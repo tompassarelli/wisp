@@ -70,6 +70,17 @@ function leftView(state: SceneState, effect: Recorded, frame: number): void {
   effect.since = undefined;
 }
 
+/**
+ * An effect placed in view starts a stay, unless one is running; placed
+ * where the game parks hidden effects, it ends it. A game that reuses an
+ * effect for a new event parks it before placing it again, so each use is
+ * a stay of its own.
+ */
+function placed(state: SceneState, effect: Recorded, x: number, y: number, z: number): void {
+  if (state.options.parked(x, y, z)) leftView(state, effect, now(state));
+  else effect.since ??= now(state);
+}
+
 function created(state: SceneState, handle: effect, model: string): effect {
   state.effects.set(handle, { model, created: now(state), alpha: 255, scale: 1.0, flat: false, since: undefined, drawn: false });
   return handle;
@@ -84,6 +95,10 @@ function wrapNatives(state: SceneState): void {
   const setScale = BlzSetSpecialEffectScale;
   const setMatrixScale = BlzSetSpecialEffectMatrixScale;
   const resetMatrix = BlzResetSpecialEffectMatrix;
+  const setPosition = BlzSetSpecialEffectPosition;
+  const setX = BlzSetSpecialEffectX;
+  const setY = BlzSetSpecialEffectY;
+  const setZ = BlzSetSpecialEffectZ;
   const natives = globalThis as Record<string, unknown>;
   natives.AddSpecialEffect = (model: string, x: number, y: number) => created(state, add(model, x, y), model);
   natives.AddSpecialEffectLoc = (model: string, where: location) => created(state, addAt(model, where), model);
@@ -120,6 +135,27 @@ function wrapNatives(state: SceneState): void {
     const effect = state.effects.get(handle);
     if (effect !== undefined) effect.flat = false;
     resetMatrix(handle);
+  };
+  // Stays start and end when the game moves an effect, not only when a report reads positions.
+  natives.BlzSetSpecialEffectPosition = (handle: effect, x: number, y: number, z: number) => {
+    setPosition(handle, x, y, z);
+    const effect = state.effects.get(handle);
+    if (effect !== undefined) placed(state, effect, x, y, z);
+  };
+  natives.BlzSetSpecialEffectX = (handle: effect, x: number) => {
+    setX(handle, x);
+    const effect = state.effects.get(handle);
+    if (effect !== undefined) placed(state, effect, x, BlzGetLocalSpecialEffectY(handle), BlzGetLocalSpecialEffectZ(handle));
+  };
+  natives.BlzSetSpecialEffectY = (handle: effect, y: number) => {
+    setY(handle, y);
+    const effect = state.effects.get(handle);
+    if (effect !== undefined) placed(state, effect, BlzGetLocalSpecialEffectX(handle), y, BlzGetLocalSpecialEffectZ(handle));
+  };
+  natives.BlzSetSpecialEffectZ = (handle: effect, z: number) => {
+    setZ(handle, z);
+    const effect = state.effects.get(handle);
+    if (effect !== undefined) placed(state, effect, BlzGetLocalSpecialEffectX(handle), BlzGetLocalSpecialEffectY(handle), z);
   };
 }
 

@@ -38,9 +38,11 @@ export function start(this: void): void {
 The recorder (wisp:src/platform/scene.ts) wraps `AddSpecialEffect`,
 `AddSpecialEffectLoc`, `AddSpecialEffectTarget`, `DestroyEffect`,
 `BlzSetSpecialEffectAlpha`, `BlzSetSpecialEffectScale`,
-`BlzSetSpecialEffectMatrixScale` and `BlzResetSpecialEffectMatrix` in the Lua
-globals once. The game's code stays as it is; an entry that never starts the
-recorder, such as a playable build's, compiles none of it.
+`BlzSetSpecialEffectMatrixScale`, `BlzResetSpecialEffectMatrix` and the
+position setters `BlzSetSpecialEffectPosition`, `BlzSetSpecialEffectX`, `Y`
+and `Z` in the Lua globals once. The game's code stays as it is; an entry
+that never starts the recorder, such as a playable build's, compiles none of
+it.
 
 Warcraft keeps a model's particle emitters running at any alpha, scale or time
 scale, so a collapsed effect left where the camera looks still shows its
@@ -58,12 +60,19 @@ Nothing in the game reads that file back, so one name per slot is safe under
 the Preloader rule. A hot reload keeps the wrappers and the records; the
 reloaded bundle's `install` registers the new report handler.
 
-Positions are read only when a report is written, so stays in view are known
-to half a second. Ages are counted in the frames of the clock the game passes,
+A stay in view starts when the game places an effect anywhere but its parking
+place and ends when it parks it there, at that frame. Each report also reads
+every effect's position, which catches effects moved some other way, such as
+attached ones, to half a second. A game that reuses one effect for a new
+event, such as a pool slot taken by the next hit while the last one still
+shows, parks it before placing it again, so each use is a stay of its own;
+an effect moved in view without parking is one stay however often it moves.
+Ages are counted in the frames of the clock the game passes,
 which should stand still while nothing plays, such as during a pause. When that clock
 restarts, as at a rematch, the recorder's clock keeps rising from where it
-was. Every wrapped call costs a table lookup and each report reads three
-getters per effect, so keep the recorder out of measurement builds.
+was. Every wrapped call costs a table lookup, a position call also asks
+`parked`, and each report reads three getters per effect, so keep the
+recorder out of measurement builds.
 
 Each line of the report gives, per model path (with `/` for `\`): live
 effects, those in view, those drawn, the frame the oldest was created on, how

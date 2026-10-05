@@ -18,6 +18,8 @@ const expectations: SceneExpectations = {
     { name: "spark", models: ["Abilities\\Spark.mdx"], lifetime: 8 },
     { name: "trap", models: ["Abilities\\Trap.mdx"], lifetime: 600 },
     { name: "flash", models: ["Gone.mdx"], lifetime: 30 },
+    { name: "puff", models: ["Abilities\\Puff.mdx"], lifetime: 12 },
+    { name: "smoke", models: ["Abilities\\Smoke.mdx"], lifetime: 30 },
   ],
   stage: { kind: "stage deck", pieces: 1 },
   framesPerSecond: 60,
@@ -29,11 +31,15 @@ test("the emitted scene recorder reports each model's effects, and the host name
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
   const scene = await Effect.runPromise(SceneReportFile.decode("fixture-scene-p0.txt", run.stdout.toString()));
   expect(scene).toEqual({
-    serial: 5,
+    serial: 6,
     frame: 101,
-    effects: 5,
+    effects: 7,
     models: [
       { model: "", live: 1, inView: 1, drawn: 1, created: 0, age: 101, longest: 101, destroyed: 0 },
+      // Four uses of 10, 10, 10 and 8 frames, each parked before the next.
+      { model: "Abilities/Puff.mdx", live: 1, inView: 0, drawn: 0, created: 29, age: undefined, longest: 10, destroyed: 0 },
+      // Moved in view without parking: one stay from frame 30 to 68.
+      { model: "Abilities/Smoke.mdx", live: 1, inView: 0, drawn: 0, created: 29, age: undefined, longest: 38, destroyed: 0 },
       { model: "Abilities/Spark.mdx", live: 1, inView: 0, drawn: 0, created: 0, age: undefined, longest: 9, destroyed: 0 },
       { model: "Abilities/Trap.mdx", live: 1, inView: 1, drawn: 0, created: 0, age: 101, longest: 101, destroyed: 0 },
       { model: "Flat.mdx", live: 1, inView: 1, drawn: 0, created: 0, age: 101, longest: 101, destroyed: 0 },
@@ -43,6 +49,7 @@ test("the emitted scene recorder reports each model's effects, and the host name
   });
   expect(sceneProblems(scene, expectations).map(({ seen }) => seen)).toEqual([
     "invisible effects: 1 effects were created with no model, 1 of them meant to be drawn now",
+    "a smoke stayed in view for 0.63 s; it should be gone within 0.50 s",
     "a spark stayed in view for 0.15 s; it should be gone within 0.13 s",
     "1 effect in view that the game declares no kind for, the oldest for 1.68 s",
     "a flash stayed in view for 1.50 s; it should be gone within 0.50 s",

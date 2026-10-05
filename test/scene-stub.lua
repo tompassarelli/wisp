@@ -45,6 +45,18 @@ local gone = shown("Gone.mdx")
 report()
 at(20) BlzSetSpecialEffectPosition(spark, 0.0, 0.0, 0.0) report()
 at(29) BlzSetSpecialEffectPosition(spark, 0.0, 0.0, -1800.0) report()
+-- A pooled puff reused while still shown, its use renewed every 10 frames
+-- between reports: each use parks it first, so each is a stay of its own.
+-- Smoke moved in view without parking stays: it counts from its first placement.
+local puff = AddSpecialEffect("Abilities\\Puff.mdx", 0.0, 0.0)
+local smoke = AddSpecialEffect("Abilities\\Smoke.mdx", 0.0, 0.0)
+for use = 0, 3 do
+  at(30 + 10 * use)
+  BlzSetSpecialEffectPosition(puff, 0.0, 0.0, -1800.0)
+  BlzSetSpecialEffectPosition(puff, 5.0 * use, 0.0, 0.0)
+  BlzSetSpecialEffectPosition(smoke, 3.0 * use, 0.0, 0.0)
+end
+at(68) BlzSetSpecialEffectPosition(puff, 0.0, 0.0, -1800.0) BlzSetSpecialEffectPosition(smoke, 0.0, 0.0, -1800.0) report()
 at(90) DestroyEffect(gone)
 -- A rematch restarts the game's frames; the report's clock keeps rising.
 at(0) report()
