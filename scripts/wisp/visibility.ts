@@ -40,11 +40,21 @@ const radians = (degrees: number) => (degrees * Math.PI) / 180;
 const dot = (a: Vector, b: Vector) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a: Vector, b: Vector): Vector => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
-/**
- * Whether any of `box` can be inside the camera's frame. Conservative: a box
- * outside the frame only past a corner of it still counts as seen.
- */
-export function boxSeen(box: Box, camera: CameraView): boolean {
+/** A camera's axes and the planes bounding its frame, which every box checked against it shares. */
+interface CameraFrame {
+  readonly eye: Vector;
+  readonly right: Vector;
+  readonly up: Vector;
+  readonly forward: Vector;
+  /** Each plane bounding the frame, as a distance that is negative outside it. */
+  readonly planes: readonly ((corner: Vector) => number)[];
+}
+
+const frames = new WeakMap<CameraView, CameraFrame>();
+
+function cameraFrame(camera: CameraView): CameraFrame {
+  const known = frames.get(camera);
+  if (known !== undefined) return known;
   const pitch = radians(camera.angleOfAttack > 180 ? camera.angleOfAttack - 360 : camera.angleOfAttack);
   const yaw = radians(camera.rotation);
   const forward: Vector = [Math.cos(pitch) * Math.cos(yaw), Math.cos(pitch) * Math.sin(yaw), Math.sin(pitch)];
@@ -54,12 +64,6 @@ export function boxSeen(box: Box, camera: CameraView): boolean {
   const eye: Vector = [x - camera.distance * forward[0], y - camera.distance * forward[1], z - camera.distance * forward[2]];
   const across = Math.tan(radians(camera.fieldOfView / 2));
   const upward = across / camera.aspect;
-  const corners: Vector[] = [];
-  for (const cornerX of [box.min[0], box.max[0]]) for (const cornerY of [box.min[1], box.max[1]]) for (const cornerZ of [box.min[2], box.max[2]]) {
-    const relative: Vector = [cornerX - eye[0], cornerY - eye[1], cornerZ - eye[2]];
-    corners.push([dot(relative, right), dot(relative, up), dot(relative, forward)]);
-  }
-  // Each plane bounding the frame, as a distance that is negative outside it.
   const planes = [
     ([, , depth]: Vector) => depth,
     ([, , depth]: Vector) => camera.farZ - depth,
@@ -68,6 +72,22 @@ export function boxSeen(box: Box, camera: CameraView): boolean {
     ([, height, depth]: Vector) => depth * upward - height,
     ([, height, depth]: Vector) => depth * upward + height,
   ];
+  const frame = { eye, right, up, forward, planes };
+  frames.set(camera, frame);
+  return frame;
+}
+
+/**
+ * Whether any of `box` can be inside the camera's frame. Conservative: a box
+ * outside the frame only past a corner of it still counts as seen.
+ */
+export function boxSeen(box: Box, camera: CameraView): boolean {
+  const { eye, right, up, forward, planes } = cameraFrame(camera);
+  const corners: Vector[] = [];
+  for (const cornerX of [box.min[0], box.max[0]]) for (const cornerY of [box.min[1], box.max[1]]) for (const cornerZ of [box.min[2], box.max[2]]) {
+    const relative: Vector = [cornerX - eye[0], cornerY - eye[1], cornerZ - eye[2]];
+    corners.push([dot(relative, right), dot(relative, up), dot(relative, forward)]);
+  }
   return !planes.some((plane) => corners.every((corner) => plane(corner) < 0));
 }
 

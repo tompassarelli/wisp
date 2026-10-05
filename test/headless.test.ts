@@ -8,6 +8,7 @@ import { Cause, Effect, Exit } from "effect";
 import { makeHeadless } from "../scripts/wisp/commands/headless";
 import { installHeadless, playHeadless } from "../scripts/wisp/headless";
 import type { SceneExpectations } from "../scripts/wisp/scene";
+import { parseNativeDeclarations } from "../src/headless/declarations";
 import { installDispatch, on, trampoline } from "../src/platform/dispatch";
 import { startSceneReport } from "../src/platform/scene";
 import { configureRuntime } from "../src/runtime/config";
@@ -84,6 +85,15 @@ test("each client keeps its own globals and files", () => {
   clients.frames(3);
   expect(clients.clients.map((client) => client.files.get("fixture-frames.txt"))).toEqual([["3"], ["6"]]);
   expect(globalThis.__fixtureFrames).toBeUndefined();
+});
+
+test("a declared native's parameter count includes a callback parameter and not what its type holds", () => {
+  const { functions } = parseNativeDeclarations([
+    "declare function GetLocalPlayer(): player;",
+    "declare function ForGroup(whichGroup: group, callback: (this: void) => void): void;",
+    "declare function CreateUnit(id: player, unitid: number, x: number, y: number, face: number): unit;",
+  ].join("\n"));
+  expect(functions).toEqual([["GetLocalPlayer", "player", 0], ["ForGroup", "void", 2], ["CreateUnit", "unit", 5]]);
 });
 
 const SCENE: SceneExpectations = {

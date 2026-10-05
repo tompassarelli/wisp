@@ -45,9 +45,16 @@ export interface HeadlessRuntime {
 
 const LUA_GLOBALS = ["xpcall", "pcall", "load", "setmetatable", "string"];
 
-/** The natives this package declares, or those in another warcraft.d.ts. */
-export const readNativeDeclarations = (path = join(import.meta.dir, "../../src/natives/warcraft.d.ts")): NativeDeclarations =>
-  parseNativeDeclarations(readFileSync(path, "utf8"));
+const declarationsRead = new Map<string, NativeDeclarations>();
+
+/** The natives this package declares, or those in another warcraft.d.ts; each file is read once per process. */
+export function readNativeDeclarations(path = join(import.meta.dir, "../../src/natives/warcraft.d.ts")): NativeDeclarations {
+  const known = declarationsRead.get(path);
+  if (known !== undefined) return known;
+  const declarations = parseNativeDeclarations(readFileSync(path, "utf8"));
+  declarationsRead.set(path, declarations);
+  return declarations;
+}
 
 const describeThrown = (error: unknown) => (error instanceof Error ? error.stack ?? error.message : String(error));
 
@@ -116,19 +123,33 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
       },
     });
   }
-  const own = new Map<HeadlessClient, Record<string, unknown>>();
+  // Leaving a client sets its own globals aside, so it must know their names
+  // without scanning every global: the ones present now, and each one created
+  // later, which a trap on the global object's prototype sees first.
+  const isOwnGlobal = (key: string) => prefixes.some((prefix) => key.startsWith(prefix));
+  const ownNames = new Set(Object.keys(globalThis).filter(isOwnGlobal));
+  const outerPrototype = Object.getPrototypeOf(globalThis) as object | null;
+  Reflect.setPrototypeOf(globalThis, new Proxy(outerPrototype ?? Object.prototype, {
+    set: (target, key, value, receiver) => {
+      if (typeof key === "string" && !ownNames.has(key) && isOwnGlobal(key)) ownNames.add(key);
+      return Reflect.set(target, key, value, receiver);
+    },
+  }));
+  const own = new Map<HeadlessClient, Map<string, unknown>>();
   const scope: ClientScope = {
     enter: (client) => {
       if (current !== undefined) throw new Error(`p${client.slot} can't run inside p${current.slot}`);
       current = client;
-      Object.assign(globalThis, own.get(client));
+      const globals = own.get(client);
+      if (globals !== undefined) for (const [key, value] of globals) global[key] = value;
     },
     leave: (client) => {
       current = undefined;
-      const globals: Record<string, unknown> = {};
-      for (const key of Object.keys(globalThis)) {
-        if (!prefixes.some((prefix) => key.startsWith(prefix))) continue;
-        globals[key] = global[key];
+      const globals = own.get(client) ?? new Map<string, unknown>();
+      globals.clear();
+      for (const key of ownNames) {
+        if (!Object.hasOwn(global, key)) continue;
+        globals.set(key, global[key]);
         delete global[key];
       }
       own.set(client, globals);
@@ -153,6 +174,7 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
       });
     },
     restore: () => {
+      Reflect.setPrototypeOf(globalThis, outerPrototype);
       for (const [name, descriptor] of before) {
         if (descriptor === undefined) delete global[name];
         else Object.defineProperty(globalThis, name, descriptor);

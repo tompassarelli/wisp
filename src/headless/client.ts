@@ -154,7 +154,7 @@ export const FRAMES_PER_SECOND = 60;
 const isHandle = (value: unknown): value is Handle =>
   typeof value === "object" && value !== null && "id" in value && "kind" in value;
 
-const isFrame = (value: unknown): value is Frame => isHandle(value) && "points" in value;
+const isFrame = (value: unknown): value is Frame => typeof value === "object" && value !== null && "points" in value;
 
 function isDigits(text: string): boolean {
   const start = text.startsWith("-") ? 1 : 0;
@@ -342,15 +342,43 @@ export class HeadlessClient {
     const behaviors = this.behaviors(options);
     const local = options.localNatives;
     const log = this.log;
-    const logged = (name: string, behave: (this: void, ...args: unknown[]) => unknown) => (...args: unknown[]) => {
-      log.push({ name, args });
-      return behave(...args);
+    // A call's arguments land in one array that the log keeps, so the common
+    // arities take them as parameters rather than as a rest array to spread.
+    const logged = (name: string, parameters: number, behave: (this: void, ...args: unknown[]) => unknown): ((this: void, ...args: unknown[]) => unknown) => {
+      switch (parameters) {
+        case 0: return () => {
+          log.push({ name, args: [] });
+          return behave();
+        };
+        case 1: return (a: unknown) => {
+          log.push({ name, args: [a] });
+          return behave(a);
+        };
+        case 2: return (a: unknown, b: unknown) => {
+          log.push({ name, args: [a, b] });
+          return behave(a, b);
+        };
+        case 3: return (a: unknown, b: unknown, c: unknown) => {
+          log.push({ name, args: [a, b, c] });
+          return behave(a, b, c);
+        };
+        case 4: return (a: unknown, b: unknown, c: unknown, d: unknown) => {
+          log.push({ name, args: [a, b, c, d] });
+          return behave(a, b, c, d);
+        };
+        default: return (...args: unknown[]) => {
+          log.push({ name, args });
+          return behave(...args);
+        };
+      }
     };
+    const arity = new Map<string, number>();
     const declared = new Set<string>();
-    for (const [name, returns] of options.declarations.functions) {
+    for (const [name, returns, parameters] of options.declarations.functions) {
       declared.add(name);
+      arity.set(name, parameters);
       const behave = (behaviors[name] ?? (name.startsWith("Convert") ? (value: unknown) => value : this.defaultNative(returns))) as (this: void, ...args: unknown[]) => unknown;
-      this.natives[name] = local[name] === undefined ? logged(name, behave) : behave;
+      this.natives[name] = local[name] === undefined ? logged(name, parameters, behave) : behave;
     }
     // A constant of a handle type is its own name, so comparisons with it work.
     for (const [name, type] of options.declarations.constants) this.natives[name] = type === "number" ? 0 : type === "boolean" ? name === "TRUE" : name;
@@ -366,7 +394,7 @@ export class HeadlessClient {
     for (const name of Object.keys(extra)) {
       const value = extra[name];
       this.natives[name] = typeof value === "function" && declared.has(name) && local[name] === undefined
-        ? logged(name, value as (this: void, ...args: unknown[]) => unknown)
+        ? logged(name, arity.get(name) ?? 5, value as (this: void, ...args: unknown[]) => unknown)
         : value;
     }
   }
@@ -409,20 +437,10 @@ export class HeadlessClient {
     return this.frames.add(this.handle("framehandle"), type, name, isFrame(owner) ? owner : undefined, context);
   }
 
-  /** Changes a frame the map holds; a handle that isn't one of this client's frames changes nothing. */
-  private withFrame<A>(frame: unknown, change: (frame: Frame) => A, otherwise: A): A {
-    return isFrame(frame) ? change(frame) : otherwise;
-  }
-
   private effectAt(model: string, x: number, y: number): Handle {
     const handle = this.handle("effect");
     this.effects.set(handle, { handle, model, created: this.frame, x, y, z: 0, alpha: 255, scale: 1, timeScale: 1, flat: false });
     return handle;
-  }
-
-  private pose(effect: Handle, change: (pose: EffectPose) => void): void {
-    const pose = this.effects.get(effect);
-    if (pose !== undefined) change(pose);
   }
 
   private show(text: string): void {
@@ -482,37 +500,45 @@ export class HeadlessClient {
       BlzCreateFrame: (name: string, owner: unknown, _priority: number, context: number) => this.created(name, name, owner, context),
       BlzCreateSimpleFrame: (name: string, owner: unknown, context: number) => this.created(name, name, owner, context),
       BlzCreateFrameByType: (type: string, name: string, owner: unknown, _inherits: string, context: number) => this.created(type, name, owner, context),
-      BlzDestroyFrame: (frame: unknown) => this.withFrame(frame, (target) => this.frames.destroy(target), undefined),
-      BlzFrameGetName: (frame: unknown) => this.withFrame(frame, (target) => target.name, ""),
-      BlzFrameGetParent: (frame: unknown) => this.withFrame(frame, (target) => target.parent, undefined),
-      BlzFrameSetText: (frame: unknown, text: string) => this.withFrame(frame, (target) => {
-        target.text = text;
-      }, undefined),
-      BlzFrameGetText: (frame: unknown) => this.withFrame(frame, (target) => target.text, ""),
-      BlzFrameSetTextSizeLimit: (frame: unknown, size: number) => this.withFrame(frame, (target) => {
-        target.textLimit = size;
-      }, undefined),
-      BlzFrameGetTextSizeLimit: (frame: unknown) => this.withFrame(frame, (target) => target.textLimit, 0),
-      BlzFrameSetVisible: (frame: unknown, visible: boolean) => this.withFrame(frame, (target) => {
-        target.visible = visible;
-      }, undefined),
-      BlzFrameIsVisible: (frame: unknown) => this.withFrame(frame, (target) => target.visible, false),
-      BlzFrameSetEnable: (frame: unknown, enabled: boolean) => this.withFrame(frame, (target) => {
-        target.enabled = enabled;
-      }, undefined),
-      BlzFrameGetEnable: (frame: unknown) => this.withFrame(frame, (target) => target.enabled, false),
-      BlzFrameSetFocus: (frame: unknown, flag: boolean) => this.withFrame(frame, (target) => this.frames.focus(target, flag), undefined),
-      BlzFrameSetLevel: (frame: unknown, level: number) => this.withFrame(frame, (target) => {
-        target.level = level;
-      }, undefined),
-      BlzFrameSetSize: (frame: unknown, width: number, height: number) => this.withFrame(frame, (target) => {
-        target.width = width;
-        target.height = height;
-      }, undefined),
-      BlzFrameSetAbsPoint: (frame: unknown, point: unknown, x: number, y: number) => this.withFrame(frame, (target) => {
-        target.points.set(point, { x, y });
-      }, undefined),
-      BlzFrameClearAllPoints: (frame: unknown) => this.withFrame(frame, (target) => target.points.clear(), undefined),
+      BlzDestroyFrame: (frame: unknown) => {
+        if (isFrame(frame)) this.frames.destroy(frame);
+      },
+      BlzFrameGetName: (frame: unknown) => (isFrame(frame) ? frame.name : ""),
+      BlzFrameGetParent: (frame: unknown) => (isFrame(frame) ? frame.parent : undefined),
+      BlzFrameSetText: (frame: unknown, text: string) => {
+        if (isFrame(frame)) frame.text = text;
+      },
+      BlzFrameGetText: (frame: unknown) => (isFrame(frame) ? frame.text : ""),
+      BlzFrameSetTextSizeLimit: (frame: unknown, size: number) => {
+        if (isFrame(frame)) frame.textLimit = size;
+      },
+      BlzFrameGetTextSizeLimit: (frame: unknown) => (isFrame(frame) ? frame.textLimit : 0),
+      BlzFrameSetVisible: (frame: unknown, visible: boolean) => {
+        if (isFrame(frame)) frame.visible = visible;
+      },
+      BlzFrameIsVisible: (frame: unknown) => (isFrame(frame) ? frame.visible : false),
+      BlzFrameSetEnable: (frame: unknown, enabled: boolean) => {
+        if (isFrame(frame)) frame.enabled = enabled;
+      },
+      BlzFrameGetEnable: (frame: unknown) => (isFrame(frame) ? frame.enabled : false),
+      BlzFrameSetFocus: (frame: unknown, flag: boolean) => {
+        if (isFrame(frame)) this.frames.focus(frame, flag);
+      },
+      BlzFrameSetLevel: (frame: unknown, level: number) => {
+        if (isFrame(frame)) frame.level = level;
+      },
+      BlzFrameSetSize: (frame: unknown, width: number, height: number) => {
+        if (isFrame(frame)) {
+          frame.width = width;
+          frame.height = height;
+        }
+      },
+      BlzFrameSetAbsPoint: (frame: unknown, point: unknown, x: number, y: number) => {
+        if (isFrame(frame)) frame.points.set(point, { x, y });
+      },
+      BlzFrameClearAllPoints: (frame: unknown) => {
+        if (isFrame(frame)) frame.points.clear();
+      },
       BlzTriggerRegisterFrameEvent: (trigger: Trigger, frame: unknown, event: unknown) => {
         if (isFrame(frame)) this.registrations.push({ kind: "frame", trigger, frame, event });
         return this.handle("event");
@@ -610,35 +636,46 @@ export class HeadlessClient {
       DestroyEffect: (effect: Handle) => {
         this.effects.delete(effect);
       },
-      BlzSetSpecialEffectPosition: (effect: Handle, x: number, y: number, z: number) => this.pose(effect, (pose) => {
+      // An effect that was destroyed or never made changes nothing.
+      BlzSetSpecialEffectPosition: (effect: Handle, x: number, y: number, z: number) => {
+        const pose = this.effects.get(effect);
+        if (pose === undefined) return;
         pose.x = x;
         pose.y = y;
         pose.z = z;
-      }),
-      BlzSetSpecialEffectX: (effect: Handle, x: number) => this.pose(effect, (pose) => {
-        pose.x = x;
-      }),
-      BlzSetSpecialEffectY: (effect: Handle, y: number) => this.pose(effect, (pose) => {
-        pose.y = y;
-      }),
-      BlzSetSpecialEffectZ: (effect: Handle, z: number) => this.pose(effect, (pose) => {
-        pose.z = z;
-      }),
-      BlzSetSpecialEffectAlpha: (effect: Handle, alpha: number) => this.pose(effect, (pose) => {
-        pose.alpha = alpha;
-      }),
-      BlzSetSpecialEffectScale: (effect: Handle, scale: number) => this.pose(effect, (pose) => {
-        pose.scale = scale;
-      }),
-      BlzSetSpecialEffectTimeScale: (effect: Handle, timeScale: number) => this.pose(effect, (pose) => {
-        pose.timeScale = timeScale;
-      }),
-      BlzSetSpecialEffectMatrixScale: (effect: Handle, x: number, y: number, z: number) => this.pose(effect, (pose) => {
-        pose.flat = pose.flat || x === 0 || y === 0 || z === 0;
-      }),
-      BlzResetSpecialEffectMatrix: (effect: Handle) => this.pose(effect, (pose) => {
-        pose.flat = false;
-      }),
+      },
+      BlzSetSpecialEffectX: (effect: Handle, x: number) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) pose.x = x;
+      },
+      BlzSetSpecialEffectY: (effect: Handle, y: number) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) pose.y = y;
+      },
+      BlzSetSpecialEffectZ: (effect: Handle, z: number) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) pose.z = z;
+      },
+      BlzSetSpecialEffectAlpha: (effect: Handle, alpha: number) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) pose.alpha = alpha;
+      },
+      BlzSetSpecialEffectScale: (effect: Handle, scale: number) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) pose.scale = scale;
+      },
+      BlzSetSpecialEffectTimeScale: (effect: Handle, timeScale: number) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) pose.timeScale = timeScale;
+      },
+      BlzSetSpecialEffectMatrixScale: (effect: Handle, x: number, y: number, z: number) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) pose.flat = pose.flat || x === 0 || y === 0 || z === 0;
+      },
+      BlzResetSpecialEffectMatrix: (effect: Handle) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) pose.flat = false;
+      },
       BlzGetLocalSpecialEffectX: (effect: Handle) => this.effects.get(effect)?.x ?? 0,
       BlzGetLocalSpecialEffectY: (effect: Handle) => this.effects.get(effect)?.y ?? 0,
       BlzGetLocalSpecialEffectZ: (effect: Handle) => this.effects.get(effect)?.z ?? 0,

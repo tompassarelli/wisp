@@ -4,7 +4,8 @@
 // Bun and 32-bit Lua read the same file alike.
 
 export interface NativeDeclarations {
-  readonly functions: readonly (readonly [name: string, returns: string])[];
+  /** Each function with its return type and how many parameters it declares. */
+  readonly functions: readonly (readonly [name: string, returns: string, parameters: number])[];
   readonly constants: readonly (readonly [name: string, type: string])[];
   /** Global variables, such as `bj_mapInitialPlayableArea`; an array type ends with `[]`. */
   readonly variables: readonly (readonly [name: string, type: string])[];
@@ -31,8 +32,30 @@ function declaredType(line: string): string | undefined {
   return undefined;
 }
 
+/** How many parameters a `declare function NAME(...)` line declares: the commas outside any nested parentheses, plus one. */
+function declaredParameters(line: string, from: number): number {
+  let depth = 0;
+  let count = 0;
+  let any = false;
+  for (let index = line.indexOf("(", from); index < line.length; index++) {
+    const character = line.charAt(index);
+    if (character === "(") {
+      depth++;
+      continue;
+    }
+    if (character === ")") {
+      depth--;
+      if (depth === 0) break;
+      continue;
+    }
+    if (depth === 1 && character === ",") count++;
+    else if (character !== " ") any = true;
+  }
+  return any ? count + 1 : 0;
+}
+
 export function parseNativeDeclarations(text: string): NativeDeclarations {
-  const functions: (readonly [string, string])[] = [];
+  const functions: (readonly [string, string, number])[] = [];
   const constants: (readonly [string, string])[] = [];
   const variables: (readonly [string, string])[] = [];
   for (const line of text.split("\n")) {
@@ -43,7 +66,7 @@ export function parseNativeDeclarations(text: string): NativeDeclarations {
     const name = declaredName(line, keyword);
     const type = declaredType(line.trim());
     if (name === undefined || type === undefined) continue;
-    if (keyword === "declare function ") functions.push([name, type]);
+    if (keyword === "declare function ") functions.push([name, type, declaredParameters(line, keyword.length + name.length)]);
     else if (keyword === "declare const ") constants.push([name, type]);
     else variables.push([name, type]);
   }
