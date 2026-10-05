@@ -1,0 +1,106 @@
+// GameFiles: the client folders Waygate shares with the game. Files in a
+// client's CustomMapData carry hot reloads, acknowledgements, error reports and
+// ready signals; its Maps folder takes the map a fresh match hosts.
+import { mkdirSync, readdirSync, renameSync, rmSync, copyFileSync } from "node:fs";
+import { basename, join } from "node:path";
+import { Context, Effect, Layer, Option, Schema } from "effect";
+import { type GameFileKind, MalformedGameFile } from "./boundary";
+import { describeCause } from "./command";
+
+export class GameFileFailure extends Schema.TaggedError<GameFileFailure>()("GameFileFailure", {
+  operation: Schema.String,
+  path: Schema.String,
+  cause: Schema.Unknown,
+}) {
+  override get message(): string {
+    return `${this.operation} failed for ${this.path}: ${describeCause(this.cause)}`;
+  }
+}
+
+export interface StoredFile {
+  readonly text: string;
+  /** Milliseconds since the epoch, on the Effect Clock's scale. */
+  readonly modified: number;
+}
+
+export class GameFiles extends Context.Service<GameFiles, {
+  /** A file's text and modification time; undefined while it doesn't exist. */
+  readonly read: (path: string) => Effect.Effect<StoredFile | undefined, GameFileFailure>;
+  readonly write: (path: string, contents: string | Uint8Array) => Effect.Effect<void, GameFileFailure>;
+  /** Written whole: a reader sees the old file or the new one. */
+  readonly replace: (path: string, text: string) => Effect.Effect<void, GameFileFailure>;
+  /** File names in a directory. */
+  readonly list: (directory: string) => Effect.Effect<readonly string[], GameFileFailure>;
+  readonly remove: (path: string) => Effect.Effect<void, GameFileFailure>;
+  /** Makes `map` the one map in the configured map folder of the client whose Documents/Warcraft III is `documents`. */
+  readonly installMap: (documents: string, map: string) => Effect.Effect<void, GameFileFailure>;
+}>()("waygate/GameFiles") {
+  static readonly layer = (options: MapDirectories = { mapFolder: "Maps/00-Waygate", replacedMaps: "waygate-replaced-maps" }) => Layer.sync(GameFiles, () => GameFiles.of(local(options)));
+}
+
+/** A client's CustomMapData, given its Documents/Warcraft III folder. */
+export const dataDirectory = (documents: string) => join(documents, "CustomMapData");
+
+export interface MapDirectories {
+  readonly mapFolder: string;
+  readonly replacedMaps: string;
+}
+
+/** A file the game writes, decoded; undefined while it doesn't exist. */
+export const readGameFile = <A>(path: string, kind: GameFileKind<A>) =>
+  Effect.gen(function*() {
+    const files = yield* GameFiles;
+    const stored = yield* files.read(path);
+    if (stored === undefined) return undefined;
+    return { value: yield* kind.decode(path, stored.text), modified: stored.modified };
+  });
+
+const tryPromise = <A>(operation: string, path: string, run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new GameFileFailure({ operation, path, cause }) });
+
+const trySync = <A>(operation: string, path: string, run: () => A) =>
+  Effect.try({ try: run, catch: (cause) => new GameFileFailure({ operation, path, cause }) });
+
+const FileSystemFailure = Schema.Struct({ code: Schema.String });
+// A client reading a file can briefly hold it on Proton.
+const transientFileErrors = new Set(["EAGAIN", "EBUSY"]);
+
+function isTransient(failure: GameFileFailure): boolean {
+  const decoded = Schema.decodeUnknownOption(FileSystemFailure)(failure.cause);
+  return Option.isSome(decoded) && transientFileErrors.has(decoded.value.code);
+}
+
+const retryTransient = <A>(effect: Effect.Effect<A, GameFileFailure>) => Effect.retry(effect, { times: 2, while: isTransient });
+
+const write = (path: string, contents: string | Uint8Array) =>
+  retryTransient(tryPromise("write game file", path, async () => {
+    await Bun.write(path, contents);
+  }));
+
+const local = ({ mapFolder, replacedMaps }: MapDirectories): GameFiles["Service"] => ({
+  read: (path) => tryPromise("read game file", path, async () => {
+    const file = Bun.file(path);
+    if (!(await file.exists())) return undefined;
+    return { text: await file.text(), modified: file.lastModified };
+  }),
+  write,
+  replace: (path, text) => Effect.gen(function*() {
+    yield* write(`${path}.next`, text);
+    yield* retryTransient(trySync("replace game file", path, () => renameSync(`${path}.next`, path)));
+  }),
+  list: (directory) => trySync("list game files", directory, () => readdirSync(directory)),
+  remove: (path) => trySync("remove game file", path, () => rmSync(path)),
+  installMap: (documents, map) => trySync("install map", join(documents, mapFolder), () => {
+    const folder = join(documents, mapFolder);
+    const replaced = join(documents, replacedMaps);
+    mkdirSync(folder, { recursive: true });
+    mkdirSync(replaced, { recursive: true });
+    for (const old of readdirSync(folder).filter((name) => name.endsWith(".w3x") && name !== basename(map))) renameSync(join(folder, old), join(replaced, old));
+    // A running game may still read the old file: replace it by rename, never in place.
+    const next = join(folder, `${basename(map)}.next`);
+    copyFileSync(map, next);
+    renameSync(next, join(folder, basename(map)));
+  }),
+});
+
+export { MalformedGameFile };

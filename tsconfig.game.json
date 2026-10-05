@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": [
+      "ESNext"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noEmitOnError": true,
+    "incremental": true,
+    "tsBuildInfoFile": "build/typecheck-game.tsbuildinfo",
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": [
+      "lua-types/5.3"
+    ]
+  },
+  "include": [
+    "src/natives/*.d.ts",
+    "src/runtime/*.ts",
+    "src/sim/*.ts",
+    "src/game/**/*.ts",
+    "src/platform/**/*.ts"
+  ],
+  "exclude": [
+    "src/sim/*.test.ts"
+  ]
+}

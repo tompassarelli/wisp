@@ -1,0 +1,5 @@
+function PreloadFiles takes nothing returns nothing
+call PreloadStart()
+call Preload( "applied nope at 1.5" )
+call PreloadEnd( 0.0 )
+endfunction

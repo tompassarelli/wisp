@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ESNext", "lib": ["ESNext"], "module": "ESNext",
+    "moduleResolution": "Bundler", "strict": true, "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true, "noEmitOnError": true,
+    "skipLibCheck": true, "types": ["lua-types/5.3"], "rootDir": "..",
+    "outDir": "../build/traps"
+  },
+  "files": [],
+  "tstl": {
+    "luaTarget": "5.3", "noImplicitSelf": true, "noHeader": true,
+    "luaPlugins": [{ "name": "../plugins/warcraft-numbers.ts" }]
+  }
+}

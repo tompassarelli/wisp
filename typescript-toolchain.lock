@@ -1,0 +1,7 @@
+sourceLanguage = "TypeScript"
+bun = "1.3.13"
+typescriptCompilerApi = "6.0.2"
+typescriptChecker = "7.0.2"
+typescriptToLua = "1.37.1"
+effect = "4.0.1"
+effectTsgo = "0.48.0"
