@@ -2,7 +2,12 @@
 // tompassarelli/WurstStdlib2 (e3714f6). Every operation rounds once, to nearest
 // with ties to even, on binary64 hosts and in Warcraft's binary32 Lua alike.
 // Integer limbs stay below 2^31, the range of Warcraft's Lua integers.
+import { at } from "../runtime/lookup";
 import { floorDiv, floorMod } from "./intMath";
+
+// Scaling by a power of two is exact, so large steps reach the same value as
+// single ones with a fraction of the work.
+const TWO_POWERS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608];
 
 /** Truncation toward zero, which Lua and JavaScript both emit exactly. */
 export function toInt(value: number): number {
@@ -23,12 +28,32 @@ export function roundToFloat32(value: number): number {
   let significand = negative ? -value : value;
   let scale = 1.0;
   let exponent = 0;
+  while (significand >= 65536 && exponent <= 111) {
+    significand *= 0.0000152587890625;
+    scale *= 65536;
+    exponent += 16;
+  }
+  while (significand >= 16 && exponent <= 123) {
+    significand *= 0.0625;
+    scale *= 16;
+    exponent += 4;
+  }
   while (significand >= 2 && exponent < 127) {
     significand *= 0.5;
     scale *= 2;
     exponent += 1;
   }
   if (significand >= 2) return negative ? -binary32Infinity() : binary32Infinity();
+  while (significand < 0.0000152587890625 && exponent >= -110) {
+    significand *= 65536;
+    scale *= 0.0000152587890625;
+    exponent -= 16;
+  }
+  while (significand < 0.0625 && exponent >= -122) {
+    significand *= 16;
+    scale *= 0.0625;
+    exponent -= 4;
+  }
   while (significand < 1 && exponent > -126) {
     significand *= 2;
     scale *= 0.5;
@@ -65,9 +90,25 @@ interface Parts {
 function decompose(value: number): Parts {
   let normalized = value < 0 ? -value : value;
   let exponent = -23;
+  while (normalized >= 65536) {
+    normalized *= 0.0000152587890625;
+    exponent += 16;
+  }
+  while (normalized >= 16) {
+    normalized *= 0.0625;
+    exponent += 4;
+  }
   while (normalized >= 2) {
     normalized *= 0.5;
     exponent += 1;
+  }
+  while (normalized < 0.0000152587890625) {
+    normalized *= 65536;
+    exponent -= 16;
+  }
+  while (normalized < 0.0625) {
+    normalized *= 16;
+    exponent -= 4;
   }
   while (normalized < 1) {
     normalized *= 2;
@@ -93,15 +134,19 @@ export function divideFloat32(numerator: number, denominator: number): number {
     exponent -= 1;
   }
   remainder -= right.significand;
+  // Twenty-six quotient bits, six at a time: the remainder stays below the
+  // divisor, so six more bits stay below 2^30.
   let quotient = 1;
-  for (let i = 1; i <= 26; i++) {
-    remainder *= 2;
-    quotient *= 2;
-    if (remainder >= right.significand) {
-      remainder -= right.significand;
-      quotient += 1;
-    }
+  for (let chunk = 1; chunk <= 4; chunk++) {
+    remainder *= 64;
+    const digits = floorDiv(remainder, right.significand);
+    remainder -= digits * right.significand;
+    quotient = quotient * 64 + digits;
   }
+  remainder *= 4;
+  const lastDigits = floorDiv(remainder, right.significand);
+  remainder -= lastDigits * right.significand;
+  quotient = quotient * 4 + lastDigits;
   let rounded = floorDiv(quotient, 8);
   const roundingBits = floorMod(quotient, 8);
   if (roundingBits > 4 || (roundingBits === 4 && (remainder !== 0 || floorMod(rounded, 2) !== 0))) rounded += 1;
@@ -177,10 +222,33 @@ export function squareRootFloat32(value: number): number {
 
 function scaleByPowerOfTwo(value: number, scale: number): number {
   let result = value * 1.0;
-  if (scale < 0) {
-    for (let i = 1; i <= -scale; i++) result *= 0.5;
+  let remaining = scale;
+  if (remaining < 0) {
+    while (remaining <= -16) {
+      result *= 0.0000152587890625;
+      remaining += 16;
+    }
+    while (remaining <= -4) {
+      result *= 0.0625;
+      remaining += 4;
+    }
+    while (remaining < 0) {
+      result *= 0.5;
+      remaining += 1;
+    }
   } else {
-    for (let i = 1; i <= scale; i++) result *= 2.0;
+    while (remaining >= 16) {
+      result *= 65536.0;
+      remaining -= 16;
+    }
+    while (remaining >= 4) {
+      result *= 16.0;
+      remaining -= 4;
+    }
+    while (remaining > 0) {
+      result *= 2.0;
+      remaining -= 1;
+    }
   }
   return result;
 }
@@ -210,24 +278,28 @@ function shiftRightJam(value: Limbs, count: number): Limbs {
   if (count >= 72) {
     return { high: 0, middle: 0, low: value.high !== 0 || value.middle !== 0 || value.low !== 0 ? 1 : 0 };
   }
-  let result = value;
+  let high = value.high;
+  let middle = value.middle;
+  let low = value.low;
   let remaining = count;
   while (remaining >= 24) {
-    const lost = result.low !== 0;
-    result = { high: 0, middle: result.high, low: result.middle };
-    if (lost && floorMod(result.low, 2) === 0) result.low += 1;
+    const lost = low !== 0;
+    low = middle;
+    middle = high;
+    high = 0;
+    if (lost && floorMod(low, 2) === 0) low += 1;
     remaining -= 24;
   }
-  for (let i = 1; i <= remaining; i++) {
-    const lost = floorMod(result.low, 2) !== 0;
-    result = {
-      high: floorDiv(result.high, 2),
-      middle: floorDiv(result.middle, 2) + floorMod(result.high, 2) * 8388608,
-      low: floorDiv(result.low, 2) + floorMod(result.middle, 2) * 8388608,
-    };
-    if (lost && floorMod(result.low, 2) === 0) result.low += 1;
+  if (remaining > 0) {
+    const divisor = at(TWO_POWERS, remaining);
+    const carry = at(TWO_POWERS, 24 - remaining);
+    const lost = floorMod(low, divisor) !== 0;
+    low = floorDiv(low, divisor) + floorMod(middle, divisor) * carry;
+    middle = floorDiv(middle, divisor) + floorMod(high, divisor) * carry;
+    high = floorDiv(high, divisor);
+    if (lost && floorMod(low, 2) === 0) low += 1;
   }
-  return result;
+  return { high, middle, low };
 }
 
 function addLimbs(a: Limbs, b: Limbs): Limbs {
@@ -263,11 +335,27 @@ function subtractLimbs(a: Limbs, b: Limbs): Limbs {
 function bitLength(value: number): number {
   let remaining = value;
   let result = 0;
-  while (remaining !== 0) {
+  if (remaining >= 65536) {
+    remaining = floorDiv(remaining, 65536);
+    result += 16;
+  }
+  if (remaining >= 256) {
+    remaining = floorDiv(remaining, 256);
+    result += 8;
+  }
+  if (remaining >= 16) {
+    remaining = floorDiv(remaining, 16);
+    result += 4;
+  }
+  if (remaining >= 4) {
+    remaining = floorDiv(remaining, 4);
+    result += 2;
+  }
+  if (remaining >= 2) {
     remaining = floorDiv(remaining, 2);
     result += 1;
   }
-  return result;
+  return result + remaining;
 }
 
 function roundLimbs(value: Limbs, scale: number, negative: boolean): number {
