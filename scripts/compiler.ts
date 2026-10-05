@@ -3,15 +3,24 @@
 // dependents when an exported declaration changed); only those are type-checked
 // and transformed to Lua again. Every other module's Lua comes from the previous
 // compile, and the bundle is rebuilt from all modules in program order, so the
-// output equals a full compile's.
+// output equals a full compile's. The bundle reuses each unchanged module's
+// text and source-map mappings (wisp:scripts/luaBundle.ts).
 import { statSync } from "node:fs";
 import { normalize, resolve } from "node:path";
 import ts from "typescript";
 import type { SourceNode } from "source-map";
-import { Transpiler, parseConfigFileWithSystem } from "typescript-to-lua";
+import { type CompilerOptions, Transpiler, parseConfigFileWithSystem } from "typescript-to-lua";
+import { LuaLibImportKind, LuaTarget, isBundleEnabled } from "typescript-to-lua/dist/CompilerOptions";
+import { buildMinimalLualibBundle, findUsedLualibFeatures, getLuaLibBundle } from "typescript-to-lua/dist/LuaLib";
+import { getBundleResult } from "typescript-to-lua/dist/transpilation/bundle";
+import type { Plugin } from "typescript-to-lua/dist/transpilation/plugins";
 import { getPlugins } from "typescript-to-lua/dist/transpilation/plugins";
+import { resolveDependencies } from "typescript-to-lua/dist/transpilation/resolve";
+import { getSourceDir } from "typescript-to-lua/dist/transpilation/transpiler";
 import { getProgramTranspileResult } from "typescript-to-lua/dist/transpilation/transpile";
-import type { ProcessedFile } from "typescript-to-lua/dist/transpilation/utils";
+import type { EmitFile, ProcessedFile } from "typescript-to-lua/dist/transpilation/utils";
+import { normalizeSlashes } from "typescript-to-lua/dist/utils";
+import { LuaBundler } from "./luaBundle";
 
 interface CachedModule {
   readonly file: ProcessedFile;
@@ -32,6 +41,27 @@ function cacheModule(file: ProcessedFile): CachedModule {
 class IncrementalTranspiler extends Transpiler {
   /** Preserve each module as first printed; emission copies code and restores tree rewrites. */
   private readonly modules = new Map<string, CachedModule>();
+  private readonly bundler = new LuaBundler();
+
+  /** TSTL 1.37.1's emit plan for a bundle, built by the caching bundler when it can. */
+  protected override getEmitPlan(program: ts.Program, diagnostics: ts.Diagnostic[], files: ProcessedFile[], plugins: Plugin[]): { emitPlan: EmitFile[] } {
+    const options: CompilerOptions = program.getCompilerOptions();
+    if (!isBundleEnabled(options)) return super.getEmitPlan(program, diagnostics, files, plugins);
+    const resolution = resolveDependencies(program, files, this.emitHost, plugins);
+    diagnostics.push(...resolution.diagnostics);
+    let resolved = resolution.resolvedFiles;
+    if (resolved.some((file) => file.fileName === "lualib_bundle")) {
+      resolved = resolved.filter((file) => file.fileName !== "lualib_bundle");
+      const luaTarget = options.luaTarget ?? LuaTarget.Universal;
+      const code = options.luaLibImport === LuaLibImportKind.RequireMinimal
+        ? buildMinimalLualibBundle(findUsedLualibFeatures(luaTarget, this.emitHost, resolved.map((file) => file.code)), luaTarget, this.emitHost)
+        : getLuaLibBundle(luaTarget, this.emitHost);
+      resolved.unshift({ fileName: normalizeSlashes(resolve(getSourceDir(program), "lualib_bundle.lua")), code });
+    }
+    const [bundleDiagnostics, bundle] = this.bundler.bundle(program, resolved) ?? getBundleResult(program, resolved);
+    diagnostics.push(...bundleDiagnostics);
+    return { emitPlan: [bundle] };
+  }
 
   compile(program: ts.Program, affected: readonly ts.SourceFile[]): readonly ts.Diagnostic[] {
     const started = performance.now();
