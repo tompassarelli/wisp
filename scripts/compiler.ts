@@ -22,6 +22,20 @@ import type { EmitFile, ProcessedFile } from "typescript-to-lua/dist/transpilati
 import { normalizeSlashes } from "typescript-to-lua/dist/utils";
 import { LuaBundler } from "./luaBundle";
 
+/** Runs one named phase of a compile and returns its result; a caller times the phase by supplying one. */
+export type Phase = <A>(name: string, run: () => A) => A;
+
+/** With COMPILER_TIMINGS set, an unsupplied hook prints each phase's duration. */
+const defaultPhase: Phase = (name, run) => {
+  if (process.env.COMPILER_TIMINGS === undefined) return run();
+  const started = performance.now();
+  try {
+    return run();
+  } finally {
+    console.log(`compile ${name} ${(performance.now() - started).toFixed(1)} ms`);
+  }
+};
+
 interface CachedModule {
   readonly file: ProcessedFile;
   readonly sourceMapChildren: readonly { readonly node: SourceNode; readonly children: SourceNode[] }[];
@@ -63,46 +77,45 @@ class IncrementalTranspiler extends Transpiler {
     return { emitPlan: [bundle] };
   }
 
-  compile(program: ts.Program, affected: readonly ts.SourceFile[]): readonly ts.Diagnostic[] {
-    const started = performance.now();
-    const { diagnostics: pluginDiagnostics, plugins } = getPlugins(program);
-    if (pluginDiagnostics.length > 0) return pluginDiagnostics;
-    const pluginDone = performance.now();
+  compile(program: ts.Program, affected: readonly ts.SourceFile[], phase: Phase): readonly ts.Diagnostic[] {
     const writeFile = this.emitHost.writeFile;
-    const { diagnostics, transpiledFiles } = getProgramTranspileResult(this.emitHost, writeFile, { program, plugins, sourceFiles: [...affected] });
-    if (diagnostics.length > 0) return diagnostics;
-    const transpileDone = performance.now();
-    for (const file of transpiledFiles) this.modules.set(file.fileName, cacheModule(file));
-    const ordered: ProcessedFile[] = [];
-    const live = new Set<string>();
-    for (const source of program.getSourceFiles()) {
-      const name = normalize(source.fileName);
-      live.add(name);
-      const module = this.modules.get(name);
-      if (module !== undefined) ordered.push({ ...module.file });
-    }
-    for (const name of this.modules.keys()) if (!live.has(name)) this.modules.delete(name);
-    const planDiagnostics: ts.Diagnostic[] = [];
-    let plan: ReturnType<IncrementalTranspiler["getEmitPlan"]>;
-    try {
-      plan = this.getEmitPlan(program, planDiagnostics, ordered, plugins);
-    } finally {
-      // Bundling is synchronous and has finished reading these trees. Restore
-      // the original requires before the next emission reuses unchanged modules.
-      for (const module of this.modules.values()) {
-        for (const { node, children } of module.sourceMapChildren) node.children = children;
+    const transpiled = phase("transpile", () => {
+      const { diagnostics: pluginDiagnostics, plugins } = getPlugins(program);
+      if (pluginDiagnostics.length > 0) return { diagnostics: pluginDiagnostics, plugins, transpiledFiles: [] };
+      return { plugins, ...getProgramTranspileResult(this.emitHost, writeFile, { program, plugins, sourceFiles: [...affected] }) };
+    });
+    if (transpiled.diagnostics.length > 0) return transpiled.diagnostics;
+    return phase("bundle", () => {
+      for (const file of transpiled.transpiledFiles) this.modules.set(file.fileName, cacheModule(file));
+      const ordered: ProcessedFile[] = [];
+      const live = new Set<string>();
+      for (const source of program.getSourceFiles()) {
+        const name = normalize(source.fileName);
+        live.add(name);
+        const module = this.modules.get(name);
+        if (module !== undefined) ordered.push({ ...module.file });
       }
-    }
-    const { emitPlan } = plan;
-    if (planDiagnostics.length > 0) return planDiagnostics;
-    const planDone = performance.now();
-    const { sourceMap: writeSourceMap = false, emitBOM = false } = program.getCompilerOptions();
-    for (const { outputPath, code, sourceMap, sourceFiles } of emitPlan) {
-      writeFile(outputPath, code, emitBOM, undefined, sourceFiles);
-      if (writeSourceMap && sourceMap !== undefined) writeFile(`${outputPath}.map`, sourceMap, emitBOM, undefined, sourceFiles);
-    }
-    if (process.env.COMPILER_TIMINGS !== undefined) console.log(`TSTL plugins ${(pluginDone - started).toFixed(1)} ms, transpile ${(transpileDone - pluginDone).toFixed(1)} ms, bundle-plan ${(planDone - transpileDone).toFixed(1)} ms, writes ${(performance.now() - planDone).toFixed(1)} ms; affected ${affected.length}`);
-    return [];
+      for (const name of this.modules.keys()) if (!live.has(name)) this.modules.delete(name);
+      const planDiagnostics: ts.Diagnostic[] = [];
+      let plan: ReturnType<IncrementalTranspiler["getEmitPlan"]>;
+      try {
+        plan = this.getEmitPlan(program, planDiagnostics, ordered, transpiled.plugins);
+      } finally {
+        // Bundling is synchronous and has finished reading these trees. Restore
+        // the original requires before the next emission reuses unchanged modules.
+        for (const module of this.modules.values()) {
+          for (const { node, children } of module.sourceMapChildren) node.children = children;
+        }
+      }
+      const { emitPlan } = plan;
+      if (planDiagnostics.length > 0) return planDiagnostics;
+      const { sourceMap: writeSourceMap = false, emitBOM = false } = program.getCompilerOptions();
+      for (const { outputPath, code, sourceMap, sourceFiles } of emitPlan) {
+        writeFile(outputPath, code, emitBOM, undefined, sourceFiles);
+        if (writeSourceMap && sourceMap !== undefined) writeFile(`${outputPath}.map`, sourceMap, emitBOM, undefined, sourceFiles);
+      }
+      return [];
+    });
   }
 }
 
@@ -127,7 +140,7 @@ function cachingHost(options: ts.CompilerOptions, cache: Map<string, CachedSourc
   return host;
 }
 
-export function mapCompiler(configPath: string): () => readonly ts.Diagnostic[] {
+export function mapCompiler(configPath: string): (phase?: Phase) => readonly ts.Diagnostic[] {
   // An absolute config path keeps every source file name absolute, which the
   // map plugin needs to recognize f32, floorDiv and floorMod by their file.
   const absolute = resolve(configPath);
@@ -135,43 +148,46 @@ export function mapCompiler(configPath: string): () => readonly ts.Diagnostic[] 
   const sources = new Map<string, CachedSource>();
   let builder: ts.EmitAndSemanticDiagnosticsBuilderProgram | undefined;
   let signaturesPrimed = false;
-  return () => {
-    const started = performance.now();
+  return (phase = defaultPhase) => {
     // Parsed every time so added and removed files are picked up.
-    const config = parseConfigFileWithSystem(absolute);
+    const config = phase("read config", () => parseConfigFileWithSystem(absolute));
     if (config.errors.length > 0) return config.errors;
     config.options.declaration = true;
     const host = cachingHost(config.options, sources);
-    builder = ts.createEmitAndSemanticDiagnosticsBuilderProgram(config.fileNames, config.options, host, builder);
-    const program = builder.getProgram();
-    const builderDone = performance.now();
+    const current = phase("create program", () => ts.createEmitAndSemanticDiagnosticsBuilderProgram(config.fileNames, config.options, host, builder));
+    builder = current;
+    const program = current.getProgram();
     const global = [...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
     if (global.length > 0) return global;
-    const affected: ts.SourceFile[] = [];
-    const diagnostics: ts.Diagnostic[] = [];
-    for (let next = builder.getSemanticDiagnosticsOfNextAffectedFile(); next !== undefined; next = builder.getSemanticDiagnosticsOfNextAffectedFile()) {
-      // A whole-program result (after an options change) means every file is affected.
-      const files = "fileName" in next.affected ? [next.affected] : next.affected.getSourceFiles();
-      for (const file of files) {
-        if (file.isDeclarationFile) continue;
-        affected.push(file);
-        diagnostics.push(...program.getSyntacticDiagnostics(file));
+    const { affected, diagnostics } = phase("type-check", () => {
+      const affected: ts.SourceFile[] = [];
+      const diagnostics: ts.Diagnostic[] = [];
+      for (let next = current.getSemanticDiagnosticsOfNextAffectedFile(); next !== undefined; next = current.getSemanticDiagnosticsOfNextAffectedFile()) {
+        // A whole-program result (after an options change) means every file is affected.
+        const files = "fileName" in next.affected ? [next.affected] : next.affected.getSourceFiles();
+        for (const file of files) {
+          if (file.isDeclarationFile) continue;
+          affected.push(file);
+          diagnostics.push(...program.getSyntacticDiagnostics(file));
+        }
+        diagnostics.push(...next.result);
       }
-      diagnostics.push(...next.result);
-    }
+      return { affected, diagnostics };
+    });
     if (!signaturesPrimed) {
-      const declarations = builder.emit(undefined, () => {}, undefined, true);
-      diagnostics.push(...declarations.diagnostics);
-      signaturesPrimed = declarations.diagnostics.length === 0 && diagnostics.length === 0;
+      phase("declaration signatures", () => {
+        const declarations = current.emit(undefined, () => {}, undefined, true);
+        diagnostics.push(...declarations.diagnostics);
+        signaturesPrimed = declarations.diagnostics.length === 0 && diagnostics.length === 0;
+      });
     }
-    const checkDone = performance.now();
     if (diagnostics.length > 0) return diagnostics;
     // Both TSTL and TypeScript's emit gate request whole-program declaration
     // diagnostics. Route those through the builder's dependency-aware cache.
     // Its per-file requests still use the program's checker; re-entry also
     // handles an option change that makes the whole program affected.
     const declarationDiagnostics = program.getDeclarationDiagnostics;
-    const incrementalDeclarations = builder.getDeclarationDiagnostics;
+    const incrementalDeclarations = current.getDeclarationDiagnostics;
     let checkingDeclarations = false;
     program.getDeclarationDiagnostics = (file, cancellationToken) => {
       if (file !== undefined || checkingDeclarations) return declarationDiagnostics(file, cancellationToken);
@@ -183,9 +199,7 @@ export function mapCompiler(configPath: string): () => readonly ts.Diagnostic[] 
       }
     };
     try {
-      const result = transpiler.compile(program, affected);
-      if (process.env.COMPILER_TIMINGS !== undefined) console.log(`config+builder ${(builderDone - started).toFixed(1)} ms, semantic diagnostics ${(checkDone - builderDone).toFixed(1)} ms`);
-      return result;
+      return transpiler.compile(program, affected, phase);
     } finally {
       program.getDeclarationDiagnostics = declarationDiagnostics;
     }

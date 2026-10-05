@@ -20,6 +20,7 @@ import { type Bundle, composeScript, typescriptBase } from "../mapScript";
 import { abilityData } from "../objectData";
 import { bytesChecksum } from "./boundary";
 import { describeCause } from "./command";
+import type { Phase } from "../compiler";
 import { type SourceMapFailure, SourceErrors } from "./sourceErrors";
 import { step } from "./timings";
 
@@ -106,16 +107,21 @@ export class MapBuild extends Context.Service<MapBuild, {
         yield* sourceErrors.retain(bundlePath, key);
         return { text: new TextDecoder().decode(bytes), key, bytes, checksum: bundleChecksum } satisfies CompiledBundle;
       });
-      const compile = Effect.gen(function*() {
-        const { run, report } = yield* tryMapPromise("load the map compiler", configPath, warmCompiler);
-        const diagnostics = yield* tryMapSync("compile map", configPath, run);
+      /** A map command times the compiler's loading and phases as steps; `hot` keeps its reload timeline short. */
+      const compileBundle = (measured: boolean) => Effect.gen(function*() {
+        const load = tryMapPromise("load the map compiler", configPath, warmCompiler);
+        const { run, report } = yield* measured ? load.pipe(step("load compiler")) : load;
+        const context = yield* Effect.context<never>();
+        const phase: Phase = (name, work) => Effect.runSyncWith(context)(Effect.sync(work).pipe(step(name)));
+        const diagnostics = yield* tryMapSync("compile map", configPath, () => measured ? run(phase) : run());
         if (diagnostics.length > 0) return yield* new CompileFailure({ diagnostics: report(diagnostics) });
         return yield* compiled;
       }).pipe(step("compile"));
+      const compile = compileBundle(false);
       // `hot` compiles every save into the same bundle, so a map command usually finds it current.
       const currentBundle = Effect.gen(function*() {
         const age = yield* tryMapSync("check compiled bundle", bundlePath, () => freshBundleAge(bundlePath, compileInputs, Date.now()));
-        if (age === undefined) return yield* compile;
+        if (age === undefined) return yield* compileBundle(true);
         return yield* compiled.pipe(step(`script reused (compiled ${age.toFixed(0)} s ago)`));
       });
       return MapBuild.of({
@@ -209,10 +215,12 @@ const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compil
   const { generated, files, assets } = yield* Effect.gen(function*() {
     const baseScriptPath = join(work, "base.war3map.lua");
     const baseInfoPath = join(work, "base.war3map.w3i");
-    yield* pack.extract(options.base, baseScriptPath);
-    yield* pack.extract(options.base, baseInfoPath, "war3map.w3i");
-    const [baseScript, baseInfo] = yield* tryMapPromise("read base map", options.base, () =>
-      Promise.all([Bun.file(baseScriptPath).text(), Bun.file(baseInfoPath).bytes()]));
+    const [baseScript, baseInfo] = yield* Effect.gen(function*() {
+      yield* pack.extract(options.base, baseScriptPath);
+      yield* pack.extract(options.base, baseInfoPath, "war3map.w3i");
+      return yield* tryMapPromise("read base map", options.base, () =>
+        Promise.all([Bun.file(baseScriptPath).text(), Bun.file(baseInfoPath).bytes()]));
+    }).pipe(step("extract base script"));
     const generated = yield* tryMapSync("generate map files", options.base, () => {
       const info = declareMap(decodeMapInfo(baseInfo), options.name, options.declaration);
       const base = typescriptBase(baseScript, mapConfig(info));
@@ -230,9 +238,9 @@ const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compil
     yield* Effect.forEach(files, ({ source, contents }) =>
       tryMapPromise("write generated file", source, () => Bun.write(source, contents)), { discard: true });
     const scriptPath = join(work, "war3map.lua");
-    yield* runProcess("check map script syntax", scriptPath, ["nix", "shell", "nixpkgs#lua5_3", "--command", "luac", "-p", scriptPath]);
+    yield* runProcess("check map script syntax", scriptPath, ["nix", "shell", "nixpkgs#lua5_3", "--command", "luac", "-p", scriptPath]).pipe(step("check script syntax"));
     const assets = [
-      ...yield* baseMapFiles(packager, options.base, new Set(files.map(({ entry }) => entry)), work),
+      ...yield* baseMapFiles(packager, options.base, new Set(files.map(({ entry }) => entry)), work).pipe(step("extract base files")),
       ...options.imports ?? [],
     ];
     return { generated, files, assets };

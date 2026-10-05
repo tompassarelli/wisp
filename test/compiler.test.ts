@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { transpileProject } from "typescript-to-lua";
-import { mapCompiler, report } from "../scripts/compiler";
+import { type Phase, mapCompiler, report } from "../scripts/compiler";
 
 test("cached module requires keep the same bundle and source map as full compilation", () => {
   const build = join(import.meta.dir, "../build");
@@ -33,4 +33,30 @@ test("cached module requires keep the same bundle and source map as full compila
     expect(report(transpileProject(config).diagnostics)).toBe("");
     expect(output()).toEqual(incremental);
   }
+});
+
+test("a compile reports its phases to the caller's hook, and signatures are primed only on the first", () => {
+  const build = join(import.meta.dir, "../build");
+  mkdirSync(build, { recursive: true });
+  const directory = mkdtempSync(join(build, "compiler-phases-"));
+  mkdirSync(join(directory, "src"));
+  const config = join(directory, "tsconfig.json");
+  writeFileSync(join(directory, "src/main.ts"), "export const result = 1;\n");
+  writeFileSync(config, JSON.stringify({
+    compilerOptions: { target: "ESNext", module: "ESNext", moduleResolution: "Bundler", strict: true, types: [], skipLibCheck: true, rootDir: "src", outDir: "out" },
+    include: ["src/**/*.ts"],
+    tstl: { luaTarget: "5.3", luaBundle: "map.lua", luaBundleEntry: "src/main.ts", noHeader: true },
+  }));
+  const compile = mapCompiler(config);
+  const phases: string[] = [];
+  const phase: Phase = (name, run) => {
+    phases.push(name);
+    return run();
+  };
+  expect(report(compile(phase))).toBe("");
+  expect(phases).toEqual(["read config", "create program", "type-check", "declaration signatures", "transpile", "bundle"]);
+  phases.length = 0;
+  writeFileSync(join(directory, "src/main.ts"), "export const result = 2;\n");
+  expect(report(compile(phase))).toBe("");
+  expect(phases).toEqual(["read config", "create program", "type-check", "transpile", "bundle"]);
 });
