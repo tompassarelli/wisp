@@ -1,0 +1,55 @@
+// Headless runs in 32-bit Lua (wisp:docs/headless.md): each simulated client
+// loads the map's compiled bundle into its own environment, whose globals are
+// that client's natives over Lua's own, so clients share no state.
+import type { LocalNatives, MapEntry } from "./client";
+import { parseNativeDeclarations } from "./declarations";
+import { type Journey, journeyLines, journeyProblems, runJourney } from "./journey";
+import { Lockstep } from "./lockstep";
+
+/** What a game declares about its map for a headless run. */
+export interface LuaHeadlessMap {
+  /** The map's configureRuntime() filePrefix. */
+  readonly filePrefix: string;
+  readonly localNatives?: LocalNatives;
+  /** Human player slots, one client each; two by default. */
+  readonly players?: readonly number[];
+}
+
+function readFile(path: string): string {
+  const [file, problem] = io.open(path, "rb");
+  if (file === undefined) throw new Error(`can't read ${path}: ${problem}`);
+  const text = file.read("a");
+  file.close();
+  if (text === undefined) throw new Error(`can't read ${path}`);
+  return text;
+}
+
+/** Clients that each run `bundle`, the map's compiled Lua, with the natives `declarations` (warcraft.d.ts) lists. */
+export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: string): Lockstep {
+  return new Lockstep({
+    declarations: parseNativeDeclarations(declarations),
+    players: map.players ?? [0, 1],
+    filePrefix: map.filePrefix,
+    bundle,
+    ...(map.localNatives === undefined ? {} : { localNatives: map.localNatives }),
+    natives: (client) => {
+      const environment = client.natives;
+      setmetatable(environment, { __index: _G });
+      // TypeScriptToLua's globalThis is _G; a hot reload loads its bundle here too.
+      return { _G: environment, load: (text: string, name?: string) => load(text, name, "t", environment) };
+    },
+    entry: (client) => {
+      const [chunk, problem] = load(bundle, "=map", "t", client.natives);
+      if (chunk === undefined) throw new Error(`the map bundle doesn't load: ${problem}`);
+      const entry: MapEntry = chunk();
+      return entry;
+    },
+  });
+}
+
+/** Plays `journey` with the bundle and declarations at these paths, prints its result, and returns how many problems it found. */
+export function runLuaJourney(map: LuaHeadlessMap, journey: Journey, bundlePath: string, declarationsPath: string): number {
+  const result = runJourney(luaLockstep(map, readFile(bundlePath), readFile(declarationsPath)), journey);
+  for (const line of journeyLines(result)) print(line);
+  return journeyProblems(result);
+}

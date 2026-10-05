@@ -13,7 +13,8 @@ tools run in Bun and use Effect. Synchronized game code stays in TypeScript
 that TypeScriptToLua can compile.
 
 Wisp owns the compiler, numeric guards and helpers, reload runtime, host
-services, and generic archive operations. Games own their simulation, UI,
+services, the headless runtime that runs a map in simulated clients, and
+generic archive operations. Games own their simulation, UI,
 assets, map declaration, import list, and acceptance journeys. Smashcraft is
 the first consumer; Wisp does not import or read its source. The sample map
 in wisp:examples/sample/ is the second map built on Wisp, from Wisp alone.

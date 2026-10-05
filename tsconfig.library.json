@@ -6,7 +6,7 @@
     "skipLibCheck": true, "types": ["lua-types/5.3"],
     "rootDir": ".", "outDir": "build/package", "declaration": true
   },
-  "include": ["src/runtime/*.ts", "src/sim/*.ts", "src/platform/*.ts", "src/natives/*.d.ts"],
+  "include": ["src/runtime/*.ts", "src/sim/*.ts", "src/platform/*.ts", "src/headless/*.ts", "src/natives/*.d.ts"],
   "exclude": ["src/**/*.test.ts", "src/**/*.tests.ts"],
   "tstl": {
     "buildMode": "library", "luaTarget": "5.3", "luaLibImport": "require",

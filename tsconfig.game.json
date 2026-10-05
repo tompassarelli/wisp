@@ -23,7 +23,8 @@
     "src/runtime/*.ts",
     "src/sim/*.ts",
     "src/game/**/*.ts",
-    "src/platform/**/*.ts"
+    "src/platform/**/*.ts",
+    "src/headless/*.ts"
   ],
   "exclude": [
     "src/sim/*.test.ts"

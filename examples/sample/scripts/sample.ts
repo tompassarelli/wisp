@@ -76,4 +76,14 @@ process.exit(await runCli("bun examples/sample/scripts/sample.ts", {
   hot: { usage: "--data DIR [--data DIR ...] [--watch]", load: async () => makeHot({ project, sourceDirectory, sourceMapDirectory, filePrefix }) },
   fresh: { usage: "MAP.w3x [--rebuild] [--from-game] [--map-folder Maps/00-Wisp]   (WISP_CLIENTS=clients.json)", load: async () => fresh },
   client: { usage: "look|read|click|keys|chat CLIENT ...   (WISP_CLIENTS=clients.json)", load: async () => makeClient(clientsFile) },
+  headless: {
+    usage: "[ping-reload] [--clients N]",
+    load: async () => {
+      const { makeHeadless } = await import("wisp/scripts/wisp/commands/headless");
+      return makeHeadless(async () => {
+        const { SAMPLE_JOURNEY, SAMPLE_MAP } = await import("../test/journey");
+        return { map: SAMPLE_MAP, entry: join(sourceDirectory, "main.ts"), journeys: { "ping-reload": SAMPLE_JOURNEY } };
+      });
+    },
+  },
 }, process.argv.slice(2)));

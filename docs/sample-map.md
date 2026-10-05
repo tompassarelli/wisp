@@ -10,7 +10,10 @@ comparable:
 - a 0.1 s periodic timer moves each unit along a square lap around the center,
   computed by one pure function, `pathPoint` in src/path.ts;
 - the chat command `-ping` prints a counter to every player;
-- one unit test for `pathPoint`, run in Bun and in 32-bit Lua.
+- one unit test for `pathPoint`, run in Bun and in 32-bit Lua;
+- a [headless](headless.md) two-client journey: start, `-ping`, a hot reload,
+  another `-ping` and more frames, with the same native calls in both clients,
+  and the same in Bun as in 32-bit Lua.
 
 | File | What it shows |
 | --- | --- |
@@ -18,8 +21,10 @@ comparable:
 | src/path.tests.ts | A test registered with `test()` from wisp:src/runtime/testing.ts, so it runs in both runtimes. |
 | src/main.ts | The map entry: `start()` creates the units, the timer and the chat trigger once, through `trampoline()`; `install()` configures the runtime and registers every handler, at start and after each hot reload. Match state is a global. |
 | test/path.test.ts, test/lua.ts | The Bun test file: the registered tests in Bun, then compiled with tsconfig.tests.json and run in the Lua that `LUA` names. |
-| scripts/sample.ts | The map's program: `build`, `rebuild`, `hot`, `fresh` and `client`, composed from Wisp's services with `runCli`. |
-| tsconfig.json, tsconfig.map.json, tsconfig.tests.json | Host scripts and tests; the map bundle; the Lua test bundle. |
+| test/journey.ts | The headless journey and what it needs to know about the map, declared once for Bun and Lua. |
+| test/headless.test.ts, test/headless-lua.ts | The journey in two simulated clients of the map's TypeScript in Bun, then of its compiled bundle in the Lua that `LUA` names, compiled with tsconfig.headless.json; both print the same result. |
+| scripts/sample.ts | The map's program: `build`, `rebuild`, `hot`, `fresh`, `client` and `headless`, composed from Wisp's services with `runCli`. |
+| tsconfig.json, tsconfig.map.json, tsconfig.tests.json, tsconfig.headless.json | Host scripts and tests, which also see the natives and Lua's types because the headless test imports map code; the map bundle; the Lua test bundle; the Lua headless bundle. |
 
 ## Run it
 
@@ -31,7 +36,9 @@ LUA=/path/to/lua32 bun test examples/sample
 bun examples/sample/scripts/sample.ts build --base BASE.w3m --out OUT_DIR/wisp-sample.w3x
 ```
 
-`LUA` must be Lua 5.3 built with `LUA_32BITS`. The output must be outside the
+`bun examples/sample/scripts/sample.ts headless [--clients N]` plays the
+headless journey and prints each client's native calls and checksum and any
+problem. `LUA` must be Lua 5.3 built with `LUA_32BITS`. The output must be outside the
 checkout. The build also needs `nix` on first use: it links nixpkgs `lua5_3`,
 which checks the script's syntax, into wisp:build/tools/lua and compiles the map
 packager from wisp:native/map-pack.c against nixpkgs StormLib into
@@ -101,17 +108,20 @@ versions in wisp:typescript-toolchain.lock in the project's package.json
 `effect`, `@effect/tsgo`), plus `lua-types` and `@types/bun`; the build checks
 the declared and installed versions. Then:
 
-- remove `paths` from the three tsconfig files: `wisp/...` imports resolve
+- remove `paths` from the four tsconfig files: `wisp/...` imports resolve
   through the installed package;
-- in tsconfig.map.json and tsconfig.tests.json, set `rootDir` to `.`, name the
-  natives `node_modules/wisp/src/natives/warcraft.d.ts` and the plugin
-  `./node_modules/wisp/plugins/warcraft-numbers.ts`;
+- name the natives `node_modules/wisp/src/natives/warcraft.d.ts` in
+  tsconfig.json and tsconfig.map.json; in tsconfig.map.json,
+  tsconfig.tests.json and tsconfig.headless.json, set `rootDir` to `.` and name
+  the plugin `./node_modules/wisp/plugins/warcraft-numbers.ts`;
 - run the number rules in the project's type-check after `tsc --build`:
-  `bun node_modules/wisp/scripts/numberRules.ts tsconfig.map.json tsconfig.tests.json`;
+  `bun node_modules/wisp/scripts/numberRules.ts tsconfig.map.json tsconfig.tests.json tsconfig.headless.json`;
   for the editor, add the plugin entry from the [feature index](index.md)
   to the tsconfig the editor uses for src/;
 - in scripts/sample.ts, make `root` the project root, compile inputs
   `src` and `node_modules/wisp/src`, and point `toolchainLockPath` at the
   project's own lock file;
 - choose the map's name, declaration, `configureRuntime()` prefixes and the
-  matching host `filePrefix`.
+  matching host `filePrefix`, and the same prefixes in test/journey.ts;
+- run the headless Lua bundle with
+  `node_modules/wisp/src/natives/warcraft.d.ts` as its declarations.
