@@ -2,7 +2,7 @@
 
 # Waygate
 
-**A Warcraft III toolchain from the future.**
+**Warcraft III development at warp speed.**
 
 Modern tooling, testing, build automation, and developer experience for Warcraft III modding.
 
