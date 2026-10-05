@@ -2,6 +2,7 @@
 // values and the concrete desktop driver come from the supplied clients file.
 import { Context, Effect, Layer } from "effect";
 import * as desktop from "../warcraft/desktop";
+import type { Frame } from "./frameProbe";
 export { DesktopFailure, type Ink, type Region, type Word, type InputAction, waitFor } from "../warcraft/desktop";
 
 /** The client identity used by journeys and fake service implementations. */
@@ -11,6 +12,8 @@ export class Clients extends Context.Service<Clients, {
   /** Every client, the host first. */
   readonly all: readonly [Client, ...Client[]];
   readonly read: (client: Client, region?: desktop.Region, ink?: desktop.Ink) => Effect.Effect<string, desktop.DesktopFailure>;
+  /** The whole client frame, captured off-screen from its private desktop. */
+  readonly capture: (client: Client) => Effect.Effect<Frame, desktop.DesktopFailure>;
   readonly words: (client: Client, ink?: desktop.Ink) => Effect.Effect<readonly desktop.Word[], desktop.DesktopFailure>;
   readonly click: (client: Client, x: number, y: number) => Effect.Effect<void, desktop.DesktopFailure>;
   readonly keys: (client: Client, ...names: string[]) => Effect.Effect<void, desktop.DesktopFailure>;
@@ -42,6 +45,7 @@ const connect = (path: string) => Effect.gen(function*() {
   return Clients.of({
     all: [first, ...others],
     read: (client, region, ink = "light") => Effect.flatMap(session(client), (value) => desktop.read(value, region, ink)),
+    capture: (client) => Effect.flatMap(session(client), (value) => desktop.capture(value)),
     words: (client, ink = "light") => Effect.flatMap(session(client), (value) => desktop.words(value, ink)),
     click: (client, x, y) => Effect.flatMap(session(client), (value) => desktop.click(value, x, y)),
     keys: (client, ...names) => Effect.flatMap(session(client), (value) => desktop.keys(value, ...names)),

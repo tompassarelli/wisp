@@ -5,6 +5,7 @@
 import { join } from "node:path";
 import { Clock, Effect, Exit, Schema } from "effect";
 import { describeCause } from "../wisp/command";
+import { type Frame, decodePpm } from "../wisp/frameProbe";
 import { captureProcess } from "../wisp/mapBuild";
 import { step } from "../wisp/timings";
 import { inputBatches, type InputAction } from "./inputBatch";
@@ -47,12 +48,6 @@ export interface Region {
 /** How text is separated from the background before reading: white labels or the gold menu labels. */
 export type Ink = "light" | "gold";
 
-interface Frame {
-  readonly width: number;
-  readonly height: number;
-  readonly rgb: Uint8Array;
-}
-
 function fail(operation: string, client: string) {
   return (cause: unknown) => new DesktopFailure({ operation, client, cause });
 }
@@ -93,10 +88,9 @@ export const capture = (client: Client, region?: Region) =>
   Effect.gen(function*() {
     const geometry = region === undefined ? [] : ["-g", `${region.x},${region.y} ${region.width}x${region.height}`];
     const ppm = yield* run(client.name, "capture frame", [client.tools.grim, "-t", "ppm", ...geometry, "-"], client.wayland);
-    // P6 header: magic, width, height, maximum value, each followed by one whitespace byte.
-    const header = /^P6\s+(\d+)\s+(\d+)\s+255\s/.exec(text(ppm.subarray(0, 32)));
-    if (header === null) return yield* new DesktopFailure({ operation: "capture frame", client: client.name, cause: "not a PPM frame" });
-    return { width: Number(header[1]), height: Number(header[2]), rgb: ppm.subarray(header[0].length) } satisfies Frame;
+    const frame = decodePpm(ppm);
+    if (frame === undefined) return yield* new DesktopFailure({ operation: "capture frame", client: client.name, cause: "not a PPM frame" });
+    return frame;
   });
 
 /** Dark text on white, which is what the reader expects. */
