@@ -7,7 +7,7 @@
 import { ackFile, formatManifest, hostFile, manifestFile, PAYLOAD_FILE_BYTES, payloadFile } from "../runtime/gameFiles";
 import { checksum } from "../runtime/payload";
 import { floorDiv } from "../sim/intMath";
-import { type ClientScope, HeadlessClient, type LocalNatives, type MapEntry, type NativeBehaviors, type SyncMessage, WISP_LOCAL_NATIVES, describeCall, sameCall } from "./client";
+import { type ClientFiles, type ClientScope, HeadlessClient, type LocalNatives, type MapEntry, type NativeBehaviors, type SyncMessage, WISP_LOCAL_NATIVES, describeCall, sameCall } from "./client";
 import type { NativeDeclarations } from "./declarations";
 
 export interface LockstepOptions {
@@ -26,6 +26,13 @@ export interface LockstepOptions {
   readonly scope?: ClientScope;
   /** When synchronized messages arrive; without it, each arrives before the next frame. */
   readonly delivery?: SyncDelivery;
+  /** A player's CustomMapData outside the process, for clients whose files another program reads and writes. */
+  readonly files?: (this: void, slot: number) => ClientFiles | undefined;
+  /**
+   * Compare the clients' calls after every frame and keep only this many of
+   * each log, for the context of a later desync, so a long run keeps its memory.
+   */
+  readonly keepCalls?: number;
 }
 
 /**
@@ -43,6 +50,15 @@ interface InFlight {
   readonly message: SyncMessage;
 }
 
+/** The key a typed character presses outside an edit box, with its modifiers (1: Shift); undefined for one with no key. */
+function typedKey(code: number): readonly [key: number, meta: number] | undefined {
+  // a-z: Warcraft's key codes are the capital letters'.
+  if (code >= 97 && code <= 122) return [code - 32, 0];
+  if (code >= 65 && code <= 90) return [code, 1];
+  if ((code >= 48 && code <= 57) || code === 32) return [code, 0];
+  return undefined;
+}
+
 /** Synchronized messages that keep causing more are a defect, not a frame. */
 const MAX_MESSAGES_PER_FLUSH = 10000;
 
@@ -56,6 +72,8 @@ export class Lockstep {
   /** With a delivery: messages sent and not yet received, by arrival frame, then send order. */
   readonly inFlight: InFlight[] = [];
   private readonly options: LockstepOptions;
+  /** The first desync, once a comparison after a frame found one. */
+  private divergence: string | undefined;
 
   constructor(options: LockstepOptions) {
     this.options = options;
@@ -63,6 +81,7 @@ export class Lockstep {
     const clients: HeadlessClient[] = [];
     for (let index = 0; index < options.players.length; index++) {
       const slot = options.players[index] ?? index;
+      const files = options.files?.(slot);
       clients.push(new HeadlessClient({
         slot,
         filePrefix: options.filePrefix,
@@ -74,6 +93,7 @@ export class Lockstep {
         screenWidth: 1920 + 640 * index,
         ...(options.scope === undefined ? {} : { scope: options.scope }),
         ...(options.natives === undefined ? {} : { natives: options.natives }),
+        ...(files === undefined ? {} : { files }),
       }));
     }
     this.clients = clients;
@@ -134,7 +154,23 @@ export class Lockstep {
       this.arrive();
       for (const client of this.clients) client.step();
       this.flush();
+      this.settle();
     }
+  }
+
+  /**
+   * With keepCalls, compares the clients' calls so far, keeps the first
+   * desync with the frame it was found after, and forgets all but the last
+   * keepCalls of each log.
+   */
+  private settle(): void {
+    const keep = this.options.keepCalls;
+    if (keep === undefined) return;
+    if (this.divergence === undefined) {
+      const divergence = this.compare();
+      if (divergence !== undefined) this.divergence = `after frame ${this.frame}, ${divergence}`;
+    }
+    for (const client of this.clients) if (client.log.length > keep) client.forget(client.log.length - keep);
   }
 
   chat(sender: number, message: string): void {
@@ -148,6 +184,42 @@ export class Lockstep {
       for (const client of this.clients) client.key(sender, key, meta, down);
       this.flush();
     }
+  }
+
+  /** The client of a player slot. */
+  client(slot: number): HeadlessClient {
+    for (const client of this.clients) if (client.slot === slot) return client;
+    throw new Error(`no client plays slot ${slot}`);
+  }
+
+  /**
+   * Text a player's keyboard types, such as an input helper's: into the edit
+   * box that has their keyboard, local to their client, or, without one, as a
+   * press and release of each character's key, which every client sees.
+   */
+  type(sender: number, text: string): void {
+    if (this.client(sender).type(text)) return;
+    for (let index = 0; index < text.length; index++) {
+      const key = typedKey(text.charCodeAt(index));
+      if (key === undefined) throw new Error(`no key types "${text.charAt(index)}" outside an edit box`);
+      this.press(sender, key[0], key[1]);
+    }
+  }
+
+  /**
+   * A player's click at (x, y) in Warcraft's UI coordinates: the frame under
+   * it on their client takes the keyboard, and every client sees the click.
+   * False when no frame there takes clicks.
+   */
+  click(sender: number, x: number, y: number): boolean {
+    const clicker = this.client(sender);
+    const frame = clicker.clickTarget(x, y);
+    if (frame === undefined) return false;
+    clicker.frames.focus(frame, true);
+    const click = clicker.natives.FRAMEEVENT_CONTROL_CLICK;
+    for (const client of this.clients) client.frameEvent(sender, frame.id, click);
+    this.flush();
+    return true;
   }
 
   /** Puts a file in every client's CustomMapData, as the host writes it: one chunk per FileIO tooltip level. */
@@ -194,6 +266,10 @@ export class Lockstep {
 
   /** The first call at which two clients' logs differ, with the calls around it; undefined when they agree. */
   firstDivergence(): string | undefined {
+    return this.divergence ?? this.compare();
+  }
+
+  private compare(): string | undefined {
     const first = this.clients[0];
     if (first === undefined) return undefined;
     for (let other = 1; other < this.clients.length; other++) {
@@ -212,7 +288,7 @@ export class Lockstep {
           }
           return lines.join("\n    ");
         };
-        return `call ${index} differs between slot ${first.slot} and slot ${client.slot}:\n  slot ${first.slot}:\n    ${context(first.log)}\n  slot ${client.slot}:\n    ${context(client.log)}`;
+        return `call ${first.forgotten + index} differs between slot ${first.slot} and slot ${client.slot}:\n  slot ${first.slot}:\n    ${context(first.log)}\n  slot ${client.slot}:\n    ${context(client.log)}`;
       }
     }
     return undefined;

@@ -8,6 +8,7 @@
 // natives where its map code finds them.
 import { errorFile, FILE_IO_ABILITY } from "../runtime/gameFiles";
 import type { NativeDeclarations } from "./declarations";
+import { FRAME_POINTS, type Frame, Frames } from "./frames";
 
 export type Handle = { readonly kind: string; readonly id: number };
 
@@ -105,12 +106,26 @@ interface EventContext {
   chat: string;
   key: number;
   timer: Timer | undefined;
+  frame: Frame | undefined;
+  frameEvent: unknown;
 }
 
 type Registration =
   | { readonly kind: "sync"; readonly trigger: Trigger; readonly player: number; readonly prefix: string }
   | { readonly kind: "chat"; readonly trigger: Trigger; readonly player: number; readonly text: string; readonly exact: boolean }
-  | { readonly kind: "key"; readonly trigger: Trigger; readonly player: number; readonly key: number; readonly meta: number; readonly down: boolean };
+  | { readonly kind: "key"; readonly trigger: Trigger; readonly player: number; readonly key: number; readonly meta: number; readonly down: boolean }
+  | { readonly kind: "frame"; readonly trigger: Trigger; readonly frame: Frame; readonly event: unknown };
+
+/**
+ * A client's CustomMapData folder outside the process, so another program,
+ * such as an input helper, reads what the map writes and writes what it reads.
+ */
+export interface ClientFiles {
+  /** A file the map wrote with PreloadGenEnd: its Preload lines. */
+  written(this: void, name: string, lines: readonly string[]): void;
+  /** What Preloader reads from a file someone else wrote: one chunk per FileIO tooltip level; undefined while it is missing. */
+  read(this: void, name: string): readonly string[] | undefined;
+}
 
 /** How a host makes one client's natives and state the ones map code sees while it runs. */
 export interface ClientScope {
@@ -131,12 +146,15 @@ export interface ClientOptions {
   readonly scope?: ClientScope;
   /** Added or replacing natives; values that aren't declared natives, such as Lua globals, are set unlogged. */
   readonly natives?: (this: void, client: HeadlessClient) => NativeBehaviors;
+  readonly files?: ClientFiles;
 }
 
 export const FRAMES_PER_SECOND = 60;
 
 const isHandle = (value: unknown): value is Handle =>
   typeof value === "object" && value !== null && "id" in value && "kind" in value;
+
+const isFrame = (value: unknown): value is Frame => isHandle(value) && "points" in value;
 
 function isDigits(text: string): boolean {
   const start = text.startsWith("-") ? 1 : 0;
@@ -242,6 +260,12 @@ function mixText(hash: number, text: string): number {
 /** Native names and handle kinds recur in every call, so each is hashed once. */
 const nameHashes = new Map<string, number>();
 
+function mixCall(hash: number, { name, args }: NativeCall): number {
+  let mixed = mixName(hash, name);
+  for (let index = 0; index < args.length; index++) mixed = mixValue(mixed, args[index]);
+  return mixed;
+}
+
 function mixName(hash: number, name: string): number {
   let named = nameHashes.get(name);
   if (named === undefined) {
@@ -269,8 +293,11 @@ function mixValue(hash: number, value: unknown): number {
 
 export class HeadlessClient {
   readonly slot: number;
-  /** Every native call the other clients must make alike, in order. */
+  /** Every native call the other clients must make alike, in order, since the calls forget() dropped. */
   readonly log: NativeCall[] = [];
+  /** Calls forget() dropped from the front of `log`; the checksum still covers them. */
+  forgotten = 0;
+  private forgottenHash = 0;
   /** Error reports the map wrote to its error file, shown on screen or not: `error in HANDLER: MESSAGE`. */
   readonly errors: string[] = [];
   /** Every message the map showed this client. */
@@ -295,18 +322,23 @@ export class HeadlessClient {
   private readonly filePrefix: string;
   private readonly timers: Timer[] = [];
   private readonly registrations: Registration[] = [];
-  private readonly memo = new Map<string, Handle>();
+  private readonly memo = new Map<string, Frame>();
+  private allPlayers: Handle | undefined;
   private readonly effects = new Map<Handle, EffectPose>();
   private readonly tooltips = new Map<string, string>();
   /** Preloader runs the content it first read from a path for the rest of the session. */
   private readonly preloaded = new Map<string, readonly string[]>();
-  private event: EventContext = { player: 0, syncPrefix: "", syncData: "", chat: "", key: 0, timer: undefined };
+  private event: EventContext = { player: 0, syncPrefix: "", syncData: "", chat: "", key: 0, timer: undefined, frame: undefined, frameEvent: undefined };
   private preload: string[] = [];
+  private readonly stored: ClientFiles | undefined;
+  /** The frames this client shows: their text, places, and which takes a click or the keyboard. */
+  readonly frames: Frames;
 
   constructor(options: ClientOptions) {
     this.slot = options.slot;
     this.scope = options.scope;
     this.filePrefix = options.filePrefix;
+    this.stored = options.files;
     const behaviors = this.behaviors(options);
     const local = options.localNatives;
     const log = this.log;
@@ -323,6 +355,13 @@ export class HeadlessClient {
     // A constant of a handle type is its own name, so comparisons with it work.
     for (const [name, type] of options.declarations.constants) this.natives[name] = type === "number" ? 0 : type === "boolean" ? name === "TRUE" : name;
     for (const [name, type] of options.declarations.variables) this.natives[name] = this.defaultValue(type);
+    const points = new Map<unknown, readonly [number, number]>();
+    for (let index = 0; index < FRAME_POINTS.length; index++) {
+      const [name, fromLeft, fromTop] = FRAME_POINTS[index] ?? ["", 0, 0];
+      points.set(this.natives[name] ?? name, [fromLeft, fromTop]);
+      points.set(index, [fromLeft, fromTop]);
+    }
+    this.frames = new Frames(points);
     const extra = options.natives?.(this) ?? {};
     for (const name of Object.keys(extra)) {
       const value = extra[name];
@@ -357,12 +396,22 @@ export class HeadlessClient {
     }
   }
 
-  private memoized(key: string, kind: string): Handle {
+  /** A frame Warcraft made, such as an origin frame: one handle per frame, made at its first lookup. */
+  private memoized(key: string, name = ""): Frame {
     const known = this.memo.get(key);
     if (known !== undefined) return known;
-    const created = this.handle(kind);
+    const created = this.frames.add(this.handle("framehandle"), "", name, undefined, 0);
     this.memo.set(key, created);
     return created;
+  }
+
+  private created(type: string, name: string, owner: unknown, context: number): Frame {
+    return this.frames.add(this.handle("framehandle"), type, name, isFrame(owner) ? owner : undefined, context);
+  }
+
+  /** Changes a frame the map holds; a handle that isn't one of this client's frames changes nothing. */
+  private withFrame<A>(frame: unknown, change: (frame: Frame) => A, otherwise: A): A {
+    return isFrame(frame) ? change(frame) : otherwise;
   }
 
   private effectAt(model: string, x: number, y: number): Handle {
@@ -396,7 +445,10 @@ export class HeadlessClient {
       GetHandleId: (handle: unknown) => (isHandle(handle) ? handle.id : handle),
       GetPlayerController: (player: number) => (playing(player) ? "MAP_CONTROL_USER" : "MAP_CONTROL_NONE"),
       GetPlayerSlotState: (player: number) => (playing(player) ? "PLAYER_SLOT_STATE_PLAYING" : "PLAYER_SLOT_STATE_EMPTY"),
-      GetPlayersAll: () => this.memoized("players all", "force"),
+      GetPlayersAll: () => {
+        if (this.allPlayers === undefined) this.allPlayers = this.handle("force");
+        return this.allPlayers;
+      },
       CreateUnit: (_owner: number, typeId: number, x: number, y: number): Unit => ({ ...this.handle("unit"), typeId, x, y, moveSpeed: 0, attackCooldown: 0 }),
       GetUnitTypeId: (unit: Unit) => unit.typeId,
       GetUnitX: (unit: Unit) => unit.x,
@@ -423,11 +475,51 @@ export class HeadlessClient {
       BlzGetLocalClientHeight: () => 1080,
       BlzIsLocalClientActive: () => true,
       BlzLoadTOCFile: () => true,
-      BlzFrameGetTextSizeLimit: () => 4096,
       // A frame getter returns one handle per frame, made at its first call.
-      BlzGetOriginFrame: (type: unknown, index: number) => this.memoized(`origin ${describeValue(type)} ${index}`, "framehandle"),
-      BlzGetFrameByName: (name: string, context: number) => this.memoized(`name ${name} ${context}`, "framehandle"),
-      BlzFrameGetChild: (frame: Handle, index: number) => this.memoized(`child ${frame.id} ${index}`, "framehandle"),
+      BlzGetOriginFrame: (type: unknown, index: number) => this.memoized(`origin ${describeValue(type)} ${index}`),
+      BlzGetFrameByName: (name: string, context: number) => this.frames.named(name, context) ?? this.memoized(`name ${name} ${context}`, name),
+      BlzFrameGetChild: (frame: Handle, index: number) => this.memoized(`child ${frame.id} ${index}`),
+      BlzCreateFrame: (name: string, owner: unknown, _priority: number, context: number) => this.created(name, name, owner, context),
+      BlzCreateSimpleFrame: (name: string, owner: unknown, context: number) => this.created(name, name, owner, context),
+      BlzCreateFrameByType: (type: string, name: string, owner: unknown, _inherits: string, context: number) => this.created(type, name, owner, context),
+      BlzDestroyFrame: (frame: unknown) => this.withFrame(frame, (target) => this.frames.destroy(target), undefined),
+      BlzFrameGetName: (frame: unknown) => this.withFrame(frame, (target) => target.name, ""),
+      BlzFrameGetParent: (frame: unknown) => this.withFrame(frame, (target) => target.parent, undefined),
+      BlzFrameSetText: (frame: unknown, text: string) => this.withFrame(frame, (target) => {
+        target.text = text;
+      }, undefined),
+      BlzFrameGetText: (frame: unknown) => this.withFrame(frame, (target) => target.text, ""),
+      BlzFrameSetTextSizeLimit: (frame: unknown, size: number) => this.withFrame(frame, (target) => {
+        target.textLimit = size;
+      }, undefined),
+      BlzFrameGetTextSizeLimit: (frame: unknown) => this.withFrame(frame, (target) => target.textLimit, 0),
+      BlzFrameSetVisible: (frame: unknown, visible: boolean) => this.withFrame(frame, (target) => {
+        target.visible = visible;
+      }, undefined),
+      BlzFrameIsVisible: (frame: unknown) => this.withFrame(frame, (target) => target.visible, false),
+      BlzFrameSetEnable: (frame: unknown, enabled: boolean) => this.withFrame(frame, (target) => {
+        target.enabled = enabled;
+      }, undefined),
+      BlzFrameGetEnable: (frame: unknown) => this.withFrame(frame, (target) => target.enabled, false),
+      BlzFrameSetFocus: (frame: unknown, flag: boolean) => this.withFrame(frame, (target) => this.frames.focus(target, flag), undefined),
+      BlzFrameSetLevel: (frame: unknown, level: number) => this.withFrame(frame, (target) => {
+        target.level = level;
+      }, undefined),
+      BlzFrameSetSize: (frame: unknown, width: number, height: number) => this.withFrame(frame, (target) => {
+        target.width = width;
+        target.height = height;
+      }, undefined),
+      BlzFrameSetAbsPoint: (frame: unknown, point: unknown, x: number, y: number) => this.withFrame(frame, (target) => {
+        target.points.set(point, { x, y });
+      }, undefined),
+      BlzFrameClearAllPoints: (frame: unknown) => this.withFrame(frame, (target) => target.points.clear(), undefined),
+      BlzTriggerRegisterFrameEvent: (trigger: Trigger, frame: unknown, event: unknown) => {
+        if (isFrame(frame)) this.registrations.push({ kind: "frame", trigger, frame, event });
+        return this.handle("event");
+      },
+      BlzGetTriggerFrame: () => this.event.frame,
+      BlzGetTriggerFrameEvent: () => this.event.frameEvent,
+      BlzGetTriggerFrameText: () => this.event.frame?.text ?? "",
       BlzGetTriggerSyncData: () => this.event.syncData,
       BlzGetTriggerSyncPrefix: () => this.event.syncPrefix,
       GetEventPlayerChatString: () => this.event.chat,
@@ -493,10 +585,11 @@ export class HeadlessClient {
       PreloadGenEnd: (name: string) => {
         this.files.set(name, this.preload);
         if (name === errorFile(this.slot, this.filePrefix)) this.report(this.preload);
+        this.stored?.written(name, this.preload);
       },
       // A published file's Preload code sets one FileIO tooltip level per chunk.
       Preloader: (name: string) => {
-        const chunks = this.preloaded.get(name) ?? this.published.get(name);
+        const chunks = this.preloaded.get(name) ?? this.published.get(name) ?? this.stored?.read(name);
         if (chunks === undefined) {
           this.missedLookups++;
           return;
@@ -592,6 +685,8 @@ export class HeadlessClient {
     if (event.syncData !== undefined) this.event.syncData = event.syncData;
     if (event.chat !== undefined) this.event.chat = event.chat;
     if (event.key !== undefined) this.event.key = event.key;
+    if (event.frame !== undefined) this.event.frame = event.frame;
+    if (event.frameEvent !== undefined) this.event.frameEvent = event.frameEvent;
     for (const action of trigger.actions) action();
   }
 
@@ -640,13 +735,54 @@ export class HeadlessClient {
     });
   }
 
+  /**
+   * Text this client's keyboard types: into the edit box that has the
+   * keyboard, while the player sees it. False when none has it, so Warcraft
+   * would take the text as key presses.
+   */
+  type(text: string): boolean {
+    return this.frames.type(text);
+  }
+
+  /** The frame a click at (x, y), in Warcraft's UI coordinates, reaches on this client: shown, enabled and registered for clicks. */
+  clickTarget(x: number, y: number): Frame | undefined {
+    const click = this.natives.FRAMEEVENT_CONTROL_CLICK;
+    return this.frames.at(x, y, (frame) => this.registrations.some((registration) =>
+      registration.kind === "frame" && registration.frame === frame && registration.event === click && !registration.trigger.destroyed));
+  }
+
+  /** A frame event from `sender` on the frame with this handle number, as every client receives it. */
+  frameEvent(sender: number, id: number, event: unknown): void {
+    this.run(() => {
+      for (const registration of [...this.registrations]) {
+        if (registration.kind === "frame" && registration.frame.id === id && registration.event === event) {
+          this.fire(registration.trigger, { player: sender, frame: registration.frame, frameEvent: event });
+        }
+      }
+    });
+  }
+
+  /** Every call this client logged, forgotten ones included. */
+  callCount(): number {
+    return this.forgotten + this.log.length;
+  }
+
+  /** Folds the first `count` logged calls into the checksum and drops them, so a long run keeps its memory. */
+  forget(count: number): void {
+    let hash = this.forgottenHash;
+    for (let index = 0; index < count; index++) {
+      const call = this.log[index];
+      if (call !== undefined) hash = mixCall(hash, call);
+    }
+    this.forgottenHash = hash;
+    this.log.splice(0, count);
+    this.forgotten += count;
+  }
+
   /** A 32-bit hash of every logged call: its name and arguments as describeValue identifies them. Equal logs hash alike in Bun and Lua. */
   checksum(): string {
-    let hash = 0;
-    for (const { name, args } of this.log) {
-      hash = mixName(hash, name);
-      for (let index = 0; index < args.length; index++) hash = mixValue(hash, args[index]);
-    }
+    let hash = this.forgottenHash;
+    for (const call of this.log) hash = mixCall(hash, call);
     return describeNumber(hash);
   }
 }

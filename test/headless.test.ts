@@ -52,6 +52,27 @@ test("a call one client makes alone is the desync, shown with the calls before i
   expect(slot0).not.toContain("CreateTimer()");
 });
 
+test("with keepCalls, clients compare every frame and keep only their latest calls, with the same checksums and desync", () => {
+  const map = everyFrame(() => {
+    globalThis.__fixtureFrame = (globalThis.__fixtureFrame ?? 0) + 1;
+    SetUnitX(CreateUnit(Player(0), 0x68666f6f, 0.0, 0.0, 0.0), globalThis.__fixtureFrame);
+    if (globalThis.__fixtureFrame === 7 && GetPlayerId(GetLocalPlayer()) === 1) CreateTimer();
+  });
+  const whole = runtime.clients(map);
+  const kept = runtime.clients(map, [0, 1], { keepCalls: 2 });
+  for (const clients of [whole, kept]) {
+    clients.start();
+    clients.frames(5);
+  }
+  expect(kept.clients.map((client) => client.log.length)).toEqual([2, 2]);
+  expect(kept.clients.map((client) => [client.callCount(), client.checksum()])).toEqual(whole.clients.map((client) => [client.log.length, client.checksum()]));
+  for (const clients of [whole, kept]) clients.frames(5);
+  const desync = kept.firstDivergence() ?? "";
+  expect(desync.split(":")[0]).toBe(`after frame 7, ${(whole.firstDivergence() ?? "").split(":")[0]}`);
+  expect(desync).toContain("CreateTimer()");
+  expect(kept.clients.map((client) => client.log.length)).toEqual([2, 2]);
+});
+
 test("each client keeps its own globals and files", () => {
   const clients = runtime.clients(everyFrame(() => {
     globalThis.__fixtureFrames = (globalThis.__fixtureFrames ?? 0) + 1 + GetPlayerId(GetLocalPlayer());
@@ -170,7 +191,7 @@ test("with a delivery, a sync message reaches every client on its arrival frame,
     install: () => {},
   });
   const received = (delivery?: ReturnType<typeof syncDelivery>) => {
-    const clients = runtime.clients(map(), [0, 1], delivery);
+    const clients = runtime.clients(map(), [0, 1], delivery === undefined ? {} : { delivery });
     clients.start();
     clients.frames(30);
     expect(clients.firstDivergence()).toBeUndefined();

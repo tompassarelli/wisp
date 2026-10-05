@@ -5,7 +5,9 @@ The headless runtime runs the map in N simulated clients in this process, in
 lockstep, with every Warcraft native the map can call emulated per client. It
 answers in about a second whether the clients stay synchronized through a
 journey, what errors the map reported, whether a hot reload ran in every
-client and what a player would see wrong in the scene the map draws.
+client and what a player would see wrong in the scene the map draws. With
+[input from another program](#input-from-another-program) the clients also
+run in real time, typed into and read by a game's own input helper.
 
 It runs the map two ways, from one plain TypeScript implementation
 (wisp:src/headless/):
@@ -29,12 +31,12 @@ effects, and logs every native call except the local-only ones.
 | --- | --- |
 | Players | Player N is the number N. The journey's player slots are playing humans with a client each; every other slot is empty. `GetLocalPlayer` is the client's slot. |
 | Timers | 60 frames a second. A timeout runs on the nearest frame, at least one frame after it starts; periodic timers repeat. Each frame runs the due timers in creation order. |
-| Triggers | Sync, chat and key events, registered per player. A chat line matches its registered text exactly or as a substring, as registered. |
+| Triggers | Sync, chat, key and frame events, registered per player or frame. A chat line matches its registered text exactly or as a substring, as registered. |
 | Sync messages | `BlzSendSyncData` reaches every client, including the sender, in send order, after the frame or event that sent it and before the next. Warcraft delivers it some frames later; a [delivery](network-model.md) gives the measured latency. |
-| Files | `Preload` writes files the test reads from `client.files`. `Preloader` reads only files the host published (`publish`, `reload`), one chunk per FileIO tooltip level, and keeps the first content it read from a path, as Warcraft does. |
+| Files | `Preload` writes files the test reads from `client.files`. `Preloader` reads files the host published (`publish`, `reload`), or another program wrote in a client's [CustomMapData folder](#input-from-another-program), one chunk per FileIO tooltip level, and keeps the first content it read from a path, as Warcraft does. |
 | Units | Position, type, move speed and attack cooldown. |
 | Special effects | Model, position, alpha, scale, time scale and a flattened matrix, as `client.effectPoses()` returns them. `AddSpecialEffect` puts an effect on the ground at height 0. |
-| Frames | A frame getter returns the same handle for the same frame. The local client is 1920 pixels wide plus 640 per client index, 1080 high. |
+| Frames | Created frames keep their type, parent, text, visibility, enabled state, level, text limit, size and absolute points; `client.frames.shownText()` lists the text a player sees (frames shown with every parent). A frame getter returns the same handle for the same frame. The local client is 1920 pixels wide plus 640 per client index, 1080 high. |
 | Conversions and math | `I2S`, `R2S`, `R2I`, `I2R`, `S2I`, `S2R`, `SubString`, `StringLength`, `SquareRoot`, `Atan2` and the bit operations, binary32 where Warcraft is. |
 | Messages | `DisplayTextToPlayer` for the local player and `DisplayTextToForce` show text in `client.messages`; Wisp's error reports go to `client.errors` as `error in HANDLER: ...` when the map writes them to its error file, shown or not ([error text](hot-reload.md#error-reports-on-screen)). |
 
@@ -104,6 +106,58 @@ A key event is a press and a release with its modifiers (2 is Ctrl).
 `runJourney` starts the map in every client, plays the events and returns each
 client's call count, checksum and error reports, the first divergence and any
 reload not running.
+
+## Typing and clicks
+
+`Lockstep.type(player, text)` is a player's keyboard typing: into the
+`EDITBOX` frame that has their keyboard (BlzFrameSetFocus) while they see it,
+on their client only and up to its text limit, as Warcraft drops the rest;
+without one, each letter, digit or space is a key press and release every
+client sees (a capital adds Shift). `Lockstep.click(player, x, y)` clicks at
+Warcraft's UI coordinates (0.8 by 0.6 over the 4:3 area): the highest-level
+shown, enabled frame there with a click event, placed by its absolute points
+and size, takes the keyboard, and every client runs its click event with the
+clicker. It returns false when no frame there takes clicks.
+
+## Input from another program
+
+A game's input helper, such as one that reads controllers, types into
+Warcraft and reads the files the map writes. wisp:scripts/wisp/headlessInput.ts
+lets the same program drive headless clients:
+
+- `customMapData(directory)` is a client's CustomMapData as a real folder:
+  each file the map writes is written there when the map writes it, byte for
+  byte as Warcraft writes Preload files, and Preloader reads the FileIO chunks
+  (`call BlzSetAbilityTooltip('$wsl', "CHUNK", LEVEL)` lines) of files the
+  program writes there. Pass it as `files` when making the clients.
+- `typedFile(path)` reads what the program appends to `path`: each line is one
+  typing of its text.
+- `RealtimeClients` runs the clients at 60 frames a second of wall time.
+  Before each frame, each player's typed lines reach their client through
+  `type`. `hold(slot)` is a stopped game: no client runs a frame, as in a
+  lockstep game, and the text typed for it waits; after `release` frames go on
+  without catching up the held time. `advance()` runs the frames due and
+  returns the milliseconds until the next, for the host's loop.
+
+```ts
+const clients = installHeadless(MAP).clients(entry, [0, 1], {
+  files: (slot) => customMapData(dataFolder(slot)),
+  // Warcraft's measured sync-message latency (wisp:docs/network-model.md).
+  delivery: syncDelivery(),
+  keepCalls: 64,
+});
+const realtime = new RealtimeClients(clients, new Map([[0, typedFile("typed-0.txt")], [1, typedFile("typed-1.txt")]]));
+realtime.start();
+// The host's loop: run what is due, sleep until the next frame.
+```
+
+A long run keeps every native call unless the clients are made with
+`keepCalls`: then they compare their calls after every frame and keep only
+the last `keepCalls` of each, for a later desync's context; the first desync
+is kept with the frame it was found after, and the checksum and
+`callCount()` still cover every call. Without it, Smashcraft's two-client
+match grew the process by about 10 MB a second, measured on its development
+build.
 
 ## In Bun tests
 
@@ -181,8 +235,12 @@ project's host type check never reads map code.
 The runtime emulates natives; it is not Warcraft. It has no engine frame
 timing, rendering, terrain, pathing, combat, real input devices or Battle.net
 beyond the [measured sync latency](network-model.md), and it emulates only
-natives a map has needed. A native answered by a default value can hide
-behavior that depends on what Warcraft would return. A passing journey shows
-that the clients agree with each other on these stubs; native desyncs, timing and what reaches the screen keep their
+natives a map has needed. A program that reads real devices can type into
+it, but focus belongs to the map's own frame calls, not to a window;
+edit-box text-changed and Enter events are not emulated, and a click reaches
+only frames placed by absolute points. A native answered by a default value
+can hide behavior that depends on what Warcraft would return. A passing
+journey shows that the clients agree with each other on these stubs; native
+desyncs, timing and what reaches the screen keep their
 native checks ([desync reports](hot-reload.md#desync-reports),
 [player view](player-view.md)).

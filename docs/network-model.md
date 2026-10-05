@@ -10,7 +10,7 @@ second-long run.
 ```ts
 import { MEASURED_BATTLE_NET, syncDelivery } from "wisp/scripts/wisp/syncChannel";
 
-const clients = headless.clients(entry, [0, 1], syncDelivery(MEASURED_BATTLE_NET, 7));
+const clients = headless.clients(entry, [0, 1], { delivery: syncDelivery(MEASURED_BATTLE_NET, 7) });
 ```
 
 A `Lockstep` takes the same object as its `delivery` option. The seed makes

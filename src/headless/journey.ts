@@ -45,7 +45,7 @@ export function runJourney(clients: Lockstep, journey: Journey): JourneyResult {
   }
   clients.frames(journey.frames - clients.frame);
   const results: ClientResult[] = [];
-  for (const client of clients.clients) results.push({ slot: client.slot, calls: client.log.length, checksum: client.checksum(), errors: client.errors });
+  for (const client of clients.clients) results.push({ slot: client.slot, calls: client.callCount(), checksum: client.checksum(), errors: client.errors });
   return { frames: clients.frame, clients: results, divergence: clients.firstDivergence(), reloaded: clients.version, reloads: clients.unappliedReloads() };
 }
 

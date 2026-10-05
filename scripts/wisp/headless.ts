@@ -10,7 +10,7 @@ import { join } from "node:path";
 import type { ClientScope, HeadlessClient, LocalNatives, MapEntry, NativeBehaviors } from "../../src/headless/client";
 import { type NativeDeclarations, parseNativeDeclarations } from "../../src/headless/declarations";
 import { type Journey, journeyLines, journeyProblems, runJourney } from "../../src/headless/journey";
-import { Lockstep, type SyncDelivery } from "../../src/headless/lockstep";
+import { Lockstep, type LockstepOptions } from "../../src/headless/lockstep";
 import { errorFile } from "../../src/runtime/gameFiles";
 import { sceneFile } from "../../src/runtime/scene";
 import { type SceneExpectations, describeScene, readSceneLines, sceneProblems } from "./scene";
@@ -30,10 +30,14 @@ export interface HeadlessMap {
 export interface HeadlessRuntime {
   /**
    * Clients of the map whose entry is `entry`, one per player slot, ready to
-   * start. With a delivery, such as syncDelivery() (wisp:scripts/wisp/syncChannel.ts),
-   * synchronized messages arrive when it says rather than before the next frame.
+   * start. `options.delivery`, such as syncDelivery()
+   * (wisp:scripts/wisp/syncChannel.ts), makes synchronized messages arrive
+   * when it says rather than before the next frame; `options.files` gives a
+   * slot's CustomMapData outside the process (customMapData,
+   * wisp:scripts/wisp/headlessInput.ts); `options.keepCalls` compares calls
+   * every frame and forgets old ones, for long runs.
    */
-  clients(entry: MapEntry, players?: readonly number[], delivery?: SyncDelivery): Lockstep;
+  clients(entry: MapEntry, players?: readonly number[], options?: Pick<LockstepOptions, "delivery" | "files" | "keepCalls">): Lockstep;
   /** Puts back what the globals held before the runtime was installed. */
   restore(): void;
 }
@@ -130,7 +134,7 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
   };
   const bundles = new Map<string, MapEntry>();
   return {
-    clients: (entry, players = [0, 1], delivery) => {
+    clients: (entry, players = [0, 1], options = {}) => {
       // The text a reload publishes; this runtime's `load` returns the entry for it.
       const bundle = `-- wisp headless bundle ${bundles.size + 1}`;
       bundles.set(bundle, entry);
@@ -141,9 +145,9 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
         entry: () => entry,
         bundle,
         scope,
+        ...options,
         ...(map.localNatives === undefined ? {} : { localNatives: map.localNatives }),
         natives: (client) => ({ ...luaFunctions(client, bundles), ...map.natives?.(client) }),
-        ...(delivery === undefined ? {} : { delivery }),
       });
     },
     restore: () => {
