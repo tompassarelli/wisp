@@ -9,6 +9,10 @@ New map? Start from the [sample map](sample-map.md) (wisp:docs/sample-map.md):
 a complete two-player map with its build, test, fresh-match and hot-reload
 commands, and what a base map needs.
 
+How Wisp compares with Wurst, the w3ts TypeScript template, WCSharp and
+warcraft-vscode on the same map is measured in the
+[toolchain comparison](comparison.md) (wisp:docs/comparison.md).
+
 | Need | Feature and entry point | Setup or boundary |
 | --- | --- | --- |
 | Find the TypeScript caller of a callback failure | [TypeScript stack traces](stack-traces.md) (wisp:docs/stack-traces.md) | Opt-in compiler plugin; development diagnostics with CPU and size cost. |
