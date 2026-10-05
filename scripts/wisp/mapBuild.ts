@@ -209,6 +209,8 @@ const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compil
   const pack = mapPack(packager);
   yield* verifyToolchain(project.toolchainLockPath, project.packageDirectory).pipe(step("verify toolchain"));
   yield* ensurePackager(packager);
+  const lua = join(dirname(packager), "lua");
+  yield* ensureLua(lua);
   const work = yield* workDirectory(dirname(out));
   const bundle = yield* compile;
 
@@ -238,7 +240,7 @@ const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compil
     yield* Effect.forEach(files, ({ source, contents }) =>
       tryMapPromise("write generated file", source, () => Bun.write(source, contents)), { discard: true });
     const scriptPath = join(work, "war3map.lua");
-    yield* runProcess("check map script syntax", scriptPath, ["nix", "shell", "nixpkgs#lua5_3", "--command", "luac", "-p", scriptPath]).pipe(step("check script syntax"));
+    yield* runProcess("check map script syntax", scriptPath, [join(lua, "bin/luac"), "-p", scriptPath]).pipe(step("check script syntax"));
     const assets = [
       ...yield* baseMapFiles(packager, options.base, new Set(files.map(({ entry }) => entry)), work).pipe(step("extract base files")),
       ...options.imports ?? [],
@@ -284,6 +286,12 @@ export const ensurePackager = (path: string) => Effect.suspend(() => existsSync(
     `-L${stormlib}/lib`, `-Wl,-rpath,${stormlib}/lib`, "-lstorm", "-o", `${path}.next`]);
   yield* tryMapSync("install map packager", path, () => renameSync(`${path}.next`, path));
 }).pipe(step("compile map packager")));
+
+/** The Lua 5.3 compiler's package at `directory`; when it is missing, links nixpkgs' lua5_3 there, which keeps it from garbage collection so later builds need no nix. */
+export const ensureLua = (directory: string) => Effect.suspend(() => existsSync(join(directory, "bin/luac")) ? Effect.void : Effect.gen(function*() {
+  yield* tryMapSync("create Lua directory", directory, () => mkdirSync(dirname(directory), { recursive: true }));
+  yield* runProcess("link Lua compiler", directory, ["nix", "build", "--out-link", directory, "nixpkgs#lua5_3"]);
+}).pipe(step("link Lua compiler")));
 
 const tryMapPromise = <A>(operation: string, path: string, run: () => PromiseLike<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => new MapBuildFailure({ operation, path, cause }) });

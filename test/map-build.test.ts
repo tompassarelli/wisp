@@ -1,9 +1,9 @@
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit } from "effect";
 import { expect, test } from "bun:test";
-import { runProcess, stageMap, verifyToolchain, withFileIo, writeHeader } from "../scripts/wisp/mapBuild";
+import { ensureLua, runProcess, stageMap, verifyToolchain, withFileIo, writeHeader } from "../scripts/wisp/mapBuild";
 import { abilityData, encodeObjectData } from "../scripts/objectData";
 import { composeScript, typescriptBase } from "../scripts/mapScript";
 
@@ -87,4 +87,12 @@ test("the map header replaces an existing one or goes in front of an archive sav
   writeFileSync(other, "not a map");
   expect(Exit.isFailure(await Effect.runPromiseExit(writeHeader(other, header)))).toBe(true);
   expect(readFileSync(other, "utf8")).toBe("not a map");
+});
+
+test("an installed Lua compiler is used as it is, without running nix", async () => {
+  const directory = join(mkdtempSync(join(tmpdir(), "wisp-lua-")), "lua");
+  mkdirSync(join(directory, "bin"), { recursive: true });
+  writeFileSync(join(directory, "bin/luac"), "installed");
+  await Effect.runPromise(ensureLua(directory));
+  expect(readFileSync(join(directory, "bin/luac"), "utf8")).toBe("installed");
 });

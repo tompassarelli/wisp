@@ -24,8 +24,8 @@ does not ship, written for this comparison with the language's usual runner.
 | --- | --- | --- | --- | --- | --- | --- |
 | Edit to type-check | **0.39 s** [0.38–0.43] `tsc --build` (TypeScript 7); the hot watcher's warm compile, 0.064 s [0.047–0.078] | 6.23 s [5.81–6.72] `grill typecheck` | 1.85 s [1.76–2.49] `tsc --noEmit` (TypeScript 5.8) | 1.40 s [1.33–1.50] `dotnet build` | None: a Lua syntax error compiles and builds with exit 0 | Leads |
 | Test run | **1.25 s** [1.19–1.30] Bun and emitted 32-bit Lua; Bun only 0.63 s [0.61–0.69] | 6.33 s [6.21–6.65] Wurstunit in the compiler's interpreter | None shipped; add-on `bun test` 0.016 s, JavaScript numbers | None shipped; add-on xUnit 3.60 s [3.35–3.89], .NET numbers | None shipped; add-on 32-bit Lua script 0.002 s | Leads: the only one that runs Warcraft's number model |
-| Full build, source to .w3x | 2.31 s [2.13–2.42] | 10.28 s [9.76–11.37] | 2.47 s [2.38–2.62] | 13.76 s [13.30–15.43] | **0.014 s** [0.013–0.014] | Ties w3ts; trails warcraft-vscode |
-| Script-only rebuild | 1.95 s [1.89–2.09] `rebuild` | No separate mode: full build | No separate mode: full build | No separate mode: full build | **0.014 s**, no separate mode: full build | Leads typed toolchains; trails warcraft-vscode |
+| Full build, source to .w3x | 2.31 s [2.13–2.42] ([phases](#where-wisps-build-time-goes)) | 10.28 s [9.76–11.37] | 2.47 s [2.38–2.62] | 13.76 s [13.30–15.43] | **0.014 s** [0.013–0.014] | Ties w3ts; trails warcraft-vscode |
+| Script-only rebuild | 1.95 s [1.89–2.09] `rebuild`; 0.26 s when its bundle is current | No separate mode: full build | No separate mode: full build | No separate mode: full build | **0.014 s**, no separate mode: full build | Leads typed toolchains; trails warcraft-vscode |
 | Edit running in a live game, 1 client | Yes: `hot --watch` compiles each save and installs it without rehosting | Lua (default): no. JASS: JHCR, a separate alpha tool | No: rebuild and restart the map | No | No | Leads |
 | Edit running in a live game, 2 multiplayer clients | Yes: every client loads, verifies and installs on the same frame or none does. Smashcraft on Waygate dd4812f: 1.68 s from save to both acknowledgements, 6/6 checksums matched | No | No | No | No | Leads |
 | Error reports with source lines | Runtime fault: shown in game; its Lua position maps to `src/main.ts:49` through the retained source map. Thrown `Error`: shown in game and reported from its TypeScript throw site by default, `src/main.ts:48: Error: …` (Wisp a80f622); TypeScript stacks opt-in ([stack traces](stack-traces.md)) | Runtime fault: generated Lua line. `error()`: message and Wurst stack, `Sample, line 21`, on by default | None: errors escape uncaught; generated Lua line | None for natives' callbacks; debug wrappers cover WCSharp's own systems | Debug build: `main.lua:29`, no stack | Ties |
@@ -43,6 +43,60 @@ on 2026-10-06 at a80f622: the sample's compiled bundle in 32-bit Lua 5.3 without
 into the `-ping` handler. The 2-client Wisp time comes from a native
 Smashcraft trial (smashcraft:evidence/waygate-extraction-native-20261005/README.md),
 not from this sample map.
+
+## Where Wisp's build time goes
+
+The same sample after a one-line edit to src/main.ts, each run a fresh process,
+timed by the steps `bun examples/sample/scripts/sample.ts build|rebuild` prints
+for itself. Medians of 9 interleaved runs at wisp 4e95889 with its compile phases
+timed, then with the Lua compiler link below, on 2026-10-06, in the same 6-CPU,
+8 GiB scope with the machine's load average between 6 and 10 on 24 CPUs, so each
+time sits about 0.1 s above the table's.
+
+| Phase | Rebuild | Build | Build, Lua compiler linked |
+| --- | --- | --- | --- |
+| Process start and host modules (wall minus the command's own steps) | 0.23 s | 0.23 s | 0.24 s |
+| Verify toolchain | | 0.01 s | 0.01 s |
+| Load the compiler (TypeScript 6.0.2, TypeScriptToLua 1.37.1) | 0.55 s | 0.53 s | 0.53 s |
+| Read config | 0.02 s | 0.02 s | 0.02 s |
+| Create program (parse 119 files, 1.1 MB) | 0.43 s | 0.41 s | 0.42 s |
+| Type-check | 0.34 s | 0.31 s | 0.32 s |
+| Declaration signatures, reused by the next hot edit | 0.07 s | 0.07 s | 0.06 s |
+| Transpile to Lua | 0.31 s | 0.27 s | 0.28 s |
+| Bundle | 0.02 s | 0.02 s | 0.02 s |
+| Extract base script, check its syntax, extract base files | | 0.01 + 0.14 + 0.02 s | 0.01 + 0.00 + 0.03 s |
+| Package and verify | 0.02 s | 0.05 s | 0.04 s |
+| **Wall** | **2.01 s** | **2.16 s** | **2.11 s** |
+
+The compile is 1.8 s of the 2.0 s, and almost all of it is the TypeScript
+compiler's own cost, the price of type safety: stock
+`tstl -p examples/sample/tsconfig.map.json`, with no Wisp code, takes 1.63 s
+[1.50–1.84] in the same scope. A cold rebuild at or under 1 s needs a compiler
+that is already running. `hot --watch` compiles each save in 0.06 s, and
+`rebuild` reuses a bundle it compiled, or an earlier build did: 0.26 s
+[0.24–0.30], the process start plus 0.04 s of packaging.
+
+The build's script syntax check ran `nix shell` each time, 0.14 s; the build now
+links nixpkgs' Lua compiler into wisp:build/tools/lua once and runs it from there.
+
+Cuts measured and not adopted, each against the same rebuild (7–9 interleaved
+runs):
+
+- A one-shot compile without the incremental builder's signature priming, and
+  with TypeScriptToLua's declaration emit and diagnostics gates replaced by one
+  explicit check: within ±0.05 s; the transpile phase absorbs the work.
+- TypeScript 7's native checker in a parallel process, with the compiler API only
+  transpiling: 0.2 s faster (1.86 s against 2.06 s over 9 runs), because the
+  transform does most of the type work itself. It also has to skip the pinned
+  compiler's diagnostics pass by patching its emit resolver.
+- A Bun bytecode bundle of TypeScript and TypeScriptToLua: it loads in 0.22 s
+  instead of 0.51 s when timed alone. Sharing it with the numeric plugin's own
+  TypeScript import was not tried.
+- Effect's submodule imports instead of its barrel: loading the barrel takes
+  0.14 s, its Effect and Schema modules alone 0.10 s.
+- JavaScriptCore JIT settings: no gain; an interpreter-only run takes twice as long.
+
+Together these remove about 0.55 s and leave a cold rebuild near 1.5 s.
 
 ## What ran
 

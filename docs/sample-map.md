@@ -32,9 +32,10 @@ bun examples/sample/scripts/sample.ts build --base BASE.w3m --out OUT_DIR/wisp-s
 ```
 
 `LUA` must be Lua 5.3 built with `LUA_32BITS`. The output must be outside the
-checkout. The build also needs `nix`: it checks the script's syntax with
-nixpkgs `lua5_3`, and on first use compiles the map packager from
-wisp:native/map-pack.c against nixpkgs StormLib into wisp:build/tools/map-pack.
+checkout. The build also needs `nix` on first use: it links nixpkgs `lua5_3`,
+which checks the script's syntax, into wisp:build/tools/lua and compiles the map
+packager from wisp:native/map-pack.c against nixpkgs StormLib into
+wisp:build/tools/map-pack.
 
 ## The base map
 
