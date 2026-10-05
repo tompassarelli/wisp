@@ -163,13 +163,25 @@ export function declarationsOf(typescript: typeof ts, program: ts.Program, node:
   });
 }
 
+/**
+ * Each tree's findings, which depend only on its text. A program keeps an
+ * unchanged file's tree, so a compile scans only the files that changed; where
+ * each finding's identifier is declared is resolved again in every program.
+ */
+const scans = new WeakMap<ts.SourceFile, readonly Finding<ts.Node>[]>();
+
 /** The number-rule diagnostics of one file of a TypeScript 6 program (compiler and editor). */
 export function programNumberRules(typescript: typeof ts, program: ts.Program, file: ts.SourceFile): ts.Diagnostic[] {
   if (file.isDeclarationFile || program.isSourceFileFromExternalLibrary(file)) return [];
   // Binding sets the parent links the rules follow.
   program.getTypeChecker();
+  let findings = scans.get(file);
+  if (findings === undefined) {
+    findings = scanNumberRules<ts.Node>(typescript, file);
+    scans.set(file, findings);
+  }
   const diagnostics: ts.Diagnostic[] = [];
-  for (const { node, message, condition } of scanNumberRules<ts.Node>(typescript, file)) {
+  for (const { node, message, condition } of findings) {
     if (condition !== undefined && !stands(condition.test, declarationsOf(typescript, program, condition.identifier))) continue;
     diagnostics.push({
       category: typescript.DiagnosticCategory.Error,

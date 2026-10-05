@@ -4,8 +4,8 @@
 // and transformed to Lua again. Every other module's Lua comes from the previous
 // compile, and the bundle is rebuilt from all modules in program order, so the
 // output equals a full compile's. The bundle reuses each unchanged module's
-// text and source-map mappings (wisp:scripts/luaBundle.ts), and keeps each
-// module's code and map for hot reloads by module.
+// resolved requires, text and source-map mappings (wisp:scripts/luaBundle.ts),
+// and keeps each module's code and map for hot reloads by module.
 import { statSync } from "node:fs";
 import { normalize, resolve } from "node:path";
 import ts from "typescript";
@@ -53,10 +53,21 @@ function cacheModule(file: ProcessedFile): CachedModule {
   return { file, sourceMapChildren };
 }
 
+interface Resolution {
+  readonly source: string;
+  readonly node: ProcessedFile["sourceMapNode"];
+  readonly code: string;
+  /** Lua files outside the program it pulled in, resolved. */
+  readonly dependencies: readonly ProcessedFile[];
+}
+
 class IncrementalTranspiler extends Transpiler {
   /** Preserve each module as first printed; emission copies code and restores tree rewrites. */
   private readonly modules = new Map<string, CachedModule>();
   private readonly bundler = new LuaBundler();
+  /** Each module's resolved requires, while its transpiled code and tree are unchanged. */
+  private readonly resolutions = new Map<string, Resolution>();
+  private resolvedProgramFiles = "";
 
   /** The modules of the last bundle; undefined when TypeScriptToLua built it. */
   get bundled(): BundledModules | undefined {
@@ -67,20 +78,79 @@ class IncrementalTranspiler extends Transpiler {
   protected override getEmitPlan(program: ts.Program, diagnostics: ts.Diagnostic[], files: ProcessedFile[], plugins: Plugin[]): { emitPlan: EmitFile[] } {
     const options: CompilerOptions = program.getCompilerOptions();
     if (!isBundleEnabled(options)) return super.getEmitPlan(program, diagnostics, files, plugins);
-    const resolution = resolveDependencies(program, files, this.emitHost, plugins);
-    diagnostics.push(...resolution.diagnostics);
-    let resolved = resolution.resolvedFiles;
-    if (resolved.some((file) => file.fileName === "lualib_bundle")) {
-      resolved = resolved.filter((file) => file.fileName !== "lualib_bundle");
+    // An unchanged module's resolved code is reused only for the caching bundler, which never walks its tree
+    // again; TypeScriptToLua's own bundle reads every module's tree.
+    const cached = !options.sourceMapTraceback;
+    const withLualib = (resolved: ProcessedFile[]) => {
+      if (!resolved.some((file) => file.fileName === "lualib_bundle")) return resolved;
+      const modules = resolved.filter((file) => file.fileName !== "lualib_bundle");
       const luaTarget = options.luaTarget ?? LuaTarget.Universal;
       const code = options.luaLibImport === LuaLibImportKind.RequireMinimal
-        ? buildMinimalLualibBundle(findUsedLualibFeatures(luaTarget, this.emitHost, resolved.map((file) => file.code)), luaTarget, this.emitHost)
+        ? buildMinimalLualibBundle(findUsedLualibFeatures(luaTarget, this.emitHost, modules.map((file) => file.code)), luaTarget, this.emitHost)
         : getLuaLibBundle(luaTarget, this.emitHost);
-      resolved.unshift({ fileName: normalizeSlashes(resolve(getSourceDir(program), "lualib_bundle.lua")), code });
+      return [{ fileName: normalizeSlashes(resolve(getSourceDir(program), "lualib_bundle.lua")), code }, ...modules];
+    };
+    const fullResolution = () => {
+      const resolution = resolveDependencies(program, files.map((file) => ({ ...file, code: this.modules.get(file.fileName)?.file.code ?? file.code })), this.emitHost, plugins);
+      return { resolved: withLualib(resolution.resolvedFiles), diagnostics: resolution.diagnostics };
+    };
+    if (cached) {
+      const changed = this.resolveChanged(program, files, plugins);
+      diagnostics.push(...changed.diagnostics);
+      const built = this.bundler.bundle(program, withLualib(changed.resolved));
+      if (built !== undefined) {
+        diagnostics.push(...built[0]);
+        return { emitPlan: [built[1]] };
+      }
     }
-    const [bundleDiagnostics, bundle] = this.bundler.bundle(program, resolved) ?? getBundleResult(program, resolved);
+    // TypeScriptToLua builds the bundle from every module's tree, so each needs its requires resolved.
+    const full = fullResolution();
+    if (!cached) diagnostics.push(...full.diagnostics);
+    const [bundleDiagnostics, bundle] = getBundleResult(program, full.resolved);
     diagnostics.push(...bundleDiagnostics);
     return { emitPlan: [bundle] };
+  }
+
+  /**
+   * Resolves the requires of each module that changed since the last compile,
+   * as resolveDependencies would resolve them all: each module, then the Lua
+   * files outside the program it first pulls in. An unchanged module takes the
+   * code it resolved to before. A change to the program's files resolves every
+   * module again.
+   */
+  private resolveChanged(program: ts.Program, files: ProcessedFile[], plugins: Plugin[]): { resolved: ProcessedFile[]; diagnostics: ts.Diagnostic[] } {
+    const programFiles = program.getSourceFiles().map((file) => file.fileName).join("\n");
+    if (programFiles !== this.resolvedProgramFiles) {
+      this.resolutions.clear();
+      this.resolvedProgramFiles = programFiles;
+    }
+    const resolved: ProcessedFile[] = [];
+    const diagnostics: ts.Diagnostic[] = [];
+    const added = new Set<string>();
+    const add = (file: ProcessedFile) => {
+      if (added.has(file.fileName)) return;
+      added.add(file.fileName);
+      resolved.push(file);
+    };
+    const live = new Set<string>();
+    for (const file of files) {
+      live.add(file.fileName);
+      let resolution = this.resolutions.get(file.fileName);
+      if (resolution === undefined || resolution.source !== file.code || resolution.node !== file.sourceMapNode) {
+        const source = file.code;
+        const result = resolveDependencies(program, [file], this.emitHost, plugins);
+        diagnostics.push(...result.diagnostics);
+        resolution = { source, node: file.sourceMapNode, code: file.code, dependencies: result.resolvedFiles.slice(1) };
+        if (result.diagnostics.length === 0) this.resolutions.set(file.fileName, resolution);
+        else this.resolutions.delete(file.fileName);
+      } else {
+        file.code = resolution.code;
+      }
+      add(file);
+      for (const dependency of resolution.dependencies) add(dependency);
+    }
+    for (const name of this.resolutions.keys()) if (!live.has(name)) this.resolutions.delete(name);
+    return { resolved, diagnostics };
   }
 
   compile(program: ts.Program, affected: readonly ts.SourceFile[], phase: Phase): readonly ts.Diagnostic[] {

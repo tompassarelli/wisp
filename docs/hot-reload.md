@@ -91,10 +91,10 @@ starts when the save is detected, so the `vN running in 2 client(s)` line ends
 at the time from save to every client's acknowledgement.
 
 The incremental compiler rebuilds the Lua bundle and its source map from each
-unchanged module's cached text and mappings; the result equals a full
-TypeScriptToLua compile (see [compiler](../scripts/compiler.ts) and
-[bundle](../scripts/luaBundle.ts), wisp:scripts/compiler.ts and
-wisp:scripts/luaBundle.ts).
+unchanged module's cached text, mappings and resolved requires; the result
+equals a full TypeScriptToLua compile (see [compiler](../scripts/compiler.ts)
+and [bundle](../scripts/luaBundle.ts), wisp:scripts/compiler.ts and
+wisp:scripts/luaBundle.ts). The number rules scan only changed files again.
 
 ## What a reload sends
 
@@ -131,8 +131,9 @@ Measured on Smashcraft (168 modules) on 6 October 2026, a one-line edit of a
 | 32-bit Lua: parse, hash, load, link and module scope (median of 15) | 123 ms (hash 80, load 39) | 5.5 ms (module scope 3.4) |
 
 From the save to both acknowledgements of two fake clients that acknowledge as
-soon as their files appear, the host's share fell from 374 ms to 301 ms
-(medians of 10 such edits): the delta, and no whole-bundle checksum. The 2-client native median
+soon as their files appear, the host's share fell from 374 ms to 190 ms
+(medians of 10 such edits): the delta, no whole-bundle checksum, and the
+compiler's reused requires and number-rule scans. The 2-client native median
 was 0.841 s with whole bundles; the sample's tiny bundle, 0.298 s, is about the
 client-side floor of polling and synchronized answers.
 

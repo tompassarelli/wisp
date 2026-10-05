@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { SourceMapConsumer } from "source-map";
@@ -31,6 +31,16 @@ test("cached module requires keep the same bundle and source map as full compila
     // An unchanged compile must also reuse the original dependency paths.
     expect(report(compile())).toBe("");
     expect(output()).toEqual(incremental);
+    expect(report(transpileProject(config).diagnostics)).toBe("");
+    expect(output()).toEqual(incremental);
+  }
+  // A module added, then removed: unchanged modules keep their resolved requires only while the program's files stay.
+  for (const main of ["import { value } from \"./value\";\nimport { extra } from \"./extra\";\nexport const result = value + extra;\n", "import { value } from \"./value\";\nexport const result = value;\n"]) {
+    if (main.includes("extra")) writeFileSync(join(directory, "src/extra.ts"), "import { value } from \"./value\";\nexport const extra = value * 2;\n");
+    else rmSync(join(directory, "src/extra.ts"));
+    writeFileSync(entry, main);
+    expect(report(compile())).toBe("");
+    const incremental = output();
     expect(report(transpileProject(config).diagnostics)).toBe("");
     expect(output()).toEqual(incremental);
   }
