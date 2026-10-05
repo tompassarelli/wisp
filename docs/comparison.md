@@ -26,8 +26,8 @@ does not ship, written for this comparison with the language's usual runner.
 | Test run | **1.25 s** [1.19–1.30] Bun and emitted 32-bit Lua; Bun only 0.63 s [0.61–0.69] | 6.33 s [6.21–6.65] Wurstunit in the compiler's interpreter | None shipped; add-on `bun test` 0.016 s, JavaScript numbers | None shipped; add-on xUnit 3.60 s [3.35–3.89], .NET numbers | None shipped; add-on 32-bit Lua script 0.002 s | Leads: the only one that runs Warcraft's number model |
 | Full build, source to .w3x | 2.31 s [2.13–2.42] ([phases](#where-wisps-build-time-goes)) | 10.28 s [9.76–11.37] | 2.47 s [2.38–2.62] | 13.76 s [13.30–15.43] | **0.014 s** [0.013–0.014] | Ties w3ts; trails warcraft-vscode |
 | Script-only rebuild | 1.95 s [1.89–2.09] `rebuild`; 0.26 s when its bundle is current | No separate mode: full build | No separate mode: full build | No separate mode: full build | **0.014 s**, no separate mode: full build | Leads typed toolchains; trails warcraft-vscode |
-| Edit running in a live game, 1 client | Yes: `hot --watch` compiles each save and installs it without rehosting | Lua (default): no. JASS: JHCR, a separate alpha tool | No: rebuild and restart the map | No | No | Leads |
-| Edit running in a live game, 2 multiplayer clients | Yes: every client loads, verifies and installs on the same frame or none does. Smashcraft on Waygate dd4812f: 1.68 s from save to both acknowledgements, 6/6 checksums matched | No | No | No | No | Leads |
+| Edit running in a live game, 1 client | **0.27 s** [0.24–0.32] from the watcher seeing the save to the client's acknowledgement; `hot --watch` installs it without rehosting | Lua (default): no. JASS: JHCR, a separate alpha tool | No: rebuild and restart the map | No | No | Leads |
+| Edit running in a live game, 2 multiplayer clients | **0.30 s** [0.28–0.38] from the watcher seeing the save to both acknowledgements; every client loads, verifies and installs on the same frame or none does | No | No | No | No | Leads |
 | Error reports with source lines | Runtime fault: shown in game; its Lua position maps to `src/main.ts:49` through the retained source map. Thrown `Error`: shown in game and reported from its TypeScript throw site by default, `src/main.ts:48: Error: …` (Wisp a80f622); TypeScript stacks opt-in ([stack traces](stack-traces.md)) | Runtime fault: generated Lua line. `error()`: message and Wurst stack, `Sample, line 21`, on by default | None: errors escape uncaught; generated Lua line | None for natives' callbacks; debug wrappers cover WCSharp's own systems | Debug build: `main.lua:29`, no stack | Ties |
 | Desync detection | `hot --watch` names the subsystem each client's Desync.txt diverged in; the compiler rejects nondeterministic APIs | None | None | None | None | Leads |
 | Language server | TypeScript language service; Warcraft number-rule errors in `bun run check` and, through a plugin, the TypeScript 6 language service (TypeScript 7's language server loads no plugins) | Wurst's own, in the compiler | TypeScript language service | C# (Roslyn) | None shipped | Ties |
@@ -40,9 +40,16 @@ error. It records what each toolchain's own handler shows, not the game's
 handling of an error that escapes. Wisp's thrown-error cell was measured again
 on 2026-10-06 at a80f622: the sample's compiled bundle in 32-bit Lua 5.3 without
 `debug`, stubs for the natives it calls, and `throw new Error(...)` injected
-into the `-ping` handler. The 2-client Wisp time comes from a native
-Smashcraft trial (smashcraft:evidence/waygate-extraction-native-20261005/README.md),
-not from this sample map.
+into the `-ping` handler.
+
+The live-game times were measured on 2026-10-06 at Wisp 4e95889 with the sample
+map itself on signed-in Warcraft III clients, each on its own private desktop:
+a Battle.net game between two clients, then a one-player game for 1 client.
+Each run timed five saves alternating `ping`/`pong` in src/main.ts after the
+watcher's unmeasured first publish; each time is the first number on the
+watcher's `vN running in N client(s)` line. The two clients acknowledged the
+same game clock, the next `-ping` printed the new text in every client, and
+the Footmen kept walking, at the same minimap positions on both clients.
 
 ## Where Wisp's build time goes
 
