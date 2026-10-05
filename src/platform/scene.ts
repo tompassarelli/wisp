@@ -40,6 +40,8 @@ interface SceneState {
   readonly effects: Map<effect, Recorded>;
   /** Per model, the longest one finished a stay in view. */
   readonly longest: Map<string, number>;
+  /** Per model, how many were destroyed in view. */
+  readonly destroyed: Map<string, number>;
   readonly options: SceneOptions;
   /** Added to the game's frame so this clock keeps rising when the game's restarts, as at a rematch. */
   offset: number;
@@ -91,6 +93,10 @@ function wrapNatives(state: SceneState): void {
     if (effect !== undefined) {
       leftView(state, effect, now(state));
       state.effects.delete(handle);
+      // Warcraft plays the death animation where the effect stands, and its emitters with it.
+      if (!state.options.parked(BlzGetLocalSpecialEffectX(handle), BlzGetLocalSpecialEffectY(handle), BlzGetLocalSpecialEffectZ(handle))) {
+        state.destroyed.set(effect.model, (state.destroyed.get(effect.model) ?? 0) + 1);
+      }
     }
     destroy(handle);
   };
@@ -149,7 +155,7 @@ function sceneModels(state: SceneState, frame: number): SceneModel[] {
     summary.inView++;
     summary.since = Math.min(summary.since ?? effect.since, effect.since);
   }
-  const models = [...new Set([...summaries.keys(), ...state.longest.keys()])].sort();
+  const models = [...new Set([...summaries.keys(), ...state.longest.keys(), ...state.destroyed.keys()])].sort();
   return models.map((model) => {
     const summary = summaries.get(model);
     const age = summary?.since === undefined ? undefined : frame - summary.since;
@@ -161,6 +167,7 @@ function sceneModels(state: SceneState, frame: number): SceneModel[] {
       created: summary?.created,
       age,
       longest: Math.max(state.longest.get(model) ?? 0, age ?? 0),
+      destroyed: state.destroyed.get(model) ?? 0,
     };
   });
 }
@@ -191,7 +198,7 @@ export function startSceneReport(options: SceneOptions): void {
   const globals = globalThis as Record<`${string}SceneReport`, SceneState | undefined>;
   const key = `${runtimeConfiguration().globalPrefix}SceneReport` as const;
   if (globals[key] !== undefined) return;
-  const state: SceneState = { effects: new Map(), longest: new Map(), options, offset: 0, last: options.frame(), serial: 0 };
+  const state: SceneState = { effects: new Map(), longest: new Map(), destroyed: new Map(), options, offset: 0, last: options.frame(), serial: 0 };
   globals[key] = state;
   wrapNatives(state);
   installSceneReport();

@@ -67,8 +67,9 @@ getters per effect, so keep the recorder out of measurement builds.
 
 Each line of the report gives, per model path (with `/` for `\`): live
 effects, those in view, those drawn, the frame the oldest was created on, how
-long the longest-standing one in view has been there, and the longest any of
-them has stayed in view without a break since the recorder started.
+long the longest-standing one in view has been there, the longest any of
+them has stayed in view without a break since the recorder started, and how
+many were destroyed in view, where Warcraft plays their death animation.
 
 ### Expectations
 
@@ -109,9 +110,55 @@ feature on frames where it is absent and where it is present, from captures
 or recordings (`ffmpeg -i REC.mkv -vf fps=1 frame-%03d.ppm`), and record the
 threshold and its measured margin beside the declaration.
 
+## Render visibility
+
+The scene report says which effects the game hides; what a player still sees
+of them depends on their models. Give `SceneExpectations` a `visibility`
+declaration and `sceneProblems` also reports what a player could see that the
+game considers hidden or gone (wisp:scripts/wisp/visibility.ts):
+
+- a model a kind names that is empty, has no facts, or has no triangles,
+  particles or light, so nothing is drawn where the game expects it;
+- effects in view but not drawn, by alpha, scale or a flat matrix, whose model
+  emits particles in a sequence other than death: those emitters keep running;
+- parked effects whose mesh or particles, alive or in their death animation,
+  reach into a declared camera's frame from a declared parking place;
+- effects destroyed in view whose death animation emits particles there.
+
+`modelFacts` (wisp:scripts/wisp/models.ts) reads an MDX file into what the
+check needs: geosets, triangles, lights, the mesh's box over every sequence,
+and per particle, ribbon, model or popcorn emitter whether it runs while shown
+and in death, whether its particles can show, its rate, lifespan and reach.
+An emitter runs in a sequence when its visibility and rate are above zero
+there; a track without keys in a sequence takes its default. Reach is a set
+of boxes around the model's origin at scale 1 that bound the particle's
+flight: its fastest launch in any direction for its lifespan, plus size,
+emission area and tail. A particle pulled down stays under the parabola
+speed²/2g − g·h²/2speed² at horizontal distance h, so its flight is cut into
+eight rings of h, each as high as that parabola at its inner edge: a death
+spray flung far out has fallen by the time it gets there. A popcorn
+emitter's reach isn't in the file, and a model emitter's reach leaves out
+the emitted model's size.
+Facts are plain records, so a game can read its imported files and the game's
+archives once, keep the table, and check scenes without the files.
+
+The game reads its own models: its imports from the build's inputs, and the
+game's models from the local install. Its declaration names every camera a
+player may see a match through (`CameraView`: target, distance, angle of
+attack, rotation, field of view across the width, aspect and far plane, with
+roll zero) and every place it parks hidden effects, in the same coordinates.
+The frame test is conservative: a box that misses the frame only past one of
+its corners still counts as seen.
+
+The pinned war3-model 4.0.1 reads a version 1800 light record 24 bytes short
+and fails on some camera records, so `modelFacts` counts light records itself
+and leaves both chunks out of parsing; facts use neither.
+
 ## Boundaries
 
 The scene report shows what the map asked Warcraft to draw, not what reached
 the screen: a model missing from the archive, or one in view but outside the
 camera's frame, still counts as drawn. The frame probe sees the screen but only what its
-features measure. Neither judges readability; that stays with a playtest.
+features measure. Render visibility knows a model's emitters and a camera's
+frame, not textures, blending or draw order. None of them judges readability;
+that stays with a playtest.

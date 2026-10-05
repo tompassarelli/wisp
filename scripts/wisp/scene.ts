@@ -3,9 +3,12 @@
 // expectations. A check fails on a missing stage, an effect created with no
 // model, an effect in view that the game declares no kind for, or one in view
 // longer than its kind's lifetime, and says what a player would see wrong.
+// With the game's model facts and cameras it also fails on what a player
+// could see that the game considers hidden or gone (visibility.ts).
 // Plain functions, so a game's tests can check a report without Effect;
 // playerView.ts reads the files.
 import { type SceneModel, reportedModel } from "../../src/runtime/scene";
+import { type VisibilityExpectations, visibilityProblems } from "./visibility";
 
 export interface SceneReport {
   readonly serial: number;
@@ -18,7 +21,7 @@ export interface SceneReport {
 
 const NUMBER = "(\\d+)(?:\\.0)?";
 const HEADING = new RegExp(`^scene ${NUMBER} frame ${NUMBER} effects ${NUMBER}$`);
-const MODEL_LINE = new RegExp(`^model ${NUMBER} ${NUMBER} ${NUMBER} (?:${NUMBER}|-) (?:${NUMBER}|-) ${NUMBER} ?(.*)$`);
+const MODEL_LINE = new RegExp(`^model ${NUMBER} ${NUMBER} ${NUMBER} (?:${NUMBER}|-) (?:${NUMBER}|-) ${NUMBER} ${NUMBER} ?(.*)$`);
 const optional = (text: string | undefined) => (text === undefined ? undefined : Number(text));
 
 export interface MalformedSceneLine {
@@ -35,7 +38,7 @@ export function readSceneLines(lines: readonly string[]): SceneReport | Malforme
   const models: SceneModel[] = [];
   for (const [index, line] of rest.entries()) {
     const fields = MODEL_LINE.exec(line);
-    if (fields === null) return { line: index + 2, problem: `expected "model LIVE IN_VIEW DRAWN CREATED AGE LONGEST PATH", found "${line}"` };
+    if (fields === null) return { line: index + 2, problem: `expected "model LIVE IN_VIEW DRAWN CREATED AGE LONGEST DESTROYED PATH", found "${line}"` };
     models.push({
       live: Number(fields[1]),
       inView: Number(fields[2]),
@@ -43,7 +46,8 @@ export function readSceneLines(lines: readonly string[]): SceneReport | Malforme
       created: optional(fields[4]),
       age: optional(fields[5]),
       longest: Number(fields[6]),
-      model: fields[7] ?? "",
+      destroyed: Number(fields[7]),
+      model: fields[8] ?? "",
     });
   }
   return { serial: Number(head[1]), frame: Number(head[2]), effects: Number(head[3]), models };
@@ -65,6 +69,8 @@ export interface SceneExpectations {
   readonly stage: { readonly kind: string; readonly pieces: number };
   /** The game's frames per second, to say lifetimes in seconds. */
   readonly framesPerSecond: number;
+  /** What the game's models draw and where its cameras look, to find what a player sees of hidden effects. */
+  readonly visibility?: VisibilityExpectations;
 }
 
 export interface SceneProblem {
@@ -120,6 +126,7 @@ export function sceneProblems(report: SceneReport, expected: SceneExpectations):
       });
     }
   }
+  if (expected.visibility !== undefined) problems.push(...visibilityProblems(report, expected.kinds, expected.visibility));
   return problems;
 }
 

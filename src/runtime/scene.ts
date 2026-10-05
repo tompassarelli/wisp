@@ -25,11 +25,13 @@ export interface SceneModel {
   readonly age: number | undefined;
   /** The longest any one of them stayed in view without a break since the report started. */
   readonly longest: number;
+  /** How many were destroyed in view, where Warcraft plays their death animation, since the report started. */
+  readonly destroyed: number;
 }
 
 /** Backslashes would sit inside the Preload file's JASS string literals. */
 export const reportedModel = (model: string) => model.replaceAll("\\", "/");
 
 /** One line per model, its path last because a path may contain spaces. */
-export const sceneModelLine = ({ model, live, inView, drawn, created, age, longest }: SceneModel) =>
-  `model ${live} ${inView} ${drawn} ${created ?? "-"} ${age ?? "-"} ${longest} ${model}`;
+export const sceneModelLine = ({ model, live, inView, drawn, created, age, longest, destroyed }: SceneModel) =>
+  `model ${live} ${inView} ${drawn} ${created ?? "-"} ${age ?? "-"} ${longest} ${destroyed} ${model}`;

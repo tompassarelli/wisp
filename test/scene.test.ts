@@ -33,12 +33,12 @@ test("the emitted scene recorder reports each model's effects, and the host name
     frame: 101,
     effects: 5,
     models: [
-      { model: "", live: 1, inView: 1, drawn: 1, created: 0, age: 101, longest: 101 },
-      { model: "Abilities/Spark.mdx", live: 1, inView: 0, drawn: 0, created: 0, age: undefined, longest: 9 },
-      { model: "Abilities/Trap.mdx", live: 1, inView: 1, drawn: 0, created: 0, age: 101, longest: 101 },
-      { model: "Flat.mdx", live: 1, inView: 1, drawn: 0, created: 0, age: 101, longest: 101 },
-      { model: "Gone.mdx", live: 0, inView: 0, drawn: 0, created: undefined, age: undefined, longest: 90 },
-      { model: "war3mapImported/Deck.mdx", live: 1, inView: 1, drawn: 1, created: 0, age: 101, longest: 101 },
+      { model: "", live: 1, inView: 1, drawn: 1, created: 0, age: 101, longest: 101, destroyed: 0 },
+      { model: "Abilities/Spark.mdx", live: 1, inView: 0, drawn: 0, created: 0, age: undefined, longest: 9, destroyed: 0 },
+      { model: "Abilities/Trap.mdx", live: 1, inView: 1, drawn: 0, created: 0, age: 101, longest: 101, destroyed: 0 },
+      { model: "Flat.mdx", live: 1, inView: 1, drawn: 0, created: 0, age: 101, longest: 101, destroyed: 0 },
+      { model: "Gone.mdx", live: 0, inView: 0, drawn: 0, created: undefined, age: undefined, longest: 90, destroyed: 1 },
+      { model: "war3mapImported/Deck.mdx", live: 1, inView: 1, drawn: 1, created: 0, age: 101, longest: 101, destroyed: 0 },
     ],
   });
   expect(sceneProblems(scene, expectations).map(({ seen }) => seen)).toEqual([
@@ -51,8 +51,8 @@ test("the emitted scene recorder reports each model's effects, and the host name
 
 test("a stage drawn with an empty model is a missing stage", () => {
   const scene: SceneReport = { serial: 1, frame: 30, effects: 4, models: [
-    { model: "", live: 3, inView: 3, drawn: 3, created: 0, age: 30, longest: 30 },
-    { model: "Units/Hippogryph.mdx", live: 1, inView: 1, drawn: 1, created: 0, age: 30, longest: 30 },
+    { model: "", live: 3, inView: 3, drawn: 3, created: 0, age: 30, longest: 30, destroyed: 0 },
+    { model: "Units/Hippogryph.mdx", live: 1, inView: 1, drawn: 1, created: 0, age: 30, longest: 30, destroyed: 0 },
   ] };
   const empty = { ...expectations, kinds: [{ name: "stage deck", models: [""] }, ...expectations.kinds.slice(1)] };
   expect(sceneProblems(scene, empty)).toEqual([
@@ -60,7 +60,7 @@ test("a stage drawn with an empty model is a missing stage", () => {
     { seen: "invisible stage deck: 3 effects were created with no model, 3 of them meant to be drawn now", evidence: "model path is empty" },
     { seen: "1 effect in view that the game declares no kind for, the oldest for 0.50 s", evidence: "model Units/Hippogryph.mdx, 1 drawn" },
   ]);
-  const drawn = { ...scene, models: [{ model: "war3mapImported/Deck.mdx", live: 3, inView: 3, drawn: 3, created: 0, age: 30, longest: 30 }] };
+  const drawn = { ...scene, models: [{ model: "war3mapImported/Deck.mdx", live: 3, inView: 3, drawn: 3, created: 0, age: 30, longest: 30, destroyed: 0 }] };
   expect(sceneProblems(drawn, expectations)).toEqual([]);
 });
 
@@ -88,7 +88,7 @@ test("the player-view check reads each client's settled scene report and keeps i
   const documents = mkdtempSync(join(tmpdir(), "wisp-player-view-"));
   try {
     mkdirSync(join(documents, "CustomMapData"));
-    const reportText = (frame: number, deck: string) => `function PreloadFiles takes nothing returns nothing\r\n\tcall PreloadStart()\r\n\tcall Preload( "scene 4 frame ${frame} effects 3" )\r\n\tcall Preload( "model 3 3 3 0 ${frame} ${frame} ${deck}" )\r\n\tcall PreloadEnd( 0.0 )\r\n\r\nendfunction\r\n`;
+    const reportText = (frame: number, deck: string) => `function PreloadFiles takes nothing returns nothing\r\n\tcall PreloadStart()\r\n\tcall Preload( "scene 4 frame ${frame} effects 3" )\r\n\tcall Preload( "model 3 3 3 0 ${frame} ${frame} 0 ${deck}" )\r\n\tcall PreloadEnd( 0.0 )\r\n\r\nendfunction\r\n`;
     const sky = new Uint8Array(4 * 4 * 3).fill(200);
     const client = { name: "a", documents };
     const fail = () => Effect.die("unused");
