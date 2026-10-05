@@ -13,6 +13,31 @@ interface ErrorState {
   count: number;
 }
 
+interface StackFrames {
+  depth: number;
+  frames: Record<number, string | undefined>;
+}
+
+interface ShadowStack extends StackFrames {
+  failure?: (StackFrames & { error: unknown }) | undefined;
+}
+
+declare global {
+  var __waygateStack: ShadowStack | undefined;
+}
+
+/** The callback boundary restores this depth after Lua unwinds a failed call. */
+export function stackDepth(): number {
+  return globalThis.__waygateStack?.depth ?? 0;
+}
+
+export function restoreStack(depth: number): void {
+  const stack = globalThis.__waygateStack;
+  if (stack === undefined) return;
+  stack.depth = depth;
+  stack.failure = undefined;
+}
+
 /** Lua runtime errors are strings that start with their position; thrown Errors are tables. */
 function describe(error: unknown): string {
   if (typeof error === "string") return error;
@@ -24,8 +49,18 @@ function describe(error: unknown): string {
   return String(error);
 }
 
-/** The call stack at the error, when the game provides the debug library. */
-export function traceback(): string {
+/** Compiler-recorded TypeScript frames work in Warcraft without Lua's debug library. */
+export function traceback(error?: unknown): string {
+  const stack = globalThis.__waygateStack;
+  if (stack !== undefined) {
+    const frames = stack.failure !== undefined && stack.failure.error === error ? stack.failure : stack;
+    const lines: string[] = [];
+    for (let depth = frames.depth; depth > 0; depth--) {
+      const frame = frames.frames[depth];
+      if (frame !== undefined) lines.push(frame);
+    }
+    return lines.join("\n");
+  }
   return typeof debug === "object" ? debug.traceback(undefined, 3) : "";
 }
 

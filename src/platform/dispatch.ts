@@ -4,7 +4,7 @@
 // reloaded bundle, whose module locals are fresh, finds the same handlers.
 // Trampolines call the table's `run`, which each bundle replaces when it
 // installs, so how handlers run, including error reporting, reloads too.
-import { reportError, traceback } from "./errors";
+import { reportError, restoreStack, stackDepth, traceback } from "./errors";
 import { runtimeConfiguration } from "../runtime/config";
 
 type Handler = (this: void) => void;
@@ -17,7 +17,11 @@ interface DispatchTable {
 /** Runs a handler under the one error handler that reports where it failed. */
 function run(name: string): void {
   const handler = table().handlers[name];
-  if (handler !== undefined) xpcall(handler, (error: unknown) => reportError(name, error, traceback()));
+  if (handler !== undefined) {
+    const depth = stackDepth();
+    xpcall(handler, (error: unknown) => reportError(name, error, traceback(error)));
+    restoreStack(depth);
+  }
 }
 
 function table(): DispatchTable {

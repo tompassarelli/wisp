@@ -10,6 +10,9 @@
   "tstl": {
     "luaTarget": "5.3", "luaBundle": "map.lua", "luaBundleEntry": "entry.ts",
     "luaLibImport": "require", "noImplicitSelf": true, "noHeader": true,
-    "luaPlugins": [{ "name": "./node_modules/waygate/plugins/warcraft-numbers.ts" }]
+    "luaPlugins": [
+      { "name": "./node_modules/waygate/plugins/warcraft-numbers.ts" },
+      { "name": "./node_modules/waygate/plugins/stack-traces.ts" }
+    ]
   }
 }

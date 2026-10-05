@@ -42,6 +42,22 @@ bundle in program order. It preserves printed Lua and source-map trees between
 compiles. Dependency resolution temporarily rewrites requires in those trees;
 the compiler restores their original child arrays after synchronous bundling.
 
+## TypeScript call stacks in Warcraft
+
+Warcraft omits Lua's `debug` library. To include named TypeScript frames in
+callback error reports, add `{ "name": "./node_modules/waygate/plugins/stack-traces.ts" }`
+to the consuming map's `tstl.luaPlugins`, alongside the numeric plugin. Rebuild
+or hot reload that bundle; the dispatch reporter then records the throw and
+call locations directly from the compiler's TypeScript source positions.
+
+Stack tracing is opt-in because it adds bookkeeping to function entry, source
+statements and returns. It keeps the thrown value intact and preserves Lua's
+multiple returns; caught failures restore the active depth. Frames cover the
+synchronous TypeScript modules compiled with the plugin. Warcraft natives,
+the Lua support library and precompiled dependency functions do not acquire
+frames. The shared stack survives hot reload; suspended coroutines are outside
+the map runtime's synchronous callback contract.
+
 ## Consume a pinned revision
 
 Smashcraft records an immutable Waygate commit and consumes its generated
