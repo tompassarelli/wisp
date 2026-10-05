@@ -30,7 +30,7 @@ effects, and logs every native call except the local-only ones.
 | Players | Player N is the number N. The journey's player slots are playing humans with a client each; every other slot is empty. `GetLocalPlayer` is the client's slot. |
 | Timers | 60 frames a second. A timeout runs on the nearest frame, at least one frame after it starts; periodic timers repeat. Each frame runs the due timers in creation order. |
 | Triggers | Sync, chat and key events, registered per player. A chat line matches its registered text exactly or as a substring, as registered. |
-| Sync messages | `BlzSendSyncData` reaches every client, including the sender, in send order, after the frame or event that sent it and before the next. Warcraft delivers it some frames later. |
+| Sync messages | `BlzSendSyncData` reaches every client, including the sender, in send order, after the frame or event that sent it and before the next. Warcraft delivers it some frames later; a [delivery](network-model.md) gives the measured latency. |
 | Files | `Preload` writes files the test reads from `client.files`. `Preloader` reads only files the host published (`publish`, `reload`), one chunk per FileIO tooltip level, and keeps the first content it read from a path, as Warcraft does. |
 | Units | Position, type, move speed and attack cooldown. |
 | Special effects | Model, position, alpha, scale, time scale and a flattened matrix, as `client.effectPoses()` returns them. `AddSpecialEffect` puts an effect on the ground at height 0. |
@@ -179,10 +179,10 @@ project's host type check never reads map code.
 ## Boundaries
 
 The runtime emulates natives; it is not Warcraft. It has no engine frame
-timing, rendering, terrain, pathing, combat, real input devices, Battle.net
-or network latency, and it emulates only natives a map has needed. A native
-answered by a default value can hide behavior that depends on what Warcraft
-would return. A passing journey shows that the clients agree with each other
-on these stubs; native desyncs, timing and what reaches the screen keep their
+timing, rendering, terrain, pathing, combat, real input devices or Battle.net
+beyond the [measured sync latency](network-model.md), and it emulates only
+natives a map has needed. A native answered by a default value can hide
+behavior that depends on what Warcraft would return. A passing journey shows
+that the clients agree with each other on these stubs; native desyncs, timing and what reaches the screen keep their
 native checks ([desync reports](hot-reload.md#desync-reports),
 [player view](player-view.md)).

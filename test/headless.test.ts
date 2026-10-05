@@ -11,6 +11,7 @@ import type { SceneExpectations } from "../scripts/wisp/scene";
 import { installDispatch, on, trampoline } from "../src/platform/dispatch";
 import { startSceneReport } from "../src/platform/scene";
 import { configureRuntime } from "../src/runtime/config";
+import { MEASURED_BATTLE_NET, syncDelivery } from "../scripts/wisp/syncChannel";
 
 const FIXTURE = { filePrefix: "fixture", globalPrefixes: ["__fixture"], localNatives: { BlzFrameSetText: "shows text on this client" } };
 const runtime = installHeadless(FIXTURE);
@@ -116,4 +117,44 @@ test("wisp headless fails with the problems it printed, and names its journeys",
   expect(Exit.isFailure(failed) ? Cause.squash(failed.cause) : undefined).toMatchObject({ message: "seconds: 1 problem" });
   const usage = await Effect.runPromiseExit(command(["other"]));
   expect(Exit.isFailure(usage) ? Cause.squash(usage.cause) : undefined).toMatchObject({ _tag: "UsageFailure", message: "journeys: seconds" });
+});
+
+test("with a delivery, a sync message reaches every client on its arrival frame, before that frame's callbacks", () => {
+  const map = () => ({
+    start: () => {
+      configure();
+      installDispatch();
+      on("fixture.frame", () => {
+        globalThis.__fixtureFrame = (globalThis.__fixtureFrame ?? 0) + 1;
+        if (globalThis.__fixtureFrame === 5 && GetPlayerId(GetLocalPlayer()) === 0) BlzSendSyncData("FX_SYNC", "ping");
+      });
+      on("fixture.sync", () => {
+        globalThis.__fixtureReceived = globalThis.__fixtureFrame ?? 0;
+      });
+      const trigger = CreateTrigger();
+      BlzTriggerRegisterPlayerSyncEvent(trigger, Player(0), "FX_SYNC", false);
+      TriggerAddAction(trigger, trampoline("fixture.sync"));
+      TimerStart(CreateTimer(), 0.0, true, trampoline("fixture.frame"));
+    },
+    install: () => {},
+  });
+  const received = (delivery?: ReturnType<typeof syncDelivery>) => {
+    const clients = runtime.clients(map(), [0, 1], delivery);
+    clients.start();
+    clients.frames(30);
+    expect(clients.firstDivergence()).toBeUndefined();
+    return clients.clients.map((client) => {
+      let frame = -1;
+      client.run(() => {
+        frame = globalThis.__fixtureReceived ?? -1;
+      });
+      return frame;
+    });
+  };
+  // At once: after the sending frame's callbacks, before the next frame's.
+  expect(received()).toEqual([5, 5]);
+  // Measured latency: some frames later, on the same frame in both clients.
+  const later = received(syncDelivery(MEASURED_BATTLE_NET, 1));
+  expect(later[0]).toBe(later[1] ?? -1);
+  expect(later[0] ?? 0).toBeGreaterThanOrEqual(5 + 4);
 });

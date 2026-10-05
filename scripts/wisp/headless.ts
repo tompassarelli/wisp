@@ -10,7 +10,7 @@ import { join } from "node:path";
 import type { ClientScope, HeadlessClient, LocalNatives, MapEntry, NativeBehaviors } from "../../src/headless/client";
 import { type NativeDeclarations, parseNativeDeclarations } from "../../src/headless/declarations";
 import { type Journey, journeyLines, journeyProblems, runJourney } from "../../src/headless/journey";
-import { Lockstep } from "../../src/headless/lockstep";
+import { Lockstep, type SyncDelivery } from "../../src/headless/lockstep";
 import { errorFile } from "../../src/runtime/gameFiles";
 import { sceneFile } from "../../src/runtime/scene";
 import { type SceneExpectations, describeScene, readSceneLines, sceneProblems } from "./scene";
@@ -28,8 +28,12 @@ export interface HeadlessMap {
 }
 
 export interface HeadlessRuntime {
-  /** Clients of the map whose entry is `entry`, one per player slot, ready to start. */
-  clients(entry: MapEntry, players?: readonly number[]): Lockstep;
+  /**
+   * Clients of the map whose entry is `entry`, one per player slot, ready to
+   * start. With a delivery, such as syncDelivery() (wisp:scripts/wisp/syncChannel.ts),
+   * synchronized messages arrive when it says rather than before the next frame.
+   */
+  clients(entry: MapEntry, players?: readonly number[], delivery?: SyncDelivery): Lockstep;
   /** Puts back what the globals held before the runtime was installed. */
   restore(): void;
 }
@@ -126,7 +130,7 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
   };
   const bundles = new Map<string, MapEntry>();
   return {
-    clients: (entry, players = [0, 1]) => {
+    clients: (entry, players = [0, 1], delivery) => {
       // The text a reload publishes; this runtime's `load` returns the entry for it.
       const bundle = `-- wisp headless bundle ${bundles.size + 1}`;
       bundles.set(bundle, entry);
@@ -139,6 +143,7 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
         scope,
         ...(map.localNatives === undefined ? {} : { localNatives: map.localNatives }),
         natives: (client) => ({ ...luaFunctions(client, bundles), ...map.natives?.(client) }),
+        ...(delivery === undefined ? {} : { delivery }),
       });
     },
     restore: () => {

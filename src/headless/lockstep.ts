@@ -24,6 +24,23 @@ export interface LockstepOptions {
   readonly localNatives?: LocalNatives;
   readonly natives?: (this: void, client: HeadlessClient) => NativeBehaviors;
   readonly scope?: ClientScope;
+  /** When synchronized messages arrive; without it, each arrives before the next frame. */
+  readonly delivery?: SyncDelivery;
+}
+
+/**
+ * When a synchronized message reaches the clients, such as the measured
+ * Battle.net latency of wisp:scripts/wisp/syncChannel.ts
+ * (wisp:docs/network-model.md).
+ */
+export interface SyncDelivery {
+  /** The frame before whose callbacks every client receives a message `sender` sent during `frame`; later than `frame`. */
+  arrivalFrame(this: void, sender: number, frame: number, message: SyncMessage): number;
+}
+
+interface InFlight {
+  readonly arrival: number;
+  readonly message: SyncMessage;
 }
 
 /** Synchronized messages that keep causing more are a defect, not a frame. */
@@ -36,6 +53,8 @@ export class Lockstep {
   frame = 0;
   /** Hot reload versions published so far. */
   version = 0;
+  /** With a delivery: messages sent and not yet received, by arrival frame, then send order. */
+  readonly inFlight: InFlight[] = [];
   private readonly options: LockstepOptions;
 
   constructor(options: LockstepOptions) {
@@ -79,8 +98,19 @@ export class Lockstep {
     this.flush();
   }
 
-  /** Synchronized messages reach every client in the order they were sent. */
+  /** Synchronized messages reach every client in the order they were sent, at once or at their arrival frame. */
   private flush(): void {
+    const delivery = this.options.delivery;
+    if (delivery !== undefined) {
+      for (let message = this.network.shift(); message !== undefined; message = this.network.shift()) {
+        const arrival = delivery.arrivalFrame(message.sender, this.frame, message);
+        if (arrival <= this.frame) throw new Error(`a message sent during frame ${this.frame} arrives at frame ${arrival}`);
+        let index = this.inFlight.length;
+        while (index > 0 && (this.inFlight[index - 1]?.arrival ?? 0) > arrival) index--;
+        this.inFlight.splice(index, 0, { arrival, message });
+      }
+      return;
+    }
     for (let delivered = 0; this.network.length > 0; delivered++) {
       if (delivered > MAX_MESSAGES_PER_FLUSH) throw new Error("synchronized messages never settle");
       const message = this.network.shift();
@@ -88,9 +118,19 @@ export class Lockstep {
     }
   }
 
+  /** Delivers the messages due at the current frame, before its callbacks, as Warcraft runs a turn's events first. */
+  private arrive(): void {
+    while ((this.inFlight[0]?.arrival ?? this.frame + 1) <= this.frame) {
+      const due = this.inFlight.shift();
+      if (due !== undefined) for (const client of this.clients) client.deliverSync(due.message);
+    }
+    this.flush();
+  }
+
   frames(count: number): void {
     for (let frame = 0; frame < count; frame++) {
       this.frame++;
+      this.arrive();
       for (const client of this.clients) client.step();
       this.flush();
     }
