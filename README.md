@@ -17,6 +17,9 @@ services, and generic archive operations. Games own their simulation, UI,
 assets, map declaration, import list, and acceptance journeys. Smashcraft is
 the first consumer; Waygate does not import or read its source.
 
+See the [feature index](docs/index.md) (waygate:docs/index.md) to find existing
+capabilities and their setup, including opt-in diagnostics.
+
 ## Develop Waygate
 
 The exact Bun, TypeScript, TypeScriptToLua and Effect versions are recorded in
@@ -44,19 +47,10 @@ the compiler restores their original child arrays after synchronous bundling.
 
 ## TypeScript call stacks in Warcraft
 
-Warcraft omits Lua's `debug` library. To include named TypeScript frames in
-callback error reports, add `{ "name": "./node_modules/waygate/plugins/stack-traces.ts" }`
-to the consuming map's `tstl.luaPlugins`, alongside the numeric plugin. Rebuild
-or hot reload that bundle; the dispatch reporter then records the throw and
-call locations directly from the compiler's TypeScript source positions.
-
-Stack tracing is opt-in because it adds bookkeeping to function entry, source
-statements and returns. It keeps the thrown value intact and preserves Lua's
-multiple returns; caught failures restore the active depth. Frames cover the
-synchronous TypeScript modules compiled with the plugin. Warcraft natives,
-the Lua support library and precompiled dependency functions do not acquire
-frames. The shared stack survives hot reload; suspended coroutines are outside
-the map runtime's synchronous callback contract.
+Warcraft omits Lua's `debug` library. Waygate can record named TypeScript
+frames without it. This is an opt-in development diagnostic with measurable
+CPU and bundle-size cost; see [TypeScript stack traces](docs/stack-traces.md)
+(waygate:docs/stack-traces.md) for configuration and scope.
 
 ## Consume a pinned revision
 

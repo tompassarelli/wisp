@@ -6,7 +6,7 @@ import { transpileProject } from "typescript-to-lua";
 import { report } from "./compiler";
 
 const root = resolve(import.meta.dir, "..");
-const packagePaths = ["scripts", "plugins", "src", "native", "assets", "README.md", "AGENTS.md", "typescript-toolchain.lock", "tsconfig.library.json"];
+const packagePaths = ["scripts", "plugins", "src", "native", "assets", "docs", "README.md", "AGENTS.md", "typescript-toolchain.lock", "tsconfig.library.json"];
 
 async function copyTree(source: string, destination: string): Promise<void> {
   await mkdir(destination, { recursive: true });
@@ -30,7 +30,7 @@ export async function producePackage(output: string): Promise<void> {
     for (const path of packagePaths) {
       const source = join(root, path);
       const destination = join(staging, path);
-      if (["scripts", "plugins", "src", "native", "assets"].includes(path)) await copyTree(source, destination);
+      if (["scripts", "plugins", "src", "native", "assets", "docs"].includes(path)) await copyTree(source, destination);
       else await copyFile(source, destination);
     }
     // Dependency versions are unchanged; installation must not run this
