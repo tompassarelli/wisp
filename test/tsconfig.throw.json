@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.runtime.json",
+  "compilerOptions": { "outDir": "../build/throw-tests" },
+  "include": ["../src/natives/*.d.ts", "throw/entry.ts"],
+  "tstl": {
+    "luaTarget": "5.3", "luaBundle": "map.lua", "luaBundleEntry": "throw/entry.ts",
+    "noImplicitSelf": true, "noHeader": true,
+    "luaPlugins": [{ "name": "../plugins/warcraft-numbers.ts" }]
+  }
+}

@@ -11,6 +11,6 @@
   "tstl": {
     "buildMode": "library", "luaTarget": "5.3", "luaLibImport": "require",
     "noImplicitSelf": true, "noHeader": true,
-    "luaPlugins": [{ "name": "./plugins/warcraft-numbers.ts" }]
+    "luaPlugins": [{ "name": "./plugins/warcraft-numbers.ts", "sourcePrefix": "wisp/" }]
   }
 }

@@ -13,6 +13,11 @@
 // - rejects type escapes in game code (tests excepted): `any`, `as unknown as`
 //   and non-null `!`, which assert what the code should check.
 // Node, Bun and DOM APIs need no rule: the map tsconfig doesn't declare them.
+//
+// It also records each `throw` statement's TypeScript file and line: Warcraft's
+// Lua has no debug library, so a thrown value carries no position. Only the
+// throwing branch runs the extra assignments.
+import { dirname, relative } from "node:path";
 import * as ts from "typescript";
 import * as tstl from "typescript-to-lua";
 import { LuaPrinter } from "typescript-to-lua";
@@ -123,7 +128,41 @@ function check(file: ts.SourceFile, checker: ts.TypeChecker, diagnostics: ts.Dia
   visit(file);
 }
 
-const plugin: tstl.Plugin = {
+/** The throw's TypeScript file and line, relative to the project's tsconfig like mapped Lua positions. */
+function throwSite(node: ts.ThrowStatement, options: tstl.CompilerOptions, sourcePrefix: string): string | undefined {
+  if (node.pos < 0) return undefined;
+  const file = node.getSourceFile();
+  const { line } = file.getLineAndCharacterOfPosition(node.getStart(file));
+  const project = typeof options.configFilePath === "string" ? dirname(options.configFilePath) : process.cwd();
+  return `${sourcePrefix}${relative(project, file.fileName).replaceAll("\\", "/")}:${line + 1}`;
+}
+
+/**
+ * `throw x` becomes `error(x, 0)` after naming x and its site in globals the
+ * error reporter reads. A rethrow of the latest thrown value keeps its first site.
+ */
+function transformThrow(node: ts.ThrowStatement, context: tstl.TransformationContext, sourcePrefix: string): tstl.Statement[] {
+  const site = throwSite(node, context.options, sourcePrefix);
+  if (site === undefined) return context.superTransformStatements(node);
+  const thrown = () => tstl.createIdentifier("____thrown");
+  const global = (name: string) => tstl.createTableIndexExpression(tstl.createIdentifier("_G"), tstl.createStringLiteral(name));
+  return [tstl.createDoStatement([
+    tstl.createVariableDeclarationStatement(thrown(), context.transformExpression(node.expression), node),
+    tstl.createIfStatement(
+      tstl.createBinaryExpression(global("__wispThrown"), thrown(), tstl.SyntaxKind.InequalityOperator),
+      tstl.createBlock([
+        tstl.createAssignmentStatement(global("__wispThrown"), thrown(), node),
+        tstl.createAssignmentStatement(global("__wispThrowSite"), tstl.createStringLiteral(site), node),
+      ]),
+      undefined,
+      node,
+    ),
+    tstl.createExpressionStatement(tstl.createCallExpression(tstl.createIdentifier("error"), [thrown(), tstl.createNumericLiteral(0)]), node),
+  ], node)];
+}
+
+/** `sourcePrefix` names a library's throw sites as its consumers import them, such as `wisp/`. */
+const plugin = ({ sourcePrefix = "" }: { readonly sourcePrefix?: string }): tstl.Plugin => ({
   beforeTransform(program) {
     const diagnostics: ts.Diagnostic[] = [];
     for (const file of program.getSourceFiles()) {
@@ -145,8 +184,9 @@ const plugin: tstl.Plugin = {
       const [left, right] = node.arguments;
       return tstl.createBinaryExpression(context.transformExpression(left!), context.transformExpression(right!), operator, node);
     },
+    [ts.SyntaxKind.ThrowStatement]: (node, context) => transformThrow(node, context, sourcePrefix),
   },
   printer: (program, emitHost, fileName, file) => new WarcraftNumberPrinter(emitHost, program, fileName).print(file),
-};
+});
 
 export default plugin;

@@ -24,6 +24,9 @@ interface ShadowStack extends StackFrames {
 
 declare global {
   var __wispStack: ShadowStack | undefined;
+  /** The latest value a compiled `throw` raised, and that statement's TypeScript file and line. */
+  var __wispThrown: unknown;
+  var __wispThrowSite: string | undefined;
 }
 
 /** The callback boundary restores this depth after Lua unwinds a failed call. */
@@ -64,11 +67,17 @@ export function traceback(error?: unknown): string {
   return typeof debug === "object" ? debug.traceback(undefined, 3) : "";
 }
 
+/** Without a stack, a thrown value's report starts with its throw site, as a runtime fault's starts with its Lua position. */
+function throwSite(error: unknown, stack: string): string | undefined {
+  return stack === "" && error === globalThis.__wispThrown ? globalThis.__wispThrowSite : undefined;
+}
+
 export function reportError(handler: string, error: unknown, stack: string): void {
   const configuration = runtimeConfiguration();
   const globals = globalThis as Record<`${string}Errors`, ErrorState | undefined>;
   const state = (globals[`${configuration.globalPrefix}Errors`] ??= { last: undefined, count: 0 });
-  const message = describe(error);
+  const site = throwSite(error, stack);
+  const message = site === undefined ? describe(error) : `${site}: ${describe(error)}`;
   if (message === state.last) return;
   state.last = message;
   state.count++;
