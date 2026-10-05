@@ -1,14 +1,14 @@
-import { readFileSync, mkdtempSync, utimesSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, mkdtempSync, statSync, utimesSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Cause, Clock, Effect, Exit, Fiber, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { expect, test } from "bun:test";
-import { Acknowledgement, ErrorReport, bytesChecksum, hostPath, manifestVersion, payloadFileKey, preloadRecord } from "../scripts/wisp/boundary";
-import { manifestFile, payloadFile } from "../src/runtime/gameFiles";
+import { Acknowledgement, ErrorReport, bytesChecksum, hostPath, linePreloadFile, manifestVersion, payloadFileKey, preloadRecord } from "../scripts/wisp/boundary";
+import { hostFile, manifestFile, payloadFile } from "../src/runtime/gameFiles";
 import { checksum } from "../src/runtime/payload";
 import { validateDataDirectories } from "../scripts/wisp/commands/hot";
-import { GameFiles } from "../scripts/wisp/gameFiles";
+import { GameFiles, prepareHotFolders } from "../scripts/wisp/gameFiles";
 import { HotReload } from "../scripts/wisp/hotReload";
 import { MapBuild, freshBundleAge, type CompiledBundle } from "../scripts/wisp/mapBuild";
 import { SourceErrors } from "../scripts/wisp/sourceErrors";
@@ -55,7 +55,7 @@ test("hot reload gives every client its payload before any manifest and waits fo
       }
       return undefined;
     }),
-    write: (path) => Effect.sync(() => events.push(`payload:${path}`)),
+    write: (path) => Effect.sync(() => events.push(path.endsWith("/host.pld") ? `marker:${path}` : `payload:${path}`)),
     replace: (path) => Effect.gen(function*() {
       events.push(`manifest:${path}`);
       acknowledgeAt = (yield* Clock.currentTimeMillis) + 10;
@@ -87,13 +87,56 @@ test("hot reload gives every client its payload before any manifest and waits fo
   const firstManifest = events.findIndex((event) => event.startsWith("manifest:"));
   expect(firstManifest).toBeGreaterThan(lastPayload);
   for (const directory of directories) {
+    const marker = events.findIndex((event) => event === `marker:${directory}/custom-hot/host.pld`);
     const payload = events.findIndex((event) => event.startsWith(`payload:${directory}/custom-hot/`));
     const manifest = events.findIndex((event) => event === `manifest:${directory}/custom-hot/manifest-1.pld`);
     const acknowledgementRead = events.findIndex((event) => event === `ack:${directory}/custom-hot-ack-p0.txt`);
-    expect(payload).toBeGreaterThanOrEqual(0);
+    expect(marker).toBeGreaterThanOrEqual(0);
+    expect(payload).toBeGreaterThan(marker);
     expect(manifest).toBeGreaterThan(payload);
     expect(acknowledgementRead).toBeGreaterThan(manifest);
   }
+});
+
+test("wisp hot creates every client's hot folder marker when it starts, once, before it can publish", async () => {
+  const directories = ["/a/CustomMapData", "/b/CustomMapData"] as const;
+  const stored = new Map<string, string | Uint8Array>();
+  const writes: string[] = [];
+  const files = GameFiles.of({
+    read: (path) => Effect.sync(() => (stored.has(path) ? { text: String(stored.get(path)), modified: 0 } : undefined)),
+    write: (path, contents) => Effect.sync(() => {
+      writes.push(path);
+      stored.set(path, contents);
+    }),
+    replace: () => Effect.void,
+    list: () => Effect.succeed([]),
+    remove: () => Effect.void,
+    installMap: () => Effect.void,
+  });
+  const mapBuild = MapBuild.of({ compile: Effect.die("not compiled"), build: () => Effect.void, rebuild: () => Effect.void });
+  const dependencies = Layer.merge(Layer.succeed(GameFiles, files), Layer.succeed(MapBuild, mapBuild));
+  const start = () => Effect.runPromise(Effect.scoped(Layer.build(HotReload.layer(directories, "custom").pipe(Layer.provide(dependencies)))));
+  await start();
+  // Starting is all it did: no payload, no manifest.
+  expect(writes).toEqual(directories.map((directory) => `${directory}/custom-hot/host.pld`));
+  expect(stored.get(writes[0] ?? "")).toBe(linePreloadFile("host"));
+  // A later run finds the marker and leaves it alone: a client may be reading it.
+  await start();
+  expect(writes).toHaveLength(directories.length);
+});
+
+test("the hot folder and its marker are created on disk, and an existing marker is not rewritten", async () => {
+  const root = mkdtempSync(join(tmpdir(), "wisp-hot-folder-"));
+  const directories = [join(root, "a", "CustomMapData"), join(root, "b", "CustomMapData")];
+  const prepare = Effect.runPromise(prepareHotFolders(directories, "custom").pipe(Effect.provide(GameFiles.layer())));
+  await prepare;
+  for (const directory of directories) {
+    expect(statSync(join(directory, "custom-hot")).isDirectory()).toBe(true);
+    expect(readFileSync(hostPath(directory, hostFile("custom")), "utf8")).toBe(linePreloadFile("host"));
+    utimesSync(hostPath(directory, hostFile("custom")), 1, 1);
+  }
+  await Effect.runPromise(prepareHotFolders(directories, "custom").pipe(Effect.provide(GameFiles.layer())));
+  for (const directory of directories) expect(statSync(hostPath(directory, hostFile("custom"))).mtimeMs).toBe(1000);
 });
 
 test("hot reload requires distinct non-empty client data directories", async () => {

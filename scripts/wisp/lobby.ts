@@ -9,7 +9,7 @@ import { Clock, Effect } from "effect";
 import { ackFile } from "../../src/runtime/gameFiles";
 import { Acknowledgement, FILE_SLOT_NUMBERS, type MalformedGameFile } from "./boundary";
 import { type Client, Clients, type DesktopFailure, waitFor, waitForText } from "./clients";
-import { GameFiles, dataDirectory, readGameFile } from "./gameFiles";
+import { GameFiles, dataDirectory, prepareHotFolders, readGameFile } from "./gameFiles";
 import { step } from "./timings";
 
 // Regions of the frame where each screen's identifying label appears.
@@ -79,7 +79,11 @@ export const freshMatch = ({ map, title, filePrefix = "wisp", fromGame = false }
     yield* waitForText(client, "custom games", /CREATE/i, CUSTOM_GAMES, "light", 15);
   }).pipe(step(`${client.name} at Custom Games`));
 
-  const install = Effect.forEach(clients.all, (client) => files.installMap(client.documents, map), { discard: true }).pipe(step("map installed"));
+  // The map's hot folder exists before its match does, so its first lookups for a reload are cheap.
+  const install = Effect.gen(function*() {
+    yield* prepareHotFolders(clients.all.map((client) => dataDirectory(client.documents)), filePrefix);
+    yield* Effect.forEach(clients.all, (client) => files.installMap(client.documents, map), { discard: true });
+  }).pipe(step("map installed"));
 
   const host = (client: Client) => Effect.gen(function*() {
     yield* click(client, CREATE_GAME);

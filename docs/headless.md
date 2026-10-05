@@ -71,8 +71,14 @@ export const MAP: HeadlessMap = {
 ## Hot reload
 
 `reload()` publishes the map's bundle as the next version, as `wisp hot` does:
-payload files, then the manifest, in every client's CustomMapData. The map's
-own reloader finds it on its next poll, the clients answer through sync
+the host marker, payload files, then the manifest, in every client's
+CustomMapData. `start()` has already put the marker there, as `wisp fresh` does
+before a match, so the map's own reloader finds the manifest on its next poll;
+`start({ hostFolder: false })` simulates clients no host has touched, which
+look for files only twice a second until `prepareHostFolder()` or `reload()`
+publishes the marker ([what polling costs](hot-reload.md#what-polling-costs)).
+`client.missedLookups` counts a client's Preloader lookups of files nobody
+published, each a folder read under Wine. The clients answer through sync
 messages, and every client installs it on the same frame. `unappliedReloads()`
 names each client whose acknowledgement file doesn't show the latest version,
 with its "not applied" message. In Lua the published text is the compiled

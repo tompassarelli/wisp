@@ -38,6 +38,8 @@ function PreloadGenStart() end
 function Preload(text) preload[#preload + 1] = text end
 function PreloadGenEnd(name) writes[name] = table.concat(preload, "\n") end
 function DisplayTextToPlayer(p, x, y, text) end
+-- A host prepared the hot folder before the match, as `wisp fresh` does.
+files["fixture-hot\\host.pld"] = "host"
 local module = assert(load(payload))()
 module.start()
 assert(writes["fixture-hot-ack-p0.txt"] == "applied 0 at 0", "match start was not acknowledged")

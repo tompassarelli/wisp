@@ -83,7 +83,9 @@ Each `run` directory holds its desktop's `display`, `xauthority` and
 1. `bun examples/sample/scripts/sample.ts fresh MAP.w3x` installs the map as
    the only map of each client's Maps/00-Wisp folder, leaves any game, hosts
    from the first client, joins the others by name, starts, and waits until
-   every client acknowledges the match start. Create Game selects the first map
+   every client acknowledges the match start. It first creates each client's
+   `sample-hot` folder in CustomMapData, as `hot` does, so the map's lookups for
+   reloads stay cheap ([polling cost](hot-reload.md#what-polling-costs)). Create Game selects the first map
    of the folder its list has open, and Warcraft keeps that folder for the
    session: open Maps/00-Wisp once in the host's list, or pass
    `--map-folder FOLDER` naming the folder it shows. `--rebuild` replaces the

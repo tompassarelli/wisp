@@ -4,12 +4,13 @@
 // load at once; the game installs the bundle in all clients on one frame or in
 // none, and each client acknowledges the version it installed. Versions continue
 // from the newest manifest on disk, so Wisp and the match can each restart
-// without losing track.
+// without losing track. The hot folder and its host marker exist before the
+// first publish: see prepareHotFolders.
 import { join } from "node:path";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { ackFile, formatManifest, hotFolder, manifestFile, payloadFile, payloadKey } from "../../src/runtime/gameFiles";
 import { Acknowledgement, FILE_SLOT_NUMBERS, type MalformedGameFile, hostPath, linePreloadFile, manifestVersion, payloadFileKey, payloadPieces, payloadPreloadFile } from "./boundary";
-import { type GameFileFailure, GameFiles, readGameFile } from "./gameFiles";
+import { type GameFileFailure, GameFiles, prepareHotFolders, readGameFile } from "./gameFiles";
 import { type CompileFailure, MapBuild, type MapBuildFailure } from "./mapBuild";
 import type { SourceMapFailure } from "./sourceErrors";
 import { step } from "./timings";
@@ -42,6 +43,8 @@ export class HotReload extends Context.Service<HotReload, {
     const files = yield* GameFiles;
     const build = yield* MapBuild;
     const folder = (directory: string) => join(directory, hotFolder(filePrefix));
+    // Before any reload: a map that has seen no host looks only twice a second and polls fast once it has.
+    yield* prepareHotFolders(directories, filePrefix);
     const published = yield* Effect.forEach(directories, (directory) =>
       files.list(folder(directory)).pipe(Effect.map((names) => Math.max(0, ...names.map(manifestVersion).filter((version) => version !== undefined)))),
     { concurrency: PUBLISH_CONCURRENCY });

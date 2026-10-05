@@ -4,7 +4,7 @@
 // same order, so clients that took the same events must make the same native
 // calls. A hot reload goes through the map's own reloader, from the files the
 // host would write. Runtime-neutral, like client.ts.
-import { ackFile, formatManifest, manifestFile, PAYLOAD_FILE_BYTES, payloadFile } from "../runtime/gameFiles";
+import { ackFile, formatManifest, hostFile, manifestFile, PAYLOAD_FILE_BYTES, payloadFile } from "../runtime/gameFiles";
 import { checksum } from "../runtime/payload";
 import { floorDiv } from "../sim/intMath";
 import { type ClientScope, HeadlessClient, type LocalNatives, type MapEntry, type NativeBehaviors, type SyncMessage, WISP_LOCAL_NATIVES, describeCall, sameCall } from "./client";
@@ -59,8 +59,13 @@ export class Lockstep {
     this.clients = clients;
   }
 
-  /** The map's main(): every client loads its entry and starts it. */
-  start(): void {
+  /**
+   * The map's main(): every client loads its entry and starts it. A host has
+   * prepared each client's hot folder first, as `wisp fresh` does before a
+   * match, unless `hostFolder` is false: a client no host has touched.
+   */
+  start(options: { readonly hostFolder?: boolean } = {}): void {
+    if (options.hostFolder !== false) this.prepareHostFolder();
     const entry = this.options.entry;
     for (const client of this.clients) {
       client.run(() => entry(client).start());
@@ -109,11 +114,17 @@ export class Lockstep {
     for (const client of this.clients) client.published.set(name, chunks);
   }
 
+  /** Puts the host's marker in every client's hot folder, as `wisp fresh` and `wisp hot` do before anything else. */
+  prepareHostFolder(): void {
+    for (const client of this.clients) client.published.set(hostFile(this.options.filePrefix), ["host"]);
+  }
+
   /**
    * Publishes the bundle as the next hot reload version, as `wisp hot` does:
-   * payload files, then the manifest. The clients find it on their next polls.
+   * the host's marker, payload files, then the manifest. The clients find it on their next polls.
    */
   reload(): number {
+    this.prepareHostFolder();
     const text = this.options.bundle;
     const prefix = this.options.filePrefix;
     const sum = checksum(text.length, (index) => text.charCodeAt(index));

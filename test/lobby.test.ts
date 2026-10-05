@@ -17,6 +17,8 @@ test.each([false, true])("a fresh match of a two-player map drives two fake clie
   const clicks: string[] = [];
   const keyEvents: string[] = [];
   const installed: string[] = [];
+  // What the host did, in order: files it wrote, installing the map, starting the match.
+  const order: string[] = [];
   let startedAt: number | undefined;
   let joinedAt: number | undefined;
   let hostedAt: number | undefined;
@@ -29,11 +31,16 @@ test.each([false, true])("a fresh match of a two-player map drives two fake clie
       if (writer < 0) return undefined;
       return startedAt !== undefined && (yield* Clock.currentTimeMillis) >= startedAt ? { text: started, modified: startedAt } : previous;
     }),
-    write: () => Effect.void,
+    write: (path) => Effect.sync(() => {
+      order.push(`write:${path}`);
+    }),
     replace: () => Effect.void,
     list: () => Effect.succeed([]),
     remove: () => Effect.void,
-    installMap: (documents, map) => Effect.sync(() => installed.push(`${documents}:${map}`)),
+    installMap: (documents, map) => Effect.sync(() => {
+      order.push("install");
+      installed.push(`${documents}:${map}`);
+    }),
   });
   const fakeClients: typeof Clients.Service = Clients.of({
     all: clients,
@@ -53,6 +60,7 @@ test.each([false, true])("a fresh match of a two-player map drives two fake clie
     words: () => Effect.succeed([]),
     click: (client, x, y) => Effect.gen(function*() {
       clicks.push(`${client.name}:${x},${y}`);
+      if (x === START.x && y === START.y) order.push("start");
       const before = states.get(client.name);
       if (x === BACK.x && y === BACK.y) states.set(client.name, "custom");
       if (x === CREATE_GAME.x && y === CREATE_GAME.y) states.set(client.name, "create");
@@ -103,6 +111,9 @@ test.each([false, true])("a fresh match of a two-player map drives two fake clie
   await Effect.runPromise(run);
   expect([...states.values()]).toEqual(["playing", "playing"]);
   expect(installed).toEqual(clients.map(({ documents }) => `${documents}:/maps/sample.w3x`));
+  // Each client's hot folder gets its marker before the map is installed and long before the match starts.
+  const markers = clients.map(({ documents }) => `write:${dataDirectory(documents)}/sample-hot/host.pld`);
+  expect(order).toEqual([...markers, "install", "install", "start"]);
   expect(selected).toEqual(new Set(["a"]));
   expect(keyEvents.indexOf("a:Escape")).toBeLessThan(keyEvents.indexOf("a:F10"));
   expect(clicks.filter((click) => click === `a:${START.x},${START.y}`)).toHaveLength(1);

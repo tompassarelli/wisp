@@ -12,15 +12,25 @@
 // Each client evaluates a new bundle's modules when its own files arrive, on
 // its own frame, so module scope must not call Warcraft natives or read
 // synchronized state.
-import { acknowledgementLine, ackFile, formatManifest, manifestFile, parseManifest, payloadFile, payloadKey, type Manifest } from "../runtime/gameFiles";
+//
+// A missing file costs a read of the folder that should hold it: of all of
+// CustomMapData when the hot folder doesn't exist. So until a client has seen a
+// host (its marker or a manifest) it looks for each only once a second, and
+// polls for every manifest 32 times a second afterwards. The poll timer never
+// changes: it ticks alike in every client, because a client's timer state must
+// not depend on what its own files hold.
+import { acknowledgementLine, ackFile, formatManifest, hostFile, manifestFile, parseManifest, payloadFile, payloadKey, type Manifest } from "../runtime/gameFiles";
 import { runtimeConfiguration } from "../runtime/config";
-import { floorDiv } from "../sim/intMath";
+import { floorDiv, floorMod } from "../sim/intMath";
 import { on, trampoline } from "./dispatch";
 import { readChunk } from "./fileio";
 import { stringChecksum } from "./payloadChecksum";
 
-// 1/32 s: each poll is one Preloader call for a file that doesn't exist yet.
+// 1/32 s: once a host has been seen, each poll is one Preloader call for a manifest that doesn't exist yet.
 const POLL_SECONDS = 0.03125;
+// Until then a lookup every 16 polls (0.5 s), for the host's marker and the next manifest in turn:
+// at most two Preloader lookups a second.
+const IDLE_POLLS = 16;
 const MAX_SLOTS = 4;
 
 /** What a reloadable bundle exports: re-register handlers, keep state. */
@@ -54,6 +64,8 @@ interface HotState {
   /** Local: the manifest version this client polls for next, and its load awaiting a decision. */
   next: number;
   prepared: Prepared | undefined;
+  /** Local: until this client has seen the host's marker or a manifest, its polls since a lookup round began. */
+  unseen: number | undefined;
   /** Game time since the first install, which every client reads alike on a given frame. */
   clock?: timer;
 }
@@ -70,6 +82,7 @@ function isReloadable(value: unknown): value is Reloadable {
 }
 
 const manifestExists = (version: number) => readChunk(manifestFile(version, runtimeConfiguration().filePrefix)) !== undefined;
+const hostSeen = () => readChunk(hostFile(runtimeConfiguration().filePrefix)) !== undefined;
 
 /**
  * The newest version published before this match. Manifests are never removed
@@ -134,9 +147,16 @@ function poll(): void {
   const state = hot();
   // One version at a time: the next waits for the decision on the one this client answered.
   if (state.prepared !== undefined) return;
+  if (state.unseen !== undefined) {
+    state.unseen = floorMod(state.unseen + 1, 2 * IDLE_POLLS);
+    // The marker proves the hot folder exists, so every poll after it is cheap.
+    if (state.unseen === IDLE_POLLS && hostSeen()) state.unseen = undefined;
+    if (state.unseen !== 0) return;
+  }
   if (state.next <= state.decided) state.next = state.decided + 1;
   const text = readChunk(manifestFile(state.next, runtimeConfiguration().filePrefix));
   if (text === undefined) return;
+  state.unseen = undefined;
   const manifest = parseManifest(text);
   if (manifest === undefined || manifest.version !== state.next) {
     // Unreadable here; another client's answer still brings this version.
@@ -208,7 +228,9 @@ export function startHotReload(): void {
   const configuration = runtimeConfiguration();
   const globals = globalThis as Record<`${string}Hot`, HotState | undefined>;
   // Versions published before this match are its baseline, not reloads.
-  globals[`${configuration.globalPrefix}Hot`] = { applied: 0, decided: 0, pending: undefined, next: latestVersion() + 1, prepared: undefined };
+  const published = latestVersion();
+  const unseen = published > 0 || hostSeen() ? undefined : 1;
+  globals[`${configuration.globalPrefix}Hot`] = { applied: 0, decided: 0, pending: undefined, next: published + 1, prepared: undefined, unseen };
   installHotReload();
   const trigger = CreateTrigger();
   for (let slot = 0; slot < MAX_SLOTS; slot++) BlzTriggerRegisterPlayerSyncEvent(trigger, Player(slot), configuration.readyPrefix, false);

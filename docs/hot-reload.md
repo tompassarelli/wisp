@@ -19,7 +19,9 @@ behavior with `on(name, handler)` from
 [dispatch](../src/platform/dispatch.ts) (wisp:src/platform/dispatch.ts).
 The bundle exports `install()`; each installation calls `installDispatch()`,
 re-registers handlers and calls `installHotReload()`. At initial match startup,
-call `startHotReload()` once to create its timer and trigger.
+call `startHotReload()` once to create its timer and trigger; a client looks
+for files only twice a second until it has seen a host
+([what polling costs](#what-polling-costs)).
 It also acknowledges version 0, the map's own bundle, which tells host tools
 such as the [fresh match](../scripts/wisp/lobby.ts) (wisp:scripts/wisp/lobby.ts)
 that the match is running in that client. Keep module scope free of Warcraft
@@ -52,10 +54,17 @@ The consumer owns the program and command name; the
 [sample map](sample-map.md) (wisp:docs/sample-map.md) composes one with
 `runCli`.
 
-The host writes every client's payload files, then every client's manifest,
-into the `<file prefix>-hot` folder of each CustomMapData directory. Every
-client polls that folder for its next manifest 32 times a second; a small
-folder keeps each poll's missing-file lookup cheap under Wine. As soon as a
+The host first creates the `<file prefix>-hot` folder of each CustomMapData
+directory with the host marker `host.pld` in it
+([prepareHotFolders](../scripts/wisp/gameFiles.ts), wisp:scripts/wisp/gameFiles.ts).
+`wisp hot` does so when it starts and a [fresh match](../scripts/wisp/lobby.ts)
+(wisp:scripts/wisp/lobby.ts) before it installs the map, so the folder exists
+before the match does; a map's own commands that start a match or publish
+reloads must do the same. The marker's content never changes, which the
+Preloader rule needs, and an existing marker is left alone. The host then
+writes every client's payload files, then every client's manifest, into that
+folder. Every client polls it for its next manifest ([what polling
+costs](#what-polling-costs)). As soon as a
 client finds its manifest, it loads and verifies its payload and broadcasts
 ready or refuse with the manifest it loaded. A client still waiting for its
 own manifest loads the version when that first answer arrives. Once every
@@ -76,6 +85,39 @@ wisp:scripts/luaBundle.ts).
 See [runtime](../src/platform/hotReload.ts) and
 [host service](../scripts/wisp/hotReload.ts)
 (wisp:src/platform/hotReload.ts, wisp:scripts/wisp/hotReload.ts).
+
+## What polling costs
+
+A client polls for a manifest that does not exist until a reload is
+published. Under Wine, a lookup of a missing file reads the folder that should
+hold it, and when that folder is missing too, its parent. Smashcraft 0.0.44
+measured one lookup at 32-35 ms in a CustomMapData of 94,057 files with no hot
+folder; 32 lookups a second asked for about 1.1 s of work per second of game,
+and Warcraft stalled for minutes. The reloader bounds that
+([runtime](../src/platform/hotReload.ts), wisp:src/platform/hotReload.ts):
+
+| Client has seen | Lookups | Worst case at 35 ms per whole-CustomMapData lookup |
+| --- | --- | --- |
+| Neither the host marker nor a manifest | Every 16th poll (0.5 s), alternately for the marker and the next manifest: two a second | 70 ms per second of game (7%); no stall longer than 35 ms |
+| The marker or any manifest, so the hot folder exists | Every poll (32 a second), for the next manifest | The hot folder only: about 0.37 µs per entry, the whole-folder rate per file. It holds a manifest per published version, the marker and the payload files of two bundles, so 1,000 reloads cost about 0.4 ms per lookup, 12 ms per second of game (1.2%) |
+
+Starting the map adds at most two lookups once (the first manifest, then the
+marker), and a hot folder with a manifest or marker from an earlier session
+starts the client at every poll. The per-entry rate is derived from the
+whole-folder measurement; small hot folders were not timed natively.
+
+The poll timer itself ticks 32 times a second, alike in every client, and is
+never restarted: a client's timer state must not depend on what its own
+files hold. Only whether a poll looks changes.
+
+Reload latency once a client has seen a host is unchanged: Smashcraft's native
+median was 0.841 s and the sample's 0.298 s (both measured with every poll
+looking). A client that has seen neither the marker nor a manifest when the
+first reload is published finds one within a second, so that first reload is
+up to 1 s slower; `wisp hot` creates the marker when it starts, before the
+first compile, so a first compile that takes 1 s or more costs nothing. Wisp
+never deletes the hot folder or its marker; deleting the folder during a match
+restores the whole-folder cost in that client until the match ends.
 
 ## Desync reports
 

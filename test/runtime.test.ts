@@ -17,6 +17,9 @@ test("configured runtime reload preserves globals and replaces handlers", async 
   const lockstep = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "hot-reload-lockstep.lua"), bundle], { cwd: root, stdout: "pipe", stderr: "pipe" });
   expect({ code: lockstep.exitCode, stderr: lockstep.stderr.toString() }).toEqual({ code: 0, stderr: "" });
   expect(lockstep.stdout.toString()).toContain("lockstep reload contract passed");
+  const polling = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "hot-reload-poll.lua"), bundle], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  expect({ code: polling.exitCode, stderr: polling.stderr.toString() }).toEqual({ code: 0, stderr: "" });
+  expect(polling.stdout.toString()).toContain("poll rate contract passed");
 });
 
 test("numeric and payload contracts pass in emitted Lua", () => {

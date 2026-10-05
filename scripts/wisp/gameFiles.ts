@@ -4,7 +4,8 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, copyFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { Context, Effect, Layer, Option, Schema } from "effect";
-import { type GameFileKind, MalformedGameFile } from "./boundary";
+import { hostFile } from "../../src/runtime/gameFiles";
+import { type GameFileKind, MalformedGameFile, hostPath, linePreloadFile } from "./boundary";
 import { describeCause } from "./command";
 
 export class GameFileFailure extends Schema.TaggedError<GameFileFailure>()("GameFileFailure", {
@@ -40,6 +41,23 @@ export class GameFiles extends Context.Service<GameFiles, {
 
 /** A client's CustomMapData, given its Documents/Warcraft III folder. */
 export const dataDirectory = (documents: string) => join(documents, "CustomMapData");
+
+/**
+ * Creates the hot folder of each client's CustomMapData with the host's
+ * marker, unless the marker is already there. Run it before a match starts or
+ * a reload is published: under Wine a map's lookup of a missing file reads all
+ * of CustomMapData while its hot folder is missing, and a map that has seen
+ * neither the marker nor a manifest looks for them at most twice a second.
+ */
+export const prepareHotFolders = (directories: readonly string[], filePrefix = "wisp") =>
+  Effect.gen(function*() {
+    const files = yield* GameFiles;
+    yield* Effect.forEach(directories, (directory) => Effect.gen(function*() {
+      const marker = hostPath(directory, hostFile(filePrefix));
+      // The marker's content never changes, and a client may be reading it.
+      if ((yield* files.read(marker)) === undefined) yield* files.write(marker, linePreloadFile("host"));
+    }), { concurrency: 2, discard: true });
+  });
 
 export interface MapDirectories {
   readonly mapFolder: string;

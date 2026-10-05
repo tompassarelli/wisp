@@ -59,6 +59,8 @@ local function client(slot)
   function env.PreloadGenEnd(name) self.writes[name] = table.concat(preload, "\n") end
   function env.DisplayTextToPlayer(p, x, y, text) self.messages[#self.messages + 1] = text end
   self.env = env
+  -- A host prepared the hot folder before the match, as `wisp fresh` does.
+  self.files["fixture-hot\\host.pld"] = "host"
   local module = assert(load(payload, "=map", "t", env))()
   module.start()
   return self

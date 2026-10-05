@@ -19,9 +19,15 @@ export const FILE_SLOTS = 4;
 //
 // Manifests and payloads live in their own CustomMapData folder, which every
 // client polls for a manifest that doesn't exist yet. Wine looks up a missing
-// name by reading its whole folder, so a small folder keeps each poll cheap.
+// name by reading the folder that should hold it, or its parent when that
+// folder is missing too: a small hot folder keeps each poll cheap, while a
+// missing one costs a read of all of CustomMapData (32-35 ms for 94,057 files).
+// The host creates the folder with its marker before any match or reload, and
+// a map that has seen neither looks only twice a second.
 // Paths are as the game passes them, relative to CustomMapData.
 export const hotFolder = (prefix = "wisp") => `${prefix}-hot`;
+/** The host's marker: it exists only in a folder a host created, and its content never changes. */
+export const hostFile = (prefix = "wisp") => `${hotFolder(prefix)}\\host.pld`;
 export const manifestFile = (version: number, prefix = "wisp") => `${hotFolder(prefix)}\\manifest-${version}.pld`;
 /** Names a bundle in file names and as its Lua chunk name, which error positions carry. */
 export const payloadKey = (payloadChecksum: string) => payloadChecksum.replace(":", "-");

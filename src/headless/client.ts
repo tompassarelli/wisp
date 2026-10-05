@@ -279,6 +279,12 @@ export class HeadlessClient {
   readonly files = new Map<string, string[]>();
   /** Files the host put in CustomMapData for Preloader: one chunk per FileIO tooltip level. */
   readonly published = new Map<string, readonly string[]>();
+  /**
+   * Preloader calls for a file nobody had published, which Wine answers by
+   * reading the folder that should hold it: all of CustomMapData when the
+   * file's own folder is missing too (wisp:docs/hot-reload.md).
+   */
+  missedLookups = 0;
   readonly natives: Record<string, unknown> = {};
   /** Frames this client has run. */
   frame = 0;
@@ -481,7 +487,10 @@ export class HeadlessClient {
       // A published file's Preload code sets one FileIO tooltip level per chunk.
       Preloader: (name: string) => {
         const chunks = this.preloaded.get(name) ?? this.published.get(name);
-        if (chunks === undefined) return;
+        if (chunks === undefined) {
+          this.missedLookups++;
+          return;
+        }
         this.preloaded.set(name, chunks);
         for (let level = 0; level < chunks.length; level++) this.tooltips.set(`${FILE_IO_ABILITY} ${level}`, chunks[level] ?? "");
       },
