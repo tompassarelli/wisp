@@ -1,7 +1,7 @@
 // GameFiles: the client folders Wisp shares with the game. Files in a
 // client's CustomMapData carry hot reloads, acknowledgements, error reports and
 // ready signals; its Maps folder takes the map a fresh match hosts.
-import { mkdirSync, readdirSync, renameSync, rmSync, copyFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, copyFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { Context, Effect, Layer, Option, Schema } from "effect";
 import { type GameFileKind, MalformedGameFile } from "./boundary";
@@ -29,7 +29,7 @@ export class GameFiles extends Context.Service<GameFiles, {
   readonly write: (path: string, contents: string | Uint8Array) => Effect.Effect<void, GameFileFailure>;
   /** Written whole: a reader sees the old file or the new one. */
   readonly replace: (path: string, text: string) => Effect.Effect<void, GameFileFailure>;
-  /** File names in a directory. */
+  /** File names in a directory; none while it doesn't exist. */
   readonly list: (directory: string) => Effect.Effect<readonly string[], GameFileFailure>;
   readonly remove: (path: string) => Effect.Effect<void, GameFileFailure>;
   /** Makes `map` the one map in the configured map folder of the client whose Documents/Warcraft III is `documents`. */
@@ -78,17 +78,17 @@ const write = (path: string, contents: string | Uint8Array) =>
   }));
 
 const local = ({ mapFolder, replacedMaps }: MapDirectories): GameFiles["Service"] => ({
-  read: (path) => tryPromise("read game file", path, async () => {
-    const file = Bun.file(path);
-    if (!(await file.exists())) return undefined;
-    return { text: await file.text(), modified: file.lastModified };
+  // Game files are small and polled every few milliseconds while a reload waits, so they are read synchronously.
+  read: (path) => trySync("read game file", path, () => {
+    const stats = statSync(path, { throwIfNoEntry: false });
+    return stats === undefined ? undefined : { text: readFileSync(path, "utf8"), modified: stats.mtimeMs };
   }),
   write,
   replace: (path, text) => Effect.gen(function*() {
     yield* write(`${path}.next`, text);
     yield* retryTransient(trySync("replace game file", path, () => renameSync(`${path}.next`, path)));
   }),
-  list: (directory) => trySync("list game files", directory, () => readdirSync(directory)),
+  list: (directory) => trySync("list game files", directory, () => (existsSync(directory) ? readdirSync(directory) : [])),
   remove: (path) => trySync("remove game file", path, () => rmSync(path)),
   installMap: (documents, map) => trySync("install map", join(documents, mapFolder), () => {
     const folder = join(documents, mapFolder);

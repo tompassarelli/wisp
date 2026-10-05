@@ -15,7 +15,7 @@ function nested(): void {
 }
 
 export function fail(): void {
-  configureRuntime({ filePrefix: "stack", announcePrefix: "S", readyPrefix: "SR", globalPrefix: "__stackFixture" });
+  configureRuntime({ filePrefix: "stack", readyPrefix: "SR", globalPrefix: "__stackFixture" });
   installDispatch();
   on("nested failure", nested);
   trampoline("nested failure")();

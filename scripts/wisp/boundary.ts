@@ -6,6 +6,7 @@
 // `call Preload( "LINE" )` statements carry the text, with CRLF and tab
 // whitespace around them. Each kind decodes here into a record, or fails with
 // MalformedGameFile naming the file and the field.
+import { join } from "node:path";
 import { Effect, Schema, SchemaIssue } from "effect";
 import { FILE_IO_ABILITY, FILE_SLOTS, PAYLOAD_FILE_BYTES } from "../../src/runtime/gameFiles";
 import { longBrackets } from "../lua";
@@ -153,6 +154,20 @@ export function payloadPreloadFile(bytes: Uint8Array): Uint8Array {
   return file;
 }
 
+/**
+ * checksum() (wisp:src/runtime/payload.ts) of these bytes, computed inline:
+ * both lanes stay below 2^31, where JavaScript's % is the floorMod it uses.
+ */
+export function bytesChecksum(bytes: Uint8Array): string {
+  let first = 0;
+  let second = 0;
+  for (const byte of bytes) {
+    first = (first * 257 + byte + 1) % 8165329;
+    second = (second * 263 + byte + 1) % 8165323;
+  }
+  return `${first}:${second}`;
+}
+
 /** Pieces of at most PAYLOAD_FILE_BYTES, cut before an ASCII byte so no character is split. */
 export function payloadPieces(bytes: Uint8Array): Uint8Array[] {
   const pieces: Uint8Array[] = [];
@@ -166,13 +181,16 @@ export function payloadPieces(bytes: Uint8Array): Uint8Array[] {
   return pieces;
 }
 
-/** The version a manifest file name carries; undefined for other names. */
-export function manifestVersion(name: string, prefix = "wisp"): number | undefined {
-  const version = /^hot-manifest-(\d+)\.pld$/.exec(name.startsWith(`${prefix}-`) ? name.slice(prefix.length + 1) : "")?.[1];
+/** Where a game path relative to CustomMapData (wisp:src/runtime/gameFiles.ts) is on the host. */
+export const hostPath = (directory: string, gamePath: string) => join(directory, ...gamePath.split("\\"));
+
+/** The version a manifest file name in the hot folder carries; undefined for other names. */
+export function manifestVersion(name: string): number | undefined {
+  const version = /^manifest-(\d+)\.pld$/.exec(name)?.[1];
   return version === undefined ? undefined : Number(version);
 }
 
-/** The payload key a payload file name carries; undefined for other names. */
-export function payloadFileKey(name: string, prefix = "wisp"): string | undefined {
-  return /^hot-(\d+-\d+)-\d+\.pld$/.exec(name.startsWith(`${prefix}-`) ? name.slice(prefix.length + 1) : "")?.[1];
+/** The payload key a payload file name in the hot folder carries; undefined for other names. */
+export function payloadFileKey(name: string): string | undefined {
+  return /^(\d+-\d+)-\d+\.pld$/.exec(name)?.[1];
 }

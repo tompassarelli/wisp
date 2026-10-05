@@ -49,7 +49,7 @@ function ping(): void {
 }
 
 export function install(this: void): void {
-  configureRuntime({ filePrefix: "sample", announcePrefix: "SP_HR", readyPrefix: "SP_HRR", globalPrefix: "__sample" });
+  configureRuntime({ filePrefix: "sample", readyPrefix: "SP_HRR", globalPrefix: "__sample" });
   installDispatch();
   on("sample.move", move);
   on("sample.ping", ping);
@@ -67,5 +67,5 @@ export function start(this: void): void {
   const chat = CreateTrigger();
   for (let player = 0; player < PLAYERS; player++) TriggerRegisterPlayerChatEvent(chat, Player(player), "-ping", true);
   TriggerAddAction(chat, trampoline("sample.ping"));
-  startHotReload(0, GetPlayerId(GetLocalPlayer()));
+  startHotReload();
 }

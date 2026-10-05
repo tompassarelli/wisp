@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { Cause, Clock, Effect, Exit, Fiber, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { expect, test } from "bun:test";
-import { Acknowledgement, ErrorReport, manifestVersion, payloadFileKey, preloadRecord } from "../scripts/wisp/boundary";
+import { Acknowledgement, ErrorReport, bytesChecksum, hostPath, manifestVersion, payloadFileKey, preloadRecord } from "../scripts/wisp/boundary";
+import { manifestFile, payloadFile } from "../src/runtime/gameFiles";
+import { checksum } from "../src/runtime/payload";
 import { validateDataDirectories } from "../scripts/wisp/commands/hot";
 import { GameFiles } from "../scripts/wisp/gameFiles";
 import { HotReload } from "../scripts/wisp/hotReload";
@@ -39,7 +41,7 @@ test("malformed framework fixtures report their file and typed field", async () 
     if (Exit.isFailure(result)) { expect(Cause.pretty(result.cause)).toContain(file); expect(Cause.pretty(result.cause)).toContain(field); }
   }
 });
-test("hot reload publishes payloads before manifests and waits for each fake client acknowledgement", async () => {
+test("hot reload gives every client its payload before any manifest and waits for each fake client acknowledgement", async () => {
   const directories = ["/a/CustomMapData", "/b/CustomMapData"] as const;
   const events: string[] = [];
   const acknowledgement = "function PreloadFiles takes nothing returns nothing\ncall Preload( \"applied 1 at 0\" )\nendfunction\n";
@@ -80,9 +82,13 @@ test("hot reload publishes payloads before manifests and waits for each fake cli
     return yield* Fiber.join(fiber);
   }).pipe(Effect.provide(Layer.merge(hotLayer, TestClock.layer())));
   expect(await Effect.runPromise(clocked)).toBe(1);
+  // The first client to answer makes every other client load at once.
+  const lastPayload = events.findLastIndex((event) => event.startsWith("payload:"));
+  const firstManifest = events.findIndex((event) => event.startsWith("manifest:"));
+  expect(firstManifest).toBeGreaterThan(lastPayload);
   for (const directory of directories) {
-    const payload = events.findIndex((event) => event.startsWith(`payload:${directory}/`));
-    const manifest = events.findIndex((event) => event === `manifest:${directory}/custom-hot-manifest-1.pld`);
+    const payload = events.findIndex((event) => event.startsWith(`payload:${directory}/custom-hot/`));
+    const manifest = events.findIndex((event) => event === `manifest:${directory}/custom-hot/manifest-1.pld`);
     const acknowledgementRead = events.findIndex((event) => event === `ack:${directory}/custom-hot-ack-p0.txt`);
     expect(payload).toBeGreaterThanOrEqual(0);
     expect(manifest).toBeGreaterThan(payload);
@@ -144,9 +150,19 @@ test("source maps stay in each consumer build directory even when payload keys m
   }
 });
 
-test("manifest and payload parsing selects only the requested project prefix", () => {
-  expect(manifestVersion("custom-hot-manifest-17.pld", "custom")).toBe(17);
-  expect(manifestVersion("wisp-hot-manifest-17.pld", "custom")).toBeUndefined();
-  expect(payloadFileKey("custom-hot-101-24-0.pld", "custom")).toBe("101-24");
-  expect(payloadFileKey("other-hot-101-24-0.pld", "custom")).toBeUndefined();
+test("hot files sit in the project's hot folder, whose names carry versions and payload keys", () => {
+  expect(manifestFile(17, "custom")).toBe("custom-hot\\manifest-17.pld");
+  expect(hostPath("/client/CustomMapData", payloadFile("101:24", 0, "custom"))).toBe("/client/CustomMapData/custom-hot/101-24-0.pld");
+  expect(manifestVersion("manifest-17.pld")).toBe(17);
+  expect(manifestVersion("custom-hot-manifest-17.pld")).toBeUndefined();
+  expect(payloadFileKey("101-24-0.pld")).toBe("101-24");
+  expect(payloadFileKey("manifest-17.pld")).toBeUndefined();
+});
+
+test("the host's bytes checksum equals the shared payload checksum", () => {
+  let state = 12345;
+  for (const length of [0, 1, 7, 4096, 100_000]) {
+    const bytes = Uint8Array.from({ length }, () => (state = (Math.imul(state, 1103515245) + 12345) >>> 0) >>> 24);
+    expect(bytesChecksum(bytes)).toBe(checksum(bytes.length, (index) => bytes[index] ?? 0));
+  }
 });

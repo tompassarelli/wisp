@@ -16,10 +16,16 @@ export const FILE_SLOTS = 4;
 // first read from that path for the rest of the Warcraft session. So no name is reused for
 // other content: manifests are numbered by a version that only rises and are never
 // removed, and payload files are named by their bundle's checksum.
-export const manifestFile = (version: number, prefix = "wisp") => `${prefix}-hot-manifest-${version}.pld`;
+//
+// Manifests and payloads live in their own CustomMapData folder, which every
+// client polls for a manifest that doesn't exist yet. Wine looks up a missing
+// name by reading its whole folder, so a small folder keeps each poll cheap.
+// Paths are as the game passes them, relative to CustomMapData.
+export const hotFolder = (prefix = "wisp") => `${prefix}-hot`;
+export const manifestFile = (version: number, prefix = "wisp") => `${hotFolder(prefix)}\\manifest-${version}.pld`;
 /** Names a bundle in file names and as its Lua chunk name, which error positions carry. */
 export const payloadKey = (payloadChecksum: string) => payloadChecksum.replace(":", "-");
-export const payloadFile = (payloadChecksum: string, index: number, prefix = "wisp") => `${prefix}-hot-${payloadKey(payloadChecksum)}-${index}.pld`;
+export const payloadFile = (payloadChecksum: string, index: number, prefix = "wisp") => `${hotFolder(prefix)}\\${payloadKey(payloadChecksum)}-${index}.pld`;
 export const ackFile = (slot: number, prefix = "wisp") => `${prefix}-hot-ack-p${slot}.txt`;
 export const errorFile = (slot: number, prefix = "wisp") => `${prefix}-error-p${slot}.txt`;
 export interface Manifest {

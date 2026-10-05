@@ -28,6 +28,7 @@ function BlzSendSyncData(prefix, data)
   return true
 end
 function BlzGetTriggerSyncData() return syncData end
+function GetTriggerPlayer() return 0 end
 function GetLocalPlayer() return 0 end
 function GetPlayerId(p) return p end
 function Player(n) return n end
@@ -46,19 +47,19 @@ local dispatch, errors, hot = __fixtureDispatch, __fixtureErrors, __fixtureHot
 local oldHandler = dispatch.handlers["fixture.tick"]
 assert(__fixtureTicks == 1 and errors.count == 1)
 assert(writes["fixture-error-p0.txt"] == "error 1 in fixture.tick\nfixture failure")
-files["fixture-hot-" .. expected:gsub(":", "-") .. "-0.pld"] = payload
-files["fixture-hot-manifest-1.pld"] = "1 1 " .. expected
+files["fixture-hot\\" .. expected:gsub(":", "-") .. "-0.pld"] = payload
+files["fixture-hot\\manifest-1.pld"] = "1 1 " .. expected
 for _, fn in ipairs(timers) do fn() end
 assert(__fixtureDispatch == dispatch and __fixtureErrors == errors and __fixtureHot == hot, "persistent state replaced")
-assert(hot.applied == 1 and hot.announced == 1 and hot.pending == nil)
+assert(hot.applied == 1 and hot.decided == 1 and hot.pending == nil and hot.prepared == nil)
 assert(dispatch.handlers["fixture.tick"] ~= oldHandler, "handler was not replaced")
 assert(writes["fixture-hot-ack-p0.txt"] == "applied 1 at 0.0" or writes["fixture-hot-ack-p0.txt"] == "applied 1 at 0")
 module.tick()
 module.fail()
 assert(__fixtureTicks == 2 and errors.count == 1, "old trampoline or error state lost")
-files["fixture-hot-manifest-2.pld"] = "2 1 2:2"
-files["fixture-hot-2-2-0.pld"] = "damaged"
+files["fixture-hot\\manifest-2.pld"] = "2 1 2:2"
+files["fixture-hot\\2-2-0.pld"] = "damaged"
 for _, fn in ipairs(timers) do fn() end
-assert(hot.applied == 1 and hot.pending == nil, "damaged reload was applied")
+assert(hot.applied == 1 and hot.decided == 2 and hot.pending == nil, "damaged reload was applied")
 assert(writes["fixture-hot-ack-p0.txt"] == "applied 1 at 0.0" or writes["fixture-hot-ack-p0.txt"] == "applied 1 at 0")
 print("reload contract passed")

@@ -12,7 +12,7 @@ declare global {
 }
 
 export function install(): void {
-  configureRuntime({ filePrefix: "fixture", announcePrefix: "FX_HR", readyPrefix: "FX_HRR", globalPrefix: "__fixture" });
+  configureRuntime({ filePrefix: "fixture", readyPrefix: "FX_HRR", globalPrefix: "__fixture" });
   installDispatch();
   installHotReload();
   on("fixture.tick", () => { globalThis.__fixtureTicks = (globalThis.__fixtureTicks ?? 0) + 1; });
@@ -26,7 +26,7 @@ export function start(): void {
   assertEquals(f32(0.1), 0.10000000149011612);
   assertEquals(multiplyFloat32(16777215.0, 2.0), 33554430.0);
   install();
-  startHotReload(0, 0);
+  startHotReload();
 }
 
 export const tick = () => trampoline("fixture.tick")();

@@ -10,6 +10,7 @@ import { GameFiles } from "../gameFiles";
 import { HotReload } from "../hotReload";
 import { MapBuild, type BuildProject } from "../mapBuild";
 import { SourceErrors } from "../sourceErrors";
+import { step } from "../timings";
 
 export interface HotProject {
   readonly project: BuildProject;
@@ -40,7 +41,7 @@ export const makeHot = ({ project, sourceDirectory, sourceMapDirectory, filePref
     // Reports from before Wisp started are old news.
     yield* sourceErrors.changed(directories);
     if (!args.includes("--watch")) {
-      yield* reload.publish;
+      yield* reload.publish.pipe(step("reload", { root: true }));
       return;
     }
     const printErrors = Effect.gen(function*() {
@@ -51,7 +52,7 @@ export const makeHot = ({ project, sourceDirectory, sourceMapDirectory, filePref
         Console.error(`p${report.slot} ${report.heading} (${report.latency.toFixed(0)} ms after the game wrote it)\n${report.text}`), { discard: true });
     });
     const request = coalesced(reload.publish);
-    yield* report(request);
+    yield* report(request.pipe(step("reload", { root: true })));
     yield* Console.log(`watching ${sourceDirectory} for changes`);
     yield* runHotWatch(sourceDirectory, request, printErrors);
   }).pipe(Effect.provide(services));
@@ -94,7 +95,8 @@ function waitForProcessStop(): Effect.Effect<void> {
 
 /**
  * Runs `onChange` after each change under the supplied source directory and `onPoll` every 50 ms,
- * printing their failures, until `stop`. Everything it started ends with it.
+ * printing their failures, until `stop`. Everything it started ends with it. Each change is a
+ * root `reload` step timed from its detection, so its end is the time since the save.
  */
 export const runHotWatch = (
   sourceDirectory: string,
@@ -138,9 +140,12 @@ export const runHotWatch = (
 
       const sourceWorker = Effect.forever(Effect.gen(function*() {
         yield* Queue.take(sourceEvents);
-        yield* Effect.sleep("10 millis");
-        sourcePending = false;
-        yield* report(onChange);
+        yield* Effect.gen(function*() {
+          // An editor's save can be several events; they make one change.
+          yield* Effect.sleep("10 millis");
+          sourcePending = false;
+          yield* report(onChange);
+        }).pipe(step("reload", { root: true }));
       }));
       const pollWorker = Effect.forever(Effect.gen(function*() {
         yield* Queue.take(pollEvents);

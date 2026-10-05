@@ -15,10 +15,10 @@ import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, 
 import { dirname, join, relative, resolve } from "node:path";
 import { Console, Context, Effect, Layer, Schema } from "effect";
 import { payloadKey } from "../../src/runtime/gameFiles";
-import { checksum } from "../../src/runtime/payload";
 import { decodeMapInfo, declareMap, encodeMapInfo, mapConfig, mapHeader, type MapDeclaration } from "../mapInfo";
 import { type Bundle, composeScript, typescriptBase } from "../mapScript";
 import { abilityData } from "../objectData";
+import { bytesChecksum } from "./boundary";
 import { describeCause } from "./command";
 import { type SourceMapFailure, SourceErrors } from "./sourceErrors";
 import { step } from "./timings";
@@ -101,7 +101,7 @@ export class MapBuild extends Context.Service<MapBuild, {
       /** The compiled bundle on disk, its source map kept under its key. */
       const compiled = Effect.gen(function*() {
         const bytes = yield* tryMapPromise("read map bundle", bundlePath, () => Bun.file(bundlePath).bytes());
-        const bundleChecksum = checksum(bytes.length, (index) => bytes[index] ?? 0);
+        const bundleChecksum = bytesChecksum(bytes);
         const key = payloadKey(bundleChecksum);
         yield* sourceErrors.retain(bundlePath, key);
         return { text: new TextDecoder().decode(bytes), key, bytes, checksum: bundleChecksum } satisfies CompiledBundle;

@@ -19,11 +19,14 @@ behavior with `on(name, handler)` from
 [dispatch](../src/platform/dispatch.ts) (wisp:src/platform/dispatch.ts).
 The bundle exports `install()`; each installation calls `installDispatch()`,
 re-registers handlers and calls `installHotReload()`. At initial match startup,
-call `startHotReload(hostSlot, localSlot)` once to create its timer and triggers.
+call `startHotReload()` once to create its timer and trigger.
 It also acknowledges version 0, the map's own bundle, which tells host tools
 such as the [fresh match](../scripts/wisp/lobby.ts) (wisp:scripts/wisp/lobby.ts)
-that the match is running in that client.
-Keep module scope free of engine work because reload evaluates modules again.
+that the match is running in that client. Keep module scope free of Warcraft
+natives and synchronized state: each client evaluates a new bundle's modules as
+soon as its own files arrive, on its own frame. A map built with an older
+reloader keeps that reloader's timer and messages; rebuild it and start a fresh
+match before relying on a reloader change.
 
 The map reads each payload through the tooltips of FileIO's ability ('$wsl'),
 so the map's war3map.w3a must declare it. MapBuild adds a war3map.w3a holding
@@ -49,10 +52,26 @@ The consumer owns the program and command name; the
 [sample map](sample-map.md) (wisp:docs/sample-map.md) composes one with
 `runCli`.
 
-Every client loads and verifies its local payload and answers ready or refuse.
-Once every answer arrives, clients install on the same synchronized frame or
-refuse that version. A refusal leaves the previous installed code in place.
-Successful installation preserves the game's global state and existing handles.
+The host writes every client's payload files, then every client's manifest,
+into the `<file prefix>-hot` folder of each CustomMapData directory. Every
+client polls that folder for its next manifest 32 times a second; a small
+folder keeps each poll's missing-file lookup cheap under Wine. As soon as a
+client finds its manifest, it loads and verifies its payload and broadcasts
+ready or refuse with the manifest it loaded. A client still waiting for its
+own manifest loads the version when that first answer arrives. Once every
+playing human has answered, clients install on the same synchronized frame or
+refuse that version; answers naming different payload checksums refuse it too.
+A refusal leaves the previous installed code in place. Successful installation
+preserves the game's global state and existing handles, and each client then
+writes its acknowledgement. In `--watch` output, each change's `reload` timeline
+starts when the save is detected, so the `vN running in 2 client(s)` line ends
+at the time from save to every client's acknowledgement.
+
+The incremental compiler rebuilds the Lua bundle and its source map from each
+unchanged module's cached text and mappings; the result equals a full
+TypeScriptToLua compile (see [compiler](../scripts/compiler.ts) and
+[bundle](../scripts/luaBundle.ts), wisp:scripts/compiler.ts and
+wisp:scripts/luaBundle.ts).
 
 See [runtime](../src/platform/hotReload.ts) and
 [host service](../scripts/wisp/hotReload.ts)

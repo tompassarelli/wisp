@@ -14,6 +14,9 @@ test("configured runtime reload preserves globals and replaces handlers", async 
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "hot-reload-stub.lua"), bundle, expected], { cwd: root, stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
   expect(run.stdout.toString()).toContain("reload contract passed");
+  const lockstep = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "hot-reload-lockstep.lua"), bundle], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  expect({ code: lockstep.exitCode, stderr: lockstep.stderr.toString() }).toEqual({ code: 0, stderr: "" });
+  expect(lockstep.stdout.toString()).toContain("lockstep reload contract passed");
 });
 
 test("numeric and payload contracts pass in emitted Lua", () => {
@@ -21,5 +24,5 @@ test("numeric and payload contracts pass in emitted Lua", () => {
   expect(report(diagnostics)).toBe("");
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(root, "build/lua-tests/tests.lua")], { cwd: root, stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
-  expect(run.stdout.toString()).toContain("7 of 7 passed");
+  expect(run.stdout.toString()).toContain("8 of 8 passed");
 });
