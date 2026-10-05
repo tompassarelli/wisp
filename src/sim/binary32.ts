@@ -136,6 +136,45 @@ export function divideFloat32(numerator: number, denominator: number): number {
   return negative ? -result : result;
 }
 
+/** Correctly rounded square root of a binary32 input, independent of host math. */
+export function squareRootFloat32(value: number): number {
+  if (value === 0 || value !== value) return value;
+  if (value < 0) {
+    const infinity = binary32Infinity();
+    return infinity - infinity;
+  }
+  if (value - value !== 0) return value;
+  const parts = decompose(value);
+  let significand = parts.significand;
+  let exponent = parts.exponent + 23;
+  if (floorMod(exponent, 2) !== 0) {
+    significand *= 2;
+    exponent -= 1;
+  }
+  // significand * 2^23 fits in two base-2^24 limbs. Each root digit
+  // consumes two radicand bits; all arithmetic stays below 2^27.
+  let high = floorDiv(significand, 2);
+  let low = floorMod(significand, 2) * 8388608;
+  let remainder = 0;
+  let root = 0;
+  for (let i = 0; i < 24; i++) {
+    const pair = floorDiv(high, 4194304);
+    high = floorMod(high, 4194304) * 4 + floorDiv(low, 4194304);
+    low = floorMod(low, 4194304) * 4;
+    remainder = remainder * 4 + pair;
+    const trial = root * 4 + 1;
+    root *= 2;
+    if (remainder >= trial) {
+      remainder -= trial;
+      root += 1;
+    }
+  }
+  // The midpoint's square is root^2 + root + 1/4: an integer
+  // radicand cannot tie, so the integer remainder decides rounding.
+  if (remainder > root) root += 1;
+  return scaleByPowerOfTwo(root, floorDiv(exponent, 2) - 23);
+}
+
 function scaleByPowerOfTwo(value: number, scale: number): number {
   let result = value * 1.0;
   if (scale < 0) {

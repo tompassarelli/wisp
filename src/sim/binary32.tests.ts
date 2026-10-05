@@ -5,6 +5,7 @@ import {
   fusedMultiplyAddFloat32,
   multiplyFloat32,
   roundToFloat32,
+  squareRootFloat32,
   subtractFloat32,
 } from "./binary32";
 
@@ -55,4 +56,19 @@ test("division: zero divisor is NaN and overflow is infinite", () => {
   same(divideFloat32(maximum, 0.5), Infinity);
   same(divideFloat32(3 * quantum, 2), 2 * quantum);
   same(divideFloat32(quantum, 2), 0);
+});
+
+test("square root: exact roots, rounding boundaries, subnormals and non-finite values", () => {
+  same(squareRootFloat32(25.0), 5.0);
+  same(squareRootFloat32(2.0), 1.4142135381698608);
+  same(squareRootFloat32(3.999999761581421), 1.9999998807907104);
+  same(squareRootFloat32(4.000000476837158), 2.0);
+  same(squareRootFloat32(quantum), 3.743392066509216e-23);
+  same(squareRootFloat32(pow2(-126)), pow2(-63));
+  same(squareRootFloat32(maximum), 18446742974197923840.0);
+  same(squareRootFloat32(0.0), 0.0);
+  same(squareRootFloat32(-0.0), -0.0);
+  same(squareRootFloat32(Infinity), Infinity);
+  same(squareRootFloat32(-1.0), NaN);
+  same(squareRootFloat32(NaN), NaN);
 });

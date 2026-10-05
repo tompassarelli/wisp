@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { addFloat32, divideFloat32, multiplyFloat32, roundToFloat32, subtractFloat32 } from "./binary32";
+import { addFloat32, divideFloat32, multiplyFloat32, roundToFloat32, squareRootFloat32, subtractFloat32 } from "./binary32";
 
 const same = (actual: number, expected: number) => expect(Object.is(actual, expected) || (actual !== actual && expected !== expected)).toBe(true);
 
@@ -33,4 +33,16 @@ describe("operations match the binary64 oracle on random binary32 operands", () 
 test("roundToFloat32: the overflow midpoint rounds to infinity", () => {
   same(roundToFloat32(16777215.5 * 2 ** 104), Infinity);
   same(roundToFloat32(-16777215.5 * 2 ** 104), -Infinity);
+});
+
+test("square root matches the binary64 oracle on 5,000 positive binary32 bit patterns", () => {
+  const view = new DataView(new ArrayBuffer(4));
+  let state = 0x2545f491;
+  for (let i = 0; i < 5000; i++) {
+    state = (Math.imul(state, 1103515245) + 12345) >>> 0;
+    const bits = (state & 0x7fffffff) % 0x7f800000;
+    view.setUint32(0, bits);
+    const value = view.getFloat32(0);
+    expect(squareRootFloat32(value)).toBe(Math.fround(Math.sqrt(value)));
+  }
 });
