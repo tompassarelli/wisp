@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ESNext", "lib": ["ESNext"], "module": "ESNext",
+    "moduleResolution": "Bundler", "strict": true, "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true, "noEmitOnError": true,
+    "skipLibCheck": true, "types": ["lua-types/5.3"], "rootDir": ".",
+    "outDir": "output"
+  },
+  "files": ["entry.ts", "node_modules/waygate/src/natives/warcraft.d.ts"],
+  "tstl": {
+    "luaTarget": "5.3", "luaBundle": "map.lua", "luaBundleEntry": "entry.ts",
+    "luaLibImport": "require", "noImplicitSelf": true, "noHeader": true,
+    "luaPlugins": [{ "name": "./node_modules/waygate/plugins/warcraft-numbers.ts" }]
+  }
+}

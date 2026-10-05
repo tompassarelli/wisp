@@ -34,7 +34,11 @@ function declaredIn(node: ts.Node, checker: ts.TypeChecker, fileSuffix: string):
   let symbol = checker.getSymbolAtLocation(node);
   if (symbol !== undefined && symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
   const declaration = symbol?.declarations?.[0];
-  return declaration !== undefined && declaration.getSourceFile().fileName.endsWith(fileSuffix);
+  if (declaration === undefined) return false;
+  const file = declaration.getSourceFile().fileName;
+  // Installed TSTL libraries expose generated declarations for their Lua
+  // modules; both declarations and source name the same helper identity.
+  return file.endsWith(fileSuffix) || file.endsWith(fileSuffix.replace(/\.ts$/, ".d.ts"));
 }
 
 const isStandardLibrary = (node: ts.Node, checker: ts.TypeChecker) =>

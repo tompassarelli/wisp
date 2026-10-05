@@ -8,7 +8,8 @@
     "postinstall": "bun node_modules/@effect/tsgo/dist/effect-tsgo.cjs patch --typescript --typescript-package typescript-native",
     "check": "bun node_modules/typescript-native/bin/tsc --build tsconfig.json tsconfig.game.json --noEmit",
     "test": "bun test",
-    "ci": "bun run check && bun run test"
+    "ci": "bun run check && bun run test",
+    "package": "bun scripts/package.ts"
   },
   "devDependencies": {
     "@effect/tsgo": "0.48.0",

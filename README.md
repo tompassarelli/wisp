@@ -40,7 +40,8 @@ Generated bundles and checker caches stay in waygate:build/.
 ## Consume a pinned revision
 
 Smashcraft records an immutable Waygate commit and consumes its generated
-source archive through Bun. The archive is dependency output; maintained
+package through Bun. The package contains authored TypeScript and its emitted
+Lua modules with generated declarations. The archive is dependency output; maintained
 framework source lives here. This keeps clean installs and CI independent of
 private-repository credentials. No registry release is required.
 
@@ -52,3 +53,8 @@ services with the game's own fresh-match, replay and integrity checks.
 
 See smashcraft:docs/typescript.md for the consumer's actual commands and
 smashcraft:ts/scripts/update-waygate.ts for updating its recorded revision.
+
+To generate a consumer archive from a checkout, run
+`bun scripts/package.ts /absolute/path/to/waygate.tgz`. The producer uses the
+pinned compiler, keeps generated output under waygate:build/, and includes the
+Lua modules required by TypeScriptToLua alongside the host source.
