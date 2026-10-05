@@ -1,10 +1,10 @@
 import { readFileSync, mkdtempSync, utimesSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Cause, Clock, Effect, Exit, Fiber, Layer } from "effect";
+import { Cause, Clock, Effect, Exit, Fiber, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { expect, test } from "bun:test";
-import { Acknowledgement, ErrorReport, manifestVersion, payloadFileKey } from "../scripts/waygate/boundary";
+import { Acknowledgement, ErrorReport, manifestVersion, payloadFileKey, preloadRecord } from "../scripts/waygate/boundary";
 import { validateDataDirectories } from "../scripts/waygate/commands/hot";
 import { GameFiles } from "../scripts/waygate/gameFiles";
 import { HotReload } from "../scripts/waygate/hotReload";
@@ -13,6 +13,21 @@ import { SourceErrors } from "../scripts/waygate/sourceErrors";
 import { SourceMapGenerator } from "source-map";
 import { toTypeScript } from "../scripts/sourceMaps";
 const fixture = (name: string) => readFileSync(join(import.meta.dir, "fixtures/waygate", name), "utf8");
+test("Preload records decode final assignments and hyphenated keys without including their key", async () => {
+  const kind = preloadRecord({ head: ["received-mask={mask} frame={frame}"] }, Schema.Struct({ mask: Schema.FiniteFromString, frame: Schema.FiniteFromString }));
+  const text = 'function PreloadFiles takes nothing returns nothing\ncall Preload( "received-mask=3 frame=417" )\nendfunction\n';
+  expect(await Effect.runPromise(kind.decode("control.txt", text))).toEqual({ mask: 3, frame: 417 });
+  const result = await Effect.runPromiseExit(kind.decode("control-malformed.txt", text.replace("frame=417", "frame=nope")));
+  expect(Exit.isFailure(result)).toBe(true);
+  if (Exit.isFailure(result)) {
+    expect(Cause.pretty(result.cause)).toContain("control-malformed.txt: frame:");
+  }
+});
+test("Preload text assignments preserve a multiword reason before the next numeric key", async () => {
+  const kind = preloadRecord({ head: ["reason={reason} sequence={sequence} frame={frame}"] }, Schema.Struct({ reason: Schema.NonEmptyString, sequence: Schema.FiniteFromString, frame: Schema.FiniteFromString }));
+  const text = 'function PreloadFiles takes nothing returns nothing\ncall Preload( "reason=input submission failed sequence=4 frame=417" )\nendfunction\n';
+  expect(await Effect.runPromise(kind.decode("failure.txt", text))).toEqual({ reason: "input submission failed", sequence: 4, frame: 417 });
+});
 test("framework game-written file kinds decode native Preload fixtures", async () => {
   expect(await Effect.runPromise(Acknowledgement.decode("ack.txt", fixture("acknowledgement.pld")))).toEqual({ version: 42, elapsed: 621.2031 });
   expect(await Effect.runPromise(ErrorReport.decode("error.txt", fixture("error-report.pld")))).toEqual({ count: 3, handler: "OnTrigger", lines: ["attempt to call nil value", "smashcraft-hot-101-24:42: in function 'OnTrigger'"] });

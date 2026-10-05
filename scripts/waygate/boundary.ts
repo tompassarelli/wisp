@@ -46,18 +46,28 @@ function lineFields(template: string, line: string): Record<string, string> | un
   const parts = template.split(" ");
   const words = line.split(" ");
   const fields: Record<string, string> = {};
+  let cursor = 0;
   for (const [index, part] of parts.entries()) {
-    if (index >= words.length) break;
-    const assignment = /^(\w+)=\{(\w+)\}$/.exec(part);
+    if (cursor >= words.length) break;
+    const assignment = /^([\w.-]+)=\{(\w+)\}$/.exec(part);
     const name = assignment?.[2] ?? FIELD.exec(part)?.[1];
     if (name === undefined) {
-      if (words[index] !== part) return undefined;
+      if (words[cursor] !== part) return undefined;
+      cursor++;
       continue;
     }
-    const word = words[index] ?? "";
+    const next = parts[index + 1];
+    const nextKey = next === undefined ? undefined : /^([\w.-]+)=\{\w+\}$/.exec(next)?.[1];
+    // A text assignment may contain spaces (e.g. a failure reason), delimited
+    // by the following key. The last field takes the remaining text.
+    const nextCursor = index === parts.length - 1 ? words.length : nextKey === undefined ? cursor + 1
+      : words.findIndex((word, position) => position > cursor && word.startsWith(`${nextKey}=`));
+    const end = nextCursor < 0 ? words.length : nextCursor;
+    const word = words.slice(cursor, end).join(" ");
     if (assignment !== null && !word.startsWith(`${assignment[1]}=`)) return undefined;
-    const value = index === parts.length - 1 ? words.slice(index).join(" ") : assignment === null ? word : word.slice(assignment[1]!.length + 1);
+    const value = assignment === null ? word : word.slice(assignment[1]!.length + 1);
     if (value !== undefined && value !== "") fields[name] = value;
+    cursor = end;
   }
   return fields;
 }
