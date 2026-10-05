@@ -2,9 +2,32 @@
 
 Use this development diagnostic when an engine callback fails and its caller
 chain matters. Warcraft III omits Lua's `debug` library. Without instrumentation,
-a Lua runtime error can carry a Lua line that Wisp maps to TypeScript, but
-there is no native callback stack; a thrown TypeScript `Error` has no source
-position by itself.
+a Lua runtime error carries a Lua line that Wisp maps to TypeScript, and a
+thrown value's report starts with its throw site, but there is no callback
+stack.
+
+## Throw sites without the plugin
+
+The numeric plugin, which every Wisp map loads, compiles each `throw` to record
+the thrown value and the statement's TypeScript file and line before raising
+it. When the report has no stack, it starts with that site, the way a runtime
+fault starts with its position. The sample map with
+`throw new Error("injected ping failure")` added to its `-ping` handler
+reports, in 32-bit Lua without `debug`:
+
+```text
+error 1 in sample.ping
+src/main.ts:48: Error: injected ping failure
+```
+
+Paths are relative to the compiling tsconfig's directory; the installed
+package's own throws read `wisp/src/...`, such as `at()`'s
+`wisp/src/runtime/lookup.ts:4`. A rethrow of the latest thrown value keeps its
+first site. Only the throwing branch runs the recording, so ordinary frames
+cost the same: seven paired Lua32 runs of Smashcraft's frame-cost workload
+(4,096 frames each) measured a median ratio of **0.9999** (0.912–1.015), with
+equal final checksums. With the stack plugin, the innermost frame gives the
+throw line instead.
 
 ## Enable it in the consuming map
 

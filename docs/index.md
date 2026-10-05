@@ -16,7 +16,7 @@ warcraft-vscode on the same map is measured in the
 | Need | Feature and entry point | Setup or boundary |
 | --- | --- | --- |
 | Find the TypeScript caller of a callback failure | [TypeScript stack traces](stack-traces.md) (wisp:docs/stack-traces.md) | Opt-in compiler plugin; development diagnostics with CPU and size cost. |
-| Map a reported Lua line back to TypeScript | [SourceErrors](../scripts/wisp/sourceErrors.ts) (wisp:scripts/wisp/sourceErrors.ts) | Retain each bundle's source map; the hot watcher prints changed reports. No stack plugin required for line mapping. |
+| Map a reported Lua line back to TypeScript | [SourceErrors](../scripts/wisp/sourceErrors.ts) (wisp:scripts/wisp/sourceErrors.ts) | Retain each bundle's source map; the hot watcher prints changed reports. No stack plugin required for line mapping; a thrown value's report already starts with its TypeScript [throw site](stack-traces.md#throw-sites-without-the-plugin). |
 | Change code without rehosting a match | [Hot reload](hot-reload.md) (wisp:docs/hot-reload.md) | Install reloadable handlers, retain global state and reapply supported runtime object fields; supply each client's CustomMapData directory. |
 | Compile TypeScript with Warcraft's number rules | [Compiler](../scripts/compiler.ts) and [numeric plugin](../plugins/warcraft-numbers.ts) (wisp:scripts/compiler.ts, wisp:plugins/warcraft-numbers.ts) | Use the pinned toolchain and numeric plugin; synchronized code has Lua32 restrictions. |
 | Calculate synchronized integer or binary32 values | [Integer helpers](../src/sim/intMath.ts) and [binary32 helpers](../src/sim/f32.ts) (wisp:src/sim/intMath.ts, wisp:src/sim/f32.ts) | Explicit operations for Warcraft integer and float semantics. |

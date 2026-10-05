@@ -28,7 +28,7 @@ does not ship, written for this comparison with the language's usual runner.
 | Script-only rebuild | 1.95 s [1.89–2.09] `rebuild` | No separate mode: full build | No separate mode: full build | No separate mode: full build | **0.014 s**, no separate mode: full build | Leads typed toolchains; trails warcraft-vscode |
 | Edit running in a live game, 1 client | Yes: `hot --watch` compiles each save and installs it without rehosting | Lua (default): no. JASS: JHCR, a separate alpha tool | No: rebuild and restart the map | No | No | Leads |
 | Edit running in a live game, 2 multiplayer clients | Yes: every client loads, verifies and installs on the same frame or none does. Smashcraft on Waygate dd4812f: 1.68 s from save to both acknowledgements, 6/6 checksums matched | No | No | No | No | Leads |
-| Error reports with source lines | Runtime fault: shown in game; its Lua position maps to `src/main.ts:49` through the retained source map. Thrown `Error`: message only, TypeScript stacks opt-in ([stack traces](stack-traces.md)) | Runtime fault: generated Lua line. `error()`: message and Wurst stack, `Sample, line 21`, on by default | None: errors escape uncaught; generated Lua line | None for natives' callbacks; debug wrappers cover WCSharp's own systems | Debug build: `main.lua:29`, no stack | Ties |
+| Error reports with source lines | Runtime fault: shown in game; its Lua position maps to `src/main.ts:49` through the retained source map. Thrown `Error`: shown in game and reported from its TypeScript throw site by default, `src/main.ts:48: Error: …` (Wisp a80f622); TypeScript stacks opt-in ([stack traces](stack-traces.md)) | Runtime fault: generated Lua line. `error()`: message and Wurst stack, `Sample, line 21`, on by default | None: errors escape uncaught; generated Lua line | None for natives' callbacks; debug wrappers cover WCSharp's own systems | Debug build: `main.lua:29`, no stack | Ties |
 | Desync detection | `hot --watch` names the subsystem each client's Desync.txt diverged in; the compiler rejects nondeterministic APIs | None | None | None | None | Leads |
 | Language server | TypeScript language service; Warcraft number-rule errors appear only when compiling | Wurst's own, in the compiler | TypeScript language service | C# (Roslyn) | None shipped | Ties |
 
@@ -37,7 +37,10 @@ Error reports come from a headless probe: each built map's war3map.lua ran in
 blizzard.j, no `debug` library, and a fault injected into the `-ping` handler:
 an integer division by zero (a nil index in w3ts) and an explicitly thrown
 error. It records what each toolchain's own handler shows, not the game's
-handling of an error that escapes. The 2-client Wisp time comes from a native
+handling of an error that escapes. Wisp's thrown-error cell was measured again
+on 2026-10-06 at a80f622: the sample's compiled bundle in 32-bit Lua 5.3 without
+`debug`, stubs for the natives it calls, and `throw new Error(...)` injected
+into the `-ping` handler. The 2-client Wisp time comes from a native
 Smashcraft trial (smashcraft:evidence/waygate-extraction-native-20261005/README.md),
 not from this sample map.
 
