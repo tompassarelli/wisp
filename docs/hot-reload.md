@@ -1,8 +1,16 @@
 # Hot reload
 
-Use hot reload for TypeScript behavior changes during a running match. It
-does not replace map assets, object data or previously created engine handles.
-Those changes need a rebuilt map and a fresh match.
+Use hot reload for TypeScript behavior changes during a running match. Changes
+to archived assets, object types or art need a rebuilt map and a fresh match.
+Runtime-settable object fields can change on retained engine handles: the
+consumer reapplies its declared values with supported native setters during
+synchronized `install()`. Waygate does not own those game-specific declarations
+or automatically apply them.
+
+Smashcraft is a consumer example: its [object-data declaration documentation](https://github.com/tompassarelli/smashcraft/blob/main/docs/typescript.md#build-the-map)
+(smashcraft:docs/typescript.md) describes the game-owned build inputs;
+[its runtime-field reload work](https://github.com/tompassarelli/smashcraft/issues/40)
+covers updating fields on retained handles without rehosting.
 
 ## Map integration
 
