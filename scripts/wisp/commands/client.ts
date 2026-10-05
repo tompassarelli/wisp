@@ -1,9 +1,10 @@
-// `wisp client look|read|click|keys CLIENT ...`: reads and drives one
+// `wisp client look|read|click|keys|chat CLIENT ...`: reads and drives one
 // signed-in client on its private desktop.
 //   look CLIENT [gold]          words on screen with positions
 //   read CLIENT X Y W H [gold]  text in one region
 //   click CLIENT X Y
 //   keys CLIENT KEY...
+//   chat CLIENT TEXT...         Return, the text, Return: a chat message or chat command
 import { Console, Effect } from "effect";
 import { Clients, type Ink } from "../clients";
 import { type Command, UsageFailure } from "../command";
@@ -36,6 +37,10 @@ export const makeClient = (stateFilePath: string): Command => ([action, name, ..
         yield* clients.click(target, x, y);
         return;
       }
+      case "chat":
+        if (rest.length === 0) return yield* new UsageFailure({ problem: "chat takes TEXT" });
+        yield* clients.batch(target, [{ kind: "keys", keys: ["Return"] }, { kind: "text", text: rest.join(" ") }, { kind: "keys", keys: ["Return"] }]);
+        return;
       case "keys":
         yield* clients.keys(target, ...rest);
         return;

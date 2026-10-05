@@ -123,6 +123,14 @@ function announced(): void {
   BlzSendSyncData(runtimeConfiguration().readyPrefix, `${local.version} ${typeof local.bundle === "string" ? "refuse" : "ready"}`);
 }
 
+/** Tells host tools which version this client runs: 0 for the map's own bundle. */
+function acknowledge(version: number, elapsed: number): void {
+  PreloadGenClear();
+  PreloadGenStart();
+  Preload(acknowledgementLine(version, elapsed));
+  PreloadGenEnd(ackFile(hot().localSlot, runtimeConfiguration().filePrefix));
+}
+
 function answered(): void {
   const state = hot();
   const pending = state.pending;
@@ -140,10 +148,7 @@ function answered(): void {
   bundle.install();
   state.applied = version;
   state.clock ??= startClock();
-  PreloadGenClear();
-  PreloadGenStart();
-  Preload(acknowledgementLine(version, TimerGetElapsed(state.clock)));
-  PreloadGenEnd(ackFile(state.localSlot, runtimeConfiguration().filePrefix));
+  acknowledge(version, TimerGetElapsed(state.clock));
   report(`hot reload ${version} applied`);
 }
 
@@ -170,4 +175,6 @@ export function startHotReload(hostSlot: number, localSlot: number): void {
   onSync(configuration.announcePrefix, "hotReload.announced");
   onSync(configuration.readyPrefix, "hotReload.answered");
   TimerStart(CreateTimer(), POLL_SECONDS, true, trampoline("hotReload.poll"));
+  // The match is running in this client; a fresh-match journey waits for this.
+  acknowledge(0, 0);
 }

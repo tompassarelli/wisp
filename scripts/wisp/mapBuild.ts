@@ -3,20 +3,22 @@
 // staged copy that replaces the old map only when every step passed; child
 // processes stop when their step is interrupted.
 //
-// The base map is a small MPQ whose hash table cannot take the map's imported
-// assets, so the TypeScript build packages into a copy of a fully packaged
-// private map instead (mitigation until map-pack can grow an archive). That
-// copy's script, object data, description and header are replaced with
+// A World Editor base map is a small MPQ whose hash table cannot take many
+// imported assets, so a map with imports packages into a copy of a fully
+// packaged private map, its container (mitigation until map-pack can grow an
+// archive). Without a container the build packages into a copy of the base.
+// The copy's script, object data, description and header are replaced with
 // TypeScript-generated ones; every other base map file and every declared
 // import must equal its source. Imports the build does not declare stay
 // unverified.
-import { closeSync, copyFileSync, existsSync, mkdtempSync, openSync, readdirSync, readSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
+import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { Console, Context, Effect, Layer, Schema } from "effect";
 import { payloadKey } from "../../src/runtime/gameFiles";
 import { checksum } from "../../src/runtime/payload";
 import { decodeMapInfo, declareMap, encodeMapInfo, mapConfig, mapHeader, type MapDeclaration } from "../mapInfo";
 import { type Bundle, composeScript, typescriptBase } from "../mapScript";
+import { abilityData } from "../objectData";
 import { describeCause } from "./command";
 import { type SourceMapFailure, SourceErrors } from "./sourceErrors";
 import { step } from "./timings";
@@ -63,13 +65,15 @@ export interface GeneratedFile {
 
 export interface BuildOptions {
   readonly base: string;
-  readonly container: string;
+  /** The packaged map that carries the imports; the base map when absent. */
+  readonly container?: string;
   readonly name: string;
   readonly out: string;
   readonly packager?: string;
   readonly declaration: MapDeclaration;
-  readonly objectData: readonly GeneratedFile[];
-  readonly imports: readonly ArchiveEntry[];
+  /** Generated object-data files; without a war3map.w3a the build adds one holding only FileIO's ability. */
+  readonly objectData?: readonly GeneratedFile[];
+  readonly imports?: readonly ArchiveEntry[];
 }
 
 export type BuildFailure = MapBuildFailure | CompileFailure | SourceMapFailure;
@@ -142,6 +146,7 @@ export function freshBundleAge(bundle: string, inputs: readonly string[], now: n
 }
 
 const rebuildMap = (map: string, compile: Effect.Effect<CompiledBundle, BuildFailure>, packager: string, entryGlobal?: string) => Effect.scoped(Effect.gen(function*() {
+  yield* ensurePackager(packager);
   const bundle = yield* compile;
   const basePath = `${map}.base.lua`;
   const base = yield* tryMapPromise("read base script", basePath, () => Bun.file(basePath).text());
@@ -168,17 +173,25 @@ const baseMapFiles = (packager: string, base: string, generated: ReadonlySet<str
   }, { concurrency: 4 });
 });
 
-/** Overwrites the map header in front of the archive; the container must have one of the same size. */
-const writeHeader = (map: string, header: Uint8Array) => tryMapSync("write map header", map, () => {
+/**
+ * Puts the 512-byte map header in front of the archive: over the existing
+ * one, or before an archive saved without one, since MPQ readers find the
+ * archive at any 512-byte boundary.
+ */
+export const writeHeader = (map: string, header: Uint8Array) => tryMapSync("write map header", map, () => {
   const file = openSync(map, "r+");
+  let magic = "";
   try {
-    const magic = new Uint8Array(4);
-    readSync(file, magic, 0, magic.length, 0);
-    if (new TextDecoder().decode(magic) !== "HM3W") throw new Error("asset container has no map header in front of its archive");
-    writeSync(file, header, 0, header.length, 0);
+    const bytes = new Uint8Array(4);
+    readSync(file, bytes, 0, bytes.length, 0);
+    magic = new TextDecoder().decode(bytes);
+    if (magic === "HM3W") writeSync(file, header, 0, header.length, 0);
   } finally {
     closeSync(file);
   }
+  if (magic === "HM3W") return;
+  if (magic !== "MPQ\x1a") throw new Error("map is neither a map header nor an MPQ archive");
+  writeFileSync(map, Buffer.concat([header, readFileSync(map)]));
 });
 
 const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compile: Effect.Effect<CompiledBundle, BuildFailure>) => Effect.scoped(Effect.gen(function*() {
@@ -189,6 +202,7 @@ const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compil
   const packager = options.packager ?? project.packager;
   const pack = mapPack(packager);
   yield* verifyToolchain(project.toolchainLockPath, project.packageDirectory).pipe(step("verify toolchain"));
+  yield* ensurePackager(packager);
   const work = yield* workDirectory(dirname(out));
   const bundle = yield* compile;
 
@@ -208,7 +222,7 @@ const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compil
         files: [
           { entry: "war3map.lua", contents: new TextEncoder().encode(composeScript(base, bundle, project.entryGlobal)) },
           { entry: "war3map.w3i", contents: encodeMapInfo(info) },
-          ...options.objectData,
+          ...withFileIo(options.objectData),
         ],
       };
     });
@@ -219,12 +233,12 @@ const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compil
     yield* runProcess("check map script syntax", scriptPath, ["nix", "shell", "nixpkgs#lua5_3", "--command", "luac", "-p", scriptPath]);
     const assets = [
       ...yield* baseMapFiles(packager, options.base, new Set(files.map(({ entry }) => entry)), work),
-      ...options.imports,
+      ...options.imports ?? [],
     ];
     return { generated, files, assets };
   }).pipe(step("generate"));
 
-  yield* stageMap(options.container, out, (staged) => Effect.gen(function*() {
+  yield* stageMap(options.container ?? options.base, out, (staged) => Effect.gen(function*() {
     yield* Effect.gen(function*() {
       for (const file of files) yield* pack.replace(staged, file.source, file.entry);
       yield* writeHeader(staged, generated.header);
@@ -242,6 +256,26 @@ const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compil
 }));
 
 // ---------------------------------------------------------------- operations
+
+/** Hot reload reads files through FileIO's ability; object data without a war3map.w3a gets one holding only that ability. */
+export function withFileIo(objectData: readonly GeneratedFile[] = []): readonly GeneratedFile[] {
+  return objectData.some(({ entry }) => entry === "war3map.w3a") ? objectData : [...objectData, { entry: "war3map.w3a", contents: abilityData() }];
+}
+
+const PACKAGER_SOURCE = join(import.meta.dir, "../../native/map-pack.c");
+
+/** The map packager at `path`; when it is missing, compiles wisp:native/map-pack.c there against nixpkgs StormLib. */
+export const ensurePackager = (path: string) => Effect.suspend(() => existsSync(path) ? Effect.void : Effect.gen(function*() {
+  const stormlib = yield* captureProcess("build StormLib", path, ["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#stormlib"]).pipe(
+    Effect.flatMap(({ exitCode, stdout, stderr }) => exitCode === 0
+      ? Effect.succeed(stdout.trim().split("\n")[0] ?? "")
+      : Effect.fail(new MapBuildFailure({ operation: "build StormLib", path, cause: `nix exited with ${exitCode}: ${stderr.trim()}` }))),
+  );
+  yield* tryMapSync("create packager directory", path, () => mkdirSync(dirname(path), { recursive: true }));
+  yield* runProcess("compile map packager", path, ["nix", "shell", "nixpkgs#gcc", "--command", "gcc", `-I${stormlib}/include`, PACKAGER_SOURCE,
+    `-L${stormlib}/lib`, `-Wl,-rpath,${stormlib}/lib`, "-lstorm", "-o", `${path}.next`]);
+  yield* tryMapSync("install map packager", path, () => renameSync(`${path}.next`, path));
+}).pipe(step("compile map packager")));
 
 const tryMapPromise = <A>(operation: string, path: string, run: () => PromiseLike<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => new MapBuildFailure({ operation, path, cause }) });

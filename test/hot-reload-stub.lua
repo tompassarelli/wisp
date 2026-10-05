@@ -39,6 +39,7 @@ function PreloadGenEnd(name) writes[name] = table.concat(preload, "\n") end
 function DisplayTextToPlayer(p, x, y, text) end
 local module = assert(load(payload))()
 module.start()
+assert(writes["fixture-hot-ack-p0.txt"] == "applied 0 at 0", "match start was not acknowledged")
 module.tick()
 module.fail()
 local dispatch, errors, hot = __fixtureDispatch, __fixtureErrors, __fixtureHot

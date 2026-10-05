@@ -46,3 +46,18 @@ export function assertDefined<T>(value: T | undefined, what = "value"): T {
   if (value === undefined) fail(`expected ${what} to be defined`);
   return value;
 }
+
+/** Runs every registered test, reports each failure and a summary line, and returns the number of failures. */
+export function runTests(report: (this: void, line: string) => void): number {
+  let failures = 0;
+  for (const { name, run } of registeredTests) {
+    try {
+      run();
+    } catch (error) {
+      failures++;
+      report(`fail ${name}: ${error instanceof AssertionFailure ? error.message : String(error)}`);
+    }
+  }
+  report(`${registeredTests.length - failures} of ${registeredTests.length} passed`);
+  return failures;
+}

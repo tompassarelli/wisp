@@ -20,7 +20,16 @@ behavior with `on(name, handler)` from
 The bundle exports `install()`; each installation calls `installDispatch()`,
 re-registers handlers and calls `installHotReload()`. At initial match startup,
 call `startHotReload(hostSlot, localSlot)` once to create its timer and triggers.
+It also acknowledges version 0, the map's own bundle, which tells host tools
+such as the [fresh match](../scripts/wisp/lobby.ts) (wisp:scripts/wisp/lobby.ts)
+that the match is running in that client.
 Keep module scope free of engine work because reload evaluates modules again.
+
+The map reads each payload through the tooltips of FileIO's ability ('$wsl'),
+so the map's war3map.w3a must declare it. MapBuild adds a war3map.w3a holding
+only that ability when the build supplies none; a map that generates its own
+writes it with `abilityData()` from [object data](../scripts/objectData.ts)
+(wisp:scripts/objectData.ts).
 
 Put state that must survive in globals. Each reload creates fresh module locals.
 If the state shape changes, migrate it deliberately or start a fresh match.
@@ -36,7 +45,9 @@ Compose [makeHot](../scripts/wisp/commands/hot.ts)
 `BuildProject`, source directory, retained-source-map directory and matching
 file prefix. Its command takes one `--data` CustomMapData directory per client;
 `--watch` publishes saved changes and prints new error and [desync](#desync-reports) reports.
-The consumer owns the CLI entry point and command name.
+The consumer owns the program and command name; the
+[sample map](sample-map.md) (wisp:docs/sample-map.md) composes one with
+`runCli`.
 
 Every client loads and verifies its local payload and answers ready or refuse.
 Once every answer arrives, clients install on the same synchronized frame or
