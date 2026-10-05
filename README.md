@@ -19,6 +19,10 @@ assets, map declaration, import list, and acceptance journeys. Smashcraft is
 the first consumer; Wisp does not import or read its source. The sample map
 in wisp:examples/sample/ is the second map built on Wisp, from Wisp alone.
 
+Run a map without Warcraft: `wisp headless` plays its real bundle in simulated
+clients and reports desyncs, errors and scene problems in about a second
+([headless runtime](docs/headless.md)).
+
 See the [feature index](docs/index.md) (wisp:docs/index.md) to find existing
 capabilities and their setup, including opt-in diagnostics. To start a new
 map, begin with the [sample map](docs/sample-map.md) (wisp:docs/sample-map.md).

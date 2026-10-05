@@ -9,6 +9,12 @@ New map? Start from the [sample map](sample-map.md) (wisp:docs/sample-map.md):
 a complete two-player map with its build, test, fresh-match and hot-reload
 commands, and what a base map needs.
 
+No Warcraft running? The [headless runtime](headless.md) (wisp:docs/headless.md)
+runs your map's real bundle in simulated clients, in Bun and in 32-bit Lua:
+desyncs between clients, error reports, hot reloads and what a player would see
+wrong, in about a second and a half for Smashcraft's two-client, 600-frame quick
+match. Use it before reaching for the signed-in clients.
+
 How Wisp compares with Wurst, the w3ts TypeScript template, WCSharp and
 warcraft-vscode on the same map is measured in the
 [toolchain comparison](comparison.md) (wisp:docs/comparison.md).
