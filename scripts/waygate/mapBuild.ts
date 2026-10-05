@@ -249,18 +249,38 @@ const tryMapPromise = <A>(operation: string, path: string, run: () => PromiseLik
 const tryMapSync = <A>(operation: string, path: string, run: () => A) =>
   Effect.try({ try: run, catch: (cause) => new MapBuildFailure({ operation, path, cause }) });
 
-/** Runs a command to completion; interrupting the step kills the process. */
-export const runProcess = (operation: string, path: string, command: readonly string[]) =>
+/** Captures a child's result; interruption kills and reaps the owned child. */
+export const captureProcess = (
+  operation: string,
+  path: string,
+  command: readonly string[],
+  options: { readonly env?: Record<string, string>; readonly stdout?: "pipe" | "ignore" } = {},
+) =>
   Effect.acquireUseRelease(
-    tryMapSync(operation, path, () => Bun.spawn([...command], { stdin: "ignore", stdout: "ignore", stderr: "pipe" })),
-    (child) => Effect.gen(function*() {
-      const [code, stderr] = yield* tryMapPromise(operation, path, () => Promise.all([child.exited, new Response(child.stderr).text()]));
-      if (code !== 0) return yield* new MapBuildFailure({ operation, path, cause: `${command[0]} exited with ${code}: ${stderr.trim()}` });
+    tryMapSync(operation, path, () => Bun.spawn([...command], {
+      ...options, stdin: "ignore", stdout: options.stdout ?? "pipe", stderr: "pipe",
+    })),
+    (child) => tryMapPromise(operation, path, async () => {
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        child.stdout === null ? "" : new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      return { exitCode, stdout, stderr };
     }),
-    (child) => Effect.sync(() => {
-      if (child.exitCode === null) child.kill();
+    (child) => Effect.promise(async () => {
+      if (child.exitCode === null) child.kill("SIGKILL");
+      await child.exited;
     }),
   );
+
+/** Runs a command to completion; interrupting the step kills and reaps it. */
+export const runProcess = (operation: string, path: string, command: readonly string[]) =>
+  captureProcess(operation, path, command, { stdout: "ignore" }).pipe(Effect.flatMap(({ exitCode, stderr }) =>
+    exitCode === 0
+      ? Effect.void
+      : Effect.fail(new MapBuildFailure({ operation, path, cause: `${command[0]} exited with ${exitCode}: ${stderr.trim()}` })),
+  ));
 
 /** The supplied map packager: extracts or replaces one archive entry, war3map.lua by default. */
 function mapPack(packager: string) {
