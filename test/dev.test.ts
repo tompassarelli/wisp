@@ -1,8 +1,8 @@
 // What `wisp dev` reruns after a save (wisp:docs/dev.md): the tests that load
 // the saved module through imports, the ones that declare reading it, every
-// test when the graph can't decide, and how the selected tests share
-// processes. Then the registry process: it runs a module's registered tests
-// and reports each failure.
+// test when the graph can't decide, which saved files a per-file audit
+// checks, and how the selected tests share processes. Then the registry
+// process: it runs a module's registered tests and reports each failure.
 import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -83,6 +83,25 @@ test("a save that changes a module's imports changes what it selects from then o
   expect(names(changed(at("src/c.ts")).units)).toEqual(["src/c.tests.ts", "test/lazy.test.ts", ...always].sort());
   write("src/a.ts", 'export { b } from "./b";\n');
   changed(at("src/a.ts"));
+});
+
+test("a per-file audit brought in only by files it reads checks just those; one its imports bring in checks everything", () => {
+  write("audit/shapes.test.ts", 'import { readFileSync } from "node:fs";\nimport { c } from "../src/c";\nexport const read = (path: string) => [c, readFileSync(path)];\n');
+  write("audit/scene.test.ts", 'import { b } from "../src/b";\nexport const scene = b;\n');
+  const audits = new TestPlan(root, {
+    files: ["audit/*.test.ts"],
+    reads: { "audit/shapes.test.ts": ["src/**/*.ts"] },
+    perFile: ["audit/shapes.test.ts"],
+    journeys: ["audit/scene.test.ts"],
+  });
+  expect(audits.isJourney(at("audit/scene.test.ts"))).toBe(true);
+  expect(audits.isJourney(at("audit/shapes.test.ts"))).toBe(false);
+  const alone = audits.select({ changed: [at("src/alone.ts")], created: [], deleted: [] });
+  expect(names(alone.units)).toEqual(["audit/shapes.test.ts"]);
+  expect([...alone.audits ?? []]).toEqual([[at("audit/shapes.test.ts"), [at("src/alone.ts")]]]);
+  const imported = audits.select({ changed: [at("src/c.ts")], created: [], deleted: [] });
+  expect(names(imported.units)).toEqual(["audit/scene.test.ts", "audit/shapes.test.ts"]);
+  expect(imported.audits?.size).toBe(0);
 });
 
 test("registry modules share processes only with each other, and isolated files only with their group", () => {

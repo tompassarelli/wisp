@@ -5,7 +5,8 @@
 // graph can't decide, every test runs: a file was created or deleted, a saved
 // file isn't a module and no test declares reading it, or the save changes a
 // module every test preloads. A test that loads a computed `import()`, or
-// reads files itself without declaring which, runs on every save.
+// reads files itself without declaring which, runs on every save. A per-file
+// audit that only files it reads brought in learns which files those are.
 import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { ImportGraph, isModulePath } from "./importGraph";
@@ -28,6 +29,20 @@ export interface TestDeclaration {
    * no group may share one.
    */
   readonly isolated?: readonly (readonly string[])[];
+  /** Bun test files that play headless journeys; `wisp dev` reports them with its own journey. */
+  readonly journeys?: readonly string[];
+  /**
+   * Bun test files that audit each file they read on their own. When only
+   * files they read brought them in, they run with those files in
+   * WISP_DEV_FILES (savedFiles(), wisp:scripts/wisp/devResult.ts).
+   */
+  readonly perFile?: readonly string[];
+  /**
+   * Bun test files, each with installed modules `wisp dev` loads into a
+   * process that waits for it before a save, such as a parser an audit
+   * imports. Each runs in a process of its own.
+   */
+  readonly warm?: Readonly<Record<string, readonly string[]>>;
   /** Environment for test processes, such as engine settings for short-lived workers. */
   readonly env?: Readonly<Record<string, string>>;
 }
@@ -48,6 +63,8 @@ export interface Selection {
   readonly units: readonly TestUnit[];
   /** Why every test runs; undefined when the graph chose them. */
   readonly full?: string;
+  /** Per-file audits that only files they read brought in, each with those files. */
+  readonly audits?: ReadonlyMap<string, readonly string[]>;
 }
 
 /** A Bun test file that reads files itself: it names one of these. */
@@ -65,14 +82,23 @@ export class TestPlan {
   /** Tests that run on every save, with why. */
   private everySave = new Map<string, string>();
   private readonly groups: ReadonlyMap<string, string>;
+  private readonly journeys: ReadonlySet<string>;
+  private readonly perFile: ReadonlySet<string>;
 
   constructor(private readonly root: string, private readonly declaration: TestDeclaration) {
     this.reads = Object.entries(declaration.reads ?? {}).map(([unit, globs]) => ({
       unit: resolve(root, unit),
       globs: globs.map((glob) => new Bun.Glob(glob)),
     }));
+    this.journeys = new Set((declaration.journeys ?? []).map((path) => resolve(root, path)));
+    this.perFile = new Set((declaration.perFile ?? []).map((path) => resolve(root, path)));
     this.groups = new Map((declaration.isolated ?? []).flatMap((group, index) => group.map((path) => [resolve(root, path), `isolated ${index}`] as const)));
     this.rescan();
+  }
+
+  /** Whether a test plays headless journeys. */
+  isJourney(path: string): boolean {
+    return this.journeys.has(path);
   }
 
   /** Which Bun test files may share a process: those with the same group. */
@@ -113,9 +139,10 @@ export class TestPlan {
     const deleted = changes.deleted[0];
     if (deleted !== undefined) return this.everything(`${this.local(deleted)} was deleted`);
     const selected = new Set<string>(this.everySave.keys());
+    const read = new Map<string, string[]>();
     for (const path of changes.changed) {
       const readers = this.readers(path);
-      for (const reader of readers) selected.add(reader);
+      for (const reader of readers) read.set(reader, [...read.get(reader) ?? [], path]);
       if (!isModulePath(path) || !this.graph.owns(path)) {
         if (readers.length === 0) return this.everything(`no test declares reading ${this.local(path)}`);
         continue;
@@ -127,7 +154,12 @@ export class TestPlan {
     }
     this.classify();
     for (const path of this.everySave.keys()) selected.add(path);
-    return { units: this.units.filter((unit) => selected.has(unit.path)) };
+    const audits = new Map<string, readonly string[]>();
+    for (const [reader, paths] of read) {
+      if (this.perFile.has(reader) && !selected.has(reader)) audits.set(reader, paths);
+      selected.add(reader);
+    }
+    return { units: this.units.filter((unit) => selected.has(unit.path)), audits };
   }
 
   /** Every test, found again, with why every test runs. */

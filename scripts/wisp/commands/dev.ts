@@ -1,23 +1,26 @@
 // `wisp dev`: one long-running command that answers every save
 // (wisp:docs/dev.md). It keeps a TypeScript 7 checker, the project's test
 // graph and processes for tests and a headless journey warm, and on each save
-// runs, at once: the saved files' type errors, the tests the save can affect,
-// the project's journey in simulated clients and the project's whole type
-// check. With --data it also hot-reloads the map into running clients, as
-// `hot --watch` does. Each result prints with its time since the save; a new
-// save stops the previous one's work, except a hot reload, which finishes.
+// reports three signals: the saved files' type errors, the unit tests the
+// save can affect, and the journeys (the project's own in simulated clients
+// and the affected journey tests); then the project's whole type check.
+// With --data it also hot-reloads the map into running clients, as `hot
+// --watch` does. Each result prints with its time since the save; a new save
+// stops the previous one's work, except a hot reload, which finishes.
 import { type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { availableParallelism } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { Console, Effect, Fiber, Layer, Queue } from "effect";
+import { Console, Deferred, Effect, Fiber, Layer, Queue, Semaphore } from "effect";
 import { type Command, type CommandFailure, UsageFailure, flagValues } from "../command";
 import { Desyncs, formatDesync } from "../desyncs";
 import { type ProcessOutput, Standby, runProcess } from "../devProcesses";
+import { SAVED_FILES_ENV, WARM_ENV } from "../devResult";
 import { GameFiles } from "../gameFiles";
 import { HotReload } from "../hotReload";
 import type { JourneyOutcome, JourneyRequest } from "../journeyRun";
 import { MapBuild } from "../mapBuild";
 import type { RegistryRequest, RegistryResult } from "../registryRun";
+import type { WaitingTestRequest } from "../testWait";
 import { SourceErrors } from "../sourceErrors";
 import { type Changes, type Selection, type TestDeclaration, type TestProcess, TestPlan, type TestUnit, packTests } from "../testSelection";
 import { step } from "../timings";
@@ -45,6 +48,7 @@ export interface DevProject {
 
 const REGISTRY_RUN = join(import.meta.dir, "../registryRun.ts");
 const JOURNEY_RUN = join(import.meta.dir, "../journeyRun.ts");
+const TEST_WAIT = join(import.meta.dir, "../testWait.ts");
 /** Registry processes kept waiting for a save. */
 const REGISTRY_STANDBY = 6;
 /** CPUs from which the journey, the tests and the whole type check run at once rather than one after another. */
@@ -198,17 +202,27 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
   const cpus = cpuBudget();
   // Tests and the whole check yield the CPUs to the journey and the saved files' check when they compete.
   const behind = Bun.which("nice") === null ? [] : ["nice", "-n", "10"];
-  // Run alone, tests get all but one CPU; beside the journey and the saved
-  // files' check, which take one each, a test process keeps about two busy.
-  const testProcesses = cpus < CONCURRENT_CPUS ? Math.max(1, cpus - 1) : Math.floor(cpus / 2) - 1;
+  // A test process keeps about two CPUs busy beside the journey and the saved
+  // files' check. Under a quota, work beyond it stalls every process, so the
+  // signals run in deadline order (the saved files' check and the unit tests,
+  // then the journeys, then the whole check) and test processes take turns.
+  const unitProcesses = cpus < CONCURRENT_CPUS ? Math.max(1, cpus - 2) : Math.floor(cpus / 2) - 1;
+  const turns = cpus < CONCURRENT_CPUS ? Semaphore.makeUnsafe(Math.max(1, cpus - 1)) : undefined;
   const checker = yield* Effect.acquireRelease(
     Effect.promise(() => TypeChecker.open(root, project.typeCheck.projects)),
     (opened) => Effect.promise(() => opened.close()),
   );
   const registry = yield* Effect.acquireRelease(
-    Effect.sync(() => new Standby([...behind, process.execPath, REGISTRY_RUN], root, Math.min(REGISTRY_STANDBY, testProcesses), project.tests.env)),
+    Effect.sync(() => new Standby([...behind, process.execPath, REGISTRY_RUN], root, Math.min(REGISTRY_STANDBY, unitProcesses), project.tests.env)),
     (standby) => Effect.sync(() => standby.close()),
   );
+  const waiting = new Map<string, Standby>();
+  for (const [file, modules] of Object.entries(project.tests.warm ?? {})) {
+    waiting.set(resolve(root, file), yield* Effect.acquireRelease(
+      Effect.sync(() => new Standby([...behind, process.execPath, "test", TEST_WAIT], root, 1, { ...project.tests.env, [WARM_ENV]: JSON.stringify(modules) })),
+      (standby) => Effect.sync(() => standby.close()),
+    ));
+  }
   const journeys = project.journey === undefined ? undefined : yield* Effect.acquireRelease(
     Effect.sync(() => new Standby([process.execPath, JOURNEY_RUN], root, 1)),
     (standby) => Effect.sync(() => standby.close()),
@@ -228,7 +242,7 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
     yield* Console.log(`${seconds(savedAt)}types: the project check failed\n${indent(output)}`);
   });
 
-  const runTests = (process: TestProcess) => Effect.gen(function*() {
+  const runTests = (process: TestProcess, audits: ReadonlyMap<string, readonly string[]>) => Effect.gen(function*() {
     if (process.kind === "registry") {
       const request: RegistryRequest = { preload, modules: process.units.map((unit) => unit.path) };
       const output = yield* registry.run(request);
@@ -236,38 +250,79 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
       return registryResult(process.units, output, local);
     }
     const started = Date.now();
-    const output = yield* runProcess([...behind, globalThis.process.execPath, "test", ...process.units.map((unit) => unit.path)], root, project.tests.env);
-    // A shared process's time is split by what each file was expected to take.
+    // A per-file audit runs alone, so its saved files are its own.
+    const audited = process.units.length === 1 ? audits.get(process.units[0]?.path ?? "") : undefined;
+    const savedFiles = audited === undefined ? {} : { [SAVED_FILES_ENV]: JSON.stringify(audited) };
+    const first = process.units[0];
+    const standby = process.units.length === 1 && first !== undefined ? waiting.get(first.path) : undefined;
+    const output = standby === undefined
+      ? yield* runProcess([...behind, globalThis.process.execPath, "test", ...process.units.map((unit) => unit.path)], root, { ...project.tests.env, ...savedFiles })
+      : yield* standby.run({ file: first?.path ?? "", env: savedFiles } satisfies WaitingTestRequest);
     const elapsed = Date.now() - started;
-    for (const unit of process.units) durations.set(unit.path, (elapsed * expected(unit)) / Math.max(1, process.work));
+    // An audit of saved files is timed apart from a whole one; a shared process's time is split by what each file was expected to take.
+    if (audited !== undefined && first !== undefined) durations.set(`audit ${first.path}`, elapsed);
+    else for (const unit of process.units) durations.set(unit.path, (elapsed * expected(unit)) / Math.max(1, process.work));
     return fileResult(process.units.map((unit) => local(unit.path)).join(", "), output);
   });
 
-  const tests = (selection: Selection, savedAt: number) => Effect.gen(function*() {
-    if (selection.units.length === 0) return yield* Console.log(`${seconds(savedAt)}tests: none load the saved files`);
-    const processes = packTests(selection.units, expected, (path) => plan.group(path), testProcesses)
+  /** Runs tests in about `count` processes; failures print as they land. */
+  const runSide = (units: readonly TestUnit[], audits: ReadonlyMap<string, readonly string[]>, count: number, savedAt: number) => Effect.gen(function*() {
+    // An audit's saved files and a waiting process are one file's own.
+    const alone = (path: string) => audits.has(path) || waiting.has(path);
+    const expectedHere = (unit: TestUnit) => (audits.has(unit.path) ? durations.get(`audit ${unit.path}`) ?? UNKNOWN_MS.file : expected(unit));
+    const processes = packTests(units, expectedHere, (path) => (alone(path) ? `alone ${path}` : plan.group(path)), count)
       .sort((left, right) => right.work - left.work);
-    const results = yield* Effect.forEach(processes, (process) => runTests(process).pipe(Effect.tap(({ failures }) =>
-      // Failures print as they land; the summary waits for every test.
+    const turn = (run: Effect.Effect<ProcessResult>) => (turns === undefined ? run : Semaphore.withPermit(turns, run));
+    const results = yield* Effect.forEach(processes, (process) => turn(runTests(process, audits)).pipe(Effect.tap(({ failures }) =>
       failures.length === 0 ? Effect.void : Console.log(`${seconds(savedAt)}FAIL ${failures.join(`\n${" ".repeat(13)}FAIL `)}`))), { concurrency: "unbounded" });
-    const passed = results.reduce((sum, result) => sum + result.passed, 0);
-    const failed = results.reduce((sum, result) => sum + result.failures.length, 0);
-    const scope = selection.full === undefined
-      ? `${plural(selection.units.length, "test file")} of ${plan.all().length} affected`
-      : `all ${plural(selection.units.length, "test file")}: ${selection.full}`;
-    yield* Console.log(`${seconds(savedAt)}tests: ${failed === 0 ? "" : `${plural(failed, "failure")}, `}${passed} passed (${scope})`);
+    return {
+      passed: results.reduce((sum, result) => sum + result.passed, 0),
+      failed: results.reduce((sum, result) => sum + result.failures.length, 0),
+    };
   });
 
-  const journey = (savedAt: number) => Effect.gen(function*() {
-    if (project.journey === undefined || journeys === undefined) return;
+  const counts = (passed: number, failed: number) => `${failed === 0 ? "" : `${plural(failed, "failure")}, `}${passed} passed`;
+  const scope = (units: readonly TestUnit[], selection: Selection) => (selection.full === undefined
+    ? `${plural(units.length, "test file")} of ${plan.all().length} affected`
+    : `${plural(units.length, "test file")}, all: ${selection.full}`);
+
+  const unitTests = (selection: Selection, savedAt: number) => Effect.gen(function*() {
+    const units = selection.units.filter((unit) => !plan.isJourney(unit.path));
+    if (units.length === 0) return yield* Console.log(`${seconds(savedAt)}unit tests: none load the saved files`);
+    const { passed, failed } = yield* runSide(units, selection.audits ?? new Map(), unitProcesses, savedAt);
+    const audited = [...selection.audits?.keys() ?? []].map(local);
+    const audits = audited.length === 0 ? "" : `; ${audited.join(", ")} checked only the saved files`;
+    yield* Console.log(`${seconds(savedAt)}unit tests: ${counts(passed, failed)} (${scope(units, selection)}${audits})`);
+  });
+
+  /** The project's own journey: what to print in the journeys line, and its report when it found problems. */
+  const ownJourney = Effect.gen(function*() {
+    if (project.journey === undefined || journeys === undefined) return undefined;
     const { module, name, clients = 2 } = project.journey;
     const request: JourneyRequest = { module: resolve(root, module), export: project.journey.export, journey: name, clients };
     const output = yield* journeys.run(request);
     const outcome = output.results.find(isJourneyOutcome);
-    if (outcome === undefined) return yield* Console.log(`${seconds(savedAt)}journey ${name} didn't finish: exited ${output.exitCode}\n${indent(output.output)}`);
-    if ("stopped" in outcome) return yield* Console.log(`${seconds(savedAt)}journey ${name} stopped:\n${indent(outcome.stopped)}`);
-    const summary = outcome.problems === 0 ? "no problems" : plural(outcome.problems, "problem");
-    yield* Console.log(`${seconds(savedAt)}journey ${name}: ${summary}\n${indent(outcome.lines.join("\n"))}`);
+    if (outcome === undefined) return { summary: `${name} didn't finish`, report: `exited ${output.exitCode}\n${output.output}` };
+    if ("stopped" in outcome) return { summary: `${name} stopped`, report: outcome.stopped };
+    if (outcome.problems === 0) return { summary: `${name} passed` };
+    return { summary: `${name}: ${plural(outcome.problems, "problem")}`, report: outcome.lines.join("\n") };
+  });
+
+  /**
+   * The journey tests a save affects, each in its own process, beside the
+   * project's own journey: one line when both end. Both start after `before`.
+   */
+  const allJourneys = (selection: Selection, savedAt: number, before: Effect.Effect<void>) => Effect.gen(function*() {
+    const units = selection.units.filter((unit) => plan.isJourney(unit.path));
+    const tests = units.length === 0 ? Effect.succeed(undefined) : runSide(units, new Map(), units.length, savedAt);
+    yield* before;
+    const [own, ran] = yield* Effect.all([ownJourney, tests], { concurrency: "unbounded" });
+    if (own === undefined && ran === undefined) return;
+    const parts = [
+      ...(own === undefined ? [] : [own.summary]),
+      ...(ran === undefined ? [] : [`${plural(ran.passed + ran.failed, "journey test")}: ${counts(ran.passed, ran.failed)} (${scope(units, selection)})`]),
+    ];
+    yield* Console.log(`${seconds(savedAt)}journeys: ${parts.join("; ")}${own?.report === undefined ? "" : `\n${indent(own.report)}`}`);
   });
 
   /** Everything one save runs; `changes` is undefined for the first run, which runs every test. */
@@ -289,11 +344,14 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
     const changedModules = changes?.changed.filter((path) => !files.isProjectFile(path)) ?? [];
     // As `hot --watch` does, the first run publishes the map too.
     if (hot !== undefined && (changes === undefined || saved.some((path) => path.startsWith(`${hot.sourceDirectory}${sep}`)))) yield* Effect.forkScoped(hot.request(savedAt));
-    const first = Effect.all([journey(savedAt), changedModules.length === 0 ? Effect.void : types(changedModules, savedAt)], { concurrency: "unbounded", discard: true });
-    // Under a CPU quota, work beyond it stalls everything, the journey included:
-    // the journey and the saved files' check go first, then the tests, then the whole check.
-    if (cpus < CONCURRENT_CPUS) yield* Effect.andThen(Effect.andThen(first, tests(selection, savedAt)), wholeCheck(savedAt));
-    else yield* Effect.all([first, tests(selection, savedAt), wholeCheck(savedAt)], { concurrency: "unbounded", discard: true });
+    const savedTypes = changedModules.length === 0 ? Effect.void : types(changedModules, savedAt);
+    // Under a quota the journeys wait for the unit tests, so those have the CPUs.
+    const unitsDone = Deferred.makeUnsafe<void>();
+    const units = unitTests(selection, savedAt).pipe(Effect.ensuring(Effect.sync(() => Deferred.doneUnsafe(unitsDone, Effect.void))));
+    const answers = Effect.all([savedTypes, units, allJourneys(selection, savedAt, turns === undefined ? Effect.void : Deferred.await(unitsDone))], { concurrency: "unbounded", discard: true });
+    // Under a quota the whole check waits for the answers above.
+    if (turns !== undefined) yield* Effect.andThen(answers, wholeCheck(savedAt));
+    else yield* Effect.all([answers, wholeCheck(savedAt)], { concurrency: "unbounded", discard: true });
   });
 
   for (const [path, why] of plan.alwaysRun()) yield* Console.log(`runs on every save: ${local(path)}: ${why}`);

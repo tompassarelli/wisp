@@ -2,22 +2,25 @@
 
 One long-running command answers every save. It keeps a TypeScript checker,
 the project's test graph, test processes and a headless journey process warm,
-and on each save prints, each with its time since the save:
+and on each save prints three signals, each with its time since the save, and
+then the whole type check:
 
 ```text
-saved src/game/sim/step.ts
-   0.044 s  types: no errors in src/game/sim/step.ts
-   0.585 s  journey quick-match: no problems
-           p0: 341968 native calls
-           p1: 341968 native calls
-           no desync in 600 frames
-           hot reload 1 running in every client
-   2.696 s  tests: 512 passed (59 test files of 98 affected)
-   3.249 s  types: no errors in the project
+saved src/game/presentation/impactState.ts
+   0.060 s  types: no errors in src/game/presentation/impactState.ts
+   0.633 s  unit tests: 86 passed (18 test files of 99 affected; test/source-shapes.test.ts checked only the saved files)
+   2.025 s  journeys: quick-match passed; 17 journey tests: 17 passed (8 test files of 99 affected)
+   2.793 s  types: no errors in the project
 ```
 
+- **types**: the saved files' type errors, `file:line:column TSxxxx message`.
+- **unit tests**: the affected tests that aren't journeys.
+- **journeys**: the project's own headless journey and the affected tests that
+  play journeys in simulated clients. The journey's report (calls, desync,
+  reload, scene) prints when it found a problem.
+
 A failing test prints as soon as its process ends (`FAIL file > test: why`),
-before the summary. A new save stops the previous save's work; a hot reload
+before its signal's line. A new save stops the previous save's work; a hot reload
 already sending finishes first. With `--data DIR --data DIR`, each save also
 hot-reloads the map into those clients exactly as `hot --watch` does
 ([hot reload](hot-reload.md)), and in-game error reports and desyncs print as
@@ -39,6 +42,9 @@ export const dev = makeDev({
     registryRunners: ["test/game.test.ts"],
     preload: ["test/host-natives.ts"],
     reads: { "test/source-shapes.test.ts": ["src/**/*.ts"] },
+    journeys: ["test/desync-guard.test.ts", "test/desync-guard-integrity.test.ts"],
+    perFile: ["test/source-shapes.test.ts"],
+    warm: { "test/source-shapes.test.ts": ["typescript"] },
     isolated: [["test/desync-guard.test.ts", "test/desync-guard-integrity.test.ts"]],
     env: { BUN_JSC_useFTLJIT: "false" },
   },
@@ -57,6 +63,15 @@ export const dev = makeDev({
   `registryRunners` file only runs the registry, so the loop runs its modules
   instead. `preload` is bunfig.toml's test preload. `env` applies to every
   test process.
+- `tests.journeys` are the Bun test files that play journeys in simulated
+  clients; they report with the project's own journey.
+- `tests.perFile` are audits that check each file they read on its own. When
+  only files they read brought them in, they run with those files in
+  `WISP_DEV_FILES`: `savedFiles()` (wisp:scripts/wisp/devResult.ts) returns
+  them, or undefined when the audit should check everything, as in CI.
+- `tests.warm` gives a Bun test file a process of its own, started before the
+  save, that has already loaded the installed modules listed, such as the
+  TypeScript compiler an audit parses with.
 - `journey` names a module exporting the game's `HeadlessProject`, the same
   declaration `makeHeadless` takes ([headless runtime](headless.md)), and the
   journey to play.
@@ -90,38 +105,41 @@ A test that loads a module with a computed `import()`, or reads files itself
 starts. Only the affected tests run, so a test that failed earlier and loads
 nothing the save touched isn't run again until a save affects it.
 
-**The journey.** A process that has already loaded the headless runtime loads
-the game's modules as saved and plays the journey in two simulated clients,
-reporting desyncs, error reports, a hot reload not running and scene problems
-as `wisp headless` does. It skips the clients' checksums, which only
+**The journeys.** A process that has already loaded the headless runtime loads
+the game's modules as saved and plays the project's journey in two simulated
+clients, reporting desyncs, error reports, a hot reload not running and scene
+problems as `wisp headless` does. It skips the clients' checksums, which only
 fingerprint a run for comparing runtimes; the desync check compares calls.
+Each affected journey test runs in its own process beside it.
 
 ## Processes and CPUs
 
 Registry modules and Bun test files run in separate processes. Registry
-processes and the journey process start before a save and wait for it, so a
-save pays only for loading the project's code. The loop splits the affected
-tests across processes by their measured times, longest first: registry
-modules share processes with each other; a Bun test file shares one only with
-files of its `isolated` group, or with files in no group.
+processes, the journey process and each `warm` file's process start before
+a save and wait for it, so a save pays only for loading the project's code.
+The loop splits the affected unit tests across processes by their measured
+times, longest first: registry modules share processes with each other; a Bun
+test file shares one only with files of its `isolated` group, or with files
+in no group. A per-file audit and a `warm` file run alone.
 
 The loop sizes this from the CPUs it may use, a Linux cgroup quota included.
-Under a quota, work beyond it stalls every process the loop runs, so with
-fewer than 12 CPUs the journey and the saved files' check go first, then the
-tests, then the whole check. Tests and the whole check run at lower priority
-(`nice`), so they yield to the journey and the saved files' check.
+With 12 CPUs or more every signal runs at once. Under a quota, work beyond it
+stalls every process the loop runs, so with fewer the signals run in deadline
+order: the saved files' check and the unit tests, then the journeys, then the
+whole check, and test processes take turns for all but one CPU. Tests and the
+whole check run at lower priority (`nice`).
 
 ## On Smashcraft
 
-Ten saves of game modules on Smashcraft ebe9169, five adding a private
+Ten saves of game modules on Smashcraft f3b3d39, five adding a private
 function and five an exported constant, measured in a 6-CPU cgroup quota
-(median from the save): saved files' type errors 0.044 s, the quick-match
-journey 0.585 s, the affected tests 2.696 s, the whole check 3.249 s. Before
-`wisp dev`, in the same quota, the whole check took 0.49 s, the full test
-suite 2.20 s and `wisp headless` 1.38 s, each run on its own. Nearly every
-game module reaches the desync guard's 600-frame journey test (about 0.5 s
-alone), and a save of any source file selects the source-shape audit, so the
-affected tests seldom finish before the heaviest of those.
+(median from the save): the saved files' type errors 0.056 s, the unit tests
+0.640 s, the journeys 2.050 s, the whole check 2.653 s. The journey work is
+fixed: the quick match and the eight journey test files take about 5.7
+CPU-seconds, so in a 6-CPU quota the journeys can't end within a second of
+the save even alone, and they wait for the unit tests. Before `wisp dev`, in
+the same quota, the whole check took 0.60 s, the full test suite 2.46 s and
+`wisp headless` 1.87 s, each run on its own.
 
 For ten behaviour-changing mutations in different game modules, every test
 that failed in a full run was one the loop selected, and the loop printed a
