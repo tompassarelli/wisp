@@ -1,3 +1,5 @@
+<p align="center"><img src="https://github.com/user-attachments/assets/45df1931-752f-42bf-8597-3917320004e1" alt="Wisp logo" width="360"></p>
+
 # Wisp
 
 **Warcraft III development at warp speed.**
