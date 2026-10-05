@@ -191,7 +191,9 @@ global whose name starts with one of the game's prefixes, or `__wisp`, is that
 client's; module locals are shared. Map state that must survive a reload is
 already in globals; keep all synchronized state there. The runtime learns a
 global's name when it is first assigned, so create one by assignment, not
-with `Object.defineProperty`. Lua's `xpcall`,
+with `Object.defineProperty`; from then on it reads and writes the running
+client's value, and assigning it outside a client throws. A global that
+exists when the runtime is installed is every client's starting value. Lua's `xpcall`,
 `pcall`, `load`, `setmetatable` and `string.byte`, which Wisp's runtime calls,
 are emulated, and a thrown error's JavaScript stack, with TypeScript lines, is
 kept in `client.thrown`.
