@@ -3,9 +3,12 @@
 // Session-bound values (desktop run directories, tool paths) come from a
 // supplied clients file.
 import { join } from "node:path";
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Effect, Exit, Schema } from "effect";
 import { describeCause } from "../waygate/command";
+import { captureProcess } from "../waygate/mapBuild";
 import { step } from "../waygate/timings";
+import { inputBatches, type InputAction } from "./inputBatch";
+export type { InputAction } from "./inputBatch";
 
 export class DesktopFailure extends Schema.TaggedError<DesktopFailure>()("DesktopFailure", {
   operation: Schema.String,
@@ -168,12 +171,14 @@ export const windowPid = (client: Client) =>
     return pid;
   });
 
+function pointerPosition(output: string) {
+  const fields = Object.fromEntries(output.split("\n").filter((line) => line.includes("=")).map((line) => line.split("=", 2) as [string, string]));
+  return { x: Number(fields.X), y: Number(fields.Y) };
+}
+
 function pointer(client: Client) {
   return run(client.name, "read pointer", [client.tools.xdotool, "getmouselocation", "--shell"], client.x11).pipe(
-    Effect.map((bytes) => {
-      const fields = Object.fromEntries(text(bytes).split("\n").filter((line) => line.includes("=")).map((line) => line.split("=", 2) as [string, string]));
-      return { x: Number(fields.X), y: Number(fields.Y) };
-    }),
+    Effect.map((bytes) => pointerPosition(text(bytes))),
   );
 }
 
@@ -194,6 +199,34 @@ export const click = (client: Client, x: number, y: number) =>
     yield* Effect.sleep("60 millis");
     yield* run(client.name, "release button", [client.tools.xdotool, "mouseup", "1"], client.x11);
   });
+
+/** Focuses once and batches recorded inputs, verifying relative pointer motion before each click. */
+export const batch = Effect.fnUntraced(function*(client: Client, actions: readonly InputAction[]) {
+  if (actions.length === 0) return;
+  yield* focus(client);
+  const moved = actions.some((action) => action.kind === "click");
+  const from = moved ? yield* pointer(client) : { x: 0, y: 0 };
+  const plan = inputBatches(actions, from);
+  const environment = Object.fromEntries(Object.entries(Bun.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
+  const runBatch = (args: readonly string[]) => captureProcess("run input batch", client.name, [client.tools.xdotool, ...args], {
+    env: { ...environment, ...client.x11 },
+  }).pipe(
+    Effect.mapError((cause) => new DesktopFailure({ operation: "run input batch", client: client.name, cause })),
+    Effect.flatMap(({ exitCode, stdout, stderr }) => exitCode === 0 ? Effect.succeed(stdout) : Effect.fail(new DesktopFailure({ operation: "run input batch", client: client.name, cause: stderr }))),
+  );
+  yield* Effect.acquireUseRelease(Effect.void, () => Effect.forEach(plan, (command) => Effect.gen(function*() {
+    const output = yield* runBatch(command.args);
+    if (command.pointer !== undefined) {
+      const at = pointerPosition(output);
+      if (at.x !== command.pointer.x || at.y !== command.pointer.y) return yield* new DesktopFailure({ operation: "move input batch pointer", client: client.name, cause: `pointer at ${at.x},${at.y}, wanted ${command.pointer.x},${command.pointer.y}` });
+    }
+  }), { discard: true }), (_, exit) => {
+    if (Exit.isSuccess(exit)) return Effect.void;
+    const keys = actions.flatMap((action) => action.kind === "keys" ? action.keys : []);
+    if (!moved && keys.length === 0) return Effect.void;
+    return runBatch([...(moved ? ["mouseup", "1"] : []), ...(keys.length > 0 ? ["keyup", ...keys] : [])]).pipe(Effect.asVoid);
+  }).pipe(step(`${client.name}: input batch (${actions.length} actions)`));
+});
 
 /** Polls until `observe` returns a value, or fails with the last observation after `seconds` of the Effect Clock. */
 export const waitFor = <A, E, R>(client: { readonly name: string }, what: string, seconds: number, observe: Effect.Effect<A | undefined, E, R>) =>

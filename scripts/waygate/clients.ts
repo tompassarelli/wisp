@@ -2,7 +2,7 @@
 // values and the concrete desktop driver come from the supplied clients file.
 import { Context, Effect, Layer } from "effect";
 import * as desktop from "../warcraft/desktop";
-export { DesktopFailure, type Ink, type Region, type Word, waitFor } from "../warcraft/desktop";
+export { DesktopFailure, type Ink, type Region, type Word, type InputAction, waitFor } from "../warcraft/desktop";
 
 /** The client identity used by journeys and fake service implementations. */
 export type Client = Pick<desktop.Client, "name" | "documents">;
@@ -15,6 +15,7 @@ export class Clients extends Context.Service<Clients, {
   readonly click: (client: Client, x: number, y: number) => Effect.Effect<void, desktop.DesktopFailure>;
   readonly keys: (client: Client, ...names: string[]) => Effect.Effect<void, desktop.DesktopFailure>;
   readonly typeText: (client: Client, value: string) => Effect.Effect<void, desktop.DesktopFailure>;
+  readonly batch: (client: Client, actions: readonly desktop.InputAction[]) => Effect.Effect<void, desktop.DesktopFailure>;
 }>()("waygate/Clients") {
   static readonly layer = (path: string) => Layer.effect(Clients, connect(path));
 }
@@ -45,5 +46,6 @@ const connect = (path: string) => Effect.gen(function*() {
     click: (client, x, y) => Effect.flatMap(session(client), (value) => desktop.click(value, x, y)),
     keys: (client, ...names) => Effect.flatMap(session(client), (value) => desktop.keys(value, ...names)),
     typeText: (client, value) => Effect.flatMap(session(client), (target) => desktop.typeText(target, value)),
+    batch: (client, actions) => Effect.flatMap(session(client), (target) => desktop.batch(target, actions)),
   });
 });
