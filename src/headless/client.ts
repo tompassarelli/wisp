@@ -6,7 +6,7 @@
 // ran the same events can be compared call by call. Runtime-neutral: it runs
 // in Bun and, compiled with TypeScriptToLua, in 32-bit Lua; each host puts the
 // natives where its map code finds them.
-import { FILE_IO_ABILITY } from "../runtime/gameFiles";
+import { errorFile, FILE_IO_ABILITY } from "../runtime/gameFiles";
 import type { NativeDeclarations } from "./declarations";
 
 export type Handle = { readonly kind: string; readonly id: number };
@@ -120,6 +120,8 @@ export interface ClientScope {
 
 export interface ClientOptions {
   readonly slot: number;
+  /** The map's configureRuntime() filePrefix, which names the file its error reports go to. */
+  readonly filePrefix: string;
   /** Player slots with a human client; the others are empty. */
   readonly humans: readonly number[];
   readonly declarations: NativeDeclarations;
@@ -269,7 +271,7 @@ export class HeadlessClient {
   readonly slot: number;
   /** Every native call the other clients must make alike, in order. */
   readonly log: NativeCall[] = [];
-  /** Error reports the map showed: `error in HANDLER: MESSAGE`. */
+  /** Error reports the map wrote to its error file, shown on screen or not: `error in HANDLER: MESSAGE`. */
   readonly errors: string[] = [];
   /** Every message the map showed this client. */
   readonly messages: string[] = [];
@@ -290,6 +292,7 @@ export class HeadlessClient {
   frame = 0;
   private nextId = 0;
   private readonly scope: ClientScope | undefined;
+  private readonly filePrefix: string;
   private readonly timers: Timer[] = [];
   private readonly registrations: Registration[] = [];
   private readonly memo = new Map<string, Handle>();
@@ -303,6 +306,7 @@ export class HeadlessClient {
   constructor(options: ClientOptions) {
     this.slot = options.slot;
     this.scope = options.scope;
+    this.filePrefix = options.filePrefix;
     const behaviors = this.behaviors(options);
     const local = options.localNatives;
     const log = this.log;
@@ -374,7 +378,12 @@ export class HeadlessClient {
 
   private show(text: string): void {
     this.messages.push(text);
-    if (text.startsWith("error in ")) this.errors.push(text);
+  }
+
+  /** A report file's lines as the screen would show them: its heading names the handler, its next line the message. */
+  private report(lines: readonly string[]): void {
+    const heading = lines[0] ?? "";
+    this.errors.push(`error in ${heading.slice(heading.indexOf(" in ") + 4)}: ${lines[1] ?? ""}`);
   }
 
   private behaviors({ humans, network, screenWidth }: ClientOptions): Readonly<Record<string, NativeBehavior>> {
@@ -483,6 +492,7 @@ export class HeadlessClient {
       },
       PreloadGenEnd: (name: string) => {
         this.files.set(name, this.preload);
+        if (name === errorFile(this.slot, this.filePrefix)) this.report(this.preload);
       },
       // A published file's Preload code sets one FileIO tooltip level per chunk.
       Preloader: (name: string) => {

@@ -107,6 +107,37 @@ test("the report lists an error report, a reload no client runs and what a playe
   expect(problems).toBe(8);
 });
 
+test("a map that turns error text off shows no report, while its error file and the client's error list keep it", () => {
+  const failing = (errorsOnScreen?: boolean) => runtime.clients({
+    start: () => {
+      configureRuntime({ filePrefix: "fixture", readyPrefix: "FX_HRR", globalPrefix: "__fixture", ...(errorsOnScreen === undefined ? {} : { errorsOnScreen }) });
+      installDispatch();
+      on("fixture.frame", () => {
+        throw new Error("boom");
+      });
+      TimerStart(CreateTimer(), 0.0, true, trampoline("fixture.frame"));
+    },
+    install: () => {},
+  });
+  const play = (errorsOnScreen?: boolean) => {
+    const clients = failing(errorsOnScreen);
+    clients.start();
+    clients.frames(10);
+    return clients.clients;
+  };
+  // Unconfigured, as before: shown, and the handler fails every frame but is reported once.
+  for (const client of [...play(), ...play(true)]) {
+    expect(client.messages).toEqual(["error in fixture.frame: Error: boom"]);
+    expect(client.errors).toEqual(["error in fixture.frame: Error: boom"]);
+    expect(client.files.get(`fixture-error-p${client.slot}.txt`)?.slice(0, 2)).toEqual(["error 1 in fixture.frame", "Error: boom"]);
+  }
+  for (const client of play(false)) {
+    expect(client.messages).toEqual([]);
+    expect(client.errors).toEqual(["error in fixture.frame: Error: boom"]);
+    expect(client.files.get(`fixture-error-p${client.slot}.txt`)?.slice(0, 2)).toEqual(["error 1 in fixture.frame", "Error: boom"]);
+  }
+});
+
 test("wisp headless fails with the problems it printed, and names its journeys", async () => {
   const command = makeHeadless(async () => ({
     map: FIXTURE,

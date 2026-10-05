@@ -36,7 +36,7 @@ effects, and logs every native call except the local-only ones.
 | Special effects | Model, position, alpha, scale, time scale and a flattened matrix, as `client.effectPoses()` returns them. `AddSpecialEffect` puts an effect on the ground at height 0. |
 | Frames | A frame getter returns the same handle for the same frame. The local client is 1920 pixels wide plus 640 per client index, 1080 high. |
 | Conversions and math | `I2S`, `R2S`, `R2I`, `I2R`, `S2I`, `S2R`, `SubString`, `StringLength`, `SquareRoot`, `Atan2` and the bit operations, binary32 where Warcraft is. |
-| Messages | `DisplayTextToPlayer` for the local player and `DisplayTextToForce` show text in `client.messages`; Wisp's `error in HANDLER: ...` reports also go to `client.errors`. |
+| Messages | `DisplayTextToPlayer` for the local player and `DisplayTextToForce` show text in `client.messages`; Wisp's error reports go to `client.errors` as `error in HANDLER: ...` when the map writes them to its error file, shown or not ([error text](hot-reload.md#error-reports-on-screen)). |
 
 Every other declared native returns a new handle, 0, "", false or nothing,
 by its declared type, and each `Convert` native returns its argument. Constants of a handle type are their own name, so

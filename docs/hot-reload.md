@@ -43,6 +43,20 @@ its file/message/global prefixes stable across that match. See
 [runtime configuration](../src/runtime/config.ts)
 (wisp:src/runtime/config.ts).
 
+## Error reports on screen
+
+A callback error is written to the `<file prefix>-error-p<slot>.txt` file that
+`wisp hot --watch` reads and maps to TypeScript lines. By default the local
+player also sees it on screen as `error in HANDLER: MESSAGE`, which names
+handlers, TypeScript lines and Lua messages. A build that players run turns
+that off with `configureRuntime({ ..., errorsOnScreen: false })`; the report
+is still written to the file, and the headless runtime's `client.errors`
+still lists it. Set the field with the other prefixes in every bundle's
+`install()`: each call replaces the previous configuration, so a reload that
+omits it shows reports again. Hot reload's own `hot reload N applied` and `not
+applied` messages are always displayed; a build players run should not
+`startHotReload()`.
+
 ## Host integration
 
 Compose [makeHot](../scripts/wisp/commands/hot.ts)

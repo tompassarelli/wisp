@@ -1,5 +1,6 @@
-// Runtime errors from engine callbacks. Each is shown in game and written to a
-// file where `wisp hot` maps its Lua positions back to TypeScript lines.
+// Runtime errors from engine callbacks. Each is written to a file where
+// `wisp hot` maps its Lua positions back to TypeScript lines, and shown in game
+// unless the map's runtime configuration sets errorsOnScreen to false.
 // A broken per-frame handler fails every frame, so a message is written only
 // when it differs from the previous one.
 import { errorFile, errorHeading } from "../runtime/gameFiles";
@@ -81,7 +82,7 @@ export function reportError(handler: string, error: unknown, stack: string): voi
   if (message === state.last) return;
   state.last = message;
   state.count++;
-  DisplayTextToPlayer(GetLocalPlayer(), 0, 0, `error in ${handler}: ${message}`);
+  if (configuration.errorsOnScreen !== false) DisplayTextToPlayer(GetLocalPlayer(), 0, 0, `error in ${handler}: ${message}`);
   PreloadGenClear();
   PreloadGenStart();
   Preload(errorHeading(state.count, handler));

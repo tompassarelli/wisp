@@ -65,6 +65,7 @@ export class Lockstep {
       const slot = options.players[index] ?? index;
       clients.push(new HeadlessClient({
         slot,
+        filePrefix: options.filePrefix,
         humans: options.players,
         declarations: options.declarations,
         localNatives,

@@ -7,8 +7,10 @@ declare global {
   var __fixtureTicks: number | undefined;
 }
 
+const FIXTURE = { filePrefix: "fixture", readyPrefix: "FX_HRR", globalPrefix: "__fixture" };
+
 export function install(): void {
-  configureRuntime({ filePrefix: "fixture", readyPrefix: "FX_HRR", globalPrefix: "__fixture" });
+  configureRuntime(FIXTURE);
   installDispatch();
   installHotReload();
   on("fixture.tick", () => { globalThis.__fixtureTicks = (globalThis.__fixtureTicks ?? 0) + 1; });
@@ -20,4 +22,5 @@ export function start(): void {
 }
 
 export const tick = () => trampoline("fixture.tick")();
-export const fail = () => reportError("fixture.tick", "fixture failure", "");
+export const fail = (message = "fixture failure") => reportError("fixture.tick", message, "");
+export const showErrors = (errorsOnScreen: boolean) => configureRuntime({ ...FIXTURE, errorsOnScreen });

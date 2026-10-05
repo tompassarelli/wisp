@@ -4,6 +4,12 @@ export interface RuntimeConfiguration {
   /** Prefix of the synchronized messages in which clients answer each hot reload. */
   readonly readyPrefix: string;
   readonly globalPrefix: string;
+  /**
+   * Whether an error report is also displayed on screen as `error in HANDLER: ...`.
+   * Default true. A shipped build sets false so players never read handler names or
+   * script positions; the report still reaches the error file `wisp hot` reads.
+   */
+  readonly errorsOnScreen?: boolean;
 }
 
 let configuration: RuntimeConfiguration = {
