@@ -7,14 +7,31 @@
 import { statSync } from "node:fs";
 import { normalize, resolve } from "node:path";
 import ts from "typescript";
+import type { SourceNode } from "source-map";
 import { Transpiler, parseConfigFileWithSystem } from "typescript-to-lua";
 import { getPlugins } from "typescript-to-lua/dist/transpilation/plugins";
 import { getProgramTranspileResult } from "typescript-to-lua/dist/transpilation/transpile";
 import type { ProcessedFile } from "typescript-to-lua/dist/transpilation/utils";
 
+interface CachedModule {
+  readonly file: ProcessedFile;
+  readonly sourceMapChildren: readonly { readonly node: SourceNode; readonly children: SourceNode[] }[];
+}
+
+/** TSTL 1.37.1 rewrites requires by replacing a source-map node's children. */
+function cacheModule(file: ProcessedFile): CachedModule {
+  const sourceMapChildren: { readonly node: SourceNode; readonly children: SourceNode[] }[] = [];
+  function visit(node: SourceNode): void {
+    sourceMapChildren.push({ node, children: node.children });
+    for (const child of node.children) if (typeof child !== "string") visit(child);
+  }
+  if (file.sourceMapNode !== undefined) visit(file.sourceMapNode);
+  return { file, sourceMapChildren };
+}
+
 class IncrementalTranspiler extends Transpiler {
-  /** Each module's Lua as first printed; bundling rewrites requires, so it only ever sees copies. */
-  private readonly modules = new Map<string, ProcessedFile>();
+  /** Preserve each module as first printed; emission copies code and restores tree rewrites. */
+  private readonly modules = new Map<string, CachedModule>();
 
   compile(program: ts.Program, affected: readonly ts.SourceFile[]): readonly ts.Diagnostic[] {
     const started = performance.now();
@@ -25,18 +42,28 @@ class IncrementalTranspiler extends Transpiler {
     const { diagnostics, transpiledFiles } = getProgramTranspileResult(this.emitHost, writeFile, { program, plugins, sourceFiles: [...affected] });
     if (diagnostics.length > 0) return diagnostics;
     const transpileDone = performance.now();
-    for (const file of transpiledFiles) this.modules.set(file.fileName, file);
+    for (const file of transpiledFiles) this.modules.set(file.fileName, cacheModule(file));
     const ordered: ProcessedFile[] = [];
     const live = new Set<string>();
     for (const source of program.getSourceFiles()) {
       const name = normalize(source.fileName);
       live.add(name);
       const module = this.modules.get(name);
-      if (module !== undefined) ordered.push({ ...module });
+      if (module !== undefined) ordered.push({ ...module.file });
     }
     for (const name of this.modules.keys()) if (!live.has(name)) this.modules.delete(name);
     const planDiagnostics: ts.Diagnostic[] = [];
-    const { emitPlan } = this.getEmitPlan(program, planDiagnostics, ordered, plugins);
+    let plan: ReturnType<IncrementalTranspiler["getEmitPlan"]>;
+    try {
+      plan = this.getEmitPlan(program, planDiagnostics, ordered, plugins);
+    } finally {
+      // Bundling is synchronous and has finished reading these trees. Restore
+      // the original requires before the next emission reuses unchanged modules.
+      for (const module of this.modules.values()) {
+        for (const { node, children } of module.sourceMapChildren) node.children = children;
+      }
+    }
+    const { emitPlan } = plan;
     if (planDiagnostics.length > 0) return planDiagnostics;
     const planDone = performance.now();
     const { sourceMap: writeSourceMap = false, emitBOM = false } = program.getCompilerOptions();

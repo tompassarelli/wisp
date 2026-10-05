@@ -37,6 +37,11 @@ waygate:scripts/waygate/; the compiler plugin is
 waygate:plugins/warcraft-numbers.ts. Focused tests are under waygate:test/.
 Generated bundles and checker caches stay in waygate:build/.
 
+The warm compiler rechecks and translates affected modules, then rebuilds the
+bundle in program order. It preserves printed Lua and source-map trees between
+compiles. Dependency resolution temporarily rewrites requires in those trees;
+the compiler restores their original child arrays after synchronous bundling.
+
 ## Consume a pinned revision
 
 Smashcraft records an immutable Waygate commit and consumes its generated
