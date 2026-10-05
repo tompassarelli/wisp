@@ -1,6 +1,6 @@
 // SourceErrors: runtime errors the game reports, with their Lua positions
 // mapped back to TypeScript lines. Every bundle that can run in a client keeps
-// its source map (waygate:scripts/sourceMaps.ts) under its payload key.
+// its source map (wisp:scripts/sourceMaps.ts) under its payload key.
 import { join } from "node:path";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { errorFile, errorHeading } from "../../src/runtime/gameFiles";
@@ -40,8 +40,8 @@ export class SourceErrors extends Context.Service<SourceErrors, {
   readonly retain: (bundlePath: string, key: string) => Effect.Effect<void, SourceMapFailure>;
   /** Reports in these CustomMapData folders that are new or changed since the previous look. */
   readonly changed: (directories: readonly string[]) => Effect.Effect<readonly SourceError[], GameFileFailure | MalformedGameFile | SourceMapFailure>;
-}>()("waygate/SourceErrors") {
-  static readonly layer = ({ sourceMapDirectory, filePrefix = "waygate" }: SourceErrorOptions) => Layer.effect(SourceErrors, Effect.gen(function*() {
+}>()("wisp/SourceErrors") {
+  static readonly layer = ({ sourceMapDirectory, filePrefix = "wisp" }: SourceErrorOptions) => Layer.effect(SourceErrors, Effect.gen(function*() {
     const files = yield* GameFiles;
     const seen = new Map<string, string>();
     return SourceErrors.of({

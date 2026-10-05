@@ -1,5 +1,5 @@
 // Runtime errors from engine callbacks. Each is shown in game and written to a
-// file where `waygate hot` maps its Lua positions back to TypeScript lines.
+// file where `wisp hot` maps its Lua positions back to TypeScript lines.
 // A broken per-frame handler fails every frame, so a message is written only
 // when it differs from the previous one.
 import { errorFile, errorHeading } from "../runtime/gameFiles";
@@ -23,16 +23,16 @@ interface ShadowStack extends StackFrames {
 }
 
 declare global {
-  var __waygateStack: ShadowStack | undefined;
+  var __wispStack: ShadowStack | undefined;
 }
 
 /** The callback boundary restores this depth after Lua unwinds a failed call. */
 export function stackDepth(): number {
-  return globalThis.__waygateStack?.depth ?? 0;
+  return globalThis.__wispStack?.depth ?? 0;
 }
 
 export function restoreStack(depth: number): void {
-  const stack = globalThis.__waygateStack;
+  const stack = globalThis.__wispStack;
   if (stack === undefined) return;
   stack.depth = depth;
   stack.failure = undefined;
@@ -51,7 +51,7 @@ function describe(error: unknown): string {
 
 /** Compiler-recorded TypeScript frames work in Warcraft without Lua's debug library. */
 export function traceback(error?: unknown): string {
-  const stack = globalThis.__waygateStack;
+  const stack = globalThis.__wispStack;
   if (stack !== undefined) {
     const frames = stack.failure !== undefined && stack.failure.error === error ? stack.failure : stack;
     const lines: string[] = [];

@@ -2,7 +2,7 @@
 // (#36). Each client gets every payload file before the manifest that names
 // them; the game installs the bundle in all clients on one frame or in none,
 // and each client acknowledges the version it installed. Versions continue
-// from the newest manifest on disk, so Waygate and the match can each restart
+// from the newest manifest on disk, so Wisp and the match can each restart
 // without losing track.
 import { join } from "node:path";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
@@ -35,9 +35,9 @@ export type HotReloadFailure = CompileFailure | MapBuildFailure | SourceMapFailu
 export class HotReload extends Context.Service<HotReload, {
   /** Compiles the bundle, publishes it to every client and waits for each to install it. Returns its version. */
   readonly publish: Effect.Effect<number, HotReloadFailure>;
-}>()("waygate/HotReload") {
+}>()("wisp/HotReload") {
   /** Publishes into these clients' CustomMapData folders. */
-  static readonly layer = (directories: readonly [string, ...string[]], filePrefix = "waygate") => Layer.effect(HotReload, Effect.gen(function*() {
+  static readonly layer = (directories: readonly [string, ...string[]], filePrefix = "wisp") => Layer.effect(HotReload, Effect.gen(function*() {
     const files = yield* GameFiles;
     const build = yield* MapBuild;
     const published = yield* Effect.forEach(directories, (directory) =>

@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "waygate",
+      "name": "wisp",
       "dependencies": {
         "effect": "4.0.1",
         "source-map": "0.7.6",

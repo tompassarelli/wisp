@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Exit, Layer } from "effect";
 import { TestClock } from "effect/testing";
-import { runHotWatch } from "../scripts/waygate/commands/hot";
-import { type DesyncReport, Desyncs, PARTNER_WAIT_MILLIS, decodeDesyncSummary, divergedValues, formatDesync } from "../scripts/waygate/desyncs";
-import { GameFiles, type StoredFile } from "../scripts/waygate/gameFiles";
+import { runHotWatch } from "../scripts/wisp/commands/hot";
+import { type DesyncReport, Desyncs, PARTNER_WAIT_MILLIS, decodeDesyncSummary, divergedValues, formatDesync } from "../scripts/wisp/desyncs";
+import { GameFiles, type StoredFile } from "../scripts/wisp/gameFiles";
 
 // The observed Desync.txt grammar, without the machine description around it.
 // Values are those of a native reload desync: one client allocated one more handle.
@@ -95,7 +95,7 @@ test("desync watcher reports a lone client's desync once its partner has had tim
 });
 
 test("hot watch prints a desync's diverged subsystem, turn and both clients' values within 1 s of the game writing it", async () => {
-  const root = mkdtempSync(join(tmpdir(), "waygate-desync-"));
+  const root = mkdtempSync(join(tmpdir(), "wisp-desync-"));
   const data = ["a", "b"].map((client) => join(root, client, "CustomMapData"));
   for (const directory of [...data, join(root, "source")]) mkdirSync(directory, { recursive: true });
   const write = (client: string, folder: string, text: string) => {

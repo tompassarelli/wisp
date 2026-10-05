@@ -1,4 +1,4 @@
-// Names and wire formats shared by Warcraft map code and Waygate host tools.
+// Names and wire formats shared by Warcraft map code and Wisp host tools.
 
 /** FileIO stores one chunk per tooltip level of its ability. */
 export const CHUNKS_PER_FILE = 64;
@@ -16,12 +16,12 @@ export const FILE_SLOTS = 4;
 // first read from that path for the rest of the Warcraft session. So no name is reused for
 // other content: manifests are numbered by a version that only rises and are never
 // removed, and payload files are named by their bundle's checksum.
-export const manifestFile = (version: number, prefix = "waygate") => `${prefix}-hot-manifest-${version}.pld`;
+export const manifestFile = (version: number, prefix = "wisp") => `${prefix}-hot-manifest-${version}.pld`;
 /** Names a bundle in file names and as its Lua chunk name, which error positions carry. */
 export const payloadKey = (payloadChecksum: string) => payloadChecksum.replace(":", "-");
-export const payloadFile = (payloadChecksum: string, index: number, prefix = "waygate") => `${prefix}-hot-${payloadKey(payloadChecksum)}-${index}.pld`;
-export const ackFile = (slot: number, prefix = "waygate") => `${prefix}-hot-ack-p${slot}.txt`;
-export const errorFile = (slot: number, prefix = "waygate") => `${prefix}-error-p${slot}.txt`;
+export const payloadFile = (payloadChecksum: string, index: number, prefix = "wisp") => `${prefix}-hot-${payloadKey(payloadChecksum)}-${index}.pld`;
+export const ackFile = (slot: number, prefix = "wisp") => `${prefix}-hot-ack-p${slot}.txt`;
+export const errorFile = (slot: number, prefix = "wisp") => `${prefix}-error-p${slot}.txt`;
 export interface Manifest {
   version: number;
   files: number;

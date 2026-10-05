@@ -1,9 +1,9 @@
-// What a Waygate command is: a program for its arguments, with the services it
+// What a Wisp command is: a program for its arguments, with the services it
 // uses provided. The consuming project selects its commands.
 import type { Effect } from "effect";
 import { Schema } from "effect";
 
-/** Arguments a command can't run with; Waygate prints the command's usage. */
+/** Arguments a command can't run with; Wisp prints the command's usage. */
 export class UsageFailure extends Schema.TaggedError<UsageFailure>()("UsageFailure", {
   problem: Schema.String,
 }) {

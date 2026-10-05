@@ -1,6 +1,6 @@
-// The typed boundary between Waygate and the game: every file either side
+// The typed boundary between Wisp and the game: every file either side
 // writes into CustomMapData for the other. Names and line formats come from
-// waygate:src/runtime/gameFiles.ts, which map code shares.
+// wisp:src/runtime/gameFiles.ts, which map code shares.
 //
 // The game writes Warcraft Preload files: a JASS function whose
 // `call Preload( "LINE" )` statements carry the text, with CRLF and tab
@@ -129,7 +129,7 @@ export const ErrorReport = preloadRecord(
 /** The slots whose per-slot files a client may write. */
 export const FILE_SLOT_NUMBERS: readonly number[] = Array.from({ length: FILE_SLOTS }, (_, slot) => slot);
 
-// ---------------------------------------------------------------- files Waygate writes
+// ---------------------------------------------------------------- files Wisp writes
 
 /** A Preload file whose execution stores one short line in the FileIO tooltip. */
 export function linePreloadFile(line: string): string {
@@ -167,12 +167,12 @@ export function payloadPieces(bytes: Uint8Array): Uint8Array[] {
 }
 
 /** The version a manifest file name carries; undefined for other names. */
-export function manifestVersion(name: string, prefix = "waygate"): number | undefined {
+export function manifestVersion(name: string, prefix = "wisp"): number | undefined {
   const version = /^hot-manifest-(\d+)\.pld$/.exec(name.startsWith(`${prefix}-`) ? name.slice(prefix.length + 1) : "")?.[1];
   return version === undefined ? undefined : Number(version);
 }
 
 /** The payload key a payload file name carries; undefined for other names. */
-export function payloadFileKey(name: string, prefix = "waygate"): string | undefined {
+export function payloadFileKey(name: string, prefix = "wisp"): string | undefined {
   return /^hot-(\d+-\d+)-\d+\.pld$/.exec(name.startsWith(`${prefix}-`) ? name.slice(prefix.length + 1) : "")?.[1];
 }

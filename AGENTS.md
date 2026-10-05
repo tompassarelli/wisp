@@ -1,13 +1,13 @@
-# Waygate
+# Wisp
 
 Before implementing a feature here or in a consuming map, consult the
-[feature index](docs/index.md) (waygate:docs/index.md) for existing capabilities
+[feature index](docs/index.md) (wisp:docs/index.md) for existing capabilities
 and opt-in setup, especially TypeScript stack traces.
 
-Waygate owns reusable Warcraft III TypeScript compilation, numeric guards,
+Wisp owns reusable Warcraft III TypeScript compilation, numeric guards,
 hot reload, runtime error reporting and host services. Its existing TypeScript
 source and immutable compiler/tool pins are declared in
-waygate:typescript-toolchain.lock. Use Bun. Keep Effect in host code;
+wisp:typescript-toolchain.lock. Use Bun. Keep Effect in host code;
 synchronized Lua code remains pure TypeScript and Warcraft native calls.
 
 Read warcraft-typescript-development-distilled and verification-distilled for

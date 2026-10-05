@@ -1,4 +1,4 @@
-// GameFiles: the client folders Waygate shares with the game. Files in a
+// GameFiles: the client folders Wisp shares with the game. Files in a
 // client's CustomMapData carry hot reloads, acknowledgements, error reports and
 // ready signals; its Maps folder takes the map a fresh match hosts.
 import { mkdirSync, readdirSync, renameSync, rmSync, copyFileSync } from "node:fs";
@@ -34,8 +34,8 @@ export class GameFiles extends Context.Service<GameFiles, {
   readonly remove: (path: string) => Effect.Effect<void, GameFileFailure>;
   /** Makes `map` the one map in the configured map folder of the client whose Documents/Warcraft III is `documents`. */
   readonly installMap: (documents: string, map: string) => Effect.Effect<void, GameFileFailure>;
-}>()("waygate/GameFiles") {
-  static readonly layer = (options: MapDirectories = { mapFolder: "Maps/00-Waygate", replacedMaps: "waygate-replaced-maps" }) => Layer.sync(GameFiles, () => GameFiles.of(local(options)));
+}>()("wisp/GameFiles") {
+  static readonly layer = (options: MapDirectories = { mapFolder: "Maps/00-Wisp", replacedMaps: "wisp-replaced-maps" }) => Layer.sync(GameFiles, () => GameFiles.of(local(options)));
 }
 
 /** A client's CustomMapData, given its Documents/Warcraft III folder. */

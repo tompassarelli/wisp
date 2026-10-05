@@ -4,9 +4,9 @@
 // supplied clients file.
 import { join } from "node:path";
 import { Clock, Effect, Exit, Schema } from "effect";
-import { describeCause } from "../waygate/command";
-import { captureProcess } from "../waygate/mapBuild";
-import { step } from "../waygate/timings";
+import { describeCause } from "../wisp/command";
+import { captureProcess } from "../wisp/mapBuild";
+import { step } from "../wisp/timings";
 import { inputBatches, type InputAction } from "./inputBatch";
 export type { InputAction } from "./inputBatch";
 
@@ -67,7 +67,7 @@ function run(client: string, operation: string, command: readonly string[], env:
     },
     catch: fail(operation, client),
   });
-  return process.env.WAYGATE_DESKTOP_TIMINGS === "1" ? effect.pipe(step(`${client}: ${operation}`)) : effect;
+  return process.env.WISP_DESKTOP_TIMINGS === "1" ? effect.pipe(step(`${client}: ${operation}`)) : effect;
 }
 
 const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes);

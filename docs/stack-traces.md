@@ -2,7 +2,7 @@
 
 Use this development diagnostic when an engine callback fails and its caller
 chain matters. Warcraft III omits Lua's `debug` library. Without instrumentation,
-a Lua runtime error can carry a Lua line that Waygate maps to TypeScript, but
+a Lua runtime error can carry a Lua line that Wisp maps to TypeScript, but
 there is no native callback stack; a thrown TypeScript `Error` has no source
 position by itself.
 
@@ -16,17 +16,17 @@ package root; adjust them for a configuration in a subdirectory.
 {
   "tstl": {
     "luaPlugins": [
-      { "name": "./node_modules/waygate/plugins/warcraft-numbers.ts" },
-      { "name": "./node_modules/waygate/plugins/stack-traces.ts" }
+      { "name": "./node_modules/wisp/plugins/warcraft-numbers.ts" },
+      { "name": "./node_modules/wisp/plugins/stack-traces.ts" }
     ]
   }
 }
 ```
 
 Recompile, then hot reload the bundle or rebuild the map. Callback errors must
-pass through Waygate's `on()`/`trampoline()` dispatch boundary with
+pass through Wisp's `on()`/`trampoline()` dispatch boundary with
 `installDispatch()` installed; see [hot reload](hot-reload.md)
-(waygate:docs/hot-reload.md). Adding the plugin does not wrap arbitrary native
+(wisp:docs/hot-reload.md). Adding the plugin does not wrap arbitrary native
 callbacks that bypass that boundary.
 
 The compiler records TypeScript file, statement line and function name directly.
@@ -39,13 +39,13 @@ test/stack/entry.ts:10: in invoke
 test/stack/entry.ts:14: in nested
 ```
 
-The example paths are compiler output from waygate:test/stack/entry.ts. The game
+The example paths are compiler output from wisp:test/stack/entry.ts. The game
 displays the error message and writes the detailed report to CustomMapData.
 The consumer's hot watcher prints that report. Compiler-recorded frames already
 contain TypeScript positions; ordinary `map-KEY:LINE` and `hot-KEY:LINE` Lua
 positions use retained source maps through
-[SourceErrors](../scripts/waygate/sourceErrors.ts)
-(waygate:scripts/waygate/sourceErrors.ts). Keep maps for bundles that can still
+[SourceErrors](../scripts/wisp/sourceErrors.ts)
+(wisp:scripts/wisp/sourceErrors.ts). Keep maps for bundles that can still
 run so old reports remain resolvable.
 
 ## Cost and scope
@@ -68,4 +68,4 @@ callback contract.
 
 Implementation: [compiler plugin](../plugins/stack-traces.ts) and
 [runtime reporter](../src/platform/errors.ts)
-(waygate:plugins/stack-traces.ts, waygate:src/platform/errors.ts).
+(wisp:plugins/stack-traces.ts, wisp:src/platform/errors.ts).

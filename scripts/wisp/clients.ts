@@ -16,7 +16,7 @@ export class Clients extends Context.Service<Clients, {
   readonly keys: (client: Client, ...names: string[]) => Effect.Effect<void, desktop.DesktopFailure>;
   readonly typeText: (client: Client, value: string) => Effect.Effect<void, desktop.DesktopFailure>;
   readonly batch: (client: Client, actions: readonly desktop.InputAction[]) => Effect.Effect<void, desktop.DesktopFailure>;
-}>()("waygate/Clients") {
+}>()("wisp/Clients") {
   static readonly layer = (path: string) => Layer.effect(Clients, connect(path));
 }
 

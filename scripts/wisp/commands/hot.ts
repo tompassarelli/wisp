@@ -1,4 +1,4 @@
-// `waygate hot`: publishes the map bundle to running clients and reports how
+// `wisp hot`: publishes the map bundle to running clients and reports how
 // long the change took to run in every client. With --watch it publishes every
 // saved change and prints in-game errors with TypeScript lines and the
 // engine values that diverged in a Warcraft desync.
@@ -25,7 +25,7 @@ export const validateDataDirectories = (input: readonly string[]) =>
     Effect.mapError((cause) => new UsageFailure({ problem: `--data needs one or more distinct client CustomMapData folders: ${cause.message}` })),
   );
 
-export const makeHot = ({ project, sourceDirectory, sourceMapDirectory, filePrefix = "waygate" }: HotProject): Command => (args) => Effect.gen(function*() {
+export const makeHot = ({ project, sourceDirectory, sourceMapDirectory, filePrefix = "wisp" }: HotProject): Command => (args) => Effect.gen(function*() {
   const directories = yield* validateDataDirectories(flagValues(args, "data"));
   const services = HotReload.layer(directories, filePrefix).pipe(
     Layer.provideMerge(MapBuild.layer(project)),
@@ -37,7 +37,7 @@ export const makeHot = ({ project, sourceDirectory, sourceMapDirectory, filePref
     const reload = yield* HotReload;
     const sourceErrors = yield* SourceErrors;
     const desyncs = yield* Desyncs;
-    // Reports from before Waygate started are old news.
+    // Reports from before Wisp started are old news.
     yield* sourceErrors.changed(directories);
     if (!args.includes("--watch")) {
       yield* reload.publish;

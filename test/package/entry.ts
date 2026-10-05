@@ -1,11 +1,11 @@
-import { configureRuntime } from "waygate/src/runtime/config";
-import { installDispatch, on, trampoline } from "waygate/src/platform/dispatch";
-import { reportError } from "waygate/src/platform/errors";
-import { installHotReload, startHotReload } from "waygate/src/platform/hotReload";
-import { assertEquals } from "waygate/src/runtime/testing";
-import { floorDiv, idiv, imod } from "waygate/src/sim/intMath";
-import { f32 } from "waygate/src/sim/f32";
-import { multiplyFloat32 } from "waygate/src/sim/binary32";
+import { configureRuntime } from "wisp/src/runtime/config";
+import { installDispatch, on, trampoline } from "wisp/src/platform/dispatch";
+import { reportError } from "wisp/src/platform/errors";
+import { installHotReload, startHotReload } from "wisp/src/platform/hotReload";
+import { assertEquals } from "wisp/src/runtime/testing";
+import { floorDiv, idiv, imod } from "wisp/src/sim/intMath";
+import { f32 } from "wisp/src/sim/f32";
+import { multiplyFloat32 } from "wisp/src/sim/binary32";
 
 declare global {
   var __fixtureTicks: number | undefined;

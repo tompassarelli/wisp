@@ -4,15 +4,15 @@ import { join } from "node:path";
 import { Cause, Clock, Effect, Exit, Fiber, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { expect, test } from "bun:test";
-import { Acknowledgement, ErrorReport, manifestVersion, payloadFileKey, preloadRecord } from "../scripts/waygate/boundary";
-import { validateDataDirectories } from "../scripts/waygate/commands/hot";
-import { GameFiles } from "../scripts/waygate/gameFiles";
-import { HotReload } from "../scripts/waygate/hotReload";
-import { MapBuild, freshBundleAge, type CompiledBundle } from "../scripts/waygate/mapBuild";
-import { SourceErrors } from "../scripts/waygate/sourceErrors";
+import { Acknowledgement, ErrorReport, manifestVersion, payloadFileKey, preloadRecord } from "../scripts/wisp/boundary";
+import { validateDataDirectories } from "../scripts/wisp/commands/hot";
+import { GameFiles } from "../scripts/wisp/gameFiles";
+import { HotReload } from "../scripts/wisp/hotReload";
+import { MapBuild, freshBundleAge, type CompiledBundle } from "../scripts/wisp/mapBuild";
+import { SourceErrors } from "../scripts/wisp/sourceErrors";
 import { SourceMapGenerator } from "source-map";
 import { toTypeScript } from "../scripts/sourceMaps";
-const fixture = (name: string) => readFileSync(join(import.meta.dir, "fixtures/waygate", name), "utf8");
+const fixture = (name: string) => readFileSync(join(import.meta.dir, "fixtures/wisp", name), "utf8");
 test("Preload records decode final assignments and hyphenated keys without including their key", async () => {
   const kind = preloadRecord({ head: ["received-mask={mask} frame={frame}"] }, Schema.Struct({ mask: Schema.FiniteFromString, frame: Schema.FiniteFromString }));
   const text = 'function PreloadFiles takes nothing returns nothing\ncall Preload( "received-mask=3 frame=417" )\nendfunction\n';
@@ -98,7 +98,7 @@ test("hot reload requires distinct non-empty client data directories", async () 
 });
 
 test("map rebuild reuses the bundle only while it is newer than every compile input", () => {
-  const root = mkdtempSync(join(tmpdir(), "waygate-fresh-"));
+  const root = mkdtempSync(join(tmpdir(), "wisp-fresh-"));
   const src = join(root, "src");
   mkdirSync(join(src, "game"), { recursive: true });
   const source = join(src, "game", "a.ts");
@@ -115,7 +115,7 @@ test("map rebuild reuses the bundle only while it is newer than every compile in
 });
 
 test("source maps stay in each consumer build directory even when payload keys match", async () => {
-  const root = mkdtempSync(join(tmpdir(), "waygate-source-maps-"));
+  const root = mkdtempSync(join(tmpdir(), "wisp-source-maps-"));
   const key = "101-24";
   for (const name of ["first", "second"]) {
     const directory = join(root, name);
@@ -146,7 +146,7 @@ test("source maps stay in each consumer build directory even when payload keys m
 
 test("manifest and payload parsing selects only the requested project prefix", () => {
   expect(manifestVersion("custom-hot-manifest-17.pld", "custom")).toBe(17);
-  expect(manifestVersion("waygate-hot-manifest-17.pld", "custom")).toBeUndefined();
+  expect(manifestVersion("wisp-hot-manifest-17.pld", "custom")).toBeUndefined();
   expect(payloadFileKey("custom-hot-101-24-0.pld", "custom")).toBe("101-24");
   expect(payloadFileKey("other-hot-101-24-0.pld", "custom")).toBeUndefined();
 });

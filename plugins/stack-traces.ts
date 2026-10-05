@@ -10,17 +10,17 @@ const id = lua.createIdentifier;
 const str = lua.createStringLiteral;
 const num = lua.createNumericLiteral;
 const get = (target: lua.Expression, key: string | lua.Expression) => lua.createTableIndexExpression(target, typeof key === "string" ? str(key) : key);
-const state = () => id("____waygateStack");
+const state = () => id("____wispStack");
 const field = (name: string) => get(state(), name);
 const set = (left: lua.AssignmentLeftHandSideExpression, right: lua.Expression) => lua.createAssignmentStatement(left, right);
 const call = (name: string, args: lua.Expression[]) => lua.createCallExpression(id(name), args);
 const plus = (left: lua.Expression, right: lua.Expression) => lua.createBinaryExpression(left, right, lua.SyntaxKind.AdditionOperator);
-const slot = () => plus(id("____waygateBase"), num(1));
+const slot = () => plus(id("____wispBase"), num(1));
 const reporters = new Set(["errors", "dispatch"].map((name) => resolve(import.meta.dir, `../src/platform/${name}.ts`)));
 
 /** Shared across modules and hot reloads; frame strings are compiler constants. */
 function prelude(): lua.Statement[] {
-  const global = get(id("_G"), "__waygateStack");
+  const global = get(id("_G"), "__wispStack");
   const empty = lua.createTableExpression([
     lua.createTableFieldExpression(num(0), str("depth")),
     lua.createTableFieldExpression(lua.createTableExpression(), str("frames")),
@@ -55,8 +55,8 @@ function prelude(): lua.Statement[] {
   return [
     lua.createVariableDeclarationStatement(state(), lua.createBinaryExpression(global, empty, lua.SyntaxKind.OrOperator)),
     set(global, state()),
-    lua.createVariableDeclarationStatement(id("____waygateReturn"), finish),
-    lua.createVariableDeclarationStatement(id("____waygateProtectedReturn"), protectedFinish),
+    lua.createVariableDeclarationStatement(id("____wispReturn"), finish),
+    lua.createVariableDeclarationStatement(id("____wispProtectedReturn"), protectedFinish),
   ];
 }
 
@@ -115,23 +115,23 @@ function instrument(file: lua.File, frames: ReadonlyMap<string, Frame>): void {
       if (own !== undefined) {
         node.flags &= ~lua.NodeFlags.Inline;
         node.body.statements.unshift(
-          lua.createVariableDeclarationStatement(id("____waygateBase"), field("depth")),
+          lua.createVariableDeclarationStatement(id("____wispBase"), field("depth")),
           set(field("depth"), slot()),
           location(own),
         );
         const last = node.body.statements.at(-1);
         if (last === undefined || !lua.isReturnStatement(last)) {
-          node.body.statements.push(set(field("depth"), id("____waygateBase")));
+          node.body.statements.push(set(field("depth"), id("____wispBase")));
         }
       }
       return node;
     }
     children(node, (child) => visit(child, frame));
     if (lua.isCallExpression(node) && lua.isIdentifier(node.expression) && ["pcall", "xpcall"].includes(node.expression.text)) {
-      return lua.setNodePosition(call("____waygateProtectedReturn", [field("depth"), node]), node);
+      return lua.setNodePosition(call("____wispProtectedReturn", [field("depth"), node]), node);
     }
     if (frame !== undefined && lua.isReturnStatement(node)) {
-      node.expressions = [call("____waygateReturn", [id("____waygateBase"), ...node.expressions])];
+      node.expressions = [call("____wispReturn", [id("____wispBase"), ...node.expressions])];
     }
     if (frame !== undefined && (lua.isBlock(node) || lua.isDoStatement(node))) {
       node.statements = node.statements.flatMap((statement) => {

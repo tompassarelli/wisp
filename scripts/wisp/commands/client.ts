@@ -1,4 +1,4 @@
-// `waygate client look|read|click|keys CLIENT ...`: reads and drives one
+// `wisp client look|read|click|keys CLIENT ...`: reads and drives one
 // signed-in client on its private desktop.
 //   look CLIENT [gold]          words on screen with positions
 //   read CLIENT X Y W H [gold]  text in one region

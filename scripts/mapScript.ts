@@ -43,7 +43,7 @@ export function typescriptBase(baseMapScript: string, mapConfig: string): string
 }
 
 /** The base, then the bundle, started after terrain initialization. */
-export function composeScript(base: string, bundle: Bundle | undefined, entryGlobal = "waygateTs"): string {
+export function composeScript(base: string, bundle: Bundle | undefined, entryGlobal = "wispTs"): string {
   if (bundle === undefined) throw new Error("a map needs the TypeScript bundle");
   if (!/^function mapConfig\(\)/m.test(base)) throw new Error("base script does not define mapConfig()");
   const [open, close] = longBrackets(bundle.text);

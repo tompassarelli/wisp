@@ -4,7 +4,7 @@ Use hot reload for TypeScript behavior changes during a running match. Changes
 to archived assets, object types or art need a rebuilt map and a fresh match.
 Runtime-settable object fields can change on retained engine handles: the
 consumer reapplies its declared values with supported native setters during
-synchronized `install()`. Waygate does not own those game-specific declarations
+synchronized `install()`. Wisp does not own those game-specific declarations
 or automatically apply them.
 
 Smashcraft is a consumer example: its [object-data declaration documentation](https://github.com/tompassarelli/smashcraft/blob/main/docs/typescript.md#build-the-map)
@@ -16,7 +16,7 @@ covers updating fields on retained handles without rehosting.
 
 Bind engine callbacks once with `trampoline(name)` and register their current
 behavior with `on(name, handler)` from
-[dispatch](../src/platform/dispatch.ts) (waygate:src/platform/dispatch.ts).
+[dispatch](../src/platform/dispatch.ts) (wisp:src/platform/dispatch.ts).
 The bundle exports `install()`; each installation calls `installDispatch()`,
 re-registers handlers and calls `installHotReload()`. At initial match startup,
 call `startHotReload(hostSlot, localSlot)` once to create its timer and triggers.
@@ -27,12 +27,12 @@ If the state shape changes, migrate it deliberately or start a fresh match.
 Call `configureRuntime()` before installing handlers in every bundle, keeping
 its file/message/global prefixes stable across that match. See
 [runtime configuration](../src/runtime/config.ts)
-(waygate:src/runtime/config.ts).
+(wisp:src/runtime/config.ts).
 
 ## Host integration
 
-Compose [makeHot](../scripts/waygate/commands/hot.ts)
-(waygate:scripts/waygate/commands/hot.ts) with the consuming project's
+Compose [makeHot](../scripts/wisp/commands/hot.ts)
+(wisp:scripts/wisp/commands/hot.ts) with the consuming project's
 `BuildProject`, source directory, retained-source-map directory and matching
 file prefix. Its command takes one `--data` CustomMapData directory per client;
 `--watch` publishes saved changes and prints new error and [desync](#desync-reports) reports.
@@ -44,8 +44,8 @@ refuse that version. A refusal leaves the previous installed code in place.
 Successful installation preserves the game's global state and existing handles.
 
 See [runtime](../src/platform/hotReload.ts) and
-[host service](../scripts/waygate/hotReload.ts)
-(waygate:src/platform/hotReload.ts, waygate:scripts/waygate/hotReload.ts).
+[host service](../scripts/wisp/hotReload.ts)
+(wisp:src/platform/hotReload.ts, wisp:scripts/wisp/hotReload.ts).
 
 ## Desync reports
 
@@ -58,7 +58,7 @@ and lists the engine's checksums and handle counters, such as
 5 October 2026 native desync (build 24268) wrote theirs 2 ms apart.
 
 `--watch` compares the clients' new reports with
-[Desyncs](../scripts/waygate/desyncs.ts) (waygate:scripts/waygate/desyncs.ts)
+[Desyncs](../scripts/wisp/desyncs.ts) (wisp:scripts/wisp/desyncs.ts)
 and prints each desync once, numbering clients in `--data` order:
 
 ```text
@@ -70,4 +70,4 @@ native desyncs recorded on build 24268 differed in the tempest checksum; seven
 also differed in the next birth tag, which advances as a client creates
 handles. Warcraft also appends four-character-coded records of the last three
 turns to `Logs/<account>_<date>_<time>_Desync.log`, one file per game process
-across all its games; Waygate does not read that file.
+across all its games; Wisp does not read that file.

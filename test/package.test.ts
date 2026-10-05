@@ -11,14 +11,14 @@ test("installed package resolves bare imports and preserves Lua32 numeric/reload
   await mkdir(join(root, "build"), { recursive: true });
   const fixture = await mkdtemp(join(root, "build/package-consumer-"));
   try {
-    const archive = join(fixture, "waygate.tgz");
+    const archive = join(fixture, "wisp.tgz");
     await producePackage(archive);
-    await Bun.write(join(fixture, "package.json"), JSON.stringify({ private: true, dependencies: { waygate: "file:./waygate.tgz" } }));
+    await Bun.write(join(fixture, "package.json"), JSON.stringify({ private: true, dependencies: { wisp: "file:./wisp.tgz" } }));
     for (const file of ["entry.ts", "tsconfig.json"]) await copyFile(join(import.meta.dir, "package", file), join(fixture, file));
     const install = Bun.spawnSync([process.execPath, "install", "--offline", "--ignore-scripts", "--silent"], { cwd: fixture, stdout: "pipe", stderr: "pipe" });
     expect({ code: install.exitCode, stderr: install.stderr.toString().replace(/bun install[^\n]*\n|Saved lockfile\n/g, "") }).toEqual({ code: 0, stderr: "" });
-    expect(await Bun.file(join(fixture, "node_modules/waygate/src/platform/hotReload.lua")).exists()).toBe(true);
-    const host = Bun.spawnSync([process.execPath, "-e", "import { idiv } from 'waygate/src/sim/intMath'; import { mapCompiler } from 'waygate/scripts/compiler'; if (idiv(-2000000000, 3) !== -666666666 || typeof mapCompiler !== 'function') throw new Error('installed host import failed');"], { cwd: fixture, stdout: "pipe", stderr: "pipe" });
+    expect(await Bun.file(join(fixture, "node_modules/wisp/src/platform/hotReload.lua")).exists()).toBe(true);
+    const host = Bun.spawnSync([process.execPath, "-e", "import { idiv } from 'wisp/src/sim/intMath'; import { mapCompiler } from 'wisp/scripts/compiler'; if (idiv(-2000000000, 3) !== -666666666 || typeof mapCompiler !== 'function') throw new Error('installed host import failed');"], { cwd: fixture, stdout: "pipe", stderr: "pipe" });
     expect({ code: host.exitCode, stderr: host.stderr.toString() }).toEqual({ code: 0, stderr: "" });
     const { diagnostics } = transpileProject(join(fixture, "tsconfig.json"));
     expect(report(diagnostics)).toBe("");

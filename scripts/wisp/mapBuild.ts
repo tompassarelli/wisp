@@ -86,7 +86,7 @@ export class MapBuild extends Context.Service<MapBuild, {
   readonly build: (options: BuildOptions) => Effect.Effect<void, BuildFailure>;
   /** Replaces only war3map.lua of a map built by `build`. */
   readonly rebuild: (map: string, packager?: string) => Effect.Effect<void, BuildFailure>;
-}>()("waygate/MapBuild") {
+}>()("wisp/MapBuild") {
   static layer(project: BuildProject) {
     const { configPath, bundlePath, compileInputs } = project;
     return Layer.effect(MapBuild, Effect.gen(function*() {

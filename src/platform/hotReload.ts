@@ -1,5 +1,5 @@
 // Development hot reload. The host client polls for the next manifest
-// `waygate hot` writes into CustomMapData and announces it in a synchronized
+// `wisp hot` writes into CustomMapData and announces it in a synchronized
 // message. Every client reads its own copy, verifies and loads it, and
 // broadcasts whether it is ready. When the last answer arrives, all clients
 // install the bundle on that same frame, or all refuse it, so a file problem

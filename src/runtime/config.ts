@@ -7,10 +7,10 @@ export interface RuntimeConfiguration {
 }
 
 let configuration: RuntimeConfiguration = {
-  filePrefix: "waygate",
-  announcePrefix: "WG_HR",
-  readyPrefix: "WG_HRR",
-  globalPrefix: "__waygate",
+  filePrefix: "wisp",
+  announcePrefix: "WS_HR",
+  readyPrefix: "WS_HRR",
+  globalPrefix: "__wisp",
 };
 
 /** Call before installing handlers in every bundle. Retain these values across live reloads. */

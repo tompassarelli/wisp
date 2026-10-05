@@ -1,10 +1,10 @@
-// Waygate measures itself with Effect spans. A step is a span marked as one;
+// Wisp measures itself with Effect spans. A step is a span marked as one;
 // when it ends, the tracer prints its end time from the start of its outermost
 // step and its own duration. Span times come from the Effect Clock, so a test
 // clock drives them too.
 import { Cause, Effect, Exit, Layer, Option, Tracer } from "effect";
 
-const STEP = "waygate.step";
+const STEP = "wisp.step";
 
 /**
  * Runs `effect` as a step. A root step starts its own timeline, as each hot

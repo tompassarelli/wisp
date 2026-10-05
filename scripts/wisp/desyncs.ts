@@ -82,7 +82,7 @@ interface Pending { readonly client: number; readonly path: string; readonly sum
 export class Desyncs extends Context.Service<Desyncs, {
   /** A desync every client has reported since the previous look; undefined until there is one. */
   readonly changed: Effect.Effect<DesyncReport | undefined, GameFileFailure | MalformedGameFile>;
-}>()("waygate/Desyncs") {
+}>()("wisp/Desyncs") {
   static readonly layer = (dataDirectories: readonly string[]) => Layer.effect(Desyncs, Effect.gen(function*() {
     const files = yield* GameFiles;
     const directories = dataDirectories.map((directory) => join(dirname(directory), "Errors"));

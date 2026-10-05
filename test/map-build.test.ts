@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit } from "effect";
 import { expect, test } from "bun:test";
-import { runProcess, stageMap, verifyToolchain } from "../scripts/waygate/mapBuild";
+import { runProcess, stageMap, verifyToolchain } from "../scripts/wisp/mapBuild";
 import { composeScript, typescriptBase } from "../scripts/mapScript";
 
 const project = join(import.meta.dir, "..");
@@ -19,14 +19,14 @@ test("a TypeScript-only map starts the TypeScript entry with its own config, bef
   expect(base).not.toMatch(/^RunInitializationTriggers\(\)$/m);
   for (const candidate of [bundle, { ...bundle, key: "3-4" }]) {
     const script = composeScript(base, candidate);
-    expect(script).toContain(`function main()\n    baseMain()\n    waygateTs.start("${candidate.key}")\nend`);
+    expect(script).toContain(`function main()\n    baseMain()\n    wispTs.start("${candidate.key}")\nend`);
     expect(script).toContain("function config()\n    mapConfig()\nend");
   }
   expect(() => composeScript(base, undefined)).toThrow();
 });
 
 test("a failed map step removes the staged copy and keeps the previous map", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "waygate-stage-"));
+  const directory = mkdtempSync(join(tmpdir(), "wisp-stage-"));
   const map = join(directory, "map.w3x");
   writeFileSync(map, "previous");
   const exit = await Effect.runPromiseExit(stageMap(map, map, (staged) => Effect.gen(function*() {
@@ -39,7 +39,7 @@ test("a failed map step removes the staged copy and keeps the previous map", asy
 });
 
 test("interrupting a map step stops its child process", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "waygate-process-"));
+  const directory = mkdtempSync(join(tmpdir(), "wisp-process-"));
   const pidFile = join(directory, "pid");
   const exit = await Effect.runPromiseExit(
     runProcess("sleep", directory, ["sh", "-c", `echo $$ > ${pidFile}; exec sleep 30`]).pipe(Effect.timeout("200 millis")),
