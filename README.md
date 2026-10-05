@@ -39,7 +39,9 @@ payload checks; an ordinary 64-bit Lua is a different runtime.
 
 Source is under wisp:src/; Bun host services are under
 wisp:scripts/wisp/; the compiler plugin is
-wisp:plugins/warcraft-numbers.ts. Focused tests are under wisp:test/.
+wisp:plugins/warcraft-numbers.ts, and its number rules
+(wisp:plugins/number-rules.ts) also run in `bun run check` and the editor.
+Focused tests are under wisp:test/.
 Generated bundles and checker caches stay in wisp:build/.
 
 The warm compiler rechecks and translates affected modules, then rebuilds the

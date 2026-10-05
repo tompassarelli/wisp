@@ -105,6 +105,10 @@ the declared and installed versions. Then:
 - in tsconfig.map.json and tsconfig.tests.json, set `rootDir` to `.`, name the
   natives `node_modules/wisp/src/natives/warcraft.d.ts` and the plugin
   `./node_modules/wisp/plugins/warcraft-numbers.ts`;
+- run the number rules in the project's type-check after `tsc --build`:
+  `bun node_modules/wisp/scripts/numberRules.ts tsconfig.map.json tsconfig.tests.json`;
+  for the editor, add the plugin entry from the [feature index](index.md)
+  to the tsconfig the editor uses for src/;
 - in scripts/sample.ts, make `root` the project root, compile inputs
   `src` and `node_modules/wisp/src`, and point `toolchainLockPath` at the
   project's own lock file;

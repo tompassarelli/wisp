@@ -6,7 +6,7 @@
   "packageManager": "bun@1.3.13",
   "scripts": {
     "postinstall": "bun node_modules/@effect/tsgo/dist/effect-tsgo.cjs patch --typescript --typescript-package typescript-native",
-    "check": "bun node_modules/typescript-native/bin/tsc --build tsconfig.json tsconfig.game.json examples/sample/tsconfig.json examples/sample/tsconfig.map.json examples/sample/tsconfig.tests.json --noEmit",
+    "check": "bun node_modules/typescript-native/bin/tsc --build tsconfig.json tsconfig.game.json examples/sample/tsconfig.json examples/sample/tsconfig.map.json examples/sample/tsconfig.tests.json --noEmit && bun scripts/numberRules.ts tsconfig.game.json examples/sample/tsconfig.map.json examples/sample/tsconfig.tests.json",
     "test": "bun test",
     "ci": "bun run check && bun run test",
     "package": "bun scripts/package.ts"
@@ -14,13 +14,13 @@
   "devDependencies": {
     "@effect/tsgo": "0.48.0",
     "@types/bun": "1.4.2",
-    "lua-types": "2.14.1",
-    "typescript-native": "npm:typescript@7.0.2"
+    "lua-types": "2.14.1"
   },
   "dependencies": {
     "effect": "4.0.1",
     "source-map": "0.7.6",
     "typescript": "6.0.2",
+    "typescript-native": "npm:typescript@7.0.2",
     "typescript-to-lua": "1.37.1"
   }
 }

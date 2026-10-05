@@ -30,7 +30,7 @@ does not ship, written for this comparison with the language's usual runner.
 | Edit running in a live game, 2 multiplayer clients | Yes: every client loads, verifies and installs on the same frame or none does. Smashcraft on Waygate dd4812f: 1.68 s from save to both acknowledgements, 6/6 checksums matched | No | No | No | No | Leads |
 | Error reports with source lines | Runtime fault: shown in game; its Lua position maps to `src/main.ts:49` through the retained source map. Thrown `Error`: shown in game and reported from its TypeScript throw site by default, `src/main.ts:48: Error: …` (Wisp a80f622); TypeScript stacks opt-in ([stack traces](stack-traces.md)) | Runtime fault: generated Lua line. `error()`: message and Wurst stack, `Sample, line 21`, on by default | None: errors escape uncaught; generated Lua line | None for natives' callbacks; debug wrappers cover WCSharp's own systems | Debug build: `main.lua:29`, no stack | Ties |
 | Desync detection | `hot --watch` names the subsystem each client's Desync.txt diverged in; the compiler rejects nondeterministic APIs | None | None | None | None | Leads |
-| Language server | TypeScript language service; Warcraft number-rule errors appear only when compiling | Wurst's own, in the compiler | TypeScript language service | C# (Roslyn) | None shipped | Ties |
+| Language server | TypeScript language service; Warcraft number-rule errors in `bun run check` and, through a plugin, the TypeScript 6 language service (TypeScript 7's language server loads no plugins) | Wurst's own, in the compiler | TypeScript language service | C# (Roslyn) | None shipped | Ties |
 
 Error reports come from a headless probe: each built map's war3map.lua ran in
 32-bit Lua 5.3 with stub natives declared by patch 3.0's common.j and

@@ -28,7 +28,8 @@
   },
   "include": [
     "src/**/*.ts",
-    "scripts/**/*.ts"
+    "scripts/**/*.ts",
+    "plugins/**/*.ts"
   ],
   "exclude": [
     "src/platform/**",

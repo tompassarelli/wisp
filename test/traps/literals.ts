@@ -9,3 +9,6 @@ export const half = 0.5;
 export const whole = 2.0;
 export const named = f32(0.1);
 export const namedNegative = f32(-(0.3));
+// Positions after non-ASCII text — counted in UTF-16 units, as editors do.
+export const labelled = ["½", 0.1]; // rejected
+export const labelledNamed = ["½", f32(0.1)];

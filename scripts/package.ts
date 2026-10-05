@@ -19,6 +19,22 @@ async function copyTree(source: string, destination: string): Promise<void> {
   }
 }
 
+/**
+ * Writes the editor plugin as CommonJS: tsserver runs in the editor's Node and
+ * `require`s a plugin, expecting the module itself to be its factory.
+ */
+export async function writeEditorPlugin(output: string): Promise<void> {
+  const result = await Bun.build({
+    entrypoints: [join(root, "plugins/number-rules-service.ts")],
+    format: "cjs",
+    target: "node",
+    footer: "module.exports = module.exports.default;",
+  });
+  const [bundle] = result.outputs;
+  if (!result.success || bundle === undefined) throw new Error(`editor plugin build failed: ${result.logs.join("\n")}`);
+  await Bun.write(output, bundle);
+}
+
 /** Writes a standard package tarball to the caller's exact output path. */
 export async function producePackage(output: string): Promise<void> {
   const target = resolve(output);
@@ -33,6 +49,7 @@ export async function producePackage(output: string): Promise<void> {
       if (["scripts", "plugins", "src", "native", "docs"].includes(path)) await copyTree(source, destination);
       else await copyFile(source, destination);
     }
+    await writeEditorPlugin(join(staging, "plugins/number-rules-service.cjs"));
     // Dependency versions are unchanged; installation must not run this
     // repository's developer checker patch against the consuming project.
     const manifest: Record<string, unknown> = await Bun.file(join(root, "package.json")).json();

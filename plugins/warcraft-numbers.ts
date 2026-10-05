@@ -7,12 +7,8 @@
 //   integer `//` and `%`;
 // - compiles f32(x) from src/sim/f32.ts and Math.fround(x), binary32 rounding
 //   on the host, to x;
-// - rejects code that would compile but compute differently in Warcraft:
-//   decimal literals that aren't binary32 values, `%`, `>>>`, Math.floor(a / b),
-//   and runtime services without a deterministic Lua meaning;
-// - rejects type escapes in game code (tests excepted): `any`, `as unknown as`
-//   and non-null `!`, which assert what the code should check.
-// Node, Bun and DOM APIs need no rule: the map tsconfig doesn't declare them.
+// - rejects code that would compile but compute differently in Warcraft, by
+//   the number rules in wisp:plugins/number-rules.ts.
 //
 // It also records each `throw` statement's TypeScript file and line: Warcraft's
 // Lua has no debug library, so a thrown value carries no position. Only the
@@ -21,6 +17,7 @@ import { dirname, relative } from "node:path";
 import * as ts from "typescript";
 import * as tstl from "typescript-to-lua";
 import { LuaPrinter } from "typescript-to-lua";
+import { ROUNDING_HELPER_FILE, declarationsOf, isDeclaredIn, programNumberRules } from "./number-rules";
 
 const floatLiterals = new WeakSet<tstl.NumericLiteral>();
 
@@ -34,98 +31,23 @@ class WarcraftNumberPrinter extends LuaPrinter {
   }
 }
 
-/** Whether `name` at this node refers to the declaration in a file ending with `fileSuffix`. */
-function declaredIn(node: ts.Node, checker: ts.TypeChecker, fileSuffix: string): boolean {
-  let symbol = checker.getSymbolAtLocation(node);
-  if (symbol !== undefined && symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
-  const declaration = symbol?.declarations?.[0];
-  if (declaration === undefined) return false;
-  const file = declaration.getSourceFile().fileName;
-  // Installed TSTL libraries expose generated declarations for their Lua
-  // modules; both declarations and source name the same helper identity.
-  return file.endsWith(fileSuffix) || file.endsWith(fileSuffix.replace(/\.ts$/, ".d.ts"));
-}
-
-const isStandardLibrary = (node: ts.Node, checker: ts.TypeChecker) =>
-  checker.getSymbolAtLocation(node)?.declarations?.some((declaration) => /\/typescript\/lib\/lib\.[^/]*\.d\.ts$/.test(declaration.getSourceFile().fileName)) ?? false;
-
-// Matched structurally: calls TSTL synthesizes, as for optional chains, have no source text.
-const isMathMember = (node: ts.Node, member: string): node is ts.PropertyAccessExpression =>
-  ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "Math" && node.name.text === member;
-
 const integerOperators: Record<string, tstl.BinaryOperator> = {
   floorDiv: tstl.SyntaxKind.FloorDivisionOperator,
   floorMod: tstl.SyntaxKind.ModuloOperator,
 };
 
-function integerOperator(node: ts.CallExpression, checker: ts.TypeChecker): tstl.BinaryOperator | undefined {
+function integerOperator(node: ts.CallExpression, program: ts.Program): tstl.BinaryOperator | undefined {
   if (!ts.isIdentifier(node.expression) || node.arguments.length !== 2) return undefined;
   const operator = integerOperators[node.expression.text];
-  return operator !== undefined && declaredIn(node.expression, checker, "/src/sim/intMath.ts") ? operator : undefined;
+  return operator !== undefined && isDeclaredIn(declarationsOf(ts, program, node.expression), "/src/sim/intMath.ts") ? operator : undefined;
 }
 
 /** f32(x) and Math.fround(x): binary32 rounding the Lua runtime already performs. */
-function isRounding(node: ts.CallExpression, checker: ts.TypeChecker): boolean {
+function isRounding(node: ts.CallExpression, program: ts.Program): boolean {
   if (node.arguments.length !== 1) return false;
-  if (isMathMember(node.expression, "fround")) return true;
-  return ts.isIdentifier(node.expression) && node.expression.text === "f32" && declaredIn(node.expression, checker, "/src/sim/f32.ts");
-}
-
-/** `f32(0.1)` names the binary32 nearest 0.1, which Warcraft's parser also picks. */
-function isRoundedLiteral(node: ts.NumericLiteral, checker: ts.TypeChecker): boolean {
-  let outer: ts.Node = node;
-  while (ts.isParenthesizedExpression(outer.parent) || (ts.isPrefixUnaryExpression(outer.parent) && outer.parent.operator === ts.SyntaxKind.MinusToken)) {
-    outer = outer.parent;
-  }
-  return ts.isCallExpression(outer.parent) && isRounding(outer.parent, checker);
-}
-
-const RUNTIME_SERVICES = new Map([
-  ["Date", "Date has no deterministic meaning in Warcraft; synchronized time is the frame counter"],
-  ["JSON", "JSON isn't available in Warcraft's Lua"],
-  ["Intl", "Intl isn't available in Warcraft's Lua"],
-]);
-
-/** Rejections walk the source, so they hold however TSTL lowers each construct. */
-function check(file: ts.SourceFile, checker: ts.TypeChecker, diagnostics: ts.Diagnostic[]): void {
-  // intMath holds the host definitions of the operations this plugin compiles to Lua operators.
-  if (file.fileName.endsWith("/src/sim/intMath.ts")) return;
-  const isTest = file.fileName.endsWith(".tests.ts");
-  const reject = (node: ts.Node, messageText: string) =>
-    diagnostics.push({ category: ts.DiagnosticCategory.Error, code: 9300, source: "warcraft", file, start: node.getStart(file), length: node.getWidth(file), messageText });
-  const visit = (node: ts.Node): void => {
-    if (ts.isNumericLiteral(node)) {
-      const text = node.getText(file);
-      const value = Number(node.text);
-      if (/[.eE]/.test(text) && Math.fround(value) !== value && !isRoundedLiteral(node, checker)) {
-        reject(node, `${text} isn't a binary32 value; write ${Math.fround(value)} or f32(${text})`);
-      }
-    } else if (ts.isBinaryExpression(node)) {
-      const operator = node.operatorToken.kind;
-      if (operator === ts.SyntaxKind.PercentToken || operator === ts.SyntaxKind.PercentEqualsToken) {
-        reject(node.operatorToken, "`%` truncates in JavaScript and floors in Lua; use floorMod or imod");
-      } else if (operator === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken || operator === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken) {
-        reject(node.operatorToken, "`>>>` masks with 2^32 - 1, which 32-bit Lua can't hold; use floorDiv");
-      }
-    } else if (ts.isCallExpression(node)) {
-      let argument = node.arguments[0];
-      while (argument !== undefined && ts.isParenthesizedExpression(argument)) argument = argument.expression;
-      if (isMathMember(node.expression, "floor") && argument !== undefined && ts.isBinaryExpression(argument) && argument.operatorToken.kind === ts.SyntaxKind.SlashToken) {
-        reject(node, "Math.floor(a / b) divides in binary32 and loses bits above 2^24; use floorDiv or idiv");
-      } else if (isMathMember(node.expression, "random")) {
-        reject(node, "Math.random differs between clients; draw from the synchronized simulation instead");
-      }
-    } else if (ts.isIdentifier(node)) {
-      const service = RUNTIME_SERVICES.get(node.text);
-      if (service !== undefined && !ts.isTypeReferenceNode(node.parent) && isStandardLibrary(node, checker)) reject(node, service);
-    } else if (!isTest) {
-      if (ts.isNonNullExpression(node)) reject(node, "non-null `!` asserts what the code should check; handle the absent case");
-      else if (node.kind === ts.SyntaxKind.AnyKeyword) reject(node, "`any` turns off type checking; name the type");
-      else if (ts.isAsExpression(node) && ts.isAsExpression(node.expression) && node.expression.type.kind === ts.SyntaxKind.UnknownKeyword) reject(node, "`as unknown as` forces an unrelated type; convert the value instead");
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(file);
+  const callee = node.expression;
+  if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) && callee.expression.text === "Math" && callee.name.text === "fround") return true;
+  return ts.isIdentifier(callee) && callee.text === "f32" && isDeclaredIn(declarationsOf(ts, program, callee), ROUNDING_HELPER_FILE);
 }
 
 /** The throw's TypeScript file and line, relative to the project's tsconfig like mapped Lua positions. */
@@ -164,11 +86,7 @@ function transformThrow(node: ts.ThrowStatement, context: tstl.TransformationCon
 /** `sourcePrefix` names a library's throw sites as its consumers import them, such as `wisp/`. */
 const plugin = ({ sourcePrefix = "" }: { readonly sourcePrefix?: string }): tstl.Plugin => ({
   beforeTransform(program) {
-    const diagnostics: ts.Diagnostic[] = [];
-    for (const file of program.getSourceFiles()) {
-      if (!file.isDeclarationFile && !program.isSourceFileFromExternalLibrary(file)) check(file, program.getTypeChecker(), diagnostics);
-    }
-    return diagnostics;
+    return program.getSourceFiles().flatMap((file) => programNumberRules(ts, program, file));
   },
   visitors: {
     [ts.SyntaxKind.NumericLiteral]: (node, context) => {
@@ -178,8 +96,8 @@ const plugin = ({ sourcePrefix = "" }: { readonly sourcePrefix?: string }): tstl
       return result;
     },
     [ts.SyntaxKind.CallExpression]: (node, context) => {
-      if (isRounding(node, context.checker)) return context.transformExpression(node.arguments[0]!);
-      const operator = integerOperator(node, context.checker);
+      if (isRounding(node, context.program)) return context.transformExpression(node.arguments[0]!);
+      const operator = integerOperator(node, context.program);
       if (operator === undefined) return context.superTransformExpression(node);
       const [left, right] = node.arguments;
       return tstl.createBinaryExpression(context.transformExpression(left!), context.transformExpression(right!), operator, node);
