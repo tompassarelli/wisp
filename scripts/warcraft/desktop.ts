@@ -5,6 +5,7 @@
 import { join } from "node:path";
 import { Clock, Effect, Schema } from "effect";
 import { describeCause } from "../waygate/command";
+import { step } from "../waygate/timings";
 
 export class DesktopFailure extends Schema.TaggedError<DesktopFailure>()("DesktopFailure", {
   operation: Schema.String,
@@ -54,7 +55,7 @@ function fail(operation: string, client: string) {
 }
 
 function run(client: string, operation: string, command: readonly string[], env: Record<string, string>, stdin?: Uint8Array) {
-  return Effect.tryPromise({
+  const effect = Effect.tryPromise({
     try: async () => {
       const process = Bun.spawn([...command], { env: { ...Bun.env, ...env }, stdin: stdin ?? "ignore", stdout: "pipe", stderr: "pipe" });
       const [stdout, stderr, code] = await Promise.all([new Response(process.stdout).arrayBuffer(), new Response(process.stderr).text(), process.exited]);
@@ -63,6 +64,7 @@ function run(client: string, operation: string, command: readonly string[], env:
     },
     catch: fail(operation, client),
   });
+  return process.env.WAYGATE_DESKTOP_TIMINGS === "1" ? effect.pipe(step(`${client}: ${operation}`)) : effect;
 }
 
 const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
