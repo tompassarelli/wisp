@@ -9,6 +9,10 @@ export interface DesyncRecord {
   readonly fields: readonly { readonly path: string; readonly value: string }[];
 }
 
+const NativeCount = Schema.FiniteFromString.check(Schema.isInt(), Schema.isBetween({ minimum: 0, maximum: 0xffffffff }));
+const RecordHeader = Schema.Struct({ subsystem: NativeCount, turn: NativeCount, checksum: Schema.String });
+const decodeHeader = Schema.decodeSync(RecordHeader);
+
 /** Warcraft's decimal subsystem identifiers are four-character codes. */
 export function subsystemName(id: number): string {
   const code = String.fromCharCode(id >>> 24, (id >>> 16) & 255, (id >>> 8) & 255, id & 255);
@@ -23,7 +27,7 @@ export function parseDesyncLog(text: string): readonly DesyncRecord[] {
   for (const line of text.split(/\r?\n/)) {
     const header = /^\[Desync - (\d+) - Turn\((\d+)\) = (-?\d+)\]$/.exec(line);
     if (header !== null) {
-      record = { subsystem: Number(header[1]), turn: Number(header[2]), checksum: header[3] ?? "", fields: [] };
+      record = { ...decodeHeader({ subsystem: header[1] ?? "", turn: header[2] ?? "", checksum: header[3] ?? "" }), fields: [] };
       records.push(record);
       parents = [];
       continue;
