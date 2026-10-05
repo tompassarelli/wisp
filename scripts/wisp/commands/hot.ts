@@ -81,17 +81,16 @@ function coalesced<A, E>(effect: Effect.Effect<A, E>): Effect.Effect<void, E> {
   });
 }
 
-function waitForProcessStop(): Effect.Effect<void> {
-  return Effect.callback<void>((resume) => {
-    const stop = () => resume(Effect.void);
-    process.once("SIGINT", stop);
-    process.once("SIGTERM", stop);
-    return Effect.sync(() => {
-      process.removeListener("SIGINT", stop);
-      process.removeListener("SIGTERM", stop);
-    });
+/** Ends when the process is asked to stop. */
+export const waitForProcessStop: Effect.Effect<void> = Effect.callback<void>((resume) => {
+  const stop = () => resume(Effect.void);
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+  return Effect.sync(() => {
+    process.removeListener("SIGINT", stop);
+    process.removeListener("SIGTERM", stop);
   });
-}
+});
 
 /**
  * Runs `onChange` after each change under the supplied source directory and `onPoll` every 50 ms,
@@ -102,7 +101,7 @@ export const runHotWatch = (
   sourceDirectory: string,
   onChange: Effect.Effect<void, CommandFailure>,
   onPoll: Effect.Effect<void, CommandFailure>,
-  stop: Effect.Effect<void> = waitForProcessStop(),
+  stop: Effect.Effect<void> = waitForProcessStop,
 ) =>
   Effect.scoped(
     Effect.gen(function*() {

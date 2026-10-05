@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ClientScope, HeadlessClient, LocalNatives, MapEntry, NativeBehaviors } from "../../src/headless/client";
 import { type NativeDeclarations, parseNativeDeclarations } from "../../src/headless/declarations";
-import { type Journey, journeyLines, journeyProblems, runJourney } from "../../src/headless/journey";
+import { type Journey, type JourneyOptions, journeyLines, journeyProblems, runJourney } from "../../src/headless/journey";
 import { Lockstep, type LockstepOptions } from "../../src/headless/lockstep";
 import { errorFile } from "../../src/runtime/gameFiles";
 import { BUNDLE_MODULE } from "../../src/runtime/modules";
@@ -201,6 +201,29 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
   };
 }
 
+/** What a game supplies to play its journeys: its map, its journeys, and its scene when the entry starts the scene recorder. */
+export interface HeadlessProject {
+  readonly map: HeadlessMap;
+  /**
+   * The map entry's TypeScript module, exporting start() and install(). It
+   * is loaded when a journey plays, so the game's host program never
+   * type-checks map code against host globals.
+   */
+  readonly entry: string;
+  /** The first is the default. */
+  readonly journeys: Readonly<Record<string, Journey>>;
+  readonly scene?: SceneExpectations;
+}
+
+/** The entry module's start() and install(); throws when it has none. */
+export async function loadMapEntry(path: string): Promise<MapEntry> {
+  const module: unknown = await import(path);
+  if (typeof module !== "object" || module === null || !("start" in module) || !("install" in module)) throw new Error(`${path} exports no start() and install()`);
+  const { start, install } = module;
+  if (typeof start !== "function" || typeof install !== "function") throw new Error(`${path}'s start and install aren't functions`);
+  return { start: () => start(), install: () => install() };
+}
+
 export interface HeadlessReport {
   readonly lines: readonly string[];
   readonly problems: number;
@@ -213,8 +236,8 @@ export interface HeadlessReport {
  * the game declares its scene, what a player would see wrong in each client's
  * latest scene report.
  */
-export function playHeadless(clients: Lockstep, journey: Journey, filePrefix: string, scene?: SceneExpectations): HeadlessReport {
-  const result = runJourney(clients, journey);
+export function playHeadless(clients: Lockstep, journey: Journey, filePrefix: string, scene?: SceneExpectations, options?: JourneyOptions): HeadlessReport {
+  const result = runJourney(clients, journey, options);
   const lines = [...journeyLines(result)];
   let problems = journeyProblems(result);
   for (const client of clients.clients) {

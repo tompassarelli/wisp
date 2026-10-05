@@ -21,7 +21,10 @@ in wisp:examples/sample/ is the second map built on Wisp, from Wisp alone.
 
 Run a map without Warcraft: `wisp headless` plays its real bundle in simulated
 clients and reports desyncs, errors and scene problems in about a second
-([headless runtime](docs/headless.md)).
+([headless runtime](docs/headless.md)). Keep `wisp dev` running while you
+change code: each save prints the saved files' type errors, the affected
+tests, a headless journey and the whole type check
+([the dev loop](docs/dev.md)).
 
 See the [feature index](docs/index.md) (wisp:docs/index.md) to find existing
 capabilities and their setup, including opt-in diagnostics. To start a new

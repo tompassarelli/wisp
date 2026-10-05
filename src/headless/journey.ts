@@ -18,7 +18,8 @@ export interface Journey {
 export interface ClientResult {
   readonly slot: number;
   readonly calls: number;
-  readonly checksum: string;
+  /** A hash of every logged call; left out when the run asked for none. */
+  readonly checksum?: string;
   readonly errors: readonly string[];
 }
 
@@ -33,8 +34,13 @@ export interface JourneyResult {
   readonly reloads: readonly string[];
 }
 
+export interface JourneyOptions {
+  /** Whether to hash each client's calls, which fingerprints a run to compare it with another runtime's. */
+  readonly checksums?: boolean;
+}
+
 /** Starts the map in every client and plays the journey. */
-export function runJourney(clients: Lockstep, journey: Journey): JourneyResult {
+export function runJourney(clients: Lockstep, journey: Journey, options: JourneyOptions = {}): JourneyResult {
   clients.start();
   for (const event of journey.events) {
     if (event.frame < clients.frame) throw new Error(`journey event at frame ${event.frame} is out of order`);
@@ -45,7 +51,11 @@ export function runJourney(clients: Lockstep, journey: Journey): JourneyResult {
   }
   clients.frames(journey.frames - clients.frame);
   const results: ClientResult[] = [];
-  for (const client of clients.clients) results.push({ slot: client.slot, calls: client.callCount(), checksum: client.checksum(), errors: client.errors });
+  for (const client of clients.clients) {
+    results.push(options.checksums === false
+      ? { slot: client.slot, calls: client.callCount(), errors: client.errors }
+      : { slot: client.slot, calls: client.callCount(), checksum: client.checksum(), errors: client.errors });
+  }
   return { frames: clients.frame, clients: results, divergence: clients.firstDivergence(), reloaded: clients.version, reloads: clients.unappliedReloads() };
 }
 
@@ -59,7 +69,9 @@ export function journeyProblems(result: JourneyResult): number {
 /** The result as lines to print: each client's calls and checksum, then each problem. */
 export function journeyLines(result: JourneyResult): string[] {
   const lines: string[] = [];
-  for (const client of result.clients) lines.push(`p${client.slot}: ${client.calls} native calls, checksum ${client.checksum}`);
+  for (const client of result.clients) {
+    lines.push(`p${client.slot}: ${client.calls} native calls${client.checksum === undefined ? "" : `, checksum ${client.checksum}`}`);
+  }
   lines.push(result.divergence === undefined ? `no desync in ${result.frames} frames` : `desync: ${result.divergence}`);
   if (result.reloaded > 0 && result.reloads.length === 0) lines.push(`hot reload ${result.reloaded} running in every client`);
   for (const reload of result.reloads) lines.push(reload);
