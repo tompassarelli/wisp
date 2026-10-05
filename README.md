@@ -2,7 +2,7 @@
 
 # Waygate
 
-**Warcraft III development at warp speed.**
+**Warcraft III modding at warp speed.**
 
 Modern tooling, testing, build automation, and developer experience for Warcraft III modding.
 
