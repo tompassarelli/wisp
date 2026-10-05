@@ -1,94 +1,75 @@
+// Desyncs: Warcraft's own desync reports, compared across the clients. When the
+// game detects a desync, each client writes Errors/<UTC time> <id>/Desync.txt
+// beside its CustomMapData: the turn and every engine subsystem's checksum. The
+// values that differ between the clients name the subsystem that diverged.
 import { dirname, join } from "node:path";
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect";
-import { GameFiles, type GameFileFailure, type StoredFile } from "./gameFiles";
+import { MalformedGameFile } from "./boundary";
+import { GameFiles, type GameFileFailure } from "./gameFiles";
 
-export interface DesyncRecord {
-  readonly subsystem: number;
+export interface DesyncSummary {
   readonly turn: number;
-  readonly checksum: string;
-  readonly fields: readonly { readonly path: string; readonly value: string }[];
+  /** Engine values in report order, such as `tempest checksum` or `next birth tag`. */
+  readonly values: readonly (readonly [name: string, value: string])[];
 }
 
-const NativeCount = Schema.FiniteFromString.check(Schema.isInt(), Schema.isBetween({ minimum: 0, maximum: 0xffffffff }));
-const RecordHeader = Schema.Struct({ subsystem: NativeCount, turn: NativeCount, checksum: Schema.String });
-const decodeHeader = Schema.decodeSync(RecordHeader);
+const ASSERTION_START = "<Exception.Assertion:>";
+const ASSERTION_END = "<:Exception.Assertion>";
+const Turn = Schema.FiniteFromString.check(Schema.isInt(), Schema.isBetween({ minimum: 0, maximum: 0xffffffff }));
 
-/** Warcraft's decimal subsystem identifiers are four-character codes. */
-export function subsystemName(id: number): string {
-  const code = String.fromCharCode(id >>> 24, (id >>> 16) & 255, (id >>> 8) & 255, id & 255);
-  return /^[\x20-\x7e]{4}$/.test(code) ? code : String(id);
-}
-
-/** The native log lists each subsystem's current turn followed by earlier turns. */
-export function parseDesyncLog(text: string): readonly DesyncRecord[] {
-  const records: DesyncRecord[] = [];
-  let record: { subsystem: number; turn: number; checksum: string; fields: { path: string; value: string }[] } | undefined;
-  let parents: string[] = [];
-  for (const line of text.split(/\r?\n/)) {
-    const header = /^\[Desync - (\d+) - Turn\((\d+)\) = (-?\d+)\]$/.exec(line);
-    if (header !== null) {
-      record = { ...decodeHeader({ subsystem: header[1] ?? "", turn: header[2] ?? "", checksum: header[3] ?? "" }), fields: [] };
-      records.push(record);
-      parents = [];
-      continue;
+/** A Desync.txt's turn and engine values; undefined while the game is still writing them. */
+export const decodeDesyncSummary = (file: string, text: string): Effect.Effect<DesyncSummary | undefined, MalformedGameFile> =>
+  Effect.gen(function*() {
+    const lines = text.split(/\r?\n/);
+    const start = lines.indexOf(ASSERTION_START);
+    const end = lines.indexOf(ASSERTION_END);
+    if (start < 0 || end < start) return undefined;
+    const heading = lines.map((line) => /^Network desync on turn (\d+) in game /.exec(line)?.[1]).find((turn) => turn !== undefined);
+    const turn = yield* Schema.decodeUnknownEffect(Turn)(heading).pipe(
+      Effect.mapError((issue) => new MalformedGameFile({ file, field: "turn", problem: issue.message })),
+    );
+    const values: [string, string][] = [];
+    for (const line of lines.slice(start + 1, end)) {
+      const tags = /^War3 next presence tag (\d+) next birth tag (\d+)$/.exec(line);
+      const value = /^War3 (.+) (\S+)$/.exec(line);
+      if (tags !== null) values.push(["next presence tag", tags[1] ?? ""], ["next birth tag", tags[2] ?? ""]);
+      else if (value !== null) values.push([value[1] ?? "", value[2] ?? ""]);
+      else if (line.trim() !== "") return yield* new MalformedGameFile({ file, field: "engine value", problem: `unrecognized line ${JSON.stringify(line)}` });
     }
-    const field = /^(\t+)#(\d+)#(?:: (0x[\da-fA-F]+))?$/.exec(line);
-    if (field !== null && record !== undefined) {
-      const depth = field[1]?.length ?? 0;
-      const name = `#${field[2]}#`;
-      parents.length = depth - 1;
-      parents.push(name);
-      if (field[3] !== undefined) record.fields.push({ path: parents.join("/"), value: field[3] });
-      continue;
-    }
-    if (line.trim() !== "" && !/^=+$/.test(line)) throw new Error(`unrecognized desync log line: ${line}`);
-  }
-  return records;
-}
+    return { turn, values };
+  });
 
 export interface DesyncDifference {
-  readonly subsystem: string;
-  readonly turn: number;
-  readonly field: string;
+  readonly name: string;
+  /** One value per summary, in the summaries' order. */
   readonly values: readonly string[];
-  readonly checksums: readonly string[];
 }
 
-/** Compares the same subsystem and turn, oldest first, across every client's log. */
-export function firstDesync(logs: readonly (readonly DesyncRecord[])[]): DesyncDifference | undefined {
-  const first = logs[0];
-  if (first === undefined || logs.length < 2) return undefined;
-  const indexed = logs.map((records) => new Map(records.map((record) => [`${record.subsystem}:${record.turn}`, record])));
-  for (const record of [...first].sort((a, b) => a.turn - b.turn)) {
-    const peers = indexed.flatMap((records) => {
-      const peer = records.get(`${record.subsystem}:${record.turn}`);
-      return peer === undefined ? [] : [peer];
-    });
-    if (peers.length !== logs.length) continue;
-    const fields = peers.map((peer) => new Map(peer.fields.map(({ path, value }) => [path, value])));
-    const paths = new Set(fields.flatMap((values) => [...values.keys()]));
-    for (const field of paths) {
-      const values = fields.map((values) => values.get(field) ?? "missing");
-      if (new Set(values).size > 1) return { subsystem: subsystemName(record.subsystem), turn: record.turn, field, values, checksums: peers.map((peer) => peer.checksum) };
-    }
-    const checksums = peers.map((peer) => peer.checksum);
-    if (new Set(checksums).size > 1) return { subsystem: subsystemName(record.subsystem), turn: record.turn, field: "checksum", values: checksums, checksums };
-  }
-  return undefined;
+/** Every engine value that is not the same in all summaries. */
+export function divergedValues(summaries: readonly DesyncSummary[]): readonly DesyncDifference[] {
+  const tables = summaries.map(({ values }) => new Map(values));
+  const names = [...new Set(summaries.flatMap(({ values }) => values.map(([name]) => name)))];
+  return names.flatMap((name) => {
+    const values = tables.map((table) => table.get(name) ?? "missing");
+    return new Set(values).size > 1 ? [{ name, values }] : [];
+  });
 }
 
-export class DesyncLogFailure extends Schema.TaggedError<DesyncLogFailure>()("DesyncLogFailure", {
-  path: Schema.String,
-  cause: Schema.Unknown,
-}) {
-  override get message(): string { return `can't decode Warcraft desync log ${this.path}: ${String(this.cause)}`; }
-}
-
-export interface DesyncReport extends DesyncDifference {
+export interface DesyncReport {
+  /** Clients, by their --data position, whose reports are compared. */
+  readonly clients: readonly number[];
+  /** Each compared client's desync turn. */
+  readonly turns: readonly number[];
+  readonly differences: readonly DesyncDifference[];
+  /** Clients that wrote no report within PARTNER_WAIT_MILLIS of the first. */
+  readonly missing: readonly number[];
   readonly paths: readonly string[];
-  /** Delay from the last client log write until this comparison. */
+  /** Milliseconds from the last compared report's write until this comparison. */
   readonly latency: number;
 }
+
+/** Every client writes its report within milliseconds of the others; one that hasn't after this, won't. */
+export const PARTNER_WAIT_MILLIS = 1000;
 
 const FileFailureCode = Schema.Struct({ code: Schema.String });
 function missingDirectory(failure: GameFileFailure): boolean {
@@ -96,55 +77,66 @@ function missingDirectory(failure: GameFileFailure): boolean {
   return Option.isSome(code) && code.value.code === "ENOENT";
 }
 
-interface PendingLog { readonly path: string; readonly stored: StoredFile; readonly stable: boolean }
+interface Pending { readonly client: number; readonly path: string; readonly summary: DesyncSummary; readonly modified: number }
 
 export class Desyncs extends Context.Service<Desyncs, {
-  readonly changed: Effect.Effect<DesyncReport | undefined, GameFileFailure | DesyncLogFailure>;
+  /** A desync every client has reported since the previous look; undefined until there is one. */
+  readonly changed: Effect.Effect<DesyncReport | undefined, GameFileFailure | MalformedGameFile>;
 }>()("waygate/Desyncs") {
   static readonly layer = (dataDirectories: readonly string[]) => Layer.effect(Desyncs, Effect.gen(function*() {
     const files = yield* GameFiles;
-    const directories = dataDirectories.map((directory) => join(dirname(directory), "Logs"));
-    const names = (directory: string) => files.list(directory).pipe(
+    const directories = dataDirectories.map((directory) => join(dirname(directory), "Errors"));
+    const reports = (directory: string) => files.list(directory).pipe(
       Effect.catchTag("GameFileFailure", (failure) => missingDirectory(failure) ? Effect.succeed([]) : Effect.fail(failure)),
-      Effect.map((entries) => entries.filter((entry) => /_Desync\.log$/i.test(entry))),
+      // Folder names start with their UTC time, so name order is write order.
+      Effect.map((entries) => [...entries].sort()),
     );
-    // Ignore reports that predate this hot session, including when no Logs folder exists yet.
-    const seen = yield* Effect.forEach(directories, (directory) => names(directory).pipe(Effect.map((entries) => new Set(entries))));
-    const pending = new Map<string, PendingLog>();
+    // Reports that predate this session are old news, including when no Errors folder exists yet.
+    const seen = yield* Effect.forEach(directories, (directory) => reports(directory).pipe(Effect.map((entries) => new Set(entries))));
+    const pending = new Map<number, Pending>();
+    let firstPending = 0;
     return Desyncs.of({ changed: Effect.gen(function*() {
-      for (const [index, directory] of directories.entries()) {
-        const old = seen[index];
-        for (const name of yield* names(directory)) {
-          if (old?.has(name)) continue;
-          const path = join(directory, name);
+      for (const [client, directory] of directories.entries()) {
+        if (pending.has(client)) continue;
+        for (const name of yield* reports(directory)) {
+          if (seen[client]?.has(name)) continue;
+          // Crash reports share the folder and have no Desync.txt.
+          const path = join(directory, name, "Desync.txt");
           const stored = yield* files.read(path);
-          if (stored === undefined || !stored.text.endsWith("\n")) continue;
-          const previous = pending.get(directory);
-          if (previous !== undefined && previous.stored.modified > stored.modified) continue;
-          pending.set(directory, { path, stored, stable: previous?.path === path && previous.stored.text === stored.text });
+          if (stored === undefined) continue;
+          // A malformed report fails once, not on every look.
+          const summary = yield* decodeDesyncSummary(path, stored.text).pipe(Effect.tapError(() => Effect.sync(() => seen[client]?.add(name))));
+          if (summary === undefined) continue;
+          seen[client]?.add(name);
+          if (pending.size === 0) firstPending = yield* Clock.currentTimeMillis;
+          pending.set(client, { client, path, summary, modified: stored.modified });
+          break;
         }
       }
-      const candidates = directories.flatMap((directory) => {
-        const candidate = pending.get(directory);
-        return candidate?.stable ? [candidate] : [];
-      });
-      if (candidates.length !== directories.length || candidates.length < 2) return undefined;
-      const logs = yield* Effect.forEach(candidates, ({ path, stored }) => Effect.try({
-        try: () => parseDesyncLog(stored.text),
-        catch: (cause) => new DesyncLogFailure({ path, cause }),
-      }));
-      const difference = firstDesync(logs);
-      if (difference === undefined) return undefined;
-      for (const [index, directory] of directories.entries()) {
-        for (const name of yield* names(directory)) seen[index]?.add(name);
-      }
+      if (pending.size === 0) return undefined;
+      const now = yield* Clock.currentTimeMillis;
+      if (pending.size < directories.length && now - firstPending < PARTNER_WAIT_MILLIS) return undefined;
+      const compared = [...pending.values()].sort((a, b) => a.client - b.client);
       pending.clear();
-      return { ...difference, paths: candidates.map(({ path }) => path), latency: (yield* Clock.currentTimeMillis) - Math.max(...candidates.map(({ stored }) => stored.modified)) };
+      return {
+        clients: compared.map(({ client }) => client),
+        turns: compared.map(({ summary }) => summary.turn),
+        differences: compared.length < 2 ? [] : divergedValues(compared.map(({ summary }) => summary)),
+        missing: directories.flatMap((_, client) => compared.some((report) => report.client === client) ? [] : [client]),
+        paths: compared.map(({ path }) => path),
+        latency: now - Math.max(...compared.map(({ modified }) => modified)),
+      };
     }) });
   }));
 }
 
 export function formatDesync(report: DesyncReport): string {
-  const values = report.values.map((value, index) => `client ${index}: ${value}`).join(", ");
-  return `Warcraft desync: subsystem ${report.subsystem}, turn ${report.turn}, ${report.field}: ${values} (${report.latency.toFixed(0)} ms after the game wrote its logs)\n${report.paths.join("\n")}`;
+  const client = (index: number) => `client ${report.clients[index] ?? index}`;
+  const turns = new Set(report.turns).size === 1 ? `turn ${report.turns[0]}` : `turns ${report.turns.map((turn, index) => `${turn} (${client(index)})`).join(", ")}`;
+  const diverged = report.differences.map(({ name, values }) => `${name} (${values.map((value, index) => `${client(index)}: ${value}`).join(", ")})`);
+  const findings = [
+    ...(diverged.length > 0 ? [`diverged: ${diverged.join(", ")}`] : report.clients.length > 1 ? ["every reported engine value matches"] : []),
+    ...(report.missing.length > 0 ? [`${report.missing.map((index) => `client ${index}`).join(", ")} wrote no desync report within ${PARTNER_WAIT_MILLIS} ms`] : []),
+  ];
+  return `Warcraft desync on ${turns}, ${findings.join("; ")}; ${report.latency.toFixed(0)} ms after the game wrote its report\n${report.paths.join("\n")}`;
 }

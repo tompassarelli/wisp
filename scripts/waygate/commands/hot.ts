@@ -1,6 +1,7 @@
 // `waygate hot`: publishes the map bundle to running clients and reports how
 // long the change took to run in every client. With --watch it publishes every
-// saved change and prints in-game errors with TypeScript lines.
+// saved change and prints in-game errors with TypeScript lines and the
+// engine values that diverged in a Warcraft desync.
 import { type FSWatcher, watch } from "node:fs";
 import { Console, Effect, Layer, Queue, Schema } from "effect";
 import { type Command, type CommandFailure, UsageFailure, flagValues } from "../command";

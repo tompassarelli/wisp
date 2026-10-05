@@ -35,7 +35,7 @@ Compose [makeHot](../scripts/waygate/commands/hot.ts)
 (waygate:scripts/waygate/commands/hot.ts) with the consuming project's
 `BuildProject`, source directory, retained-source-map directory and matching
 file prefix. Its command takes one `--data` CustomMapData directory per client;
-`--watch` publishes saved changes and prints new error and desync reports.
+`--watch` publishes saved changes and prints new error and [desync](#desync-reports) reports.
 The consumer owns the CLI entry point and command name.
 
 Every client loads and verifies its local payload and answers ready or refuse.
@@ -46,3 +46,28 @@ Successful installation preserves the game's global state and existing handles.
 See [runtime](../src/platform/hotReload.ts) and
 [host service](../scripts/waygate/hotReload.ts)
 (waygate:src/platform/hotReload.ts, waygate:scripts/waygate/hotReload.ts).
+
+## Desync reports
+
+When Warcraft detects a desync, each client writes
+`Errors/<UTC date and time> <id>/Desync.txt` in its Documents/Warcraft III
+folder, beside CustomMapData. It names the turn (`Network desync on turn N`)
+and lists the engine's checksums and handle counters, such as
+`War3 tempest checksum cb35df6c` and
+`War3 next presence tag 04406 next birth tag 08102`. Both clients of the
+5 October 2026 native desync (build 24268) wrote theirs 2 ms apart.
+
+`--watch` compares the clients' new reports with
+[Desyncs](../scripts/waygate/desyncs.ts) (waygate:scripts/waygate/desyncs.ts)
+and prints each desync once, numbering clients in `--data` order:
+
+```text
+Warcraft desync on turn 12585, diverged: next birth tag (client 0: 08102, client 1: 08103), tempest checksum (client 0: cb35df6c, client 1: cbb742b8); 3 ms after the game wrote its report
+```
+
+A client with no report 1 s after the first is named as missing. All eight
+native desyncs recorded on build 24268 differed in the tempest checksum; seven
+also differed in the next birth tag, which advances as a client creates
+handles. Warcraft also appends four-character-coded records of the last three
+turns to `Logs/<account>_<date>_<time>_Desync.log`, one file per game process
+across all its games; Waygate does not read that file.

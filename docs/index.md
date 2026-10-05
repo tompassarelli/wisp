@@ -15,7 +15,7 @@ paths, map content and acceptance journeys.
 | Build a map or replace only its script | [MapBuild](../scripts/waygate/mapBuild.ts) and [map declaration](../scripts/mapInfo.ts) (waygate:scripts/waygate/mapBuild.ts, waygate:scripts/mapInfo.ts) | Game supplies base/container, declaration, generated object-data bytes and imports; output stays outside the checkout. |
 | Read reports or write reload payloads | [GameFiles](../scripts/waygate/gameFiles.ts) (waygate:scripts/waygate/gameFiles.ts) | Host-side file transport; runtime and host must share file identities. |
 | Control existing Warcraft clients | [Clients](../scripts/waygate/clients.ts) (waygate:scripts/waygate/clients.ts) | Supply the clients file and private desktop sessions; game-specific journeys belong to the consumer. |
-| Diagnose a reported multiplayer desync | [Desyncs](../scripts/waygate/desyncs.ts) (waygate:scripts/waygate/desyncs.ts) | Reads consumer-provided reports; does not replace the game's replay or integrity checks. |
+| Name the engine subsystem a native desync diverged in | [Desync reports](hot-reload.md#desync-reports) (waygate:scripts/waygate/desyncs.ts) | `hot --watch` compares the Desync.txt each client writes beside its `--data` folder; it does not replace the game's replay or integrity checks. |
 | Generate the package for an immutable pin | [Package instructions](../README.md#consume-a-pinned-revision) (waygate:README.md) | Authored TypeScript, emitted Lua, declarations and this documentation ship together. |
 
 The checkout's `bun run check`, `bun run test` and package-generation command
