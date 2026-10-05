@@ -4,6 +4,7 @@
 -- reading the folder that should hold it, which is all of CustomMapData while
 -- the hot folder is missing too.
 local bundlePath = assert(arg[1])
+local hotFiles = dofile(arg[0]:match("^(.*[/\\])") .. "hot-reload-files.lua")
 local bundleFile = assert(io.open(bundlePath, "rb"))
 local payload = bundleFile:read("a")
 bundleFile:close()
@@ -17,20 +18,6 @@ local HOST_FILE = HOT_FOLDER .. "host.pld"
 -- What a second of game may spend on lookups before a host is seen: two lookups, each of the whole CustomMapData.
 -- Costs are in whole microseconds because 32-bit floats would round their sums.
 local IDLE_MICROSECONDS_PER_SECOND = 2 * MAP_DATA_MICROSECONDS
-
--- The reference payload checksum: two polynomial lanes, one byte at a time.
-local function checksum(text)
-  local first, second = 0, 0
-  for index = 1, #text do
-    local byte = string.byte(text, index)
-    first = (first * 257 + byte + 1) % 8165329
-    second = (second * 263 + byte + 1) % 8165323
-  end
-  return first .. ":" .. second
-end
-
-local sum = checksum(payload)
-local payloadName = HOT_FOLDER .. (sum:gsub(":", "-")) .. "-0.pld"
 
 -- One client in its own environment, with its files, its Preloader cache and a count of polls.
 -- `before` puts files in place before the map starts, as a host does.
@@ -115,8 +102,9 @@ local function measure(c, count)
 end
 
 local function publishManifest(c, version)
-  c.files[payloadName] = payload
-  c.files[HOT_FOLDER .. "manifest-" .. version .. ".pld"] = version .. " 1 " .. sum
+  local published = hotFiles.version("fixture", version, payload)
+  for name, text in pairs(published.payloads) do c.files[name] = text end
+  c.files[published.manifestName] = published.manifest
 end
 
 -- The poll timer is created once, at the poll rate, and never restarted: its state must be alike in every client.
@@ -175,7 +163,7 @@ assert(tickUntil(prepared, 4, function() return prepared.hot.applied == 1 end) =
 
 -- So does one whose folder holds manifests from an earlier session.
 local earlier = client(function(c)
-  for version = 1, 3 do c.files[HOT_FOLDER .. "manifest-" .. version .. ".pld"] = version .. " 1 1:1" end
+  for version = 1, 3 do c.files[HOT_FOLDER .. "manifest-" .. version .. ".pld"] = version .. " 1:1 1 - 0" end
 end)
 assert(earlier.hot.unseen == nil and earlier.hot.next == 4, "start with manifests from an earlier session")
 assert(measure(earlier, TICKS_PER_SECOND).missed == TICKS_PER_SECOND)

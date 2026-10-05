@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
+import { SourceMapConsumer } from "source-map";
 import { transpileProject } from "typescript-to-lua";
 import { type Phase, mapCompiler, report } from "../scripts/compiler";
 
@@ -32,6 +33,50 @@ test("cached module requires keep the same bundle and source map as full compila
     expect(output()).toEqual(incremental);
     expect(report(transpileProject(config).diagnostics)).toBe("");
     expect(output()).toEqual(incremental);
+  }
+});
+
+test("each module's hot-reload chunk is its bundle code and maps its lines as the bundle maps them", async () => {
+  const build = join(import.meta.dir, "../build");
+  mkdirSync(build, { recursive: true });
+  const directory = mkdtempSync(join(build, "compiler-modules-"));
+  mkdirSync(join(directory, "src"));
+  const config = join(directory, "tsconfig.json");
+  writeFileSync(join(directory, "src/value.ts"), "export const values = [5, 6].map((value) => value * 2);\n\nexport function first(): number {\n  return values[0] ?? 0;\n}\n");
+  writeFileSync(join(directory, "src/main.ts"), "import { first, values } from \"./value\";\nexport const result = [...values, first()].join(\",\");\n");
+  writeFileSync(config, JSON.stringify({
+    compilerOptions: {
+      target: "ESNext", module: "ESNext", moduleResolution: "Bundler", strict: true,
+      types: [], skipLibCheck: true, rootDir: "src", outDir: "out", sourceMap: true,
+    },
+    include: ["src/**/*.ts"],
+    tstl: { luaTarget: "5.3", luaBundle: "map.lua", luaBundleEntry: "src/main.ts", noHeader: true },
+  }));
+  const compile = mapCompiler(config);
+  expect(report(compile())).toBe("");
+  const bundled = compile.modules();
+  expect(bundled?.entry).toBe("main");
+  expect(bundled?.modules.map(({ name }) => name)).toEqual(["lualib_bundle", "value", "main"]);
+  const bundle = readFileSync(join(directory, "out/map.lua"), "utf8");
+  const mappings = async (map: string, from: number, to: number, offset: number) => {
+    const consumer = await new SourceMapConsumer(JSON.parse(map));
+    const found: string[] = [];
+    consumer.eachMapping((m) => {
+      if (m.generatedLine >= from && m.generatedLine < to) found.push(`${m.generatedLine - offset}:${m.generatedColumn} ${m.source}:${m.originalLine}:${m.originalColumn} ${m.name}`);
+    });
+    consumer.destroy();
+    return found;
+  };
+  for (const module of bundled?.modules ?? []) {
+    const entry = `["${module.name}"] = function(...) \n${module.code} end,\n`;
+    const at = bundle.indexOf(entry);
+    expect(at).toBeGreaterThan(0);
+    // The chunk's head and the entry's head are each one line, so the code starts on the same line of each.
+    const firstLine = bundle.slice(0, at).split("\n").length;
+    const lines = entry.split("\n").length - 1;
+    const own = await mappings(module.sourceMap(), 1, lines + 1, 0);
+    expect(own).toEqual(await mappings(readFileSync(join(directory, "out/map.lua.map"), "utf8"), firstLine, firstLine + lines, firstLine - 1));
+    if (module.name !== "lualib_bundle") expect(own.length).toBeGreaterThan(0);
   }
 });
 

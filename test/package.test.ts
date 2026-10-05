@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { transpileProject } from "typescript-to-lua";
 import { report } from "../scripts/compiler";
 import { producePackage } from "../scripts/package";
-import { checksum } from "../src/runtime/payload";
 
 test("installed package resolves bare imports and preserves Lua32 numeric/reload behavior", async () => {
   const root = join(import.meta.dir, "..");
@@ -23,9 +22,7 @@ test("installed package resolves bare imports and preserves Lua32 numeric/reload
     const { diagnostics } = transpileProject(join(fixture, "tsconfig.json"));
     expect(report(diagnostics)).toBe("");
     const bundle = join(fixture, "output/map.lua");
-    const bytes = new Uint8Array(await Bun.file(bundle).arrayBuffer());
-    const expected = checksum(bytes.length, (index) => bytes[index] ?? 0);
-    const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "hot-reload-stub.lua"), bundle, expected], { cwd: root, stdout: "pipe", stderr: "pipe" });
+    const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "hot-reload-stub.lua"), bundle], { cwd: root, stdout: "pipe", stderr: "pipe" });
     expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
     expect(run.stdout.toString()).toContain("reload contract passed");
   } finally {

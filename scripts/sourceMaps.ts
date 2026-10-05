@@ -1,19 +1,29 @@
 // Maps Lua positions in in-game error reports back to TypeScript lines. Every
-// bundle that can run in a client, the one built into the map and each hot
-// reload, keeps its source map here under its payload key, which is also its
+// chunk that can run in a client, the bundle built into the map and each hot
+// reload's modules, keeps its source map here under its key, which is also its
 // Lua chunk name (`map-KEY` or `hot-KEY`).
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SourceMapConsumer } from "source-map";
 
 const POSITION = /\b(?:map|hot)-(\d+-\d+):(\d+)\b/g;
 
+const consumers = new Map<string, SourceMapConsumer>();
+
 export function keepSourceMap(bundlePath: string, key: string, mapDirectory: string): void {
   mkdirSync(mapDirectory, { recursive: true });
-  copyFileSync(`${bundlePath}.map`, join(mapDirectory, `${key}.lua.map`));
+  const path = join(mapDirectory, `${key}.lua.map`);
+  copyFileSync(`${bundlePath}.map`, path);
+  consumers.delete(path);
 }
 
-const consumers = new Map<string, SourceMapConsumer>();
+/** Keeps a hot-reload module's source map, the JSON `sourceMap`, under its key. */
+export function keepModuleSourceMap(key: string, sourceMap: string, mapDirectory: string): void {
+  mkdirSync(mapDirectory, { recursive: true });
+  const path = join(mapDirectory, `${key}.lua.map`);
+  writeFileSync(path, sourceMap);
+  consumers.delete(path);
+}
 
 async function consumer(key: string, mapDirectory: string): Promise<SourceMapConsumer | undefined> {
   const path = join(mapDirectory, `${key}.lua.map`);

@@ -1,10 +1,10 @@
 // SourceErrors: runtime errors the game reports, with their Lua positions
-// mapped back to TypeScript lines. Every bundle that can run in a client keeps
-// its source map (wisp:scripts/sourceMaps.ts) under its payload key.
+// mapped back to TypeScript lines. Every chunk that can run in a client keeps
+// its source map (wisp:scripts/sourceMaps.ts) under its key.
 import { join } from "node:path";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { errorFile, errorHeading } from "../../src/runtime/gameFiles";
-import { keepSourceMap, toTypeScript } from "../sourceMaps";
+import { keepModuleSourceMap, keepSourceMap, toTypeScript } from "../sourceMaps";
 import { ErrorReport, FILE_SLOT_NUMBERS, type MalformedGameFile } from "./boundary";
 import { describeCause } from "./command";
 import { type GameFileFailure, GameFiles } from "./gameFiles";
@@ -38,6 +38,8 @@ export interface SourceErrorOptions {
 export class SourceErrors extends Context.Service<SourceErrors, {
   /** Keeps a compiled bundle's source map under its key, so reports from that bundle map back. */
   readonly retain: (bundlePath: string, key: string) => Effect.Effect<void, SourceMapFailure>;
+  /** Keeps a hot-reload module's source map under its key. */
+  readonly retainModule: (key: string, sourceMap: string) => Effect.Effect<void, SourceMapFailure>;
   /** Reports in these CustomMapData folders that are new or changed since the previous look. */
   readonly changed: (directories: readonly string[]) => Effect.Effect<readonly SourceError[], GameFileFailure | MalformedGameFile | SourceMapFailure>;
 }>()("wisp/SourceErrors") {
@@ -48,6 +50,10 @@ export class SourceErrors extends Context.Service<SourceErrors, {
       retain: (bundlePath, key) => Effect.try({
         try: () => keepSourceMap(bundlePath, key, sourceMapDirectory),
         catch: (cause) => new SourceMapFailure({ operation: "retain TypeScript source map", path: `${bundlePath}.map`, cause }),
+      }),
+      retainModule: (key, sourceMap) => Effect.try({
+        try: () => keepModuleSourceMap(key, sourceMap, sourceMapDirectory),
+        catch: (cause) => new SourceMapFailure({ operation: "retain TypeScript source map", path: join(sourceMapDirectory, `${key}.lua.map`), cause }),
       }),
       changed: Effect.fnUntraced(function*(directories) {
         const reports: SourceError[] = [];

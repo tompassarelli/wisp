@@ -72,9 +72,13 @@ export const MAP: HeadlessMap = {
 
 ## Hot reload
 
-`reload()` publishes the map's bundle as the next version, as `wisp hot` does:
-the host marker, payload files, then the manifest, in every client's
-CustomMapData. `start()` has already put the marker there, as `wisp fresh` does
+`reload()` publishes the map's modules as the next version, as `wisp hot` does
+([what a reload sends](hot-reload.md#what-a-reload-sends)): the host marker,
+payload files, then the manifest, in every client's CustomMapData, with a delta
+from the previous version when every client acknowledged it.
+`reload(modules)` publishes another module set, such as a later compile's;
+wisp:test/modules.test.ts plays full and incremental reloads that way, and
+`client.preloadedFiles()` shows which payload each client read. `start()` has already put the marker there, as `wisp fresh` does
 before a match, so the map's own reloader finds the manifest on its next poll;
 `start({ hostFolder: false })` simulates clients no host has touched, which
 look for files only twice a second until `prepareHostFolder()` or `reload()`
@@ -83,8 +87,9 @@ publishes the marker ([what polling costs](hot-reload.md#what-polling-costs)).
 published, each a folder read under Wine. The clients answer through sync
 messages, and every client installs it on the same frame. `unappliedReloads()`
 names each client whose acknowledgement file doesn't show the latest version,
-with its "not applied" message. In Lua the published text is the compiled
-bundle; in Bun it names the entry module, which the emulated `load` returns.
+with its "not applied" message. In Lua the map's modules are its compiled
+bundle as one module; in Bun they are one module whose text names the entry,
+which the emulated `load` returns.
 
 ## Journeys
 

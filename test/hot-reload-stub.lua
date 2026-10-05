@@ -1,6 +1,7 @@
 -- The Lua VM is Warcraft's irreducible foreign boundary. This fixture drives
 -- the emitted runtime with native stubs, including cached Preloader contents.
-local bundlePath, expected = assert(arg[1]), assert(arg[2])
+local bundlePath = assert(arg[1])
+local hotFiles = dofile(arg[0]:match("^(.*[/\\])") .. "hot-reload-files.lua")
 local bundleFile = assert(io.open(bundlePath, "rb"))
 local payload = bundleFile:read("a")
 bundleFile:close()
@@ -49,19 +50,30 @@ local dispatch, errors, hot = __fixtureDispatch, __fixtureErrors, __fixtureHot
 local oldHandler = dispatch.handlers["fixture.tick"]
 assert(__fixtureTicks == 1 and errors.count == 1)
 assert(writes["fixture-error-p0.txt"] == "error 1 in fixture.tick\nfixture failure")
-files["fixture-hot\\" .. expected:gsub(":", "-") .. "-0.pld"] = payload
-files["fixture-hot\\manifest-1.pld"] = "1 1 " .. expected
+local first = hotFiles.version("fixture", 1, payload)
+for name, text in pairs(first.payloads) do files[name] = text end
+files[first.manifestName] = first.manifest
 for _, fn in ipairs(timers) do fn() end
 assert(__fixtureDispatch == dispatch and __fixtureErrors == errors and __fixtureHot == hot, "persistent state replaced")
 assert(hot.applied == 1 and hot.decided == 1 and hot.pending == nil and hot.prepared == nil)
+assert(hot.state == first.state and hot.modules.bundle.hash == first.hash, "installed modules not recorded")
 assert(dispatch.handlers["fixture.tick"] ~= oldHandler, "handler was not replaced")
 assert(writes["fixture-hot-ack-p0.txt"] == "applied 1 at 0.0" or writes["fixture-hot-ack-p0.txt"] == "applied 1 at 0")
 module.tick()
 module.fail()
 assert(__fixtureTicks == 2 and errors.count == 1, "old trampoline or error state lost")
-files["fixture-hot\\manifest-2.pld"] = "2 1 2:2"
+files["fixture-hot\\manifest-2.pld"] = "2 2:2 1 - 0"
 files["fixture-hot\\2-2-0.pld"] = "damaged"
 for _, fn in ipairs(timers) do fn() end
 assert(hot.applied == 1 and hot.decided == 2 and hot.pending == nil, "damaged reload was applied")
 assert(writes["fixture-hot-ack-p0.txt"] == "applied 1 at 0.0" or writes["fixture-hot-ack-p0.txt"] == "applied 1 at 0")
+-- Version 3 offers a delta from version 1, which this client runs: it reads the delta, not the full payload.
+local third = hotFiles.version("fixture", 3, payload .. "\n-- version 3\n", first)
+for name, text in pairs(third.payloads) do files[name] = text end
+files[third.manifestName] = third.manifest
+for _, fn in ipairs(timers) do fn() end
+assert(hot.applied == 3 and hot.state == third.state and hot.modules.bundle.hash == third.hash, "the delta was not applied")
+local thirdKey, firstKey = third.state:gsub(":", "-"), first.state:gsub(":", "-")
+assert(cached["fixture-hot\\" .. thirdKey .. "-" .. firstKey .. "-0.pld"] ~= nil, "the delta was not read")
+assert(cached["fixture-hot\\" .. thirdKey .. "-0.pld"] == nil, "the full payload was read")
 print("reload contract passed")

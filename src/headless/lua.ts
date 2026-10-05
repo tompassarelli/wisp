@@ -5,6 +5,8 @@ import type { LocalNatives, MapEntry } from "./client";
 import { parseNativeDeclarations } from "./declarations";
 import { type Journey, journeyLines, journeyProblems, runJourney } from "./journey";
 import { Lockstep } from "./lockstep";
+import { bundleModules } from "../runtime/modules";
+import { stringChecksum } from "../platform/payloadChecksum";
 
 /** What a game declares about its map for a headless run. */
 export interface LuaHeadlessMap {
@@ -30,7 +32,9 @@ export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: s
     declarations: parseNativeDeclarations(declarations),
     players: map.players ?? [0, 1],
     filePrefix: map.filePrefix,
-    bundle,
+    // A reload publishes the whole bundle as one module.
+    modules: bundleModules(bundle),
+    hash: stringChecksum,
     ...(map.localNatives === undefined ? {} : { localNatives: map.localNatives }),
     natives: (client) => {
       const environment = client.natives;

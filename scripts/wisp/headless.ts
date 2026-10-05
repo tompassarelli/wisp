@@ -12,6 +12,7 @@ import { type NativeDeclarations, parseNativeDeclarations } from "../../src/head
 import { type Journey, journeyLines, journeyProblems, runJourney } from "../../src/headless/journey";
 import { Lockstep, type LockstepOptions } from "../../src/headless/lockstep";
 import { errorFile } from "../../src/runtime/gameFiles";
+import { BUNDLE_MODULE } from "../../src/runtime/modules";
 import { sceneFile } from "../../src/runtime/scene";
 import { type SceneExpectations, describeScene, readSceneLines, sceneProblems } from "./scene";
 
@@ -68,9 +69,10 @@ function luaFunctions(client: HeadlessClient, bundles: ReadonlyMap<string, MapEn
         return [false, error];
       }
     },
+    // A published module's chunk: linked against a require, it returns the module, whose value is the entry.
     load: (text: string) => {
       const entry = bundles.get(text);
-      return entry === undefined ? [undefined, "not a bundle this headless run published"] : [() => entry];
+      return entry === undefined ? [undefined, "not a module this headless run published"] : [() => () => entry];
     },
     setmetatable: (table: object, metatable: object | null) => Object.setPrototypeOf(table, metatable),
     string: {
@@ -135,7 +137,7 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
   const bundles = new Map<string, MapEntry>();
   return {
     clients: (entry, players = [0, 1], options = {}) => {
-      // The text a reload publishes; this runtime's `load` returns the entry for it.
+      // The text of the one module a reload publishes; this runtime's `load` returns the entry for it.
       const bundle = `-- wisp headless bundle ${bundles.size + 1}`;
       bundles.set(bundle, entry);
       return new Lockstep({
@@ -143,7 +145,7 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
         players,
         filePrefix: map.filePrefix,
         entry: () => entry,
-        bundle,
+        modules: { entry: BUNDLE_MODULE, modules: [{ name: BUNDLE_MODULE, text: bundle }] },
         scope,
         ...options,
         ...(map.localNatives === undefined ? {} : { localNatives: map.localNatives }),

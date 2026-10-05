@@ -8,7 +8,7 @@
 // MalformedGameFile naming the file and the field.
 import { join } from "node:path";
 import { Effect, Schema, SchemaIssue } from "effect";
-import { FILE_IO_ABILITY, FILE_SLOTS, PAYLOAD_FILE_BYTES } from "../../src/runtime/gameFiles";
+import { FILE_IO_ABILITY, FILE_SLOTS } from "../../src/runtime/gameFiles";
 import { longBrackets } from "../lua";
 
 export class MalformedGameFile extends Schema.TaggedError<MalformedGameFile>()("MalformedGameFile", {
@@ -168,19 +168,6 @@ export function bytesChecksum(bytes: Uint8Array): string {
   return `${first}:${second}`;
 }
 
-/** Pieces of at most PAYLOAD_FILE_BYTES, cut before an ASCII byte so no character is split. */
-export function payloadPieces(bytes: Uint8Array): Uint8Array[] {
-  const pieces: Uint8Array[] = [];
-  let start = 0;
-  while (start < bytes.length) {
-    let end = Math.min(start + PAYLOAD_FILE_BYTES, bytes.length);
-    while (end < bytes.length && (bytes[end] ?? 0) >= 0x80) end--;
-    pieces.push(bytes.subarray(start, end));
-    start = end;
-  }
-  return pieces;
-}
-
 /** Where a game path relative to CustomMapData (wisp:src/runtime/gameFiles.ts) is on the host. */
 export const hostPath = (directory: string, gamePath: string) => join(directory, ...gamePath.split("\\"));
 
@@ -190,7 +177,7 @@ export function manifestVersion(name: string): number | undefined {
   return version === undefined ? undefined : Number(version);
 }
 
-/** The payload key a payload file name in the hot folder carries; undefined for other names. */
+/** The payload key a payload file name in the hot folder carries, a full payload's or a delta's; undefined for other names. */
 export function payloadFileKey(name: string): string | undefined {
-  return /^(\d+-\d+)-\d+\.pld$/.exec(name)?.[1];
+  return /^(\d+-\d+(?:-\d+-\d+)?)-\d+\.pld$/.exec(name)?.[1];
 }

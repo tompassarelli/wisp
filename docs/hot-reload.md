@@ -25,8 +25,8 @@ for files only twice a second until it has seen a host
 It also acknowledges version 0, the map's own bundle, which tells host tools
 such as the [fresh match](../scripts/wisp/lobby.ts) (wisp:scripts/wisp/lobby.ts)
 that the match is running in that client. Keep module scope free of Warcraft
-natives and synchronized state: each client evaluates a new bundle's modules as
-soon as its own files arrive, on its own frame. A map built with an older
+natives and synchronized state: each client evaluates every module of a new
+version as soon as its own files arrive, on its own frame. A map built with an older
 reloader keeps that reloader's timer and messages; rebuild it and start a fresh
 match before relying on a reloader change.
 
@@ -77,13 +77,13 @@ before the match does; a map's own commands that start a match or publish
 reloads must do the same. The marker's content never changes, which the
 Preloader rule needs, and an existing marker is left alone. The host then
 writes every client's payload files, then every client's manifest, into that
-folder. Every client polls it for its next manifest ([what polling
-costs](#what-polling-costs)). As soon as a
-client finds its manifest, it loads and verifies its payload and broadcasts
+folder ([what a reload sends](#what-a-reload-sends)). Every client polls it for
+its next manifest ([what polling costs](#what-polling-costs)). As soon as a
+client finds its manifest, it loads and verifies its copy and broadcasts
 ready or refuse with the manifest it loaded. A client still waiting for its
 own manifest loads the version when that first answer arrives. Once every
 playing human has answered, clients install on the same synchronized frame or
-refuse that version; answers naming different payload checksums refuse it too.
+refuse that version; answers naming different module states refuse it too.
 A refusal leaves the previous installed code in place. Successful installation
 preserves the game's global state and existing handles, and each client then
 writes its acknowledgement. In `--watch` output, each change's `reload` timeline
@@ -95,6 +95,46 @@ unchanged module's cached text and mappings; the result equals a full
 TypeScriptToLua compile (see [compiler](../scripts/compiler.ts) and
 [bundle](../scripts/luaBundle.ts), wisp:scripts/compiler.ts and
 wisp:scripts/luaBundle.ts).
+
+## What a reload sends
+
+A version is a module set: the compiled map's modules, each a Lua chunk of its
+own ([modules](../src/runtime/modules.ts), wisp:src/runtime/modules.ts). Its
+payload starts with an index, every module's name and hash, whose checksum is
+the version's state. The host writes two payloads: the full one, which carries
+every module, and, once every client has acknowledged an earlier version, a
+delta from that version's state that carries only the modules whose hash
+changed, renamed and new modules included; a removed module is absent from
+the index. The manifest names the state, the full payload's files and the
+delta's base and files.
+
+A client keeps the modules it installed and their state. When that state is
+the delta's base it reads only the delta, checks the index and each carried
+module against its hash, loads only those chunks and links every other module
+from its own table; otherwise, as on the first reload after the map's own
+bundle or after a restarted `wisp hot`, which knows no base, it reads the full
+payload. Either way every module of the version is linked again, so module
+locals are fresh as before, and the client answers with the state it loaded.
+A module that fails its hash, a payload cut short or a version that fails
+while its modules load refuses the version in every client.
+
+Each module loads as the chunk `hot-KEY`, KEY its hash, and the host keeps its
+source map under that key, so an error report names TypeScript lines as a
+whole bundle's did.
+
+Measured on Smashcraft (168 modules) on 6 October 2026, a one-line edit of a
+12 KB module:
+
+| | Full payload | Delta |
+| --- | --- | --- |
+| Bytes a client reads | 1,240,509 in 7 files | 19,113 in 1 file: the 8 KB index and the module |
+| 32-bit Lua: parse, hash, load, link and module scope (median of 15) | 123 ms (hash 80, load 39) | 5.5 ms (module scope 3.4) |
+
+From the save to both acknowledgements of two fake clients that acknowledge as
+soon as their files appear, the host's share fell from 374 ms to 301 ms
+(medians of 10 such edits): the delta, and no whole-bundle checksum. The 2-client native median
+was 0.841 s with whole bundles; the sample's tiny bundle, 0.298 s, is about the
+client-side floor of polling and synchronized answers.
 
 See [runtime](../src/platform/hotReload.ts) and
 [host service](../scripts/wisp/hotReload.ts)
@@ -113,7 +153,7 @@ and Warcraft stalled for minutes. The reloader bounds that
 | Client has seen | Lookups | Worst case at 35 ms per whole-CustomMapData lookup |
 | --- | --- | --- |
 | Neither the host marker nor a manifest | Every 16th poll (0.5 s), alternately for the marker and the next manifest: two a second | 70 ms per second of game (7%); no stall longer than 35 ms |
-| The marker or any manifest, so the hot folder exists | Every poll (32 a second), for the next manifest | The hot folder only: about 0.37 µs per entry, the whole-folder rate per file. It holds a manifest per published version, the marker and the payload files of two bundles, so 1,000 reloads cost about 0.4 ms per lookup, 12 ms per second of game (1.2%) |
+| The marker or any manifest, so the hot folder exists | Every poll (32 a second), for the next manifest | The hot folder only: about 0.37 µs per entry, the whole-folder rate per file. It holds a manifest per published version, the marker and the full and delta payload files of two versions, so 1,000 reloads cost about 0.4 ms per lookup, 12 ms per second of game (1.2%) |
 
 Starting the map adds at most two lookups once (the first manifest, then the
 marker), and a hot folder with a manifest or marker from an earlier session
@@ -124,14 +164,15 @@ The poll timer itself ticks 32 times a second, alike in every client, and is
 never restarted: a client's timer state must not depend on what its own
 files hold. Only whether a poll looks changes.
 
-Reload latency once a client has seen a host is unchanged: Smashcraft's native
-median was 0.841 s and the sample's 0.298 s (both measured with every poll
-looking). A client that has seen neither the marker nor a manifest when the
-first reload is published finds one within a second, so that first reload is
-up to 1 s slower; `wisp hot` creates the marker when it starts, before the
-first compile, so a first compile that takes 1 s or more costs nothing. Wisp
-never deletes the hot folder or its marker; deleting the folder during a match
-restores the whole-folder cost in that client until the match ends.
+The bound left reload latency once a client has seen a host unchanged:
+Smashcraft's native median was 0.841 s and the sample's 0.298 s (both measured
+with every poll looking, while every reload sent the whole bundle). A client
+that has seen neither the marker nor a manifest when the first reload is
+published finds one within a second, so that first reload is up to 1 s slower;
+`wisp hot` creates the marker when it starts, before the first compile, so a
+first compile that takes 1 s or more costs nothing. Wisp never deletes the hot
+folder or its marker; deleting the folder during a match restores the
+whole-folder cost in that client until the match ends.
 
 ## Desync reports
 

@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { mapCompiler, report } from "../scripts/compiler";
-import { checksum } from "../src/runtime/payload";
 
 const root = join(import.meta.dir, "..");
 
@@ -15,11 +14,9 @@ function runtimeBundle(): string {
   return compiled;
 }
 
-test("configured runtime reload preserves globals and replaces handlers", async () => {
+test("configured runtime reload preserves globals and replaces handlers", () => {
   const bundle = runtimeBundle();
-  const bytes = new Uint8Array(await Bun.file(bundle).arrayBuffer());
-  const expected = checksum(bytes.length, (index) => bytes[index] ?? 0);
-  const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "hot-reload-stub.lua"), bundle, expected], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "hot-reload-stub.lua"), bundle], { cwd: root, stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
   expect(run.stdout.toString()).toContain("reload contract passed");
   const lockstep = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "hot-reload-lockstep.lua"), bundle], { cwd: root, stdout: "pipe", stderr: "pipe" });
@@ -41,5 +38,5 @@ test("numeric and payload contracts pass in emitted Lua", () => {
   expect(report(diagnostics)).toBe("");
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(root, "build/lua-tests/tests.lua")], { cwd: root, stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
-  expect(run.stdout.toString()).toContain("8 of 8 passed");
+  expect(run.stdout.toString()).toContain("12 of 12 passed");
 });

@@ -3,20 +3,10 @@
 -- natives, files and Preloader cache; every synchronized message reaches both
 -- clients in send order, one step after it was sent.
 local bundlePath = assert(arg[1])
+local hotFiles = dofile(arg[0]:match("^(.*[/\\])") .. "hot-reload-files.lua")
 local bundleFile = assert(io.open(bundlePath, "rb"))
 local payload = bundleFile:read("a")
 bundleFile:close()
-
--- The reference payload checksum: two polynomial lanes, one byte at a time.
-local function checksum(text)
-  local first, second = 0, 0
-  for index = 1, #text do
-    local byte = string.byte(text, index)
-    first = (first * 257 + byte + 1) % 8165329
-    second = (second * 263 + byte + 1) % 8165323
-  end
-  return first .. ":" .. second
-end
 
 local network = {}
 local stepCount = 0
@@ -90,9 +80,11 @@ local function step()
   end
 end
 
-local function payloadName(text) return "fixture-hot\\" .. checksum(text):gsub(":", "-") .. "-0.pld" end
-local function publishPayload(c, text, stored) c.files[payloadName(text)] = stored or text end
-local function publishManifest(c, version, text) c.files["fixture-hot\\manifest-" .. version .. ".pld"] = version .. " 1 " .. checksum(text) end
+-- A version's payload files, each cut short by `damage` bytes in this client when given; then its manifest.
+local function publishPayload(c, version, damage)
+  for name, text in pairs(version.payloads) do c.files[name] = damage and text:sub(1, -damage - 1) or text end
+end
+local function publishManifest(c, version) c.files[version.manifestName] = version.manifest end
 
 -- Steps until both clients decided `version`; returns the step on which each applied it.
 local function settle(version)
@@ -108,39 +100,44 @@ local function settle(version)
 end
 
 -- Version 1: client A finds its manifest first; B loads from A's answer before its own manifest exists.
-publishPayload(a, payload)
-publishPayload(b, payload)
-publishManifest(a, 1, payload)
+local first = hotFiles.version("fixture", 1, payload)
+publishPayload(a, first)
+publishPayload(b, first)
+publishManifest(a, first)
 local applied = settle(1)
 assert(applied[1] ~= nil and applied[1] == applied[2], "clients installed version 1 on different steps")
 assert(a.sent == 1 and b.sent == 1, "each client answers a version once")
 for _, c in ipairs(clients) do
   assert(hot(c).applied == 1 and hot(c).pending == nil and hot(c).prepared == nil)
+  assert(hot(c).state == first.state, "installed state not recorded")
   assert(c.writes["fixture-hot-ack-p" .. c.slot .. ".txt"]:match("^applied 1 at "), "missing acknowledgement")
 end
-publishManifest(b, 1, payload)
+publishManifest(b, first)
 for _ = 1, 3 do step() end
 assert(a.sent == 1 and b.sent == 1, "a decided version was answered again")
 
--- Version 2: B's copy is damaged, so neither client installs it.
-local second = payload .. "\n-- version 2\n"
+-- Version 2 offers a delta from version 1, and B's copy of it is damaged, so neither client installs it.
+local second = hotFiles.version("fixture", 2, payload .. "\n-- version 2\n", first)
 publishPayload(a, second)
-publishPayload(b, second, second:sub(1, -3))
-publishManifest(a, 2, second)
-publishManifest(b, 2, second)
+publishPayload(b, second, 2)
+publishManifest(a, second)
+publishManifest(b, second)
 settle(2)
-for _, c in ipairs(clients) do assert(hot(c).applied == 1 and hot(c).decided == 2, "a refused version was applied") end
+for _, c in ipairs(clients) do assert(hot(c).applied == 1 and hot(c).decided == 2 and hot(c).state == first.state, "a refused version was applied") end
 assert(a.messages[#a.messages] == "hot reload 2 not applied: another client couldn't load it", a.messages[#a.messages])
 assert(b.messages[#b.messages] == "hot reload 2 not applied: payload missing or damaged", b.messages[#b.messages])
 
--- Version 3: both clients find their manifests on the same step and install together.
-local third = payload .. "\n-- version 3\n"
+-- Version 3, a delta from version 1 again: both clients find their manifests on the same step and install together.
+local third = hotFiles.version("fixture", 3, payload .. "\n-- version 3\n", first)
 publishPayload(a, third)
 publishPayload(b, third)
-publishManifest(a, 3, third)
-publishManifest(b, 3, third)
+publishManifest(a, third)
+publishManifest(b, third)
 applied = settle(3)
 assert(applied[1] ~= nil and applied[1] == applied[2], "clients installed version 3 on different steps")
 assert(a.sent == 3 and b.sent == 3)
-for _, c in ipairs(clients) do assert(c.writes["fixture-hot-ack-p" .. c.slot .. ".txt"]:match("^applied 3 at ")) end
+for _, c in ipairs(clients) do
+  assert(c.writes["fixture-hot-ack-p" .. c.slot .. ".txt"]:match("^applied 3 at "))
+  assert(hot(c).state == third.state and hot(c).modules.bundle.hash == third.hash)
+end
 print("lockstep reload contract passed")

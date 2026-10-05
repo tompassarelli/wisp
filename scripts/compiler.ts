@@ -4,7 +4,8 @@
 // and transformed to Lua again. Every other module's Lua comes from the previous
 // compile, and the bundle is rebuilt from all modules in program order, so the
 // output equals a full compile's. The bundle reuses each unchanged module's
-// text and source-map mappings (wisp:scripts/luaBundle.ts).
+// text and source-map mappings (wisp:scripts/luaBundle.ts), and keeps each
+// module's code and map for hot reloads by module.
 import { statSync } from "node:fs";
 import { normalize, resolve } from "node:path";
 import ts from "typescript";
@@ -20,7 +21,7 @@ import { getSourceDir } from "typescript-to-lua/dist/transpilation/transpiler";
 import { getProgramTranspileResult } from "typescript-to-lua/dist/transpilation/transpile";
 import type { EmitFile, ProcessedFile } from "typescript-to-lua/dist/transpilation/utils";
 import { normalizeSlashes } from "typescript-to-lua/dist/utils";
-import { LuaBundler } from "./luaBundle";
+import { type BundledModules, LuaBundler } from "./luaBundle";
 
 /** Runs one named phase of a compile and returns its result; a caller times the phase by supplying one. */
 export type Phase = <A>(name: string, run: () => A) => A;
@@ -56,6 +57,11 @@ class IncrementalTranspiler extends Transpiler {
   /** Preserve each module as first printed; emission copies code and restores tree rewrites. */
   private readonly modules = new Map<string, CachedModule>();
   private readonly bundler = new LuaBundler();
+
+  /** The modules of the last bundle; undefined when TypeScriptToLua built it. */
+  get bundled(): BundledModules | undefined {
+    return this.bundler.bundled;
+  }
 
   /** TSTL 1.37.1's emit plan for a bundle, built by the caching bundler when it can. */
   protected override getEmitPlan(program: ts.Program, diagnostics: ts.Diagnostic[], files: ProcessedFile[], plugins: Plugin[]): { emitPlan: EmitFile[] } {
@@ -140,7 +146,13 @@ function cachingHost(options: ts.CompilerOptions, cache: Map<string, CachedSourc
   return host;
 }
 
-export function mapCompiler(configPath: string): (phase?: Phase) => readonly ts.Diagnostic[] {
+export interface MapCompiler {
+  (phase?: Phase): readonly ts.Diagnostic[];
+  /** The modules of the bundle the last successful compile wrote; undefined when TypeScriptToLua built it. */
+  readonly modules: () => BundledModules | undefined;
+}
+
+export function mapCompiler(configPath: string): MapCompiler {
   // An absolute config path keeps every source file name absolute, which the
   // map plugin needs to recognize f32, floorDiv and floorMod by their file.
   const absolute = resolve(configPath);
@@ -148,7 +160,7 @@ export function mapCompiler(configPath: string): (phase?: Phase) => readonly ts.
   const sources = new Map<string, CachedSource>();
   let builder: ts.EmitAndSemanticDiagnosticsBuilderProgram | undefined;
   let signaturesPrimed = false;
-  return (phase = defaultPhase) => {
+  const compile = (phase: Phase = defaultPhase): readonly ts.Diagnostic[] => {
     // Parsed every time so added and removed files are picked up.
     const config = phase("read config", () => parseConfigFileWithSystem(absolute));
     if (config.errors.length > 0) return config.errors;
@@ -204,6 +216,7 @@ export function mapCompiler(configPath: string): (phase?: Phase) => readonly ts.
       program.getDeclarationDiagnostics = declarationDiagnostics;
     }
   };
+  return Object.assign(compile, { modules: () => transpiler.bundled });
 }
 
 export function report(diagnostics: readonly ts.Diagnostic[]): string {

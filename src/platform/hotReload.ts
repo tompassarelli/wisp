@@ -4,13 +4,21 @@
 // and broadcasts its answer: ready or refuse, with the manifest it loaded. A
 // client that has not found that version yet loads it when the first answer
 // arrives. When every playing human has answered, all clients install the
-// bundle on that same frame, or all refuse it, so a file problem on one client
+// version on that same frame, or all refuse it, so a file problem on one client
 // can't split the simulations. Match state is untouched: it lives in globals
 // the new code reads. The reloader's own handlers are reinstalled too, so it
 // can reload itself.
 //
-// Each client evaluates a new bundle's modules when its own files arrive, on
-// its own frame, so module scope must not call Warcraft natives or read
+// A version is a module set (wisp:src/runtime/modules.ts). A client keeps the
+// modules it installed; when they are the version's base it reads only the
+// delta, the modules that changed, and links every other module from its own
+// table. Otherwise, as on the first reload after the map's own bundle, it
+// reads the full payload. Either way it checks the whole resulting state: the
+// index's checksum is the version's state hash, every module it loads matches
+// its hash in the index, and every client answers with that state.
+//
+// Each client evaluates a version's modules when its own files arrive, on its
+// own frame, so module scope must not call Warcraft natives or read
 // synchronized state.
 //
 // A missing file costs a read of the folder that should hold it: of all of
@@ -19,8 +27,9 @@
 // polls for every manifest 32 times a second afterwards. The poll timer never
 // changes: it ticks alike in every client, because a client's timer state must
 // not depend on what its own files hold.
-import { acknowledgementLine, ackFile, formatManifest, hostFile, manifestFile, parseManifest, payloadFile, payloadKey, type Manifest } from "../runtime/gameFiles";
+import { acknowledgementLine, ackFile, deltaFile, formatManifest, hostFile, manifestFile, parseManifest, payloadFile, payloadKey, type Manifest } from "../runtime/gameFiles";
 import { runtimeConfiguration } from "../runtime/config";
+import { moduleHashText, parsePayload } from "../runtime/modules";
 import { floorDiv, floorMod } from "../sim/intMath";
 import { on, trampoline } from "./dispatch";
 import { readChunk } from "./fileio";
@@ -38,18 +47,27 @@ export interface Reloadable {
   install(this: void): void;
 }
 
+type Require = (this: void, name: string) => unknown;
+
+/** A module this client loaded: its hash and its chunk, which links it against a require. */
+interface LoadedModule {
+  readonly hash: string;
+  readonly chunk: (this: void, require: Require) => (this: void, name: string) => unknown;
+}
+
+type ModuleTable = Record<string, LoadedModule | undefined>;
+
 /** This client's load of a version it answered, or why it failed. Local to this client. */
 interface Prepared {
   version: number;
-  checksum: string;
+  state: string;
   bundle: Reloadable | string;
+  modules: ModuleTable;
 }
 
 /** The newest version answered by some client and not yet decided. Synchronized. */
 interface Pending {
-  version: number;
-  files: number;
-  checksum: string;
+  manifest: Manifest;
   /** Bit per player slot that has answered. */
   answered: number;
   waiting: number;
@@ -66,6 +84,9 @@ interface HotState {
   prepared: Prepared | undefined;
   /** Local: until this client has seen the host's marker or a manifest, its polls since a lookup round began. */
   unseen: number | undefined;
+  /** Local: the modules this client runs and their state; undefined while it runs the map's own bundle. */
+  modules?: ModuleTable;
+  state?: string;
   /** Game time since the first install, which every client reads alike on a given frame. */
   clock?: timer;
 }
@@ -121,25 +142,59 @@ function report(text: string): void {
   DisplayTextToPlayer(GetLocalPlayer(), 0, 0, text);
 }
 
-/** This client's copy of a version's bundle, loaded but not installed, or why it failed. */
-function loadLocal({ files, checksum: expected }: Manifest): Reloadable | string {
+/** A require over `modules`, as TypeScriptToLua's bundle defines it: each module runs once, on its first require. */
+function link(modules: ModuleTable): Require {
+  const values: Record<string, { readonly value: unknown } | undefined> = {};
+  const require: Require = (name) => {
+    const known = values[name];
+    if (known !== undefined) return known.value;
+    const module = modules[name];
+    if (module === undefined) throw `module '${name}' not found`;
+    const value = module.chunk(require)(name);
+    values[name] = { value };
+    return value;
+  };
+  return require;
+}
+
+/** This client's copy of a version, linked and evaluated but not installed, or why it failed. */
+function loadLocal(state: HotState, manifest: Manifest): { bundle: Reloadable | string; modules: ModuleTable } {
+  const prefix = runtimeConfiguration().filePrefix;
+  const installed = state.modules;
+  const delta = installed !== undefined && manifest.changes > 0 && manifest.base === state.state;
+  const modules: ModuleTable = {};
+  const refuse = (reason: string) => ({ bundle: reason, modules });
   const parts: string[] = [];
-  for (let index = 0; index < files; index++) parts.push(readChunk(payloadFile(expected, index, runtimeConfiguration().filePrefix)) ?? "");
-  const text = parts.join("");
-  if (stringChecksum(text) !== expected) return "payload missing or damaged";
-  const [chunk, error] = load(text, `=hot-${payloadKey(expected)}`);
-  if (chunk === undefined) return error ?? "load failed";
-  // A bundle that fails while loading is refused like a damaged one, so every client still answers.
-  const [ran, module] = pcall(chunk);
-  if (!ran) return `failed while loading: ${String(module)}`;
-  return isReloadable(module) ? module : "bundle exports no install()";
+  for (let index = 0; index < (delta ? manifest.changes : manifest.files); index++) {
+    parts.push(readChunk(delta ? deltaFile(manifest.state, manifest.base, index, prefix) : payloadFile(manifest.state, index, prefix)) ?? "");
+  }
+  const payload = parsePayload(parts.join(""));
+  if (payload === undefined || stringChecksum(payload.index) !== manifest.state) return refuse("payload missing or damaged");
+  for (const [name, hash] of payload.hashes) {
+    const text = payload.texts[name];
+    if (text === undefined) {
+      // Unchanged since the base this client runs.
+      const kept = delta ? installed[name] : undefined;
+      if (kept === undefined || kept.hash !== hash) return refuse(`module ${name} missing`);
+      modules[name] = kept;
+      continue;
+    }
+    if (stringChecksum(moduleHashText(name, text)) !== hash) return refuse(`module ${name} damaged`);
+    const [chunk, error] = load(text, `=hot-${payloadKey(hash)}`);
+    if (chunk === undefined) return refuse(error ?? `module ${name} doesn't load`);
+    modules[name] = { hash, chunk };
+  }
+  // A version that fails while its modules load is refused like a damaged one, so every client still answers.
+  const [ran, entry] = pcall(link(modules), payload.entry);
+  if (!ran) return refuse(`failed while loading: ${String(entry)}`);
+  return { bundle: isReloadable(entry) ? entry : "bundle exports no install()", modules };
 }
 
 /** Loads this client's copy of a version and tells every client whether it is ready. */
 function answer(state: HotState, manifest: Manifest): void {
   if (state.next <= manifest.version) state.next = manifest.version + 1;
-  const bundle = loadLocal(manifest);
-  state.prepared = { version: manifest.version, checksum: manifest.checksum, bundle };
+  const { bundle, modules } = loadLocal(state, manifest);
+  state.prepared = { version: manifest.version, state: manifest.state, bundle, modules };
   BlzSendSyncData(runtimeConfiguration().readyPrefix, `${formatManifest(manifest)} ${typeof bundle === "string" ? "refuse" : "ready"}`);
 }
 
@@ -175,45 +230,47 @@ function acknowledge(version: number, elapsed: number): void {
 }
 
 function decide(state: HotState, pending: Pending): void {
+  const { version, state: expected } = pending.manifest;
   state.pending = undefined;
-  state.decided = pending.version;
+  state.decided = version;
   const prepared = state.prepared;
-  if (prepared !== undefined && prepared.version <= pending.version) state.prepared = undefined;
-  // Every client answered ready with this checksum, so each holds its own load of it.
-  const bundle = prepared !== undefined && prepared.version === pending.version && prepared.checksum === pending.checksum ? prepared.bundle : "no local copy";
-  if (pending.refused || typeof bundle === "string") {
+  if (prepared !== undefined && prepared.version <= version) state.prepared = undefined;
+  // Every client answered ready with this state, so each holds its own load of it.
+  const loaded = prepared !== undefined && prepared.version === version && prepared.state === expected ? prepared : undefined;
+  const bundle = loaded === undefined ? "no local copy" : loaded.bundle;
+  if (pending.refused || typeof bundle === "string" || loaded === undefined) {
     const reason = typeof bundle === "string" ? bundle : "another client couldn't load it";
-    report(`hot reload ${pending.version} not applied: ${reason}`);
+    report(`hot reload ${version} not applied: ${reason}`);
     return;
   }
+  state.modules = loaded.modules;
+  state.state = loaded.state;
   bundle.install();
-  state.applied = pending.version;
+  state.applied = version;
   state.clock ??= startClock();
-  acknowledge(pending.version, TimerGetElapsed(state.clock));
-  report(`hot reload ${pending.version} applied`);
+  acknowledge(version, TimerGetElapsed(state.clock));
+  report(`hot reload ${version} applied`);
 }
 
 function answered(): void {
   const state = hot();
   const text = BlzGetTriggerSyncData();
   const manifest = parseManifest(text);
-  const verdict = text.split(" ")[3];
+  const verdict = text.split(" ")[5];
   if (manifest === undefined || manifest.version <= state.decided) return;
   let pending = state.pending;
-  if (pending !== undefined && manifest.version < pending.version) return;
-  if (pending === undefined || manifest.version > pending.version) {
+  if (pending !== undefined && manifest.version < pending.manifest.version) return;
+  if (pending === undefined || manifest.version > pending.manifest.version) {
     // The first answer for a newer version supersedes an undecided older one.
-    pending = { version: manifest.version, files: manifest.files, checksum: manifest.checksum, answered: 0, waiting: playingHumans(), refused: false };
+    pending = { manifest, answered: 0, waiting: playingHumans(), refused: false };
     state.pending = pending;
   }
   const bit = 1 << GetPlayerId(GetTriggerPlayer());
   if ((pending.answered & bit) !== 0) return;
   pending.answered |= bit;
   pending.waiting--;
-  if (verdict !== "ready" || manifest.checksum !== pending.checksum) pending.refused = true;
-  if (state.prepared === undefined || state.prepared.version !== pending.version) {
-    answer(state, { version: pending.version, files: pending.files, checksum: pending.checksum });
-  }
+  if (verdict !== "ready" || manifest.state !== pending.manifest.state) pending.refused = true;
+  if (state.prepared === undefined || state.prepared.version !== pending.manifest.version) answer(state, pending.manifest);
   if (pending.waiting <= 0 && state.pending === pending) decide(state, pending);
 }
 

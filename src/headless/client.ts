@@ -661,6 +661,11 @@ export class HeadlessClient {
     };
   }
 
+  /** The published files Preloader has read in this client, in the order it first read them. */
+  preloadedFiles(): string[] {
+    return [...this.preloaded.keys()];
+  }
+
   /** The effects this client shows now, as copies, in creation order. */
   effectPoses(): EffectPose[] {
     const poses: EffectPose[] = [];

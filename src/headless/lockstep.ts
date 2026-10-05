@@ -4,9 +4,8 @@
 // same order, so clients that took the same events must make the same native
 // calls. A hot reload goes through the map's own reloader, from the files the
 // host would write. Runtime-neutral, like client.ts.
-import { ackFile, formatManifest, hostFile, manifestFile, PAYLOAD_FILE_BYTES, payloadFile } from "../runtime/gameFiles";
-import { checksum } from "../runtime/payload";
-import { floorDiv } from "../sim/intMath";
+import { ackFile, formatManifest, hostFile, manifestFile } from "../runtime/gameFiles";
+import { type Hash, type ModuleSet, ModulePublisher, type VersionFiles } from "../runtime/modules";
 import { type ClientFiles, type ClientScope, HeadlessClient, type LocalNatives, type MapEntry, type NativeBehaviors, type SyncMessage, WISP_LOCAL_NATIVES, describeCall, sameCall } from "./client";
 import type { NativeDeclarations } from "./declarations";
 
@@ -18,8 +17,10 @@ export interface LockstepOptions {
   readonly filePrefix: string;
   /** Each client's map entry; called in that client, so a host can load the bundle there. */
   readonly entry: (this: void, client: HeadlessClient) => MapEntry;
-  /** The text a hot reload publishes; each client's Lua `load` turns it back into the entry. */
-  readonly bundle: string;
+  /** The modules a hot reload publishes; each client's `load` turns their texts back into chunks. */
+  readonly modules: ModuleSet;
+  /** The checksum the host computes over module texts and indexes; the runtime-neutral one by default. */
+  readonly hash?: Hash;
   /** The game's local-only natives, added to WISP_LOCAL_NATIVES. */
   readonly localNatives?: LocalNatives;
   readonly natives?: (this: void, client: HeadlessClient) => NativeBehaviors;
@@ -69,14 +70,18 @@ export class Lockstep {
   frame = 0;
   /** Hot reload versions published so far. */
   version = 0;
+  /** The files of the latest version, as the host wrote them. */
+  files: VersionFiles | undefined = undefined;
   /** With a delivery: messages sent and not yet received, by arrival frame, then send order. */
   readonly inFlight: InFlight[] = [];
   private readonly options: LockstepOptions;
   /** The first desync, once a comparison after a frame found one. */
   private divergence: string | undefined;
+  private readonly publisher: ModulePublisher;
 
   constructor(options: LockstepOptions) {
     this.options = options;
+    this.publisher = new ModulePublisher(options.filePrefix, options.hash);
     const localNatives = { ...WISP_LOCAL_NATIVES, ...options.localNatives };
     const clients: HeadlessClient[] = [];
     for (let index = 0; index < options.players.length; index++) {
@@ -233,20 +238,20 @@ export class Lockstep {
   }
 
   /**
-   * Publishes the bundle as the next hot reload version, as `wisp hot` does:
-   * the host's marker, payload files, then the manifest. The clients find it on their next polls.
+   * Publishes the map's modules, or `modules`, as the next hot reload version,
+   * as `wisp hot` does: the host's marker, payload files, then the manifest.
+   * When every client acknowledged the previous version, it offers a delta
+   * from that state. The clients find it on their next polls.
    */
-  reload(): number {
+  reload(modules: ModuleSet = this.options.modules): number {
     this.prepareHostFolder();
-    const text = this.options.bundle;
-    const prefix = this.options.filePrefix;
-    const sum = checksum(text.length, (index) => text.charCodeAt(index));
-    const files = Math.max(1, floorDiv(text.length + PAYLOAD_FILE_BYTES - 1, PAYLOAD_FILE_BYTES));
-    for (let index = 0; index < files; index++) {
-      this.publish(payloadFile(sum, index, prefix), [text.slice(index * PAYLOAD_FILE_BYTES, (index + 1) * PAYLOAD_FILE_BYTES)]);
-    }
+    const previous = this.files;
+    if (previous !== undefined && this.unappliedReloads().length === 0) this.publisher.installed(previous.published);
     this.version++;
-    this.publish(manifestFile(this.version, prefix), [formatManifest({ version: this.version, files, checksum: sum })]);
+    const files = this.publisher.files(this.version, modules);
+    for (const [name, text] of files.payloads) this.publish(name, [text]);
+    this.publish(manifestFile(this.version, this.options.filePrefix), [formatManifest(files.manifest)]);
+    this.files = files;
     return this.version;
   }
 

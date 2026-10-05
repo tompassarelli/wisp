@@ -17,6 +17,8 @@ import { Console, Context, Effect, Layer, Schema } from "effect";
 import { payloadKey } from "../../src/runtime/gameFiles";
 import { decodeMapInfo, declareMap, encodeMapInfo, mapConfig, mapHeader, type MapDeclaration } from "../mapInfo";
 import { type Bundle, composeScript, typescriptBase } from "../mapScript";
+import type { BundledModules } from "../luaBundle";
+import { BUNDLE_MODULE } from "../../src/runtime/modules";
 import { abilityData } from "../objectData";
 import { bytesChecksum } from "./boundary";
 import { describeCause } from "./command";
@@ -81,8 +83,11 @@ export type BuildFailure = MapBuildFailure | CompileFailure | SourceMapFailure;
 type CompilerModule = typeof import("../compiler");
 
 export class MapBuild extends Context.Service<MapBuild, {
-  /** Compiles the map bundle with a compiler kept warm between calls, and keeps its source map. */
-  readonly compile: Effect.Effect<CompiledBundle, BuildFailure>;
+  /**
+   * Compiles the map with a compiler kept warm between calls and returns its
+   * modules, as a hot reload sends them; it doesn't read the bundle it wrote.
+   */
+  readonly compile: Effect.Effect<BundledModules, BuildFailure>;
   /**
    * A map whose project code is only the TypeScript bundle, started from
    * the supplied entry module. Like `rebuild`, it reuses the compiled bundle
@@ -108,16 +113,31 @@ export class MapBuild extends Context.Service<MapBuild, {
         return { text: new TextDecoder().decode(bytes), key, bytes, checksum: bundleChecksum } satisfies CompiledBundle;
       });
       /** A map command times the compiler's loading and phases as steps; `hot` keeps its reload timeline short. */
-      const compileBundle = (measured: boolean) => Effect.gen(function*() {
+      const runCompiler = (measured: boolean) => Effect.gen(function*() {
         const load = tryMapPromise("load the map compiler", configPath, warmCompiler);
         const { run, report } = yield* measured ? load.pipe(step("load compiler")) : load;
         const context = yield* Effect.context<never>();
         const phase: Phase = (name, work) => Effect.runSyncWith(context)(Effect.sync(work).pipe(step(name)));
         const diagnostics = yield* tryMapSync("compile map", configPath, () => measured ? run(phase) : run());
         if (diagnostics.length > 0) return yield* new CompileFailure({ diagnostics: report(diagnostics) });
-        return yield* compiled;
-      }).pipe(step("compile"));
-      const compile = compileBundle(false);
+        return run;
+      });
+      const compileBundle = (measured: boolean) => runCompiler(measured).pipe(Effect.andThen(compiled), step("compile"));
+      /** TypeScriptToLua built the bundle, so it reloads as one module. */
+      const wholeBundle = Effect.gen(function*() {
+        const code = yield* tryMapPromise("read map bundle", bundlePath, () => Bun.file(bundlePath).text());
+        const map = yield* tryMapPromise("read map bundle source map", `${bundlePath}.map`, () => Bun.file(`${bundlePath}.map`).text());
+        // MODULE_HEAD puts one line before the bundle's first.
+        const sourceMap = () => map.replace(/"mappings":"/, "\"mappings\":\";");
+        return { entry: BUNDLE_MODULE, modules: [{ name: BUNDLE_MODULE, code, sourceMap }] } satisfies BundledModules;
+      });
+      const compile = runCompiler(false).pipe(
+        Effect.flatMap((run) => {
+          const modules = run.modules();
+          return modules === undefined ? wholeBundle : Effect.succeed(modules);
+        }),
+        step("compile"),
+      );
       // `hot` compiles every save into the same bundle, so a map command usually finds it current.
       const currentBundle = Effect.gen(function*() {
         const age = yield* tryMapSync("check compiled bundle", bundlePath, () => freshBundleAge(bundlePath, compileInputs, Date.now()));

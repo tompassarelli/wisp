@@ -46,14 +46,35 @@ interface Encoded {
 interface Cached {
   readonly node: Node | undefined;
   readonly code: string;
+  readonly name: string;
   readonly path: string;
   readonly walk: Walk;
   /** TypeScriptToLua replaces the traceback placeholder wherever it appears, so such text is left to it. */
   readonly placeholder: boolean;
   encoded?: Encoded;
+  module?: BundledModule;
+}
+
+/** A module of a bundle, as a hot reload sends it (wisp:src/runtime/modules.ts). */
+export interface BundledModule {
+  /** The name the bundle's require uses. */
+  readonly name: string;
+  /** Its code: the body of its function in the bundle's module table. */
+  readonly code: string;
+  /** The source map of its hot-reload chunk, MODULE_HEAD + code + MODULE_TAIL, as JSON. */
+  readonly sourceMap: () => string;
+}
+
+export interface BundledModules {
+  readonly entry: string;
+  /** In bundle order. */
+  readonly modules: readonly BundledModule[];
 }
 
 const FIELDS = 6;
+// A module's entry in the bundle's module table, around its code.
+const entryHead = (path: string) => `[${path}] = function(...) \n`;
+const ENTRY_TAIL = " end,\n";
 const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const SMALL = 2048;
 const SMALL_VLQ = Array.from({ length: SMALL * 2 + 1 }, (_, index) => encodeVlq(index - SMALL));
@@ -247,15 +268,54 @@ function encodeModule(walk: Walk, sourceIndices: readonly number[], nameIndices:
   return { sourceIndices, nameIndices, head: vlq(m[1]!), middle, crossName, tail };
 }
 
+/**
+ * The source map of a module's hot-reload chunk. The chunk's head is one line,
+ * as the table entry's head is, and neither is mapped, so the walk's lines and
+ * columns are the chunk's.
+ */
+function chunkSourceMap(walk: Walk): string {
+  const m = walk.mappings;
+  let mappings = "";
+  let line = 0;
+  let column = 0;
+  let source = 0;
+  let originalLine = 0;
+  let originalColumn = 0;
+  let name = 0;
+  for (let index = 0; index < m.length; index += FIELDS) {
+    if (m[index]! !== line) {
+      mappings += ";".repeat(m[index]! - line);
+      line = m[index]!;
+      column = 0;
+    } else if (index > 0) {
+      mappings += ",";
+    }
+    mappings += vlq(m[index + 1]! - column);
+    column = m[index + 1]!;
+    if (m[index + 2]! < 0) continue;
+    mappings += vlq(m[index + 2]! - source) + vlq(m[index + 3]! - 1 - originalLine) + vlq(m[index + 4]! - originalColumn);
+    source = m[index + 2]!;
+    originalLine = m[index + 3]! - 1;
+    originalColumn = m[index + 4]!;
+    if (m[index + 5]! < 0) continue;
+    mappings += vlq(m[index + 5]! - name);
+    name = m[index + 5]!;
+  }
+  return JSON.stringify({ version: 3, sources: walk.sources, names: walk.names, mappings });
+}
+
 const sameIndices = (left: readonly number[], right: readonly number[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
 /** Builds bundles from processed modules, reusing what each module produced last time. */
 export class LuaBundler {
   private readonly modules = new Map<string, Cached>();
+  /** The modules of the last bundle built here; undefined when TypeScriptToLua built it. */
+  bundled: BundledModules | undefined;
 
   /** The bundle for these resolved modules, or undefined when TypeScriptToLua must build it. */
   bundle(program: ts.Program, files: readonly ProcessedFile[]): [ts.Diagnostic[], EmitFile] | undefined {
+    this.bundled = undefined;
     const options = program.getCompilerOptions();
     if (options.sourceMapTraceback) return undefined;
     // The rest of the bundle around an empty module table: the require shim, entry call and diagnostics.
@@ -270,13 +330,14 @@ export class LuaBundler {
     const walked: Cached[] = [];
     for (const file of files) {
       live.add(file.fileName);
-      const path = escapeString(formatPathToLuaPath(trimExtension(getEmitPathRelativeToOutDir(file.fileName, program))));
+      const name = formatPathToLuaPath(trimExtension(getEmitPathRelativeToOutDir(file.fileName, program)));
+      const path = escapeString(name);
       const node = file.sourceMapNode as unknown as Node | undefined;
       let cached = this.modules.get(file.fileName);
       if (cached === undefined || cached.node !== node || cached.code !== file.code || cached.path !== path) {
-        const walk = walkModule(`[${path}] = function(...) \n`, node ?? file.code, " end,\n");
+        const walk = walkModule(entryHead(path), node ?? file.code, ENTRY_TAIL);
         if (walk === undefined || (walk.mappings.length > 0 && walk.mappings[2]! < 0)) return undefined;
-        cached = { node, code: file.code, path, walk, placeholder: walk.text.includes(sourceMapTracebackBundlePlaceholder) };
+        cached = { node, code: file.code, name, path, walk, placeholder: walk.text.includes(sourceMapTracebackBundlePlaceholder) };
         this.modules.set(file.fileName, cached);
       }
       if (cached.placeholder) return undefined;
@@ -345,6 +406,15 @@ export class LuaBundler {
     const code = prefix + walked.map(({ walk }) => walk.text).join("") + suffix;
     const sourceMap = JSON.stringify({ version: 3, sources: [...sources.keys()], names: [...names.keys()], mappings });
     const sourceFiles = files.flatMap((file) => file.sourceFiles ?? []);
+    const entry = walked.find(({ path }) => suffix.includes(`local ____entry = require(${path}, `));
+    if (entry !== undefined) {
+      const modules = walked.map((cached) => (cached.module ??= {
+        name: cached.name,
+        code: cached.walk.text.slice(entryHead(cached.path).length, cached.walk.text.length - ENTRY_TAIL.length),
+        sourceMap: () => chunkSourceMap(cached.walk),
+      }));
+      this.bundled = { entry: entry.name, modules };
+    }
     return [diagnostics, { outputPath: empty.outputPath, code, sourceMap, sourceFiles }];
   }
 }
