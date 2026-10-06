@@ -1,4 +1,4 @@
-import { lineTokens, parseRecord, recordTokens, tokenLines } from "./recordText";
+import { IntegerKeysUndeclared, lineTokens, parseRecord, recordTokens, tokenLines } from "./recordText";
 import { type Repro, assertReproLands, parseRepro, reproLines } from "./repro";
 import { assertDefined, assertEquals, assertTrue, test } from "./testing";
 
@@ -111,11 +111,23 @@ test("record text: records keyed by numbers keep their keys, alike in Bun and Lu
   assertTrue(Array.isArray(plain) && plain[0] === 10 && plain[2] === 30 && plain.length === 3);
 });
 
-test("record text: a record keyed by numbers that isn't declared is refused rather than read as a list", () => {
-  const undeclared: Record<number, number> = {};
-  undeclared[0] = 1;
-  undeclared[2] = 3;
-  assertEquals(recordTokens({ undeclared }), undefined);
+/** The message recordTokens throws for `record`; undefined when it doesn't throw. */
+function thrown(record: object, keyed: readonly string[] = []): string | undefined {
+  try {
+    recordTokens(record, keyed);
+  } catch (error) {
+    return error instanceof IntegerKeysUndeclared ? error.message : `not IntegerKeysUndeclared: ${String(error)}`;
+  }
+  return undefined;
+}
+
+test("record text: a record keyed by numbers that isn't declared throws, naming its path", () => {
+  const moves: Record<number, number> = {};
+  moves[0] = 1;
+  moves[2] = 3;
+  const message = thrown({ kit: { rows: [{ name: "jab" }, { moves }] } });
+  assertEquals(message?.startsWith("record text: kit.rows.1.moves is keyed by integers but not declared"), true, message);
+  assertEquals(thrown({ moves: { jab: 1 } }, ["moves"])?.startsWith("record text: moves is declared keyed by integers"), true);
 });
 
 const COUNTER: Repro["lines"] = ["start 3", "add 4 5"];
