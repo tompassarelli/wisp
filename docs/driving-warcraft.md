@@ -159,6 +159,11 @@ menus start | leave
 - The library form is `hostLobby`, `joinLobby`, `startLobby` and `leaveLobby`
   on a `connectMenus` socket. wisp:test/menus.test.ts plays each one against
   a fake game.
+- `startLobby` sends `LobbyStart` no sooner than `LOBBY_SETTLE_MS` (2.5 s)
+  after the same socket's `hostLobby` was confirmed. On 7 Oct 2026,
+  Warcraft III 3.0.0.24268 crashed while loading (a read of 0x500) in 6 of 6
+  starts sent as soon as the lobby was confirmed, and in 0 of 11 sent about
+  2 s later (Smashcraft #119). No menu event is known to end that window.
 - `hostLobby` waits for `isHost:true`. A lobby-entry event requests
   `SendGameLobbySetup`; an earlier `isHost:false` setup does not mean creation
   failed. An explicit creation refusal still fails immediately.

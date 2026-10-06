@@ -209,16 +209,21 @@ test("no report within the wait names what to check", async () => {
   expect(failure(exit)).toContain("no menu page reported");
 });
 
-test("a lobby is hosted by walking the map list to the map, then started and left", async () => {
+test("a lobby is hosted by walking the map list to the map, then started once it settles and left", async () => {
   const game = started();
+  let settled = 0;
   const exit = await run(Effect.gen(function*() {
     const menus = yield* connectMenus(game.address);
     const map = yield* hostLobby(menus, { folder: "00-Wisp", file: "wisp sample.w3x", gameName: "wisp 1", password: "pw" });
-    yield* startLobby(menus);
+    const hosted = performance.now();
+    yield* startLobby(menus, 300);
+    settled = performance.now() - hosted;
     yield* leaveLobby(menus);
     return map;
   }));
   expect(Exit.isSuccess(exit) ? exit.value : failure(exit)).toBe(`${MAPS}00-Wisp/Wisp Sample.w3x`);
+  // LobbyStart right after hosting crashed Warcraft III 3.0 while loading (Smashcraft #119).
+  expect(settled).toBeGreaterThanOrEqual(290);
   expect(game.received.map(({ message, payload }) => (message === "CreateLobby" ? [message, payload["filename"], payload["privateGame"], payload["password"]] : [message, payload]))).toEqual([
     ["GetMapList", { useLastMap: true }],
     ["GetMapList", { subdirectory: `${MAPS}00-Wisp/` }],
