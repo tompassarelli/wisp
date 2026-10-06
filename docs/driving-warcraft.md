@@ -153,6 +153,17 @@ menus start | leave
 - The library form is `hostLobby`, `joinLobby`, `startLobby` and `leaveLobby`
   on a `connectMenus` socket. wisp:test/menus.test.ts plays each one against
   a fake game.
+- `hostLobby` waits for `isHost:true`. A lobby-entry event requests
+  `SendGameLobbySetup`; an earlier `isHost:false` setup does not mean creation
+  failed. An explicit creation refusal still fails immediately.
+- `PlayDeclaration.menuReportPort` selects the installed page for `play`'s
+  menu route. Without a configured port, or without a report within 3 s,
+  the usual menu controls run. After a page reports, hosting or starting
+  failures stop the command rather than creating a second lobby.
+- Each client in a clients file may set `menuReportPort`. Use a different
+  port per client and install that client's page with the same `--port`;
+  a shared port cannot identify which client reported. `reportedMenus(port)`
+  discovers and connects to that page within the caller's Effect scope.
 
 ### Setup and undo
 

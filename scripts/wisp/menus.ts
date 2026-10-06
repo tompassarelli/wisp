@@ -280,6 +280,15 @@ export const connectMenus = (address: MenuAddress): Effect.Effect<MenuSocket, Me
   return { send, expect, forget: Queue.clear(events).pipe(Effect.asVoid) };
 });
 
+/** Finds this client's installed page. No page means the caller may use its ordinary menu controls. */
+export const reportedMenus = (reportPort: number | undefined): Effect.Effect<MenuSocket | undefined, MenuFailure, Scope.Scope> => Effect.gen(function*() {
+  if (reportPort === undefined) return undefined;
+  const reports = yield* listenForMenus(reportPort);
+  const address = yield* reports.waitForAddress(3).pipe(Effect.catchTag("MenuFailure", () => Effect.void));
+  if (address === undefined) return undefined;
+  return yield* connectMenus(address);
+});
+
 const record = (value: unknown): Readonly<Record<string, unknown>> => (typeof value === "object" && value !== null ? value as Record<string, unknown> : {});
 
 interface ListedMap {
@@ -341,8 +350,9 @@ export interface HostOptions {
   readonly gameSpeed?: 0 | 1 | 2;
 }
 
-const lobbyHost = (event: MenuEvent): Outcome<{ readonly isHost: boolean }> => {
-  if (event.messageType === "GameLobbySetup") return { done: { isHost: record(event.payload)["isHost"] === true } };
+const lobbyHost = (event: MenuEvent): Outcome<"host" | "refresh"> => {
+  if (event.messageType === "GameLobbySetup" && record(event.payload)["isHost"] === true) return { done: "host" };
+  if (event.messageType === "SetGlueScreen" && record(event.payload)["screen"] === "GAME_LOBBY") return { done: "refresh" };
   if (event.messageType === "MultiplayerGameCreateResult" && record(record(event.payload)["details"])["success"] === false) return { failed: "the game refused to create the lobby" };
   return undefined;
 };
@@ -367,8 +377,16 @@ export const hostLobby = (menus: MenuSocket, options: HostOptions) => Effect.gen
       settingVisibility: 0,
     },
   });
-  const { isHost } = yield* menus.expect(`host "${options.gameName}"`, 20, lobbyHost);
-  if (!isHost) return yield* new MenuFailure({ operation: `host "${options.gameName}"`, problem: "the game put this client in a lobby it does not host" });
+  const what = `host "${options.gameName}"`;
+  yield* Effect.gen(function*() {
+    while ((yield* menus.expect(what, 20, lobbyHost)) === "refresh") {
+      // Lobby entry can announce the previous setup first. The menus request the new setup on entry too.
+      yield* menus.send("SendGameLobbySetup");
+    }
+  }).pipe(Effect.timeoutOrElse({
+    duration: "20 seconds",
+    orElse: () => Effect.fail(new MenuFailure({ operation: what, problem: "the game did not confirm this client hosting within 20 s" })),
+  }));
   return filename;
 });
 

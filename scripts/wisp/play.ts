@@ -20,6 +20,7 @@ import {
 } from "../warcraft/battleNet";
 import type { Ink, Word } from "../warcraft/desktop";
 import { step } from "./timings";
+import { hostLobby, reportedMenus, startLobby } from "./menus";
 
 /** Why play can't go on, in words for the person who ran it. */
 export class PlayProblem extends Schema.TaggedError<PlayProblem>()("PlayProblem", {
@@ -222,6 +223,8 @@ export interface PlayDeclaration<R = never> {
   readonly map: { readonly folder: string; readonly file: string; readonly title: string; readonly source?: string };
   /** The hosted game's name; joining by name is case-sensitive. */
   readonly gameName: string;
+  /** The installed menu page's report port for this prefix. Absent uses ordinary menu controls. */
+  readonly menuReportPort?: number;
   /** Each run saves a picture before and after every click, and its click log, in a folder here named by its start time. */
   readonly debugDirectory: string;
   /** Before Warcraft III starts the map: what the map reads at its start, left in Documents/Warcraft III. */
@@ -682,6 +685,19 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   // 4, through the menus: Multiplayer, Custom Games, Create Game, the map's folder, the map, the game's name, Create, Start.
   const host = (game: PlayGame) => Effect.gen(function*() {
     const { folder, title } = declaration.map;
+    const driven = yield* Effect.scoped(Effect.gen(function*() {
+      const menus = yield* reportedMenus(declaration.menuReportPort);
+      if (menus === undefined) return false;
+      yield* hostLobby(menus, { folder, file: declaration.map.file, gameName: declaration.gameName, password: "" });
+      const since = yield* Clock.currentTimeMillis;
+      yield* startLobby(menus);
+      yield* declaration.started(game, since);
+      return true;
+    })).pipe(Effect.mapError((cause) => cause._tag === "MenuFailure" ? new PlayProblem({ problem: cause.message }) : cause));
+    if (driven) {
+      yield* status(4, "Map", `"${declaration.gameName}" of ${title} hosted through the menus (joining by name is case-sensitive)`);
+      return;
+    }
     // The menus are read from the output, which only the fullscreen game covers.
     yield* fullscreen(game.window, "Warcraft III's window", PLAY_TIMEOUTS.gameFullscreen);
     const output = yield* outputOf(game.window, "Warcraft III's window");

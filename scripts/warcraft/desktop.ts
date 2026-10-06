@@ -23,7 +23,7 @@ export class DesktopFailure extends Schema.TaggedError<DesktopFailure>()("Deskto
 
 const ClientsFile = Schema.Struct({
   tools: Schema.Struct({ grim: Schema.String, xdotool: Schema.String, wlrctl: Schema.String, tesseract: Schema.String }),
-  clients: Schema.NonEmptyArray(Schema.Struct({ name: Schema.String, run: Schema.String, documents: Schema.String })),
+  clients: Schema.NonEmptyArray(Schema.Struct({ name: Schema.String, run: Schema.String, documents: Schema.String, menuReportPort: Schema.optional(Schema.Int) })),
 });
 type Tools = typeof ClientsFile.Type["tools"];
 
@@ -31,6 +31,8 @@ export interface Client {
   readonly name: string;
   /** The client's Documents/Warcraft III folder. */
   readonly documents: string;
+  /** This client's installed Wisp page's report port; distinct for every client. Absent uses ordinary menus. */
+  readonly menuReportPort?: number;
   readonly tools: Tools;
   readonly x11: Record<string, string>;
   readonly wayland: Record<string, string>;
@@ -74,7 +76,11 @@ export const loadClients = (path: string) =>
   Effect.gen(function*() {
     const raw = yield* Effect.tryPromise({ try: () => Bun.file(path).json(), catch: fail("read clients file", path) });
     const config = yield* Schema.decodeUnknownEffect(ClientsFile)(raw).pipe(Effect.mapError(fail("decode clients file", path)));
-    return yield* Effect.forEach(config.clients, ({ name, run: dir, documents }) =>
+    const ports = config.clients.flatMap((client) => client.menuReportPort === undefined ? [] : [client.menuReportPort]);
+    if (ports.some((port) => port < 1 || port > 65535) || new Set(ports).size !== ports.length) {
+      return yield* new DesktopFailure({ operation: "decode clients file", client: path, cause: "menuReportPort must be a distinct port from 1 to 65535 for each configured client" });
+    }
+    return yield* Effect.forEach(config.clients, ({ name, run: dir, documents, menuReportPort }) =>
       Effect.gen(function*() {
         const read = (file: string) =>
           Effect.tryPromise({ try: async () => (await Bun.file(join(dir, file)).text()).trim(), catch: fail(`read desktop ${file}`, name) });
@@ -82,7 +88,7 @@ export const loadClients = (path: string) =>
         const wayland = { XDG_RUNTIME_DIR: join(dir, "runtime"), WAYLAND_DISPLAY: yield* read("wayland-display") };
         const windows = text(yield* run(name, "find Warcraft window", [config.tools.xdotool, "search", "--name", "^Warcraft III$"], x11)).split("\n").filter((line) => line !== "");
         if (windows.length !== 1) return yield* new DesktopFailure({ operation: "find Warcraft window", client: name, cause: `${windows.length} windows` });
-        return { name, documents, tools: config.tools, x11, wayland, window: windows[0]! } satisfies Client;
+        return { name, documents, ...(menuReportPort === undefined ? {} : { menuReportPort }), tools: config.tools, x11, wayland, window: windows[0]! } satisfies Client;
       }));
   });
 
