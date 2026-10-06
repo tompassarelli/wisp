@@ -1,0 +1,53 @@
+10/6 20:34:53.371  GameMain Started
+10/6 20:34:53.372  Command Line: "C:\Program Files (x86)\Warcraft III\_retail_\x86_64\Warcraft III.exe" -loadfile "C:\users\steamuser\Documents\Warcraft III\Maps\00-Smashcraft\Smashcraft wisp-play diagnostic.w3x" -launch -uid w3
+10/6 20:34:53.372  Current Directory: "C:\Program Files (x86)\Warcraft III\_retail_"
+10/6 20:34:54.161  Opening mod - War3.w3mod
+10/6 20:34:57.022  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft diagnostic stage lineup main bda8a366.w3x
+10/6 20:34:57.022  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft diagnostic stage lineup main bda8a366.w3x
+10/6 20:34:57.027  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
+10/6 20:34:57.027  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
+10/6 20:34:57.033  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/ORDR_S2_2.323[R].w3x
+10/6 20:34:57.033  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/ORDR_S2_2.323[R].w3x
+10/6 20:34:57.117  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/PKLegendsv3.1b_ELO_0829-1612.w3x
+10/6 20:34:57.117  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/PKLegendsv3.1b_ELO_0829-1612.w3x
+10/6 20:34:57.137  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)Amazonia.w3x
+10/6 20:34:57.137  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)Amazonia.w3x
+10/6 20:34:57.138  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)Amazonia_S2.w3x
+10/6 20:34:57.138  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)Amazonia_S2.w3x
+10/6 20:35:07.261  [CLoginCallbacks] LoginDoorClose called
+10/6 20:35:08.515  Activating WebUI
+10/6 20:35:08.526  Activating WebUI
+10/6 20:35:12.825  Activating WebUI
+10/6 20:35:12.828  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
+10/6 20:35:12.828  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
+10/6 20:35:13.906  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
+10/6 20:35:13.906  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
+10/6 20:35:14.429  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
+10/6 20:35:14.431  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
+10/6 20:35:18.842  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)EchoIsles_S2_v2.2.w3x
+10/6 20:35:18.842  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)EchoIsles_S2_v2.2.w3x
+10/6 20:35:18.852  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)TerenasStand_LV.w3x
+10/6 20:35:18.852  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)TerenasStand_LV.w3x
+10/6 20:35:18.855  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(4)LostTemple_S2.w3x
+10/6 20:35:18.855  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(4)LostTemple_S2.w3x
+10/6 20:35:18.866  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)LastRefuge_S2_v1.5.w3x
+10/6 20:35:18.866  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)LastRefuge_S2_v1.5.w3x
+10/6 20:35:18.875  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)Tidehunters_S2_v1.2.w3x
+10/6 20:35:18.875  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)Tidehunters_S2_v1.2.w3x
+10/6 20:35:18.885  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(4)TurtleRock_S2.w3x
+10/6 20:35:18.885  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(4)TurtleRock_S2.w3x
+10/6 20:35:18.895  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)AutumnLeaves_S2_v2.0.w3x
+10/6 20:35:18.895  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)AutumnLeaves_S2_v2.0.w3x
+10/6 20:35:18.905  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)NorthernIsles_S2.w3x
+10/6 20:35:18.905  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)NorthernIsles_S2.w3x
+10/6 20:35:18.915  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(4)TwistedMeadows_S2_v1.1.w3x
+10/6 20:35:18.915  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(4)TwistedMeadows_S2_v1.1.w3x
+10/6 20:35:18.925  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)Hammerfall_S3.w3x
+10/6 20:35:18.925  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)Hammerfall_S3.w3x
+10/6 20:35:19.858  model creation failed - war3mapImported/ImpactHit-14ab984c85a771b2c9feb68275c44577ceb14d0f5c5f2e3801cbc00c2decd594.mdx
+10/6 20:35:19.858  model creation failed - war3mapImported/ImpactHit-14ab984c85a771b2c9feb68275c44577ceb14d0f5c5f2e3801cbc00c2decd594.mdx
+10/6 20:35:19.858  model creation failed - war3mapImported/ImpactHit-14ab984c85a771b2c9feb68275c44577ceb14d0f5c5f2e3801cbc00c2decd594.mdx
+10/6 20:35:19.858  model creation failed - war3mapImported/ImpactHit-14ab984c85a771b2c9feb68275c44577ceb14d0f5c5f2e3801cbc00c2decd594.mdx
+10/6 20:35:19.858  model creation failed - war3mapImported/ImpactHit-14ab984c85a771b2c9feb68275c44577ceb14d0f5c5f2e3801cbc00c2decd594.mdx
+10/6 20:35:19.858  model creation failed - war3mapImported/ImpactHit-14ab984c85a771b2c9feb68275c44577ceb14d0f5c5f2e3801cbc00c2decd594.mdx
+10/6 20:35:21.078  model creation failed - war3mapImported/IllidanOriginalClip39-dd095794de700f991d5fb124ff8eadd694b11d328fa661fdcc9a3ab36a5c4e16.mdx

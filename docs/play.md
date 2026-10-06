@@ -2,28 +2,17 @@
 
 `play` takes the owner from their desktop to a match on their own display.
 It reports each step on one line and stops at the first problem with a plain
-message that says what to do. Nothing after Battle.net's Play is clicked:
-Warcraft III loads the map from its launch options and the map starts the
-match when the game asks.
-
-Use `bun wisp play --menus` to host after Warcraft III shows its Multiplayer
-menu instead of loading the map during startup. This avoids overlapping map
-loading with the engine's startup map scan. A signed-in launcher is reused
-without a restart when it has no startup map argument; an earlier kept
-argument for this map is cleared, restarting the launcher once if necessary.
-Other launch options stay in place. An argument loading another map is refused.
-The installed menu page and `PlayDeclaration.menuReportPort` use the game's
-own menu controls without clicks; otherwise the ordinary menu clicks run.
-`--menus` and `--keep-launch-options` are separate choices.
+message that says what to do. It takes no arguments.
 
 ```text
 1/7 Wine prefix: free
 2/7 Battle.net: starting the Steam shortcut "Warcraft III (Battle.net)"
-2/7 Battle.net: started and signed in (27 s), with Warcraft III set to load the map
+2/7 Battle.net: started and signed in (27 s)
 3/7 Warcraft III: Battle.net's Play started it
-3/7 Warcraft III: Battle.net's launch options for it put back; its own Play no longer loads the map
 3/7 Warcraft III: running (pid 2852), asked to go fullscreen
-4/7 Map: Warcraft III loaded Smashcraft 0.0.47.w3x from its launch options; fighter selection 30 s after Play (6 key presses to continue)
+4/7 Map: Warcraft III signed in and read its ladder maps (27 s); hosting the map
+4/7 Map: "Smashcraft" of Smashcraft 0.0.47 hosted through the menus (joining by name is case-sensitive)
+4/7 Map: fighter selection 35 s after Play
 5/7 Controller helper: running (pid 41234), log ~/.local/state/smashcraft/play-helper.log
 6/7 Match: computer as Player 3
 7/7 Fullscreen: Warcraft III is fullscreen and focused. Ready to fight.
@@ -37,23 +26,20 @@ own menu controls without clicks; otherwise the ordinary menu clicks run.
    prefix's wineservers by their `WINEPREFIX` and, for one started in another
    namespace, by the server directory Wine names after the prefix's device
    and inode (`server-DEV-INODE`).
-2. **Battle.net.** Warcraft III's launch options (Battle.net's "Additional
-   command line arguments", `Games.w3.AdditionalLaunchArguments` in the
-   prefix's `AppData/Roaming/Battle.net/Battle.net.config`) are set to
-   `-loadfile "C:\…\Maps\FOLDER\FILE"`, the option the World Editor's Test
-   Map passes; BenqsXd/wc3-mcp (MIT) loads maps the same way. Launched
-   directly, `Warcraft III.exe -loadfile` has no Battle.net session and stops
-   at a sign-in form (Smashcraft's World Editor Test Map did), and the game
-   can drop the option after a sign-in, which step 4 handles. Battle.net reads them when it starts and writes its settings
-   back when it exits, so they are written while it isn't running: a running
-   launcher that started with them is reused, and one that didn't is ended
-   and started again. Steam starts the game's shortcut: a non-Steam
-   shortcut's URL is `steam://rungameid/` followed by its 32-bit app id
-   shifted left 32 bits, OR 0x02000000 (`steam -applaunch` takes only
-   Steam's own app ids). Signed in means the newest `battle.net-*.log` in
-   `AppData/Local/Battle.net/Logs` has `Logged into Battle.net successfully`.
-   `play` never signs in or out. When Warcraft III already runs, the options
-   can't apply and step 4 hosts the map through its menus.
+2. **Battle.net.** A running, signed-in launcher is reused; otherwise Steam
+   starts the game's shortcut: a non-Steam shortcut's URL is
+   `steam://rungameid/` followed by its 32-bit app id shifted left 32 bits,
+   OR 0x02000000 (`steam -applaunch` takes only Steam's own app ids). Signed
+   in means the newest `battle.net-*.log` in `AppData/Local/Battle.net/Logs`
+   has `Logged into Battle.net successfully`. `play` never signs in or out.
+   Warcraft III's launch options (Battle.net's "Additional command line
+   arguments", `Games.w3.AdditionalLaunchArguments` in the prefix's
+   `AppData/Roaming/Battle.net/Battle.net.config`) must not load a map at
+   startup (step 4). Earlier Wisp runs set `-loadfile` there for this map;
+   Battle.net reads the options when it starts and writes its settings back
+   when it exits, so that argument is removed while it isn't running,
+   ending a running launcher first. Other options stay in place; a
+   `-loadfile` for another map stops `play`.
 3. **Warcraft III.** The map is copied in from its declared build when its
    folder lacks it, and the game's `prepare` leaves what the map reads at its
    start. `play` makes the launcher's window fullscreen and reads it.
@@ -75,22 +61,30 @@ own menu controls without clicks; otherwise the ordinary menu clicks run.
    starts Warcraft III.exe itself. Battle.net's `--exec="launch W3"` would
    need a second Battle.net.exe inside the launcher's own Steam runtime
    container; started from outside, Wine would start a second wineserver on
-   the prefix, so `play` presses Play. Once the game runs, the launch
-   options are put back as they were, so Battle.net's own Play doesn't load
-   the map; `--keep-launch-options` leaves them after a run that succeeds, so
-   the next run reuses the running launcher. A run that stops puts them back,
-   or removes the ones an earlier kept run left. Battle.net may write back
-   the options it read when it exits. `play` asks for fullscreen as soon as
-   the game's window appears; a game loading its map takes a while to follow
+   the prefix, so `play` presses Play. `play` asks for fullscreen as soon
+   as the game's window appears; a game loading takes a while to follow
    (more than 5 s on 6 Oct), so the menus and step 7 wait up to 45 s, and
    once it is fullscreen a capture of its output is the game's frame.
-4. **Map.** A map loaded from the launch options waits on "Press any key to
-   continue" once it has loaded (6 Oct), so space goes to the game window
-   every 2 s (at most 60 times, none once the main menu shows), and the time
-   from Play to fighter selection is printed. It ends when the game's
-   `started` resolves. If Warcraft III shows
-   its main menu for 10 s instead, or already ran, the map is hosted through
-   the menus: Multiplayer, Custom Games, Create Game, the map's folder, the
+4. **Map.** After the login doors close, Warcraft III opens every map of
+   the ladder pools in `Maps/Download/SeasonN/` as its active mod (6 Oct:
+   Season1's twelve, then Season9's ten, 8-12 s after
+   `[CLoginCallbacks] LoginDoorClose called` in
+   `Documents/Warcraft III/Logs/War3Log.txt`). A map that loads during that
+   scan can't read its own imported files: each `-loadfile` run on 6 Oct
+   logged 326 `model creation failed - war3mapImported/...` lines and drew
+   neither stage nor fighters, and the one `--menus` run that created its
+   lobby 27 ms after the scan's last map (its map listing ran between the
+   two batches) crashed Warcraft III while loading. Maps hosted after the
+   scan loaded with no failure. So `play` never loads the map at startup
+   and hosts it only once the game's own log (this launch's, not the one
+   Play replaces) shows the scan over: a line at least 2 s after its last
+   ladder map, or 2 s with nothing new. A game that signed in and opens no
+   ladder map within 30 s is hosted anyway; one whose log shows no sign-in
+   within 120 s stops `play`. Warcraft III already past its scan is hosted
+   at once. Hosting goes through the menu socket when the game declares
+   `menuReportPort` and its installed page reports within 3 s
+   ([driving-warcraft.md](driving-warcraft.md)); otherwise through the
+   menus: Multiplayer, Custom Games, Create Game, the map's folder, the
    map, the game's name, Create, Start. Each control is found by the text
    Warcraft shows, so any screen size works. Warcraft's menus slide in (on 6
    Oct Battle.net's tabs moved 32 px down within 0.3 s of appearing, and a
@@ -101,8 +95,11 @@ own menu controls without clicks; otherwise the ordinary menu clicks run.
    just below a "Game Name" label when there is one, and otherwise where it
    is on a 2560x1440 frame scaled by the frame's height; the name typed into
    it must read back beside it. A click aimed outside the screen is refused
-   before the pointer moves. Another way to make the game, such as a message
-   to the game's own interface, would replace this route alone.
+   before the pointer moves. The step ends when the game's `started`
+   resolves, and prints the time from Play to fighter selection. Any
+   `model creation failed - war3mapImported/` line the log gains from
+   hosting on, checked then and again after step 6, stops `play` with the
+   count and the first model.
 5. **Controller helper.** One helper for this game: a running helper whose
    `--pid` is this game's is kept; any other running copy stops `play`. The
    helper starts in its own session, so it outlives `play` and its terminal,

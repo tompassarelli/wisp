@@ -1,10 +1,11 @@
 // `play`: one command from the owner's desktop to a match. It checks that at
 // most one Wine runtime uses the game's prefix, starts or reuses the signed-in
-// Battle.net launcher through its Steam shortcut, presses Play, hosts a custom
-// game of the map, lets the game add its computer opponent at its first
-// screen, starts the game's controller helper, and leaves Warcraft III
-// fullscreen and focused so pointer focus can't leave it. Each step prints one
-// status line; the first problem stops the run with a plain message.
+// Battle.net launcher through its Steam shortcut, presses Play, waits for
+// Warcraft III to sign in and read its ladder maps, hosts a custom game of the
+// map, lets the game add its computer opponent at its first screen, starts the
+// game's controller helper, and leaves Warcraft III fullscreen and focused so
+// pointer focus can't leave it. Each step prints one status line; the first
+// problem stops the run with a plain message.
 //
 // It never signs in or out, never starts Warcraft III.exe itself (only the
 // launcher's Play does), and never starts a runtime while another uses the
@@ -19,6 +20,7 @@ import {
   newestLauncherLog, prefixUse, shortcutAppId, shortcutUrl, signedIn, withLaunchOptions,
 } from "../warcraft/battleNet";
 import type { Ink, Word } from "../warcraft/desktop";
+import { SCAN_QUIET_MS, importFailures, ladderScan, sessionStart, war3LogPath } from "../warcraft/war3Log";
 import { step } from "./timings";
 import { hostLobby, reportedMenus, startLobby } from "./menus";
 
@@ -194,8 +196,6 @@ export class PlayDesktop extends Context.Service<PlayDesktop, {
   readonly click: (spot: Spot) => Effect.Effect<readonly string[], PlayProblem>;
   readonly keys: (window: XWindow, ...keys: string[]) => Effect.Effect<void, PlayProblem>;
   readonly typeText: (window: XWindow, text: string) => Effect.Effect<void, PlayProblem>;
-  /** Sends one key to the window itself (6 Oct: space on "Press any key to continue" reached Warcraft III this way). */
-  readonly pressKey: (window: XWindow, key: string) => Effect.Effect<void, PlayProblem>;
 }>()("wisp/PlayDesktop") {}
 
 /** The running game, as the consuming game's steps see it. */
@@ -260,12 +260,13 @@ export const PLAY_TIMEOUTS = {
   request: 15,
   tile: 6,
   next: 10,
-  menuShown: 10,
   gameFullscreen: 45,
-  continueEvery: 2,
-  continuePresses: 60,
   launch: 45,
   gameWindow: 60,
+  /** Warcraft III's own sign-in, from its start to its login doors closing (14 s on 6 Oct). */
+  gameSignIn: 120,
+  /** From the login doors closing to the ladder scan (8-12 s on 6 Oct); a game that never scans is hosted after it. */
+  ladderScan: 30,
   mainMenu: 120,
   screen: 20,
   started: 120,
@@ -414,16 +415,8 @@ const isFullscreen = (window: DesktopWindow) =>
  */
 const GAME_NAME_FIELD = { x: 400, y: 340 };
 
-/** Choices for one run of play. */
-export interface PlayOptions {
-  /** Hosts only after Warcraft III shows its main menu, avoiding startup map loading. */
-  readonly menus?: boolean;
-  /** Leaves Warcraft III's launch options loading the map, so Battle.net needn't restart on the next run. */
-  readonly keepLaunchOptions?: boolean;
-}
-
 /** Runs the declared playtest, printing one status line per step. */
-export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) => void, options: PlayOptions = {}) => Effect.gen(function*() {
+export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) => void) => Effect.gen(function*() {
   const machine = yield* PlayMachine;
   const desktop = yield* PlayDesktop;
   const { prefix, display, shortcut } = declaration;
@@ -505,58 +498,34 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     ? fail(`Battle.net has no settings at ${configPath}; start it once from Steam, then run play again`)
     : Effect.try({ try: () => ({ text, options: launchOptions(text) }), catch: () => new PlayProblem({ problem: `Battle.net's settings at ${configPath} aren't JSON` }) }))));
   const setLaunchOptions = (options: string | undefined) => settings.pipe(Effect.flatMap(({ text }) => machine.write(configPath, withLaunchOptions(text, options))));
-  /**
-   * What Warcraft III's launch options were before this run first set them, while ours are in place:
-   * every way a run ends puts them back but a successful run with --keep-launch-options. A run that
-   * found them already set by an earlier kept run removes them when it fails.
-   */
-  let pending: { readonly previous: string | undefined } | undefined;
-  /** True when it put options back. */
-  const restoreLaunchOptions = Effect.suspend(() => (pending === undefined
-    ? Effect.succeed(false)
-    : setLaunchOptions(pending.previous).pipe(Effect.tap(() => Effect.sync(() => { pending = undefined; })), Effect.as(true))));
 
-  /** How the map gets loaded: by Warcraft III's launch options, or through its menus when it already runs. */
-  type Route = { readonly kind: "launch"; readonly previous: string | undefined } | { readonly kind: "menus" };
+  /**
+   * A signed-in launcher whose Play starts Warcraft III without loading a map: a map loaded at
+   * startup loads during the ladder scan (wisp:scripts/warcraft/war3Log.ts). Earlier Wisp runs
+   * left `-loadfile` for this map in the launch options; that one is cleared, another map's refused.
+   */
   const launcher = Effect.gen(function*() {
     const use = yield* prefixState;
     if (use.game !== undefined) {
       yield* waitSignedIn(undefined);
-      yield* status(2, "Battle.net", "signed in; Warcraft III already runs, so the map is hosted through its menus");
-      return { kind: "menus" } satisfies Route as Route;
+      yield* status(2, "Battle.net", "signed in; Warcraft III already runs");
+      return;
     }
     const { options: previous } = yield* settings;
-    if (options.menus) {
-      if (previous === loadOption) {
-        if (use.launcher !== undefined) yield* stopPrefix;
-        yield* setLaunchOptions(undefined);
-      } else if (previous !== undefined && /(?:^|\s)-loadfile(?:\s|$)/i.test(previous)) {
-        return yield* fail("Battle.net is set to load another map at startup. Clear its additional command line arguments and restart Battle.net before playing through the menus.");
-      }
-      if (use.launcher !== undefined && previous !== loadOption) {
-        yield* waitSignedIn(undefined);
-        yield* status(2, "Battle.net", "signed in; reusing it to open Warcraft III's menus");
-      } else {
-        const seconds = yield* startLauncher(2, "Battle.net");
-        yield* status(2, "Battle.net", `started and signed in (${seconds} s); Warcraft III will open its menus`);
-      }
-      return { kind: "menus" } satisfies Route as Route;
+    if (previous === loadOption) {
+      yield* status(2, "Battle.net", "clearing an earlier run's startup map from Warcraft III's launch options");
+      if (use.launcher !== undefined) yield* stopPrefix;
+      yield* setLaunchOptions(undefined);
+    } else if (previous !== undefined && /(?:^|\s)-loadfile(?:\s|$)/i.test(previous)) {
+      return yield* fail("Battle.net is set to load another map at startup. Clear its additional command line arguments for Warcraft III and restart Battle.net, then run play again.");
     }
-    // Ours from an earlier kept run count as nothing set before.
-    pending = { previous: previous === loadOption ? undefined : previous };
-    if (use.launcher !== undefined) {
-      if (previous === loadOption) {
-        yield* waitSignedIn(undefined);
-        yield* status(2, "Battle.net", "signed in, with Warcraft III set to load the map");
-        return { kind: "launch", previous } satisfies Route as Route;
-      }
-      yield* status(2, "Battle.net", "restarting it to set Warcraft III's launch options, which it reads when it starts");
-      yield* stopPrefix;
+    if (use.launcher !== undefined && previous !== loadOption) {
+      yield* waitSignedIn(undefined);
+      yield* status(2, "Battle.net", "signed in; reusing it");
+    } else {
+      const seconds = yield* startLauncher(2, "Battle.net");
+      yield* status(2, "Battle.net", `started and signed in (${seconds} s)`);
     }
-    yield* setLaunchOptions(loadOption);
-    const seconds = yield* startLauncher(2, "Battle.net");
-    yield* status(2, "Battle.net", `started and signed in (${seconds} s), with Warcraft III set to load the map`);
-    return { kind: "launch", previous } satisfies Route as Route;
   });
 
   // 3. Play in the launcher, confirmed by its log; one restart of the launcher alone when it can't launch.
@@ -680,14 +649,18 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     yield* status(3, "Warcraft III", `${installed === undefined ? "installed" : "replaced"} ${file} from ${source}`);
   });
 
-  const game = (route: Route) => Effect.gen(function*() {
+  const war3Log = war3LogPath(documents);
+  const game = Effect.gen(function*() {
     yield* installMap;
     yield* declaration.prepare(documents);
     const since = yield* Clock.currentTimeMillis;
     const running = (yield* prefixState).game;
+    /** The session in Warcraft III's log before Play; the game's own session replaces it. */
+    let earlierSession: string | undefined;
     if (running !== undefined) {
       yield* status(3, "Warcraft III", `already running (pid ${running.pid})`);
     } else {
+      earlierSession = sessionStart((yield* machine.read(war3Log)) ?? "");
       let attempt = yield* pressPlay;
       if (attempt.outcome.kind === "failed") {
         yield* status(3, "Warcraft III", `${attempt.outcome.reason}; restarting Battle.net alone, once`);
@@ -697,11 +670,6 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
         if (attempt.outcome.kind === "failed") return yield* fail(`${attempt.outcome.reason}, also after restarting Battle.net. Its log: ${attempt.log}`);
       }
       yield* status(3, "Warcraft III", "Battle.net's Play started it");
-      if (route.kind === "launch" && !options.keepLaunchOptions) {
-        // Battle.net may write its settings back as it read them when it exits.
-        yield* restoreLaunchOptions;
-        yield* status(3, "Warcraft III", "Battle.net's launch options for it put back; its own Play no longer loads the map");
-      }
     }
     const process = yield* until(PLAY_TIMEOUTS.gameWindow, prefixState.pipe(Effect.map((use) => use.game)),
       () => `Battle.net reported Warcraft III running, but its process didn't appear within ${PLAY_TIMEOUTS.gameWindow} s`);
@@ -711,7 +679,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     const xWindow = yield* until(PLAY_TIMEOUTS.gameWindow, desktop.xWindow("Warcraft III", process.pid),
       () => `Warcraft III's window isn't on display ${display}`);
     yield* status(3, "Warcraft III", `running (pid ${process.pid}), asked to go fullscreen`);
-    return { game: { documents, pid: process.pid, window: window.id, xWindow, display } satisfies PlayGame, since };
+    return { game: { documents, pid: process.pid, window: window.id, xWindow, display } satisfies PlayGame, since, earlierSession };
   });
 
   // 4, through the menus: Multiplayer, Custom Games, Create Game, the map's folder, the map, the game's name, Create, Start.
@@ -829,64 +797,60 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     yield* status(4, "Map", `"${declaration.gameName}" of ${title} hosted through the menus (joining by name is case-sensitive)`);
   });
 
-  // 4. The map, loaded by the launch options; hosted through the menus when Warcraft III already ran, or showed its main menu instead.
-  /** Shared by the main menu's watch and the key presses: once Warcraft III shows its main menu, no key goes to it. */
-  interface Loading {
-    menu: boolean;
-    presses: number;
-  }
-  const mainMenu = (game: PlayGame, loading: Loading) => Effect.gen(function*() {
-    const output = yield* outputOf(game.window, "Warcraft III's window");
-    let first: number | undefined;
-    while (true) {
-      const screen = yield* desktop.read(output, "light");
-      const now = yield* Clock.currentTimeMillis;
-      if (findPhrase(screen.words, "Multiplayer").length === 0) first = undefined;
-      else {
-        loading.menu = true;
-        if (now - (first ??= now) >= PLAY_TIMEOUTS.menuShown * 1000) return;
-      }
-      yield* Effect.sleep(POLL);
-    }
-  });
+  // 4. The map, hosted once Warcraft III has signed in and read its ladder maps.
   /**
-   * A map loaded from the launch options waits on "Press any key to
-   * continue" when it has loaded (6 Oct, run 9: space went on to fighter
-   * selection within 12 s). Space goes to the game every 2 s until fighter
-   * selection or the main menu ends the wait, at most 60 times.
+   * Waits until the game's log shows its ladder scan over: a map loading while Warcraft III opens
+   * the ladder maps as its active mod can't read its own imported models (wisp:scripts/warcraft/war3Log.ts).
+   * A log that ends with ladder lines is over once it stays quiet for SCAN_QUIET_MS; a game that
+   * signed in and scans nothing within PLAY_TIMEOUTS.ladderScan is hosted anyway. Returns the
+   * log's length, where the hosted map's lines start.
    */
-  const pressToContinue = (game: PlayGame, loading: Loading) => Effect.gen(function*() {
-    while (loading.presses < PLAY_TIMEOUTS.continuePresses) {
-      yield* Effect.sleep(`${PLAY_TIMEOUTS.continueEvery} seconds`);
-      if (loading.menu) continue;
-      yield* desktop.pressKey(game.xWindow, "space");
-      loading.presses++;
-    }
-    return yield* Effect.never;
-  }).pipe(Effect.catch(() => Effect.never));
-  const loadMap = (route: Route, game: PlayGame, since: number) => Effect.gen(function*() {
-    if (route.kind === "menus") {
-      if (options.menus) {
-        yield* fullscreen(game.window, "Warcraft III's window", PLAY_TIMEOUTS.gameFullscreen);
-        const output = yield* outputOf(game.window, "Warcraft III's window");
-        yield* until(PLAY_TIMEOUTS.mainMenu, desktop.read(output, "gold").pipe(Effect.map((screen) =>
-          findPhrase(screen.words, "Multiplayer").length > 0 || findPhrase(screen.words, "Custom Games").length > 0 ? true : undefined)),
-        () => `Warcraft III didn't show its main menu within ${PLAY_TIMEOUTS.mainMenu} s`);
-        yield* status(4, "Map", "Warcraft III's main menu is ready; hosting the map");
+  const ladderScanned = (earlierSession: string | undefined) => Effect.gen(function*() {
+    let quiet: { readonly last: number; readonly count: number; readonly since: number } | undefined;
+    let signedInAt: number | undefined;
+    const signIn = PLAY_TIMEOUTS.gameSignIn;
+    return yield* until(signIn + PLAY_TIMEOUTS.ladderScan, Effect.gen(function*() {
+      const text = (yield* machine.read(war3Log)) ?? "";
+      const now = yield* Clock.currentTimeMillis;
+      // Until the game's launch writes its own log, the one there is an earlier session's.
+      if (earlierSession !== undefined && sessionStart(text) === earlierSession) return undefined;
+      const scan = ladderScan(text);
+      switch (scan.kind) {
+        case "signing in":
+          return undefined;
+        case "waiting":
+          signedInAt ??= now;
+          return now - signedInAt >= PLAY_TIMEOUTS.ladderScan * 1000 ? { text, scanned: false } : undefined;
+        case "done":
+          return { text, scanned: true };
+        case "scanning":
+          if (quiet === undefined || quiet.last !== scan.last || quiet.count !== scan.count) quiet = { last: scan.last, count: scan.count, since: now };
+          return now - quiet.since >= SCAN_QUIET_MS ? { text, scanned: true } : undefined;
       }
-      return yield* host(game);
-    }
-    const loading: Loading = { menu: false, presses: 0 };
-    const loaded = yield* Effect.raceFirst(
-      declaration.started(game, since).pipe(Effect.as("map" as const)),
-      Effect.raceFirst(mainMenu(game, loading).pipe(Effect.as("menu" as const), Effect.catch(() => Effect.never)), pressToContinue(game, loading)),
-    );
-    const seconds = Math.round(((yield* Clock.currentTimeMillis) - since) / 1000);
-    if (loaded === "map") {
-      return yield* status(4, "Map", `Warcraft III loaded ${declaration.map.file} from its launch options; fighter selection ${seconds} s after Play (${loading.presses} key presses to continue)`);
-    }
-    yield* status(4, "Map", "Warcraft III showed its main menu instead of loading the map; hosting it through the menus");
+    }), () => signedInAt === undefined
+      ? `Warcraft III didn't sign in within ${signIn} s (its log, ${war3Log}, shows no LoginDoorClose)`
+      : `Warcraft III didn't finish reading its ladder maps (its log: ${war3Log})`);
+  });
+
+  /** Stops play when Warcraft III's log shows the hosted map's imported models failing to load. */
+  const checkImports = (from: number) => Effect.gen(function*() {
+    const failures = importFailures(((yield* machine.read(war3Log)) ?? "").slice(from));
+    if (failures.count === 0) return;
+    return yield* fail(`Warcraft III couldn't create ${failures.count} of the map's imported models (its log: ${war3Log}, first "model creation failed - ${failures.first}"), so the stage and fighters won't draw. ` +
+      "Quit Warcraft III and run play again.");
+  });
+
+  const loadMap = (game: PlayGame, since: number, earlierSession: string | undefined) => Effect.gen(function*() {
+    const { text, scanned } = yield* ladderScanned(earlierSession);
+    const waited = Math.round(((yield* Clock.currentTimeMillis) - since) / 1000);
+    yield* status(4, "Map", scanned
+      ? `Warcraft III signed in and read its ladder maps (${waited} s); hosting the map`
+      : `Warcraft III signed in and read no ladder maps within ${PLAY_TIMEOUTS.ladderScan} s; hosting the map`);
     yield* host(game);
+    yield* checkImports(text.length);
+    const seconds = Math.round(((yield* Clock.currentTimeMillis) - since) / 1000);
+    yield* status(4, "Map", `fighter selection ${seconds} s after Play`);
+    return text.length;
   });
 
   // 6. One helper for this game.
@@ -914,12 +878,17 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
 
   yield* Effect.gen(function*() {
     yield* checkPrefix.pipe(inStep(1, "Wine prefix"));
-    const route = yield* launcher.pipe(inStep(2, "Battle.net"));
-    const { game: running, since } = yield* game(route).pipe(inStep(3, "Warcraft III"));
-    yield* loadMap(route, running, since).pipe(inStep(4, "Map"));
+    yield* launcher.pipe(inStep(2, "Battle.net"));
+    const { game: running, since, earlierSession } = yield* game.pipe(inStep(3, "Warcraft III"));
+    const hosted = yield* loadMap(running, since, earlierSession).pipe(inStep(4, "Map"));
     // The helper runs before the match starts, or the match is played on the keyboard.
     yield* helper(running).pipe(inStep(5, "Controller helper"));
-    const match = yield* declaration.match(running).pipe(inStep(6, "Match"));
+    const match = yield* Effect.gen(function*() {
+      const match = yield* declaration.match(running);
+      // Models the match creates fail the same way.
+      yield* checkImports(hosted);
+      return match;
+    }).pipe(inStep(6, "Match"));
     yield* status(6, "Match", match);
     yield* Effect.gen(function*() {
       yield* fullscreen(running.window, "Warcraft III's window", PLAY_TIMEOUTS.gameFullscreen);
@@ -928,10 +897,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       yield* status(7, "Fullscreen", "Warcraft III is fullscreen and focused. Ready to fight.");
     }).pipe(inStep(7, "Fullscreen"));
   }).pipe(Effect.onExit((exit) => (Exit.isFailure(exit)
-    ? Effect.gen(function*() {
-      if (yield* restoreLaunchOptions) print("Battle.net's launch options for Warcraft III put back, as the run stopped");
-      yield* declaration.cleanup(documents);
-    }).pipe(Effect.ignore)
+    ? declaration.cleanup(documents).pipe(Effect.ignore)
     : Effect.void)));
 });
 
