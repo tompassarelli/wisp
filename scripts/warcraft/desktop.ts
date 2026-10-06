@@ -45,8 +45,11 @@ export interface Region {
   readonly height: number;
 }
 
-/** How text is separated from the background before reading: white labels or the gold menu labels. */
-export type Ink = "light" | "gold";
+/**
+ * How text is separated from the background before reading: light labels,
+ * the gold menu labels, or white text on a coloured button.
+ */
+export type Ink = "light" | "gold" | "white";
 
 function fail(operation: string, client: string) {
   return (cause: unknown) => new DesktopFailure({ operation, client, cause });
@@ -93,8 +96,8 @@ export const capture = (client: Client, region?: Region) =>
     return frame;
   });
 
-/** Dark text on white, which is what the reader expects. */
-function separateInk(frame: Frame, ink: Ink): Uint8Array {
+/** Dark text on white as a PGM image, which is what the reader expects. */
+export function separateInk(frame: Frame, ink: Ink): Uint8Array {
   const header = new TextEncoder().encode(`P5\n${frame.width} ${frame.height}\n255\n`);
   const pixels = frame.width * frame.height;
   const out = new Uint8Array(header.length + pixels);
@@ -103,7 +106,9 @@ function separateInk(frame: Frame, ink: Ink): Uint8Array {
     const r = frame.rgb[i * 3]!;
     const g = frame.rgb[i * 3 + 1]!;
     const b = frame.rgb[i * 3 + 2]!;
-    out[header.length + i] = ink === "gold" ? (r > 170 && g > 150 ? 0 : 255) : 255 - ((r * 3 + g * 6 + b) / 10 | 0);
+    out[header.length + i] = ink === "gold" ? (r > 170 && g > 150 ? 0 : 255)
+      : ink === "white" ? (r > 200 && g > 200 && b > 200 ? 0 : 255)
+      : 255 - ((r * 3 + g * 6 + b) / 10 | 0);
   }
   return out;
 }
@@ -120,19 +125,25 @@ export interface Word {
   readonly text: string;
   readonly x: number;
   readonly y: number;
+  /** The reader's block, paragraph and line: equal for the words of one line. */
+  readonly line?: string;
+}
+
+/** The words of Tesseract's TSV output with their centres; low-confidence words are left out. */
+export function parseWords(tsv: string): Word[] {
+  return tsv.split("\n").slice(1).flatMap((line): Word[] => {
+    const field = line.split("\t");
+    const word = field[11]?.trim() ?? "";
+    if (word === "" || Number(field[10]) < 40) return [];
+    return [{ text: word, x: Number(field[6]) + Math.round(Number(field[8]) / 2), y: Number(field[7]) + Math.round(Number(field[9]) / 2), line: `${field[2]}.${field[3]}.${field[4]}` }];
+  });
 }
 
 /** Every word in the frame with its centre, for finding where controls are. */
 export const words = (client: Client, ink: Ink = "light") =>
   Effect.gen(function*() {
     const frame = yield* capture(client);
-    const tsv = text(yield* run(client.name, "read words", [client.tools.tesseract, "stdin", "stdout", "--psm", "11", "tsv"], {}, separateInk(frame, ink)));
-    return tsv.split("\n").slice(1).flatMap((line): Word[] => {
-      const field = line.split("\t");
-      const word = field[11]?.trim() ?? "";
-      if (word === "" || Number(field[10]) < 40) return [];
-      return [{ text: word, x: Number(field[6]) + Math.round(Number(field[8]) / 2), y: Number(field[7]) + Math.round(Number(field[9]) / 2) }];
-    });
+    return parseWords(text(yield* run(client.name, "read words", [client.tools.tesseract, "stdin", "stdout", "--psm", "11", "tsv"], {}, separateInk(frame, ink))));
   });
 
 /** Gives the Warcraft window compositor and X11 focus. */

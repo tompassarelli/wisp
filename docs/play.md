@@ -1,0 +1,94 @@
+# One command to a match: `wisp play`
+
+`play` takes the owner from their desktop to a match on their own display.
+It reports each step on one line and stops at the first problem with a plain
+message that says what to do:
+
+```text
+1/7 Wine prefix: free
+2/7 Battle.net: starting the Steam shortcut "Warcraft III (Battle.net)"
+2/7 Battle.net: started and signed in (16 s)
+3/7 Warcraft III: Battle.net's Play started it
+3/7 Warcraft III: running (pid 2852), fullscreen
+4/7 Custom game: "Smashcraft" of Smashcraft 0.0.47 started (joining by name is case-sensitive)
+5/7 Opponent: computer in slot 2
+6/7 Controller helper: running (pid 41234), log ~/.local/state/smashcraft/play-helper.log
+7/7 Fullscreen: Warcraft III is fullscreen and focused. Ready to fight.
+```
+
+1. **Wine prefix.** Separate Steam runtime containers each start their own
+   wineserver against one prefix, and a launcher started beside another
+   runtime can't start the game. `play` refuses two runtimes, a runtime on
+   another display, and a runtime without Battle.net (after allowing it 20 s
+   to exit), and prints the `kill` command that clears it. It finds a
+   prefix's wineservers by their `WINEPREFIX` and, for one started in another
+   namespace, by the server directory Wine names after the prefix's device
+   and inode (`server-DEV-INODE`).
+2. **Battle.net.** A running launcher is reused. Otherwise Steam starts the
+   game's shortcut: a non-Steam shortcut's URL is
+   `steam://rungameid/` followed by its 32-bit app id shifted left 32 bits,
+   OR 0x02000000 (`steam -applaunch` takes only Steam's own app ids). Signed
+   in means the newest `battle.net-*.log` in the prefix's
+   `AppData/Local/Battle.net/Logs` has `Logged into Battle.net successfully`.
+   `play` never signs in or out.
+3. **Warcraft III.** `play` makes the launcher's window fullscreen, reads its
+   white Play label, clicks it and puts the window back. Only the log lines
+   written after the click decide: `Game is running: w3` is a launch, and
+   `Could not launch ... Warcraft III.exe` or an expired pending launch is a
+   failure. On a failure it ends every program of the prefix, waits for
+   Steam to see the shortcut end, starts the launcher again alone and presses
+   Play once more. It never starts Warcraft III.exe itself. The game's window
+   becomes fullscreen as soon as it appears, so a capture of its output is the
+   game's frame.
+4. **Custom game.** From the main menu: Multiplayer, Custom Games, Create
+   Game, the map's folder, the map, the game's name, Create, Start. Each
+   control is found by the text Warcraft shows, so any screen size works; the
+   game name field, which shows no label of its own, sits where it does on a
+   2560x1440 frame scaled by the frame's height. Each click waits for the
+   next screen's text before the next. It ends when the game's `started`
+   resolves.
+5. **Opponent.** The game's own step. `game.clickUi(x, y)` clicks a map frame
+   placed at Warcraft's UI coordinates: the 4:3 area spans the window's
+   height, centred, with x from 0 to 0.8 and y from 0 at the bottom to 0.6.
+6. **Controller helper.** One helper for this game: a running helper whose
+   `--pid` is this game's is kept; any other running copy stops `play`. The
+   helper starts in its own session, so it outlives `play` and its terminal,
+   and must print its ready line within 10 s.
+7. **Fullscreen.** The game's window is fullscreen and focused, so the
+   compositor's focus-follows-mouse has no other window to move to.
+
+## Declare it
+
+The game declares its playtest (wisp:scripts/wisp/play.ts,
+`PlayDeclaration`) and adds the command with `makePlay`
+(wisp:scripts/wisp/commands/play.ts); its own steps may use services that
+`layer` provides:
+
+```ts
+export const play = makePlay({
+  prefix: join(homedir(), ".local/share/Steam/steamapps/compatdata/3516115571/pfx"),
+  display: ":0",
+  shortcut: { appId: 3775098022, name: "Warcraft III (Battle.net)" },
+  map: { folder: "00-Smashcraft", file: "Smashcraft 0.0.47.w3x", title: "Smashcraft 0.0.47" },
+  gameName: "Smashcraft",
+  started: (game, since) => /* the map's first-screen file, newer than since */,
+  opponent: (game) => /* clicks with game.clickUi, confirms, returns "computer in slot 2" */,
+  helper: { binary, args: (game) => /* game.pid, game.window, game.xWindow.id, ... */, ready: /waiting_for_match/, log },
+}, gameFilesLayer, tools);
+```
+
+The map must already be in `Maps/FOLDER` of the prefix's Documents/Warcraft III.
+
+## What it needs
+
+The owner's niri session (`niri msg`), `grim`, `tesseract` and `xdotool`, and
+`steam`; each is looked up on PATH unless the game passes its path in
+`tools`. The game runs on the declared X display under niri's Xwayland
+(xwayland-satellite); clicks are XTEST relative pointer moves checked against
+the pointer position, as on private desktops. Every wait has a bound
+(`PLAY_TIMEOUTS`); none is a readiness delay.
+
+The fakes in wisp:test/play.test.ts cover each step's success and failure
+messages with the recorded window, log and process shapes. Reading the menus
+at the owner's resolution and XTEST activating Warcraft's and Battle.net's
+buttons are properties of the real desktop, which only a native run checks.

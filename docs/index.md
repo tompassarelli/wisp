@@ -21,6 +21,12 @@ headless journeys (its own and the affected journey tests) and the whole type
 check, each with its time since the save, and hot-reloads running clients when
 given their folders.
 
+Playtesting? [`wisp play`](play.md) (wisp:docs/play.md) goes from the
+desktop to a match on the owner's display in one command: it checks the Wine
+prefix, reuses or starts the signed-in Battle.net launcher, presses Play,
+hosts the map, adds the game's computer opponent, starts its controller helper
+and leaves the game fullscreen.
+
 How Wisp compares with Wurst, the w3ts TypeScript template, WCSharp and
 warcraft-vscode on the same map is measured in the
 [toolchain comparison](comparison.md) (wisp:docs/comparison.md).
@@ -39,6 +45,7 @@ warcraft-vscode on the same map is measured in the
 | Generate custom objects, including FileIO's ability | [Object data](../scripts/objectData.ts) (wisp:scripts/objectData.ts) | A build without its own war3map.w3a gets FileIO's ability; a map that writes war3map.w3a includes it with `abilityData()`. |
 | Read reports or write reload payloads | [GameFiles](../scripts/wisp/gameFiles.ts) (wisp:scripts/wisp/gameFiles.ts) | Host-side file transport; runtime and host must share file identities. |
 | Control existing Warcraft clients | [Clients](../scripts/wisp/clients.ts) and the [client command](../scripts/wisp/commands/client.ts) (wisp:scripts/wisp/clients.ts, wisp:scripts/wisp/commands/client.ts) | Supply the clients file ([format](sample-map.md#play-it-and-change-it-while-it-runs)) and private desktop sessions; game-specific journeys belong to the consumer. |
+| Go from the owner's desktop to a match in one command: prefix check, Battle.net, Play, hosted game, opponent, controller helper, fullscreen | [`wisp play`](play.md) (wisp:docs/play.md, wisp:scripts/wisp/play.ts) | The game declares its prefix, Steam shortcut, map, game name, opponent step and helper. Runs on the owner's niri desktop with `grim`, `tesseract`, `xdotool` and `steam`; never signs in or starts Warcraft III.exe itself. |
 | Start a new match of a map in every client | [Fresh match](../scripts/wisp/lobby.ts) (wisp:scripts/wisp/lobby.ts) | Hosts from the first client, joins the others, starts, and waits for each client's match-start acknowledgement; Create Game must show the configured map folder. |
 | Run a map in simulated clients without Warcraft: desyncs, error reports, hot reloads, scene problems | [Headless runtime](headless.md) and `wisp headless` (wisp:docs/headless.md) | Bun runs the map's TypeScript, 32-bit Lua its compiled bundle. The game declares its local-only natives, global prefixes and journeys; Warcraft's engine, timing and rendering keep their native checks. |
 | Give headless clients Warcraft's sync-message latency | [Network and timing model](network-model.md) and `syncDelivery()` (wisp:scripts/wisp/syncChannel.ts) | Latency, 25 ms turns and 60 Hz callbacks fitted to native traces; no client lag, so it does not predict a sender's saturation. |
