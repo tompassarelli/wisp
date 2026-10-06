@@ -13,7 +13,7 @@ match when the game asks.
 3/7 Warcraft III: Battle.net's Play started it
 3/7 Warcraft III: Battle.net's launch options for it put back; its own Play no longer loads the map
 3/7 Warcraft III: running (pid 2852), fullscreen
-4/7 Map: Warcraft III loaded Smashcraft 0.0.47.w3x from its launch options
+4/7 Map: Warcraft III loaded Smashcraft 0.0.47.w3x from its launch options; fighter selection 30 s after Play (6 key presses to continue)
 5/7 Controller helper: running (pid 41234), log ~/.local/state/smashcraft/play-helper.log
 6/7 Match: computer as Player 3
 7/7 Fullscreen: Warcraft III is fullscreen and focused. Ready to fight.
@@ -71,7 +71,11 @@ match when the game asks.
    running launcher. Battle.net may write back the options it read when it
    exits. The game's window becomes fullscreen as soon as it appears, so a
    capture of its output is the game's frame.
-4. **Map.** It ends when the game's `started` resolves. If Warcraft III shows
+4. **Map.** A map loaded from the launch options waits on "Press any key to
+   continue" once it has loaded (6 Oct), so space goes to the game window
+   every 2 s (at most 60 times, none once the main menu shows), and the time
+   from Play to fighter selection is printed. It ends when the game's
+   `started` resolves. If Warcraft III shows
    its main menu for 10 s instead, or already ran, the map is hosted through
    the menus: Multiplayer, Custom Games, Create Game, the map's folder, the
    map, the game's name, Create, Start. Each control is found by the text

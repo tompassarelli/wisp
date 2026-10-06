@@ -191,6 +191,8 @@ export class PlayDesktop extends Context.Service<PlayDesktop, {
   readonly click: (spot: Spot) => Effect.Effect<readonly string[], PlayProblem>;
   readonly keys: (window: XWindow, ...keys: string[]) => Effect.Effect<void, PlayProblem>;
   readonly typeText: (window: XWindow, text: string) => Effect.Effect<void, PlayProblem>;
+  /** Sends one key to the window itself (6 Oct: space on "Press any key to continue" reached Warcraft III this way). */
+  readonly pressKey: (window: XWindow, key: string) => Effect.Effect<void, PlayProblem>;
 }>()("wisp/PlayDesktop") {}
 
 /** The running game, as the consuming game's steps see it. */
@@ -252,6 +254,8 @@ export const PLAY_TIMEOUTS = {
   tile: 6,
   next: 10,
   menuShown: 10,
+  continueEvery: 2,
+  continuePresses: 60,
   launch: 45,
   gameWindow: 60,
   mainMenu: 120,
@@ -753,24 +757,51 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   });
 
   // 4. The map, loaded by the launch options; hosted through the menus when Warcraft III already ran, or showed its main menu instead.
-  const mainMenu = (game: PlayGame) => Effect.gen(function*() {
+  /** Shared by the main menu's watch and the key presses: once Warcraft III shows its main menu, no key goes to it. */
+  interface Loading {
+    menu: boolean;
+    presses: number;
+  }
+  const mainMenu = (game: PlayGame, loading: Loading) => Effect.gen(function*() {
     const output = yield* outputOf(game.window, "Warcraft III's window");
     let first: number | undefined;
     while (true) {
       const screen = yield* desktop.read(output, "light");
       const now = yield* Clock.currentTimeMillis;
       if (findPhrase(screen.words, "Multiplayer").length === 0) first = undefined;
-      else if (now - (first ??= now) >= PLAY_TIMEOUTS.menuShown * 1000) return;
+      else {
+        loading.menu = true;
+        if (now - (first ??= now) >= PLAY_TIMEOUTS.menuShown * 1000) return;
+      }
       yield* Effect.sleep(POLL);
     }
   });
+  /**
+   * A map loaded from the launch options waits on "Press any key to
+   * continue" when it has loaded (6 Oct, run 9: space went on to fighter
+   * selection within 12 s). Space goes to the game every 2 s until fighter
+   * selection or the main menu ends the wait, at most 60 times.
+   */
+  const pressToContinue = (game: PlayGame, loading: Loading) => Effect.gen(function*() {
+    while (loading.presses < PLAY_TIMEOUTS.continuePresses) {
+      yield* Effect.sleep(`${PLAY_TIMEOUTS.continueEvery} seconds`);
+      if (loading.menu) continue;
+      yield* desktop.pressKey(game.xWindow, "space");
+      loading.presses++;
+    }
+    return yield* Effect.never;
+  }).pipe(Effect.catch(() => Effect.never));
   const loadMap = (route: Route, game: PlayGame, since: number) => Effect.gen(function*() {
     if (route.kind === "menus") return yield* host(game);
+    const loading: Loading = { menu: false, presses: 0 };
     const loaded = yield* Effect.raceFirst(
       declaration.started(game, since).pipe(Effect.as("map" as const)),
-      mainMenu(game).pipe(Effect.as("menu" as const), Effect.catch(() => Effect.never)),
+      Effect.raceFirst(mainMenu(game, loading).pipe(Effect.as("menu" as const), Effect.catch(() => Effect.never)), pressToContinue(game, loading)),
     );
-    if (loaded === "map") return yield* status(4, "Map", `Warcraft III loaded ${declaration.map.file} from its launch options`);
+    const seconds = Math.round(((yield* Clock.currentTimeMillis) - since) / 1000);
+    if (loaded === "map") {
+      return yield* status(4, "Map", `Warcraft III loaded ${declaration.map.file} from its launch options; fighter selection ${seconds} s after Play (${loading.presses} key presses to continue)`);
+    }
     yield* status(4, "Map", "Warcraft III showed its main menu instead of loading the map; hosting it through the menus");
     yield* host(game);
   });
