@@ -22,7 +22,7 @@ import {
   newestLauncherLog, prefixUse, shortcutAppId, shortcutUrl, signedIn, withLaunchOptions,
 } from "../warcraft/battleNet";
 import type { Ink, Word } from "../warcraft/desktop";
-import { preferencesBackupPath, preferencesPath } from "../warcraft/preferences";
+import { type DisplaySettings, displayChanges, preferencesBackupPath, preferencesPath, withDisplaySettings } from "../warcraft/preferences";
 import { SCAN_QUIET_MS, importFailures, ladderScan, sessionStart, war3LogPath } from "../warcraft/war3Log";
 import { step } from "./timings";
 import { hostLobby, reportedMenus, startLobby } from "./menus";
@@ -239,6 +239,13 @@ export interface PlayDeclaration<R = never> {
   readonly gameName: string;
   /** The installed menu page's report port for this prefix. Absent uses ordinary menu controls. */
   readonly menuReportPort?: number;
+  /**
+   * The owner's display settings, `[Video]` keys of War3Preferences.txt.
+   * Written in before the game starts and so into the saved copy, so a test
+   * run that left its own settings in the prefix doesn't open the owner's game
+   * with them.
+   */
+  readonly displaySettings?: DisplaySettings;
   /** Each run saves a picture before and after every click, and its click log, in a folder here named by its start time. */
   readonly debugDirectory: string;
   /** Before Warcraft III starts the map: what the map reads at its start, left in Documents/Warcraft III. */
@@ -587,10 +594,14 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
    */
   const savePreferences = Effect.gen(function*() {
     const saved = yield* machine.read(backup);
-    const text = saved ?? (yield* machine.read(preferences));
-    if (text === undefined) return;
-    if (saved === undefined) yield* machine.write(backup, text);
-    else yield* machine.write(preferences, saved);
+    const found = saved ?? (yield* machine.read(preferences));
+    if (found === undefined) return;
+    const declared = declaration.displaySettings;
+    const changes = declared === undefined ? [] : displayChanges(found, declared);
+    const text = declared === undefined || changes.length === 0 ? found : withDisplaySettings(found, declared);
+    if (changes.length > 0) yield* status(3, "Warcraft III", `restored the declared display settings (${changes.map((change) => `${change.key} was ${change.actual ?? "unset"}`).join(", ")})`);
+    if (saved === undefined || text !== saved) yield* machine.write(backup, text);
+    if (saved !== undefined || text !== found) yield* machine.write(preferences, text);
     yield* status(3, "Warcraft III", `saved ${preferences} as ${backup}; it is put back when the game exits`);
   });
   const restorePreferencesOnExit = (pid: number) => Effect.gen(function*() {
