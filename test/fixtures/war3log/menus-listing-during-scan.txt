@@ -1,0 +1,158 @@
+10/6 20:29:58.355  GameMain Started
+10/6 20:29:58.356  Command Line: "C:\Program Files (x86)\Warcraft III\_retail_\x86_64\Warcraft III.exe" -launch -uid w3
+10/6 20:29:58.356  Current Directory: "C:\Program Files (x86)\Warcraft III\_retail_"
+10/6 20:30:12.157  [CLoginCallbacks] LoginDoorClose called
+10/6 20:30:13.429  Activating WebUI
+10/6 20:30:13.441  Activating WebUI
+10/6 20:30:17.594  Activating WebUI
+10/6 20:30:20.537  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)NorthernIsles_S2.w3x
+10/6 20:30:20.537  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)NorthernIsles_S2.w3x
+10/6 20:30:20.548  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(4)LostTemple_S2.w3x
+10/6 20:30:20.548  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(4)LostTemple_S2.w3x
+10/6 20:30:20.559  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)TerenasStand_LV.w3x
+10/6 20:30:20.559  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)TerenasStand_LV.w3x
+10/6 20:30:20.565  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(4)TwistedMeadows_S2_v1.1.w3x
+10/6 20:30:20.565  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(4)TwistedMeadows_S2_v1.1.w3x
+10/6 20:30:20.576  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(4)PhantomGrove_S2_v2.0.w3x
+10/6 20:30:20.576  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(4)PhantomGrove_S2_v2.0.w3x
+10/6 20:30:20.587  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(4)TidewaterGlades_S2_v1.1.w3x
+10/6 20:30:20.587  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(4)TidewaterGlades_S2_v1.1.w3x
+10/6 20:30:20.604  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(6)GnollWood_S2.w3x
+10/6 20:30:20.604  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(6)GnollWood_S2.w3x
+10/6 20:30:20.615  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(6)UpperKingdom.w3x
+10/6 20:30:20.615  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(6)UpperKingdom.w3x
+10/6 20:30:20.619  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(6)StranglethornVale.w3x
+10/6 20:30:20.619  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(6)StranglethornVale.w3x
+10/6 20:30:20.622  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(6)Typhoon.w3x
+10/6 20:30:20.622  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(6)Typhoon.w3x
+10/6 20:30:20.625  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)LastRefuge_S2_v1.5.w3x
+10/6 20:30:20.625  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)LastRefuge_S2_v1.5.w3x
+10/6 20:30:20.634  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)ConcealedHill_S2.w3x
+10/6 20:30:20.634  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)ConcealedHill_S2.w3x
+10/6 20:30:20.908  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Smashcraft_Melee_Physics_r7.w3x
+10/6 20:30:20.908  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Smashcraft_Melee_Physics_r7.w3x
+10/6 20:30:20.927  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Smashcraft_Melee_Physics_r8.w3x
+10/6 20:30:20.927  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Smashcraft_Melee_Physics_r8.w3x
+10/6 20:30:20.947  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Smashcraft_Melee_Physics_r9.w3x
+10/6 20:30:20.947  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Smashcraft_Melee_Physics_r9.w3x
+10/6 20:30:20.967  Opening map - Maps/(10)dustwallowkeys.w3m
+10/6 20:30:20.967  Opening mod - Maps/(10)dustwallowkeys.w3m
+10/6 20:30:20.977  Opening map - Maps/(12)divideandconquer.w3m
+10/6 20:30:20.977  Opening mod - Maps/(12)divideandconquer.w3m
+10/6 20:30:20.989  Opening map - Maps/(12)icecrown.w3m
+10/6 20:30:20.989  Opening mod - Maps/(12)icecrown.w3m
+10/6 20:30:20.998  Opening map - Maps/(2)a_starter_map_losttemple_lv.w3x
+10/6 20:30:20.998  Opening mod - Maps/(2)a_starter_map_losttemple_lv.w3x
+10/6 20:30:21.005  Opening map - Maps/(2)bootybay.w3m
+10/6 20:30:21.005  Opening mod - Maps/(2)bootybay.w3m
+10/6 20:30:21.010  Opening map - Maps/(2)harrow.w3m
+10/6 20:30:21.010  Opening mod - Maps/(2)harrow.w3m
+10/6 20:30:21.014  Opening map - Maps/(2)hillsofglory.w3m
+10/6 20:30:21.014  Opening mod - Maps/(2)hillsofglory.w3m
+10/6 20:30:21.019  Opening map - Maps/(2)ogremound.w3m
+10/6 20:30:21.019  Opening mod - Maps/(2)ogremound.w3m
+10/6 20:30:21.023  Opening map - Maps/(2)plunderisle.w3m
+10/6 20:30:21.023  Opening mod - Maps/(2)plunderisle.w3m
+10/6 20:30:21.028  Opening map - Maps/(3)forestwalk.w3m
+10/6 20:30:21.028  Opening mod - Maps/(3)forestwalk.w3m
+10/6 20:30:21.035  Opening map - Maps/(3)isleofdread.w3m
+10/6 20:30:21.035  Opening mod - Maps/(3)isleofdread.w3m
+10/6 20:30:21.040  Opening map - Maps/(3)nighthaven.w3m
+10/6 20:30:21.040  Opening mod - Maps/(3)nighthaven.w3m
+10/6 20:30:21.044  Opening map - Maps/(4)adrenaline.w3m
+10/6 20:30:21.044  Opening mod - Maps/(4)adrenaline.w3m
+10/6 20:30:21.048  Opening map - Maps/(4)borderlands.w3m
+10/6 20:30:21.048  Opening mod - Maps/(4)borderlands.w3m
+10/6 20:30:21.053  Opening map - Maps/(4)deadlock.w3m
+10/6 20:30:21.053  Opening mod - Maps/(4)deadlock.w3m
+10/6 20:30:21.058  Opening map - Maps/(4)deadwaterdrop.w3m
+10/6 20:30:21.058  Opening mod - Maps/(4)deadwaterdrop.w3m
+10/6 20:30:21.063  Opening map - Maps/(4)dragonmountain.w3m
+10/6 20:30:21.063  Opening mod - Maps/(4)dragonmountain.w3m
+10/6 20:30:21.069  Opening map - Maps/(4)duskwood.w3m
+10/6 20:30:21.069  Opening mod - Maps/(4)duskwood.w3m
+10/6 20:30:21.076  Opening map - Maps/(4)frostsabre.w3m
+10/6 20:30:21.076  Opening mod - Maps/(4)frostsabre.w3m
+10/6 20:30:21.082  Opening map - Maps/(4)harvestmoon.w3m
+10/6 20:30:21.082  Opening mod - Maps/(4)harvestmoon.w3m
+10/6 20:30:21.088  Opening map - Maps/(4)hearttoheart.w3m
+10/6 20:30:21.088  Opening mod - Maps/(4)hearttoheart.w3m
+10/6 20:30:21.094  Opening map - Maps/(4)legends.w3m
+10/6 20:30:21.094  Opening mod - Maps/(4)legends.w3m
+10/6 20:30:21.100  Opening map - Maps/(4)losttemple.w3m
+10/6 20:30:21.100  Opening mod - Maps/(4)losttemple.w3m
+10/6 20:30:21.107  Opening map - Maps/(4)mysticisles.w3m
+10/6 20:30:21.107  Opening mod - Maps/(4)mysticisles.w3m
+10/6 20:30:21.114  Opening map - Maps/(4)tranquilpaths.w3m
+10/6 20:30:21.114  Opening mod - Maps/(4)tranquilpaths.w3m
+10/6 20:30:21.121  Opening map - Maps/(5)theglaive.w3m
+10/6 20:30:21.121  Opening mod - Maps/(5)theglaive.w3m
+10/6 20:30:21.127  Opening map - Maps/(6)darkforest.w3m
+10/6 20:30:21.127  Opening mod - Maps/(6)darkforest.w3m
+10/6 20:30:21.135  Opening map - Maps/(6)dragonfire.w3m
+10/6 20:30:21.135  Opening mod - Maps/(6)dragonfire.w3m
+10/6 20:30:21.142  Opening map - Maps/(6)drywatergulch.w3m
+10/6 20:30:21.142  Opening mod - Maps/(6)drywatergulch.w3m
+10/6 20:30:21.149  Opening map - Maps/(6)gnollwood.w3m
+10/6 20:30:21.149  Opening mod - Maps/(6)gnollwood.w3m
+10/6 20:30:21.156  Opening map - Maps/(6)moonglade.w3m
+10/6 20:30:21.156  Opening mod - Maps/(6)moonglade.w3m
+10/6 20:30:21.161  Opening map - Maps/(6)scorchedbasin.w3m
+10/6 20:30:21.161  Opening mod - Maps/(6)scorchedbasin.w3m
+10/6 20:30:21.168  Opening map - Maps/(6)stromguarde.w3m
+10/6 20:30:21.168  Opening mod - Maps/(6)stromguarde.w3m
+10/6 20:30:21.175  Opening map - Maps/(6)swampofsorrows.w3m
+10/6 20:30:21.175  Opening mod - Maps/(6)swampofsorrows.w3m
+10/6 20:30:21.182  Opening map - Maps/(6)timbermawhold.w3m
+10/6 20:30:21.182  Opening mod - Maps/(6)timbermawhold.w3m
+10/6 20:30:21.188  Opening map - Maps/(8)battleground.w3m
+10/6 20:30:21.188  Opening mod - Maps/(8)battleground.w3m
+10/6 20:30:21.195  Opening map - Maps/(8)blastedlands.w3m
+10/6 20:30:21.195  Opening mod - Maps/(8)blastedlands.w3m
+10/6 20:30:21.201  Opening map - Maps/(8)bloodvenomfalls.w3m
+10/6 20:30:21.201  Opening mod - Maps/(8)bloodvenomfalls.w3m
+10/6 20:30:21.208  Opening map - Maps/(8)gardenofwar.w3m
+10/6 20:30:21.208  Opening mod - Maps/(8)gardenofwar.w3m
+10/6 20:30:21.215  Opening map - Maps/(8)golemsinthemist.w3m
+10/6 20:30:21.215  Opening mod - Maps/(8)golemsinthemist.w3m
+10/6 20:30:21.223  Opening map - Maps/(8)petrifiedforest.w3m
+10/6 20:30:21.223  Opening mod - Maps/(8)petrifiedforest.w3m
+10/6 20:30:21.231  Opening map - Maps/(8)plaguelands.w3m
+10/6 20:30:21.231  Opening mod - Maps/(8)plaguelands.w3m
+10/6 20:30:21.240  Opening map - Maps/(8)plainsofsnow.w3m
+10/6 20:30:21.240  Opening mod - Maps/(8)plainsofsnow.w3m
+10/6 20:30:21.247  Opening map - Maps/(8)richmansgarden.w3m
+10/6 20:30:21.247  Opening mod - Maps/(8)richmansgarden.w3m
+10/6 20:30:21.254  Opening map - Maps/(8)thecrucible.w3m
+10/6 20:30:21.254  Opening mod - Maps/(8)thecrucible.w3m
+10/6 20:30:21.261  Opening map - Maps/(9)riverrun.w3m
+10/6 20:30:21.261  Opening mod - Maps/(9)riverrun.w3m
+10/6 20:30:21.331  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft diagnostic stage lineup main bda8a366.w3x
+10/6 20:30:21.331  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft diagnostic stage lineup main bda8a366.w3x
+10/6 20:30:21.386  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
+10/6 20:30:21.386  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
+10/6 20:30:21.420  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)EchoIsles_S2_v2.2.w3x
+10/6 20:30:21.420  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)EchoIsles_S2_v2.2.w3x
+10/6 20:30:21.429  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)TerenasStand_LV.w3x
+10/6 20:30:21.429  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)TerenasStand_LV.w3x
+10/6 20:30:21.432  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(4)LostTemple_S2.w3x
+10/6 20:30:21.432  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(4)LostTemple_S2.w3x
+10/6 20:30:21.443  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)LastRefuge_S2_v1.5.w3x
+10/6 20:30:21.443  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)LastRefuge_S2_v1.5.w3x
+10/6 20:30:21.451  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)Tidehunters_S2_v1.2.w3x
+10/6 20:30:21.451  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)Tidehunters_S2_v1.2.w3x
+10/6 20:30:21.462  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(4)TurtleRock_S2.w3x
+10/6 20:30:21.462  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(4)TurtleRock_S2.w3x
+10/6 20:30:21.473  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)AutumnLeaves_S2_v2.0.w3x
+10/6 20:30:21.473  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)AutumnLeaves_S2_v2.0.w3x
+10/6 20:30:21.484  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)NorthernIsles_S2.w3x
+10/6 20:30:21.484  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)NorthernIsles_S2.w3x
+10/6 20:30:21.492  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(4)TwistedMeadows_S2_v1.1.w3x
+10/6 20:30:21.492  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(4)TwistedMeadows_S2_v1.1.w3x
+10/6 20:30:21.502  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)Hammerfall_S3.w3x
+10/6 20:30:21.502  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season9/(2)Hammerfall_S3.w3x
+10/6 20:30:21.529  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
+10/6 20:30:21.529  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
+10/6 20:30:24.005  NetProviderBNET::PostDistFileComplete()
+10/6 20:30:31.445  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x
+10/6 20:30:31.445  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft wisp-play diagnostic.w3x

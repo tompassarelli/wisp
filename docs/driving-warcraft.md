@@ -24,7 +24,7 @@ and what Wisp hasn't observed itself. W3Champions' code is in
 | Step | `wisp play` today | Bot sessions today (wisp:scripts/wisp/lobby.ts `freshMatch`) |
 | --- | --- | --- |
 | Start the game | Battle.net's Play, clicked on the launcher's page | Clients stay running |
-| Load the map | `-loadfile` from Battle.net's launch options ([play.md](play.md)); menu clicks when Warcraft ignores it | Create Game → first map → name → Create, by clicks |
+| Load the map | The menu socket, or menu clicks without a menu page, once the game's ladder scan is over ([play.md](play.md)) | Create Game → first map → name → Create, by clicks |
 | Add a computer | The map's own setup | (none) |
 | Join | (solo) | Join name → Join, by clicks |
 | Start | The map starts the match | Start, by a click |
@@ -216,9 +216,9 @@ decision.
 
 ### What it replaces
 
-- **`wisp play`.** It replaces the menu route that runs when Warcraft ignores
-  `-loadfile` (`host(game)` in wisp:scripts/wisp/play.ts). It also allows
-  rematches in the running game instead of a new Play per match.
+- **`wisp play`.** It replaces the menu clicks of `host(game)` in
+  wisp:scripts/wisp/play.ts when the game declares `menuReportPort`. It
+  also allows rematches in the running game instead of a new Play per match.
 - **Bot sessions.** It replaces all of `freshMatch` except leaving a running
   match: host, join, start, and leave from the lobby or score screen.
 - **Adding a computer** once its request is known.
@@ -285,8 +285,8 @@ starts the map as a single-player test game, the World Editor's Test Map.
 - Battle.net's Play hands the game its session. It also passes the game's
   "Additional command line arguments" (`Games.w3.AdditionalLaunchArguments`
   in `Battle.net.config`), which it reads when it starts.
-- So `wisp play` writes the argument while Battle.net isn't running, then
-  presses Play ([play.md](play.md)).
+- So a tool writes the argument while Battle.net isn't running, then
+  presses Play.
 - Prior art: [BenqsXd/wc3-mcp](https://github.com/BenqsXd/wc3-mcp) (MIT),
   `src/wc3mcp/desktop/battlenet.py`. It reports about 13 s from
   `Battle.net.exe --exec="launch W3"` to the loading screen, and that the
@@ -302,8 +302,12 @@ lobby on Battle.net and changes no game file.
   post-sign-in failures.
 - Nothing can join.
 
-**What it replaces:** loading and starting the map in `wisp play`. This is
-done; see [play.md](play.md).
+**Why `wisp play` no longer uses it.** The option loads the map during
+startup, and Warcraft III's ladder scan after sign-in then lands mid-load: on
+6 Oct every `-loadfile` run on the owner's display logged 326
+`model creation failed - war3mapImported/...` lines and drew no stage. The
+option can't be delayed, so `play` hosts after the scan instead
+([play.md](play.md), step 4).
 
 ## 4. Menu clicks (fallback)
 
@@ -346,8 +350,9 @@ different kind from a UI file, and Wisp doesn't take it.
    signed-in client, solo and two-client alike. It needs one setup per prefix
    and carries W3Champions' account risk, so it needs the account owner's
    decision.
-2. **`-loadfile` through Battle.net.** It is the solo route without any change
-   to the game, at the cost of a new game per match. `wisp play` uses it now.
+2. **`-loadfile` through Battle.net.** It changes nothing in the game, but its
+   map loads during the ladder scan and loses its imported models, so
+   `wisp play` doesn't use it.
 3. **Menu clicks.** Keep them for Battle.net's Play, for leaving a running
    match, and for any prefix whose owner declines the menu page.
 4. **LAN hosting.** Excluded while the 3.0 client needs a code patch to see

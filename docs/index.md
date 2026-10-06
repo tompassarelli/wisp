@@ -25,9 +25,9 @@ given their folders.
 
 Playtesting? [`wisp play`](play.md) (wisp:docs/play.md) goes from the
 desktop to a match on the owner's display in one command: it checks the Wine
-prefix, sets Warcraft III's launch options to load the map, reuses or starts
-the signed-in Battle.net launcher, presses Play, starts the game's controller
-helper, has the map start the match and leaves the game fullscreen.
+prefix, reuses or starts the signed-in Battle.net launcher, presses Play,
+hosts the map once Warcraft III has read its ladder maps, starts the game's
+controller helper, has the map start the match and leaves the game fullscreen.
 [Driving Warcraft III without clicks](driving-warcraft.md)
 (wisp:docs/driving-warcraft.md) compares the ways to make the game host,
 join and start games without clicking its menus, with their account risk.
@@ -58,7 +58,7 @@ warcraft-vscode on the same map is measured in the
 | Generate custom objects, including FileIO's ability | [Object data](../scripts/objectData.ts) (wisp:scripts/objectData.ts) | A build without its own war3map.w3a gets FileIO's ability; a map that writes war3map.w3a includes it with `abilityData()`. |
 | Read reports or write reload payloads | [GameFiles](../scripts/wisp/gameFiles.ts) (wisp:scripts/wisp/gameFiles.ts) | Host-side file transport; runtime and host must share file identities. |
 | Control existing Warcraft clients | [Clients](../scripts/wisp/clients.ts) and the [client command](../scripts/wisp/commands/client.ts) (wisp:scripts/wisp/clients.ts, wisp:scripts/wisp/commands/client.ts) | Supply the clients file ([format](sample-map.md#play-it-and-change-it-while-it-runs)) and private desktop sessions; game-specific journeys belong to the consumer. |
-| Go from the owner's desktop to a match in one command: prefix check, Battle.net with Warcraft III set to load the map, Play, controller helper, the map's match setup, fullscreen | [`wisp play`](play.md) (wisp:docs/play.md, wisp:scripts/wisp/play.ts) | The game declares its prefix, Steam shortcut, map, request to the map, match step and helper; the menus are a fallback. Runs on the owner's niri desktop with `grim`, `tesseract`, `wlrctl`, `xdotool` and `steam`; never signs in or starts Warcraft III.exe itself. |
+| Go from the owner's desktop to a match in one command: prefix check, Battle.net, Play, the map hosted after Warcraft III's ladder scan, controller helper, the map's match setup, fullscreen | [`wisp play`](play.md) (wisp:docs/play.md, wisp:scripts/wisp/play.ts) | The game declares its prefix, Steam shortcut, map, request to the map, match step, helper and optional `menuReportPort`; without a menu page the menus are clicked. Runs on the owner's niri desktop with `grim`, `tesseract`, `wlrctl`, `xdotool` and `steam`; never signs in or starts Warcraft III.exe itself. |
 | Start a new match of a map in every client | [Fresh match](../scripts/wisp/lobby.ts) (wisp:scripts/wisp/lobby.ts) | Hosts from the first client, joins the others, starts, and waits for each client's match-start acknowledgement; Create Game must show the configured map folder. |
 | Host, join, start or leave a game without clicks, through the menus' own socket; which no-click approach to use and why | [Driving Warcraft III without clicks](driving-warcraft.md) and `wisp menus` (wisp:docs/driving-warcraft.md, wisp:scripts/wisp/menus.ts) | Needs Wisp's menu page in the game's `_retail_/webui` and the registry value `Allow Local Files`, set once per prefix with the account owner's agreement (W3Champions' install method; see the page's account risk). Battle.net's Play and leaving a running match stay clicks. |
 | Run a map in simulated clients without Warcraft: desyncs, error reports, hot reloads, scene problems | [Headless runtime](headless.md) and `wisp headless` (wisp:docs/headless.md) | Bun runs the map's TypeScript, 32-bit Lua its compiled bundle. The game declares its local-only natives, global prefixes and journeys; Warcraft's engine, timing and rendering keep their native checks. |
