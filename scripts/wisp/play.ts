@@ -13,7 +13,7 @@
 // The game's window is fullscreen while play drives it, so a capture of its
 // output is the game's frame.
 import { join } from "node:path";
-import { Clock, Context, Effect, Schema } from "effect";
+import { Clock, Context, Effect, Exit, Schema } from "effect";
 import {
   type LaunchOutcome, type PrefixUse, type ProcessInfo, documentsFolder, launchOptions, launchOutcome, launchRequested, launcherConfig, launcherLogDirectory, loadMapOption,
   newestLauncherLog, prefixUse, shortcutAppId, shortcutUrl, signedIn, withLaunchOptions,
@@ -254,6 +254,7 @@ export const PLAY_TIMEOUTS = {
   tile: 6,
   next: 10,
   menuShown: 10,
+  gameFullscreen: 45,
   continueEvery: 2,
   continuePresses: 60,
   launch: 45,
@@ -495,6 +496,16 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     ? fail(`Battle.net has no settings at ${configPath}; start it once from Steam, then run play again`)
     : Effect.try({ try: () => ({ text, options: launchOptions(text) }), catch: () => new PlayProblem({ problem: `Battle.net's settings at ${configPath} aren't JSON` }) }))));
   const setLaunchOptions = (options: string | undefined) => settings.pipe(Effect.flatMap(({ text }) => machine.write(configPath, withLaunchOptions(text, options))));
+  /**
+   * What Warcraft III's launch options were before this run first set them, while ours are in place:
+   * every way a run ends puts them back but a successful run with --keep-launch-options. A run that
+   * found them already set by an earlier kept run removes them when it fails.
+   */
+  let pending: { readonly previous: string | undefined } | undefined;
+  /** True when it put options back. */
+  const restoreLaunchOptions = Effect.suspend(() => (pending === undefined
+    ? Effect.succeed(false)
+    : setLaunchOptions(pending.previous).pipe(Effect.tap(() => Effect.sync(() => { pending = undefined; })), Effect.as(true))));
 
   /** How the map gets loaded: by Warcraft III's launch options, or through its menus when it already runs. */
   type Route = { readonly kind: "launch"; readonly previous: string | undefined } | { readonly kind: "menus" };
@@ -506,6 +517,8 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       return { kind: "menus" } satisfies Route as Route;
     }
     const { options: previous } = yield* settings;
+    // Ours from an earlier kept run count as nothing set before.
+    pending = { previous: previous === loadOption ? undefined : previous };
     if (use.launcher !== undefined) {
       if (previous === loadOption) {
         yield* waitSignedIn(undefined);
@@ -528,14 +541,22 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     return window === undefined ? fail(`window ${id} closed`) : Effect.succeed(window);
   }));
   /** Focuses a window and makes it fullscreen; true when it had to toggle fullscreen on. */
-  const fullscreen = (id: number, what: string) => Effect.gen(function*() {
+  /** Windows play asked to go fullscreen: niri's fullscreen is a toggle, and a window loading a map takes its time to follow it. */
+  const asked = new Set<number>();
+  const askFullscreen = (id: number) => Effect.gen(function*() {
     yield* desktop.focus(id);
-    if (isFullscreen(yield* windowById(id))) return false;
+    if (isFullscreen(yield* windowById(id)) || asked.has(id)) return false;
     yield* desktop.toggleFullscreen(id);
-    yield* until(PLAY_TIMEOUTS.fullscreen, windowById(id).pipe(Effect.map((window) => (isFullscreen(window) ? true : undefined))),
-      () => `${what} didn't become fullscreen within ${PLAY_TIMEOUTS.fullscreen} s`);
+    asked.add(id);
     return true;
   });
+  const fullscreen = (id: number, what: string, seconds: number = PLAY_TIMEOUTS.fullscreen) => Effect.gen(function*() {
+    const toggled = yield* askFullscreen(id);
+    yield* until(seconds, windowById(id).pipe(Effect.map((window) => (isFullscreen(window) ? true : undefined))),
+      () => `${what} didn't become fullscreen within ${seconds} s`);
+    return toggled;
+  });
+  const leaveFullscreen = (id: number) => desktop.toggleFullscreen(id).pipe(Effect.tap(() => Effect.sync(() => asked.delete(id))));
   const outputOf = (id: number, what: string) => windowById(id).pipe(Effect.flatMap((window) =>
     window.output === undefined ? fail(`${what} isn't on any output`) : Effect.succeed(window.output.name)));
   const sameShape = (screen: Screen, window: XWindow, what: string) =>
@@ -586,7 +607,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       const offset = (yield* machine.size(path)) ?? 0;
       yield* click(seen.white, warcraftPlay(seen)!, "Battle.net Play");
       return { path, offset };
-    }).pipe(Effect.ensuring(toggled ? desktop.toggleFullscreen(window.id).pipe(Effect.ignore) : Effect.void));
+    }).pipe(Effect.ensuring(toggled ? leaveFullscreen(window.id).pipe(Effect.ignore) : Effect.void));
     const since = machine.read(path, offset).pipe(Effect.map((text) => text ?? ""));
     const requested = yield* poll(PLAY_TIMEOUTS.request, since.pipe(Effect.map((text) => (launchRequested(text) || launchOutcome(text) !== undefined ? true : undefined))));
     if (requested === undefined) {
@@ -639,26 +660,28 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
         if (attempt.outcome.kind === "failed") return yield* fail(`${attempt.outcome.reason}, also after restarting Battle.net. Its log: ${attempt.log}`);
       }
       yield* status(3, "Warcraft III", "Battle.net's Play started it");
-      if (route.kind === "launch" && !options.keepLaunchOptions && route.previous !== loadOption) {
+      if (route.kind === "launch" && !options.keepLaunchOptions) {
         // Battle.net may write its settings back as it read them when it exits.
-        yield* setLaunchOptions(route.previous);
+        yield* restoreLaunchOptions;
         yield* status(3, "Warcraft III", "Battle.net's launch options for it put back; its own Play no longer loads the map");
       }
     }
     const process = yield* until(PLAY_TIMEOUTS.gameWindow, prefixState.pipe(Effect.map((use) => use.game)),
       () => `Battle.net reported Warcraft III running, but its process didn't appear within ${PLAY_TIMEOUTS.gameWindow} s`);
     const window = yield* until(PLAY_TIMEOUTS.gameWindow, windowTitled("Warcraft III"), () => `Warcraft III's window didn't appear within ${PLAY_TIMEOUTS.gameWindow} s`);
-    yield* fullscreen(window.id, "Warcraft III's window");
+    // A game loading a map can take a while to follow; step 7 waits for it.
+    yield* askFullscreen(window.id);
     const xWindow = yield* until(PLAY_TIMEOUTS.gameWindow, desktop.xWindow("Warcraft III", process.pid),
       () => `Warcraft III's window isn't on display ${display}`);
-    yield* status(3, "Warcraft III", `running (pid ${process.pid}), fullscreen`);
+    yield* status(3, "Warcraft III", `running (pid ${process.pid}), asked to go fullscreen`);
     return { game: { documents, pid: process.pid, window: window.id, xWindow, display } satisfies PlayGame, since };
   });
 
   // 4, through the menus: Multiplayer, Custom Games, Create Game, the map's folder, the map, the game's name, Create, Start.
   const host = (game: PlayGame) => Effect.gen(function*() {
     const { folder, title } = declaration.map;
-    yield* desktop.focus(game.window);
+    // The menus are read from the output, which only the fullscreen game covers.
+    yield* fullscreen(game.window, "Warcraft III's window", PLAY_TIMEOUTS.gameFullscreen);
     const output = yield* outputOf(game.window, "Warcraft III's window");
     const read = desktop.read(output, "light");
     const seen = (seconds: number, accept: (screen: Screen) => boolean, problem: string) =>
@@ -829,20 +852,27 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     yield* status(5, "Controller helper", `running (pid ${pid}), log ${log}`);
   });
 
-  yield* checkPrefix.pipe(inStep(1, "Wine prefix"));
-  const route = yield* launcher.pipe(inStep(2, "Battle.net"));
-  const { game: running, since } = yield* game(route).pipe(inStep(3, "Warcraft III"));
-  yield* loadMap(route, running, since).pipe(inStep(4, "Map"));
-  // The helper runs before the match starts, or the match is played on the keyboard.
-  yield* helper(running).pipe(inStep(5, "Controller helper"));
-  const match = yield* declaration.match(running).pipe(inStep(6, "Match"));
-  yield* status(6, "Match", match);
   yield* Effect.gen(function*() {
-    yield* fullscreen(running.window, "Warcraft III's window");
-    yield* until(PLAY_TIMEOUTS.fullscreen, windowById(running.window).pipe(Effect.map((window) => (window.focused ? true : undefined))),
-      () => "Warcraft III's window didn't take focus");
-    yield* status(7, "Fullscreen", "Warcraft III is fullscreen and focused. Ready to fight.");
-  }).pipe(inStep(7, "Fullscreen"));
+    yield* checkPrefix.pipe(inStep(1, "Wine prefix"));
+    const route = yield* launcher.pipe(inStep(2, "Battle.net"));
+    const { game: running, since } = yield* game(route).pipe(inStep(3, "Warcraft III"));
+    yield* loadMap(route, running, since).pipe(inStep(4, "Map"));
+    // The helper runs before the match starts, or the match is played on the keyboard.
+    yield* helper(running).pipe(inStep(5, "Controller helper"));
+    const match = yield* declaration.match(running).pipe(inStep(6, "Match"));
+    yield* status(6, "Match", match);
+    yield* Effect.gen(function*() {
+      yield* fullscreen(running.window, "Warcraft III's window", PLAY_TIMEOUTS.gameFullscreen);
+      yield* until(PLAY_TIMEOUTS.fullscreen, windowById(running.window).pipe(Effect.map((window) => (window.focused ? true : undefined))),
+        () => "Warcraft III's window didn't take focus");
+      yield* status(7, "Fullscreen", "Warcraft III is fullscreen and focused. Ready to fight.");
+    }).pipe(inStep(7, "Fullscreen"));
+  }).pipe(Effect.onExit((exit) => (Exit.isFailure(exit)
+    ? restoreLaunchOptions.pipe(
+      Effect.tap((restored) => Effect.sync(() => { if (restored) print("Battle.net's launch options for Warcraft III put back, as the run stopped"); })),
+      Effect.ignore,
+    )
+    : Effect.void)));
 });
 
 /** Names the step a problem stopped play at; the step's time prints with the command's step timings. */
