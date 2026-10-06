@@ -73,6 +73,7 @@ interface Scenario {
   readonly helper?: "ready" | "exits" | "earlier" | "this game's";
   readonly fullscreens?: boolean;
   readonly gameRunning?: boolean;
+  readonly initialMenu?: "main" | "battle.net";
   readonly matchFails?: boolean;
   /** False: another window takes focus back once the helper runs. */
   readonly gameKeepsFocus?: boolean;
@@ -127,7 +128,7 @@ function world(scenario: Scenario = {}) {
   const events: string[] = [];
   let now = 0;
   let focused: number | undefined;
-  let menu = "main";
+  let menu: string = scenario.initialMenu ?? "main";
   let name = "Tompas's game";
   let started = false;
   let presses = 0;
@@ -638,8 +639,15 @@ test("menu loading reuses a warm launcher, waits for Multiplayer, and clears thi
   expect(otherMap.failure).toContain("Battle.net is set to load another map at startup");
   expect(otherMap.events.filter((event) => event.startsWith("SIG") || event.startsWith("launch options"))).toEqual([]);
   const notReady = await world({ mainMenu: false }).run({ menus: true });
-  expect(notReady.failure).toBe("4/7 Map stopped: Warcraft III didn't show its Multiplayer menu within 120 s");
+  expect(notReady.failure).toBe("4/7 Map stopped: Warcraft III didn't show its main menu within 120 s");
   expect(notReady.events.some((event) => event.includes("CREATE") || event.startsWith(`start ${HELPER}`))).toBe(false);
+});
+
+test("menu loading resumes a warm Warcraft client already showing Custom Games", async () => {
+  const result = await world({ runtimes: "launcher", gameRunning: true, initialMenu: "battle.net" }).run({ menus: true });
+  expect(result.failure).toBeUndefined();
+  expect(result.events).toContain("click Warcraft III CUSTOM GAMES");
+  expect(result.events).not.toContain("click Warcraft III MULTIPLAYER");
 });
 
 test("Battle.net's launch options: kept on request, reused by a launcher that read them, set by restarting one that didn't", async () => {
