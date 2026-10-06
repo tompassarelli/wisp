@@ -85,3 +85,8 @@ To generate a consumer archive from a checkout, run
 `bun scripts/package.ts /absolute/path/to/wisp.tgz`. The producer uses the
 pinned compiler, keeps generated output under wisp:build/, and includes the
 Lua modules required by TypeScriptToLua alongside the host source.
+
+## License
+
+Wisp is released under the [MIT License](LICENSE). Warcraft III and its assets
+belong to Blizzard Entertainment and are not part of this repository.

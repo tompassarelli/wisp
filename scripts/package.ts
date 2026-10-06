@@ -6,7 +6,7 @@ import { transpileProject } from "typescript-to-lua";
 import { report } from "./compiler";
 
 const root = resolve(import.meta.dir, "..");
-const packagePaths = ["scripts", "plugins", "src", "native", "docs", "README.md", "AGENTS.md", "typescript-toolchain.lock", "tsconfig.library.json"];
+const packagePaths = ["scripts", "plugins", "src", "native", "docs", "README.md", "LICENSE", "AGENTS.md", "typescript-toolchain.lock", "tsconfig.library.json"];
 
 async function copyTree(source: string, destination: string): Promise<void> {
   await mkdir(destination, { recursive: true });
