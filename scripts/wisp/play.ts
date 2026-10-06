@@ -164,6 +164,8 @@ export class PlayMachine extends Context.Service<PlayMachine, {
   /** A file's text from byte `from`; undefined while it doesn't exist. */
   readonly read: (path: string, from?: number) => Effect.Effect<string | undefined, PlayProblem>;
   readonly size: (path: string) => Effect.Effect<number | undefined, PlayProblem>;
+  /** The SHA-256 of a file's bytes; undefined while it doesn't exist. */
+  readonly digest: (path: string) => Effect.Effect<string | undefined, PlayProblem>;
   readonly list: (directory: string) => Effect.Effect<readonly string[], PlayProblem>;
   /** Appends to a file, creating it and its folder. */
   readonly append: (path: string, text: string) => Effect.Effect<void, PlayProblem>;
@@ -662,14 +664,20 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     () => `Steam still runs the shortcut "${shortcut.name}" after Battle.net exited`);
   });
 
-  /** The map in its folder, copied from its build when missing. */
+  /**
+   * The map in its folder, identical to its declared build. A stale or different copy is replaced
+   * by an atomic copy and verified, all before Warcraft is started or told to load it.
+   */
   const installMap = Effect.gen(function*() {
     const { file, source } = declaration.map;
-    if ((yield* machine.size(mapPath)) !== undefined) return;
-    if (source === undefined) return yield* fail(`the map isn't installed: ${mapPath}`);
-    if ((yield* machine.size(source)) === undefined) return yield* fail(`the map isn't installed (${mapPath}) and its build is missing: ${source}`);
+    const installed = yield* machine.digest(mapPath);
+    if (source === undefined) return installed === undefined ? yield* fail(`the map isn't installed: ${mapPath}`) : undefined;
+    const built = yield* machine.digest(source);
+    if (built === undefined) return installed === undefined ? yield* fail(`the map isn't installed (${mapPath}) and its build is missing: ${source}`) : undefined;
+    if (installed === built) return;
     yield* machine.copy(source, mapPath);
-    yield* status(3, "Warcraft III", `installed ${file} from ${source}`);
+    if ((yield* machine.digest(mapPath)) !== built) return yield* fail(`the installed map differs from its build after copying: ${mapPath}`);
+    yield* status(3, "Warcraft III", `${installed === undefined ? "installed" : "replaced"} ${file} from ${source}`);
   });
 
   const game = (route: Route) => Effect.gen(function*() {
