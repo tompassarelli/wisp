@@ -12,7 +12,7 @@ match when the game asks.
 2/7 Battle.net: started and signed in (27 s), with Warcraft III set to load the map
 3/7 Warcraft III: Battle.net's Play started it
 3/7 Warcraft III: Battle.net's launch options for it put back; its own Play no longer loads the map
-3/7 Warcraft III: running (pid 2852), fullscreen
+3/7 Warcraft III: running (pid 2852), asked to go fullscreen
 4/7 Map: Warcraft III loaded Smashcraft 0.0.47.w3x from its launch options; fighter selection 30 s after Play (6 key presses to continue)
 5/7 Controller helper: running (pid 41234), log ~/.local/state/smashcraft/play-helper.log
 6/7 Match: computer as Player 3
@@ -67,10 +67,13 @@ match when the game asks.
    container; started from outside, Wine would start a second wineserver on
    the prefix, so `play` presses Play. Once the game runs, the launch
    options are put back as they were, so Battle.net's own Play doesn't load
-   the map; `--keep-launch-options` leaves them, so the next run reuses the
-   running launcher. Battle.net may write back the options it read when it
-   exits. The game's window becomes fullscreen as soon as it appears, so a
-   capture of its output is the game's frame.
+   the map; `--keep-launch-options` leaves them after a run that succeeds, so
+   the next run reuses the running launcher. A run that stops puts them back,
+   or removes the ones an earlier kept run left. Battle.net may write back
+   the options it read when it exits. `play` asks for fullscreen as soon as
+   the game's window appears; a game loading its map takes a while to follow
+   (more than 5 s on 6 Oct), so the menus and step 7 wait up to 45 s, and
+   once it is fullscreen a capture of its output is the game's frame.
 4. **Map.** A map loaded from the launch options waits on "Press any key to
    continue" once it has loaded (6 Oct), so space goes to the game window
    every 2 s (at most 60 times, none once the main menu shows), and the time
@@ -116,6 +119,7 @@ export const play = makePlay({
   gameName: "Smashcraft",
   debugDirectory: join(homedir(), ".local/state/smashcraft/play-debug"),
   prepare: (documents) => /* the map's request file in CustomMapData */,
+  cleanup: (documents) => /* removes it when a run stops */,
   started: (game, since) => /* the map's first-screen file, newer than since */,
   match: (game) => /* the go-ahead the map waits for, then its receipt; "computer as Player 3" */,
   helper: { binary, args: (game) => /* game.pid, game.window, game.xWindow.id, ... */, ready: /waiting_for_match/, log },
