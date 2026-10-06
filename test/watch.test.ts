@@ -8,6 +8,12 @@ import { sessionStart } from "../scripts/warcraft/war3Log";
 import { type ClientState, type ClientView, ClientWatch, type CrashReport, type SocketState, type Sources, changes, crashSummary, decide, eventLine, inState, socketEvent, unlessLost, waitFor } from "../scripts/wisp/watch";
 
 const client: Client = { name: "a", documents: "/a/Documents/Warcraft III" };
+test("a rendered menu transition replaces old score data, while overlays do not", () => {
+  const results = socketEvent({ connected: true }, { messageType: "UpdateScoreInfo", payload: {} }, 1);
+  const menus = socketEvent(results, { messageType: "ScreenTransitionInfo", payload: { screen: "CREATE_GAME", type: "Screen" } }, 2);
+  expect(menus.last?.state).toEqual({ kind: "menus", screen: "CREATE_GAME" });
+  expect(socketEvent(menus, { messageType: "ScreenTransitionInfo", payload: { screen: "OPTIONS", type: "Overlay" } }, 3)).toEqual(menus);
+});
 const view = (state: ClientState): ClientView => ({ client: "a", state, source: "socket", evidence: "SetGlueScreen", at: 0, scan: "done", loadErrors: { count: 0 } });
 
 /** A watch that reports each state once, then repeats the last. */

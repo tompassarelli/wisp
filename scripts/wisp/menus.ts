@@ -37,6 +37,7 @@ export interface HeardMessage {
   readonly messageType: string;
   readonly at: number;
   readonly screen?: string;
+  readonly type?: string;
   readonly isHost?: boolean;
 }
 
@@ -54,7 +55,7 @@ export interface MenuEvent {
 
 const PAGE_MARK = `<meta name="wisp" content="menu page" />`;
 /** Requests whose payloads the page reports: what a lobby step sends. */
-const REPORTED_PAYLOADS = "Lobby|Slot|Computer|Team|Race|Color|Handicap|Map|Start|Join";
+const REPORTED_PAYLOADS = "Lobby|Slot|Computer|Team|Race|Color|Handicap|Map|Start|Join|ScreenTransitionInfo";
 /** Messages from the game that say where the client is; the page keeps the newest few and announces them. */
 const PAGE_STATES = "SetGlueScreen|GameLobbySetup|UpdateScoreInfo|LoggedOut";
 const RECENT_KEPT = 4;
@@ -82,6 +83,14 @@ export function menuPage(reportPort: number): string {
         var payloads = /${REPORTED_PAYLOADS}/;
         var states = /^(?:${PAGE_STATES})$/;
         var recent = [];
+        function keep(messageType, payload) {
+          var kept = { messageType: messageType, at: Date.now() };
+          if (typeof payload.screen === "string") kept.screen = payload.screen;
+          if (typeof payload.type === "string") kept.type = payload.type;
+          if (typeof payload.isHost === "boolean") kept.isHost = payload.isHost;
+          recent.push(kept);
+          if (recent.length > ${RECENT_KEPT}) recent.shift();
+        }
         function post(path, body) {
           return fetch(report + path, { method: "POST", mode: "no-cors", body: JSON.stringify(body) });
         }
@@ -93,6 +102,9 @@ export function menuPage(reportPort: number): string {
             socket.send = function (data) {
               try {
                 var sent = JSON.parse(data);
+                if (sent.message === "ScreenTransitionInfo" && sent.payload && sent.payload.type === "Screen") {
+                  keep(sent.message, sent.payload);
+                }
                 if (heard && typeof sent.message === "string") {
                   post("/sent", payloads.test(sent.message) ? { message: sent.message, payload: sent.payload } : { message: sent.message }).catch(function () {});
                 }
@@ -104,12 +116,7 @@ export function menuPage(reportPort: number): string {
                 try {
                   var said = JSON.parse(event.data);
                   if (typeof said.messageType !== "string" || !states.test(said.messageType)) return;
-                  var payload = said.payload || {};
-                  var kept = { messageType: said.messageType, at: Date.now() };
-                  if (typeof payload.screen === "string") kept.screen = payload.screen;
-                  if (typeof payload.isHost === "boolean") kept.isHost = payload.isHost;
-                  recent.push(kept);
-                  if (recent.length > ${RECENT_KEPT}) recent.shift();
+                  keep(said.messageType, said.payload || {});
                 } catch (error) {}
               });
             }
@@ -175,7 +182,7 @@ export const removeMenuPage = (retail: string) => Effect.try({
   catch: (cause) => new MenuFailure({ operation: "remove the menu page", problem: cause instanceof Error ? cause.message : String(cause) }),
 });
 
-const Heard = Schema.Struct({ messageType: Schema.String, at: Schema.Finite, screen: Schema.optionalKey(Schema.String), isHost: Schema.optionalKey(Schema.Boolean) });
+const Heard = Schema.Struct({ messageType: Schema.String, at: Schema.Finite, screen: Schema.optionalKey(Schema.String), type: Schema.optionalKey(Schema.String), isHost: Schema.optionalKey(Schema.Boolean) });
 const Announcement = Schema.Struct({ port: Schema.Int, guid: Schema.String, recent: Schema.optionalKey(Schema.Array(Heard)) });
 
 /**

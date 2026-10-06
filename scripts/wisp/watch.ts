@@ -12,7 +12,7 @@ import { listProcesses } from "../warcraft/processes";
 import { type LadderScan, SCAN_QUIET_MS, importFailures, ladderScan, logTime, sessionMarks, sessionStart, sessionText, war3LogPath } from "../warcraft/war3Log";
 import type { Client } from "./clients";
 import { dataDirectory } from "./gameFiles";
-import { type MenuEvent, connectMenus, menuAddress } from "./menus";
+import { type MenuEvent, connectMenus, keptAddress, menuAddress } from "./menus";
 
 /** Where a state or event was learned. */
 export type Source = "socket" | "log" | "receipt" | "process";
@@ -167,9 +167,11 @@ export function socketEvent(previous: SocketState, event: MenuEvent, at: number)
   const said = (state: ClientState, evidence: string): SocketState => ({ connected: true, last: { state, at, evidence } });
   const payload = record(event.payload);
   switch (event.messageType) {
+    case "ScreenTransitionInfo":
+      if (payload["type"] !== "Screen") return previous;
     case "SetGlueScreen": {
       const screen = String(payload["screen"] ?? "");
-      const evidence = `SetGlueScreen ${screen}`;
+      const evidence = `${event.messageType} ${screen}`;
       if (screen === "LOGIN_DOORS") return said({ kind: "signing in" }, evidence);
       if (LOBBY_SCREENS.has(screen)) return said(previous.last?.state.kind === "lobby" ? previous.last.state : { kind: "lobby" }, evidence);
       if (screen === "LOADING_SCREEN") return said({ kind: "loading" }, evidence);
@@ -396,6 +398,13 @@ const liveWatch = (options: WatchOptions) => Effect.gen(function*() {
         const first = tracker;
         for (let waited = 0; waited < 40 && !(first.tried && (first.socket.connected || waited > 2)); waited++) yield* Effect.sleep("100 millis");
       }
+    }
+    // The page reports completed local navigation too; it isn't broadcast to
+    // our separate socket, so consume its later announcements while connected.
+    const recent = client.menuReportPort === undefined ? undefined : keptAddress(client.menuReportPort)?.recent;
+    const newest = recent?.at(-1);
+    if (recent !== undefined && newest !== undefined && newest.at >= (tracker.socket.last?.at ?? 0)) {
+      tracker.socket = recent.reduce<SocketState>((socket, heard) => socketEvent(socket, { messageType: heard.messageType, payload: heard }, heard.at), tracker.socket);
     }
     const processes: readonly ProcessInfo[] = yield* Effect.try({
       try: listProcesses,
