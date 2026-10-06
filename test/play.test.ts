@@ -12,7 +12,7 @@ import { hostNsenter } from "../scripts/wisp/playHost";
 import { ClientWatch } from "../scripts/wisp/watch";
 import { type ProcessInfo, launchOptions, launchOutcome, loadMapOption, newestLauncherLog, prefixUse, shortcutUrl, windowsPath, withLaunchOptions } from "../scripts/warcraft/battleNet";
 import type { Word } from "../scripts/warcraft/desktop";
-import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, findPhrase, expectedGain, measuredGain, play, spotTargets, steer, steerPointer, offScreen } from "../scripts/wisp/play";
+import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, findPhrase, expectedGain, leaveScoreScreen, measuredGain, play, spotTargets, steer, steerPointer, offScreen } from "../scripts/wisp/play";
 
 const PREFIX = "/home/u/compatdata/3516115571/pfx";
 const SERVER = "server-24-18d2b7ec";
@@ -96,6 +96,8 @@ interface Scenario {
   readonly fullscreens?: boolean;
   readonly gameRunning?: boolean;
   readonly initialMenu?: "main" | "battle.net";
+  /** The running game is in a match whose menus answer keys: Escape and F10 open Game Menu, e End Game, q the score screen, and only Escape leaves it. */
+  readonly warmMatch?: boolean;
   readonly matchFails?: boolean;
   /** False: another window takes focus back once the helper runs. */
   readonly gameKeepsFocus?: boolean;
@@ -146,7 +148,7 @@ function world(scenario: Scenario = {}) {
   const events: string[] = [];
   let now = 0;
   let focused: number | undefined;
-  let menu: string = scenario.initialMenu ?? "main";
+  let menu: string = scenario.warmMatch === true ? "in match" : scenario.initialMenu ?? "main";
   let name = "Tompas's game";
   let started = false;
   let presses = 0;
@@ -269,6 +271,8 @@ function world(scenario: Scenario = {}) {
           { phrase: "CREATE GAME", x: 2600, y: 1501, press: () => { if (menu === "selected") menu = "lobby"; } },
         ];
       }
+      case "game menu": return [{ phrase: "GAME MENU", x: 1440, y: 500, press: () => {} }];
+      case "end game": return [{ phrase: "QUIT MISSION", x: 1440, y: 700, press: () => {} }];
       case "lobby": return [{ phrase: "SMASHCRAFT 0.0.47", x: 2600, y: 240, press: () => {} }, { phrase: "START GAME", x: 2593, y: 1503, press: () => {
         menu = "selection";
         logged("Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft 0.0.47.w3x");
@@ -403,7 +407,17 @@ function world(scenario: Scenario = {}) {
       } else hit?.press();
       return [`moved to X ${root.x},${root.y}`];
     }),
-    keys: (_window, ...keys) => Effect.sync(() => events.push(`keys ${keys.join(" ")}`)),
+    keys: (window, ...keys) => Effect.sync(() => {
+      events.push(`keys ${keys.join(" ")}`);
+      if (focused === undefined || windows.get(focused)?.title !== window.id) return;
+      for (const key of keys) {
+        if (menu === "in match" && key === "F10") menu = "game menu";
+        else if (menu === "game menu" && key === "e") menu = "end game";
+        else if (menu === "end game" && key === "q") menu = "results";
+        // Warcraft III 3.0.0.24268: the menus' ScoreScreenClose is ignored; Escape leaves the score screen.
+        else if (menu === "results" && key === "Escape") menu = "main";
+      }
+    }),
     typeText: (_window, text) => Effect.sync(() => {
       events.push(`type ${text}`);
       name = text;
@@ -443,7 +457,8 @@ function world(scenario: Scenario = {}) {
   const run = async () => {
     const lines: string[] = [];
     const playing = play(declaration, (status) => lines.push(status));
-    const watched = scenario.socketSignedIn === true ? playing.pipe(Effect.provideService(ClientWatch, ClientWatch.of({ view: () => Effect.succeed({ client: "the game", state: { kind: "menus", screen: "MAIN_MENU" }, source: "socket", evidence: "SetGlueScreen MAIN_MENU", at: now * 1000, scan: "signing in", loadErrors: { count: 0 } }) }))) : playing;
+    const warm = ClientWatch.of({ view: () => Effect.sync(() => ({ client: "the game", state: menu === "in match" || menu === "game menu" || menu === "end game" ? { kind: "in match" as const } : menu === "results" ? { kind: "results" as const } : { kind: "menus" as const, screen: "MAIN_MENU" }, source: "socket" as const, evidence: menu, at: now * 1000, scan: "done" as const, loadErrors: { count: 0 } })) });
+    const watched = scenario.warmMatch === true ? playing.pipe(Effect.provideService(ClientWatch, warm)) : scenario.socketSignedIn === true ? playing.pipe(Effect.provideService(ClientWatch, ClientWatch.of({ view: () => Effect.succeed({ client: "the game", state: { kind: "menus", screen: "MAIN_MENU" }, source: "socket", evidence: "SetGlueScreen MAIN_MENU", at: now * 1000, scan: "signing in", loadErrors: { count: 0 } }) }))) : playing;
     const program = watched.pipe(
       Effect.provide(Layer.merge(Layer.succeed(PlayMachine, machine), Layer.succeed(PlayDesktop, desktop))),
     );
@@ -461,7 +476,12 @@ function world(scenario: Scenario = {}) {
     const failure = Option.isSome(error) ? error.value.message : undefined;
     return { lines, failure, events, prefFiles, presses: () => presses, windows, shots, clickLog, options: () => launchOptions(config) };
   };
-  return { run };
+  /** Doctor's hand for a score screen, as `wisp play` gives it: Escape in the game's window. */
+  const leaveScore = async () => {
+    const exit = await Effect.runPromiseExit(leaveScoreScreen(declaration).pipe(Effect.provide(Layer.merge(Layer.succeed(PlayMachine, machine), Layer.succeed(PlayDesktop, desktop)))));
+    return { failure: Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause))?.message : undefined, events, menu: () => menu, focused: () => focused };
+  };
+  return { run, leaveScore };
 }
 
 test("recorded Battle.net and Steam facts: the shortcut's game id, sign-in and launch lines, the newest log", () => {
@@ -637,6 +657,24 @@ test("Warcraft III already past its ladder scan is hosted without waiting for on
   const idle = await world({ runtimes: "launcher", gameRunning: true }).run();
   expect(idle.failure).toBeUndefined();
   expect(idle.lines[5]).toBe("4/7 Map: Warcraft III signed in and read its ladder maps (2 s); hosting the map");
+});
+
+test("a warm match is left through Game Menu, End Game and Quit Mission, and its score screen with Escape, not ScoreScreenClose", async () => {
+  const result = await world({ runtimes: "launcher", gameRunning: true, runningLog: "played", warmMatch: true }).run();
+  expect(result.failure).toBeUndefined();
+  expect(result.events.filter((event) => event.startsWith("keys")).slice(0, 4)).toEqual(["keys Escape F10", "keys e", "keys q", "keys Escape"]);
+  expect(result.events).toContain("click Warcraft III START GAME");
+  expect(result.lines.at(-1)).toBe("7/7 Fullscreen: Warcraft III is fullscreen and focused. Ready to fight.");
+});
+
+test("doctor's score-screen hand presses Escape in the game's focused window, and stops plainly when the game isn't running", async () => {
+  const scored = world({ runtimes: "launcher", gameRunning: true, warmMatch: true, initialMenu: "main" });
+  const left = await scored.leaveScore();
+  expect(left.failure).toBeUndefined();
+  expect(left.events).toEqual(["keys Escape"]);
+  expect(left.focused()).toBe(762);
+  const closed = await world({ runtimes: "launcher" }).leaveScore();
+  expect(closed.failure).toBe("Warcraft III isn't running, so its score screen can't be left");
 });
 
 test("menu hosting resumes a warm Warcraft client already showing Custom Games", async () => {
