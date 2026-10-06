@@ -49,7 +49,8 @@ message that says what to do:
    container; started from outside, Wine would start a second wineserver on
    the prefix, so `play` presses Play. The game's window becomes fullscreen as
    soon as it appears, so a capture of its output is the game's frame.
-4. **Custom game.** From the main menu: Multiplayer, Custom Games, Create
+4. **Custom game.** It installs the map when its folder lacks it (from the
+   declared build). From the main menu: Multiplayer, Custom Games, Create
    Game, the map's folder, the map, the game's name, Create, Start. Each
    control is found by the text Warcraft shows, so any screen size works; the
    game name field, which shows no label of its own, sits where it does on a
@@ -78,7 +79,7 @@ export const play = makePlay({
   prefix: join(homedir(), ".local/share/Steam/steamapps/compatdata/3516115571/pfx"),
   display: ":0",
   shortcut: { appId: 3775098022, name: "Warcraft III (Battle.net)" },
-  map: { folder: "00-Smashcraft", file: "Smashcraft 0.0.47.w3x", title: "Smashcraft 0.0.47" },
+  map: { folder: "00-Smashcraft", file: "Smashcraft 0.0.47.w3x", title: "Smashcraft 0.0.47", source: BUILT_MAP },
   gameName: "Smashcraft",
   debugDirectory: join(homedir(), ".local/state/smashcraft/play-debug"),
   started: (game, since) => /* the map's first-screen file, newer than since */,
@@ -87,7 +88,9 @@ export const play = makePlay({
 }, gameFilesLayer, tools);
 ```
 
-The map must already be in `Maps/FOLDER` of the prefix's Documents/Warcraft III.
+When `Maps/FOLDER/FILE` of the prefix's Documents/Warcraft III is missing, step
+4 copies it from `map.source`; without a source it stops. An installed map is
+left as it is.
 
 ## What it needs
 
@@ -102,9 +105,12 @@ virtual pointer) and click with `wlrctl pointer click`, as a mouse does. On
 the owner's desktop the X pointer stays where the compositor's pointer is, so
 XTEST motion doesn't move it: on 6 Oct an XTEST move to 2075,1518 left the X
 pointer at 1194,882. A target is read in the capture's pixels (2880x1920 on a
-1440x960 output at scale 2), moved to in the output's logical pixels and
-checked in the X root's pixels, which match the capture there; a move that
-lands short is corrected from where the X pointer is, up to four times. Typed
+1440x960 output at scale 2) and checked in the X root's pixels, which match
+the capture there. How far the X pointer moves per logical pixel depends on
+the window under it: 2 X pixels over the launcher, as the scale says, but 1
+over fullscreen Warcraft III from its Battle.net screens on (6 Oct). Each
+move starts from the scale's gain and divides the next by the gain the last
+one showed, until the X pointer is within 2 pixels, at most 8 moves. Typed
 text and keys are XTEST (`xdotool`) into the focused game window.
 
 Each run prints a folder under the game's `debugDirectory`, named by its

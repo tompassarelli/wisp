@@ -99,16 +99,56 @@ export function spotTargets(spot: Spot, output: OutputArea) {
   };
 }
 
-/**
- * The compositor pointer move, in logical pixels, from where the X pointer is
- * to the spot. Over an X window the X pointer is where the compositor's is
- * (2880x1920 X pixels for a 1440x960 logical output at scale 2).
- */
-export function pointerMove(spot: Spot, output: OutputArea, at: { readonly x: number; readonly y: number }) {
-  const { logical } = spotTargets(spot, output);
-  const now = { x: output.x + (at.x - spot.window.x) * output.width / spot.window.width, y: output.y + (at.y - spot.window.y) * output.height / spot.window.height };
-  return { dx: logical.x - now.x, dy: logical.y - now.y };
+interface Point {
+  readonly x: number;
+  readonly y: number;
 }
+
+/** X root pixels the X pointer moves per logical pixel the compositor's pointer is moved, on each axis. */
+export interface Gain {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * The gain before any move: the X pixels per logical pixel of the output
+ * (2 for 2880x1920 X pixels on a 1440x960 output at scale 2). Over
+ * fullscreen Warcraft III's Battle.net screens it moved one X pixel per
+ * logical pixel (6 Oct), so each move measures it again.
+ */
+export const expectedGain = (spot: Spot, output: OutputArea): Gain => ({ x: spot.window.width / output.width, y: spot.window.height / output.height });
+
+/** The compositor pointer move, in logical pixels, that brings the X pointer from `at` to `target` at `gain`. */
+export const steer = (at: Point, target: Point, gain: Gain) => ({ dx: (target.x - at.x) / gain.x, dy: (target.y - at.y) / gain.y });
+
+/** The gain a move showed on each axis; an axis that moved too little to measure keeps the gain it had. */
+export function measuredGain(gain: Gain, requested: { readonly dx: number; readonly dy: number }, moved: Point): Gain {
+  const axis = (previous: number, asked: number, went: number) =>
+    (Math.abs(asked) >= 1 && Math.abs(went) >= 1 ? Math.min(4, Math.max(0.25, went / asked)) : previous);
+  return { x: axis(gain.x, requested.dx, moved.x), y: axis(gain.y, requested.dy, moved.y) };
+}
+
+/**
+ * Moves the X pointer to `target` (X root pixels) with compositor moves,
+ * measuring the gain after each, until it is within `tolerance` pixels or
+ * `moves` moves are spent. `move` moves the compositor's pointer and returns
+ * where the X pointer then is.
+ */
+export const steerPointer = <E>(start: Point, target: Point, gain: Gain, tolerance: number, move: (dx: number, dy: number) => Effect.Effect<Point, E>, moves = 8) =>
+  Effect.gen(function*() {
+    const arrived = (at: Point) => Math.abs(at.x - target.x) <= tolerance && Math.abs(at.y - target.y) <= tolerance;
+    let at = start;
+    let current = gain;
+    const trace = [`pointer at X ${at.x},${at.y}`];
+    for (let made = 0; made < moves && !arrived(at); made++) {
+      const requested = steer(at, target, current);
+      const next = yield* move(requested.dx, requested.dy);
+      current = measuredGain(current, requested, { x: next.x - at.x, y: next.y - at.y });
+      trace.push(`moved ${requested.dx.toFixed(1)},${requested.dy.toFixed(1)} -> X ${next.x},${next.y} (gain ${current.x.toFixed(2)},${current.y.toFixed(2)})`);
+      at = next;
+    }
+    return { at, arrived: arrived(at), trace };
+  });
 
 /** The host: its processes and files. */
 export class PlayMachine extends Context.Service<PlayMachine, {
@@ -126,6 +166,8 @@ export class PlayMachine extends Context.Service<PlayMachine, {
   readonly list: (directory: string) => Effect.Effect<readonly string[], PlayProblem>;
   /** Appends to a file, creating it and its folder. */
   readonly append: (path: string, text: string) => Effect.Effect<void, PlayProblem>;
+  /** Copies a file whole: the destination appears complete or not at all. */
+  readonly copy: (from: string, to: string) => Effect.Effect<void, PlayProblem>;
 }>()("wisp/PlayMachine") {}
 
 /** The owner's desktop: its compositor's windows and outputs, and the game's X display. */
@@ -175,8 +217,11 @@ export interface PlayDeclaration<R = never> {
   readonly display: string;
   /** The Steam shortcut that starts Battle.net Launcher.exe in the prefix: its app id and its name in Steam. */
   readonly shortcut: { readonly appId: number; readonly name: string };
-  /** The map: its folder under Maps, its file, and the title Create Game lists it by. */
-  readonly map: { readonly folder: string; readonly file: string; readonly title: string };
+  /**
+   * The map: its folder under Maps, its file, the title Create Game lists it
+   * by, and the build it is copied from when the folder lacks it.
+   */
+  readonly map: { readonly folder: string; readonly file: string; readonly title: string; readonly source?: string };
   /** The hosted game's name; joining by name is case-sensitive. */
   readonly gameName: string;
   /** Each run saves a picture before and after every click, and its click log, in a folder here named by its start time. */
@@ -533,9 +578,14 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
 
   // 4. Custom Games, Create Game, the map's folder, the map, the game's name, Create, Start.
   const host = (game: PlayGame) => Effect.gen(function*() {
-    const { folder, file, title } = declaration.map;
+    const { folder, file, title, source } = declaration.map;
     const mapPath = join(documents, "Maps", folder, file);
-    if ((yield* machine.size(mapPath)) === undefined) return yield* fail(`the map isn't installed: ${mapPath}`);
+    if ((yield* machine.size(mapPath)) === undefined) {
+      if (source === undefined) return yield* fail(`the map isn't installed: ${mapPath}`);
+      if ((yield* machine.size(source)) === undefined) return yield* fail(`the map isn't installed (${mapPath}) and its build is missing: ${source}`);
+      yield* machine.copy(source, mapPath);
+      yield* status(4, "Custom game", `installed ${file} from ${source}`);
+    }
     yield* desktop.focus(game.window);
     const output = yield* outputOf(game.window, "Warcraft III's window");
     const read = desktop.read(output, "light");
