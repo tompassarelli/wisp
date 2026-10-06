@@ -376,6 +376,19 @@ export interface SoakDriver {
    * `wisp repro` replays.
    */
   repro?(client: HeadlessClient): readonly string[] | undefined;
+  /**
+   * In a client, after each frame: what the game's own detectors found, such
+   * as a fighter caught in a loop it can't escape. Each is a `game` finding,
+   * reported once per match, client and detector.
+   */
+  findings?(client: HeadlessClient): readonly SoakGameFinding[];
+}
+
+/** What one of the game's own detectors found. */
+export interface SoakGameFinding {
+  /** The detector's name, which starts the finding's text. */
+  readonly detector: string;
+  readonly text: string;
 }
 
 /** How a game plays a soak match. */
@@ -426,7 +439,7 @@ export const SOAK_LIMITS: SoakLimits = {
   warmUpFrames: 1200,
 };
 
-export type SoakFindingKind = "stall" | "desync" | "error" | "scene" | "invisible" | "cost" | "catch-up" | "unfinished" | "crash";
+export type SoakFindingKind = "stall" | "desync" | "error" | "scene" | "invisible" | "cost" | "catch-up" | "unfinished" | "crash" | "game";
 
 export interface SoakFinding {
   readonly kind: SoakFindingKind;
@@ -565,6 +578,7 @@ export class SoakMonitor {
       }
       this.checkErrors(client, index);
       this.checkScene(client, index);
+      this.checkGame(client);
     });
     this.checkStall(observations);
     this.checkCatchUp(wallMs, observations, quiet.size > 0);
@@ -607,6 +621,16 @@ export class SoakMonitor {
       if (this.missing[index]?.includes(problem.seen)) this.find("invisible", `would see ${problem.seen} (${problem.evidence}; report frame ${report.frame})`, client.slot, problem.seen);
     }
     this.missing[index] = shapes;
+  }
+
+  private checkGame(client: HeadlessClient): void {
+    const detect = this.driver.findings;
+    if (detect === undefined) return;
+    let found: readonly SoakGameFinding[] = [];
+    client.run(() => {
+      found = detect.call(this.driver, client);
+    });
+    for (const { detector, text } of found) this.find("game", `${detector}: ${text}`, client.slot, detector);
   }
 
   private checkStall(observations: readonly SoakObservation[]): void {
@@ -865,7 +889,7 @@ const MatchSchema = Schema.Struct({
   typed: Schema.optionalKey(Schema.Boolean),
 });
 const FindingSchema = Schema.Struct({
-  kind: Schema.Literals(["stall", "desync", "error", "scene", "invisible", "cost", "catch-up", "unfinished", "crash"]),
+  kind: Schema.Literals(["stall", "desync", "error", "scene", "invisible", "cost", "catch-up", "unfinished", "crash", "game"]),
   frame: Whole,
   slot: Schema.optionalKey(Whole),
   text: Schema.String,
