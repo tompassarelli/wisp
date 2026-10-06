@@ -206,6 +206,7 @@ export const PLAY_TIMEOUTS = {
   signIn: 90,
   window: 30,
   request: 15,
+  tile: 6,
   launch: 45,
   gameWindow: 60,
   mainMenu: 120,
@@ -291,6 +292,24 @@ export function warcraftThree(words: readonly Word[]): readonly { readonly x: nu
     return fold(after.text) === "111" ? [{ x: Math.round((word.x + after.x) / 2), y: Math.round((word.y + after.y) / 2) }] : [];
   });
 }
+
+/**
+ * Where to click a game's tile in Battle.net's Games tab, given its label.
+ * The label under the tile's art doesn't take clicks; the art does. Tiles
+ * are as tall as they are apart (labels of one row, each its own line, about
+ * 381 px apart on 6 Oct), so the art's centre is about 0.6 of that above the
+ * label and its upper half 0.5 above.
+ */
+export function tileArt(words: readonly Word[], label: { readonly x: number; readonly y: number }) {
+  const starts = words.filter((word, index) => Math.abs(word.y - label.y) <= 8 && (index === 0 || words[index - 1]!.line !== word.line))
+    .map(({ x }) => x).sort((a, b) => a - b);
+  const gaps = starts.slice(1).map((x, index) => x - starts[index]!).filter((gap) => gap > 100).sort((a, b) => a - b);
+  const pitch = gaps[Math.floor(gaps.length / 2)] ?? TILE_PITCH;
+  return { first: { x: label.x, y: Math.round(label.y - pitch / 2) }, retry: { x: label.x, y: Math.round(label.y - pitch * 0.6) } };
+}
+
+/** The Games tab's tile pitch on 6 Oct (Battle.net 2.53), for a row with one tile. */
+const TILE_PITCH = 381;
 
 /**
  * Warcraft III's Play button, when the launcher shows Warcraft III: its game
@@ -443,9 +462,13 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
         yield* click(seen.light, topmost(findPhrase(seen.light.words, "Games"))!, "Battle.net Games");
         seen = yield* until(PLAY_TIMEOUTS.screen, page.pipe(Effect.map((now) => (warcraftThree(now.light.words).length > 0 ? now : undefined))),
           () => "Battle.net's Games tab doesn't list Warcraft III");
-        yield* click(seen.light, topmost(warcraftThree(seen.light.words))!, "Battle.net Warcraft III");
-        seen = yield* until(PLAY_TIMEOUTS.screen, page.pipe(Effect.map((now) => (warcraftPlay(now) !== undefined ? now : undefined))),
-          () => "Battle.net doesn't show Play for Warcraft III. If it is installing or updating, let it finish, then run play again.");
+        const tile = tileArt(seen.light.words, topmost(warcraftThree(seen.light.words))!);
+        const opened = page.pipe(Effect.map((now) => (warcraftPlay(now) !== undefined ? now : undefined)));
+        yield* click(seen.light, tile.first, "Battle.net Warcraft III tile");
+        const first = yield* poll(PLAY_TIMEOUTS.tile, opened);
+        if (first === undefined) yield* click(seen.light, tile.retry, "Battle.net Warcraft III tile again");
+        seen = first ?? (yield* until(PLAY_TIMEOUTS.screen, opened,
+          () => `Battle.net didn't show Warcraft III's Play after two clicks on its Games tile. If it is installing or updating, let it finish, then run play again (pictures and click log: ${debug})`));
       }
       const log = newestLauncherLog(yield* machine.list(logs));
       if (log === undefined) return yield* fail(`Battle.net has no log in ${logs}`);

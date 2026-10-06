@@ -8,7 +8,7 @@ import { TestClock } from "effect/testing";
 import { expect, test } from "bun:test";
 import { type ProcessInfo, launchOutcome, newestLauncherLog, prefixUse, shortcutUrl } from "../scripts/warcraft/battleNet";
 import type { Word } from "../scripts/warcraft/desktop";
-import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, findPhrase, play, pointerMove, spotTargets, uiPoint, warcraftPlay, warcraftThree } from "../scripts/wisp/play";
+import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, findPhrase, play, pointerMove, spotTargets, tileArt, uiPoint, warcraftPlay, warcraftThree } from "../scripts/wisp/play";
 
 const PREFIX = "/home/u/compatdata/3516115571/pfx";
 const SERVER = "server-24-18d2b7ec";
@@ -54,6 +54,8 @@ interface Scenario {
   readonly launcherPage?: "warcraft" | "other";
   /** Warcraft III's button on its page. */
   readonly warcraftButton?: "Play" | "Update";
+  /** Which click on Warcraft III's tile art opens its page; 0 for none. */
+  readonly tileOpensOn?: number;
   readonly playShown?: boolean;
   readonly mapInstalled?: boolean;
   readonly mainMenu?: boolean;
@@ -65,12 +67,33 @@ interface Scenario {
   readonly gameKeepsFocus?: boolean;
 }
 
+/**
+ * Battle.net's Games tab as the reader read it on 6 Oct (third run, 2880x1920):
+ * each tile's label is its own line under its art, then its install state.
+ */
+const GAMES_TAB: readonly Word[] = [
+  { text: "My", x: 411, y: 299, line: "18" }, { text: "Games", x: 510, y: 295, line: "18" },
+  { text: "Installed", x: 102, y: 439, line: "26" }, { text: "Favorites", x: 105, y: 489, line: "30" },
+  { text: "REFORGED", x: 549, y: 729, line: "69" },
+  { text: "Warcraft", x: 428, y: 818, line: "79" }, { text: "lll", x: 488, y: 818, line: "79" },
+  { text: "WoW:", x: 794, y: 818, line: "80" }, { text: "Forever", x: 871, y: 818, line: "80" },
+  { text: "World", x: 1176, y: 818, line: "81" }, { text: "of", x: 1224, y: 818, line: "81" }, { text: "Warcraft", x: 1285, y: 818, line: "81" }, { text: "Classic", x: 1374, y: 818, line: "81" },
+  { text: "World", x: 1557, y: 818, line: "82" }, { text: "of", x: 1605, y: 818, line: "82" }, { text: "Warcraft", x: 1666, y: 818, line: "82" },
+  { text: "Installed", x: 453, y: 848, line: "85" }, { text: "Installed", x: 835, y: 848, line: "88" }, { text: "Installed", x: 1216, y: 848, line: "91" },
+];
+/** Warcraft III's tile art in that capture, measured from its pixels: x 385-715, y 400-785. */
+const WARCRAFT_ART = { width: 165, height: 192 };
+
 interface Button {
   readonly phrase: string;
   /** Launcher text the reader separates as white, like Play on its blue button; all else is light. */
   readonly white?: boolean;
   readonly x: number;
   readonly y: number;
+  /** The words the reader makes of it, when recorded; otherwise the phrase's words around x. */
+  readonly read?: readonly Word[];
+  /** Half its size, for what isn't text, like a tile's art. */
+  readonly half?: { readonly width: number; readonly height: number };
   readonly press: () => void;
 }
 
@@ -87,6 +110,7 @@ function world(scenario: Scenario = {}) {
   let name = "Tompas's game";
   let started = false;
   let presses = 0;
+  let tileClicks = 0;
   let page: "warcraft" | "other" | "games" = scenario.launcherPage ?? "other";
   const shots: string[] = [];
   const clickLog: string[] = [];
@@ -108,6 +132,7 @@ function world(scenario: Scenario = {}) {
     const log = `battle.net-20261006T0${2 + logs.size}0000.000000.log`;
     processes.push(reaper(90), wineserver(100), launcher(101), launcherChild(102));
     page = scenario.launcherPage ?? "other";
+    tileClicks = 0;
     logs.set(log, line("Main", "Logging started for Battle.net build 2.53.4.17896"));
     windows.set(758, tiled(758, "Battle.net"));
     if (scenario.signsIn !== false) later(2, () => logs.set(log, logs.get(log)! + SIGNED_IN));
@@ -188,8 +213,12 @@ function world(scenario: Scenario = {}) {
     ];
     switch (page) {
       case "games": return [...nav,
-        { phrase: "World of Warcraft", x: 600, y: 500, press: () => { page = "other"; } },
-        { phrase: "Warcraft III: Reforged", x: 1100, y: 500, press: () => { page = "warcraft"; } }];
+        { phrase: "Games tab text", x: -10_000, y: -10_000, read: GAMES_TAB, press: () => {} },
+        { phrase: "Warcraft III art", x: 550, y: 592, half: WARCRAFT_ART, read: [], press: () => {
+          tileClicks++;
+          if (tileClicks === (scenario.tileOpensOn ?? 1)) page = "warcraft";
+        } },
+        { phrase: "WoW: Forever art", x: 550 + 381, y: 592, half: WARCRAFT_ART, read: [], press: () => { page = "other"; } }];
       case "other": return [...nav,
         { phrase: "World of Warcraft: Forever Gameplay Trailer", x: 2224, y: 875, press: () => {} },
         { phrase: "Play Now", x: 2510, y: 1470, white: true, press: () => events.push("store") },
@@ -259,7 +288,7 @@ function world(scenario: Scenario = {}) {
     read: (output, ink) => Effect.sync(() => {
       expect(output).toBe(OUTPUT.name);
       const shown = screenOf().filter((button) => (button.white === true) === (ink === "white"));
-      return { ...FRAME, words: shown.flatMap((button, index) => words(`b${index}`, button.x, button.y, button.phrase)) };
+      return { ...FRAME, words: shown.flatMap((button, index) => button.read ?? words(`b${index}`, button.x, button.y, button.phrase)) };
     }),
     snapshot: (output, path) => Effect.sync(() => {
       expect(output).toBe(OUTPUT.name);
@@ -272,7 +301,9 @@ function world(scenario: Scenario = {}) {
       // The spot's image and window cover the output, so the target is in the capture's pixels.
       const { root } = spotTargets(spot, { x: 0, y: 0, width: OUTPUT.width, height: OUTPUT.height });
       // Within the words of the phrase, which words() spaces 140 pixels apart.
-      const hit = screenOf().find((button) => Math.abs(button.x - root.x) <= 70 * (button.phrase.split(" ").length - 1) + 60 && Math.abs(button.y - root.y) <= 30);
+      const hit = screenOf().find((button) => (button.half === undefined
+        ? Math.abs(button.x - root.x) <= 70 * (button.phrase.split(" ").length - 1) + 60 && Math.abs(button.y - root.y) <= 30
+        : Math.abs(button.x - root.x) <= button.half.width && Math.abs(button.y - root.y) <= button.half.height));
       events.push(`click ${spot.window.id} ${hit?.phrase ?? `${root.x},${root.y}`}`);
       hit?.press();
       return [`moved to X ${root.x},${root.y}`];
@@ -378,6 +409,22 @@ test("Warcraft III's Play is the Play under a game version box naming Warcraft I
   expect(warcraftThree(games)).toEqual([{ x: 1030, y: 500 }]);
 });
 
+test("a Games tab tile is clicked on its art above the label, which on 6 Oct didn't take the click", () => {
+  const label = warcraftThree(GAMES_TAB)[0]!;
+  expect(label).toEqual({ x: 458, y: 818 });
+  const tile = tileArt(GAMES_TAB, label);
+  // The labels' first words are 366, 382 and 381 px apart: the tiles' pitch is 381.
+  expect(tile).toEqual({ first: { x: 458, y: 628 }, retry: { x: 458, y: 589 } });
+  for (const point of [tile.first, tile.retry]) {
+    expect(point.x).toBeGreaterThanOrEqual(385);
+    expect(point.x).toBeLessThanOrEqual(715);
+    expect(point.y).toBeGreaterThanOrEqual(400);
+    expect(point.y).toBeLessThanOrEqual(785);
+  }
+  // A row with one tile falls back to that pitch.
+  expect(tileArt(GAMES_TAB.filter(({ line }) => line !== "80" && line !== "81" && line !== "82"), label).first).toEqual({ x: 458, y: 628 });
+});
+
 test("Warcraft's UI coordinates land on the centred 4:3 area of a 3:2 and a 16:9 window", () => {
   const window = (width: number, height: number): XWindow => ({ id: "w", x: 0, y: 0, width, height });
   // A slot tag Smashcraft clicked at 1484,824 on the 2560x1440 private desktop.
@@ -417,7 +464,7 @@ test("from a cold desktop: Steam starts Battle.net, Play starts Warcraft III, th
     "steam steam://rungameid/16213922543717842944",
     "fullscreen Battle.net",
     "click Battle.net GAMES",
-    "click Battle.net Warcraft III: Reforged",
+    "click Battle.net Warcraft III art",
     "click Battle.net Play",
     "Play",
     "fullscreen Battle.net",
@@ -437,7 +484,7 @@ test("from a cold desktop: Steam starts Battle.net, Play starts Warcraft III, th
     `start ${HELPER} --pid 2852 > ${HELPER_LOG}`,
   ]);
   // A picture before and after every click, and one click log line each with its pointer moves.
-  expect(result.shots.slice(0, 4)).toEqual(["01-battle-net-games-before.jpg", "01-battle-net-games-after.jpg", "02-battle-net-warcraft-iii-before.jpg", "02-battle-net-warcraft-iii-after.jpg"]);
+  expect(result.shots.slice(0, 4)).toEqual(["01-battle-net-games-before.jpg", "01-battle-net-games-after.jpg", "02-battle-net-warcraft-iii-tile-before.jpg", "02-battle-net-warcraft-iii-tile-after.jpg"]);
   expect(result.shots).toHaveLength(2 * 12);
   expect(result.clickLog[2]).toBe("03-battle-net-play: 1598,1746 of 2880x1920 on eDP-1; moved to X 1598,1746\n");
   expect(result.clickLog.at(-1)).toBe("12-map-ui-0-485-0-257: 1712,1099 of 2880x1920 on eDP-1; moved to X 1712,1099\n");
@@ -498,10 +545,18 @@ test("step 3 stops without a restart when Battle.net doesn't take the Play click
   expect(ignored.failure).toBe(
     "3/7 Warcraft III stopped: Battle.net didn't take the Play click: its log has no launch request within 15 s (pictures and click log: /state/play-debug/1970-01-01T00-00-00-000Z)");
   expect(ignored.events.filter((event) => event.startsWith("SIGTERM"))).toEqual([]);
+  const stuck = "3/7 Warcraft III stopped: Battle.net didn't show Warcraft III's Play after two clicks on its Games tile. If it is installing or updating, let it finish, then run play again (pictures and click log: /state/play-debug/1970-01-01T00-00-00-000Z)";
   const updating = await world({ warcraftButton: "Update" }).run();
-  expect(updating.failure).toBe(
-    "3/7 Warcraft III stopped: Battle.net doesn't show Play for Warcraft III. If it is installing or updating, let it finish, then run play again.");
+  expect(updating.failure).toBe(stuck);
   expect(updating.events).not.toContain("Play WoW");
+  // The tile's art is clicked again once when the first click doesn't open its page, then play stops.
+  const second = await world({ tileOpensOn: 2 }).run();
+  expect(second.failure).toBeUndefined();
+  expect(second.events.filter((event) => event.startsWith("click Battle.net"))).toEqual(
+    ["click Battle.net GAMES", "click Battle.net Warcraft III art", "click Battle.net Warcraft III art", "click Battle.net Play"]);
+  const never = await world({ tileOpensOn: 0 }).run();
+  expect(never.failure).toBe(stuck);
+  expect(never.events.filter((event) => event === "click Battle.net Warcraft III art")).toHaveLength(2);
   const blank = await world({ playShown: false }).run();
   expect(blank.failure).toBe("3/7 Warcraft III stopped: Battle.net's window shows neither its Games tab nor Warcraft III's Play button");
   expect(blank.windows.get(758)?.width).toBe(1424);

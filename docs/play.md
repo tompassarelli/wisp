@@ -35,7 +35,9 @@ message that says what to do:
    it. Battle.net opens on the game it last showed or features (on 6 Oct,
    WoW: Forever), and every game's page has its own Play, so `play` clicks
    Play only under a game version box that names Warcraft III; otherwise it
-   opens the Games tab and Warcraft III first. Then it puts the window back.
+   opens the Games tab and clicks Warcraft III's tile on its art, above the
+   label, which takes no clicks; when the page doesn't change within 6 s it
+   clicks the art once more, then stops. Then it puts the window back.
    Only the log lines written after the click decide: no `LaunchBinary:
    uid=w3` within 15 s means the click wasn't taken, and `play` stops there;
    `Game is running: w3` is a launch, and `Could not launch ... Warcraft
