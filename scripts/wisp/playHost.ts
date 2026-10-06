@@ -288,6 +288,7 @@ const desktop = (tools: PlayTools, display: string): PlayDesktop["Service"] => {
     }),
     keys: (_window, ...keys) => xdotool("key", "--clearmodifiers", ...keys).pipe(Effect.asVoid),
     typeText: (_window, value) => xdotool("type", "--clearmodifiers", "--delay", "12", "--", value).pipe(Effect.asVoid),
+    pressKey: (window, key) => xdotool("key", "--window", window.id, key).pipe(Effect.asVoid),
   };
 };
 

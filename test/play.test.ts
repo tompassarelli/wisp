@@ -80,6 +80,8 @@ interface Scenario {
   readonly launchOptions?: string;
   /** Whether Warcraft III loads the map its launch options name, or shows its main menu. */
   readonly loadfile?: "honored" | "ignored";
+  /** False: the loaded map goes on to fighter selection without a key. */
+  readonly waitsForKey?: boolean;
 }
 
 /**
@@ -167,7 +169,8 @@ function world(scenario: Scenario = {}) {
     windows.set(762, tiled(762, "Warcraft III"));
     if (launcherOptions?.startsWith("-loadfile ") === true && scenario.loadfile !== "ignored") {
       menu = "loading";
-      later(8, () => { menu = "selection"; started = true; });
+      // Run 9, 6 Oct: the loaded map waits on "PRESS ANY KEY TO CONTINUE".
+      later(8, () => { menu = scenario.waitsForKey === false ? "selection" : "press any key"; started = scenario.waitsForKey === false; });
     }
   };
 
@@ -224,6 +227,7 @@ function world(scenario: Scenario = {}) {
           { phrase: "CREATE GAME", x: 2600, y: 1501, press: () => { if (menu === "selected") menu = "lobby"; } },
         ];
       }
+      case "press any key": return [{ phrase: "PRESS ANY KEY TO CONTINUE", x: 1440, y: 1700, press: () => {} }];
       case "lobby": return [{ phrase: "SMASHCRAFT 0.0.47", x: 2600, y: 240, press: () => {} }, { phrase: "START GAME", x: 2593, y: 1503, press: () => { menu = "selection"; later(8, () => { started = true; }); } }];
       default: return [];
     }
@@ -360,6 +364,10 @@ function world(scenario: Scenario = {}) {
       return [`moved to X ${root.x},${root.y}`];
     }),
     keys: (_window, ...keys) => Effect.sync(() => events.push(`keys ${keys.join(" ")}`)),
+    pressKey: (_window, key) => Effect.sync(() => {
+      events.push(`press ${key}`);
+      if (menu === "press any key") later(2, () => { menu = "selection"; started = true; });
+    }),
     typeText: (_window, text) => Effect.sync(() => {
       events.push(`type ${text}`);
       name = text;
@@ -566,13 +574,18 @@ test("from a cold desktop: Battle.net set to load the map, Play, the map loaded,
     "3/7 Warcraft III: Battle.net's Play started it",
     "3/7 Warcraft III: Battle.net's launch options for it put back; its own Play no longer loads the map",
     "3/7 Warcraft III: running (pid 2852), fullscreen",
-    "4/7 Map: Warcraft III loaded Smashcraft 0.0.47.w3x from its launch options",
+    "4/7 Map: Warcraft III loaded Smashcraft 0.0.47.w3x from its launch options; fighter selection 13 s after Play (5 key presses to continue)",
     "5/7 Controller helper: running (pid 3000), log /state/helper.log",
     "6/7 Match: computer as Player 3",
     "7/7 Fullscreen: Warcraft III is fullscreen and focused. Ready to fight.",
   ]);
-  // Battle.net opened on WoW: Forever, as on 6 Oct: its Games tab leads to Warcraft III's Play. Nothing after Play is clicked.
-  expect(result.events).toEqual([
+  // Battle.net opened on WoW: Forever, as on 6 Oct: its Games tab leads to Warcraft III's Play. Nothing after Play is clicked;
+  // space goes to the game every 2 s until the loaded map has passed "Press any key".
+  const presses = result.events.filter((event) => event === "press space");
+  expect(presses.length).toBe(5);
+  expect(result.events.indexOf("press space")).toBeGreaterThan(result.events.indexOf("fullscreen Warcraft III"));
+  expect(result.events.lastIndexOf("press space")).toBeLessThan(result.events.indexOf(`start ${HELPER} --pid 2852 > ${HELPER_LOG}`));
+  expect(result.events.filter((event) => event !== "press space")).toEqual([
     `launch options: ${LOAD_MAP}`,
     "steam steam://rungameid/16213922543717842944",
     "prepare",
@@ -633,9 +646,19 @@ test("a launcher already showing Warcraft III gets one click, on Play; with Warc
   expect(result.events).toContain("click Warcraft III START GAME");
 });
 
-test("Warcraft III that shows its main menu instead of loading the map has it hosted through the menus", async () => {
+test("a map that goes on without a key is timed the same, keys during loading changing nothing; one that never loads stops play after 120 s", async () => {
+  const direct = await world({ waitsForKey: false }).run();
+  expect(direct.failure).toBeUndefined();
+  expect(direct.lines[7]).toBe("4/7 Map: Warcraft III loaded Smashcraft 0.0.47.w3x from its launch options; fighter selection 9 s after Play (4 key presses to continue)");
+  const stuck = await world({ loadfile: "ignored", mainMenu: false }).run();
+  expect(stuck.failure).toBe("4/7 Map stopped: the map didn't reach fighter selection within 120 s");
+  expect(stuck.events.filter((event) => event === "press space").length).toBeLessThanOrEqual(60);
+});
+
+test("Warcraft III that shows its main menu instead of loading the map has it hosted through the menus, with no key sent to the menu", async () => {
   const result = await world({ loadfile: "ignored" }).run();
   expect(result.failure).toBeUndefined();
+  expect(result.events).not.toContain("press space");
   expect(result.lines).toContain("4/7 Map: Warcraft III showed its main menu instead of loading the map; hosting it through the menus");
   expect(result.events.filter((event) => event.startsWith("click Warcraft III"))).toEqual([
     "click Warcraft III MULTIPLAYER", "click Warcraft III CUSTOM GAMES", "click Warcraft III CREATE GAME", "click Warcraft III 00-SMASHCRAFT",
