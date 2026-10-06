@@ -8,7 +8,7 @@ import { TestClock } from "effect/testing";
 import { expect, test } from "bun:test";
 import { type ProcessInfo, launchOutcome, newestLauncherLog, prefixUse, shortcutUrl } from "../scripts/warcraft/battleNet";
 import type { Word } from "../scripts/warcraft/desktop";
-import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, findPhrase, play, pointerMove, spotTargets, tileArt, uiPoint, warcraftPlay, warcraftThree } from "../scripts/wisp/play";
+import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, findPhrase, expectedGain, measuredGain, play, spotTargets, steer, steerPointer, tileArt, uiPoint, warcraftPlay, warcraftThree } from "../scripts/wisp/play";
 
 const PREFIX = "/home/u/compatdata/3516115571/pfx";
 const SERVER = "server-24-18d2b7ec";
@@ -17,6 +17,7 @@ const MAP = `${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III/Maps/00-Sm
 const HELPER = "/inputs/wc3-journal";
 const HELPER_LOG = "/state/helper.log";
 const DEBUG = "/state/play-debug";
+const SOURCE = "/inputs/playable-0047/Smashcraft 0.0.47.w3x";
 const OUTPUT = { name: "eDP-1", width: 1440, height: 960 };
 const FRAME = { width: 2880, height: 1920 };
 const APP = "steam_app_3775098022";
@@ -58,6 +59,8 @@ interface Scenario {
   readonly tileOpensOn?: number;
   readonly playShown?: boolean;
   readonly mapInstalled?: boolean;
+  /** Whether the declaration names the map's build, and whether that file is there. */
+  readonly mapSource?: "present" | "missing";
   readonly mainMenu?: boolean;
   readonly helper?: "ready" | "exits" | "earlier" | "this game's";
   readonly fullscreens?: boolean;
@@ -111,6 +114,7 @@ function world(scenario: Scenario = {}) {
   let started = false;
   let presses = 0;
   let tileClicks = 0;
+  let mapInstalled = scenario.mapInstalled !== false;
   let page: "warcraft" | "other" | "games" = scenario.launcherPage ?? "other";
   const shots: string[] = [];
   const clickLog: string[] = [];
@@ -265,11 +269,16 @@ function world(scenario: Scenario = {}) {
       return text?.slice(from);
     })),
     size: (path) => Effect.sync(() => {
-      if (path === MAP) return scenario.mapInstalled === false ? undefined : 38_579_096;
+      if (path === MAP) return mapInstalled ? 38_579_096 : undefined;
+      if (path === SOURCE) return scenario.mapSource === "present" ? 38_579_096 : undefined;
       if (path === HELPER_LOG) return helperLog.length;
       return path.startsWith(`${LOGS}/`) ? logs.get(path.slice(LOGS.length + 1))?.length : undefined;
     }),
     list: (directory) => Effect.sync(() => (directory === LOGS ? [...logs.keys(), "libcef-20261006T014728.217325.log"] : [])),
+    copy: (from, to) => Effect.sync(() => {
+      events.push(`copy ${from} -> ${to}`);
+      mapInstalled = true;
+    }),
     append: (path, text) => Effect.sync(() => {
       expect(path).toBe(`${DEBUG}/1970-01-01T00-00-00-000Z/clicks.log`);
       clickLog.push(text);
@@ -319,7 +328,7 @@ function world(scenario: Scenario = {}) {
     prefix: PREFIX,
     display: ":0",
     shortcut: { appId: 3775098022, name: "Warcraft III (Battle.net)" },
-    map: { folder: "00-Smashcraft", file: "Smashcraft 0.0.47.w3x", title: "Smashcraft 0.0.47" },
+    map: { folder: "00-Smashcraft", file: "Smashcraft 0.0.47.w3x", title: "Smashcraft 0.0.47", ...(scenario.mapSource === undefined ? {} : { source: SOURCE }) },
     gameName: "Smashcraft",
     debugDirectory: DEBUG,
     started: () => Effect.gen(function*() {
@@ -438,10 +447,43 @@ test("a click target maps to the compositor's logical pixels and the X root's pi
   const output = { x: 0, y: 0, width: 1440, height: 960 };
   const spot = { output: "eDP-1", area: FRAME, x: 2075, y: 1518, window: { id: "100663313", x: 0, y: 0, ...FRAME } };
   expect(spotTargets(spot, output)).toEqual({ logical: { x: 1037.5, y: 759 }, root: { x: 2075, y: 1518 } });
-  expect(pointerMove(spot, output, { x: 1194, y: 882 })).toEqual({ dx: 440.5, dy: 318 });
+  expect(steer({ x: 1194, y: 882 }, spotTargets(spot, output).root, expectedGain(spot, output))).toEqual({ dx: 440.5, dy: 318 });
   // A second output to the right: logical positions shift, X pixels follow the window.
   const right = { ...spot, output: "HDMI-A-1", window: { ...spot.window, x: 2880 } };
   expect(spotTargets(right, { ...output, x: 1440 })).toEqual({ logical: { x: 2477.5, y: 759 }, root: { x: 4955, y: 1518 } });
+});
+
+/** A compositor pointer whose moves reach the X pointer at `gain` X pixels per logical pixel, rounded as Xwayland reports them. */
+const simulatedPointer = (start: { x: number; y: number }, gain: number, moves: string[]) => {
+  let at = start;
+  return (dx: number, dy: number) => Effect.sync(() => {
+    at = { x: at.x + Math.round(dx * gain), y: at.y + Math.round(dy * gain) };
+    moves.push(`${dx.toFixed(1)},${dy.toFixed(1)}`);
+    return at;
+  });
+};
+
+test("the pointer is steered by the gain each move shows: 2 over the launcher, 1 over fullscreen Warcraft III holding the pointer", async () => {
+  const output = { x: 0, y: 0, width: 1440, height: 960 };
+  const spot = (x: number, y: number) => ({ output: "eDP-1", area: FRAME, x, y, window: { id: "w", x: 0, y: 0, ...FRAME } });
+  // Run 5, 6 Oct: Custom Games at 1049,132 from 2218,966. At the assumed gain 2 every move went half way:
+  // -584.5,-417.0 -> 1634,549; -292.5,-208.5 -> 1342,341; -146.5,-104.5 -> 1196,237; -73.5,-52.5 -> 1123,185.
+  expect(measuredGain({ x: 2, y: 2 }, { dx: -584.5, dy: -417 }, { x: 1634 - 2218, y: 549 - 966 })).toEqual({ x: 584 / 584.5, y: 1 });
+  const target = spot(1049, 132);
+  const moves: string[] = [];
+  const steered = await Effect.runPromise(steerPointer({ x: 2218, y: 966 }, target, expectedGain(target, output), 2, simulatedPointer({ x: 2218, y: 966 }, 1, moves)));
+  expect(steered.arrived).toBe(true);
+  expect(moves).toEqual(["-584.5,-417.0", "-585.5,-417.0"]);
+  expect(steered.trace[1]).toBe("moved -584.5,-417.0 -> X 1634,549 (gain 1.00,1.00)");
+  // Run 5's first click, Multiplayer at 2219,966 from 232,1762, went in one move at gain 2.
+  const multiplayer: string[] = [];
+  const first = await Effect.runPromise(steerPointer({ x: 232, y: 1762 }, { x: 2219, y: 966 }, expectedGain(spot(2219, 966), output), 2, simulatedPointer({ x: 232, y: 1762 }, 2, multiplayer)));
+  expect(first.arrived).toBe(true);
+  expect(multiplayer).toEqual(["993.5,-398.0"]);
+  // A pointer that doesn't move keeps its gain and stops after the cap.
+  const stuck = await Effect.runPromise(steerPointer({ x: 10, y: 10 }, { x: 500, y: 500 }, { x: 2, y: 2 }, 2, () => Effect.succeed({ x: 10, y: 10 })));
+  expect(stuck.arrived).toBe(false);
+  expect(stuck.trace).toHaveLength(9);
 });
 
 test("from a cold desktop: Steam starts Battle.net, Play starts Warcraft III, the game is hosted, the opponent added, the helper started, the game fullscreen", async () => {
@@ -563,8 +605,17 @@ test("step 3 stops without a restart when Battle.net doesn't take the Play click
   expect((await world({ fullscreens: false }).run()).failure).toBe("3/7 Warcraft III stopped: Battle.net's window didn't become fullscreen within 5 s");
 });
 
-test("step 4 stops when the map isn't installed or Warcraft III never shows its main menu", async () => {
+test("step 4 installs a missing map from its declared build, and stops when it can't or Warcraft III never shows its main menu", async () => {
   expect((await world({ mapInstalled: false }).run()).failure).toBe(`4/7 Custom game stopped: the map isn't installed: ${MAP}`);
+  expect((await world({ mapInstalled: false, mapSource: "missing" }).run()).failure).toBe(
+    `4/7 Custom game stopped: the map isn't installed (${MAP}) and its build is missing: ${SOURCE}`);
+  // Run 4, 6 Oct: the map's folder had been emptied; play installs the declared build and goes on.
+  const copied = await world({ mapInstalled: false, mapSource: "present" }).run();
+  expect(copied.failure).toBeUndefined();
+  expect(copied.lines).toContain(`4/7 Custom game: installed Smashcraft 0.0.47.w3x from ${SOURCE}`);
+  expect(copied.events).toContain(`copy ${SOURCE} -> ${MAP}`);
+  // An installed map is left as it is.
+  expect((await world({ mapSource: "present" }).run()).events.filter((event) => event.startsWith("copy"))).toEqual([]);
   expect((await world({ mainMenu: false }).run()).failure).toBe("4/7 Custom game stopped: Warcraft III didn't show its main menu within 120 s");
 });
 

@@ -8,14 +8,14 @@
 // mouse does: on the owner's desktop the X pointer stays where the
 // compositor's pointer is, so XTEST motion doesn't move it.
 import { spawn } from "node:child_process";
-import { appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, statSync } from "node:fs";
+import { appendFileSync, closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, renameSync, statSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { Clock, Effect, Layer, Schema } from "effect";
 import { type ProcessInfo, serverDirectoryName } from "../warcraft/battleNet";
 import { parseWords, separateInk } from "../warcraft/desktop";
 import { describeCause } from "./command";
 import { decodePpm } from "./frameProbe";
-import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow, pointerMove, spotTargets } from "./play";
+import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow, expectedGain, spotTargets, steerPointer } from "./play";
 
 /** The programs play runs; each is a command name on PATH or a path. */
 export interface PlayTools {
@@ -147,6 +147,14 @@ const machine = (tools: PlayTools): PlayMachine["Service"] => ({
     },
     catch: problem(`couldn't list ${directory}`),
   }),
+  copy: (from, to) => Effect.try({
+    try: () => {
+      mkdirSync(dirname(to), { recursive: true });
+      copyFileSync(from, `${to}.next`);
+      renameSync(`${to}.next`, to);
+    },
+    catch: problem(`couldn't copy ${from} to ${to}`),
+  }),
   append: (path, text) => Effect.try({
     try: () => {
       mkdirSync(dirname(path), { recursive: true });
@@ -248,24 +256,22 @@ const desktop = (tools: PlayTools, display: string): PlayDesktop["Service"] => {
       const { logical, root } = spotTargets(spot, output);
       // One logical pixel, in X pixels.
       const tolerance = Math.max(1, Math.ceil(spot.window.width / output.width));
-      const arrived = (at: { readonly x: number; readonly y: number }) => Math.abs(at.x - root.x) <= tolerance && Math.abs(at.y - root.y) <= tolerance;
-      const moves = [`target logical ${logical.x.toFixed(1)},${logical.y.toFixed(1)}, X root ${root.x},${root.y}`];
-      let at = yield* pointer;
-      moves.push(`pointer at X ${at.x},${at.y}`);
-      // The X pointer can be stale until the compositor's pointer moves over an X window, so the move is corrected from where it lands.
-      for (let move = 0; move < 4 && !arrived(at); move++) {
-        const { dx, dy } = pointerMove(spot, output, at);
+      // Xwayland reports the move asynchronously; a move that changes nothing within a second counts as not moving.
+      const move = (dx: number, dy: number) => Effect.gen(function*() {
+        const from = yield* pointer;
         // getopt would read a negative distance as an option; POSIXLY_CORRECT ends options at "pointer".
-        yield* run([tools.wlrctl, "pointer", "move", dx.toFixed(1), dy.toFixed(1)], { POSIXLY_CORRECT: "1" });
-        const from = at;
+        yield* run([tools.wlrctl, "pointer", "move", dx.toFixed(2), dy.toFixed(2)], { POSIXLY_CORRECT: "1" });
         const deadline = (yield* Clock.currentTimeMillis) + 1000;
+        let at = from;
         do {
           yield* Effect.sleep("20 millis");
           at = yield* pointer;
         } while (at.x === from.x && at.y === from.y && (yield* Clock.currentTimeMillis) < deadline);
-        moves.push(`moved ${dx.toFixed(1)},${dy.toFixed(1)} -> X ${at.x},${at.y}`);
-      }
-      if (!arrived(at)) return yield* new PlayProblem({ problem: `the pointer stopped at ${at.x},${at.y} instead of ${root.x},${root.y} (X root pixels) over window ${spot.window.id}: ${moves.join("; ")}` });
+        return at;
+      });
+      const steered = yield* steerPointer(yield* pointer, root, expectedGain(spot, output), tolerance, move);
+      const moves = [`target logical ${logical.x.toFixed(1)},${logical.y.toFixed(1)}, X root ${root.x},${root.y}`, ...steered.trace];
+      if (!steered.arrived) return yield* new PlayProblem({ problem: `the pointer stopped at ${steered.at.x},${steered.at.y} instead of ${root.x},${root.y} (X root pixels) over window ${spot.window.id}: ${moves.join("; ")}` });
       // The game reads the move before the press.
       yield* Effect.sleep("120 millis");
       yield* run([tools.wlrctl, "pointer", "click", "left"], {});
