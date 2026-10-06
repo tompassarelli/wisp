@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
+import { Effect } from "effect";
 import { mapCompiler, report } from "../scripts/compiler";
+import { towardZeroLua } from "../scripts/wisp/towardZeroLua";
 
 const root = join(import.meta.dir, "..");
 
@@ -33,10 +35,15 @@ test("an error report is displayed unless the map turns error text off, and is w
   expect(run.stdout.toString()).toContain("error text contract passed");
 });
 
-test("numeric and payload contracts pass in emitted Lua", () => {
+test("numeric, payload and record text contracts pass in emitted Lua, rounding to nearest and toward zero", async () => {
   const diagnostics = mapCompiler(join(import.meta.dir, "tsconfig.lua.json"))();
   expect(report(diagnostics)).toBe("");
-  const run = Bun.spawnSync([process.env.LUA ?? "lua", join(root, "build/lua-tests/tests.lua")], { cwd: root, stdout: "pipe", stderr: "pipe" });
-  expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
-  expect(run.stdout.toString()).toContain("18 of 18 passed");
-});
+  // TOWARD_ZERO_LUA as in toward-zero.test.ts: CI builds it with make.
+  const towardZero = process.env.TOWARD_ZERO_LUA ?? await Effect.runPromise(towardZeroLua(join(root, "build/toward-zero-lua")));
+  // Warcraft's Lua rounds toward zero; the binary32 contracts assume a Lua rounding to nearest, the record text neither.
+  for (const [lua, only, passed] of [[process.env.LUA ?? "lua", [], "20 of 20 passed"], [towardZero, ["record text"], "4 of 4 passed"]] as const) {
+    const run = Bun.spawnSync([lua, join(root, "build/lua-tests/tests.lua"), ...only], { cwd: root, stdout: "pipe", stderr: "pipe" });
+    expect({ lua, code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ lua, code: 0, stderr: "" });
+    expect(run.stdout.toString()).toContain(passed);
+  }
+}, 600_000);

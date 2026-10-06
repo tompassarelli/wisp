@@ -49,6 +49,75 @@ test("record text: lines stay within their width and a malformed token is refuse
   assertEquals(recordTokens({ handler: () => 1 }), undefined);
 });
 
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === "object" && value !== null;
+
+/** A record keyed by numbers rather than a list: in Lua it is a table with integer keys, as an array is. */
+const isKeyed = (value: unknown): value is Readonly<Record<number, unknown>> => typeof value === "object" && value !== null;
+
+function keyedAt(value: unknown, ...keys: readonly number[]): unknown {
+  let current = value;
+  for (const key of keys) current = isKeyed(current) ? current[key] : undefined;
+  return current;
+}
+
+/** A kit keyed by action number, with key 0, gaps and negative keys, nested in records, lists and each other. */
+function numberKeyedKit(): Record<string, unknown> {
+  const poses: Record<number, number> = {};
+  poses[-2] = 15;
+  poses[0] = 7;
+  poses[5] = 9;
+  const normals: Record<number, unknown> = {};
+  normals[0] = { frames: 3, poses };
+  normals[2] = { frames: 4 };
+  normals[7] = { frames: 1 };
+  const throws: Record<number, string> = {};
+  throws[-1] = "back";
+  throws[3] = "up";
+  return { normals, list: [{ throws }], plain: [10, 20, 30] };
+}
+
+const NUMBER_KEYED = ["normals", "poses", "throws"];
+
+test("record text: records keyed by numbers keep their keys, alike in Bun and Lua", () => {
+  const tokens = assertDefined(recordTokens(numberKeyedKit(), NUMBER_KEYED), "tokens");
+  assertEquals(sorted(tokens), sorted([
+    "normals#", "0{", "frames=3", "poses#", "-2=15", "0=7", "5=9", "}", "}", "2{", "frames=4", "}", "7{", "frames=1", "}", "}",
+    "list[", "0{", "throws#", "-1='back", "3='up", "}", "}", "]",
+    "plain[", "0=10", "1=20", "2=30", "]",
+  ]));
+  const back = assertDefined(parseRecord(lineTokens(tokenLines(tokens, 40))), "record");
+  assertEquals(sorted(assertDefined(recordTokens(back, NUMBER_KEYED), "tokens again")), sorted(tokens));
+  const normals = back.normals;
+  assertEquals(keyedAt(normals, 0, -1), undefined);
+  assertEquals(keyedAt(normals, 1), undefined);
+  assertEquals(keyedAt(normals, 3), undefined);
+  for (const [key, frames] of [[0, 3], [2, 4], [7, 1]] as const) {
+    const move = keyedAt(normals, key);
+    assertTrue(isRecord(move) && move.frames === frames);
+  }
+  const first = keyedAt(normals, 0);
+  const poses = isRecord(first) ? first.poses : undefined;
+  assertEquals(keyedAt(poses, -2), 15);
+  assertEquals(keyedAt(poses, 0), 7);
+  assertEquals(keyedAt(poses, 5), 9);
+  assertEquals(keyedAt(poses, 1), undefined);
+  const list = back.list;
+  const row = Array.isArray(list) ? list[0] : undefined;
+  const throws = isRecord(row) ? row.throws : undefined;
+  assertEquals(keyedAt(throws, -1), "back");
+  assertEquals(keyedAt(throws, 3), "up");
+  assertEquals(keyedAt(throws, 2), undefined);
+  const plain = back.plain;
+  assertTrue(Array.isArray(plain) && plain[0] === 10 && plain[2] === 30 && plain.length === 3);
+});
+
+test("record text: a record keyed by numbers that isn't declared is refused rather than read as a list", () => {
+  const undeclared: Record<number, number> = {};
+  undeclared[0] = 1;
+  undeclared[2] = 3;
+  assertEquals(recordTokens({ undeclared }), undefined);
+});
+
 const COUNTER: Repro["lines"] = ["start 3", "add 4 5"];
 
 /** A game whose state is a number and whose frames add to it. */
