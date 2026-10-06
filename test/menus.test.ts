@@ -284,13 +284,15 @@ test("the page keeps the newest screens it heard and announces them, so a later 
   };
   const timers: (() => void)[] = [];
   new Function("window", "location", "fetch", "setTimeout", "URLSearchParams", script)(window, { search: `?guid=${GUID}`, port: "38487" }, fetch, (next: () => void) => timers.push(next), URLSearchParams);
-  new (window.WebSocket as new (url: string) => NativeSocket)(`ws://127.0.0.1:38487/webui-socket/${GUID}`);
+  const socket = new (window.WebSocket as new (url: string) => NativeSocket)(`ws://127.0.0.1:38487/webui-socket/${GUID}`);
   for (const [messageType, payload] of [["SetGlueScreen", { screen: "CUSTOM_LOBBIES" }], ["MapList", { mapList: {} }], ["GameLobbySetup", { isHost: true, players: [] }]] as const) {
     listener!({ data: JSON.stringify({ messageType, payload }) });
   }
+  socket.send(JSON.stringify({ message: "ScreenTransitionInfo", payload: { screen: "CREATE_GAME", type: "Screen" } }));
+  socket.send(JSON.stringify({ message: "ScreenTransitionInfo", payload: { screen: "OPTIONS", type: "Overlay" } }));
   timers.shift()!();
   const announced = posts.at(-1)!.body as { recent: { messageType: string; screen?: string; isHost?: boolean; at: number }[] };
-  expect(announced.recent.map(({ at: _, ...heard }) => heard)).toEqual([{ messageType: "SetGlueScreen", screen: "CUSTOM_LOBBIES" }, { messageType: "GameLobbySetup", isHost: true }]);
+  expect(announced.recent.map(({ at: _, ...heard }) => heard)).toEqual([{ messageType: "SetGlueScreen", screen: "CUSTOM_LOBBIES" }, { messageType: "GameLobbySetup", isHost: true }, { messageType: "ScreenTransitionInfo", screen: "CREATE_GAME", type: "Screen" }]);
 });
 
 test("a second program finds the menus through the address the port's listener keeps", async () => {
