@@ -48,7 +48,8 @@ Before each session the driver prepares the clients (wisp doctor, or by
 default: none crashed or disconnected by `wisp watch`), marks each client's
 receipts and War3Log, starts the session's map with the game's own
 fresh-match command and waits until `watch` reports every client in the
-match. For each check it marks again, runs the setup, takes the captures in
+match. Without a ClientWatch service the live driver skips both watch steps
+and the game's start alone decides that the match runs. For each check it marks again, runs the setup, takes the captures in
 order, collects the receipt and log lines written since its marks, and
 judges the rules. A session that can't start fails each of its checks with
 the reason and every client's watched state; the run goes on to the next

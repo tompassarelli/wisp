@@ -1,9 +1,10 @@
 // The accept driver for the signed-in clients: input and frames through
 // Clients' private desktops, receipts and War3Log from each client's
-// Documents folder, and each client's state from ClientWatch, which decides
-// when a session is ready and what a failed one looked like.
+// Documents folder, and each client's state from ClientWatch, when provided,
+// which decides when a session is ready and what a failed one looked like.
+// Without ClientWatch the game's `start` alone decides that the match runs.
 import { join } from "node:path";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { war3LogPath } from "../warcraft/war3Log";
 import { AcceptDriver, AcceptFailure, type ReceiptFile } from "./accept";
 import { type Client, Clients } from "./clients";
@@ -33,8 +34,8 @@ export const liveAcceptDriver = <R>({ start, receipt, prepare, matchSeconds = 60
   Layer.effect(AcceptDriver, Effect.gen(function*() {
     const clients = yield* Clients;
     const files = yield* GameFiles;
-    const watch = yield* ClientWatch;
-    const context = yield* Effect.context<R | ClientWatch>();
+    const watch = yield* Effect.serviceOption(ClientWatch);
+    const context = yield* Effect.context<R>();
     const byName = new Map(clients.all.map((client) => [client.name, client]));
     const find = (name: string) => {
       const client = byName.get(name);
@@ -43,8 +44,8 @@ export const liveAcceptDriver = <R>({ start, receipt, prepare, matchSeconds = 60
     const on = <A, E extends { readonly message: string }>(name: string, operation: string, run: (client: Client) => Effect.Effect<A, E>) =>
       Effect.flatMap(find(name), (client) => run(client).pipe(Effect.mapError(failure(`${operation} ${name}`))));
 
-    const healthy = Effect.forEach(clients.all, (client) => Effect.gen(function*() {
-      const view = yield* watch.view(client).pipe(Effect.mapError(failure(`watch ${client.name}`)));
+    const healthy = Option.isNone(watch) ? Effect.void : Effect.forEach(clients.all, (client) => Effect.gen(function*() {
+      const view = yield* watch.value.view(client).pipe(Effect.mapError(failure(`watch ${client.name}`)));
       if (view.state.kind === "crashed" || view.state.kind === "disconnected") {
         return yield* new AcceptFailure({ operation: `client ${client.name}`, problem: describeView(view) });
       }
@@ -55,7 +56,9 @@ export const liveAcceptDriver = <R>({ start, receipt, prepare, matchSeconds = 60
       prepare: (prepare === undefined ? healthy : prepare.pipe(Effect.mapError(failure("prepare clients")))).pipe(Effect.provide(context)),
       start: (map, session) => Effect.gen(function*() {
         yield* start(map, session).pipe(Effect.mapError(failure(`start ${map} (${session})`)));
-        yield* Effect.forEach(clients.all, (client) => waitFor(client, inState("in match"), { what: "the match", seconds: matchSeconds }).pipe(Effect.mapError(failure(`${client.name} in match`))), { concurrency: "unbounded", discard: true });
+        if (Option.isNone(watch)) return;
+        const watched = Layer.succeed(ClientWatch, watch.value);
+        yield* Effect.forEach(clients.all, (client) => waitFor(client, inState("in match"), { what: "the match", seconds: matchSeconds }).pipe(Effect.mapError(failure(`${client.name} in match`)), Effect.provide(watched)), { concurrency: "unbounded", discard: true });
       }).pipe(Effect.provide(context)),
       chat: (name, text) => on(name, "chat", (client) => clients.batch(client, [{ kind: "keys", keys: ["Return"] }, { kind: "text", text }, { kind: "keys", keys: ["Return"] }])),
       keys: (name, keys) => on(name, "keys", (client) => clients.keys(client, ...keys)),
@@ -72,6 +75,6 @@ export const liveAcceptDriver = <R>({ start, receipt, prepare, matchSeconds = 60
         return found;
       })),
       log: (name) => on(name, "War3Log", (client) => Effect.map(files.read(war3LogPath(client.documents)), (stored) => stored?.text ?? "")),
-      state: (name) => on(name, "watch", (client) => Effect.map(watch.view(client), describeView)),
+      state: (name) => Option.isNone(watch) ? Effect.succeed("not watched") : on(name, "watch", (client) => Effect.map(watch.value.view(client), describeView)),
     });
   }));
