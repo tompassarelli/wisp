@@ -30,7 +30,7 @@ const PRELOAD_HEADER = /^function PreloadFiles takes nothing returns nothing\r?\
 const PRELOAD_LINE = /^\s*call Preload\( "(.*)" \)[\t ]*\r?$/gm;
 
 /** The lines a complete Preload file stores, or undefined when it is not one (or not yet whole). */
-function preloadLines(text: string): string[] | undefined {
+export function preloadLines(text: string): string[] | undefined {
   if (!PRELOAD_HEADER.test(text) || !text.trimEnd().endsWith("endfunction")) return undefined;
   return [...text.matchAll(PRELOAD_LINE)].map((match) => match[1] ?? "");
 }
