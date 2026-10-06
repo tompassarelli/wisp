@@ -46,6 +46,14 @@ test("only the newest session counts, and its start tells one launch's log from 
   expect(sessionStart("")).toBeUndefined();
 });
 
+test("socket sign-in permits scan evidence without inventing a missing login line", () => {
+  const buffered = "10/6 23:08:33.000  GameMain Started\n10/6 23:08:36.000  Opening map - C:/Maps/Download/Season9/a.w3x\n";
+  expect(ladderScan(buffered).kind).toBe("signing in");
+  expect(ladderScan(buffered, true)).toMatchObject({ kind: "scanning", count: 1 });
+  expect(ladderScan(`${buffered}10/6 23:08:40.000  Opening map - C:/Maps/00-Smashcraft/old.w3x\n`, true)).toMatchObject({ kind: "done" });
+  expect(ladderScan("", true)).toEqual({ kind: "waiting" });
+});
+
 test("import failures are counted with the first model named; a clean load has none", () => {
   expect(importFailures(loadfile)).toEqual({ count: 7, first: "war3mapImported/ImpactHit-14ab984c85a771b2c9feb68275c44577ceb14d0f5c5f2e3801cbc00c2decd594.mdx" });
   expect(importFailures(menus)).toEqual({ count: 0 });

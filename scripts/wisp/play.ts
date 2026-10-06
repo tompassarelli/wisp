@@ -26,7 +26,7 @@ import { preferencesBackupPath, preferencesPath } from "../warcraft/preferences"
 import { SCAN_QUIET_MS, importFailures, ladderScan, sessionStart, war3LogPath } from "../warcraft/war3Log";
 import { step } from "./timings";
 import { hostLobby, reportedMenus, startLobby } from "./menus";
-import { unlessLost } from "./watch";
+import { ClientWatch, unlessLost } from "./watch";
 
 /** Why play can't go on, in words for the person who ran it. */
 export class PlayProblem extends Schema.TaggedError<PlayProblem>()("PlayProblem", {
@@ -563,6 +563,13 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   });
 
   const war3Log = war3LogPath(documents);
+  const watched = { name: "the game", documents, ...(declaration.menuReportPort === undefined ? {} : { menuReportPort: declaration.menuReportPort }) };
+  const clientState = Effect.gen(function*() {
+    const watch = yield* Effect.serviceOption(ClientWatch);
+    if (watch._tag === "None") return undefined;
+    const view = yield* watch.value.view(watched).pipe(Effect.mapError((cause) => new PlayProblem({ problem: cause.message })));
+    return view.source === "socket" ? view.state : undefined;
+  });
   const preferences = preferencesPath(documents);
   const backup = preferencesBackupPath(documents);
   /**
@@ -622,6 +629,24 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   // 4, through the menus: Multiplayer, Custom Games, Create Game, the map's folder, the map, the game's name, Create, Start.
   const host = (game: PlayGame) => Effect.gen(function*() {
     const { folder, title } = declaration.map;
+    if ((yield* clientState)?.kind === "in match") {
+      yield* fullscreen(game.window, "Warcraft III's window", PLAY_TIMEOUTS.gameFullscreen);
+      const output = yield* outputOf(game.window, "Warcraft III's window");
+      const hasText = (phrase: string) => desktop.read(output, "gold").pipe(Effect.map((screen) => findPhrase(screen.words, phrase).length > 0 ? true : undefined));
+      const key = (...keys: string[]) => desktop.focus(game.window).pipe(Effect.andThen(desktop.keys(game.xWindow, ...keys)));
+      yield* key("Escape", "F10");
+      yield* until(5, hasText("Game Menu"), () => "The current match didn't open Game Menu");
+      yield* key("e");
+      yield* until(5, hasText("Quit Mission"), () => "End Game didn't show Quit Mission");
+      yield* key("q");
+      yield* until(15, clientState.pipe(Effect.map((state) => state?.kind === "results" ? true : undefined)), () => "Quit Mission didn't reach the results screen");
+      yield* Effect.scoped(Effect.gen(function*() {
+        const menus = yield* reportedMenus(declaration.menuReportPort);
+        if (menus === undefined) return yield* fail("The results screen's menu connection isn't available");
+        yield* menus.send("ScoreScreenClose");
+      })).pipe(Effect.mapError((cause) => cause._tag === "MenuFailure" ? new PlayProblem({ problem: cause.message }) : cause));
+      yield* until(10, clientState.pipe(Effect.map((state) => state?.kind === "menus" ? true : undefined)), () => "Results didn't return to the menus");
+    }
     const driven = yield* Effect.scoped(Effect.gen(function*() {
       const menus = yield* reportedMenus(declaration.menuReportPort);
       if (menus === undefined) return false;
@@ -751,7 +776,9 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       const now = yield* Clock.currentTimeMillis;
       // Until the game's launch writes its own log, the one there is an earlier session's.
       if (earlierSession !== undefined && sessionStart(text) === earlierSession) return undefined;
-      const scan = ladderScan(text);
+      const state = yield* clientState;
+      const authenticated = state !== undefined && (state.kind === "menus" || state.kind === "lobby" || state.kind === "loading" || state.kind === "in match" || state.kind === "results");
+      const scan = ladderScan(text, authenticated);
       switch (scan.kind) {
         case "signing in":
           return undefined;
@@ -818,7 +845,6 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     yield* launcher.pipe(inStep(2, "Battle.net"));
     const { game: running, since, earlierSession } = yield* game.pipe(inStep(3, "Warcraft III"));
     // A crash or a lost Battle.net ends these steps at once rather than at their timeouts (wisp:docs/watch.md).
-    const watched = { name: "the game", documents, ...(declaration.menuReportPort === undefined ? {} : { menuReportPort: declaration.menuReportPort }) };
     const watching = <A, R2>(effect: Effect.Effect<A, PlayProblem, R2>) => unlessLost(watched, effect).pipe(Effect.mapError((cause) => (cause._tag === "WatchFailure" ? new PlayProblem({ problem: `Warcraft III ${cause.problem}` }) : cause)));
     const hosted = yield* watching(loadMap(running, since, earlierSession)).pipe(inStep(4, "Map"));
     // The helper runs before the match starts, or the match is played on the keyboard.

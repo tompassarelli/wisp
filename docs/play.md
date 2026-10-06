@@ -103,9 +103,12 @@ command that clears them.
    and hosts it only once the game's own log (this launch's, not the one
    launch replaces) shows the scan over: a line at least 2 s after its last
    ladder map, or 2 s with nothing new. A game that signed in and opens no
-   ladder map within 30 s is hosted anyway; one whose log shows no sign-in
-   within 120 s stops `play`. Warcraft III already past its scan is hosted
-   at once. Hosting goes through the menu socket when the game declares
+   ladder map within 30 s is hosted anyway. The menu connection can establish
+   sign-in when the log hasn't written its login line. Without either source
+   establishing sign-in within 120 s, `play` stops. Warcraft III already past
+   its scan is hosted at once. A running match is first left through Game Menu,
+   End Game and Quit Mission, retaining the signed-in game; its results screen
+   closes through the menu connection. Hosting goes through the menu socket when the game declares
    `menuReportPort` and its installed page reports within 3 s
    ([driving-warcraft.md](driving-warcraft.md)); otherwise through the
    menus: Multiplayer, Custom Games, Create Game, the map's folder, the
