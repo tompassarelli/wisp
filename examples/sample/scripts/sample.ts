@@ -10,6 +10,7 @@ import { makeClient } from "wisp/scripts/wisp/commands/client";
 import { makeHot } from "wisp/scripts/wisp/commands/hot";
 import { GameFiles } from "wisp/scripts/wisp/gameFiles";
 import { freshMatch } from "wisp/scripts/wisp/lobby";
+import { ClientWatch } from "wisp/scripts/wisp/watch";
 import { type BuildProject, MapBuild } from "wisp/scripts/wisp/mapBuild";
 import { SourceErrors } from "wisp/scripts/wisp/sourceErrors";
 import type { MapDeclaration } from "wisp/scripts/mapInfo";
@@ -66,7 +67,7 @@ const fresh: Command = ([map, ...flags]) => Effect.gen(function*() {
   if (map === undefined || !known) return yield* new UsageFailure({ problem: "fresh takes MAP.w3x and its options" });
   if (flags.includes("--rebuild")) yield* MapBuild.use((maps) => maps.rebuild(map)).pipe(Effect.provide(mapServices));
   yield* freshMatch({ map, title: /WISP\s*SAMPLE/i, filePrefix, fromGame: flags.includes("--from-game") }).pipe(
-    Effect.provide(Layer.merge(Clients.layer(clientsFile), GameFiles.layer({ mapFolder, replacedMaps: "wisp-replaced-maps" }))),
+    Effect.provide(Layer.mergeAll(Clients.layer(clientsFile), GameFiles.layer({ mapFolder, replacedMaps: "wisp-replaced-maps" }), ClientWatch.layer({ filePrefix }))),
   );
 });
 
@@ -76,6 +77,7 @@ process.exit(await runCli("bun examples/sample/scripts/sample.ts", {
   hot: { usage: "--data DIR [--data DIR ...] [--watch]", load: async () => makeHot({ project, sourceDirectory, sourceMapDirectory, filePrefix }) },
   fresh: { usage: "MAP.w3x [--rebuild] [--from-game] [--map-folder Maps/00-Wisp]   (WISP_CLIENTS=clients.json)", load: async () => fresh },
   client: { usage: "look|read|click|keys|chat CLIENT ...   (WISP_CLIENTS=clients.json)", load: async () => makeClient(clientsFile) },
+  watch: { usage: "[CLIENT...] [--once] [--json] [--record FILE]   (WISP_CLIENTS=clients.json)", load: async () => (await import("wisp/scripts/wisp/commands/watch")).makeWatch(clientsFile, { filePrefix }) },
   menus: {
     usage: "install|remove RETAIL_DIR | listen | host --folder F --map FILE --name NAME [--password P] [--start] | join --name NAME --password P | start | leave   [--port N]",
     load: async () => (await import("wisp/scripts/wisp/commands/menus")).makeMenus(),

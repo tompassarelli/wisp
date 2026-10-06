@@ -23,6 +23,7 @@ import type { Ink, Word } from "../warcraft/desktop";
 import { SCAN_QUIET_MS, importFailures, ladderScan, sessionStart, war3LogPath } from "../warcraft/war3Log";
 import { step } from "./timings";
 import { hostLobby, reportedMenus, startLobby } from "./menus";
+import { unlessLost } from "./watch";
 
 /** Why play can't go on, in words for the person who ran it. */
 export class PlayProblem extends Schema.TaggedError<PlayProblem>()("PlayProblem", {
@@ -880,11 +881,14 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     yield* checkPrefix.pipe(inStep(1, "Wine prefix"));
     yield* launcher.pipe(inStep(2, "Battle.net"));
     const { game: running, since, earlierSession } = yield* game.pipe(inStep(3, "Warcraft III"));
-    const hosted = yield* loadMap(running, since, earlierSession).pipe(inStep(4, "Map"));
+    // A crash or a lost Battle.net ends these steps at once rather than at their timeouts (wisp:docs/watch.md).
+    const watched = { name: "the game", documents, ...(declaration.menuReportPort === undefined ? {} : { menuReportPort: declaration.menuReportPort }) };
+    const watching = <A, R2>(effect: Effect.Effect<A, PlayProblem, R2>) => unlessLost(watched, effect).pipe(Effect.mapError((cause) => (cause._tag === "WatchFailure" ? new PlayProblem({ problem: `Warcraft III ${cause.problem}` }) : cause)));
+    const hosted = yield* watching(loadMap(running, since, earlierSession)).pipe(inStep(4, "Map"));
     // The helper runs before the match starts, or the match is played on the keyboard.
     yield* helper(running).pipe(inStep(5, "Controller helper"));
     const match = yield* Effect.gen(function*() {
-      const match = yield* declaration.match(running);
+      const match = yield* watching(declaration.match(running));
       // Models the match creates fail the same way.
       yield* checkImports(hosted);
       return match;

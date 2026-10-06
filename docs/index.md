@@ -44,6 +44,13 @@ and runs its known recovery, step by step, and stops with one plain line
 only when the owner must sign in. Run it instead of driving a client by
 hand; `play`, `accept` and bot sessions run it before they start.
 
+What is a client doing? [`wisp watch`](watch.md) (wisp:docs/watch.md) prints
+each client's state from events, never its screen: launcher, signing in,
+signed in, the menu screen, lobby, loading, in match, results, disconnected or
+crashed, plus its map's load errors and the ladder scan, each with its source.
+Run it before clicking, reading or waiting on a client; code waits on the same
+states with `waitFor`, and `unlessLost` stops any wait when a client crashes.
+
 Tuning the feel? [`wisp tune`](tune.md) (wisp:docs/tune.md) serves a panel
 on this computer that changes declared values, such as speeds and knockback,
 in the running match through hot reloads, and writes the ones you keep back
@@ -69,6 +76,7 @@ warcraft-vscode on the same map is measured in the
 | Build a map or replace only its script | [MapBuild](../scripts/wisp/mapBuild.ts) and [map declaration](../scripts/mapInfo.ts) (wisp:scripts/wisp/mapBuild.ts, wisp:scripts/mapInfo.ts) | Game supplies the base map, declaration, and any container, object data and imports; output stays outside the checkout. Needs `nix` on first use: the map packager compiles from wisp:native/map-pack.c, and nixpkgs' Lua 5.3 compiler is linked for the script syntax check. |
 | Generate custom objects, including FileIO's ability | [Object data](../scripts/objectData.ts) (wisp:scripts/objectData.ts) | A build without its own war3map.w3a gets FileIO's ability; a map that writes war3map.w3a includes it with `abilityData()`. |
 | Read reports or write reload payloads | [GameFiles](../scripts/wisp/gameFiles.ts) (wisp:scripts/wisp/gameFiles.ts) | Host-side file transport; runtime and host must share file identities. |
+| Know what each client is doing (closed, launcher, signing in, signed in, menu screen, lobby, loading, in match, results, disconnected, crashed), its load errors and ladder scan, from the menus' socket, its log, crash reports, match receipts and processes; wait on a state | [`wisp watch`](watch.md), `wisp client state` and `wait` and [ClientWatch](../scripts/wisp/watch.ts) (wisp:docs/watch.md, wisp:scripts/wisp/commands/watch.ts, wisp:scripts/wisp/watch.ts) | The clients file's `documents` (in a Wine prefix) and, for menu screens, `menuReportPort` with the current menu page installed; run where the host's processes are visible. `filePrefix` adds the map's match receipts. |
 | Control existing Warcraft clients | [Clients](../scripts/wisp/clients.ts) and the [client command](../scripts/wisp/commands/client.ts) (wisp:scripts/wisp/clients.ts, wisp:scripts/wisp/commands/client.ts) | Supply the clients file ([format](sample-map.md#play-it-and-change-it-while-it-runs)) and private desktop sessions; game-specific journeys belong to the consumer. |
 | Go from the owner's desktop to a match in one command: prefix check, Battle.net, Play, the map hosted after Warcraft III's ladder scan, controller helper, the map's match setup, fullscreen | [`wisp play`](play.md) (wisp:docs/play.md, wisp:scripts/wisp/play.ts) | The game declares its prefix, Steam shortcut, map, request to the map, match step, helper and optional `menuReportPort`; without a menu page the menus are clicked. Runs on the owner's niri desktop with `grim`, `tesseract`, `wlrctl`, `xdotool` and `steam`; never signs in or starts Warcraft III.exe itself. |
 | Run the game's declared native checks as one batched session: pass, fail or needs-look per check, evidence kept privately | [`wisp accept`](accept.md) and [makeAccept](../scripts/wisp/commands/accept.ts) (wisp:docs/accept.md, wisp:scripts/wisp/accept.ts, wisp:scripts/wisp/acceptLive.ts) | The game declares checks as data (map profile, setup commands, captures, pass rules) and supplies its fresh-match start and receipt file names; `--dry-run` prints the plan without touching clients. Visual judgement beyond declared rules stays with the owner (needs-look). |

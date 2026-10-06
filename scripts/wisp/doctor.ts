@@ -185,6 +185,8 @@ export function diagnose(seen: Observation, canPlay: boolean, display?: string):
       case "signed in":
       case "in match":
         return { kind: "ready", detail: describeView(view) };
+      case "running":
+        return { kind: "ready", detail: `${describeView(view)}; no source says where it is, so doctor leaves it` };
       case "closed":
       case "launcher":
         return { kind: "wait", detail: "Warcraft III starting" };

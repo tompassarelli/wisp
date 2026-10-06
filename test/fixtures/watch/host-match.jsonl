@@ -1,0 +1,12 @@
+{"at":0,"messageType":"SetGlueScreen","payload":{"screen":"MAIN_MENU"}}
+{"at":1500,"messageType":"SetGlueScreen","payload":{"screen":"CUSTOM_LOBBIES"}}
+{"at":4000,"messageType":"MapList","payload":{"mapList":{"maps":[]}}}
+{"at":6000,"messageType":"SetGlueScreen","payload":{"screen":"GAME_LOBBY"}}
+{"at":6100,"messageType":"GameLobbySetup","payload":{"isHost":true}}
+{"at":9000,"messageType":"SetGlueScreen","payload":{"screen":"LOADING_SCREEN"}}
+{"at":16000,"messageType":"SetGlueScreen","payload":{"screen":"DISABLED_SCREEN"}}
+{"at":76000,"messageType":"UpdateScoreInfo","payload":{"scoreInfo":{"localPlayerWon":true}}}
+{"at":76100,"messageType":"SetGlueScreen","payload":{"screen":"SCORE_SCREEN"}}
+{"at":80000,"messageType":"MultiplayerGameLeave","payload":{}}
+{"at":80100,"messageType":"SetGlueScreen","payload":{"screen":"CUSTOM_LOBBIES"}}
+{"at":90000,"messageType":"LoggedOut","payload":{}}

@@ -23,8 +23,10 @@ const leaveBy = (port: number | undefined, what: string, leave: (menus: MenuSock
 export const makePlay = <R>(declaration: PlayDeclaration<R>, layer: Layer.Layer<R>, tools: Partial<PlayTools> = {}, watch?: Layer.Layer<ClientWatch, CommandFailure>): Command => (args) => {
   if (args.length > 0) return Effect.fail(new UsageFailure({ problem: "play takes no arguments" }));
   const print = (line: string) => console.log(line);
-  const run = play(declaration, print).pipe(Effect.provide(Layer.merge(playHostLayer(declaration.display, tools), layer)));
-  if (watch === undefined) return run;
+  const hosted = play(declaration, print).pipe(Effect.provide(Layer.merge(playHostLayer(declaration.display, tools), layer)));
+  // With the watch, a crash or lost Battle.net stops play's map and match steps at once (wisp:docs/watch.md).
+  const run = watch === undefined ? hosted : hosted.pipe(Effect.provide(watch));
+  if (watch === undefined) return hosted;
   const { prefix, shortcut, menuReportPort } = declaration;
   const target: DoctorTarget = {
     client: { name: "Warcraft III", documents: documentsFolder(prefix), ...(menuReportPort === undefined ? {} : { menuReportPort }) },
@@ -36,7 +38,7 @@ export const makePlay = <R>(declaration: PlayDeclaration<R>, layer: Layer.Layer<
     leaveLobby: () => leaveBy(menuReportPort, "a lobby", leaveLobby),
     closeScore: () => leaveBy(menuReportPort, "a score screen", (menus) => menus.send("ScoreScreenClose")),
   });
-  // Each doctor run holds the watch only while it runs, so play's own menu steps have the report port.
+  // A watch beside play's own menu steps shares the report port through its kept address (wisp:docs/watch.md).
   const check = doctor([target], print).pipe(Effect.provide(Layer.mergeAll(playMachineLayer(tools), Layer.succeed(DoctorHands, hands), watch)));
   return withDoctor(check, print, run);
 };

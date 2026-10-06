@@ -9,10 +9,11 @@
 // compositor's pointer is, so XTEST motion doesn't move it.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFileSync, closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { Clock, Effect, Layer, Schema } from "effect";
-import { type ProcessInfo, serverDirectoryName } from "../warcraft/battleNet";
+import { serverDirectoryName } from "../warcraft/battleNet";
+import { listProcesses } from "../warcraft/processes";
 import { parseWords, separateInk } from "../warcraft/desktop";
 import { describeCause } from "./command";
 import { decodePpm } from "./frameProbe";
@@ -31,47 +32,6 @@ export interface PlayTools {
 export const PLAY_TOOLS: PlayTools = { grim: "grim", xdotool: "xdotool", tesseract: "tesseract", wlrctl: "wlrctl", niri: "niri", steam: "steam" };
 
 const problem = (what: string) => (cause: unknown) => new PlayProblem({ problem: `${what}: ${describeCause(cause)}` });
-
-const readText = (path: string) => {
-  try {
-    return readFileSync(path, "utf8");
-  } catch {
-    return undefined;
-  }
-};
-
-/** Only Wine's processes need their environment and the wineserver its directory; reading every process's would cost each poll. */
-const wineLike = (name: string, args: readonly string[]) => name === "wineserver" || args.some((arg) => /\.exe\b/i.test(arg));
-
-function listProcesses(): ProcessInfo[] {
-  const found: ProcessInfo[] = [];
-  for (const entry of readdirSync("/proc")) {
-    if (!/^\d+$/.test(entry)) continue;
-    const base = `/proc/${entry}`;
-    const cmdline = readText(`${base}/cmdline`);
-    const name = readText(`${base}/comm`)?.trim();
-    // The process exited while the table was read.
-    if (cmdline === undefined || name === undefined) continue;
-    const args = cmdline.split("\0");
-    if (args.at(-1) === "") args.pop();
-    const process: { -readonly [K in keyof ProcessInfo]: ProcessInfo[K] } = { pid: Number(entry), name, args };
-    if (wineLike(name, args)) {
-      for (const variable of (readText(`${base}/environ`) ?? "").split("\0")) {
-        if (variable.startsWith("WINEPREFIX=")) process.prefix = variable.slice("WINEPREFIX=".length).replace(/\/+$/, "");
-        if (variable.startsWith("DISPLAY=")) process.display = variable.slice("DISPLAY=".length);
-      }
-      if (name === "wineserver") {
-        try {
-          process.cwd = readlinkSync(`${base}/cwd`);
-        } catch {
-          // Another user's or an exited process.
-        }
-      }
-    }
-    found.push(process);
-  }
-  return found;
-}
 
 /** Starts a program in its own session, so it outlives play and the terminal's signals. */
 const startDetached = (command: readonly string[], log?: string) => Effect.tryPromise({

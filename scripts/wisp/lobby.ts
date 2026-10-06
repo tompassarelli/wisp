@@ -3,7 +3,8 @@
 // name, and the host starts it. Create Game selects the first map of the
 // folder its list has open, and Warcraft keeps that folder for the session, so
 // GameFiles installs the map as the only map of its configured folder. Screen
-// positions are for the 2560x1440 client frame.
+// positions are for the 2560x1440 client frame. With a ClientWatch provided, a
+// client that crashes or loses Battle.net stops the match at once.
 import { join } from "node:path";
 import { Clock, Effect } from "effect";
 import { ackFile } from "../../src/runtime/gameFiles";
@@ -11,6 +12,7 @@ import { Acknowledgement, FILE_SLOT_NUMBERS, type MalformedGameFile } from "./bo
 import { type Client, Clients, type DesktopFailure, waitFor, waitForText } from "./clients";
 import { GameFiles, dataDirectory, prepareHotFolders, readGameFile } from "./gameFiles";
 import { step } from "./timings";
+import { unlessLost } from "./watch";
 
 // Regions of the frame where each screen's identifying label appears.
 export const GAME_MENU = { x: 1100, y: 180, width: 420, height: 50 };
@@ -111,12 +113,12 @@ export const freshMatch = ({ map, title, filePrefix = "wisp", fromGame = false }
   }).pipe(step(`${client.name} asked to join`));
 
   yield* Effect.all([install, ...clients.all.map(leave)], { concurrency: "unbounded", discard: true });
-  yield* Effect.all([host(first), ...others.map(prepareJoin)], { concurrency: clients.all.length, discard: true });
-  yield* Effect.forEach(others, joinByName, { discard: true });
+  yield* Effect.all([unlessLost(first, host(first)), ...others.map(prepareJoin)], { concurrency: clients.all.length, discard: true });
+  yield* Effect.forEach(others, (client) => unlessLost(client, joinByName(client)), { discard: true });
   yield* waitForText(first, "all players", new RegExp(`PLAYERS\\s*:?\\s*${clients.all.length}\\s*/\\s*\\d+`, "i"), LOBBY, "light", 60).pipe(step("everyone in the lobby"));
   const start = yield* Clock.currentTimeMillis;
   yield* click(first, START);
-  yield* Effect.forEach(clients.all, (client) => startedAfter(client, start, filePrefix), { concurrency: "unbounded", discard: true }).pipe(step("match running in every client"));
+  yield* Effect.forEach(clients.all, (client) => unlessLost(client, startedAfter(client, start, filePrefix)), { concurrency: "unbounded", discard: true }).pipe(step("match running in every client"));
 });
 
 /**

@@ -14,6 +14,10 @@ compares four ways to make the game do those things, with how each works,
 whose code shows it, its licence, its account risk and what it would
 replace. A ranked recommendation closes the page.
 
+To know what a client is doing (its menu screen, lobby, match, a lost
+Battle.net or a crash) without reading its screen, use [`wisp watch`](watch.md):
+it listens to the same socket.
+
 The facts are for Warcraft III 3.0.0.24268, the Windows build under Proton,
 unless a line says otherwise. "Prior art" marks what another project found
 and what Wisp hasn't observed itself. W3Champions' code is in

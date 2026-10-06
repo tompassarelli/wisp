@@ -97,3 +97,30 @@ export function importFailures(log: string): { readonly count: number; readonly 
   }
   return first === undefined ? { count } : { count, first };
 }
+
+/** The epoch milliseconds of a line's `at`, in the local time zone the game wrote it in, in the year up to `now`. */
+export function logTime(at: number, now: number): number {
+  const days = Math.floor(at / DAY_MS);
+  const within = at - days * DAY_MS;
+  // A month's day 31 counts as the next month's day 0, which Date reads as the same day.
+  const date = (year: number) => new Date(year, Math.floor(days / 31) - 1, days % 31).getTime() + within;
+  const year = new Date(now).getFullYear();
+  return date(year) > now + DAY_MS ? date(year - 1) : date(year);
+}
+
+const SESSION_END = "GameMain Ended";
+
+/** The newest session's start, sign-in and clean end, each when the log has it. */
+export function sessionMarks(log: string): { readonly start?: LogLine; readonly login?: LogLine; readonly ended?: LogLine } {
+  const lines = sessionLines(log);
+  const start = lines.find(({ text }) => text === SESSION_START);
+  const login = lines.findLast(({ text }) => text === LOGIN);
+  const ended = lines.findLast(({ text }) => text === SESSION_END);
+  return { ...(start === undefined ? {} : { start }), ...(login === undefined ? {} : { login }), ...(ended === undefined ? {} : { ended }) };
+}
+
+/** The newest session's part of the log. */
+export const sessionText = (log: string) => {
+  const start = log.lastIndexOf(SESSION_START);
+  return start < 0 ? log : log.slice(log.lastIndexOf("\n", start) + 1);
+};
