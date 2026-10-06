@@ -25,4 +25,8 @@ jobs:
           echo 'fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60  build/lua-5.3.6.tar.gz' | sha256sum --check
           tar -xzf build/lua-5.3.6.tar.gz -C build
           make -C build/lua-5.3.6 -j2 generic MYCFLAGS=-DLUA_32BITS
-      - run: LUA="$PWD/build/lua-5.3.6/src/lua" bun run test
+          # The same Lua with Warcraft's rounding: raw float + - * toward zero.
+          mkdir -p build/warcraft-lua
+          tar -xzf build/lua-5.3.6.tar.gz -C build/warcraft-lua
+          make -C build/warcraft-lua/lua-5.3.6 -j2 generic "MYCFLAGS=-DLUA_32BITS -include $PWD/native/warcraft-rounding.h"
+      - run: LUA="$PWD/build/lua-5.3.6/src/lua" WARCRAFT_LUA="$PWD/build/warcraft-lua/lua-5.3.6/src/lua" bun run test
