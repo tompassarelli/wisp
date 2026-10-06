@@ -32,7 +32,7 @@ export interface HeadlessRuntime {
   /**
    * Clients of the map whose entry is `entry`, one per player slot, ready to
    * start. `options.delivery`, such as syncDelivery()
-   * (wisp:scripts/wisp/syncChannel.ts), makes synchronized messages arrive
+   * (wisp:src/headless/syncChannel.ts), makes synchronized messages arrive
    * when it says rather than before the next frame; `options.files` gives a
    * slot's CustomMapData outside the process (customMapData,
    * wisp:scripts/wisp/headlessInput.ts); `options.keepCalls` compares calls

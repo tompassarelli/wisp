@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { MEASURED_BATTLE_NET, syncAgeMs, syncDelivery } from "../scripts/wisp/syncChannel";
+import { MEASURED_BATTLE_NET, syncAgeMs, syncDelivery } from "../src/headless/syncChannel";
 
 /** Own-echo ages the model gives a message sent on any frame: the frame cycle repeats every 3 frames (2 turns). */
 function modelAges(samples: number): number[] {

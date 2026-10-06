@@ -2,6 +2,7 @@
 // loads the map's compiled bundle into its own environment, whose globals are
 // that client's natives over Lua's own, so clients share no state.
 import type { ClientScope, LocalNatives, MapEntry } from "./client";
+import type { SyncDelivery } from "./lockstep";
 import { parseNativeDeclarations } from "./declarations";
 import { type Journey, journeyLines, journeyProblems, runJourney } from "./journey";
 import { Lockstep } from "./lockstep";
@@ -27,10 +28,15 @@ export function readFile(path: string): string {
   return text;
 }
 
-/** Clients that each run `bundle`, the map's compiled Lua, with the natives `declarations` (warcraft.d.ts) lists; `scope` sees each client run. */
-export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: string, scope?: ClientScope): Lockstep {
+/**
+ * Clients that each run `bundle`, the map's compiled Lua, with the natives
+ * `declarations` (warcraft.d.ts) lists; `scope` sees each client run, and
+ * `delivery` delays synchronized messages as Warcraft does.
+ */
+export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: string, scope?: ClientScope, delivery?: SyncDelivery): Lockstep {
   return new Lockstep({
     ...(scope === undefined ? {} : { scope }),
+    ...(delivery === undefined ? {} : { delivery }),
     declarations: parseNativeDeclarations(declarations),
     players: map.players ?? [0, 1],
     filePrefix: map.filePrefix,

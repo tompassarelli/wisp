@@ -1,5 +1,6 @@
 // How the soak's tests set up a match of the test map: each policy but
-// "fuzz" switches on a fault, and every controller edge is counted.
+// "fuzz" switches on a fault, and every controller edge is counted. A
+// "typing" player's helper types a 600-character burst every two seconds.
 import { defineSoakGame } from "../../scripts/wisp/soak";
 import { reproLines } from "../../src/runtime/repro";
 import { LAST_TICK, install, start, state } from "./map";
@@ -14,14 +15,17 @@ export default defineSoakGame({
       s.throwing = match.policies.includes("throw");
       s.heavyMs = match.policies.includes("heavy") ? 0.3 : 0;
     });
+    let frame = 0;
     return {
-      input: ({ edges }) => {
+      input: ({ edges, frame: next }) => {
+        frame = next;
         for (const client of clients.clients) {
           client.run(() => {
             for (const [slot, changes] of edges) state().edges[slot] = (state().edges[slot] ?? 0) + changes.length;
           });
         }
       },
+      typed: (slot) => (match.policies[slot] === "typing" && frame % 120 === 60 ? 600 : 0),
       observe: () => {
         const { tick } = state();
         return { progress: tick >= LAST_TICK ? undefined : tick, over: tick >= LAST_TICK };

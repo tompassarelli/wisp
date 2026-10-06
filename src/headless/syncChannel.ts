@@ -4,9 +4,11 @@
 // receives a message at the same synchronized turn: the first 25 ms turn
 // boundary after the send plus a one-way latency, plus a random number of
 // further turns. A sender's messages arrive in the order it sent them.
-import type { SyncMessage } from "../../src/headless/client";
-import type { SyncDelivery } from "../../src/headless/lockstep";
+// Plain TypeScript, so Lua programs such as a game's perf runs can use it.
+import type { SyncMessage } from "./client";
+import type { SyncDelivery } from "./lockstep";
 import { Random } from "./random";
+import { f32 } from "../sim/f32";
 
 export interface SyncLatency {
   /** One-way latency in game milliseconds, before rounding up to a turn. */
@@ -25,7 +27,7 @@ export interface SyncLatency {
 export const MEASURED_BATTLE_NET: SyncLatency = {
   latencyMs: 80,
   turnMs: 25,
-  extraTurns: [0.4, 0.24, 0.144, 0.0864, 0.05184, 0.031104, 0.0186624, 0.01119744, 0.01679616],
+  extraTurns: [f32(0.4), f32(0.24), f32(0.144), f32(0.0864), f32(0.05184), f32(0.031104), f32(0.0186624), f32(0.01119744), f32(0.01679616)],
 };
 
 /** Game milliseconds between a client's timer callbacks. */
@@ -34,7 +36,7 @@ export const CALLBACK_MS = 1000 / 60;
 /** The game milliseconds from a send during `frame`'s callback until every client receives it. */
 export function syncAgeMs(latency: SyncLatency, frame: number, extraTurns: number): number {
   const sentMs = frame * CALLBACK_MS;
-  const turn = Math.ceil((sentMs + latency.latencyMs) / latency.turnMs - 1e-9) + extraTurns;
+  const turn = Math.ceil((sentMs + latency.latencyMs) / latency.turnMs - f32(1e-9)) + extraTurns;
   return turn * latency.turnMs - sentMs;
 }
 
@@ -55,7 +57,8 @@ function turnsFor(probabilities: readonly number[], draw: number): number {
  */
 export function syncDelivery(latency: SyncLatency = MEASURED_BATTLE_NET, seed = 1): SyncDelivery {
   const total = latency.extraTurns.reduce((sum, p) => sum + p, 0);
-  if (Math.abs(total - 1) > 1e-9) throw new Error(`extra-turn probabilities sum to ${total}, not 1`);
+  // Binary32 probabilities sum to 1 within a few of its ulps.
+  if (Math.abs(total - 1) > f32(1e-6)) throw new Error(`extra-turn probabilities sum to ${total}, not 1`);
   if (!(latency.turnMs > 0) || !(latency.latencyMs >= 0)) throw new Error("turn length must be positive and latency not negative");
   const senders = new Map<number, { readonly random: Random; lastArrivalMs: number }>();
   return {
@@ -67,7 +70,7 @@ export function syncDelivery(latency: SyncLatency = MEASURED_BATTLE_NET, seed = 
       }
       const arrivalMs = Math.max(state.lastArrivalMs, frame * CALLBACK_MS + syncAgeMs(latency, frame, turnsFor(latency.extraTurns, state.random.next())));
       state.lastArrivalMs = arrivalMs;
-      return Math.max(frame + 1, Math.ceil(arrivalMs / CALLBACK_MS - 1e-9));
+      return Math.max(frame + 1, Math.ceil(arrivalMs / CALLBACK_MS - f32(1e-9)));
     },
   };
 }

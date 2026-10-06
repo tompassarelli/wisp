@@ -13,9 +13,10 @@ import type { Lockstep } from "../../src/headless/lockstep";
 import { sceneFile } from "../../src/runtime/scene";
 import type { HeadlessMap, HeadlessRuntime } from "./headless";
 import type { TypedInput } from "./headlessInput";
-import { Random } from "./random";
+import { Random } from "../../src/headless/random";
 import { type SceneBody, type SceneExpectations, bodyProblems, readSceneLines, sceneProblems } from "./scene";
-import { MEASURED_BATTLE_NET, syncDelivery } from "./syncChannel";
+import { type NativeCostModel, WARCRAFT_COST, nativeFrameCost } from "../../src/headless/nativeCost";
+import { MEASURED_BATTLE_NET, syncDelivery } from "../../src/headless/syncChannel";
 
 /** A controller the fuzzer drives: buttons, and axes whose values are whole numbers from -axisLimit to axisLimit. */
 export interface SoakController {
@@ -376,6 +377,12 @@ export interface SoakDriver {
    * `wisp repro` replays.
    */
   repro?(client: HeadlessClient): readonly string[] | undefined;
+  /**
+   * Characters a player's input helper typed into their client's edit box
+   * before this frame, which Warcraft takes at a cost that grows with their
+   * square (wisp:src/headless/nativeCost.ts).
+   */
+  typed?(slot: number): number;
 }
 
 /** How a game plays a soak match. */
@@ -479,6 +486,13 @@ export const cpuMillis: () => number = (() => {
 /** Text of a finding with its numbers left out, to report each kind of problem once per client. */
 const shape = (text: string) => text.replace(/\d+(\.\d+)?/g, "#");
 
+/** A client frame that cost more than its moment: whose, how many native milliseconds, and how many of them taking typed text. */
+interface CostlyFrame {
+  readonly slot: number;
+  readonly ms: number;
+  readonly typingMs?: number;
+}
+
 /**
  * Watches a match's clients after every frame and keeps what it finds. The
  * soak's own loop and a game's real-time runs (such as through its input
@@ -502,7 +516,7 @@ export class SoakMonitor {
   private stallReported = false;
   private quietUntil = 0;
   /** Frames a client's cost, after costScale, was over spikeMs: the costliest client of each. */
-  readonly spikes = new Map<number, { readonly slot: number; readonly ms: number }>();
+  readonly spikes = new Map<number, CostlyFrame>();
   private behindSince: number | undefined;
   private readonly windows: { readonly lag: number; readonly backlog: number }[] = [];
   private overAt: number | undefined;
@@ -544,8 +558,13 @@ export class SoakMonitor {
     return this.overAt !== undefined && this.frame - this.overAt >= this.limits.afterOver;
   }
 
-  /** After each frame: `wallMs` is the game's wall clock, `quiet` the slots whose input source sends nothing now. */
-  afterFrame(wallMs: number, quiet: ReadonlySet<number>): void {
+  /**
+   * After each frame: `wallMs` is the game's wall clock, `quiet` the slots
+   * whose input source sends nothing now, and `nativeMs` each client's
+   * predicted native milliseconds for the frame: by default its measured cost
+   * times costScale; `typingMs`, how much of each the edit-box stall is.
+   */
+  afterFrame(wallMs: number, quiet: ReadonlySet<number>, nativeMs?: readonly number[], typingMs?: readonly number[]): void {
     this.frame++;
     const { clients, driver, limits } = this;
     if (quiet.size > 0) this.quietUntil = this.frame + limits.stallFrames;
@@ -559,9 +578,9 @@ export class SoakMonitor {
       const cost = clients.costs[index] ?? 0;
       this.costMs += cost;
       this.worstFrameMs = Math.max(this.worstFrameMs, cost);
-      if (this.frame > this.warmUp && cost * limits.costScale > limits.spikeMs) {
-        const ms = cost * limits.costScale;
-        if (ms > (this.spikes.get(this.frame)?.ms ?? 0)) this.spikes.set(this.frame, { slot: client.slot, ms });
+      const ms = nativeMs?.[index] ?? cost * limits.costScale;
+      if (this.frame > this.warmUp && ms > limits.spikeMs) {
+        if (ms > (this.spikes.get(this.frame)?.ms ?? 0)) this.spikes.set(this.frame, { slot: client.slot, ms, typingMs: typingMs?.[index] ?? 0 });
       }
       this.checkErrors(client, index);
       this.checkScene(client, index);
@@ -690,13 +709,13 @@ export class SoakMonitor {
   }
 
   /** Reports the costly frames among `frames`, such as those a replay found costly too. */
-  costFinding(frames: ReadonlyMap<number, { readonly slot: number; readonly ms: number }>, again?: ReadonlyMap<number, { readonly ms: number }>): void {
-    let worst: [number, { readonly slot: number; readonly ms: number }] | undefined;
+  costFinding(frames: ReadonlyMap<number, CostlyFrame>, again?: ReadonlyMap<number, { readonly ms: number }>): void {
+    let worst: [number, CostlyFrame] | undefined;
     for (const entry of frames) if (worst === undefined || entry[1].ms > worst[1].ms) worst = entry;
     if (worst === undefined) return;
-    const [frame, { slot, ms }] = worst;
+    const [frame, { slot, ms, typingMs = 0 }] = worst;
     const replayed = again?.get(frame);
-    this.find("cost", `${frames.size} client frame${frames.size === 1 ? "" : "s"} cost more than ${this.limits.spikeMs.toFixed(1)} ms${again === undefined ? "" : " in the match and again in its replay"}; the worst, p${slot}'s frame ${frame}, ${ms.toFixed(1)} ms${replayed === undefined ? "" : ` then ${replayed.ms.toFixed(1)} ms`}`);
+    this.find("cost", `${frames.size} client frame${frames.size === 1 ? "" : "s"} cost more than ${this.limits.spikeMs.toFixed(1)} ms${again === undefined ? "" : " in the match and again in its replay"}; the worst, p${slot}'s frame ${frame}, ${ms.toFixed(1)} ms${replayed === undefined ? "" : ` then ${replayed.ms.toFixed(1)} ms`}${typingMs > 0 ? `, ${typingMs.toFixed(1)} ms of it taking typed text` : ""}`);
   }
 
   /**
@@ -719,6 +738,11 @@ export interface SoakSetup {
   readonly players?: readonly number[];
   readonly limits?: Partial<SoakLimits>;
   readonly fuzz?: Partial<FuzzOptions>;
+  /**
+   * Warcraft's costs beyond the measured frame time, which costScale scales:
+   * each native call and the edit-box stall of typed text (nativeCost.ts).
+   */
+  readonly cost?: NativeCostModel;
 }
 
 /** Frames this process has played, across matches. */
@@ -745,7 +769,7 @@ export function playSoakMatch(runtime: HeadlessRuntime, game: SoakGame, setup: S
   // compile can land on any frame: a costly frame counts when its replay,
   // on the same clock, finds it costly again.
   const replay = playOnce(runtime, game, setup, match, first.result.inputs);
-  const again = replay.monitor?.spikes ?? new Map<number, { readonly slot: number; readonly ms: number }>();
+  const again = replay.monitor?.spikes ?? new Map<number, CostlyFrame>();
   const confirmed = new Map([...spikes].filter(([frame]) => again.has(frame)));
   first.monitor?.costFinding(confirmed, again);
   return { ...first.result, findings: first.monitor?.findings ?? first.result.findings };
@@ -755,6 +779,9 @@ function playOnce(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, ma
   const limits = { ...SOAK_LIMITS, ...setup.limits };
   const source = inputs === undefined ? fuzzedInputs(match, setup.controller, { ...SOAK_FUZZ, ...setup.fuzz }) : recordedInputs(inputs);
   const clients = runtime.clients(game.entry, setup.players ?? [0, 1], { delivery: syncDelivery(MEASURED_BATTLE_NET, match.seed), keepCalls: 64, cost: cpuMillis });
+  const model = setup.cost ?? WARCRAFT_COST;
+  /** Each client's native calls when its last frame ended. */
+  let calls: number[] = [];
   let monitor: SoakMonitor | undefined;
   let wallMs = 0;
   const crashes: SoakFinding[] = [];
@@ -763,6 +790,7 @@ function playOnce(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, ma
     // Files a helper wrote that the map read before the match began, such as in its menus, are recorded at frame 0.
     for (const [frame, slot, name, chunks] of inputs?.files ?? []) if (frame === 0) clients.client(slot).published.set(name, chunks);
     const driver = game.begin(clients, match);
+    calls = clients.clients.map((client) => client.callCount());
     const watching = new SoakMonitor(clients, driver, limits, setup.scene, setup.map.filePrefix, framesPlayed);
     monitor = watching;
     const quietUntil = new Map<number, number>();
@@ -780,8 +808,19 @@ function playOnce(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, ma
       // In a match played through input helpers the edges reached the clients only as what the helpers typed.
       driver.input({ frame, wallMs, edges: match.typed === true ? NO_EDGES : step.edges, silent: quiet });
       clients.frames(1);
-      wallMs += limits.frameMs + source.slow(frame, Math.max(0, Math.max(0, ...clients.costs) * limits.costScale - limits.frameMs));
-      watching.afterFrame(wallMs, quiet);
+      // A frame's native cost: its measured time scaled, its natives' calls and the stall of what was typed before it.
+      const typingMs: number[] = [];
+      const nativeMs = clients.clients.map((client, index) => {
+        const now = client.callCount();
+        const natives = now - (calls[index] ?? 0);
+        calls[index] = now;
+        const typedCharacters = (driver.typed?.(client.slot) ?? 0) + (step.typed.get(client.slot) ?? []).reduce((sum, line) => sum + line.length, 0);
+        const predicted = nativeFrameCost(model, { instructions: 0, natives, allocatedKb: 0, typedCharacters });
+        typingMs.push(predicted.typingUs / 1000);
+        return (clients.costs[index] ?? 0) * limits.costScale + (predicted.callbacksUs + predicted.typingUs) / 1000;
+      });
+      wallMs += limits.frameMs + source.slow(frame, Math.max(0, Math.max(0, ...nativeMs) - limits.frameMs));
+      watching.afterFrame(wallMs, quiet, nativeMs, typingMs);
     }
   } catch (error) {
     crashes.push({ kind: "crash", frame: monitor?.frame ?? 0, text: describeError(error) });
