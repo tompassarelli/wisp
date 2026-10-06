@@ -2,12 +2,19 @@
 // tompassarelli/WurstStdlib2 (e3714f6). Every operation rounds once, to nearest
 // with ties to even, on binary64 hosts and in Warcraft's binary32 Lua alike.
 // Integer limbs stay below 2^31, the range of Warcraft's Lua integers.
+//
+// Warcraft's float + and * don't round to nearest, so these use only integer
+// arithmetic, comparisons and scaling by powers of two. Rollback replays run
+// thousands of them a callback, so the operations whose result is a normal
+// number allocate nothing; subnormal, infinite and non-finite cases take the
+// limb implementation below them.
 import { at } from "../runtime/lookup";
+import { f32 } from "./f32";
 import { floorDiv, floorMod } from "./intMath";
 
 // Scaling by a power of two is exact, so large steps reach the same value as
 // single ones with a fraction of the work.
-const TWO_POWERS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608];
+const TWO_POWERS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216];
 
 /** Truncation toward zero, which Lua and JavaScript both emit exactly. */
 export function toInt(value: number): number {
@@ -21,8 +28,34 @@ function binary32Infinity(): number {
   return result;
 }
 
+const INFINITY = binary32Infinity();
+const SIGNIFICAND_UNIT = 1.1920928955078125e-7;
+
+/** 2^-126 through 2^127, the normal powers of two: element i is 2^(i - 126). */
+const NORMAL_POWERS: number[] = [];
+{
+  let power = 1.0;
+  for (let i = 0; i < 126; i++) power *= 0.5;
+  NORMAL_POWERS.push(power);
+  for (let i = 1; i < 254; i++) {
+    power *= 2.0;
+    NORMAL_POWERS.push(power);
+  }
+}
+const SMALLEST_NORMAL = at(NORMAL_POWERS, 0);
+
+/** significand * 2^exponent for a significand in [2^23, 2^24); undefined unless the result is a normal binary32 value. */
+function normalResult(significand: number, exponent: number, negative: boolean): number | undefined {
+  const power = NORMAL_POWERS[exponent + 149];
+  if (power === undefined) return undefined;
+  const magnitude = significand * SIGNIFICAND_UNIT * power;
+  return negative ? -magnitude : magnitude;
+}
+
 /** Rounds to the nearest binary32 value; NaN and infinity pass through. */
 export function roundToFloat32(value: number): number {
+  // A normal-range number is already binary32 in Lua; f32 rounds it on the host.
+  if ((value >= SMALLEST_NORMAL && value < INFINITY) || (value <= -SMALLEST_NORMAL && value > -INFINITY)) return f32(value * 1.0);
   if (value === 0 || value !== value) return value;
   const negative = value < 0;
   let significand = negative ? -value : value;
@@ -43,7 +76,7 @@ export function roundToFloat32(value: number): number {
     scale *= 2;
     exponent += 1;
   }
-  if (significand >= 2) return negative ? -binary32Infinity() : binary32Infinity();
+  if (significand >= 2) return negative ? -INFINITY : INFINITY;
   while (significand < 0.0000152587890625 && exponent >= -110) {
     significand *= 65536;
     scale *= 0.0000152587890625;
@@ -64,30 +97,19 @@ export function roundToFloat32(value: number): number {
   const remainder = units - rounded;
   if (remainder > 0.5 || (remainder === 0.5 && floorMod(rounded, 2) !== 0)) rounded += 1;
   if (exponent === 127 && rounded === 16777216) {
-    return negative ? -binary32Infinity() : binary32Infinity();
+    return negative ? -INFINITY : INFINITY;
   }
   const result = (rounded / 8388608.0) * scale;
   return negative ? -result : result;
 }
 
-export function addFloat32(a: number, b: number): number {
-  return fusedMultiplyAddFloat32(1.0, a, b);
-}
+// The last split: |value| truncated to 24 bits is splitSignificand * 2^splitExponent,
+// with splitSignificand in [2^23, 2^24).
+let splitSignificand = 0;
+let splitExponent = 0;
 
-export function subtractFloat32(a: number, b: number): number {
-  return fusedMultiplyAddFloat32(-1.0, b, a);
-}
-
-export function multiplyFloat32(a: number, b: number): number {
-  return fusedMultiplyAddFloat32(a, b, 0.0);
-}
-
-interface Parts {
-  significand: number;
-  exponent: number;
-}
-
-function decompose(value: number): Parts {
+/** Sets splitSignificand and splitExponent from a finite nonzero value. */
+function split(value: number): void {
   let normalized = value < 0 ? -value : value;
   let exponent = -23;
   while (normalized >= 65536) {
@@ -114,38 +136,293 @@ function decompose(value: number): Parts {
     normalized *= 2;
     exponent -= 1;
   }
-  return { significand: Math.floor(normalized * 8388608.0), exponent };
+  splitSignificand = (normalized * 8388608.0) | 0;
+  splitExponent = exponent;
+}
+
+/**
+ * Rounds (high * 2^24 + low) * 2^exponent, plus a fraction of 2^exponent in
+ * (0, 1) when sticky, to 24 bits. Requires 0 < high < 2^31 or 0 < low, and
+ * 0 <= low < 2^24; with sticky, high >= 2^23 - 1.
+ */
+function roundLimbsToNormal(high: number, low: number, exponent: number, sticky: boolean, negative: boolean): number | undefined {
+  let top = high;
+  let bottom = low;
+  let scale = exponent;
+  let inexact = sticky;
+  while (top >= 16777216) {
+    if (floorMod(bottom, 2) !== 0) inexact = true;
+    bottom = floorDiv(bottom, 2) + floorMod(top, 2) * 8388608;
+    top = floorDiv(top, 2);
+    scale += 1;
+  }
+  let significand: number;
+  let remainder: number;
+  let half: number;
+  if (top >= 8388608) {
+    significand = top;
+    remainder = bottom;
+    half = 8388608;
+    scale += 24;
+  } else if (inexact) {
+    significand = top * 2 + floorDiv(bottom, 8388608);
+    remainder = floorMod(bottom, 8388608);
+    half = 4194304;
+    scale += 23;
+  } else {
+    // Exact: shifting left loses nothing.
+    if (top === 0) {
+      top = bottom;
+      bottom = 0;
+      scale -= 24;
+    }
+    while (top < 8388608) {
+      top = top * 2 + floorDiv(bottom, 8388608);
+      bottom = floorMod(bottom, 8388608) * 2;
+      scale -= 1;
+    }
+    significand = top;
+    remainder = bottom;
+    half = 8388608;
+    scale += 24;
+  }
+  if (remainder > half || (remainder === half && (inexact || floorMod(significand, 2) !== 0))) {
+    significand += 1;
+    if (significand === 16777216) {
+      significand = 8388608;
+      scale += 1;
+    }
+  }
+  return normalResult(significand, scale, negative);
+}
+
+/**
+ * (high * 2^24 + low) * 2^exponent, with high in [2^23, 2^24), plus c, rounded
+ * once; undefined unless the result is a normal binary32 value.
+ */
+function addToLimbs(high: number, low: number, exponent: number, negative: boolean, c: number): number | undefined {
+  split(c);
+  const addend = splitSignificand;
+  const addendNegative = c < 0;
+  // Bits from the low limb's lowest bit to the addend's.
+  const shift = splitExponent - exponent;
+  if (shift > 30) {
+    // The addend dominates: six guard bits below it and a sticky bit for the rest.
+    const guarded = splitExponent - 6;
+    let part = 0;
+    let sticky = true;
+    if (shift - 30 < 24) {
+      const unit = TWO_POWERS[shift - 30] ?? 0;
+      part = floorDiv(high, unit);
+      sticky = high - part * unit !== 0 || low !== 0;
+    }
+    let sum = addend * 64;
+    if (negative === addendNegative) sum += part;
+    else sum -= part + (sticky ? 1 : 0);
+    // sum is in (2^28, 2^31): drop five to seven bits.
+    const dropped = sum >= 1073741824 ? 7 : sum >= 536870912 ? 6 : 5;
+    const unit = TWO_POWERS[dropped] ?? 0;
+    let significand = floorDiv(sum, unit);
+    const remainder = sum - significand * unit;
+    const half = TWO_POWERS[dropped - 1] ?? 0;
+    let scale = guarded + dropped;
+    if (remainder > half || (remainder === half && (sticky || floorMod(significand, 2) !== 0))) {
+      significand += 1;
+      if (significand === 16777216) {
+        significand = 8388608;
+        scale += 1;
+      }
+    }
+    return normalResult(significand, scale, addendNegative);
+  }
+  let top = high;
+  let bottom = low;
+  let sign = negative;
+  if (shift < 0) {
+    // The addend sits below the low limb: a sticky bit keeps what shifts out.
+    let part = 0;
+    let sticky = true;
+    if (-shift < 24) {
+      const unit = TWO_POWERS[-shift] ?? 0;
+      part = floorDiv(addend, unit);
+      sticky = addend - part * unit !== 0;
+    }
+    if (negative === addendNegative) {
+      bottom += part;
+      if (bottom >= 16777216) {
+        bottom -= 16777216;
+        top += 1;
+      }
+    } else {
+      bottom -= part + (sticky ? 1 : 0);
+      if (bottom < 0) {
+        bottom += 16777216;
+        top -= 1;
+      }
+    }
+    return roundLimbsToNormal(top, bottom, exponent, sticky, sign);
+  }
+  // The addend's bits land on the two limbs exactly.
+  let addendHigh: number;
+  let addendLow = 0;
+  if (shift >= 24) {
+    addendHigh = addend * (TWO_POWERS[shift - 24] ?? 0);
+  } else {
+    const unit = TWO_POWERS[24 - shift] ?? 0;
+    addendHigh = floorDiv(addend, unit);
+    addendLow = (addend - addendHigh * unit) * (TWO_POWERS[shift] ?? 0);
+  }
+  if (negative === addendNegative) {
+    top += addendHigh;
+    bottom += addendLow;
+    if (bottom >= 16777216) {
+      bottom -= 16777216;
+      top += 1;
+    }
+  } else {
+    top -= addendHigh;
+    bottom -= addendLow;
+    if (bottom < 0) {
+      bottom += 16777216;
+      top -= 1;
+    }
+    if (top < 0) {
+      if (bottom > 0) {
+        top = -top - 1;
+        bottom = 16777216 - bottom;
+      } else {
+        top = -top;
+      }
+      sign = addendNegative;
+    } else if (top === 0 && bottom === 0) {
+      return 0.0;
+    }
+  }
+  return roundLimbsToNormal(top, bottom, exponent, false, sign);
+}
+
+export function addFloat32(a: number, b: number): number {
+  if (a === 0) return 1.0 * a + b;
+  if (a < INFINITY && a > -INFINITY && b < INFINITY && b > -INFINITY) {
+    split(a);
+    const result = b === 0
+      ? normalResult(splitSignificand, splitExponent, a < 0)
+      : addToLimbs(splitSignificand, 0, splitExponent - 24, a < 0, b);
+    if (result !== undefined) return result;
+  }
+  return limbFusedMultiplyAdd(1.0, a, b);
+}
+
+export function subtractFloat32(a: number, b: number): number {
+  if (b === 0) return -1.0 * b + a;
+  if (a < INFINITY && a > -INFINITY && b < INFINITY && b > -INFINITY) {
+    split(b);
+    const result = a === 0
+      ? normalResult(splitSignificand, splitExponent, !(b < 0))
+      : addToLimbs(splitSignificand, 0, splitExponent - 24, !(b < 0), a);
+    if (result !== undefined) return result;
+  }
+  return limbFusedMultiplyAdd(-1.0, b, a);
+}
+
+// The last product: (productHigh * 2^24 + productLow) * 2^productExponent is the
+// exact product of two split values, with productHigh in [2^23, 2^24).
+let productHigh = 0;
+let productLow = 0;
+let productExponent = 0;
+
+/** Sets the product limbs of two finite nonzero values. */
+function multiplySplit(a: number, b: number): void {
+  split(a);
+  const left = splitSignificand;
+  const leftExponent = splitExponent;
+  split(b);
+  // Twelve-bit factors keep every partial product within signed 32 bits.
+  const leftHigh = floorDiv(left, 4096);
+  const leftLow = left - leftHigh * 4096;
+  const rightHigh = floorDiv(splitSignificand, 4096);
+  const rightLow = splitSignificand - rightHigh * 4096;
+  const lowest = leftLow * rightLow;
+  const middle = floorDiv(lowest, 4096) + leftHigh * rightLow + leftLow * rightHigh;
+  let high = leftHigh * rightHigh + floorDiv(middle, 4096);
+  let low = floorMod(lowest, 4096) + floorMod(middle, 4096) * 4096;
+  let exponent = leftExponent + splitExponent;
+  if (high < 8388608) {
+    high = high * 2 + floorDiv(low, 8388608);
+    low = floorMod(low, 8388608) * 2;
+    exponent -= 1;
+  }
+  productHigh = high;
+  productLow = low;
+  productExponent = exponent;
+}
+
+export function multiplyFloat32(a: number, b: number): number {
+  if (a === 0 || b === 0) return a * b + 0.0;
+  if (a < INFINITY && a > -INFINITY && b < INFINITY && b > -INFINITY) {
+    multiplySplit(a, b);
+    let significand = productHigh;
+    let exponent = productExponent + 24;
+    if (productLow > 8388608 || (productLow === 8388608 && floorMod(significand, 2) !== 0)) {
+      significand += 1;
+      if (significand === 16777216) {
+        significand = 8388608;
+        exponent += 1;
+      }
+    }
+    const result = normalResult(significand, exponent, a < 0 !== b < 0);
+    if (result !== undefined) return result;
+  }
+  return limbFusedMultiplyAdd(a, b, 0.0);
+}
+
+/**
+ * a * b + c with one binary32 rounding. Inputs must be finite binary32 values;
+ * the exact product may leave binary32 range before cancellation.
+ */
+export function fusedMultiplyAddFloat32(a: number, b: number, c: number): number {
+  if (a === 0 || b === 0) return a * b + c;
+  if (a < INFINITY && a > -INFINITY && b < INFINITY && b > -INFINITY && c < INFINITY && c > -INFINITY) {
+    multiplySplit(a, b);
+    const negative = a < 0 !== b < 0;
+    let result: number | undefined;
+    if (c === 0) result = roundLimbsToNormal(productHigh, productLow, productExponent, false, negative);
+    else result = addToLimbs(productHigh, productLow, productExponent, negative, c);
+    if (result !== undefined) return result;
+  }
+  return limbFusedMultiplyAdd(a, b, c);
 }
 
 /** Long division keeps the quotient and sticky remainder; a zero divisor gives NaN. */
 export function divideFloat32(numerator: number, denominator: number): number {
   if (denominator === 0) {
-    const infinity = binary32Infinity();
-    return infinity - infinity;
+    return INFINITY - INFINITY;
   }
   if (numerator === 0) return numerator;
-  const left = decompose(numerator);
-  const right = decompose(denominator);
+  split(numerator);
+  let remainder = splitSignificand;
+  let exponent = splitExponent;
+  split(denominator);
+  const denominatorSignificand = splitSignificand;
+  exponent -= splitExponent;
   const negative = numerator < 0 !== denominator < 0;
-  let remainder = left.significand;
-  let exponent = left.exponent - right.exponent;
-  if (remainder < right.significand) {
+  if (remainder < denominatorSignificand) {
     remainder *= 2;
     exponent -= 1;
   }
-  remainder -= right.significand;
+  remainder -= denominatorSignificand;
   // Twenty-six quotient bits, six at a time: the remainder stays below the
   // divisor, so six more bits stay below 2^30.
   let quotient = 1;
   for (let chunk = 1; chunk <= 4; chunk++) {
     remainder *= 64;
-    const digits = floorDiv(remainder, right.significand);
-    remainder -= digits * right.significand;
+    const digits = floorDiv(remainder, denominatorSignificand);
+    remainder -= digits * denominatorSignificand;
     quotient = quotient * 64 + digits;
   }
   remainder *= 4;
-  const lastDigits = floorDiv(remainder, right.significand);
-  remainder -= lastDigits * right.significand;
+  const lastDigits = floorDiv(remainder, denominatorSignificand);
+  remainder -= lastDigits * denominatorSignificand;
   quotient = quotient * 4 + lastDigits;
   let rounded = floorDiv(quotient, 8);
   const roundingBits = floorMod(quotient, 8);
@@ -175,7 +452,7 @@ export function divideFloat32(numerator: number, denominator: number): number {
     scale = exponent - 23;
   }
   if (exponent > 127 || (exponent === 127 && rounded === 16777216)) {
-    return negative ? -binary32Infinity() : binary32Infinity();
+    return negative ? -INFINITY : INFINITY;
   }
   const result = scaleByPowerOfTwo(rounded, scale);
   return negative ? -result : result;
@@ -185,13 +462,12 @@ export function divideFloat32(numerator: number, denominator: number): number {
 export function squareRootFloat32(value: number): number {
   if (value === 0 || value !== value) return value;
   if (value < 0) {
-    const infinity = binary32Infinity();
-    return infinity - infinity;
+    return INFINITY - INFINITY;
   }
   if (value - value !== 0) return value;
-  const parts = decompose(value);
-  let significand = parts.significand;
-  let exponent = parts.exponent + 23;
+  split(value);
+  let significand = splitSignificand;
+  let exponent = splitExponent + 23;
   if (floorMod(exponent, 2) !== 0) {
     significand *= 2;
     exponent -= 1;
@@ -258,20 +534,6 @@ interface Limbs {
   high: number;
   middle: number;
   low: number;
-}
-
-function multiplySignificands(a: number, b: number): { high: number; low: number } {
-  // Twelve-bit factors keep every partial product within signed 32 bits.
-  const aLow = floorMod(a, 4096);
-  const bLow = floorMod(b, 4096);
-  const aHigh = floorDiv(a, 4096);
-  const bHigh = floorDiv(b, 4096);
-  const first = aLow * bLow;
-  const second = floorDiv(first, 4096) + aHigh * bLow + aLow * bHigh;
-  return {
-    high: aHigh * bHigh + floorDiv(second, 4096),
-    low: floorMod(first, 4096) + floorMod(second, 4096) * 4096,
-  };
 }
 
 function shiftRightJam(value: Limbs, count: number): Limbs {
@@ -381,36 +643,42 @@ function roundLimbs(value: Limbs, scale: number, negative: boolean): number {
     if (floorMod(value.low, 2) !== 0 && floorMod(rounded, 2) !== 0) rounded += 1;
     resultScale += 1;
   }
-  if (resultScale + bitLength(rounded) > 128) return negative ? -binary32Infinity() : binary32Infinity();
+  if (resultScale + bitLength(rounded) > 128) return negative ? -INFINITY : INFINITY;
   const result = scaleByPowerOfTwo(rounded, resultScale);
   return negative ? -result : result;
 }
 
-/**
- * a * b + c with one binary32 rounding. Inputs must be finite binary32 values;
- * the exact product may leave binary32 range before cancellation.
- */
-export function fusedMultiplyAddFloat32(a: number, b: number, c: number): number {
+/** a * b + c in three limbs: every finite input and result, subnormal and overflowing ones included. */
+function limbFusedMultiplyAdd(a: number, b: number, c: number): number {
   if (a === 0 || b === 0) return a * b + c;
-  const left = decompose(a);
-  const right = decompose(b);
-  const product = multiplySignificands(left.significand, right.significand);
+  split(a);
+  const leftSignificand = splitSignificand;
+  const leftExponent = splitExponent;
+  split(b);
+  const leftHigh = floorDiv(leftSignificand, 4096);
+  const leftLow = floorMod(leftSignificand, 4096);
+  const rightHigh = floorDiv(splitSignificand, 4096);
+  const rightLow = floorMod(splitSignificand, 4096);
+  const first = leftLow * rightLow;
+  const second = floorDiv(first, 4096) + leftHigh * rightLow + leftLow * rightHigh;
+  const wideHigh = leftHigh * rightHigh + floorDiv(second, 4096);
+  const wideLow = floorMod(first, 4096) + floorMod(second, 4096) * 4096;
   // One carry bit above the product and 23 exact zero bits below it.
   let magnitude: Limbs = {
-    high: floorDiv(product.high, 2),
-    middle: floorMod(product.high, 2) * 8388608 + floorDiv(product.low, 2),
-    low: floorMod(product.low, 2) * 8388608,
+    high: floorDiv(wideHigh, 2),
+    middle: floorMod(wideHigh, 2) * 8388608 + floorDiv(wideLow, 2),
+    low: floorMod(wideLow, 2) * 8388608,
   };
-  let scale = left.exponent + right.exponent - 23;
+  let scale = leftExponent + splitExponent - 23;
   let negative = a < 0 !== b < 0;
   if (c !== 0) {
-    const addend = decompose(c);
+    split(c);
     let other: Limbs = {
-      high: floorDiv(addend.significand, 2),
-      middle: floorMod(addend.significand, 2) * 8388608,
+      high: floorDiv(splitSignificand, 2),
+      middle: floorMod(splitSignificand, 2) * 8388608,
       low: 0,
     };
-    const otherScale = addend.exponent - 47;
+    const otherScale = splitExponent - 47;
     if (scale < otherScale) {
       magnitude = shiftRightJam(magnitude, otherScale - scale);
       scale = otherScale;
