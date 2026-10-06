@@ -1,12 +1,16 @@
 // `wisp perf`: plays one of the game's runs with its map's compiled bundle in
 // 32-bit Lua and measures every frame (wisp:docs/frame-cost.md#headless);
-// `wisp perf compare A B` compares two such runs and fails when B is worse.
+// `wisp perf compare A B` compares two such runs and fails when B is worse;
+// `wisp perf native` and `wisp perf fit` hold predictions to native overlay
+// readings (wisp:docs/frame-cost.md#checking-against-warcraft).
 import { join } from "node:path";
 import { Console, Effect, Schema } from "effect";
 import { mapCompiler, report } from "../../compiler";
 import { type Command, UsageFailure, describeCause, flagValues } from "../command";
 import { DEFAULT_PERF_THRESHOLD, comparePerfRuns, parsePerfRun, predictionLines } from "../perf";
 import { step } from "../timings";
+import { type NativeCase, checkNative, fitNativeCost, nativeCheckLines, parseNativeReadings, parsePerfSamples } from "../nativeFit";
+import { type NativeCostModel, WARCRAFT_COST } from "../../../src/headless/nativeCost";
 
 /** A tsconfig and the Lua bundle it writes. */
 export interface LuaBuild {
@@ -91,9 +95,70 @@ export const measureRun = (project: PerfProject, name: string, frames: number, s
   return { output, summary, measured };
 });
 
+const readText = (path: string) => Effect.tryPromise({
+  try: () => Bun.file(path).text(),
+  catch: (cause) => new PerfFailure({ problem: `${path}: ${describeCause(cause)}` }),
+});
+
+/** One case: a headless run's samples (`perf --samples` output) and the overlay readings of the native run it stands for. */
+const readCase = (samplesText: string, readingsPath: string, slot: number) => Effect.gen(function*() {
+  const frames = parsePerfSamples(samplesText).get(slot);
+  if (frames === undefined || frames.length === 0) return yield* new PerfFailure({ problem: `the samples have no frames of p${slot}: run perf with --samples` });
+  const text = yield* readText(readingsPath);
+  const readings = yield* Effect.try({ try: () => parseNativeReadings(text), catch: (cause) => new PerfFailure({ problem: `${readingsPath}: ${describeCause(cause)}` }) });
+  return { name: readingsPath, frames, readings } satisfies NativeCase;
+});
+
+const modelLine = (model: NativeCostModel) =>
+  `model: Lua factor ${model.luaFactor.toFixed(2)} x ${model.hostUsPerThousandInstructions.toFixed(1)} µs per 1000 instructions, native call ${model.nativeCallUs} µs, collector ${model.collectorUsPerKb} µs per KB, typing ${model.typingUsPerCharacterSquared} µs per character squared`;
+
+/**
+ * `perf native READINGS [RUN] [--samples FILE] [--slot N]`: the run's
+ * predicted overlay against a native session's readings of the same build;
+ * fails unless median and p95 are within 20%. Without --samples it plays RUN.
+ */
+const native = (project: PerfProject): Command => (args) => Effect.gen(function*() {
+  const [samples] = flagValues(args, "samples");
+  const [slotText = "0"] = flagValues(args, "slot");
+  const [framesText = String(DEFAULT_FRAMES)] = flagValues(args, "frames");
+  const named = args.filter((arg, index) => !arg.startsWith("--") && !["--samples", "--slot", "--frames"].includes(args[index - 1] ?? ""));
+  const [readings, name = project.defaultRun ?? "journey"] = named;
+  if (readings === undefined || named.length > 2) return yield* new UsageFailure({ problem: "perf native takes the native readings (a session's bot-result.json), then a run, or --samples FILE" });
+  const samplesText = samples === undefined ? (yield* measureRun(project, name, Number(framesText), true)).output : yield* readText(samples);
+  const check = checkNative(WARCRAFT_COST, yield* readCase(samplesText, readings, Number(slotText)));
+  yield* Console.log([modelLine(WARCRAFT_COST), ...nativeCheckLines(check)].join("\n"));
+  if (!check.passed) return yield* new PerfFailure({ problem: "the prediction misses native by more than 20%, or the readings show no p95" });
+});
+
+/**
+ * `perf fit SAMPLES=READINGS ... [--slot N]`: the native call and collector
+ * costs fitted to every case, each case's error under them, and with two or
+ * more cases each one's error under a fit to the others (held out).
+ */
+const fit: Command = (args) => Effect.gen(function*() {
+  const [slotText = "0"] = flagValues(args, "slot");
+  const pairs = args.filter((arg, index) => !arg.startsWith("--") && args[index - 1] !== "--slot");
+  if (pairs.length === 0 || pairs.some((pair) => !pair.includes("="))) return yield* new UsageFailure({ problem: "perf fit takes SAMPLES=READINGS pairs: a run's perf --samples output and its native overlay readings" });
+  const cases = yield* Effect.forEach(pairs, (pair) => readText(pair.slice(0, pair.indexOf("="))).pipe(Effect.flatMap((text) => readCase(text, pair.slice(pair.indexOf("=") + 1), Number(slotText)))));
+  const fitted = fitNativeCost(WARCRAFT_COST, cases);
+  const lines = [`fitted to all ${cases.length}: ${modelLine(fitted)}`];
+  for (const item of cases) lines.push(...nativeCheckLines(checkNative(fitted, item)));
+  if (cases.length > 1) {
+    for (const item of cases) {
+      const others = fitNativeCost(WARCRAFT_COST, cases.filter((other) => other !== item));
+      lines.push(`held out ${item.name}, fitted to the others: native call ${others.nativeCallUs} µs, collector ${others.collectorUsPerKb} µs per KB`);
+      lines.push(...nativeCheckLines(checkNative(others, item)));
+    }
+  }
+  yield* Console.log(lines.join("\n"));
+});
+
+
 /** `perf [RUN] [--frames N] [--samples] [--out FILE]` and `perf compare A B [--threshold SHARE]`. */
 export const makePerf = (project: PerfProject): Command => (args) => Effect.gen(function*() {
   if (args[0] === "compare") return yield* compare(args.slice(1));
+  if (args[0] === "native") return yield* native(project)(args.slice(1));
+  if (args[0] === "fit") return yield* fit(args.slice(1));
   const [out] = flagValues(args, "out");
   const [framesText = String(DEFAULT_FRAMES)] = flagValues(args, "frames");
   const named = args.filter((arg, index) => !arg.startsWith("--") && args[index - 1] !== "--out" && args[index - 1] !== "--frames");
@@ -101,7 +166,7 @@ export const makePerf = (project: PerfProject): Command => (args) => Effect.gen(
   const name = named[0] ?? project.defaultRun ?? "journey";
   const frames = Number(framesText);
   if (named.length > 1 || runs[name] === undefined || !Number.isInteger(frames) || frames < 1) {
-    return yield* new UsageFailure({ problem: `perf takes one run (${Object.keys(runs).join(", ")}), --frames N, --samples and --out FILE, or compare A B` });
+    return yield* new UsageFailure({ problem: `perf takes one run (${Object.keys(runs).join(", ")}), --frames N, --samples and --out FILE; or compare A B; native READINGS [RUN]; fit SAMPLES=READINGS ...` });
   }
   const { output, summary, measured } = yield* measureRun(project, name, frames, args.includes("--samples"));
   if (out !== undefined) yield* Effect.tryPromise({ try: () => Bun.write(out, output), catch: (cause) => new PerfFailure({ problem: `writing ${out}: ${describeCause(cause)}` }) });
