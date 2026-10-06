@@ -5,9 +5,10 @@
 //   and runtime services without a deterministic Lua meaning;
 // - `.length` of an array whose elements may be undefined: Lua's length of a
 //   table with nil in it is any border, so Bun and Warcraft disagree;
-// - Math's and Warcraft's trigonometry, roots, powers and logarithms, and
-//   Warcraft's random numbers: each platform's math library differs by an
-//   ulp, and a headless replay can't repeat Warcraft's own;
+// - Math's trigonometry, roots, powers and logarithms inside f32(), the mark
+//   of synchronized binary32 arithmetic, and Warcraft's math and random
+//   natives anywhere: each platform's math library differs by an ulp, and a
+//   headless replay can't repeat Warcraft's own;
 // - type escapes in game code (tests excepted): `any`, `as unknown as` and
 //   non-null `!`, which assert what the code should check.
 // Node, Bun and DOM APIs need no rule: the map tsconfig doesn't declare them.
@@ -67,9 +68,10 @@ export interface Declaration {
  * What a finding needs to know about one identifier:
  * - "standardLibrary": the finding stands if the identifier is TypeScript's own global;
  * - "notRoundingHelper": the finding stands unless the identifier is Wisp's f32();
+ * - "roundingHelper": the finding stands if the identifier is Wisp's f32();
  * - "warcraftNative": the finding stands if the identifier is one of Warcraft's natives.
  */
-export type DeclarationTest = "standardLibrary" | "notRoundingHelper" | "warcraftNative";
+export type DeclarationTest = "standardLibrary" | "notRoundingHelper" | "roundingHelper" | "warcraftNative";
 
 export interface Finding<N> {
   readonly node: N;
@@ -95,6 +97,7 @@ export function isDeclaredIn(declarations: readonly Declaration[], fileSuffix: s
 export function stands(test: DeclarationTest, declarations: readonly Declaration[]): boolean {
   if (test === "standardLibrary") return declarations.some((declaration) => declaration.isDefaultLibrary);
   if (test === "warcraftNative") return isDeclaredIn(declarations, NATIVES_FILE);
+  if (test === "roundingHelper") return isDeclaredIn(declarations, ROUNDING_HELPER_FILE);
   return !isDeclaredIn(declarations, ROUNDING_HELPER_FILE);
 }
 
@@ -123,8 +126,13 @@ export function scanNumberRules<N extends RuleNode<N>>(syntax: RuleSyntax<N>, fi
   const isMathMember = (node: N, member: string) =>
     syntax.isPropertyAccessExpression(node) && syntax.isIdentifier(node.expression) && node.expression.text === "Math" && node.name.text === member;
   const isTest = file.fileName.endsWith(".tests.ts");
-  // Wisp's headless clients stand in for Warcraft's natives on the host, with the host's math library.
-  const emulatesNatives = file.fileName.includes("/src/headless/");
+  /** The f32() call around a node, if any: synchronized code rounds its reals there; presentation and host math may use the library. */
+  const enclosingRounding = (node: N): N | undefined => {
+    for (let outer = node.parent; outer !== undefined && outer !== file; outer = outer.parent) {
+      if (syntax.isCallExpression(outer) && syntax.isIdentifier(outer.expression) && outer.expression.text === "f32") return outer.expression;
+    }
+    return undefined;
+  };
   const findings: Finding<N>[] = [];
   const reject = (node: N, message: string) => findings.push({ node, message });
   const visit = (node: N): void => {
@@ -159,8 +167,9 @@ export function scanNumberRules<N extends RuleNode<N>>(syntax: RuleSyntax<N>, fi
       } else if (isMathMember(node.expression, "random")) {
         reject(node, "Math.random differs between clients; draw from the synchronized simulation instead");
       } else if (syntax.isPropertyAccessExpression(node.expression) && syntax.isIdentifier(node.expression.expression) && node.expression.expression.text === "Math"
-        && LIBRARY_MATH.has(node.expression.name.text) && !emulatesNatives) {
-        reject(node, LIBRARY_MATH_MESSAGE(node.expression.name.text));
+        && LIBRARY_MATH.has(node.expression.name.text)) {
+        const rounding = enclosingRounding(node);
+        if (rounding !== undefined) findings.push({ node, message: LIBRARY_MATH_MESSAGE(node.expression.name.text), condition: { identifier: rounding, test: "roundingHelper" } });
       } else if (syntax.isIdentifier(node.expression) && (WARCRAFT_MATH.has(node.expression.text) || WARCRAFT_RANDOM.has(node.expression.text))) {
         const name = node.expression.text;
         const message = WARCRAFT_RANDOM.has(name)
