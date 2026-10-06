@@ -206,3 +206,45 @@ test("wisp accept prints the plan for --dry-run without its driver, and fails a 
     console.log = log;
   }
 });
+
+test("the live driver reads receipts and War3Log from each client's Documents and runs without a watch", async () => {
+  const { Clients } = await import("../scripts/wisp/clients");
+  const { GameFiles } = await import("../scripts/wisp/gameFiles");
+  const { liveAcceptDriver } = await import("../scripts/wisp/acceptLive");
+  const stored = new Map([
+    ["/a/Documents/Warcraft III/CustomMapData/game-dev-p0.txt", "receipt"],
+    ["/a/Documents/Warcraft III/CustomMapData/other.txt", "other"],
+    ["/a/Documents/Warcraft III/Logs/War3Log.txt", "log"],
+  ]);
+  const chats: string[] = [];
+  const clients = Layer.succeed(Clients, Clients.of({
+    all: [{ name: "a", documents: "/a/Documents/Warcraft III" }],
+    read: () => Effect.succeed(""),
+    capture: () => Effect.succeed({ width: 1, height: 1, rgb: new Uint8Array(3) }),
+    words: () => Effect.succeed([]),
+    click: () => Effect.void,
+    keys: () => Effect.void,
+    typeText: () => Effect.void,
+    batch: (_, actions) => Effect.sync(() => void chats.push(actions.map((action) => (action.kind === "text" ? action.text : action.kind === "keys" ? action.keys.join("+") : action.kind)).join(" "))),
+  }));
+  const files = Layer.succeed(GameFiles, GameFiles.of({
+    read: (path) => Effect.succeed(stored.has(path) ? { text: stored.get(path)!, modified: 1 } : undefined),
+    write: () => Effect.void,
+    replace: () => Effect.void,
+    list: () => Effect.succeed(["game-dev-p0.txt", "other.txt"]),
+    remove: () => Effect.void,
+    installMap: () => Effect.void,
+  }));
+  const started: string[] = [];
+  const driver = liveAcceptDriver({ start: (map, session) => Effect.sync(() => void started.push(`${map}/${session}`)), receipt: (name) => name.startsWith("game-dev-") }).pipe(Layer.provide(Layer.mergeAll(clients, files)));
+  const seen = await Effect.runPromise(Effect.gen(function*() {
+    const live = yield* AcceptDriver;
+    yield* live.prepare;
+    yield* live.start("m", "shared");
+    yield* live.chat("a", "-dev effects 12");
+    return { receipts: yield* live.receipts("a"), log: yield* live.log("a"), state: yield* live.state("a") };
+  }).pipe(Effect.provide(driver)));
+  expect(seen).toEqual({ receipts: [{ name: "game-dev-p0.txt", text: "receipt", modified: 1 }], log: "log", state: "not watched" });
+  expect(started).toEqual(["m/shared"]);
+  expect(chats).toEqual(["Return -dev effects 12 Return"]);
+});
