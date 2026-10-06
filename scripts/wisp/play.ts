@@ -719,7 +719,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     // The menus are read from the output, which only the fullscreen game covers.
     yield* fullscreen(game.window, "Warcraft III's window", PLAY_TIMEOUTS.gameFullscreen);
     const output = yield* outputOf(game.window, "Warcraft III's window");
-    const read = desktop.read(output, "light");
+    const read = desktop.read(output, "gold");
     const seen = (seconds: number, accept: (screen: Screen) => boolean, problem: string) =>
       until(seconds, read.pipe(Effect.map((screen) => (accept(screen) ? screen : undefined))), () => problem);
     const has = (screen: Screen, phrase: string, wholeLine = false) => findPhrase(screen.words, phrase, wholeLine).length > 0;
