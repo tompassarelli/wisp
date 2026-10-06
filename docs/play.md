@@ -64,6 +64,7 @@ command that clears them.
    a "Warcraft" logo in another tile's art is no label). The label itself
    takes no clicks; when the page doesn't change within 6 s it
    clicks the art once more, then stops. Then it puts the window back.
+   Before the game starts, `play` saves War3Preferences.txt and a detached helper puts it back when the game exits ([display-settings.md](display-settings.md)).
    Only the log lines written after the click decide: no `LaunchBinary:
    uid=w3` within 15 s means the click wasn't taken, and `play` stops there;
    `Game is running: w3` is a launch, and `Could not launch ... Warcraft

@@ -13,6 +13,7 @@ import {
   type LauncherHealth, type PrefixUse, type ProcessInfo, isErrorDialog, launchOutcome, launchRequested, launcherHealth, launcherLogDirectory, newestLauncherLog,
   prefixUse, shortcutUrl,
 } from "../warcraft/battleNet";
+import { type DisplayChange, type DisplaySettings, displayChanges, preferencesPath, withDisplaySettings } from "../warcraft/preferences";
 import { sessionLines, war3LogPath } from "../warcraft/war3Log";
 import type { Client } from "./clients";
 import { PlayMachine, type PlayProblem } from "./play";
@@ -33,6 +34,12 @@ export interface DoctorTarget {
   readonly start:
     | { readonly kind: "steam"; readonly appId: number; readonly name: string }
     | { readonly kind: "command"; readonly command: readonly string[]; readonly log?: string };
+  /**
+   * The [Video] settings of War3Preferences.txt this client's display needs
+   * (windowmode, windowwidth, reswidth, ...). Doctor writes them back while
+   * Warcraft III is closed: a run on another display rewrites them on exit.
+   */
+  readonly displaySettings?: DisplaySettings;
 }
 
 /** Why doctor stopped, as one plain line per client. */
@@ -84,6 +91,8 @@ export interface Observation {
   readonly view?: ClientView;
   /** Why the watch couldn't say, while Warcraft III runs. */
   readonly unknown?: string;
+  /** The declared display settings Warcraft III's preferences file doesn't hold. */
+  readonly displayChanges?: readonly DisplayChange[];
   /** Milliseconds this observation's state has held. */
   readonly held: number;
 }
@@ -99,6 +108,7 @@ export type Problem =
   | "empty login shell"
   | "map without its imports"
   | "stuck loading"
+  | "display settings changed"
   | "stale lobby"
   | "score screen"
   | "closed"
@@ -123,6 +133,7 @@ export const RECOVERY: Readonly<Record<Problem, string>> = {
   "empty login shell": "ending Warcraft III",
   "map without its imports": "ending Warcraft III",
   "stuck loading": "ending Warcraft III",
+  "display settings changed": "restoring the display settings",
   "stale lobby": "leaving the lobby",
   "score screen": "leaving the score screen",
   closed: "starting Battle.net",
@@ -194,6 +205,10 @@ export function diagnose(seen: Observation, canPlay: boolean, display?: string, 
         return { kind: "wait", detail: "Warcraft III starting" };
     }
   }
+  if (seen.displayChanges !== undefined && seen.displayChanges.length > 0) {
+    const list = seen.displayChanges.map(({ key, expected, actual }) => `${key} is ${actual ?? "missing"}, expected ${expected}`).join(", ");
+    return problem("display settings changed", `War3Preferences.txt no longer holds this client's display settings (${list}); a run on another display rewrites them when Warcraft III exits`);
+  }
   if (use.launcher === undefined) {
     const [runtime] = use.runtimes;
     if (runtime !== undefined) {
@@ -241,6 +256,7 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
   const failed = (cause: PlayProblem) => new DoctorStop({ problem: `${name}: ${cause.problem}` });
   const logs = launcherLogDirectory(prefix);
   const war3Log = war3LogPath(client.documents);
+  const preferences = preferencesPath(client.documents);
   const server = yield* machine.serverDirectory(prefix).pipe(Effect.mapError(failed));
 
   const prefixState = machine.processes.pipe(Effect.map((processes) => prefixUse(processes, prefix, server)), Effect.mapError(failed));
@@ -260,6 +276,12 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
     const errorDialog = use.processes.find(isErrorDialog);
     const log = use.launcher === undefined ? undefined : yield* newestLog;
     const launcher = log === undefined ? undefined : launcherHealth((yield* machine.read(join(logs, log)).pipe(Effect.mapError(failed))) ?? "");
+    // Warcraft III rewrites the file when it exits, so only a closed game's file is settled.
+    let changes: readonly DisplayChange[] | undefined;
+    if (target.displaySettings !== undefined && use.game === undefined && errorDialog === undefined) {
+      const text = yield* machine.read(preferences).pipe(Effect.mapError(failed));
+      if (text !== undefined) changes = displayChanges(text, target.displaySettings);
+    }
     let view: ClientView | undefined;
     let unknown: string | undefined;
     if (use.game !== undefined) {
@@ -267,12 +289,12 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
       if (watched._tag === "Success") view = watched.success;
       else unknown = watched.failure.message;
     }
-    const key = [use.runtimes.length, use.launcher === undefined ? "-" : launcher?.kind, use.game === undefined ? "-" : view === undefined ? "?" : describeView(view)].join("|");
+    const key = [changes === undefined || changes.length === 0 ? "-" : "display", use.runtimes.length, use.launcher === undefined ? "-" : launcher?.kind, use.game === undefined ? "-" : view === undefined ? "?" : describeView(view)].join("|");
     const now = yield* Clock.currentTimeMillis;
     if (since === undefined || since.key !== key) since = { key, at: now };
     let held = now - since.at;
     if (view?.state.kind === "signing in") held = Math.max(held, yield* sessionSpan);
-    return { use, ...(errorDialog === undefined ? {} : { errorDialog }), ...(launcher === undefined ? {} : { launcher }), ...(view === undefined ? {} : { view }), ...(unknown === undefined ? {} : { unknown }), held } satisfies Observation;
+    return { use, ...(errorDialog === undefined ? {} : { errorDialog }), ...(launcher === undefined ? {} : { launcher }), ...(view === undefined ? {} : { view }), ...(unknown === undefined ? {} : { unknown }), ...(changes === undefined ? {} : { displayChanges: changes }), held } satisfies Observation;
   });
 
   const poll = <A>(seconds: number, check: Effect.Effect<A | undefined, DoctorStop>) => Effect.gen(function*() {
@@ -366,6 +388,12 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
       case "map without its imports":
       case "stuck loading":
         return yield* endGame;
+      case "display settings changed": {
+        const text = yield* machine.read(preferences).pipe(Effect.mapError(failed));
+        if (text === undefined || target.displaySettings === undefined) return;
+        yield* machine.write(preferences, withDisplaySettings(text, target.displaySettings)).pipe(Effect.mapError(failed));
+        return;
+      }
       case "stale lobby":
         yield* hands.leaveLobby(target).pipe(Effect.mapError(failed));
         return yield* left("lobby");

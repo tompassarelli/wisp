@@ -12,7 +12,7 @@ import { type PlayTools, playMachineLayer } from "../playHost";
 import type { ClientWatch } from "../watch";
 
 export interface DoctorDeclaration {
-  /** The clients file (wisp:docs/sample-map.md): each client's desktop run folder, Documents folder and menu port. */
+  /** The clients file (wisp:docs/sample-map.md): each client's desktop run folder, Documents folder, menu port and expected display settings. */
   readonly clientsFile: string;
   /** How each client's Battle.net starts, by client name. */
   readonly start: Readonly<Record<string, DoctorTarget["start"]>>;
@@ -36,6 +36,7 @@ export const doctorTargets = (declaration: DoctorDeclaration, names: readonly st
       prefix: entry.documents.slice(0, -DOCUMENTS.length),
       display: x11.DISPLAY,
       start,
+      ...(entry.displaySettings === undefined ? {} : { displaySettings: entry.displaySettings }),
     } satisfies DoctorTarget;
   }));
 });

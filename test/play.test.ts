@@ -19,6 +19,9 @@ const HELPER_LOG = "/state/helper.log";
 const DEBUG = "/state/play-debug";
 const SOURCE = "/inputs/playable-0047/Smashcraft 0.0.47.w3x";
 const CONFIG = `${PREFIX}/drive_c/users/steamuser/AppData/Roaming/Battle.net/Battle.net.config`;
+const DOCUMENTS = `${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III`;
+const PREFERENCES = `${DOCUMENTS}/War3Preferences.txt`;
+const BACKUP = `${DOCUMENTS}/War3Preferences-before-play.txt`;
 const WAR3LOG = `${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III/Logs/War3Log.txt`;
 /** Battle.net's settings, in its own layout: four-space indents, CRLF lines, string values. */
 const SETTINGS = JSON.stringify({ Client: { AutoLogin: "true" }, Games: { w3: { LastPlayed: "1791240000", ServerUid: "w3" } } }, null, 4).replaceAll("\n", "\r\n");
@@ -51,6 +54,9 @@ function words(id: string, x: number, y: number, text: string): Word[] {
 }
 
 interface Scenario {
+  /** War3Preferences.txt as the desktop finds it, and a backup an earlier play left. */
+  readonly preferences?: string;
+  readonly backup?: string;
   readonly runtimes?: "none" | "launcher" | "two" | "other display" | "lingering" | "lingering exits";
   readonly signsIn?: boolean;
   readonly steamStarts?: boolean;
@@ -160,6 +166,7 @@ function world(scenario: Scenario = {}) {
   let launcherLightReads = 0;
   const ignored = new Map(Object.entries(scenario.ignoredClicks ?? {}));
   let mapInstalled = scenario.mapInstalled !== false;
+  const prefFiles = new Map<string, string>([...(scenario.preferences === undefined ? [] : [[PREFERENCES, scenario.preferences] as [string, string]]), ...(scenario.backup === undefined ? [] : [[BACKUP, scenario.backup] as [string, string]])]);
   let mapDigest = scenario.mapStale === true ? "old build" : "this build";
   let config = withLaunchOptions(SETTINGS, scenario.launchOptions);
   /** What Battle.net read from its settings when it started. */
@@ -353,6 +360,7 @@ function world(scenario: Scenario = {}) {
     read: (path, from = 0) => tick.pipe(Effect.map(() => {
       if (path === HELPER_LOG) return helperLog.slice(from);
       if (path === CONFIG) return config.slice(from);
+      if (prefFiles.has(path)) return prefFiles.get(path)!.slice(from);
       if (path === WAR3LOG) return war3Log.slice(from);
       const text = path.startsWith(`${LOGS}/`) ? logs.get(path.slice(LOGS.length + 1)) : undefined;
       return text?.slice(from);
@@ -370,6 +378,11 @@ function world(scenario: Scenario = {}) {
     }),
     list: (directory) => Effect.sync(() => (directory === LOGS ? [...logs.keys(), "libcef-20261006T014728.217325.log"] : [])),
     write: (path, text) => Effect.sync(() => {
+      if (path === PREFERENCES || path === BACKUP) {
+        events.push(`write ${path.slice(DOCUMENTS.length + 1)}`);
+        prefFiles.set(path, text);
+        return;
+      }
       expect(path).toBe(CONFIG);
       expect(text).toContain("\r\n    \"Client\": {");
       config = text;
@@ -485,7 +498,7 @@ function world(scenario: Scenario = {}) {
     const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
     if (Exit.isFailure(exit) && Option.isNone(error)) throw new Error(Cause.pretty(exit.cause));
     const failure = Option.isSome(error) ? error.value.message : undefined;
-    return { lines, failure, events, presses: () => presses, windows, shots, clickLog, options: () => launchOptions(config) };
+    return { lines, failure, events, prefFiles, presses: () => presses, windows, shots, clickLog, options: () => launchOptions(config) };
   };
   return { run };
 }
@@ -890,4 +903,32 @@ test("a click outside the screen is refused before the pointer moves", () => {
 
 test("step 7 stops when the game's window won't take focus", async () => {
   expect((await world({ gameKeepsFocus: false }).run()).failure).toBe("7/7 Fullscreen stopped: Warcraft III's window didn't take focus");
+});
+
+test("play saves War3Preferences.txt before Warcraft III starts and has a detached helper put it back when the game exits", async () => {
+  const before = "[Video]\nwindowmode=2\nreswidth=1280\n";
+  const result = await world({ preferences: before }).run();
+  expect(result.failure).toBeUndefined();
+  expect(result.prefFiles.get(BACKUP)).toBe(before);
+  expect(result.lines).toContain(`3/7 Warcraft III: saved ${PREFERENCES} as ${BACKUP}; it is put back when the game exits`);
+  const restore = result.events.findIndex((event) => event.includes("restorePreferences.ts"));
+  expect(result.events.indexOf("write War3Preferences-before-play.txt")).toBeLessThan(result.events.indexOf("Play"));
+  expect(result.events[restore]).toEndWith(` 2852 ${DOCUMENTS} > undefined`);
+  expect(restore).toBeGreaterThan(result.events.indexOf("Play"));
+});
+
+test("a backup an earlier play left is the file to keep: it goes back before the game starts and stays for the helper", async () => {
+  const kept = "[Video]\nwindowmode=2\n";
+  const result = await world({ preferences: "[Video]\nwindowmode=1\n", backup: kept }).run();
+  expect(result.failure).toBeUndefined();
+  expect(result.prefFiles.get(PREFERENCES)).toBe(kept);
+  expect(result.prefFiles.get(BACKUP)).toBe(kept);
+  expect(result.events.filter((event) => event.startsWith("write "))).toEqual(["write War3Preferences.txt"]);
+});
+
+test("a game already running keeps its own backup and helper: play saves and starts nothing for it", async () => {
+  const result = await world({ runtimes: "launcher", gameRunning: true, runningLog: "played", preferences: "[Video]\nwindowmode=2\n" }).run();
+  expect(result.failure).toBeUndefined();
+  expect(result.events.filter((event) => event.startsWith("write ") || event.includes("restorePreferences"))).toEqual([]);
+  expect(result.prefFiles.has(BACKUP)).toBe(false);
 });

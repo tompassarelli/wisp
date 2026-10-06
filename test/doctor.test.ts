@@ -12,6 +12,9 @@
 //                                  3 Oct (ERROR_TOKEN_NOT_FOUND (49), then LoginCredential); that log rotated
 //   war3log-buffered-signed-in.txt client B's War3Log.txt, 6 Oct: written 3 s into a session that signed
 //                                  in and played all evening, and nothing since
+//   ../preferences/*.txt           client A's War3Preferences.txt of 6 Oct, trimmed (private-desktop.txt),
+//                                  and the same with the display values a main-display run writes (main-display.txt;
+//                                  those values are constructed from the 6 Oct report, not recorded)
 //   crash-report.txt               client A's Errors/…/Crash.txt of the 6 Oct menus run that crashed loading
 import { Cause, Effect, Exit, Layer, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -20,6 +23,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type ProcessInfo, isErrorDialog, launcherHealth } from "../scripts/warcraft/battleNet";
 import { ladderScan } from "../scripts/warcraft/war3Log";
+import { displayChanges, videoSettings, withDisplaySettings } from "../scripts/warcraft/preferences";
 import { DoctorHands, type DoctorTarget, diagnose, doctor, withDoctor } from "../scripts/wisp/doctor";
 import { PlayMachine, PlayProblem } from "../scripts/wisp/play";
 import { type ClientState, type ClientView, ClientWatch, type Source } from "../scripts/wisp/watch";
@@ -36,6 +40,11 @@ const PREFIX = "/home/u/.local/share/wc3-melee/client-b/pfx";
 const DOCUMENTS = `${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III`;
 const LOGS = `${PREFIX}/drive_c/users/steamuser/AppData/Local/Battle.net/Logs`;
 const WAR3LOG = `${DOCUMENTS}/Logs/War3Log.txt`;
+const PREFERENCES = `${DOCUMENTS}/War3Preferences.txt`;
+const preferences = (name: string) => readFileSync(join(import.meta.dir, "fixtures/preferences", name), "utf8");
+const PRIVATE = preferences("private-desktop.txt");
+const MAIN = preferences("main-display.txt");
+const DISPLAY = Object.fromEntries(["windowmode", "windowwidth", "windowheight", "windowx", "windowy", "reswidth", "resheight", "refreshrate", "maxfps"].map((key) => [key, videoSettings(PRIVATE)[key]!]));
 const SERVER = "server-24-2e7a1c";
 const START = ["env", "-i", "DISPLAY=:2", "steam-run", "proton", "waitforexitandrun", `${PREFIX}/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe`];
 const target: DoctorTarget = { client: { name: "b", documents: DOCUMENTS, menuReportPort: 47123 }, prefix: PREFIX, display: ":2", start: { kind: "command", command: START } };
@@ -59,6 +68,8 @@ interface Scenario {
   readonly restartedLog?: string;
   readonly war3Log?: string;
   readonly noPlay?: boolean;
+  /** War3Preferences.txt as the client finds it; the client declares DISPLAY settings when set. */
+  readonly preferences?: string;
   /** Views the started game reports as `afterPlay` before its menus report MAIN_MENU. */
   readonly settlesAfter?: number;
 }
@@ -71,7 +82,7 @@ function world(scenario: Scenario) {
     ...(scenario.processes === "game" || scenario.processes === "game and dialog" ? [gameProcess(52713)] : []),
     ...(scenario.processes === "game and dialog" ? [errorDialog(52990)] : []),
   ];
-  const files = new Map<string, string>([[`${LOGS}/battle.net-20261006T085733.941623.log`, scenario.launcherLog ?? SIGNED_IN], [WAR3LOG, scenario.war3Log ?? ""]]);
+  const files = new Map<string, string>([[`${LOGS}/battle.net-20261006T085733.941623.log`, scenario.launcherLog ?? SIGNED_IN], [WAR3LOG, scenario.war3Log ?? ""], ...(scenario.preferences === undefined ? [] : [[PREFERENCES, scenario.preferences] as [string, string]])]);
   let state: ClientState = scenario.state ?? { kind: "menus", screen: "MAIN_MENU" };
   let source: Source = scenario.source ?? "socket";
   let plays = 0;
@@ -96,7 +107,10 @@ function world(scenario: Scenario) {
     digest: () => Effect.die("unused"),
     list: (directory) => Effect.sync(() => [...files.keys()].filter((path) => path.startsWith(`${directory}/`)).map((path) => path.slice(directory.length + 1))),
     append: () => Effect.die("unused"),
-    write: () => Effect.die("unused"),
+    write: (path, text) => Effect.sync(() => {
+      events.push(`write ${path.slice(DOCUMENTS.length + 1)}`);
+      files.set(path, text);
+    }),
     copy: () => Effect.die("unused"),
   });
 
@@ -145,13 +159,14 @@ function world(scenario: Scenario) {
   };
   const run = async () => {
     const lines: string[] = [];
-    const { failure } = await finish(doctor([target], (line) => lines.push(line)));
+    const { failure } = await finish(doctor([scenario.preferences === undefined ? target : { ...target, displaySettings: DISPLAY }], (line) => lines.push(line)));
     return { lines, failure, events };
   };
+  const written = () => files.get(PREFERENCES);
   const drop = (next: ClientState) => {
     state = next;
   };
-  return { run, finish, events, drop };
+  return { run, finish, events, drop, written };
 }
 
 test("recorded launcher logs: signed in, a lost connection, a reconnect, a rejected saved login", () => {
@@ -322,4 +337,41 @@ test("a game doctor started is waited on until its menus report, not taken as re
   const found = await world({ processes: "game", state: { kind: "running" } }).run();
   expect(found.events).toEqual([]);
   expect(found.lines.at(-1)).toStartWith("b: ready: running");
+});
+
+test("display settings changed: a closed game's preferences are rewritten with the declared values, nothing else touched", async () => {
+  const changed = world({ processes: "launcher", preferences: MAIN });
+  const { lines, failure, events } = await changed.run();
+  expect(failure).toBeUndefined();
+  expect(lines[0]).toStartWith("b: display settings changed: War3Preferences.txt no longer holds this client's display settings (windowmode is 1, expected 2, ");
+  expect(lines[0]).toEndWith("restoring the display settings");
+  expect(events).toEqual(["write War3Preferences.txt", "play"]);
+  // Only the declared Video keys differ from what the client found; sfxvolume (Gameplay) stays 70.
+  expect(changed.written()).toBe(MAIN.replace(/^(windowmode|windowwidth|windowheight|windowx|windowy|reswidth|resheight|refreshrate|maxfps)=.*$/gm, (_, key: string) => `${key}=${DISPLAY[key]}`));
+  expect(displayChanges(changed.written()!, DISPLAY)).toEqual([]);
+  expect(changed.written()).toContain("sfxvolume=70");
+  expect(lines.at(-1)).toBe("b: ready: menus (MAIN_MENU), after display settings changed, no game");
+});
+
+test("settings that match are left alone; a running game's file is not touched, since it rewrites it on exit", async () => {
+  const same = await world({ processes: "launcher", preferences: PRIVATE }).run();
+  expect(same.events).toEqual(["play"]);
+  expect(same.lines.some((line) => line.includes("display settings"))).toBe(false);
+  const running = await world({ processes: "game", preferences: MAIN }).run();
+  expect(running.events).toEqual([]);
+  expect(running.lines.at(-1)).toBe("b: ready: menus (MAIN_MENU)");
+});
+
+test("a declared key the file lacks is added to its [Video] section; CRLF files keep their endings", () => {
+  expect(displayChanges(PRIVATE, { vsync: "1" })).toEqual([{ key: "vsync", expected: "1", actual: "0" }]);
+  expect(displayChanges(PRIVATE, { bogus: "1" })).toEqual([{ key: "bogus", expected: "1" }]);
+  const added = withDisplaySettings(PRIVATE, { bogus: "1" });
+  expect(videoSettings(added).bogus).toBe("1");
+  expect(added.indexOf("bogus=1")).toBeGreaterThan(added.indexOf("[Video]"));
+  const crlf = withDisplaySettings(MAIN.replace(/\n/g, "\r\n"), DISPLAY);
+  expect(crlf.split("\r\n").length).toBe(MAIN.split("\n").length);
+  expect(displayChanges(crlf, DISPLAY)).toEqual([]);
+  expect(crlf.replace(/\r\n/g, "\n").split("\n").every((line) => !line.includes("\r"))).toBe(true);
+  // Entries of other sections with a Video key's name are not Video settings.
+  expect(videoSettings("[Gameplay]\nwindowmode=9\n[Video]\nwindowmode=2\n").windowmode).toBe("2");
 });
