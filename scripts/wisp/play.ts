@@ -99,16 +99,56 @@ export function spotTargets(spot: Spot, output: OutputArea) {
   };
 }
 
-/**
- * The compositor pointer move, in logical pixels, from where the X pointer is
- * to the spot. Over an X window the X pointer is where the compositor's is
- * (2880x1920 X pixels for a 1440x960 logical output at scale 2).
- */
-export function pointerMove(spot: Spot, output: OutputArea, at: { readonly x: number; readonly y: number }) {
-  const { logical } = spotTargets(spot, output);
-  const now = { x: output.x + (at.x - spot.window.x) * output.width / spot.window.width, y: output.y + (at.y - spot.window.y) * output.height / spot.window.height };
-  return { dx: logical.x - now.x, dy: logical.y - now.y };
+interface Point {
+  readonly x: number;
+  readonly y: number;
 }
+
+/** X root pixels the X pointer moves per logical pixel the compositor's pointer is moved, on each axis. */
+export interface Gain {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * The gain before any move: the X pixels per logical pixel of the output
+ * (2 for 2880x1920 X pixels on a 1440x960 output at scale 2). Over
+ * fullscreen Warcraft III's Battle.net screens it moved one X pixel per
+ * logical pixel (6 Oct), so each move measures it again.
+ */
+export const expectedGain = (spot: Spot, output: OutputArea): Gain => ({ x: spot.window.width / output.width, y: spot.window.height / output.height });
+
+/** The compositor pointer move, in logical pixels, that brings the X pointer from `at` to `target` at `gain`. */
+export const steer = (at: Point, target: Point, gain: Gain) => ({ dx: (target.x - at.x) / gain.x, dy: (target.y - at.y) / gain.y });
+
+/** The gain a move showed on each axis; an axis that moved too little to measure keeps the gain it had. */
+export function measuredGain(gain: Gain, requested: { readonly dx: number; readonly dy: number }, moved: Point): Gain {
+  const axis = (previous: number, asked: number, went: number) =>
+    (Math.abs(asked) >= 1 && Math.abs(went) >= 1 ? Math.min(4, Math.max(0.25, went / asked)) : previous);
+  return { x: axis(gain.x, requested.dx, moved.x), y: axis(gain.y, requested.dy, moved.y) };
+}
+
+/**
+ * Moves the X pointer to `target` (X root pixels) with compositor moves,
+ * measuring the gain after each, until it is within `tolerance` pixels or
+ * `moves` moves are spent. `move` moves the compositor's pointer and returns
+ * where the X pointer then is.
+ */
+export const steerPointer = <E>(start: Point, target: Point, gain: Gain, tolerance: number, move: (dx: number, dy: number) => Effect.Effect<Point, E>, moves = 8) =>
+  Effect.gen(function*() {
+    const arrived = (at: Point) => Math.abs(at.x - target.x) <= tolerance && Math.abs(at.y - target.y) <= tolerance;
+    let at = start;
+    let current = gain;
+    const trace = [`pointer at X ${at.x},${at.y}`];
+    for (let made = 0; made < moves && !arrived(at); made++) {
+      const requested = steer(at, target, current);
+      const next = yield* move(requested.dx, requested.dy);
+      current = measuredGain(current, requested, { x: next.x - at.x, y: next.y - at.y });
+      trace.push(`moved ${requested.dx.toFixed(1)},${requested.dy.toFixed(1)} -> X ${next.x},${next.y} (gain ${current.x.toFixed(2)},${current.y.toFixed(2)})`);
+      at = next;
+    }
+    return { at, arrived: arrived(at), trace };
+  });
 
 /** The host: its processes and files. */
 export class PlayMachine extends Context.Service<PlayMachine, {
@@ -126,6 +166,8 @@ export class PlayMachine extends Context.Service<PlayMachine, {
   readonly list: (directory: string) => Effect.Effect<readonly string[], PlayProblem>;
   /** Appends to a file, creating it and its folder. */
   readonly append: (path: string, text: string) => Effect.Effect<void, PlayProblem>;
+  /** Copies a file whole: the destination appears complete or not at all. */
+  readonly copy: (from: string, to: string) => Effect.Effect<void, PlayProblem>;
 }>()("wisp/PlayMachine") {}
 
 /** The owner's desktop: its compositor's windows and outputs, and the game's X display. */
@@ -175,8 +217,11 @@ export interface PlayDeclaration<R = never> {
   readonly display: string;
   /** The Steam shortcut that starts Battle.net Launcher.exe in the prefix: its app id and its name in Steam. */
   readonly shortcut: { readonly appId: number; readonly name: string };
-  /** The map: its folder under Maps, its file, and the title Create Game lists it by. */
-  readonly map: { readonly folder: string; readonly file: string; readonly title: string };
+  /**
+   * The map: its folder under Maps, its file, the title Create Game lists it
+   * by, and the build it is copied from when the folder lacks it.
+   */
+  readonly map: { readonly folder: string; readonly file: string; readonly title: string; readonly source?: string };
   /** The hosted game's name; joining by name is case-sensitive. */
   readonly gameName: string;
   /** Each run saves a picture before and after every click, and its click log, in a folder here named by its start time. */
@@ -207,6 +252,7 @@ export const PLAY_TIMEOUTS = {
   window: 30,
   request: 15,
   tile: 6,
+  next: 10,
   launch: 45,
   gameWindow: 60,
   mainMenu: 120,
@@ -533,9 +579,14 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
 
   // 4. Custom Games, Create Game, the map's folder, the map, the game's name, Create, Start.
   const host = (game: PlayGame) => Effect.gen(function*() {
-    const { folder, file, title } = declaration.map;
+    const { folder, file, title, source } = declaration.map;
     const mapPath = join(documents, "Maps", folder, file);
-    if ((yield* machine.size(mapPath)) === undefined) return yield* fail(`the map isn't installed: ${mapPath}`);
+    if ((yield* machine.size(mapPath)) === undefined) {
+      if (source === undefined) return yield* fail(`the map isn't installed: ${mapPath}`);
+      if ((yield* machine.size(source)) === undefined) return yield* fail(`the map isn't installed (${mapPath}) and its build is missing: ${source}`);
+      yield* machine.copy(source, mapPath);
+      yield* status(4, "Custom game", `installed ${file} from ${source}`);
+    }
     yield* desktop.focus(game.window);
     const output = yield* outputOf(game.window, "Warcraft III's window");
     const read = desktop.read(output, "light");
@@ -550,40 +601,87 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     const mapShown = (screen: Screen) => has(screen, title, true) || has(screen, folder, true);
     const createButton = (screen: Screen) => lowest(findPhrase(screen.words, "Create Game"));
 
+    const near = (a: Point, b: Point) => Math.abs(a.x - b.x) <= 6 && Math.abs(a.y - b.y) <= 6;
+    /**
+     * Reads until `find` gives the same place twice running: Warcraft's menus
+     * slide in (6 Oct: Battle.net's tabs moved 32 px down within 0.3 s of
+     * appearing), so a control is clicked only once it has stopped. A screen
+     * that already shows `next` ends the wait.
+     */
+    const settled = (find: (screen: Screen) => Point | undefined, next: (screen: Screen) => boolean, first: Screen | undefined, what: string) => Effect.gen(function*() {
+      let last = first === undefined ? undefined : find(first);
+      return yield* until(PLAY_TIMEOUTS.screen, read.pipe(Effect.map((screen) => {
+        if (next(screen)) return { screen, place: undefined };
+        const place = find(screen);
+        const previous = last;
+        last = place;
+        return place !== undefined && previous !== undefined && near(previous, place) ? { screen, place } : undefined;
+      })), () => `${what} isn't on the screen, or doesn't stay still`);
+    });
+    /**
+     * Clicks a control found on the screen once it has settled and waits for
+     * the screen it leads to; clicks it once more when that doesn't come.
+     */
+    const advance = (what: string, find: (screen: Screen) => Point | undefined, next: (screen: Screen) => boolean, problem: string, first?: Screen, after: Effect.Effect<void, PlayProblem> = Effect.void) =>
+      Effect.gen(function*() {
+        let from = first;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          const at = yield* settled(find, next, from, what);
+          if (at.place === undefined) return at.screen;
+          yield* click(at.screen, at.place, attempt === 1 ? what : `${what} again`);
+          yield* after;
+          const reached = yield* poll(attempt === 1 ? PLAY_TIMEOUTS.next : PLAY_TIMEOUTS.screen, read.pipe(Effect.map((screen) => (next(screen) ? screen : undefined))));
+          if (reached !== undefined) return reached;
+          from = undefined;
+        }
+        return yield* fail(`${problem} (pictures and click log: ${debug})`);
+      });
+    const listed = (screen: Screen) => findPhrase(screen.words, title, true);
+    // A name field shows no label of its own on a 2560x1440 frame; when "Game Name" labels it, it is just below.
+    const nameField = (screen: Screen) => {
+      const scale = screen.height / 1440;
+      const label = topmost(findPhrase(screen.words, "Game Name"));
+      return label === undefined
+        ? { x: Math.round(GAME_NAME_FIELD.x * scale), y: Math.round(GAME_NAME_FIELD.y * scale) }
+        : { x: label.x, y: Math.round(label.y + 40 * scale) };
+    };
+    const named = (screen: Screen) => {
+      const field = nameField(screen);
+      const scale = screen.height / 1440;
+      return findPhrase(screen.words.filter((word) => Math.abs(word.x - field.x) < 400 * scale && Math.abs(word.y - field.y) < 40 * scale), declaration.gameName).length > 0;
+    };
+
     let screen = yield* seen(PLAY_TIMEOUTS.mainMenu, (now) => has(now, "Multiplayer") || has(now, "Custom Games") || mapShown(now),
       `Warcraft III didn't show its main menu within ${PLAY_TIMEOUTS.mainMenu} s`);
     if (!mapShown(screen) && !has(screen, "Custom Games")) {
-      yield* click(screen, lowest(findPhrase(screen.words, "Multiplayer")), "Multiplayer");
-      screen = yield* seen(PLAY_TIMEOUTS.screen, (now) => has(now, "Custom Games"), "Multiplayer didn't open Battle.net's Custom Games");
+      screen = yield* advance("Multiplayer", (now) => lowest(findPhrase(now.words, "Multiplayer")), (now) => has(now, "Custom Games"),
+        "Multiplayer didn't open Battle.net's Custom Games", screen);
     }
     if (!mapShown(screen)) {
       if (createButton(screen) === undefined) {
-        yield* click(screen, lowest(findPhrase(screen.words, "Custom Games")), "Custom Games");
-        screen = yield* seen(PLAY_TIMEOUTS.screen, (now) => createButton(now) !== undefined, "Custom Games didn't show Create Game");
+        screen = yield* advance("Custom Games", (now) => lowest(findPhrase(now.words, "Custom Games")), (now) => createButton(now) !== undefined,
+          "Custom Games didn't show Create Game", screen);
       }
-      yield* click(screen, createButton(screen), "Create Game");
-      screen = yield* seen(PLAY_TIMEOUTS.screen, mapShown, `Create Game didn't list the folder ${folder}`);
+      screen = yield* advance("Create Game", createButton, mapShown, `Create Game didn't list the folder ${folder}`, screen);
     }
     if (!has(screen, title, true)) {
-      yield* click(screen, findPhrase(screen.words, folder, true)[0], `the folder ${folder}`);
-      screen = yield* seen(PLAY_TIMEOUTS.screen, (now) => has(now, title, true), `the folder ${folder} doesn't list "${title}"`);
+      screen = yield* advance(`the folder ${folder}`, (now) => findPhrase(now.words, folder, true)[0], (now) => has(now, title, true),
+        `the folder ${folder} doesn't list "${title}"`, screen);
     }
     // Selected, the map's title also heads the details beside the list.
-    if (findPhrase(screen.words, title, true).length < 2) {
-      yield* click(screen, findPhrase(screen.words, title, true)[0], `"${title}"`);
-      screen = yield* seen(PLAY_TIMEOUTS.screen, (now) => findPhrase(now.words, title, true).length >= 2, `"${title}" didn't become the selected map`);
+    if (listed(screen).length < 2) {
+      screen = yield* advance(`"${title}"`, (now) => listed(now)[0], (now) => listed(now).length >= 2, `"${title}" didn't become the selected map`, screen);
     }
-    const scale = screen.height / 1440;
-    const field = { x: Math.round(GAME_NAME_FIELD.x * scale), y: Math.round(GAME_NAME_FIELD.y * scale) };
-    yield* click(screen, field, "the game name field");
-    yield* desktop.keys(game.xWindow, "ctrl+a");
-    yield* desktop.typeText(game.xWindow, declaration.gameName);
-    const near = (now: Screen) => ({ ...now, words: now.words.filter((word) => Math.abs(word.x - field.x) < 400 * scale && Math.abs(word.y - field.y) < 40 * scale) });
-    screen = yield* seen(PLAY_TIMEOUTS.screen, (now) => has(near(now), declaration.gameName), `the game name field didn't take "${declaration.gameName}"`);
-    yield* click(screen, lowest(findPhrase(screen.words, "Create")), "the Create button");
-    screen = yield* seen(PLAY_TIMEOUTS.screen, (now) => has(now, "Start"), "Create didn't open the game's lobby");
+    if (!named(screen)) {
+      const typeName = Effect.gen(function*() {
+        yield* desktop.keys(game.xWindow, "ctrl+a");
+        yield* desktop.typeText(game.xWindow, declaration.gameName);
+      });
+      screen = yield* advance("the game name field", nameField, named, `the game name field didn't take "${declaration.gameName}"`, screen, typeName);
+    }
+    screen = yield* advance("the Create button", (now) => lowest(findPhrase(now.words, "Create")), (now) => has(now, "Start"), "Create didn't open the game's lobby", screen);
     const since = yield* Clock.currentTimeMillis;
-    yield* click(screen, lowest(findPhrase(screen.words, "Start")), "the Start button");
+    yield* advance("the Start button", (now) => lowest(findPhrase(now.words, "Start")), (now) => !has(now, "Start"), "Start didn't start the game", screen);
     yield* declaration.started(game, since);
     yield* status(4, "Custom game", `"${declaration.gameName}" of ${title} started (joining by name is case-sensitive)`);
   });

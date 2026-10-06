@@ -9,7 +9,6 @@
 // number allocate nothing; subnormal, infinite and non-finite cases take the
 // limb implementation below them.
 import { at } from "../runtime/lookup";
-import { f32 } from "./f32";
 import { floorDiv, floorMod } from "./intMath";
 
 // Scaling by a power of two is exact, so large steps reach the same value as
@@ -54,8 +53,9 @@ function normalResult(significand: number, exponent: number, negative: boolean):
 
 /** Rounds to the nearest binary32 value; NaN and infinity pass through. */
 export function roundToFloat32(value: number): number {
-  // A normal-range number is already binary32 in Lua; f32 rounds it on the host.
-  if ((value >= SMALLEST_NORMAL && value < INFINITY) || (value <= -SMALLEST_NORMAL && value > -INFINITY)) return f32(value * 1.0);
+  // A normal-range number is already binary32 in Lua; Math.fround rounds it on
+  // the host. (f32 imports this module, so it can't be used here.)
+  if ((value >= SMALLEST_NORMAL && value < INFINITY) || (value <= -SMALLEST_NORMAL && value > -INFINITY)) return Math.fround(value * 1.0);
   if (value === 0 || value !== value) return value;
   const negative = value < 0;
   let significand = negative ? -value : value;
