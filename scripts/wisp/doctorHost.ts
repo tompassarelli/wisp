@@ -78,7 +78,7 @@ export const privateDoctorHands = (clientsFile: string) => Layer.effect(DoctorHa
 
   /** Through the menus' socket when the client's page reports, else their Back button (a lobby and the score screen share it). */
   const leave = (target: DoctorTarget, socket: "lobby" | "score") => Effect.scoped(Effect.gen(function*() {
-    // A watch in this process may already hold the report port; then Back it is.
+    // Without a menu page that answers, the Back button leaves both.
     const menus = yield* reportedMenus(target.client.menuReportPort).pipe(Effect.catchTag("MenuFailure", () => Effect.void));
     if (menus !== undefined) {
       if (socket === "lobby") return yield* leaveLobby(menus);
