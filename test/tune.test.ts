@@ -1,0 +1,254 @@
+// `wisp tune` (wisp:docs/tune.md): finding and writing a tunable's literal,
+// a tuned value in two 32-bit Lua clients of a compiled fixture map
+// (test/tune/headless-lua.ts), and the panel's requests.
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { expect, test } from "bun:test";
+import { Effect, Layer } from "effect";
+import { mapCompiler, report } from "../scripts/compiler";
+import { servePanel } from "../scripts/wisp/commands/tune";
+import { HotReload } from "../scripts/wisp/hotReload";
+import { Tune, type Tunable, checkValue, findLiteral, lineDiff, literalText, replaceSpans } from "../scripts/wisp/tune";
+import { moduleChunk, moduleHashText, moduleIndex, modulePayload, textChecksum } from "../src/runtime/modules";
+import type { BundledModules } from "../scripts/luaBundle";
+
+const root = join(import.meta.dir, "..");
+
+const DECLARATION = `// Tuning.
+import { f32 } from "../../../src/sim/f32";
+
+function scaled(units: number): number {
+  return f32(units * 0.5);
+}
+
+export interface Tuning {
+  readonly speed: number;
+  readonly steps: number;
+}
+
+export const TUNING: Tuning = {
+  speed: scaled(0.5),
+  steps: 2,
+};
+
+export const OFFSET = -1.5;
+`;
+
+const TUNABLES: readonly Tunable[] = [
+  { name: "speed", file: "src/tuning.ts", path: ["TUNING", "speed"], kind: "f32", min: 0.0, max: 2.0, step: 0.01 },
+  { name: "steps", group: "Counts", file: "src/tuning.ts", path: ["TUNING", "steps"], kind: "int", min: 1, max: 8, step: 1 },
+];
+
+test("a tunable's literal is found through objects and a wrapping call, and written as its binary32 or integer value", () => {
+  const speed = findLiteral(DECLARATION, ["TUNING", "speed"]);
+  expect(typeof speed === "string" ? speed : DECLARATION.slice(speed.start, speed.end)).toBe("0.5");
+  const offset = findLiteral(DECLARATION, ["OFFSET"]);
+  expect(typeof offset === "string" ? offset : [offset.text, offset.value]).toEqual(["-1.5", -1.5]);
+  expect(findLiteral(DECLARATION, ["TUNING", "pace"])).toBe("TUNING has no property pace");
+  expect(findLiteral(DECLARATION, ["MISSING"])).toBe("no top-level variable MISSING with a value");
+  expect(findLiteral(`const A = { b: 1 + 2 };`, ["A", "b"])).toBe("A.b is not a number literal or a call of one");
+  expect(literalText("f32", 2.2)).toBe("2.200000047683716");
+  expect(literalText("f32", 3)).toBe("3.0");
+  expect(literalText("f32", -0.25)).toBe("-0.25");
+  expect(literalText("int", 4)).toBe("4");
+  // The compiler accepts what tune writes: each real is exactly a binary32 value.
+  for (const value of [0.1, 2.2, 1.85, 123.456, 1e-8]) expect(Math.fround(Number(literalText("f32", value)))).toBe(Number(literalText("f32", value)));
+  const speedTunable = TUNABLES[0]!;
+  expect(checkValue(speedTunable, 0.6)).toBe(Math.fround(0.6));
+  expect(checkValue(speedTunable, 3)).toBe("speed: 3 is outside 0 to 2");
+  expect(checkValue(TUNABLES[1]!, 2.5)).toBe("steps: 2.5 is not a 32-bit integer");
+});
+
+test("a kept value's diff is its line with three lines of context, as git shows it", () => {
+  const literal = findLiteral(DECLARATION, ["TUNING", "steps"]);
+  if (typeof literal === "string") throw new Error(literal);
+  const after = replaceSpans(DECLARATION, [{ start: literal.start, end: literal.end, text: "3" }]);
+  expect(after).toBe(DECLARATION.replace("steps: 2,", "steps: 3,"));
+  expect(lineDiff("src/tuning.ts", DECLARATION, after)).toBe([
+    "--- a/src/tuning.ts",
+    "+++ b/src/tuning.ts",
+    "@@ -12,7 +12,7 @@",
+    " ",
+    " export const TUNING: Tuning = {",
+    "   speed: scaled(0.5),",
+    "-  steps: 2,",
+    "+  steps: 3,",
+    " };",
+    " ",
+    " export const OFFSET = -1.5;",
+  ].join("\n"));
+  // `git apply` takes it as it stands.
+  const directory = mkdtempSync(join(root, "build/tune-diff-"));
+  try {
+    mkdirSync(join(directory, "src"));
+    writeFileSync(join(directory, "src/tuning.ts"), DECLARATION);
+    writeFileSync(join(directory, "change.diff"), `${lineDiff("src/tuning.ts", DECLARATION, after)}\n`);
+    const applied = Bun.spawnSync(["git", "apply", "change.diff"], { cwd: directory, stdout: "pipe", stderr: "pipe" });
+    expect({ code: applied.exitCode, stderr: applied.stderr.toString() }).toEqual({ code: 0, stderr: "" });
+    expect(readFileSync(join(directory, "src/tuning.ts"), "utf8")).toBe(after);
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+});
+
+const MAIN = `import { configureRuntime } from "../../../src/runtime/config";
+import { installDispatch, on, trampoline } from "../../../src/platform/dispatch";
+import { installHotReload, startHotReload } from "../../../src/platform/hotReload";
+import { f32 } from "../../../src/sim/f32";
+import { TUNING } from "./tuning";
+
+declare global {
+  var __tuneFixture: { ticks: number; x: number; steps: number[]; installs: number[]; unit: unit } | undefined;
+}
+
+export function install(): void {
+  configureRuntime({ filePrefix: "tune", readyPrefix: "TN_HRR", globalPrefix: "__tune" });
+  installDispatch();
+  installHotReload();
+  const state = globalThis.__tuneFixture;
+  if (state !== undefined) state.installs.push(state.ticks);
+  on("tune.tick", () => {
+    const fixture = globalThis.__tuneFixture;
+    if (fixture === undefined) return;
+    const step = f32(TUNING.speed * TUNING.steps);
+    fixture.ticks = fixture.ticks + 1;
+    fixture.steps.push(step);
+    fixture.x = f32(fixture.x + step);
+    SetUnitX(fixture.unit, fixture.x);
+  });
+}
+
+export function start(): void {
+  install();
+  globalThis.__tuneFixture = { ticks: 0, x: 0.0, steps: [], installs: [], unit: CreateUnit(Player(0), 0x68666f6f, 0.0, 0.0, 0.0) };
+  startHotReload();
+  TimerStart(CreateTimer(), 0.01666666753590107, true, trampoline("tune.tick"));
+}
+`;
+
+/** A version's full payload, as `wisp hot` sends it. */
+function payload(bundled: BundledModules): string {
+  const modules = bundled.modules.map((module) => ({ name: module.name, text: Buffer.from(moduleChunk(module.code), "utf8").toString("latin1") }));
+  const index = moduleIndex(bundled.entry, modules.map(({ name, text }) => [name, textChecksum(moduleHashText(name, text))] as const));
+  return modulePayload(index, modules);
+}
+
+test("a tuned value is compiled in memory, sent as a delta of its module alone and installed by two Lua32 clients on the same tick", async () => {
+  mkdirSync(join(root, "build"), { recursive: true });
+  const directory = mkdtempSync(join(root, "build/tune-"));
+  try {
+    const src = join(directory, "src");
+    mkdirSync(src);
+    writeFileSync(join(directory, "tsconfig.json"), JSON.stringify({
+      compilerOptions: {
+        target: "ESNext", lib: ["ESNext"], module: "ESNext", moduleResolution: "Bundler", strict: true,
+        noUncheckedIndexedAccess: true, exactOptionalPropertyTypes: true, noEmitOnError: true, skipLibCheck: true,
+        types: ["lua-types/5.3"], rootDir: "../..", outDir: "out", sourceMap: true,
+      },
+      include: ["src/**/*.ts", "../../src/natives/warcraft.d.ts"],
+      tstl: { luaTarget: "5.3", luaBundle: "map.lua", luaBundleEntry: "src/main.ts", noImplicitSelf: true, noHeader: true, luaPlugins: [{ name: "../../plugins/warcraft-numbers.ts" }] },
+    }));
+    writeFileSync(join(src, "main.ts"), MAIN);
+    writeFileSync(join(src, "tuning.ts"), DECLARATION);
+    const replacements = new Map<string, string>();
+    const compile = mapCompiler(join(directory, "tsconfig.json"), () => replacements);
+    expect(report(compile())).toBe("");
+    const untuned = compile.modules();
+    if (untuned === undefined) throw new Error("the compiler kept no modules");
+    writeFileSync(join(directory, "untuned.payload"), Buffer.from(payload(untuned), "latin1"));
+    const bundle = join(directory, "map.lua");
+    copyFileSync(join(directory, "out/map.lua"), bundle);
+    const written = statSync(join(directory, "out/map.lua")).mtimeMs;
+
+    // Tune's own path, with a reload that only compiles.
+    let tuned: BundledModules | undefined;
+    const reload = HotReload.of({
+      publish: Effect.sync(() => {
+        expect(report(compile())).toBe("");
+        tuned = compile.modules();
+        return 1;
+      }),
+    });
+    const applied = await Effect.runPromise(Effect.gen(function*() {
+      const tune = yield* Tune;
+      return yield* tune.apply("speed", 0.6);
+    }).pipe(Effect.provide(Tune.layer(directory, TUNABLES, replacements).pipe(Layer.provide(Layer.succeed(HotReload, reload))))));
+    expect(applied.version).toBe(1);
+    if (tuned === undefined) throw new Error("tune published nothing");
+    expect(replacements.get(join(src, "tuning.ts"))).toBe(DECLARATION.replace("scaled(0.5)", "scaled(0.6000000238418579)"));
+    // The source and the bundle on disk stay as they were.
+    expect(readFileSync(join(src, "tuning.ts"), "utf8")).toBe(DECLARATION);
+    expect(statSync(join(directory, "out/map.lua")).mtimeMs).toBe(written);
+    const changed = tuned.modules.filter((module) => untuned.modules.find(({ name }) => name === module.name)?.code !== module.code).map(({ name }) => name);
+    expect(changed.map((name) => name.slice(name.lastIndexOf(".") + 1))).toEqual(["tuning"]);
+    writeFileSync(join(directory, "tuned.payload"), Buffer.from(payload(tuned), "latin1"));
+
+    expect(report(mapCompiler(join(import.meta.dir, "tsconfig.tune.json"))())).toBe("");
+    const run = Bun.spawnSync([
+      process.env.LUA ?? "lua", join(root, "build/tune-tests/tune.lua"),
+      bundle, join(root, "src/natives/warcraft.d.ts"), join(directory, "untuned.payload"), join(directory, "tuned.payload"),
+    ], { stdout: "pipe", stderr: "pipe" });
+    const output = run.stdout.toString();
+    expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
+    expect(output).toContain("tune contract passed");
+    expect(output).toMatch(/tuned module \S+\.src\.tuning, delta \d+ of \d+ bytes/);
+    const [, before, after] = /step before ([\d.]+), after ([\d.]+)/.exec(output) ?? [];
+    expect(Number(before)).toBe(0.5);
+    expect(Number(after)).toBeCloseTo(Math.fround(Math.fround(0.6) * 0.5) * 2, 6);
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+}, 30_000);
+
+test("the panel applies a value, keeps it in the source and resets both, and answers only its own address with JSON posts", async () => {
+  mkdirSync(join(root, "build"), { recursive: true });
+  const directory = mkdtempSync(join(root, "build/tune-panel-"));
+  try {
+    mkdirSync(join(directory, "src"));
+    const file = join(directory, "src/tuning.ts");
+    writeFileSync(file, DECLARATION);
+    const replacements = new Map<string, string>();
+    const published: (string | undefined)[] = [];
+    const reload = HotReload.of({ publish: Effect.sync(() => published.push(replacements.get(file))) });
+    const layer = Tune.layer(directory, TUNABLES, replacements).pipe(Layer.provide(Layer.succeed(HotReload, reload)));
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const address = yield* servePanel(0);
+      const post = (path: string, body: unknown, headers: Record<string, string> = {}) => Effect.promise(async () => {
+        const response = await fetch(new URL(path, address), { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+        return { status: response.status, body: await response.json() as Record<string, unknown> };
+      });
+      const page = yield* Effect.promise(() => fetch(address).then((response) => response.text()));
+      expect(page).toContain("Tune the running match");
+      const listed = yield* Effect.promise(() => fetch(new URL("/tunables", address)).then((response) => response.json()));
+      expect(listed).toEqual([
+        { name: "speed", group: "", kind: "f32", min: 0.0, max: 2.0, step: 0.01, value: 0.5, original: 0.5, source: 0.5 },
+        { name: "steps", group: "Counts", kind: "int", min: 1, max: 8, step: 1, value: 2, original: 2, source: 2 },
+      ]);
+
+      expect((yield* post("/apply", { name: "steps", value: 3 })).body).toMatchObject({ version: 1 });
+      expect(published).toEqual([DECLARATION.replace("steps: 2,", "steps: 3,")]);
+      expect(readFileSync(file, "utf8")).toBe(DECLARATION);
+      expect(yield* post("/apply", { name: "steps", value: 9 })).toEqual({ status: 400, body: { error: "steps: 9 is outside 1 to 8" } });
+
+      const kept = yield* post("/keep", { name: "steps" });
+      expect(kept.body.diff).toContain("-  steps: 2,\n+  steps: 3,");
+      expect(readFileSync(file, "utf8")).toBe(DECLARATION.replace("steps: 2,", "steps: 3,"));
+      expect(replacements.size).toBe(0);
+      expect((yield* post("/keep", { name: "steps" })).body).toEqual({ diff: "" });
+
+      const reset = yield* post("/reset", { name: "steps" });
+      expect(reset.body.diff).toContain("-  steps: 3,\n+  steps: 2,");
+      expect(reset.body.applied).toMatchObject({ version: 2 });
+      expect(readFileSync(file, "utf8")).toBe(DECLARATION);
+      expect(published).toHaveLength(2);
+      expect(published[1]).toBeUndefined();
+
+      // Another site in the browser: a different host, or a form post without a preflight.
+      expect((yield* post("/apply", { name: "steps", value: 4 }, { host: "tune.example:80" })).status).toBe(403);
+      expect((yield* post("/apply", { name: "steps", value: 4 }, { "content-type": "text/plain" })).status).toBe(404);
+      expect(published).toHaveLength(2);
+    })).pipe(Effect.provide(layer)));
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+});

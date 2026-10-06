@@ -12,7 +12,7 @@ import { type NativeDeclarations, parseNativeDeclarations } from "../../src/head
 import { type Journey, type JourneyOptions, journeyLines, journeyProblems, runJourney } from "../../src/headless/journey";
 import { Lockstep, type LockstepOptions } from "../../src/headless/lockstep";
 import { errorFile } from "../../src/runtime/gameFiles";
-import { BUNDLE_MODULE } from "../../src/runtime/modules";
+import { BUNDLE_MODULE, type ModuleSet } from "../../src/runtime/modules";
 import { sceneFile } from "../../src/runtime/scene";
 import { type SceneExpectations, describeScene, readSceneLines, sceneProblems } from "./scene";
 
@@ -39,6 +39,12 @@ export interface HeadlessRuntime {
    * every frame and forgets old ones, for long runs.
    */
   clients(entry: MapEntry, players?: readonly number[], options?: Pick<LockstepOptions, "delivery" | "files" | "keepCalls">): Lockstep;
+  /**
+   * The module set a reload publishes to install `entry`: `reload(modules(entry))`
+   * moves the clients to another entry, such as the map loaded again from a
+   * copy of its sources with other values, as a real reload's new modules do.
+   */
+  modules(entry: MapEntry): ModuleSet;
   /** Puts back what the globals held before the runtime was installed. */
   restore(): void;
 }
@@ -173,17 +179,26 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
     },
   };
   const bundles = new Map<string, MapEntry>();
-  return {
-    clients: (entry, players = [0, 1], options = {}) => {
-      // The text of the one module a reload publishes; this runtime's `load` returns the entry for it.
-      const bundle = `-- wisp headless bundle ${bundles.size + 1}`;
+  const texts = new Map<MapEntry, string>();
+  // The text of the one module a reload publishes; this runtime's `load` returns the entry for it.
+  const modules = (entry: MapEntry): ModuleSet => {
+    let bundle = texts.get(entry);
+    if (bundle === undefined) {
+      bundle = `-- wisp headless bundle ${bundles.size + 1}`;
       bundles.set(bundle, entry);
+      texts.set(entry, bundle);
+    }
+    return { entry: BUNDLE_MODULE, modules: [{ name: BUNDLE_MODULE, text: bundle }] };
+  };
+  return {
+    modules,
+    clients: (entry, players = [0, 1], options = {}) => {
       return new Lockstep({
         declarations,
         players,
         filePrefix: map.filePrefix,
         entry: () => entry,
-        modules: { entry: BUNDLE_MODULE, modules: [{ name: BUNDLE_MODULE, text: bundle }] },
+        modules: modules(entry),
         scope,
         ...options,
         ...(map.localNatives === undefined ? {} : { localNatives: map.localNatives }),

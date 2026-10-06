@@ -89,7 +89,10 @@ messages, and every client installs it on the same frame. `unappliedReloads()`
 names each client whose acknowledgement file doesn't show the latest version,
 with its "not applied" message. In Lua the map's modules are its compiled
 bundle as one module; in Bun they are one module whose text names the entry,
-which the emulated `load` returns.
+which the emulated `load` returns. `runtime.modules(entry)` is the module set
+that installs another entry, so `reload(runtime.modules(entry))` moves the
+clients to it, such as the map imported from a copy of its sources with other
+values ([live tuning](tune.md#headless)).
 
 ## Journeys
 

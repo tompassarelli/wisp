@@ -153,8 +153,9 @@ class IncrementalTranspiler extends Transpiler {
     return { resolved, diagnostics };
   }
 
-  compile(program: ts.Program, affected: readonly ts.SourceFile[], phase: Phase): readonly ts.Diagnostic[] {
-    const writeFile = this.emitHost.writeFile;
+  /** With `write` false nothing is written; the modules stay in memory for a hot reload. */
+  compile(program: ts.Program, affected: readonly ts.SourceFile[], phase: Phase, write: boolean): readonly ts.Diagnostic[] {
+    const writeFile: ts.WriteFileCallback = write ? this.emitHost.writeFile : () => {};
     const transpiled = phase("transpile", () => {
       const { diagnostics: pluginDiagnostics, plugins } = getPlugins(program);
       if (pluginDiagnostics.length > 0) return { diagnostics: pluginDiagnostics, plugins, transpiledFiles: [] };
@@ -200,13 +201,21 @@ interface CachedSource {
   readonly file: ts.SourceFile;
 }
 
-/** A compiler host that parses a file again only when its size or modification time changed. */
-function cachingHost(options: ts.CompilerOptions, cache: Map<string, CachedSource>): ts.CompilerHost {
+/**
+ * A compiler host that parses a file again only when its size or modification
+ * time changed, or the text replacing it did.
+ */
+function cachingHost(options: ts.CompilerOptions, cache: Map<string, CachedSource>, replaced: ReadonlyMap<string, string>): ts.CompilerHost {
   const host = ts.createIncrementalCompilerHost(options);
   const parse = host.getSourceFile.bind(host);
+  if (replaced.size > 0) {
+    const readFile = host.readFile.bind(host);
+    host.readFile = (fileName) => replaced.get(normalize(fileName)) ?? readFile(fileName);
+  }
   host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
-    const stat = statSync(fileName, { throwIfNoEntry: false });
-    const stamp = stat === undefined ? "missing" : `${stat.mtimeMs}:${stat.size}`;
+    const replacement = replaced.get(normalize(fileName));
+    const stat = replacement === undefined ? statSync(fileName, { throwIfNoEntry: false }) : undefined;
+    const stamp = replacement !== undefined ? `text:${replacement}` : stat === undefined ? "missing" : `${stat.mtimeMs}:${stat.size}`;
     const cached = cache.get(fileName);
     if (cached?.stamp === stamp && shouldCreateNewSourceFile !== true) return cached.file;
     const file = parse(fileName, languageVersion, onError, shouldCreateNewSourceFile);
@@ -218,16 +227,23 @@ function cachingHost(options: ts.CompilerOptions, cache: Map<string, CachedSourc
 
 export interface MapCompiler {
   (phase?: Phase): readonly ts.Diagnostic[];
-  /** The modules of the bundle the last successful compile wrote; undefined when TypeScriptToLua built it. */
+  /** The modules of the last successful compile's bundle; undefined when TypeScriptToLua built it. */
   readonly modules: () => BundledModules | undefined;
 }
 
-export function mapCompiler(configPath: string): MapCompiler {
+const noReplacements = (): ReadonlyMap<string, string> => new Map();
+
+/**
+ * `sources` returns, before each compile, texts that replace files' contents,
+ * by absolute path, such as `wisp tune`'s values. A compile that replaces a
+ * file writes nothing, so the bundle on disk is always compiled from the files.
+ */
+export function mapCompiler(configPath: string, sources: () => ReadonlyMap<string, string> = noReplacements): MapCompiler {
   // An absolute config path keeps every source file name absolute, which the
   // map plugin needs to recognize f32, floorDiv and floorMod by their file.
   const absolute = resolve(configPath);
   const transpiler = new IncrementalTranspiler();
-  const sources = new Map<string, CachedSource>();
+  const parsed = new Map<string, CachedSource>();
   let builder: ts.EmitAndSemanticDiagnosticsBuilderProgram | undefined;
   let signaturesPrimed = false;
   const compile = (phase: Phase = defaultPhase): readonly ts.Diagnostic[] => {
@@ -235,7 +251,8 @@ export function mapCompiler(configPath: string): MapCompiler {
     const config = phase("read config", () => parseConfigFileWithSystem(absolute));
     if (config.errors.length > 0) return config.errors;
     config.options.declaration = true;
-    const host = cachingHost(config.options, sources);
+    const replaced = sources();
+    const host = cachingHost(config.options, parsed, replaced);
     const current = phase("create program", () => ts.createEmitAndSemanticDiagnosticsBuilderProgram(config.fileNames, config.options, host, builder));
     builder = current;
     const program = current.getProgram();
@@ -281,7 +298,7 @@ export function mapCompiler(configPath: string): MapCompiler {
       }
     };
     try {
-      return transpiler.compile(program, affected, phase);
+      return transpiler.compile(program, affected, phase, replaced.size === 0);
     } finally {
       program.getDeclarationDiagnostics = declarationDiagnostics;
     }

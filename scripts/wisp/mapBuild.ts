@@ -97,13 +97,17 @@ export class MapBuild extends Context.Service<MapBuild, {
   /** Replaces only war3map.lua of a map built by `build`. */
   readonly rebuild: (map: string, packager?: string) => Effect.Effect<void, BuildFailure>;
 }>()("wisp/MapBuild") {
-  static layer(project: BuildProject) {
+  /**
+   * `sources` replaces files' texts in every compile, by absolute path, as
+   * `wisp tune` does (wisp:scripts/compiler.ts); such a compile writes no bundle.
+   */
+  static layer(project: BuildProject, sources?: () => ReadonlyMap<string, string>) {
     const { configPath, bundlePath, compileInputs } = project;
     return Layer.effect(MapBuild, Effect.gen(function*() {
       const sourceErrors = yield* SourceErrors;
       // The compiler API takes about 0.6 s to load, so it loads on the first compile.
       let compiler: Promise<{ readonly run: ReturnType<CompilerModule["mapCompiler"]>; readonly report: CompilerModule["report"] }> | undefined;
-      const warmCompiler = () => (compiler ??= import("../compiler").then(({ mapCompiler, report }) => ({ run: mapCompiler(configPath), report })));
+      const warmCompiler = () => (compiler ??= import("../compiler").then(({ mapCompiler, report }) => ({ run: mapCompiler(configPath, sources), report })));
       /** The compiled bundle on disk, its source map kept under its key. */
       const compiled = Effect.gen(function*() {
         const bytes = yield* tryMapPromise("read map bundle", bundlePath, () => Bun.file(bundlePath).bytes());
@@ -134,7 +138,12 @@ export class MapBuild extends Context.Service<MapBuild, {
       const compile = runCompiler(false).pipe(
         Effect.flatMap((run) => {
           const modules = run.modules();
-          return modules === undefined ? wholeBundle : Effect.succeed(modules);
+          if (modules !== undefined) return Effect.succeed(modules);
+          // The bundle on disk lacks the replaced texts.
+          if (sources !== undefined && sources().size > 0) {
+            return Effect.fail(new MapBuildFailure({ operation: "compile replaced sources", path: configPath, cause: "TypeScriptToLua builds this bundle itself (sourceMapTraceback)" }));
+          }
+          return wholeBundle;
         }),
         step("compile"),
       );
