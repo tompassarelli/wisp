@@ -62,10 +62,10 @@ export type LadderScan =
   /** The login doors haven't closed. */
   | { readonly kind: "signing in" }
   /** Signed in; no ladder map opened since. */
-  | { readonly kind: "waiting"; readonly login: number }
+  | { readonly kind: "waiting"; readonly login?: number }
   /** Ladder maps are being opened; `last` is the newest one's time, `count` how many lines so far. */
   | { readonly kind: "scanning"; readonly last: number; readonly count: number }
-  | { readonly kind: "done"; readonly login: number; readonly last: number };
+  | { readonly kind: "done"; readonly login?: number; readonly last: number };
 
 /**
  * Where the newest session is with its post-sign-in ladder scan. The scan is
@@ -73,15 +73,16 @@ export type LadderScan =
  * line; while the log ends with ladder lines it is "scanning", and the caller
  * decides how long a quiet log means it is over.
  */
-export function ladderScan(log: string): LadderScan {
+export function ladderScan(log: string, authenticated = false): LadderScan {
   const lines = sessionLines(log);
   const login = lines.findLastIndex(({ text }) => text === LOGIN);
-  if (login < 0) return { kind: "signing in" };
+  if (login < 0 && !authenticated) return { kind: "signing in" };
+  const signedIn = login < 0 ? {} : { login: lines[login]!.at };
   const after = lines.slice(login + 1);
   const ladder = after.filter(({ text }) => LADDER.test(text));
   const last = ladder.at(-1);
-  if (last === undefined) return { kind: "waiting", login: lines[login]!.at };
-  if (after.some(({ at, text }) => at - last.at >= SCAN_QUIET_MS && !LADDER.test(text))) return { kind: "done", login: lines[login]!.at, last: last.at };
+  if (last === undefined) return { kind: "waiting", ...signedIn };
+  if (after.some(({ at, text }) => at - last.at >= SCAN_QUIET_MS && !LADDER.test(text))) return { kind: "done", ...signedIn, last: last.at };
   return { kind: "scanning", last: last.at, count: ladder.length };
 }
 

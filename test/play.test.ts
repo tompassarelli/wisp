@@ -9,6 +9,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { hostNsenter } from "../scripts/wisp/playHost";
+import { ClientWatch } from "../scripts/wisp/watch";
 import { type ProcessInfo, launchOptions, launchOutcome, loadMapOption, newestLauncherLog, prefixUse, shortcutUrl, windowsPath, withLaunchOptions } from "../scripts/warcraft/battleNet";
 import type { Word } from "../scripts/warcraft/desktop";
 import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, findPhrase, expectedGain, measuredGain, play, spotTargets, steer, steerPointer, offScreen } from "../scripts/wisp/play";
@@ -104,6 +105,7 @@ interface Scenario {
   readonly gameFullscreenAfter?: number;
   /** False: Warcraft III's log never shows its login doors closing. */
   readonly gameSignsIn?: boolean;
+  readonly socketSignedIn?: boolean;
   /** "none": no ladder scan follows the sign-in. */
   readonly ladderScan?: "scans" | "none";
   /** An already running game's log after its scan: nothing more (idle in its menus), or an earlier game. */
@@ -231,7 +233,7 @@ function world(scenario: Scenario = {}) {
   if (scenario.gameRunning === true) {
     processes.push(gameProcess(2852));
     windows.set(762, tiled(762, "Warcraft III"));
-    war3Log = [war3Line(-60_000, "GameMain Started"), war3Line(-46_000, "[CLoginCallbacks] LoginDoorClose called"), ...[...SEASON1, ...SEASON9].map((text) => war3Line(-37_000, text)),
+    war3Log = [war3Line(-60_000, "GameMain Started"), ...(scenario.socketSignedIn === true ? [] : [war3Line(-46_000, "[CLoginCallbacks] LoginDoorClose called")]), ...[...SEASON1, ...SEASON9].map((text) => war3Line(-37_000, text)),
       ...(scenario.runningLog === "played" ? [war3Line(-20_000, "Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft 0.0.47.w3x")] : [])].join("");
   }
   if (scenario.helper === "earlier") processes.push({ pid: 400, name: "wc3-journal", args: [HELPER, "--pid", "1"] });
@@ -437,7 +439,9 @@ function world(scenario: Scenario = {}) {
 
   const run = async () => {
     const lines: string[] = [];
-    const program = play(declaration, (status) => lines.push(status)).pipe(
+    const playing = play(declaration, (status) => lines.push(status));
+    const watched = scenario.socketSignedIn === true ? playing.pipe(Effect.provideService(ClientWatch, ClientWatch.of({ view: () => Effect.succeed({ client: "the game", state: { kind: "menus", screen: "MAIN_MENU" }, source: "socket", evidence: "SetGlueScreen MAIN_MENU", at: now * 1000, scan: "signing in", loadErrors: { count: 0 } }) }))) : playing;
+    const program = watched.pipe(
       Effect.provide(Layer.merge(Layer.succeed(PlayMachine, machine), Layer.succeed(PlayDesktop, desktop))),
     );
     const exit = await Effect.runPromise(Effect.gen(function*() {
@@ -632,6 +636,12 @@ test("menu hosting resumes a warm Warcraft client already showing Custom Games",
   expect(result.failure).toBeUndefined();
   expect(result.events).toContain("click Warcraft III CUSTOM GAMES");
   expect(result.events).not.toContain("click Warcraft III MULTIPLAYER");
+});
+
+test("socket-authenticated menus can host when the running game's log lacks LoginDoorClose", async () => {
+  const result = await world({ runtimes: "launcher", gameRunning: true, socketSignedIn: true }).run();
+  expect(result.failure).toBeUndefined();
+  expect(result.events).toContain("match");
 });
 
 test("a game that scans no ladder maps is hosted 30 s after its sign-in; one that never signs in stops play", async () => {
