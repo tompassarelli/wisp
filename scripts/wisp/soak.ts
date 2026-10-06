@@ -417,8 +417,14 @@ export interface SoakLimits {
   readonly frameMs: number;
   /** Native milliseconds per measured millisecond of a client's frame. */
   readonly costScale: number;
-  /** A client frame costing more, after costScale, misses its moment. */
+  /** A client frame whose own work costs more, after costScale, misses its moment. */
   readonly spikeMs: number;
+  /**
+   * The longest a frame may stop taking typed text into an edit box: the
+   * bound of what the game's input helper types at once. Over it is a
+   * `typing` finding.
+   */
+  readonly typingMs: number;
   /** Backlog frames that count as behind; once they keep growing, or stay, the game can't catch up. */
   readonly backlogFrames: number;
   /** Seconds of growing lag or backlog that make a spiral. */
@@ -438,6 +444,7 @@ export const SOAK_LIMITS: SoakLimits = {
   frameMs: 1000 / 60,
   costScale: 1,
   spikeMs: 1000 / 60,
+  typingMs: 1000 / 60,
   backlogFrames: 60,
   growthSeconds: 3,
   recoverFrames: 180,
@@ -446,7 +453,7 @@ export const SOAK_LIMITS: SoakLimits = {
   warmUpFrames: 1200,
 };
 
-export type SoakFindingKind = "stall" | "desync" | "error" | "scene" | "invisible" | "cost" | "catch-up" | "unfinished" | "crash" | "game";
+export type SoakFindingKind = "stall" | "desync" | "error" | "scene" | "invisible" | "cost" | "typing" | "catch-up" | "unfinished" | "crash" | "game";
 
 export interface SoakFinding {
   readonly kind: SoakFindingKind;
@@ -499,11 +506,10 @@ export const cpuMillis: () => number = (() => {
 /** Text of a finding with its numbers left out, to report each kind of problem once per client. */
 const shape = (text: string) => text.replace(/\d+(\.\d+)?/g, "#");
 
-/** A client frame that cost more than its moment: whose, how many native milliseconds, and how many of them taking typed text. */
+/** A client frame that cost more than its moment: whose, and how many native milliseconds. */
 interface CostlyFrame {
   readonly slot: number;
   readonly ms: number;
-  readonly typingMs?: number;
 }
 
 /**
@@ -573,9 +579,9 @@ export class SoakMonitor {
 
   /**
    * After each frame: `wallMs` is the game's wall clock, `quiet` the slots
-   * whose input source sends nothing now, and `nativeMs` each client's
-   * predicted native milliseconds for the frame: by default its measured cost
-   * times costScale; `typingMs`, how much of each the edit-box stall is.
+   * whose input source sends nothing now, `nativeMs` each client's predicted
+   * native milliseconds for the frame's own work (by default its measured
+   * cost times costScale) and `typingMs` how long it stops taking typed text.
    */
   afterFrame(wallMs: number, quiet: ReadonlySet<number>, nativeMs?: readonly number[], typingMs?: readonly number[]): void {
     this.frame++;
@@ -593,7 +599,12 @@ export class SoakMonitor {
       this.worstFrameMs = Math.max(this.worstFrameMs, cost);
       const ms = nativeMs?.[index] ?? cost * limits.costScale;
       if (this.frame > this.warmUp && ms > limits.spikeMs) {
-        if (ms > (this.spikes.get(this.frame)?.ms ?? 0)) this.spikes.set(this.frame, { slot: client.slot, ms, typingMs: typingMs?.[index] ?? 0 });
+        if (ms > (this.spikes.get(this.frame)?.ms ?? 0)) this.spikes.set(this.frame, { slot: client.slot, ms });
+      }
+      // Typing is counted, not timed: a frame over the bound is over it on every run.
+      const typing = typingMs?.[index] ?? 0;
+      if (typing > limits.typingMs) {
+        this.find("typing", `p${client.slot}'s frame ${this.frame} stops ${typing.toFixed(1)} ms taking typed text, more than the ${limits.typingMs.toFixed(1)} ms its input helper may type at once`, client.slot, "typing");
       }
       this.checkErrors(client, index);
       this.checkScene(client, index);
@@ -737,9 +748,9 @@ export class SoakMonitor {
     let worst: [number, CostlyFrame] | undefined;
     for (const entry of frames) if (worst === undefined || entry[1].ms > worst[1].ms) worst = entry;
     if (worst === undefined) return;
-    const [frame, { slot, ms, typingMs = 0 }] = worst;
+    const [frame, { slot, ms }] = worst;
     const replayed = again?.get(frame);
-    this.find("cost", `${frames.size} client frame${frames.size === 1 ? "" : "s"} cost more than ${this.limits.spikeMs.toFixed(1)} ms${again === undefined ? "" : " in the match and again in its replay"}; the worst, p${slot}'s frame ${frame}, ${ms.toFixed(1)} ms${replayed === undefined ? "" : ` then ${replayed.ms.toFixed(1)} ms`}${typingMs > 0 ? `, ${typingMs.toFixed(1)} ms of it taking typed text` : ""}`);
+    this.find("cost", `${frames.size} client frame${frames.size === 1 ? "" : "s"} cost more than ${this.limits.spikeMs.toFixed(1)} ms${again === undefined ? "" : " in the match and again in its replay"}; the worst, p${slot}'s frame ${frame}, ${ms.toFixed(1)} ms${replayed === undefined ? "" : ` then ${replayed.ms.toFixed(1)} ms`}`);
   }
 
   /**
@@ -841,9 +852,11 @@ function playOnce(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, ma
         const typedCharacters = (driver.typed?.(client.slot) ?? 0) + (step.typed.get(client.slot) ?? []).reduce((sum, line) => sum + line.length, 0);
         const predicted = nativeFrameCost(model, { instructions: 0, natives, allocatedKb: 0, typedCharacters });
         typingMs.push(predicted.typingUs / 1000);
-        return (clients.costs[index] ?? 0) * limits.costScale + (predicted.callbacksUs + predicted.typingUs) / 1000;
+        return (clients.costs[index] ?? 0) * limits.costScale + predicted.callbacksUs / 1000;
       });
-      wallMs += limits.frameMs + source.slow(frame, Math.max(0, Math.max(0, ...nativeMs) - limits.frameMs));
+      // The wall clock waits for the costliest client's frame, its typing stall included.
+      const frameMs = Math.max(0, ...nativeMs.map((ms, index) => ms + (typingMs[index] ?? 0)));
+      wallMs += limits.frameMs + source.slow(frame, Math.max(0, frameMs - limits.frameMs));
       watching.afterFrame(wallMs, quiet, nativeMs, typingMs);
     }
   } catch (error) {
@@ -928,7 +941,7 @@ const MatchSchema = Schema.Struct({
   typed: Schema.optionalKey(Schema.Boolean),
 });
 const FindingSchema = Schema.Struct({
-  kind: Schema.Literals(["stall", "desync", "error", "scene", "invisible", "cost", "catch-up", "unfinished", "crash", "game"]),
+  kind: Schema.Literals(["stall", "desync", "error", "scene", "invisible", "cost", "typing", "catch-up", "unfinished", "crash", "game"]),
   frame: Whole,
   slot: Schema.optionalKey(Whole),
   text: Schema.String,
