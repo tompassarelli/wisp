@@ -237,6 +237,37 @@ overlay shows it now. The meter's native clock is likely wall time (Windows'
 `clock()`), so a reading taken while the machine runs other work is
 inflated; calibrate on a quiet machine.
 
+### Checking against Warcraft
+
+[nativeFit](../scripts/wisp/nativeFit.ts) (wisp:scripts/wisp/nativeFit.ts)
+compares a prediction with the overlay of a native run of the same build.
+It replays the headless run's frames (`perf --samples`) through the
+overlay's windows (120 frames, read every 30) and reads each frame's
+predicted time as a whole number of the native clock's steps. A time
+between two steps reads as either one, in proportion to where it falls,
+with a fixed seed. It then compares the median across windows of each
+window's median, 95th percentile and maximum:
+
+- `perf native READINGS [RUN] [--samples FILE] [--slot N]` plays RUN, or
+  reads `--samples`, and prints native against predicted per frame. It fails
+  unless the median and the 95th percentile are both within 20%, so
+  readings without a 95th percentile can't pass. READINGS is JSON:
+  `{clockStepMs?, windows: [{median, p95?, max}]}` in ms, or a game's
+  session result holding `frame_cost_overlay.windows[].lua_ms`, such as
+  Smashcraft's `bot-result.json`. The clock step defaults to Warcraft's
+  0.977 ms. Run it from the source the native build was made from: the
+  prediction comes from that source's frames.
+- `perf fit SAMPLES=READINGS ...` fits the native call and collector costs
+  to every case: a 0.25 µs grid, minimizing squared log ratios of the median
+  and the 95th percentile, plus a quarter weight on the maximum, because a
+  window's maximum is one frame. The Lua speed factor, the host rate and
+  typing keep their separate measurements. With two or more cases it also
+  fits each case's costs to the others and reports that case held out.
+
+Three summaries don't pin both costs on a 1 ms clock when a frame's native
+calls rise with its Lua work, as they do in a match. A fit is judged by
+what it predicts on readings it wasn't fitted to.
+
 ## What it costs
 
 Measured on Smashcraft's development build (smashcraft 2f29ab3 with the meter
