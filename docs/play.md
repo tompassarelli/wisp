@@ -154,7 +154,10 @@ the capture there. How far the X pointer moves per logical pixel depends on
 the window under it: 2 X pixels over the launcher, as the scale says, but 1
 over fullscreen Warcraft III from its Battle.net screens on (6 Oct). Each
 move starts from the scale's gain and divides the next by the gain the last
-one showed, until the X pointer is within 2 pixels, at most 8 moves. Typed
+one showed, until the X pointer is within 2 pixels, at most 8 moves. Targets
+and the initial gain use the captured output's size, so a letterboxed launcher
+does not rescale or offset the point read from that capture. Games is clicked
+only after two reads put its tab in the same place. Typed
 text and keys are XTEST (`xdotool`) into the focused game window.
 
 Each run prints a folder under the game's `debugDirectory`, named by its
