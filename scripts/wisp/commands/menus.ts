@@ -61,6 +61,7 @@ export const makeMenus = (): Command => ([action, ...args]) => Effect.gen(functi
     case "host": {
       const [folder, file, gameName] = [flag(args, "folder"), flag(args, "map"), flag(args, "name")];
       if (folder === undefined || file === undefined || gameName === undefined) return yield* new UsageFailure({ problem: "host needs --folder, --map and --name" });
+      if (args.includes("--password") && flag(args, "password") === undefined) return yield* new UsageFailure({ problem: "--password needs a value; use --password= for a game without a password" });
       const password = flag(args, "password") ?? randomPassword();
       yield* withMenus(args, (menus) => Effect.gen(function*() {
         const map = yield* hostLobby(menus, { folder, file, gameName, password }).pipe(step(`hosting "${gameName}"`));
