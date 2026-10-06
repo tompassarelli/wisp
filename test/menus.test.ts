@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "bun:test";
 import { Effect, Exit } from "effect";
-import { type MenuAddress, connectMenus, hostLobby, installMenuPage, joinLobby, leaveLobby, listenForMenus, menuPage, removeMenuPage, startLobby } from "../scripts/wisp/menus";
+import { type MenuAddress, connectMenus, hostLobby, installMenuPage, joinLobby, keptAddress, leaveLobby, listenForMenus, menuAddress, menuPage, removeMenuPage, startLobby } from "../scripts/wisp/menus";
 
 const GUID = "6f1c2a90-guid";
 const MAPS = "C:/Users/player/Documents/Warcraft III/Maps/";
@@ -251,5 +251,56 @@ test("the page is installed only where Warcraft's own page isn't, and removed on
     expect(readFileSync(page, "utf8")).toBe("<html>W3Champions</html>");
   } finally {
     rmSync(retail, { recursive: true, force: true });
+  }
+});
+
+test("the page keeps the newest screens it heard and announces them, so a later listener knows where the menus are", () => {
+  const script = /<script>\n([\s\S]*?)<\/script>/.exec(menuPage(47123))?.[1] ?? "";
+  const posts: { url: string; body: unknown }[] = [];
+  let listener: ((event: { data: string }) => void) | undefined;
+  class NativeSocket {
+    constructor(readonly url: string) {}
+    send() {}
+    addEventListener(_: string, heard: (event: { data: string }) => void) {
+      listener = heard;
+    }
+  }
+  const window: { WebSocket: unknown } = { WebSocket: NativeSocket };
+  const fetch = (url: string, init: { body: string }) => {
+    posts.push({ url, body: JSON.parse(init.body) });
+    return Promise.resolve();
+  };
+  const timers: (() => void)[] = [];
+  new Function("window", "location", "fetch", "setTimeout", "URLSearchParams", script)(window, { search: `?guid=${GUID}`, port: "38487" }, fetch, (next: () => void) => timers.push(next), URLSearchParams);
+  new (window.WebSocket as new (url: string) => NativeSocket)(`ws://127.0.0.1:38487/webui-socket/${GUID}`);
+  for (const [messageType, payload] of [["SetGlueScreen", { screen: "CUSTOM_LOBBIES" }], ["MapList", { mapList: {} }], ["GameLobbySetup", { isHost: true, players: [] }]] as const) {
+    listener!({ data: JSON.stringify({ messageType, payload }) });
+  }
+  timers.shift()!();
+  const announced = posts.at(-1)!.body as { recent: { messageType: string; screen?: string; isHost?: boolean; at: number }[] };
+  expect(announced.recent.map(({ at: _, ...heard }) => heard)).toEqual([{ messageType: "SetGlueScreen", screen: "CUSTOM_LOBBIES" }, { messageType: "GameLobbySetup", isHost: true }]);
+});
+
+test("a second program finds the menus through the address the port's listener keeps", async () => {
+  const runtime = mkdtempSync(join(tmpdir(), "wisp-runtime-"));
+  const previous = process.env["XDG_RUNTIME_DIR"];
+  process.env["XDG_RUNTIME_DIR"] = runtime;
+  try {
+    const exit = await run(Effect.gen(function*() {
+      const reports = yield* listenForMenus(0);
+      yield* Effect.promise(() => fetch(`http://127.0.0.1:${reports.port}/menus`, {
+        method: "POST",
+        headers: { origin: "http://127.0.0.1:38487" },
+        body: JSON.stringify({ port: 38487, guid: GUID, recent: [{ messageType: "SetGlueScreen", screen: "GAME_LOBBY", at: 5 }] }),
+      }));
+      // The port is taken: the address comes from the file.
+      return yield* menuAddress(reports.port, 1);
+    }));
+    expect(Exit.isSuccess(exit) ? exit.value : failure(exit)).toEqual({ port: 38487, guid: GUID, recent: [{ messageType: "SetGlueScreen", screen: "GAME_LOBBY", at: 5 }] });
+    expect(keptAddress(1, Date.now())).toBeUndefined();
+  } finally {
+    if (previous === undefined) delete process.env["XDG_RUNTIME_DIR"];
+    else process.env["XDG_RUNTIME_DIR"] = previous;
+    rmSync(runtime, { recursive: true });
   }
 });

@@ -1,0 +1,28 @@
+<Application>Warcraft III
+<Exception.ProjectId>264
+<Exception.JiraProjectId>19202
+<Exception.JiraProjectKey>WAR3
+<Exception.BuildNumber>24268
+<Exception.Platform>Windows
+<Exception.DesktopOS>Win
+<BlizzardError.AffectsVersions>War III 3.0.0
+<BlizzardError.FixVersions>War III 3.0.X
+<BlizzardError.Source>Blizzard Error Report
+<BlizzardError.Language>English
+<Exception.IssueType>Exception
+<Exception.Priority>1
+<Process.Name>\Device\HarddiskVolume1\Program Files (x86)\Warcraft III\_retail_\x86_64\Warcraft III.exe
+<Process.Parent.Name>\Device\HarddiskVolume1\Program Files (x86)\Battle.net\Battle.net.exe
+<Process.Grandparent.Name>\Device\HarddiskVolume1\Program Files (x86)\Battle.net\Battle.net Launcher.exe
+<Process.CommandLine>"C:\Program Files (x86)\Warcraft III\_retail_\x86_64\Warcraft III.exe" -launch -uid w3
+<Mem.PhysicalUsed>1262 MB
+<Mem.VirtualUsed>1262 MB
+<Mem.Committed>658 MB
+<Mem.PhysicalAvailable>58828 MB
+<Mem.VirtualAvailable>134216466 MB
+<Mem.PageAvailable>235509 MB
+
+<Exception.Summary:>
+ACCESS_VIOLATION (Failed to read address 0x0000000000000500 at instruction 0x00006FFFEEC73856) DBG-OPTIONS<FunctionsOnly SingleLine> DBG-ADDR<00006FFFEEC73856>("Warcraft III.exe") <- DBG-ADDR<00006FFFEF1844F8>("Warcraft III.exe") <- DBG-ADDR<00006FFFEE549D94>("Warcraft III.exe")  DBG-OPTIONS<>
+<:Exception.Summary>
+

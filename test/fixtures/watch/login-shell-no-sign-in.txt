@@ -1,0 +1,7 @@
+10/6 17:00:09.316  GameMain Started
+10/6 17:00:09.316  Command Line: "C:\Program Files (x86)\Warcraft III\_retail_\x86_64\Warcraft III.exe" -launch -uid w3
+10/6 17:00:09.316  Current Directory: "C:\Program Files (x86)\Warcraft III\_retail_"
+10/6 17:00:10.104  Opening mod - War3.w3mod
+10/6 17:00:12.816  Opening mod - Maps/(8)plainsofsnow.w3m
+10/6 17:00:12.818  Opening map - Maps/(8)richmansgarden.w3m
+10/6 17:00:12.818  Opening mod - Maps/(8)richmansgarden.w3m

@@ -111,7 +111,9 @@ command that clears them.
    resolves, and prints the time from Play to fighter selection. Any
    `model creation failed - war3mapImported/` line the log gains from
    hosting on, checked then and again after step 6, stops `play` with the
-   count and the first model.
+   count and the first model. While steps 4 and 6 run, a crash report for
+   this session or a lost Battle.net ([watch.md](watch.md)) stops `play` at
+   once instead of at the step's timeout.
 5. **Controller helper.** One helper for this game: a running helper whose
    `--pid` is this game's is kept; any other running copy stops `play`. The
    helper starts in its own session, so it outlives `play` and its terminal,

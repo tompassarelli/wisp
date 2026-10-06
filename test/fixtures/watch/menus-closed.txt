@@ -1,0 +1,8 @@
+10/6 16:20:57.156  GameMain Started
+10/6 16:20:57.157  Command Line: "C:\Program Files (x86)\Warcraft III\_retail_\x86_64\Warcraft III.exe" -launch -uid w3
+10/6 16:20:57.157  Current Directory: "C:\Program Files (x86)\Warcraft III\_retail_"
+10/6 16:21:11.129  [CLoginCallbacks] LoginDoorClose called
+10/6 16:21:12.550  Activating WebUI
+10/6 16:21:12.563  Activating WebUI
+10/6 16:21:17.022  Activating WebUI
+10/6 16:35:48.756  GameMain Ended

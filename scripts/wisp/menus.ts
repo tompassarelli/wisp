@@ -7,9 +7,10 @@
 // installs a page of its own in the game's _retail_/webui folder (read only
 // while the registry value "Allow Local Files" is 1). It loads the game's own
 // menus and tells Wisp its address.
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Deferred, Effect, Option, Queue, Schema, type Scope } from "effect";
+import { Clock, Deferred, Effect, Option, Queue, Schema, type Scope } from "effect";
 
 /** Where an installed menu page reports its address and the menus' own requests. */
 export const DEFAULT_MENU_REPORT_PORT = 47123;
@@ -27,6 +28,16 @@ export class MenuFailure extends Schema.TaggedError<MenuFailure>()("MenuFailure"
 export interface MenuAddress {
   readonly port: number;
   readonly guid: string;
+  /** The newest state messages the page heard from the game, oldest first, so a later listener knows the current screen. */
+  readonly recent?: readonly HeardMessage[];
+}
+
+/** A state message the page heard: its name, its screen or host flag, and when (ms since the epoch). */
+export interface HeardMessage {
+  readonly messageType: string;
+  readonly at: number;
+  readonly screen?: string;
+  readonly isHost?: boolean;
 }
 
 /** A message the menus sent the game: its name, and its payload for lobby and map messages. */
@@ -44,6 +55,9 @@ export interface MenuEvent {
 const PAGE_MARK = `<meta name="wisp" content="menu page" />`;
 /** Requests whose payloads the page reports: what a lobby step sends. */
 const REPORTED_PAYLOADS = "Lobby|Slot|Computer|Team|Race|Color|Handicap|Map|Start|Join";
+/** Messages from the game that say where the client is; the page keeps the newest few and announces them. */
+const PAGE_STATES = "SetGlueScreen|GameLobbySetup|UpdateScoreInfo|LoggedOut";
+const RECENT_KEPT = 4;
 
 /**
  * The menu page: the game's own menus (GlueManager.js draws them into #root
@@ -66,6 +80,8 @@ export function menuPage(reportPort: number): string {
         var guid = new URLSearchParams(location.search).get("guid");
         var heard = false;
         var payloads = /${REPORTED_PAYLOADS}/;
+        var states = /^(?:${PAGE_STATES})$/;
+        var recent = [];
         function post(path, body) {
           return fetch(report + path, { method: "POST", mode: "no-cors", body: JSON.stringify(body) });
         }
@@ -83,6 +99,20 @@ export function menuPage(reportPort: number): string {
               } catch (error) {}
               return send(data);
             };
+            if (socket.addEventListener) {
+              socket.addEventListener("message", function (event) {
+                try {
+                  var said = JSON.parse(event.data);
+                  if (typeof said.messageType !== "string" || !states.test(said.messageType)) return;
+                  var payload = said.payload || {};
+                  var kept = { messageType: said.messageType, at: Date.now() };
+                  if (typeof payload.screen === "string") kept.screen = payload.screen;
+                  if (typeof payload.isHost === "boolean") kept.isHost = payload.isHost;
+                  recent.push(kept);
+                  if (recent.length > ${RECENT_KEPT}) recent.shift();
+                } catch (error) {}
+              });
+            }
           }
           return socket;
         }
@@ -94,7 +124,9 @@ export function menuPage(reportPort: number): string {
         window.WebSocket = Watched;
         function announce() {
           if (!guid) return;
-          post("/menus", { port: Number(location.port), guid: guid })
+          var address = { port: Number(location.port), guid: guid };
+          if (recent.length > 0) address.recent = recent;
+          post("/menus", address)
             .then(function () { heard = true; }, function () { heard = false; });
           setTimeout(announce, 2000);
         }
@@ -143,7 +175,36 @@ export const removeMenuPage = (retail: string) => Effect.try({
   catch: (cause) => new MenuFailure({ operation: "remove the menu page", problem: cause instanceof Error ? cause.message : String(cause) }),
 });
 
-const Announcement = Schema.Struct({ port: Schema.Int, guid: Schema.String });
+const Heard = Schema.Struct({ messageType: Schema.String, at: Schema.Finite, screen: Schema.optionalKey(Schema.String), isHost: Schema.optionalKey(Schema.Boolean) });
+const Announcement = Schema.Struct({ port: Schema.Int, guid: Schema.String, recent: Schema.optionalKey(Schema.Array(Heard)) });
+
+/**
+ * One program at a time can listen on a report port. The listener keeps the
+ * newest announced address in a file only this user can read, so another
+ * Wisp program (`wisp watch` beside `play` or `fresh`) finds the menus too.
+ */
+export const menuAddressFile = (reportPort: number) => join(process.env["XDG_RUNTIME_DIR"] ?? tmpdir(), `wisp-menus-${reportPort}.json`);
+/** The page announces every 2 s; an address file older than this has no listener behind it. */
+const ADDRESS_FRESH_MS = 6000;
+const KeptAddress = Schema.Struct({ port: Schema.Int, guid: Schema.String, recent: Schema.optionalKey(Schema.Array(Heard)), at: Schema.Finite });
+
+const keepAddress = (reportPort: number, address: MenuAddress) => {
+  try {
+    const path = menuAddressFile(reportPort);
+    writeFileSync(`${path}.new`, JSON.stringify({ ...address, at: Date.now() }), { mode: 0o600 });
+    renameSync(`${path}.new`, path);
+  } catch {
+    // Without the file, only this listener knows the address.
+  }
+};
+
+/** The address another listener on the port keeps, while it is fresh. */
+export const keptAddress = (reportPort: number, now = Date.now()): MenuAddress | undefined => {
+  const kept = Schema.decodeUnknownOption(KeptAddress)(parseJson(existsSync(menuAddressFile(reportPort)) ? readFileSync(menuAddressFile(reportPort), "utf8") : ""));
+  if (Option.isNone(kept) || now - kept.value.at > ADDRESS_FRESH_MS) return undefined;
+  const { at: _, ...address } = kept.value;
+  return address;
+};
 const Sent = Schema.Struct({ message: Schema.String, payload: Schema.optional(Schema.Unknown) });
 const Envelope = Schema.Struct({ messageType: Schema.String, payload: Schema.optional(Schema.Unknown) });
 const GUID = /^[A-Za-z0-9_-]{1,128}$/;
@@ -191,7 +252,8 @@ export const listenForMenus = (reportPort = DEFAULT_MENU_REPORT_PORT, onSent: (s
           if (url.pathname === "/menus") {
             const announced = Schema.decodeUnknownOption(Announcement)(body);
             if (Option.isNone(announced) || !GUID.test(announced.value.guid) || announced.value.port < 1 || announced.value.port > 65535) return new Response(null, { status: 400 });
-            latest = { port: announced.value.port, guid: announced.value.guid };
+            latest = announced.value;
+            keepAddress(Number(url.port), latest);
             Deferred.doneUnsafe(first, Effect.succeed(latest));
             return empty();
           }
@@ -280,11 +342,28 @@ export const connectMenus = (address: MenuAddress): Effect.Effect<MenuSocket, Me
   return { send, expect, forget: Queue.clear(events).pipe(Effect.asVoid) };
 });
 
+/**
+ * The menus' address: from the page's announcements, or, while another Wisp
+ * program listens on the report port, from the address it keeps.
+ */
+export const menuAddress = (reportPort: number, seconds: number): Effect.Effect<MenuAddress, MenuFailure, Scope.Scope> =>
+  listenForMenus(reportPort).pipe(
+    Effect.flatMap((reports) => reports.waitForAddress(seconds)),
+    Effect.catchTag("MenuFailure", (failure) => failure.operation !== "listen for the menu page" ? Effect.fail(failure) : Effect.gen(function*() {
+      const deadline = (yield* Clock.currentTimeMillis) + seconds * 1000;
+      while (true) {
+        const kept = keptAddress(reportPort);
+        if (kept !== undefined) return kept;
+        if ((yield* Clock.currentTimeMillis) >= deadline) return yield* failure;
+        yield* Effect.sleep("250 millis");
+      }
+    })),
+  );
+
 /** Finds this client's installed page. No page means the caller may use its ordinary menu controls. */
 export const reportedMenus = (reportPort: number | undefined): Effect.Effect<MenuSocket | undefined, MenuFailure, Scope.Scope> => Effect.gen(function*() {
   if (reportPort === undefined) return undefined;
-  const reports = yield* listenForMenus(reportPort);
-  const address = yield* reports.waitForAddress(3).pipe(Effect.catchTag("MenuFailure", () => Effect.void));
+  const address = yield* menuAddress(reportPort, 3).pipe(Effect.catchTag("MenuFailure", () => Effect.void));
   if (address === undefined) return undefined;
   return yield* connectMenus(address);
 });
