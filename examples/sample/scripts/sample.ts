@@ -76,6 +76,10 @@ process.exit(await runCli("bun examples/sample/scripts/sample.ts", {
   hot: { usage: "--data DIR [--data DIR ...] [--watch]", load: async () => makeHot({ project, sourceDirectory, sourceMapDirectory, filePrefix }) },
   fresh: { usage: "MAP.w3x [--rebuild] [--from-game] [--map-folder Maps/00-Wisp]   (WISP_CLIENTS=clients.json)", load: async () => fresh },
   client: { usage: "look|read|click|keys|chat CLIENT ...   (WISP_CLIENTS=clients.json)", load: async () => makeClient(clientsFile) },
+  menus: {
+    usage: "install|remove RETAIL_DIR | listen | host --folder F --map FILE --name NAME [--password P] [--start] | join --name NAME --password P | start | leave   [--port N]",
+    load: async () => (await import("wisp/scripts/wisp/commands/menus")).makeMenus(),
+  },
   headless: {
     usage: "[ping-reload] [--clients N]",
     load: async () => {

@@ -59,7 +59,10 @@ project's host type check. The driver:
   finding ([repro files](#repro-files));
 - `typed(slot)`, optional: the characters the player's input helper typed
   into their client's edit box before this frame, which Warcraft takes at a
-  cost that grows with their square.
+  cost that grows with their square;
+- `findings(client)`, optional: after each frame, what the game's own
+  detectors found, each with its detector's name, such as a fighter caught
+  in a loop it can't escape.
 
 A policy is a name the game interprets, such as its computer or a human
 whose input never arrives; `fuzz` is Wisp's input fuzzer.
@@ -106,6 +109,7 @@ replay runs on the same clock whatever the replaying machine measures.
 | `catch-up` | The wall clock runs more than 1 s ahead of the game and the gap grows for 3 s in a row; or, while no input source is quiet, input not yet played grows for 3 s while past 60 frames, or stays past 60 frames for 3 s. |
 | `unfinished` | The match isn't over within its frames. |
 | `crash` | The game's setup or driver throws, or a worker process stops. |
+| `game` | The driver's `findings(client)` names something one of the game's own detectors found; each detector reports once per match and client. |
 
 Each kind of problem is reported once per match and client, with the frame
 after the match began. `limits` in the declaration change the thresholds
