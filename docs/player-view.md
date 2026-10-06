@@ -44,6 +44,14 @@ and `Z` in the Lua globals once. The game's code stays as it is; an entry
 that never starts the recorder, such as a playable build's, compiles none of
 it.
 
+A game that draws some of what players see with units passes `unitModel`,
+the model each unit type draws (undefined for types it doesn't track). The
+recorder then also wraps `CreateUnit`, `RemoveUnit`, `ShowUnit`,
+`SetUnitVertexColor` and `SetUnitScale`, and reports those units under their
+model with the effects: a unit is in view while shown, and drawn while shown
+with nonzero alpha and scale. Removing a unit plays no death animation, so it
+never counts as destroyed in view.
+
 Warcraft keeps a model's particle emitters running at any alpha, scale or time
 scale, so a collapsed effect left where the camera looks still shows its
 particles. A game hides an effect for good only by moving it where no camera
