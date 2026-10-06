@@ -5,8 +5,12 @@
 //   overflow), matching Wurst's real literals;
 // - compiles floorDiv and floorMod from src/sim/intMath.ts to Lua's exact
 //   integer `//` and `%`;
-// - compiles f32(x) from src/sim/f32.ts and Math.fround(x), binary32 rounding
-//   on the host, to x;
+// - compiles f32(a + b), f32(a - b) and f32(a * b) from src/sim/f32.ts to
+//   f32(a, b, operation), which rounds the exact result to nearest: Warcraft's
+//   raw + and * don't. A product with a power-of-two literal is exact and
+//   stays raw;
+// - compiles any other f32(x), and Math.fround(x), binary32 rounding on the
+//   host, to x;
 // - rejects code that would compile but compute differently in Warcraft, by
 //   the number rules in wisp:plugins/number-rules.ts.
 //
@@ -17,6 +21,7 @@ import { dirname, relative } from "node:path";
 import * as ts from "typescript";
 import * as tstl from "typescript-to-lua";
 import { LuaPrinter } from "typescript-to-lua";
+import { F32_ADD, F32_MULTIPLY, F32_SUBTRACT } from "../src/sim/f32";
 import { ROUNDING_HELPER_FILE, declarationsOf, isDeclaredIn, programNumberRules } from "./number-rules";
 
 const floatLiterals = new WeakSet<tstl.NumericLiteral>();
@@ -40,6 +45,36 @@ function integerOperator(node: ts.CallExpression, program: ts.Program): tstl.Bin
   if (!ts.isIdentifier(node.expression) || node.arguments.length !== 2) return undefined;
   const operator = integerOperators[node.expression.text];
   return operator !== undefined && isDeclaredIn(declarationsOf(ts, program, node.expression), "/src/sim/intMath.ts") ? operator : undefined;
+}
+
+const strip = (node: ts.Expression): ts.Expression => (ts.isParenthesizedExpression(node) ? strip(node.expression) : node);
+
+/** A literal ±2^k: multiplying by it is exact under any rounding. */
+function isPowerOfTwo(node: ts.Expression): boolean {
+  let operand = strip(node);
+  if (ts.isPrefixUnaryExpression(operand) && operand.operator === ts.SyntaxKind.MinusToken) operand = strip(operand.operand);
+  if (!ts.isNumericLiteral(operand)) return false;
+  const value = Number(operand.text);
+  return value > 0 && 2 ** Math.round(Math.log2(value)) === value;
+}
+
+/** f32(a + b), f32(a - b) or f32(a * b): the operands and the code f32 takes for the operation in Lua. */
+function roundedOperation(node: ts.CallExpression): { left: ts.Expression; right: ts.Expression; code: number } | undefined {
+  const argument = node.arguments[0];
+  if (!ts.isIdentifier(node.expression) || argument === undefined) return undefined;
+  const operation = strip(argument);
+  if (!ts.isBinaryExpression(operation)) return undefined;
+  const { left, right } = operation;
+  switch (operation.operatorToken.kind) {
+    case ts.SyntaxKind.PlusToken:
+      return { left, right, code: F32_ADD };
+    case ts.SyntaxKind.MinusToken:
+      return { left, right, code: F32_SUBTRACT };
+    case ts.SyntaxKind.AsteriskToken:
+      return isPowerOfTwo(left) || isPowerOfTwo(right) ? undefined : { left, right, code: F32_MULTIPLY };
+    default:
+      return undefined;
+  }
 }
 
 /** f32(x) and Math.fround(x): binary32 rounding the Lua runtime already performs. */
@@ -96,7 +131,16 @@ const plugin = ({ sourcePrefix = "" }: { readonly sourcePrefix?: string }): tstl
       return result;
     },
     [ts.SyntaxKind.CallExpression]: (node, context) => {
-      if (isRounding(node, context.program)) return context.transformExpression(node.arguments[0]!);
+      if (isRounding(node, context.program)) {
+        const rounded = roundedOperation(node);
+        if (rounded === undefined) return context.transformExpression(node.arguments[0]!);
+        const { left, right, code } = rounded;
+        return tstl.createCallExpression(
+          context.transformExpression(node.expression),
+          [context.transformExpression(left), context.transformExpression(right), tstl.createNumericLiteral(code)],
+          node,
+        );
+      }
       const operator = integerOperator(node, context.program);
       if (operator === undefined) return context.superTransformExpression(node);
       const [left, right] = node.arguments;
