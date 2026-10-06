@@ -1,6 +1,12 @@
 # One command to a match: `wisp play`
 
 `play` takes the owner from their desktop to a match on their own display.
+It is the owner's normal playable path. A consumer such as Smashcraft resolves
+current main and builds its matching map and controller helper before calling
+Wisp. Experimental candidates use `fresh`, captures or `accept`; they do not
+replace the owner's play declaration. Consumer-owned versioned map libraries
+can set `GameFiles.layer({ ..., preserveMaps: true })` and install diagnostics
+in a `tests/` subfolder; menu hosting accepts nested map folders.
 It reports each step on one line and stops at the first problem with a plain
 message that says what to do. It takes no arguments.
 
@@ -42,8 +48,11 @@ command that clears them.
    starts the game's shortcut: a non-Steam shortcut's URL is
    `steam://rungameid/` followed by its 32-bit app id shifted left 32 bits,
    OR 0x02000000 (`steam -applaunch` takes only Steam's own app ids). Signed
-   in means the newest `battle.net-*.log` in `AppData/Local/Battle.net/Logs`
-   has `Logged into Battle.net successfully`. `play` never signs in or out.
+   in means the newest `battle.net-*.log` containing a BNLogin event in `AppData/Local/Battle.net/Logs`
+   has `Logged into Battle.net successfully`. Newer `--exec` request logs have
+   no login event and are ignored for sign-in and launch confirmation. A
+   launcher restarted by doctor cannot reuse a prior session's login log.
+   `play` never signs in or out.
    Warcraft III's launch options (Battle.net's "Additional command line
    arguments", `Games.w3.AdditionalLaunchArguments` in the prefix's
    `AppData/Roaming/Battle.net/Battle.net.config`) must not load a map at
@@ -56,7 +65,8 @@ command that clears them.
    folder lacks it, and the game's `prepare` leaves what the map reads at its
    start. `play` then asks the running launcher to launch Warcraft III with
    Battle.net's own `Battle.net.exe --exec="launch W3"`, run inside the
-   launcher's Steam runtime container: `nsenter` joins the launcher's user
+   launcher's Steam runtime container: `nsenter`, resolved to an absolute host
+   path before adopting the launcher's environment, joins the launcher's user
    and mount namespaces (they are the owner's) with its environment and
    folder. Each container has its own `/tmp`, where Wine keeps the
    wineserver's socket, so a Battle.net.exe started outside would start a

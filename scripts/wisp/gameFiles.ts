@@ -62,6 +62,8 @@ export const prepareHotFolders = (directories: readonly string[], filePrefix = "
 export interface MapDirectories {
   readonly mapFolder: string;
   readonly replacedMaps: string;
+  /** Keep other installed maps when a consumer owns a versioned library. */
+  readonly preserveMaps?: boolean;
 }
 
 /** A file the game writes, decoded; undefined while it doesn't exist. */
@@ -95,7 +97,7 @@ const write = (path: string, contents: string | Uint8Array) =>
     await Bun.write(path, contents);
   }));
 
-const local = ({ mapFolder, replacedMaps }: MapDirectories): GameFiles["Service"] => ({
+const local = ({ mapFolder, replacedMaps, preserveMaps }: MapDirectories): GameFiles["Service"] => ({
   // Game files are small and polled every few milliseconds while a reload waits, so they are read synchronously.
   read: (path) => trySync("read game file", path, () => {
     const stats = statSync(path, { throwIfNoEntry: false });
@@ -113,7 +115,7 @@ const local = ({ mapFolder, replacedMaps }: MapDirectories): GameFiles["Service"
     const replaced = join(documents, replacedMaps);
     mkdirSync(folder, { recursive: true });
     mkdirSync(replaced, { recursive: true });
-    for (const old of readdirSync(folder).filter((name) => name.endsWith(".w3x") && name !== basename(map))) renameSync(join(folder, old), join(replaced, old));
+    if (!preserveMaps) for (const old of readdirSync(folder).filter((name) => name.endsWith(".w3x") && name !== basename(map))) renameSync(join(folder, old), join(replaced, old));
     // A running game may still read the old file: replace it by rename, never in place.
     const next = join(folder, `${basename(map)}.next`);
     copyFileSync(map, next);

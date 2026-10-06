@@ -419,8 +419,15 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   });
 
   // 2. A launcher whose log says it signed in.
+  const loginLog = Effect.gen(function*() {
+    const names = (yield* machine.list(logs)).filter((name) => newestLauncherLog([name]) !== undefined).sort().reverse();
+    for (const name of names) {
+      if (/\[BNLogin\]/.test((yield* machine.read(join(logs, name))) ?? "")) return name;
+    }
+    return names[0];
+  });
   const waitSignedIn = (newerThan: string | undefined) => until(PLAY_TIMEOUTS.signIn, Effect.gen(function*() {
-    const log = newestLauncherLog(yield* machine.list(logs));
+    const log = yield* loginLog;
     if (log === undefined || (newerThan !== undefined && log <= newerThan)) return undefined;
     return signedIn((yield* machine.read(join(logs, log))) ?? "") ? log : undefined;
   }), () => `Battle.net didn't sign in within ${PLAY_TIMEOUTS.signIn} s. Sign in in its window (keep "Keep me logged in" ticked), then run play again.`);
@@ -509,7 +516,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   const launchGame = Effect.gen(function*() {
     const { launcher } = yield* prefixState;
     if (launcher === undefined) return yield* fail("Battle.net isn't running in the prefix");
-    const log = newestLauncherLog(yield* machine.list(logs));
+    const log = yield* loginLog;
     if (log === undefined) return yield* fail(`Battle.net has no log in ${logs}`);
     const path = join(logs, log);
     const offset = (yield* machine.size(path)) ?? 0;
