@@ -95,8 +95,7 @@ export const doctor = makeDoctor({
     a: { kind: "command", command: [/* steam-run ... proton waitforexitandrun .../Battle.net Launcher.exe */], log: "/state/client-a.log" },
     b: { kind: "steam", appId: 3516115572, name: "Warcraft III B" },
   },
-  watch: ClientWatch.layer(/* wisp watch's options for these clients */),
-});
+}, ClientWatch.layer({ filePrefix: "smashcraft" }));
 ```
 
 Each client's prefix is the folder its `documents` lives in
@@ -110,10 +109,14 @@ display (wisp:scripts/wisp/doctorHost.ts).
 ## Doctor in other commands
 
 - **Bot sessions and other runs on the clients:** `clientsDoctor(declaration,
-  names, print)` runs it as a library call, and `withDoctor(targets, print,
-  run)` (wisp:scripts/wisp/doctor.ts) runs doctor, then `run`; when `run`
-  fails it runs doctor once more and, only if that recovered something, `run`
-  once more. A failure doctor can't explain stands.
+  names, print)` runs it as a library call (with the caller's ClientWatch),
+  and `withDoctor(check, print, run, { retry })`
+  (wisp:scripts/wisp/doctor.ts) runs `check` (a doctor run), then `run`; when
+  `run` fails it runs `check` once more and, only if that recovered
+  something, `run` once more. A failure doctor can't explain stands. A run
+  that can't repeat, such as a capture into its own folder, passes
+  `retry: false`: its clients are healed for the next run and its failure
+  stands.
 - **`wisp accept`:** pass `clientsDoctor(...)` as the live driver's
   `prepare` (wisp:scripts/wisp/acceptLive.ts).
 - **`wisp play`:** checks its prefix with doctor before step 1 and once after
