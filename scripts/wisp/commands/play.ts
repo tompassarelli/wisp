@@ -41,5 +41,6 @@ export const makePlay = <R>(declaration: PlayDeclaration<R>, layer: Layer.Layer<
   });
   // A watch beside play's own menu steps shares the report port through its kept address (wisp:docs/watch.md).
   const check = doctor([target], print).pipe(Effect.provide(Layer.mergeAll(playMachineLayer(tools), Layer.succeed(DoctorHands, hands), watch)));
-  return withDoctor(check, print, run);
+  // Warcraft III 3.0 crashes in about one map start in three on this machine, with Smashcraft maps old and new alike (smashcraft#108), so play tries a few times.
+  return withDoctor(check, print, run, { attempts: 4 });
 };

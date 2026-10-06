@@ -479,16 +479,18 @@ export const recoveredAny = (results: readonly DoctorResult[]) => results.some((
  * Runs `run` on healthy clients: `check` (a doctor run, such as
  * `doctor(targets, print)` with its services) first, and once more after a
  * failure; when that recovered something and `retry` allows (the default),
- * `run` gets one more try. A failure doctor can't explain stands, and so does
+ * `run` tries again, up to `attempts` runs in all (2 by default). A failure doctor can't explain stands, and so does
  * any failure of a run that can't repeat (a capture into its own folder): its
  * clients are healed for the next run. `check` runs apart from `run`, so a
  * watch it holds (a menu report port) is free again while `run` runs.
  */
-export const withDoctor = <A, E, R, E2, R2>(check: Effect.Effect<readonly DoctorResult[], E2, R2>, print: (line: string) => void, run: Effect.Effect<A, E, R>, { retry = true }: { readonly retry?: boolean } = {}) => Effect.gen(function*() {
+export const withDoctor = <A, E, R, E2, R2>(check: Effect.Effect<readonly DoctorResult[], E2, R2>, print: (line: string) => void, run: Effect.Effect<A, E, R>, { retry = true, attempts = 2 }: { readonly retry?: boolean; readonly attempts?: number } = {}) => Effect.gen(function*() {
   yield* check;
-  const first = yield* run.pipe(Effect.result);
-  if (first._tag === "Success") return first.success;
-  print(`failed: ${(first.failure as { readonly message?: string }).message ?? String(first.failure)}; running doctor once`);
-  if (!recoveredAny(yield* check) || !retry) return yield* Effect.fail(first.failure);
-  return yield* run;
+  for (let attempt = 1; ; attempt++) {
+    const result = yield* run.pipe(Effect.result);
+    if (result._tag === "Success") return result.success;
+    if (attempt >= attempts) return yield* Effect.fail(result.failure);
+    print(`failed: ${(result.failure as { readonly message?: string }).message ?? String(result.failure)}; running doctor once`);
+    if (!recoveredAny(yield* check) || !retry) return yield* Effect.fail(result.failure);
+  }
 });
