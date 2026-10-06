@@ -262,6 +262,14 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
 
   const prefixState = machine.processes.pipe(Effect.map((processes) => prefixUse(processes, prefix, server)), Effect.mapError(failed));
   const newestLog = machine.list(logs).pipe(Effect.map(newestLauncherLog), Effect.mapError(failed));
+  let priorSessionLog: string | undefined;
+  const loginLog = Effect.gen(function*() {
+    const names = (yield* machine.list(logs)).filter((name) => newestLauncherLog([name]) !== undefined && (priorSessionLog === undefined || name > priorSessionLog)).sort().reverse();
+    for (const name of names) {
+      if (/\[BNLogin\]/.test((yield* machine.read(join(logs, name))) ?? "")) return name;
+    }
+    return names[0];
+  }).pipe(Effect.mapError(failed));
 
   /** The newest session's span in Warcraft III's own log: a lower bound on how long it has run. */
   const sessionSpan = machine.read(war3Log).pipe(Effect.map((text) => {
@@ -275,7 +283,7 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
   const observe = Effect.gen(function*() {
     const use = yield* prefixState;
     const errorDialog = use.processes.find(isErrorDialog);
-    const log = use.launcher === undefined ? undefined : yield* newestLog;
+    const log = use.launcher === undefined ? undefined : yield* loginLog;
     const launcher = log === undefined ? undefined : launcherHealth((yield* machine.read(join(logs, log)).pipe(Effect.mapError(failed))) ?? "");
     // Warcraft III rewrites the file when it exits, so only a closed game's file is settled.
     let changes: readonly DisplayChange[] | undefined;
@@ -335,6 +343,7 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
 
   const startLauncher = Effect.gen(function*() {
     const before = yield* newestLog;
+    priorSessionLog = before;
     const { start } = target;
     const how = start.kind === "steam" ? `the Steam shortcut "${start.name}" (steam ${shortcutUrl(start.appId)})` : `its launch command (${start.command.join(" ")})`;
     yield* say(`starting Battle.net with ${start.kind === "steam" ? `the Steam shortcut "${start.name}"` : "its launch command"}`);
@@ -354,7 +363,7 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
   const launchGame = Effect.gen(function*() {
     const { launcher } = yield* prefixState;
     if (launcher === undefined) return yield* stop("Battle.net isn't running in the prefix");
-    const log = yield* newestLog;
+    const log = yield* loginLog;
     if (log === undefined) return yield* stop(`Battle.net has no log in ${logs}`);
     const path = join(logs, log);
     const offset = (yield* machine.size(path).pipe(Effect.mapError(failed))) ?? 0;

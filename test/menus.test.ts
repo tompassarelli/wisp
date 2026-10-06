@@ -14,7 +14,19 @@ const FOLDERS: Readonly<Record<string, readonly { filename: string; isFolder: bo
   [MAPS]: [{ filename: "00-Wisp", isFolder: true }, { filename: "Download", isFolder: true }],
   [`${MAPS}Download/`]: [{ filename: "Other.w3x", isFolder: false }],
   [`${MAPS}00-Wisp/`]: [{ filename: "Wisp Sample.w3x", isFolder: false }],
+  [`${MAPS}00-Wisp/tests/`]: [{ filename: "Probe.w3x", isFolder: false }],
 };
+
+test("test maps are hosted from a nested tests folder", async () => {
+  const game = fakeGame();
+  try {
+    const result = await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const menus = yield* connectMenus(game.address);
+      return yield* hostLobby(menus, { folder: "00-Wisp/tests", file: "Probe.w3x", gameName: "probe", password: "pw" });
+    })));
+    expect(result).toBe(`${MAPS}00-Wisp/tests/Probe.w3x`);
+  } finally { game.stop(); }
+});
 
 interface Received {
   readonly message: string;

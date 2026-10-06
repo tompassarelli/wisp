@@ -388,8 +388,7 @@ const listedMaps = (payload: unknown): ListedMap[] => {
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const separator = (path: string) => (path.includes("\\") && !path.includes("/") ? "\\" : "/");
 const withSeparator = (path: string) => (/[\\/]$/.test(path) ? path : `${path}${separator(path)}`);
-/** The last folder of a listed path. */
-const lastFolder = (path: string) => path.split(/[\\/]/).filter((part) => part !== "").at(-1) ?? "";
+const inFolder = (path: string, folder: string) => path.replaceAll("\\", "/").replace(/\/$/, "").toLowerCase().endsWith(`/${folder.replaceAll("\\", "/").toLowerCase()}`);
 
 /**
  * The menus' path of FOLDER/FILE: the map list is walked as Create Game walks
@@ -402,12 +401,12 @@ export const findMap = (menus: MenuSocket, folder: string, file: string) => Effe
     yield* menus.forget;
     yield* menus.send("GetMapList", request);
     const maps = yield* menus.expect("list maps", 10, (event) => (event.messageType === "MapList" ? { done: listedMaps(event.payload) } : undefined));
-    const map = maps.find((entry) => !entry.isFolder && same(entry.filename, file) && same(lastFolder(entry.filepath), folder));
+    const map = maps.find((entry) => !entry.isFolder && same(entry.filename, file) && inFolder(entry.filepath, folder));
     if (map !== undefined) return `${withSeparator(map.filepath)}${map.filename}`;
     const sub = maps.find((entry) => entry.isFolder && same(entry.filename, folder));
     // Folders are listed with their parent's absolute path; asking for one takes that path, its name and a separator.
     const inMaps = maps.map((entry) => /^(.*[\\/]Maps[\\/])/i.exec(entry.filepath)?.[1]).find((root) => root !== undefined);
-    const next = sub !== undefined ? `${withSeparator(sub.filepath)}${sub.filename}${separator(sub.filepath)}` : inMaps !== undefined ? `${inMaps}${folder}${separator(inMaps)}` : undefined;
+    const next = sub !== undefined ? `${withSeparator(sub.filepath)}${sub.filename}${separator(sub.filepath)}` : inMaps !== undefined ? `${inMaps}${folder.replace(/[\\/]/g, separator(inMaps))}${separator(inMaps)}` : undefined;
     if (next === undefined || asked.has(next)) {
       const seen = maps.slice(0, 12).map((entry) => `${entry.isFolder ? "[folder] " : ""}${entry.filename}`).join(", ");
       return yield* new MenuFailure({ operation: "find the map", problem: `${folder}/${file} is not in the map list (${maps.length} entries${maps.length > 0 ? ` in ${maps[0]!.filepath}: ${seen}` : ""})` });

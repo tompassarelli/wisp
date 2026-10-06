@@ -6,6 +6,9 @@
 import { Cause, Clock, Effect, Exit, Layer, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { hostNsenter } from "../scripts/wisp/playHost";
 import { type ProcessInfo, launchOptions, launchOutcome, loadMapOption, newestLauncherLog, prefixUse, shortcutUrl, windowsPath, withLaunchOptions } from "../scripts/warcraft/battleNet";
 import type { Word } from "../scripts/warcraft/desktop";
 import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, findPhrase, expectedGain, measuredGain, play, spotTargets, steer, steerPointer, offScreen } from "../scripts/wisp/play";
@@ -17,6 +20,19 @@ const MAP = `${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III/Maps/00-Sm
 const HELPER = "/inputs/wc3-journal";
 const HELPER_LOG = "/state/helper.log";
 const DEBUG = "/state/play-debug";
+
+test("launch resolves nsenter on the host, before adopting the launcher's PATH", () => {
+  const configured = Bun.which("sh")!;
+  expect(hostNsenter(configured)).toBe(configured);
+  expect(hostNsenter("sh")).toBe(configured);
+  expect(() => hostNsenter("wisp-nonexistent-nsenter")).toThrow("host PATH");
+});
+
+test("play ignores a newer --exec request log and follows the signed-in launcher's log", async () => {
+  const result = await world({ runtimes: "launcher", execRequestLog: true }).run();
+  expect(result.failure).toBeUndefined();
+  expect(result.events).toContain("launch");
+});
 const SOURCE = "/inputs/playable-0047/Smashcraft 0.0.47.w3x";
 const CONFIG = `${PREFIX}/drive_c/users/steamuser/AppData/Roaming/Battle.net/Battle.net.config`;
 const DOCUMENTS = `${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III`;
@@ -54,6 +70,7 @@ function words(id: string, x: number, y: number, text: string): Word[] {
 }
 
 interface Scenario {
+  readonly execRequestLog?: boolean;
   /** War3Preferences.txt as the desktop finds it, and a backup an earlier play left. */
   readonly preferences?: string;
   readonly backup?: string;
@@ -193,7 +210,8 @@ function world(scenario: Scenario = {}) {
   switch (scenario.runtimes ?? "none") {
     case "launcher":
       startLauncher();
-      logs.set(newestLog(), logs.get(newestLog())! + SIGNED_IN);
+      logs.set(newestLog(), logs.get(newestLog())! + (scenario.execRequestLog ? readFileSync(join(import.meta.dir, "fixtures/doctor/launcher-played.log"), "utf8") : SIGNED_IN));
+      if (scenario.execRequestLog) logs.set("battle.net-20261006T235959.000000.log", readFileSync(join(import.meta.dir, "fixtures/doctor/launcher-exec.log"), "utf8"));
       pending.length = 0;
       break;
     case "two":
@@ -262,7 +280,8 @@ function world(scenario: Scenario = {}) {
     events.push("launch");
     const outcome = launchesLeft.shift() ?? "running";
     later(1, () => {
-      if (outcome !== "ignored") logs.set(newestLog(), logs.get(newestLog())! + REQUESTED + (outcome === "running" ? LAUNCHED : COULD_NOT));
+      const ownerLog = [...logs.keys()].findLast((name) => logs.get(name)!.includes("[BNLogin]")) ?? newestLog();
+      if (outcome !== "ignored") logs.set(ownerLog, logs.get(ownerLog)! + REQUESTED + (outcome === "running" ? LAUNCHED : COULD_NOT));
       if (outcome === "running") startGame();
     });
   };

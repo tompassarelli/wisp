@@ -33,6 +33,13 @@ export interface PlayTools {
 
 export const PLAY_TOOLS: PlayTools = { grim: "grim", xdotool: "xdotool", tesseract: "tesseract", wlrctl: "wlrctl", niri: "niri", steam: "steam", nsenter: "nsenter" };
 
+/** Resolve on the host before replacing PATH with the launcher's environment. */
+export function hostNsenter(command: string): string {
+  const path = Bun.which(command);
+  if (path === null) throw new Error(`couldn't find ${command} on the host PATH`);
+  return path;
+}
+
 const problem = (what: string) => (cause: unknown) => new PlayProblem({ problem: `${what}: ${describeCause(cause)}` });
 
 /** Starts a program in its own session, so it outlives play and the terminal's signals. */
@@ -77,7 +84,8 @@ const launchInContainer = (tools: PlayTools, launcher: { readonly pid: number })
       .map((entry) => [entry.slice(0, entry.indexOf("=")), entry.slice(entry.indexOf("=") + 1)] as const)
       .filter(([name]) => name !== "WINESERVERSOCKET" && name !== "WINELOADERNOEXEC"));
     const wine = resolve(dirname(readlinkSync(`${base}/exe`)), "../../../bin/wine");
-    const child = Bun.spawn([tools.nsenter, "-t", String(launcher.pid), "-U", "-m", "--preserve-credentials", `--wd=${readlinkSync(`${base}/cwd`)}`, "--",
+    const nsenter = hostNsenter(tools.nsenter);
+    const child = Bun.spawn([nsenter, "-t", String(launcher.pid), "-U", "-m", "--preserve-credentials", `--wd=${readlinkSync(`${base}/cwd`)}`, "--",
       wine, "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe", "--exec=launch W3"], { env, stdin: "ignore", stdout: "ignore", stderr: "pipe", timeout: 30_000 });
     const [stderr, code] = await Promise.all([new Response(child.stderr).text(), child.exited]);
     if (code !== 0) throw new Error(`exited ${code}: ${stderr.trim().split("\n").slice(-3).join(" ")}`);

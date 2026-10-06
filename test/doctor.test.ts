@@ -57,6 +57,7 @@ const gameProcess = (pid: number): ProcessInfo => ({ pid, name: "Warcraft III.ex
 const errorDialog = (pid: number): ProcessInfo => ({ pid, name: "BlizzardError.e", args: ["C:\\Program Files (x86)\\Warcraft III\\_retail_\\x86_64\\BlizzardError.exe"], ...env });
 
 interface Scenario {
+  readonly execRequestLog?: boolean;
   readonly processes: "two runtimes" | "game" | "game and dialog" | "launcher" | "runtime alone";
   readonly launcherLog?: string;
   /** The watch's view while the first game runs. */
@@ -83,6 +84,7 @@ function world(scenario: Scenario) {
     ...(scenario.processes === "game and dialog" ? [errorDialog(52990)] : []),
   ];
   const files = new Map<string, string>([[`${LOGS}/battle.net-20261006T085733.941623.log`, scenario.launcherLog ?? SIGNED_IN], [WAR3LOG, scenario.war3Log ?? ""], ...(scenario.preferences === undefined ? [] : [[PREFERENCES, scenario.preferences] as [string, string]])]);
+  if (scenario.execRequestLog) files.set(`${LOGS}/battle.net-20261006T235959.000000.log`, fixture("launcher-exec.log"));
   let state: ClientState = scenario.state ?? { kind: "menus", screen: "MAIN_MENU" };
   let source: Source = scenario.source ?? "socket";
   let plays = 0;
@@ -99,7 +101,8 @@ function world(scenario: Scenario) {
     launch: (launcher) => Effect.sync(() => {
       plays++;
       events.push(`launch ${launcher.pid}`);
-      files.set(newestLog(), files.get(newestLog())! + LAUNCH);
+      const log = [...files.keys()].findLast((path) => path.startsWith(LOGS) && files.get(path)!.includes("[BNLogin]")) ?? newestLog();
+      files.set(log, files.get(log)! + LAUNCH);
       processes = [...processes, gameProcess(70000 + plays)];
       state = scenario.afterPlay ?? { kind: "menus", screen: "MAIN_MENU" };
       source = "socket";
@@ -178,6 +181,12 @@ test("recorded launcher logs: signed in, a lost connection, a reconnect, a rejec
   expect(launcherHealth(REJECTED.split("\n")[0]!)).toEqual({ kind: "not signed in" });
   // The catalog's "DisableLoginCredentialUIRegionList" in every launcher's log is no sign-in form.
   expect(launcherHealth(`${SIGNED_IN}D 2026-10-06 12:33:38.741703 [CatalogVarStorage] {Main} Setting var from catalog Client.DisableLoginCredentialUIRegionList=CN\n`).kind).toBe("signed in");
+});
+
+test("doctor ignores a newer --exec log when checking and launching from a signed-in launcher", async () => {
+  const result = await world({ processes: "launcher", execRequestLog: true }).run();
+  expect(result.failure).toBeUndefined();
+  expect(result.events).toContain("launch 43924");
 });
 
 test("the crash dialog is Warcraft III's BlizzardError.exe, not the launcher's copy", () => {
