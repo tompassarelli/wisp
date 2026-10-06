@@ -119,6 +119,7 @@ export const play = makePlay({
   gameName: "Smashcraft",
   debugDirectory: join(homedir(), ".local/state/smashcraft/play-debug"),
   prepare: (documents) => /* the map's request file in CustomMapData */,
+  cleanup: (documents) => /* removes it when a run stops */,
   started: (game, since) => /* the map's first-screen file, newer than since */,
   match: (game) => /* the go-ahead the map waits for, then its receipt; "computer as Player 3" */,
   helper: { binary, args: (game) => /* game.pid, game.window, game.xWindow.id, ... */, ready: /waiting_for_match/, log },

@@ -226,6 +226,8 @@ export interface PlayDeclaration<R = never> {
   readonly debugDirectory: string;
   /** Before Warcraft III starts the map: what the map reads at its start, left in Documents/Warcraft III. */
   readonly prepare: (documents: string) => Effect.Effect<void, PlayProblem, R>;
+  /** When a run stops before the match: removes what prepare left, so a later session of the map runs as usual. */
+  readonly cleanup: (documents: string) => Effect.Effect<void, PlayProblem, R>;
   /** Resolves once the started map shows its first screen; `since` is when the game was asked to start it, on the Effect Clock. */
   readonly started: (game: PlayGame, since: number) => Effect.Effect<void, PlayProblem, R>;
   /** With the helper running: sets up and starts the match, its opponent included, and describes it, as in "computer as Player 3". */
@@ -868,10 +870,10 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       yield* status(7, "Fullscreen", "Warcraft III is fullscreen and focused. Ready to fight.");
     }).pipe(inStep(7, "Fullscreen"));
   }).pipe(Effect.onExit((exit) => (Exit.isFailure(exit)
-    ? restoreLaunchOptions.pipe(
-      Effect.tap((restored) => Effect.sync(() => { if (restored) print("Battle.net's launch options for Warcraft III put back, as the run stopped"); })),
-      Effect.ignore,
-    )
+    ? Effect.gen(function*() {
+      if (yield* restoreLaunchOptions) print("Battle.net's launch options for Warcraft III put back, as the run stopped");
+      yield* declaration.cleanup(documents);
+    }).pipe(Effect.ignore)
     : Effect.void)));
 });
 
