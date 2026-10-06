@@ -92,7 +92,7 @@ interface Scenario {
   /** Whether the declaration names the map's build, and whether that file is there. */
   readonly mapSource?: "present" | "missing";
   readonly mainMenu?: boolean;
-  readonly helper?: "ready" | "exits" | "earlier" | "this game's";
+  readonly helper?: "ready" | "exits" | "earlier" | "this game's" | "service" | "service fails";
   readonly fullscreens?: boolean;
   readonly gameRunning?: boolean;
   readonly initialMenu?: "main" | "battle.net";
@@ -435,7 +435,9 @@ function world(scenario: Scenario = {}) {
       if (scenario.matchFails === true) return yield* new PlayProblem({ problem: "the map refused the playtest request" });
       return "computer as Player 3";
     }),
-    helper: { binary: HELPER, ready: /waiting_for_match/, log: HELPER_LOG, args: (game) => Effect.succeed(["--pid", String(game.pid)]) },
+    helper: scenario.helper === "service" || scenario.helper === "service fails"
+      ? { service: (game) => scenario.helper === "service" ? Effect.succeed(`the controller service serves this game (pid ${game.pid})`) : Effect.fail(new PlayProblem({ problem: "the controller service isn't running" })) }
+      : { binary: HELPER, ready: /waiting_for_match/, log: HELPER_LOG, args: (game) => Effect.succeed(["--pid", String(game.pid)]) },
   };
 
   const run = async () => {
@@ -775,6 +777,13 @@ test("step 5 reuses this game's helper, refuses an earlier one and reports a hel
     "5/7 Controller helper stopped: an earlier controller helper is running (pid 400). Stop it with: kill 400   then run play again.");
   expect((await world({ helper: "exits" }).run()).failure).toBe(
     `5/7 Controller helper stopped: the controller helper stopped: wc3-journal: no controller at /dev/input/event9 (log: ${HELPER_LOG})`);
+});
+
+test("step 5 with an always-on controller service waits on it and starts no helper of its own", async () => {
+  const served = await world({ helper: "service" }).run();
+  expect(served.failure).toBeUndefined();
+  expect(served.lines).toContain("5/7 Controller helper: the controller service serves this game (pid 2852)");
+  expect((await world({ helper: "service fails" }).run()).failure).toBe("5/7 Controller helper stopped: the controller service isn't running");
 });
 
 test("a problem in the game's own step stops play with that step's name", async () => {
