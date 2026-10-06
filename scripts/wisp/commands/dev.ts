@@ -13,6 +13,7 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { Console, Deferred, Effect, Fiber, Layer, Queue, Semaphore } from "effect";
 import { type Command, type CommandFailure, UsageFailure, flagValues } from "../command";
 import { Desyncs, formatDesync } from "../desyncs";
+import { FrameCosts, formatFrameCost } from "../frameCosts";
 import { type ProcessOutput, Standby, runProcess } from "../devProcesses";
 import { SAVED_FILES_ENV, WARM_ENV } from "../devResult";
 import { GameFiles } from "../gameFiles";
@@ -406,14 +407,17 @@ export const makeDev = (project: DevProject): Command => (args) => Effect.gen(fu
     Layer.provideMerge(MapBuild.layer(hotProject.project)),
     Layer.provideMerge(SourceErrors.layer({ sourceMapDirectory: hotProject.sourceMapDirectory, filePrefix: hotProject.filePrefix ?? "wisp" })),
     Layer.merge(Desyncs.layer(directories)),
+    Layer.provideMerge(FrameCosts.layer(hotProject.filePrefix)),
     Layer.provideMerge(GameFiles.layer()),
   );
   yield* Effect.gen(function*() {
     const reload = yield* HotReload;
     const sourceErrors = yield* SourceErrors;
     const desyncs = yield* Desyncs;
+    const frameCosts = yield* FrameCosts;
     // Reports from before the loop started are old news.
     yield* sourceErrors.changed(directories);
+    yield* frameCosts.changed(directories);
     const report = (effect: Effect.Effect<unknown, CommandFailure>) => effect.pipe(Effect.asVoid, Effect.catch((failure) => Console.log(failure.message)));
     let running = false;
     let next: number | undefined;
@@ -443,6 +447,8 @@ export const makeDev = (project: DevProject): Command => (args) => Effect.gen(fu
         const reports = yield* sourceErrors.changed(directories);
         yield* Effect.forEach(reports, (found) =>
           Console.log(`p${found.slot} ${found.heading} (${found.latency.toFixed(0)} ms after the game wrote it)\n${found.text}`), { discard: true });
+        const costs = yield* frameCosts.changed(directories);
+        yield* Effect.forEach(costs, ({ slot, report: cost }) => Console.log(formatFrameCost(slot, cost, hotProject.frameCostThreshold)), { discard: true });
       })),
     };
     yield* loop(project, hot);

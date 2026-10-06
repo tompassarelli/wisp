@@ -1,6 +1,6 @@
 // Produces the installed library: TypeScript source for host tools and the
 // matching Lua modules required by TypeScriptToLua's package resolver.
-import { copyFile, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readdir, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { transpileProject } from "typescript-to-lua";
 import { report } from "./compiler";
@@ -16,6 +16,25 @@ async function copyTree(source: string, destination: string): Promise<void> {
     const to = join(destination, entry.name);
     if (entry.isDirectory()) await copyTree(from, to);
     else if (entry.isFile()) await copyFile(from, to);
+  }
+}
+
+/**
+ * Moves the generated declarations under `source` to the same paths under
+ * `destination`. A declaration's relative import then finds the sibling
+ * declaration, not the TypeScript source shipped beside the Lua: a consumer
+ * program that held the source would take it for its own and TypeScriptToLua
+ * would leave its Lua out of the bundle.
+ */
+async function moveDeclarations(source: string, destination: string): Promise<void> {
+  for (const entry of await readdir(source, { withFileTypes: true })) {
+    const from = join(source, entry.name);
+    const to = join(destination, entry.name);
+    if (entry.isDirectory()) await moveDeclarations(from, to);
+    else if (entry.name.endsWith(".d.ts")) {
+      await mkdir(destination, { recursive: true });
+      await rename(from, to);
+    }
   }
 }
 
@@ -43,6 +62,7 @@ export async function producePackage(output: string): Promise<void> {
   try {
     const { diagnostics } = transpileProject(join(root, "tsconfig.library.json"), { outDir: staging });
     if (diagnostics.length > 0) throw new Error(report(diagnostics));
+    await moveDeclarations(join(staging, "src"), join(staging, "types/src"));
     for (const path of packagePaths) {
       const source = join(root, path);
       const destination = join(staging, path);
@@ -57,7 +77,7 @@ export async function producePackage(output: string): Promise<void> {
     delete manifest.devDependencies;
     manifest.exports = {
       // TSTL's resolver appends .lua to its selected export path.
-      "./src/*": { types: "./src/*.d.ts", tstl: "./src/*", default: "./src/*.ts" },
+      "./src/*": { types: "./types/src/*.d.ts", tstl: "./src/*", default: "./src/*.ts" },
       "./scripts/*": "./scripts/*.ts",
       "./plugins/*": "./plugins/*.ts",
       "./*": "./*",

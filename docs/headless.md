@@ -218,6 +218,10 @@ over Lua's globals, so clients share nothing, and the bundle's module scope
 runs once per client and once per reload. wisp:examples/sample/test/headless.test.ts
 requires the Lua run to print exactly what the Bun run does.
 
+`runLuaPerf(map, journey, bundlePath, declarationsPath)` plays the journey the
+same way and measures each client's frames: Lua instructions, Lua time and
+native calls ([frame cost](frame-cost.md#headless)).
+
 ## `wisp headless`
 
 A project adds the command to its program with `makeHeadless`

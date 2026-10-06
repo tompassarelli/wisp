@@ -53,6 +53,8 @@ export const WISP_LOCAL_NATIVES: LocalNatives = {
   BlzGetAbilityTooltip: "FileIO's local file buffer",
   BlzSetAbilityTooltip: "FileIO's local file buffer",
   DisplayTextToPlayer: "a message on this client: reload results and error reports",
+  BlzFrameSetText: "the frame meter's overlay: an existing frame's text on this client",
+  BlzFrameSetVisible: "the frame meter's overlay: shows an existing frame on this client",
   TimerGetElapsed: "reads a timer; the reload acknowledgement only reports it",
   BlzGetLocalSpecialEffectX: "the scene report reads an effect's local position",
   BlzGetLocalSpecialEffectY: "the scene report reads an effect's local position",

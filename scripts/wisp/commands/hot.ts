@@ -6,6 +6,7 @@ import { type FSWatcher, watch } from "node:fs";
 import { Console, Effect, Layer, Queue, Schema } from "effect";
 import { type Command, type CommandFailure, UsageFailure, flagValues } from "../command";
 import { Desyncs, formatDesync } from "../desyncs";
+import { FrameCosts, formatFrameCost } from "../frameCosts";
 import { GameFiles } from "../gameFiles";
 import { HotReload } from "../hotReload";
 import { MapBuild, type BuildProject } from "../mapBuild";
@@ -17,6 +18,8 @@ export interface HotProject {
   readonly sourceDirectory: string;
   readonly sourceMapDirectory: string;
   readonly filePrefix?: string;
+  /** How much worse a reloaded version's frames may be before `--watch` flags it: 0.2 for 20%. */
+  readonly frameCostThreshold?: number;
 }
 
 const DataDirectories = Schema.NonEmptyArray(Schema.String.check(Schema.isMinLength(1))).check(Schema.isUnique());
@@ -26,20 +29,23 @@ export const validateDataDirectories = (input: readonly string[]) =>
     Effect.mapError((cause) => new UsageFailure({ problem: `--data needs one or more distinct client CustomMapData folders: ${cause.message}` })),
   );
 
-export const makeHot = ({ project, sourceDirectory, sourceMapDirectory, filePrefix = "wisp" }: HotProject): Command => (args) => Effect.gen(function*() {
+export const makeHot = ({ project, sourceDirectory, sourceMapDirectory, filePrefix = "wisp", frameCostThreshold }: HotProject): Command => (args) => Effect.gen(function*() {
   const directories = yield* validateDataDirectories(flagValues(args, "data"));
   const services = HotReload.layer(directories, filePrefix).pipe(
     Layer.provideMerge(MapBuild.layer(project)),
     Layer.provideMerge(SourceErrors.layer({ sourceMapDirectory, filePrefix })),
     Layer.merge(Desyncs.layer(directories)),
+    Layer.provideMerge(FrameCosts.layer(filePrefix)),
     Layer.provideMerge(GameFiles.layer()),
   );
   yield* Effect.gen(function*() {
     const reload = yield* HotReload;
     const sourceErrors = yield* SourceErrors;
     const desyncs = yield* Desyncs;
+    const frameCosts = yield* FrameCosts;
     // Reports from before Wisp started are old news.
     yield* sourceErrors.changed(directories);
+    yield* frameCosts.changed(directories);
     if (!args.includes("--watch")) {
       yield* reload.publish.pipe(step("reload", { root: true }));
       return;
@@ -50,6 +56,8 @@ export const makeHot = ({ project, sourceDirectory, sourceMapDirectory, filePref
       const reports = yield* sourceErrors.changed(directories);
       yield* Effect.forEach(reports, (report) =>
         Console.error(`p${report.slot} ${report.heading} (${report.latency.toFixed(0)} ms after the game wrote it)\n${report.text}`), { discard: true });
+      const costs = yield* frameCosts.changed(directories);
+      yield* Effect.forEach(costs, ({ slot, report }) => Console.log(formatFrameCost(slot, report, frameCostThreshold)), { discard: true });
     });
     const request = coalesced(reload.publish);
     yield* report(request.pipe(step("reload", { root: true })));

@@ -23,8 +23,8 @@ A failing test prints as soon as its process ends (`FAIL file > test: why`),
 before its signal's line. A new save stops the previous save's work; a hot reload
 already sending finishes first. With `--data DIR --data DIR`, each save also
 hot-reloads the map into those clients exactly as `hot --watch` does
-([hot reload](hot-reload.md)), and in-game error reports and desyncs print as
-they appear.
+([hot reload](hot-reload.md)), and in-game error reports, desyncs and each
+reload's [frame cost](frame-cost.md#after-each-hot-reload) print as they appear.
 
 ## Declare it
 

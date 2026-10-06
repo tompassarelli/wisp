@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ESNext", "lib": ["ESNext"], "module": "ESNext",
+    "moduleResolution": "Bundler", "strict": true, "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true, "noEmitOnError": true,
+    "skipLibCheck": true, "types": ["lua-types/5.3"], "rootDir": ".",
+    "outDir": "output"
+  },
+  "files": ["perf.ts"],
+  "tstl": {
+    "luaTarget": "5.3", "luaBundle": "perf.lua", "luaBundleEntry": "perf.ts",
+    "noImplicitSelf": true, "noHeader": true,
+    "luaPlugins": [{ "name": "./node_modules/wisp/plugins/warcraft-numbers.ts" }]
+  }
+}

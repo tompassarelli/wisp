@@ -1,7 +1,7 @@
 // Headless runs in 32-bit Lua (wisp:docs/headless.md): each simulated client
 // loads the map's compiled bundle into its own environment, whose globals are
 // that client's natives over Lua's own, so clients share no state.
-import type { LocalNatives, MapEntry } from "./client";
+import type { ClientScope, LocalNatives, MapEntry } from "./client";
 import { parseNativeDeclarations } from "./declarations";
 import { type Journey, journeyLines, journeyProblems, runJourney } from "./journey";
 import { Lockstep } from "./lockstep";
@@ -17,7 +17,8 @@ export interface LuaHeadlessMap {
   readonly players?: readonly number[];
 }
 
-function readFile(path: string): string {
+/** A file's bytes, for a host program running in Lua. */
+export function readFile(path: string): string {
   const [file, problem] = io.open(path, "rb");
   if (file === undefined) throw new Error(`can't read ${path}: ${problem}`);
   const text = file.read("a");
@@ -26,9 +27,10 @@ function readFile(path: string): string {
   return text;
 }
 
-/** Clients that each run `bundle`, the map's compiled Lua, with the natives `declarations` (warcraft.d.ts) lists. */
-export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: string): Lockstep {
+/** Clients that each run `bundle`, the map's compiled Lua, with the natives `declarations` (warcraft.d.ts) lists; `scope` sees each client run. */
+export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: string, scope?: ClientScope): Lockstep {
   return new Lockstep({
+    ...(scope === undefined ? {} : { scope }),
     declarations: parseNativeDeclarations(declarations),
     players: map.players ?? [0, 1],
     filePrefix: map.filePrefix,

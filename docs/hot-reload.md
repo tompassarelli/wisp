@@ -63,7 +63,8 @@ Compose [makeHot](../scripts/wisp/commands/hot.ts)
 (wisp:scripts/wisp/commands/hot.ts) with the consuming project's
 `BuildProject`, source directory, retained-source-map directory and matching
 file prefix. Its command takes one `--data` CustomMapData directory per client;
-`--watch` publishes saved changes and prints new error and [desync](#desync-reports) reports.
+`--watch` publishes saved changes and prints new error and [desync](#desync-reports) reports
+and each reload's [frame cost](frame-cost.md#after-each-hot-reload).
 The consumer owns the program and command name; the
 [sample map](sample-map.md) (wisp:docs/sample-map.md) composes one with
 `runCli`.
