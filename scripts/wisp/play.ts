@@ -320,7 +320,7 @@ const lowest = (places: readonly { readonly x: number; readonly y: number }[]) =
   places.reduce<{ readonly x: number; readonly y: number } | undefined>((best, place) => (best === undefined || place.y > best.y ? place : best), undefined);
 
 /** The highest of a phrase's places: a tab bar sits above the pages that repeat its words. */
-const topmost = (places: readonly { readonly x: number; readonly y: number }[]) =>
+export const topmost = (places: readonly { readonly x: number; readonly y: number }[]) =>
   places.reduce<{ readonly x: number; readonly y: number } | undefined>((best, place) => (best === undefined || place.y < best.y ? place : best), undefined);
 
 /**
@@ -350,12 +350,34 @@ export function tileArt(words: readonly Word[], label: { readonly x: number; rea
   const starts = words.filter((word, index) => Math.abs(word.y - label.y) <= 8 && (index === 0 || words[index - 1]!.line !== word.line))
     .map(({ x }) => x).sort((a, b) => a - b);
   const gaps = starts.slice(1).map((x, index) => x - starts[index]!).filter((gap) => gap > 100).sort((a, b) => a - b);
-  const pitch = gaps[Math.floor(gaps.length / 2)] ?? TILE_PITCH;
+  const measured = gaps[Math.floor(gaps.length / 2)];
+  const pitch = measured !== undefined && measured >= 250 && measured <= 600 ? measured : TILE_PITCH;
   return { first: { x: label.x, y: Math.round(label.y - pitch / 2) }, retry: { x: label.x, y: Math.round(label.y - pitch * 0.6) } };
 }
 
-/** The Games tab's tile pitch on 6 Oct (Battle.net 2.53), for a row with one tile. */
+/** The Games tab's tile pitch on 6 Oct (Battle.net 2.53), for a row with one tile or gaps that aren't tiles'. */
 const TILE_PITCH = 381;
+
+/** A tile's install state under its label. */
+const TILE_STATE = /^(installed|install|update|updating|download|downloading|queued|paused|play|playing)$/i;
+
+/**
+ * Warcraft III's label in Battle.net's Games grid: below the grid's header
+ * ("My Games", "Sort by") with the tile's install state, such as
+ * "Installed", just below it (30 px on 6 Oct). Other text naming Warcraft,
+ * like the "World of Warcraft" logo in a tile's art (run 7 read "WARCRAFT"
+ * at 1307,703), is no label.
+ */
+export function gridLabel(words: readonly Word[]): Point | undefined {
+  const header = [...findPhrase(words, "Sort by"), ...findPhrase(words, "My Games")];
+  if (header.length === 0) return undefined;
+  const top = Math.min(...header.map(({ y }) => y));
+  return topmost(warcraftThree(words).filter((label) => label.y > top + 40 && words.some((word) =>
+    TILE_STATE.test(word.text.replace(/[^A-Za-z]/g, "")) && word.y - label.y >= 10 && word.y - label.y <= 60 && Math.abs(word.x - label.x) <= 250)));
+}
+
+/** Two reads of one control: within 6 px. */
+const samePlace = (a: Point, b: Point) => Math.abs(a.x - b.x) <= 6 && Math.abs(a.y - b.y) <= 6;
 
 /**
  * Warcraft III's Play button, when the launcher shows Warcraft III: its game
@@ -403,6 +425,11 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   /** A click, with a picture of its output before and after it and its pointer moves in the click log. */
   const clickSpot = (what: string, window: number, spot: Spot) => Effect.gen(function*() {
     const name = `${String(++clicks).padStart(2, "0")}-${what.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase()}`;
+    if (spot.x < 0 || spot.y < 0 || spot.x >= spot.area.width || spot.y >= spot.area.height) {
+      const problem = `${what} would be clicked at ${spot.x},${spot.y}, outside the ${spot.area.width}x${spot.area.height} screen (pictures and click log: ${debug})`;
+      yield* machine.append(clickLog, `${name}: ${problem}\n`);
+      return yield* fail(problem);
+    }
     yield* desktop.focus(window);
     yield* desktop.snapshot(spot.output, join(debug, `${name}-before.jpg`));
     const moves = yield* desktop.click(spot).pipe(Effect.tapError(({ problem }) => machine.append(clickLog, `${name}: ${spot.x},${spot.y} of ${spot.area.width}x${spot.area.height} on ${spot.output}: ${problem}\n`)));
@@ -506,9 +533,15 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       // Battle.net opens on the game it last showed or features, such as WoW: Forever; its Games tab lists Warcraft III.
       if (warcraftPlay(seen) === undefined) {
         yield* click(seen.light, topmost(findPhrase(seen.light.words, "Games"))!, "Battle.net Games");
-        seen = yield* until(PLAY_TIMEOUTS.screen, page.pipe(Effect.map((now) => (warcraftThree(now.light.words).length > 0 ? now : undefined))),
-          () => "Battle.net's Games tab doesn't list Warcraft III");
-        const tile = tileArt(seen.light.words, topmost(warcraftThree(seen.light.words))!);
+        // The grid fills in after the tab opens; its label is taken once two reads agree.
+        let last: Point | undefined;
+        seen = yield* until(PLAY_TIMEOUTS.screen, page.pipe(Effect.map((now) => {
+          const label = gridLabel(now.light.words);
+          const previous = last;
+          last = label;
+          return label !== undefined && previous !== undefined && samePlace(label, previous) ? now : undefined;
+        })), () => `Battle.net's Games tab doesn't list Warcraft III with its install state (pictures and click log: ${debug})`);
+        const tile = tileArt(seen.light.words, gridLabel(seen.light.words)!);
         const opened = page.pipe(Effect.map((now) => (warcraftPlay(now) !== undefined ? now : undefined)));
         yield* click(seen.light, tile.first, "Battle.net Warcraft III tile");
         const first = yield* poll(PLAY_TIMEOUTS.tile, opened);
@@ -601,7 +634,6 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     const mapShown = (screen: Screen) => has(screen, title, true) || has(screen, folder, true);
     const createButton = (screen: Screen) => lowest(findPhrase(screen.words, "Create Game"));
 
-    const near = (a: Point, b: Point) => Math.abs(a.x - b.x) <= 6 && Math.abs(a.y - b.y) <= 6;
     /**
      * Reads until `find` gives the same place twice running: Warcraft's menus
      * slide in (6 Oct: Battle.net's tabs moved 32 px down within 0.3 s of
@@ -615,7 +647,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
         const place = find(screen);
         const previous = last;
         last = place;
-        return place !== undefined && previous !== undefined && near(previous, place) ? { screen, place } : undefined;
+        return place !== undefined && previous !== undefined && samePlace(previous, place) ? { screen, place } : undefined;
       })), () => `${what} isn't on the screen, or doesn't stay still`);
     });
     /**

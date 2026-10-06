@@ -8,7 +8,7 @@ import { TestClock } from "effect/testing";
 import { expect, test } from "bun:test";
 import { type ProcessInfo, launchOutcome, newestLauncherLog, prefixUse, shortcutUrl } from "../scripts/warcraft/battleNet";
 import type { Word } from "../scripts/warcraft/desktop";
-import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, findPhrase, expectedGain, measuredGain, play, spotTargets, steer, steerPointer, tileArt, uiPoint, warcraftPlay, warcraftThree } from "../scripts/wisp/play";
+import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, findPhrase, expectedGain, measuredGain, play, spotTargets, steer, steerPointer, gridLabel, tileArt, topmost, uiPoint, warcraftPlay, warcraftThree } from "../scripts/wisp/play";
 
 const PREFIX = "/home/u/compatdata/3516115571/pfx";
 const SERVER = "server-24-18d2b7ec";
@@ -72,6 +72,8 @@ interface Scenario {
   readonly opponentFails?: boolean;
   /** False: another window takes focus back once the helper runs. */
   readonly gameKeepsFocus?: boolean;
+  /** Where the opponent step clicks, in Warcraft's UI coordinates. */
+  readonly opponentClick?: readonly [number, number];
 }
 
 /**
@@ -90,6 +92,8 @@ const GAMES_TAB: readonly Word[] = [
 ];
 /** Warcraft III's tile art in that capture, measured from its pixels: x 385-715, y 400-785. */
 const WARCRAFT_ART = { width: 165, height: 192 };
+/** Run 7 read the "World of Warcraft" logo in World of Warcraft Classic's tile art as a word of its own. */
+const ART_LOGO: readonly Word[] = [{ text: "WORLD", x: 1300, y: 660, line: "58" }, { text: "WARCRAFT", x: 1307, y: 703, line: "66" }];
 
 interface Button {
   readonly phrase: string;
@@ -229,7 +233,7 @@ function world(scenario: Scenario = {}) {
     ];
     switch (page) {
       case "games": return [...nav,
-        { phrase: "Games tab text", x: -10_000, y: -10_000, read: GAMES_TAB, press: () => {} },
+        { phrase: "Games tab text", x: -10_000, y: -10_000, read: [...GAMES_TAB, ...ART_LOGO], press: () => {} },
         { phrase: "Warcraft III art", x: 550, y: 592, half: WARCRAFT_ART, read: [], press: () => {
           tileClicks++;
           if (tileClicks === (scenario.tileOpensOn ?? 1)) page = "warcraft";
@@ -355,7 +359,7 @@ function world(scenario: Scenario = {}) {
       }
     }),
     opponent: (game) => Effect.gen(function*() {
-      yield* game.clickUi(0.485, 0.2565);
+      yield* game.clickUi(...(scenario.opponentClick ?? [0.485, 0.2565]));
       if (scenario.opponentFails === true) return yield* new PlayProblem({ problem: "the computer opponent didn't appear in slot 3" });
       return "computer in slot 3";
     }),
@@ -449,6 +453,20 @@ test("a Games tab tile is clicked on its art above the label, which on 6 Oct did
   }
   // A row with one tile falls back to that pitch.
   expect(tileArt(GAMES_TAB.filter(({ line }) => line !== "80" && line !== "81" && line !== "82"), label).first).toEqual({ x: 458, y: 628 });
+});
+
+test("Warcraft III's tile label is the one in the Games grid with its install state below, not a logo in another tile's art", () => {
+  // Run 7, 6 Oct: "WARCRAFT" read in World of Warcraft Classic's art at 1307,703 was taken for the label.
+  const read = [...GAMES_TAB, ...ART_LOGO];
+  expect(topmost(warcraftThree(read))).toEqual({ x: 1307, y: 703 });
+  expect(gridLabel(read)).toEqual({ x: 458, y: 818 });
+  // The grid isn't drawn yet: no header, no label.
+  expect(gridLabel(ART_LOGO)).toBeUndefined();
+  // A label without its install state below isn't taken either.
+  expect(gridLabel(read.filter(({ text }) => text !== "Installed"))).toBeUndefined();
+  // The logo's row has gaps that aren't tiles' (run 7 made a 1220 px pitch of them): the recorded pitch stands in.
+  const art = tileArt([{ text: "WARCRAFT", x: 1307, y: 703, line: "a" }, { text: "x", x: 87, y: 703, line: "b" }, { text: "y", x: 2527, y: 703, line: "c" }], { x: 1307, y: 703 });
+  expect(art.first).toEqual({ x: 1307, y: 513 });
 });
 
 test("Warcraft's UI coordinates land on the centred 4:3 area of a 3:2 and a 16:9 window", () => {
@@ -666,6 +684,14 @@ test("step 6 reuses this game's helper, refuses an earlier one and reports a hel
 
 test("a problem in the game's own step stops play with that step's name", async () => {
   expect((await world({ opponentFails: true }).run()).failure).toBe("5/7 Opponent stopped: the computer opponent didn't appear in slot 3");
+});
+
+test("a click outside the screen is refused before the pointer moves", async () => {
+  // Run 7's retry was aimed at 1307,-29 and pinned the pointer at the top edge for eight moves.
+  const result = await world({ opponentClick: [0.485, 0.7] }).run();
+  expect(result.failure).toBe(
+    "5/7 Opponent stopped: map UI 0.485 0.700 would be clicked at 1712,-320, outside the 2880x1920 screen (pictures and click log: /state/play-debug/1970-01-01T00-00-00-000Z)");
+  expect(result.events).not.toContain("click Warcraft III 1712,-320");
 });
 
 test("step 7 stops when the game's window won't take focus", async () => {

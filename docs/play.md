@@ -36,7 +36,10 @@ message that says what to do:
    WoW: Forever), and every game's page has its own Play, so `play` clicks
    Play only under a game version box that names Warcraft III; otherwise it
    opens the Games tab and clicks Warcraft III's tile on its art, above the
-   label, which takes no clicks; when the page doesn't change within 6 s it
+   label found in the grid (below its "My Games" and "Sort by" header, with
+   the install state, such as "Installed", under it; once two reads agree;
+   a "Warcraft" logo in another tile's art is no label). The label itself
+   takes no clicks; when the page doesn't change within 6 s it
    clicks the art once more, then stops. Then it puts the window back.
    Only the log lines written after the click decide: no `LaunchBinary:
    uid=w3` within 15 s means the click wasn't taken, and `play` stops there;
@@ -61,7 +64,8 @@ message that says what to do:
    pictures. The game name field is just below a "Game Name" label when
    there is one, and otherwise where it is on a 2560x1440 frame scaled by
    the frame's height; the name typed into it must read back beside it. It
-   ends when the game's `started` resolves.
+   ends when the game's `started` resolves. A click aimed outside the screen
+   is refused before the pointer moves.
 5. **Opponent.** The game's own step. `game.clickUi(x, y)` clicks a map frame
    placed at Warcraft's UI coordinates: the 4:3 area spans the window's
    height, centred, with x from 0 to 0.8 and y from 0 at the bottom to 0.6.
