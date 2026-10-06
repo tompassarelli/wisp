@@ -13,21 +13,16 @@ import { floorDiv, floorMod } from "./intMath";
 
 // Scaling by a power of two is exact, so large steps reach the same value as
 // single ones with a fraction of the work.
-const TWO_POWERS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216];
+const TWO_POWERS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728, 268435456, 536870912, 1073741824];
 
 /** Truncation toward zero, which Lua and JavaScript both emit exactly. */
 export function toInt(value: number): number {
   return value < 0 ? Math.ceil(value) : Math.floor(value);
 }
 
-function binary32Infinity(): number {
-  // 2^(24 * 64) overflows binary32 and binary64 without dividing by zero.
-  let result = 16777216.0;
-  for (let i = 1; i <= 6; i++) result *= result;
-  return result;
-}
-
-const INFINITY = binary32Infinity();
+// math.huge in Lua. Not an overflowing product: a product rounded toward zero,
+// as Warcraft's raw * can be, overflows to the largest finite value instead.
+const INFINITY = Infinity;
 const SIGNIFICAND_UNIT = 1.1920928955078125e-7;
 
 /** 2^-126 through 2^127, the normal powers of two: element i is 2^(i - 126). */
@@ -110,29 +105,51 @@ let splitExponent = 0;
 
 /** Sets splitSignificand and splitExponent from a finite nonzero value. */
 function split(value: number): void {
+  // Halving steps of 8, 4, 2 and 1 bits reach [1, 2) from any game-scale magnitude in a few comparisons.
   let normalized = value < 0 ? -value : value;
   let exponent = -23;
-  while (normalized >= 65536) {
-    normalized *= 0.0000152587890625;
-    exponent += 16;
-  }
-  while (normalized >= 16) {
-    normalized *= 0.0625;
-    exponent += 4;
-  }
-  while (normalized >= 2) {
-    normalized *= 0.5;
-    exponent += 1;
-  }
-  while (normalized < 0.0000152587890625) {
-    normalized *= 65536;
-    exponent -= 16;
-  }
-  while (normalized < 0.0625) {
-    normalized *= 16;
-    exponent -= 4;
-  }
-  while (normalized < 1) {
+  if (normalized >= 2) {
+    while (normalized >= 65536) {
+      normalized *= 0.0000152587890625;
+      exponent += 16;
+    }
+    if (normalized >= 256) {
+      normalized *= 0.00390625;
+      exponent += 8;
+    }
+    if (normalized >= 16) {
+      normalized *= 0.0625;
+      exponent += 4;
+    }
+    if (normalized >= 4) {
+      normalized *= 0.25;
+      exponent += 2;
+    }
+    if (normalized >= 2) {
+      normalized *= 0.5;
+      exponent += 1;
+    }
+  } else if (normalized < 1) {
+    while (normalized < 0.0000152587890625) {
+      normalized *= 65536;
+      exponent -= 16;
+    }
+    if (normalized < 0.00390625) {
+      normalized *= 256;
+      exponent -= 8;
+    }
+    if (normalized < 0.0625) {
+      normalized *= 16;
+      exponent -= 4;
+    }
+    if (normalized < 0.25) {
+      normalized *= 4;
+      exponent -= 2;
+    }
+    if (normalized < 0.5) {
+      normalized *= 2;
+      exponent -= 1;
+    }
     normalized *= 2;
     exponent -= 1;
   }
@@ -301,13 +318,91 @@ function addToLimbs(high: number, low: number, exponent: number, negative: boole
   return roundLimbsToNormal(top, bottom, exponent, false, sign);
 }
 
+/**
+ * The exact sum of two split values rounded once; undefined unless it is a
+ * normal binary32 value. The sum is an integer below 2^31 in units of its
+ * lowest kept bit, with a sticky bit for what shifts out of the smaller
+ * operand; rounding is inline, as every f32 sum and difference runs it.
+ */
+function sumOfSplits(aSignificand: number, aExponent: number, aNegative: boolean, bSignificand: number, bExponent: number, bNegative: boolean): number | undefined {
+  // Order by magnitude: the result takes the larger operand's sign.
+  let large = aSignificand;
+  let largeExponent = aExponent;
+  let negative = aNegative;
+  let small = bSignificand;
+  let smallExponent = bExponent;
+  if (aExponent < bExponent || (aExponent === bExponent && aSignificand < bSignificand)) {
+    large = bSignificand;
+    largeExponent = bExponent;
+    negative = bNegative;
+    small = aSignificand;
+    smallExponent = aExponent;
+  }
+  const same = aNegative === bNegative;
+  const shift = largeExponent - smallExponent;
+  let sum: number;
+  let exponent: number;
+  let sticky = false;
+  if (shift <= 6) {
+    // Both in units of the smaller one's lowest bit: exact below 2^31.
+    const scaled = large * (TWO_POWERS[shift] ?? 0);
+    sum = same ? scaled + small : scaled - small;
+    if (sum === 0) return 0.0;
+    exponent = smallExponent;
+  } else if (shift > 30) {
+    // The smaller is below a quarter of the larger's last place.
+    return normalResult(large, largeExponent, negative);
+  } else {
+    // Six guard bits below the larger one; sum is then in (2^28, 2^31).
+    const unit = TWO_POWERS[shift - 6] ?? 0;
+    const part = floorDiv(small, unit);
+    sticky = small - part * unit !== 0;
+    sum = same ? large * 64 + part : large * 64 - part - (sticky ? 1 : 0);
+    exponent = largeExponent - 6;
+  }
+  let significand = sum;
+  if (sum < 16777216) {
+    // Without a sticky bit: exact, and shifting left loses nothing.
+    while (significand < 8388608) {
+      significand *= 2;
+      exponent -= 1;
+    }
+  } else {
+    // Bits below the 24 kept: one to seven.
+    let dropped: number;
+    if (sum >= 134217728) dropped = sum >= 1073741824 ? 7 : sum >= 536870912 ? 6 : sum >= 268435456 ? 5 : 4;
+    else dropped = sum >= 67108864 ? 3 : sum >= 33554432 ? 2 : 1;
+    const unit = TWO_POWERS[dropped] ?? 0;
+    significand = floorDiv(sum, unit);
+    const remainder = sum - significand * unit;
+    const half = TWO_POWERS[dropped - 1] ?? 0;
+    exponent += dropped;
+    if (remainder > half || (remainder === half && (sticky || floorMod(significand, 2) !== 0))) {
+      significand += 1;
+      if (significand === 16777216) {
+        significand = 8388608;
+        exponent += 1;
+      }
+    }
+  }
+  const power = NORMAL_POWERS[exponent + 149];
+  if (power === undefined) return undefined;
+  const magnitude = significand * SIGNIFICAND_UNIT * power;
+  return negative ? -magnitude : magnitude;
+}
+
 export function addFloat32(a: number, b: number): number {
   if (a === 0) return 1.0 * a + b;
   if (a < INFINITY && a > -INFINITY && b < INFINITY && b > -INFINITY) {
     split(a);
-    const result = b === 0
-      ? normalResult(splitSignificand, splitExponent, a < 0)
-      : addToLimbs(splitSignificand, 0, splitExponent - 24, a < 0, b);
+    let result: number | undefined;
+    if (b === 0) result = normalResult(splitSignificand, splitExponent, a < 0);
+    else {
+      const significand = splitSignificand;
+      const exponent = splitExponent;
+      split(b);
+      result = sumOfSplits(significand, exponent, a < 0, splitSignificand, splitExponent, b < 0);
+    }
     if (result !== undefined) return result;
   }
   return limbFusedMultiplyAdd(1.0, a, b);
@@ -317,9 +412,14 @@ export function subtractFloat32(a: number, b: number): number {
   if (b === 0) return -1.0 * b + a;
   if (a < INFINITY && a > -INFINITY && b < INFINITY && b > -INFINITY) {
     split(b);
-    const result = a === 0
-      ? normalResult(splitSignificand, splitExponent, !(b < 0))
-      : addToLimbs(splitSignificand, 0, splitExponent - 24, !(b < 0), a);
+    let result: number | undefined;
+    if (a === 0) result = normalResult(splitSignificand, splitExponent, !(b < 0));
+    else {
+      const significand = splitSignificand;
+      const exponent = splitExponent;
+      split(a);
+      result = sumOfSplits(splitSignificand, splitExponent, a < 0, significand, exponent, !(b < 0));
+    }
     if (result !== undefined) return result;
   }
   return limbFusedMultiplyAdd(-1.0, b, a);
