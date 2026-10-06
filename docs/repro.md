@@ -49,8 +49,11 @@ type over a numeric enum) is the same Lua table as an array, so Lua can't tell
 which one TypeScript means. Name every field that holds one:
 `recordTokens(state, ["normals", "throws"])` writes those with their keys
 (`normals#`), so key 0, gaps and negative keys come back as they were in both
-runtimes. A field not named is written as an array; one keyed below 1 in Lua,
-or by integers in Bun, is refused rather than written shifted.
+runtimes. A record keyed by integers that isn't named throws
+`IntegerKeysUndeclared` with its path (`kit.rows.1.moves`) rather than
+come back shifted: always in Bun, and in Lua when a key is below 1. Lua writes
+one keyed only from 1 as an array, which Lua reads back as the same table, so
+Bun tests are where an undeclared record shows up first.
 
 A match state is thousands of tokens and its checksum a walk of every field:
 a map that saves during play spreads that work over frames.

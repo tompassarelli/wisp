@@ -176,8 +176,24 @@ function integerKey(key: string): number | undefined {
   return integerName(key);
 }
 
-/** Integers' keys, as a list of keyed records' names. */
-type KeyedNames = Readonly<Record<string, boolean>>;
+/**
+ * Thrown for a table keyed by integers whose field recordTokens wasn't told
+ * holds a record keyed by integers, or one it was told does but isn't: written
+ * as an array, it would come back with other keys.
+ */
+export class IntegerKeysUndeclared extends Error {}
+
+/** A record being written: its tokens, the fields keyed by integers and the names down to the value being written. */
+interface Writer {
+  readonly tokens: string[];
+  readonly keyed: Readonly<Record<string, boolean>>;
+  readonly path: string[];
+}
+
+/** Names the field at the writer's path; only joined when a record is refused. */
+function undeclared(writer: Writer, why: string): never {
+  throw new IntegerKeysUndeclared(`record text: ${writer.path.join(".")} ${why}`);
+}
 
 /**
  * An array's length; undefined when `value` is a record. In Lua a
@@ -216,8 +232,9 @@ function isKeyed(value: Fields): boolean {
   return numbers || !Array.isArray(value) || value.length === 0;
 }
 
-function writeValue(tokens: string[], name: string, value: unknown, depth: number, keyed: KeyedNames): boolean {
+function writeValue(writer: Writer, name: string, value: unknown, depth: number): boolean {
   if (value === undefined) return true;
+  const { tokens } = writer;
   if (!isFields(value)) {
     const text = valueText(value);
     if (text === undefined) return false;
@@ -225,31 +242,33 @@ function writeValue(tokens: string[], name: string, value: unknown, depth: numbe
     return true;
   }
   if (depth >= MAX_DEPTH) return false;
-  if (keyed[name] === true) {
-    if (!isKeyed(value)) return false;
+  writer.path.push(name);
+  if (writer.keyed[name] === true) {
+    if (!isKeyed(value)) undeclared(writer, "is declared keyed by integers but has other keys or is an array");
     tokens.push(`${name}#`);
-    for (const key in value) if (!writeValue(tokens, `${integerKey(key)}`, value[key], depth + 1, keyed)) return false;
+    for (const key in value) if (!writeValue(writer, `${integerKey(key)}`, value[key], depth + 1)) return false;
     tokens.push("}");
-    return true;
+  } else {
+    const length = arrayLength(value);
+    if (length === false) undeclared(writer, "is keyed by integers but not declared so in recordTokens, or mixes integer and named keys");
+    const items: unknown = value;
+    if (isList(items, length)) {
+      tokens.push(`${name}[`);
+      for (let index = 0; index < (length ?? 0); index++) if (!writeValue(writer, `${index}`, items[index], depth + 1)) return false;
+      tokens.push("]");
+    } else {
+      tokens.push(`${name}{`);
+      if (!writeFields(writer, value, depth + 1)) return false;
+      tokens.push("}");
+    }
   }
-  const length = arrayLength(value);
-  if (length === false) return false;
-  const items: unknown = value;
-  if (isList(items, length)) {
-    tokens.push(`${name}[`);
-    for (let index = 0; index < (length ?? 0); index++) if (!writeValue(tokens, `${index}`, items[index], depth + 1, keyed)) return false;
-    tokens.push("]");
-    return true;
-  }
-  tokens.push(`${name}{`);
-  if (!writeFields(tokens, value, depth + 1, keyed)) return false;
-  tokens.push("}");
+  writer.path.pop();
   return true;
 }
 
-function writeFields(tokens: string[], record: Fields, depth: number, keyed: KeyedNames): boolean {
+function writeFields(writer: Writer, record: Fields, depth: number): boolean {
   for (const key in record) {
-    if (!isFieldName(key) || !writeValue(tokens, key, record[key], depth, keyed)) return false;
+    if (!isFieldName(key) || !writeValue(writer, key, record[key], depth)) return false;
   }
   return true;
 }
@@ -257,17 +276,19 @@ function writeFields(tokens: string[], record: Fields, depth: number, keyed: Key
 /**
  * The tokens of a record's fields. A field named in `keyedByInteger` holds
  * a record keyed by integers (`{ readonly [action: number]: T }`), written
- * with its keys; Lua can't tell one from an array, so any other value keyed by
- * integers is written as an array, and one with a key below 1 is refused.
- * Undefined when the record holds anything else: a function, a cycle, a
- * string byte above 255 or a key that isn't letters, digits and `_`.
+ * with its keys. Lua can't tell any other such record from an array, so one
+ * not named throws IntegerKeysUndeclared, naming its path, when Bun sees it or
+ * Lua sees a key below 1; one with keys from 1 Lua writes as an array, which
+ * Lua alone reads back as the same table. Undefined when the record holds
+ * anything else: a function, a cycle, a string byte above 255 or a key that
+ * isn't letters, digits and `_`.
  */
 export function recordTokens(record: object, keyedByInteger: readonly string[] = []): string[] | undefined {
   if (!isFields(record) || arrayLength(record) !== undefined) return undefined;
   const keyed: Record<string, boolean> = {};
   for (const name of keyedByInteger) keyed[name] = true;
-  const tokens: string[] = [];
-  return writeFields(tokens, record, 0, keyed) ? tokens : undefined;
+  const writer: Writer = { tokens: [], keyed, path: [] };
+  return writeFields(writer, record, 0) ? writer.tokens : undefined;
 }
 
 /** A record, array or record keyed by integers being filled; exactly one of the three. */
