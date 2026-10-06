@@ -292,3 +292,17 @@ test("diagnose orders the prefix before the game, and the game before the launch
     .toMatchObject({ kind: "problem", problem: "map without its imports" });
   expect(diagnose({ use: { ...use, runtimes: [wineserver(1)] }, held: 0, unknown: "no menu page" }, true)).toMatchObject({ kind: "stop" });
 });
+
+test("withDoctor without retry: doctor heals the clients after a failure, and the failure stands", async () => {
+  let runs = 0;
+  const dropping = world({ processes: "game" });
+  const capture = Effect.suspend(() => {
+    runs++;
+    dropping.drop({ kind: "disconnected", reason: "logged out" });
+    return Effect.fail(new PlayProblem({ problem: "capture stopped: B dropped" }));
+  });
+  const result = await dropping.finish(withDoctor(doctor([target], () => {}), () => {}, capture, { retry: false }));
+  expect(result.failure).toBe("capture stopped: B dropped");
+  expect(runs).toBe(1);
+  expect(dropping.events).toEqual(["SIGTERM 52713", "play"]);
+});
