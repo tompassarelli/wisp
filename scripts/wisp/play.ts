@@ -414,6 +414,8 @@ const GAME_NAME_FIELD = { x: 400, y: 340 };
 
 /** Choices for one run of play. */
 export interface PlayOptions {
+  /** Hosts only after Warcraft III shows its main menu, avoiding startup map loading. */
+  readonly menus?: boolean;
   /** Leaves Warcraft III's launch options loading the map, so Battle.net needn't restart on the next run. */
   readonly keepLaunchOptions?: boolean;
 }
@@ -522,6 +524,22 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       return { kind: "menus" } satisfies Route as Route;
     }
     const { options: previous } = yield* settings;
+    if (options.menus) {
+      if (previous === loadOption) {
+        if (use.launcher !== undefined) yield* stopPrefix;
+        yield* setLaunchOptions(undefined);
+      } else if (previous !== undefined && /(?:^|\s)-loadfile(?:\s|$)/i.test(previous)) {
+        return yield* fail("Battle.net is set to load another map at startup. Clear its additional command line arguments and restart Battle.net before playing through the menus.");
+      }
+      if (use.launcher !== undefined && previous !== loadOption) {
+        yield* waitSignedIn(undefined);
+        yield* status(2, "Battle.net", "signed in; reusing it to open Warcraft III's menus");
+      } else {
+        const seconds = yield* startLauncher(2, "Battle.net");
+        yield* status(2, "Battle.net", `started and signed in (${seconds} s); Warcraft III will open its menus`);
+      }
+      return { kind: "menus" } satisfies Route as Route;
+    }
     // Ours from an earlier kept run count as nothing set before.
     pending = { previous: previous === loadOption ? undefined : previous };
     if (use.launcher !== undefined) {
@@ -833,7 +851,17 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     return yield* Effect.never;
   }).pipe(Effect.catch(() => Effect.never));
   const loadMap = (route: Route, game: PlayGame, since: number) => Effect.gen(function*() {
-    if (route.kind === "menus") return yield* host(game);
+    if (route.kind === "menus") {
+      if (options.menus) {
+        yield* fullscreen(game.window, "Warcraft III's window", PLAY_TIMEOUTS.gameFullscreen);
+        const output = yield* outputOf(game.window, "Warcraft III's window");
+        yield* until(PLAY_TIMEOUTS.mainMenu, desktop.read(output, "light").pipe(Effect.map((screen) =>
+          findPhrase(screen.words, "Multiplayer").length > 0 ? true : undefined)),
+        () => `Warcraft III didn't show its Multiplayer menu within ${PLAY_TIMEOUTS.mainMenu} s`);
+        yield* status(4, "Map", "Warcraft III's main menu is ready; hosting the map");
+      }
+      return yield* host(game);
+    }
     const loading: Loading = { menu: false, presses: 0 };
     const loaded = yield* Effect.raceFirst(
       declaration.started(game, since).pipe(Effect.as("map" as const)),

@@ -620,6 +620,28 @@ test("from a cold desktop: Battle.net set to load the map, Play, the map loaded,
   expect(result.windows.get(762)?.width).toBe(OUTPUT.width);
 });
 
+test("menu loading reuses a warm launcher, waits for Multiplayer, and clears this map's earlier startup argument", async () => {
+  const cold = await world().run({ menus: true });
+  expect(cold.failure).toBeUndefined();
+  expect(cold.lines).toContain("4/7 Map: Warcraft III's main menu is ready; hosting the map");
+  expect(cold.events.filter((event) => event.startsWith("launch options") || event === "press space")).toEqual([]);
+  const warm = await world({ runtimes: "launcher", launchOptions: "-windowmode 0" }).run({ menus: true });
+  expect(warm.failure).toBeUndefined();
+  expect(warm.events.filter((event) => event.startsWith("SIG") || event.startsWith("steam") || event.startsWith("launch options"))).toEqual([]);
+  expect(warm.options()).toBe("-windowmode 0");
+  const kept = await world({ runtimes: "launcher", launchOptions: LOAD_MAP }).run({ menus: true });
+  expect(kept.failure).toBeUndefined();
+  expect(kept.events.filter((event) => event.startsWith("SIG") || event.startsWith("steam") || event.startsWith("launch options"))).toEqual([
+    "SIGTERM 100 101 102", "launch options: none", "steam steam://rungameid/16213922543717842944",
+  ]);
+  const otherMap = await world({ runtimes: "launcher", launchOptions: '-loadfile "C:\\other.w3x"' }).run({ menus: true });
+  expect(otherMap.failure).toContain("Battle.net is set to load another map at startup");
+  expect(otherMap.events.filter((event) => event.startsWith("SIG") || event.startsWith("launch options"))).toEqual([]);
+  const notReady = await world({ mainMenu: false }).run({ menus: true });
+  expect(notReady.failure).toBe("4/7 Map stopped: Warcraft III didn't show its Multiplayer menu within 120 s");
+  expect(notReady.events.some((event) => event.includes("CREATE") || event.startsWith(`start ${HELPER}`))).toBe(false);
+});
+
 test("Battle.net's launch options: kept on request, reused by a launcher that read them, set by restarting one that didn't", async () => {
   const kept = await world().run({ keepLaunchOptions: true });
   expect(kept.failure).toBeUndefined();

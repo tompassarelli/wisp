@@ -6,6 +6,16 @@ message that says what to do. Nothing after Battle.net's Play is clicked:
 Warcraft III loads the map from its launch options and the map starts the
 match when the game asks.
 
+Use `bun wisp play --menus` to host after Warcraft III shows its Multiplayer
+menu instead of loading the map during startup. This avoids overlapping map
+loading with the engine's startup map scan. A signed-in launcher is reused
+without a restart when it has no startup map argument; an earlier kept
+argument for this map is cleared, restarting the launcher once if necessary.
+Other launch options stay in place. An argument loading another map is refused.
+The installed menu page and `PlayDeclaration.menuReportPort` use the game's
+own menu controls without clicks; otherwise the ordinary menu clicks run.
+`--menus` and `--keep-launch-options` are separate choices.
+
 ```text
 1/7 Wine prefix: free
 2/7 Battle.net: starting the Steam shortcut "Warcraft III (Battle.net)"
