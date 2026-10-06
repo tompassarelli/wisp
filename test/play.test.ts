@@ -82,6 +82,8 @@ interface Scenario {
   readonly loadfile?: "honored" | "ignored";
   /** False: the loaded map goes on to fighter selection without a key. */
   readonly waitsForKey?: boolean;
+  /** Seconds the game window takes to follow a fullscreen request. */
+  readonly gameFullscreenAfter?: number;
 }
 
 /**
@@ -333,7 +335,13 @@ function world(scenario: Scenario = {}) {
       const window = windows.get(id)!;
       events.push(`fullscreen ${window.title}`);
       if (scenario.fullscreens === false) return;
-      windows.set(id, window.width === OUTPUT.width ? { ...window, width: 1424, height: 920 } : { ...window, width: OUTPUT.width, height: OUTPUT.height });
+      const flip = () => {
+        const now = windows.get(id)!;
+        windows.set(id, now.width === OUTPUT.width ? { ...now, width: 1424, height: 920 } : { ...now, width: OUTPUT.width, height: OUTPUT.height });
+      };
+      // Run 10, 6 Oct: the game loading its map took more than 5 s to follow.
+      if (window.title === "Warcraft III" && scenario.gameFullscreenAfter !== undefined) later(scenario.gameFullscreenAfter, flip);
+      else flip();
     }),
     read: (output, ink) => Effect.sync(() => {
       expect(output).toBe(OUTPUT.name);
@@ -417,7 +425,7 @@ function world(scenario: Scenario = {}) {
     const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
     if (Exit.isFailure(exit) && Option.isNone(error)) throw new Error(Cause.pretty(exit.cause));
     const failure = Option.isSome(error) ? error.value.message : undefined;
-    return { lines, failure, events, presses: () => presses, windows, shots, clickLog };
+    return { lines, failure, events, presses: () => presses, windows, shots, clickLog, options: () => launchOptions(config) };
   };
   return { run };
 }
@@ -573,7 +581,7 @@ test("from a cold desktop: Battle.net set to load the map, Play, the map loaded,
     "2/7 Battle.net: started and signed in (3 s), with Warcraft III set to load the map",
     "3/7 Warcraft III: Battle.net's Play started it",
     "3/7 Warcraft III: Battle.net's launch options for it put back; its own Play no longer loads the map",
-    "3/7 Warcraft III: running (pid 2852), fullscreen",
+    "3/7 Warcraft III: running (pid 2852), asked to go fullscreen",
     "4/7 Map: Warcraft III loaded Smashcraft 0.0.47.w3x from its launch options; fighter selection 13 s after Play (5 key presses to continue)",
     "5/7 Controller helper: running (pid 3000), log /state/helper.log",
     "6/7 Match: computer as Player 3",
@@ -629,6 +637,35 @@ test("Battle.net's launch options: kept on request, reused by a launcher that re
   ]);
 });
 
+test("--keep-launch-options keeps them only after a successful run; any stop puts them back", async () => {
+  // Run 10, 6 Oct: a kept run that stopped at step 3 left -loadfile in Battle.net's settings.
+  const kept = await world().run({ keepLaunchOptions: true });
+  expect(kept.failure).toBeUndefined();
+  expect(kept.options()).toBe(LOAD_MAP);
+  const stopped = await world({ helper: "exits", launchOptions: "-windowmode 0" }).run({ keepLaunchOptions: true });
+  expect(stopped.failure).toContain("5/7 Controller helper stopped");
+  expect(stopped.options()).toBe("-windowmode 0");
+  expect(stopped.lines.at(-1)).toBe("Battle.net's launch options for Warcraft III put back, as the run stopped");
+  // A warm run that finds an earlier kept run's options removes them when it stops.
+  const warm = await world({ runtimes: "launcher", launchOptions: LOAD_MAP, helper: "exits" }).run({ keepLaunchOptions: true });
+  expect(warm.failure).toContain("5/7 Controller helper stopped");
+  expect(warm.options()).toBeUndefined();
+  // Without the option they are already back after Play, and a later stop writes nothing more.
+  const plain = await world({ helper: "exits", launchOptions: "-windowmode 0" }).run();
+  expect(plain.options()).toBe("-windowmode 0");
+  expect(plain.events.filter((event) => event.startsWith("launch options"))).toEqual([`launch options: ${LOAD_MAP}`, "launch options: -windowmode 0"]);
+  expect(plain.lines).not.toContain("Battle.net's launch options for Warcraft III put back, as the run stopped");
+});
+
+test("a game window that takes 30 s to go fullscreen while its map loads is waited for, and space reaches it meanwhile", async () => {
+  const result = await world({ gameFullscreenAfter: 30 }).run();
+  expect(result.failure).toBeUndefined();
+  expect(result.events.filter((event) => event === "fullscreen Warcraft III")).toHaveLength(1);
+  expect(result.events).toContain("press space");
+  expect(result.windows.get(762)?.width).toBe(OUTPUT.width);
+  expect((await world({ gameFullscreenAfter: 60 }).run()).failure).toBe("7/7 Fullscreen stopped: Warcraft III's window didn't become fullscreen within 45 s");
+});
+
 test("a launcher already showing Warcraft III gets one click, on Play; with Warcraft III already running the map is hosted through its menus", async () => {
   const shown = await world({ launcherPage: "warcraft" }).run();
   expect(shown.failure).toBeUndefined();
@@ -639,7 +676,7 @@ test("a launcher already showing Warcraft III gets one click, on Play; with Warc
     "1/7 Wine prefix: Battle.net already running in its only runtime (pid 101)",
     "2/7 Battle.net: signed in; Warcraft III already runs, so the map is hosted through its menus",
     "3/7 Warcraft III: already running (pid 2852)",
-    "3/7 Warcraft III: running (pid 2852), fullscreen",
+    "3/7 Warcraft III: running (pid 2852), asked to go fullscreen",
     "4/7 Map: \"Smashcraft\" of Smashcraft 0.0.47 hosted through the menus (joining by name is case-sensitive)",
   ]);
   expect(result.events.filter((event) => event.startsWith("steam") || event === "Play" || event.startsWith("launch options"))).toEqual([]);
