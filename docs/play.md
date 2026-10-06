@@ -31,18 +31,22 @@ message that says what to do:
    in means the newest `battle.net-*.log` in the prefix's
    `AppData/Local/Battle.net/Logs` has `Logged into Battle.net successfully`.
    `play` never signs in or out.
-3. **Warcraft III.** `play` makes the launcher's window fullscreen, reads its
-   white Play label, clicks it and puts the window back. Only the log lines
-   written after the click decide: `Game is running: w3` is a launch, and
-   `Could not launch ... Warcraft III.exe` or an expired pending launch is a
-   failure. On a failure it ends every program of the prefix, waits for
-   Steam to see the shortcut end, starts the launcher again alone and presses
-   Play once more. It never starts Warcraft III.exe itself. Battle.net's
-   `--exec="launch W3"` would need a second Battle.net.exe inside the
-   launcher's own Steam runtime container; started from outside, Wine would
-   start a second wineserver on the prefix, so `play` presses Play. The game's window
-   becomes fullscreen as soon as it appears, so a capture of its output is the
-   game's frame.
+3. **Warcraft III.** `play` makes the launcher's window fullscreen and reads
+   it. Battle.net opens on the game it last showed or features (on 6 Oct,
+   WoW: Forever), and every game's page has its own Play, so `play` clicks
+   Play only under a game version box that names Warcraft III; otherwise it
+   opens the Games tab and Warcraft III first. Then it puts the window back.
+   Only the log lines written after the click decide: no `LaunchBinary:
+   uid=w3` within 15 s means the click wasn't taken, and `play` stops there;
+   `Game is running: w3` is a launch, and `Could not launch ... Warcraft
+   III.exe` or an expired pending launch is a failure. On a failure it ends
+   every program of the prefix, waits for Steam to see the shortcut end,
+   starts the launcher again alone and presses Play once more. It never
+   starts Warcraft III.exe itself. Battle.net's `--exec="launch W3"` would
+   need a second Battle.net.exe inside the launcher's own Steam runtime
+   container; started from outside, Wine would start a second wineserver on
+   the prefix, so `play` presses Play. The game's window becomes fullscreen as
+   soon as it appears, so a capture of its output is the game's frame.
 4. **Custom game.** From the main menu: Multiplayer, Custom Games, Create
    Game, the map's folder, the map, the game's name, Create, Start. Each
    control is found by the text Warcraft shows, so any screen size works; the
@@ -74,6 +78,7 @@ export const play = makePlay({
   shortcut: { appId: 3775098022, name: "Warcraft III (Battle.net)" },
   map: { folder: "00-Smashcraft", file: "Smashcraft 0.0.47.w3x", title: "Smashcraft 0.0.47" },
   gameName: "Smashcraft",
+  debugDirectory: join(homedir(), ".local/state/smashcraft/play-debug"),
   started: (game, since) => /* the map's first-screen file, newer than since */,
   opponent: (game) => /* clicks with game.clickUi, confirms, returns "computer in slot 2" */,
   helper: { binary, args: (game) => /* game.pid, game.window, game.xWindow.id, ... */, ready: /waiting_for_match/, log },
@@ -99,6 +104,12 @@ pointer at 1194,882. A target is read in the capture's pixels (2880x1920 on a
 checked in the X root's pixels, which match the capture there; a move that
 lands short is corrected from where the X pointer is, up to four times. Typed
 text and keys are XTEST (`xdotool`) into the focused game window.
+
+Each run prints a folder under the game's `debugDirectory`, named by its
+start time. It holds a picture of the output before and after every click
+(`NN-what-before.jpg`, `NN-what-after.jpg`) and `clicks.log`: each click's
+target in the capture, in logical and in X root pixels, where the X pointer
+was, each `wlrctl` move and where the X pointer then was.
 
 The fakes in wisp:test/play.test.ts cover each step's success and failure
 messages with the recorded window, log and process shapes. Reading the menus

@@ -8,7 +8,7 @@ import { TestClock } from "effect/testing";
 import { expect, test } from "bun:test";
 import { type ProcessInfo, launchOutcome, newestLauncherLog, prefixUse, shortcutUrl } from "../scripts/warcraft/battleNet";
 import type { Word } from "../scripts/warcraft/desktop";
-import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, findPhrase, play, pointerMove, spotTargets, uiPoint } from "../scripts/wisp/play";
+import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, findPhrase, play, pointerMove, spotTargets, uiPoint, warcraftPlay, warcraftThree } from "../scripts/wisp/play";
 
 const PREFIX = "/home/u/compatdata/3516115571/pfx";
 const SERVER = "server-24-18d2b7ec";
@@ -16,12 +16,14 @@ const LOGS = `${PREFIX}/drive_c/users/steamuser/AppData/Local/Battle.net/Logs`;
 const MAP = `${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft 0.0.47.w3x`;
 const HELPER = "/inputs/wc3-journal";
 const HELPER_LOG = "/state/helper.log";
+const DEBUG = "/state/play-debug";
 const OUTPUT = { name: "eDP-1", width: 1440, height: 960 };
 const FRAME = { width: 2880, height: 1920 };
 const APP = "steam_app_3775098022";
 
 const line = (component: string, text: string) => `I 2026-10-06 01:47:49.901612 [${component}] {Main} ${text}\n`;
 const SIGNED_IN = line("BNLogin", "Logged into Battle.net successfully. |bnet=1:0:0|game=2:0:0");
+const REQUESTED = line("GameLaunchController", "LaunchBinary: uid=w3 selectedRegion=US binaryType=game");
 const LAUNCHED = line("InstallManager", "Launched C:/Program Files (x86)/Warcraft III/_retail_/x86_64/Warcraft III.exe with args: -launch -uid w3, pid: 2852")
   + line("InstallManager", "Game is running: w3");
 const COULD_NOT = line("InstallManager", "Could not launch C:/Program Files (x86)/Warcraft III/_retail_/x86_64/Warcraft III.exe (FAILED)");
@@ -47,7 +49,11 @@ interface Scenario {
   readonly signsIn?: boolean;
   readonly steamStarts?: boolean;
   /** What each press of Play logs. */
-  readonly launches?: readonly ("running" | "failed")[];
+  readonly launches?: readonly ("running" | "failed" | "ignored")[];
+  /** The game Battle.net shows when it opens; 6 Oct it opened on WoW: Forever. */
+  readonly launcherPage?: "warcraft" | "other";
+  /** Warcraft III's button on its page. */
+  readonly warcraftButton?: "Play" | "Update";
   readonly playShown?: boolean;
   readonly mapInstalled?: boolean;
   readonly mainMenu?: boolean;
@@ -61,6 +67,8 @@ interface Scenario {
 
 interface Button {
   readonly phrase: string;
+  /** Launcher text the reader separates as white, like Play on its blue button; all else is light. */
+  readonly white?: boolean;
   readonly x: number;
   readonly y: number;
   readonly press: () => void;
@@ -79,6 +87,9 @@ function world(scenario: Scenario = {}) {
   let name = "Tompas's game";
   let started = false;
   let presses = 0;
+  let page: "warcraft" | "other" | "games" = scenario.launcherPage ?? "other";
+  const shots: string[] = [];
+  const clickLog: string[] = [];
   let helperLog = "";
   let helperStarted = false;
   let nextPid = 3000;
@@ -96,6 +107,7 @@ function world(scenario: Scenario = {}) {
   const startLauncher = () => {
     const log = `battle.net-20261006T0${2 + logs.size}0000.000000.log`;
     processes.push(reaper(90), wineserver(100), launcher(101), launcherChild(102));
+    page = scenario.launcherPage ?? "other";
     logs.set(log, line("Main", "Logging started for Battle.net build 2.53.4.17896"));
     windows.set(758, tiled(758, "Battle.net"));
     if (scenario.signsIn !== false) later(2, () => logs.set(log, logs.get(log)! + SIGNED_IN));
@@ -157,15 +169,39 @@ function world(scenario: Scenario = {}) {
       default: return [];
     }
   };
-  const launcherButtons = (): Button[] => scenario.playShown === false ? [] : [{ phrase: "Play", x: 468, y: 1602, press: () => {
+  const pressWarcraftPlay = () => {
     presses++;
     events.push("Play");
     const outcome = launchesLeft.shift() ?? "running";
     later(1, () => {
-      logs.set(newestLog(), logs.get(newestLog())! + (outcome === "running" ? LAUNCHED : COULD_NOT));
+      if (outcome !== "ignored") logs.set(newestLog(), logs.get(newestLog())! + REQUESTED + (outcome === "running" ? LAUNCHED : COULD_NOT));
       if (outcome === "running") startGame();
     });
-  } }];
+  };
+  // Positions from the 6 Oct capture of Battle.net 2.53 on the 2880x1920 output.
+  const launcherButtons = (): Button[] => {
+    if (scenario.playShown === false) return [];
+    const nav: Button[] = [
+      { phrase: "HOME", x: 1705, y: 146, press: () => {} },
+      { phrase: "GAMES", x: 1843, y: 146, press: () => { page = "games"; } },
+      { phrase: "SHOP", x: 1979, y: 146, press: () => {} },
+    ];
+    switch (page) {
+      case "games": return [...nav,
+        { phrase: "World of Warcraft", x: 600, y: 500, press: () => { page = "other"; } },
+        { phrase: "Warcraft III: Reforged", x: 1100, y: 500, press: () => { page = "warcraft"; } }];
+      case "other": return [...nav,
+        { phrase: "World of Warcraft: Forever Gameplay Trailer", x: 2224, y: 875, press: () => {} },
+        { phrase: "Play Now", x: 2510, y: 1470, white: true, press: () => events.push("store") },
+        { phrase: "GAME VERSION", x: 1493, y: 1618, press: () => {} },
+        { phrase: "WoW: Forever Beta", x: 1537, y: 1665, press: () => {} },
+        { phrase: "Play", x: 1598, y: 1746, white: true, press: () => events.push("Play WoW") }];
+      case "warcraft": return [...nav,
+        { phrase: "GAME VERSION", x: 1493, y: 1618, press: () => {} },
+        { phrase: "Warcraft III", x: 1537, y: 1665, press: () => {} },
+        { phrase: scenario.warcraftButton ?? "Play", x: 1598, y: 1746, white: true, press: () => { if (scenario.warcraftButton !== "Update") pressWarcraftPlay(); } }];
+    }
+  };
   const screenOf = () => {
     const window = focused === undefined ? undefined : windows.get(focused);
     if (window === undefined || window.width !== OUTPUT.width) return [];
@@ -205,6 +241,10 @@ function world(scenario: Scenario = {}) {
       return path.startsWith(`${LOGS}/`) ? logs.get(path.slice(LOGS.length + 1))?.length : undefined;
     }),
     list: (directory) => Effect.sync(() => (directory === LOGS ? [...logs.keys(), "libcef-20261006T014728.217325.log"] : [])),
+    append: (path, text) => Effect.sync(() => {
+      expect(path).toBe(`${DEBUG}/1970-01-01T00-00-00-000Z/clicks.log`);
+      clickLog.push(text);
+    }),
   });
 
   const desktop = PlayDesktop.of({
@@ -216,9 +256,14 @@ function world(scenario: Scenario = {}) {
       if (scenario.fullscreens === false) return;
       windows.set(id, window.width === OUTPUT.width ? { ...window, width: 1424, height: 920 } : { ...window, width: OUTPUT.width, height: OUTPUT.height });
     }),
-    read: (output) => Effect.sync(() => {
+    read: (output, ink) => Effect.sync(() => {
       expect(output).toBe(OUTPUT.name);
-      return { ...FRAME, words: screenOf().flatMap((button, index) => words(`b${index}`, button.x, button.y, button.phrase)) };
+      const shown = screenOf().filter((button) => (button.white === true) === (ink === "white"));
+      return { ...FRAME, words: shown.flatMap((button, index) => words(`b${index}`, button.x, button.y, button.phrase)) };
+    }),
+    snapshot: (output, path) => Effect.sync(() => {
+      expect(output).toBe(OUTPUT.name);
+      shots.push(path.slice(path.lastIndexOf("/") + 1));
     }),
     xWindow: (title) => Effect.succeed<XWindow | undefined>(
       [...windows.values()].some((window) => window.title === title) ? { id: title, x: 0, y: 0, ...FRAME } : undefined),
@@ -226,9 +271,11 @@ function world(scenario: Scenario = {}) {
       expect(spot.output).toBe(OUTPUT.name);
       // The spot's image and window cover the output, so the target is in the capture's pixels.
       const { root } = spotTargets(spot, { x: 0, y: 0, width: OUTPUT.width, height: OUTPUT.height });
-      const hit = screenOf().find((button) => Math.abs(button.x - root.x) <= 140 && Math.abs(button.y - root.y) <= 30);
+      // Within the words of the phrase, which words() spaces 140 pixels apart.
+      const hit = screenOf().find((button) => Math.abs(button.x - root.x) <= 70 * (button.phrase.split(" ").length - 1) + 60 && Math.abs(button.y - root.y) <= 30);
       events.push(`click ${spot.window.id} ${hit?.phrase ?? `${root.x},${root.y}`}`);
       hit?.press();
+      return [`moved to X ${root.x},${root.y}`];
     }),
     keys: (_window, ...keys) => Effect.sync(() => events.push(`keys ${keys.join(" ")}`)),
     typeText: (_window, text) => Effect.sync(() => {
@@ -243,6 +290,7 @@ function world(scenario: Scenario = {}) {
     shortcut: { appId: 3775098022, name: "Warcraft III (Battle.net)" },
     map: { folder: "00-Smashcraft", file: "Smashcraft 0.0.47.w3x", title: "Smashcraft 0.0.47" },
     gameName: "Smashcraft",
+    debugDirectory: DEBUG,
     started: () => Effect.gen(function*() {
       while (!started) {
         yield* Effect.sleep("250 millis");
@@ -274,7 +322,7 @@ function world(scenario: Scenario = {}) {
     const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
     if (Exit.isFailure(exit) && Option.isNone(error)) throw new Error(Cause.pretty(exit.cause));
     const failure = Option.isSome(error) ? error.value.message : undefined;
-    return { lines, failure, events, presses: () => presses, windows };
+    return { lines, failure, events, presses: () => presses, windows, shots, clickLog };
   };
   return { run };
 }
@@ -312,6 +360,24 @@ test("phrases are found however the reader split or misread them, and list entri
   expect(findPhrase(seen, "Smash")).toEqual([]);
 });
 
+test("Warcraft III's Play is the Play under a game version box naming Warcraft III; WoW: Forever's and other Warcraft games' are not", () => {
+  const screen = (width: number, height: number, ...lines: Word[][]) => ({ width, height, words: lines.flat() });
+  // Tom's launcher on 6 Oct (2880x1920), as the reader read it: WoW: Forever was selected.
+  const wow = {
+    light: screen(2880, 1920, words("a", 1493, 1618, "GAME VERSION"), words("b", 1537, 1665, "WoW: Forever Beta"), words("c", 2224, 875, "World of Warcraft: Forever")),
+    white: screen(2880, 1920, words("d", 2510, 1460, "Play"), words("e", 1598, 1746, "Play")),
+  };
+  expect(warcraftPlay(wow)).toBeUndefined();
+  // A 3 Oct private desktop (2560x1440): the reader dropped III from the box's "Warcraft III".
+  const warcraft = {
+    light: screen(2560, 1440, words("a", 128, 673, "GAME VERSION"), [{ text: "Warcraft", x: 114, y: 720, line: "b" }]),
+    white: screen(2560, 1440, [{ text: "Play", x: 234, y: 801, line: "c" }]),
+  };
+  expect(warcraftPlay(warcraft)).toEqual({ x: 234, y: 801 });
+  const games = [...words("a", 600, 500, "World of Warcraft"), ...words("b", 1100, 500, "Warcraft Ill: Reforged"), ...words("c", 1600, 500, "Warcraft II: Remastered"), ...words("d", 2100, 500, "Warcraft Rumble")];
+  expect(warcraftThree(games)).toEqual([{ x: 1030, y: 500 }]);
+});
+
 test("Warcraft's UI coordinates land on the centred 4:3 area of a 3:2 and a 16:9 window", () => {
   const window = (width: number, height: number): XWindow => ({ id: "w", x: 0, y: 0, width, height });
   // A slot tag Smashcraft clicked at 1484,824 on the 2560x1440 private desktop.
@@ -335,6 +401,7 @@ test("from a cold desktop: Steam starts Battle.net, Play starts Warcraft III, th
   const result = await world().run();
   expect(result.failure).toBeUndefined();
   expect(result.lines).toEqual([
+    "Captures and click log: /state/play-debug/1970-01-01T00-00-00-000Z",
     "1/7 Wine prefix: free",
     "2/7 Battle.net: starting the Steam shortcut \"Warcraft III (Battle.net)\"",
     "2/7 Battle.net: started and signed in (3 s)",
@@ -345,9 +412,12 @@ test("from a cold desktop: Steam starts Battle.net, Play starts Warcraft III, th
     "6/7 Controller helper: running (pid 3000), log /state/helper.log",
     "7/7 Fullscreen: Warcraft III is fullscreen and focused. Ready to fight.",
   ]);
+  // Battle.net opened on WoW: Forever, as on 6 Oct: its Games tab leads to Warcraft III's Play.
   expect(result.events).toEqual([
     "steam steam://rungameid/16213922543717842944",
     "fullscreen Battle.net",
+    "click Battle.net GAMES",
+    "click Battle.net Warcraft III: Reforged",
     "click Battle.net Play",
     "Play",
     "fullscreen Battle.net",
@@ -366,15 +436,23 @@ test("from a cold desktop: Steam starts Battle.net, Play starts Warcraft III, th
     "click Warcraft III 1712,1099",
     `start ${HELPER} --pid 2852 > ${HELPER_LOG}`,
   ]);
+  // A picture before and after every click, and one click log line each with its pointer moves.
+  expect(result.shots.slice(0, 4)).toEqual(["01-battle-net-games-before.jpg", "01-battle-net-games-after.jpg", "02-battle-net-warcraft-iii-before.jpg", "02-battle-net-warcraft-iii-after.jpg"]);
+  expect(result.shots).toHaveLength(2 * 12);
+  expect(result.clickLog[2]).toBe("03-battle-net-play: 1598,1746 of 2880x1920 on eDP-1; moved to X 1598,1746\n");
+  expect(result.clickLog.at(-1)).toBe("12-map-ui-0-485-0-257: 1712,1099 of 2880x1920 on eDP-1; moved to X 1712,1099\n");
   // The launcher went back to its tile; the game stays fullscreen.
   expect(result.windows.get(758)?.width).toBe(1424);
   expect(result.windows.get(762)?.width).toBe(OUTPUT.width);
 });
 
-test("a signed-in launcher and a running game are reused: no Steam start, no Play", async () => {
+test("a launcher already showing Warcraft III gets one click, on Play; a signed-in launcher and a running game are reused", async () => {
+  const shown = await world({ launcherPage: "warcraft" }).run();
+  expect(shown.failure).toBeUndefined();
+  expect(shown.events.filter((event) => event.startsWith("click Battle.net"))).toEqual(["click Battle.net Play"]);
   const result = await world({ runtimes: "launcher", gameRunning: true }).run();
   expect(result.failure).toBeUndefined();
-  expect(result.lines.slice(0, 4)).toEqual([
+  expect(result.lines.slice(1, 5)).toEqual([
     "1/7 Wine prefix: Battle.net already running in its only runtime (pid 101)",
     "2/7 Battle.net: signed in",
     "3/7 Warcraft III: already running (pid 2852)",
@@ -392,7 +470,7 @@ test("step 1 refuses two runtimes on the prefix, a runtime on another display, a
     `1/7 Wine prefix stopped: a Wine runtime (wineserver pid 100) is using ${PREFIX} without Battle.net. Close it with: kill 100   then run play again.`);
   const exits = await world({ runtimes: "lingering exits" }).run();
   expect(exits.failure).toBeUndefined();
-  expect(exits.lines[0]).toBe("1/7 Wine prefix: free");
+  expect(exits.lines[1]).toBe("1/7 Wine prefix: free");
 });
 
 test("step 2 stops when Steam doesn't start Battle.net or Battle.net doesn't sign in", async () => {
@@ -413,9 +491,20 @@ test("step 3 restarts Battle.net alone once when it can't launch the game, and s
   expect(failed.failure).toBe(
     `3/7 Warcraft III stopped: Battle.net could not start Warcraft III.exe, also after restarting Battle.net. Its log: ${LOGS}/battle.net-20261006T030000.000000.log`);
   expect(failed.presses()).toBe(2);
-  const noPlay = await world({ playShown: false }).run();
-  expect(noPlay.failure).toBe("3/7 Warcraft III stopped: Battle.net doesn't show a Play button. Select Warcraft III in Battle.net, then run play again.");
-  expect(noPlay.windows.get(758)?.width).toBe(1424);
+});
+
+test("step 3 stops without a restart when Battle.net doesn't take the Play click, can't show Warcraft III's Play, or won't go fullscreen", async () => {
+  const ignored = await world({ launches: ["ignored"] }).run();
+  expect(ignored.failure).toBe(
+    "3/7 Warcraft III stopped: Battle.net didn't take the Play click: its log has no launch request within 15 s (pictures and click log: /state/play-debug/1970-01-01T00-00-00-000Z)");
+  expect(ignored.events.filter((event) => event.startsWith("SIGTERM"))).toEqual([]);
+  const updating = await world({ warcraftButton: "Update" }).run();
+  expect(updating.failure).toBe(
+    "3/7 Warcraft III stopped: Battle.net doesn't show Play for Warcraft III. If it is installing or updating, let it finish, then run play again.");
+  expect(updating.events).not.toContain("Play WoW");
+  const blank = await world({ playShown: false }).run();
+  expect(blank.failure).toBe("3/7 Warcraft III stopped: Battle.net's window shows neither its Games tab nor Warcraft III's Play button");
+  expect(blank.windows.get(758)?.width).toBe(1424);
   expect((await world({ fullscreens: false }).run()).failure).toBe("3/7 Warcraft III stopped: Battle.net's window didn't become fullscreen within 5 s");
 });
 

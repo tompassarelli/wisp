@@ -15,7 +15,7 @@
 import { join } from "node:path";
 import { Clock, Context, Effect, Schema } from "effect";
 import {
-  type LaunchOutcome, type PrefixUse, type ProcessInfo, documentsFolder, launchOutcome, launcherLogDirectory, newestLauncherLog,
+  type LaunchOutcome, type PrefixUse, type ProcessInfo, documentsFolder, launchOutcome, launchRequested, launcherLogDirectory, newestLauncherLog,
   prefixUse, shortcutAppId, shortcutUrl, signedIn,
 } from "../warcraft/battleNet";
 import type { Ink, Word } from "../warcraft/desktop";
@@ -124,6 +124,8 @@ export class PlayMachine extends Context.Service<PlayMachine, {
   readonly read: (path: string, from?: number) => Effect.Effect<string | undefined, PlayProblem>;
   readonly size: (path: string) => Effect.Effect<number | undefined, PlayProblem>;
   readonly list: (directory: string) => Effect.Effect<readonly string[], PlayProblem>;
+  /** Appends to a file, creating it and its folder. */
+  readonly append: (path: string, text: string) => Effect.Effect<void, PlayProblem>;
 }>()("wisp/PlayMachine") {}
 
 /** The owner's desktop: its compositor's windows and outputs, and the game's X display. */
@@ -135,8 +137,14 @@ export class PlayDesktop extends Context.Service<PlayDesktop, {
   readonly read: (output: string, ink: Ink) => Effect.Effect<Screen, PlayProblem>;
   /** The largest visible X window with this exact title, preferring those of process `pid`. */
   readonly xWindow: (title: string, pid?: number) => Effect.Effect<XWindow | undefined, PlayProblem>;
-  /** Moves the compositor's pointer to a spot, as a mouse would, checks the X pointer got there, and clicks. */
-  readonly click: (spot: Spot) => Effect.Effect<void, PlayProblem>;
+  /** Saves a picture of an output to `path`, creating its folder. */
+  readonly snapshot: (output: string, path: string) => Effect.Effect<void, PlayProblem>;
+  /**
+   * Moves the compositor's pointer to a spot, as a mouse would, checks the X
+   * pointer got there, and clicks. Returns each move and where the pointer
+   * then was, for the click log.
+   */
+  readonly click: (spot: Spot) => Effect.Effect<readonly string[], PlayProblem>;
   readonly keys: (window: XWindow, ...keys: string[]) => Effect.Effect<void, PlayProblem>;
   readonly typeText: (window: XWindow, text: string) => Effect.Effect<void, PlayProblem>;
 }>()("wisp/PlayDesktop") {}
@@ -171,6 +179,8 @@ export interface PlayDeclaration<R = never> {
   readonly map: { readonly folder: string; readonly file: string; readonly title: string };
   /** The hosted game's name; joining by name is case-sensitive. */
   readonly gameName: string;
+  /** Each run saves a picture before and after every click, and its click log, in a folder here named by its start time. */
+  readonly debugDirectory: string;
   /** Resolves once the started map shows its first screen; `since` is when Start was pressed, on the Effect Clock. */
   readonly started: (game: PlayGame, since: number) => Effect.Effect<void, PlayProblem, R>;
   /** Adds the computer opponent at that screen and describes it, as in "computer in slot 2". */
@@ -195,6 +205,7 @@ export const PLAY_TIMEOUTS = {
   launcherStart: 90,
   signIn: 90,
   window: 30,
+  request: 15,
   launch: 45,
   gameWindow: 60,
   mainMenu: 120,
@@ -261,6 +272,38 @@ export function findPhrase(words: readonly Word[], phrase: string, entry = false
 const lowest = (places: readonly { readonly x: number; readonly y: number }[]) =>
   places.reduce<{ readonly x: number; readonly y: number } | undefined>((best, place) => (best === undefined || place.y > best.y ? place : best), undefined);
 
+/** The highest of a phrase's places: a tab bar sits above the pages that repeat its words. */
+const topmost = (places: readonly { readonly x: number; readonly y: number }[]) =>
+  places.reduce<{ readonly x: number; readonly y: number } | undefined>((best, place) => (best === undefined || place.y < best.y ? place : best), undefined);
+
+/**
+ * Where the launcher names Warcraft III: "Warcraft" followed by III (read as
+ * III, Ill, lll), or alone where the reader dropped the numeral. "World of
+ * Warcraft", "Warcraft II" and "Warcraft Rumble" are other games.
+ */
+export function warcraftThree(words: readonly Word[]): readonly { readonly x: number; readonly y: number }[] {
+  return words.flatMap((word, index) => {
+    if (fold(word.text) !== "WARCRAFT") return [];
+    const before = words[index - 1];
+    const after = words[index + 1];
+    if (before !== undefined && before.line === word.line && fold(before.text) === "0F") return [];
+    if (after === undefined || after.line !== word.line) return [{ x: word.x, y: word.y }];
+    return fold(after.text) === "111" ? [{ x: Math.round((word.x + after.x) / 2), y: Math.round((word.y + after.y) / 2) }] : [];
+  });
+}
+
+/**
+ * Warcraft III's Play button, when the launcher shows Warcraft III: its game
+ * version box names the game about 80 pixels above Play (Battle.net 2.53,
+ * whatever the window's size).
+ */
+export function warcraftPlay(page: { readonly light: Screen; readonly white: Screen }) {
+  const names = warcraftThree(page.light.words);
+  return findPhrase(page.white.words, "Play")
+    .filter((play) => names.some((name) => play.y - name.y > 0 && play.y - name.y <= 200 && Math.abs(play.x - name.x) <= 400))
+    .reduce<{ readonly x: number; readonly y: number } | undefined>((best, place) => (best === undefined || place.y > best.y ? place : best), undefined);
+}
+
 const isFullscreen = (window: DesktopWindow) =>
   window.output !== undefined && window.width === window.output.width && window.height === window.output.height;
 
@@ -287,6 +330,22 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   const serverDirectory = yield* machine.serverDirectory(prefix).pipe(Effect.mapError(({ problem }) => new PlayFailure({ step: 1, title: "Wine prefix", problem })));
 
   const status = (step: number, title: string, text: string) => Effect.sync(() => print(`${step}/${STEPS} ${title}: ${text}`));
+
+  const debug = join(declaration.debugDirectory, new Date(yield* Clock.currentTimeMillis).toISOString().replace(/[:.]/g, "-"));
+  const clickLog = join(debug, "clicks.log");
+  print(`Captures and click log: ${debug}`);
+  let clicks = 0;
+  /** A click, with a picture of its output before and after it and its pointer moves in the click log. */
+  const clickSpot = (what: string, window: number, spot: Spot) => Effect.gen(function*() {
+    const name = `${String(++clicks).padStart(2, "0")}-${what.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase()}`;
+    yield* desktop.focus(window);
+    yield* desktop.snapshot(spot.output, join(debug, `${name}-before.jpg`));
+    const moves = yield* desktop.click(spot).pipe(Effect.tapError(({ problem }) => machine.append(clickLog, `${name}: ${spot.x},${spot.y} of ${spot.area.width}x${spot.area.height} on ${spot.output}: ${problem}\n`)));
+    yield* machine.append(clickLog, `${name}: ${spot.x},${spot.y} of ${spot.area.width}x${spot.area.height} on ${spot.output}; ${moves.join("; ")}\n`);
+    // The picture after shows what the click changed.
+    yield* Effect.sleep("300 millis");
+    yield* desktop.snapshot(spot.output, join(debug, `${name}-after.jpg`));
+  });
   const prefixState = machine.processes.pipe(Effect.map((processes) => prefixUse(processes, prefix, serverDirectory)));
   const pidList = (processes: readonly ProcessInfo[]) => processes.map(({ pid }) => pid).join(" ");
   const twoRuntimes = (use: PrefixUse) =>
@@ -367,18 +426,40 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     // The launcher's window goes back to its place once Play is pressed, or play stopped.
     const { path, offset } = yield* Effect.gen(function*() {
       const output = yield* outputOf(window.id, "Battle.net's window");
-      const screen = yield* until(PLAY_TIMEOUTS.screen, desktop.read(output, "white").pipe(Effect.map((seen) => (findPhrase(seen.words, "Play").length > 0 ? seen : undefined))),
-        () => "Battle.net doesn't show a Play button. Select Warcraft III in Battle.net, then run play again.");
       const xWindow = yield* desktop.xWindow("Battle.net").pipe(Effect.filterOrFail((found) => found !== undefined, () => new PlayProblem({ problem: "Battle.net's window isn't on this desktop's X display" })));
-      yield* sameShape(screen, xWindow, "Battle.net's window");
+      // Labels read as light text; Play is white on its blue button.
+      const page = Effect.gen(function*() {
+        const light = yield* desktop.read(output, "light");
+        const white = yield* desktop.read(output, "white");
+        yield* sameShape(light, xWindow, "Battle.net's window");
+        return { light, white };
+      });
+      const click = (screen: Screen, place: { readonly x: number; readonly y: number }, what: string) =>
+        clickSpot(what, window.id, { output, area: screen, x: place.x, y: place.y, window: xWindow });
+      let seen = yield* until(PLAY_TIMEOUTS.screen, page.pipe(Effect.map((now) => (warcraftPlay(now) !== undefined || topmost(findPhrase(now.light.words, "Games")) !== undefined ? now : undefined))),
+        () => "Battle.net's window shows neither its Games tab nor Warcraft III's Play button");
+      // Battle.net opens on the game it last showed or features, such as WoW: Forever; its Games tab lists Warcraft III.
+      if (warcraftPlay(seen) === undefined) {
+        yield* click(seen.light, topmost(findPhrase(seen.light.words, "Games"))!, "Battle.net Games");
+        seen = yield* until(PLAY_TIMEOUTS.screen, page.pipe(Effect.map((now) => (warcraftThree(now.light.words).length > 0 ? now : undefined))),
+          () => "Battle.net's Games tab doesn't list Warcraft III");
+        yield* click(seen.light, topmost(warcraftThree(seen.light.words))!, "Battle.net Warcraft III");
+        seen = yield* until(PLAY_TIMEOUTS.screen, page.pipe(Effect.map((now) => (warcraftPlay(now) !== undefined ? now : undefined))),
+          () => "Battle.net doesn't show Play for Warcraft III. If it is installing or updating, let it finish, then run play again.");
+      }
       const log = newestLauncherLog(yield* machine.list(logs));
       if (log === undefined) return yield* fail(`Battle.net has no log in ${logs}`);
       const path = join(logs, log);
       const offset = (yield* machine.size(path)) ?? 0;
-      yield* desktop.click({ output, area: screen, ...lowest(findPhrase(screen.words, "Play"))!, window: xWindow });
+      yield* click(seen.white, warcraftPlay(seen)!, "Battle.net Play");
       return { path, offset };
     }).pipe(Effect.ensuring(toggled ? desktop.toggleFullscreen(window.id).pipe(Effect.ignore) : Effect.void));
-    const outcome: LaunchOutcome = (yield* poll(PLAY_TIMEOUTS.launch, machine.read(path, offset).pipe(Effect.map((text) => launchOutcome(text ?? "")))))
+    const since = machine.read(path, offset).pipe(Effect.map((text) => text ?? ""));
+    const requested = yield* poll(PLAY_TIMEOUTS.request, since.pipe(Effect.map((text) => (launchRequested(text) || launchOutcome(text) !== undefined ? true : undefined))));
+    if (requested === undefined) {
+      return yield* fail(`Battle.net didn't take the Play click: its log has no launch request within ${PLAY_TIMEOUTS.request} s (pictures and click log: ${debug})`);
+    }
+    const outcome: LaunchOutcome = (yield* poll(PLAY_TIMEOUTS.launch, since.pipe(Effect.map(launchOutcome))))
       ?? { kind: "failed", reason: `Battle.net reported no launch within ${PLAY_TIMEOUTS.launch} s` };
     return { outcome, log: path };
   });
@@ -423,7 +504,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     yield* status(3, "Warcraft III", `running (pid ${process.pid}), fullscreen`);
     return {
       documents, pid: process.pid, window: window.id, xWindow, display,
-      clickUi: (x: number, y: number) => desktop.click({ output, area: xWindow, ...uiPoint(xWindow, x, y), window: xWindow }),
+      clickUi: (x: number, y: number) => clickSpot(`map UI ${x.toFixed(3)} ${y.toFixed(3)}`, window.id, { output, area: xWindow, ...uiPoint(xWindow, x, y), window: xWindow }),
     } satisfies PlayGame;
   });
 
@@ -441,7 +522,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     const click = (screen: Screen, place: { readonly x: number; readonly y: number } | undefined, what: string) => Effect.gen(function*() {
       if (place === undefined) return yield* fail(`${what} isn't on the screen`);
       yield* sameShape(screen, game.xWindow, "Warcraft III's window");
-      yield* desktop.click({ output, area: screen, x: place.x, y: place.y, window: game.xWindow });
+      yield* clickSpot(what, game.window, { output, area: screen, x: place.x, y: place.y, window: game.xWindow });
     });
     const mapShown = (screen: Screen) => has(screen, title, true) || has(screen, folder, true);
     const createButton = (screen: Screen) => lowest(findPhrase(screen.words, "Create Game"));

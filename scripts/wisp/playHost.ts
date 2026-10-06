@@ -8,7 +8,7 @@
 // mouse does: on the owner's desktop the X pointer stays where the
 // compositor's pointer is, so XTEST motion doesn't move it.
 import { spawn } from "node:child_process";
-import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, statSync } from "node:fs";
+import { appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, statSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { Clock, Effect, Layer, Schema } from "effect";
 import { type ProcessInfo, serverDirectoryName } from "../warcraft/battleNet";
@@ -147,6 +147,13 @@ const machine = (tools: PlayTools): PlayMachine["Service"] => ({
     },
     catch: problem(`couldn't list ${directory}`),
   }),
+  append: (path, text) => Effect.try({
+    try: () => {
+      mkdirSync(dirname(path), { recursive: true });
+      appendFileSync(path, text);
+    },
+    catch: problem(`couldn't write ${path}`),
+  }),
 });
 
 /** Runs a tool to completion; its stdout on success. A nonzero exit is a problem unless `allowExit` lists it. */
@@ -231,14 +238,20 @@ const desktop = (tools: PlayTools, display: string): PlayDesktop["Service"] => {
       return preferred.map(({ window }) => window).reduce<XWindow | undefined>((best, window) =>
         (best === undefined || window.width * window.height > best.width * best.height ? window : best), undefined);
     }),
+    snapshot: (output, path) => Effect.gen(function*() {
+      yield* Effect.try({ try: () => mkdirSync(dirname(path), { recursive: true }), catch: problem(`couldn't create ${dirname(path)}`) });
+      yield* run([tools.grim, "-o", output, "-t", "jpeg", "-q", "80", path], {});
+    }),
     click: (spot) => Effect.gen(function*() {
       const output = (yield* niri(tools, "outputs", NiriOutput)).find(({ name }) => name === spot.output)?.logical ?? undefined;
       if (output === undefined) return yield* new PlayProblem({ problem: `niri has no output ${spot.output}` });
-      const { root } = spotTargets(spot, output);
+      const { logical, root } = spotTargets(spot, output);
       // One logical pixel, in X pixels.
       const tolerance = Math.max(1, Math.ceil(spot.window.width / output.width));
       const arrived = (at: { readonly x: number; readonly y: number }) => Math.abs(at.x - root.x) <= tolerance && Math.abs(at.y - root.y) <= tolerance;
+      const moves = [`target logical ${logical.x.toFixed(1)},${logical.y.toFixed(1)}, X root ${root.x},${root.y}`];
       let at = yield* pointer;
+      moves.push(`pointer at X ${at.x},${at.y}`);
       // The X pointer can be stale until the compositor's pointer moves over an X window, so the move is corrected from where it lands.
       for (let move = 0; move < 4 && !arrived(at); move++) {
         const { dx, dy } = pointerMove(spot, output, at);
@@ -250,11 +263,14 @@ const desktop = (tools: PlayTools, display: string): PlayDesktop["Service"] => {
           yield* Effect.sleep("20 millis");
           at = yield* pointer;
         } while (at.x === from.x && at.y === from.y && (yield* Clock.currentTimeMillis) < deadline);
+        moves.push(`moved ${dx.toFixed(1)},${dy.toFixed(1)} -> X ${at.x},${at.y}`);
       }
-      if (!arrived(at)) return yield* new PlayProblem({ problem: `the pointer stopped at ${at.x},${at.y} instead of ${root.x},${root.y} (X root pixels) over window ${spot.window.id}` });
+      if (!arrived(at)) return yield* new PlayProblem({ problem: `the pointer stopped at ${at.x},${at.y} instead of ${root.x},${root.y} (X root pixels) over window ${spot.window.id}: ${moves.join("; ")}` });
       // The game reads the move before the press.
       yield* Effect.sleep("120 millis");
       yield* run([tools.wlrctl, "pointer", "click", "left"], {});
+      moves.push("clicked");
+      return moves;
     }),
     keys: (_window, ...keys) => xdotool("key", "--clearmodifiers", ...keys).pipe(Effect.asVoid),
     typeText: (_window, value) => xdotool("type", "--clearmodifiers", "--delay", "12", "--", value).pipe(Effect.asVoid),

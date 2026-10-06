@@ -70,6 +70,9 @@ export const documentsFolder = (prefix: string) => join(prefix, "drive_c/users/s
 const SIGNED_IN = /\[BNLogin\] .*Logged into Battle\.net successfully/;
 export const signedIn = (log: string) => SIGNED_IN.test(log);
 
+/** The launcher took a Play of Warcraft III: it asks its agent to launch the game. */
+export const launchRequested = (log: string) => /\[GameLaunchController\] .*LaunchBinary: uid=w3\b/.test(log);
+
 export type LaunchOutcome = { readonly kind: "running" } | { readonly kind: "failed"; readonly reason: string };
 
 /**
