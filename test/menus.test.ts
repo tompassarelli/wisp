@@ -34,8 +34,9 @@ interface Received {
 }
 
 /** A game's menus server: the menus' socket at /webui-socket/GUID, answering as the game does. */
-function fakeGame(hosting: "immediate" | "old-setup" | "refused" = "immediate") {
+function fakeGame(hosting: "immediate" | "old-setup" | "refused" = "immediate", unreadListings = 0) {
   const received: Received[] = [];
+  let unread = unreadListings;
   const sockets = new Set<Bun.ServerWebSocket<undefined>>();
   let listed = new Set<string>();
   const tell = (messageType: string, payload: unknown) => {
@@ -64,7 +65,8 @@ function fakeGame(hosting: "immediate" | "old-setup" | "refused" = "immediate") 
         switch (message) {
           case "GetMapList": {
             const folder = payload["useLastMap"] === true ? `${MAPS}Download/` : String(payload["subdirectory"]);
-            const entries = FOLDERS[folder] ?? [];
+            // Just after starting, the game lists a folder's subfolders before its maps.
+            const entries = folder !== `${MAPS}Download/` && folder !== MAPS && unread-- > 0 ? [{ filename: "older", isFolder: true }] : FOLDERS[folder] ?? [];
             listed = new Set(entries.map((entry) => `${folder}${entry.filename}`));
             // A folder is listed with its parent's path.
             tell("MapList", { mapList: { maps: entries.map((entry) => ({ ...entry, filepath: folder })) } });
@@ -98,6 +100,18 @@ function fakeGame(hosting: "immediate" | "old-setup" | "refused" = "immediate") 
   });
   return { received, address: { port: server.port!, guid: GUID } satisfies MenuAddress, stop: () => server.stop(true) };
 }
+
+test("a folder whose maps the game hasn't read yet is listed again until they appear", async () => {
+  const game = fakeGame("immediate", 2);
+  try {
+    const result = await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const menus = yield* connectMenus(game.address);
+      return yield* hostLobby(menus, { folder: "00-Wisp", file: "Wisp Sample.w3x", gameName: "late", password: "pw" });
+    })));
+    expect(result).toBe(`${MAPS}00-Wisp/Wisp Sample.w3x`);
+    expect(game.received.filter(({ message }) => message === "GetMapList").length).toBe(4);
+  } finally { game.stop(); }
+});
 
 const games: { stop: () => void }[] = [];
 afterEach(() => {

@@ -392,6 +392,9 @@ const listedMaps = (payload: unknown): ListedMap[] => {
   }));
 };
 
+/** How long a folder's maps may stay unlisted after its subfolders are. */
+const MAP_LIST_WAIT_SECONDS = 15;
+
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const separator = (path: string) => (path.includes("\\") && !path.includes("/") ? "\\" : "/");
 const withSeparator = (path: string) => (/[\\/]$/.test(path) ? path : `${path}${separator(path)}`);
@@ -404,6 +407,7 @@ const inFolder = (path: string, folder: string) => path.replaceAll("\\", "/").re
 export const findMap = (menus: MenuSocket, folder: string, file: string) => Effect.gen(function*() {
   const asked = new Set<string>();
   let request: Readonly<Record<string, unknown>> = { useLastMap: true };
+  let waited = 0;
   for (let listing = 0; listing < 4; listing++) {
     yield* menus.forget;
     yield* menus.send("GetMapList", request);
@@ -414,6 +418,13 @@ export const findMap = (menus: MenuSocket, folder: string, file: string) => Effe
     // Folders are listed with their parent's absolute path; asking for one takes that path, its name and a separator.
     const inMaps = maps.map((entry) => /^(.*[\\/]Maps[\\/])/i.exec(entry.filepath)?.[1]).find((root) => root !== undefined);
     const next = sub !== undefined ? `${withSeparator(sub.filepath)}${sub.filename}${separator(sub.filepath)}` : inMaps !== undefined ? `${inMaps}${folder.replace(/[\\/]/g, separator(inMaps))}${separator(inMaps)}` : undefined;
+    // A game that has just started lists a folder's subfolders before it has read its maps.
+    if (maps.length > 0 && maps.every((entry) => entry.isFolder) && inFolder(maps[0]!.filepath, folder) && waited < MAP_LIST_WAIT_SECONDS) {
+      waited++;
+      listing--;
+      yield* Effect.sleep("1 second");
+      continue;
+    }
     if (next === undefined || asked.has(next)) {
       const seen = maps.slice(0, 12).map((entry) => `${entry.isFolder ? "[folder] " : ""}${entry.filename}`).join(", ");
       return yield* new MenuFailure({ operation: "find the map", problem: `${folder}/${file} is not in the map list (${maps.length} entries${maps.length > 0 ? ` in ${maps[0]!.filepath}: ${seen}` : ""})` });
