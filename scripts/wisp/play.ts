@@ -1,6 +1,7 @@
 // `play`: one command from the owner's desktop to a match. It checks that at
 // most one Wine runtime uses the game's prefix, starts or reuses the signed-in
-// Battle.net launcher through its Steam shortcut, presses Play, waits for
+// Battle.net launcher through its Steam shortcut, asks it to launch Warcraft
+// III (its own `--exec="launch W3"`, not its window's Play), waits for
 // Warcraft III to sign in and read its ladder maps, hosts a custom game of the
 // map, lets the game add its computer opponent at its first screen, starts the
 // game's controller helper, and leaves Warcraft III fullscreen and focused so
@@ -8,8 +9,8 @@
 // problem stops the run with a plain message.
 //
 // It never signs in or out, never starts Warcraft III.exe itself (only the
-// launcher's Play does), and never starts a runtime while another uses the
-// prefix: a launcher started beside another runtime can't start the game.
+// launcher does), and never starts a runtime while another uses the prefix: a
+// launcher started beside another runtime can't start the game.
 // Warcraft's menus are found by the text they show, so any screen size works.
 // The game's window is fullscreen while play drives it, so a capture of its
 // output is the game's frame.
@@ -162,6 +163,14 @@ export class PlayMachine extends Context.Service<PlayMachine, {
   /** The name of the directory Wine's server for `prefix` lives in. */
   readonly serverDirectory: (prefix: string) => Effect.Effect<string, PlayProblem>;
   readonly signal: (pids: readonly number[], signal: "SIGTERM" | "SIGKILL") => Effect.Effect<void>;
+  /**
+   * Asks the running launcher to start Warcraft III: Battle.net.exe
+   * --exec="launch W3" in the launcher's own runtime container (its mount and
+   * user namespaces, environment and folder), so Wine reaches the prefix's
+   * wineserver instead of starting a second one. Battle.net hands the command
+   * to the running launcher and exits.
+   */
+  readonly launch: (launcher: ProcessInfo) => Effect.Effect<void, PlayProblem>;
   /** Hands Steam a steam:// URL, as the shortcut's desktop entry does. */
   readonly openSteam: (url: string) => Effect.Effect<void, PlayProblem>;
   /** Starts a program that outlives play; its output goes to `log`, appended, or nowhere. Returns its pid. */
@@ -261,9 +270,7 @@ export const PLAY_TIMEOUTS = {
   runtimeExit: 20,
   launcherStart: 90,
   signIn: 90,
-  window: 30,
   request: 15,
-  tile: 6,
   next: 10,
   gameFullscreen: 45,
   launch: 45,
@@ -340,76 +347,11 @@ const lowest = (places: readonly { readonly x: number; readonly y: number }[]) =
 export const topmost = (places: readonly { readonly x: number; readonly y: number }[]) =>
   places.reduce<{ readonly x: number; readonly y: number } | undefined>((best, place) => (best === undefined || place.y < best.y ? place : best), undefined);
 
-/**
- * Where the launcher names Warcraft III: "Warcraft" followed by III (read as
- * III, Ill, lll), or alone where the reader dropped the numeral. "World of
- * Warcraft", "Warcraft II" and "Warcraft Rumble" are other games.
- */
-export function warcraftThree(words: readonly Word[]): readonly { readonly x: number; readonly y: number }[] {
-  return words.flatMap((word, index) => {
-    if (fold(word.text) !== "WARCRAFT") return [];
-    const before = words[index - 1];
-    const after = words[index + 1];
-    if (before !== undefined && before.line === word.line && fold(before.text) === "0F") return [];
-    if (after === undefined || after.line !== word.line) return [{ x: word.x, y: word.y }];
-    return fold(after.text) === "111" ? [{ x: Math.round((word.x + after.x) / 2), y: Math.round((word.y + after.y) / 2) }] : [];
-  });
-}
-
-/**
- * Where to click a game's tile in Battle.net's Games tab, given its label.
- * The label under the tile's art doesn't take clicks; the art does. Tiles
- * are as tall as they are apart (labels of one row, each its own line, about
- * 381 px apart on 6 Oct), so the art's centre is about 0.6 of that above the
- * label and its upper half 0.5 above.
- */
-export function tileArt(words: readonly Word[], label: { readonly x: number; readonly y: number }) {
-  const starts = words.filter((word, index) => Math.abs(word.y - label.y) <= 8 && (index === 0 || words[index - 1]!.line !== word.line))
-    .map(({ x }) => x).sort((a, b) => a - b);
-  const gaps = starts.slice(1).map((x, index) => x - starts[index]!).filter((gap) => gap > 100).sort((a, b) => a - b);
-  const measured = gaps[Math.floor(gaps.length / 2)];
-  const pitch = measured !== undefined && measured >= 250 && measured <= 600 ? measured : TILE_PITCH;
-  return { first: { x: label.x, y: Math.round(label.y - pitch / 2) }, retry: { x: label.x, y: Math.round(label.y - pitch * 0.6) } };
-}
-
-/** The Games tab's tile pitch on 6 Oct (Battle.net 2.53), for a row with one tile or gaps that aren't tiles'. */
-const TILE_PITCH = 381;
-
-/** A tile's install state under its label. */
-const TILE_STATE = /^(installed|install|update|updating|download|downloading|queued|paused|play|playing)$/i;
-
-/**
- * Warcraft III's label in Battle.net's Games grid: below the grid's header
- * ("My Games", "Sort by") with the tile's install state, such as
- * "Installed", just below it (30 px on 6 Oct). Other text naming Warcraft,
- * like the "World of Warcraft" logo in a tile's art (run 7 read "WARCRAFT"
- * at 1307,703), is no label.
- */
-export function gridLabel(words: readonly Word[]): Point | undefined {
-  const header = [...findPhrase(words, "Sort by"), ...findPhrase(words, "My Games")];
-  if (header.length === 0) return undefined;
-  const top = Math.min(...header.map(({ y }) => y));
-  return topmost(warcraftThree(words).filter((label) => label.y > top + 40 && words.some((word) =>
-    TILE_STATE.test(word.text.replace(/[^A-Za-z]/g, "")) && word.y - label.y >= 10 && word.y - label.y <= 60 && Math.abs(word.x - label.x) <= 250)));
-}
-
 /** A spot outside the image its point is in: the pointer would only pin at the screen's edge. */
 export const offScreen = (spot: Spot) => spot.x < 0 || spot.y < 0 || spot.x >= spot.area.width || spot.y >= spot.area.height;
 
 /** Two reads of one control: within 6 px. */
 const samePlace = (a: Point, b: Point) => Math.abs(a.x - b.x) <= 6 && Math.abs(a.y - b.y) <= 6;
-
-/**
- * Warcraft III's Play button, when the launcher shows Warcraft III: its game
- * version box names the game about 80 pixels above Play (Battle.net 2.53,
- * whatever the window's size).
- */
-export function warcraftPlay(page: { readonly light: Screen; readonly white: Screen }) {
-  const names = warcraftThree(page.light.words);
-  return findPhrase(page.white.words, "Play")
-    .filter((play) => names.some((name) => play.y - name.y > 0 && play.y - name.y <= 200 && Math.abs(play.x - name.x) <= 400))
-    .reduce<{ readonly x: number; readonly y: number } | undefined>((best, place) => (best === undefined || place.y > best.y ? place : best), undefined);
-}
 
 const isFullscreen = (window: DesktopWindow) =>
   window.output !== undefined && window.width === window.output.width && window.height === window.output.height;
@@ -505,7 +447,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   const setLaunchOptions = (options: string | undefined) => settings.pipe(Effect.flatMap(({ text }) => machine.write(configPath, withLaunchOptions(text, options))));
 
   /**
-   * A signed-in launcher whose Play starts Warcraft III without loading a map: a map loaded at
+   * A signed-in launcher that starts Warcraft III without loading a map: a map loaded at
    * startup loads during the ladder scan (wisp:scripts/warcraft/war3Log.ts). Earlier Wisp runs
    * left `-loadfile` for this map in the launch options; that one is cleared, another map's refused.
    */
@@ -533,7 +475,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     }
   });
 
-  // 3. Play in the launcher, confirmed by its log; one restart of the launcher alone when it can't launch.
+  // 3. The launcher's launch, confirmed by its log; one restart of the launcher alone when it can't launch.
   const windowTitled = (title: string) => desktop.windows.pipe(Effect.map((windows) => windows.find((window) => window.title === title && window.appId === appId)));
   const windowById = (id: number) => desktop.windows.pipe(Effect.flatMap((windows) => {
     const window = windows.find((candidate) => candidate.id === id);
@@ -563,60 +505,19 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       ? Effect.void
       : fail(`${what} isn't covering its screen (window ${window.width}x${window.height}, screen ${screen.width}x${screen.height})`);
 
-  const pressPlay = Effect.gen(function*() {
-    const window = yield* until(PLAY_TIMEOUTS.window, windowTitled("Battle.net"), () => `Battle.net's window didn't appear within ${PLAY_TIMEOUTS.window} s`);
-    const toggled = yield* fullscreen(window.id, "Battle.net's window");
-    // The launcher's window goes back to its place once Play is pressed, or play stopped.
-    const { path, offset } = yield* Effect.gen(function*() {
-      const output = yield* outputOf(window.id, "Battle.net's window");
-      const xWindow = yield* desktop.xWindow("Battle.net").pipe(Effect.filterOrFail((found) => found !== undefined, () => new PlayProblem({ problem: "Battle.net's window isn't on this desktop's X display" })));
-      // Labels read as light text; Play is white on its blue button.
-      const page = Effect.gen(function*() {
-        const light = yield* desktop.read(output, "light");
-        const white = yield* desktop.read(output, "white");
-        return { light, white };
-      });
-      const click = (screen: Screen, place: { readonly x: number; readonly y: number }, what: string) =>
-        clickSpot(what, window.id, { output, area: screen, x: place.x, y: place.y, window: xWindow });
-      // Fullscreen requests can reflow the launcher before the compositor's next capture.
-      let previousGames: Point | undefined;
-      let seen = yield* until(PLAY_TIMEOUTS.screen, page.pipe(Effect.map((now) => {
-        const games = topmost(findPhrase(now.light.words, "Games"));
-        const previous = previousGames;
-        previousGames = games;
-        return warcraftPlay(now) !== undefined || (games !== undefined && previous !== undefined && samePlace(games, previous)) ? now : undefined;
-      })),
-        () => "Battle.net's window shows neither its Games tab nor Warcraft III's Play button");
-      // Battle.net opens on the game it last showed or features, such as WoW: Forever; its Games tab lists Warcraft III.
-      if (warcraftPlay(seen) === undefined) {
-        yield* click(seen.light, topmost(findPhrase(seen.light.words, "Games"))!, "Battle.net Games");
-        // The grid fills in after the tab opens; its label is taken once two reads agree.
-        let last: Point | undefined;
-        seen = yield* until(PLAY_TIMEOUTS.screen, page.pipe(Effect.map((now) => {
-          const label = gridLabel(now.light.words);
-          const previous = last;
-          last = label;
-          return label !== undefined && previous !== undefined && samePlace(label, previous) ? now : undefined;
-        })), () => `Battle.net's Games tab doesn't list Warcraft III with its install state (pictures and click log: ${debug})`);
-        const tile = tileArt(seen.light.words, gridLabel(seen.light.words)!);
-        const opened = page.pipe(Effect.map((now) => (warcraftPlay(now) !== undefined ? now : undefined)));
-        yield* click(seen.light, tile.first, "Battle.net Warcraft III tile");
-        const first = yield* poll(PLAY_TIMEOUTS.tile, opened);
-        if (first === undefined) yield* click(seen.light, tile.retry, "Battle.net Warcraft III tile again");
-        seen = first ?? (yield* until(PLAY_TIMEOUTS.screen, opened,
-          () => `Battle.net didn't show Warcraft III's Play after two clicks on its Games tile. If it is installing or updating, let it finish, then run play again (pictures and click log: ${debug})`));
-      }
-      const log = newestLauncherLog(yield* machine.list(logs));
-      if (log === undefined) return yield* fail(`Battle.net has no log in ${logs}`);
-      const path = join(logs, log);
-      const offset = (yield* machine.size(path)) ?? 0;
-      yield* click(seen.white, warcraftPlay(seen)!, "Battle.net Play");
-      return { path, offset };
-    }).pipe(Effect.ensuring(toggled ? leaveFullscreen(window.id).pipe(Effect.ignore) : Effect.void));
+  /** The launcher's launch of Warcraft III, confirmed by its log: `LaunchBinary`, then a launch or a failure. */
+  const launchGame = Effect.gen(function*() {
+    const { launcher } = yield* prefixState;
+    if (launcher === undefined) return yield* fail("Battle.net isn't running in the prefix");
+    const log = newestLauncherLog(yield* machine.list(logs));
+    if (log === undefined) return yield* fail(`Battle.net has no log in ${logs}`);
+    const path = join(logs, log);
+    const offset = (yield* machine.size(path)) ?? 0;
+    yield* machine.launch(launcher);
     const since = machine.read(path, offset).pipe(Effect.map((text) => text ?? ""));
     const requested = yield* poll(PLAY_TIMEOUTS.request, since.pipe(Effect.map((text) => (launchRequested(text) || launchOutcome(text) !== undefined ? true : undefined))));
     if (requested === undefined) {
-      return yield* fail(`Battle.net didn't take the Play click: its log has no launch request within ${PLAY_TIMEOUTS.request} s (pictures and click log: ${debug})`);
+      return yield* fail(`Battle.net didn't launch Warcraft III within ${PLAY_TIMEOUTS.request} s of being asked (its log: ${path}). Check that it is signed in to an account that owns Warcraft III and that the game is installed and up to date, then run play again.`);
     }
     const outcome: LaunchOutcome = (yield* poll(PLAY_TIMEOUTS.launch, since.pipe(Effect.map(launchOutcome))))
       ?? { kind: "failed", reason: `Battle.net reported no launch within ${PLAY_TIMEOUTS.launch} s` };
@@ -683,21 +584,21 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     const running = (yield* prefixState).game;
     // A game already running was started with its own backup and helper.
     if (running === undefined) yield* savePreferences;
-    /** The session in Warcraft III's log before Play; the game's own session replaces it. */
+    /** The session in Warcraft III's log before the launch; the game's own session replaces it. */
     let earlierSession: string | undefined;
     if (running !== undefined) {
       yield* status(3, "Warcraft III", `already running (pid ${running.pid})`);
     } else {
       earlierSession = sessionStart((yield* machine.read(war3Log)) ?? "");
-      let attempt = yield* pressPlay;
+      let attempt = yield* launchGame;
       if (attempt.outcome.kind === "failed") {
         yield* status(3, "Warcraft III", `${attempt.outcome.reason}; restarting Battle.net alone, once`);
         yield* stopPrefix;
         yield* startLauncher(3, "Warcraft III");
-        attempt = yield* pressPlay;
+        attempt = yield* launchGame;
         if (attempt.outcome.kind === "failed") return yield* fail(`${attempt.outcome.reason}, also after restarting Battle.net. Its log: ${attempt.log}`);
       }
-      yield* status(3, "Warcraft III", "Battle.net's Play started it");
+      yield* status(3, "Warcraft III", "Battle.net started it");
     }
     const process = yield* until(PLAY_TIMEOUTS.gameWindow, prefixState.pipe(Effect.map((use) => use.game)),
       () => `Battle.net reported Warcraft III running, but its process didn't appear within ${PLAY_TIMEOUTS.gameWindow} s`);
@@ -878,7 +779,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     yield* host(game);
     yield* checkImports(text.length);
     const seconds = Math.round(((yield* Clock.currentTimeMillis) - since) / 1000);
-    yield* status(4, "Map", `fighter selection ${seconds} s after Play`);
+    yield* status(4, "Map", `fighter selection ${seconds} s after launch`);
     return text.length;
   });
 

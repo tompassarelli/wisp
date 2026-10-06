@@ -13,7 +13,7 @@ is needed: a Battle.net sign-in, or a state it doesn't know.
 a: ready: menus (MAIN_MENU)
 b: disconnected: Battle.net connection lost (socket: ...); ending Warcraft III
 b: ending Warcraft III (pids 52713)
-b: Play started Warcraft III (pid 70001)
+b: Battle.net started Warcraft III (pid 70001)
 b: Warcraft III signing in...
 b: ready: menus (MAIN_MENU), after disconnected, no game
 ```
@@ -55,26 +55,26 @@ instead of looping.
 
 | State | Seen when | Recovery |
 | --- | --- | --- |
-| Two runtimes on one prefix | More than one wineserver uses the prefix. A launcher started beside another runtime can't start the game. | End every program of the prefix (SIGTERM, SIGKILL after 20 s), then start Battle.net alone and press Play. |
+| Two runtimes on one prefix | More than one wineserver uses the prefix. A launcher started beside another runtime can't start the game. | End every program of the prefix (SIGTERM, SIGKILL after 20 s), then start Battle.net alone and launch the game. |
 | Runtime without Battle.net | A wineserver without Battle.net or Warcraft III, still there after 20 s. | End it, then start Battle.net. |
-| Crashed with the error dialog up | BlizzardError.exe runs, or `watch` says crashed (an exited game, a new `Errors/*/Crash.txt`). | End the dialog and Warcraft III, then press Play in the retained launcher. |
-| Disconnected | `watch` says Warcraft III lost Battle.net. | End Warcraft III, check the launcher, press Play. A dropped game isn't asked to sign in again: its Login button would open another sign-in. |
-| Empty login shell | The menus report a login screen (`LOGIN_DOORS`, `LOGIN_OPTIONS`), or signing in, for 120 s (Warcraft III signed in within 14 s on 6 Oct). | End Warcraft III and press Play in the retained launcher: the observed recovery (warcraft3-development skill). |
-| Map without its imports | Warcraft III's log has `model creation failed - war3mapImported/...` lines: the map loaded while its ladder scan ran ([play.md](play.md), step 4). | End Warcraft III and press Play. |
-| Stuck loading | On the loading screen for 120 s. | End Warcraft III and press Play. |
+| Crashed with the error dialog up | BlizzardError.exe runs, or `watch` says crashed (an exited game, a new `Errors/*/Crash.txt`). | End the dialog and Warcraft III, then launch the game from the retained launcher. |
+| Disconnected | `watch` says Warcraft III lost Battle.net. | End Warcraft III, check the launcher, launch the game. A dropped game isn't asked to sign in again: its Login button would open another sign-in. |
+| Empty login shell | The menus report a login screen (`LOGIN_DOORS`, `LOGIN_OPTIONS`), or signing in, for 120 s (Warcraft III signed in within 14 s on 6 Oct). | End Warcraft III and launch it from the retained launcher: the observed recovery (warcraft3-development skill). |
+| Map without its imports | Warcraft III's log has `model creation failed - war3mapImported/...` lines: the map loaded while its ladder scan ran ([play.md](play.md), step 4). | End Warcraft III and launch it again. |
+| Stuck loading | On the loading screen for 120 s. | End Warcraft III and launch it again. |
 | Display settings changed | The client declares `displaySettings` and its closed game's War3Preferences.txt holds other `[Video]` values ([display-settings.md](display-settings.md)). | Write the declared values into the file, keeping its other lines. |
 | Stale lobby | In a lobby from an earlier run. | `LeaveGame` on the menus' socket, or the Back button without a menu page. |
 | Score screen | An earlier match's score screen. | `ScoreScreenClose` on the menus' socket, or Back. |
-| Closed | Neither Battle.net nor Warcraft III runs. | Start Battle.net the way the game declares, then Play. |
-| No game | Battle.net is signed in; Warcraft III isn't running. | Press Play; the launcher's log must take it within 15 s and report the game running within 45 s. A launch it reports failed restarts Battle.net once and presses Play again, as `play` does. |
-| Connection failing | The launcher's log shows its connection lost (above). | Restart Battle.net (every program of the prefix), then Play. |
+| Closed | Neither Battle.net nor Warcraft III runs. | Start Battle.net the way the game declares, then launch the game. |
+| No game | Battle.net is signed in; Warcraft III isn't running. | Ask the launcher to launch Warcraft III; its log must take it within 15 s and report the game running within 45 s. A launch it reports failed restarts Battle.net once and asks again, as `play` does. |
+| Connection failing | The launcher's log shows its connection lost (above). | Restart Battle.net (every program of the prefix), then launch the game. |
 | Sign-in needed | The launcher's log shows its saved login rejected, or no sign-in 90 s after it started. | Stop: one line naming the client, its display and what to do. |
 
 A client in its menus, signed in, or in a match is ready. Signing in or
 loading for less than its bound is waited on. A game no source places yet
 (`running`: its process, no menu screen heard, no sign-in in its log) is
 left alone when doctor finds it, and waited on for up to 120 s when doctor
-just pressed Play for it.
+just launched it.
 
 War3Log.txt is written in bursts: on 6 Oct client B's log stopped 3 s into a
 session that then signed in and played all evening, so it showed no sign-in
@@ -82,7 +82,8 @@ for hours. A client that only its log calls "signing in", with no menu page
 reporting, is therefore left alone and reported, never ended.
 
 Doctor never signs in, never starts Warcraft III.exe itself (only the
-launcher's Play does), never starts Battle.net beside another runtime, and
+launcher does, asked as `play` asks it), never starts Battle.net beside
+another runtime, and
 never touches a client that is ready. Battle.net's credential entry stays with
 the owner or the authorized login-field helper (warcraft3-development skill).
 
@@ -104,11 +105,9 @@ export const doctor = makeDoctor({
 
 Each client's prefix is the folder its `documents` lives in
 (`<prefix>/drive_c/users/steamuser/Documents/Warcraft III`) and its display
-is its desktop run folder's. On a private desktop Play is pressed in the
-client's own Battle.net window: its text is read and Warcraft III's Play
-found as `play` finds it (opening the Games tab and Warcraft III's tile when
-the launcher shows another game), and clicked with XTEST on the client's X
-display (wisp:scripts/wisp/doctorHost.ts).
+is its desktop run folder's. Doctor launches Warcraft III as `play` does
+([play.md](play.md), step 3): Battle.net's `--exec="launch W3"` inside the
+client's launcher container, never a click in its window.
 
 ## Doctor in other commands
 
@@ -124,14 +123,14 @@ display (wisp:scripts/wisp/doctorHost.ts).
 - **`wisp accept`:** pass `clientsDoctor(...)` as the live driver's
   `prepare` (wisp:scripts/wisp/acceptLive.ts).
 - **`wisp play`:** checks its prefix with doctor before step 1 and once after
-  a failure, without pressing Play itself (`DoctorHands.pressPlay` absent):
-  play's own steps start Battle.net and press Play.
+  a failure, without launching the game itself (`DoctorHands.launches`
+  false): play's own steps start Battle.net and launch it.
 
 ## Tests
 
 wisp:test/doctor.test.ts runs every state above against a simulated client:
 client B's recorded process shapes, launcher log lines recorded on 3 and 6
 Oct (wisp:test/fixtures/doctor), B's burst-written War3Log and the 6 Oct
-crash report. Whether the private desktop's Battle.net window takes the Play
-click, and the live watch's view of each state, are properties of the real
+crash report. The live watch's view of each state and the launcher's
+answer to a launch request are properties of the real
 clients, which only a native run checks.

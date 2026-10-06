@@ -8,11 +8,11 @@ message that says what to do. It takes no arguments.
 1/7 Wine prefix: free
 2/7 Battle.net: starting the Steam shortcut "Warcraft III (Battle.net)"
 2/7 Battle.net: started and signed in (27 s)
-3/7 Warcraft III: Battle.net's Play started it
+3/7 Warcraft III: Battle.net started it
 3/7 Warcraft III: running (pid 2852), asked to go fullscreen
 4/7 Map: Warcraft III signed in and read its ladder maps (27 s); hosting the map
 4/7 Map: "Smashcraft" of Smashcraft 0.0.47 hosted through the menus (joining by name is case-sensitive)
-4/7 Map: fighter selection 35 s after Play
+4/7 Map: fighter selection 35 s after launch
 5/7 Controller helper: running (pid 41234), log ~/.local/state/smashcraft/play-helper.log
 6/7 Match: computer as Player 3
 7/7 Fullscreen: Warcraft III is fullscreen and focused. Ready to fight.
@@ -25,7 +25,7 @@ runtime without Battle.net, a crashed game and its error dialog, a game that
 lost Battle.net, sits at the empty login shell, loaded the map without its
 imports or is stuck loading, leaves an earlier lobby or score screen, and
 restarts a launcher whose connection is failing; when it recovered
-something after a failure, `play` runs once more. It leaves pressing Play to
+something after a failure, `play` runs once more. It leaves launching the game to
 the steps below, and stops with one line when the launcher needs its owner
 to sign in. Without a watch, step 1 refuses these states and prints the
 command that clears them.
@@ -54,27 +54,28 @@ command that clears them.
    `-loadfile` for another map stops `play`.
 3. **Warcraft III.** The map is copied in from its declared build when its
    folder lacks it, and the game's `prepare` leaves what the map reads at its
-   start. `play` makes the launcher's window fullscreen and reads it.
-   Battle.net opens on the game it last showed or features (on 6 Oct,
-   WoW: Forever), and every game's page has its own Play, so `play` clicks
-   Play only under a game version box that names Warcraft III; otherwise it
-   opens the Games tab and clicks Warcraft III's tile on its art, above the
-   label found in the grid (below its "My Games" and "Sort by" header, with
-   the install state, such as "Installed", under it; once two reads agree;
-   a "Warcraft" logo in another tile's art is no label). The label itself
-   takes no clicks; when the page doesn't change within 6 s it
-   clicks the art once more, then stops. Then it puts the window back.
+   start. `play` then asks the running launcher to launch Warcraft III with
+   Battle.net's own `Battle.net.exe --exec="launch W3"`, run inside the
+   launcher's Steam runtime container: `nsenter` joins the launcher's user
+   and mount namespaces (they are the owner's) with its environment and
+   folder. Each container has its own `/tmp`, where Wine keeps the
+   wineserver's socket, so a Battle.net.exe started outside would start a
+   second wineserver on the prefix; inside, it reaches the launcher's. The
+   second Battle.net.exe hands the command to the running launcher
+   (`Received IPC Message: IPC_COMMAND` in its log) and exits. Nothing is
+   clicked in the launcher's window, whichever game or page it shows (on 6
+   Oct, two main-display runs that clicked through its Games tab and Play
+   stopped on a stuck pointer and on a page without them). The launcher
+   must be signed in to an account that owns Warcraft III: for one that
+   doesn't, it only selects the game (`Selecting game family by id: W3`).
    Before the game starts, `play` saves War3Preferences.txt and a detached helper puts it back when the game exits ([display-settings.md](display-settings.md)).
-   Only the log lines written after the click decide: no `LaunchBinary:
-   uid=w3` within 15 s means the click wasn't taken, and `play` stops there;
-   `Game is running: w3` is a launch, and `Could not launch ... Warcraft
-   III.exe` or an expired pending launch is a failure. On a failure it ends
-   every program of the prefix, waits for Steam to see the shortcut end,
-   starts the launcher again alone and presses Play once more. It never
-   starts Warcraft III.exe itself. Battle.net's `--exec="launch W3"` would
-   need a second Battle.net.exe inside the launcher's own Steam runtime
-   container; started from outside, Wine would start a second wineserver on
-   the prefix, so `play` presses Play. `play` asks for fullscreen as soon
+   Only the log lines written after the request decide: no `LaunchBinary:
+   uid=w3` within 15 s means it didn't launch, and `play` stops there;
+   `Game is running: w3` is a launch (1.4 s after the request on 6 Oct), and
+   `Could not launch ... Warcraft III.exe` or an expired pending launch is a
+   failure. On a failure it ends every program of the prefix, waits for
+   Steam to see the shortcut end, starts the launcher again alone and asks
+   once more. It never starts Warcraft III.exe itself. `play` asks for fullscreen as soon
    as the game's window appears; a game loading takes a while to follow
    (more than 5 s on 6 Oct), so the menus and step 7 wait up to 45 s, and
    once it is fullscreen a capture of its output is the game's frame.
@@ -90,7 +91,7 @@ command that clears them.
    two batches) crashed Warcraft III while loading. Maps hosted after the
    scan loaded with no failure. So `play` never loads the map at startup
    and hosts it only once the game's own log (this launch's, not the one
-   Play replaces) shows the scan over: a line at least 2 s after its last
+   launch replaces) shows the scan over: a line at least 2 s after its last
    ladder map, or 2 s with nothing new. A game that signed in and opens no
    ladder map within 30 s is hosted anyway; one whose log shows no sign-in
    within 120 s stops `play`. Warcraft III already past its scan is hosted
@@ -109,7 +110,7 @@ command that clears them.
    is on a 2560x1440 frame scaled by the frame's height; the name typed into
    it must read back beside it. A click aimed outside the screen is refused
    before the pointer moves. The step ends when the game's `started`
-   resolves, and prints the time from Play to fighter selection. Any
+   resolves, and prints the time from the launch to fighter selection. Any
    `model creation failed - war3mapImported/` line the log gains from
    hosting on, checked then and again after step 6, stops `play` with the
    count and the first model. While steps 4 and 6 run, a crash report for
@@ -163,13 +164,12 @@ XTEST motion doesn't move it: on 6 Oct an XTEST move to 2075,1518 left the X
 pointer at 1194,882. A target is read in the capture's pixels (2880x1920 on a
 1440x960 output at scale 2) and checked in the X root's pixels, which match
 the capture there. How far the X pointer moves per logical pixel depends on
-the window under it: 2 X pixels over the launcher, as the scale says, but 1
+the window under it: 2 X pixels over a scaled window, as the scale says, but 1
 over fullscreen Warcraft III from its Battle.net screens on (6 Oct). Each
 move starts from the scale's gain and divides the next by the gain the last
 one showed, until the X pointer is within 2 pixels, at most 8 moves. Targets
-and the initial gain use the captured output's size, so a letterboxed launcher
-does not rescale or offset the point read from that capture. Games is clicked
-only after two reads put its tab in the same place. Typed
+and the initial gain use the captured output's size, so a letterboxed window
+does not rescale or offset the point read from that capture. Typed
 text and keys are XTEST (`xdotool`) into the focused game window.
 
 Each run prints a folder under the game's `debugDirectory`, named by its
