@@ -52,11 +52,16 @@ message that says what to do:
 4. **Custom game.** It installs the map when its folder lacks it (from the
    declared build). From the main menu: Multiplayer, Custom Games, Create
    Game, the map's folder, the map, the game's name, Create, Start. Each
-   control is found by the text Warcraft shows, so any screen size works; the
-   game name field, which shows no label of its own, sits where it does on a
-   2560x1440 frame scaled by the frame's height. Each click waits for the
-   next screen's text before the next. It ends when the game's `started`
-   resolves.
+   control is found by the text Warcraft shows, so any screen size works.
+   Warcraft's menus slide in (on 6 Oct Battle.net's tabs moved 32 px down
+   within 0.3 s of appearing, and a click read before the move missed), so a
+   control is clicked only when two reads in a row put it in the same place.
+   Each click then waits up to 10 s for the next screen's text; without it,
+   the control is found and clicked once more, then `play` stops with the
+   pictures. The game name field is just below a "Game Name" label when
+   there is one, and otherwise where it is on a 2560x1440 frame scaled by
+   the frame's height; the name typed into it must read back beside it. It
+   ends when the game's `started` resolves.
 5. **Opponent.** The game's own step. `game.clickUi(x, y)` clicks a map frame
    placed at Warcraft's UI coordinates: the 4:3 area spans the window's
    height, centred, with x from 0 to 0.8 and y from 0 at the bottom to 0.6.
