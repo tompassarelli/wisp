@@ -268,6 +268,14 @@ Three summaries don't pin both costs on a 1 ms clock when a frame's native
 calls rise with its Lua work, as they do in a match. A fit is judged by
 what it predicts on readings it wasn't fitted to.
 
+The four-fighter overlays of Smashcraft 0.0.48 and 0.0.49 show only medians
+and maxima (smashcraft:evidence/cost-model-20261007). On the 1 ms clock,
+their medians don't move with either cost, so the fit follows the maxima and
+drives both costs to 0. `WARCRAFT_COST` keeps 2 and 2 until readings with a
+95th percentile exist. Predicted median, native → predicted: 0.0.49 5.00 →
+5.00 ms, and 0.0.48 3.97 → 4.40 ms (+11%) held out. Predicted maximum:
+0.0.49 +6%, 0.0.48 +60%.
+
 ## What it costs
 
 Measured on Smashcraft's development build (smashcraft 2f29ab3 with the meter

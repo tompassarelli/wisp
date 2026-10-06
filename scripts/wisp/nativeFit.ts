@@ -182,18 +182,21 @@ function misfit(model: NativeCostModel, cases: readonly NativeCase[]): number {
 }
 
 /**
- * The native call and collector costs, on a 0.25 µs grid up to 6 and 12 µs,
+ * The native call and collector costs, to a quarter µs up to 6 and 12 µs,
  * that bring `base`'s predictions closest to the cases' readings; the Lua
  * speed factor, host rate and typing cost stay `base`'s, each measured apart.
  */
 export function fitNativeCost(base: NativeCostModel, cases: readonly NativeCase[]): NativeCostModel {
   let best = { model: base, misfit: Number.POSITIVE_INFINITY };
-  for (let call = 0; call <= 24; call++) {
-    for (let collector = 0; collector <= 48; collector++) {
-      const model = { ...base, nativeCallUs: call / 4, collectorUsPerKb: collector / 4 };
-      const value = misfit(model, cases);
-      if (value < best.misfit) best = { model, misfit: value };
-    }
-  }
+  const tryCosts = (call: number, collector: number) => {
+    if (call < 0 || call > 6 || collector < 0 || collector > 12) return;
+    const model = { ...base, nativeCallUs: call, collectorUsPerKb: collector };
+    const value = misfit(model, cases);
+    if (value < best.misfit) best = { model, misfit: value };
+  };
+  // Whole microseconds first, then quarters around the best of them.
+  for (let call = 0; call <= 6; call++) for (let collector = 0; collector <= 12; collector++) tryCosts(call, collector);
+  const { nativeCallUs, collectorUsPerKb } = best.model;
+  for (let call = -4; call <= 4; call++) for (let collector = -4; collector <= 4; collector++) tryCosts(nativeCallUs + call / 4, collectorUsPerKb + collector / 4);
   return best.model;
 }
