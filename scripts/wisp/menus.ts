@@ -486,8 +486,19 @@ export const hostLobby = (menus: MenuSocket, options: HostOptions) => Effect.gen
     duration: "20 seconds",
     orElse: () => Effect.fail(new MenuFailure({ operation: what, problem: "the game did not confirm this client hosting within 20 s" })),
   }));
+  hostedAt.set(menus, yield* Clock.currentTimeMillis);
   return filename;
 });
+
+/**
+ * How long LobbyStart waits after the game confirms hosting. Warcraft III
+ * 3.0.0.24268 crashed while loading (a read of 0x500) in 6 of 6 starts sent as
+ * soon as the lobby was confirmed and in 0 of 11 sent about 2 s later
+ * (Smashcraft #119, 7 Oct 2026). No menu event is known to end that window,
+ * so this is a measured pause.
+ */
+export const LOBBY_SETTLE_MS = 2500;
+const hostedAt = new WeakMap<MenuSocket, number>();
 
 /** Joins a lobby by its exact (case-sensitive) name and password; returns once this client is in it. */
 export const joinLobby = (menus: MenuSocket, gameName: string, password: string, seconds = 20) => Effect.gen(function*() {
@@ -503,8 +514,16 @@ export const joinLobby = (menus: MenuSocket, gameName: string, password: string,
   yield* menus.expect(what, seconds, (event) => (joined(event) ? { done: undefined } : event.messageType === "RequestForPassword" ? { failed: "the game asked for the password again: it is wrong" } : undefined));
 });
 
-/** Starts the hosted lobby; returns once the game shows its loading screen. */
-export const startLobby = (menus: MenuSocket) => Effect.gen(function*() {
+/**
+ * Starts the hosted lobby, at least `settleMs` after this socket hosted it
+ * (`LOBBY_SETTLE_MS`); returns once the game shows its loading screen.
+ */
+export const startLobby = (menus: MenuSocket, settleMs = LOBBY_SETTLE_MS) => Effect.gen(function*() {
+  const hosted = hostedAt.get(menus);
+  if (hosted !== undefined) {
+    const wait = hosted + settleMs - (yield* Clock.currentTimeMillis);
+    if (wait > 0) yield* Effect.sleep(`${wait} millis`);
+  }
   yield* menus.forget;
   yield* menus.send("LobbyStart");
   yield* menus.expect("start the game", 30, (event) => (event.messageType === "SetGlueScreen" && record(event.payload)["screen"] === "LOADING_SCREEN" ? { done: undefined } : undefined));
