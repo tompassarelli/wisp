@@ -187,8 +187,8 @@ play and `samples` as its next arguments.
 
 For CI, run `perf --out` on both versions and `perf compare` the two files.
 Smashcraft's 0.0.48 four-fighter match against 0.0.49's fails it on
-allocation (mean +273%, 95th percentile +501%) and predicted native time
-(95th percentile +16%): 0.0.48's binary32 arithmetic still allocated.
+allocation, its mean up 273% and its 95th percentile 501%: 0.0.48's binary32
+arithmetic still allocated.
 
 `wisp headless --cost` (wisp:scripts/wisp/commands/headless.ts) plays the
 journey in Bun as usual, then the perf program's run of the same name, and
