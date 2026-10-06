@@ -2,12 +2,12 @@
 // tsconfigs, as `bun run check` does for the TypeScript 7 checker, which runs
 // no plugins. TypeScript 7's API parses and resolves; the rules read its trees.
 // A file's findings depend only on its text, so they are cached per file in
-// build/number-rules.json; where each finding's identifier is declared is
-// resolved again on every run.
+// build/number-rules.json; where each finding's identifier is declared, and
+// the type of each array whose length is read, are resolved again on every run.
 // Usage: bun node_modules/wisp/scripts/numberRules.ts MAP_TSCONFIG...
 import { mkdir, rename } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
-import { API, SymbolFlags, type Symbol as TsSymbol } from "typescript-native/unstable/async";
+import { API, type Checker, SymbolFlags, type Symbol as TsSymbol, type Type, TypeFlags } from "typescript-native/unstable/async";
 import * as syntax from "typescript-native/unstable/ast";
 import { NUMBER_RULE_CODE, type Declaration, type DeclarationTest, scanNumberRules, stands } from "../plugins/number-rules";
 
@@ -15,6 +15,7 @@ interface CachedFinding {
   readonly start: number;
   readonly message: string;
   readonly condition?: { readonly identifier: number; readonly test: DeclarationTest };
+  readonly holeyArray?: number;
 }
 
 interface CachedFile {
@@ -43,6 +44,23 @@ async function readCache(path: string, version: string): Promise<Cache["files"]>
   } catch {
     return {};
   }
+}
+
+/** isHoleyArray (wisp:plugins/number-rules.ts) through TypeScript 7's checker. */
+async function isHoleyArray(checker: Checker, type: Type): Promise<boolean> {
+  const mayBeUndefined = async (element: Type): Promise<boolean> => {
+    if ((element.flags & (TypeFlags.Undefined | TypeFlags.Void)) !== 0) return true;
+    if (!element.isUnionType()) return false;
+    for (const member of (await element.getTypes()) ?? []) if (await mayBeUndefined(member)) return true;
+    return false;
+  };
+  if (type.isUnionType()) {
+    for (const member of (await type.getTypes()) ?? []) if (await isHoleyArray(checker, member)) return true;
+    return false;
+  }
+  if (!type.isTypeReference() || !(await checker.isArrayType(type) || await checker.isTupleType(type))) return false;
+  for (const element of await checker.getTypeArguments(type)) if (await mayBeUndefined(element)) return true;
+  return false;
 }
 
 /** 1-based line and UTF-16 column, as tsc reports them. */
@@ -102,19 +120,27 @@ export async function numberRuleReport(
           const file = await program.getSourceFile(name);
           if (file === undefined) throw new Error(`${name}: TypeScript did not load this file`);
           text = file.text;
-          const findings = file.isDeclarationFile ? [] : scanNumberRules<syntax.Node>(syntax, file).map(({ node, message, condition }): CachedFinding => ({
+          const findings = file.isDeclarationFile ? [] : scanNumberRules<syntax.Node>(syntax, file).map(({ node, message, condition, holeyArray }): CachedFinding => ({
             start: node.getStart(file),
             message,
             ...(condition === undefined ? {} : { condition: { identifier: condition.identifier.getStart(file), test: condition.test } }),
+            ...(holeyArray === undefined ? {} : { holeyArray: holeyArray.getStart(file) }),
           }));
           entry = { hash: hash(text), findings };
         }
         files[name] = entry;
         const positions = entry.findings.flatMap(({ condition }) => (condition === undefined ? [] : [condition.identifier]));
         const resolved = positions.length === 0 ? [] : await checker.getSymbolAtPosition(name, positions);
+        const arrays = entry.findings.flatMap(({ holeyArray }) => (holeyArray === undefined ? [] : [holeyArray]));
+        const types = arrays.length === 0 ? [] : await checker.getTypeAtPosition(name, arrays);
         let next = 0;
-        for (const { start, message, condition } of entry.findings) {
+        let nextArray = 0;
+        for (const { start, message, condition, holeyArray } of entry.findings) {
           if (condition !== undefined && !stands(condition.test, await declarations(resolved[next++]))) continue;
+          if (holeyArray !== undefined) {
+            const type = types[nextArray++];
+            if (type === undefined || !(await isHoleyArray(checker, type))) continue;
+          }
           const file = relative(cwd, name);
           reports.set(`${name}\0${start}\0${message}`, { file, start, line: `${file}(${position(text, start)}): error TS${NUMBER_RULE_CODE}: ${message}` });
         }
