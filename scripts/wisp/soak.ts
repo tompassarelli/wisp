@@ -629,7 +629,8 @@ export class SoakMonitor {
     if (growing(({ lag }) => lag, limits.frameMs) && lag > 1000) {
       this.find("catch-up", `the game fell ${(lag / 1000).toFixed(1)} s behind real time and kept falling for ${limits.growthSeconds} s (worst client frame ${this.worstFrameMs.toFixed(1)} ms measured)`);
     }
-    if (growing(({ backlog }) => backlog, 1) && backlog > limits.backlogFrames) {
+    // A spiral grows while behind: a game's usual backlog rising a few frames, then a lag spike, is a catch-up starting.
+    if (growing(({ backlog }) => backlog, 1) && recent.every(({ backlog }) => backlog > limits.backlogFrames)) {
       this.find("catch-up", `catch-up spiral: input not yet played grew for ${limits.growthSeconds} s to ${backlog} frames`);
     }
   }

@@ -95,7 +95,7 @@ replay runs on the same clock whatever the replaying machine measures.
 | `scene` | A client's scene report shows a [player view](player-view.md) problem: no stage, an effect without a model, one lingering past its lifetime, hidden effects still showing particles or parked where a camera sees them. |
 | `invisible` | Two scene reports in a row show nothing drawn with geometry for a body the game says is in play (`bodyProblems`, wisp:scripts/wisp/scene.ts): no effect of its models drawn, or only models whose facts have no triangles. |
 | `cost` | A client frame costs more than 1/60 s, after `costScale`, and costs that much again at the same frame when the soak replays the match on the same clock: a collection or a compile that lands on a frame doesn't count. A worker's first 1200 frames, which compile the map's code, don't count either. |
-| `catch-up` | The wall clock runs more than 1 s ahead of the game and the gap grows for 3 s in a row; or, while no input source is quiet, input not yet played grows for 3 s past 60 frames, or stays past 60 frames for 3 s. |
+| `catch-up` | The wall clock runs more than 1 s ahead of the game and the gap grows for 3 s in a row; or, while no input source is quiet, input not yet played grows for 3 s while past 60 frames, or stays past 60 frames for 3 s. |
 | `unfinished` | The match isn't over within its frames. |
 | `crash` | The game's setup or driver throws, or a worker process stops. |
 

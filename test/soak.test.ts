@@ -9,8 +9,9 @@ import { join } from "node:path";
 import { Console, Effect, Exit } from "effect";
 import { makeSoak } from "../scripts/wisp/commands/soak";
 import { installHeadless } from "../scripts/wisp/headless";
+import type { Lockstep } from "../src/headless/lockstep";
 import { type SceneReport, bodyProblems } from "../scripts/wisp/scene";
-import { type SoakMatch, fuzzedInputs, planSoak, playSoakMatch, readSoakRepro, soakRepro } from "../scripts/wisp/soak";
+import { type SoakMatch, SoakMonitor, fuzzedInputs, planSoak, playSoakMatch, readSoakRepro, soakRepro } from "../scripts/wisp/soak";
 import { timingsLayer } from "../scripts/wisp/timings";
 import game from "./soak/game";
 import project from "./soak/project";
@@ -118,4 +119,22 @@ test("the command plays matches in worker processes and keeps a repro file for e
   expect(Exit.isFailure(replayed)).toBe(true);
   expect(lines.join("\n")).toContain("native call checksums equal the recorded ones");
   expect(Exit.isFailure(await run(["--workers", "5"]))).toBe(true);
+});
+
+test("a lag spike's catch-up after a usual backlog's rise is no spiral; input left further behind each second is", () => {
+  /** The catch-up findings of a match whose one client reports `backlog(frame)` frames of input not yet played, on a clock that keeps real time. */
+  const catchUps = (backlog: (frame: number) => number, frames: number) => {
+    let frame = 0;
+    const client = { slot: 0, errors: [], thrown: [], files: new Map(), run: (body: () => void) => body() };
+    const clients = { clients: [client], costs: [0], firstDivergence: () => undefined } as unknown as Lockstep;
+    const monitor = new SoakMonitor(clients, { input: () => {}, observe: () => ({ progress: frame, over: false, backlog: backlog(frame) }) });
+    for (frame = 1; frame <= frames; frame++) monitor.afterFrame((frame * 1000) / 60, new Set());
+    return monitor.findings.filter(({ kind }) => kind === "catch-up").map(({ text }) => text);
+  };
+  // Smashcraft's soak, match 96 (6 October): a usual backlog of 11, 17 and 23 frames a second apart, then a
+  // 1.5 s spike that leaves 105 frames, played within 42 frames.
+  const spike = (frame: number) => (frame < 120 ? 11 : frame < 180 ? 17 : frame < 235 ? 23 : frame < 280 ? 105 - (frame - 235) * 2 : 20);
+  expect(catchUps(spike, 600)).toEqual([]);
+  const spiral = (frame: number) => 50 + Math.floor(frame / 10);
+  expect(catchUps(spiral, 600)).toContain("catch-up spiral: input not yet played grew for 3 s to 80 frames");
 });
