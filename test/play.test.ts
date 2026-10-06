@@ -75,6 +75,8 @@ interface Scenario {
   /** War3Preferences.txt as the desktop finds it, and a backup an earlier play left. */
   readonly preferences?: string;
   readonly backup?: string;
+  /** The owner's display settings the declaration names. */
+  readonly displaySettings?: Readonly<Record<string, string>>;
   readonly runtimes?: "none" | "launcher" | "two" | "other display" | "lingering" | "lingering exits";
   readonly signsIn?: boolean;
   readonly steamStarts?: boolean;
@@ -430,6 +432,7 @@ function world(scenario: Scenario = {}) {
     shortcut: { appId: 3775098022, name: "Warcraft III (Battle.net)" },
     map: { folder: "00-Smashcraft", file: "Smashcraft 0.0.47.w3x", title: "Smashcraft 0.0.47", ...(scenario.mapSource === undefined ? {} : { source: SOURCE }) },
     gameName: "Smashcraft",
+    ...(scenario.displaySettings === undefined ? {} : { displaySettings: scenario.displaySettings }),
     debugDirectory: DEBUG,
     prepare: (documents) => Effect.sync(() => {
       expect(documents).toBe(`${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III`);
@@ -859,6 +862,17 @@ test("a backup an earlier play left is the file to keep: it goes back before the
   expect(result.prefFiles.get(PREFERENCES)).toBe(kept);
   expect(result.prefFiles.get(BACKUP)).toBe(kept);
   expect(result.events.filter((event) => event.startsWith("write "))).toEqual(["write War3Preferences.txt"]);
+});
+
+test("declared display settings replace a test run's before the game starts, so the helper puts the owner's back", async () => {
+  // 7 Oct: the owner's file held a test desktop's windowed 1920x1080 settings, and play saved and restored them.
+  const result = await world({ preferences: "[Video]\nmaxfps=61\nwindowmode=2\nwindowwidth=1920\n", displaySettings: { windowmode: "1", windowwidth: "2876" } }).run();
+  expect(result.failure).toBeUndefined();
+  const owner = "[Video]\nmaxfps=61\nwindowmode=1\nwindowwidth=2876\n";
+  expect(result.prefFiles.get(PREFERENCES)).toBe(owner);
+  expect(result.prefFiles.get(BACKUP)).toBe(owner);
+  expect(result.lines).toContain("3/7 Warcraft III: restored the declared display settings (windowmode was 2, windowwidth was 1920)");
+  expect(result.events.indexOf("write War3Preferences.txt")).toBeLessThan(result.events.indexOf("launch"));
 });
 
 test("a game already running keeps its own backup and helper: play saves and starts nothing for it", async () => {
