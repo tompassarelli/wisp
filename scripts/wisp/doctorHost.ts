@@ -1,6 +1,6 @@
 // What `doctor` does inside clients on private desktops (the clients file's
-// run folders): leaving a lobby or score screen through the menus' socket, or
-// their Back button without a menu page. Doctor launches Warcraft III itself,
+// run folders): leaving a lobby through the menus' socket, or its Back button
+// without a menu page, and the score screen with Escape. Doctor launches Warcraft III itself,
 // through the launcher's own --exec (wisp:scripts/wisp/doctor.ts).
 import { Effect, Layer } from "effect";
 import * as desktop from "../warcraft/desktop";
@@ -25,21 +25,23 @@ export const privateDoctorHands = (clientsFile: string) => Layer.effect(DoctorHa
     return { name: entry.name, documents: entry.documents, tools: config.tools, x11, wayland, window } satisfies desktop.Client;
   }).pipe(Effect.mapError((cause) => (cause instanceof PlayProblem ? cause : problem(cause))));
 
-  /** Through the menus' socket when the client's page reports, else their Back button (a lobby and the score screen share it). */
-  const leave = (target: DoctorTarget, socket: "lobby" | "score") => Effect.scoped(Effect.gen(function*() {
-    // Without a menu page that answers, the Back button leaves both.
+  /** A lobby through the menus' socket when the client's page reports, else its Back button. */
+  const leaveLobbyOf = (target: DoctorTarget) => Effect.scoped(Effect.gen(function*() {
     const menus = yield* reportedMenus(target.client.menuReportPort).pipe(Effect.catchTag("MenuFailure", () => Effect.void));
-    if (menus !== undefined) {
-      if (socket === "lobby") return yield* leaveLobby(menus);
-      return yield* menus.send("ScoreScreenClose");
-    }
+    if (menus !== undefined) return yield* leaveLobby(menus);
     const game = yield* windowOf(target, "Warcraft III");
     yield* desktop.click(game, BACK.x, BACK.y);
   })).pipe(Effect.mapError((cause) => (cause instanceof PlayProblem ? cause : problem(cause))));
 
+  // Warcraft III 3.0.0.24268 ignores the menus' ScoreScreenClose and moved the score screen's Back to its top left; Escape leaves it (client B, 7 Oct 2026).
+  const closeScoreOf = (target: DoctorTarget) => Effect.gen(function*() {
+    const game = yield* windowOf(target, "Warcraft III");
+    yield* desktop.keys(game, "Escape");
+  }).pipe(Effect.mapError((cause) => (cause instanceof PlayProblem ? cause : problem(cause))));
+
   return DoctorHands.of({
     launches: true,
-    leaveLobby: (target) => leave(target, "lobby"),
-    closeScore: (target) => leave(target, "score"),
+    leaveLobby: leaveLobbyOf,
+    closeScore: closeScoreOf,
   });
 }));

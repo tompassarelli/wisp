@@ -64,7 +64,7 @@ instead of looping.
 | Stuck loading | On the loading screen for 120 s. | End Warcraft III and launch it again. |
 | Display settings changed | The client declares `displaySettings` and its closed game's War3Preferences.txt holds other `[Video]` values ([display-settings.md](display-settings.md)). | Write the declared values into the file, keeping its other lines. |
 | Stale lobby | In a lobby from an earlier run. | `LeaveGame` on the menus' socket, or the Back button without a menu page. |
-| Score screen | An earlier match's score screen. | `ScoreScreenClose` on the menus' socket, or Back. |
+| Score screen | An earlier match's score screen. | Escape in its window: Warcraft III 3.0 ignores the menus' `ScoreScreenClose` there. |
 | Closed | Neither Battle.net nor Warcraft III runs. | Start Battle.net the way the game declares, then launch the game. |
 | No game | Battle.net is signed in; Warcraft III isn't running. | Ask the launcher to launch Warcraft III; its log must take it within 15 s and report the game running within 45 s. A launch it reports failed restarts Battle.net once and asks again, as `play` does. |
 | Connection failing | The launcher's log shows its connection lost (above). | Restart Battle.net (every program of the prefix), then launch the game. |

@@ -122,7 +122,7 @@ From prior art unless marked. Names are case-sensitive.
 | `SendGameChatMessage` | `{content}` (255 characters at most) | `ChatMessage` |
 | `InitializeLocalNetProvider` | `{}` | The local, single-player provider: its lobbies are invisible to other clients. |
 | `InitializeNetProvider`, `PlayOffline` | `{}` | On 3.0 both start a Battle.net sign-in (the build reports `enableOfflineMode: false`). Don't send them to a signed-in client. |
-| `ScoreScreenClose` | `{}` | Leaves the score screen |
+| `ScoreScreenClose` | `{}` | Ignored by 3.0.0.24268 (7 Oct 2026); Escape leaves the score screen |
 
 Events seen without a request: `SetGlueScreen {screen}` (for example
 `LOGIN_DOORS`, `GAME_LOBBY`, `LOADING_SCREEN`, `SCORE_SCREEN`),
