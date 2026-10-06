@@ -56,7 +56,13 @@ project's host type check. The driver:
 - `bodies(client)`, optional: what the player must see now, such as each
   fighter in play with the models it may be drawn with;
 - `repro(client)`, optional: the game's repro of the moments before a
-  finding ([repro files](#repro-files)).
+  finding ([repro files](#repro-files));
+- `typed(slot)`, optional: the characters the player's input helper typed
+  into their client's edit box before this frame, which Warcraft takes at a
+  cost that grows with their square;
+- `findings(client)`, optional: after each frame, what the game's own
+  detectors found, each with its detector's name, such as a fighter caught
+  in a loop it can't escape.
 
 A policy is a name the game interprets, such as its computer or a human
 whose input never arrives; `fuzz` is Wisp's input fuzzer.
@@ -74,12 +80,17 @@ quiet for a quarter second to three seconds, and the whole game stops for
 up to two seconds, as in a lag spike.
 
 The game's wall clock gains 1/60 s per frame, more when a client's frame
-cost more than that (its thread's CPU time, times the soak's `costScale`),
-and the length of each lag spike. The players' input sources, such as a
-journal helper's stand-in, live on that clock, so a frame that costs too
-much leaves input waiting, as it does in the game. The clients still run as
-fast as the process can run them: Smashcraft's 200-match soak played 57
-game minutes in 46 s with four workers and 241 s of CPU (6 October 2026).
+cost more than that, and the length of each lag spike. A client frame's
+cost is Warcraft's as the [model](frame-cost.md#predicted-native-cost)
+predicts what Bun can measure: its thread's CPU time times the soak's
+`costScale`, each native call, and the edit-box stall of the text typed
+before it (the driver's `typed`, or what a typed match's helpers typed). A
+burst of hundreds of characters stops the game as long as Warcraft would. The
+players' input sources, such as a journal helper's stand-in, live on that
+clock, so a frame that costs too much leaves input waiting, as it does in the
+game. The clients still run as fast as the process can run them:
+Smashcraft's 200-match soak played 57 game minutes in 46 s with four workers
+and 241 s of CPU (6 October 2026).
 
 A match repeats exactly from its seed while every frame stays within its
 1/60 s. Its repro file also keeps how much each costlier frame took, so a
@@ -94,10 +105,11 @@ replay runs on the same clock whatever the replaying machine measures.
 | `error` | A client writes an error report, with the TypeScript stack the host kept. |
 | `scene` | A client's scene report shows a [player view](player-view.md) problem: no stage, an effect without a model, one lingering past its lifetime, hidden effects still showing particles or parked where a camera sees them. |
 | `invisible` | Two scene reports in a row show nothing drawn with geometry for a body the game says is in play (`bodyProblems`, wisp:scripts/wisp/scene.ts): no effect of its models drawn, or only models whose facts have no triangles. |
-| `cost` | A client frame costs more than 1/60 s, after `costScale`, and costs that much again at the same frame when the soak replays the match on the same clock: a collection or a compile that lands on a frame doesn't count. A worker's first 1200 frames, which compile the map's code, don't count either. |
+| `cost` | A client frame costs more than 1/60 s, as predicted natively (CPU time times `costScale`, native calls and typing stall), and costs that much again at the same frame when the soak replays the match on the same clock: a collection or a compile that lands on a frame doesn't count. A worker's first 1200 frames, which compile the map's code, don't count either. |
 | `catch-up` | The wall clock runs more than 1 s ahead of the game and the gap grows for 3 s in a row; or, while no input source is quiet, input not yet played grows for 3 s while past 60 frames, or stays past 60 frames for 3 s. |
 | `unfinished` | The match isn't over within its frames. |
 | `crash` | The game's setup or driver throws, or a worker process stops. |
+| `game` | The driver's `findings(client)` names something one of the game's own detectors found; each detector reports once per match and client. |
 
 Each kind of problem is reported once per match and client, with the frame
 after the match began. `limits` in the declaration change the thresholds
@@ -148,6 +160,7 @@ stopped it before every match played.
 
 A soak runs the headless runtime, so its findings and its limits are that
 runtime's: no engine timing, rendering or real devices. Per-frame cost is
-the TypeScript's in Bun, not Warcraft's Lua and engine; a game sets
-`costScale` from its own measurements to judge it in native terms. The
+the TypeScript's in Bun scaled, not Warcraft's Lua and engine; a game sets
+`costScale` from its own measurements to judge it in native terms, and
+`wisp perf` predicts Warcraft's cost from 32-bit Lua, allocation included. The
 fuzzer finds what random edges reach; it makes no balance or feel judgments.

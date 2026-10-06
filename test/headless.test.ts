@@ -12,7 +12,7 @@ import { parseNativeDeclarations } from "../src/headless/declarations";
 import { installDispatch, on, trampoline } from "../src/platform/dispatch";
 import { startSceneReport } from "../src/platform/scene";
 import { configureRuntime } from "../src/runtime/config";
-import { MEASURED_BATTLE_NET, syncDelivery } from "../scripts/wisp/syncChannel";
+import { MEASURED_BATTLE_NET, syncDelivery } from "../src/headless/syncChannel";
 
 const FIXTURE = { filePrefix: "fixture", globalPrefixes: ["__fixture"], localNatives: { BlzFrameSetText: "shows text on this client" } };
 const runtime = installHeadless(FIXTURE);

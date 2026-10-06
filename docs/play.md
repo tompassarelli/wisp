@@ -2,17 +2,20 @@
 
 `play` takes the owner from their desktop to a match on their own display.
 It reports each step on one line and stops at the first problem with a plain
-message that says what to do:
+message that says what to do. Nothing after Battle.net's Play is clicked:
+Warcraft III loads the map from its launch options and the map starts the
+match when the game asks.
 
 ```text
 1/7 Wine prefix: free
 2/7 Battle.net: starting the Steam shortcut "Warcraft III (Battle.net)"
-2/7 Battle.net: started and signed in (16 s)
+2/7 Battle.net: started and signed in (27 s), with Warcraft III set to load the map
 3/7 Warcraft III: Battle.net's Play started it
-3/7 Warcraft III: running (pid 2852), fullscreen
-4/7 Custom game: "Smashcraft" of Smashcraft 0.0.47 started (joining by name is case-sensitive)
-5/7 Opponent: computer in slot 2
-6/7 Controller helper: running (pid 41234), log ~/.local/state/smashcraft/play-helper.log
+3/7 Warcraft III: Battle.net's launch options for it put back; its own Play no longer loads the map
+3/7 Warcraft III: running (pid 2852), asked to go fullscreen
+4/7 Map: Warcraft III loaded Smashcraft 0.0.47.w3x from its launch options; fighter selection 30 s after Play (6 key presses to continue)
+5/7 Controller helper: running (pid 41234), log ~/.local/state/smashcraft/play-helper.log
+6/7 Match: computer as Player 3
 7/7 Fullscreen: Warcraft III is fullscreen and focused. Ready to fight.
 ```
 
@@ -24,15 +27,27 @@ message that says what to do:
    prefix's wineservers by their `WINEPREFIX` and, for one started in another
    namespace, by the server directory Wine names after the prefix's device
    and inode (`server-DEV-INODE`).
-2. **Battle.net.** A running launcher is reused. Otherwise Steam starts the
-   game's shortcut: a non-Steam shortcut's URL is
-   `steam://rungameid/` followed by its 32-bit app id shifted left 32 bits,
-   OR 0x02000000 (`steam -applaunch` takes only Steam's own app ids). Signed
-   in means the newest `battle.net-*.log` in the prefix's
+2. **Battle.net.** Warcraft III's launch options (Battle.net's "Additional
+   command line arguments", `Games.w3.AdditionalLaunchArguments` in the
+   prefix's `AppData/Roaming/Battle.net/Battle.net.config`) are set to
+   `-loadfile "C:\…\Maps\FOLDER\FILE"`, the option the World Editor's Test
+   Map passes; BenqsXd/wc3-mcp (MIT) loads maps the same way. Launched
+   directly, `Warcraft III.exe -loadfile` has no Battle.net session and stops
+   at a sign-in form (Smashcraft's World Editor Test Map did), and the game
+   can drop the option after a sign-in, which step 4 handles. Battle.net reads them when it starts and writes its settings
+   back when it exits, so they are written while it isn't running: a running
+   launcher that started with them is reused, and one that didn't is ended
+   and started again. Steam starts the game's shortcut: a non-Steam
+   shortcut's URL is `steam://rungameid/` followed by its 32-bit app id
+   shifted left 32 bits, OR 0x02000000 (`steam -applaunch` takes only
+   Steam's own app ids). Signed in means the newest `battle.net-*.log` in
    `AppData/Local/Battle.net/Logs` has `Logged into Battle.net successfully`.
-   `play` never signs in or out.
-3. **Warcraft III.** `play` makes the launcher's window fullscreen and reads
-   it. Battle.net opens on the game it last showed or features (on 6 Oct,
+   `play` never signs in or out. When Warcraft III already runs, the options
+   can't apply and step 4 hosts the map through its menus.
+3. **Warcraft III.** The map is copied in from its declared build when its
+   folder lacks it, and the game's `prepare` leaves what the map reads at its
+   start. `play` makes the launcher's window fullscreen and reads it.
+   Battle.net opens on the game it last showed or features (on 6 Oct,
    WoW: Forever), and every game's page has its own Play, so `play` clicks
    Play only under a game version box that names Warcraft III; otherwise it
    opens the Games tab and clicks Warcraft III's tile on its art, above the
@@ -50,29 +65,41 @@ message that says what to do:
    starts Warcraft III.exe itself. Battle.net's `--exec="launch W3"` would
    need a second Battle.net.exe inside the launcher's own Steam runtime
    container; started from outside, Wine would start a second wineserver on
-   the prefix, so `play` presses Play. The game's window becomes fullscreen as
-   soon as it appears, so a capture of its output is the game's frame.
-4. **Custom game.** It installs the map when its folder lacks it (from the
-   declared build). From the main menu: Multiplayer, Custom Games, Create
-   Game, the map's folder, the map, the game's name, Create, Start. Each
-   control is found by the text Warcraft shows, so any screen size works.
-   Warcraft's menus slide in (on 6 Oct Battle.net's tabs moved 32 px down
-   within 0.3 s of appearing, and a click read before the move missed), so a
-   control is clicked only when two reads in a row put it in the same place.
-   Each click then waits up to 10 s for the next screen's text; without it,
-   the control is found and clicked once more, then `play` stops with the
-   pictures. The game name field is just below a "Game Name" label when
-   there is one, and otherwise where it is on a 2560x1440 frame scaled by
-   the frame's height; the name typed into it must read back beside it. It
-   ends when the game's `started` resolves. A click aimed outside the screen
-   is refused before the pointer moves.
-5. **Opponent.** The game's own step. `game.clickUi(x, y)` clicks a map frame
-   placed at Warcraft's UI coordinates: the 4:3 area spans the window's
-   height, centred, with x from 0 to 0.8 and y from 0 at the bottom to 0.6.
-6. **Controller helper.** One helper for this game: a running helper whose
+   the prefix, so `play` presses Play. Once the game runs, the launch
+   options are put back as they were, so Battle.net's own Play doesn't load
+   the map; `--keep-launch-options` leaves them after a run that succeeds, so
+   the next run reuses the running launcher. A run that stops puts them back,
+   or removes the ones an earlier kept run left. Battle.net may write back
+   the options it read when it exits. `play` asks for fullscreen as soon as
+   the game's window appears; a game loading its map takes a while to follow
+   (more than 5 s on 6 Oct), so the menus and step 7 wait up to 45 s, and
+   once it is fullscreen a capture of its output is the game's frame.
+4. **Map.** A map loaded from the launch options waits on "Press any key to
+   continue" once it has loaded (6 Oct), so space goes to the game window
+   every 2 s (at most 60 times, none once the main menu shows), and the time
+   from Play to fighter selection is printed. It ends when the game's
+   `started` resolves. If Warcraft III shows
+   its main menu for 10 s instead, or already ran, the map is hosted through
+   the menus: Multiplayer, Custom Games, Create Game, the map's folder, the
+   map, the game's name, Create, Start. Each control is found by the text
+   Warcraft shows, so any screen size works. Warcraft's menus slide in (on 6
+   Oct Battle.net's tabs moved 32 px down within 0.3 s of appearing, and a
+   click read before the move missed), so a control is clicked only when two
+   reads in a row put it in the same place. Each click then waits up to 10 s
+   for the next screen's text; without it, the control is found and clicked
+   once more, then `play` stops with the pictures. The game name field is
+   just below a "Game Name" label when there is one, and otherwise where it
+   is on a 2560x1440 frame scaled by the frame's height; the name typed into
+   it must read back beside it. A click aimed outside the screen is refused
+   before the pointer moves. Another way to make the game, such as a message
+   to the game's own interface, would replace this route alone.
+5. **Controller helper.** One helper for this game: a running helper whose
    `--pid` is this game's is kept; any other running copy stops `play`. The
    helper starts in its own session, so it outlives `play` and its terminal,
-   and must print its ready line within 10 s.
+   and must print its ready line within 10 s. It starts before the match, so
+   the player's pad plays from the first frame.
+6. **Match.** The game's own step: it sets up and starts the match, its
+   opponent included, by calling the map's code, not its menus.
 7. **Fullscreen.** The game's window is fullscreen and focused, so the
    compositor's focus-follows-mouse has no other window to move to.
 
@@ -91,15 +118,13 @@ export const play = makePlay({
   map: { folder: "00-Smashcraft", file: "Smashcraft 0.0.47.w3x", title: "Smashcraft 0.0.47", source: BUILT_MAP },
   gameName: "Smashcraft",
   debugDirectory: join(homedir(), ".local/state/smashcraft/play-debug"),
+  prepare: (documents) => /* the map's request file in CustomMapData */,
+  cleanup: (documents) => /* removes it when a run stops */,
   started: (game, since) => /* the map's first-screen file, newer than since */,
-  opponent: (game) => /* clicks with game.clickUi, confirms, returns "computer in slot 2" */,
+  match: (game) => /* the go-ahead the map waits for, then its receipt; "computer as Player 3" */,
   helper: { binary, args: (game) => /* game.pid, game.window, game.xWindow.id, ... */, ready: /waiting_for_match/, log },
 }, gameFilesLayer, tools);
 ```
-
-When `Maps/FOLDER/FILE` of the prefix's Documents/Warcraft III is missing, step
-4 copies it from `map.source`; without a source it stops. An installed map is
-left as it is.
 
 ## What it needs
 

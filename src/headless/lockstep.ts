@@ -43,7 +43,7 @@ export interface LockstepOptions {
 
 /**
  * When a synchronized message reaches the clients, such as the measured
- * Battle.net latency of wisp:scripts/wisp/syncChannel.ts
+ * Battle.net latency of wisp:src/headless/syncChannel.ts
  * (wisp:docs/network-model.md).
  */
 export interface SyncDelivery {

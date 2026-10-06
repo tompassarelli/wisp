@@ -33,7 +33,7 @@ test("the overlay shows to the player who asks; every client reports the frames 
   const lines = play();
   // The player who typed -perf sees medians and maxima of the last 120 frames, including a 5-frame catch-up.
   const overlay = after(lines, "p0 overlay: ")[0] ?? "";
-  expect(overlay).toMatch(/^frame cost, last 120 frames, median \/ max \| Lua ms: [\d.]+ \/ [\d.]+ \(clock step under 0\.01 ms\) \| natives: \d+ \/ \d+ \| catch-up frames: 1 \/ 5$/);
+  expect(overlay).toMatch(/^frame cost, last 120 frames, median \/ p95 \/ max \| Lua ms: [\d.]+ \/ [\d.]+ \/ [\d.]+ \(clock step under 0\.01 ms\) \| natives: \d+ \/ \d+ \/ \d+ \| catch-up frames: 1 \/ 1 \/ 5$/);
   expect(after(lines, "p1 overlay: ")).toEqual([""]);
   expect(after(lines, "desync: ")).toEqual(["none"]);
   expect(lines.filter((line) => line.includes(" error: "))).toEqual([]);
@@ -72,6 +72,18 @@ test("the overlay shows to the player who asks; every client reports the frames 
   };
   expect(comparePerfRuns(run, heavier).regressions).toEqual(["p0 Lua instructions mean +10.0%", "p1 Lua instructions mean +10.0%"]);
   expect(comparePerfRuns(run, heavier, 0.2).regressions).toEqual([]);
+  // What only Warcraft pays for: more allocation, which its collector sweeps, and a burst of typed text.
+  const native = (change: (values: PerfRun["clients"] extends ReadonlyMap<number, infer V> ? V : never) => object): PerfRun => ({
+    ...run, clients: new Map([...run.clients].map(([slot, values]) => [slot, { ...values, ...change(values) }])),
+  });
+  const allocating = native((values) => ({
+    "alloc-kb": { ...values["alloc-kb"], mean: values["alloc-kb"].mean * 4 + 1, p95: values["alloc-kb"].p95 * 4 + 1 },
+  }));
+  expect(comparePerfRuns(run, allocating).regressions.filter((regression) => regression.startsWith("p0"))).toEqual([
+    expect.stringMatching(/^p0 allocated KB mean /), expect.stringMatching(/^p0 allocated KB p95 /),
+  ]);
+  const typing = native((values) => ({ "typing-us": { ...values["typing-us"], max: 180000 } }));
+  expect(comparePerfRuns(run, typing).regressions).toEqual(["p0 predicted typing stall µs max new", "p1 predicted typing stall µs max new"]);
 }, 30_000);
 
 test("the host reads each client's new report once, as the map wrote it", async () => {

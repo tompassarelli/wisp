@@ -24,7 +24,7 @@ test("the check command reports the compiler's number-rule errors, from scratch 
   const { luaBundle, luaBundleEntry, ...unbundled } = options;
   const { diagnostics } = transpileFiles(files, { ...unbundled, rootDir: root, noEmitOnError: false }, () => {});
   const compiled = diagnostics.filter((diagnostic) => diagnostic.code === NUMBER_RULE_CODE).map((diagnostic) => line(diagnostic, root)).sort();
-  expect(compiled.length).toBe(15);
+  expect(compiled.length).toBe(23);
   await mkdir(join(root, "build"), { recursive: true });
   const directory = await mkdtemp(join(root, "build/number-rules-"));
   try {

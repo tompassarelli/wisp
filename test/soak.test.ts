@@ -13,7 +13,7 @@ import type { Lockstep } from "../src/headless/lockstep";
 import { type SceneReport, bodyProblems } from "../scripts/wisp/scene";
 import { RealtimeClients } from "../scripts/wisp/headlessInput";
 import { type SoakMatch, SoakMonitor, fuzzedInputs, helperRecorder, planSoak, playSoakMatch, readSoakRepro, soakRepro } from "../scripts/wisp/soak";
-import { MEASURED_BATTLE_NET, syncDelivery } from "../scripts/wisp/syncChannel";
+import { MEASURED_BATTLE_NET, syncDelivery } from "../src/headless/syncChannel";
 import { timingsLayer } from "../scripts/wisp/timings";
 import game from "./soak/game";
 import project from "./soak/project";
@@ -49,9 +49,16 @@ test("each fault is found by its detector", () => {
   const error = kinds(["fuzz", "throw"]);
   expect(error.length).toBe(2);
   expect(error[0]).toContain("tick 150 failed");
+  // The game's own detector, reported once per client though it finds the loop on every frame after.
+  expect(kinds(["fuzz", "loop"])).toEqual(["game: loop: tick 200 repeats tick 150", "game: loop: tick 200 repeats tick 150"]);
   const heavy = kinds(["fuzz", "heavy"], { ...project, limits: { costScale: 100, warmUpFrames: 0 } });
   expect(heavy.some((finding) => finding.startsWith("catch-up: the game fell"))).toBe(true);
   expect(heavy.some((finding) => finding.startsWith("cost: "))).toBe(true);
+  // Warcraft's edit-box stall (nativeCost.ts): 600 characters typed at once cost 180 ms.
+  const typing = kinds(["fuzz", "typing"], { ...project, limits: { warmUpFrames: 0 } });
+  const costly = typing.filter((finding) => finding.startsWith("cost: "));
+  expect(costly.length).toBe(1);
+  expect(costly[0]).toMatch(/^cost: \d+ client frames cost more than 16\.7 ms in the match and again in its replay; the worst, p1's frame \d+, 18\d\.\d ms then 18\d\.\d ms, 180\.0 ms of it taking typed text$/);
 });
 
 test("a repro file plays its match again with the same inputs, calls and findings", () => {
@@ -60,6 +67,8 @@ test("a repro file plays its match again with the same inputs, calls and finding
   const again = playSoakMatch(runtime, game, project, repro.match, repro.inputs);
   expect(again.checksums).toEqual(found.checksums);
   expect(again.findings).toEqual(found.findings);
+  const looped = play(["fuzz", "loop"]);
+  expect(readSoakRepro(JSON.stringify(soakRepro(project.name, looped))).findings).toEqual(looped.findings);
 });
 
 test("a match played through input helpers replays what they typed, not their pads' edges, such as a stick inside its dead zone", () => {
