@@ -29,7 +29,8 @@ Before step 1, and once more after a failure, `play` runs
 ClientWatch (`makePlay`'s fourth argument). Doctor ends a second runtime, a
 runtime without Battle.net, a crashed game and its error dialog, a game that
 lost Battle.net, sits at the empty login shell, loaded the map without its
-imports or is stuck loading, leaves an earlier lobby or score screen, and
+imports or is stuck loading, leaves an earlier lobby, or an earlier score screen with Escape in the
+game's window, and
 restarts a launcher whose connection is failing; when it recovered
 something after a failure, `play` runs once more. It leaves launching the game to
 the steps below, and stops with one line when the launcher needs its owner
@@ -110,7 +111,8 @@ command that clears them.
    establishing sign-in within 120 s, `play` stops. Warcraft III already past
    its scan is hosted at once. A running match is first left through Game Menu,
    End Game and Quit Mission, retaining the signed-in game; its results screen
-   closes through the menu connection. Hosting goes through the menu socket when the game declares
+   closes with Escape in the game's window: Warcraft III 3.0.0.24268 ignores the
+   menus' `ScoreScreenClose`. Hosting goes through the menu socket when the game declares
    `menuReportPort` and its installed page reports within 3 s
    ([driving-warcraft.md](driving-warcraft.md)); otherwise through the
    menus: Multiplayer, Custom Games, Create Game, the map's folder, the

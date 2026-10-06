@@ -25,7 +25,7 @@ import type { Ink, Word } from "../warcraft/desktop";
 import { preferencesBackupPath, preferencesPath } from "../warcraft/preferences";
 import { SCAN_QUIET_MS, importFailures, ladderScan, sessionStart, war3LogPath } from "../warcraft/war3Log";
 import { step } from "./timings";
-import { type MenuSocket, hostLobby, reportedMenus, startLobby } from "./menus";
+import { hostLobby, reportedMenus, startLobby } from "./menus";
 import { ClientWatch, unlessLost } from "./watch";
 
 /** Why play can't go on, in words for the person who ran it. */
@@ -635,30 +635,23 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   // 4, through the menus: Multiplayer, Custom Games, Create Game, the map's folder, the map, the game's name, Create, Start.
   const host = (game: PlayGame) => Effect.scoped(Effect.gen(function*() {
     const { folder, title } = declaration.map;
-    /** One connection to the menus for leaving a match and hosting: each new one waits for the page's next announcement. */
-    let connection: { readonly menus: MenuSocket | undefined } | undefined;
-    const menuSocket = Effect.gen(function*() {
-      connection ??= { menus: yield* reportedMenus(declaration.menuReportPort) };
-      return connection.menus;
-    }).pipe(Effect.mapError((cause) => new PlayProblem({ problem: cause.message })));
     if ((yield* clientState)?.kind === "in match") {
       yield* fullscreen(game.window, "Warcraft III's window", PLAY_TIMEOUTS.gameFullscreen);
       const output = yield* outputOf(game.window, "Warcraft III's window");
       const hasText = (phrase: string) => desktop.read(output, "gold").pipe(Effect.map((screen) => findPhrase(screen.words, phrase).length > 0 ? true : undefined));
-      const key = (...keys: string[]) => desktop.focus(game.window).pipe(Effect.andThen(desktop.keys(game.xWindow, ...keys)));
+      const key = (...keys: string[]) => pressInGame(game, ...keys);
       yield* key("Escape", "F10");
       yield* until(5, hasText("Game Menu"), () => "The current match didn't open Game Menu");
       yield* key("e");
       yield* until(5, hasText("Quit Mission"), () => "End Game didn't show Quit Mission");
       yield* key("q");
       yield* until(15, clientState.pipe(Effect.map((state) => state?.kind === "results" ? true : undefined)), () => "Quit Mission didn't reach the results screen");
-      const menus = yield* menuSocket;
-      if (menus === undefined) return yield* fail("The results screen's menu connection isn't available");
-      yield* menus.send("ScoreScreenClose").pipe(Effect.mapError((cause) => new PlayProblem({ problem: cause.message })));
+      // Warcraft III 3.0.0.24268 ignores the menus' ScoreScreenClose; Escape leaves the score screen.
+      yield* key("Escape");
       yield* until(10, clientState.pipe(Effect.map((state) => state?.kind === "menus" ? true : undefined)), () => "Results didn't return to the menus");
     }
     const driven = yield* Effect.gen(function*() {
-      const menus = yield* menuSocket;
+      const menus = yield* reportedMenus(declaration.menuReportPort);
       if (menus === undefined) return false;
       yield* hostLobby(menus, { folder, file: declaration.map.file, gameName: declaration.gameName, password: "" });
       const since = yield* Clock.currentTimeMillis;
@@ -877,6 +870,33 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   }).pipe(Effect.onExit((exit) => (Exit.isFailure(exit)
     ? declaration.cleanup(documents).pipe(Effect.ignore)
     : Effect.void)));
+});
+
+/** Focuses the game's window and presses keys in it. */
+const pressInGame = (game: { readonly window: number; readonly xWindow: XWindow }, ...keys: string[]) =>
+  Effect.gen(function*() {
+    const desktop = yield* PlayDesktop;
+    yield* desktop.focus(game.window);
+    yield* desktop.keys(game.xWindow, ...keys);
+  });
+
+/**
+ * Leaves the score screen of the game running in the declaration's prefix
+ * with Escape in its window: Warcraft III 3.0.0.24268 ignores the menus'
+ * ScoreScreenClose. The window is found as play finds it: the compositor's
+ * window of the Steam shortcut titled Warcraft III, and the game's X window.
+ */
+export const leaveScoreScreen = (declaration: { readonly prefix: string; readonly shortcut: { readonly appId: number } }) => Effect.gen(function*() {
+  const machine = yield* PlayMachine;
+  const desktop = yield* PlayDesktop;
+  const serverDirectory = yield* machine.serverDirectory(declaration.prefix);
+  const { game } = prefixUse(yield* machine.processes, declaration.prefix, serverDirectory);
+  if (game === undefined) return yield* fail("Warcraft III isn't running, so its score screen can't be left");
+  const appId = shortcutAppId(declaration.shortcut.appId);
+  const window = (yield* desktop.windows).find((candidate) => candidate.title === "Warcraft III" && candidate.appId === appId);
+  const xWindow = yield* desktop.xWindow("Warcraft III", game.pid);
+  if (window === undefined || xWindow === undefined) return yield* fail("Warcraft III's window isn't on this desktop, so its score screen can't be left");
+  yield* pressInGame({ window: window.id, xWindow }, "Escape");
 });
 
 /** Names the step a problem stopped play at; the step's time prints with the command's step timings. */

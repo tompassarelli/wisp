@@ -8,7 +8,7 @@ import { documentsFolder } from "../../warcraft/battleNet";
 import { type Command, type CommandFailure, UsageFailure } from "../command";
 import { DoctorHands, type DoctorTarget, doctor, withDoctor } from "../doctor";
 import { type MenuFailure, type MenuSocket, leaveLobby, reportedMenus } from "../menus";
-import { type PlayDeclaration, PlayProblem, play } from "../play";
+import { type PlayDeclaration, PlayProblem, leaveScoreScreen, play } from "../play";
 import { type PlayTools, playHostLayer, playMachineLayer } from "../playHost";
 import type { ClientWatch } from "../watch";
 
@@ -37,7 +37,8 @@ export const makePlay = <R>(declaration: PlayDeclaration<R>, layer: Layer.Layer<
   const hands = DoctorHands.of({
     launches: false,
     leaveLobby: () => leaveBy(menuReportPort, "a lobby", leaveLobby),
-    closeScore: () => leaveBy(menuReportPort, "a score screen", (menus) => menus.send("ScoreScreenClose")),
+    // Warcraft III 3.0.0.24268 ignores the menus' ScoreScreenClose; Escape in its window leaves the score screen.
+    closeScore: () => leaveScoreScreen(declaration).pipe(Effect.provide(playHostLayer(declaration.display, tools))),
   });
   // A watch beside play's own menu steps shares the report port through its kept address (wisp:docs/watch.md).
   const check = doctor([target], print).pipe(Effect.provide(Layer.mergeAll(playMachineLayer(tools), Layer.succeed(DoctorHands, hands), watch)));
