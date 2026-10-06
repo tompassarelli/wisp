@@ -279,7 +279,7 @@ const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compil
 
   yield* stageMap(options.container ?? options.base, out, (staged) => Effect.gen(function*() {
     yield* Effect.gen(function*() {
-      for (const file of files) yield* pack.replace(staged, file.source, file.entry);
+      yield* packageEntries(({ entry, source }) => pack.replace(staged, source, entry), assets, files);
       yield* writeHeader(staged, generated.header);
     }).pipe(step("package"));
     yield* Effect.gen(function*() {
@@ -398,6 +398,16 @@ export interface ArchiveEntry {
   /** The file whose bytes the archive entry must equal. */
   readonly source: string;
 }
+
+/** Add base assets and declared imports before generated files, so generated entries win collisions. */
+export const packageEntries = (
+  replace: (entry: ArchiveEntry) => Effect.Effect<void, BuildFailure>,
+  assets: readonly ArchiveEntry[],
+  files: readonly ArchiveEntry[],
+) => Effect.gen(function*() {
+  for (const entry of assets) yield* replace(entry);
+  for (const entry of files) yield* replace(entry);
+});
 
 /** Extracts every entry, four at a time, and compares it with its source file. */
 const verifyArchive = (packager: string, archive: string, entries: readonly ArchiveEntry[], scratch: string) =>
