@@ -126,6 +126,16 @@ headless clients in real time through its real input helper
 and turns the fuzzer's edges (`fuzzedInputs`) into its helper's device
 input, at a rate real time allows.
 
+The fuzzer's edges reach such a match's clients only through the helpers, in
+the helpers' own units, so they can't replay it. `helperRecorder` wraps each
+player's typed text and CustomMapData and records what the helpers typed and
+which of their files the map read, by frame (0 before the match began);
+the match is marked `typed`.
+`soak --repro` plays a typed match without the helpers or their devices: it
+types the recorded text and publishes the recorded files before their
+frames, as `RealtimeClients` delivered them, and gives the game's driver no
+edges. A game's `begin` keeps its own input sources quiet in a typed match.
+
 ## Output and cost
 
 Each finding prints with its match and repro file as it arrives. The run

@@ -26,7 +26,7 @@ export default defineSoakGame({
         const { tick } = state();
         return { progress: tick >= LAST_TICK ? undefined : tick, over: tick >= LAST_TICK };
       },
-      confirmed: () => ({ frame: state().tick, checksum: `${state().tick}:${state().edges.join(",")}` }),
+      confirmed: () => ({ frame: state().tick, checksum: `${state().tick}:${state().edges.join(",")}:${state().keys.join(",")}` }),
       repro: () => reproLines({ build: "soak-test", frame: state().tick, checksum: String(state().tick) }, [`edges ${state().edges.join(" ")}`]),
     };
   },

@@ -191,6 +191,7 @@ const loadProject = (path: string) =>
 const replay = (options: SoakCommandOptions, file: string) => Effect.gen(function*() {
   const project = yield* loadProject(options.project);
   const repro = yield* Effect.try({ try: () => readSoakRepro(readFileSync(file, "utf8")), catch: (cause) => new SoakFailure({ problem: `reading ${file}`, cause }) });
+  if (repro.project !== project.name) return yield* new SoakFailure({ problem: `${file} is a repro of ${repro.project}'s soak, not ${project.name}'s` });
   const game = yield* Effect.tryPromise({
     try: () => loadSoakGame(project.game),
     catch: (cause) => new SoakFailure({ problem: "loading the soak's match setup and map", cause }),

@@ -8,10 +8,11 @@
 // worker processes.
 import { dlopen } from "bun:ffi";
 import { Schema } from "effect";
-import type { HeadlessClient, MapEntry } from "../../src/headless/client";
+import type { ClientFiles, HeadlessClient, MapEntry } from "../../src/headless/client";
 import type { Lockstep } from "../../src/headless/lockstep";
 import { sceneFile } from "../../src/runtime/scene";
 import type { HeadlessMap, HeadlessRuntime } from "./headless";
+import type { TypedInput } from "./headlessInput";
 import { Random } from "./random";
 import { type SceneBody, type SceneExpectations, bodyProblems, readSceneLines, sceneProblems } from "./scene";
 import { MEASURED_BATTLE_NET, syncDelivery } from "./syncChannel";
@@ -42,6 +43,10 @@ export interface SoakInputFrame {
   readonly silences: ReadonlyMap<number, number>;
   /** Wall-clock milliseconds the whole game stops before this frame, as in a lag spike. */
   readonly hitchMs: number;
+  /** Text each player's input helper typed before this frame, in a match played through the helpers. */
+  readonly typed: ReadonlyMap<number, readonly string[]>;
+  /** Files each player's input helper put in their CustomMapData that the map read first during this frame; those read before the match began are at frame 0. */
+  readonly files: ReadonlyMap<number, readonly (readonly [name: string, chunks: readonly string[]])[]>;
 }
 
 /** A match's inputs as a repro file keeps them: only the frames where something happened. */
@@ -51,6 +56,15 @@ export interface SoakInputs {
   readonly hitches: readonly (readonly [frame: number, ms: number])[];
   /** Frames whose clients cost more than real time allows, with the milliseconds over, which the replay's clock adds again. */
   readonly slow: readonly (readonly [frame: number, ms: number])[];
+  /**
+   * In a match played through its players' input helpers: what each typed,
+   * by the frame it reached the client before, and each file it wrote that the
+   * map read, by the frame the map first read it (0: before the match began).
+   * A replay plays these instead of the edges, which reached the clients
+   * only through the helpers.
+   */
+  readonly typed?: readonly (readonly [frame: number, slot: number, text: string])[];
+  readonly files?: readonly (readonly [frame: number, slot: number, name: string, chunks: readonly string[]])[];
 }
 
 export interface FuzzOptions {
@@ -80,6 +94,8 @@ export interface SoakMatch {
   readonly policies: readonly string[];
   /** Frames the match may run after it began; it ends sooner when the game says it is over. */
   readonly frames: number;
+  /** Every player's input came from an input helper typing into their client, which the repro's `typed` inputs replay. */
+  readonly typed?: boolean;
 }
 
 /** What each match chooses from. */
@@ -245,6 +261,8 @@ export interface SoakInputSource {
 
 const NO_EDGES: ReadonlyMap<number, readonly SoakEdge[]> = new Map();
 const NO_SILENCES: ReadonlyMap<number, number> = new Map();
+const NO_TYPING: ReadonlyMap<number, readonly string[]> = new Map();
+const NO_FILES: ReadonlyMap<number, readonly (readonly [string, readonly string[]])[]> = new Map();
 
 /** Fuzzed input for each slot whose policy is FUZZ_POLICY, and lag spikes for the whole match, all from the match's seed. */
 export function fuzzedInputs(match: SoakMatch, controller: SoakController, options: FuzzOptions = SOAK_FUZZ): SoakInputSource {
@@ -275,7 +293,7 @@ export function fuzzedInputs(match: SoakMatch, controller: SoakController, optio
         hitchMs = timing.between(100, 2000);
         record.hitches.push([frame, hitchMs]);
       }
-      return { edges: edges.size > 0 ? edges : NO_EDGES, silences: silences.size > 0 ? silences : NO_SILENCES, hitchMs };
+      return { edges: edges.size > 0 ? edges : NO_EDGES, silences: silences.size > 0 ? silences : NO_SILENCES, hitchMs, typed: NO_TYPING, files: NO_FILES };
     },
     slow: (frame, measuredMs) => {
       if (measuredMs > 0) record.slow.push([frame, measuredMs]);
@@ -297,8 +315,22 @@ export function recordedInputs(inputs: SoakInputs): SoakInputSource {
   for (const [frame, slot, frames] of inputs.silences) silences.set(frame, (silences.get(frame) ?? new Map<number, number>()).set(slot, frames));
   const hitches = new Map(inputs.hitches.map(([frame, ms]) => [frame, ms]));
   const slow = new Map(inputs.slow.map(([frame, ms]) => [frame, ms]));
+  const bySlot = <T>(entries: readonly (readonly [frame: number, slot: number, item: T])[]) => {
+    const frames = new Map<number, Map<number, T[]>>();
+    for (const [frame, slot, item] of entries) {
+      const slots = frames.get(frame) ?? new Map<number, T[]>();
+      slots.set(slot, [...(slots.get(slot) ?? []), item]);
+      frames.set(frame, slots);
+    }
+    return frames;
+  };
+  const typed = bySlot(inputs.typed ?? []);
+  const files = bySlot((inputs.files ?? []).map(([frame, slot, name, chunks]) => [frame, slot, [name, chunks] as const] as const));
   return {
-    frame: (frame) => ({ edges: edges.get(frame) ?? NO_EDGES, silences: silences.get(frame) ?? NO_SILENCES, hitchMs: hitches.get(frame) ?? 0 }),
+    frame: (frame) => ({
+      edges: edges.get(frame) ?? NO_EDGES, silences: silences.get(frame) ?? NO_SILENCES, hitchMs: hitches.get(frame) ?? 0,
+      typed: typed.get(frame) ?? NO_TYPING, files: files.get(frame) ?? NO_FILES,
+    }),
     slow: (frame) => slow.get(frame) ?? 0,
     recorded: () => inputs,
   };
@@ -728,6 +760,8 @@ function playOnce(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, ma
   const crashes: SoakFinding[] = [];
   try {
     clients.start();
+    // Files a helper wrote that the map read before the match began, such as in its menus, are recorded at frame 0.
+    for (const [frame, slot, name, chunks] of inputs?.files ?? []) if (frame === 0) clients.client(slot).published.set(name, chunks);
     const driver = game.begin(clients, match);
     const watching = new SoakMonitor(clients, driver, limits, setup.scene, setup.map.filePrefix, framesPlayed);
     monitor = watching;
@@ -740,7 +774,11 @@ function playOnce(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, ma
       const quiet = new Set<number>();
       for (const [slot, until] of quietUntil) if (until > frame) quiet.add(slot);
       framesPlayed++;
-      driver.input({ frame, wallMs, edges: step.edges, silent: quiet });
+      // What a player's input helper wrote and typed reaches their client before the frame, as RealtimeClients delivers it.
+      for (const [slot, written] of step.files) for (const [name, chunks] of written) clients.client(slot).published.set(name, chunks);
+      for (const [slot, lines] of step.typed) for (const line of lines) clients.type(slot, line);
+      // In a match played through input helpers the edges reached the clients only as what the helpers typed.
+      driver.input({ frame, wallMs, edges: match.typed === true ? NO_EDGES : step.edges, silent: quiet });
       clients.frames(1);
       wallMs += limits.frameMs + source.slow(frame, Math.max(0, Math.max(0, ...clients.costs) * limits.costScale - limits.frameMs));
       watching.afterFrame(wallMs, quiet);
@@ -763,6 +801,40 @@ function playOnce(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, ma
     ...(monitor === undefined || monitor.repros.size === 0 ? {} : { repros: [...monitor.repros] }),
   };
   return { result, monitor };
+}
+
+/**
+ * What a real-time run through players' input helpers records for its repro:
+ * `input` and `files` wrap each player's typed text and CustomMapData, and
+ * `recorded` gives what they delivered, by the frame `frame()` says is next.
+ */
+export function helperRecorder(frame: () => number) {
+  const typed: [number, number, string][] = [];
+  const files: [number, number, string, readonly string[]][] = [];
+  const read = new Map<string, string>();
+  return {
+    input: (slot: number, input: TypedInput): TypedInput => ({
+      read: () => {
+        const lines = input.read();
+        for (const line of lines) typed.push([frame(), slot, line]);
+        return lines;
+      },
+      close: () => input.close(),
+    }),
+    files: (slot: number, stored: ClientFiles): ClientFiles => ({
+      written: (name, lines) => stored.written(name, lines),
+      read: (name) => {
+        const chunks = stored.read(name);
+        const key = `${slot} ${name}`;
+        if (chunks !== undefined && read.get(key) !== chunks.join("\n")) {
+          read.set(key, chunks.join("\n"));
+          files.push([frame(), slot, name, chunks]);
+        }
+        return chunks;
+      },
+    }),
+    recorded: (inputs: SoakInputs): SoakInputs => ({ ...inputs, typed, files }),
+  };
 }
 
 /** A repro file: one match, what it found, and its inputs, so `soak --repro FILE` plays it again. */
@@ -790,6 +862,7 @@ export const soakRepro = (project: string, result: SoakResult): SoakRepro => ({
 const Whole = Schema.Int;
 const MatchSchema = Schema.Struct({
   index: Whole, seed: Whole, fighters: Schema.Array(Schema.String), stage: Schema.String, policies: Schema.Array(Schema.String), frames: Whole,
+  typed: Schema.optionalKey(Schema.Boolean),
 });
 const FindingSchema = Schema.Struct({
   kind: Schema.Literals(["stall", "desync", "error", "scene", "invisible", "cost", "catch-up", "unfinished", "crash"]),
@@ -805,6 +878,8 @@ const InputsSchema = Schema.Struct({
   silences: Schema.Array(Schema.Tuple([Whole, Whole, Whole])),
   hitches: Schema.Array(Schema.Tuple([Whole, Whole])),
   slow: Schema.Array(Schema.Tuple([Whole, Schema.Finite])),
+  typed: Schema.optionalKey(Schema.Array(Schema.Tuple([Whole, Whole, Schema.String]))),
+  files: Schema.optionalKey(Schema.Array(Schema.Tuple([Whole, Whole, Schema.String, Schema.Array(Schema.String)]))),
 });
 const ReproFile = Schema.fromJsonString(Schema.Struct({
   format: Schema.Literal("wisp-soak-repro"),

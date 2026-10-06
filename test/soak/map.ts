@@ -1,6 +1,7 @@
 // A map for the soak's tests: a counter every frame until 300, and the faults
 // a soak must find, each switched on by a policy: the counter stops, one
 // client makes a call the other doesn't, a frame throws, frames cost more.
+// It counts each player's typed A, as a game counts what its input helper types.
 import { configureRuntime } from "../../src/runtime/config";
 import { installDispatch, on, trampoline } from "../../src/platform/dispatch";
 
@@ -12,6 +13,8 @@ interface SoakTestState {
   heavyMs: number;
   /** Controller edges each slot's input reached the map with. */
   readonly edges: number[];
+  /** Presses of A each player typed. */
+  readonly keys: number[];
 }
 
 declare global {
@@ -38,14 +41,24 @@ function tick(): void {
   }
 }
 
+function key(): void {
+  const keys = state().keys;
+  const player = GetPlayerId(GetTriggerPlayer());
+  keys[player] = (keys[player] ?? 0) + 1;
+}
+
 export function install(): void {
   configureRuntime({ filePrefix: "soaktest", readyPrefix: "ST_HRR", globalPrefix: "__soakTest" });
   installDispatch();
   on("soak.tick", tick);
+  on("soak.key", key);
 }
 
 export function start(): void {
   install();
-  globalThis.__soakTest = { tick: 0, frozen: false, desync: false, throwing: false, heavyMs: 0, edges: [0, 0] };
+  globalThis.__soakTest = { tick: 0, frozen: false, desync: false, throwing: false, heavyMs: 0, edges: [0, 0], keys: [0, 0] };
   TimerStart(CreateTimer(), 1 / 60, true, trampoline("soak.tick"));
+  const typing = CreateTrigger();
+  for (let player = 0; player < 2; player++) BlzTriggerRegisterPlayerKeyEvent(typing, Player(player), ConvertOsKeyType(0x41), 0, true);
+  TriggerAddAction(typing, trampoline("soak.key"));
 }

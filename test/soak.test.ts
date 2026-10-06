@@ -11,7 +11,9 @@ import { makeSoak } from "../scripts/wisp/commands/soak";
 import { installHeadless } from "../scripts/wisp/headless";
 import type { Lockstep } from "../src/headless/lockstep";
 import { type SceneReport, bodyProblems } from "../scripts/wisp/scene";
-import { type SoakMatch, SoakMonitor, fuzzedInputs, planSoak, playSoakMatch, readSoakRepro, soakRepro } from "../scripts/wisp/soak";
+import { RealtimeClients } from "../scripts/wisp/headlessInput";
+import { type SoakMatch, SoakMonitor, fuzzedInputs, helperRecorder, planSoak, playSoakMatch, readSoakRepro, soakRepro } from "../scripts/wisp/soak";
+import { MEASURED_BATTLE_NET, syncDelivery } from "../scripts/wisp/syncChannel";
 import { timingsLayer } from "../scripts/wisp/timings";
 import game from "./soak/game";
 import project from "./soak/project";
@@ -58,6 +60,52 @@ test("a repro file plays its match again with the same inputs, calls and finding
   const again = playSoakMatch(runtime, game, project, repro.match, repro.inputs);
   expect(again.checksums).toEqual(found.checksums);
   expect(again.findings).toEqual(found.findings);
+});
+
+test("a match played through input helpers replays what they typed, not their pads' edges, such as a stick inside its dead zone", () => {
+  const helperMatch: SoakMatch = { ...match(["fuzz", "cpu"]), typed: true };
+  // wc3-journal's pad: a full-scale stick, here held inside its 0.28 dead zone (9175), which reached the map only as typed text.
+  const inputs = {
+    edges: [[11, 0, { axis: 1, value: -9083 }], [12, 0, { axis: 1, value: 7396 }], [13, 0, { axis: 0, value: 752 }]] as const,
+    silences: [], hitches: [], slow: [],
+    typed: [[20, 0, "aa"], [40, 1, "a"]] as const,
+    files: [[30, 1, "soaktest-note.txt", ["noted"]]] as const,
+  };
+  const played = playSoakMatch(runtime, game, project, helperMatch, inputs);
+  expect(played.findings).toEqual([]);
+  const replayed = playSoakMatch(runtime, game, project, readSoakRepro(JSON.stringify(soakRepro(project.name, played))).match, played.inputs);
+  expect(replayed.checksums).toEqual(played.checksums);
+  expect(replayed.findings).toEqual([]);
+  // The pads' edges never reach the game; the typed A's do, in both clients.
+  expect(playSoakMatch(runtime, game, project, helperMatch, { ...inputs, edges: [] }).checksums).toEqual(played.checksums);
+  expect(playSoakMatch(runtime, game, project, helperMatch, { ...inputs, typed: [] }).checksums).not.toEqual(played.checksums);
+});
+
+test("a real-time run through input helpers, recorded with helperRecorder, replays onto the same native calls", () => {
+  const helperMatch: SoakMatch = { ...match(["fuzz", "cpu"]), typed: true };
+  // Each helper types at wall-clock frames of its own, as a program appending to its typed file does.
+  const typing = new Map([[0, [[25, "aa"], [90, "a"]]], [1, [[60, "a"]]]] as const);
+  let now = 0;
+  let monitor: SoakMonitor | undefined;
+  const recorder = helperRecorder(() => (monitor === undefined ? 0 : monitor.frame + 1));
+  const helper = (slot: number) => {
+    const pending = [...(typing.get(slot) ?? [])];
+    return recorder.input(slot, { read: () => pending.splice(0, pending.filter(([frame]) => (frame * 1000) / 60 <= now).length).map(([, text]) => text), close: () => undefined });
+  };
+  const clients = runtime.clients(game.entry, [0, 1], { delivery: syncDelivery(MEASURED_BATTLE_NET, helperMatch.seed), keepCalls: 64 });
+  const realtime = new RealtimeClients(clients, new Map([[0, helper(0)], [1, helper(1)]]), () => now, () => monitor?.afterFrame(now, new Set()));
+  realtime.start();
+  monitor = new SoakMonitor(clients, game.begin(clients, helperMatch));
+  while (!monitor.done) {
+    now += 1000 / 60;
+    realtime.advance();
+  }
+  const inputs = recorder.recorded({ edges: [], silences: [], hitches: [], slow: [] });
+  // Typed by wall-clock frame 25, it reaches the client before frame 25 runs.
+  expect(inputs.typed).toEqual([[25, 0, "aa"], [60, 1, "a"], [90, 0, "a"]]);
+  const replayed = playSoakMatch(runtime, game, project, helperMatch, inputs);
+  expect(replayed.findings).toEqual([]);
+  expect(replayed.checksums).toEqual(clients.clients.map((client) => client.checksum()));
 });
 
 test("the fuzzer makes edges in one frame, holds, chords and stick flicks, and presses a toggle twice", () => {
