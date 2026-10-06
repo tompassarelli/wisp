@@ -25,7 +25,7 @@ import type { Ink, Word } from "../warcraft/desktop";
 import { preferencesBackupPath, preferencesPath } from "../warcraft/preferences";
 import { SCAN_QUIET_MS, importFailures, ladderScan, sessionStart, war3LogPath } from "../warcraft/war3Log";
 import { step } from "./timings";
-import { hostLobby, reportedMenus, startLobby } from "./menus";
+import { type MenuSocket, hostLobby, reportedMenus, startLobby } from "./menus";
 import { ClientWatch, unlessLost } from "./watch";
 
 /** Why play can't go on, in words for the person who ran it. */
@@ -627,8 +627,14 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   });
 
   // 4, through the menus: Multiplayer, Custom Games, Create Game, the map's folder, the map, the game's name, Create, Start.
-  const host = (game: PlayGame) => Effect.gen(function*() {
+  const host = (game: PlayGame) => Effect.scoped(Effect.gen(function*() {
     const { folder, title } = declaration.map;
+    /** One connection to the menus for leaving a match and hosting: each new one waits for the page's next announcement. */
+    let connection: { readonly menus: MenuSocket | undefined } | undefined;
+    const menuSocket = Effect.gen(function*() {
+      connection ??= { menus: yield* reportedMenus(declaration.menuReportPort) };
+      return connection.menus;
+    }).pipe(Effect.mapError((cause) => new PlayProblem({ problem: cause.message })));
     if ((yield* clientState)?.kind === "in match") {
       yield* fullscreen(game.window, "Warcraft III's window", PLAY_TIMEOUTS.gameFullscreen);
       const output = yield* outputOf(game.window, "Warcraft III's window");
@@ -640,22 +646,20 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       yield* until(5, hasText("Quit Mission"), () => "End Game didn't show Quit Mission");
       yield* key("q");
       yield* until(15, clientState.pipe(Effect.map((state) => state?.kind === "results" ? true : undefined)), () => "Quit Mission didn't reach the results screen");
-      yield* Effect.scoped(Effect.gen(function*() {
-        const menus = yield* reportedMenus(declaration.menuReportPort);
-        if (menus === undefined) return yield* fail("The results screen's menu connection isn't available");
-        yield* menus.send("ScoreScreenClose");
-      })).pipe(Effect.mapError((cause) => cause._tag === "MenuFailure" ? new PlayProblem({ problem: cause.message }) : cause));
+      const menus = yield* menuSocket;
+      if (menus === undefined) return yield* fail("The results screen's menu connection isn't available");
+      yield* menus.send("ScoreScreenClose").pipe(Effect.mapError((cause) => new PlayProblem({ problem: cause.message })));
       yield* until(10, clientState.pipe(Effect.map((state) => state?.kind === "menus" ? true : undefined)), () => "Results didn't return to the menus");
     }
-    const driven = yield* Effect.scoped(Effect.gen(function*() {
-      const menus = yield* reportedMenus(declaration.menuReportPort);
+    const driven = yield* Effect.gen(function*() {
+      const menus = yield* menuSocket;
       if (menus === undefined) return false;
       yield* hostLobby(menus, { folder, file: declaration.map.file, gameName: declaration.gameName, password: "" });
       const since = yield* Clock.currentTimeMillis;
       yield* startLobby(menus);
       yield* declaration.started(game, since);
       return true;
-    })).pipe(Effect.mapError((cause) => cause._tag === "MenuFailure" ? new PlayProblem({ problem: cause.message }) : cause));
+    }).pipe(Effect.mapError((cause) => cause._tag === "MenuFailure" ? new PlayProblem({ problem: cause.message }) : cause));
     if (driven) {
       yield* status(4, "Map", `"${declaration.gameName}" of ${title} hosted through the menus (joining by name is case-sensitive)`);
       return;
@@ -757,7 +761,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     yield* advance("the Start button", (now) => lowest(findPhrase(now.words, "Start")), (now) => !has(now, "Start"), "Start didn't start the game", screen);
     yield* declaration.started(game, since);
     yield* status(4, "Map", `"${declaration.gameName}" of ${title} hosted through the menus (joining by name is case-sensitive)`);
-  });
+  }));
 
   // 4. The map, hosted once Warcraft III has signed in and read its ladder maps.
   /**
@@ -784,7 +788,8 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
           return undefined;
         case "waiting":
           signedInAt ??= now;
-          return now - signedInAt >= PLAY_TIMEOUTS.ladderScan * 1000 ? { text, scanned: false } : undefined;
+          // A game whose log already spans the wait since its sign-in, such as one that played a match, is hosted at once.
+          return now - signedInAt >= PLAY_TIMEOUTS.ladderScan * 1000 || (scan.sinceLogin ?? 0) >= PLAY_TIMEOUTS.ladderScan * 1000 ? { text, scanned: false } : undefined;
         case "done":
           return { text, scanned: true };
         case "scanning":

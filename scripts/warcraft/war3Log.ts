@@ -61,8 +61,12 @@ export const SCAN_QUIET_MS = 2000;
 export type LadderScan =
   /** The login doors haven't closed. */
   | { readonly kind: "signing in" }
-  /** Signed in; no ladder map opened since. */
-  | { readonly kind: "waiting"; readonly login?: number }
+  /**
+   * Signed in; no ladder map opened since. `sinceLogin`: from the sign-in to
+   * the log's newest line, by the log's own clock, so a game that signed in
+   * long ago is known to without watching it.
+   */
+  | { readonly kind: "waiting"; readonly login?: number; readonly sinceLogin?: number }
   /** Ladder maps are being opened; `last` is the newest one's time, `count` how many lines so far. */
   | { readonly kind: "scanning"; readonly last: number; readonly count: number }
   | { readonly kind: "done"; readonly login?: number; readonly last: number };
@@ -81,7 +85,7 @@ export function ladderScan(log: string, authenticated = false): LadderScan {
   const after = lines.slice(login + 1);
   const ladder = after.filter(({ text }) => LADDER.test(text));
   const last = ladder.at(-1);
-  if (last === undefined) return { kind: "waiting", ...signedIn };
+  if (last === undefined) return { kind: "waiting", ...signedIn, ...(login < 0 ? {} : { sinceLogin: (lines.at(-1)?.at ?? 0) - lines[login]!.at }) };
   if (after.some(({ at, text }) => at - last.at >= SCAN_QUIET_MS && !LADDER.test(text))) return { kind: "done", ...signedIn, last: last.at };
   return { kind: "scanning", last: last.at, count: ladder.length };
 }

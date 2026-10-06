@@ -109,7 +109,7 @@ interface Scenario {
   /** "none": no ladder scan follows the sign-in. */
   readonly ladderScan?: "scans" | "none";
   /** An already running game's log after its scan: nothing more (idle in its menus), or an earlier game. */
-  readonly runningLog?: "idle" | "played";
+  readonly runningLog?: "idle" | "played" | "played unscanned";
   /** The hosted map's imported models fail to load, as in the 6 Oct -loadfile runs. */
   readonly importFailures?: "loading" | "match";
 }
@@ -233,8 +233,9 @@ function world(scenario: Scenario = {}) {
   if (scenario.gameRunning === true) {
     processes.push(gameProcess(2852));
     windows.set(762, tiled(762, "Warcraft III"));
-    war3Log = [war3Line(-60_000, "GameMain Started"), ...(scenario.socketSignedIn === true ? [] : [war3Line(-46_000, "[CLoginCallbacks] LoginDoorClose called")]), ...[...SEASON1, ...SEASON9].map((text) => war3Line(-37_000, text)),
-      ...(scenario.runningLog === "played" ? [war3Line(-20_000, "Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft 0.0.47.w3x")] : [])].join("");
+    const unscanned = scenario.runningLog === "played unscanned";
+    war3Log = [war3Line(-60_000, "GameMain Started"), ...(scenario.socketSignedIn === true ? [] : [war3Line(-46_000, "[CLoginCallbacks] LoginDoorClose called")]), ...(unscanned ? [] : [...SEASON1, ...SEASON9].map((text) => war3Line(-37_000, text))),
+      ...(scenario.runningLog === "played" || unscanned ? [war3Line(unscanned ? -10_000 : -20_000, "Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft 0.0.47.w3x")] : [])].join("");
   }
   if (scenario.helper === "earlier") processes.push({ pid: 400, name: "wc3-journal", args: [HELPER, "--pid", "1"] });
   if (scenario.helper === "this game's") processes.push({ pid: 401, name: "wc3-journal", args: [HELPER, "--pid", "2852"] });
@@ -625,6 +626,11 @@ test("Warcraft III already past its ladder scan is hosted without waiting for on
   ]);
   expect(played.events.filter((event) => event.startsWith("steam") || event === "launch" || event.startsWith("launch options"))).toEqual([]);
   expect(played.events).toContain("click Warcraft III START GAME");
+  // A game that never scanned but has played since, more than 30 s after its sign-in by its log, isn't made to wait 30 s more.
+  const unscanned = await world({ runtimes: "launcher", gameRunning: true, runningLog: "played unscanned" }).run();
+  expect(unscanned.failure).toBeUndefined();
+  expect(unscanned.lines[5]).toBe("4/7 Map: Warcraft III signed in and read no ladder maps within 30 s; hosting the map");
+  expect(unscanned.lines.find((line) => line.includes("fighter selection"))).toBe(played.lines.find((line) => line.includes("fighter selection")));
   // Idle in its menus since the scan, the log ends with it: 2 s of quiet decide.
   const idle = await world({ runtimes: "launcher", gameRunning: true }).run();
   expect(idle.failure).toBeUndefined();
