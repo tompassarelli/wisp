@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit } from "effect";
 import { expect, test } from "bun:test";
-import { ensureLua, runProcess, stageMap, verifyToolchain, withFileIo, writeHeader } from "../scripts/wisp/mapBuild";
+import { ensureLua, packageEntries, runProcess, stageMap, verifyToolchain, withFileIo, writeHeader } from "../scripts/wisp/mapBuild";
 import { abilityData, encodeObjectData } from "../scripts/objectData";
 import { composeScript, typescriptBase } from "../scripts/mapScript";
 
@@ -13,6 +13,26 @@ const bundle = { text: "return { start = function() end }", key: "1-2" };
 
 test("the installed TypeScript toolchain matches typescript-toolchain.lock", async () => {
   await Effect.runPromise(verifyToolchain(join(project, "typescript-toolchain.lock"), project));
+});
+
+test("a declared import absent from the container is packaged and generated files keep precedence", async () => {
+  const archive = new Map([ ["war3mapImported\\Card.tga", "old container art"] ]);
+  const sources = new Map([
+    ["private/card.tga", "declared import"],
+    ["generated/card.tga", "generated art"],
+  ]);
+  const assets = [
+    { entry: "war3mapImported\\Nordrassil.tga", source: "private/card.tga" },
+    { entry: "war3mapImported\\Card.tga", source: "private/card.tga" },
+  ];
+  const files = [{ entry: "war3mapImported\\Card.tga", source: "generated/card.tga" }];
+  await Effect.runPromise(packageEntries((item) => Effect.sync(() => {
+    const contents = sources.get(item.source);
+    if (contents === undefined) throw new Error(`missing source ${item.source}`);
+    archive.set(item.entry, contents);
+  }), assets, files));
+  expect(archive.get("war3mapImported\\Nordrassil.tga")).toBe("declared import");
+  expect(archive.get("war3mapImported\\Card.tga")).toBe("generated art");
 });
 
 test("a TypeScript-only map starts the TypeScript entry with its own config, before and after a rebuild", () => {
