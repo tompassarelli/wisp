@@ -2,7 +2,7 @@
 // playtest (wisp:docs/play.md). The game declares its prefix, Steam shortcut,
 // map, match setup and helper; `layer` provides what its own steps use.
 // Given `wisp watch`'s ClientWatch, play runs `doctor` on its prefix first
-// and once after a failure (wisp:docs/doctor.md); play presses Play itself.
+// and once after a failure (wisp:docs/doctor.md); play launches the game itself.
 import { Effect, Layer } from "effect";
 import { documentsFolder } from "../../warcraft/battleNet";
 import { type Command, type CommandFailure, UsageFailure } from "../command";
@@ -35,6 +35,7 @@ export const makePlay = <R>(declaration: PlayDeclaration<R>, layer: Layer.Layer<
     start: { kind: "steam", appId: shortcut.appId, name: shortcut.name },
   };
   const hands = DoctorHands.of({
+    launches: false,
     leaveLobby: () => leaveBy(menuReportPort, "a lobby", leaveLobby),
     closeScore: () => leaveBy(menuReportPort, "a score screen", (menus) => menus.send("ScoreScreenClose")),
   });

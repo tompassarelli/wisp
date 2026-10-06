@@ -9,8 +9,8 @@
 // compositor's pointer is, so XTEST motion doesn't move it.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFileSync, closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname } from "node:path";
+import { appendFileSync, closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, resolve } from "node:path";
 import { Clock, Effect, Layer, Schema } from "effect";
 import { serverDirectoryName } from "../warcraft/battleNet";
 import { listProcesses } from "../warcraft/processes";
@@ -27,9 +27,11 @@ export interface PlayTools {
   readonly wlrctl: string;
   readonly niri: string;
   readonly steam: string;
+  /** util-linux nsenter, which runs the launch request inside the launcher's runtime container. */
+  readonly nsenter: string;
 }
 
-export const PLAY_TOOLS: PlayTools = { grim: "grim", xdotool: "xdotool", tesseract: "tesseract", wlrctl: "wlrctl", niri: "niri", steam: "steam" };
+export const PLAY_TOOLS: PlayTools = { grim: "grim", xdotool: "xdotool", tesseract: "tesseract", wlrctl: "wlrctl", niri: "niri", steam: "steam", nsenter: "nsenter" };
 
 const problem = (what: string) => (cause: unknown) => new PlayProblem({ problem: `${what}: ${describeCause(cause)}` });
 
@@ -58,6 +60,31 @@ const startDetached = (command: readonly string[], log?: string) => Effect.tryPr
   catch: problem(`couldn't start ${basename(command[0] ?? "")}`),
 });
 
+/**
+ * Battle.net.exe --exec="launch W3" in the running launcher's container. Each
+ * Steam runtime container has its own /tmp, where Wine keeps the wineserver's
+ * socket, so a Wine started outside would start a second wineserver on the
+ * prefix. Joining the launcher's user and mount namespaces (they are this
+ * user's) with its environment reaches its wineserver. Its WINESERVERSOCKET is
+ * an inherited descriptor, so the new process finds the server by its socket
+ * instead. Proton's wine is three folders above the launcher's
+ * wine-preloader (files/lib/wine/i386-unix).
+ */
+const launchInContainer = (tools: PlayTools, launcher: { readonly pid: number }) => Effect.tryPromise({
+  try: async () => {
+    const base = `/proc/${launcher.pid}`;
+    const env = Object.fromEntries(readFileSync(`${base}/environ`, "utf8").split("\0").filter((entry) => entry.includes("="))
+      .map((entry) => [entry.slice(0, entry.indexOf("=")), entry.slice(entry.indexOf("=") + 1)] as const)
+      .filter(([name]) => name !== "WINESERVERSOCKET" && name !== "WINELOADERNOEXEC"));
+    const wine = resolve(dirname(readlinkSync(`${base}/exe`)), "../../../bin/wine");
+    const child = Bun.spawn([tools.nsenter, "-t", String(launcher.pid), "-U", "-m", "--preserve-credentials", `--wd=${readlinkSync(`${base}/cwd`)}`, "--",
+      wine, "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe", "--exec=launch W3"], { env, stdin: "ignore", stdout: "ignore", stderr: "pipe", timeout: 30_000 });
+    const [stderr, code] = await Promise.all([new Response(child.stderr).text(), child.exited]);
+    if (code !== 0) throw new Error(`exited ${code}: ${stderr.trim().split("\n").slice(-3).join(" ")}`);
+  },
+  catch: problem("couldn't ask Battle.net to launch Warcraft III"),
+});
+
 const machine = (tools: PlayTools): PlayMachine["Service"] => ({
   processes: Effect.try({ try: listProcesses, catch: problem("couldn't read the process table") }),
   serverDirectory: (prefix) => Effect.try({
@@ -76,6 +103,7 @@ const machine = (tools: PlayTools): PlayMachine["Service"] => ({
       }
     }
   }),
+  launch: (launcher) => launchInContainer(tools, launcher),
   openSteam: (url) => startDetached([tools.steam, url]).pipe(Effect.asVoid),
   start: startDetached,
   read: (path, from = 0) => Effect.try({

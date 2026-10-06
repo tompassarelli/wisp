@@ -4,7 +4,8 @@
 // client's Wine prefix: its processes and its Battle.net launcher's log.
 //
 // Recoveries never sign in, never start Warcraft III.exe themselves (only the
-// launcher's Play does) and never start a runtime beside another on a prefix.
+// launcher does, asked through its own --exec) and never start a runtime
+// beside another on a prefix.
 // A client whose launcher needs its owner to sign in stops doctor with one
 // plain line. A state doctor has no recovery for is reported, not guessed at.
 import { join } from "node:path";
@@ -52,12 +53,12 @@ export class DoctorStop extends Schema.TaggedError<DoctorStop>()("DoctorStop", {
 }
 
 /**
- * What doctor does inside a client. `pressPlay` presses Warcraft III's Play
- * in the client's launcher; a caller that presses Play itself (`play`) leaves
+ * What doctor does inside a client. With `launches`, doctor asks the client's
+ * signed-in launcher to start Warcraft III; a caller that launches it itself (`play`) leaves
  * it out, and doctor then leaves a client closed or at its signed-in launcher.
  */
 export class DoctorHands extends Context.Service<DoctorHands, {
-  readonly pressPlay?: (target: DoctorTarget) => Effect.Effect<void, PlayProblem>;
+  readonly launches: boolean;
   /** Leaves the lobby the client is in, for the menus it came from. */
   readonly leaveLobby: (target: DoctorTarget) => Effect.Effect<void, PlayProblem>;
   /** Leaves the score screen. */
@@ -70,7 +71,7 @@ export const DOCTOR_TIMEOUTS = {
   exit: 20,
   launcherStart: 90,
   signIn: 90,
-  /** From Play to the launcher's log taking it. */
+  /** From the launch request to the launcher's log taking it. */
   request: 15,
   launch: 45,
   gameProcess: 60,
@@ -137,7 +138,7 @@ export const RECOVERY: Readonly<Record<Problem, string>> = {
   "stale lobby": "leaving the lobby",
   "score screen": "leaving the score screen",
   closed: "starting Battle.net",
-  "no game": "pressing Play",
+  "no game": "asking Battle.net to launch Warcraft III",
 };
 
 const pids = (processes: readonly ProcessInfo[]) => processes.map(({ pid }) => pid).join(" ");
@@ -151,7 +152,7 @@ const describeView = (view: ClientView) => {
 /**
  * The state of a client, as doctor names it: what to do next. Ordered so the
  * prefix comes first (two runtimes break every launch), then the game, then
- * the launcher. `canPlay`: doctor presses Play itself; `started`: this run did.
+ * the launcher. `canPlay`: doctor launches the game itself; `started`: this run did.
  */
 export function diagnose(seen: Observation, canPlay: boolean, display?: string, started = false): Diagnosis {
   const { use, view, held } = seen;
@@ -349,16 +350,18 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
     yield* say("Battle.net started");
   });
 
-  /** Play in the launcher, confirmed by its log; the game's process must follow. Returns false when the launcher reported a failed launch. */
-  const pressPlay = (press: NonNullable<DoctorHands["Service"]["pressPlay"]>) => Effect.gen(function*() {
+  /** The launcher's launch of Warcraft III, confirmed by its log; the game's process must follow. Returns false when the launcher reported a failed launch. */
+  const launchGame = Effect.gen(function*() {
+    const { launcher } = yield* prefixState;
+    if (launcher === undefined) return yield* stop("Battle.net isn't running in the prefix");
     const log = yield* newestLog;
     if (log === undefined) return yield* stop(`Battle.net has no log in ${logs}`);
     const path = join(logs, log);
     const offset = (yield* machine.size(path).pipe(Effect.mapError(failed))) ?? 0;
-    yield* press(target).pipe(Effect.mapError(failed));
+    yield* machine.launch(launcher).pipe(Effect.mapError(failed));
     const written = machine.read(path, offset).pipe(Effect.map((text) => text ?? ""), Effect.mapError(failed));
     const taken = yield* poll(DOCTOR_TIMEOUTS.request, written.pipe(Effect.map((text) => (launchRequested(text) || launchOutcome(text) !== undefined ? true : undefined))));
-    if (taken === undefined) return yield* stop(`Battle.net didn't take the Play click: its log (${path}) has no launch request within ${DOCTOR_TIMEOUTS.request} s`);
+    if (taken === undefined) return yield* stop(`Battle.net didn't launch Warcraft III within ${DOCTOR_TIMEOUTS.request} s of being asked (its log: ${path}); check that it is signed in to an account that owns the game`);
     const outcome = (yield* poll(DOCTOR_TIMEOUTS.launch, written.pipe(Effect.map(launchOutcome)))) ?? { kind: "failed", reason: `Battle.net reported no launch within ${DOCTOR_TIMEOUTS.launch} s` };
     if (outcome.kind === "failed") {
       yield* say(outcome.reason);
@@ -366,14 +369,14 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
     }
     const game = yield* poll(DOCTOR_TIMEOUTS.gameProcess, prefixState.pipe(Effect.map((use) => use.game)));
     if (game === undefined) return yield* stop(`Battle.net reported Warcraft III running, but its process didn't appear within ${DOCTOR_TIMEOUTS.gameProcess} s`);
-    yield* say(`Play started Warcraft III (pid ${game.pid})`);
+    yield* say(`Battle.net started Warcraft III (pid ${game.pid})`);
     return true;
   });
 
   /** Waits up to LEAVE_SECONDS for the watch to show the client out of `kind`; the next look decides either way. */
   const left = (kind: StateKind) => waitFor(client, (view) => view.state.kind !== kind, { what: `leaving ${kind}`, seconds: LEAVE_SECONDS, failOn: [] }).pipe(Effect.ignore, Effect.asVoid);
 
-  /** Whether this run pressed Play: its game is waited on until it says where it is. */
+  /** Whether this run launched the game: its game is waited on until it says where it is. */
   let started = false;
   const recover = (problem: Problem) => Effect.gen(function*() {
     switch (problem) {
@@ -403,8 +406,8 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
       case "closed":
         return yield* startLauncher;
       case "no game": {
-        if (hands.pressPlay === undefined) return;
-        if (!(yield* pressPlay(hands.pressPlay))) return "launch failed" as const;
+        if (!hands.launches) return;
+        if (!(yield* launchGame)) return "launch failed" as const;
         started = true;
         return;
       }
@@ -417,7 +420,7 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
   let next: Problem | undefined;
   while (true) {
     const diagnosis: Diagnosis = next === undefined
-      ? diagnose(yield* observe, hands.pressPlay !== undefined, target.display, started)
+      ? diagnose(yield* observe, hands.launches, target.display, started)
       : { kind: "problem", problem: next, detail: "Battle.net couldn't start Warcraft III" };
     next = undefined;
     switch (diagnosis.kind) {
@@ -441,7 +444,7 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
         yield* say(`${problem}: ${diagnosis.detail}; ${RECOVERY[problem]}`);
         const then = yield* recover(problem);
         if (then !== undefined) next = then;
-        // A launcher restarted after a failed launch starts and presses Play once more, as `play` does.
+        // A launcher restarted after a failed launch starts and launches once more, as `play` does.
         if (problem === "launch failed") {
           tried.delete("closed");
           tried.delete("no game");
