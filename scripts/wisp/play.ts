@@ -13,6 +13,7 @@
 // Warcraft's menus are found by the text they show, so any screen size works.
 // The game's window is fullscreen while play drives it, so a capture of its
 // output is the game's frame.
+import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { Clock, Context, Effect, Exit, Schema } from "effect";
 import {
@@ -20,6 +21,7 @@ import {
   newestLauncherLog, prefixUse, shortcutAppId, shortcutUrl, signedIn, withLaunchOptions,
 } from "../warcraft/battleNet";
 import type { Ink, Word } from "../warcraft/desktop";
+import { preferencesBackupPath, preferencesPath } from "../warcraft/preferences";
 import { SCAN_QUIET_MS, importFailures, ladderScan, sessionStart, war3LogPath } from "../warcraft/war3Log";
 import { step } from "./timings";
 import { hostLobby, reportedMenus, startLobby } from "./menus";
@@ -251,6 +253,8 @@ export interface PlayDeclaration<R = never> {
 }
 
 const STEPS = 7;
+
+const RESTORE_PREFERENCES = fileURLToPath(new URL("./restorePreferences.ts", import.meta.url));
 
 /** Seconds each wait may take. */
 export const PLAY_TIMEOUTS = {
@@ -651,11 +655,34 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   });
 
   const war3Log = war3LogPath(documents);
+  const preferences = preferencesPath(documents);
+  const backup = preferencesBackupPath(documents);
+  /**
+   * Warcraft III rewrites War3Preferences.txt with this run's display settings
+   * when it exits, which would leave a private desktop sharing the prefix with
+   * the wrong ones. The file is saved before the game starts, and a detached
+   * helper puts it back once the game's process is gone. A backup left by a
+   * helper that never ran (the game ended with the machine) is the file to keep.
+   */
+  const savePreferences = Effect.gen(function*() {
+    const saved = yield* machine.read(backup);
+    const text = saved ?? (yield* machine.read(preferences));
+    if (text === undefined) return;
+    if (saved === undefined) yield* machine.write(backup, text);
+    else yield* machine.write(preferences, saved);
+    yield* status(3, "Warcraft III", `saved ${preferences} as ${backup}; it is put back when the game exits`);
+  });
+  const restorePreferencesOnExit = (pid: number) => Effect.gen(function*() {
+    if ((yield* machine.read(backup)) === undefined) return;
+    yield* machine.start([process.execPath, RESTORE_PREFERENCES, String(pid), documents]);
+  });
   const game = Effect.gen(function*() {
     yield* installMap;
     yield* declaration.prepare(documents);
     const since = yield* Clock.currentTimeMillis;
     const running = (yield* prefixState).game;
+    // A game already running was started with its own backup and helper.
+    if (running === undefined) yield* savePreferences;
     /** The session in Warcraft III's log before Play; the game's own session replaces it. */
     let earlierSession: string | undefined;
     if (running !== undefined) {
@@ -674,6 +701,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     }
     const process = yield* until(PLAY_TIMEOUTS.gameWindow, prefixState.pipe(Effect.map((use) => use.game)),
       () => `Battle.net reported Warcraft III running, but its process didn't appear within ${PLAY_TIMEOUTS.gameWindow} s`);
+    yield* restorePreferencesOnExit(process.pid);
     const window = yield* until(PLAY_TIMEOUTS.gameWindow, windowTitled("Warcraft III"), () => `Warcraft III's window didn't appear within ${PLAY_TIMEOUTS.gameWindow} s`);
     // A game loading a map can take a while to follow; step 7 waits for it.
     yield* askFullscreen(window.id);

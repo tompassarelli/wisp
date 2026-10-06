@@ -62,6 +62,7 @@ instead of looping.
 | Empty login shell | The menus report a login screen (`LOGIN_DOORS`, `LOGIN_OPTIONS`), or signing in, for 120 s (Warcraft III signed in within 14 s on 6 Oct). | End Warcraft III and press Play in the retained launcher: the observed recovery (warcraft3-development skill). |
 | Map without its imports | Warcraft III's log has `model creation failed - war3mapImported/...` lines: the map loaded while its ladder scan ran ([play.md](play.md), step 4). | End Warcraft III and press Play. |
 | Stuck loading | On the loading screen for 120 s. | End Warcraft III and press Play. |
+| Display settings changed | The client declares `displaySettings` and its closed game's War3Preferences.txt holds other `[Video]` values ([display-settings.md](display-settings.md)). | Write the declared values into the file, keeping its other lines. |
 | Stale lobby | In a lobby from an earlier run. | `LeaveGame` on the menus' socket, or the Back button without a menu page. |
 | Score screen | An earlier match's score screen. | `ScoreScreenClose` on the menus' socket, or Back. |
 | Closed | Neither Battle.net nor Warcraft III runs. | Start Battle.net the way the game declares, then Play. |

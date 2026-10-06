@@ -76,7 +76,7 @@ names the clients file (default ~/.local/state/wisp/clients.json):
 }
 ```
 
-Each `run` directory holds its desktop's `display`, `xauthority` and
+A client may add `displaySettings`, the `[Video]` keys of War3Preferences.txt its display needs, which `doctor` restores ([display-settings.md](display-settings.md)). Each `run` directory holds its desktop's `display`, `xauthority` and
 `wayland-display` files. The first client hosts. Screen positions assume a
 2560x1440 client.
 
