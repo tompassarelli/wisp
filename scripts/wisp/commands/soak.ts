@@ -11,7 +11,7 @@ import { type Command, UsageFailure, describeCause, flagValues } from "../comman
 import { installHeadless } from "../headless";
 import { writtenPreloadFile } from "../headlessInput";
 import {
-  type SoakMatch, type SoakProject, type SoakReply, describeMatch, loadSoakGame, loadSoakProject, planSoak, playSoakMatch, readSoakReply,
+  SOAK_LIMITS, type SoakMatch, type SoakProject, type SoakReply, describeMatch, loadSoakGame, loadSoakProject, planSoak, playSoakMatch, readSoakReply,
   readSoakRepro, soakRepro,
 } from "../soak";
 import { step } from "../timings";
@@ -153,7 +153,7 @@ const runWorker = (worker: string, project: string, next: () => SoakMatch | unde
         const line = yield* Effect.promise(read);
         const reply: SoakReply = line === undefined
           ? {
-            match: sent, frames: 0, wallMs: 0, costMs: 0, worstFrameMs: 0, over: false, checksums: [],
+            match: sent, frames: 0, wallMs: 0, costMs: 0, worstFrameMs: 0, typingStallsMs: [], over: false, checksums: [],
             findings: [{ kind: "crash", frame: 0, text: `the worker process stopped${child.exitCode === null ? "" : ` with exit code ${child.exitCode}`}: ${stderr().trim().split("\n").slice(-8).join("\n    ")}` }],
           }
           : yield* Effect.try({ try: () => readSoakReply(line), catch: (cause) => new SoakFailure({ problem: `a worker's answer for ${describeMatch(sent)}`, cause }) });
@@ -176,6 +176,19 @@ const runWorker = (worker: string, project: string, next: () => SoakMatch | unde
   );
 
 const plural = (count: number, noun: string, nouns = `${noun}s`) => `${count.toLocaleString("en-US")} ${count === 1 ? noun : nouns}`;
+
+/**
+ * Recovery typing stalls, client frames that stopped longer than 1/60 s
+ * taking typed text: how many, the worst and the 95th percentile, against the
+ * budget a frame may stop for (limits.typingMs).
+ */
+export function typingStallsLine(stalls: readonly number[], budgetMs: number): string {
+  if (stalls.length === 0) return `recovery typing stalls: none (budget ${budgetMs.toFixed(1)} ms)`;
+  const sorted = [...stalls].sort((a, b) => a - b);
+  const p95 = sorted[Math.max(0, Math.ceil(0.95 * sorted.length) - 1)] ?? 0;
+  const over = sorted.filter((ms) => ms > budgetMs).length;
+  return `recovery typing stalls: ${plural(sorted.length, "client frame")} over 1/60 s, worst ${(sorted.at(-1) ?? 0).toFixed(1)} ms, p95 ${p95.toFixed(1)} ms; budget ${budgetMs.toFixed(1)} ms, ${over === 0 ? "none" : over} over it`;
+}
 
 /** A finding's lines: the match, the finding and where its repro file is. */
 const findingLines = (reply: SoakReply, repro: string | undefined) => [
@@ -209,6 +222,7 @@ const replay = (options: SoakCommandOptions, file: string) => Effect.gen(functio
     ...findingLines(result, undefined),
     result.findings.length === 0 ? "  no findings" : "",
     `  ${result.frames} frames; native call checksums ${same ? "equal the recorded ones" : `${result.checksums.join(" ")}, recorded ${repro.checksums.join(" ")}`}`,
+    `  ${typingStallsLine(result.typingStallsMs, { ...SOAK_LIMITS, ...project.limits }.typingMs)}`,
   ].filter((line) => line !== "").join("\n"));
   if (result.findings.length > 0) return yield* new SoakFailure({ problem: `${plural(result.findings.length, "finding")} replaying ${file}` });
 });
@@ -271,6 +285,7 @@ export const makeSoak = (options: SoakCommandOptions): Command => (args) => Effe
   yield* Console.log([
     `${plural(replies.length, "match", "matches")}, ${plural(frames, "frame")} (${(gameSeconds / 60).toFixed(1)} game minutes) in ${wallSeconds.toFixed(1)} s with ${plural(workers, "worker")}`
       + ` (${pool.workersStarted} started): ${(gameSeconds / Math.max(wallSeconds, 0.001)).toFixed(0)}x real time, ${cpuSeconds.toFixed(1)} s CPU`,
+    typingStallsLine(replies.flatMap(({ typingStallsMs }) => typingStallsMs), { ...SOAK_LIMITS, ...project.limits }.typingMs),
     `costliest client frame ${slowest.toFixed(1)} ms; ${found.length === 0 ? "no findings" : `${plural(findings, "finding")} (${kinds.join(", ")}) in ${plural(found.length, "match", "matches")}, repro files in ${out}`}`,
   ].join("\n"));
   if (replies.length < plan.length) return yield* new SoakFailure({ problem: `stopped at the ${run.minutes}-minute limit: ${replies.length} of ${plan.length} matches played` });

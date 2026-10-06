@@ -7,7 +7,7 @@ import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Console, Effect, Exit } from "effect";
-import { makeSoak } from "../scripts/wisp/commands/soak";
+import { makeSoak, typingStallsLine } from "../scripts/wisp/commands/soak";
 import { installHeadless } from "../scripts/wisp/headless";
 import type { Lockstep } from "../src/headless/lockstep";
 import { type SceneReport, bodyProblems } from "../scripts/wisp/scene";
@@ -57,10 +57,15 @@ test("each fault is found by its detector", () => {
   // Warcraft's edit-box stall (nativeCost.ts): 600 characters typed at once stop the game 180 ms, a typing finding.
   const typing = kinds(["fuzz", "typing"], { ...project, limits: { warmUpFrames: 0 } });
   expect(typing).toEqual([
-    expect.stringMatching(/^typing: p1's frame \d+ stops 180\.0 ms taking typed text, more than the 16\.7 ms its input helper may type at once$/),
+    expect.stringMatching(/^typing: p1's frame \d+ has a recovery typing stall of 180\.0 ms, over the 16\.7 ms budget of what its input helper may type at once$/),
   ]);
-  // Within a bound the game declares, such as its helper's, typing is no finding.
-  expect(kinds(["fuzz", "typing"], { ...project, limits: { warmUpFrames: 0, typingMs: 200 } }).filter((finding) => finding.startsWith("typing: "))).toEqual([]);
+  // Within the budget the game declares, such as its helper's, a typing stall is no finding, but it is counted.
+  const within = play(["fuzz", "typing"], { ...project, limits: { warmUpFrames: 0, typingMs: 200 } });
+  expect(within.findings.filter(({ kind }) => kind === "typing")).toEqual([]);
+  expect(within.typingStallsMs.length).toBeGreaterThan(2);
+  expect(within.typingStallsMs.every((ms) => ms === 180)).toBe(true);
+  expect(typingStallsLine(within.typingStallsMs, 200)).toBe(`recovery typing stalls: ${within.typingStallsMs.length} client frames over 1/60 s, worst 180.0 ms, p95 180.0 ms; budget 200.0 ms, none over it`);
+  expect(typingStallsLine([20, 30, 40], 32.768)).toBe("recovery typing stalls: 3 client frames over 1/60 s, worst 40.0 ms, p95 40.0 ms; budget 32.8 ms, 1 over it");
 });
 
 test("a repro file plays its match again with the same inputs, calls and findings", () => {
