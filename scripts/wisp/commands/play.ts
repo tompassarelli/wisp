@@ -1,14 +1,42 @@
 // `wisp play`: from the owner's desktop to a match of the game's declared
 // playtest (wisp:docs/play.md). The game declares its prefix, Steam shortcut,
 // map, match setup and helper; `layer` provides what its own steps use.
+// Given `wisp watch`'s ClientWatch, play runs `doctor` on its prefix first
+// and once after a failure (wisp:docs/doctor.md); play presses Play itself.
 import { Effect, Layer } from "effect";
-import { type Command, UsageFailure } from "../command";
-import { type PlayDeclaration, play } from "../play";
-import { type PlayTools, playHostLayer } from "../playHost";
+import { documentsFolder } from "../../warcraft/battleNet";
+import { type Command, type CommandFailure, UsageFailure } from "../command";
+import { DoctorHands, type DoctorTarget, doctor, withDoctor } from "../doctor";
+import { type MenuFailure, type MenuSocket, leaveLobby, reportedMenus } from "../menus";
+import { type PlayDeclaration, PlayProblem, play } from "../play";
+import { type PlayTools, playHostLayer, playMachineLayer } from "../playHost";
+import type { ClientWatch } from "../watch";
 
-export const makePlay = <R>(declaration: PlayDeclaration<R>, layer: Layer.Layer<R>, tools: Partial<PlayTools> = {}): Command => (args) =>
-  args.length > 0
-    ? Effect.fail(new UsageFailure({ problem: "play takes no arguments" }))
-    : play(declaration, (line) => console.log(line)).pipe(
-      Effect.provide(Layer.merge(playHostLayer(declaration.display, tools), layer)),
-    );
+/** Leaves through the menus' socket; without a menu page that answers, the owner leaves by hand. */
+const leaveBy = (port: number | undefined, what: string, leave: (menus: MenuSocket) => Effect.Effect<void, MenuFailure>) =>
+  Effect.scoped(Effect.gen(function*() {
+    const menus = yield* reportedMenus(port).pipe(Effect.catchTag("MenuFailure", () => Effect.void));
+    if (menus === undefined) return yield* new PlayProblem({ problem: `Warcraft III shows ${what} from an earlier run and its menu page doesn't answer; leave it, then run play again` });
+    yield* leave(menus).pipe(Effect.mapError((cause) => new PlayProblem({ problem: `couldn't leave ${what}: ${cause.message}` })));
+  }));
+
+export const makePlay = <R>(declaration: PlayDeclaration<R>, layer: Layer.Layer<R>, tools: Partial<PlayTools> = {}, watch?: Layer.Layer<ClientWatch, CommandFailure>): Command => (args) => {
+  if (args.length > 0) return Effect.fail(new UsageFailure({ problem: "play takes no arguments" }));
+  const print = (line: string) => console.log(line);
+  const run = play(declaration, print).pipe(Effect.provide(Layer.merge(playHostLayer(declaration.display, tools), layer)));
+  if (watch === undefined) return run;
+  const { prefix, shortcut, menuReportPort } = declaration;
+  const target: DoctorTarget = {
+    client: { name: "Warcraft III", documents: documentsFolder(prefix), ...(menuReportPort === undefined ? {} : { menuReportPort }) },
+    prefix,
+    display: declaration.display,
+    start: { kind: "steam", appId: shortcut.appId, name: shortcut.name },
+  };
+  const hands = DoctorHands.of({
+    leaveLobby: () => leaveBy(menuReportPort, "a lobby", leaveLobby),
+    closeScore: () => leaveBy(menuReportPort, "a score screen", (menus) => menus.send("ScoreScreenClose")),
+  });
+  // Each doctor run holds the watch only while it runs, so play's own menu steps have the report port.
+  const check = doctor([target], print).pipe(Effect.provide(Layer.mergeAll(playMachineLayer(tools), Layer.succeed(DoctorHands, hands), watch)));
+  return withDoctor(check, print, run);
+};

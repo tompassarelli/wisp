@@ -1,0 +1,5 @@
+I 2026-10-06 12:44:44.234612 [BNLogin] {Main} Logged into Battle.net successfully.
+I 2026-10-06 12:45:24.904671 [GameLaunchController] {Main} LaunchBinary: uid=w3 selectedRegion=US binaryType=game
+I 2026-10-06 12:45:25.627653 [InstallManager] {Main} Launched C:/Program Files (x86)/Warcraft III/_retail_/x86_64/Warcraft III.exe with args: -launch -uid w3, pid: 2784
+D 2026-10-06 12:45:27.900454 [InstallManager] {Main} Game is running: w3
+I 2026-10-06 12:57:10.365896 [GameLaunchController] {Main} LaunchBinary: uid=w3 selectedRegion=US binaryType=game

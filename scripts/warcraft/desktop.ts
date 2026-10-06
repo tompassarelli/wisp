@@ -72,7 +72,11 @@ function run(client: string, operation: string, command: readonly string[], env:
 
 const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 
-export const loadClients = (path: string) =>
+export type ClientsConfig = typeof ClientsFile.Type;
+export type ClientEntry = ClientsConfig["clients"][number];
+
+/** The clients file, decoded: its tools and each client's desktop run folder, Documents folder and menu port. */
+export const readClientsFile = (path: string) =>
   Effect.gen(function*() {
     const raw = yield* Effect.tryPromise({ try: () => Bun.file(path).json(), catch: fail("read clients file", path) });
     const config = yield* Schema.decodeUnknownEffect(ClientsFile)(raw).pipe(Effect.mapError(fail("decode clients file", path)));
@@ -80,12 +84,34 @@ export const loadClients = (path: string) =>
     if (ports.some((port) => port < 1 || port > 65535) || new Set(ports).size !== ports.length) {
       return yield* new DesktopFailure({ operation: "decode clients file", client: path, cause: "menuReportPort must be a distinct port from 1 to 65535 for each configured client" });
     }
-    return yield* Effect.forEach(config.clients, ({ name, run: dir, documents, menuReportPort }) =>
+    return config;
+  });
+
+/** A client's private desktop: its X display and its compositor, from its run folder. */
+export const desktopSession = (entry: ClientEntry) =>
+  Effect.gen(function*() {
+    const read = (file: string) =>
+      Effect.tryPromise({ try: async () => (await Bun.file(join(entry.run, file)).text()).trim(), catch: fail(`read desktop ${file}`, entry.name) });
+    const x11 = { DISPLAY: yield* read("display"), XAUTHORITY: yield* read("xauthority") };
+    const wayland = { XDG_RUNTIME_DIR: join(entry.run, "runtime"), WAYLAND_DISPLAY: yield* read("wayland-display") };
+    return { x11, wayland };
+  });
+
+/** The ids of the client display's windows titled exactly `title`. */
+export const findWindows = (tools: Tools, name: string, x11: Record<string, string>, title: string) =>
+  run(name, `find ${title} window`, [tools.xdotool, "search", "--name", `^${title.replace(/[.\\^$|?*+()[\]{}]/g, "\\$&")}$`], x11).pipe(
+    Effect.map((bytes) => text(bytes).split("\n").filter((line) => line !== "")),
+    // xdotool search exits 1 when nothing matches.
+    Effect.catchTag("DesktopFailure", () => Effect.succeed([] as string[])),
+  );
+
+export const loadClients = (path: string) =>
+  Effect.gen(function*() {
+    const config = yield* readClientsFile(path);
+    return yield* Effect.forEach(config.clients, (entry) =>
       Effect.gen(function*() {
-        const read = (file: string) =>
-          Effect.tryPromise({ try: async () => (await Bun.file(join(dir, file)).text()).trim(), catch: fail(`read desktop ${file}`, name) });
-        const x11 = { DISPLAY: yield* read("display"), XAUTHORITY: yield* read("xauthority") };
-        const wayland = { XDG_RUNTIME_DIR: join(dir, "runtime"), WAYLAND_DISPLAY: yield* read("wayland-display") };
+        const { name, documents, menuReportPort } = entry;
+        const { x11, wayland } = yield* desktopSession(entry);
         const windows = text(yield* run(name, "find Warcraft window", [config.tools.xdotool, "search", "--name", "^Warcraft III$"], x11)).split("\n").filter((line) => line !== "");
         if (windows.length !== 1) return yield* new DesktopFailure({ operation: "find Warcraft window", client: name, cause: `${windows.length} windows` });
         return { name, documents, ...(menuReportPort === undefined ? {} : { menuReportPort }), tools: config.tools, x11, wayland, window: windows[0]! } satisfies Client;
@@ -148,9 +174,12 @@ export function parseWords(tsv: string): Word[] {
 /** Every word in the frame with its centre, for finding where controls are. */
 export const words = (client: Client, ink: Ink = "light") =>
   Effect.gen(function*() {
-    const frame = yield* capture(client);
-    return parseWords(text(yield* run(client.name, "read words", [client.tools.tesseract, "stdin", "stdout", "--psm", "11", "tsv"], {}, separateInk(frame, ink))));
+    return yield* frameWords(client, yield* capture(client), ink);
   });
+
+/** Every word of one captured frame, read with one ink. */
+export const frameWords = (client: Client, frame: Frame, ink: Ink) =>
+  run(client.name, "read words", [client.tools.tesseract, "stdin", "stdout", "--psm", "11", "tsv"], {}, separateInk(frame, ink)).pipe(Effect.map((bytes) => parseWords(text(bytes))));
 
 /** Gives the Warcraft window compositor and X11 focus. */
 export const focus = (client: Client) =>
@@ -201,6 +230,19 @@ function pointer(client: Client) {
 export const click = (client: Client, x: number, y: number) =>
   Effect.gen(function*() {
     yield* focus(client);
+    yield* pressAt(client, x, y);
+  });
+
+/** Gives a window of the client's display X11 focus, and compositor focus when its toplevel has this title. */
+export const focusWindow = (client: Client, title: string) =>
+  Effect.gen(function*() {
+    yield* run(client.name, `focus ${title}`, [client.tools.wlrctl, "toplevel", "focus", `title:${title}`], client.wayland).pipe(Effect.ignore);
+    yield* run(client.name, `activate ${title} window`, [client.tools.xdotool, "windowactivate", "--sync", client.window], client.x11);
+  });
+
+/** Clicks at a frame position in whatever window has focus, as click does once Warcraft has it. */
+export const pressAt = (client: Client, x: number, y: number) =>
+  Effect.gen(function*() {
     const from = yield* pointer(client);
     yield* run(client.name, "move pointer", [client.tools.xdotool, "mousemove_relative", "--", String(x - from.x), String(y - from.y)], client.x11);
     const at = yield* pointer(client);

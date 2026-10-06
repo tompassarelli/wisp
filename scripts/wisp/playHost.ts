@@ -301,3 +301,6 @@ export const playHostLayer = (display: string, tools: Partial<PlayTools> = {}) =
   const resolved = { ...PLAY_TOOLS, ...tools };
   return Layer.merge(Layer.succeed(PlayMachine, PlayMachine.of(machine(resolved))), Layer.succeed(PlayDesktop, PlayDesktop.of(desktop(resolved, display))));
 };
+
+/** The host alone (processes, files, Steam), for commands that drive no desktop of their own, like `doctor`. */
+export const playMachineLayer = (tools: Partial<PlayTools> = {}) => Layer.succeed(PlayMachine, PlayMachine.of(machine({ ...PLAY_TOOLS, ...tools })));
