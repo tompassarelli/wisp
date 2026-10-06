@@ -20,14 +20,9 @@ export function toInt(value: number): number {
   return value < 0 ? Math.ceil(value) : Math.floor(value);
 }
 
-function binary32Infinity(): number {
-  // 2^(24 * 64) overflows binary32 and binary64 without dividing by zero.
-  let result = 16777216.0;
-  for (let i = 1; i <= 6; i++) result *= result;
-  return result;
-}
-
-const INFINITY = binary32Infinity();
+// math.huge in Lua. Not an overflowing product: a product rounded toward zero,
+// as Warcraft's raw * can be, overflows to the largest finite value instead.
+const INFINITY = Infinity;
 const SIGNIFICAND_UNIT = 1.1920928955078125e-7;
 
 /** 2^-126 through 2^127, the normal powers of two: element i is 2^(i - 126). */
