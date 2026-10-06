@@ -66,14 +66,14 @@ client, and registers the toggle's chat text for the first four players.
 
 ## The overlay
 
-Typing the toggle shows or hides, for that player only, the medians and
-maxima of the last 120 frames:
+Typing the toggle shows or hides, for that player only, the medians, 95th
+percentiles and maxima of the last 120 frames:
 
 ```text
-frame cost, last 120 frames, median / max
-Lua ms: 0.42 / 3.10 (clock step 0.98 ms)
-natives: 312 / 498
-catch-up frames: 1 / 4
+frame cost, last 120 frames, median / p95 / max
+Lua ms: 0.42 / 1.95 / 3.10 (clock step 0.98 ms)
+natives: 312 / 470 / 498
+catch-up frames: 1 / 1 / 4
 ```
 
 It updates every 30 frames, twice a second. Its frame text and visibility are local
@@ -115,7 +115,10 @@ to a fight, moves them too.
 [runLuaPerf](../src/headless/luaPerf.ts) (wisp:src/headless/luaPerf.ts) plays
 a journey with the map's compiled bundle in simulated clients in 32-bit Lua,
 as [runLuaJourney](headless.md#in-32-bit-lua) does, and measures each
-client's frames:
+client's frames; `runLuaPerfWith(map, bundle, declarations, play, options)`
+measures a game's own driver instead, such as a match set up through its
+menus with input helpers typing, and `measure.begin()` counts frames from the
+one after it, such as a match's first:
 
 - **Lua instructions**: while a client runs a callback, a count hook counts
   every 100th instruction, restarted at each run, so a run counts its
@@ -127,35 +130,112 @@ client's frames:
 - **Lua time**: `os.clock` while each client ran, less the time in natives,
   in microseconds. It includes the hook's cost and varies with the machine.
 - **Natives**: every declared function's calls, local-only ones included.
+- **Allocated KB**: what the map's code allocated. The collector stops while
+  a client runs, so Lua time holds none of its work; between runs it collects
+  once the heap has grown 16 MB, and the run reports those collections' time
+  per kilobyte (`collector us=... kb=...`).
+- **Typed characters**: text the driver says reached the client's edit box
+  before the frame (`measure.typed(slot, characters)`).
+- **Predicted native time** (`native-us`, `typing-us`): the frame's cost in
+  Warcraft by the [model](#predicted-native-cost), the map's callbacks and the
+  edit-box stall apart.
 
 It prints a heading and, per client and value, the start (before the first
-frame), the total, and the median, mean and maximum per frame, here one
-client of Smashcraft's development build in its 600-frame quick match, whose
-maximum is the frame that loads a hot reload:
+frame), the total, and the median, 95th percentile, mean and maximum per
+frame, here one client of Smashcraft's native bot session's four-fighter
+match (`bun wisp perf bot-four`, 1800 frames), counted from its first frame:
 
 ```text
-frames 600 step 100 problems 0
-p0 instructions start=1158900 total=51922600 median=47800 mean=86538 max=16184800
-p0 lua-us start=57491 total=835408 median=831 mean=1392 max=184030
-p0 natives start=111 total=104988 median=138 mean=175 max=7919
+frames 1800 step 100 problems 0
+collector us=1132990 kb=183545
+p0 instructions start=1220800 total=509878400 median=212600 p95=847100 mean=283266 max=2664800
+p0 lua-us start=68161 total=9104176 median=3860 p95=15385 mean=5058 max=39151
+p0 natives start=111 total=444483 median=156 p95=347 mean=247 max=2335
+p0 alloc-kb start=14930 total=80789 median=15 p95=108 mean=45 max=721
+p0 typed start=0 total=37561 median=0 p95=51 mean=21 max=60
+p0 native-us start=56077 total=11907900 median=4890 p95=20167 mean=6616 max=57943
+p0 typing-us start=0 total=802055 median=0 p95=1301 mean=446 max=1800
 ```
+
+With `samples`, it also prints every client's every frame
+(`frame F pSLOT instructions=... lua-us=... natives=... alloc-bytes=... typed=...`),
+from which a model is fitted.
 
 A game adds `perf` to its program with `makePerf`
 (wisp:scripts/wisp/commands/perf.ts), naming the tsconfig and bundle of its
-map and of a Lua program that calls `runLuaPerf(map, journey, arg[1], arg[2])`:
+map, a Lua program that calls `runLuaPerf` or `runLuaPerfWith` with
+`arg[1]` and `arg[2]`, the name of its default run and its other runs, each
+with the map it measures. The program gets the run's name, the frames to
+play and `samples` as its next arguments.
 
-- `perf [--out FILE]` compiles both, runs the program with the 32-bit Lua
-  that `LUA` names, prints the run and writes it to FILE.
+- `perf [RUN] [--frames N] [--samples] [--out FILE]` compiles the run's map
+  and the program, runs it with the 32-bit Lua that `LUA` names, prints the
+  run and each client's predicted native cost per frame, and writes the run
+  to FILE; for the run above:
+
+  ```text
+  p0 predicted native per frame: 4.89 ms p50, 20.17 ms p95, 57.94 ms worst; typing stall 1.80 ms worst
+  ```
+
 - `perf compare A B [--threshold SHARE]` compares two runs per client and
-  fails when B's mean or maximum instructions per frame, or its mean native
-  calls per frame, exceed A's by more than the threshold, 5% by default, or
-  when B's journey found a problem. Lua time is printed, not held to it.
+  fails when, beyond the threshold (5% by default), B's instructions rise at
+  their mean or maximum, its native calls at their mean, its allocation at
+  its mean or 95th percentile, its predicted native time at its median or
+  95th percentile, or its worst typing stall; or when B's run found a
+  problem. Each of these is made from counts, so the same code compares
+  alike on any machine; Lua time is printed, not held to it.
 
 For CI, run `perf --out` on both versions and `perf compare` the two files.
+Smashcraft's 0.0.48 four-fighter match against 0.0.49's fails it on
+allocation, its mean up 273% and its 95th percentile 501%: 0.0.48's binary32
+arithmetic still allocated.
+
+`wisp headless --cost` (wisp:scripts/wisp/commands/headless.ts) plays the
+journey in Bun as usual, then the perf program's run of the same name, and
+prints the predicted native cost per frame too.
 
 The headless count differs from the game's in one way: an emulated native is
 a stub, so a Blizzard.j function counts once, without the natives it would
 call.
+
+## Predicted native cost
+
+[nativeFrameCost](../src/headless/nativeCost.ts) (wisp:src/headless/nativeCost.ts)
+turns what a headless frame did into what it would cost in Warcraft:
+
+- the map's callbacks: its Lua instructions at the development host's 32-bit
+  Lua rate times Warcraft's Lua speed factor, plus a cost per native call and
+  a collector cost per kilobyte allocated: what the frame meter's Lua time
+  measures natively;
+- the edit-box stall: Warcraft takes typed text at a cost that grows with the
+  square of the characters it takes at once, outside the callbacks.
+
+The Lua term counts instructions, not time, so a prediction is the same on
+every run and every machine. `WARCRAFT_COST` holds the measured constants:
+
+| Term | Value | From |
+| --- | --- | --- |
+| Host 32-bit Lua | 18.2 µs per 1000 instructions | Smashcraft's four-fighter bot match on the development host (6 October 2026) |
+| Lua speed factor | 1.17 | Smashcraft's 4096-frame workload, Warcraft against the same host's Lua32 (smashcraft:evidence/native-frame-cost-20261005) |
+| Native call | 2 µs | fitted to Smashcraft 0.0.49's four-fighter overlay |
+| Collector | 2 µs per KB | fitted to the same; the host's own full collections cost 7 µs per KB |
+| Typing | 0.5 µs per character squared | 608 characters held a client about 180 ms (smashcraft#48) |
+
+Checked against the frame meter's overlay in the native bot session's
+four-fighter rematch (median and maximum of every 120 frames), with the
+headless frames replayed through the same windows, its 1 ms clock steps
+included:
+
+| Build | Native median frame | Predicted | Native worst frame, median window | Predicted |
+| --- | --- | --- | --- | --- |
+| 0.0.49 (fitted) | 5.0 ms (windows 3.5–6.0) | 4.9 ms | 48 ms (30–105) | 52 ms |
+| 0.0.48 | 4.0 ms (windows 3.1–4.9) | 4.6 ms | 35 ms (18–66) | 50 ms |
+
+Each frame's median is within 20% on both builds; 0.0.48's worst frames are
+predicted 40% high. Those overlays showed no 95th percentile, so the
+overlay shows it now. The meter's native clock is likely wall time (Windows'
+`clock()`), so a reading taken while the machine runs other work is
+inflated; calibrate on a quiet machine.
 
 ## What it costs
 

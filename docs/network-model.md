@@ -2,13 +2,13 @@
 
 By default the [headless runtime](headless.md) delivers a synchronized
 message before the frame after the one that sent it. Warcraft delivers it
-several frames later. `syncDelivery()` (wisp:scripts/wisp/syncChannel.ts)
+several frames later. `syncDelivery()` (wisp:src/headless/syncChannel.ts)
 gives headless clients the latency Smashcraft's native traces measured, so a
 map's rollback, prediction and timeout logic meets realistic delays in a
 second-long run.
 
 ```ts
-import { MEASURED_BATTLE_NET, syncDelivery } from "wisp/scripts/wisp/syncChannel";
+import { MEASURED_BATTLE_NET, syncDelivery } from "wisp/src/headless/syncChannel";
 
 const clients = headless.clients(entry, [0, 1], { delivery: syncDelivery(MEASURED_BATTLE_NET, 7) });
 ```

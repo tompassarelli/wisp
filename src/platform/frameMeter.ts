@@ -148,12 +148,20 @@ function findClock(): { clock: ((this: void) => number) | undefined; step: numbe
 
 const milliseconds = (microseconds: number) => reportNumber(microseconds / 1000);
 
+/** The 95th percentile of a ring's values, nearest rank: what a cost model's p95 is checked against. */
+function ninetyFifth(source: Ring): number {
+  const sorted: number[] = [];
+  for (let index = 0; index < source.count; index++) sorted.push(source.values[index] ?? 0);
+  sorted.sort((left, right) => left - right);
+  return sorted[Math.max(0, Math.ceil(f32(0.95) * sorted.length) - 1)] ?? 0;
+}
+
 function overlayText(state: MeterState): string {
   const { lua, natives, catchUp, frames } = summary(state, state.recent);
   const time = lua === undefined
     ? "Lua: no clock"
-    : `Lua ms: ${milliseconds(lua.median * 1000000)} / ${milliseconds(lua.max * 1000000)} (clock step ${state.step * 100000 < 1 ? "under 0.01" : milliseconds(state.step * 1000000)} ms)`;
-  return `frame cost, last ${frames} frames, median / max\n${time}\nnatives: ${reportNumber(natives.median)} / ${reportNumber(natives.max)}\ncatch-up frames: ${reportNumber(catchUp.median)} / ${reportNumber(catchUp.max)}`;
+    : `Lua ms: ${milliseconds(lua.median * 1000000)} / ${milliseconds(ninetyFifth(state.recent.lua) * 1000000)} / ${milliseconds(lua.max * 1000000)} (clock step ${state.step * 100000 < 1 ? "under 0.01" : milliseconds(state.step * 1000000)} ms)`;
+  return `frame cost, last ${frames} frames, median / p95 / max\n${time}\nnatives: ${reportNumber(natives.median)} / ${reportNumber(ninetyFifth(state.recent.natives))} / ${reportNumber(natives.max)}\ncatch-up frames: ${reportNumber(catchUp.median)} / ${reportNumber(ninetyFifth(state.recent.catchUp))} / ${reportNumber(catchUp.max)}`;
 }
 
 function microseconds(window: FrameWindow): FrameWindow {

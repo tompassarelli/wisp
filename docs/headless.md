@@ -272,12 +272,15 @@ headless: {
 },
 ```
 
-`headless [JOURNEY] [--clients N]` plays the named journey, or the first, in
+`headless [JOURNEY] [--clients N] [--cost]` plays the named journey, or the first, in
 N clients (2 by default, at most 4, the slots Wisp's per-player files cover)
 and prints each client's calls and checksum, the first desync, a reload not
 running, each client's error report file and thrown stack, and each client's
 latest scene report with what a player would see wrong. It exits 1 when it
-printed a problem. The entry module loads when the command runs, so the
+printed a problem. With `--cost` and the game's perf program (`makeHeadless(load,
+perf)`), it then plays the journey in 32-bit Lua and prints each client's
+predicted native cost per frame ([frame cost](frame-cost.md#predicted-native-cost)).
+The entry module loads when the command runs, so the
 project's host type check never reads map code.
 
 ## Boundaries
