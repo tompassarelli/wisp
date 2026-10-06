@@ -3,6 +3,8 @@
 // The rules reject
 // - decimal literals that aren't binary32 values, `%`, `>>>`, Math.floor(a / b),
 //   and runtime services without a deterministic Lua meaning;
+// - `.length` of an array whose elements may be undefined: Lua's length of a
+//   table with nil in it is any border, so Bun and Warcraft disagree;
 // - type escapes in game code (tests excepted): `any`, `as unknown as` and
 //   non-null `!`, which assert what the code should check.
 // Node, Bun and DOM APIs need no rule: the map tsconfig doesn't declare them.
@@ -12,6 +14,7 @@
 // (wisp:scripts/numberRules.ts) all run scanNumberRules. Each supplies its
 // TypeScript's syntax module and says where an identifier is declared, so
 // TypeScript 6's language service and TypeScript 7's API share these rules.
+// The length rule also needs the array's type, which each asks its checker for.
 import type * as ts from "typescript";
 
 /** The diagnostic code every number rule reports. */
@@ -45,7 +48,7 @@ export interface RuleSyntax<N extends RuleNode<N>> {
   isCallExpression(node: N): node is N & { readonly expression: N; readonly arguments: readonly N[] };
   isParenthesizedExpression(node: N): node is N & { readonly expression: N };
   isPrefixUnaryExpression(node: N): node is N & { readonly operator: number };
-  isPropertyAccessExpression(node: N): node is N & { readonly expression: N; readonly name: Named };
+  isPropertyAccessExpression(node: N): node is N & { readonly expression: N; readonly name: N & Named };
   isAsExpression(node: N): node is N & { readonly expression: N; readonly type: N };
   isNonNullExpression(node: N): boolean;
   isTypeReferenceNode(node: N): boolean;
@@ -68,7 +71,11 @@ export interface Finding<N> {
   readonly node: N;
   readonly message: string;
   readonly condition?: { readonly identifier: N; readonly test: DeclarationTest };
+  /** The finding stands only if this node's type is an array or tuple whose elements may be undefined. */
+  readonly holeyArray?: N;
 }
+
+export const HOLEY_LENGTH_MESSAGE = "the length of an array that may hold undefined is any of its borders in Lua; loop to a fixed count or keep the count";
 
 export const ROUNDING_HELPER_FILE = "/src/sim/f32.ts";
 
@@ -136,6 +143,10 @@ export function scanNumberRules<N extends RuleNode<N>>(syntax: RuleSyntax<N>, fi
       } else if (isMathMember(node.expression, "random")) {
         reject(node, "Math.random differs between clients; draw from the synchronized simulation instead");
       }
+    } else if (syntax.isPropertyAccessExpression(node) && node.name.text === "length") {
+      // An identifier or a property names the array, and its type is asked for at that name.
+      const array = syntax.isIdentifier(node.expression) ? node.expression : syntax.isPropertyAccessExpression(node.expression) ? node.expression.name : undefined;
+      if (array !== undefined) findings.push({ node, message: HOLEY_LENGTH_MESSAGE, holeyArray: array });
     } else if (syntax.isIdentifier(node)) {
       const service = RUNTIME_SERVICES.get(node.text);
       if (service !== undefined && !syntax.isTypeReferenceNode(node.parent)) {
@@ -152,6 +163,15 @@ export function scanNumberRules<N extends RuleNode<N>>(syntax: RuleSyntax<N>, fi
   return findings;
 }
 
+/** Whether a TypeScript 6 type is an array or tuple, or a union with one, whose elements may be undefined. */
+export function isHoleyArray(typescript: typeof ts, checker: ts.TypeChecker, type: ts.Type): boolean {
+  const mayBeUndefined = (element: ts.Type): boolean =>
+    (element.flags & (typescript.TypeFlags.Undefined | typescript.TypeFlags.Void)) !== 0 || (element.isUnion() && element.types.some(mayBeUndefined));
+  if (type.isUnion()) return type.types.some((member) => isHoleyArray(typescript, checker, member));
+  if (!checker.isArrayType(type) && !checker.isTupleType(type)) return false;
+  return checker.getTypeArguments(type as ts.TypeReference).some(mayBeUndefined);
+}
+
 /** The declarations of an identifier's symbol in a TypeScript 6 program, following imports. */
 export function declarationsOf(typescript: typeof ts, program: ts.Program, node: ts.Node): Declaration[] {
   const checker = program.getTypeChecker();
@@ -166,7 +186,8 @@ export function declarationsOf(typescript: typeof ts, program: ts.Program, node:
 /**
  * Each tree's findings, which depend only on its text. A program keeps an
  * unchanged file's tree, so a compile scans only the files that changed; where
- * each finding's identifier is declared is resolved again in every program.
+ * each finding's identifier is declared, and each read length's array type,
+ * are resolved again in every program.
  */
 const scans = new WeakMap<ts.SourceFile, readonly Finding<ts.Node>[]>();
 
@@ -174,15 +195,16 @@ const scans = new WeakMap<ts.SourceFile, readonly Finding<ts.Node>[]>();
 export function programNumberRules(typescript: typeof ts, program: ts.Program, file: ts.SourceFile): ts.Diagnostic[] {
   if (file.isDeclarationFile || program.isSourceFileFromExternalLibrary(file)) return [];
   // Binding sets the parent links the rules follow.
-  program.getTypeChecker();
+  const checker = program.getTypeChecker();
   let findings = scans.get(file);
   if (findings === undefined) {
     findings = scanNumberRules<ts.Node>(typescript, file);
     scans.set(file, findings);
   }
   const diagnostics: ts.Diagnostic[] = [];
-  for (const { node, message, condition } of findings) {
+  for (const { node, message, condition, holeyArray } of findings) {
     if (condition !== undefined && !stands(condition.test, declarationsOf(typescript, program, condition.identifier))) continue;
+    if (holeyArray !== undefined && !isHoleyArray(typescript, checker, checker.getTypeAtLocation(holeyArray))) continue;
     diagnostics.push({
       category: typescript.DiagnosticCategory.Error,
       code: NUMBER_RULE_CODE,

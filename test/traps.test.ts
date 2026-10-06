@@ -24,5 +24,5 @@ test("each fixture is rejected exactly on its marked lines", () => {
       .map((diagnostic) => diagnostic.file!.getLineAndCharacterOfPosition(diagnostic.start!).line + 1);
     expect({ file, lines: [...new Set(rejected)].sort((a, b) => a - b) }).toEqual({ file, lines: marked });
   }
-  expect(files.length).toBe(4);
+  expect(files.length).toBe(5);
 });
