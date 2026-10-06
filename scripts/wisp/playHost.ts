@@ -1,27 +1,33 @@
 // The live machine and desktop `play` runs on: /proc, files and Steam on the
-// host; niri's IPC, grim, Tesseract and xdotool on the owner's desktop. The
-// game's X display is the declared one; niri and grim use the environment
-// play runs in, which on the owner's desktop names its compositor.
+// host; niri's IPC, grim, Tesseract, wlrctl and xdotool on the owner's
+// desktop. The game's X display is the declared one; niri, grim and wlrctl use
+// the environment play runs in, which on the owner's desktop names its
+// compositor.
+//
+// The pointer moves through the compositor (wlrctl's virtual pointer), as a
+// mouse does: on the owner's desktop the X pointer stays where the
+// compositor's pointer is, so XTEST motion doesn't move it.
 import { spawn } from "node:child_process";
 import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, statSync } from "node:fs";
 import { basename, dirname } from "node:path";
-import { Effect, Layer, Schema } from "effect";
+import { Clock, Effect, Layer, Schema } from "effect";
 import { type ProcessInfo, serverDirectoryName } from "../warcraft/battleNet";
 import { parseWords, separateInk } from "../warcraft/desktop";
 import { describeCause } from "./command";
 import { decodePpm } from "./frameProbe";
-import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow } from "./play";
+import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow, pointerMove, spotTargets } from "./play";
 
 /** The programs play runs; each is a command name on PATH or a path. */
 export interface PlayTools {
   readonly grim: string;
   readonly xdotool: string;
   readonly tesseract: string;
+  readonly wlrctl: string;
   readonly niri: string;
   readonly steam: string;
 }
 
-export const PLAY_TOOLS: PlayTools = { grim: "grim", xdotool: "xdotool", tesseract: "tesseract", niri: "niri", steam: "steam" };
+export const PLAY_TOOLS: PlayTools = { grim: "grim", xdotool: "xdotool", tesseract: "tesseract", wlrctl: "wlrctl", niri: "niri", steam: "steam" };
 
 const problem = (what: string) => (cause: unknown) => new PlayProblem({ problem: `${what}: ${describeCause(cause)}` });
 
@@ -167,7 +173,7 @@ const NiriWindow = Schema.Struct({
 const NiriWorkspace = Schema.Struct({ id: Schema.Int, output: Schema.NullOr(Schema.String) });
 const NiriOutput = Schema.Struct({
   name: Schema.String,
-  logical: Schema.NullOr(Schema.Struct({ width: Schema.Int, height: Schema.Int })),
+  logical: Schema.NullOr(Schema.Struct({ x: Schema.Int, y: Schema.Int, width: Schema.Int, height: Schema.Int })),
 });
 
 /** `niri msg --json` replies, decoded; outputs come keyed by name. */
@@ -225,16 +231,30 @@ const desktop = (tools: PlayTools, display: string): PlayDesktop["Service"] => {
       return preferred.map(({ window }) => window).reduce<XWindow | undefined>((best, window) =>
         (best === undefined || window.width * window.height > best.width * best.height ? window : best), undefined);
     }),
-    // Warcraft follows relative pointer motion under Xwayland, not absolute moves, and reads it after XTEST reports the new position.
-    click: (window, x, y) => Effect.gen(function*() {
-      const from = yield* pointer;
-      yield* xdotool("mousemove_relative", "--", String(x - from.x), String(y - from.y));
-      const at = yield* pointer;
-      if (at.x !== x || at.y !== y) return yield* new PlayProblem({ problem: `the pointer stopped at ${at.x},${at.y} instead of ${x},${y} over window ${window.id}` });
+    click: (spot) => Effect.gen(function*() {
+      const output = (yield* niri(tools, "outputs", NiriOutput)).find(({ name }) => name === spot.output)?.logical ?? undefined;
+      if (output === undefined) return yield* new PlayProblem({ problem: `niri has no output ${spot.output}` });
+      const { root } = spotTargets(spot, output);
+      // One logical pixel, in X pixels.
+      const tolerance = Math.max(1, Math.ceil(spot.window.width / output.width));
+      const arrived = (at: { readonly x: number; readonly y: number }) => Math.abs(at.x - root.x) <= tolerance && Math.abs(at.y - root.y) <= tolerance;
+      let at = yield* pointer;
+      // The X pointer can be stale until the compositor's pointer moves over an X window, so the move is corrected from where it lands.
+      for (let move = 0; move < 4 && !arrived(at); move++) {
+        const { dx, dy } = pointerMove(spot, output, at);
+        // getopt would read a negative distance as an option; POSIXLY_CORRECT ends options at "pointer".
+        yield* run([tools.wlrctl, "pointer", "move", dx.toFixed(1), dy.toFixed(1)], { POSIXLY_CORRECT: "1" });
+        const from = at;
+        const deadline = (yield* Clock.currentTimeMillis) + 1000;
+        do {
+          yield* Effect.sleep("20 millis");
+          at = yield* pointer;
+        } while (at.x === from.x && at.y === from.y && (yield* Clock.currentTimeMillis) < deadline);
+      }
+      if (!arrived(at)) return yield* new PlayProblem({ problem: `the pointer stopped at ${at.x},${at.y} instead of ${root.x},${root.y} (X root pixels) over window ${spot.window.id}` });
+      // The game reads the move before the press.
       yield* Effect.sleep("120 millis");
-      yield* xdotool("mousedown", "1");
-      yield* Effect.sleep("60 millis");
-      yield* xdotool("mouseup", "1");
+      yield* run([tools.wlrctl, "pointer", "click", "left"], {});
     }),
     keys: (_window, ...keys) => xdotool("key", "--clearmodifiers", ...keys).pipe(Effect.asVoid),
     typeText: (_window, value) => xdotool("type", "--clearmodifiers", "--delay", "12", "--", value).pipe(Effect.asVoid),

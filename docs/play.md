@@ -37,7 +37,10 @@ message that says what to do:
    `Could not launch ... Warcraft III.exe` or an expired pending launch is a
    failure. On a failure it ends every program of the prefix, waits for
    Steam to see the shortcut end, starts the launcher again alone and presses
-   Play once more. It never starts Warcraft III.exe itself. The game's window
+   Play once more. It never starts Warcraft III.exe itself. Battle.net's
+   `--exec="launch W3"` would need a second Battle.net.exe inside the
+   launcher's own Steam runtime container; started from outside, Wine would
+   start a second wineserver on the prefix, so `play` presses Play. The game's window
    becomes fullscreen as soon as it appears, so a capture of its output is the
    game's frame.
 4. **Custom game.** From the main menu: Multiplayer, Custom Games, Create
@@ -81,14 +84,23 @@ The map must already be in `Maps/FOLDER` of the prefix's Documents/Warcraft III.
 
 ## What it needs
 
-The owner's niri session (`niri msg`), `grim`, `tesseract` and `xdotool`, and
-`steam`; each is looked up on PATH unless the game passes its path in
-`tools`. The game runs on the declared X display under niri's Xwayland
-(xwayland-satellite); clicks are XTEST relative pointer moves checked against
-the pointer position, as on private desktops. Every wait has a bound
-(`PLAY_TIMEOUTS`); none is a readiness delay.
+The owner's niri session (`niri msg`), `grim`, `tesseract`, `wlrctl`,
+`xdotool` and `steam`; each is looked up on PATH unless the game passes its
+path in `tools`. The game runs on the declared X display under niri's
+Xwayland (xwayland-satellite). Every wait has a bound (`PLAY_TIMEOUTS`); none
+is a readiness delay.
+
+Clicks move the compositor's own pointer with `wlrctl pointer move` (niri's
+virtual pointer) and click with `wlrctl pointer click`, as a mouse does. On
+the owner's desktop the X pointer stays where the compositor's pointer is, so
+XTEST motion doesn't move it: on 6 Oct an XTEST move to 2075,1518 left the X
+pointer at 1194,882. A target is read in the capture's pixels (2880x1920 on a
+1440x960 output at scale 2), moved to in the output's logical pixels and
+checked in the X root's pixels, which match the capture there; a move that
+lands short is corrected from where the X pointer is, up to four times. Typed
+text and keys are XTEST (`xdotool`) into the focused game window.
 
 The fakes in wisp:test/play.test.ts cover each step's success and failure
 messages with the recorded window, log and process shapes. Reading the menus
-at the owner's resolution and XTEST activating Warcraft's and Battle.net's
-buttons are properties of the real desktop, which only a native run checks.
+at the owner's resolution and the buttons taking the compositor's clicks are
+properties of the real desktop, which only a native run checks.

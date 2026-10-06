@@ -69,6 +69,47 @@ export interface Screen {
   readonly words: readonly Word[];
 }
 
+/**
+ * A place to click: a point of an image `area` that covers `output` exactly,
+ * as its capture or the fullscreen X window on it does, and that X window.
+ */
+export interface Spot {
+  readonly output: string;
+  readonly area: { readonly width: number; readonly height: number };
+  readonly x: number;
+  readonly y: number;
+  readonly window: XWindow;
+}
+
+/** An output's place in the compositor's logical pixels, which its pointer moves in. */
+export interface OutputArea {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** Where a spot is in the compositor's logical pixels and in the X root window's pixels. */
+export function spotTargets(spot: Spot, output: OutputArea) {
+  const across = spot.x / spot.area.width;
+  const down = spot.y / spot.area.height;
+  return {
+    logical: { x: output.x + across * output.width, y: output.y + down * output.height },
+    root: { x: spot.window.x + Math.round(across * spot.window.width), y: spot.window.y + Math.round(down * spot.window.height) },
+  };
+}
+
+/**
+ * The compositor pointer move, in logical pixels, from where the X pointer is
+ * to the spot. Over an X window the X pointer is where the compositor's is
+ * (2880x1920 X pixels for a 1440x960 logical output at scale 2).
+ */
+export function pointerMove(spot: Spot, output: OutputArea, at: { readonly x: number; readonly y: number }) {
+  const { logical } = spotTargets(spot, output);
+  const now = { x: output.x + (at.x - spot.window.x) * output.width / spot.window.width, y: output.y + (at.y - spot.window.y) * output.height / spot.window.height };
+  return { dx: logical.x - now.x, dy: logical.y - now.y };
+}
+
 /** The host: its processes and files. */
 export class PlayMachine extends Context.Service<PlayMachine, {
   readonly processes: Effect.Effect<readonly ProcessInfo[], PlayProblem>;
@@ -94,8 +135,8 @@ export class PlayDesktop extends Context.Service<PlayDesktop, {
   readonly read: (output: string, ink: Ink) => Effect.Effect<Screen, PlayProblem>;
   /** The largest visible X window with this exact title, preferring those of process `pid`. */
   readonly xWindow: (title: string, pid?: number) => Effect.Effect<XWindow | undefined, PlayProblem>;
-  /** A click at root-window coordinates over `window`. */
-  readonly click: (window: XWindow, x: number, y: number) => Effect.Effect<void, PlayProblem>;
+  /** Moves the compositor's pointer to a spot, as a mouse would, checks the X pointer got there, and clicks. */
+  readonly click: (spot: Spot) => Effect.Effect<void, PlayProblem>;
   readonly keys: (window: XWindow, ...keys: string[]) => Effect.Effect<void, PlayProblem>;
   readonly typeText: (window: XWindow, text: string) => Effect.Effect<void, PlayProblem>;
 }>()("wisp/PlayDesktop") {}
@@ -223,15 +264,10 @@ const lowest = (places: readonly { readonly x: number; readonly y: number }[]) =
 const isFullscreen = (window: DesktopWindow) =>
   window.output !== undefined && window.width === window.output.width && window.height === window.output.height;
 
-/** A point of a fullscreen window's capture, in its X window's root coordinates. */
-function toRoot(screen: Screen, window: XWindow, point: { readonly x: number; readonly y: number }) {
-  return { x: window.x + Math.round(point.x * window.width / screen.width), y: window.y + Math.round(point.y * window.height / screen.height) };
-}
-
-/** Warcraft's UI coordinates in a window's root coordinates: the 4:3 area is centred and spans the height. */
-export function uiPoint(window: XWindow, x: number, y: number) {
+/** Warcraft's UI coordinates in a window's own pixels: the 4:3 area is centred and spans the height. */
+export function uiPoint(window: { readonly width: number; readonly height: number }, x: number, y: number) {
   const unit = window.height / 0.6;
-  return { x: window.x + Math.round(window.width / 2 + (x - 0.4) * unit), y: window.y + Math.round((0.6 - y) * unit) };
+  return { x: Math.round(window.width / 2 + (x - 0.4) * unit), y: Math.round((0.6 - y) * unit) };
 }
 
 /**
@@ -339,8 +375,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       if (log === undefined) return yield* fail(`Battle.net has no log in ${logs}`);
       const path = join(logs, log);
       const offset = (yield* machine.size(path)) ?? 0;
-      const button = toRoot(screen, xWindow, lowest(findPhrase(screen.words, "Play"))!);
-      yield* desktop.click(xWindow, button.x, button.y);
+      yield* desktop.click({ output, area: screen, ...lowest(findPhrase(screen.words, "Play"))!, window: xWindow });
       return { path, offset };
     }).pipe(Effect.ensuring(toggled ? desktop.toggleFullscreen(window.id).pipe(Effect.ignore) : Effect.void));
     const outcome: LaunchOutcome = (yield* poll(PLAY_TIMEOUTS.launch, machine.read(path, offset).pipe(Effect.map((text) => launchOutcome(text ?? "")))))
@@ -384,13 +419,11 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     yield* fullscreen(window.id, "Warcraft III's window");
     const xWindow = yield* until(PLAY_TIMEOUTS.gameWindow, desktop.xWindow("Warcraft III", process.pid),
       () => `Warcraft III's window isn't on display ${display}`);
+    const output = yield* outputOf(window.id, "Warcraft III's window");
     yield* status(3, "Warcraft III", `running (pid ${process.pid}), fullscreen`);
     return {
       documents, pid: process.pid, window: window.id, xWindow, display,
-      clickUi: (x: number, y: number) => Effect.gen(function*() {
-        const point = uiPoint(xWindow, x, y);
-        yield* desktop.click(xWindow, point.x, point.y);
-      }),
+      clickUi: (x: number, y: number) => desktop.click({ output, area: xWindow, ...uiPoint(xWindow, x, y), window: xWindow }),
     } satisfies PlayGame;
   });
 
@@ -408,8 +441,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     const click = (screen: Screen, place: { readonly x: number; readonly y: number } | undefined, what: string) => Effect.gen(function*() {
       if (place === undefined) return yield* fail(`${what} isn't on the screen`);
       yield* sameShape(screen, game.xWindow, "Warcraft III's window");
-      const at = toRoot(screen, game.xWindow, place);
-      yield* desktop.click(game.xWindow, at.x, at.y);
+      yield* desktop.click({ output, area: screen, x: place.x, y: place.y, window: game.xWindow });
     });
     const mapShown = (screen: Screen) => has(screen, title, true) || has(screen, folder, true);
     const createButton = (screen: Screen) => lowest(findPhrase(screen.words, "Create Game"));

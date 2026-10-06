@@ -8,7 +8,7 @@ import { TestClock } from "effect/testing";
 import { expect, test } from "bun:test";
 import { type ProcessInfo, launchOutcome, newestLauncherLog, prefixUse, shortcutUrl } from "../scripts/warcraft/battleNet";
 import type { Word } from "../scripts/warcraft/desktop";
-import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, findPhrase, play, uiPoint } from "../scripts/wisp/play";
+import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, findPhrase, play, pointerMove, spotTargets, uiPoint } from "../scripts/wisp/play";
 
 const PREFIX = "/home/u/compatdata/3516115571/pfx";
 const SERVER = "server-24-18d2b7ec";
@@ -222,9 +222,12 @@ function world(scenario: Scenario = {}) {
     }),
     xWindow: (title) => Effect.succeed<XWindow | undefined>(
       [...windows.values()].some((window) => window.title === title) ? { id: title, x: 0, y: 0, ...FRAME } : undefined),
-    click: (window, x, y) => Effect.sync(() => {
-      const hit = screenOf().find((button) => Math.abs(button.x - x) <= 140 && Math.abs(button.y - y) <= 30);
-      events.push(`click ${window.id} ${hit?.phrase ?? `${x},${y}`}`);
+    click: (spot) => Effect.sync(() => {
+      expect(spot.output).toBe(OUTPUT.name);
+      // The spot's image and window cover the output, so the target is in the capture's pixels.
+      const { root } = spotTargets(spot, { x: 0, y: 0, width: OUTPUT.width, height: OUTPUT.height });
+      const hit = screenOf().find((button) => Math.abs(button.x - root.x) <= 140 && Math.abs(button.y - root.y) <= 30);
+      events.push(`click ${spot.window.id} ${hit?.phrase ?? `${root.x},${root.y}`}`);
       hit?.press();
     }),
     keys: (_window, ...keys) => Effect.sync(() => events.push(`keys ${keys.join(" ")}`)),
@@ -314,6 +317,18 @@ test("Warcraft's UI coordinates land on the centred 4:3 area of a 3:2 and a 16:9
   // A slot tag Smashcraft clicked at 1484,824 on the 2560x1440 private desktop.
   expect(uiPoint(window(2560, 1440), 0.485, 0.2565)).toEqual({ x: 1484, y: 824 });
   expect(uiPoint(window(2880, 1920), 0.485, 0.2565)).toEqual({ x: 1712, y: 1099 });
+});
+
+test("a click target maps to the compositor's logical pixels and the X root's pixels of the scaled owner's desktop", () => {
+  // 6 Oct: eDP-1 is 1440x960 logical at scale 2; grim's capture and the X root are 2880x1920. The
+  // launcher's Play read at 2075,1518 while the X pointer sat at 1194,882, where the compositor's pointer was.
+  const output = { x: 0, y: 0, width: 1440, height: 960 };
+  const spot = { output: "eDP-1", area: FRAME, x: 2075, y: 1518, window: { id: "100663313", x: 0, y: 0, ...FRAME } };
+  expect(spotTargets(spot, output)).toEqual({ logical: { x: 1037.5, y: 759 }, root: { x: 2075, y: 1518 } });
+  expect(pointerMove(spot, output, { x: 1194, y: 882 })).toEqual({ dx: 440.5, dy: 318 });
+  // A second output to the right: logical positions shift, X pixels follow the window.
+  const right = { ...spot, output: "HDMI-A-1", window: { ...spot.window, x: 2880 } };
+  expect(spotTargets(right, { ...output, x: 1440 })).toEqual({ logical: { x: 2477.5, y: 759 }, root: { x: 4955, y: 1518 } });
 });
 
 test("from a cold desktop: Steam starts Battle.net, Play starts Warcraft III, the game is hosted, the opponent added, the helper started, the game fullscreen", async () => {
