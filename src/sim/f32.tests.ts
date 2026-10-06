@@ -35,3 +35,15 @@ test("f32 arithmetic keeps zero signs and small integers", () => {
   same(f32(3 * 4), 12);
   same(f32(40 - 2), 38);
 });
+
+test("f32 differences within a factor of two and products with ±1 are exact", () => {
+  const position = 230.71875;
+  const near = 160.3000030517578;
+  same(f32(position - near), 70.41874694824219);
+  same(f32(-position + near), -70.41874694824219);
+  same(f32(near - position), -70.41874694824219);
+  const offset = 3.0999999046325684;
+  same(f32(offset * -1), -3.0999999046325684);
+  same(f32(1 * offset), 3.0999999046325684);
+  same(f32(-1 * -offset), 3.0999999046325684);
+});
