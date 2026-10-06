@@ -27,7 +27,12 @@ export function describeCause(cause: unknown): string {
   return String(cause);
 }
 
-/** Values of each `--name value` pair; flags without a value are left out. */
+/** Values of `--name value` or `--name=value`; flags without a value are left out. */
 export function flagValues(args: readonly string[], name: string): string[] {
-  return args.flatMap((arg, index) => (arg === `--${name}` && args[index + 1] !== undefined ? [args[index + 1]!] : []));
+  const flag = `--${name}`;
+  return args.flatMap((arg, index) => {
+    if (arg.startsWith(`${flag}=`)) return [arg.slice(flag.length + 1)];
+    const value = args[index + 1];
+    return arg === flag && value !== undefined && !value.startsWith("--") ? [value] : [];
+  });
 }
