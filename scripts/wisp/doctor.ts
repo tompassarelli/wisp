@@ -140,9 +140,9 @@ const describeView = (view: ClientView) => {
 /**
  * The state of a client, as doctor names it: what to do next. Ordered so the
  * prefix comes first (two runtimes break every launch), then the game, then
- * the launcher. `canPlay`: doctor presses Play itself.
+ * the launcher. `canPlay`: doctor presses Play itself; `started`: this run did.
  */
-export function diagnose(seen: Observation, canPlay: boolean, display?: string): Diagnosis {
+export function diagnose(seen: Observation, canPlay: boolean, display?: string, started = false): Diagnosis {
   const { use, view, held } = seen;
   const problem = (name: Problem, detail: string): Diagnosis => ({ kind: "problem", problem: name, detail });
   const where = display === undefined ? "its launcher" : `its launcher on display ${display}`;
@@ -186,6 +186,8 @@ export function diagnose(seen: Observation, canPlay: boolean, display?: string):
       case "in match":
         return { kind: "ready", detail: describeView(view) };
       case "running":
+        // A game this run started says where it is within its sign-in; one found running is left as it is.
+        if (started && held < DOCTOR_TIMEOUTS.loginShell * 1000) return { kind: "wait", detail: "Warcraft III starting" };
         return { kind: "ready", detail: `${describeView(view)}; no source says where it is, so doctor leaves it` };
       case "closed":
       case "launcher":
@@ -315,13 +317,13 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
     yield* say(`starting Battle.net with ${start.kind === "steam" ? `the Steam shortcut "${start.name}"` : "its launch command"}`);
     if (start.kind === "steam") yield* machine.openSteam(shortcutUrl(start.appId)).pipe(Effect.mapError(failed));
     else yield* say(`launch command running (pid ${yield* machine.start(start.command, start.log).pipe(Effect.mapError(failed))})`);
-    const started = yield* poll(DOCTOR_TIMEOUTS.launcherStart, Effect.gen(function*() {
+    const launched = yield* poll(DOCTOR_TIMEOUTS.launcherStart, Effect.gen(function*() {
       const use = yield* prefixState;
       if (use.runtimes.length > 1) return yield* stop(`starting Battle.net left ${use.runtimes.length} Wine runtimes on the prefix (wineserver pids ${pids(use.runtimes)})`);
       const log = yield* newestLog;
       return use.launcher !== undefined && log !== undefined && log !== before ? true : undefined;
     }));
-    if (started === undefined) return yield* stop(`Battle.net didn't start within ${DOCTOR_TIMEOUTS.launcherStart} s from ${how}`);
+    if (launched === undefined) return yield* stop(`Battle.net didn't start within ${DOCTOR_TIMEOUTS.launcherStart} s from ${how}`);
     yield* say("Battle.net started");
   });
 
@@ -349,6 +351,8 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
   /** Waits up to LEAVE_SECONDS for the watch to show the client out of `kind`; the next look decides either way. */
   const left = (kind: StateKind) => waitFor(client, (view) => view.state.kind !== kind, { what: `leaving ${kind}`, seconds: LEAVE_SECONDS, failOn: [] }).pipe(Effect.ignore, Effect.asVoid);
 
+  /** Whether this run pressed Play: its game is waited on until it says where it is. */
+  let started = false;
   const recover = (problem: Problem) => Effect.gen(function*() {
     switch (problem) {
       case "two runtimes":
@@ -373,6 +377,7 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
       case "no game": {
         if (hands.pressPlay === undefined) return;
         if (!(yield* pressPlay(hands.pressPlay))) return "launch failed" as const;
+        started = true;
         return;
       }
     }
@@ -384,7 +389,7 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
   let next: Problem | undefined;
   while (true) {
     const diagnosis: Diagnosis = next === undefined
-      ? diagnose(yield* observe, hands.pressPlay !== undefined, target.display)
+      ? diagnose(yield* observe, hands.pressPlay !== undefined, target.display, started)
       : { kind: "problem", problem: next, detail: "Battle.net couldn't start Warcraft III" };
     next = undefined;
     switch (diagnosis.kind) {

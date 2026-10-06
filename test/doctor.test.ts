@@ -59,6 +59,8 @@ interface Scenario {
   readonly restartedLog?: string;
   readonly war3Log?: string;
   readonly noPlay?: boolean;
+  /** Views the started game reports as `afterPlay` before its menus report MAIN_MENU. */
+  readonly settlesAfter?: number;
 }
 
 function world(scenario: Scenario) {
@@ -99,7 +101,11 @@ function world(scenario: Scenario) {
   });
 
   const view = (state: ClientState): ClientView => ({ client: "b", state, source, evidence: state.kind === "menus" ? "SetGlueScreen" : "fake", at: 0, scan: "done", loadErrors: { count: 0 } });
-  const watch = ClientWatch.of({ view: () => Effect.sync(() => view(state)) });
+  let views = 0;
+  const watch = ClientWatch.of({ view: () => Effect.sync(() => {
+    if (plays > 0 && scenario.settlesAfter !== undefined && ++views > scenario.settlesAfter) state = { kind: "menus", screen: "MAIN_MENU" };
+    return view(state);
+  }) });
 
   const hands = DoctorHands.of({
     ...(scenario.noPlay === true ? {} : {
@@ -305,4 +311,15 @@ test("withDoctor without retry: doctor heals the clients after a failure, and th
   expect(result.failure).toBe("capture stopped: B dropped");
   expect(runs).toBe(1);
   expect(dropping.events).toEqual(["SIGTERM 52713", "play"]);
+});
+
+test("a game doctor started is waited on until its menus report, not taken as ready while it only runs", async () => {
+  const { lines, failure } = await world({ processes: "launcher", afterPlay: { kind: "running" }, settlesAfter: 10 }).run();
+  expect(failure).toBeUndefined();
+  expect(lines).toContain("b: Warcraft III starting...");
+  expect(lines.at(-1)).toBe("b: ready: menus (MAIN_MENU), after no game");
+  // One found running is left alone.
+  const found = await world({ processes: "game", state: { kind: "running" } }).run();
+  expect(found.events).toEqual([]);
+  expect(found.lines.at(-1)).toStartWith("b: ready: running");
 });

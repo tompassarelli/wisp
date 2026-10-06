@@ -70,7 +70,10 @@ instead of looping.
 | Sign-in needed | The launcher's log shows its saved login rejected, or no sign-in 90 s after it started. | Stop: one line naming the client, its display and what to do. |
 
 A client in its menus, signed in, or in a match is ready. Signing in or
-loading for less than its bound is waited on.
+loading for less than its bound is waited on. A game no source places yet
+(`running`: its process, no menu screen heard, no sign-in in its log) is
+left alone when doctor finds it, and waited on for up to 120 s when doctor
+just pressed Play for it.
 
 War3Log.txt is written in bursts: on 6 Oct client B's log stopped 3 s into a
 session that then signed in and played all evening, so it showed no sign-in
