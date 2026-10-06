@@ -44,6 +44,14 @@ out, as Lua leaves them out, so restore into records the game creates and copy
 the parsed ones over them with the game's own copy functions. `tokenLines`
 packs tokens into lines of a width; `lineTokens` splits them again.
 
+A record keyed by integers (`{ readonly [action: number]: Move }`, a mapped
+type over a numeric enum) is the same Lua table as an array, so Lua can't tell
+which one TypeScript means. Name every field that holds one:
+`recordTokens(state, ["normals", "throws"])` writes those with their keys
+(`normals#`), so key 0, gaps and negative keys come back as they were in both
+runtimes. A field not named is written as an array; one keyed below 1 in Lua,
+or by integers in Bun, is refused rather than written shifted.
+
 A match state is thousands of tokens and its checksum a walk of every field:
 a map that saves during play spreads that work over frames.
 

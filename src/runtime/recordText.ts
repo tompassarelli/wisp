@@ -5,7 +5,9 @@
 // (seven digits in 32-bit Lua) doesn't.
 //
 // Tokens: `NAME=VALUE` is a field, `NAME{` and `NAME[` open a record or an
-// array, `}` and `]` close it; an array's names are its indices. Values are T
+// array, `}` and `]` close it; an array's names are its indices. `NAME#`
+// opens a record keyed by integers, such as a kit's moves by action number,
+// and `}` closes it; its names are its keys. Values are T
 // and F, an integer's decimal digits, `~` and a real's exact form, or `'` and
 // a string's bytes with every byte but letters, digits, `_`, `.` and `-` as
 // %XX. Undefined fields and elements are left out, as Lua leaves them out.
@@ -155,25 +157,66 @@ function parseValue(text: string): unknown {
   return parseInteger(text);
 }
 
+/** A field's name: letters, digits and `_`, not an integer's digits, which a record keyed by integers writes as `#`. */
+const isFieldName = (text: string) => isName(text) && !isDecimal(text);
+
+/** The integer an integer key's text spells, written the way `${}` writes it; undefined for any other text. */
+function integerName(text: string): number | undefined {
+  const value = parseInteger(text);
+  return value !== undefined && isInteger(value) && `${value}` === text ? value : undefined;
+}
+
 /**
- * An array's length. In Lua a TypeScript array is a table whose keys are
- * integers from 1, with no key for an undefined element, so its length is its
- * largest key; in Bun an array has string keys and a length.
+ * The integer a record's key is: `for...in` gives a number in Lua and its
+ * text in Bun.
  */
-function arrayLength(value: Fields): number | undefined {
+function integerKey(key: string): number | undefined {
+  const raw: unknown = key;
+  if (typeof raw === "number") return isInteger(raw) ? raw : undefined;
+  return integerName(key);
+}
+
+/** Integers' keys, as a list of keyed records' names. */
+type KeyedNames = Readonly<Record<string, boolean>>;
+
+/**
+ * An array's length; undefined when `value` is a record. In Lua a
+ * TypeScript array is a table whose keys are integers from 1, with no key for
+ * an undefined element, so its length is its largest key; in Bun an array has
+ * string keys and a length. A table with any other key beside them, or a Bun
+ * object keyed by integers, is neither (false): a record keyed by integers is
+ * the same Lua table as an array, so only its declared name tells them apart.
+ */
+function arrayLength(value: Fields): number | undefined | false {
   let length: number | undefined;
+  let named = false;
   for (const key in value) {
     const raw: unknown = key;
-    if (typeof raw === "number") length = Math.max(length ?? 0, raw);
+    if (typeof raw !== "number") named = true;
+    else if (!isInteger(raw) || raw < 1) return false;
+    else length = Math.max(length ?? 0, raw);
   }
-  if (length === undefined && Array.isArray(value)) return value.length;
-  return length;
+  if (length !== undefined) return named ? false : length;
+  if (Array.isArray(value)) return value.length;
+  for (const key in value) if (isDecimal(key)) return false;
+  return undefined;
 }
 
 /** Lets an array arrayLength found be indexed as one, which TypeScriptToLua offsets for Lua's tables from 1. */
 const isList = (_value: unknown, length: number | undefined): _value is readonly unknown[] => length !== undefined;
 
-function writeValue(tokens: string[], name: string, value: unknown, depth: number): boolean {
+/** Whether `value` can be written as a record keyed by integers: every key an integer, and not a Bun array. */
+function isKeyed(value: Fields): boolean {
+  let numbers = false;
+  for (const key in value) {
+    const raw: unknown = key;
+    if (typeof raw === "number") numbers = true;
+    if (integerKey(key) === undefined) return false;
+  }
+  return numbers || !Array.isArray(value) || value.length === 0;
+}
+
+function writeValue(tokens: string[], name: string, value: unknown, depth: number, keyed: KeyedNames): boolean {
   if (value === undefined) return true;
   if (!isFields(value)) {
     const text = valueText(value);
@@ -182,48 +225,68 @@ function writeValue(tokens: string[], name: string, value: unknown, depth: numbe
     return true;
   }
   if (depth >= MAX_DEPTH) return false;
+  if (keyed[name] === true) {
+    if (!isKeyed(value)) return false;
+    tokens.push(`${name}#`);
+    for (const key in value) if (!writeValue(tokens, `${integerKey(key)}`, value[key], depth + 1, keyed)) return false;
+    tokens.push("}");
+    return true;
+  }
   const length = arrayLength(value);
+  if (length === false) return false;
   const items: unknown = value;
   if (isList(items, length)) {
     tokens.push(`${name}[`);
-    for (let index = 0; index < (length ?? 0); index++) if (!writeValue(tokens, `${index}`, items[index], depth + 1)) return false;
+    for (let index = 0; index < (length ?? 0); index++) if (!writeValue(tokens, `${index}`, items[index], depth + 1, keyed)) return false;
     tokens.push("]");
     return true;
   }
   tokens.push(`${name}{`);
-  if (!writeFields(tokens, value, depth + 1)) return false;
+  if (!writeFields(tokens, value, depth + 1, keyed)) return false;
   tokens.push("}");
   return true;
 }
 
-function writeFields(tokens: string[], record: Fields, depth: number): boolean {
+function writeFields(tokens: string[], record: Fields, depth: number, keyed: KeyedNames): boolean {
   for (const key in record) {
-    if (!isName(key) || !writeValue(tokens, key, record[key], depth)) return false;
+    if (!isFieldName(key) || !writeValue(tokens, key, record[key], depth, keyed)) return false;
   }
   return true;
 }
 
 /**
- * The tokens of a record's fields. Undefined when it holds anything else: a
- * function, a cycle, a string byte above 255 or a key that isn't letters,
- * digits and `_`.
+ * The tokens of a record's fields. A field named in `keyedByInteger` holds
+ * a record keyed by integers (`{ readonly [action: number]: T }`), written
+ * with its keys; Lua can't tell one from an array, so any other value keyed by
+ * integers is written as an array, and one with a key below 1 is refused.
+ * Undefined when the record holds anything else: a function, a cycle, a
+ * string byte above 255 or a key that isn't letters, digits and `_`.
  */
-export function recordTokens(record: object): string[] | undefined {
+export function recordTokens(record: object, keyedByInteger: readonly string[] = []): string[] | undefined {
   if (!isFields(record) || arrayLength(record) !== undefined) return undefined;
+  const keyed: Record<string, boolean> = {};
+  for (const name of keyedByInteger) keyed[name] = true;
   const tokens: string[] = [];
-  return writeFields(tokens, record, 0) ? tokens : undefined;
+  return writeFields(tokens, record, 0, keyed) ? tokens : undefined;
 }
 
-/** A record or array being filled; exactly one of the two. */
+/** A record, array or record keyed by integers being filled; exactly one of the three. */
 interface Open {
   readonly fields: Record<string, unknown> | undefined;
   readonly items: unknown[] | undefined;
+  readonly keyed: Record<number, unknown> | undefined;
 }
 
 function place(open: Open, name: string, value: unknown): boolean {
   if (open.fields !== undefined) {
-    if (!isName(name)) return false;
+    if (!isFieldName(name)) return false;
     open.fields[name] = value;
+    return true;
+  }
+  if (open.keyed !== undefined) {
+    const key = integerName(name);
+    if (key === undefined) return false;
+    open.keyed[key] = value;
     return true;
   }
   const index = parseInteger(name);
@@ -232,22 +295,28 @@ function place(open: Open, name: string, value: unknown): boolean {
   return true;
 }
 
+function opened(last: string): Open {
+  if (last === "{") return { fields: {}, items: undefined, keyed: undefined };
+  if (last === "[") return { fields: undefined, items: [], keyed: undefined };
+  return { fields: undefined, items: undefined, keyed: {} };
+}
+
 /** The record that recordTokens wrote `tokens` for; undefined when they are malformed. */
 export function parseRecord(tokens: readonly string[]): Record<string, unknown> | undefined {
   const root: Record<string, unknown> = {};
-  const stack: Open[] = [{ fields: root, items: undefined }];
+  const stack: Open[] = [{ fields: root, items: undefined, keyed: undefined }];
   for (const token of tokens) {
     const open = stack[stack.length - 1];
     if (open === undefined) return undefined;
     if (token === "}" || token === "]") {
-      if (stack.length === 1 || (token === "}") !== (open.fields !== undefined)) return undefined;
+      if (stack.length === 1 || (token === "}") !== (open.items === undefined)) return undefined;
       stack.pop();
       continue;
     }
     const last = token.charAt(token.length - 1);
-    if (last === "{" || last === "[") {
-      const child: Open = last === "{" ? { fields: {}, items: undefined } : { fields: undefined, items: [] };
-      if (!place(open, token.substring(0, token.length - 1), child.fields ?? child.items)) return undefined;
+    if (last === "{" || last === "[" || last === "#") {
+      const child = opened(last);
+      if (!place(open, token.substring(0, token.length - 1), child.fields ?? child.items ?? child.keyed)) return undefined;
       stack.push(child);
       continue;
     }
