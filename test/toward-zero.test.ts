@@ -1,14 +1,14 @@
-// wisp:native/warcraft-rounding.h against an exact oracle: every binary32
-// sum, difference and product the Warcraft-rounding Lua computes must be the
+// wisp:native/toward-zero.h against an exact oracle: every binary32
+// sum, difference and product the toward-zero Lua computes must be the
 // exact result truncated toward zero, computed here with integers. The Lua is
-// WARCRAFT_LUA when set (CI builds it with make), else one built with nix in
-// build/warcraft-lua (wisp:scripts/wisp/warcraftLua.ts).
+// TOWARD_ZERO_LUA when set (CI builds it with make), else one built with nix in
+// build/toward-zero-lua (wisp:scripts/wisp/towardZeroLua.ts).
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { luaRounding, warcraftLua } from "../scripts/wisp/warcraftLua";
+import { luaRounding, towardZeroLua } from "../scripts/wisp/towardZeroLua";
 
-const lua = process.env.WARCRAFT_LUA ?? await Effect.runPromise(warcraftLua(join(import.meta.dir, "../build/warcraft-lua")));
+const lua = process.env.TOWARD_ZERO_LUA ?? await Effect.runPromise(towardZeroLua(join(import.meta.dir, "../build/toward-zero-lua")));
 
 /** A finite binary32 value as sign × significand × 2^exponent, with an integer significand. */
 interface Exact {
@@ -101,8 +101,8 @@ function operands(): [number, number][] {
 
 const same = (actual: number, expected: number) => Object.is(actual, expected) || (Number.isNaN(actual) && Number.isNaN(expected));
 
-test("the Warcraft-rounding Lua's + - * are the exact results truncated toward zero, and / rounds to nearest", async () => {
-  expect(luaRounding(lua)).toBe("warcraft");
+test("the toward-zero Lua's + - * are the exact results truncated toward zero, and / rounds to nearest", async () => {
+  expect(luaRounding(lua)).toBe("toward-zero");
   const pairs = operands();
   const program = [
     "for line in io.lines() do",
@@ -124,6 +124,6 @@ test("the Warcraft-rounding Lua's + - * are the exact results truncated toward z
     });
   });
   expect(wrong.slice(0, 10)).toEqual([]);
-  // Round-to-nearest gives 3 and 3 here; Warcraft truncates toward zero.
+  // Rounding to nearest gives 3 for both.
   expect(lines[3]?.split(" ").slice(0, 2)).toEqual(["0x1.8p+1", "0x1.7ffffep+1"]);
 });

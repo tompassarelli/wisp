@@ -1,10 +1,11 @@
-// A 32-bit Lua that rounds as Warcraft III's does: Lua 5.3.6 with LUA_32BITS
-// and wisp:native/warcraft-rounding.h, whose raw float + - * round toward
-// zero. Bun and stock Lua32 round to nearest, so a replay that equals Bun's
-// in this Lua relies on no raw float operation Warcraft would round
-// differently (wisp:docs/headless.md#warcraft-rounding).
+// A 32-bit Lua whose raw float + - * round toward zero: Lua 5.3.6 with
+// LUA_32BITS and wisp:native/toward-zero.h. Warcraft's raw float + - * don't
+// always round to nearest, and toward zero is the nearest model of them
+// found; Bun and a stock Lua32 round to nearest. A replay or check that gives
+// the same results in both Luas relies on no raw float + - *
+// (wisp:docs/headless.md#raw-float-rounding).
 //
-// `bun node_modules/wisp/scripts/wisp/warcraftLua.ts DIRECTORY` prints the
+// `bun node_modules/wisp/scripts/wisp/towardZeroLua.ts DIRECTORY` prints the
 // executable, building it in DIRECTORY when it is missing or its header
 // changed. Building needs `nix`: nixpkgs' Lua 5.3.6 source, checked against
 // lua.org's checksum, and its gcc.
@@ -14,35 +15,32 @@ import { Console, Effect } from "effect";
 import { MapBuildFailure, captureProcess, runProcess } from "./mapBuild";
 import { step } from "./timings";
 
-export const WARCRAFT_ROUNDING_HEADER = join(import.meta.dir, "../../native/warcraft-rounding.h");
+export const TOWARD_ZERO_HEADER = join(import.meta.dir, "../../native/toward-zero.h");
 
 /** lua.org's SHA-256 of lua-5.3.6.tar.gz. */
 const LUA_SOURCE_SHA256 = "fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60";
 
-/**
- * A Lua chunk that prints 3 - 1e-30 in binary32: the next binary32 below 3
- * when the subtraction rounds toward zero, as Warcraft's does; 3 when it rounds to nearest.
- */
-export const ROUNDING_PROBE = "local a, b = 3.0, 1e-30 io.write(string.format('%a', a - b))";
-export const WARCRAFT_ROUNDS = "0x1.7ffffep+1";
+/** Prints 3 - 1e-30 in binary32: the binary32 below 3 when subtraction rounds toward zero, 3 when it rounds to nearest. */
+const ROUNDING_PROBE = "local a, b = 3.0, 1e-30 io.write(string.format('%a', a - b))";
+const TOWARD_ZERO_RESULT = "0x1.7ffffep+1";
 
-/** How `lua` rounds raw float arithmetic: "warcraft" (toward zero), "nearest", or why it can't tell. */
-export function luaRounding(lua: string): "warcraft" | "nearest" | string {
+/** How `lua` rounds raw float arithmetic: "toward-zero", "nearest", or why it can't tell. */
+export function luaRounding(lua: string): "toward-zero" | "nearest" | string {
   const integers = Bun.spawnSync([lua, "-e", "io.write(math.maxinteger)"], { stdout: "pipe", stderr: "pipe" });
   if (integers.exitCode !== 0) return `${lua} doesn't run: ${integers.stderr.toString().trim()}`;
   if (integers.stdout.toString() !== "2147483647") return `${lua} is not a 32-bit Lua (LUA_32BITS)`;
   const probe = Bun.spawnSync([lua, "-e", ROUNDING_PROBE], { stdout: "pipe", stderr: "pipe" }).stdout.toString();
-  return probe === WARCRAFT_ROUNDS ? "warcraft" : "nearest";
+  return probe === TOWARD_ZERO_RESULT ? "toward-zero" : "nearest";
 }
 
 const fail = (operation: string, path: string, cause: unknown) => new MapBuildFailure({ operation, path, cause });
 
-/** The Warcraft-rounding Lua's executable in `directory`, built there when it is missing or its header changed. */
-export const warcraftLua = (directory: string) => Effect.gen(function*() {
+/** The toward-zero Lua's executable in `directory`, built there when it is missing or its header changed. */
+export const towardZeroLua = (directory: string) => Effect.gen(function*() {
   const lua = join(directory, "lua-5.3.6/src/lua");
   // The build's copy of the header, written after the previous build is removed: a Lua beside it was built with it.
-  const copy = join(directory, "warcraft-rounding.h");
-  const header = readFileSync(WARCRAFT_ROUNDING_HEADER, "utf8");
+  const copy = join(directory, "toward-zero.h");
+  const header = readFileSync(TOWARD_ZERO_HEADER, "utf8");
   if (existsSync(lua) && existsSync(copy) && readFileSync(copy, "utf8") === header) return lua;
   const source = yield* captureProcess("fetch Lua 5.3.6 source", directory, ["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#lua5_3.src"]).pipe(
     Effect.flatMap(({ exitCode, stdout, stderr }) => exitCode === 0
@@ -60,20 +58,20 @@ export const warcraftLua = (directory: string) => Effect.gen(function*() {
     catch: (cause) => fail("prepare", directory, cause),
   });
   yield* runProcess("unpack Lua source", directory, ["tar", "-xzf", source, "-C", directory]);
-  yield* runProcess("compile Lua with Warcraft's rounding", directory, ["nix", "shell", "nixpkgs#gcc", "nixpkgs#gnumake", "--command",
+  yield* runProcess("compile Lua rounding toward zero", directory, ["nix", "shell", "nixpkgs#gcc", "nixpkgs#gnumake", "--command",
     "make", "-C", join(directory, "lua-5.3.6/src"), "-j2", "posix", `MYCFLAGS=-DLUA_32BITS -include ${copy}`]);
   const rounding = luaRounding(lua);
-  if (rounding !== "warcraft") return yield* fail("check rounding", lua, rounding === "nearest" ? "it rounds to nearest" : rounding);
+  if (rounding !== "toward-zero") return yield* fail("check rounding", lua, rounding === "nearest" ? "it rounds to nearest" : rounding);
   return lua;
-}).pipe(step("Lua with Warcraft's rounding"));
+}).pipe(step("Lua32 rounding toward zero"));
 
 if (import.meta.main) {
   const [directory] = process.argv.slice(2);
   if (directory === undefined) {
-    console.error("usage: bun warcraftLua.ts DIRECTORY");
+    console.error("usage: bun towardZeroLua.ts DIRECTORY");
     process.exit(2);
   }
-  const exit = await Effect.runPromiseExit(warcraftLua(directory).pipe(Effect.flatMap((lua) => Console.log(lua))));
+  const exit = await Effect.runPromiseExit(towardZeroLua(directory).pipe(Effect.flatMap((lua) => Console.log(lua))));
   if (exit._tag === "Failure") {
     console.error(String(exit.cause));
     process.exit(1);
