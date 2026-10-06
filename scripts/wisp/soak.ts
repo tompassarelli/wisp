@@ -473,6 +473,12 @@ export interface SoakResult {
   readonly costMs: number;
   /** The costliest client frame, measured. */
   readonly worstFrameMs: number;
+  /**
+   * Recovery typing stalls: each client frame that stopped longer than its
+   * 1/60 s taking typed text, as a backlog drains, in native milliseconds.
+   * Over limits.typingMs one is a `typing` finding.
+   */
+  readonly typingStallsMs: readonly number[];
   readonly over: boolean;
   readonly findings: readonly SoakFinding[];
   readonly inputs: SoakInputs;
@@ -526,6 +532,8 @@ export class SoakMonitor {
   over = false;
   costMs = 0;
   worstFrameMs = 0;
+  /** Recovery typing stalls: each client frame that stopped longer than its 1/60 s taking typed text, in milliseconds. */
+  readonly typingStallsMs: number[] = [];
   private readonly seen = new Set<string>();
   private readonly errors: number[];
   private readonly serials: number[];
@@ -603,8 +611,9 @@ export class SoakMonitor {
       }
       // Typing is counted, not timed: a frame over the bound is over it on every run.
       const typing = typingMs?.[index] ?? 0;
+      if (typing > limits.frameMs) this.typingStallsMs.push(typing);
       if (typing > limits.typingMs) {
-        this.find("typing", `p${client.slot}'s frame ${this.frame} stops ${typing.toFixed(1)} ms taking typed text, more than the ${limits.typingMs.toFixed(1)} ms its input helper may type at once`, client.slot, "typing");
+        this.find("typing", `p${client.slot}'s frame ${this.frame} has a recovery typing stall of ${typing.toFixed(1)} ms, over the ${limits.typingMs.toFixed(1)} ms budget of what its input helper may type at once`, client.slot, "typing");
       }
       this.checkErrors(client, index);
       this.checkScene(client, index);
@@ -870,6 +879,7 @@ function playOnce(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, ma
     wallMs,
     costMs: monitor?.costMs ?? 0,
     worstFrameMs: monitor?.worstFrameMs ?? 0,
+    typingStallsMs: monitor?.typingStallsMs ?? [],
     over: monitor?.over ?? false,
     findings,
     inputs: source.recorded(),
@@ -984,6 +994,7 @@ const ReplySchema = Schema.fromJsonString(Schema.Struct({
   wallMs: Schema.Finite,
   costMs: Schema.Finite,
   worstFrameMs: Schema.Finite,
+  typingStallsMs: Schema.Array(Schema.Finite),
   over: Schema.Boolean,
   findings: Schema.Array(FindingSchema),
   checksums: Schema.Array(Schema.String),
