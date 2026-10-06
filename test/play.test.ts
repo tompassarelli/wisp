@@ -393,6 +393,7 @@ function world(scenario: Scenario = {}) {
       expect(documents).toBe(`${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III`);
       events.push("prepare");
     }),
+    cleanup: () => Effect.sync(() => { events.push("cleanup"); }),
     started: () => Effect.gen(function*() {
       for (let waited = 0; !started; waited++) {
         if (waited > 480) return yield* new PlayProblem({ problem: "the map didn't reach fighter selection within 120 s" });
@@ -655,6 +656,9 @@ test("--keep-launch-options keeps them only after a successful run; any stop put
   expect(plain.options()).toBe("-windowmode 0");
   expect(plain.events.filter((event) => event.startsWith("launch options"))).toEqual([`launch options: ${LOAD_MAP}`, "launch options: -windowmode 0"]);
   expect(plain.lines).not.toContain("Battle.net's launch options for Warcraft III put back, as the run stopped");
+  // What prepare left for the map is cleaned up when a run stops, and only then.
+  expect(plain.events.at(-1)).toBe("cleanup");
+  expect(kept.events).not.toContain("cleanup");
 });
 
 test("a game window that takes 30 s to go fullscreen while its map loads is waited for, and space reaches it meanwhile", async () => {
