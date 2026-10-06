@@ -18,6 +18,18 @@ message that says what to do. It takes no arguments.
 7/7 Fullscreen: Warcraft III is fullscreen and focused. Ready to fight.
 ```
 
+Before step 1, and once more after a failure, `play` runs
+[`doctor`](doctor.md) on its prefix when the game gives it `wisp watch`'s
+ClientWatch (`makePlay`'s fourth argument). Doctor ends a second runtime, a
+runtime without Battle.net, a crashed game and its error dialog, a game that
+lost Battle.net, sits at the empty login shell, loaded the map without its
+imports or is stuck loading, leaves an earlier lobby or score screen, and
+restarts a launcher whose connection is failing; when it recovered
+something after a failure, `play` runs once more. It leaves pressing Play to
+the steps below, and stops with one line when the launcher needs its owner
+to sign in. Without a watch, step 1 refuses these states and prints the
+command that clears them.
+
 1. **Wine prefix.** Separate Steam runtime containers each start their own
    wineserver against one prefix, and a launcher started beside another
    runtime can't start the game. `play` refuses two runtimes, a runtime on

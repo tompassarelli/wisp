@@ -37,6 +37,13 @@ Checking on the signed-in clients? [`wisp accept`](accept.md)
 issue each closes, in as few fresh matches as their maps allow, and prints
 pass, fail or needs-look per check with its evidence folder.
 
+A client dropped from Battle.net, crashed, stuck on its login, loading
+screen or an old lobby, or sharing its prefix with a second runtime?
+[`wisp doctor`](doctor.md) (wisp:docs/doctor.md) finds each client's state
+and runs its known recovery, step by step, and stops with one plain line
+only when the owner must sign in. Run it instead of driving a client by
+hand; `play`, `accept` and bot sessions run it before they start.
+
 Tuning the feel? [`wisp tune`](tune.md) (wisp:docs/tune.md) serves a panel
 on this computer that changes declared values, such as speeds and knockback,
 in the running match through hot reloads, and writes the ones you keep back
@@ -65,6 +72,7 @@ warcraft-vscode on the same map is measured in the
 | Control existing Warcraft clients | [Clients](../scripts/wisp/clients.ts) and the [client command](../scripts/wisp/commands/client.ts) (wisp:scripts/wisp/clients.ts, wisp:scripts/wisp/commands/client.ts) | Supply the clients file ([format](sample-map.md#play-it-and-change-it-while-it-runs)) and private desktop sessions; game-specific journeys belong to the consumer. |
 | Go from the owner's desktop to a match in one command: prefix check, Battle.net, Play, the map hosted after Warcraft III's ladder scan, controller helper, the map's match setup, fullscreen | [`wisp play`](play.md) (wisp:docs/play.md, wisp:scripts/wisp/play.ts) | The game declares its prefix, Steam shortcut, map, request to the map, match step, helper and optional `menuReportPort`; without a menu page the menus are clicked. Runs on the owner's niri desktop with `grim`, `tesseract`, `wlrctl`, `xdotool` and `steam`; never signs in or starts Warcraft III.exe itself. |
 | Run the game's declared native checks as one batched session: pass, fail or needs-look per check, evidence kept privately | [`wisp accept`](accept.md) and [makeAccept](../scripts/wisp/commands/accept.ts) (wisp:docs/accept.md, wisp:scripts/wisp/accept.ts, wisp:scripts/wisp/acceptLive.ts) | The game declares checks as data (map profile, setup commands, captures, pass rules) and supplies its fresh-match start and receipt file names; `--dry-run` prints the plan without touching clients. Visual judgement beyond declared rules stays with the owner (needs-look). |
+| Bring every client to a ready state: recover a dropped, crashed, login-stuck, loading-stuck or lobby-stuck client, or two runtimes on one prefix | [`wisp doctor`](doctor.md) and [makeDoctor](../scripts/wisp/commands/doctor.ts) (wisp:docs/doctor.md, wisp:scripts/wisp/doctor.ts, wisp:scripts/wisp/doctorHost.ts) | The game declares how each client's Battle.net starts and supplies `wisp watch`'s ClientWatch; `withDoctor` runs it before a run and once after a failure. Never signs in: a needed sign-in stops it with one line. |
 | Start a new match of a map in every client | [Fresh match](../scripts/wisp/lobby.ts) (wisp:scripts/wisp/lobby.ts) | Hosts from the first client, joins the others, starts, and waits for each client's match-start acknowledgement; Create Game must show the configured map folder. |
 | Host, join, start or leave a game without clicks, through the menus' own socket; which no-click approach to use and why | [Driving Warcraft III without clicks](driving-warcraft.md) and `wisp menus` (wisp:docs/driving-warcraft.md, wisp:scripts/wisp/menus.ts) | Needs Wisp's menu page in the game's `_retail_/webui` and the registry value `Allow Local Files`, set once per prefix with the account owner's agreement (W3Champions' install method; see the page's account risk). Battle.net's Play and leaving a running match stay clicks. |
 | Run a map in simulated clients without Warcraft: desyncs, error reports, hot reloads, scene problems | [Headless runtime](headless.md) and `wisp headless` (wisp:docs/headless.md) | Bun runs the map's TypeScript, 32-bit Lua its compiled bundle. The game declares its local-only natives, global prefixes and journeys; Warcraft's engine, timing and rendering keep their native checks. |

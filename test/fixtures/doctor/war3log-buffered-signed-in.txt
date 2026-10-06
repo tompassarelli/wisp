@@ -1,0 +1,11 @@
+10/6 17:00:09.316  GameMain Started
+10/6 17:00:09.316  Command Line: "C:\Program Files (x86)\Warcraft III\_retail_\x86_64\Warcraft III.exe" -launch -uid w3
+10/6 17:00:09.316  Current Directory: "C:\Program Files (x86)\Warcraft III\_retail_"
+10/6 17:00:10.104  Opening mod - War3.w3mod
+10/6 17:00:12.557  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft dev 0.0.49.w3x
+10/6 17:00:12.557  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft dev 0.0.49.w3x
+10/6 17:00:12.562  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)Amazonia.w3x
+10/6 17:00:12.562  Opening mod - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)Amazonia.w3x
+10/6 17:00:12.564  Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season1/(2)Amazonia_S2.w3x
+10/6 17:00:12.818  Opening map - Maps/(8)richmansgarden.w3m
+10/6 17:00:12.818  Opening mod - Maps/(8)richmansgarden.w3m

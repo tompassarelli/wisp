@@ -1,0 +1,7 @@
+I 2026-10-03 14:30:56.861810 [BNLogin] {Main} Logged into Battle.net successfully.
+W 2026-10-03 15:21:12.620783 [BNPresence] {Main} |event=Presence update failed|error=ERROR_RPC_REQUEST_TIMED_OUT (3006)
+W 2026-10-03 15:21:12.620832 [IdentityGameAccount] {Main} Failed to set AFK status. entityId=2:0:0 error=ERROR_RPC_REQUEST_TIMED_OUT (3006)
+W 2026-10-03 15:21:58.589799 [BNPresence] {Main} |event=Presence update failed|error=ERROR_RPC_REQUEST_TIMED_OUT (3006)
+W 2026-10-03 15:21:58.589847 [IdentityGameAccount] {Main} Failed to set AFK status. entityId=2:0:0 error=ERROR_RPC_REQUEST_TIMED_OUT (3006)
+W 2026-10-03 15:22:44.618333 [BNPresence] {Main} |event=Presence update failed|error=ERROR_RPC_REQUEST_TIMED_OUT (3006)
+W 2026-10-03 15:22:44.618386 [IdentityGameAccount] {Main} Failed to set AFK status. entityId=2:0:0 error=ERROR_RPC_REQUEST_TIMED_OUT (3006)

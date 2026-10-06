@@ -123,3 +123,52 @@ export function launchOutcome(log: string): LaunchOutcome | undefined {
   }
   return undefined;
 }
+
+/**
+ * Warcraft III's crash reporter, which holds the error dialog up after a
+ * crash: _retail_\x86_64\BlizzardError.exe (the launcher's own copies live
+ * under Battle.net\, and are another program's).
+ */
+export const isErrorDialog = (process: ProcessInfo) => /\\Warcraft III\\_retail_\\x86_64\\BlizzardError\.exe(?:\s|"|$)/i.test(commandLine(process));
+
+export type LauncherHealth =
+  /** Signed in, with nothing failing since. */
+  | { readonly kind: "signed in" }
+  /** No sign-in in this launcher's log yet: it is starting, or showing its sign-in form. */
+  | { readonly kind: "not signed in" }
+  /** Battle.net rejected the saved login: only the account owner can sign in again. */
+  | { readonly kind: "sign-in needed"; readonly reason: string }
+  /** Signed in, but its connection to Battle.net fails: a restarted launcher reconnects. */
+  | { readonly kind: "connection failing"; readonly reason: string };
+
+const LOGIN_REJECTED = /ERROR_TOKEN_NOT_FOUND/;
+const SSO_FAILED = /GenerateAuth.*(?:fail|error)|SSO token generation error/i;
+const RPC_TIMEOUT = /ERROR_RPC_REQUEST_TIMED_OUT/;
+/** Presence updates fail every 46 s while the connection is gone (3 Oct, client B); two in a row, with nothing logged in between that worked, is not a blip. */
+const RPC_TIMEOUTS_FAILING = 2;
+
+/**
+ * What a launcher's log (its newest battle.net-*.log) says about its sign-in
+ * and its connection (smashcraft:docs/warcraft-authentication.md). After its
+ * last sign-in: a rejected saved login needs the owner; a failed Warcraft III
+ * sign-in token, or presence updates timing out to the log's end, is a
+ * connection the launcher lost, which a restart of the launcher reconnects.
+ */
+export function launcherHealth(log: string): LauncherHealth {
+  const lines = log.split("\n");
+  const last = lines.findLastIndex((line) => SIGNED_IN.test(line));
+  const after = lines.slice(last + 1).filter((line) => line.trim() !== "");
+  const rejected = after.find((line) => LOGIN_REJECTED.test(line));
+  if (rejected !== undefined) return { kind: "sign-in needed", reason: "Battle.net rejected its saved login (ERROR_TOKEN_NOT_FOUND)" };
+  if (last < 0) return { kind: "not signed in" };
+  if (after.some((line) => SSO_FAILED.test(line))) return { kind: "connection failing", reason: "Warcraft III's sign-in token couldn't be made (GenerateAuth failed)" };
+  let timeouts = 0;
+  for (const line of after.toReversed()) {
+    if (!/^[EW] /.test(line)) continue;
+    if (!RPC_TIMEOUT.test(line)) break;
+    if (/\[BNPresence\]/.test(line)) timeouts++;
+  }
+  return timeouts >= RPC_TIMEOUTS_FAILING
+    ? { kind: "connection failing", reason: `its last ${timeouts} presence updates timed out (ERROR_RPC_REQUEST_TIMED_OUT)` }
+    : { kind: "signed in" };
+}
