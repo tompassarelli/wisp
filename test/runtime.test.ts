@@ -38,5 +38,5 @@ test("numeric and payload contracts pass in emitted Lua", () => {
   expect(report(diagnostics)).toBe("");
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(root, "build/lua-tests/tests.lua")], { cwd: root, stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
-  expect(run.stdout.toString()).toContain("17 of 17 passed");
+  expect(run.stdout.toString()).toContain("18 of 18 passed");
 });
