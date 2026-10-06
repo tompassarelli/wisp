@@ -4,10 +4,12 @@
 // model, an effect in view that the game declares no kind for, or one in view
 // longer than its kind's lifetime, and says what a player would see wrong.
 // With the game's model facts and cameras it also fails on what a player
-// could see that the game considers hidden or gone (visibility.ts).
+// could see that the game considers hidden or gone (visibility.ts), and,
+// given what must be on screen, a fighter in play drawn with nothing.
 // Plain functions, so a game's tests can check a report without Effect;
 // playerView.ts reads the files.
 import { type SceneModel, reportedModel } from "../../src/runtime/scene";
+import type { ModelFacts } from "./models";
 import { type VisibilityExpectations, visibilityProblems } from "./visibility";
 
 export interface SceneReport {
@@ -142,4 +144,45 @@ export function describeScene(report: SceneReport, expected: SceneExpectations):
   const pieces = stagePieces(report, stageModelsOf(expected));
   const inView = report.models.reduce((sum, { inView }) => sum + inView, 0);
   return `frame ${report.frame}: ${pieces} ${expected.stage.kind} piece${pieces === 1 ? "" : "s"} drawn; ${inView} of ${report.effects} effects in view across ${report.models.length} models`;
+}
+
+/** Something a player must see now, such as a fighter in play, and every model the game may draw it with. */
+export interface SceneBody {
+  /** What a player would call it, such as "Illidan (Player 2)". */
+  readonly name: string;
+  readonly models: readonly string[];
+}
+
+/**
+ * Each body the report shows nothing of: no effect of its models is drawn
+ * with geometry. A model counts as geometry when its facts have triangles,
+ * or when it has no facts to judge it by. Bodies drawn with the same models
+ * share their effects, so two of one fighter need two drawn.
+ */
+export function bodyProblems(report: SceneReport, bodies: readonly SceneBody[], facts: Readonly<Record<string, ModelFacts>> = {}): readonly SceneProblem[] {
+  const triangles = new Map(Object.entries(facts).map(([model, entry]) => [reportedModel(model).toLowerCase(), entry.triangles]));
+  const groups = new Map<string, { readonly models: ReadonlySet<string>; readonly names: string[] }>();
+  for (const { name, models } of bodies) {
+    const paths = [...new Set(models.map((model) => reportedModel(model).toLowerCase()))].sort();
+    const group = groups.get(paths.join("|")) ?? { models: new Set(paths), names: [] };
+    group.names.push(name);
+    groups.set(paths.join("|"), group);
+  }
+  const problems: SceneProblem[] = [];
+  for (const { models, names } of groups.values()) {
+    const lines = report.models.filter(({ model }) => models.has(model.toLowerCase()));
+    const solid = lines.filter(({ model }) => (triangles.get(model.toLowerCase()) ?? 1) > 0);
+    const drawn = solid.reduce((sum, { drawn }) => sum + drawn, 0);
+    if (drawn >= names.length) continue;
+    const empty = lines.filter(({ model, drawn }) => drawn > 0 && triangles.get(model.toLowerCase()) === 0);
+    problems.push({
+      seen: names.length === 1
+        ? `invisible fighter: ${names.join("")} is in play, but none of its models is drawn with geometry`
+        : `invisible fighter: ${names.join(" and ")} are in play, but ${drawn === 0 ? "none" : `only ${drawn}`} of them ${drawn <= 1 ? "is" : "are"} drawn with geometry`,
+      evidence: empty.length > 0
+        ? `drawn without triangles: ${empty.map(({ model, drawn }) => `${model} (${drawn})`).join(", ")}`
+        : `${lines.reduce((sum, { live }) => sum + live, 0)} effects of its ${models.size} models live, ${lines.reduce((sum, { inView }) => sum + inView, 0)} in view, none drawn`,
+    });
+  }
+  return problems;
 }

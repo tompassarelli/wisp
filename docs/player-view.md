@@ -98,6 +98,12 @@ effect, or the check passes whatever the code does. `sceneProblems` reports:
 - a model whose effects stayed in view longer than its kinds' longest
   lifetime. Kinds that share a model share their longest lifetime.
 
+A game that knows what must be on screen, such as each fighter in play with
+the models it may be drawn with (`SceneBody`), checks it with `bodyProblems`:
+a body none of whose effects is drawn with triangles, by the models' facts,
+is invisible. The [soak](soak.md) asks the game for its bodies with every
+report.
+
 wisp:scripts/wisp/scene.ts and wisp:scripts/wisp/frameProbe.ts are plain
 functions: a game's tests can check the lines its recorder wrote with
 `readSceneLines` and `sceneProblems` without loading Effect.

@@ -102,6 +102,43 @@ const point = (at: Vector3) => `(${at.map(round).join(", ")})`;
 const seconds = (value: number) => `${Number(value.toFixed(2))} s`;
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
+interface Sighting {
+  readonly place: Vector3;
+  readonly camera: CameraView;
+  readonly box: Box;
+}
+
+/** Per declaration: its facts by model, and where each parked model is first seen from, which no report changes. */
+const prepared = new WeakMap<VisibilityExpectations, { readonly facts: ReadonlyMap<string, ModelFacts>; readonly sightings: Map<string, Sighting | undefined> }>();
+
+function preparedFor(expected: VisibilityExpectations) {
+  let entry = prepared.get(expected);
+  if (entry === undefined) {
+    entry = { facts: new Map(Object.entries(expected.models).map(([model, facts]) => [key(model), facts])), sightings: new Map() };
+    prepared.set(expected, entry);
+  }
+  return entry;
+}
+
+/** The first parking place and camera from which a parked model's mesh or particles can be seen, if any. */
+function sighting(expected: VisibilityExpectations, model: string, boxes: readonly Box[]): Sighting | undefined {
+  const { sightings } = preparedFor(expected);
+  if (sightings.has(model)) return sightings.get(model);
+  let found: Sighting | undefined;
+  for (const place of expected.parking) {
+    for (const camera of expected.cameras) {
+      const box = boxes.find((reach) => boxSeen(shift(reach, place), camera));
+      if (box !== undefined) {
+        found = { place, camera, box };
+        break;
+      }
+    }
+    if (found !== undefined) break;
+  }
+  sightings.set(model, found);
+  return found;
+}
+
 /**
  * Everything a player could see that the game considers hidden or gone, and
  * every model the game names that draws nothing:
@@ -114,7 +151,7 @@ const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ?
  * - effects destroyed in view whose death animation emits particles.
  */
 export function visibilityProblems(report: SceneReport, kinds: readonly SceneKind[], expected: VisibilityExpectations): readonly SceneProblem[] {
-  const facts = new Map(Object.entries(expected.models).map(([model, entry]) => [key(model), entry]));
+  const { facts } = preparedFor(expected);
   const named = new Map<string, { readonly model: string; readonly names: string[] }>();
   for (const { name, models } of kinds) {
     for (const model of models) {
@@ -156,10 +193,7 @@ export function visibilityProblems(report: SceneReport, kinds: readonly SceneKin
       if (unknown.length > 0) {
         problems.push({ seen: `${parked} parked ${kind}${parked === 1 ? "" : "s"} may show particles from where they are parked`, evidence: `model ${line.model}: the reach of ${unknown.join(", ")} is unknown` });
       } else {
-        const seen = expected.parking.flatMap((place) => expected.cameras.flatMap((camera) => {
-          const box = boxes.find((reach) => boxSeen(shift(reach, place), camera));
-          return box === undefined ? [] : [{ place, camera, box }];
-        }))[0];
+        const seen = sighting(expected, key(line.model), boxes);
         if (seen !== undefined) {
           const { place, camera, box } = seen;
           const { min, max } = shift(box, place);

@@ -36,9 +36,10 @@ export interface HeadlessRuntime {
    * when it says rather than before the next frame; `options.files` gives a
    * slot's CustomMapData outside the process (customMapData,
    * wisp:scripts/wisp/headlessInput.ts); `options.keepCalls` compares calls
-   * every frame and forgets old ones, for long runs.
+   * every frame and forgets old ones, for long runs; `options.cost` measures
+   * each client's frames.
    */
-  clients(entry: MapEntry, players?: readonly number[], options?: Pick<LockstepOptions, "delivery" | "files" | "keepCalls">): Lockstep;
+  clients(entry: MapEntry, players?: readonly number[], options?: Pick<LockstepOptions, "delivery" | "files" | "keepCalls" | "cost">): Lockstep;
   /**
    * The module set a reload publishes to install `entry`: `reload(modules(entry))`
    * moves the clients to another entry, such as the map loaded again from a
@@ -141,7 +142,8 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
     starting[key] = global[key];
     delete global[key];
   }
-  const values = new Map<HeadlessClient, Record<string, unknown>>();
+  // Weak, so a long run's finished clients take their match state with them.
+  const values = new WeakMap<HeadlessClient, Record<string, unknown>>();
   const valuesOf = (client: HeadlessClient) => {
     let own = values.get(client);
     if (own === undefined) values.set(client, own = { ...starting });

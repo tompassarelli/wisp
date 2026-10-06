@@ -145,7 +145,8 @@ lets the same program drive headless clients:
   `type`. `hold(slot)` is a stopped game: no client runs a frame, as in a
   lockstep game, and the text typed for it waits; after `release` frames go on
   without catching up the held time. `advance()` runs the frames due and
-  returns the milliseconds until the next, for the host's loop.
+  returns the milliseconds until the next, for the host's loop; a hook given
+  after the clock runs after every frame, as the [soak's detectors](soak.md#through-a-games-own-input-helper) do.
 
 ```ts
 const clients = installHeadless(MAP).clients(entry, [0, 1], {
@@ -166,6 +167,9 @@ is kept with the frame it was found after, and the checksum and
 `callCount()` still cover every call. Without it, Smashcraft's two-client
 match grew the process by about 10 MB a second, measured on its development
 build.
+
+With `cost`, a clock such as process CPU milliseconds, `clients.costs` holds
+what each client's last frame took: its arriving messages and its callbacks.
 
 ## In Bun tests
 

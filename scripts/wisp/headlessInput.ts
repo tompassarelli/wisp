@@ -106,6 +106,8 @@ export class RealtimeClients {
     readonly clients: Lockstep,
     private readonly inputs: ReadonlyMap<number, TypedInput>,
     private readonly now: () => number = () => performance.now(),
+    /** Runs after each frame, such as a soak's detectors. */
+    private readonly afterFrame: (this: void) => void = () => undefined,
   ) {}
 
   /** Starts the map in every client; frame 1 is due one frame later. */
@@ -131,6 +133,7 @@ export class RealtimeClients {
       this.deliver();
       this.clients.frames(1);
       this.ran++;
+      this.afterFrame();
     }
     return this.origin + (this.ran + 1) * frameMillis - this.now();
   }

@@ -6,6 +6,7 @@
 // further turns. A sender's messages arrive in the order it sent them.
 import type { SyncMessage } from "../../src/headless/client";
 import type { SyncDelivery } from "../../src/headless/lockstep";
+import { Random } from "./random";
 
 export interface SyncLatency {
   /** One-way latency in game milliseconds, before rounding up to a turn. */
@@ -29,23 +30,6 @@ export const MEASURED_BATTLE_NET: SyncLatency = {
 
 /** Game milliseconds between a client's timer callbacks. */
 export const CALLBACK_MS = 1000 / 60;
-
-/** Park-Miller minimal standard generator in Schrage's form: every product stays below 2^31. */
-class Random {
-  private state: number;
-
-  constructor(seed: number) {
-    this.state = (Math.abs(Math.trunc(seed)) % 2147483646) + 1;
-  }
-
-  /** Uniform in (0, 1). */
-  next(): number {
-    const high = Math.floor(this.state / 44488);
-    const next = 48271 * (this.state - high * 44488) - 3399 * high;
-    this.state = next > 0 ? next : next + 2147483647;
-    return this.state / 2147483647;
-  }
-}
 
 /** The game milliseconds from a send during `frame`'s callback until every client receives it. */
 export function syncAgeMs(latency: SyncLatency, frame: number, extraTurns: number): number {

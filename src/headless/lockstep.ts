@@ -34,6 +34,11 @@ export interface LockstepOptions {
    * each log, for the context of a later desync, so a long run keeps its memory.
    */
   readonly keepCalls?: number;
+  /**
+   * A clock, such as process CPU milliseconds: with it, `costs` holds what
+   * each client's last frame took, its arriving messages and its callbacks.
+   */
+  readonly cost?: (this: void) => number;
 }
 
 /**
@@ -74,6 +79,8 @@ export class Lockstep {
   files: VersionFiles | undefined = undefined;
   /** With a delivery: messages sent and not yet received, by arrival frame, then send order. */
   readonly inFlight: InFlight[] = [];
+  /** With a `cost` clock: each client's last frame, in the clock's units, by client index. */
+  readonly costs: number[] = [];
   private readonly options: LockstepOptions;
   /** The first desync, once a comparison after a frame found one. */
   private divergence: string | undefined;
@@ -148,7 +155,12 @@ export class Lockstep {
   private arrive(): void {
     while ((this.inFlight[0]?.arrival ?? this.frame + 1) <= this.frame) {
       const due = this.inFlight.shift();
-      if (due !== undefined) for (const client of this.clients) client.deliverSync(due.message);
+      if (due === undefined) continue;
+      for (let index = 0; index < this.clients.length; index++) {
+        const started = this.options.cost?.();
+        this.clients[index]?.deliverSync(due.message);
+        this.charge(index, started);
+      }
     }
     this.flush();
   }
@@ -156,11 +168,22 @@ export class Lockstep {
   frames(count: number): void {
     for (let frame = 0; frame < count; frame++) {
       this.frame++;
+      for (let index = 0; index < this.clients.length; index++) this.costs[index] = 0;
       this.arrive();
-      for (const client of this.clients) client.step();
+      for (let index = 0; index < this.clients.length; index++) {
+        const started = this.options.cost?.();
+        this.clients[index]?.step();
+        this.charge(index, started);
+      }
       this.flush();
       this.settle();
     }
+  }
+
+  /** Adds the cost clock's time since `started` to a client's frame. */
+  private charge(index: number, started: number | undefined): void {
+    const clock = this.options.cost;
+    if (clock !== undefined && started !== undefined) this.costs[index] = (this.costs[index] ?? 0) + clock() - started;
   }
 
   /**
