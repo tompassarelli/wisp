@@ -135,7 +135,10 @@ command that clears them.
    `--pid` is this game's is kept; any other running copy stops `play`. The
    helper starts in its own session, so it outlives `play` and its terminal,
    and must print its ready line within 10 s. It starts before the match, so
-   the player's pad plays from the first frame.
+   the player's pad plays from the first frame. A game whose controller
+   runs as an always-on service declares `helper: { service }` instead:
+   play starts no helper and waits on `service(game)`, which resolves with
+   what the service says once it serves this game.
 6. **Match.** The game's own step: it sets up and starts the match, its
    opponent included, by calling the map's code, not its menus.
 7. **Fullscreen.** The game's window is fullscreen and focused, so the
@@ -161,6 +164,7 @@ export const play = makePlay({
   started: (game, since) => /* the map's first-screen file, newer than since */,
   match: (game) => /* the go-ahead the map waits for, then its receipt; "computer as Player 3" */,
   helper: { binary, args: (game) => /* game.pid, game.window, game.xWindow.id, ... */, ready: /waiting_for_match/, log },
+  // or, with an always-on controller service: helper: { service: (game) => /* waits until it serves game.pid */ },
 }, gameFilesLayer, tools);
 ```
 

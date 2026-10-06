@@ -250,6 +250,12 @@ export interface PlayDeclaration<R = never> {
   /** With the helper running: sets up and starts the match, its opponent included, and describes it, as in "computer as Player 3". */
   readonly match: (game: PlayGame) => Effect.Effect<string, PlayProblem, R>;
   readonly helper: {
+    /**
+     * An always-on controller service that serves whatever game runs: resolves
+     * with what it says once it serves this game, or fails when it doesn't.
+     */
+    readonly service: (game: PlayGame) => Effect.Effect<string, PlayProblem, R>;
+  } | {
     /** The helper's executable; a running process of it is an earlier helper. */
     readonly binary: string;
     /** Its arguments for this game. */
@@ -824,6 +830,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
 
   // 6. One helper for this game.
   const helper = (game: PlayGame) => Effect.gen(function*() {
+    if ("service" in declaration.helper) return yield* status(5, "Controller helper", yield* declaration.helper.service(game));
     const { binary, ready, log } = declaration.helper;
     const earlier = (yield* machine.processes).filter((process) => process.args[0] === binary);
     const mine = earlier.find((process) => process.args.some((arg, index) => arg === "--pid" && process.args[index + 1] === String(game.pid)));
