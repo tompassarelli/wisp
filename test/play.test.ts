@@ -69,6 +69,10 @@ interface Scenario {
   readonly nameLabel?: boolean;
   readonly playShown?: boolean;
   readonly mapInstalled?: boolean;
+  /** The installed map is an older build than the declared one. */
+  readonly mapStale?: boolean;
+  /** The copy lands damaged. */
+  readonly copyDamaged?: boolean;
   /** Whether the declaration names the map's build, and whether that file is there. */
   readonly mapSource?: "present" | "missing";
   readonly mainMenu?: boolean;
@@ -139,6 +143,7 @@ function world(scenario: Scenario = {}) {
   let launcherLightReads = 0;
   const ignored = new Map(Object.entries(scenario.ignoredClicks ?? {}));
   let mapInstalled = scenario.mapInstalled !== false;
+  let mapDigest = scenario.mapStale === true ? "old build" : "this build";
   let config = withLaunchOptions(SETTINGS, scenario.launchOptions);
   /** What Battle.net read from its settings when it started. */
   let launcherOptions = launchOptions(config);
@@ -315,6 +320,11 @@ function world(scenario: Scenario = {}) {
       if (path === HELPER_LOG) return helperLog.length;
       return path.startsWith(`${LOGS}/`) ? logs.get(path.slice(LOGS.length + 1))?.length : undefined;
     }),
+    digest: (path) => Effect.sync(() => {
+      if (path === MAP) return mapInstalled ? mapDigest : undefined;
+      if (path === SOURCE) return scenario.mapSource === "present" ? "this build" : undefined;
+      return undefined;
+    }),
     list: (directory) => Effect.sync(() => (directory === LOGS ? [...logs.keys(), "libcef-20261006T014728.217325.log"] : [])),
     write: (path, text) => Effect.sync(() => {
       expect(path).toBe(CONFIG);
@@ -325,6 +335,7 @@ function world(scenario: Scenario = {}) {
     copy: (from, to) => Effect.sync(() => {
       events.push(`copy ${from} -> ${to}`);
       mapInstalled = true;
+      mapDigest = scenario.copyDamaged === true ? "truncated" : "this build";
     }),
     append: (path, text) => Effect.sync(() => {
       expect(path).toBe(`${DEBUG}/1970-01-01T00-00-00-000Z/clicks.log`);
@@ -838,7 +849,14 @@ test("a missing map is installed from its declared build before Play; play stops
   expect(copied.failure).toBeUndefined();
   expect(copied.lines).toContain(`3/7 Warcraft III: installed Smashcraft 0.0.47.w3x from ${SOURCE}`);
   expect(copied.events.indexOf(`copy ${SOURCE} -> ${MAP}`)).toBeLessThan(copied.events.indexOf("Play"));
-  // An installed map is left as it is.
+  // Run 11, 6 Oct: an installed map that differs from the declared build is replaced before Play, then verified.
+  const stale = await world({ mapStale: true, mapSource: "present" }).run();
+  expect(stale.failure).toBeUndefined();
+  expect(stale.lines).toContain(`3/7 Warcraft III: replaced Smashcraft 0.0.47.w3x from ${SOURCE}`);
+  expect(stale.events.indexOf(`copy ${SOURCE} -> ${MAP}`)).toBeLessThan(stale.events.indexOf("Play"));
+  expect((await world({ mapStale: true, mapSource: "present", copyDamaged: true }).run()).failure).toBe(
+    `3/7 Warcraft III stopped: the installed map differs from its build after copying: ${MAP}`);
+  // An installed map identical to its build is left as it is.
   expect((await world({ mapSource: "present" }).run()).events.filter((event) => event.startsWith("copy"))).toEqual([]);
   // Neither the map nor the main menu: the map's own wait decides.
   expect((await world({ loadfile: "ignored", mainMenu: false }).run()).failure).toBe("4/7 Map stopped: the map didn't reach fighter selection within 120 s");

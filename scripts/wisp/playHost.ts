@@ -8,6 +8,7 @@
 // mouse does: on the owner's desktop the X pointer stays where the
 // compositor's pointer is, so XTEST motion doesn't move it.
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { appendFileSync, closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { Clock, Effect, Layer, Schema } from "effect";
@@ -137,6 +138,10 @@ const machine = (tools: PlayTools): PlayMachine["Service"] => ({
     catch: problem(`couldn't read ${path}`),
   }),
   size: (path) => Effect.try({ try: () => statSync(path, { throwIfNoEntry: false })?.size, catch: problem(`couldn't read ${path}`) }),
+  digest: (path) => Effect.try({
+    try: () => (statSync(path, { throwIfNoEntry: false }) === undefined ? undefined : createHash("sha256").update(readFileSync(path)).digest("hex")),
+    catch: problem(`couldn't read ${path}`),
+  }),
   list: (directory) => Effect.try({
     try: () => {
       try {
