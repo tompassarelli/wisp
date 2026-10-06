@@ -1,6 +1,7 @@
 // How the soak's tests set up a match of the test map: each policy but
 // "fuzz" switches on a fault, and every controller edge is counted. A
 // "typing" player's helper types a 600-character burst every two seconds.
+// "loop" is the game's own detector finding something from tick 200 on.
 import { defineSoakGame } from "../../scripts/wisp/soak";
 import { reproLines } from "../../src/runtime/repro";
 import { LAST_TICK, install, start, state } from "./map";
@@ -31,6 +32,10 @@ export default defineSoakGame({
         return { progress: tick >= LAST_TICK ? undefined : tick, over: tick >= LAST_TICK };
       },
       confirmed: () => ({ frame: state().tick, checksum: `${state().tick}:${state().edges.join(",")}:${state().keys.join(",")}` }),
+      findings: () => {
+        const { tick } = state();
+        return match.policies.includes("loop") && tick >= 200 ? [{ detector: "loop", text: `tick ${tick} repeats tick ${tick - 50}` }] : [];
+      },
       repro: () => reproLines({ build: "soak-test", frame: state().tick, checksum: String(state().tick) }, [`edges ${state().edges.join(" ")}`]),
     };
   },
