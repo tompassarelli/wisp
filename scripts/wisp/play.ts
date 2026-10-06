@@ -71,8 +71,8 @@ export interface Screen {
 }
 
 /**
- * A place to click: a point of an image `area` that covers `output` exactly,
- * as its capture or the fullscreen X window on it does, and that X window.
+ * A place to click: a point of an image `area` that captures `output` exactly,
+ * and the target X window. The window may be letterboxed inside the output.
  */
 export interface Spot {
   readonly output: string;
@@ -96,7 +96,7 @@ export function spotTargets(spot: Spot, output: OutputArea) {
   const down = spot.y / spot.area.height;
   return {
     logical: { x: output.x + across * output.width, y: output.y + down * output.height },
-    root: { x: spot.window.x + Math.round(across * spot.window.width), y: spot.window.y + Math.round(down * spot.window.height) },
+    root: { x: Math.round((output.x + across * output.width) * spot.area.width / output.width), y: Math.round((output.y + down * output.height) * spot.area.height / output.height) },
   };
 }
 
@@ -112,12 +112,12 @@ export interface Gain {
 }
 
 /**
- * The gain before any move: the X pixels per logical pixel of the output
+ * The gain before any move: the captured pixels per logical pixel of the output
  * (2 for 2880x1920 X pixels on a 1440x960 output at scale 2). Over
  * fullscreen Warcraft III's Battle.net screens it moved one X pixel per
  * logical pixel (6 Oct), so each move measures it again.
  */
-export const expectedGain = (spot: Spot, output: OutputArea): Gain => ({ x: spot.window.width / output.width, y: spot.window.height / output.height });
+export const expectedGain = (spot: Spot, output: OutputArea): Gain => ({ x: spot.area.width / output.width, y: spot.area.height / output.height });
 
 /** The compositor pointer move, in logical pixels, that brings the X pointer from `at` to `target` at `gain`. */
 export const steer = (at: Point, target: Point, gain: Gain) => ({ dx: (target.x - at.x) / gain.x, dy: (target.y - at.y) / gain.y });
@@ -598,12 +598,18 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       const page = Effect.gen(function*() {
         const light = yield* desktop.read(output, "light");
         const white = yield* desktop.read(output, "white");
-        yield* sameShape(light, xWindow, "Battle.net's window");
         return { light, white };
       });
       const click = (screen: Screen, place: { readonly x: number; readonly y: number }, what: string) =>
         clickSpot(what, window.id, { output, area: screen, x: place.x, y: place.y, window: xWindow });
-      let seen = yield* until(PLAY_TIMEOUTS.screen, page.pipe(Effect.map((now) => (warcraftPlay(now) !== undefined || topmost(findPhrase(now.light.words, "Games")) !== undefined ? now : undefined))),
+      // Fullscreen requests can reflow the launcher before the compositor's next capture.
+      let previousGames: Point | undefined;
+      let seen = yield* until(PLAY_TIMEOUTS.screen, page.pipe(Effect.map((now) => {
+        const games = topmost(findPhrase(now.light.words, "Games"));
+        const previous = previousGames;
+        previousGames = games;
+        return warcraftPlay(now) !== undefined || (games !== undefined && previous !== undefined && samePlace(games, previous)) ? now : undefined;
+      })),
         () => "Battle.net's window shows neither its Games tab nor Warcraft III's Play button");
       // Battle.net opens on the game it last showed or features, such as WoW: Forever; its Games tab lists Warcraft III.
       if (warcraftPlay(seen) === undefined) {

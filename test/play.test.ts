@@ -57,6 +57,8 @@ interface Scenario {
   readonly launches?: readonly ("running" | "failed" | "ignored")[];
   /** The game Battle.net shows when it opens; 6 Oct it opened on WoW: Forever. */
   readonly launcherPage?: "warcraft" | "other";
+  /** The first Games read precedes the launcher's settled layout. */
+  readonly launcherGamesMoves?: boolean;
   /** Warcraft III's button on its page. */
   readonly warcraftButton?: "Play" | "Update";
   /** Which click on Warcraft III's tile art opens its page; 0 for none. */
@@ -134,6 +136,7 @@ function world(scenario: Scenario = {}) {
   let presses = 0;
   let tileClicks = 0;
   let battleNetReads = 0;
+  let launcherLightReads = 0;
   const ignored = new Map(Object.entries(scenario.ignoredClicks ?? {}));
   let mapInstalled = scenario.mapInstalled !== false;
   let config = withLaunchOptions(SETTINGS, scenario.launchOptions);
@@ -249,7 +252,7 @@ function world(scenario: Scenario = {}) {
     if (scenario.playShown === false) return [];
     const nav: Button[] = [
       { phrase: "HOME", x: 1705, y: 146, press: () => {} },
-      { phrase: "GAMES", x: 1843, y: 146, press: () => { page = "games"; } },
+      { phrase: "GAMES", x: scenario.launcherGamesMoves ? 480 : 1843, y: scenario.launcherGamesMoves ? 82 : 146, press: () => { page = "games"; } },
       { phrase: "SHOP", x: 1979, y: 146, press: () => {} },
     ];
     switch (page) {
@@ -348,7 +351,11 @@ function world(scenario: Scenario = {}) {
       expect(output).toBe(OUTPUT.name);
       if (menu === "battle.net") battleNetReads++;
       const shown = screenOf().filter((button) => (button.white === true) === (ink === "white"));
-      return { ...FRAME, words: shown.flatMap((button, index) => button.read ?? words(`b${index}`, button.x, button.y, button.phrase)) };
+      if (windows.get(focused ?? 0)?.title === "Battle.net" && ink === "light") launcherLightReads++;
+      return { ...FRAME, words: shown.flatMap((button, index) => {
+        const moving = scenario.launcherGamesMoves && launcherLightReads === 1 && button.phrase === "GAMES";
+        return button.read ?? words(`b${index}`, button.x + (moving ? 92 : 0), button.y + (moving ? 5 : 0), button.phrase);
+      }) };
     }),
     snapshot: (output, path) => Effect.sync(() => {
       expect(output).toBe(OUTPUT.name);
@@ -538,6 +545,18 @@ test("a click target maps to the compositor's logical pixels and the X root's pi
   // A second output to the right: logical positions shift, X pixels follow the window.
   const right = { ...spot, output: "HDMI-A-1", window: { ...spot.window, x: 2880 } };
   expect(spotTargets(right, { ...output, x: 1440 })).toEqual({ logical: { x: 2477.5, y: 759 }, root: { x: 4955, y: 1518 } });
+  // An output capture's coordinates do not change when its target window is letterboxed.
+  const letterboxed = { ...spot, x: 480, y: 82, window: { ...spot.window, x: 690, y: 40, width: 1500, height: 1840 } };
+  expect(spotTargets(letterboxed, output)).toEqual({ logical: { x: 240, y: 41 }, root: { x: 480, y: 82 } });
+  expect(expectedGain(letterboxed, output)).toEqual({ x: 2, y: 2 });
+});
+
+test("launcher Games is clicked after its layout settles, at the capture's point", async () => {
+  const result = await world({ launcherGamesMoves: true }).run({ menus: true });
+  expect(result.failure).toBeUndefined();
+  expect(result.events).toContain("click Battle.net GAMES");
+  expect(result.clickLog[0]).toContain("480,82 of 2880x1920");
+  expect(result.events).toContain("match");
 });
 
 /** A compositor pointer whose moves reach the X pointer at `gain` X pixels per logical pixel, rounded as Xwayland reports them. */

@@ -263,7 +263,7 @@ const desktop = (tools: PlayTools, display: string): PlayDesktop["Service"] => {
       if (output === undefined) return yield* new PlayProblem({ problem: `niri has no output ${spot.output}` });
       const { logical, root } = spotTargets(spot, output);
       // One logical pixel, in X pixels.
-      const tolerance = Math.max(1, Math.ceil(spot.window.width / output.width));
+      const tolerance = Math.max(1, Math.ceil(spot.area.width / output.width));
       // Xwayland reports the move asynchronously; a move that changes nothing within a second counts as not moving.
       const move = (dx: number, dy: number) => Effect.gen(function*() {
         const from = yield* pointer;
