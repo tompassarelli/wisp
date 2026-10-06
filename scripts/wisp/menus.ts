@@ -59,6 +59,8 @@ const REPORTED_PAYLOADS = "Lobby|Slot|Computer|Team|Race|Color|Handicap|Map|Star
 /** Messages from the game that say where the client is; the page keeps the newest few and announces them. */
 const PAGE_STATES = "SetGlueScreen|GameLobbySetup|UpdateScoreInfo|LoggedOut";
 const RECENT_KEPT = 4;
+/** How often the page announces its address: a listener that starts waits at most this long for it. */
+const ANNOUNCE_MS = 500;
 
 /**
  * The menu page: the game's own menus (GlueManager.js draws them into #root
@@ -135,7 +137,7 @@ export function menuPage(reportPort: number): string {
           if (recent.length > 0) address.recent = recent;
           post("/menus", address)
             .then(function () { heard = true; }, function () { heard = false; });
-          setTimeout(announce, 2000);
+          setTimeout(announce, ${ANNOUNCE_MS});
         }
         announce();
       })();
@@ -191,7 +193,7 @@ const Announcement = Schema.Struct({ port: Schema.Int, guid: Schema.String, rece
  * Wisp program (`wisp watch` beside `play` or `fresh`) finds the menus too.
  */
 export const menuAddressFile = (reportPort: number) => join(process.env["XDG_RUNTIME_DIR"] ?? tmpdir(), `wisp-menus-${reportPort}.json`);
-/** The page announces every 2 s; an address file older than this has no listener behind it. */
+/** Several announcements long: an address file older than this has no listener behind it. */
 const ADDRESS_FRESH_MS = 6000;
 const KeptAddress = Schema.Struct({ port: Schema.Int, guid: Schema.String, recent: Schema.optionalKey(Schema.Array(Heard)), at: Schema.Finite });
 
@@ -392,8 +394,9 @@ const listedMaps = (payload: unknown): ListedMap[] => {
   }));
 };
 
-/** How long a folder's maps may stay unlisted after its subfolders are. */
+/** How long a folder's maps may stay unlisted after its subfolders are, and how often it is listed again meanwhile. */
 const MAP_LIST_WAIT_SECONDS = 15;
+const MAP_LIST_RETRY_MS = 250;
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const separator = (path: string) => (path.includes("\\") && !path.includes("/") ? "\\" : "/");
@@ -419,10 +422,10 @@ export const findMap = (menus: MenuSocket, folder: string, file: string) => Effe
     const inMaps = maps.map((entry) => /^(.*[\\/]Maps[\\/])/i.exec(entry.filepath)?.[1]).find((root) => root !== undefined);
     const next = sub !== undefined ? `${withSeparator(sub.filepath)}${sub.filename}${separator(sub.filepath)}` : inMaps !== undefined ? `${inMaps}${folder.replace(/[\\/]/g, separator(inMaps))}${separator(inMaps)}` : undefined;
     // A game that has just started lists a folder's subfolders before it has read its maps.
-    if (maps.length > 0 && maps.every((entry) => entry.isFolder) && inFolder(maps[0]!.filepath, folder) && waited < MAP_LIST_WAIT_SECONDS) {
-      waited++;
+    if (maps.length > 0 && maps.every((entry) => entry.isFolder) && inFolder(maps[0]!.filepath, folder) && waited < MAP_LIST_WAIT_SECONDS * 1000) {
+      waited += MAP_LIST_RETRY_MS;
       listing--;
-      yield* Effect.sleep("1 second");
+      yield* Effect.sleep(`${MAP_LIST_RETRY_MS} millis`);
       continue;
     }
     if (next === undefined || asked.has(next)) {

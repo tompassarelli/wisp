@@ -94,7 +94,9 @@ interface at launch. That needs root and sees other loopback traffic.
 - `#root` and `#portal`, with the game's own `GlueManager.js` from its data.
   Nothing of Blizzard's is copied.
 - A script that posts the page's port and GUID to `127.0.0.1:47123` every
-  2 s.
+  0.5 s, so a program that starts listening finds the menus within half a
+  second. A page installed before 7 October 2026 announces every 2 s until
+  `wisp menus install` replaces it.
 - While something listens there, the name of each request the menus send,
   with the payload for lobby, map and slot requests. This turns any click
   into a known request: `wisp menus listen`, then do the step by hand once.

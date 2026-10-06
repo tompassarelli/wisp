@@ -104,12 +104,15 @@ function fakeGame(hosting: "immediate" | "old-setup" | "refused" = "immediate", 
 test("a folder whose maps the game hasn't read yet is listed again until they appear", async () => {
   const game = fakeGame("immediate", 2);
   try {
+    const started = performance.now();
     const result = await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const menus = yield* connectMenus(game.address);
       return yield* hostLobby(menus, { folder: "00-Wisp", file: "Wisp Sample.w3x", gameName: "late", password: "pw" });
     })));
     expect(result).toBe(`${MAPS}00-Wisp/Wisp Sample.w3x`);
     expect(game.received.filter(({ message }) => message === "GetMapList").length).toBe(4);
+    // Listed again every 250 ms: two unread listings cost half a second, not two.
+    expect(performance.now() - started).toBeLessThan(1500);
   } finally { game.stop(); }
 });
 
@@ -297,7 +300,10 @@ test("the page keeps the newest screens it heard and announces them, so a later 
     return Promise.resolve();
   };
   const timers: (() => void)[] = [];
-  new Function("window", "location", "fetch", "setTimeout", "URLSearchParams", script)(window, { search: `?guid=${GUID}`, port: "38487" }, fetch, (next: () => void) => timers.push(next), URLSearchParams);
+  const delays: number[] = [];
+  new Function("window", "location", "fetch", "setTimeout", "URLSearchParams", script)(window, { search: `?guid=${GUID}`, port: "38487" }, fetch, (next: () => void, delay: number) => { timers.push(next); delays.push(delay); }, URLSearchParams);
+  // Every half second, so a program that starts listening finds the menus within it.
+  expect(delays).toEqual([500]);
   const socket = new (window.WebSocket as new (url: string) => NativeSocket)(`ws://127.0.0.1:38487/webui-socket/${GUID}`);
   for (const [messageType, payload] of [["SetGlueScreen", { screen: "CUSTOM_LOBBIES" }], ["MapList", { mapList: {} }], ["GameLobbySetup", { isHost: true, players: [] }]] as const) {
     listener!({ data: JSON.stringify({ messageType, payload }) });

@@ -103,7 +103,9 @@ command that clears them.
    and hosts it only once the game's own log (this launch's, not the one
    launch replaces) shows the scan over: a line at least 2 s after its last
    ladder map, or 2 s with nothing new. A game that signed in and opens no
-   ladder map within 30 s is hosted anyway. The menu connection can establish
+   ladder map within 30 s of its sign-in, by the clock of the log or of
+   `play`, is hosted anyway, so a running game that never scanned but played
+   since is hosted at once. The menu connection can establish
    sign-in when the log hasn't written its login line. Without either source
    establishing sign-in within 120 s, `play` stops. Warcraft III already past
    its scan is hosted at once. A running match is first left through Game Menu,

@@ -69,7 +69,7 @@ The sources, in the order they count:
    ([driving-warcraft.md](driving-warcraft.md)), watch connects its own socket
    to the menus and hears every message the game sends them. The page also
    keeps the newest four state messages it heard and announces them every
-   2 s, so a watch started mid-session knows the current screen. A page
+   0.5 s, so a watch started mid-session knows the current screen. A page
    installed before this feature announces no screens: until the screen next
    changes, such a client is `running` or `signed in`. Reinstall the page
    (`wisp menus install`) to get them.
