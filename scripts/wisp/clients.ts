@@ -6,7 +6,7 @@ import type { Frame } from "./frameProbe";
 export { DesktopFailure, type Ink, type Region, type Word, type InputAction, waitFor } from "../warcraft/desktop";
 
 /** The client identity used by journeys and fake service implementations. */
-export type Client = Pick<desktop.Client, "name" | "documents">;
+export type Client = Pick<desktop.Client, "name" | "documents" | "menuReportPort">;
 
 export class Clients extends Context.Service<Clients, {
   /** Every client, the host first. */

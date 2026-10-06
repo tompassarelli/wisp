@@ -22,7 +22,7 @@ interface Received {
 }
 
 /** A game's menus server: the menus' socket at /webui-socket/GUID, answering as the game does. */
-function fakeGame() {
+function fakeGame(hosting: "immediate" | "old-setup" | "refused" = "immediate") {
   const received: Received[] = [];
   const sockets = new Set<Bun.ServerWebSocket<undefined>>();
   let listed = new Set<string>();
@@ -59,8 +59,16 @@ function fakeGame() {
             return;
           }
           case "CreateLobby":
-            if (listed.has(String(payload["filename"]))) tell("GameLobbySetup", { isHost: true });
+            if (hosting === "refused") tell("MultiplayerGameCreateResult", { details: { success: false } });
+            else if (hosting === "old-setup") {
+              tell("GameLobbySetup", { isHost: false });
+              tell("SetGlueScreen", { screen: "GAME_LOBBY" });
+            }
+            else if (listed.has(String(payload["filename"]))) tell("GameLobbySetup", { isHost: true });
             else tell("MultiplayerGameCreateResult", { details: { success: false } });
+            return;
+          case "SendGameLobbySetup":
+            tell("GameLobbySetup", { isHost: true });
             return;
           case "JoinGameByGameName":
             if (payload["checkForGamePass"] === true || payload["gamePass"] !== "pw") tell("RequestForPassword", {});
@@ -83,14 +91,33 @@ const games: { stop: () => void }[] = [];
 afterEach(() => {
   for (const game of games.splice(0)) game.stop();
 });
-const started = () => {
-  const game = fakeGame();
+const started = (hosting?: Parameters<typeof fakeGame>[0]) => {
+  const game = fakeGame(hosting);
   games.push(game);
   return game;
 };
 
 const run = <A, E>(effect: Effect.Effect<A, E, import("effect").Scope.Scope>) => Effect.runPromiseExit(Effect.scoped(effect));
 const failure = (exit: Exit.Exit<unknown, { readonly message: string }>) => (Exit.isFailure(exit) ? String(exit.cause) : "succeeded");
+
+test("hosting ignores the previous non-host setup and requests the current setup on lobby entry", async () => {
+  const game = started("old-setup");
+  const exit = await run(Effect.gen(function*() {
+    const menus = yield* connectMenus(game.address);
+    return yield* hostLobby(menus, { folder: "00-Wisp", file: "Wisp Sample.w3x", gameName: "wisp 1", password: "pw" });
+  }));
+  expect(Exit.isSuccess(exit) ? exit.value : failure(exit)).toBe(`${MAPS}00-Wisp/Wisp Sample.w3x`);
+  expect(game.received.map(({ message }) => message)).toEqual(["GetMapList", "GetMapList", "CreateLobby", "SendGameLobbySetup"]);
+});
+
+test("an explicit create refusal still fails instead of waiting for a host setup", async () => {
+  const game = started("refused");
+  const exit = await run(Effect.gen(function*() {
+    const menus = yield* connectMenus(game.address);
+    return yield* hostLobby(menus, { folder: "00-Wisp", file: "Wisp Sample.w3x", gameName: "wisp 1", password: "pw" });
+  }));
+  expect(failure(exit)).toContain("the game refused to create the lobby");
+});
 
 test("the page loads the game's menus and reports its port and GUID, then the menus' requests while heard", async () => {
   const page = menuPage(47123);
