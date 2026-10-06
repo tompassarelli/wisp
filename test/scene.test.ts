@@ -20,6 +20,7 @@ const expectations: SceneExpectations = {
     { name: "flash", models: ["Gone.mdx"], lifetime: 30 },
     { name: "puff", models: ["Abilities\\Puff.mdx"], lifetime: 12 },
     { name: "smoke", models: ["Abilities\\Smoke.mdx"], lifetime: 30 },
+    { name: "hero", models: ["Units\\Hero.mdx"] },
   ],
   stage: { kind: "stage deck", pieces: 1 },
   framesPerSecond: 60,
@@ -44,6 +45,8 @@ test("the emitted scene recorder reports each model's effects, and the host name
       { model: "Abilities/Trap.mdx", live: 1, inView: 1, drawn: 0, created: 0, age: 101, longest: 101, destroyed: 0 },
       { model: "Flat.mdx", live: 1, inView: 1, drawn: 0, created: 0, age: 101, longest: 101, destroyed: 0 },
       { model: "Gone.mdx", live: 0, inView: 0, drawn: 0, created: undefined, age: undefined, longest: 90, destroyed: 1 },
+      // Units: one hidden from 20 to 30, one faded out, one removed at 90.
+      { model: "Units/Hero.mdx", live: 2, inView: 2, drawn: 1, created: 0, age: 101, longest: 101, destroyed: 0 },
       { model: "war3mapImported/Deck.mdx", live: 1, inView: 1, drawn: 1, created: 0, age: 101, longest: 101, destroyed: 0 },
     ],
   });

@@ -1,5 +1,5 @@
 // The scene recorder, for development and diagnostic builds: it reports which
-// special effects the map draws, so a host check can fail on a missing stage,
+// special effects, and optionally which units, the map draws, so a host check can fail on a missing stage,
 // an effect with no model or one that stays in view too long. At start it
 // wraps the effect natives in the Lua globals once, so the game's own code is
 // unchanged and a build that never starts it carries none of this. Local to
@@ -22,6 +22,12 @@ export interface SceneOptions {
    * scale or time scale, so only an effect parked there is out of view.
    */
   readonly parked: (this: void, x: number, y: number, z: number) => boolean;
+  /**
+   * The model a unit type draws, for a game that draws some of what a player
+   * sees with units. Given, units count in the report with effects: a unit is
+   * in view while shown. Units of a type it names no model for are not recorded.
+   */
+  readonly unitModel?: ((this: void, unitType: number) => string | undefined) | undefined;
 }
 
 interface Recorded {
@@ -36,8 +42,13 @@ interface Recorded {
   drawn: boolean;
 }
 
+interface RecordedUnit extends Recorded {
+  hidden: boolean;
+}
+
 interface SceneState {
   readonly effects: Map<effect, Recorded>;
+  readonly units: Map<unit, RecordedUnit>;
   /** Per model, the longest one finished a stay in view. */
   readonly longest: Map<string, number>;
   /** Per model, how many were destroyed in view. */
@@ -157,6 +168,56 @@ function wrapNatives(state: SceneState): void {
     const effect = state.effects.get(handle);
     if (effect !== undefined) placed(state, effect, BlzGetLocalSpecialEffectX(handle), BlzGetLocalSpecialEffectY(handle), z);
   };
+  const { unitModel } = state.options;
+  if (unitModel !== undefined) wrapUnitNatives(state, unitModel);
+}
+
+/** A unit is in view from creation while shown; hiding or removing it ends its stay. */
+function wrapUnitNatives(state: SceneState, unitModel: (this: void, unitType: number) => string | undefined): void {
+  const create = CreateUnit;
+  const remove = RemoveUnit;
+  const show = ShowUnit;
+  const setColor = SetUnitVertexColor;
+  const setScale = SetUnitScale;
+  const natives = globalThis as Record<string, unknown>;
+  natives.CreateUnit = (owner: player, unitType: number, x: number, y: number, facing: number) => {
+    const handle = create(owner, unitType, x, y, facing);
+    const model = unitModel(unitType);
+    if (model !== undefined) {
+      const frame = now(state);
+      state.units.set(handle, { model, created: frame, alpha: 255, scale: 1.0, flat: false, since: frame, drawn: false, hidden: false });
+    }
+    return handle;
+  };
+  natives.RemoveUnit = (handle: unit) => {
+    const recorded = state.units.get(handle);
+    if (recorded !== undefined) {
+      leftView(state, recorded, now(state));
+      state.units.delete(handle);
+    }
+    remove(handle);
+  };
+  natives.ShowUnit = (handle: unit, shown: boolean) => {
+    show(handle, shown);
+    const recorded = state.units.get(handle);
+    if (recorded === undefined) return;
+    recorded.hidden = !shown;
+    if (shown) recorded.since ??= now(state);
+    else leftView(state, recorded, now(state));
+  };
+  natives.SetUnitVertexColor = (handle: unit, red: number, green: number, blue: number, alpha: number) => {
+    const recorded = state.units.get(handle);
+    if (recorded !== undefined) recorded.alpha = alpha;
+    setColor(handle, red, green, blue, alpha);
+  };
+  natives.SetUnitScale = (handle: unit, x: number, y: number, z: number) => {
+    const recorded = state.units.get(handle);
+    if (recorded !== undefined) {
+      recorded.scale = x;
+      recorded.flat = x === 0 || y === 0 || z === 0;
+    }
+    setScale(handle, x, y, z);
+  };
 }
 
 /** Where each effect stands now: in view since when, and whether its model is drawn. */
@@ -168,6 +229,7 @@ function observe(state: SceneState, frame: number): void {
     else effect.since ??= frame;
     effect.drawn = inView && effect.alpha > 0 && effect.scale > 0 && !effect.flat;
   }
+  for (const recorded of state.units.values()) recorded.drawn = !recorded.hidden && recorded.alpha > 0 && recorded.scale > 0 && !recorded.flat;
 }
 
 interface Summary {
@@ -181,7 +243,7 @@ interface Summary {
 /** Every model's line, in path order. */
 function sceneModels(state: SceneState, frame: number): SceneModel[] {
   const summaries = new Map<string, Summary>();
-  for (const effect of state.effects.values()) {
+  for (const effect of [...state.effects.values(), ...state.units.values()]) {
     const summary = summaries.get(effect.model) ?? { live: 0, inView: 0, drawn: 0, created: effect.created, since: undefined };
     summaries.set(effect.model, summary);
     summary.live++;
@@ -234,7 +296,7 @@ export function startSceneReport(options: SceneOptions): void {
   const globals = globalThis as Record<`${string}SceneReport`, SceneState | undefined>;
   const key = `${runtimeConfiguration().globalPrefix}SceneReport` as const;
   if (globals[key] !== undefined) return;
-  const state: SceneState = { effects: new Map(), longest: new Map(), destroyed: new Map(), options, offset: 0, last: options.frame(), serial: 0 };
+  const state: SceneState = { effects: new Map(), units: new Map(), longest: new Map(), destroyed: new Map(), options, offset: 0, last: options.frame(), serial: 0 };
   globals[key] = state;
   wrapNatives(state);
   installSceneReport();

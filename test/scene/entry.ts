@@ -9,5 +9,9 @@ declare global {
 export function start(): void {
   configureRuntime({ filePrefix: "fixture", readyPrefix: "FX_HRR", globalPrefix: "__fixture" });
   installDispatch();
-  startSceneReport({ frame: () => globalThis.__fixtureFrame ?? 0, parked: (_x, _y, z) => z < -1000.0 });
+  startSceneReport({
+    frame: () => globalThis.__fixtureFrame ?? 0,
+    parked: (_x, _y, z) => z < -1000.0,
+    unitModel: (unitType) => (unitType === 1 ? "Units\\Hero.mdx" : undefined),
+  });
 }
