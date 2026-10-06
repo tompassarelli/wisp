@@ -8,7 +8,7 @@
 // mouse does: on the owner's desktop the X pointer stays where the
 // compositor's pointer is, so XTEST motion doesn't move it.
 import { spawn } from "node:child_process";
-import { appendFileSync, closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, renameSync, statSync } from "node:fs";
+import { appendFileSync, closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { Clock, Effect, Layer, Schema } from "effect";
 import { type ProcessInfo, serverDirectoryName } from "../warcraft/battleNet";
@@ -146,6 +146,14 @@ const machine = (tools: PlayTools): PlayMachine["Service"] => ({
       }
     },
     catch: problem(`couldn't list ${directory}`),
+  }),
+  write: (path, text) => Effect.try({
+    try: () => {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(`${path}.next`, text);
+      renameSync(`${path}.next`, path);
+    },
+    catch: problem(`couldn't write ${path}`),
   }),
   copy: (from, to) => Effect.try({
     try: () => {
