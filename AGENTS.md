@@ -10,7 +10,7 @@ source and immutable compiler/tool pins are declared in
 wisp:typescript-toolchain.lock. Use Bun. Keep Effect in host code;
 synchronized Lua code remains pure TypeScript and Warcraft native calls.
 
-Read warcraft-typescript-development-distilled and verification-distilled for
+Read warcraft-modding-distilled and verification-distilled for
 changes. The operator explicitly authorized extracting the existing framework;
 the skill's earlier in-Smashcraft deferral does not apply to this extraction.
 Read effect-development-distilled when changing Effect host services. Read the installed pinned Effect source before choosing its APIs. Runtime
