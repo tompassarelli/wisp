@@ -90,8 +90,12 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
         if (status !== undefined && status.clients.every(({ pid }) => pid !== undefined)) return child;
       }
       if (child.exitCode !== 75) throw new Error(`its session exited with ${child.exitCode}; see ${pairDirectory(pair)}/session.err and desktop-*.err`);
-      if (Date.now() > deadline) throw new Error(`the capacity helper kept deferring it for ${waitSeconds} s`);
-      console.log(`pair ${pair}: the machine is busy; trying again in 45 s`);
+      // Exit 75 is a deferral only when the helper says DEFER; it also exits 75 when it can't reach systemd --user (a user namespace, as run-bounded makes).
+      const said = readFileSync(join(pairDirectory(pair), "session.err"), "utf8");
+      const reason = /"decision":"DEFER","reason":"([A-Z_]+)".*?"cpuSomeAvg10":([\d.]+)/.exec(said);
+      if (reason === null) throw new Error(`the capacity helper refused: ${said.trim().split("\n").slice(-2).join(" | ")}`);
+      if (Date.now() > deadline) throw new Error(`the capacity helper kept deferring it for ${waitSeconds} s (${reason[1]})`);
+      console.log(`pair ${pair}: the capacity helper defers it (${reason[1]}, CPU pressure ${reason[2]}%); trying again in 45 s`);
       await Bun.sleep(45_000);
     }
   },
