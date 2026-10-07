@@ -14,7 +14,7 @@ import { Effect, Fiber } from "effect";
 import type { Client } from "../clients";
 import { describeCause } from "../command";
 import { type DesyncDump, compareDumps, findDesyncLog, formatDesyncComparison, ipseStates, pairDumps, parseDesyncLog } from "./desyncLog";
-import { type EngineClient, isAncestorOf } from "./attach";
+import { type EngineClient, attachClient } from "./attach";
 import { PTRACE_SCOPE, findGameProcesses, prefixOfDocuments } from "./memory";
 import { type LoggedEvent, diffPresenceLogs, parsePresenceLog } from "./presenceLog";
 
@@ -260,9 +260,8 @@ export function groupReports(reports: readonly DesyncReport[], windowMs = 10_000
 
 /**
  * The clients the poller can read, and for the rest one line naming the
- * sysctl. At ptrace_scope 0 it reads every client; at 1 only those this
- * process launched, so a client not running yet is followed in case this
- * session's doctor launches it (the poller's attach decides then).
+ * sysctl. At ptrace_scope 0 it reads every client; at 1 those `readable`
+ * says this process can read.
  */
 export function pollerAccess<C extends EngineClient>(scope: string | undefined, readable: (client: C) => boolean, clients: readonly C[]): { readonly readable: readonly C[]; readonly problem: string | undefined } {
   const value = scope?.trim();
@@ -281,10 +280,20 @@ const readScope = () => {
   }
 };
 
-/** At ptrace_scope 1: a client this process launched (its ancestor), or one not running yet that this session may launch. */
-const launchedHere = (client: EngineClient) => {
-  const game = findGameProcesses(client.prefix)[0];
-  return game === undefined || isAncestorOf(game.pid);
+/**
+ * At ptrace_scope 1: whether this process can read the client, tried with
+ * the poller's own read-only attach (a client this process launched, or one
+ * in a user namespace this user owns). A client not running yet counts, since
+ * this session may launch it; the poller's attach decides then.
+ */
+const readableNow = (client: EngineClient) => {
+  if (findGameProcesses(client.prefix)[0] === undefined) return true;
+  const attached = attachClient(client);
+  if (typeof attached !== "string") {
+    attached.memory.close();
+    return true;
+  }
+  return !attached.includes("can't read pid");
 };
 
 type DeclaredClient = Pick<Client, "name" | "documents">;
@@ -358,7 +367,7 @@ export const withAutopsy = <A, E, R>(options: AutopsyOptions, run: Effect.Effect
   let pollDirectory: string | undefined;
   let poller: { readonly stop: () => Promise<void> } | undefined;
   if (options.poll !== false) {
-    const access = pollerAccess(readScope(), launchedHere, engineClients);
+    const access = pollerAccess(readScope(), readableNow, engineClients);
     if (access.problem !== undefined) print(access.problem);
     if (access.readable.length > 0) {
       pollDirectory = join(session, "presence");

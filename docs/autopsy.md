@@ -35,21 +35,24 @@ Every native session runner runs inside it:
   (wisp:scripts/wisp/doctor.ts). Smashcraft's native pad runs, integrity and
   bot captures, `fresh` and `accept` all go through it.
 
-`wisp play` doesn't pass `autopsy`, because it is the owner's own game. Other
-code wraps any Effect with `withAutopsy({ clientsFile }, run)`
-(wisp:scripts/wisp/engine/autopsy.ts).
+`wisp play` doesn't pass `autopsy`, because it is the owner's own game. Any other
+runner wraps its run in `withAutopsy({ clientsFile }, run)`
+(wisp:scripts/wisp/engine/autopsy.ts) with the clients file of its clients. For
+example, an offline LAN pool host passes the pool's file,
+`~/.local/state/wisp/lan/clients.json`.
 
 ## What a session does
 
 1. **The presence poller.** At the start the session reads
    `kernel.yama.ptrace_scope`. At `0` it starts `wisp engine`'s
    [presence poller](engine.md) on every declared client, in its own thread so
-   that timed input such as pad scripts keeps its timing. At `1` only an
-   ancestor may read a game. The poller then follows the clients this
-   process launched, plus those not running yet, which this session's doctor
-   may launch. For each running client that another process launched, it
-   prints one line naming the sysctl, and the session goes on without
-   polling that client. It also prints one line saying which clients it reads
+   that timed input such as pad scripts keeps its timing. At `1` it first tries
+   one read-only read of each running client. That read works on a client this
+   process launched, and on an offline pool client in a user namespace this
+   user owns. The poller follows each client it could read, plus the clients
+   not running yet, which this session may launch. For each client it can't
+   read, it prints one line naming the sysctl, and the session goes on
+   without polling that client. It also prints one line saying which clients it reads
    and where the logs go. The poller tries again every 2 s to attach to a
    client that isn't running yet.
 2. **Report watch.** Each client's `Documents/Warcraft III/Errors` folder is
