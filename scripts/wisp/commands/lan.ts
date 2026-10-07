@@ -5,6 +5,7 @@
 //                                      run N pairs, each in a private network namespace with only loopback
 //   fresh MAP --pair K [--turn-ms MS]  host MAP on pair K and join both clients; returns once the match plays
 //   status [--pair K]                  each pair's clients and current game
+//   speed N --pair K                   deliver game turns N times sooner (1 restores real time)
 //   end --pair K                       end pair K's game
 // Development and testing on your own offline clients and maps only: never
 // signed-in Battle.net clients, never anyone else's game, not for cheating.
@@ -240,7 +241,15 @@ const dummy: Command = (args) => Effect.gen(function*() {
   if (exit !== 0) return yield* new LanFailure({ problem: `dummy lobby check exited ${exit}` });
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | status [--pair K] | end --pair K";
+const speed: Command = (args) => Effect.gen(function*() {
+  const value = Number(args[0]);
+  if (!Number.isFinite(value) || value < 1 || value > 16) return yield* new UsageFailure({ problem: "speed takes a multiple between 1 and 16" });
+  const pair = yield* number(args, "pair", undefined);
+  yield* agent(pair, "/speed", { speed: value });
+  yield* Console.log(`pair ${pair}: delivering turns at ${value}x; compare client frame progress to measure game speed`);
+});
+
+export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | status [--pair K] | end --pair K";
 
 export const lan: Command = ([sub, ...args]) => {
   switch (sub) {
@@ -249,6 +258,7 @@ export const lan: Command = ([sub, ...args]) => {
     case "fresh": return fresh(args);
     case "dummy": return dummy(args);
     case "status": return status(args);
+    case "speed": return speed(args);
     case "end": return end(args);
     default: return Effect.fail(new UsageFailure({ problem: `lan takes ${LAN_USAGE}` }));
   }

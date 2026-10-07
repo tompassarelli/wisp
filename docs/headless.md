@@ -40,12 +40,33 @@ effects, and logs every native call except the local-only ones.
 | Conversions and math | `I2S`, `R2S`, `R2I`, `I2R`, `S2I`, `S2R`, `SubString`, `StringLength`, `SquareRoot`, `Atan2` and the bit operations, binary32 where Warcraft is. |
 | Messages | `DisplayTextToPlayer` for the local player and `DisplayTextToForce` show text in `client.messages`; Wisp's error reports go to `client.errors` as `error in HANDLER: ...` when the map writes them to its error file, shown or not ([error text](hot-reload.md#error-reports-on-screen)). |
 
-Every other declared native returns a new handle, 0, "", false or nothing,
-by its declared type, and each `Convert` native returns its argument. Constants of a handle type are their own name, so
+An unmodeled declared native fails the journey. Each client records its first
+call with the native name, client slot and frame, including local-only calls.
+The runtime continues with the declared type's default so the report can name
+all missing behavior; equal defaults and equal checksums cannot make it pass.
+Each `Convert` native returns its argument. Constants of a handle type are their own name, so
 comparisons with them work; global variables such as
 `bj_mapInitialPlayableArea` are handles. A game supplies `natives` for one its
 code needs answered otherwise. The declarations come from
 wisp:src/natives/warcraft.d.ts.
+
+### Intentional no-ops
+
+For behavior a particular journey deliberately ignores, declare exact native
+names and a concrete reason in `HeadlessMap` or `LuaHeadlessMap`:
+
+```ts
+intentionalNoops: {
+  StopMusic: "this logic journey has no music playback",
+}
+```
+
+These calls retain their declared defaults and synchronized call logging.
+Empty reasons and undeclared names (including wildcards) are rejected.
+`localNatives` only controls synchronization logging; it does not suppress
+missing-native failures. A function supplied through `natives` counts as
+modeled in both runtimes. Prefer supplied behavior when the return value
+matters, as the sample declares its playable rectangle's center at zero.
 
 ## Synchronized and local-only calls
 
@@ -343,6 +364,56 @@ with an existing headless pad path can call `captureScene(client)` at that
 path's recorded match frame and `renderScenes(render, scenes, PRIVATE_DIR)`
 after the run; no new input simulator is required.
 
+## Unit states
+
+The Bun and emitted Lua runtimes retain a unit's owner and facing, and model
+`GetOwningPlayer`, `GetUnitFacing`, `SetUnitFacing`, `BlzSetUnitFacingEx`,
+life and mana through `GetUnitState`/`SetUnitState`, `GetWidgetLife`/
+`SetWidgetLife`, `BlzGetUnitMaxHP`/`BlzSetUnitMaxHP`,
+`BlzGetUnitMaxMana`/`BlzSetUnitMaxMana`, `KillUnit`, and `RemoveUnit`.
+Removal drops the unit from rendered poses; its type ID and life read zero.
+Life at or below the binary32 value of 0.405 marks a unit dead. Life writes
+to a dead unit cannot revive it; `KillUnit` leaves zero life.
+
+Declare initial object-data values in `unitStates`, keyed by numeric unit
+type ID, on the map passed to `installHeadless` or `luaLockstep`:
+
+```ts
+unitStates: {
+  [0x68666f6f]: { life: 100, maxLife: 100, mana: 80, maxMana: 80 },
+},
+```
+
+These are fixture values, not guessed defaults for the stock footman. For a
+native comparison, establish the same values with `BlzSetUnitMaxHP`,
+`BlzSetUnitMaxMana`, `SetWidgetLife`, and `SetUnitState(UNIT_STATE_MANA)`
+immediately after creation. Without a fixture, set each field before reading
+it; a missing field throws an error naming the unit type and field.
+
+`test/unit-states/cases.ts` authors twelve cases shared by the Bun, Lua32,
+and offline native map. They cover owner, facing, life, mana, both maximums,
+the exactly representable life values 0.40625 and 0.3984375 around the death
+cutoff, killing, two attempted writes after death, and removal. The two-client
+journey took 25.1 ms in Bun on 7 October 2026; its injected different life
+write is reported by the existing call comparison.
+
+Run the shared cases and build their native measurement map:
+
+```sh
+LUA=PATH_TO_LUA32 bun test test/headless-unit-states.test.ts
+bun test/unit-states/build.ts BASE.w3m PRIVATE_OUT.w3x
+```
+
+The native map writes `unit-states-p0.txt` and `unit-states-p1.txt` to
+CustomMapData. Each named row contains integers equal to the observed values
+multiplied by 128, retaining every bit of the selected fractional values.
+Compare the twelve rows with the `EXPECTED` list in the test.
+
+The 0.405 cutoff was identified in WurstScript's Apache-2.0
+[UnitProvider at 9913e1b](https://github.com/wurstscript/WurstScript/blob/9913e1bd300c2053637d756a11bae8c3c8ed568f/de.peeeq.wurstscript/src/main/java/de/peeeq/wurstio/jassinterpreter/providers/UnitProvider.java).
+Wisp's TypeScript implementation is independently authored; no Wurst source
+was copied or adapted.
+
 ## Native table iteration order
 
 `test/table-order/main.ts` walks a 1,000-key string table and a 1,000-key
@@ -372,8 +443,8 @@ beyond the [measured sync latency](network-model.md), and it emulates only
 natives a map has needed. A program that reads real devices can type into
 it, but focus belongs to the map's own frame calls, not to a window;
 edit-box text-changed and Enter events are not emulated, and a click reaches
-only frames placed by absolute points. A native answered by a default value
-can hide behavior that depends on what Warcraft would return. A passing
+only frames placed by absolute points. Explicit no-ops use the map's stated
+assumptions about behavior it ignores. A passing
 journey shows that the clients agree with each other on these stubs; native
 desyncs, timing and rendering beyond the matched checks above keep their
 native checks ([desync reports](hot-reload.md#desync-reports),
@@ -388,8 +459,9 @@ prediction.
 
 Each journey writes one `type: "result"` record with `journey`, `ok`,
 `frames`, and `clients` (each client's slot, native call count, checksum,
-and errors). Each problem writes a `type: "failure"` record with `kind`
-(`desync`, `error`, `scene`, or `check-fail`), `frame`, `client`, and `message`.
+and errors, plus `missingNatives`). Each problem writes a `type: "failure"` record with `kind`
+(`desync`, `error`, `scene`, `check-fail`, or `missing-native`), `frame`, `client`, and `message`.
+Missing-native records also include `native`, its exact declared name.
 Unavailable frame or client values are `null`. JSON mode compares calls on
 every frame so a desync names the first differing frame and client.
 
@@ -397,3 +469,9 @@ The last line is always a `type: "summary"` record with `ok`,
 `counts: { results, failures }`, and monotonic `elapsedMs`. All records have
 `schema: 1` and `command: "headless"`. A failed run retains its nonzero exit
 code, including a load or usage error before any result.
+
+The missing-native CLI fixture (`bun test test/headless-coverage.test.ts`)
+reported both clients and exited 1 in 1.51 s on 7 October 2026, below the 2 s
+target and the approximately 24 s native-check baseline in #38. The focused
+fixture also runs built-in, supplied and intentional no-op behavior in Bun
+and emitted 32-bit Lua.

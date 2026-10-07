@@ -90,6 +90,7 @@ interface Connection {
 
 export interface HostStatus {
   readonly phase: Phase;
+  readonly speed: number;
   readonly turns: number;
   readonly gameSeconds: number;
   readonly desyncs: number;
@@ -103,6 +104,8 @@ export interface LanHost {
   readonly say: (from: number, to: number, text: string) => void;
   /** Queues an action as `pid`'s for the next turn (a seat's or any player's). */
   readonly inject: (pid: number, data: Uint8Array) => void;
+  /** Deliver unchanged game-time turns sooner; clients may still limit their own clocks. */
+  readonly setSpeed: (multiple: number) => void;
   readonly stop: () => void;
 }
 
@@ -154,6 +157,7 @@ export function startHost(options: HostOptions): LanHost {
   let turns = 0;
   let gameMs = 0;
   let lastTurn = 0;
+  let speed = 1;
   let waiting = false;
   let desyncs = 0;
   let pending: PlayerAction[] = [];
@@ -405,7 +409,7 @@ export function startHost(options: HostOptions): LanHost {
       }
       if (waiting) line("caught up");
       waiting = false;
-      const step = Math.min(MAX_STEP_MS, Math.round(at - lastTurn));
+      const step = speed === 1 ? Math.min(MAX_STEP_MS, Math.round(at - lastTurn)) : turnMs;
       lastTurn = at;
       const actions = pending;
       pending = [];
@@ -422,9 +426,10 @@ export function startHost(options: HostOptions): LanHost {
   const lobbyTimer = setInterval(() => {
     if (phase !== "playing") tick();
   }, 250);
-  const turnTimer = setInterval(() => {
+  const sendTurn = () => {
     if (phase === "playing") tick();
-  }, turnMs);
+  };
+  let turnTimer = setInterval(sendTurn, turnMs);
   line(`host ${JSON.stringify(options.gameName)} map ${options.map.path} on 127.0.0.1:${listener.port}, turns of ${turnMs} ms, clients ${options.clients.join(", ")}`);
 
   return {
@@ -436,6 +441,7 @@ export function startHost(options: HostOptions): LanHost {
     },
     status: () => ({
       phase,
+      speed,
       turns,
       gameSeconds: gameMs / 1000,
       desyncs,
@@ -443,6 +449,14 @@ export function startHost(options: HostOptions): LanHost {
     }),
     inject: (pid, data) => {
       pending.push({ playerId: pid, data });
+    },
+    setSpeed: (multiple) => {
+      if (!Number.isFinite(multiple) || multiple < 1 || multiple > 16) throw new Error("LAN speed must be between 1 and 16");
+      clearInterval(turnTimer);
+      speed = multiple;
+      lastTurn = now();
+      turnTimer = setInterval(sendTurn, turnMs / speed);
+      line(`speed ${speed}`);
     },
     stop: () => {
       clearInterval(lobbyTimer);
