@@ -12,6 +12,7 @@ export interface HeadlessRenderProject {
   readonly width?: number;
   readonly height?: number;
   readonly chrome?: string;
+  readonly preloadModels?: readonly string[];
 }
 
 export interface RenderScene {

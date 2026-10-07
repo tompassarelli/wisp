@@ -68,7 +68,9 @@ let gl: WebGL2RenderingContext;
 const models = new Map<string, Promise<model.Model>>();
 const textures = new Map<string, Promise<HTMLCanvasElement>>();
 const tinted = new Map<string, HTMLCanvasElement>();
-const instances = new Map<number, { renderer: ModelRenderer; model: model.Model; path: string; clock: number; alpha: number; originalAlpha: (model.AnimVector | number)[] }>();
+interface ModelInstance { renderer: ModelRenderer; model: model.Model; path: string; clock: number; alpha: number; originalAlpha: (model.AnimVector | number)[] }
+const instances = new Map<number, ModelInstance>();
+const preparedModels = new Map<string, ModelInstance>();
 async function asset(path: string): Promise<ArrayBuffer> {
   const response = await fetch(`/asset?path=${encodeURIComponent(path)}`);
   if (!response.ok) throw new Error(`missing map asset: ${path}`);
@@ -126,19 +128,31 @@ function sequenceIndex(data: model.Model, pose: EffectPose): number {
   const index = data.Sequences.findIndex((sequence) => wanted.every((part) => sequence.Name.toLowerCase().includes(part)));
   return Math.max(0, index);
 }
-async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>) {
+async function prepareInstance(pose: EffectPose) {
   let instance = instances.get(pose.handle.id);
   if (instance === undefined || instance.path !== pose.model) {
     instance?.renderer.destroy();
-    const data = structuredClone(await modelAt(pose.model));
-    for (let index = 0; index < data.Geosets.length; index++) if (!data.GeosetAnims.some((animation) => animation.GeosetId === index)) data.GeosetAnims.push({ GeosetId: index, Alpha: 1, Color: new Float32Array([1, 1, 1]), Flags: 0 });
-    const renderer = new ModelRenderer(data); renderer.initGL(gl);
-    for (const texture of data.Textures) if (texture.Image !== "") {
-      const bitmap = await textureAt(texture.Image), context = bitmap.getContext("2d");
-      if (context !== null) renderer.setTextureImageData(texture.Image, [context.getImageData(0, 0, bitmap.width, bitmap.height)]);
-    }
-    instance = { renderer, model: data, path: pose.model, clock: 0, alpha: 255, originalAlpha: data.GeosetAnims.map((animation) => animation.Alpha) }; instances.set(pose.handle.id, instance);
+    instance = preparedModels.get(pose.model);
+    if (instance === undefined) instance = await createInstance(pose.model);
+    else preparedModels.delete(pose.model);
+    instances.set(pose.handle.id, instance);
   }
+  return instance;
+}
+async function createInstance(path: string): Promise<ModelInstance> {
+  const original = await modelAt(path);
+  // Geometry and animation tables are read-only; opacity entries must belong to each instance.
+  const data = { ...original, GeosetAnims: original.GeosetAnims.map(animation => ({ ...animation })) };
+  for (let index = 0; index < data.Geosets.length; index++) if (!data.GeosetAnims.some((animation) => animation.GeosetId === index)) data.GeosetAnims.push({ GeosetId: index, Alpha: 1, Color: new Float32Array([1, 1, 1]), Flags: 0 });
+  const renderer = new ModelRenderer(data); renderer.initGL(gl);
+  for (const texture of data.Textures) if (texture.Image !== "") {
+    const bitmap = await textureAt(texture.Image), context = bitmap.getContext("2d");
+    if (context !== null) renderer.setTextureImageData(texture.Image, [context.getImageData(0, 0, bitmap.width, bitmap.height)]);
+  }
+  return { renderer, model: data, path, clock: 0, alpha: 255, originalAlpha: data.GeosetAnims.map((animation) => animation.Alpha) };
+}
+async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>) {
+  const instance = await prepareInstance(pose);
   const { renderer, model: data } = instance;
   if (instance.alpha !== pose.alpha) {
     for (let index = 0; index < data.GeosetAnims.length; index++) {
@@ -178,7 +192,11 @@ async function uiTexture(path: string, color: number): Promise<HTMLCanvasElement
 }
 
 declare global {
-  interface Window { prepareRenderer: (width: number, height: number) => string; renderScene: (scene: RenderScene, options?: { capture?: boolean }) => Promise<{ png: string; models: number; textures: number }> }
+  interface Window {
+    prepareRenderer: (width: number, height: number) => string;
+    prepareScene: (scene: RenderScene, models?: readonly string[], progress?: (completed: number, total: number) => void) => Promise<{ models: number; instances: number; textures: number }>;
+    renderScene: (scene: RenderScene, options?: { capture?: boolean }) => Promise<{ png: string; models: number; textures: number }>;
+  }
 }
 window.prepareRenderer = (width, height) => {
   canvas.width = output.width = overlay.width = width; canvas.height = output.height = overlay.height = height;
@@ -188,6 +206,16 @@ window.prepareRenderer = (width, height) => {
   gl.depthFunc(gl.LEQUAL);
   const debug = gl.getExtension("WEBGL_debug_renderer_info");
   return debug === null ? String(gl.getParameter(gl.RENDERER)) : String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL));
+};
+window.prepareScene = async (scene, extraModels = [], progress) => {
+  const frames = scene.ui.filter(frame => frame.texture !== "");
+  const total = scene.effects.length + extraModels.length + frames.length;
+  let completed = 0;
+  const advanced = () => progress?.(++completed, total);
+  for (const pose of scene.effects) { await prepareInstance(pose); advanced(); }
+  for (const path of extraModels) { preparedModels.set(path, await createInstance(path)); advanced(); }
+  for (const frame of frames) { await uiTexture(frame.texture, frame.color); advanced(); }
+  return { models: models.size, instances: instances.size + preparedModels.size, textures: textures.size };
 };
 window.renderScene = async (scene, options) => {
   gl.viewport(0, 0, canvas.width, canvas.height); gl.depthMask(true); gl.clearColor(0.04, 0.06, 0.09, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);

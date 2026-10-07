@@ -26,6 +26,10 @@ test("standalone records scripted checksums and skips live or explicitly disable
       const out = join(directory, String(index));
       const player = await openStandalone(game, { ...options, out });
       try {
+        const prepared = await fetch(`${player.url}prepare`).then(response => response.json());
+        expect(prepared.step).toBe(0);
+        expect(prepared.scene.frame).toBe(clients.client(0).frame);
+        expect(checksumCalls).toBe(0);
         for (let frame = 0; frame < 3; frame++) {
           const response = await fetch(`${player.url}frame`, { method: "POST", body: JSON.stringify({ buttons: [], axisX: 0, axisY: 0 }) });
           expect(response.ok).toBe(true);
