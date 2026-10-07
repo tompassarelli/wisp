@@ -198,7 +198,9 @@ It keeps animation callbacks registered throughout drawing and waits for a fresh
 callback to deliver each scene. Idle callbacks do not count as delivered frames.
 Sound labels resolve through the installed sound tables. Sound downloads run
 four at a time so slow asset loading leaves connections available for game
-frames. Assets remain outside Wisp. Closing the window closes the game session.
+frames. Decoded sound assets are reused by resolved file path, preserving each
+handle's selected variation. Assets remain outside Wisp. Closing the window
+closes the game session.
 
 ```ts
 import { runStandalone, type StandaloneGame } from "wisp/scripts/wisp/standalone";
