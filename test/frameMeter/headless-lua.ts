@@ -7,6 +7,7 @@
 import { luaLockstep, readFile } from "../../src/headless/lua";
 import { runLuaPerf } from "../../src/headless/luaPerf";
 import { frameCostFile } from "../../src/runtime/frameCost";
+import { frameCostCaptureFile } from "../../src/runtime/frameCostCapture";
 
 declare const arg: Readonly<Record<number, string | undefined>>;
 
@@ -32,4 +33,10 @@ for (const client of clients.clients) {
   for (const error of client.errors) print(`p${client.slot} error: ${error}`);
 }
 print(`desync: ${clients.firstDivergence() ?? "none"}`);
+clients.chat(0, "-capture 240");
+clients.frames(241);
+for (const client of clients.clients) {
+  for (const line of client.files.get(frameCostCaptureFile(client.slot, 1, MAP.filePrefix)) ?? ["no capture"]) print(`p${client.slot} capture: ${line}`);
+}
+print(`capture desync: ${clients.firstDivergence() ?? "none"}`);
 runLuaPerf(MAP, { frames: 120, events: [{ frame: 60, player: 0, chat: "-work 20" }] }, bundlePath, declarationsPath);

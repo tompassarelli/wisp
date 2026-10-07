@@ -64,6 +64,38 @@ reloaded bundle installs its own dispatch, which the meter measures again.
 capitalized globals once, creates the overlay's frame, hidden, on every
 client, and registers the toggle's chat text for the first four players.
 
+### A bounded native capture
+
+`startFrameCostCapture(frames)` records the next 1–18,000 frame callbacks using
+the already-running meter. It skips the callback that requested it, so setup
+does not enter its sample. It creates no Warcraft handles, and changes no game
+state. Eighteen thousand callbacks cover five minutes at 60 Hz; the receipt
+also records elapsed clock milliseconds, so callback count alone is not a claim
+about elapsed time. Starting another capture while one runs is an error.
+
+After the last measured callback, every client writes
+`<prefix>-perf-capture-p<slot>-run<run>.txt` using the filename and line format in
+wisp:src/runtime/frameCostCapture.ts. The receipt contains the clock step,
+elapsed time, code version, and every callback's Lua microseconds, native count
+and simulation catch-up. It retains the complete sample in three bounded arrays;
+there is no file output or sorting during the sample. Report generation is
+outside the sample and should not share a timing-sensitive subsequent trial.
+
+The host's `parseFrameCostCapture(text)` and `captureDistribution(capture)`
+(wisp:scripts/wisp/frameCostCapture.ts) return full-run median, p95, p99 and worst
+callback cost in microseconds. Percentiles use nearest rank; an even sample's
+median is the mean of its two middle values. The parser rejects incomplete or
+reordered samples, unavailable clocks and captures that crossed a hot reload.
+Native session tooling must additionally reject crashes, desyncs, early results
+and the wrong gameplay phase, as with any native measurement.
+
+`perf native CAPTURE.txt RUN --samples HEADLESS.perf` accepts the raw receipt
+directly. It constructs the same 120-frame windows, every 30 frames, from
+**observed** costs; only predicted costs are resampled into whole clock steps.
+This provides native p50/p95 readings without OCR. The native and headless
+samples must still exercise the same candidate, workload and starting frame.
+GPU/render times remain outside the script-cost meter's scope.
+
 ## The overlay
 
 Typing the toggle shows or hides, for that player only, the medians, 95th
