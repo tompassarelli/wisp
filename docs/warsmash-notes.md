@@ -122,6 +122,27 @@ Sequence selection preserves that counter. Translation defaults to
 the selected animation has no applicable keys.
 [Global clocks and defaults](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/mdx/Sd.java#L80-L131).
 
+For quaternion interpolation, let **L** and **R** be the left and right key
+rotations, **O** the left outgoing tangent, and **I** the right incoming
+tangent. Warsmash uses the same spherical cubic formula for Hermite (2) and
+Bezier (3):
+
+**Q(t) = slerp(slerp(L, R, t), slerp(O, I, t), 2t(1 − t)).**
+
+When O = L and I = R, this reduces to ordinary slerp between the endpoints;
+at t = 0.5 it gives their spherical midpoint. This agrees with the
+`war3-model` behavior reported by the #40 worker, so this fact does not
+explain that worker's apparent 0.4/0.3-second pose difference. Warsmash slerp
+uses the shorter quaternion arc by changing the right quaternion's sign
+when the dot product is negative. It uses linear weights when
+**1 − dot ≤ 0.000001**, and spherical sine weights otherwise. The inspected
+quaternion and track-sampling paths have no model-version or 1800-specific
+interpolation branch; this does not establish overall version-1800 model
+support or native Warcraft's interpolation.
+[Endpoint/tangent identities](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/mdx/QuaternionSd.java#L24-L31),
+[Hermite/Bezier behavior](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/util/Interpolator.java#L54-L69),
+[spherical formulas](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/util/RenderMathUtils.java#L405-L454).
+
 ## File-format facts for a standalone player (#48)
 
 These are parseable format facts. Native acceptance of a particular model
@@ -173,7 +194,7 @@ reproducing a captured pose, not infer it from the simulation step count.
 
 | Question | Existing fixture or next observation | Status |
 | --- | --- | --- |
-| Warcraft life threshold, clipping, corpse writes and removal | #44's [unit-state fixture](headless.md#unit-states), including exact binary32 0.40625 and 0.3984375 | Native executor queued; no native verdict recorded here yet. |
+| Warcraft life threshold, clipping, corpse writes and removal | #44's [unit-state fixture](headless.md#unit-states), including exact binary32 0.40625 and 0.3984375 | Native executor stopped clients under Tom's playtest hold; no values measured. Ready map retained privately at `~/.local/state/wisp/unit-states44/`; await explicit release. |
 | Widget/unit/player death callback order and repeated kills | A callback log with before/inside/after life and event names | Requested from the shared native executor; source-researched only. |
 | Blend setting, frozen clock and the 0.3/0.4-second pose discrepancy | #40's retained frames, then one-variable blend-zero comparison if needed | Native pose discrepancy observed; cause unresolved. |
 | Sequence end/loop overshoot and queued animation timing | A model with explicit interval bounds at time scales 0, 0.5, 1 and 2 | Source-researched only; defer until a consuming check requires it. |
