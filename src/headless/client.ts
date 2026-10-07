@@ -75,8 +75,62 @@ export interface EffectPose {
   alpha: number;
   scale: number;
   timeScale: number;
+  animation: string | number | undefined;
+  subAnimations: (string | number)[];
+  /** Seconds elapsed in the current animation, advancing with timeScale. */
+  animationElapsed: number;
+  yaw: number;
+  pitch: number;
+  roll: number;
+  color: [number, number, number];
+  teamColor: number;
+  matrixScale: [number, number, number];
   /** A matrix scale of zero on some axis since the matrix was last reset. */
   flat: boolean;
+}
+
+export interface CameraPose {
+  readonly x: number;
+  readonly y: number;
+  readonly fields: Readonly<Record<string, number>>;
+}
+
+export interface SoundCue {
+  readonly event: "create" | "start";
+  readonly frame: number;
+  readonly handle: Handle;
+  readonly source: string | undefined;
+  readonly label: string | undefined;
+  readonly volume: number;
+  readonly pitch: number;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+interface SoundState {
+  readonly handle: Handle;
+  readonly source: string | undefined;
+  label: string | undefined;
+  volume: number;
+  pitch: number;
+  x: number;
+  y: number;
+  z: number;
+  unit: Unit | undefined;
+}
+
+/** One pure assertion over emitted cues; creation alone never counts as playing. */
+export function assertSoundCue(log: readonly SoundCue[], expected: { readonly source?: string; readonly label?: string; readonly frame?: number; readonly count?: number }): void {
+  let count = 0;
+  for (const cue of log) {
+    if (cue.event !== "start") continue;
+    if (expected.source !== undefined && cue.source !== expected.source) continue;
+    if (expected.label !== undefined && cue.label !== expected.label) continue;
+    if (expected.frame !== undefined && cue.frame !== expected.frame) continue;
+    count++;
+  }
+  if (count !== (expected.count ?? 1)) throw new Error(`sound cue ${expected.source ?? expected.label ?? "any"}: expected ${expected.count ?? 1} starts, got ${count}`);
 }
 
 interface Unit extends Handle {
@@ -155,6 +209,8 @@ export interface ClientOptions {
 }
 
 export const FRAMES_PER_SECOND = 60;
+
+const CAMERA_FIELDS = ["CAMERA_FIELD_TARGET_DISTANCE", "CAMERA_FIELD_FARZ", "CAMERA_FIELD_ANGLE_OF_ATTACK", "CAMERA_FIELD_FIELD_OF_VIEW", "CAMERA_FIELD_ROLL", "CAMERA_FIELD_ROTATION", "CAMERA_FIELD_ZOFFSET", "CAMERA_FIELD_NEARZ", "CAMERA_FIELD_LOCAL_PITCH", "CAMERA_FIELD_LOCAL_YAW", "CAMERA_FIELD_LOCAL_ROLL", "CAMERA_FIELD_DEPTH_OF_FIELD_DISTANCE", "CAMERA_FIELD_DEPTH_OF_FIELD_SCALE", "CAMERA_FIELD_ZABSOLUTE"];
 
 const isHandle = (value: unknown): value is Handle =>
   typeof value === "object" && value !== null && "id" in value && "kind" in value;
@@ -331,6 +387,11 @@ export class HeadlessClient {
   private readonly memo = new Map<string, Frame>();
   private allPlayers: Handle | undefined;
   private readonly effects = new Map<Handle, EffectPose>();
+  private readonly sounds = new Map<Handle, SoundState>();
+  readonly soundLog: SoundCue[] = [];
+  private cameraX = 0;
+  private cameraY = 0;
+  private readonly cameraFields: Record<string, number> = {};
   private readonly tooltips = new Map<string, string>();
   /** Preloader runs the content it first read from a path for the rest of the session. */
   private readonly preloaded = new Map<string, readonly string[]>();
@@ -446,8 +507,36 @@ export class HeadlessClient {
 
   private effectAt(model: string, x: number, y: number): Handle {
     const handle = this.handle("effect");
-    this.effects.set(handle, { handle, model, created: this.frame, x, y, z: 0, alpha: 255, scale: 1, timeScale: 1, flat: false });
+    this.effects.set(handle, { handle, model, created: this.frame, x, y, z: 0, alpha: 255, scale: 1, timeScale: 1, flat: false,
+      animation: undefined, subAnimations: [], animationElapsed: 0, yaw: 0, pitch: 0, roll: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1] });
     return handle;
+  }
+
+  private sound(source: string | undefined, label: string | undefined): Handle {
+    const handle = this.handle("sound");
+    const sound: SoundState = { handle, source, label, volume: 127, pitch: 1, x: 0, y: 0, z: 0, unit: undefined };
+    this.sounds.set(handle, sound);
+    this.cue(sound, "create");
+    return handle;
+  }
+
+  private cue(sound: SoundState, event: "create" | "start"): void {
+    this.soundLog.push({ event, frame: this.frame, handle: sound.handle, source: sound.source, label: sound.label,
+      volume: sound.volume, pitch: sound.pitch, x: sound.unit?.x ?? sound.x, y: sound.unit?.y ?? sound.y, z: sound.z });
+  }
+
+  private cameraField(field: unknown): string {
+    if (typeof field === "number") return CAMERA_FIELDS[field] ?? describeValue(field);
+    if (typeof field === "string") return field;
+    return describeValue(field);
+  }
+
+  private playEffect(effect: Handle, animation: string | number, timeScale?: number): void {
+    const pose = this.effects.get(effect);
+    if (pose === undefined) return;
+    pose.animation = animation;
+    pose.animationElapsed = 0;
+    if (timeScale !== undefined) pose.timeScale = timeScale;
   }
 
   private show(text: string): void {
@@ -517,6 +606,19 @@ export class HeadlessClient {
         if (isFrame(frame)) frame.text = text;
       },
       BlzFrameGetText: (frame: unknown) => (isFrame(frame) ? frame.text : ""),
+      BlzFrameSetTexture: (frame: unknown, texture: string) => {
+        if (isFrame(frame)) frame.texture = texture;
+      },
+      BlzFrameSetVertexColor: (frame: unknown, color: number) => {
+        if (isFrame(frame)) frame.color = color;
+      },
+      BlzFrameSetTextColor: (frame: unknown, color: number) => {
+        if (isFrame(frame)) frame.textColor = color;
+      },
+      BlzFrameSetAlpha: (frame: unknown, alpha: number) => {
+        if (isFrame(frame)) frame.alpha = alpha;
+      },
+      BlzFrameGetAlpha: (frame: unknown) => (isFrame(frame) ? frame.alpha : 0),
       BlzFrameSetTextSizeLimit: (frame: unknown, size: number) => {
         if (isFrame(frame)) frame.textLimit = size;
       },
@@ -545,7 +647,24 @@ export class HeadlessClient {
         if (isFrame(frame)) frame.points.set(point, { x, y });
       },
       BlzFrameClearAllPoints: (frame: unknown) => {
-        if (isFrame(frame)) frame.points.clear();
+        if (isFrame(frame)) {
+          frame.points.clear();
+          frame.anchors.length = 0;
+        }
+      },
+      BlzFrameSetPoint: (frame: unknown, point: unknown, relative: unknown, relativePoint: unknown, x: number, y: number) => {
+        if (!isFrame(frame) || !isFrame(relative)) return;
+        const name = (value: unknown) => typeof value === "number" ? FRAME_POINTS[value]?.[0] ?? "" : typeof value === "string" ? value : "";
+        const ownPoint = name(point).replace("FRAMEPOINT_", "");
+        for (let index = frame.anchors.length - 1; index >= 0; index--) if (frame.anchors[index]?.point === ownPoint) frame.anchors.splice(index, 1);
+        frame.anchors.push({ point: ownPoint, relative, relativePoint: name(relativePoint).replace("FRAMEPOINT_", ""), x, y });
+      },
+      BlzFrameSetAllPoints: (frame: unknown, relative: unknown) => {
+        if (!isFrame(frame) || !isFrame(relative)) return false;
+        frame.points.clear();
+        frame.anchors.length = 0;
+        for (const point of ["TOPLEFT", "BOTTOMRIGHT"]) frame.anchors.push({ point, relative, relativePoint: point, x: 0, y: 0 });
+        return true;
       },
       BlzTriggerRegisterFrameEvent: (trigger: Trigger, frame: unknown, event: unknown) => {
         if (isFrame(frame)) this.registrations.push({ kind: "frame", trigger, frame, event });
@@ -636,6 +755,50 @@ export class HeadlessClient {
       },
       BlzGetAbilityTooltip: (ability: number, level: number) => this.tooltips.get(`${ability} ${level}`) ?? "",
       AddSpecialEffect: (model: string, x: number, y: number) => this.effectAt(model, x, y),
+      SetCameraPosition: (x: number, y: number) => {
+        this.cameraX = x;
+        this.cameraY = y;
+      },
+      SetCameraField: (field: unknown, value: number) => {
+        this.cameraFields[this.cameraField(field)] = value;
+      },
+      GetCameraField: (field: unknown) => this.cameraFields[this.cameraField(field)] ?? 0,
+      CreateSound: (source: string) => this.sound(source, undefined),
+      CreateSoundFromLabel: (label: string) => this.sound(undefined, label),
+      CreateSoundFilenameWithLabel: (source: string, _loop: boolean, _is3D: boolean, _stop: boolean, _fadeIn: number, _fadeOut: number, label: string) => this.sound(source, label),
+      SetSoundParamsFromLabel: (handle: Handle, label: string) => {
+        const sound = this.sounds.get(handle);
+        if (sound !== undefined) sound.label = label;
+      },
+      SetSoundVolume: (handle: Handle, volume: number) => {
+        const sound = this.sounds.get(handle);
+        if (sound !== undefined) sound.volume = volume;
+      },
+      SetSoundPitch: (handle: Handle, pitch: number) => {
+        const sound = this.sounds.get(handle);
+        if (sound !== undefined) sound.pitch = pitch;
+      },
+      SetSoundPosition: (handle: Handle, x: number, y: number, z: number) => {
+        const sound = this.sounds.get(handle);
+        if (sound !== undefined) {
+          sound.x = x;
+          sound.y = y;
+          sound.z = z;
+          sound.unit = undefined;
+        }
+      },
+      AttachSoundToUnit: (handle: Handle, unit: Unit) => {
+        const sound = this.sounds.get(handle);
+        if (sound !== undefined) sound.unit = unit;
+      },
+      StartSound: (handle: Handle) => {
+        const sound = this.sounds.get(handle);
+        if (sound !== undefined) this.cue(sound, "start");
+      },
+      StartSoundEx: (handle: Handle) => {
+        const sound = this.sounds.get(handle);
+        if (sound !== undefined) this.cue(sound, "start");
+      },
       AddSpecialEffectLoc: (model: string) => this.effectAt(model, 0, 0),
       AddSpecialEffectTarget: (model: string, target: unknown) => {
         const unit = target as Partial<Unit>;
@@ -676,13 +839,71 @@ export class HeadlessClient {
         const pose = this.effects.get(effect);
         if (pose !== undefined) pose.timeScale = timeScale;
       },
+      BlzSetSpecialEffectTime: (effect: Handle, time: number) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) pose.animationElapsed = time;
+      },
+      BlzPlaySpecialEffect: (effect: Handle, animation: string | number) => this.playEffect(effect, animation),
+      BlzPlaySpecialEffectWithTimeScale: (effect: Handle, animation: string | number, timeScale: number) => this.playEffect(effect, animation, timeScale),
+      BlzSetSpecialEffectAnimation: (effect: Handle, animation: string) => this.playEffect(effect, animation),
+      BlzSpecialEffectClearSubAnimations: (effect: Handle) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) pose.subAnimations.length = 0;
+      },
+      BlzSpecialEffectAddSubAnimation: (effect: Handle, animation: string | number) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined && !pose.subAnimations.includes(animation)) pose.subAnimations.push(animation);
+      },
+      BlzSpecialEffectRemoveSubAnimation: (effect: Handle, animation: string | number) => {
+        const pose = this.effects.get(effect);
+        if (pose === undefined) return;
+        const index = pose.subAnimations.indexOf(animation);
+        if (index >= 0) pose.subAnimations.splice(index, 1);
+      },
+      BlzSetSpecialEffectOrientation: (effect: Handle, yaw: number, pitch: number, roll: number) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) {
+          pose.yaw = yaw;
+          pose.pitch = pitch;
+          pose.roll = roll;
+        }
+      },
+      BlzSetSpecialEffectYaw: (effect: Handle, yaw: number) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) pose.yaw = yaw;
+      },
+      BlzSetSpecialEffectPitch: (effect: Handle, pitch: number) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) pose.pitch = pitch;
+      },
+      BlzSetSpecialEffectRoll: (effect: Handle, roll: number) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) pose.roll = roll;
+      },
+      BlzSetSpecialEffectColor: (effect: Handle, r: number, g: number, b: number) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) pose.color = [r, g, b];
+      },
+      BlzSetSpecialEffectColorByPlayer: (effect: Handle, player: number) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) pose.teamColor = player;
+      },
       BlzSetSpecialEffectMatrixScale: (effect: Handle, x: number, y: number, z: number) => {
         const pose = this.effects.get(effect);
-        if (pose !== undefined) pose.flat = pose.flat || x === 0 || y === 0 || z === 0;
+        if (pose !== undefined) {
+          pose.matrixScale = [pose.matrixScale[0] * x, pose.matrixScale[1] * y, pose.matrixScale[2] * z];
+          pose.flat = pose.matrixScale.includes(0);
+        }
       },
       BlzResetSpecialEffectMatrix: (effect: Handle) => {
         const pose = this.effects.get(effect);
-        if (pose !== undefined) pose.flat = false;
+        if (pose !== undefined) {
+          pose.flat = false;
+          pose.matrixScale = [1, 1, 1];
+          pose.yaw = 0;
+          pose.pitch = 0;
+          pose.roll = 0;
+        }
       },
       BlzGetLocalSpecialEffectX: (effect: Handle) => this.effects.get(effect)?.x ?? 0,
       BlzGetLocalSpecialEffectY: (effect: Handle) => this.effects.get(effect)?.y ?? 0,
@@ -714,8 +935,12 @@ export class HeadlessClient {
   /** The effects this client shows now, as copies, in creation order. */
   effectPoses(): EffectPose[] {
     const poses: EffectPose[] = [];
-    for (const pose of this.effects.values()) poses.push({ ...pose });
+    for (const pose of this.effects.values()) poses.push({ ...pose, subAnimations: [...pose.subAnimations], color: [...pose.color], matrixScale: [...pose.matrixScale] });
     return poses;
+  }
+
+  cameraPose(): CameraPose {
+    return { x: this.cameraX, y: this.cameraY, fields: { ...this.cameraFields } };
   }
 
   /** Makes this client's natives and state the ones map code sees, and runs `body`. */
@@ -744,6 +969,7 @@ export class HeadlessClient {
   step(): void {
     this.run(() => {
       this.frame++;
+      for (const pose of this.effects.values()) pose.animationElapsed += pose.timeScale / FRAMES_PER_SECOND;
       const count = this.timers.length;
       for (let index = 0; index < count; index++) {
         const timer = this.timers[index];

@@ -37,19 +37,43 @@ export interface JourneyResult {
 export interface JourneyOptions {
   /** Whether to hash each client's calls, which fingerprints a run to compare it with another runtime's. */
   readonly checksums?: boolean;
+  /** Frames observed after all journey events at that frame, including frame zero after start. */
+  readonly observationFrames?: readonly number[];
+  /** Reads each chosen frame without advancing gameplay. */
+  readonly observe?: (this: void, clients: Lockstep, frame: number) => void;
 }
 
 /** Starts the map in every client and plays the journey. */
 export function runJourney(clients: Lockstep, journey: Journey, options: JourneyOptions = {}): JourneyResult {
   clients.start();
+  const frames = [...new Set(options.observationFrames ?? [])].sort((a, b) => a - b);
+  for (const frame of frames) if (!Number.isInteger(frame) || frame < 0 || frame > journey.frames) throw new Error(`observation frame ${frame} is outside the journey`);
+  let observation = 0;
+  const capture = () => {
+    if (frames[observation] !== clients.frame) return;
+    options.observe?.(clients, clients.frame);
+    observation++;
+  };
+  const advance = (target: number) => {
+    while ((frames[observation] ?? target) < target) {
+      const frame = frames[observation];
+      if (frame === undefined) break;
+      clients.frames(frame - clients.frame);
+      capture();
+    }
+    clients.frames(target - clients.frame);
+  };
   for (const event of journey.events) {
     if (event.frame < clients.frame) throw new Error(`journey event at frame ${event.frame} is out of order`);
-    clients.frames(event.frame - clients.frame);
+    if (event.frame > clients.frame) capture();
+    advance(event.frame);
     if ("chat" in event) clients.chat(event.player, event.chat);
     else if ("key" in event) clients.press(event.player, event.key, event.meta);
     else clients.reload();
   }
-  clients.frames(journey.frames - clients.frame);
+  capture();
+  advance(journey.frames);
+  capture();
   const results: ClientResult[] = [];
   for (const client of clients.clients) {
     results.push(options.checksums === false
