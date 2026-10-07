@@ -88,7 +88,7 @@ process.exit(await runCli("bun examples/sample/scripts/sample.ts", {
     },
   },
   lan: {
-    usage: "setup --from INSTALL [--pairs N] | pool [--pairs N] [--pool-profile parity|visual] | fresh MAP [--pair K] | status | end --pair K",
+    usage: "setup --from INSTALL [--pairs N] | pool [--pairs N] [--pool-profile parity|visual] [--fps N] | fresh MAP [--pair K] | status | end --pair K",
     load: async () => (await import("wisp/scripts/wisp/commands/lan")).lan,
   },
   headless: {

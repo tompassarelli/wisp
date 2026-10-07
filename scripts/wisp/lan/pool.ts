@@ -66,6 +66,14 @@ export const PROFILES: Readonly<Record<string, Profile>> = {
   visual: { name: "visual", width: 1280, height: 720, maxFps: 60, video: { ...LOWEST, lightingquality: 2, particles: 2, texquality: 1 }, classic: false, sound: true, music: true },
 };
 
+/** Hold every graphics choice fixed while measuring a different frame cap. */
+export function poolProfile(name: string, fps?: number): Profile {
+  const profile = PROFILES[name];
+  if (profile === undefined) throw new Error(`unknown pool profile ${name}`);
+  if (fps !== undefined && (!Number.isInteger(fps) || fps < 1)) throw new Error("--fps takes a positive whole number");
+  return fps === undefined ? profile : { ...profile, maxFps: fps };
+}
+
 /** War3Preferences.txt with the sections a profile sets: the game fills in the rest. */
 export function preferences(profile: Profile, windowX: number): string {
   const video: Record<string, number> = {
