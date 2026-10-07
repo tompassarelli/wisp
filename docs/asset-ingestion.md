@@ -49,6 +49,15 @@ sounds, rather than imported audio families. This count covers
 `stockSoundInfo.ts`, excluding additional fighter model-event labels.
 The encoded inputs and conversions stay in private local storage.
 
+For native playback, build the small two-player fixture with
+`bun test/native-ogg51/build.ts PRIVATE_BASE.w3m PRIVATE_RiflemanWarcry1.ogg PRIVATE_OUT.w3x`.
+It imports the supplied sound without conversion, calls `StartSound` once
+three seconds after map start at volume 127, and writes
+`native-ogg51-pN.txt` in each client's CustomMapData. The file records the
+sound's duration before and after starting, and whether it is playing
+250 ms later. Record the actual client version, graphics mode and audible
+output alongside it; the file alone only records the sound native calls.
+
 ## Why packaging, not the asset bytes
 
 Measured on Smashcraft's private families (7 Oct 2026, aggregate numbers):
