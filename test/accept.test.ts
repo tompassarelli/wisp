@@ -261,3 +261,18 @@ test("shardSessions balances sessions over shards and keeps plan order; mergeRep
   const merged = mergeReports("/r", checks, [{ directory: "/r/a", started: 0, finished: 1, results: [result("2-b"), result("1-a")] }], 0, 2, (missing) => ({ ...result(missing.id), verdict: "fail" }));
   expect(merged.results.map(({ id, verdict }) => `${id} ${verdict}`)).toEqual(["1-a pass", "2-a fail", "2-b pass", "3-a fail", "4-a fail", "4-b fail"]);
 });
+
+test("accept --json emits each verdict and a final summary", async () => {
+  const lines: string[] = [];
+  const log = console.log;
+  console.log = (line: string) => void lines.push(line);
+  try {
+    const exit = await Effect.runPromiseExit(makeAccept({ suite, evidenceRoot: tempDirectory(), driver: fakeClients().layer, clients: ["a", "b"] })(["--only", "57-underside", "73-load", "--json"]));
+    expect(Exit.isFailure(exit)).toBe(true);
+    const rows = lines.map(line => JSON.parse(line));
+    expect(rows.filter(row => row.type === "result").map(row => row.verdict)).toEqual(["pass", "fail"]);
+    expect(rows.find(row => row.kind === "check-fail")).toMatchObject({ frame: null, client: null, message: expect.any(String) });
+    expect(rows.at(-1)).toMatchObject({ schema: 1, command: "accept", type: "summary", ok: false, counts: { results: 2, failures: 1 } });
+    expect(rows.at(-1).elapsedMs).toBeGreaterThanOrEqual(0);
+  } finally { console.log = log; }
+});

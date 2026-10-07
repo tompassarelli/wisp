@@ -10,6 +10,7 @@ import {
   AcceptDriver, AcceptFailure, type AcceptReport, type AcceptSuite, type PlannedSession, describePlan, mergeReports, planSessions, privateDirectory, resultLine, runAccept, selectChecks, shardSessions, suiteProblems, summaryLine,
 } from "../accept";
 import { type Command, type CommandFailure, UsageFailure, flagValues } from "../command";
+import { emitJson } from "../jsonResults";
 
 export interface AcceptOptions {
   readonly suite: AcceptSuite;
@@ -37,7 +38,7 @@ export interface AcceptShards {
   readonly flags: readonly string[];
 }
 
-const FLAGS = new Set(["--only", "--dry-run", "--out"]);
+const FLAGS = new Set(["--only", "--dry-run", "--out", "--json"]);
 
 /** Every value after `--only` up to the next flag, and comma lists. */
 const onlyValues = (args: readonly string[]) => {
@@ -54,6 +55,8 @@ const onlyValues = (args: readonly string[]) => {
 const runName = (millis: number) => new Date(millis).toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
 
 export const makeAccept = ({ suite, evidenceRoot, driver, clients = ["host"], shards }: AcceptOptions): Command => (args) => Effect.gen(function*() {
+  const json = args.includes("--json");
+  const started = performance.now();
   const known = new Set([...FLAGS, ...(shards?.flags ?? [])]);
   const unknownFlag = args.find((arg) => arg.startsWith("--") && !known.has(arg.split("=")[0]!));
   if (unknownFlag !== undefined) return yield* new UsageFailure({ problem: `unknown option ${unknownFlag}` });
@@ -66,6 +69,11 @@ export const makeAccept = ({ suite, evidenceRoot, driver, clients = ["host"], sh
   const selected = shards === undefined ? [] : yield* shards.select(args);
   const split = selected.length > 1 ? shardSessions(sessions, selected.length) : [];
   if (args.includes("--dry-run")) {
+    if (json) {
+      for (const session of sessions) yield* emitJson("accept", { type: "result", ok: true, planned: true, ...session });
+      yield* emitJson("accept", { type: "summary", ok: true, counts: { results: sessions.length, checks: checks.length, failures: 0 }, elapsedMs: performance.now() - started });
+      return;
+    }
     if (split.length > 1) {
       for (const [index, part] of split.entries()) yield* Console.log(`shard ${selected[index]}: ${part.length} sessions, ${part.reduce((sum, { checks: grouped }) => sum + grouped.length, 0)} checks`);
     }
@@ -73,20 +81,23 @@ export const makeAccept = ({ suite, evidenceRoot, driver, clients = ["host"], sh
     return;
   }
   const directory = flagValues(args, "out")[0] ?? join(evidenceRoot, runName(yield* Clock.currentTimeMillis));
-  yield* Console.log(`evidence: ${directory}`);
+  if (!json) yield* Console.log(`evidence: ${directory}`);
   const report = shards !== undefined && split.length > 1
-    ? yield* runShards(shards, selected, split, checks, directory)
-    : yield* runAccept(suite, sessions, directory, (line) => Console.log(line)).pipe(Effect.provide(driver));
-  yield* Console.log(summaryLine(report.results));
+    ? yield* runShards(shards, selected, split, checks, directory, json)
+    : yield* runAccept(suite, sessions, directory, (line) => json ? Effect.void : Console.log(line)).pipe(Effect.provide(driver));
   const failed = report.results.filter(({ verdict }) => verdict === "fail");
+  if (json) {
+    for (const result of report.results) yield* emitJson("accept", { type: "result", ok: result.verdict !== "fail", ...result, ...(result.verdict === "fail" ? { kind: "check-fail", frame: null, client: null, message: result.reason } : {}) });
+    yield* emitJson("accept", { type: "summary", ok: failed.length === 0, counts: { results: report.results.length, failures: failed.length, passed: report.results.filter(({ verdict }) => verdict === "pass").length, needsLook: report.results.filter(({ verdict }) => verdict === "needs-look").length }, elapsedMs: performance.now() - started, evidence: directory });
+  } else yield* Console.log(summaryLine(report.results));
   if (failed.length > 0) return yield* new AcceptFailure({ operation: "accept", problem: `${failed.length} failed: ${failed.map(({ id }) => id).join(", ")}; report ${join(directory, "report.txt")}` });
 });
 
 /** Plays each shard's sessions at once and merges their reports into `directory`. */
-const runShards = (shards: AcceptShards, selected: readonly string[], split: readonly (readonly PlannedSession[])[], checks: AcceptSuite["checks"], directory: string) => Effect.gen(function*() {
+const runShards = (shards: AcceptShards, selected: readonly string[], split: readonly (readonly PlannedSession[])[], checks: AcceptSuite["checks"], directory: string, json = false) => Effect.gen(function*() {
   const started = yield* Clock.currentTimeMillis;
   yield* privateDirectory(directory);
-  yield* Console.log(`${split.length} shards: ${split.map((part, index) => `${selected[index]} (${part.length} sessions)`).join(", ")}`);
+  if (!json) yield* Console.log(`${split.length} shards: ${split.map((part, index) => `${selected[index]} (${part.length} sessions)`).join(", ")}`);
   if (shards.prepare !== undefined) yield* shards.prepare(split.flat());
   const outcomes = yield* Effect.forEach(split, (part, index) => {
     const shard = selected[index]!;
@@ -114,7 +125,9 @@ const runShards = (shards: AcceptShards, selected: readonly string[], split: rea
     },
     catch: (cause) => new AcceptFailure({ operation: "report", problem: String(cause) }),
   });
-  for (const line of lines.slice(0, -2)) yield* Console.log(line);
-  yield* Console.log(lines.at(-1)!);
+  if (!json) {
+    for (const line of lines.slice(0, -2)) yield* Console.log(line);
+    yield* Console.log(lines.at(-1)!);
+  }
   return report;
 });
