@@ -11,7 +11,7 @@
         "typescript-native": "npm:typescript@7.0.2",
         "typescript-to-lua": "1.37.1",
         "w3gjs": "4.3.0",
-        "war3-model": "4.0.1",
+        "war3-model": "file:vendor/war3-model-2e61b3ed83350c04fb9df92ecb5cf0fad39e0509.tgz",
       },
       "devDependencies": {
         "@effect/tsgo": "0.48.0",
@@ -129,6 +129,6 @@
 
     "w3gjs": ["w3gjs@4.3.0", "", { "dependencies": { "protobufjs": "^8.0.1" } }, "sha512-9MJYO674NXsQBS8XZ8ivAkyLv31OgnXv5/LnQaOPLt5eEW4tyUu3IbK2LvpAeVjww3vdxI9IPYKoO3Z2NkfQGQ=="],
 
-    "war3-model": ["war3-model@4.0.1", "", { "dependencies": { "gl-matrix": "3.3.0" } }, "sha512-1jzV2756ty16m9XO8bdXsPF4mxvMK/RGed8b9WZ3Slw76kYdrhty8OQ+UAykdIrhlqzEYwyON+pLbXI5a+yURg=="],
+    "war3-model": ["war3-model@vendor/war3-model-2e61b3ed83350c04fb9df92ecb5cf0fad39e0509.tgz", { "dependencies": { "gl-matrix": "3.3.0" } }, "sha512-fSxEOPdfqbd0NSysEaqlaG+MZWRx0bVTQVs7LH6J9XUpf8aqKKz6rxdgn5Av5BVVFiZsTtOHqho6NUnJKT1hAw=="],
   }
 }

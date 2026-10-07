@@ -145,7 +145,7 @@ export const renderScenes = (project: HeadlessRenderProject, scenes: readonly Re
       await Bun.write(join(directory, `p${scene.client}-frame-${scene.frame}.json`), JSON.stringify(scene));
       images.push({ frame: scene.frame, client: scene.client, image, models: result.models, textures: result.textures });
     }
-    await Bun.write(join(directory, "render.json"), JSON.stringify({ renderer: "war3-model 4.0.1", gpu: browser.gpu, images }, null, 2) + "\n");
+    await Bun.write(join(directory, "render.json"), JSON.stringify({ renderer: "war3-model 4.0.1 + HD sampling precision", gpu: browser.gpu, images }, null, 2) + "\n");
     return images;
   }, catch: (cause) => new RenderFailure({ cause }) });
 })).pipe(Effect.timeout("2 minutes"));

@@ -6,7 +6,7 @@ import { transpileProject } from "typescript-to-lua";
 import { report } from "./compiler";
 
 const root = resolve(import.meta.dir, "..");
-const packagePaths = ["scripts", "plugins", "src", "native", "docs", "README.md", "LICENSE", "AGENTS.md", "typescript-toolchain.lock", "tsconfig.library.json"];
+const packagePaths = ["scripts", "plugins", "src", "native", "docs", "vendor", "README.md", "LICENSE", "AGENTS.md", "typescript-toolchain.lock", "tsconfig.library.json"];
 
 async function copyTree(source: string, destination: string): Promise<void> {
   await mkdir(destination, { recursive: true });
@@ -66,7 +66,7 @@ export async function producePackage(output: string): Promise<void> {
     for (const path of packagePaths) {
       const source = join(root, path);
       const destination = join(staging, path);
-      if (["scripts", "plugins", "src", "native", "docs"].includes(path)) await copyTree(source, destination);
+      if (["scripts", "plugins", "src", "native", "docs", "vendor"].includes(path)) await copyTree(source, destination);
       else await copyFile(source, destination);
     }
     await writeEditorPlugin(join(staging, "plugins/number-rules-service.cjs"));
