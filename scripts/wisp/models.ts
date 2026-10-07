@@ -48,7 +48,7 @@ type Track = mdx.AnimVector | number | undefined;
 const SKIPPED = new Set(["LITE", "CAMS"]);
 
 /** The file without the chunks parsing skips, and how many light records it holds. */
-function parsable(bytes: Uint8Array): { readonly bytes: Uint8Array; readonly lights: number } {
+export function parsableModel(bytes: Uint8Array): { readonly bytes: Uint8Array; readonly lights: number } {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const tag = (at: number) => String.fromCharCode(...bytes.subarray(at, at + 4));
   if (bytes.length < 4 || tag(0) !== "MDLX") throw new Error("not an MDX model");
@@ -261,7 +261,7 @@ function meshBounds(model: mdx.Model): Box | undefined {
 
 /** Everything a model file says about what it draws. */
 export function modelFacts(file: Uint8Array): ModelFacts {
-  const { bytes, lights } = parsable(file);
+  const { bytes, lights } = parsableModel(file);
   const model = parseMDX(bytes.slice().buffer);
   const triangles = model.Geosets.reduce((sum, { Faces }) => sum + Math.floor(Faces.length / 3), 0);
   const bounds = triangles > 0 ? meshBounds(model) : undefined;

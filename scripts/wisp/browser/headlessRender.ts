@@ -2,6 +2,7 @@
 import { ModelRenderer, decodeBLP, getBLPImageData, parseMDL, parseMDX, type model } from "war3-model";
 import type { EffectPose } from "../../../src/headless/client";
 import type { RenderScene } from "../headlessRender";
+import { parsableModel } from "../models";
 
 type Matrix = Float32Array;
 const identity = (): Matrix => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -68,7 +69,7 @@ async function asset(path: string): Promise<ArrayBuffer> {
 async function modelAt(path: string): Promise<model.Model> {
   let result = models.get(path);
   if (result === undefined) {
-    result = asset(path).then((bytes) => new TextDecoder().decode(bytes.slice(0, 4)) === "MDLX" ? parseMDX(bytes) : parseMDL(new TextDecoder().decode(bytes)));
+    result = asset(path).then((bytes) => new TextDecoder().decode(bytes.slice(0, 4)) === "MDLX" ? parseMDX(parsableModel(new Uint8Array(bytes)).bytes.slice().buffer) : parseMDL(new TextDecoder().decode(bytes)));
     models.set(path, result);
   }
   return result;
@@ -176,6 +177,7 @@ window.prepareRenderer = (width, height) => {
   const context = canvas.getContext("webgl2", { preserveDrawingBuffer: true, antialias: true, alpha: false });
   if (context === null) throw new Error("Chrome could not create a WebGL2 context");
   gl = context;
+  gl.depthFunc(gl.LEQUAL);
   const debug = gl.getExtension("WEBGL_debug_renderer_info");
   return debug === null ? String(gl.getParameter(gl.RENDERER)) : String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL));
 };
