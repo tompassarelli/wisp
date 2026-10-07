@@ -62,7 +62,7 @@ export class DoctorHands extends Context.Service<DoctorHands, {
   readonly launches: boolean;
   /** Leaves the lobby the client is in, for the menus it came from. */
   readonly leaveLobby: (target: DoctorTarget) => Effect.Effect<void, PlayProblem>;
-  /** Leaves the score screen. */
+  /** Leaves the score screen with a key; doctor calls it only while the client's watch shows the score screen. */
   readonly closeScore: (target: DoctorTarget) => Effect.Effect<void, PlayProblem>;
 }>()("wisp/DoctorHands") {}
 
@@ -245,6 +245,12 @@ export interface DoctorResult {
 const POLL = "1 second";
 /** A lobby or score screen left through the menus changes screen within this (the menus answer a leave in under 10 s). */
 const LEAVE_SECONDS = 10;
+/**
+ * Escape presses on a score screen before doctor ends Warcraft III and has it
+ * launched again: on 7 Oct client B (3.0.0.24268) stayed on the score screen
+ * after one Escape in three doctor runs, and left it on a later press.
+ */
+export const SCORE_ESCAPES = 3;
 
 /** Brings one client to a ready state, printing each step as "NAME: ...". */
 export const doctorClient = (target: DoctorTarget, print: (line: string) => void) => Effect.gen(function*() {
@@ -386,6 +392,13 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
   /** Waits up to LEAVE_SECONDS for the watch to show the client out of `kind`; the next look decides either way. */
   const left = (kind: StateKind) => waitFor(client, (view) => view.state.kind !== kind, { what: `leaving ${kind}`, seconds: LEAVE_SECONDS, failOn: [] }).pipe(Effect.ignore, Effect.asVoid);
 
+  /**
+   * Whether the watch shows the score screen now. Keys reach a client only
+   * while it does: at the menus they could land in Battle.net's channel chat,
+   * and a client the watch can't read gets none.
+   */
+  const onScoreScreen = watch.view(client).pipe(Effect.map((view) => view.state.kind === "results"), Effect.orElseSucceed(() => false));
+
   /** Whether this run launched the game: its game is waited on until it says where it is. */
   let started = false;
   const recover = (problem: Problem) => Effect.gen(function*() {
@@ -410,9 +423,17 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
       case "stale lobby":
         yield* hands.leaveLobby(target).pipe(Effect.mapError(failed));
         return yield* left("lobby");
-      case "score screen":
-        yield* hands.closeScore(target).pipe(Effect.mapError(failed));
-        return yield* left("results");
+      case "score screen": {
+        for (let press = 1; press <= SCORE_ESCAPES; press++) {
+          if (!(yield* onScoreScreen)) return;
+          if (press > 1) yield* say(`still on the score screen; Escape again (${press} of ${SCORE_ESCAPES})`);
+          yield* hands.closeScore(target).pipe(Effect.mapError(failed));
+          yield* left("results");
+        }
+        if (!(yield* onScoreScreen)) return;
+        yield* say(`still on the score screen after ${SCORE_ESCAPES} Escapes; ending Warcraft III so it starts again at the menus`);
+        return yield* endGame;
+      }
       case "closed":
         return yield* startLauncher;
       case "no game": {
