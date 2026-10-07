@@ -13,6 +13,8 @@ import { GameFiles } from "../scripts/wisp/gameFiles";
 import { writtenPreloadFile } from "../scripts/wisp/headlessInput";
 import { type PerfRun, comparePerfRuns, parsePerfRun } from "../scripts/wisp/perf";
 import { type FrameWindow, frameCostFile, frameCostHeading, frameWindowLine } from "../src/runtime/frameCost";
+import { captureDistribution, parseFrameCostCapture } from "../scripts/wisp/frameCostCapture";
+import { frameCostCaptureReadings } from "../scripts/wisp/nativeFit";
 
 const root = join(import.meta.dir, "..");
 
@@ -84,6 +86,14 @@ test("the overlay shows to the player who asks; every client reports the frames 
   ]);
   const typing = native((values) => ({ "typing-us": { ...values["typing-us"], max: 180000 } }));
   expect(comparePerfRuns(run, typing).regressions).toEqual(["p0 predicted typing stall µs max new", "p1 predicted typing stall µs max new"]);
+  for (const slot of [0, 1]) {
+    const capture = parseFrameCostCapture(writtenPreloadFile(after(lines, `p${slot} capture: `)));
+    expect(capture.samples.length).toBe(240);
+    expect(capture.samples.every(({ natives, catchUp }) => natives >= 20 && catchUp === 1)).toBe(true);
+    expect(captureDistribution(capture).frames).toBe(240);
+    expect(frameCostCaptureReadings(capture).windows.length).toBe(5);
+  }
+  expect(after(lines, "capture desync: ")).toEqual(["none"]);
 }, 30_000);
 
 test("the host reads each client's new report once, as the map wrote it", async () => {

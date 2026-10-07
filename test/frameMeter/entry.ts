@@ -2,7 +2,7 @@
 // times and advances its simulation one frame, or `__fixtureCatchUp` frames once.
 import { configureRuntime } from "../../src/runtime/config";
 import { installDispatch, on, trampoline } from "../../src/platform/dispatch";
-import { installFrameMeter, startFrameMeter } from "../../src/platform/frameMeter";
+import { installFrameMeter, startFrameMeter, startFrameCostCapture } from "../../src/platform/frameMeter";
 import { installHotReload, startHotReload } from "../../src/platform/hotReload";
 
 interface FixtureState {
@@ -34,6 +34,7 @@ function command(): void {
   const [name, value] = GetEventPlayerChatString().split(" ");
   if (name === "-work") fixture.work = S2I(value ?? "0");
   else if (name === "-stall") fixture.catchUp = S2I(value ?? "1");
+  else if (name === "-capture") startFrameCostCapture(S2I(value ?? "0"));
 }
 
 export function install(this: void): void {
@@ -53,6 +54,7 @@ export function start(this: void): void {
   for (const player of [0, 1]) {
     TriggerRegisterPlayerChatEvent(chat, Player(player), "-work ", false);
     TriggerRegisterPlayerChatEvent(chat, Player(player), "-stall ", false);
+    TriggerRegisterPlayerChatEvent(chat, Player(player), "-capture ", false);
   }
   TriggerAddAction(chat, trampoline("fixture.command"));
   startHotReload();

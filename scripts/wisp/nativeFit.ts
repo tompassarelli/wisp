@@ -6,6 +6,7 @@
 // compared with the overlay's. `fitNativeCost` chooses the native call and
 // collector costs that bring the predictions closest to readings.
 import { type FrameWork, type NativeCostModel, nativeFrameCost } from "../../src/headless/nativeCost";
+import { type FrameCostCapture, parseFrameCostCapture } from "./frameCostCapture";
 
 /** A share of native the prediction may miss by: the cost box's 20%. */
 export const NATIVE_TOLERANCE = 0.2;
@@ -47,6 +48,7 @@ const finite = (value: unknown) => (typeof value === "number" && Number.isFinite
  * game's session tooling writes it.
  */
 export function parseNativeReadings(text: string): NativeReadings {
+  if (text.trimStart().startsWith("function PreloadFiles")) return frameCostCaptureReadings(parseFrameCostCapture(text));
   const root = record(JSON.parse(text));
   const overlay = root["frame_cost_overlay"] === undefined ? root : record(root["frame_cost_overlay"]);
   const listed = overlay["windows"];
@@ -90,6 +92,18 @@ const rank = (values: readonly number[], share: number) => {
   const order = sorted(values);
   return order[Math.max(0, Math.min(order.length - 1, Math.ceil(share * order.length) - 1))]!;
 };
+
+/** Windows of actually measured callback costs, without prediction or clock-step resampling. */
+export function frameCostCaptureReadings(capture: FrameCostCapture): NativeReadings {
+  const times = capture.samples.map(({ luaUs }) => luaUs / 1000);
+  const windows: OverlayWindow[] = [];
+  for (let end = WINDOW_FRAMES; end <= times.length; end += WINDOW_STRIDE) {
+    const values = times.slice(end - WINDOW_FRAMES, end);
+    windows.push({ median: median(values), p95: rank(values, 0.95), max: Math.max(...values) });
+  }
+  if (windows.length === 0) throw new Error("frame capture needs at least 120 samples for native calibration");
+  return { windows, clockStepMs: capture.clockStepUs / 1000 };
+}
 
 /**
  * Per-frame times as the native overlay shows them: each frame a whole number

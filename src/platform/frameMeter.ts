@@ -14,6 +14,7 @@
 import { FILE_SLOTS } from "../runtime/gameFiles";
 import { runtimeConfiguration } from "../runtime/config";
 import { type FrameWindow, frameCostFile, frameCostHeading, frameWindowLine, reportNumber, spread } from "../runtime/frameCost";
+import { MAX_FRAME_COST_CAPTURE, frameCostCaptureFile, frameCostCaptureHeading, frameCostCaptureSample } from "../runtime/frameCostCapture";
 import { f32 } from "../sim/f32";
 import { floorMod } from "../sim/intMath";
 import { on, trampoline } from "./dispatch";
@@ -56,6 +57,19 @@ interface Window {
   readonly catchUp: Ring;
 }
 
+interface Capture {
+  readonly run: number;
+  readonly limit: number;
+  readonly version: number;
+  readonly started: number;
+  readonly lua: number[];
+  readonly natives: number[];
+  readonly catchUp: number[];
+  /** The callback that starts a capture contains setup work, outside its sample. */
+  skip: boolean;
+  changed: boolean;
+}
+
 interface MeterState {
   readonly options: FrameMeterOptions;
   readonly clock: ((this: void) => number) | undefined;
@@ -81,6 +95,8 @@ interface MeterState {
   readonly overlay: framehandle;
   shown: boolean;
   frames: number;
+  capture: Capture | undefined;
+  captureRuns: number;
 }
 
 const ring = (): Ring => ({ values: [], next: 0, count: 0 });
@@ -178,6 +194,44 @@ function writeReport(state: MeterState, before: { readonly version: number; read
   PreloadGenEnd(frameCostFile(GetPlayerId(GetLocalPlayer()), runtimeConfiguration().filePrefix));
 }
 
+/** Starts a bounded native capture after the current frame; no handles are created or freed. */
+export function startFrameCostCapture(frames: number): number {
+  if (frames < 1 || frames > MAX_FRAME_COST_CAPTURE || frames !== Math.floor(frames)) throw new Error("frame cost capture needs 1 to 18000 frames");
+  const state = meter();
+  if (state.capture !== undefined) throw new Error("frame cost capture already running");
+  const run = (state.captureRuns ?? 0) + 1;
+  state.captureRuns = run;
+  state.capture = {
+    run, limit: frames, version: installedVersion(), started: state.clock?.() ?? 0,
+    lua: [], natives: [], catchUp: [], skip: true, changed: false,
+  };
+  return run;
+}
+
+function captureFrame(state: MeterState, calls: number, catchUp: number, version: number): void {
+  const capture = state.capture;
+  if (capture === undefined) return;
+  if (capture.skip) {
+    capture.skip = false;
+    return;
+  }
+  capture.changed ||= version !== capture.version;
+  capture.lua.push(state.lua);
+  capture.natives.push(calls);
+  capture.catchUp.push(catchUp);
+  if (capture.lua.length < capture.limit) return;
+  // All output is after the last measured callback, outside the capture.
+  state.capture = undefined;
+  const elapsed = state.clock === undefined ? 0 : state.clock() - capture.started;
+  PreloadGenClear();
+  PreloadGenStart();
+  Preload(frameCostCaptureHeading(capture.run, capture.limit, capture.version, state.step * 1000000, elapsed * 1000, capture.changed));
+  for (let index = 0; index < capture.limit; index++) {
+    Preload(frameCostCaptureSample(index + 1, state.clock === undefined ? undefined : (capture.lua[index] ?? 0) * 1000000, capture.natives[index] ?? 0, capture.catchUp[index] ?? 0));
+  }
+  PreloadGenEnd(frameCostCaptureFile(GetPlayerId(GetLocalPlayer()), capture.run, runtimeConfiguration().filePrefix));
+}
+
 /** Ends a frame: its sample, the reload report once due, the overlay. The meter's own calls are not the game's. */
 function endFrame(state: MeterState): void {
   const calls = state.calls - state.frameCalls;
@@ -190,6 +244,7 @@ function endFrame(state: MeterState): void {
   push(state.recent.natives, calls);
   push(state.recent.catchUp, catchUp);
   const version = installedVersion();
+  captureFrame(state, calls, catchUp, version);
   if (version !== state.version) {
     // This frame installed the version: its cost is the reload's, not either version's.
     state.before = { version: state.version, window: summary(state, state.current) };
@@ -298,7 +353,7 @@ export function startFrameMeter(options: FrameMeterOptions): void {
   const state: MeterState = {
     options, clock, step, plain: undefined, measured: undefined, calls: 0, frameCalls: 0, lua: 0,
     simulation: read === undefined ? 0 : read(), recent: emptyWindow(), current: emptyWindow(), version: installedVersion(),
-    before: undefined, overlay: createOverlay(), shown: false, frames: 0,
+    before: undefined, overlay: createOverlay(), shown: false, frames: 0, capture: undefined, captureRuns: 0,
   };
   globals[key] = state;
   countCalls(state);
