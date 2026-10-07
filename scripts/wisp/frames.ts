@@ -160,6 +160,12 @@ function fdfFrame(definition: FrameDefinition, node: FrameNode, name: string, pa
   return lines;
 }
 
+/** A map-side number as the binary32 value Warcraft holds, which the number rules require of a literal. */
+const scriptNumber = (value: number) => {
+  if (!Number.isFinite(value)) throw new FrameDefinitionError([`number ${value} is not finite`]);
+  return String(Math.fround(value));
+};
+
 function bindingsSource(definition: FrameDefinition, tocEntry: string): string {
   const nodes = flatten(definition.children);
   const type = `${definition.name}Frames`;
@@ -179,7 +185,7 @@ function bindingsSource(definition: FrameDefinition, tocEntry: string): string {
     `  if (!BlzLoadTOCFile(${definition.name.toUpperCase()}_TOC)) return undefined;`,
     `  const root = BlzCreateFrame(${escaped(definition.name)}, parent, 0, context);`,
   ];
-  if (definition.at !== undefined) lines.push(`  BlzFrameSetAbsPoint(root, FRAMEPOINT_${definition.at.point}, ${fdfNumber(definition.at.x)}, ${fdfNumber(definition.at.y)});`);
+  if (definition.at !== undefined) lines.push(`  BlzFrameSetAbsPoint(root, FRAMEPOINT_${definition.at.point}, ${scriptNumber(definition.at.x)}, ${scriptNumber(definition.at.y)});`);
   if (definition.level !== undefined) lines.push(`  BlzFrameSetLevel(root, ${definition.level});`);
   lines.push(`  const frames: ${type} = {`, "    root,");
   for (const node of nodes) lines.push(`    ${node.key}: BlzGetFrameByName(${escaped(definition.name + capitalize(node.key))}, context),`);

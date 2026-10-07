@@ -20,7 +20,7 @@ test("the opponent-settings panel generates FDF, TOC and native bindings", () =>
   expect(generated.fdf.match(/^\s*Frame /gm)?.length).toBe(14);
   expect(generated.bindings).toContain('if (!BlzLoadTOCFile(OPPONENTSETTINGS_TOC)) return undefined;');
   expect(generated.bindings).toContain('const root = BlzCreateFrame("OpponentSettings", parent, 0, context);');
-  expect(generated.bindings).toContain("BlzFrameSetAbsPoint(root, FRAMEPOINT_TOPLEFT, 0.12, 0.44);");
+  expect(generated.bindings).toContain("BlzFrameSetAbsPoint(root, FRAMEPOINT_TOPLEFT, 0.11999999731779099, 0.4399999976158142);");
   expect(generated.bindings).toContain('    opponentNext: BlzGetFrameByName("OpponentSettingsOpponentNext", context),');
   expect(generated.bindings).toContain('  BlzFrameSetText(frames.done, "Done");');
   expect(generated.bindings).toContain("  BlzFrameSetEnable(frames.preview, false);");
