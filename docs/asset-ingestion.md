@@ -41,6 +41,14 @@ and listen in the target client before replacing a game's sound family.
 The authored test tone is 440 Hz, mono, 48 kHz, 0.1 s, encoded with
 `ffmpeg -f lavfi -i sine=frequency=440:sample_rate=48000:duration=0.1 -c:a libvorbis -q:a 4 tone.ogg`.
 
+Smashcraft's 84 declared stock sound paths were measured on 8 Oct 2026:
+34,604,984 encoded source bytes versus 31,123,807 bytes after Vorbis quality 4
+conversion with the source sample rates and channels (10.06% smaller).
+Seventy sources already use OGG and fourteen use MP3; these are stock game
+sounds, rather than imported audio families. This count covers
+`stockSoundInfo.ts`, excluding additional fighter model-event labels.
+The encoded inputs and conversions stay in private local storage.
+
 ## Why packaging, not the asset bytes
 
 Measured on Smashcraft's private families (7 Oct 2026, aggregate numbers):
