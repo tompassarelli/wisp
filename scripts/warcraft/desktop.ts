@@ -326,3 +326,37 @@ export const waitFor = <A, E, R>(client: { readonly name: string }, what: string
 /** Waits until a region shows text matching `pattern`. */
 export const waitForText = (client: Client, what: string, pattern: RegExp, region?: Region, ink: Ink = "light", seconds = 20) =>
   waitFor(client, what, seconds, read(client, region, ink).pipe(Effect.map((seen) => (pattern.test(seen.replace(/\s+/g, " ")) ? seen : undefined))));
+
+/** The X window with input focus on the client's display. */
+const activeWindow = (client: Client) =>
+  run(client.name, "read active window", [client.tools.xdotool, "getactivewindow"], client.x11).pipe(Effect.map((bytes) => text(bytes).trim()));
+
+/** A window's frame rectangle on the client's display. */
+const windowRegion = (client: Client) =>
+  run(client.name, "read window geometry", [client.tools.xdotool, "getwindowgeometry", "--shell", client.window], client.x11).pipe(Effect.map((bytes): Region => {
+    const fields = Object.fromEntries(text(bytes).split("\n").filter((line) => line.includes("=")).map((line) => line.split("=", 2) as [string, string]));
+    return { x: Number(fields.X), y: Number(fields.Y), width: Number(fields.WIDTH), height: Number(fields.HEIGHT) };
+  }));
+
+/**
+ * Replaces a field of the Battle.net sign-in window `client.window` (titled
+ * `title`) with `secret` and submits it with Return. The field is clicked
+ * where its empty placeholder (`placeholder`, read from the window) is: the
+ * password page of 7 Oct loaded with no field focused. The value reaches
+ * xdotool on its stdin, never its arguments, and is zeroed after; nothing
+ * types unless that window has focus before and after.
+ */
+export const enterLoginField = (client: Client, title: string, placeholder: RegExp, secret: Uint8Array) =>
+  Effect.gen(function*() {
+    yield* focusWindow(client, title);
+    const focused = yield* activeWindow(client);
+    if (focused !== client.window) return yield* new DesktopFailure({ operation: "focus sign-in", client: client.name, cause: `window ${focused} has focus, not the "${title}" window ${client.window}` });
+    const region = yield* windowRegion(client);
+    const field = (yield* frameWords(client, yield* capture(client, region), "light")).find((word) => placeholder.test(word.text));
+    if (field !== undefined) yield* pressAt(client, region.x + field.x, region.y + field.y);
+    yield* run(client.name, "select sign-in field", [client.tools.xdotool, "key", "--clearmodifiers", "ctrl+a"], client.x11);
+    yield* run(client.name, "type sign-in field", [client.tools.xdotool, "type", "--clearmodifiers", "--file", "-"], client.x11, secret);
+    const after = yield* activeWindow(client);
+    if (after !== client.window) return yield* new DesktopFailure({ operation: "type sign-in field", client: client.name, cause: `focus moved to window ${after} while typing; not submitting` });
+    yield* run(client.name, "submit sign-in field", [client.tools.xdotool, "key", "--clearmodifiers", "Return"], client.x11);
+  }).pipe(Effect.ensuring(Effect.sync(() => secret.fill(0))));

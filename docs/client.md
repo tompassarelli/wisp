@@ -10,5 +10,8 @@ See [watching clients](watch.md).
 
 `wisp client doctor [CLIENT...]` brings named clients, or all clients, to a
 ready state. The game supplies its recovery command as the third argument
-to `makeClient(clientsFile, watchOptions, doctorCommand)`; see
-[client recovery](doctor.md). The sample map has no account recovery declaration.
+to `makeClient(clientsFile, watchOptions, doctorCommand, signOutCommand)`; see
+[client recovery](doctor.md). Doctor signs a launcher in with the client's
+declared account. `wisp client sign-out CLIENT...` signs clients out (the
+fourth argument, from `makeSignOut`); the next doctor run signs them in again.
+The sample map has no account recovery declaration.

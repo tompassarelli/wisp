@@ -8,6 +8,7 @@
 //   launcher-played.log            client A's launcher, 6 Oct: signed in, Play, Warcraft III running
 //   launcher-connection-lost.log   client B's launcher, 3 Oct: signed in, then presence updates timing out
 //   launcher-reconnected.log       the same launcher once restarted: its cached login, signed in again
+//   launcher-signed-in-by-hand.log client A's launcher, 6 Oct: its UnifiedAuth account page, password page and sign-in
 //   launcher-login-rejected.log    written from smashcraft:docs/warcraft-authentication.md's record of
 //                                  3 Oct (ERROR_TOKEN_NOT_FOUND (49), then LoginCredential); that log rotated
 //   war3log-buffered-signed-in.txt client B's War3Log.txt, 6 Oct: written 3 s into a session that signed
@@ -33,6 +34,11 @@ const PLAYED = fixture("launcher-played.log");
 const LOST = fixture("launcher-connection-lost.log");
 const RECONNECTED = fixture("launcher-reconnected.log");
 const REJECTED = fixture("launcher-login-rejected.log");
+const BY_HAND = fixture("launcher-signed-in-by-hand.log").split("\n");
+/** The launcher's log up to its account page, then up to its password page, then signed in. */
+const ACCOUNT_PAGE = BY_HAND.slice(0, 5).join("\n") + "\n";
+const PASSWORD_PAGE = BY_HAND.slice(5, 13).join("\n") + "\n";
+const SIGNED_IN_BY_FORM = BY_HAND.slice(13).join("\n");
 const SIGNED_IN = PLAYED.split("\n")[0]! + "\n";
 const LAUNCH = PLAYED.split("\n").slice(1, 4).join("\n") + "\n";
 
@@ -75,6 +81,8 @@ interface Scenario {
   readonly settlesAfter?: number;
   /** Escape presses the score screen takes to leave (1 by default); Infinity never leaves. */
   readonly scoreEscapes?: number;
+  /** The client declares an account and doctor has hands to type it; "stuck" leaves the form where it is. */
+  readonly signsIn?: "works" | "stuck";
 }
 
 function world(scenario: Scenario) {
@@ -145,6 +153,12 @@ function world(scenario: Scenario) {
       events.push(state.kind === "results" ? "close score" : `close score at ${state.kind}`);
       if (++escapes >= (scenario.scoreEscapes ?? 1)) state = { kind: "menus", screen: "CUSTOM_GAMES" };
     }),
+    enterLogin: (_target, field) => Effect.sync(() => {
+      events.push(`enter ${field}`);
+      if (scenario.signsIn !== "works") return;
+      const log = newestLog();
+      files.set(log, files.get(log)! + (field === "username" ? PASSWORD_PAGE : SIGNED_IN_BY_FORM));
+    }),
   });
 
   const layer = Layer.mergeAll(Layer.succeed(PlayMachine, machine), Layer.succeed(ClientWatch, watch), Layer.succeed(DoctorHands, hands));
@@ -164,7 +178,8 @@ function world(scenario: Scenario) {
   };
   const run = async () => {
     const lines: string[] = [];
-    const { failure } = await finish(doctor([scenario.preferences === undefined ? target : { ...target, displaySettings: DISPLAY }], (line) => lines.push(line)));
+    const account = scenario.signsIn === undefined ? {} : { account: { username: ["print", "username"], password: ["print", "password"] } };
+    const { failure } = await finish(doctor([{ ...(scenario.preferences === undefined ? target : { ...target, displaySettings: DISPLAY }), ...account }], (line) => lines.push(line)));
     return { lines, failure, events };
   };
   const written = () => files.get(PREFERENCES);
@@ -400,4 +415,34 @@ test("a declared key the file lacks is added to its [Video] section; CRLF files 
   expect(crlf.replace(/\r\n/g, "\n").split("\n").every((line) => !line.includes("\r"))).toBe(true);
   // Entries of other sections with a Video key's name are not Video settings.
   expect(videoSettings("[Gameplay]\nwindowmode=9\n[Video]\nwindowmode=2\n").windowmode).toBe("2");
+});
+
+test("the launcher's sign-in pages, from its UnifiedAuth log", () => {
+  expect(launcherHealth(ACCOUNT_PAGE)).toEqual({ kind: "sign-in form", form: "Login" });
+  // Submitted: no page until the password page loads.
+  expect(launcherHealth(ACCOUNT_PAGE + BY_HAND.slice(5, 8).join("\n"))).toEqual({ kind: "not signed in" });
+  expect(launcherHealth(ACCOUNT_PAGE + PASSWORD_PAGE)).toEqual({ kind: "sign-in form", form: "LoginCredential" });
+  expect(launcherHealth(ACCOUNT_PAGE + PASSWORD_PAGE + SIGNED_IN_BY_FORM)).toEqual({ kind: "signed in" });
+  // A rejected saved login, then its form.
+  expect(launcherHealth(REJECTED + ACCOUNT_PAGE)).toEqual({ kind: "sign-in form", form: "Login" });
+});
+
+test("a launcher at its sign-in form is signed in with the client's account, then launches the game", async () => {
+  const { lines, failure, events } = await world({ processes: "launcher", launcherLog: ACCOUNT_PAGE, signsIn: "works" }).run();
+  expect(failure).toBeUndefined();
+  expect(events).toEqual(["enter username", "enter password", "launch 43924"]);
+  expect(lines).toContain("b: sign-in form: Battle.net shows its account page; signing in with its account");
+  expect(lines.at(-1)).toBe("b: ready: menus (MAIN_MENU), after sign-in form, no game");
+  // The password page alone (a remembered account name) takes only the password.
+  const password = await world({ processes: "launcher", launcherLog: ACCOUNT_PAGE + PASSWORD_PAGE, signsIn: "works" }).run();
+  expect(password.events).toEqual(["enter password", "launch 43924"]);
+});
+
+test("a sign-in form without an account, or one that doesn't move, stops with one line", async () => {
+  const none = await world({ processes: "launcher", launcherLog: ACCOUNT_PAGE }).run();
+  expect(none.events).toEqual([]);
+  expect(none.failure).toBe("b: Battle.net shows its sign-in form; it needs its owner to sign in to Battle.net: sign in in its launcher on display :2 with \"Keep me logged in\" ticked, then run doctor again");
+  const stuck = await world({ processes: "launcher", launcherLog: ACCOUNT_PAGE, signsIn: "stuck" }).run();
+  expect(stuck.events).toEqual(["enter username"]);
+  expect(stuck.failure).toBe("b: Battle.net didn't show its password page within 30 s of the account name");
 });

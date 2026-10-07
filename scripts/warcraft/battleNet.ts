@@ -136,12 +136,34 @@ export type LauncherHealth =
   | { readonly kind: "signed in" }
   /** No sign-in in this launcher's log yet: it is starting, or showing its sign-in form. */
   | { readonly kind: "not signed in" }
-  /** Battle.net rejected the saved login: only the account owner can sign in again. */
+  /** Battle.net rejected the saved login: the account's credentials must be entered again. */
   | { readonly kind: "sign-in needed"; readonly reason: string }
+  /** Not signed in, with its sign-in form loaded: the account page (Login) or the password page (LoginCredential). */
+  | { readonly kind: "sign-in form"; readonly form: LoginForm }
   /** Signed in, but its connection to Battle.net fails: a restarted launcher reconnects. */
   | { readonly kind: "connection failing"; readonly reason: string };
 
 const LOGIN_REJECTED = /ERROR_TOKEN_NOT_FOUND/;
+
+/** The launcher's sign-in pages: the account name (Login), then the password (LoginCredential). */
+export type LoginForm = "Login" | "LoginCredential";
+
+/**
+ * The sign-in page the launcher shows at the end of `lines`, by its UnifiedAuth
+ * log (client A, 6 Oct): "finished loading. statusCode=200 state=Login" is the
+ * account page, "state=LoginCredential" the password page; a submitted page
+ * ("status changed: RequestingToken") or one closed ("browser state changed:
+ * None") shows none until the next one loads.
+ */
+export function loginForm(lines: readonly string[]): LoginForm | undefined {
+  let form: LoginForm | undefined;
+  for (const line of lines) {
+    const loaded = /\[UnifiedAuth\] .*UAuth: finished loading\. statusCode=200 state=(Login|LoginCredential)\s*$/.exec(line);
+    if (loaded !== null) form = loaded[1] as LoginForm;
+    else if (/\[UnifiedAuth\] .*UAuth: (?:status changed: (?:RequestingToken|ReceivedToken)|browser state changed: (?:None|Done))/.test(line)) form = undefined;
+  }
+  return form;
+}
 const SSO_FAILED = /GenerateAuth.*(?:fail|error)|SSO token generation error/i;
 const RPC_TIMEOUT = /ERROR_RPC_REQUEST_TIMED_OUT/;
 /** Presence updates fail every 46 s while the connection is gone (3 Oct, client B); two in a row, with nothing logged in between that worked, is not a blip. */
@@ -158,9 +180,12 @@ export function launcherHealth(log: string): LauncherHealth {
   const lines = log.split("\n");
   const last = lines.findLastIndex((line) => SIGNED_IN.test(line));
   const after = lines.slice(last + 1).filter((line) => line.trim() !== "");
-  const rejected = after.find((line) => LOGIN_REJECTED.test(line));
-  if (rejected !== undefined) return { kind: "sign-in needed", reason: "Battle.net rejected its saved login (ERROR_TOKEN_NOT_FOUND)" };
-  if (last < 0) return { kind: "not signed in" };
+  const rejected = after.findLastIndex((line) => LOGIN_REJECTED.test(line));
+  if (rejected >= 0 || last < 0) {
+    const form = loginForm(after.slice(rejected + 1));
+    if (form !== undefined) return { kind: "sign-in form", form };
+    return rejected >= 0 ? { kind: "sign-in needed", reason: "Battle.net rejected its saved login (ERROR_TOKEN_NOT_FOUND)" } : { kind: "not signed in" };
+  }
   if (after.some((line) => SSO_FAILED.test(line))) return { kind: "connection failing", reason: "Warcraft III's sign-in token couldn't be made (GenerateAuth failed)" };
   let timeouts = 0;
   for (const line of after.toReversed()) {
@@ -172,3 +197,28 @@ export function launcherHealth(log: string): LauncherHealth {
     ? { kind: "connection failing", reason: `its last ${timeouts} presence updates timed out (ERROR_RPC_REQUEST_TIMED_OUT)` }
     : { kind: "signed in" };
 }
+
+const SAVED_LOGIN_KEY = "[Software\\\\Blizzard Entertainment\\\\Battle.net\\\\UnifiedAuth]";
+
+/**
+ * A prefix's user.reg without the launcher's saved login: the values of its
+ * UnifiedAuth key, the token it signs in with at start (client B, 7 Oct). The
+ * key itself and every other line stay. Wine reads the file when its runtime
+ * starts, so it is rewritten only while none runs on the prefix.
+ */
+export function withoutSavedLogin(userReg: string): string {
+  const lines = userReg.split("\n");
+  const kept: string[] = [];
+  let inKey = false;
+  let continued = false;
+  for (const line of lines) {
+    if (line.startsWith("[")) inKey = line.startsWith(SAVED_LOGIN_KEY);
+    const value = inKey && !line.startsWith("[") && !line.startsWith("#") && line.trim() !== "";
+    if (!(value || (inKey && continued))) kept.push(line);
+    continued = (value || (inKey && continued)) && line.trimEnd().endsWith("\\");
+  }
+  return kept.join("\n");
+}
+
+/** Whether a prefix's user.reg holds a saved login. */
+export const hasSavedLogin = (userReg: string) => withoutSavedLogin(userReg) !== userReg;

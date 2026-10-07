@@ -7,6 +7,8 @@
 //   chat CLIENT TEXT...         Return, the text, Return: a chat message or chat command, only in a match
 //   watch CLIENT --once                its state from events (wisp:docs/watch.md), not its screen
 //   wait CLIENT STATE... [--seconds N]  until it is in one of these states; a crash or lost Battle.net fails at once
+//   doctor [CLIENT...]                 recovers known bad states, signing in with each client's account (wisp:docs/doctor.md)
+//   sign-out CLIENT...                 signs clients out of Battle.net; doctor signs them in again
 import { Console, Effect, Layer } from "effect";
 import { Clients, type Ink } from "../clients";
 import { type Command, UsageFailure, flagValues } from "../command";
@@ -38,7 +40,7 @@ const watchAction = (clientsFile: string, action: "wait", name: string | undefin
  * tell a match from a lobby when the menus don't, for `watch`, `wait` and the
  * match check before `chat` and Return (wisp:scripts/warcraft/desktop.ts `requireMatch`).
  */
-export const makeClient = (stateFilePath: string, watch: WatchOptions = {}, doctor?: Command): Command => ([action, name, ...rest]) => action === "watch" ? makeWatch(stateFilePath, watch)([...(name === undefined ? [] : [name]), ...rest]) : action === "doctor" ? (doctor === undefined ? Effect.fail(new UsageFailure({ problem: "the game has not declared client recovery" })) : doctor([...(name === undefined ? [] : [name]), ...rest])) : action === "wait" ? watchAction(stateFilePath, action, name, rest, watch) : Effect.gen(function*() {
+export const makeClient = (stateFilePath: string, watch: WatchOptions = {}, doctor?: Command, signOut?: Command): Command => ([action, name, ...rest]) => action === "sign-out" ? (signOut === undefined ? Effect.fail(new UsageFailure({ problem: "the game has not declared client sign-out" })) : signOut([...(name === undefined ? [] : [name]), ...rest])) : action === "watch" ? makeWatch(stateFilePath, watch)([...(name === undefined ? [] : [name]), ...rest]) : action === "doctor" ? (doctor === undefined ? Effect.fail(new UsageFailure({ problem: "the game has not declared client recovery" })) : doctor([...(name === undefined ? [] : [name]), ...rest])) : action === "wait" ? watchAction(stateFilePath, action, name, rest, watch) : Effect.gen(function*() {
   const clients = yield* Clients;
   const target = clients.all.find((candidate) => candidate.name === name);
   if (target === undefined) return yield* new UsageFailure({ problem: `unknown client ${name}; known: ${clients.all.map((c) => c.name).join(", ")}` });

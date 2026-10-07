@@ -3,16 +3,16 @@
 // what each client is doing from `watch` (wisp:scripts/wisp/watch.ts) and the
 // client's Wine prefix: its processes and its Battle.net launcher's log.
 //
-// Recoveries never sign in, never start Warcraft III.exe themselves (only the
-// launcher does, asked through its own --exec) and never start a runtime
-// beside another on a prefix.
-// A client whose launcher needs its owner to sign in stops doctor with one
-// plain line. A state doctor has no recovery for is reported, not guessed at.
+// Recoveries never start Warcraft III.exe themselves (only the launcher does,
+// asked through its own --exec) and never start a runtime beside another on a
+// prefix. A launcher at its sign-in form is signed in with the client's
+// declared account; without one, doctor stops with one plain line. A state
+// doctor has no recovery for is reported, not guessed at.
 import { join } from "node:path";
 import { Clock, Context, Effect, Schema } from "effect";
 import {
-  type LauncherHealth, type PrefixUse, type ProcessInfo, isErrorDialog, launchOutcome, launchRequested, launcherHealth, launcherLogDirectory, newestLauncherLog,
-  prefixUse, shortcutUrl,
+  type LauncherHealth, type PrefixUse, type ProcessInfo, hasSavedLogin, isErrorDialog, launchOutcome, launchRequested, launcherHealth, launcherLogDirectory, newestLauncherLog,
+  prefixUse, shortcutUrl, withoutSavedLogin,
 } from "../warcraft/battleNet";
 import { type DisplayChange, type DisplaySettings, displayChanges, preferencesPath, withDisplaySettings } from "../warcraft/preferences";
 import { sessionLines, war3LogPath } from "../warcraft/war3Log";
@@ -45,6 +45,13 @@ export interface DoctorTarget {
    * Warcraft III is closed: a run on another display rewrites them on exit.
    */
   readonly displaySettings?: DisplaySettings;
+  /**
+   * The Battle.net account doctor signs in with when the launcher shows its
+   * sign-in form: commands that print the account's username and password on
+   * stdout. They run only while doctor types that field; the value goes to the
+   * form through a pipe and is never printed. Without it, the form stops doctor.
+   */
+  readonly account?: { readonly username: readonly string[]; readonly password: readonly string[] };
 }
 
 /** Why doctor stopped, as one plain line per client. */
@@ -67,6 +74,8 @@ export class DoctorHands extends Context.Service<DoctorHands, {
   readonly leaveLobby: (target: DoctorTarget) => Effect.Effect<void, PlayProblem>;
   /** Leaves the score screen with a key; doctor calls it only while the client's watch shows the score screen. */
   readonly closeScore: (target: DoctorTarget) => Effect.Effect<void, PlayProblem>;
+  /** Types the target's account field into the launcher's sign-in form and submits it; absent, doctor never signs in. */
+  readonly enterLogin?: (target: DoctorTarget, field: "username" | "password") => Effect.Effect<void, PlayProblem>;
 }>()("wisp/DoctorHands") {}
 
 /** Seconds each bound allows. */
@@ -75,6 +84,10 @@ export const DOCTOR_TIMEOUTS = {
   exit: 20,
   launcherStart: 90,
   signIn: 90,
+  /** A submitted sign-in page: the password page loaded 1 s after the account name, and the sign-in landed 5 s after the password (client A, 6 Oct). */
+  signInPage: 30,
+  /** A launcher that signs in itself waits this long for its sign-in form: on 7 Oct client B's password page took 47 s to load, 92 s after the launcher started. */
+  signInForm: 240,
   /** From the launch request to the launcher's log taking it. */
   request: 15,
   launch: 45,
@@ -117,6 +130,7 @@ export type Problem =
   | "stale lobby"
   | "score screen"
   | "closed"
+  | "sign-in form"
   | "no game";
 
 export type Diagnosis =
@@ -142,6 +156,7 @@ export const RECOVERY: Readonly<Record<Problem, string>> = {
   "stale lobby": "leaving the lobby",
   "score screen": "leaving the score screen",
   closed: "starting Battle.net",
+  "sign-in form": "signing in with its account",
   "no game": "asking Battle.net to launch Warcraft III",
 };
 
@@ -158,7 +173,7 @@ const describeView = (view: ClientView) => {
  * prefix comes first (two runtimes break every launch), then the game, then
  * the launcher. `canPlay`: doctor launches the game itself; `started`: this run did.
  */
-export function diagnose(seen: Observation, canPlay: boolean, display?: string, started = false): Diagnosis {
+export function diagnose(seen: Observation, canPlay: boolean, display?: string, started = false, signsIn = false): Diagnosis {
   const { use, view, held } = seen;
   const problem = (name: Problem, detail: string): Diagnosis => ({ kind: "problem", problem: name, detail });
   const where = display === undefined ? "its launcher" : `its launcher on display ${display}`;
@@ -225,10 +240,14 @@ export function diagnose(seen: Observation, canPlay: boolean, display?: string, 
   }
   const health = seen.launcher ?? { kind: "not signed in" };
   switch (health.kind) {
+    case "sign-in form":
+      return signsIn ? problem("sign-in form", `Battle.net shows its ${health.form === "Login" ? "account" : "password"} page`) : { kind: "stop", problem: `Battle.net shows its sign-in form; it ${signIn}` };
     case "sign-in needed":
+      // The launcher opens its sign-in form after a rejected saved login (3 Oct).
+      if (signsIn && held < DOCTOR_TIMEOUTS.signInForm * 1000) return { kind: "wait", detail: `${health.reason}; Battle.net opening its sign-in form` };
       return { kind: "stop", problem: `${health.reason}; it ${signIn}` };
     case "not signed in":
-      return held >= DOCTOR_TIMEOUTS.signIn * 1000 ? { kind: "stop", problem: `Battle.net hasn't signed in after ${Math.round(held / 1000)} s; it ${signIn}` } : { kind: "wait", detail: "Battle.net signing in" };
+      return held >= (signsIn ? DOCTOR_TIMEOUTS.signInForm : DOCTOR_TIMEOUTS.signIn) * 1000 ? { kind: "stop", problem: `Battle.net hasn't signed in after ${Math.round(held / 1000)} s; it ${signIn}` } : { kind: "wait", detail: "Battle.net signing in" };
     case "connection failing":
       return problem("connection failing", `Battle.net is signed in, but ${health.reason}`);
     case "signed in":
@@ -397,6 +416,31 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
     return true;
   });
 
+  /** The launcher's state by its log: its sign-in form's page, or signed in. */
+  const launcherNow = Effect.gen(function*() {
+    const log = yield* loginLog;
+    return log === undefined ? undefined : launcherHealth((yield* machine.read(join(logs, log)).pipe(Effect.mapError(failed))) ?? "");
+  });
+  const enter = (field: "username" | "password") => (hands.enterLogin === undefined ? stop("doctor has no hands to sign in") : hands.enterLogin(target, field).pipe(Effect.mapError(failed)));
+
+  /** Types the account name, waits for the password page, types the password, then waits for the launcher's sign-in. */
+  const signInWithAccount = Effect.gen(function*() {
+    let health = yield* launcherNow;
+    if (health?.kind === "sign-in form" && health.form === "Login") {
+      yield* say("typing its account name");
+      yield* enter("username");
+      health = yield* poll(DOCTOR_TIMEOUTS.signInPage, launcherNow.pipe(Effect.map((now) => (now?.kind === "sign-in form" && now.form === "LoginCredential") || now?.kind === "signed in" ? now : undefined)));
+      if (health === undefined) return yield* stop(`Battle.net didn't show its password page within ${DOCTOR_TIMEOUTS.signInPage} s of the account name`);
+    }
+    if (health?.kind === "sign-in form" && health.form === "LoginCredential") {
+      yield* say("typing its password");
+      yield* enter("password");
+      const done = yield* poll(DOCTOR_TIMEOUTS.signInPage, launcherNow.pipe(Effect.map((now) => (now?.kind === "signed in" ? true : undefined))));
+      if (done === undefined) return yield* stop(`Battle.net didn't sign in within ${DOCTOR_TIMEOUTS.signInPage} s of the password; check its sign-in window on display ${target.display ?? "?"}`);
+    }
+    if ((yield* launcherNow)?.kind === "signed in") yield* say("Battle.net signed in");
+  });
+
   /** Waits up to LEAVE_SECONDS for the watch to show the client out of `kind`; the next look decides either way. */
   const left = (kind: StateKind) => waitFor(client, (view) => view.state.kind !== kind, { what: `leaving ${kind}`, seconds: LEAVE_SECONDS, failOn: [] }).pipe(Effect.ignore, Effect.asVoid);
 
@@ -444,6 +488,8 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
       }
       case "closed":
         return yield* startLauncher;
+      case "sign-in form":
+        return yield* signInWithAccount;
       case "no game": {
         if (!hands.launches) return;
         if (!(yield* launchGame)) return "launch failed" as const;
@@ -459,7 +505,7 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
   let next: Problem | undefined;
   while (true) {
     const diagnosis: Diagnosis = next === undefined
-      ? diagnose(yield* observe, hands.launches, target.display, started)
+      ? diagnose(yield* observe, hands.launches, target.display, started, target.account !== undefined && hands.enterLogin !== undefined)
       : { kind: "problem", problem: next, detail: "Battle.net couldn't start Warcraft III" };
     next = undefined;
     switch (diagnosis.kind) {
@@ -492,6 +538,44 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
       }
     }
   }
+});
+
+/**
+ * Signs a client out of Battle.net: ends every program of its prefix (SIGTERM,
+ * SIGKILL after DOCTOR_TIMEOUTS.exit), then removes the launcher's saved login
+ * from the prefix's user.reg, so its next start shows the sign-in form, which
+ * doctor fills with the client's account.
+ */
+export const signOut = (target: DoctorTarget, print: (line: string) => void) => Effect.gen(function*() {
+  const machine = yield* PlayMachine;
+  const name = target.client.name;
+  const failed = (cause: PlayProblem) => new DoctorStop({ problem: `${name}: ${cause.problem}` });
+  const server = yield* machine.serverDirectory(target.prefix).pipe(Effect.mapError(failed));
+  const programs = machine.processes.pipe(Effect.map((processes) => prefixUse(processes, target.prefix, server).processes), Effect.mapError(failed));
+  const gone = (seconds: number) => Effect.gen(function*() {
+    for (let left = seconds; left > 0; left--) {
+      if ((yield* programs).length === 0) return true;
+      yield* Effect.sleep(POLL);
+    }
+    return (yield* programs).length === 0;
+  });
+  const running = yield* programs;
+  if (running.length > 0) {
+    print(`${name}: ending every program of the prefix (pids ${pids(running)})`);
+    yield* machine.signal(running.map(({ pid }) => pid), "SIGTERM");
+    if (!(yield* gone(DOCTOR_TIMEOUTS.exit))) {
+      yield* machine.signal((yield* programs).map(({ pid }) => pid), "SIGKILL");
+      if (!(yield* gone(DOCTOR_TIMEOUTS.exit))) return yield* new DoctorStop({ problem: `${name}: can't end its programs: kill -9 ${pids(yield* programs)}` });
+    }
+  }
+  const registry = join(target.prefix, "user.reg");
+  const text = yield* machine.read(registry).pipe(Effect.mapError(failed));
+  if (text === undefined || !hasSavedLogin(text)) {
+    print(`${name}: signed out (no saved login in ${registry})`);
+    return;
+  }
+  yield* machine.write(registry, withoutSavedLogin(text)).pipe(Effect.mapError(failed));
+  print(`${name}: signed out: removed Battle.net's saved login; doctor signs it in again`);
 });
 
 /** Every target brought to a ready state at once; fails with one line per client that couldn't be. */
