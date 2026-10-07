@@ -9,8 +9,9 @@ import { type Frame, decodePpm } from "../wisp/frameProbe";
 import { captureProcess } from "../wisp/mapBuild";
 import { step } from "../wisp/timings";
 import { ClientWatch, describeView, typesIntoMatch } from "../wisp/watch";
-import { inputBatches, type InputAction } from "./inputBatch";
+import { inputBatches, sendsChat, type InputAction } from "./inputBatch";
 export type { InputAction } from "./inputBatch";
+export { sendsChat } from "./inputBatch";
 
 export class DesktopFailure extends Schema.TaggedError<DesktopFailure>()("DesktopFailure", {
   operation: Schema.String,
@@ -189,12 +190,6 @@ export const focus = (client: Client) =>
     yield* run(client.name, "activate Warcraft window", [client.tools.xdotool, "windowactivate", "--sync", client.window], client.x11);
   });
 
-/** Keys that send what a chat box holds. */
-const SENDING_KEYS = new Set(["return", "kp_enter", "iso_enter", "linefeed"]);
-
-/** Whether any of these xdotool key names, chords included, is Return or another key that sends chat. */
-export const sendsChat = (names: readonly string[]) => names.some((name) => name.split("+").some((key) => SENDING_KEYS.has(key.toLowerCase())));
-
 /**
  * Refuses typed text and Return unless the client is in a match with its menu
  * page connected (wisp:scripts/wisp/watch.ts `typesIntoMatch`): in the menus
@@ -221,7 +216,11 @@ export const keys = (client: Client, ...names: string[]) =>
   Effect.gen(function*() {
     if (sendsChat(names)) yield* requireMatch(client, names.join(" "));
     yield* focus(client);
-    yield* run(client.name, `press ${names.join(" ")}`, [client.tools.xdotool, "key", "--clearmodifiers", ...names], client.x11);
+    if (sendsChat(names)) {
+      for (const planned of inputBatches([{ kind: "keys", keys: names }], { x: 0, y: 0 })) {
+        yield* run(client.name, `press ${names.join(" ")}`, [client.tools.xdotool, ...planned.args], client.x11);
+      }
+    } else yield* run(client.name, `press ${names.join(" ")}`, [client.tools.xdotool, "key", "--clearmodifiers", ...names], client.x11);
   });
 
 /** Types `value`, which may start with "-", into a match (requireMatch); `delayMillis` spaces the keys for text fields that drop fast input. */
