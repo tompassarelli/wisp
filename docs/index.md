@@ -46,6 +46,16 @@ Checking on the signed-in clients? [`wisp accept`](accept.md)
 issue each closes, in as few fresh matches as their maps allow, and prints
 pass, fail or needs-look per check with its evidence folder.
 
+Many scripted native checks? Never start a new game per check: in
+Smashcraft (7 Oct 2026) a new game cost 42 to 64 s against about 24 s for
+the check itself. Start one game per client pair, give the map a developer
+command that puts the match back exactly as the map started it (Smashcraft's
+`-dev reset`, held by a test comparing the next match's checksums and saved
+moments with a new game's first match), run the headless side of every
+check alongside, and shard the checks over the offline LAN pool. Smashcraft's
+`bun wisp pad SCRIPT|DIR... [--pairs N]` does all four
+(smashcraft:docs/native-bot-session.md, "Many scripts in one game").
+
 A client dropped from Battle.net, crashed, stuck on its login, loading
 screen or an old lobby, or sharing its prefix with a second runtime?
 [`wisp doctor`](doctor.md) (wisp:docs/doctor.md) finds each client's state
