@@ -13,8 +13,9 @@ export type FrameType = (typeof FRAME_TYPES)[number];
 export const FRAME_POINTS = ["TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT"] as const;
 export type FramePoint = (typeof FRAME_POINTS)[number];
 
-/** Warcraft templates a definition may inherit without defining them: loaded by the game before any map script. */
+/** Warcraft templates whose defining FDF is included before a generated tree. */
 export const WARCRAFT_TEMPLATES = ["ScriptDialogButton", "EscMenuBackdrop"] as const;
+const WARCRAFT_TEMPLATE_FDF = "UI\\FrameDef\\UI\\EscMenuTemplates.fdf";
 
 export interface FrameAnchor {
   readonly point: FramePoint;
@@ -206,8 +207,10 @@ export function generateFrames(definition: FrameDefinition): GeneratedFrames {
   const tocEntry = `war3mapImported\\${definition.name}.toc`;
   const root: FrameNode = { key: "root", type: definition.type, width: definition.width, height: definition.height, children: definition.children, ...(definition.texture === undefined ? {} : { texture: definition.texture }) };
   const rootLines = fdfFrame(definition, root, definition.name, definition.name, 0);
+  const includes = flatten(definition.children).some((node) => node.inherits !== undefined && (WARCRAFT_TEMPLATES as readonly string[]).includes(node.inherits))
+    ? [`IncludeFile "${WARCRAFT_TEMPLATE_FDF}",`, ""] : [];
   // A TOC lists one FDF per line and needs a line break after the last.
-  return { fdfEntry, tocEntry, fdf: `${rootLines.join("\n")}\n`, toc: `${fdfEntry}\r\n\r\n`, bindings: bindingsSource(definition, tocEntry) };
+  return { fdfEntry, tocEntry, fdf: `${[...includes, ...rootLines].join("\n")}\n`, toc: `${fdfEntry}\r\n\r\n`, bindings: bindingsSource(definition, tocEntry) };
 }
 
 /**

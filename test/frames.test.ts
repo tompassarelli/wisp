@@ -7,7 +7,9 @@ test("the opponent-settings panel generates FDF, TOC and native bindings", () =>
   const generated = generateFrames(opponentSettings);
   expect(generated.tocEntry).toBe("war3mapImported\\OpponentSettings.toc");
   expect(generated.toc).toBe("war3mapImported\\OpponentSettings.fdf\r\n\r\n");
-  expect(generated.fdf.split("\n").slice(0, 6)).toEqual([
+  expect(generated.fdf.split("\n").slice(0, 8)).toEqual([
+    'IncludeFile "UI\\FrameDef\\UI\\EscMenuTemplates.fdf",',
+    "",
     'Frame "BACKDROP" "OpponentSettings" {',
     "    Width 0.56,",
     "    Height 0.34,",
