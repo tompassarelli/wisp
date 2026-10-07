@@ -104,7 +104,7 @@ test("listed entries are packaged and extracted in one archive opening, byte for
     const source = join(work, name);
     writeFileSync(source, bytes);
     // Enough copies to outgrow the full table more than once.
-    for (let copy = 0; copy < 8; copy++) entries.push({ entry: `war3mapImported\\${name}-${copy}`, source });
+    for (let copy = 0; copy < 8; copy++) entries.push({ entry: `war3mapImported\\${name === "tone.ogg" ? `tone-${copy}.ogg` : `${name}-${copy}`}`, source });
   }
   const override = join(work, "override");
   writeFileSync(override, "later entries win");
