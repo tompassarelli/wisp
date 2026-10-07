@@ -4790,6 +4790,21 @@ function scale$2(out, a, b) {
 	return out;
 }
 /**
+* Adds two vec3's after scaling the second operand by a scalar value
+*
+* @param {vec3} out the receiving vector
+* @param {ReadonlyVec3} a the first operand
+* @param {ReadonlyVec3} b the second operand
+* @param {Number} scale the amount to scale b by before adding
+* @returns {vec3} out
+*/
+function scaleAndAdd(out, a, b, scale) {
+	out[0] = a[0] + b[0] * scale;
+	out[1] = a[1] + b[1] * scale;
+	out[2] = a[2] + b[2] * scale;
+	return out;
+}
+/**
 * Normalize a vec3
 *
 * @param {vec3} out the receiving vector
@@ -7216,7 +7231,8 @@ var ModelRenderer = class {
 		this.gpuSkinWeightBuffer = [];
 		this.gpuTangentBuffer = [];
 		this.gpuFSUniformsBuffers = [];
-		this.isHD = model.Geosets?.some((it) => it.SkinWeights?.length > 0);
+		this.hasWeightedSkin = model.Geosets?.some((it) => it.SkinWeights?.length > 0);
+		this.isHD = model.Materials.some((material) => material.Shader === "Shader_HD_DefaultUnit" || material.Layers.some((layer) => layer.ShaderTypeId === 1));
 		this.shaderProgramLocations = {
 			vertexPositionAttribute: null,
 			normalsAttribute: null,
@@ -7413,7 +7429,7 @@ var ModelRenderer = class {
 	}
 	initGL(glContext) {
 		this.gl = glContext;
-		this.softwareSkinning = this.gl.getParameter(this.gl.MAX_VERTEX_UNIFORM_VECTORS) < 4 * (MAX_NODES + 2);
+		this.softwareSkinning = !this.isHD && this.hasWeightedSkin || this.gl.getParameter(this.gl.MAX_VERTEX_UNIFORM_VECTORS) < 4 * (MAX_NODES + 2);
 		this.anisotropicExt = this.gl.getExtension("EXT_texture_filter_anisotropic") || this.gl.getExtension("MOZ_EXT_texture_filter_anisotropic") || this.gl.getExtension("WEBKIT_EXT_texture_filter_anisotropic");
 		this.colorBufferFloatExt = this.gl.getExtension("EXT_color_buffer_float");
 		this.initRequiredEnvMaps();
@@ -8214,11 +8230,22 @@ var ModelRenderer = class {
 		const buffer = this.vertices[geosetIndex];
 		for (let i = 0; i < buffer.length; i += 3) {
 			const index = i / 3;
-			const group = geoset.Groups[geoset.VertexGroup[index]];
 			set$2(tempPos, geoset.Vertices[i], geoset.Vertices[i + 1], geoset.Vertices[i + 2]);
 			set$2(tempSum, 0, 0, 0);
-			for (let j = 0; j < group.length; ++j) add$2(tempSum, tempSum, transformMat4(tempVec3, tempPos, this.rendererData.nodes[group[j]].matrix));
-			scale$2(tempPos, tempSum, 1 / group.length);
+			if (geoset.SkinWeights?.length > 0) {
+				const offset = index * 8;
+				for (let j = 0; j < 4; ++j) {
+					const weight = geoset.SkinWeights[offset + 4 + j] / 255;
+					if (weight === 0) continue;
+					const node = this.rendererData.nodes[geoset.SkinWeights[offset + j]];
+					scaleAndAdd(tempSum, tempSum, transformMat4(tempVec3, tempPos, node.matrix), weight);
+				}
+				copy$2(tempPos, tempSum);
+			} else {
+				const group = geoset.Groups[geoset.VertexGroup[index]];
+				for (let j = 0; j < group.length; ++j) add$2(tempSum, tempSum, transformMat4(tempVec3, tempPos, this.rendererData.nodes[group[j]].matrix));
+				scale$2(tempPos, tempSum, 1 / group.length);
+			}
 			buffer[i] = tempPos[0];
 			buffer[i + 1] = tempPos[1];
 			buffer[i + 2] = tempPos[2];

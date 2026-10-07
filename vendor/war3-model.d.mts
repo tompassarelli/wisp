@@ -323,6 +323,7 @@ declare interface ModelInfo {
 
 export declare class ModelRenderer {
     private isHD;
+    private hasWeightedSkin;
     private canvas;
     private gl;
     private device;
