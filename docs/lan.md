@@ -18,6 +18,7 @@ game. It isn't for cheating. The terms are in
 | `wisp lan setup --from INSTALL [--pairs N \| --pair K...]` | Creates the pool's clients from an existing Warcraft III install folder (the one holding `_retail_`): pairs 0..N-1, or only the pairs named, leaving clients other runners use alone. See "Setting up". |
 | `wisp lan pool [--pairs N \| --pair K...] [--pool-profile parity\|visual\|hfr[,...]] [--fps N] [--seconds S]` | Runs up to N pairs, each admitted by the machine-capacity helper. It stays in the foreground; Ctrl-C stops the pool. |
 | `wisp lan fresh MAP [--pair K] [--computers N] [--turn-ms MS]` | Hosts MAP on pair K, switches both clients to LAN, joins them, and returns once the match plays. It prints the game's action log. |
+| `wisp lan dummy MAP --program W3GSCLIENT [--pair K] [--count N]` | Joins side a to a lobby, then runs N dummy joins, handicap changes and leaves (default 20). The pair must have no active game. |
 | `wisp lan status [--pair K]` | Each pair's clients and processes, and its game: phase, turns, desyncs, players. |
 | `wisp lan end --pair K` | Ends pair K's game. The clients go back to their menus. |
 | `wisp engine actions --client lan0a,lan0b [--map MAP] [--follow]` | Prints the pair's action log, and follows it with `--follow`. With `--map`, it starts the match first ([engine.md](engine.md#actions)). |
@@ -37,6 +38,39 @@ under `$XDG_STATE_HOME/wisp/lan/` (default `~/.local/state/wisp/lan/`):
 
 Each game's files are under `pair-K/games/<time>/`: `actions.log` and
 `packets.log` (every packet except empty turns, in hex).
+
+## Dummy lobby checks
+
+`wisp lan dummy MAP --program /path/to/w3gsclient --pair K` uses the
+unmodified [GoWarcraft3 command](https://github.com/nielsAD/gowarcraft3/blob/f13251b6caed199c3347214f4591e7ccaa96c7c7/cmd/w3gsclient/main.go)
+at revision `f13251b6caed199c3347214f4591e7ccaa96c7c7` as a separate program.
+Build it in its own checkout with `CGO_ENABLED=0 go build -o w3gsclient
+./cmd/w3gsclient`. It is MPL-2.0; Wisp neither copies nor distributes its
+source or executable. Keep its licence with any copy you distribute and make
+the corresponding source available under MPL-2.0.
+
+The command enters the existing pair's loopback-only namespace and uses only
+side a. The host stays in the lobby. Each new dummy process uses protocol
+version 10200, answers the map and profile handshake, requests handicap 90,
+receives the changed slot table, then leaves. Wisp resets its vacated slot.
+The original command's peer dialing is disabled: these checks exercise the
+host connection. The map must put its first human player in player slot 1.
+The dummy acknowledges the advertised map size without reading or executing
+the map; map-file validation, gameplay, checksums and peer connections still
+need real clients.
+
+Results go to `pair-K/dummy/<time>/`: packet and action logs, one log per
+dummy, and `result.json` with each join time, CPU sample and resident memory.
+Keep that folder private. These lobby checks can replace the second native
+client for join/leave, profile/map-message handling and handicap slot updates.
+They cannot replace `lan fresh`, native input checks or parity runs. The
+pool still starts pairs; an executor may stop its unused side b to measure
+the one-client footprint.
+
+On 7 October 2026, the isolated protocol run completed 20 joins, handicap
+changes and leaves with zero errors against Wisp's host. Median join time was
+12.4 ms and resident memory was 5.5–5.9 MiB. The current native compatibility
+measurement is tracked in [#46](https://github.com/tompassarelli/wisp/issues/46).
 
 ## Guardrails
 

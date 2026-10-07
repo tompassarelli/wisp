@@ -46,6 +46,10 @@ checksum each turn (`wisp engine actions`). Every `wisp engine` command works
 on them, breakpoints included. Keep signed-in clients for what needs
 Battle.net itself.
 
+For lobby protocol checks, [`wisp lan dummy`](lan.md#dummy-lobby-checks)
+uses the separate GoWarcraft3 dummy beside side a for repeated joins, map and
+profile messages, handicap changes and leaves; it does not execute the map.
+
 Checking on the signed-in clients? [`wisp accept`](accept.md)
 (wisp:docs/accept.md) runs every native check a game declares, next to the
 issue each closes, in as few fresh matches as their maps allow, and prints

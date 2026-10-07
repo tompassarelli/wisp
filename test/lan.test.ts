@@ -164,6 +164,27 @@ describe("host, replaying two recorded offline clients", () => {
     if (!done()) throw new Error(`timed out waiting for ${what}`);
   };
 
+  test("a lobby applies a player's handicap request and resets the slot when they leave", async () => {
+    const host = startHost({ map: MAP, gameName: "handicap", clients: ["a"], autoStart: false, announcePorts: [], log: () => {} });
+    try {
+      const socket = await Bun.connect({ hostname: "127.0.0.1", port: host.port, socket: { data: () => {} } });
+      const request = fixture.find(({ packet }) => packet[1] === PACKET.ReqJoin)?.packet;
+      if (request === undefined) throw new Error("missing join fixture");
+      socket.write(request);
+      await until(() => host.status().players[0]?.connected === true, "join");
+      socket.write(encodePacket(PACKET.ChatToHost, new Writer().u8(1).u8(1).u8(1).u8(0x14).u8(90).bytes()));
+      await until(() => host.slots().slots[0]?.handicap === 90, "handicap change");
+      expect(host.status().phase).toBe("lobby");
+      socket.write(encodePacket(PACKET.LeaveReq, new Writer().u32(1).bytes()));
+      await until(() => host.status().players[0]?.connected === false, "leave");
+      expect(host.slots().slots[0]?.handicap).toBe(100);
+      expect(host.slots().slots[0]?.status).toBe(0);
+      socket.end();
+    } finally {
+      host.stop();
+    }
+  });
+
   test("joins, retires lobby discovery, loads, logs actions and flags a checksum that differs", async () => {
     const lines: string[] = [];
     let discoveryPort: number | undefined;
