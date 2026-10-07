@@ -129,17 +129,35 @@ export const loadClients = (path: string) =>
       }));
   });
 
-/** A raw frame from the compositor; an eight-second timeout kills and reaps a stalled capture. */
-export const capture = (client: Client, region?: Region) =>
+/** A compositor sample bracketed on the caller's clock, shared with its stimulus. */
+export interface TimedFrame {
+  readonly frame: Frame;
+  readonly beforeNs: number;
+  readonly afterNs: number;
+}
+
+/**
+ * Captures pixels and brackets acquisition on the supplied monotonic clock.
+ * The bracket includes process startup and readback; neither endpoint nor its
+ * midpoint is a compositor presentation timestamp. Repeated calls stay serial.
+ * An eight-second timeout kills and reaps a stalled capture.
+ */
+export const captureTimed = (client: Client, nowNs: () => number, region?: Region) =>
   Effect.gen(function*() {
     const geometry = region === undefined ? [] : ["-g", `${region.x},${region.y} ${region.width}x${region.height}`];
+    const beforeNs = nowNs();
     const ppm = yield* run(client.name, "capture frame", [client.tools.grim, "-t", "ppm", ...geometry, "-"], client.wayland).pipe(
       Effect.timeoutOrElse({ duration: "8 seconds", orElse: () => Effect.fail(new DesktopFailure({ operation: "capture frame", client: client.name, cause: "framebuffer read exceeded 8 seconds; capture process stopped" })) }),
     );
+    const afterNs = nowNs();
     const frame = decodePpm(ppm);
     if (frame === undefined) return yield* new DesktopFailure({ operation: "capture frame", client: client.name, cause: "not a PPM frame" });
-    return frame;
+    return { frame, beforeNs, afterNs } satisfies TimedFrame;
   });
+
+/** A raw frame from the compositor. Use captureTimed when correlating a stimulus. */
+export const capture = (client: Client, region?: Region) =>
+  captureTimed(client, () => performance.now() * 1_000_000, region).pipe(Effect.map(({ frame }) => frame));
 
 /** Dark text on white as a PGM image, which is what the reader expects. */
 export function separateInk(frame: Frame, ink: Ink): Uint8Array {

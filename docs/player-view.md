@@ -125,6 +125,20 @@ consumers that request a specific game frame must hold that pose and require
 matching drawn-frame receipts before and after the read. A later or absent
 completion receipt is INVALID, never evidence for the requested frame.
 
+For a running game's response measurement, `captureTimed(client, nowNs, region?)`
+returns `{ frame, beforeNs, afterNs }`. Supply the same monotonic nanosecond
+clock that stamps input injection; for cross-process Linux evidence that means
+`CLOCK_MONOTONIC`, not Bun's process-relative `hrtime`. Consume consecutive
+samples serially and retain the pixels and both timestamps outside the repository.
+The interval brackets framebuffer acquisition including child startup and
+readback. It is not a presentation timestamp, and its midpoint must not be
+reported as one. A response first observed in those pixels happened no later
+than `afterNs`; use that conservative upper bound for a latency gate. A prior
+absent sample only establishes absence at some point in its acquisition interval.
+Measure acquisition intervals before choosing a sample rate. This API makes no
+frame-rate guarantee and cannot identify the game's responding object: the
+consumer must detect actual game pixels, separately from diagnostic markers.
+
 wisp:scripts/wisp/frameProbe.ts measures a frame; it never needs the image
 viewed. Bands are fractions of the frame's width and height, so one
 declaration fits the 2560x1440 private-desktop capture and a downscaled
