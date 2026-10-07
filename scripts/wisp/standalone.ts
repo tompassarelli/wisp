@@ -33,6 +33,7 @@ export interface StandaloneOptions {
   readonly out?: string;
   readonly headless?: boolean;
   readonly captureFrames?: readonly number[];
+  readonly recordChecksums?: boolean;
 }
 
 export interface StandaloneFrame {
@@ -40,7 +41,7 @@ export interface StandaloneFrame {
   readonly sounds: readonly SoundCue[];
   readonly frame: number;
   readonly step: number;
-  readonly checksum: string;
+  readonly checksum?: string;
   readonly capture: boolean;
   readonly done: boolean;
 }
@@ -59,6 +60,7 @@ export async function openStandalone(game: StandaloneGame, options: StandaloneOp
   let soundOffset = 0, steps = 0;
   const checksums: { step: number; frame: number; checksum: string; simulationMs: number }[] = [];
   const captures = new Set(options.captureFrames ?? []);
+  const recordChecksums = options.recordChecksums ?? options.script !== undefined;
   const sounds = createSoundResolver(game.render.readAsset);
   const assets = new Map<string, Promise<Uint8Array | undefined>>();
   let finish!: (result: unknown) => void;
@@ -90,15 +92,17 @@ export async function openStandalone(game: StandaloneGame, options: StandaloneOp
         const input = Schema.decodeUnknownSync(Input)(await request.json());
         const start = performance.now();
         session.step(input);
-        const frame = session.frame?.() ?? session.client.frame, checksum = session.checksum();
-        checksums.push({ step: ++steps, frame, checksum, simulationMs: performance.now() - start });
+        const frame = session.frame?.() ?? session.client.frame;
+        const checksum = recordChecksums ? session.checksum() : undefined;
+        steps++;
+        if (checksum !== undefined) checksums.push({ step: steps, frame, checksum, simulationMs: performance.now() - start });
         const scene = sceneWithUnits(game.render, captureScene(session.client));
         const cues = session.client.soundLog.slice(soundOffset);
         soundOffset = session.client.soundLog.length;
         const capture = captures.delete(frame);
         if (capture && options.out !== undefined) await Bun.write(join(options.out, `p${scene.client}-frame-${frame}.json`), JSON.stringify(scene));
         const packet: StandaloneFrame = { scene: { ...scene, frame, units: [], effects: scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat), ui: scene.ui.filter((element) => element.visible && element.alpha > 0) },
-          sounds: cues, step: steps, frame, checksum, capture, done: options.frames !== undefined && steps >= options.frames };
+          sounds: cues, step: steps, frame, ...(checksum === undefined ? {} : { checksum }), capture, done: options.frames !== undefined && steps >= options.frames };
         return Response.json(packet);
       }
       if (url.pathname === "/capture" && request.method === "POST" && options.out !== undefined) {
@@ -110,7 +114,7 @@ export async function openStandalone(game: StandaloneGame, options: StandaloneOp
       if (url.pathname === "/complete" && request.method === "POST") {
         const result = await request.json() as { error?: string };
         if (options.out !== undefined) {
-          await Bun.write(join(options.out, "checksums.jsonl"), checksums.map((row) => JSON.stringify(row)).join("\n") + "\n");
+          if (recordChecksums) await Bun.write(join(options.out, "checksums.jsonl"), checksums.map((row) => JSON.stringify(row)).join("\n") + "\n");
           await Bun.write(join(options.out, "standalone.json"), JSON.stringify({ ...result, steps, capturesMissing: [...captures] }, null, 2) + "\n");
         }
         if (result.error !== undefined) fail(new Error(result.error));
