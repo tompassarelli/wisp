@@ -116,7 +116,7 @@ test("a compile reports its phases to the caller's hook, and signatures are prim
   expect(phases).toEqual(["read config", "create program", "type-check", "transpile", "bundle"]);
 });
 
-test("f32 sums, differences and products compile to f32's exact path in Lua: Warcraft's raw + and * don't round to nearest", () => {
+test("f32 sums, differences, products and quotients compile to f32's exact path in Lua, and real literals to exact hexadecimal floats: Warcraft's raw arithmetic and decimal parsing don't round to nearest", () => {
   const build = join(import.meta.dir, "../build");
   mkdirSync(build, { recursive: true });
   const directory = mkdtempSync(join(build, "compiler-f32-"));
@@ -128,6 +128,10 @@ test("f32 sums, differences and products compile to f32's exact path in Lua: War
     "export const sum = (a: number, b: number) => f32((a + b));",
     "export const difference = (a: number, b: number) => f32(a - b);",
     "export const quotient = (a: number, b: number) => f32(a / b);",
+    "export const halvedQuotient = (a: number) => f32(a / 2.0);",
+    "export const tenth = () => f32(0.1);",
+    "export const negativeTenth = () => f32(-0.1);",
+    "export const exactLiteral = () => 0.10000000149011612;",
     "export const doubled = (a: number) => f32(a * 2.0);",
     "export const halved = (a: number) => f32(-0.5 * a);",
     "export const rounded = (a: number) => f32(a);",
@@ -146,13 +150,17 @@ test("f32 sums, differences and products compile to f32's exact path in Lua: War
   const lua = readFileSync(join(directory, "out/map.lua"), "utf8").replace(/\s+/g, " ");
   rmSync(directory, { recursive: true });
   const body = (name: string) => new RegExp(`____exports\\.${name} = function\\([^)]*\\) return (.*?) end`).exec(lua)?.[1];
-  expect(Object.fromEntries(["product", "sum", "difference", "quotient", "doubled", "halved", "rounded", "nested"].map((name) => [name, body(name)]))).toEqual({
+  expect(Object.fromEntries(["product", "sum", "difference", "quotient", "halvedQuotient", "tenth", "negativeTenth", "exactLiteral", "doubled", "halved", "rounded", "nested"].map((name) => [name, body(name)]))).toEqual({
     product: "f32(a, b, 3)",
     sum: "f32(a, b, 1)",
     difference: "f32(a, b, 2)",
-    quotient: "a / b",
+    quotient: "f32(a, b, 4)",
+    halvedQuotient: "a / 2.0",
+    tenth: "0xcccccdp-27",
+    negativeTenth: "-0xcccccdp-27",
+    exactLiteral: "0xcccccdp-27",
     doubled: "a * 2.0",
-    halved: "-0.5 * a",
+    halved: "-0x1p-1 * a",
     rounded: "a",
     nested: "f32( a, f32(b, c, 1), 3 )",
   });

@@ -228,17 +228,22 @@ native calls ([frame cost](frame-cost.md#headless)).
 
 ### Raw float rounding
 
-Warcraft's Lua numbers are binary32, and its raw float `+`, `-` and `*`
-don't always round to nearest as Bun and a stock Lua32 do. In Smashcraft
+Warcraft's Lua numbers are binary32, and its raw float `+`, `-`, `*` and
+`/`, and its decimal numerals, don't always round to nearest as Bun and a
+stock Lua32 do. In Smashcraft
 0.0.48 a product was the exact result truncated toward zero, and the native
 moments diverged from their headless replay from that ulp on
-(smashcraft#59). Toward zero is the nearest model found, not the exact rule:
-a Lua rounding so replayed one of five native moments exactly. Code that
+(smashcraft#59). In Smashcraft's 7 October native
+match a camera quotient was an ulp above the nearest, and the numeral
+`0.016666667` read as the binary32 below the nearest. Toward zero is the
+nearest model found, not the exact rule: a Lua rounding so replayed one of
+five native moments exactly. Code that
 must equal the host uses Wisp's exact helpers and `f32()`, which the
-compiler emits as exact operations.
+compiler emits as exact operations, and the compiler prints every
+non-integer literal as an exact hexadecimal float.
 
 wisp:native/toward-zero.h makes a LUA_32BITS Lua 5.3.6 round its raw float
-`+ - *` toward zero; division still rounds to nearest.
+`+ - * /` and its decimal numerals toward zero.
 `bun node_modules/wisp/scripts/wisp/towardZeroLua.ts DIR` builds one in DIR
 with `nix` (nixpkgs' Lua source, checked against lua.org's checksum) and
 prints its path; `towardZeroLua(DIR)` does the same in a host program, and
@@ -249,8 +254,8 @@ make -C lua-5.3.6 generic "MYCFLAGS=-DLUA_32BITS -include /path/to/toward-zero.h
 ```
 
 Run a game's Lua replays and numeric checks in both a stock Lua32 and this
-one: results that agree rely on no raw float `+ - *`, whatever Warcraft's
-exact rule is; a difference names an operation that leaked past the exact
+one: results that agree rely on no raw float `+ - * /` and no inexact
+numeral, whatever Warcraft's exact rule is; a difference names an operation that leaked past the exact
 helpers. wisp:test/toward-zero.test.ts holds the build to an exact integer
 oracle. Wisp's binary32 helpers make infinity by overflowing a product,
 which rounds to the largest finite value toward zero, so their infinity and

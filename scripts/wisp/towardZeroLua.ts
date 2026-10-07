@@ -1,8 +1,8 @@
-// A 32-bit Lua whose raw float + - * round toward zero: Lua 5.3.6 with
-// LUA_32BITS and wisp:native/toward-zero.h. Warcraft's raw float + - * don't
+// A 32-bit Lua whose raw float + - * / and decimal numerals round toward zero: Lua 5.3.6 with
+// LUA_32BITS and wisp:native/toward-zero.h. Warcraft's raw float arithmetic doesn't
 // always round to nearest, and toward zero is the nearest model of them
 // found; Bun and a stock Lua32 round to nearest. A replay or check that gives
-// the same results in both Luas relies on no raw float + - *
+// the same results in both Luas relies on no raw float + - * / or inexact numeral
 // (wisp:docs/headless.md#raw-float-rounding).
 //
 // `bun node_modules/wisp/scripts/wisp/towardZeroLua.ts DIRECTORY` prints the
