@@ -40,6 +40,15 @@ export const setupClient = (name: string, from: string, port: number, log: (line
   if (!existsSync(installOf(name))) {
     yield* run(`copy the install into ${name}`, ["cp", "-a", "--reflink=always", from, installOf(name)]);
     log(`${name}: install reflinked from ${from}`);
+  } else {
+    const versions = yield* Effect.try({
+      try: () => ({ source: readExecutable(join(from, "_retail_/x86_64/Warcraft III.exe")).version, installed: readExecutable(join(retailOf(name), "x86_64/Warcraft III.exe")).version }),
+      catch: (cause) => new LanFailure({ problem: `${name}: read install versions: ${String(cause)}` }),
+    });
+    if (versions.source !== versions.installed) {
+      yield* run(`refresh the install in ${name}`, ["cp", "-a", "--reflink=always", `${from}/.`, installOf(name)]);
+      log(`${name}: install refreshed from ${versions.installed} to ${versions.source}`);
+    }
   }
   yield* installMenuPage(retailOf(name), port).pipe(Effect.mapError((failure) => new LanFailure({ problem: failure.message })));
   log(`${name}: menu page reports to 127.0.0.1:${port}`);
