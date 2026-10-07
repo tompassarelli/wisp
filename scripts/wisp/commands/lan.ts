@@ -97,7 +97,7 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
     while (true) {
       if (greedy && memoryAvailableMiB() < GREEDY_FLOOR_MIB) throw new Error(`only ${memoryAvailableMiB()} MiB of memory available, under the 12 GiB --greedy keeps free`);
       const scope = greedy ? greedyScope(pair) : [process.execPath, capacity, "session", "--class", "moderate", "--owner", `wisp-lan-pair-${pair}`, "--"];
-      const child = Bun.spawn([...scope, process.execPath, SESSION, "--pair", String(pair), "--profile", profile, "--launcher", launcher], {
+      const child = Bun.spawn([...scope, process.execPath, SESSION, "--pair", String(pair), "--profile", profile, "--launcher", launcher, "--capacity", capacity], {
         stdout: Bun.file(join(pairDirectory(pair), "session.out")),
         stderr: Bun.file(join(pairDirectory(pair), "session.err")),
       });

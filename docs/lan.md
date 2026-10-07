@@ -96,10 +96,16 @@ it. The agent:
 - answers on `pair-K/agent.sock`. A Unix socket reaches across network
   namespaces, so `wisp lan fresh` and `status` talk to it from outside.
 
-Each pair is admitted by its own `machine-capacity session --class moderate`.
-The pool adds pairs while the helper admits them: a deferred pair is retried
-every 45 s, for up to `--wait` seconds (default 1800). After that the pool
-keeps the pairs it has.
+Each pair's desktops and agent run in one `machine-capacity session --class
+moderate`. Each game runs in its own `session --class native` scope: the
+high-weight slice for game clients, with no CPU quota, admitted on memory
+alone. The pool adds pairs while the helper admits them: a deferred pair is
+retried every 45 s, for up to `--wait` seconds (default 1800). After that the
+pool keeps the pairs it has. `--greedy` is the owner's call for unattended
+runs: it skips the helper's admission, keeps each pair in a scope of the
+helper's slice, and starts no pair while less than 12 GiB of memory is
+available. The agent stops its games when it is stopped, or when its pair's
+session ends.
 
 - `--pair K` (repeated) picks which pairs start, in that order of admission.
 - `--profile` takes one profile, or one per pair separated by commas; the last
@@ -114,13 +120,20 @@ after the other, then ran 51 turns behind, so the host kept pausing the game.
 With the windows apart, both kept within a few turns at 1:1 game time. Two
 controller helpers typing on one display would also take each other's focus.
 
-**Profiles.** `parity` (the default) is for checksum and input runs that need
-no pixels: an 800×600 window with every quality setting at its lowest. `visual`
-is 1280×720, with more lighting and texture detail. Both cap the game at 60
-frames a second, focused or not. `hfr` is parity at 144 frames a second, for
-comparing the game's clocks against the 60 fps cap. A client consumes at most one turn per
-frame, so a cap below the turn rate (33 turns a second at 30 ms) makes it fall
-behind.
+**Profiles** (wisp:scripts/wisp/lan/pool.ts `PROFILES`). Each one writes the
+client's War3Preferences `[Video]`, `[Misc]` and `[Sound]` at launch:
+
+- `parity` (the default) is for checksum and input runs, which need no pixels
+  and no sound. It has an 800×600 window, every quality setting at its
+  lowest, classic models and textures (`hd=0`), and sound off.
+- `checks` is parity with sound, for checks that record a client's audio.
+- `visual` is 1280×720, with Reforged models and more lighting and texture
+  detail.
+- `hfr` is parity at 144 frames a second, for comparing the game's clocks
+  against the 60 fps cap.
+
+The others cap the game at 60 frames a second, focused or not. A cap below
+the turn rate (33 turns a second at 30 ms) is untested.
 
 **Cost at parity** (7 October, two clients in a match on Smashcraft
 bisect-588610b7, measured over 10 s from /proc):

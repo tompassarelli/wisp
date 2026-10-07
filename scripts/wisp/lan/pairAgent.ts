@@ -37,6 +37,9 @@ const proton = join(steam, "compatibilitytools.d/GE-Proton11-7-x86_64/proton");
 const runtime = join(steam, "steamapps/common/SteamLinuxRuntime_4/_v2-entry-point");
 
 const runB = argument("run-b");
+const capacity = argument("capacity");
+/** The games' launchers: each game sits in its own scope, so it outlives this agent unless stopped. */
+const games: Bun.Subprocess[] = [];
 const runs: Record<string, string | undefined> = { a: process.env["PRIVATE_DESKTOP_RUN"], b: runB };
 /** Client b's display: its own private desktop, from that desktop's run folder. */
 const displayOf = (run: string | undefined): Record<string, string> => {
@@ -72,11 +75,14 @@ for (const client of clients) {
   mkdirSync(documentsOf(client.name), { recursive: true });
   writeFileSync(join(documentsOf(client.name), "War3Preferences.txt"), preferences(profile, client.windowX));
   const appId = String(3516115600 + pair * 2 + PAIR_SIDES.indexOf(client.side));
-  Bun.spawn(["dbus-run-session", "--", "steam-run", "env", runtime, "--verb=waitforexitandrun", "--", proton, "waitforexitandrun", exeOf(client.name), "-launch", "-windowmode", "windowed", "-nowfpause"], {
+  // Each game in its own machine-capacity native scope: the high-weight
+  // slice for game clients, no CPU quota, admitted on memory alone.
+  const native = capacity === undefined ? [] : [process.execPath, capacity, "session", "--class", "native", "--owner", `wisp-lan:${client.name}`, "--"];
+  games.push(Bun.spawn([...native, "dbus-run-session", "--", "steam-run", "env", runtime, "--verb=waitforexitandrun", "--", proton, "waitforexitandrun", exeOf(client.name), "-launch", "-windowmode", "windowed", "-nowfpause"], {
     env: { ...process.env, ...client.env, ...audioEnv(client.name), STEAM_COMPAT_DATA_PATH: clientRoot(client.name), STEAM_COMPAT_CLIENT_INSTALL_PATH: steam, STEAM_COMPAT_APP_ID: appId, SteamAppId: appId, SteamGameId: appId },
     stdout: Bun.file(join(directory, `${client.name}.out`)),
     stderr: Bun.file(join(directory, `${client.name}.err`)),
-  });
+  }));
   say(`launched ${client.name}`);
   await Bun.sleep(3000);
 }
@@ -236,9 +242,23 @@ const server = Bun.serve({
 });
 writeFileSync(join(directory, "agent.json"), `${JSON.stringify({ pid: process.pid, socket: agentSocket(pair), profile: profile.name, runs })}\n`);
 say(`agent on ${agentSocket(pair)}`);
-process.on("SIGTERM", () => {
+const shutdown = (why: string) => {
+  say(`stopping: ${why}`);
   endGame();
+  for (const launched of games) launched.kill("SIGTERM");
   server.stop(true);
   Effect.runSync(Scope.close(scope, Exit.void));
   process.exit(0);
-});
+};
+process.on("SIGTERM", () => shutdown("asked to"));
+// The pair's session gone (its desktops stopped) means the pair is over.
+const sessionPid = Number(argument("session-pid") ?? "0");
+if (sessionPid > 0) {
+  setInterval(() => {
+    try {
+      process.kill(sessionPid, 0);
+    } catch {
+      shutdown(`the pair session ${sessionPid} ended`);
+    }
+  }, 2000);
+}
