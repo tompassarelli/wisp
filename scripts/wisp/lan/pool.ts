@@ -80,8 +80,8 @@ export function preferences(profile: Profile, windowX: number): string {
   return `[Video]\n${Object.keys(video).sort().map((key) => `${key}=${video[key]}`).join("\n")}\n`;
 }
 
-/** The private desktop one pair needs: its two windows side by side. */
-export const desktopSize = (profile: Profile) => `${profile.width * 2 + 40}x${profile.height + 40}`;
+/** The private desktop one client needs: its window and a margin. */
+export const desktopSize = (profile: Profile) => `${profile.width + 40}x${profile.height + 40}`;
 
 /** A pool client as a clients file lists it (the schema `wisp watch` and the engine tools read). */
 export interface PoolClient {
@@ -97,7 +97,8 @@ export interface PoolPair {
   readonly id: number;
   readonly clients: string;
   readonly agentSocket: string;
-  readonly run: string | undefined;
+  /** Each client's private desktop. */
+  readonly runs: Readonly<Partial<Record<Side, string>>>;
   readonly appIds: Readonly<Record<Side, string>>;
 }
 
@@ -110,8 +111,11 @@ export const poolFile = () => join(stateRoot(), "pool.json");
 /** Every pool client, for tools that take a clients file. */
 export const poolClientsFile = () => join(stateRoot(), "clients.json");
 
-export function pairClients(pair: number, run: string | undefined): PoolClient[] {
-  return PAIR_SIDES.map((side) => ({ name: clientName(pair, side), documents: documentsOf(clientName(pair, side)), menuReportPort: reportPort(pair, side), pair, offline: true as const, ...(run === undefined ? {} : { run }) }));
+export function pairClients(pair: number, runs: Readonly<Partial<Record<Side, string>>>): PoolClient[] {
+  return PAIR_SIDES.map((side) => {
+    const run = runs[side];
+    return { name: clientName(pair, side), documents: documentsOf(clientName(pair, side)), menuReportPort: reportPort(pair, side), pair, offline: true as const, ...(run === undefined ? {} : { run }) };
+  });
 }
 
 export function writeJson(path: string, value: unknown): void {

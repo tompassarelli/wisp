@@ -18,7 +18,7 @@ import {
 } from "../lan/pool";
 import { setupClient } from "../lan/setup";
 
-const AGENT = join(import.meta.dir, "../lan/pairAgent.ts");
+const SESSION = join(import.meta.dir, "../lan/pairSession.ts");
 
 const number = (args: readonly string[], name: string, fallback: number | undefined) => Effect.gen(function*() {
   const [text] = flagValues(args, name);
@@ -79,9 +79,9 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
     mkdirSync(pairDirectory(pair), { recursive: true });
     rmSync(agentSocket(pair), { force: true });
     while (true) {
-      const child = Bun.spawn([process.execPath, capacity, "session", "--class", "moderate", "--owner", `wisp-lan-pair-${pair}`, "--", launcher, "start", "--resolution", desktopSize(definition), "--", "bwrap", "--dev-bind", "/", "/", "--unshare-net", "--die-with-parent", "--", process.execPath, AGENT, "--pair", String(pair), "--profile", profile], {
-        stdout: Bun.file(join(pairDirectory(pair), "desktop.out")),
-        stderr: Bun.file(join(pairDirectory(pair), "desktop.err")),
+      const child = Bun.spawn([process.execPath, capacity, "session", "--class", "moderate", "--owner", `wisp-lan-pair-${pair}`, "--", process.execPath, SESSION, "--pair", String(pair), "--profile", profile, "--launcher", launcher], {
+        stdout: Bun.file(join(pairDirectory(pair), "session.out")),
+        stderr: Bun.file(join(pairDirectory(pair), "session.err")),
       });
       for (;;) {
         const exited = await Promise.race([child.exited, Bun.sleep(1000).then(() => undefined)]);
@@ -89,7 +89,7 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
         const status = await fetch("http://pair/status", { unix: agentSocket(pair) }).then((response) => response.json() as Promise<{ clients: { pid?: number }[] }>).catch(() => undefined);
         if (status !== undefined && status.clients.every(({ pid }) => pid !== undefined)) return child;
       }
-      if (child.exitCode !== 75) throw new Error(`its desktop exited with ${child.exitCode}; see ${pairDirectory(pair)}/desktop.err`);
+      if (child.exitCode !== 75) throw new Error(`its session exited with ${child.exitCode}; see ${pairDirectory(pair)}/session.err and desktop-*.err`);
       if (Date.now() > deadline) throw new Error(`the capacity helper kept deferring it for ${waitSeconds} s`);
       console.log(`pair ${pair}: the machine is busy; trying again in 45 s`);
       await Bun.sleep(45_000);
@@ -102,8 +102,11 @@ const pool: Command = (args) => Effect.gen(function*() {
   const pairs = yield* number(args, "pairs", 1);
   const seconds = yield* number(args, "seconds", 0);
   const waitSeconds = yield* number(args, "wait", 1800);
-  const [profile = "parity"] = flagValues(args, "profile");
-  if (PROFILES[profile] === undefined) return yield* new UsageFailure({ problem: `--profile takes ${Object.keys(PROFILES).join(" or ")}` });
+  // One profile for every pair, or one per pair (parity,parity,visual): the last one repeats.
+  const [profileText = "parity"] = flagValues(args, "profile");
+  const profiles = profileText.split(",");
+  if (profiles.some((name) => PROFILES[name] === undefined)) return yield* new UsageFailure({ problem: `--profile takes ${Object.keys(PROFILES).join(" or ")}, or one per pair separated by commas` });
+  const profileOf = (pair: number) => profiles[pair] ?? profiles.at(-1) ?? "parity";
   const launcher = desktopLauncher(args);
   const capacity = capacityHelper(args);
   const children: Bun.Subprocess[] = [];
@@ -113,24 +116,31 @@ const pool: Command = (args) => Effect.gen(function*() {
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
   const entries: PoolPair[] = [];
-  for (let pair = 0; pair < pairs; pair++) {
+  // --pair K... picks which pairs and in what order the helper admits them; else 0..N-1.
+  const chosen = flagValues(args, "pair").map(Number);
+  const order = chosen.length > 0 ? chosen : Array.from({ length: pairs }, (_, index) => index);
+  if (order.some((pair) => !Number.isInteger(pair) || pair < 0)) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
+  for (const [admitted, pair] of order.entries()) {
+    const profile = profileOf(pair);
     const started = yield* startPair(pair, profile, launcher, capacity, waitSeconds).pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed(failure)));
     if (started instanceof LanFailure) {
       // The pool is as big as the machine admits: keep the pairs that started.
-      yield* Console.log(`${started.problem}; the pool stays at ${pair} pair${pair === 1 ? "" : "s"}`);
-      if (pair === 0) return yield* started;
+      yield* Console.log(`${started.problem}; the pool stays at ${admitted} pair${admitted === 1 ? "" : "s"}`);
+      if (admitted === 0) return yield* started;
       break;
     }
     const child = started;
     children.push(child);
     const agentFile = join(pairDirectory(pair), "agent.json");
-    const run = existsSync(agentFile) ? (JSON.parse(readFileSync(agentFile, "utf8")) as { run?: string }).run : undefined;
+    const runs = existsSync(agentFile) ? (JSON.parse(readFileSync(agentFile, "utf8")) as { runs?: Partial<Record<"a" | "b", string>> }).runs ?? {} : {};
+    const status = yield* agent(pair, "/status").pipe(Effect.orElseSucceed(() => ({}) as Record<string, unknown>));
+    const pids = new Map(((status["clients"] ?? []) as { name: string; pid?: number }[]).map(({ name, pid }) => [name, pid]));
     const clientsPath = join(pairDirectory(pair), "clients.json");
-    writeJson(clientsPath, { clients: pairClients(pair, run).map((client) => ({ ...client, name: client.name.endsWith("a") ? "a" : "b", poolName: client.name })) });
-    entries.push({ id: pair, clients: clientsPath, agentSocket: agentSocket(pair), run, appIds: { a: "warcraft iii.exe", b: "warcraft iii.exe" } });
-    writeJson(poolFile(), { profile, pairs: entries });
-    writeJson(poolClientsFile(), { clients: entries.flatMap(({ id, run: desktop }) => pairClients(id, desktop)) });
-    yield* Console.log(`pair ${pair}: ${clientName(pair, "a")} and ${clientName(pair, "b")} running (${profile}); desktop ${run ?? "?"}`);
+    writeJson(clientsPath, { clients: pairClients(pair, runs).map((client) => ({ ...client, name: client.name.endsWith("a") ? "a" : "b", poolName: client.name, pid: pids.get(client.name) })) });
+    entries.push({ id: pair, clients: clientsPath, agentSocket: agentSocket(pair), runs, appIds: { a: "warcraft iii.exe", b: "warcraft iii.exe" } });
+    writeJson(poolFile(), { profile: profileText, pairs: entries.map((entry) => ({ ...entry, profile: profileOf(entry.id) })) });
+    writeJson(poolClientsFile(), { clients: entries.flatMap(({ id, runs: desktops }) => pairClients(id, desktops)) });
+    yield* Console.log(`pair ${pair}: ${clientName(pair, "a")} and ${clientName(pair, "b")} running (${profile}); desktops ${runs.a ?? "?"} and ${runs.b ?? "?"}`);
   }
   yield* Console.log(`pool: ${poolFile()}; clients: ${poolClientsFile()}. Ctrl-C stops it.`);
   yield* Effect.tryPromise({
@@ -145,8 +155,9 @@ const fresh: Command = (args) => Effect.gen(function*() {
   if (map === undefined || !existsSync(map)) return yield* new UsageFailure({ problem: "fresh takes a built map file (MAP.w3x or --map MAP.w3x)" });
   const pair = yield* number(args, "pair", 0);
   const [turnText] = flagValues(args, "turn-ms");
+  const computers = yield* number(args, "computers", 0);
   const started = Date.now();
-  const result = yield* agent(pair, "/fresh", { map, ...(turnText === undefined ? {} : { turnMs: Number(turnText) }) });
+  const result = yield* agent(pair, "/fresh", { map, computers, ...(turnText === undefined ? {} : { turnMs: Number(turnText) }) });
   yield* Console.log(`pair ${pair}: playing ${map} after ${((Date.now() - started) / 1000).toFixed(1)} s; action log ${String(result["log"])}`);
 });
 
@@ -166,7 +177,7 @@ const end: Command = (args) => Effect.gen(function*() {
   yield* Console.log(`pair ${pair}: game ended`);
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N] | pool [--pairs N] [--profile parity|visual] [--seconds S] | fresh MAP [--pair K] [--turn-ms MS] | status [--pair K] | end --pair K";
+export const LAN_USAGE = "setup --from INSTALL [--pairs N] | pool [--pairs N | --pair K...] [--profile parity|visual[,...]] [--seconds S] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | status [--pair K] | end --pair K";
 
 export const lan: Command = ([sub, ...args]) => {
   switch (sub) {

@@ -48,6 +48,8 @@ export interface HostOptions {
   /** TCP port to listen on; 0 picks one. */
   readonly port?: number;
   readonly announcePorts?: readonly number[];
+  /** Computer players (normal) in the map's user slots after the clients'. */
+  readonly computers?: number;
   /** Milliseconds between the countdown packets (COUNTDOWN_MS); tests shorten it. */
   readonly countdownMs?: number;
   /** Milliseconds after the last join before the countdown (JOIN_SETTLE_MS). */
@@ -101,18 +103,23 @@ export interface LanHost {
 }
 
 /** The slot table for `count` human players in the map's first user slots; other map slots closed. */
-export function slotTable(map: MapFacts, count: number, randomSeed: number, joined: (slot: number) => boolean): SlotTable {
+/**
+ * The slot table: `count` clients in the map's first user slots, `computers`
+ * computer players (normal) in the next ones, every other slot closed.
+ */
+export function slotTable(map: MapFacts, count: number, randomSeed: number, joined: (slot: number) => boolean, computers = 0): SlotTable {
   const users = map.players.filter(({ controller }) => controller === 1).map(({ id }) => id);
-  if (users.length < count) throw new Error(`the map has ${users.length} user slots; ${count} clients need as many`);
+  if (users.length < count + computers) throw new Error(`the map has ${users.length} user slots; ${count} clients and ${computers} computers need as many`);
   const used = new Set(users.slice(0, count));
+  const computer = new Set(users.slice(count, count + computers));
   const forceOf = (id: number) => Math.max(0, map.forces.findIndex((mask) => (mask & (1 << id)) !== 0));
   const slots = map.players.map(({ id, race }, index): Slot => {
     const occupied = used.has(id) && joined(id);
     return {
       playerId: occupied ? id + 1 : 0,
-      download: occupied ? 100 : 255,
-      status: occupied ? SLOT_OCCUPIED : used.has(id) ? SLOT_OPEN : SLOT_CLOSED,
-      computer: false,
+      download: occupied || computer.has(id) ? 100 : 255,
+      status: occupied || computer.has(id) ? SLOT_OCCUPIED : used.has(id) ? SLOT_OPEN : SLOT_CLOSED,
+      computer: computer.has(id),
       team: (map.layout & 1) !== 0 ? forceOf(id) : index,
       color: id,
       race: (map.layout & 2) !== 0 ? (RACE_BITS[race] ?? RACE_RANDOM_SELECTABLE) | 0x40 : RACE_RANDOM_SELECTABLE,
@@ -155,7 +162,7 @@ export function startHost(options: HostOptions): LanHost {
     line(`phase ${next}`);
     options.onPhase?.(next);
   };
-  const table = () => slotTable(options.map, players.length, randomSeed, (slot) => players.some((player) => player.slot === slot && player.socket !== undefined && !player.left));
+  const table = () => slotTable(options.map, players.length, randomSeed, (slot) => players.some((player) => player.slot === slot && player.socket !== undefined && !player.left), options.computers ?? 0);
   const send = (player: Player, packet: Uint8Array) => {
     if (player.socket === undefined) return;
     options.onPacket?.("out", player.label, packet);
