@@ -11,6 +11,8 @@ import { f32 } from "../sim/f32";
 import type { FrameTemplate } from "./frames";
 import type { NativeDeclarations } from "./declarations";
 import { FRAME_POINTS, type Frame, Frames } from "./frames";
+import { Warcraft3Abilities } from "./warcraft3Abilities";
+import { WARCRAFT3_ENUM_VALUES } from "./warcraft3Natives";
 
 export type Handle = { readonly kind: string; readonly id: number };
 
@@ -89,6 +91,8 @@ export interface EffectPose {
   subAnimations: (string | number)[];
   /** Seconds elapsed in the current animation, advancing with timeScale. */
   animationElapsed: number;
+  animationBlendTime: number;
+  queuedAnimations: string[];
   yaw: number;
   pitch: number;
   roll: number;
@@ -197,6 +201,8 @@ interface Timer extends Handle {
 interface Trigger extends Handle {
   readonly actions: Callback[];
   destroyed: boolean;
+  running: boolean;
+  interrupted: boolean;
 }
 
 interface EventContext {
@@ -399,6 +405,12 @@ function mixValue(hash: number, value: unknown): number {
 }
 
 export class HeadlessClient {
+  readonly abilities = new Warcraft3Abilities();
+  readonly textAreaAutoScroll = new Map<Handle, boolean>();
+  readonly heldMouseButtons = new Set<unknown>();
+  mouseScreenX = 0;
+  mouseScreenY = 0;
+  private heldMeta = 0;
   readonly slot: number;
   /** Every native call the other clients must make alike, in order, since the calls forget() dropped. */
   readonly log: NativeCall[] = [];
@@ -513,7 +525,7 @@ export class HeadlessClient {
       this.natives[name] = local[name] === undefined ? logged(name, parameters, behave) : behave;
     }
     // A constant of a handle type is its own name, so comparisons with it work.
-    for (const [name, type] of options.declarations.constants) this.natives[name] = type === "number" ? 0 : type === "boolean" ? name === "TRUE" : name;
+    for (const [name, type] of options.declarations.constants) this.natives[name] = WARCRAFT3_ENUM_VALUES[name] ?? (type === "number" ? 0 : type === "boolean" ? name === "TRUE" : name);
     for (const [name, type] of options.declarations.variables) this.natives[name] = this.defaultValue(type);
     const points = new Map<unknown, readonly [number, number]>();
     for (let index = 0; index < FRAME_POINTS.length; index++) {
@@ -572,7 +584,7 @@ export class HeadlessClient {
 
   private effectAt(model: string, x: number, y: number): Handle {
     const handle = this.handle("effect");
-    this.effects.set(handle, { handle, model, created: this.frame, x, y, z: 0, alpha: 255, scale: 1, timeScale: 1, flat: false,
+    this.effects.set(handle, { handle, model, created: this.frame, x, y, z: 0, alpha: 255, scale: 1, timeScale: 1, flat: false, animationBlendTime: 0, queuedAnimations: [],
       animation: undefined, subAnimations: [], animationElapsed: 0, yaw: 0, pitch: 0, roll: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1] });
     return handle;
   }
@@ -719,14 +731,20 @@ export class HeadlessClient {
         unit.moveSpeed = value;
       },
       GetUnitMoveSpeed: (unit: Unit) => unit.moveSpeed,
-      BlzSetUnitAttackCooldown: (unit: Unit, value: number) => {
-        unit.attackCooldown = value;
-      },
-      BlzGetUnitAttackCooldown: (unit: Unit) => unit.attackCooldown,
+      ...this.abilities.behaviors((kind) => this.handle(kind)),
       BlzGetLocalClientWidth: () => screenWidth,
       BlzGetLocalClientHeight: () => 1080,
       BlzIsLocalClientActive: () => true,
       BlzIsKeyPressed: (key: number) => this.heldKeys.has(key),
+      BlzIsMetaKeyPressed: (meta: number) => this.heldMeta === meta,
+      BlzIsMouseButtonPressed: (button: unknown) => this.heldMouseButtons.has(button),
+      BlzGetMouseScreenPosX: () => this.mouseScreenX,
+      BlzGetMouseScreenPosY: () => this.mouseScreenY,
+      BlzPixelToFrameX: (pixel: number) => f32(pixel * f32(0.8) / screenWidth),
+      BlzPixelToFrameY: (pixel: number) => f32(pixel * f32(0.6) / 1080),
+      BlzFrameToPixelX: (frame: number) => Math.round(frame * screenWidth / f32(0.8)),
+      BlzFrameToPixelY: (frame: number) => Math.round(frame * 1080 / f32(0.6)),
+      BlzTextAreaFrameSetAutoScroll: (frame: Handle, value: boolean) => { this.textAreaAutoScroll.set(frame, value); },
       BlzLoadTOCFile: () => true,
       // A frame getter returns one handle per frame, made at its first call.
       BlzGetOriginFrame: (type: unknown, index: number) => this.memoized(`origin ${describeValue(type)} ${index}`),
@@ -816,7 +834,9 @@ export class HeadlessClient {
       GetEventPlayerChatString: () => this.event.chat,
       BlzGetTriggerPlayerKey: () => this.event.key,
       GetExpiredTimer: () => this.event.timer,
-      CreateTrigger: (): Trigger => ({ ...this.handle("trigger"), actions: [], destroyed: false }),
+      CreateTrigger: (): Trigger => ({ ...this.handle("trigger"), actions: [], destroyed: false, running: false, interrupted: false }),
+      BlzTriggerIsRunning: (trigger: Trigger) => trigger.running,
+      BlzTriggerInterrupt: (trigger: Trigger) => { trigger.interrupted = true; },
       DestroyTrigger: (trigger: Trigger) => {
         trigger.destroyed = true;
       },
@@ -947,6 +967,19 @@ export class HeadlessClient {
       DestroyEffect: (effect: Handle) => {
         this.effects.delete(effect);
       },
+      BlzRemoveEffect: (effect: Handle) => { this.effects.delete(effect); },
+      BlzSetSpecialEffectAnimationBlendTime: (effect: Handle, time: number) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) pose.animationBlendTime = time;
+      },
+      BlzSetSpecialEffectAnimation: (effect: Handle, animation: string) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) { pose.queuedAnimations.length = 0; this.playEffect(effect, animation); }
+      },
+      BlzQueueSpecialEffectAnimation: (effect: Handle, animation: string) => {
+        const pose = this.effects.get(effect);
+        if (pose !== undefined) pose.queuedAnimations.push(animation);
+      },
       // An effect that was destroyed or never made changes nothing.
       BlzSetSpecialEffectPosition: (effect: Handle, x: number, y: number, z: number) => {
         const pose = this.effects.get(effect);
@@ -985,7 +1018,6 @@ export class HeadlessClient {
       },
       BlzPlaySpecialEffect: (effect: Handle, animation: string | number) => this.playEffect(effect, animation),
       BlzPlaySpecialEffectWithTimeScale: (effect: Handle, animation: string | number, timeScale: number) => this.playEffect(effect, animation, timeScale),
-      BlzSetSpecialEffectAnimation: (effect: Handle, animation: string) => this.playEffect(effect, animation),
       BlzSpecialEffectClearSubAnimations: (effect: Handle) => {
         const pose = this.effects.get(effect);
         if (pose !== undefined) pose.subAnimations.length = 0;
@@ -1111,13 +1143,26 @@ export class HeadlessClient {
     if (event.key !== undefined) this.event.key = event.key;
     if (event.frame !== undefined) this.event.frame = event.frame;
     if (event.frameEvent !== undefined) this.event.frameEvent = event.frameEvent;
-    for (const action of trigger.actions) action();
+    const running = trigger.running;
+    const interrupted = trigger.interrupted;
+    trigger.running = true;
+    trigger.interrupted = false;
+    try {
+      for (const action of trigger.actions) {
+        if (trigger.interrupted) break;
+        action();
+      }
+    } finally {
+      trigger.running = running;
+      trigger.interrupted = interrupted;
+    }
   }
 
   /** One game frame: every due timer, in creation order. */
   step(): void {
     this.run(() => {
       this.frame++;
+      this.abilities.tick(f32(1 / FRAMES_PER_SECOND));
       for (const pose of this.effects.values()) pose.animationElapsed += pose.timeScale / FRAMES_PER_SECOND;
       for (const unit of this.units.values()) unit.animationElapsed += unit.timeScale / FRAMES_PER_SECOND;
       const count = this.timers.length;
@@ -1153,6 +1198,7 @@ export class HeadlessClient {
 
   key(sender: number, key: number, meta: number, down: boolean): void {
     if (sender === this.slot) {
+      this.heldMeta = meta;
       if (down) this.heldKeys.add(key);
       else this.heldKeys.delete(key);
     }
