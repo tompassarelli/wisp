@@ -32,10 +32,13 @@ export interface DoctorTarget {
    * How its Battle.net Launcher.exe starts in the prefix: a Steam shortcut (its
    * app id and name), or a command that starts it on the client's own display,
    * as a private desktop's clients are started; its output goes to `log`.
+   * Offline clients belong to the LAN pool, which owns their lifecycle.
    */
   readonly start:
     | { readonly kind: "steam"; readonly appId: number; readonly name: string }
-    | { readonly kind: "command"; readonly command: readonly string[]; readonly log?: string };
+    | { readonly kind: "command"; readonly command: readonly string[]; readonly log?: string }
+    /** Offline clients are started and recovered by their LAN pool owner. */
+    | { readonly kind: "offline-pool" };
   /**
    * The [Video] settings of War3Preferences.txt this client's display needs
    * (windowmode, windowwidth, reswidth, ...). Doctor writes them back while
@@ -254,6 +257,13 @@ export const SCORE_ESCAPES = 3;
 
 /** Brings one client to a ready state, printing each step as "NAME: ...". */
 export const doctorClient = (target: DoctorTarget, print: (line: string) => void) => Effect.gen(function*() {
+  const { start } = target;
+  if (start.kind === "offline-pool") {
+    const view = yield* ClientWatch.use((watch) => watch.view(target.client)).pipe(Effect.mapError((cause) => new DoctorStop({ problem: cause.message })));
+    if (["closed", "crashed", "disconnected"].includes(view.state.kind)) return yield* new DoctorStop({ problem: `${target.client.name}: ${view.state.kind}; restart its offline pool pair before retrying` });
+    yield* Effect.sync(() => print(`${target.client.name}: ready: ${view.state.kind}`));
+    return { client: target.client.name, state: view.state.kind, recovered: [] } satisfies DoctorResult;
+  }
   const machine = yield* PlayMachine;
   const watch = yield* ClientWatch;
   const hands = yield* DoctorHands;
@@ -339,7 +349,6 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
   /** Every program of the prefix; then Steam must see its shortcut end, so it can start it again. */
   const endPrefix = Effect.gen(function*() {
     yield* end("every program of the prefix", (use) => use.processes);
-    const { start } = target;
     if (start.kind !== "steam") return;
     const launch = `AppId=${start.appId}`;
     const steamDone = machine.processes.pipe(Effect.mapError(failed), Effect.map((processes) => (processes.some((process) => process.args.includes("SteamLaunch") && process.args.includes(launch)) ? undefined : true)));
@@ -351,7 +360,6 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
   const startLauncher = Effect.gen(function*() {
     const before = yield* newestLog;
     priorSessionLog = before;
-    const { start } = target;
     const how = start.kind === "steam" ? `the Steam shortcut "${start.name}" (steam ${shortcutUrl(start.appId)})` : `its launch command (${start.command.join(" ")})`;
     yield* say(`starting Battle.net with ${start.kind === "steam" ? `the Steam shortcut "${start.name}"` : "its launch command"}`);
     if (start.kind === "steam") yield* machine.openSteam(shortcutUrl(start.appId)).pipe(Effect.mapError(failed));

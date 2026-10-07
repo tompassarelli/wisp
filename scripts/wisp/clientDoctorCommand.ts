@@ -15,8 +15,8 @@ import type { ClientWatch } from "./watch";
 export interface DoctorDeclaration {
   /** The clients file (wisp:docs/sample-map.md): each client's desktop run folder, Documents folder, menu port and expected display settings. */
   readonly clientsFile: string;
-  /** How each client's Battle.net starts, by client name. */
-  readonly start: Readonly<Record<string, DoctorTarget["start"]>>;
+  /** How each signed-in client's Battle.net starts, by client name. Offline pool clients need no entry. */
+  readonly start: Readonly<Record<string, Exclude<DoctorTarget["start"], { readonly kind: "offline-pool" }>>>;
 }
 
 const DOCUMENTS = "/drive_c/users/steamuser/Documents/Warcraft III";
@@ -28,7 +28,7 @@ export const doctorTargets = (declaration: DoctorDeclaration, names: readonly st
   if (unknown.length > 0) return yield* new UsageFailure({ problem: `unknown client ${unknown.join(", ")}; known: ${config.clients.map(({ name }) => name).join(", ")}` });
   const chosen = names.length === 0 ? config.clients : config.clients.filter((client) => names.includes(client.name));
   return yield* Effect.forEach(chosen, (entry) => Effect.gen(function*() {
-    const start = declaration.start[entry.name];
+    const start = entry.offline === true ? { kind: "offline-pool" } as const : declaration.start[entry.name];
     if (start === undefined) return yield* new DoctorStop({ problem: `${entry.name}: the game declares no way to start its Battle.net` });
     if (!entry.documents.endsWith(DOCUMENTS)) return yield* new DoctorStop({ problem: `${entry.name}: its documents folder isn't a Wine prefix's ${DOCUMENTS}: ${entry.documents}` });
     const { x11 } = yield* desktop.desktopSession(entry).pipe(Effect.mapError((cause) => new DoctorStop({ problem: cause.message })));
