@@ -1,7 +1,7 @@
 // `wisp lan ...`: offline Warcraft III clients that play LAN matches against
 // Wisp's own host, for development on your own maps (wisp:docs/lan.md).
 //   setup --from INSTALL --pairs N     make the pool's clients (no Battle.net, no account)
-//   pool --pairs N [--profile parity|visual] [--seconds S]
+//   pool --pairs N [--profile parity|visual|hfr] [--seconds S]
 //                                      run N pairs, each in a private network namespace with only loopback
 //   fresh MAP --pair K [--turn-ms MS]  host MAP on pair K and join both clients; returns once the match plays
 //   status [--pair K]                  each pair's clients and current game
@@ -183,7 +183,7 @@ const end: Command = (args) => Effect.gen(function*() {
   yield* Console.log(`pair ${pair}: game ended`);
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N] | pool [--pairs N | --pair K...] [--profile parity|visual[,...]] [--seconds S] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | status [--pair K] | end --pair K";
+export const LAN_USAGE = "setup --from INSTALL [--pairs N] | pool [--pairs N | --pair K...] [--profile parity|visual|hfr[,...]] [--seconds S] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | status [--pair K] | end --pair K";
 
 export const lan: Command = ([sub, ...args]) => {
   switch (sub) {

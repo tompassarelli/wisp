@@ -16,7 +16,7 @@ game. It isn't for cheating. The terms are in
 | Command | What it does |
 | --- | --- |
 | `wisp lan setup --from INSTALL [--pairs N]` | Creates the pool's clients from an existing Warcraft III install folder (the one holding `_retail_`). See "Setting up". |
-| `wisp lan pool [--pairs N \| --pair K...] [--profile parity\|visual[,...]] [--seconds S]` | Runs up to N pairs, each admitted by the machine-capacity helper. It stays in the foreground; Ctrl-C stops the pool. |
+| `wisp lan pool [--pairs N \| --pair K...] [--profile parity\|visual\|hfr[,...]] [--seconds S]` | Runs up to N pairs, each admitted by the machine-capacity helper. It stays in the foreground; Ctrl-C stops the pool. |
 | `wisp lan fresh MAP [--pair K] [--computers N] [--turn-ms MS]` | Hosts MAP on pair K, switches both clients to LAN, joins them, and returns once the match plays. It prints the game's action log. |
 | `wisp lan status [--pair K]` | Each pair's clients and processes, and its game: phase, turns, desyncs, players. |
 | `wisp lan end --pair K` | Ends pair K's game. The clients go back to their menus. |
@@ -117,7 +117,8 @@ controller helpers typing on one display would also take each other's focus.
 **Profiles.** `parity` (the default) is for checksum and input runs that need
 no pixels: an 800×600 window with every quality setting at its lowest. `visual`
 is 1280×720, with more lighting and texture detail. Both cap the game at 60
-frames a second, focused or not. A client consumes at most one turn per
+frames a second, focused or not. `hfr` is parity at 144 frames a second, for
+comparing the game's clocks against the 60 fps cap. A client consumes at most one turn per
 frame, so a cap below the turn rate (33 turns a second at 30 ms) makes it fall
 behind.
 

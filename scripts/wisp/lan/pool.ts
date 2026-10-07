@@ -53,6 +53,8 @@ const LOWEST: Readonly<Record<string, number>> = {
  */
 export const PROFILES: Readonly<Record<string, Profile>> = {
   parity: { name: "parity", width: 800, height: 600, maxFps: 60, video: LOWEST },
+  /** parity at 144 frames a second, focused or not, to compare the game's clocks against a 60 fps cap. */
+  hfr: { name: "hfr", width: 800, height: 600, maxFps: 144, video: LOWEST },
   visual: { name: "visual", width: 1280, height: 720, maxFps: 60, video: { ...LOWEST, lightingquality: 2, particles: 2, texquality: 1 } },
 };
 
