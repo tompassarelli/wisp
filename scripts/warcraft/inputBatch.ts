@@ -33,7 +33,8 @@ export function inputBatches(actions: readonly InputAction[], pointer: PointerPo
             current.push("keydown", "--clearmodifiers", key);
             wait(60);
             current.push("keyup", "--clearmodifiers", key);
-            wait(60);
+            // Chat accepts text after its opening transition, beyond key release.
+            wait(660);
           } else current.push("key", "--clearmodifiers", "--delay", String(action.delayMillis ?? 12), key);
         }
         break;
