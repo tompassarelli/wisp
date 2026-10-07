@@ -20,6 +20,7 @@ const pair = Number(argument("pair") ?? "0");
 const profileName = argument("pool-profile") ?? "parity";
 const launcher = argument("launcher");
 const capacity = argument("capacity");
+if (capacity === undefined) throw new Error("pairSession requires --capacity MACHINE_CAPACITY_HELPER");
 const fpsText = argument("fps");
 const profile = poolProfile(profileName, fpsText === undefined ? undefined : Number(fpsText));
 if (launcher === undefined) throw new Error("pairSession takes --pair K --pool-profile parity|visual --launcher PRIVATE_DESKTOP_SH");
@@ -49,7 +50,7 @@ void (async () => {
 })();
 
 const desktopA = Bun.spawn([launcher, "start", "--resolution", size, "--", "bwrap", "--dev-bind", "/", "/", "--unshare-net", "--die-with-parent", "--",
-  process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", profileName, "--run-b", runB, "--session-pid", String(process.pid), ...(capacity === undefined ? [] : ["--capacity", capacity]), ...(fpsText === undefined ? [] : ["--fps", fpsText])], {
+  process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", profileName, "--run-b", runB, "--session-pid", String(process.pid), "--capacity", capacity, ...(fpsText === undefined ? [] : ["--fps", fpsText])], {
   stdout: Bun.file(join(directory, "desktop-a.out")),
   stderr: Bun.file(join(directory, "desktop-a.err")),
 });

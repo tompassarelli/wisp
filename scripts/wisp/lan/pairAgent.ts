@@ -19,12 +19,15 @@ import { type LanHost, startHost } from "./host";
 import { LanFailure, enableLan, joinLanGame } from "./join";
 import { readMapFacts } from "./map";
 import { PAIR_SIDES, poolProfile, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
+import { admissionFile, nativeCommand } from "./admission";
 
 const argument = (name: string) => {
   const at = process.argv.indexOf(`--${name}`);
   return at < 0 ? undefined : process.argv[at + 1];
 };
 const pair = Number(argument("pair") ?? "0");
+const capacity = argument("capacity");
+if (capacity === undefined) throw new Error("pairAgent requires --capacity MACHINE_CAPACITY_HELPER");
 const fpsText = argument("fps");
 const profile = poolProfile(argument("pool-profile") ?? "parity", fpsText === undefined ? undefined : Number(fpsText));
 const packager = argument("packager") ?? join(process.env["XDG_CACHE_HOME"] ?? join(process.env["HOME"] ?? "", ".cache"), "wisp/lan/map-pack");
@@ -37,9 +40,10 @@ const proton = join(steam, "compatibilitytools.d/GE-Proton11-7-x86_64/proton");
 const runtime = join(steam, "steamapps/common/SteamLinuxRuntime_4/_v2-entry-point");
 
 const runB = argument("run-b");
-const capacity = argument("capacity");
 /** The games' launchers: each game sits in its own scope, so it outlives this agent unless stopped. */
 const games: Bun.Subprocess[] = [];
+const stopGames = () => { for (const game of games) game.kill("SIGTERM"); };
+process.on("SIGTERM", stopGames);
 const runs: Record<string, string | undefined> = { a: process.env["PRIVATE_DESKTOP_RUN"], b: runB };
 /** Client b's display: its own private desktop, from that desktop's run folder. */
 const displayOf = (run: string | undefined): Record<string, string> => {
@@ -70,42 +74,44 @@ const audioEnv = (name: string): Record<string, string> => {
   return { PULSE_SERVER: `unix:${pulse}`, PULSE_SINK: sink };
 };
 
-// Launch both clients.
-for (const client of clients) {
-  // A second runtime on a live prefix joins its wineserver and dies: a game left from before must be stopped first.
-  const left = findGameProcesses(prefixOf(client.name));
-  if (left.length > 0) {
-    say(`${client.name} still runs (pid ${left.map(({ pid }) => pid).join(", ")}); stopping it first`);
-    for (const { pid } of left) process.kill(pid, "SIGTERM");
-    await Bun.sleep(5000);
-  }
-  mkdirSync(documentsOf(client.name), { recursive: true });
-  writeFileSync(join(documentsOf(client.name), "War3Preferences.txt"), preferences(profile, client.windowX));
-  const appId = String(3516115600 + pair * 2 + PAIR_SIDES.indexOf(client.side));
-  // Each game in its own machine-capacity native scope: the high-weight
-  // slice for game clients, no CPU quota, admitted on memory alone.
-  // Admission uses the user's service bus; restore the private runtime only inside the game scope.
-  const gameRuntime = client.env["XDG_RUNTIME_DIR"] ?? process.env["XDG_RUNTIME_DIR"] ?? userRuntime;
-  const native = capacity === undefined ? [] : [process.execPath, capacity, "session", "--class", "native", "--memory-gib", "1.5", "--owner", `wisp-lan:${client.name}`, "--", "env", `XDG_RUNTIME_DIR=${gameRuntime}`];
-  // The helper may defer the game's scope (exit 75, DEFER on stderr): wait
-  // for admission instead of leaving the pair without a game.
-  for (;;) {
+// A refused second client ends the first too: a pool only keeps whole pairs.
+try {
+  for (const client of clients) {
+    // A second runtime on a live prefix joins its wineserver and dies: a game left from before must be stopped first.
+    const left = findGameProcesses(prefixOf(client.name));
+    if (left.length > 0) {
+      say(`${client.name} still runs (pid ${left.map(({ pid }) => pid).join(", ")}); stopping it first`);
+      for (const { pid } of left) process.kill(pid, "SIGTERM");
+      await Bun.sleep(5000);
+    }
+    mkdirSync(documentsOf(client.name), { recursive: true });
+    writeFileSync(join(documentsOf(client.name), "War3Preferences.txt"), preferences(profile, client.windowX));
+    const appId = String(3516115600 + pair * 2 + PAIR_SIDES.indexOf(client.side));
+    // Each game in its own machine-capacity native scope: the high-weight
+    // slice for game clients, no CPU quota.
+    // Admission uses the user's service bus; restore the private runtime only inside the game scope.
+    const gameRuntime = client.env["XDG_RUNTIME_DIR"] ?? process.env["XDG_RUNTIME_DIR"] ?? userRuntime;
+    const native = nativeCommand(capacity, client.name, gameRuntime);
     const child = Bun.spawn([...native, "dbus-run-session", "--", "steam-run", "env", runtime, "--verb=waitforexitandrun", "--", proton, "waitforexitandrun", exeOf(client.name), "-launch", "-windowmode", "windowed", "-nowfpause"], {
-      env: { ...process.env, ...client.env, ...audioEnv(client.name), ...(capacity === undefined ? {} : { XDG_RUNTIME_DIR: userRuntime, DBUS_SESSION_BUS_ADDRESS: `unix:path=${userRuntime}/bus` }), STEAM_COMPAT_DATA_PATH: clientRoot(client.name), STEAM_COMPAT_CLIENT_INSTALL_PATH: steam, STEAM_COMPAT_APP_ID: appId, SteamAppId: appId, SteamGameId: appId },
+      env: { ...process.env, ...client.env, ...audioEnv(client.name), XDG_RUNTIME_DIR: userRuntime, DBUS_SESSION_BUS_ADDRESS: `unix:path=${userRuntime}/bus`, STEAM_COMPAT_DATA_PATH: clientRoot(client.name), STEAM_COMPAT_CLIENT_INSTALL_PATH: steam, STEAM_COMPAT_APP_ID: appId, SteamAppId: appId, SteamGameId: appId },
       stdout: Bun.file(join(directory, `${client.name}.out`)),
       stderr: Bun.file(join(directory, `${client.name}.err`)),
     });
+    games.push(child);
     const early = await Promise.race([child.exited, Bun.sleep(5000).then(() => undefined)]);
     const said = early === 75 ? readFileSync(join(directory, `${client.name}.err`), "utf8") : "";
     const deferred = /"decision":"DEFER","reason":"([A-Z_]+)"/.exec(said);
-    if (deferred === null) {
-      games.push(child);
-      break;
+    if (deferred !== null) {
+      writeFileSync(admissionFile(directory), JSON.stringify({ reason: `${client.name}: ${deferred[1]}` }));
+      throw new Error(`${client.name}: waiting for native capacity (${deferred[1]})`);
     }
-    say(`${client.name}: the capacity helper defers its game (${deferred[1]}); trying again in 45 s`);
-    await Bun.sleep(45_000);
+    if (early !== undefined) throw new Error(`${client.name}: its native launcher exited with ${early}`);
+    say(`launched ${client.name}`);
   }
-  say(`launched ${client.name}`);
+} catch (cause) {
+  stopGames();
+  await Promise.all(games.map((game) => game.exited));
+  throw cause;
 }
 
 const gamePid = (name: string) => findGameProcesses(prefixOf(name))[0]?.pid;
