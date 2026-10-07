@@ -84,9 +84,11 @@ for (const client of clients) {
   const appId = String(3516115600 + pair * 2 + PAIR_SIDES.indexOf(client.side));
   // Each game in its own machine-capacity native scope: the high-weight
   // slice for game clients, no CPU quota, admitted on memory alone.
-  const native = capacity === undefined ? [] : [process.execPath, capacity, "session", "--class", "native", "--owner", `wisp-lan:${client.name}`, "--"];
+  // Admission uses the user's service bus; restore the private runtime only inside the game scope.
+  const gameRuntime = client.env["XDG_RUNTIME_DIR"] ?? process.env["XDG_RUNTIME_DIR"] ?? userRuntime;
+  const native = capacity === undefined ? [] : [process.execPath, capacity, "session", "--class", "native", "--owner", `wisp-lan:${client.name}`, "--", "env", `XDG_RUNTIME_DIR=${gameRuntime}`];
   games.push(Bun.spawn([...native, "dbus-run-session", "--", "steam-run", "env", runtime, "--verb=waitforexitandrun", "--", proton, "waitforexitandrun", exeOf(client.name), "-launch", "-windowmode", "windowed", "-nowfpause"], {
-    env: { ...process.env, ...client.env, ...audioEnv(client.name), STEAM_COMPAT_DATA_PATH: clientRoot(client.name), STEAM_COMPAT_CLIENT_INSTALL_PATH: steam, STEAM_COMPAT_APP_ID: appId, SteamAppId: appId, SteamGameId: appId },
+    env: { ...process.env, ...client.env, ...audioEnv(client.name), ...(capacity === undefined ? {} : { XDG_RUNTIME_DIR: userRuntime, DBUS_SESSION_BUS_ADDRESS: `unix:path=${userRuntime}/bus` }), STEAM_COMPAT_DATA_PATH: clientRoot(client.name), STEAM_COMPAT_CLIENT_INSTALL_PATH: steam, STEAM_COMPAT_APP_ID: appId, SteamAppId: appId, SteamGameId: appId },
     stdout: Bun.file(join(directory, `${client.name}.out`)),
     stderr: Bun.file(join(directory, `${client.name}.err`)),
   }));

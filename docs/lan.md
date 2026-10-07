@@ -97,7 +97,9 @@ it. The agent:
   namespaces, so `wisp lan fresh` and `status` talk to it from outside.
 
 Each pair's desktops and agent run in one `machine-capacity session --class
-moderate`. Each game runs in its own `session --class native` scope: the
+moderate`. Admission uses the user's service bus and runtime directory;
+inside the scope the game receives its private desktop's runtime directory
+and its own session bus. Each game runs in its own `session --class native` scope: the
 high-weight slice for game clients, with no CPU quota, admitted on memory
 alone. The pool adds pairs while the helper admits them: a deferred pair is
 retried every 45 s, for up to `--wait` seconds (default 1800). After that the
