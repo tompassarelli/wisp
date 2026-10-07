@@ -78,6 +78,11 @@ namespace runs the pair agent (wisp:scripts/wisp/lan/pairAgent.ts). The agent:
   steam-run, Steam Linux Runtime 4 and GE-Proton 11-7, as the signed-in
   clients run;
 - places their windows side by side;
+- plays each client's sound into its own silent sink, `wisp-lan-<name>`, on
+  the user's PipeWire (a null sink the agent creates, `PULSE_SINK` at launch).
+  The owner's speakers stay quiet, and `pw-record --target wisp-lan-lan0a.monitor
+  OUT.wav` records exactly that client's audio. Without the user's PipeWire
+  pulse socket the clients run without sound;
 - answers on `pair-K/agent.sock`. A Unix socket reaches across network
   namespaces, so `wisp lan fresh` and `status` talk to it from outside.
 

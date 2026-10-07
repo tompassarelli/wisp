@@ -18,7 +18,7 @@ import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type M
 import { type LanHost, startHost } from "./host";
 import { LanFailure, enableLan, joinLanGame } from "./join";
 import { readMapFacts } from "./map";
-import { PAIR_SIDES, PROFILES, agentSocket, clientName, clientRoot, documentsOf, exeOf, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
+import { PAIR_SIDES, PROFILES, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
 
 const argument = (name: string) => {
   const at = process.argv.indexOf(`--${name}`);
@@ -38,13 +38,34 @@ const runtime = join(steam, "steamapps/common/SteamLinuxRuntime_4/_v2-entry-poin
 
 const clients = PAIR_SIDES.map((side, index) => ({ side, name: clientName(pair, side), port: reportPort(pair, side), windowX: index * (profile.width + 20) }));
 
+// Each client plays into its own silent sink on the user's PipeWire, so a pool
+// never sounds on the owner's speakers and a check records exactly one
+// client's audio. The desktop's runtime folder is private, so the user's own
+// one is named. Without PipeWire the clients run without sound, as before.
+const userRuntime = `/run/user/${process.getuid?.() ?? 1000}`;
+const pulse = join(userRuntime, "pulse/native");
+const audioEnv = (name: string): Record<string, string> => {
+  if (!existsSync(pulse)) return {};
+  const sink = audioSinkOf(name);
+  const pw = { ...process.env, XDG_RUNTIME_DIR: userRuntime };
+  const nodes = Bun.spawnSync(["pw-dump"], { env: pw, stdout: "pipe", stderr: "ignore", timeout: 5000 }).stdout.toString();
+  if (!nodes.includes(`"node.name": "${sink}"`)) {
+    const made = Bun.spawnSync(["pw-cli", "create-node", "adapter", `{ factory.name=support.null-audio-sink node.name=${sink} node.description="Wisp ${name}" media.class=Audio/Sink object.linger=true audio.position=[ FL FR ] priority.session=0 priority.driver=0 }`], { env: pw, stdout: "ignore", stderr: "pipe", timeout: 5000 });
+    if (made.exitCode !== 0) {
+      say(`no sink for ${name} (${made.stderr.toString().trim()}): it runs without sound`);
+      return {};
+    }
+  }
+  return { PULSE_SERVER: `unix:${pulse}`, PULSE_SINK: sink };
+};
+
 // Launch both clients.
 for (const client of clients) {
   mkdirSync(documentsOf(client.name), { recursive: true });
   writeFileSync(join(documentsOf(client.name), "War3Preferences.txt"), preferences(profile, client.windowX));
   const appId = String(3516115600 + pair * 2 + PAIR_SIDES.indexOf(client.side));
   Bun.spawn(["dbus-run-session", "--", "steam-run", "env", runtime, "--verb=waitforexitandrun", "--", proton, "waitforexitandrun", exeOf(client.name), "-launch", "-windowmode", "windowed", "-nowfpause"], {
-    env: { ...process.env, STEAM_COMPAT_DATA_PATH: clientRoot(client.name), STEAM_COMPAT_CLIENT_INSTALL_PATH: steam, STEAM_COMPAT_APP_ID: appId, SteamAppId: appId, SteamGameId: appId },
+    env: { ...process.env, ...audioEnv(client.name), STEAM_COMPAT_DATA_PATH: clientRoot(client.name), STEAM_COMPAT_CLIENT_INSTALL_PATH: steam, STEAM_COMPAT_APP_ID: appId, SteamAppId: appId, SteamGameId: appId },
     stdout: Bun.file(join(directory, `${client.name}.out`)),
     stderr: Bun.file(join(directory, `${client.name}.err`)),
   });
