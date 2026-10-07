@@ -6,10 +6,11 @@ reference map for toolchain comparisons. It is not part of the installed
 package; read it in the repository. Its behavior is fixed so ports stay
 comparable:
 
-- two player slots; one Footman per player spawns at the playable area's center;
+- two player slots; one custom Wisp Rider per player spawns at the playable area's center, using a Knight model and the typed unit definition;
 - a 0.1 s periodic timer moves each unit along a square lap around the center,
   computed by one pure function, `pathPoint` in src/path.ts;
 - the chat command `-ping` prints a counter to every player;
+- a typed two-level Blizzard ability; the first rider has level 1, the second level 2. `-objects` prints the unit names, levels and tooltips and writes `sample-objects.txt` for an offline check;
 - one unit test for `pathPoint`, run in Bun and in 32-bit Lua;
 - a [headless](headless.md) two-client journey: start, `-ping`, a hot reload,
   another `-ping` and more frames, with the same native calls in both clients,
@@ -25,6 +26,7 @@ comparable:
 | test/headless.test.ts, test/headless-lua.ts | The journey in two simulated clients of the map's TypeScript in Bun, then of its compiled bundle in the Lua that `LUA` names, compiled with tsconfig.headless.json; both print the same result. |
 | test/fixtures/desync.ts, test/failing-fixture.test.ts | A deliberately desyncing copy of the map that the headless journey must fail on: the failing case of the [consumer CI](ci.md) check. |
 | scripts/sample.ts | The map's program: `map build`, `map rebuild`, `hot`, `fresh`, `client` and `headless`, composed from Wisp's services with `runCli`. |
+| scripts/objects.ts, src/objectIds.ts | [Typed object authoring](object-data.md): one unit and a two-level ability, with the same named numeric IDs used by map code. The build prints object-generation time and includes FileIO. |
 | tsconfig.json, tsconfig.map.json, tsconfig.tests.json, tsconfig.headless.json | Host scripts and tests, which also see the natives and Lua's types because the headless test imports map code; the map bundle; the Lua test bundle; the Lua headless bundle. |
 
 ## Run it

@@ -14,6 +14,7 @@ import { ClientWatch } from "wisp/scripts/wisp/watch";
 import { type BuildProject, MapBuild } from "wisp/scripts/wisp/mapBuild";
 import { SourceErrors } from "wisp/scripts/wisp/sourceErrors";
 import type { MapDeclaration } from "wisp/scripts/mapInfo";
+import { sampleObjectData } from "./objects";
 
 const sample = join(import.meta.dir, "..");
 // In a project that installs the wisp package, this is the project's own root.
@@ -37,7 +38,7 @@ const project: BuildProject = {
 
 const declaration: MapDeclaration = {
   author: "Wisp",
-  description: "Two Footmen walk a square around the center. Type -ping.",
+  description: "Two custom riders walk a square. Type -ping or -objects.",
   suggestedPlayers: "2",
   players: [{ id: 0, name: "Player 1" }, { id: 1, name: "Player 2" }],
   forces: [{ name: "Players", playerIds: [0, 1] }],
@@ -53,7 +54,10 @@ const build: Command = (args) => Effect.gen(function*() {
   const [out] = flagValues(args, "out");
   const [container] = flagValues(args, "container");
   if (base === undefined || out === undefined) return yield* new UsageFailure({ problem: "build needs --base and --out" });
-  yield* MapBuild.use((maps) => maps.build({ base, out, name: NAME, declaration, ...(container === undefined ? {} : { container }) }));
+  const objectStarted = performance.now();
+  const objectData = sampleObjectData();
+  console.error(`object generation ${(performance.now() - objectStarted).toFixed(3)} ms`);
+  yield* MapBuild.use((maps) => maps.build({ base, out, name: NAME, declaration, objectData, ...(container === undefined ? {} : { container }) }));
 }).pipe(Effect.provide(mapServices));
 
 const rebuild: Command = ([map, ...rest]) => Effect.gen(function*() {
