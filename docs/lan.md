@@ -25,10 +25,16 @@ was **3.0.0.24268**.
 A separate signed-in 3.0.1 client also failed to create a game window; the
 cause was not established as an offline restriction. The Agent-presence
 experiments were invalid or cancelled, and the temporary SDK substitution
-produced no valid comparison. The authentic 24342 SDK was restored.
+produced no valid comparison. The saved 24342 SDK was restored.
 
-The operator ended this startup investigation. No loader patch or engine
-offset change was applied. [Issue #49](https://github.com/tompassarelli/wisp/issues/49)
+The operator paused diagnosis at 02:52, then superseded that pause at 03:00
+(UTC+8) on the same day. Further offline experiments use a new private
+baseline and separate per-client reflinks under `~/.local/share/wisp/lan/`,
+with distinct inodes and no links back to the source install. The test
+prefixes hold no Battle.net program or account, and only one game file changes
+per attempt. Tom's installation stays untouched; its SDK hash is checked
+before and after. No loader patch or engine offset change has been applied.
+[Issue #49](https://github.com/tompassarelli/wisp/issues/49)
 retains the unfinished 3.0.1 memory checks: an uninitialized process with no
 presence table is not evidence of a changed table layout.
 
