@@ -61,7 +61,7 @@ For a definition named `OpponentSettings`:
   line a TOC needs.
 - The bindings module: `OPPONENTSETTINGS_TOC`, an `OpponentSettingsFrames`
   interface with `root` and every key, and `createOpponentSettings(parent,
-  context)`. It calls `BlzLoadTOCFile` once, `BlzCreateFrame("OpponentSettings",
+  context)`. It calls `BlzLoadTOCFile` (each call, since a headless run's clients share module state), `BlzCreateFrame("OpponentSettings",
   parent, 0, context)`, places and levels the root, finds each child with
   `BlzGetFrameByName(name, context)`, then sets button labels and disables
   `enabled: false` frames. It returns `undefined` when the TOC does not load.

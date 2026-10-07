@@ -173,12 +173,10 @@ function bindingsSource(definition: FrameDefinition, tocEntry: string): string {
     ...nodes.map((node) => `  readonly ${node.key}: framehandle;`),
     "}",
     "",
-    "let loaded = false;",
-    "",
-    `/** Loads the TOC once, then creates the ${definition.name} tree; context tells copies apart. */`,
+    `/** Loads the TOC, then creates the ${definition.name} tree; context tells copies apart. */`,
     `export function create${definition.name}(parent: framehandle, context: number): ${type} | undefined {`,
-    `  if (!loaded) loaded = BlzLoadTOCFile(${definition.name.toUpperCase()}_TOC);`,
-    "  if (!loaded) return undefined;",
+    // Module state would be shared by a headless run's clients; loading a TOC again is harmless.
+    `  if (!BlzLoadTOCFile(${definition.name.toUpperCase()}_TOC)) return undefined;`,
     `  const root = BlzCreateFrame(${escaped(definition.name)}, parent, 0, context);`,
   ];
   if (definition.at !== undefined) lines.push(`  BlzFrameSetAbsPoint(root, FRAMEPOINT_${definition.at.point}, ${fdfNumber(definition.at.x)}, ${fdfNumber(definition.at.y)});`);
