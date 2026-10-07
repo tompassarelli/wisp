@@ -265,6 +265,13 @@ const server = Bun.serve({
       endGame();
       return Response.json({ ended: true });
     }
+    if (url.pathname === "/speed" && request.method === "POST") {
+      const body = (await request.json()) as { speed?: number };
+      if (game === undefined || game.host.status().phase !== "playing") return Response.json({ error: "no match is playing" }, { status: 400 });
+      if (typeof body.speed !== "number" || !Number.isFinite(body.speed) || body.speed < 1 || body.speed > 16) return Response.json({ error: "speed must be between 1 and 16" }, { status: 400 });
+      game.host.setSpeed(body.speed);
+      return Response.json(game.host.status());
+    }
     return new Response("not found", { status: 404 });
   },
 });

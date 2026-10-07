@@ -5,11 +5,12 @@
 //                                      run N pairs, each in a private network namespace with only loopback
 //   fresh MAP --pair K [--turn-ms MS]  host MAP on pair K and join both clients; returns once the match plays
 //   status [--pair K]                  each pair's clients and current game
+//   speed N --pair K                   deliver game turns N times sooner (1 restores real time)
 //   end --pair K                       end pair K's game
 // Development and testing on your own offline clients and maps only: never
 // signed-in Battle.net clients, never anyone else's game, not for cheating.
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { Console, Effect } from "effect";
 import { type Command, UsageFailure, flagValues } from "../command";
 import { LanFailure } from "../lan/join";
@@ -216,14 +217,48 @@ const end: Command = (args) => Effect.gen(function*() {
   yield* Console.log(`pair ${pair}: game ended`);
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | status [--pair K] | end --pair K";
+const dummy: Command = (args) => Effect.gen(function*() {
+  const map = args[0];
+  const [program] = flagValues(args, "program");
+  const pair = yield* number(args, "pair", 0);
+  const count = yield* number(args, "count", 20);
+  if (map === undefined || !existsSync(map) || program === undefined || !existsSync(program) || count < 1) return yield* new UsageFailure({ problem: "dummy takes MAP --program W3GSCLIENT [--pair K] [--count N]" });
+  const status = yield* agent(pair, "/status");
+  if (status["game"] !== undefined) return yield* new UsageFailure({ problem: `pair ${pair} has a game; end it with lan end before checking its lobby` });
+  const clients = status["clients"] as { name: string; pid?: number }[];
+  const native = clients.find(({ name }) => name === clientName(pair, "a"));
+  if (native?.pid === undefined) return yield* new UsageFailure({ problem: `pair ${pair}'s first client is not running` });
+  const state = JSON.parse(readFileSync(join(pairDirectory(pair), "agent.json"), "utf8")) as { pid: number; runs: { a: string } };
+  const exit = yield* Effect.tryPromise({
+    try: async () => {
+      const child = Bun.spawn(["nsenter", "--target", String(state.pid), "--user", "--net", "--preserve-credentials", process.execPath, join(import.meta.dir, "../lan/dummySession.ts"), String(pair), resolve(map), resolve(program), String(count), String(native.pid)], {
+        env: { ...process.env, XDG_RUNTIME_DIR: join(state.runs.a, "runtime") }, stdout: "inherit", stderr: "inherit",
+      });
+      return child.exited;
+    },
+    catch: (cause) => new LanFailure({ problem: String(cause) }),
+  });
+  if (exit !== 0) return yield* new LanFailure({ problem: `dummy lobby check exited ${exit}` });
+});
+
+const speed: Command = (args) => Effect.gen(function*() {
+  const value = Number(args[0]);
+  if (!Number.isFinite(value) || value < 1 || value > 16) return yield* new UsageFailure({ problem: "speed takes a multiple between 1 and 16" });
+  const pair = yield* number(args, "pair", undefined);
+  yield* agent(pair, "/speed", { speed: value });
+  yield* Console.log(`pair ${pair}: delivering turns at ${value}x; compare client frame progress to measure game speed`);
+});
+
+export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | status [--pair K] | end --pair K";
 
 export const lan: Command = ([sub, ...args]) => {
   switch (sub) {
     case "setup": return setup(args);
     case "pool": return pool(args);
     case "fresh": return fresh(args);
+    case "dummy": return dummy(args);
     case "status": return status(args);
+    case "speed": return speed(args);
     case "end": return end(args);
     default: return Effect.fail(new UsageFailure({ problem: `lan takes ${LAN_USAGE}` }));
   }

@@ -163,7 +163,8 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--four-fighters` | Capture the four-fighter match and rematch | `integrity capture` |
 | `--playable` | Capture a playable candidate match and rematch | `integrity capture` |
 | `--screen` | Capture native framebuffer samples on the stimulus clock | `integrity capture` |
-| `--count N` | How many samples to capture | `integrity capture --screen` |
+| `--count N` | How many samples to capture | `integrity capture --screen`, `lan dummy` |
+| `--program FILE` | External command executable | `lan dummy` |
 | `--region X,Y,WIDTH,HEIGHT` | The pixel rectangle to capture | `integrity capture --screen` |
 | `--functions` | Report functions in the worst frames | `perf census` |
 | `--frame N` | Inspect this recorded frame | `repro` |
