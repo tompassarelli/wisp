@@ -440,8 +440,9 @@ LUA=/path/to/lua32 bun test test/headless-warcraft3.test.ts
 Attack reset clears the selected weapon's remaining wait while retaining
 its configured attack period. Ability cooldowns track each unit and ability
 independently and advance with the headless clock. The aura toggle tracks
-both aura operation and its optional UI change. Input queries read the
-client's held keys, modifiers, mouse buttons and screen position. Effect
+both aura operation and its optional UI change. Removing a unit releases its
+ability state and ability handles, including their fields and IDs. Input
+queries read the client's held keys, modifiers, mouse buttons and screen position. Effect
 animation controls retain the blend duration and requested animation queue;
 `BlzRemoveEffect` removes the effect immediately.
 

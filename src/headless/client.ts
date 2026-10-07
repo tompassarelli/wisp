@@ -702,7 +702,7 @@ export class HeadlessClient {
       },
       CreateUnit: (owner: number, typeId: number, x: number, y: number, facing: number) => this.unitAt(owner, typeId, x, y, facing),
       CreateUnitByName: (owner: number, name: string, x: number, y: number, facing: number) => this.unitAt(owner, name.length === 4 ? name.charCodeAt(0) * 0x1000000 + name.charCodeAt(1) * 0x10000 + name.charCodeAt(2) * 0x100 + name.charCodeAt(3) : 0, x, y, facing),
-      RemoveUnit: (unit: Unit) => { unit.removed = true; unit.dead = true; this.units.delete(unit); },
+      RemoveUnit: (unit: Unit) => { unit.removed = true; unit.dead = true; this.units.delete(unit); this.abilities.removeUnit(unit); },
       GetOwningPlayer: (unit: Unit) => unit.owner,
       GetWidgetLife: (unit: Unit) => this.unitValue(unit, "life"),
       SetWidgetLife: (unit: Unit, life: number) => this.setLife(unit, life),

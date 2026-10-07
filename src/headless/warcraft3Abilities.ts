@@ -26,6 +26,16 @@ export class Warcraft3Abilities {
     return state;
   }
 
+  removeUnit(unit: Handle): void {
+    const state = this.units.get(unit);
+    if (state === undefined) return;
+    for (const ability of state.handles.values()) {
+      this.fields.delete(ability);
+      this.ids.delete(ability);
+    }
+    this.units.delete(unit);
+  }
+
   tick(seconds: number): void {
     for (const unit of this.units.values()) {
       for (const [id, remaining] of unit.remaining) unit.remaining.set(id, f32(Math.max(0, remaining - seconds)));
