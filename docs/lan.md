@@ -27,6 +27,13 @@ one after Battle.net's Scan and Repair returned to Play. The cause has not
 been isolated to offline use. The Agent-presence experiments were invalid or
 cancelled.
 
+Module and exception logging from an authenticated launch confirmed the same
+`0xc0000420` assertion in `war3_loader.dll`, at module-relative stack addresses
+`0x52eec`, `0x765159`, and `0xcaa1e7`. Adding Steam's launch wrapper and reaper
+to that client's command reproduced the same assertion. Its capacity scope
+recorded zero memory-high and out-of-memory events. These commands launched
+Proton directly; they were not launches of a registered Steam application.
+
 The operator paused diagnosis at 02:52, then superseded that pause at 03:00
 (UTC+8) on the same day. Further offline experiments use a new private
 baseline and separate per-client reflinks under `~/.local/share/wisp/lan/`,

@@ -129,6 +129,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--retries N` | How many times an invalid run reruns | `pad` |
 | `--headless` | Play into headless clients instead of native ones; hide the standalone browser window | `pad`, `play --standalone` |
 | `--standalone` | Play in the game's browser window | `play` |
+| `--presentation NAME` | The game's presentation mode for standalone play, such as native, pool-confirmed or pool-predicted | `play --standalone` |
 | `--script FILE` | Read the game's scripted input from this file | `play --standalone` |
 | `--capture-frames N,N` | Save images of these simulation frames | `play --standalone` |
 | `--compare DIR` | A native run's folder to hold the headless run to | `pad` |
