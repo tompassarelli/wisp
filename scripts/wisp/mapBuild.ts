@@ -3,10 +3,9 @@
 // staged copy that replaces the old map only when every step passed; child
 // processes stop when their step is interrupted.
 //
-// A World Editor base map is a small MPQ whose hash table cannot take many
-// imported assets, so a map with imports packages into a copy of a fully
-// packaged private map, its container (mitigation until map-pack can grow an
-// archive). Without a container the build packages into a copy of the base.
+// A map with a private container packages into a copy of it. Without one the
+// build packages into a copy of the base. The packager grows full hash tables
+// when adding imports, so the source archive's capacity is not an import limit.
 // The copy's script, object data, description and header are replaced with
 // TypeScript-generated ones; every other base map file and every declared
 // import must equal its source. Imports the build does not declare stay

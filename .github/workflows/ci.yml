@@ -18,6 +18,8 @@ jobs:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile
       - run: bun run check
+      - name: Install the native archive test dependency
+        run: sudo apt-get update && sudo apt-get install -y libstorm-dev
       - name: Build Warcraft's numeric Lua runtime
         run: |
           mkdir -p build
@@ -29,4 +31,4 @@ jobs:
           mkdir -p build/toward-zero-lua
           tar -xzf build/lua-5.3.6.tar.gz -C build/toward-zero-lua
           make -C build/toward-zero-lua/lua-5.3.6 -j2 generic "MYCFLAGS=-DLUA_32BITS -include $PWD/native/toward-zero.h"
-      - run: LUA="$PWD/build/lua-5.3.6/src/lua" TOWARD_ZERO_LUA="$PWD/build/toward-zero-lua/lua-5.3.6/src/lua" bun run test
+      - run: CC=gcc STORMLIB_PREFIX=/usr LUA="$PWD/build/lua-5.3.6/src/lua" TOWARD_ZERO_LUA="$PWD/build/toward-zero-lua/lua-5.3.6/src/lua" bun run test
