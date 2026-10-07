@@ -66,7 +66,7 @@ export async function checkDummy(options: DummyOptions) {
         const wallMs = performance.now() - started;
         const resources = child.resourceUsage();
         if (resources === undefined) throw new Error("the dummy's CPU usage is unavailable");
-        const cpuMs = resources.cpuTime.total / 1000;
+        const cpuMs = Number(resources.cpuTime.total) / 1000;
         const out = await stdout;
         const err = await stderr;
         writeFileSync(join(options.output, `dummy-${index + 1}.log`), out + err);

@@ -30,7 +30,7 @@ console.log(`dummy lobby: Warcraft ${version}; evidence ${output}`);
 await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const menus = yield* connectMenus(yield* menuAddress(reportPort(pair, "a"), 10));
   const result = yield* Effect.tryPromise({
-    try: () => checkDummy({ program, map, count: Number(countText), output, nativeVersion: version, announcePorts: [16000, 16001],
+    try: () => checkDummy({ program, map, count: Number(countText), output, nativeVersion: version, announcePorts: [16000],
       joinNative: async (_host, gameName) => Effect.runPromise(Effect.gen(function*() {
         yield* enableLan(nativePid, exeOf(name), version, menus, console.log);
         yield* joinLanGame(menus, gameName);
