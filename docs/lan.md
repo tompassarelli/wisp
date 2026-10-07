@@ -22,10 +22,10 @@ launch wrapper both reproduced the failure. The runtime and `-launch`
 argument already matched the working launch. The last working offline build
 was **3.0.0.24268**.
 
-A separate signed-in 3.0.1 client also failed to create a game window; the
-cause was not established as an offline restriction. The Agent-presence
-experiments were invalid or cancelled, and the temporary SDK substitution
-produced no valid comparison. The saved 24342 SDK was restored.
+Two separate signed-in 3.0.1 clients also failed to reach a menu, including
+one after Battle.net's Scan and Repair returned to Play. The cause has not
+been isolated to offline use. The Agent-presence experiments were invalid or
+cancelled.
 
 The operator paused diagnosis at 02:52, then superseded that pause at 03:00
 (UTC+8) on the same day. Further offline experiments use a new private
@@ -33,7 +33,28 @@ baseline and separate per-client reflinks under `~/.local/share/wisp/lan/`,
 with distinct inodes and no links back to the source install. The test
 prefixes hold no Battle.net program or account, and only one game file changes
 per attempt. Tom's installation stays untouched; its SDK hash is checked
-before and after. No loader patch or engine offset change has been applied.
+before and after. The installed Blizzard loader has not been patched, and no
+engine offset change has been applied.
+
+The isolated comparisons changed one startup file at a time:
+
+| Executable / loader / SDK builds | Observed startup result |
+| --- | --- |
+| 24342 / 24342 / 24268 | Same loader assertion; no menu or map acknowledgment. |
+| 24342 / 24268 / 24342 | Loader attach did not return within 86 seconds; no menu or map acknowledgment. |
+| 24268 / 24268 / 24342 | Loader assertion and an error-reporter window; no menu or map acknowledgment. |
+| 24268 / 24268 / 24268 | Same loader assertion; no menu or map acknowledgment. Other installed files still came from 24342. |
+
+At 03:24 the operator authorized one Internet-route comparison with the last
+combination, keeping its prefix and launch unchanged and using no account,
+Battle.net program, or engine controls. It failed with the same assertion
+within a minute. Offline experiments then stopped, and all three startup
+files were restored from the private 24342 baseline. The source SDK hash
+remained unchanged throughout.
+
+The [official 3.0.1 notes](https://us.forums.blizzard.com/en/warcraft3/t/warcraft-iii-reforged-forsaken-kingdom-patch-notes/38400/4)
+include a game-start performance fix; the startup failure's cause is still
+being compared against recorded working launches.
 [Issue #49](https://github.com/tompassarelli/wisp/issues/49)
 retains the unfinished 3.0.1 memory checks: an uninitialized process with no
 presence table is not evidence of a changed table layout.

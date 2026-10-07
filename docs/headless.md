@@ -414,6 +414,50 @@ The 0.405 cutoff was identified in WurstScript's Apache-2.0
 Wisp's TypeScript implementation is independently authored; no Wurst source
 was copied or adapted.
 
+## Warcraft 3.0 natives
+
+The typed API is generated from the installed 3.0.1 build 24342 `common.j`
+and `Blizzard.j`. The nineteen equipment natives renamed in 3.0.1 are
+declared only with their `Blz` names. The installed script names the music
+native `BlzSetThematicMusicAbsoluteVolume`. No dedicated Ability Amp, Crit,
+or Resolve stat native or unit field is exposed there; the new ability
+level fields are declared as the script defines them.
+
+```bash
+bun scripts/natives.ts /private/common.j /private/blizzard.j src/natives/warcraft.d.ts
+LUA=/path/to/lua32 bun test test/headless-warcraft3.test.ts
+```
+
+Attack reset clears the selected weapon's remaining wait while retaining
+its configured attack period. Ability cooldowns track each unit and ability
+independently and advance with the headless clock. The aura toggle tracks
+both aura operation and its optional UI change. Input queries read the
+client's held keys, modifiers, mouse buttons and screen position. Effect
+animation controls retain the blend duration and requested animation queue;
+`BlzRemoveEffect` removes the effect immediately.
+
+Scenery natives retain fog and HD water settings, camera types and blockers,
+input control, hotkey target lock, HUD scale, cinematic state, thematic music
+settings, doodad colors and animations, and all 24 destructable creation
+variants. `SceneryFixtures` supplies map doodads, cinematic shot durations,
+terrain pathing cells and HUD scale. Queries for missing cinematic or terrain
+facts fail with the needed fixture name.
+`LUA=/path/to/lua32 bun test test/warcraft3-scenery.test.ts` exercises 92
+native calls in Bun and Lua32, with zero missing-native reports.
+
+Set `scenery` and `inventory` on `HeadlessMap` or `LuaHeadlessMap`; both are
+passed to every client. `inventory.items` declares item types, levels,
+equipment types and tags. `inventory.units` declares bag, inventory and
+extended inventory capacities, supported equipment slots, animation
+durations, talent defaults and healing multipliers. Missing animation,
+equipment or healing-bonus facts ask for their fixture instead of making up
+a value. `BlzUnitHeal` reads and writes the same life as `GetWidgetLife`.
+
+The combined fixture executes all 145 added native names in Bun and Lua32,
+checks zero unmodelled calls, and exercises the default client's inventory,
+healing and scenery clock. `WARCRAFT3_NATIVES` in
+`wisp:src/headless/warcraft3Natives.ts` is the checked list.
+
 ## Native table iteration order
 
 `test/table-order/main.ts` walks a 1,000-key string table and a 1,000-key
