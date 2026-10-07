@@ -53,9 +53,3 @@ export const clientsDoctor = (declaration: DoctorDeclaration, names: readonly st
   Effect.gen(function*() {
     return yield* doctor(yield* doctorTargets(declaration, names), print);
   }).pipe(Effect.provide(doctorLayer(declaration, tools)));
-
-/** `doctor [CLIENT...]`, watching the clients through `watch` (`wisp watch`'s ClientWatch layer). */
-export const makeDoctor = (declaration: DoctorDeclaration, watch: Layer.Layer<ClientWatch, CommandFailure>, tools: Partial<PlayTools> = {}): Command => (names) =>
-  names.some((name) => name.startsWith("-"))
-    ? Effect.fail(new UsageFailure({ problem: "doctor takes client names only" }))
-    : clientsDoctor(declaration, names, (line) => console.log(line), tools).pipe(Effect.provide(watch), Effect.asVoid);
