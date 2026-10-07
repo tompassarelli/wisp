@@ -1,9 +1,9 @@
 import { runtimeConfiguration } from "../runtime/config";
 import { driverCommandFile, driverReadyFile, driverStatusFile } from "../runtime/nativeDriver";
+import { checksum } from "../runtime/payload";
 import { floorDiv } from "../sim/intMath";
 import { on, trampoline } from "./dispatch";
 import { readChunk, writeLine } from "./fileio";
-import { stringChecksum } from "./payloadChecksum";
 
 const SYNC = "wisp.nativeDriver";
 const PREFIX = "WISP_DRIVE";
@@ -37,7 +37,7 @@ function prepare(state: DriverState): void {
   const text = readChunk(driverCommandFile(runtimeConfiguration().filePrefix, state.serial + 1));
   if (text === undefined) return;
   state.payload = text;
-  state.digest = stringChecksum(text);
+  state.digest = checksum(text.length, index => text.charCodeAt(index));
 }
 
 /** Every client first verifies its numbered payload; the last matching sync answer applies it everywhere. */
