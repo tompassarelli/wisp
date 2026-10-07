@@ -11,6 +11,7 @@ import { type Command, UsageFailure, describeCause, flagValues } from "../comman
 import { type HeadlessMap, installHeadless } from "../headless";
 import { step } from "../timings";
 import { diffReproStates } from "../reproInspection";
+import { emitJson } from "../jsonResults";
 
 /** What a game declares for `wisp repro`. */
 export interface ReproProject {
@@ -143,6 +144,9 @@ function importFrom(directory: string, module: string): string {
 
 /** `repro FILE [--test NAME]`; loads the game's modules only when it runs. */
 export const makeRepro = (load: () => Promise<ReproProject>): Command => (args) => Effect.gen(function*() {
+  const json = args.includes("--json");
+  const started = performance.now();
+  args = args.filter(arg => arg !== "--json");
   const [name, ...extra] = flagValues(args, "test");
   const [frameText, ...extraFrames] = flagValues(args, "frame");
   const [diffText, ...extraDiffs] = flagValues(args, "diff-frame");
@@ -167,8 +171,17 @@ export const makeRepro = (load: () => Promise<ReproProject>): Command => (args) 
     catch: (cause) => new ReproFailure({ file, problem: `the replay stopped: ${describeCause(cause)}` }),
   }).pipe(step(`replay in ${CLIENTS.length} clients`));
   const report = reproReport(file, repro, results);
-  yield* Console.log(report.lines.join("\n"));
-  if (!report.landed) return yield* new ReproFailure({ file, problem: "the replay doesn't reproduce the moment" });
+  const summary = () => emitJson("repro", { type: "summary", ok: report.landed, counts: { results: results.length, failures: results.filter(result => result.checksum !== repro.checksum || result.problems.length > 0).length }, elapsedMs: performance.now() - started });
+  if (json) {
+    for (const [client, result] of results.entries()) {
+      const ok = result.checksum === repro.checksum && result.problems.length === 0;
+      yield* emitJson("repro", { type: "result", ok, frame: repro.frame, client, repro: file, frames: result.frames, checksum: result.checksum, expectedChecksum: repro.checksum, ...(ok ? {} : { kind: result.checksum !== repro.checksum ? "desync" : "error", message: result.problems.join("; ") || "the replay checksum differs from the recorded moment" }) });
+    }
+  } else yield* Console.log(report.lines.join("\n"));
+  if (!report.landed) {
+    if (json) yield* summary();
+    return yield* new ReproFailure({ file, problem: "the replay doesn't reproduce the moment" });
+  }
   if (frame !== undefined && out !== undefined) {
     const inspector = yield* Effect.tryPromise({ try: () => loadInspector(project.replay), catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) });
     const inspection = yield* Effect.try({
@@ -184,9 +197,12 @@ export const makeRepro = (load: () => Promise<ReproProject>): Command => (args) 
       mkdirSync(dirname(target), { recursive: true });
       writeFileSync(target, `${JSON.stringify(inspection, null, 2)}\n`);
     }, catch: cause => new ReproFailure({ file, problem: `writing ${target}: ${describeCause(cause)}` }) });
-    yield* Console.log(`wrote frame ${frame}, checksum ${inspection.checksum} to ${target}`);
+    if (!json) yield* Console.log(`wrote frame ${frame}, checksum ${inspection.checksum} to ${target}`);
   }
-  if (name === undefined) return;
+  if (name === undefined) {
+    if (json) yield* summary();
+    return;
+  }
   const target = join(project.tests, `${name}.tests.ts`);
   if (existsSync(target)) return yield* new ReproFailure({ file, problem: `${target} already exists` });
   yield* Effect.try({
@@ -196,5 +212,6 @@ export const makeRepro = (load: () => Promise<ReproProject>): Command => (args) 
     },
     catch: (cause) => new ReproFailure({ file, problem: `writing ${target}: ${describeCause(cause)}` }),
   });
-  yield* Console.log(`wrote ${target}`);
+  if (json) yield* summary();
+  else yield* Console.log(`wrote ${target}`);
 });

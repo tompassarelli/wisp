@@ -90,3 +90,18 @@ test("field diffs sort paths and distinguish added and removed canonical fields"
     { path: "a", before: "2", after: null }, { path: "b", before: null, after: "4" }, { path: "z", before: "1", after: "3" },
   ]);
 });
+
+test("repro --json emits client results and a final summary on checksum failure", async () => {
+  const lines: string[] = [];
+  const log = console.log;
+  console.log = (line: string) => void lines.push(line);
+  try {
+    const file = writeReproFile("total-12");
+    const exit = await Effect.runPromiseExit(makeRepro(async () => project)([file, "--json"]));
+    expect(Exit.isFailure(exit)).toBe(true);
+    const rows = lines.map(line => JSON.parse(line));
+    expect(rows.slice(0, 2).map(row => [row.type, row.kind, row.frame, row.client, row.repro])).toEqual([0, 1].map(client => ["result", "desync", 3, client, file]));
+    expect(rows.at(-1)).toMatchObject({ schema: 1, command: "repro", type: "summary", ok: false, counts: { results: 2, failures: 2 } });
+    expect(rows.at(-1).elapsedMs).toBeGreaterThanOrEqual(0);
+  } finally { console.log = log; }
+});

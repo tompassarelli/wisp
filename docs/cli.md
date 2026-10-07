@@ -117,7 +117,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--watch` | Keep running and act on every save | `hot` |
 | `--wait` | Block until a remote run ends, then print its verdict | `farm` |
 | `--once` | Print the current state and exit | `client watch` |
-| `--json` | One JSON object a line | `client watch` |
+| `--json` | One JSON object a line | `client watch`, `headless`, `soak`, `repro`, `accept`, `perf` |
 | `--record FILE` | Also append every event to a file | `client watch` |
 | `--seconds N` | A time limit in seconds | `client wait`, `soak` |
 | `--minutes N` | A time limit in minutes | `soak` |
@@ -239,3 +239,10 @@ Every command and verb in Wisp's sample program and Smashcraft's `bun wisp`, gro
 | `soak memory` | Measures retained match state after warm-up |
 | `farm perf`, `farm memory` | Runs frame measurements and memory soak on hosted runners |
 | `view motion` | Measures fighter movement and recovery animation cadence |
+
+For `headless`, `soak`, `repro`, `accept`, and `perf`, JSON Lines objects have
+`schema: 1`, `command`, and `type` (`result`, `failure`, or `summary`). A final
+summary carries `ok`, `counts`, and `elapsedMs`. Failure results carry `kind`
+(desync, error, scene, check-fail, or budget), `frame`, `client`, and `message`;
+frame/client are null when unavailable. `repro` and `source` (TypeScript
+file:line) appear when known. Command pages describe their result fields.

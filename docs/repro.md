@@ -121,3 +121,11 @@ field paths sorted lexically. Each change has `path`, `before`, and `after`;
 null denotes an absent field and all other values preserve canonical text,
 including exact numeric encodings. Renderer and operating-system state are
 outside this gameplay snapshot.
+
+## JSON Lines
+
+`repro FILE --json` writes one result per client, then a summary. Every object
+has `schema: 1`, `command`, and `type`. Results carry `ok`, `frame`, `client`,
+`repro`, `frames`, `checksum`, and `expectedChecksum`. Failures add `kind`
+(desync or error) and `message`. The summary carries `ok`, `counts` (results
+and failures), and `elapsedMs`. Inspection files keep their existing format.

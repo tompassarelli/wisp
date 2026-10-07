@@ -94,3 +94,13 @@ against a fake driver (wisp:test/accept.test.ts).
 
 Not automated: visual judgement beyond the declared rules. A capture whose
 meaning needs eyes is needs-look, with its cropped frames on disk.
+
+## JSON Lines
+
+`accept --json` writes one result per check, then a summary. Every object has
+`schema: 1`, `command`, and `type`. Results carry `ok`, `id`, `verdict`,
+`reason`, `evidence`, `rules`, `readings`, and `files`. A failed check adds
+`kind: "check-fail"`, `frame`, `client`, and `message`; frame and client are
+null when the check has no single frame or client. The summary has `ok`,
+`counts` (results, failures, passed, needsLook), `elapsedMs`, and `evidence`.
+With `--dry-run`, results are planned sessions and no clients are touched.

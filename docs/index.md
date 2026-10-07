@@ -152,3 +152,10 @@ are Wisp development commands. This package does not install a universal
 with `runCli`, as wisp:examples/sample/scripts/sample.ts does, naming its
 commands by the [command vocabulary](cli.md) (wisp:docs/cli.md). Smashcraft's
 concrete commands and game-specific policy live in smashcraft:docs/typescript.md.
+
+## Machine-readable results
+
+`headless`, `soak`, `repro`, `accept`, and `perf` support `--json`: one JSON
+object per result and a final summary with verdict, counts, and elapsed time.
+See the [CLI fields](cli.md), [headless](headless.md), [soak](soak.md),
+[repro](repro.md), [accept](accept.md), and [performance](frame-cost.md) pages.
