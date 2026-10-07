@@ -89,6 +89,10 @@ measurement is tracked in [#46](https://github.com/tompassarelli/wisp/issues/46)
 
 ## Setting up
 
+Running `setup` again refreshes an existing client's install when its Warcraft
+executable version differs from `--from`, then reinstalls that client's menu
+page. Stop the pool first, and use an install whose update has finished.
+
 `wisp lan setup --from "<a prefix>/drive_c/Program Files (x86)/Warcraft III" --pairs N`
 makes, for each client:
 
