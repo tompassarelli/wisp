@@ -38,6 +38,10 @@ export interface Profile {
   readonly maxFps: number;
   /** War3Preferences [Video] values besides the window. */
   readonly video: Readonly<Record<string, number>>;
+  /** Classic (SD) models and textures instead of Reforged's (War3Preferences [Misc] hd=0). */
+  readonly classic: boolean;
+  /** Sound on; off, the game loads and mixes no sound at all. */
+  readonly sound: boolean;
 }
 
 const LOWEST: Readonly<Record<string, number>> = {
@@ -46,19 +50,21 @@ const LOWEST: Readonly<Record<string, number>> = {
 };
 
 /**
- * `parity`: checksum and input runs need no pixels, so the smallest window and
- * the lowest settings. `visual`: a window big enough to judge what players see.
- * Both run at 60 frames a second, focused or not, so the game loop keeps the
- * cadence the map's 60 Hz callbacks expect.
+ * `parity`: checksum and input runs need no pixels and no sound: the smallest
+ * window, every quality setting lowest, classic models, sound off. `checks`:
+ * parity with sound, for checks that record a client's audio. `visual`: a
+ * window big enough to judge what players see, Reforged models. All run at
+ * 60 frames a second, focused or not (wisp:docs/lan.md, "Profiles").
  */
 export const PROFILES: Readonly<Record<string, Profile>> = {
-  parity: { name: "parity", width: 800, height: 600, maxFps: 60, video: LOWEST },
+  parity: { name: "parity", width: 800, height: 600, maxFps: 60, video: LOWEST, classic: true, sound: false },
+  checks: { name: "checks", width: 800, height: 600, maxFps: 60, video: LOWEST, classic: true, sound: true },
   /** parity at 144 frames a second, focused or not, to compare the game's clocks against a 60 fps cap. */
-  hfr: { name: "hfr", width: 800, height: 600, maxFps: 144, video: LOWEST },
-  visual: { name: "visual", width: 1280, height: 720, maxFps: 60, video: { ...LOWEST, lightingquality: 2, particles: 2, texquality: 1 } },
+  hfr: { name: "hfr", width: 800, height: 600, maxFps: 144, video: LOWEST, classic: true, sound: false },
+  visual: { name: "visual", width: 1280, height: 720, maxFps: 60, video: { ...LOWEST, lightingquality: 2, particles: 2, texquality: 1 }, classic: false, sound: true },
 };
 
-/** War3Preferences.txt with only its [Video] section: the game fills in the rest. */
+/** War3Preferences.txt with the sections a profile sets: the game fills in the rest. */
 export function preferences(profile: Profile, windowX: number): string {
   const video: Record<string, number> = {
     ...profile.video,
@@ -79,7 +85,13 @@ export function preferences(profile: Profile, windowX: number): string {
     windowx: windowX,
     windowy: 0,
   };
-  return `[Video]\n${Object.keys(video).sort().map((key) => `${key}=${video[key]}`).join("\n")}\n`;
+  const sound = profile.sound ? 1 : 0;
+  const sections: Record<string, Record<string, number>> = {
+    Video: video,
+    Misc: { hd: profile.classic ? 0 : 1 },
+    Sound: { ambient: sound, environmental: sound, movement: sound, music: sound, positional: sound, sfx: sound, unit: sound, nosoundwarn: 1 },
+  };
+  return Object.entries(sections).map(([name, values]) => `[${name}]\n${Object.keys(values).sort().map((key) => `${key}=${values[key]}`).join("\n")}\n`).join("\n");
 }
 
 /** The private desktop one client needs: its window and a margin. */

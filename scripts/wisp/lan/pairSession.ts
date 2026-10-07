@@ -19,6 +19,7 @@ const argument = (name: string) => {
 const pair = Number(argument("pair") ?? "0");
 const profileName = argument("profile") ?? "parity";
 const launcher = argument("launcher");
+const capacity = argument("capacity");
 const profile = PROFILES[profileName];
 if (profile === undefined || launcher === undefined) throw new Error("pairSession takes --pair K --profile parity|visual --launcher PRIVATE_DESKTOP_SH");
 const directory = pairDirectory(pair);
@@ -47,7 +48,7 @@ void (async () => {
 })();
 
 const desktopA = Bun.spawn([launcher, "start", "--resolution", size, "--", "bwrap", "--dev-bind", "/", "/", "--unshare-net", "--die-with-parent", "--",
-  process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--profile", profileName, "--run-b", runB], {
+  process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--profile", profileName, "--run-b", runB, "--session-pid", String(process.pid), ...(capacity === undefined ? [] : ["--capacity", capacity])], {
   stdout: Bun.file(join(directory, "desktop-a.out")),
   stderr: Bun.file(join(directory, "desktop-a.err")),
 });
