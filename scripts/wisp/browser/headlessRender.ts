@@ -55,7 +55,15 @@ function camera(scene: RenderScene, aspect: number) {
 
 const canvas = document.createElement("canvas");
 const output = document.createElement("canvas");
-document.body.append(output);
+const overlay = document.createElement("canvas");
+const display = document.createElement("div");
+display.style.cssText = "display:grid;max-width:100%;max-height:100%";
+for (const layer of [canvas, overlay, output]) {
+  layer.style.gridArea = "1 / 1";
+  display.append(layer);
+}
+canvas.style.display = overlay.style.display = "none";
+document.body.append(display);
 let gl: WebGL2RenderingContext;
 const models = new Map<string, Promise<model.Model>>();
 const textures = new Map<string, Promise<HTMLCanvasElement>>();
@@ -173,7 +181,7 @@ declare global {
   interface Window { prepareRenderer: (width: number, height: number) => string; renderScene: (scene: RenderScene, options?: { capture?: boolean }) => Promise<{ png: string; models: number; textures: number }> }
 }
 window.prepareRenderer = (width, height) => {
-  canvas.width = output.width = width; canvas.height = output.height = height;
+  canvas.width = output.width = overlay.width = width; canvas.height = output.height = overlay.height = height;
   const context = canvas.getContext("webgl2", { preserveDrawingBuffer: true, antialias: true, alpha: false });
   if (context === null) throw new Error("Chrome could not create a WebGL2 context");
   gl = context;
@@ -186,7 +194,12 @@ window.renderScene = async (scene, options) => {
   const view = camera(scene, canvas.width / canvas.height);
   const visible = scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat);
   for (const pose of visible) await drawEffect(pose, view);
-  const context = output.getContext("2d"); if (context === null) throw new Error("no output canvas"); context.drawImage(canvas, 0, 0);
+  const live = options?.capture === false;
+  canvas.style.display = overlay.style.display = live ? "block" : "none";
+  output.style.display = live ? "none" : "block";
+  const context = (live ? overlay : output).getContext("2d"); if (context === null) throw new Error("no output canvas");
+  if (live) context.clearRect(0, 0, overlay.width, overlay.height);
+  else context.drawImage(canvas, 0, 0);
   const scaleX = output.height / 0.6, scaleY = output.height / 0.6;
   for (const frame of [...scene.ui].sort((a, b) => a.level - b.level)) {
     if (!frame.visible || frame.alpha <= 0 || frame.rectangle === undefined) continue;
