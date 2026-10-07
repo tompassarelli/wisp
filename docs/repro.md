@@ -91,3 +91,33 @@ what should have happened.
 
 Bun replays what Warcraft's Lua recorded: a moment lands only where the game's
 Bun and Lua runs agree, which a game's own Bun/Lua comparisons check.
+
+## Inspecting a saved frame
+
+`wisp repro FILE --frame N --out STATE.json` writes the state **after** frame
+N in the saved interval. The ordinary two-client replay must first reach the
+recorded ending checksum. Inspection runs in those same isolated client scopes
+and both results must agree. Invalid frames, missing inspection support, and
+frames outside the consumer's saved interval fail without writing output.
+The output path must differ from the saved repro, including an existing symlink
+to it; the saved file stays unchanged.
+
+`wisp repro FILE --frame N --diff-frame previous --out STATE.json` also
+compares N-1 to N. Use `--diff-frame M` to compare any other saved frame M to
+N, including when M is later. A backward request restores and replays the
+consumer's existing state; it does not reverse the engine or record new state.
+
+The replay module opts in by also exporting
+`inspectRepro(repro, frame): ReproInspection | string`
+(wisp:src/runtime/repro.ts). It returns a clear refusal string, or the exact
+`frame`, `checksum`, canonical `state` text and `fields` with the consumer's
+canonical `path` and `value` strings. Capture existing snapshot state and reuse
+the ordinary frame executor; inspection must leave live gameplay and the saved
+repro untouched. Wisp does not prescribe a game's canonical representation.
+
+The JSON output holds `build`, `frame`, `checksum`, `state`, and `fields`.
+With a comparison it also holds `diff: { from, to, fields }`, with changed
+field paths sorted lexically. Each change has `path`, `before`, and `after`;
+null denotes an absent field and all other values preserve canonical text,
+including exact numeric encodings. Renderer and operating-system state are
+outside this gameplay snapshot.
