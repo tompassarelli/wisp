@@ -29,9 +29,9 @@ export function inputBatches(actions: readonly InputAction[], pointer: PointerPo
       case "keys":
         for (const key of action.keys) {
           if (sendsChat([key])) {
-            // Warcraft samples its chat control per frame; a 12 ms Return can disappear between samples.
+            // Warcraft samples chat per rendered frame; loaded native pools missed 60 ms Return holds.
             current.push("keydown", "--clearmodifiers", key);
-            wait(60);
+            wait(300);
             current.push("keyup", "--clearmodifiers", key);
             // Chat accepts text after its opening transition, beyond key release.
             wait(660);
