@@ -27,19 +27,22 @@ function input(): StandaloneInput {
 
 const audio = new AudioContext();
 const buffers = new Map<string, Promise<AudioBuffer>>();
+const decodedAssets = new Map<string, Promise<AudioBuffer>>();
 const pendingAudio = new Set<Promise<void>>();
 const missing = new Set<string>();
-let audioPlayed = 0, audioEvents = 0, audioReadyEvents = 0;
+let audioPlayed = 0, audioEvents = 0, audioReadyEvents = 0, audioDecodedAssets = 0;
 let soundRequests = 0;
 const soundQueue: (() => void)[] = [];
-async function soundBytes(cue: SoundCue): Promise<ArrayBuffer> {
+async function soundBytes(cue: SoundCue): Promise<{ path: string; bytes: ArrayBuffer }> {
   // Leave HTTP connections available for frame delivery while sound assets load.
   if (soundRequests === 4) await new Promise<void>((resolve) => soundQueue.push(resolve));
   else soundRequests++;
   try {
     const response = await fetch("/sound", { method: "POST", body: JSON.stringify(cue) });
     if (!response.ok) throw new Error(await response.text());
-    return await response.arrayBuffer();
+    const path = response.headers.get("x-wisp-sound-path");
+    if (path === null) throw new Error("sound asset path missing");
+    return { path: path.replaceAll("\\", "/").toLowerCase(), bytes: await response.arrayBuffer() };
   } finally {
     const next = soundQueue.shift();
     if (next === undefined) soundRequests--;
@@ -51,7 +54,14 @@ function sound(cue: SoundCue): void {
   const key = `${cue.source ?? cue.label}:${cue.handle.id}`;
   let buffer = buffers.get(key);
   if (buffer === undefined) {
-    buffer = soundBytes(cue).then((bytes) => audio.decodeAudioData(bytes));
+    buffer = soundBytes(cue).then(({ path, bytes }) => {
+      let decoded = decodedAssets.get(path);
+      if (decoded === undefined) {
+        decoded = audio.decodeAudioData(bytes).then((asset) => { audioDecodedAssets++; return asset; });
+        decodedAssets.set(path, decoded);
+      }
+      return decoded;
+    });
     buffers.set(key, buffer);
   }
   const task = buffer.then(async (decoded) => {
@@ -129,7 +139,7 @@ async function run(): Promise<void> {
     milliseconds.push(performance.now() - began);
     if (frame.done) {
       await Promise.all(pendingAudio);
-      await post("/complete", { gpu, startupMs, prepared: { ...prepared, step: preparation.step }, frames: milliseconds.length, elapsedMs: performance.now() - start, frameMs: { p50: percentile(milliseconds, 0.5), p95: percentile(milliseconds, 0.95), p99: percentile(milliseconds, 0.99) }, intervalMs: { p50: percentile(intervals, 0.5), p95: percentile(intervals, 0.95) }, requestMs: { p50: percentile(requests, 0.5), p95: percentile(requests, 0.95) }, renderMs: { p50: percentile(renders, 0.5), p95: percentile(renders, 0.95) }, ...(config.samples ? { frameSamplesMs: milliseconds, intervalSamplesMs: intervals, requestSamplesMs: requests, renderSamplesMs: renders, frameTimings: timings } : {}), audioEvents, audioReadyEvents, audioPlayed, missingSounds: [...missing] });
+      await post("/complete", { gpu, startupMs, prepared: { ...prepared, step: preparation.step }, frames: milliseconds.length, elapsedMs: performance.now() - start, frameMs: { p50: percentile(milliseconds, 0.5), p95: percentile(milliseconds, 0.95), p99: percentile(milliseconds, 0.99) }, intervalMs: { p50: percentile(intervals, 0.5), p95: percentile(intervals, 0.95) }, requestMs: { p50: percentile(requests, 0.5), p95: percentile(requests, 0.95) }, renderMs: { p50: percentile(renders, 0.5), p95: percentile(renders, 0.95) }, ...(config.samples ? { frameSamplesMs: milliseconds, intervalSamplesMs: intervals, requestSamplesMs: requests, renderSamplesMs: renders, frameTimings: timings } : {}), audioEvents, audioReadyEvents, audioPlayed, audioDecodedAssets, missingSounds: [...missing] });
       return;
     }
   }

@@ -88,7 +88,7 @@ export async function openStandalone(game: StandaloneGame, options: StandaloneOp
       if (url.pathname === "/sound" && request.method === "POST") {
         const cue = Schema.decodeUnknownSync(Sound)(await request.json());
         const resolved = await sounds({ ...cue, source: cue.source, label: cue.label });
-        return resolved === undefined ? new Response(`missing sound: ${cue.source ?? cue.label}`, { status: 404 }) : new Response(new Uint8Array(resolved.bytes));
+        return resolved === undefined ? new Response(`missing sound: ${cue.source ?? cue.label}`, { status: 404 }) : new Response(new Uint8Array(resolved.bytes), { headers: { "x-wisp-sound-path": resolved.path } });
       }
       if (url.pathname === "/frame" && request.method === "POST") {
         const input = Schema.decodeUnknownSync(Input)(await request.json());
