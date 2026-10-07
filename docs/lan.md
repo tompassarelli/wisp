@@ -20,6 +20,7 @@ game. It isn't for cheating. The terms are in
 | `wisp lan fresh MAP [--pair K] [--computers N] [--turn-ms MS]` | Hosts MAP on pair K, switches both clients to LAN, joins them, and returns once the match plays. It prints the game's action log. |
 | `wisp lan dummy MAP --program W3GSCLIENT [--pair K] [--count N]` | Joins side a to a lobby, then runs N dummy joins, handicap changes and leaves (default 20). The pair must have no active game. |
 | `wisp lan status [--pair K]` | Each pair's clients and processes, and its game: phase, turns, desyncs, players. |
+| `wisp lan speed N --pair K` | Diagnostic turn delivery at 1–16 times real time; 1 restores normal delivery. Measure client frame progress to establish actual game speed. |
 | `wisp lan end --pair K` | Ends pair K's game. The clients go back to their menus. |
 | `wisp engine actions --client lan0a,lan0b [--map MAP] [--follow]` | Prints the pair's action log, and follows it with `--follow`. With `--map`, it starts the match first ([engine.md](engine.md#actions)). |
 | `wisp engine diff ACTIONS.log POLL.log` | Places every birth from `wisp engine poll` in the turn it happened in, with the actions just delivered. |
@@ -288,6 +289,28 @@ game in a user namespace this user owns, and Yama allows a tracer that holds
 `CAP_SYS_PTRACE` in the target's namespace.
 
 ## The action log
+
+### Faster turn delivery
+
+`wisp lan speed 4 --pair K` asks the existing host to deliver four game-time
+turns in the wall time normally used for one. Accelerated packets retain the
+configured `turn-ms` game-time step. `wisp lan speed 1 --pair K` restores
+normal delivery. The action log records every speed change, and status
+reports the requested `speed`. The host still waits when a client falls more
+than 50 turns behind and compares all returned checksums.
+
+This is an experiment control, not a measured native fast mode. Host
+`gameSeconds` measures delivered time; compare the map driver's frame progress
+against wall time to find the speed the clients actually sustain. Rendering
+is unchanged. A full parity run needs separate measurements with rendering
+suppressed before `pad --fast` can be offered.
+
+FLO's observer send queue uses the same protocol fact: speed changes packet
+delivery delay, not the game-time increment encoded in each packet
+([source at 6db3a401](https://github.com/BogdanW3/W3C-Flo/blob/6db3a4010fab0b0b29824a61f2c9c956f97fd211/crates/client/src/observer/send_queue.rs)).
+Wisp's implementation changes its existing timer; no FLO code is copied.
+
+### Reading the log
 
 `wisp client watch` observes each declared pool client through its host's Unix
 socket, since the client's menu socket is inside the isolated network.

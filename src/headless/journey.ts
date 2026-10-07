@@ -1,6 +1,7 @@
 // A journey: what players do in a headless match, frame by frame, as data a
 // game declares once and runs in Bun or 32-bit Lua (wisp:docs/headless.md).
 import type { Lockstep } from "./lockstep";
+import type { MissingNative } from "./client";
 
 /** After `frame` frames have run: a player's chat line, a key event, or a hot reload of the map's bundle. */
 export type JourneyEvent =
@@ -21,6 +22,7 @@ export interface ClientResult {
   /** A hash of every logged call; left out when the run asked for none. */
   readonly checksum?: string;
   readonly errors: readonly string[];
+  readonly missingNatives: readonly MissingNative[];
 }
 
 export interface JourneyResult {
@@ -80,8 +82,8 @@ export function runJourney(clients: Lockstep, journey: Journey, options: Journey
   const results: ClientResult[] = [];
   for (const client of clients.clients) {
     results.push(options.checksums === false
-      ? { slot: client.slot, calls: client.callCount(), errors: client.errors }
-      : { slot: client.slot, calls: client.callCount(), checksum: client.checksum(), errors: client.errors });
+      ? { slot: client.slot, calls: client.callCount(), errors: client.errors, missingNatives: client.missingNatives }
+      : { slot: client.slot, calls: client.callCount(), checksum: client.checksum(), errors: client.errors, missingNatives: client.missingNatives });
   }
   return { frames: clients.frame, clients: results, divergence: clients.firstDivergence(), reloaded: clients.version, reloads: clients.unappliedReloads() };
 }
@@ -89,7 +91,7 @@ export function runJourney(clients: Lockstep, journey: Journey, options: Journey
 /** Problems a journey found: a desync, an error report or a reload that didn't run. */
 export function journeyProblems(result: JourneyResult): number {
   let problems = (result.divergence === undefined ? 0 : 1) + result.reloads.length;
-  for (const client of result.clients) problems += client.errors.length;
+  for (const client of result.clients) problems += client.errors.length + client.missingNatives.length;
   return problems;
 }
 
@@ -103,5 +105,6 @@ export function journeyLines(result: JourneyResult): string[] {
   if (result.reloaded > 0 && result.reloads.length === 0) lines.push(`hot reload ${result.reloaded} running in every client`);
   for (const reload of result.reloads) lines.push(reload);
   for (const client of result.clients) for (const error of client.errors) lines.push(`p${client.slot}: ${error}`);
+  for (const client of result.clients) for (const missing of client.missingNatives) lines.push(`p${missing.client} frame ${missing.frame}: unmodeled native ${missing.native}`);
   return lines;
 }

@@ -1,0 +1,9 @@
+{
+  "extends": "../../examples/sample/tsconfig.headless.json",
+  "compilerOptions": { "rootDir": "../..", "outDir": "../../build/unit-states/headless" },
+  "include": ["headless-lua.ts", "../../src/natives/warcraft.d.ts"],
+  "tstl": {
+    "luaBundle": "headless.lua", "luaBundleEntry": "headless-lua.ts",
+    "luaPlugins": [{ "name": "../../plugins/warcraft-numbers.ts" }]
+  }
+}
