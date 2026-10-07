@@ -54,6 +54,8 @@ export interface HostOptions {
   readonly countdownMs?: number;
   /** Milliseconds after the last join before the countdown (JOIN_SETTLE_MS). */
   readonly settleMs?: number;
+  /** Keep a lobby open for protocol checks. */
+  readonly autoStart?: boolean;
   /** Each action-log line, already formatted. */
   readonly log: (line: string) => void;
   /** Called when the phase changes. */
@@ -97,6 +99,8 @@ export interface HostStatus {
 export interface LanHost {
   readonly port: number;
   readonly status: () => HostStatus;
+  readonly slots: () => SlotTable;
+  readonly say: (from: number, to: number, text: string) => void;
   /** Queues an action as `pid`'s for the next turn (a seat's or any player's). */
   readonly inject: (pid: number, data: Uint8Array) => void;
   readonly stop: () => void;
@@ -158,6 +162,7 @@ export function startHost(options: HostOptions): LanHost {
   let lastPing = 0;
   let discovery: udp.Socket<"buffer"> | undefined;
   const reported = new Set<number>();
+  const handicaps = new Map<number, number>();
   const setPhase = (next: Phase) => {
     phase = next;
     // Discovery serves only the lobby. Bun 1.3.13 can spin on a socket that
@@ -169,7 +174,10 @@ export function startHost(options: HostOptions): LanHost {
     line(`phase ${next}`);
     options.onPhase?.(next);
   };
-  const table = () => slotTable(options.map, players.length, randomSeed, (slot) => players.some((player) => player.slot === slot && player.socket !== undefined && !player.left), options.computers ?? 0);
+  const table = (): SlotTable => {
+    const base = slotTable(options.map, players.length, randomSeed, (slot) => players.some((player) => player.slot === slot && player.socket !== undefined && !player.left), options.computers ?? 0);
+    return { ...base, slots: base.slots.map((slot) => ({ ...slot, handicap: handicaps.get(slot.playerId) ?? slot.handicap })) };
+  };
   const send = (player: Player, packet: Uint8Array) => {
     if (player.socket === undefined) return;
     options.onPacket?.("out", player.label, packet);
@@ -207,6 +215,8 @@ export function startHost(options: HostOptions): LanHost {
       player.left = false;
       player.socket = undefined;
       player.mapOk = player.skins = player.unknown5 = false;
+      handicaps.delete(player.pid);
+      broadcast(slotInfo(table()));
     }
     if (phase === "playing" && players.every((each) => each.left)) setPhase("over");
   };
@@ -274,6 +284,12 @@ export function startHost(options: HostOptions): LanHost {
         break;
       case PACKET.ChatToHost: {
         const chat: Chat = decodeChat(payload);
+        if (phase === "lobby" && chat.kind === CHAT.HandicapChange && chat.from === player.pid && chat.value !== undefined && [50, 60, 70, 80, 90, 100].includes(chat.value)) {
+          handicaps.set(player.pid, chat.value);
+          line(`slot ${player.label} p${player.pid} handicap ${chat.value}`);
+          broadcast(slotInfo(table()));
+          break;
+        }
         if (chat.kind === CHAT.Chat || chat.kind === CHAT.Scoped) line(`chat ${player.label} p${player.pid} ${JSON.stringify(chat.text ?? "")}`);
         const relay = chatFromHost(chat);
         for (const to of chat.to) {
@@ -367,7 +383,7 @@ export function startHost(options: HostOptions): LanHost {
         }
       }
       // Skins and profiles are echoed only when other players exist; a lone client sends none.
-      if (players.every((player) => player.socket !== undefined && player.mapOk && (players.length === 1 || player.skins)) && at - lastJoin >= (options.settleMs ?? JOIN_SETTLE_MS)) {
+      if (options.autoStart !== false && players.every((player) => player.socket !== undefined && player.mapOk && (players.length === 1 || player.skins)) && at - lastJoin >= (options.settleMs ?? JOIN_SETTLE_MS)) {
         broadcast(slotInfo(table()));
         broadcast(countDownStart());
         countdownAt = at + (options.countdownMs ?? COUNTDOWN_MS);
@@ -413,6 +429,11 @@ export function startHost(options: HostOptions): LanHost {
 
   return {
     port: listener.port,
+    slots: table,
+    say: (from, to, text) => {
+      const target = byPid(to);
+      if (target !== undefined) send(target, chatFromHost({ from, to: [to], kind: CHAT.Chat, text }));
+    },
     status: () => ({
       phase,
       turns,
