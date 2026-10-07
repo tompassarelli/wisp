@@ -3,7 +3,11 @@
 import type { Journey } from "wisp/src/headless/journey";
 
 /** What a headless run needs to know about the map: src/main.ts's configureRuntime() prefixes. */
-export const SAMPLE_MAP = { filePrefix: "sample", globalPrefixes: ["__sample"] };
+export const SAMPLE_MAP = {
+  filePrefix: "sample", globalPrefixes: ["__sample"],
+  // The sample's playable rectangle is centered at the origin.
+  natives: () => ({ GetRectCenterX: () => 0, GetRectCenterY: () => 0 }),
+};
 
 export const SAMPLE_JOURNEY: Journey = {
   frames: 120,
