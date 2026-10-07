@@ -16,7 +16,7 @@ game. It isn't for cheating. The terms are in
 A separate signed-in 3.0.1 client also failed to create a game window; the
 cause was not established as an offline restriction. The Agent-presence
 experiments were invalid or cancelled, and the temporary SDK substitution
-produced no valid comparison. The authentic 24342 SDK was restored.
+produced no valid comparison. The saved 24342 SDK was restored.
 
 ## Commands
 
