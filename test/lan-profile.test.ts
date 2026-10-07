@@ -16,8 +16,9 @@ test("invalid frame caps fail before a pool client starts", () => {
  test("3.0.1 profiles select the installed graphics modes without retired video keys", () => {
   for (const name of Object.keys(PROFILES)) {
     const text = preferences(poolProfile(name), 0);
+    expect(text).toContain("assao=0\n");
     expect(text).toContain(`hd=${name === "visual" ? 1 : 0}\n`);
-    for (const key of ["assao", "bloom", "portraitBloom", "particles", "spellfilter"]) expect(text).not.toContain(`${key}=`);
+    for (const key of ["bloom", "portraitBloom", "particles", "spellfilter"]) expect(text).not.toContain(`${key}=`);
   }
   expect(preferences({ ...poolProfile("visual"), graphicsMode: "definitive" }, 0)).toContain("hd=2\n");
 });

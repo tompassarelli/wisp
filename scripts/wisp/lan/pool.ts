@@ -47,7 +47,7 @@ export interface Profile {
 }
 
 const LOWEST: Readonly<Record<string, number>> = {
-  antialiasing: 0, foliagequality: 0, lightingquality: 0, pointlightshadowquality: 0,
+  antialiasing: 0, assao: 0, foliagequality: 0, lightingquality: 0, pointlightshadowquality: 0,
   shadowquality: 0, texquality: 0, waterquality: 0, vsync: 0,
 };
 

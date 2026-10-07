@@ -221,9 +221,8 @@ Warcraft **3.0.1.24342**'s installed `webui/GlueManager.js` maps
 choice as `[Misc] hd`. The profiles choose Classic (`hd=0`) for parity,
 checks and hfr, and Reforged (`hd=1`) for visual. `graphicsMode: "definitive"`
 selects Definitive Edition (`hd=2`). Audio checks therefore use Classic
-sounds; Definitive Edition also uses Classic sounds. Profiles omit `assao`,
-`bloom`, `portraitBloom`, `particles` and `spellfilter`; 3.0.1 restored Ambient
-Occlusion, but these measurement profiles deliberately leave it unspecified.
+sounds; Definitive Edition also uses Classic sounds. Profiles set Ambient Occlusion off (`assao=0`) and omit
+`bloom`, `portraitBloom`, `particles` and `spellfilter`. Smashcraft play explicitly chooses Reforged (`hd=1`) and Ambient Occlusion off too.
 
 The others cap the game at 60 frames a second, focused or not. A cap below
 the turn rate (33 turns a second at 30 ms) is untested.
