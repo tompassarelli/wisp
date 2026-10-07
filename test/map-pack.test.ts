@@ -98,7 +98,7 @@ test("listed entries are packaged and extracted in one archive opening, byte for
   const { archive, existing } = fullArchive("listed");
   const packager = join(work, "map-pack");
   await Effect.runPromise(ensurePackager(packager));
-  const files = { clip: clip(), portrait: portrait(), blp: blp() };
+  const files = { clip: clip(), portrait: portrait(), blp: blp(), "tone.ogg": readFileSync(join(import.meta.dir, "fixtures/tone.ogg")) };
   const entries: { readonly entry: string; readonly source: string }[] = [];
   for (const [name, bytes] of Object.entries(files)) {
     const source = join(work, name);
