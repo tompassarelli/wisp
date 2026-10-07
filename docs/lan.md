@@ -11,6 +11,27 @@ never switches a signed-in Battle.net client, and never touches anyone else's
 game. It isn't for cheating. The terms are in
 [driving-warcraft.md](driving-warcraft.md#2-lan-hosting-offline-clients-and-wisps-host).
 
+## 3.0.1 startup failure
+
+On 8 October 2026, updated **3.0.1.24342** clients stopped before creating a
+Warcraft window, reporting a menu, or loading a map. Wine recorded an
+`0xc0000420` assertion in `war3_loader.dll`, followed by
+`RtlpWaitForCriticalSection` timeouts on `ntdll/loader.c: loader_section`.
+An exact fresh copy of the updated installation and the successful Steam
+launch wrapper both reproduced the failure. The runtime and `-launch`
+argument already matched the working launch. The last working offline build
+was **3.0.0.24268**.
+
+A separate signed-in 3.0.1 client also failed to create a game window; the
+cause was not established as an offline restriction. The Agent-presence
+experiments were invalid or cancelled, and the temporary SDK substitution
+produced no valid comparison. The authentic 24342 SDK was restored.
+
+The operator ended this startup investigation. No loader patch or engine
+offset change was applied. [Issue #49](https://github.com/tompassarelli/wisp/issues/49)
+retains the unfinished 3.0.1 memory checks: an uninitialized process with no
+presence table is not evidence of a changed table layout.
+
 ## Commands
 
 | Command | What it does |
