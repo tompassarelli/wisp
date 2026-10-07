@@ -5,9 +5,11 @@
 import { Effect, Layer } from "effect";
 import * as desktop from "../warcraft/desktop";
 import { DoctorHands, type DoctorTarget } from "./doctor";
-import { BACK } from "./lobby";
 import { leaveLobby, reportedMenus } from "./menus";
 import { PlayProblem } from "./play";
+
+/** The Back button of a lobby, on the 2560x1440 client frame. */
+const BACK = { x: 155, y: 1389 };
 
 const problem = (cause: { readonly message: string }) => new PlayProblem({ problem: cause.message });
 

@@ -63,10 +63,10 @@ const rebuild: Command = ([map, ...rest]) => Effect.gen(function*() {
 
 const fresh: Command = ([map, ...flags]) => Effect.gen(function*() {
   const [mapFolder = "Maps/00-Wisp"] = flagValues(flags, "map-folder");
-  const known = flags.every((flag, index) => flag === "--rebuild" || flag === "--from-game" || flag === "--map-folder" || flags[index - 1] === "--map-folder");
+  const known = flags.every((flag, index) => flag === "--rebuild" || flag === "--map-folder" || flags[index - 1] === "--map-folder");
   if (map === undefined || !known) return yield* new UsageFailure({ problem: "fresh takes MAP.w3x and its options" });
   if (flags.includes("--rebuild")) yield* MapBuild.use((maps) => maps.rebuild(map)).pipe(Effect.provide(mapServices));
-  yield* freshMatch({ map, title: /WISP\s*SAMPLE/i, filePrefix, fromGame: flags.includes("--from-game") }).pipe(
+  yield* freshMatch({ map, folder: mapFolder.replace(/^Maps\//, ""), filePrefix }).pipe(
     Effect.provide(Layer.mergeAll(Clients.layer(clientsFile), GameFiles.layer({ mapFolder, replacedMaps: "wisp-replaced-maps" }), ClientWatch.layer({ filePrefix }))),
   );
 });
@@ -75,8 +75,8 @@ process.exit(await runCli("bun examples/sample/scripts/sample.ts", {
   build: { usage: "--base BASE.w3m --out OUT.w3x [--container MAP.w3x]", load: async () => build },
   rebuild: { usage: "MAP.w3x", load: async () => rebuild },
   hot: { usage: "--data DIR [--data DIR ...] [--watch]", load: async () => makeHot({ project, sourceDirectory, sourceMapDirectory, filePrefix }) },
-  fresh: { usage: "MAP.w3x [--rebuild] [--from-game] [--map-folder Maps/00-Wisp]   (WISP_CLIENTS=clients.json)", load: async () => fresh },
-  client: { usage: "look|read|click|keys|chat CLIENT ...   (WISP_CLIENTS=clients.json)", load: async () => makeClient(clientsFile) },
+  fresh: { usage: "MAP.w3x [--rebuild] [--map-folder Maps/00-Wisp]   (WISP_CLIENTS=clients.json)", load: async () => fresh },
+  client: { usage: "look|read|click|keys|chat CLIENT ...   (WISP_CLIENTS=clients.json)", load: async () => makeClient(clientsFile, { filePrefix }) },
   watch: { usage: "[CLIENT...] [--once] [--json] [--record FILE]   (WISP_CLIENTS=clients.json)", load: async () => (await import("wisp/scripts/wisp/commands/watch")).makeWatch(clientsFile, { filePrefix }) },
   menus: {
     usage: "install|remove RETAIL_DIR | listen | host --folder F --map FILE --name NAME [--password P] [--start] | join --name NAME --password P | start | leave   [--port N]",

@@ -56,6 +56,8 @@ export interface ClientView {
   readonly scan: LadderScan["kind"];
   /** Models the newest session's map couldn't create: "model creation failed - war3mapImported/...". */
   readonly loadErrors: { readonly count: number; readonly first?: string };
+  /** Whether the client's menu page was connected when the view was decided. Without it, a match receipt may be an earlier match's. */
+  readonly menus?: boolean;
 }
 
 /** A change in a client's view, as `wisp watch` prints it. */
@@ -121,6 +123,14 @@ export const waitFor = (client: Client, predicate: (view: ClientView) => boolean
     yield* Effect.sleep(POLL);
   }
 });
+
+/**
+ * Whether Return or typed text reaches the match's own chat: the client is in
+ * a match while its menu page is connected. In the menus they reach
+ * Battle.net's public channel, in a lobby its chat, and without the page a
+ * match receipt may be one an earlier match left.
+ */
+export const typesIntoMatch = (view: ClientView) => view.state.kind === "in match" && view.menus === true;
 
 /** A predicate for one of these states. */
 export const inState = (...kinds: readonly StateKind[]) => (view: ClientView) => kinds.includes(view.state.kind);
@@ -240,7 +250,7 @@ export function decide(client: string, sources: Sources, previous?: ClientView):
   const scanned = ladderScan(log);
   const scan = scanned.kind === "scanning" && now - logTime(scanned.last, now) >= SCAN_QUIET_MS ? "done" : scanned.kind;
   const loadErrors = importFailures(sessionText(log));
-  const view = (state: ClientState, source: Source, evidence: string, time = now): ClientView => ({ client, state, source, evidence, at: time, scan, loadErrors });
+  const view = (state: ClientState, source: Source, evidence: string, time = now): ClientView => ({ client, state, source, evidence, at: time, scan, loadErrors, menus: socket.connected });
   const keep = (next: ClientView) =>
     previous !== undefined && previous.state.kind === next.state.kind && previous.source === next.source && previous.evidence === next.evidence ? { ...next, at: previous.at } : next;
 
