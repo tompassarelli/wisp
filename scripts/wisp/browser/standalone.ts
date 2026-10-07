@@ -52,7 +52,8 @@ function sound(cue: SoundCue): void {
   }).catch((cause: unknown) => { missing.add(cause instanceof Error ? cause.message : String(cause)); });
   pendingAudio.add(task); void task.finally(() => pendingAudio.delete(task));
 }
-const milliseconds: number[] = [], intervals: number[] = [];
+const milliseconds: number[] = [], intervals: number[] = [], requests: number[] = [], renders: number[] = [];
+const timings: { step: number; frame: number; rafTimestampMs: number; callbackMs: number; deadlineMs: number; requestedMs: number; readyMs: number; drawnMs: number }[] = [];
 let previous = 0;
 const percentile = (values: readonly number[], percent: number) => [...values].sort((a, b) => a - b)[Math.max(0, Math.ceil(values.length * percent) - 1)] ?? 0;
 async function post(path: string, body: unknown): Promise<Response> {
@@ -72,25 +73,39 @@ async function run(): Promise<void> {
   status.textContent = "Ready to play";
   const start = performance.now();
   let nextFrame = start;
+  const loadFrame = async () => {
+    const requestedMs = performance.now();
+    const frame = await post("/frame", config.scripted ? { buttons: [], axisX: 0, axisY: 0 } : input()).then(response => response.json()) as StandaloneFrame;
+    return { frame, requestedMs, readyMs: performance.now() };
+  };
+  let pending = loadFrame();
   while (true) {
+    const deadlineMs = nextFrame;
     let presented: number;
     do { presented = await new Promise<number>((resolve) => requestAnimationFrame(resolve)); } while (presented < nextFrame);
     nextFrame = Math.max(nextFrame + 1000 / 60, presented);
     const began = performance.now();
     if (previous !== 0) intervals.push(began - previous);
     previous = began;
-    const frame = await post("/frame", config.scripted ? { buttons: [], axisX: 0, axisY: 0 } : input()).then((response) => response.json()) as StandaloneFrame;
+    const { frame, requestedMs, readyMs } = await pending;
     frame.sounds.forEach(sound);
+    if (!frame.done && !frame.capture) pending = loadFrame();
+    const drawStart = performance.now();
     const rendered = await window.renderScene(frame.scene, { capture: frame.capture });
+    const drawnMs = performance.now();
     if (frame.capture) {
       const blob = await fetch(rendered.png).then((response) => response.blob());
       const response = await fetch(`/capture?frame=${frame.frame}`, { method: "POST", body: blob });
       if (!response.ok) throw new Error(await response.text());
+      if (!frame.done) pending = loadFrame();
     }
+    requests.push(readyMs - requestedMs);
+    renders.push(drawnMs - drawStart);
+    if (config.samples) timings.push({ step: frame.step, frame: frame.frame, rafTimestampMs: presented, callbackMs: began, deadlineMs, requestedMs, readyMs, drawnMs });
     milliseconds.push(performance.now() - began);
     if (frame.done) {
       await Promise.all(pendingAudio);
-      await post("/complete", { gpu, startupMs, prepared: { ...prepared, step: preparation.step }, frames: milliseconds.length, elapsedMs: performance.now() - start, frameMs: { p50: percentile(milliseconds, 0.5), p95: percentile(milliseconds, 0.95), p99: percentile(milliseconds, 0.99) }, intervalMs: { p50: percentile(intervals, 0.5), p95: percentile(intervals, 0.95) }, ...(config.samples ? { frameSamplesMs: milliseconds, intervalSamplesMs: intervals } : {}), audioEvents, audioReadyEvents, audioPlayed, missingSounds: [...missing] });
+      await post("/complete", { gpu, startupMs, prepared: { ...prepared, step: preparation.step }, frames: milliseconds.length, elapsedMs: performance.now() - start, frameMs: { p50: percentile(milliseconds, 0.5), p95: percentile(milliseconds, 0.95), p99: percentile(milliseconds, 0.99) }, intervalMs: { p50: percentile(intervals, 0.5), p95: percentile(intervals, 0.95) }, requestMs: { p50: percentile(requests, 0.5), p95: percentile(requests, 0.95) }, renderMs: { p50: percentile(renders, 0.5), p95: percentile(renders, 0.95) }, ...(config.samples ? { frameSamplesMs: milliseconds, intervalSamplesMs: intervals, requestSamplesMs: requests, renderSamplesMs: renders, frameTimings: timings } : {}), audioEvents, audioReadyEvents, audioPlayed, missingSounds: [...missing] });
       return;
     }
   }
