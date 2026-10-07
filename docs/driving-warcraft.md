@@ -28,7 +28,7 @@ and what Wisp hasn't observed itself. W3Champions' code is in
 | Step | `wisp play` today | Bot sessions before the menu socket (wisp:scripts/wisp/lobby.ts `freshMatch` now uses the socket) |
 | --- | --- | --- |
 | Start the game | Battle.net's Play, clicked on the launcher's page | Clients stay running |
-| Load the map | The menu socket, or menu clicks without a menu page, once the game's ladder scan is over ([play.md](play.md)) | Create Game → first map → name → Create, by clicks |
+| Load the map | The menu socket only, once the game's ladder scan is over ([play.md](play.md)) | Create Game → first map → name → Create, by clicks |
 | Add a computer | The map's own setup | (none) |
 | Join | (solo) | Join name → Join, by clicks |
 | Start | The map starts the match | Start, by a click |
@@ -227,8 +227,8 @@ decision.
 
 ### What it replaces
 
-- **`wisp play`.** It replaces the menu clicks of `host(game)` in
-  wisp:scripts/wisp/play.ts when the game declares `menuReportPort`. It
+- **`wisp play`.** It hosts through the page on the game's `menuReportPort`
+  and stops when the page doesn't report, instead of clicking the menus. It
   also allows rematches in the running game instead of a new Play per match.
 - **Bot sessions.** `freshMatch` (wisp:scripts/wisp/lobby.ts) hosts a
   private game, joins it by name and password, starts it and leaves a lobby
@@ -337,13 +337,9 @@ option can't be delayed, so `play` hosts after the scan instead
 
 ## 4. Menu clicks (fallback)
 
-**How it works.** wisp:scripts/wisp/play.ts, without a reporting page,
-reads each screen's text and clicks a control once two reads agree:
-
-- clicks go through the compositor on the owner's desktop and through XTEST
-  on private desktops;
-- typing is XTEST;
-- each click waits for the next screen's text.
+**How it works.** A program reads each screen's text and clicks a control
+once two reads agree. Wisp no longer creates games this way: `play` and
+`freshMatch` host only through the menu page.
 
 **Risk:** a game created by clicks has no password, so Battle.net lists it
 publicly. Typing outside a match is refused by Wisp's private-desktop input
@@ -355,7 +351,7 @@ publicly. Typing outside a match is refused by Wisp's private-desktop input
 - It depends on the resolution and on menu animations.
 - Every click waits for a screen, and a changed menu breaks it.
 
-**Still needed for:** Battle.net's Play, and leaving a match in progress.
+**Still needed for:** leaving a match in progress (Escape, F10, E, Q).
 
 ## Excluded: memory on signed-in clients
 
@@ -382,8 +378,8 @@ Wisp's menu page reports it instead.
 2. **`-loadfile` through Battle.net.** It changes nothing in the game, but its
    map loads during the ladder scan and loses its imported models, so
    `wisp play` doesn't use it.
-3. **Menu clicks.** Keep them for Battle.net's Play, for leaving a running
-   match, and for any prefix whose owner declines the menu page.
+3. **Menu clicks.** Keep them for leaving a running match. A prefix whose
+   owner declines the menu page doesn't host through Wisp.
 4. **LAN hosting on offline clients.** For parallel bot, parity and engine
    sessions, not for the owner's play: `wisp lan` (section 2).
 

@@ -1,37 +1,32 @@
 // The live machine and desktop `play` runs on: /proc, files and Steam on the
-// host; niri's IPC, grim, Tesseract, wlrctl and xdotool on the owner's
-// desktop. The game's X display is the declared one; niri, grim and wlrctl use
-// the environment play runs in, which on the owner's desktop names its
-// compositor.
-//
-// The pointer moves through the compositor (wlrctl's virtual pointer), as a
-// mouse does: on the owner's desktop the X pointer stays where the
-// compositor's pointer is, so XTEST motion doesn't move it.
+// host; niri's IPC, grim, Tesseract and xdotool on the owner's desktop. The
+// game's X display is the declared one; niri and grim use the environment play
+// runs in, which on the owner's desktop names its compositor.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFileSync, closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
-import { Clock, Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Schema } from "effect";
 import { serverDirectoryName } from "../warcraft/battleNet";
 import { listProcesses } from "../warcraft/processes";
 import { parseWords, separateInk } from "../warcraft/desktop";
 import { describeCause } from "./command";
 import { decodePpm } from "./frameProbe";
-import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow, expectedGain, spotTargets, steerPointer } from "./play";
+import { reportedMenus } from "./menus";
+import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow } from "./play";
 
 /** The programs play runs; each is a command name on PATH or a path. */
 export interface PlayTools {
   readonly grim: string;
   readonly xdotool: string;
   readonly tesseract: string;
-  readonly wlrctl: string;
   readonly niri: string;
   readonly steam: string;
   /** util-linux nsenter, which runs the launch request inside the launcher's runtime container. */
   readonly nsenter: string;
 }
 
-export const PLAY_TOOLS: PlayTools = { grim: "grim", xdotool: "xdotool", tesseract: "tesseract", wlrctl: "wlrctl", niri: "niri", steam: "steam", nsenter: "nsenter" };
+export const PLAY_TOOLS: PlayTools = { grim: "grim", xdotool: "xdotool", tesseract: "tesseract", niri: "niri", steam: "steam", nsenter: "nsenter" };
 
 /** Resolve on the host before replacing PATH with the launcher's environment. */
 export function hostNsenter(command: string): string {
@@ -164,13 +159,6 @@ const machine = (tools: PlayTools): PlayMachine["Service"] => ({
     },
     catch: problem(`couldn't copy ${from} to ${to}`),
   }),
-  append: (path, text) => Effect.try({
-    try: () => {
-      mkdirSync(dirname(path), { recursive: true });
-      appendFileSync(path, text);
-    },
-    catch: problem(`couldn't write ${path}`),
-  }),
 });
 
 /** Runs a tool to completion; its stdout on success. A nonzero exit is a problem unless `allowExit` lists it. */
@@ -216,10 +204,6 @@ const escapeTitle = (title: string) => title.replace(/[.*+?^${}()|[\]\\]/g, "\\$
 const desktop = (tools: PlayTools, display: string): PlayDesktop["Service"] => {
   const x11 = { DISPLAY: display };
   const xdotool = (...args: string[]) => run([tools.xdotool, ...args], x11);
-  const pointer = xdotool("getmouselocation", "--shell").pipe(Effect.map((bytes) => {
-    const values = shellValues(text(bytes));
-    return { x: Number(values.X), y: Number(values.Y) };
-  }));
   return {
     windows: Effect.gen(function*() {
       const [windows, workspaces, outputs] = yield* Effect.all([niri(tools, "windows", NiriWindow), niri(tools, "workspaces", NiriWorkspace), niri(tools, "outputs", NiriOutput)]);
@@ -255,40 +239,8 @@ const desktop = (tools: PlayTools, display: string): PlayDesktop["Service"] => {
       return preferred.map(({ window }) => window).reduce<XWindow | undefined>((best, window) =>
         (best === undefined || window.width * window.height > best.width * best.height ? window : best), undefined);
     }),
-    snapshot: (output, path) => Effect.gen(function*() {
-      yield* Effect.try({ try: () => mkdirSync(dirname(path), { recursive: true }), catch: problem(`couldn't create ${dirname(path)}`) });
-      yield* run([tools.grim, "-o", output, "-t", "jpeg", "-q", "80", path], {});
-    }),
-    click: (spot) => Effect.gen(function*() {
-      const output = (yield* niri(tools, "outputs", NiriOutput)).find(({ name }) => name === spot.output)?.logical ?? undefined;
-      if (output === undefined) return yield* new PlayProblem({ problem: `niri has no output ${spot.output}` });
-      const { logical, root } = spotTargets(spot, output);
-      // One logical pixel, in X pixels.
-      const tolerance = Math.max(1, Math.ceil(spot.area.width / output.width));
-      // Xwayland reports the move asynchronously; a move that changes nothing within a second counts as not moving.
-      const move = (dx: number, dy: number) => Effect.gen(function*() {
-        const from = yield* pointer;
-        // getopt would read a negative distance as an option; POSIXLY_CORRECT ends options at "pointer".
-        yield* run([tools.wlrctl, "pointer", "move", dx.toFixed(2), dy.toFixed(2)], { POSIXLY_CORRECT: "1" });
-        const deadline = (yield* Clock.currentTimeMillis) + 1000;
-        let at = from;
-        do {
-          yield* Effect.sleep("20 millis");
-          at = yield* pointer;
-        } while (at.x === from.x && at.y === from.y && (yield* Clock.currentTimeMillis) < deadline);
-        return at;
-      });
-      const steered = yield* steerPointer(yield* pointer, root, expectedGain(spot, output), tolerance, move);
-      const moves = [`target logical ${logical.x.toFixed(1)},${logical.y.toFixed(1)}, X root ${root.x},${root.y}`, ...steered.trace];
-      if (!steered.arrived) return yield* new PlayProblem({ problem: `the pointer stopped at ${steered.at.x},${steered.at.y} instead of ${root.x},${root.y} (X root pixels) over window ${spot.window.id}: ${moves.join("; ")}` });
-      // The game reads the move before the press.
-      yield* Effect.sleep("120 millis");
-      yield* run([tools.wlrctl, "pointer", "click", "left"], {});
-      moves.push("clicked");
-      return moves;
-    }),
     keys: (_window, ...keys) => xdotool("key", "--clearmodifiers", ...keys).pipe(Effect.asVoid),
-    typeText: (_window, value) => xdotool("type", "--clearmodifiers", "--delay", "12", "--", value).pipe(Effect.asVoid),
+    menus: (port) => reportedMenus(port).pipe(Effect.catchTag("MenuFailure", () => Effect.succeed(undefined))),
   };
 };
 

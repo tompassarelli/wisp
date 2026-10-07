@@ -12,7 +12,8 @@ import { hostNsenter } from "../scripts/wisp/playHost";
 import { ClientWatch } from "../scripts/wisp/watch";
 import { type ProcessInfo, launchOptions, launchOutcome, loadMapOption, newestLauncherLog, prefixUse, shortcutUrl, windowsPath, withLaunchOptions } from "../scripts/warcraft/battleNet";
 import type { Word } from "../scripts/warcraft/desktop";
-import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, findPhrase, expectedGain, leaveScoreScreen, measuredGain, play, spotTargets, steer, steerPointer, offScreen } from "../scripts/wisp/play";
+import { type MenuEvent, MenuFailure, type MenuSocket, type Outcome } from "../scripts/wisp/menus";
+import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, findPhrase, leaveScoreScreen, play } from "../scripts/wisp/play";
 
 const PREFIX = "/home/u/compatdata/3516115571/pfx";
 const SERVER = "server-24-18d2b7ec";
@@ -20,7 +21,6 @@ const LOGS = `${PREFIX}/drive_c/users/steamuser/AppData/Local/Battle.net/Logs`;
 const MAP = `${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft 0.0.47.w3x`;
 const HELPER = "/inputs/wc3-journal";
 const HELPER_LOG = "/state/helper.log";
-const DEBUG = "/state/play-debug";
 
 test("launch resolves nsenter on the host, before adopting the launcher's PATH", () => {
   const configured = Bun.which("sh")!;
@@ -82,10 +82,8 @@ interface Scenario {
   readonly steamStarts?: boolean;
   /** What each launch request logs. */
   readonly launches?: readonly ("running" | "failed" | "ignored")[];
-  /** How many first clicks on a phrase Warcraft ignores. */
-  readonly ignoredClicks?: Readonly<Record<string, number>>;
-  /** Create Game labels its name field "GAME NAME", away from the 2560x1440 position. */
-  readonly nameLabel?: boolean;
+  /** False: the game's menu page doesn't report. */
+  readonly page?: boolean;
   readonly mapInstalled?: boolean;
   /** The installed map is an older build than the declared one. */
   readonly mapStale?: boolean;
@@ -93,11 +91,9 @@ interface Scenario {
   readonly copyDamaged?: boolean;
   /** Whether the declaration names the map's build, and whether that file is there. */
   readonly mapSource?: "present" | "missing";
-  readonly mainMenu?: boolean;
   readonly helper?: "ready" | "exits" | "earlier" | "this game's" | "service" | "service fails";
   readonly fullscreens?: boolean;
   readonly gameRunning?: boolean;
-  readonly initialMenu?: "main" | "battle.net";
   /** The running game is in a match whose menus answer keys: Escape and F10 open Game Menu, e End Game, q the score screen, and only Escape leaves it. */
   readonly warmMatch?: boolean;
   readonly matchFails?: boolean;
@@ -150,20 +146,15 @@ function world(scenario: Scenario = {}) {
   const events: string[] = [];
   let now = 0;
   let focused: number | undefined;
-  let menu: string = scenario.warmMatch === true ? "in match" : scenario.initialMenu ?? "main";
-  let name = "Tompas's game";
+  let menu: string = scenario.warmMatch === true ? "in match" : "main";
   let started = false;
   let presses = 0;
-  let battleNetReads = 0;
-  const ignored = new Map(Object.entries(scenario.ignoredClicks ?? {}));
   let mapInstalled = scenario.mapInstalled !== false;
   const prefFiles = new Map<string, string>([...(scenario.preferences === undefined ? [] : [[PREFERENCES, scenario.preferences] as [string, string]]), ...(scenario.backup === undefined ? [] : [[BACKUP, scenario.backup] as [string, string]])]);
   let mapDigest = scenario.mapStale === true ? "old build" : "this build";
   let config = withLaunchOptions(SETTINGS, scenario.launchOptions);
   /** What Battle.net read from its settings when it started. */
   let launcherOptions = launchOptions(config);
-  const shots: string[] = [];
-  const clickLog: string[] = [];
   let helperLog = "";
   let helperStarted = false;
   let nextPid = 3000;
@@ -245,44 +236,44 @@ function world(scenario: Scenario = {}) {
   if (scenario.helper === "this game's") processes.push({ pid: 401, name: "wc3-journal", args: [HELPER, "--pid", "2852"] });
 
   const gameButtons = (): Button[] => {
-    const go = (next: string) => () => { menu = next; };
     switch (menu) {
-      case "main": return scenario.mainMenu === false ? [] : [
-        { phrase: "SINGLE PLAYER", x: 2218, y: 750, press: go("single") },
-        { phrase: "MULTIPLAYER", x: 2218, y: 965, press: go("battle.net") },
-      ];
-      // Recorded 6 Oct: the tabs slide 32 px down within 0.3 s of appearing.
-      case "battle.net": return [
-        { phrase: "VERSUS", x: 610, y: battleNetReads <= 1 ? 132 : 153, press: () => {} },
-        { phrase: "CUSTOM GAMES", x: 1058, y: battleNetReads <= 1 ? 132 : 164, press: go("custom games") },
-      ];
-      case "custom games": return [{ phrase: "CUSTOM GAMES", x: 800, y: 120, press: () => {} }, { phrase: "CREATE GAME", x: 2013, y: 1601, press: go("create") }];
-      case "create":
-      case "folder":
-      case "selected": {
-        const list: Button[] = menu === "create"
-          ? [{ phrase: "00-SMASHCRAFT", x: 1550, y: 490, press: go("folder") }, { phrase: "DOWNLOAD", x: 1550, y: 560, press: () => {} }]
-          : [{ phrase: "SMASHCRAFT 0.0.47", x: 1550, y: 490, press: go("selected") }, { phrase: "SMASHCRAFT INPUT PROBE", x: 1550, y: 560, press: () => {} }];
-        return [
-          { phrase: "REATE GAME", x: 300, y: 243, press: () => {} },
-          ...(scenario.nameLabel === true
-            ? [{ phrase: "GAME NAME", x: 200, y: 400, press: () => {} }, { phrase: name, x: 200, y: 453, press: () => events.push("name field") }]
-            : [{ phrase: name, x: 533, y: 453, press: () => events.push("name field") }]),
-          ...list,
-          ...(menu === "selected" ? [{ phrase: "SMASHCRAFT 0.0.47", x: 2600, y: 240, press: () => {} }, { phrase: "SUGGESTED PLAYERS: 4", x: 2600, y: 970, press: () => {} }] : []),
-          { phrase: "CREATE GAME", x: 2600, y: 1501, press: () => { if (menu === "selected") menu = "lobby"; } },
-        ];
-      }
       case "game menu": return [{ phrase: "GAME MENU", x: 1440, y: 500, press: () => {} }];
       case "end game": return [{ phrase: "QUIT MISSION", x: 1440, y: 700, press: () => {} }];
-      case "lobby": return [{ phrase: "SMASHCRAFT 0.0.47", x: 2600, y: 240, press: () => {} }, { phrase: "START GAME", x: 2593, y: 1503, press: () => {
+      default: return [];
+    }
+  };
+
+  /** The game's menu page: it lists the map, hosts it and starts it, as the game's menus answer. */
+  let hosted: { readonly privateGame: unknown; readonly password: unknown } | undefined;
+  const heard: MenuEvent[] = [];
+  const tell = (messageType: string, payload: unknown) => heard.push({ messageType, payload });
+  const page: MenuSocket = {
+    send: (message, payload = {}) => Effect.sync(() => {
+      events.push(`page ${message}`);
+      if (message === "GetMapList") {
+        tell("MapList", { mapList: { maps: [{ filename: "Smashcraft 0.0.47.w3x", filepath: "C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/", isFolder: false }] } });
+      } else if (message === "CreateLobby") {
+        hosted = { privateGame: payload["privateGame"], password: payload["password"] };
+        tell("GameLobbySetup", { isHost: true });
+      } else if (message === "LobbyStart") {
+        tell("SetGlueScreen", { screen: "LOADING_SCREEN" });
         menu = "selection";
         logged("Opening map - C:/users/steamuser/Documents/Warcraft III/Maps/00-Smashcraft/Smashcraft 0.0.47.w3x");
         if (scenario.importFailures === "loading") later(4, () => logged(...["ImpactHit", "StageMainDeck", "IllidanOriginalClip39"].map((model) => `model creation failed - war3mapImported/${model}-14ab984c.mdx`)));
         later(8, () => { started = true; });
-      } }];
-      default: return [];
-    }
+      }
+    }),
+    expect: <A>(what: string, seconds: number, decide: (event: MenuEvent) => Outcome<A>) => Effect.gen(function*() {
+      for (let waited = 0; ; waited += 50) {
+        for (let event = heard.shift(); event !== undefined; event = heard.shift()) {
+          const outcome = decide(event);
+          if (outcome !== undefined) return "done" in outcome ? outcome.done : yield* new MenuFailure({ operation: what, problem: outcome.failed });
+        }
+        if (waited >= seconds * 1000) return yield* new MenuFailure({ operation: what, problem: `nothing within ${seconds} s` });
+        yield* Effect.sleep("50 millis");
+      }
+    }),
+    forget: Effect.sync(() => { heard.length = 0; }),
   };
   const requestLaunch = () => {
     presses++;
@@ -362,10 +353,6 @@ function world(scenario: Scenario = {}) {
       mapInstalled = true;
       mapDigest = scenario.copyDamaged === true ? "truncated" : "this build";
     }),
-    append: (path, text) => Effect.sync(() => {
-      expect(path).toBe(`${DEBUG}/1970-01-01T00-00-00-000Z/clicks.log`);
-      clickLog.push(text);
-    }),
   });
 
   const desktop = PlayDesktop.of({
@@ -385,30 +372,11 @@ function world(scenario: Scenario = {}) {
     }),
     read: (output, ink) => Effect.sync(() => {
       expect(output).toBe(OUTPUT.name);
-      if (menu === "battle.net") battleNetReads++;
       const shown = screenOf().filter((button) => (button.white === true) === (ink === "white"));
       return { ...FRAME, words: shown.flatMap((button, index) => button.read ?? words(`b${index}`, button.x, button.y, button.phrase)) };
     }),
-    snapshot: (output, path) => Effect.sync(() => {
-      expect(output).toBe(OUTPUT.name);
-      shots.push(path.slice(path.lastIndexOf("/") + 1));
-    }),
     xWindow: (title) => Effect.succeed<XWindow | undefined>(
       [...windows.values()].some((window) => window.title === title) ? { id: title, x: 0, y: 0, ...FRAME } : undefined),
-    click: (spot) => Effect.sync(() => {
-      expect(spot.output).toBe(OUTPUT.name);
-      // The spot's image and window cover the output, so the target is in the capture's pixels.
-      const { root } = spotTargets(spot, { x: 0, y: 0, width: OUTPUT.width, height: OUTPUT.height });
-      // Within the words of the phrase, which words() spaces 140 pixels apart.
-      const hit = screenOf().find((button) => Math.abs(button.x - root.x) <= 70 * (button.phrase.split(" ").length - 1) + 60 && Math.abs(button.y - root.y) <= 30);
-      events.push(`click ${spot.window.id} ${hit?.phrase ?? `${root.x},${root.y}`}`);
-      const ignoring = hit === undefined ? 0 : ignored.get(hit.phrase) ?? 0;
-      if (hit !== undefined && ignoring > 0) {
-        ignored.set(hit.phrase, ignoring - 1);
-        events.push("ignored");
-      } else hit?.press();
-      return [`moved to X ${root.x},${root.y}`];
-    }),
     keys: (window, ...keys) => Effect.sync(() => {
       events.push(`keys ${keys.join(" ")}`);
       if (focused === undefined || windows.get(focused)?.title !== window.id) return;
@@ -420,9 +388,9 @@ function world(scenario: Scenario = {}) {
         else if (menu === "results" && key === "Escape") menu = "main";
       }
     }),
-    typeText: (_window, text) => Effect.sync(() => {
-      events.push(`type ${text}`);
-      name = text;
+    menus: (port) => Effect.sync(() => {
+      expect(port).toBe(47124);
+      return scenario.page === false ? undefined : page;
     }),
   });
 
@@ -433,7 +401,7 @@ function world(scenario: Scenario = {}) {
     map: { folder: "00-Smashcraft", file: "Smashcraft 0.0.47.w3x", title: "Smashcraft 0.0.47", ...(scenario.mapSource === undefined ? {} : { source: SOURCE }) },
     gameName: "Smashcraft",
     ...(scenario.displaySettings === undefined ? {} : { displaySettings: scenario.displaySettings }),
-    debugDirectory: DEBUG,
+    menuReportPort: 47124,
     prepare: (documents) => Effect.sync(() => {
       expect(documents).toBe(`${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III`);
       events.push("prepare");
@@ -477,7 +445,7 @@ function world(scenario: Scenario = {}) {
     const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
     if (Exit.isFailure(exit) && Option.isNone(error)) throw new Error(Cause.pretty(exit.cause));
     const failure = Option.isSome(error) ? error.value.message : undefined;
-    return { lines, failure, events, prefFiles, presses: () => presses, windows, shots, clickLog, options: () => launchOptions(config) };
+    return { lines, failure, events, prefFiles, presses: () => presses, windows, hosted: () => hosted, options: () => launchOptions(config) };
   };
   /** Doctor's hand for a score screen, as `wisp play` gives it: Escape in the game's window. */
   const leaveScore = async () => {
@@ -535,82 +503,34 @@ test("phrases are found however the reader split or misread them, and list entri
   expect(findPhrase(seen, "Smash")).toEqual([]);
 });
 
-test("a click target maps to the compositor's logical pixels and the X root's pixels of the scaled owner's desktop", () => {
-  // 6 Oct: eDP-1 is 1440x960 logical at scale 2; grim's capture and the X root are 2880x1920. The
-  // launcher's Play read at 2075,1518 while the X pointer sat at 1194,882, where the compositor's pointer was.
-  const output = { x: 0, y: 0, width: 1440, height: 960 };
-  const spot = { output: "eDP-1", area: FRAME, x: 2075, y: 1518, window: { id: "100663313", x: 0, y: 0, ...FRAME } };
-  expect(spotTargets(spot, output)).toEqual({ logical: { x: 1037.5, y: 759 }, root: { x: 2075, y: 1518 } });
-  expect(steer({ x: 1194, y: 882 }, spotTargets(spot, output).root, expectedGain(spot, output))).toEqual({ dx: 440.5, dy: 318 });
-  // A second output to the right: logical positions shift, X pixels follow the window.
-  const right = { ...spot, output: "HDMI-A-1", window: { ...spot.window, x: 2880 } };
-  expect(spotTargets(right, { ...output, x: 1440 })).toEqual({ logical: { x: 2477.5, y: 759 }, root: { x: 4955, y: 1518 } });
-  // An output capture's coordinates do not change when its target window is letterboxed.
-  const letterboxed = { ...spot, x: 480, y: 82, window: { ...spot.window, x: 690, y: 40, width: 1500, height: 1840 } };
-  expect(spotTargets(letterboxed, output)).toEqual({ logical: { x: 240, y: 41 }, root: { x: 480, y: 82 } });
-  expect(expectedGain(letterboxed, output)).toEqual({ x: 2, y: 2 });
-});
-
-/** A compositor pointer whose moves reach the X pointer at `gain` X pixels per logical pixel, rounded as Xwayland reports them. */
-const simulatedPointer = (start: { x: number; y: number }, gain: number, moves: string[]) => {
-  let at = start;
-  return (dx: number, dy: number) => Effect.sync(() => {
-    at = { x: at.x + Math.round(dx * gain), y: at.y + Math.round(dy * gain) };
-    moves.push(`${dx.toFixed(1)},${dy.toFixed(1)}`);
-    return at;
-  });
-};
-
-test("the pointer is steered by the gain each move shows: 2 over the launcher, 1 over fullscreen Warcraft III holding the pointer", async () => {
-  const output = { x: 0, y: 0, width: 1440, height: 960 };
-  const spot = (x: number, y: number) => ({ output: "eDP-1", area: FRAME, x, y, window: { id: "w", x: 0, y: 0, ...FRAME } });
-  // Run 5, 6 Oct: Custom Games at 1049,132 from 2218,966. At the assumed gain 2 every move went half way:
-  // -584.5,-417.0 -> 1634,549; -292.5,-208.5 -> 1342,341; -146.5,-104.5 -> 1196,237; -73.5,-52.5 -> 1123,185.
-  expect(measuredGain({ x: 2, y: 2 }, { dx: -584.5, dy: -417 }, { x: 1634 - 2218, y: 549 - 966 })).toEqual({ x: 584 / 584.5, y: 1 });
-  const target = spot(1049, 132);
-  const moves: string[] = [];
-  const steered = await Effect.runPromise(steerPointer({ x: 2218, y: 966 }, target, expectedGain(target, output), 2, simulatedPointer({ x: 2218, y: 966 }, 1, moves)));
-  expect(steered.arrived).toBe(true);
-  expect(moves).toEqual(["-584.5,-417.0", "-585.5,-417.0"]);
-  expect(steered.trace[1]).toBe("moved -584.5,-417.0 -> X 1634,549 (gain 1.00,1.00)");
-  // Run 5's first click, Multiplayer at 2219,966 from 232,1762, went in one move at gain 2.
-  const multiplayer: string[] = [];
-  const first = await Effect.runPromise(steerPointer({ x: 232, y: 1762 }, { x: 2219, y: 966 }, expectedGain(spot(2219, 966), output), 2, simulatedPointer({ x: 232, y: 1762 }, 2, multiplayer)));
-  expect(first.arrived).toBe(true);
-  expect(multiplayer).toEqual(["993.5,-398.0"]);
-  // A pointer that doesn't move keeps its gain and stops after the cap.
-  const stuck = await Effect.runPromise(steerPointer({ x: 10, y: 10 }, { x: 500, y: 500 }, { x: 2, y: 2 }, 2, () => Effect.succeed({ x: 10, y: 10 })));
-  expect(stuck.arrived).toBe(false);
-  expect(stuck.trace).toHaveLength(9);
-});
-
 test("from a cold desktop: Battle.net, its launch of Warcraft III, the map hosted once Warcraft III has read its ladder maps, the helper, the match, the game fullscreen", async () => {
   const result = await world().run();
   expect(result.failure).toBeUndefined();
   expect(result.lines).toEqual([
-    "Captures and click log: /state/play-debug/1970-01-01T00-00-00-000Z",
     "1/7 Wine prefix: free",
     "2/7 Battle.net: starting the Steam shortcut \"Warcraft III (Battle.net)\"",
     "2/7 Battle.net: started and signed in (3 s)",
     "3/7 Warcraft III: Battle.net started it",
     "3/7 Warcraft III: running (pid 2852), asked to go fullscreen",
     "4/7 Map: Warcraft III signed in and read its ladder maps (27 s); hosting the map",
-    "4/7 Map: \"Smashcraft\" of Smashcraft 0.0.47 hosted through the menus (joining by name is case-sensitive)",
+    "4/7 Map: \"Smashcraft\" of Smashcraft 0.0.47 hosted as a private game through the menus",
     "4/7 Map: fighter selection 35 s after launch",
     "5/7 Controller helper: running (pid 3000), log /state/helper.log",
     "6/7 Match: computer as Player 3",
     "7/7 Fullscreen: Warcraft III is fullscreen and focused. Ready to fight.",
   ]);
-  // The earlier session's log, which says its scan was over, doesn't count: nothing in the game is clicked
+  // The earlier session's log, which says its scan was over, doesn't count: nothing is hosted
   // before this launch's scan. Battle.net's launch options stay untouched and no key reaches the game.
   const scanned = result.events.indexOf("ladder maps read");
   expect(scanned).toBeGreaterThan(result.events.indexOf("launch"));
-  expect(result.events.findIndex((event) => event.startsWith("click Warcraft III"))).toBeGreaterThan(scanned);
+  expect(result.events.findIndex((event) => event.startsWith("page"))).toBeGreaterThan(scanned);
+  // The menu page hosts a private game, never a listed one, and starts it.
+  expect(result.events.filter((event) => event.startsWith("page"))).toEqual(["page GetMapList", "page CreateLobby", "page LobbyStart"]);
+  expect(result.hosted()?.privateGame).toBe(true);
+  expect(result.hosted()?.password).toMatch(/^[0-9a-f]{12}$/);
   expect(result.events.filter((event) => event.startsWith("launch options") || event.startsWith("press"))).toEqual([]);
   // The launcher's window is neither clicked, read nor resized: Battle.net launches the game on request.
   expect(result.events.filter((event) => event.includes("Battle.net"))).toEqual([]);
-  // A picture before and after every click, and one click log line each with its pointer moves.
-  expect(result.shots.slice(0, 2)).toEqual(["01-multiplayer-before.jpg", "01-multiplayer-after.jpg"]);
   expect(result.windows.get(758)?.width).toBe(1424);
   expect(result.windows.get(762)?.width).toBe(OUTPUT.width);
 });
@@ -618,13 +538,13 @@ test("from a cold desktop: Battle.net, its launch of Warcraft III, the map hoste
 test("a warm launcher is reused; an earlier run's startup map argument is cleared and another map's refused", async () => {
   const warm = await world({ runtimes: "launcher", launchOptions: "-windowmode 0" }).run();
   expect(warm.failure).toBeUndefined();
-  expect(warm.lines[2]).toBe("2/7 Battle.net: signed in; reusing it");
+  expect(warm.lines[1]).toBe("2/7 Battle.net: signed in; reusing it");
   expect(warm.events.filter((event) => event.startsWith("SIG") || event.startsWith("steam") || event.startsWith("launch options"))).toEqual([]);
   expect(warm.options()).toBe("-windowmode 0");
   // Earlier Wisp runs could keep -loadfile for this map; Battle.net reads it at its start, so it restarts once.
   const kept = await world({ runtimes: "launcher", launchOptions: LOAD_MAP }).run();
   expect(kept.failure).toBeUndefined();
-  expect(kept.lines[2]).toBe("2/7 Battle.net: clearing an earlier run's startup map from Warcraft III's launch options");
+  expect(kept.lines[1]).toBe("2/7 Battle.net: clearing an earlier run's startup map from Warcraft III's launch options");
   expect(kept.events.filter((event) => event.startsWith("SIG") || event.startsWith("steam") || event.startsWith("launch options"))).toEqual([
     "SIGTERM 100 101 102", "launch options: none", "steam steam://rungameid/16213922543717842944",
   ]);
@@ -642,7 +562,7 @@ test("Warcraft III already past its ladder scan is hosted without waiting for on
   // An earlier game after the scan: the log shows the scan over at once.
   const played = await world({ runtimes: "launcher", gameRunning: true, runningLog: "played" }).run();
   expect(played.failure).toBeUndefined();
-  expect(played.lines.slice(1, 6)).toEqual([
+  expect(played.lines.slice(0, 5)).toEqual([
     "1/7 Wine prefix: Battle.net already running in its only runtime (pid 101)",
     "2/7 Battle.net: signed in; Warcraft III already runs",
     "3/7 Warcraft III: already running (pid 2852)",
@@ -650,41 +570,34 @@ test("Warcraft III already past its ladder scan is hosted without waiting for on
     "4/7 Map: Warcraft III signed in and read its ladder maps (0 s); hosting the map",
   ]);
   expect(played.events.filter((event) => event.startsWith("steam") || event === "launch" || event.startsWith("launch options"))).toEqual([]);
-  expect(played.events).toContain("click Warcraft III START GAME");
+  expect(played.events).toContain("page LobbyStart");
   // A game that never scanned but has played since, more than 30 s after its sign-in by its log, isn't made to wait 30 s more.
   const unscanned = await world({ runtimes: "launcher", gameRunning: true, runningLog: "played unscanned" }).run();
   expect(unscanned.failure).toBeUndefined();
-  expect(unscanned.lines[5]).toBe("4/7 Map: Warcraft III signed in and read no ladder maps within 30 s; hosting the map");
+  expect(unscanned.lines[4]).toBe("4/7 Map: Warcraft III signed in and read no ladder maps within 30 s; hosting the map");
   expect(unscanned.lines.find((line) => line.includes("fighter selection"))).toBe(played.lines.find((line) => line.includes("fighter selection")));
   // Idle in its menus since the scan, the log ends with it: 2 s of quiet decide.
   const idle = await world({ runtimes: "launcher", gameRunning: true }).run();
   expect(idle.failure).toBeUndefined();
-  expect(idle.lines[5]).toBe("4/7 Map: Warcraft III signed in and read its ladder maps (2 s); hosting the map");
+  expect(idle.lines[4]).toBe("4/7 Map: Warcraft III signed in and read its ladder maps (2 s); hosting the map");
 });
 
 test("a warm match is left through Game Menu, End Game and Quit Mission, and its score screen with Escape, not ScoreScreenClose", async () => {
   const result = await world({ runtimes: "launcher", gameRunning: true, runningLog: "played", warmMatch: true }).run();
   expect(result.failure).toBeUndefined();
   expect(result.events.filter((event) => event.startsWith("keys")).slice(0, 4)).toEqual(["keys Escape F10", "keys e", "keys q", "keys Escape"]);
-  expect(result.events).toContain("click Warcraft III START GAME");
+  expect(result.events).toContain("page LobbyStart");
   expect(result.lines.at(-1)).toBe("7/7 Fullscreen: Warcraft III is fullscreen and focused. Ready to fight.");
 });
 
 test("doctor's score-screen hand presses Escape in the game's focused window, and stops plainly when the game isn't running", async () => {
-  const scored = world({ runtimes: "launcher", gameRunning: true, warmMatch: true, initialMenu: "main" });
+  const scored = world({ runtimes: "launcher", gameRunning: true, warmMatch: true });
   const left = await scored.leaveScore();
   expect(left.failure).toBeUndefined();
   expect(left.events).toEqual(["keys Escape"]);
   expect(left.focused()).toBe(762);
   const closed = await world({ runtimes: "launcher" }).leaveScore();
   expect(closed.failure).toBe("Warcraft III isn't running, so its score screen can't be left");
-});
-
-test("menu hosting resumes a warm Warcraft client already showing Custom Games", async () => {
-  const result = await world({ runtimes: "launcher", gameRunning: true, initialMenu: "battle.net" }).run();
-  expect(result.failure).toBeUndefined();
-  expect(result.events).toContain("click Warcraft III CUSTOM GAMES");
-  expect(result.events).not.toContain("click Warcraft III MULTIPLAYER");
 });
 
 test("socket-authenticated menus can host when the running game's log lacks LoginDoorClose", async () => {
@@ -699,7 +612,7 @@ test("a game that scans no ladder maps is hosted 30 s after its sign-in; one tha
   expect(unscanned.lines).toContain("4/7 Map: Warcraft III signed in and read no ladder maps within 30 s; hosting the map");
   const unsigned = await world({ gameSignsIn: false }).run();
   expect(unsigned.failure).toBe(`4/7 Map stopped: Warcraft III didn't sign in within 120 s (its log, ${WAR3LOG}, shows no LoginDoorClose)`);
-  expect(unsigned.events.some((event) => event.startsWith("click Warcraft III"))).toBe(false);
+  expect(unsigned.events.some((event) => event.startsWith("page"))).toBe(false);
 });
 
 test("play stops when Warcraft III's log shows the map's imported models failing, at load or once the match starts", async () => {
@@ -714,23 +627,19 @@ test("play stops when Warcraft III's log shows the map's imported models failing
   expect(earlier.failure).toBeUndefined();
 });
 
-test("a game window that takes 30 s to go fullscreen is waited for before its menus are read", async () => {
+test("a game window that takes 30 s to go fullscreen is waited for", async () => {
   const result = await world({ gameFullscreenAfter: 30 }).run();
   expect(result.failure).toBeUndefined();
   expect(result.events.filter((event) => event === "fullscreen Warcraft III")).toHaveLength(1);
   expect(result.windows.get(762)?.width).toBe(OUTPUT.width);
-  expect((await world({ gameFullscreenAfter: 90 }).run()).failure).toBe("4/7 Map stopped: Warcraft III's window didn't become fullscreen within 45 s");
+  expect((await world({ gameFullscreenAfter: 90 }).run()).failure).toBe("7/7 Fullscreen stopped: Warcraft III's window didn't become fullscreen within 45 s");
 });
 
-test("Warcraft III's menus are clicked in order: Multiplayer, Custom Games, Create Game, the folder, the map, the name, Create, Start", async () => {
-  const result = await world().run();
-  expect(result.failure).toBeUndefined();
-  expect(result.events.filter((event) => event.startsWith("click Warcraft III"))).toEqual([
-    "click Warcraft III MULTIPLAYER", "click Warcraft III CUSTOM GAMES", "click Warcraft III CREATE GAME", "click Warcraft III 00-SMASHCRAFT",
-    "click Warcraft III SMASHCRAFT 0.0.47", "click Warcraft III Tompas's game", "click Warcraft III CREATE GAME", "click Warcraft III START GAME",
-  ]);
-  const notReady = await world({ mainMenu: false }).run();
-  expect(notReady.failure).toBe("4/7 Map stopped: Warcraft III didn't show its main menu within 120 s");
+test("without a reporting menu page play stops before hosting: a game created by clicks is listed publicly", async () => {
+  const result = await world({ page: false }).run();
+  expect(result.failure).toBe("4/7 Map stopped: Warcraft III's menu page didn't report on port 47124. play hosts only a private game through it, never a listed one by clicks: install the page once, with the owner's agreement, with `wisp menus install RETAIL_DIR --port 47124` (wisp:docs/driving-warcraft.md)");
+  expect(result.events.filter((event) => event.startsWith("page") || event.startsWith("keys"))).toEqual([]);
+  expect(result.events.at(-1)).toBe("cleanup");
 });
 
 test("step 1 refuses two runtimes on the prefix, a runtime on another display, and a runtime without Battle.net", async () => {
@@ -742,7 +651,7 @@ test("step 1 refuses two runtimes on the prefix, a runtime on another display, a
     `1/7 Wine prefix stopped: a Wine runtime (wineserver pid 100) is using ${PREFIX} without Battle.net. Close it with: kill 100   then run play again.`);
   const exits = await world({ runtimes: "lingering exits" }).run();
   expect(exits.failure).toBeUndefined();
-  expect(exits.lines[1]).toBe("1/7 Wine prefix: free");
+  expect(exits.lines[0]).toBe("1/7 Wine prefix: free");
 });
 
 test("step 2 stops when Steam doesn't start Battle.net or Battle.net doesn't sign in", async () => {
@@ -770,24 +679,6 @@ test("step 3 stops without a restart when Battle.net doesn't take the launch req
   expect(ignored.failure).toBe(
     `3/7 Warcraft III stopped: Battle.net didn't launch Warcraft III within 15 s of being asked (its log: ${LOGS}/battle.net-20261006T020000.000000.log). Check that it is signed in to an account that owns Warcraft III and that the game is installed and up to date, then run play again.`);
   expect(ignored.events.filter((event) => event.startsWith("SIGTERM"))).toEqual([]);
-});
-
-test("the menus are clicked once they stop moving, once more when a click doesn't take, and the name field is found by its label", async () => {
-  // Run 6, 6 Oct: Custom Games was read at 1058,132 and clicked there while the tabs slid down to y=164.
-  const result = await world().run();
-  expect(result.failure).toBeUndefined();
-  expect(result.clickLog[1]).toStartWith("02-custom-games: 1058,164 of 2880x1920");
-  const retried = await world({ ignoredClicks: { "CUSTOM GAMES": 1, "START GAME": 1 } }).run();
-  expect(retried.failure).toBeUndefined();
-  expect(retried.events.filter((event) => event === "click Warcraft III CUSTOM GAMES" || event === "click Warcraft III START GAME" || event === "ignored")).toEqual([
-    "click Warcraft III CUSTOM GAMES", "ignored", "click Warcraft III CUSTOM GAMES", "click Warcraft III START GAME", "ignored", "click Warcraft III START GAME",
-  ]);
-  expect(retried.clickLog.some((line) => line.startsWith("03-custom-games-again:"))).toBe(true);
-  expect((await world({ ignoredClicks: { "CUSTOM GAMES": 2 } }).run()).failure).toBe(
-    "4/7 Map stopped: Custom Games didn't show Create Game (pictures and click log: /state/play-debug/1970-01-01T00-00-00-000Z)");
-  const labelled = await world({ nameLabel: true }).run();
-  expect(labelled.failure).toBeUndefined();
-  expect(labelled.events).toContain("name field");
 });
 
 test("a missing map is installed from its declared build before the launch, and play stops when it can't be", async () => {
@@ -829,14 +720,6 @@ test("step 5 with an always-on controller service waits on it and starts no help
 
 test("a problem in the game's own step stops play with that step's name", async () => {
   expect((await world({ matchFails: true }).run()).failure).toBe("6/7 Match stopped: the map refused the playtest request");
-});
-
-test("a click outside the screen is refused before the pointer moves", () => {
-  // Run 7's retry was aimed at 1307,-29 and pinned the pointer at the top edge for eight moves.
-  const spot = (x: number, y: number) => ({ output: "eDP-1", area: FRAME, x, y, window: { id: "w", x: 0, y: 0, ...FRAME } });
-  expect(offScreen(spot(1307, -29))).toBe(true);
-  expect(offScreen(spot(2880, 10))).toBe(true);
-  expect(offScreen(spot(1307, 93))).toBe(false);
 });
 
 test("step 7 stops when the game's window won't take focus", async () => {

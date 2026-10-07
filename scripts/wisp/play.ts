@@ -11,12 +11,13 @@
 // It never signs in or out, never starts Warcraft III.exe itself (only the
 // launcher does), and never starts a runtime while another uses the prefix: a
 // launcher started beside another runtime can't start the game.
-// Warcraft's menus are found by the text they show, so any screen size works.
-// The game's window is fullscreen while play drives it, so a capture of its
-// output is the game's frame.
+// It hosts only through the game's menu page (wisp:docs/driving-warcraft.md),
+// as a private game, and stops when the page doesn't report: a game created by
+// clicks is listed publicly. Leaving a running match reads the game's text in
+// its fullscreen window, so a capture of its output is the game's frame.
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { Clock, Context, Effect, Exit, Schema } from "effect";
+import { Clock, Context, Effect, Exit, Schema, type Scope } from "effect";
 import {
   type LaunchOutcome, type PrefixUse, type ProcessInfo, documentsFolder, launchOptions, launchOutcome, launchRequested, launcherConfig, launcherLogDirectory, loadMapOption,
   newestLauncherLog, prefixUse, shortcutAppId, shortcutUrl, signedIn, withLaunchOptions,
@@ -25,7 +26,7 @@ import type { Ink, Word } from "../warcraft/desktop";
 import { type DisplaySettings, displayChanges, preferencesBackupPath, preferencesPath, withDisplaySettings } from "../warcraft/preferences";
 import { SCAN_QUIET_MS, importFailures, ladderScan, sessionStart, war3LogPath } from "../warcraft/war3Log";
 import { step } from "./timings";
-import { hostLobby, reportedMenus, startLobby } from "./menus";
+import { type MenuSocket, hostLobby, startLobby } from "./menus";
 import { ClientWatch, unlessLost } from "./watch";
 
 /** Why play can't go on, in words for the person who ran it. */
@@ -76,87 +77,6 @@ export interface Screen {
   readonly words: readonly Word[];
 }
 
-/**
- * A place to click: a point of an image `area` that captures `output` exactly,
- * and the target X window. The window may be letterboxed inside the output.
- */
-export interface Spot {
-  readonly output: string;
-  readonly area: { readonly width: number; readonly height: number };
-  readonly x: number;
-  readonly y: number;
-  readonly window: XWindow;
-}
-
-/** An output's place in the compositor's logical pixels, which its pointer moves in. */
-export interface OutputArea {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-}
-
-/** Where a spot is in the compositor's logical pixels and in the X root window's pixels. */
-export function spotTargets(spot: Spot, output: OutputArea) {
-  const across = spot.x / spot.area.width;
-  const down = spot.y / spot.area.height;
-  return {
-    logical: { x: output.x + across * output.width, y: output.y + down * output.height },
-    root: { x: Math.round((output.x + across * output.width) * spot.area.width / output.width), y: Math.round((output.y + down * output.height) * spot.area.height / output.height) },
-  };
-}
-
-interface Point {
-  readonly x: number;
-  readonly y: number;
-}
-
-/** X root pixels the X pointer moves per logical pixel the compositor's pointer is moved, on each axis. */
-export interface Gain {
-  readonly x: number;
-  readonly y: number;
-}
-
-/**
- * The gain before any move: the captured pixels per logical pixel of the output
- * (2 for 2880x1920 X pixels on a 1440x960 output at scale 2). Over
- * fullscreen Warcraft III's Battle.net screens it moved one X pixel per
- * logical pixel (6 Oct), so each move measures it again.
- */
-export const expectedGain = (spot: Spot, output: OutputArea): Gain => ({ x: spot.area.width / output.width, y: spot.area.height / output.height });
-
-/** The compositor pointer move, in logical pixels, that brings the X pointer from `at` to `target` at `gain`. */
-export const steer = (at: Point, target: Point, gain: Gain) => ({ dx: (target.x - at.x) / gain.x, dy: (target.y - at.y) / gain.y });
-
-/** The gain a move showed on each axis; an axis that moved too little to measure keeps the gain it had. */
-export function measuredGain(gain: Gain, requested: { readonly dx: number; readonly dy: number }, moved: Point): Gain {
-  const axis = (previous: number, asked: number, went: number) =>
-    (Math.abs(asked) >= 1 && Math.abs(went) >= 1 ? Math.min(4, Math.max(0.25, went / asked)) : previous);
-  return { x: axis(gain.x, requested.dx, moved.x), y: axis(gain.y, requested.dy, moved.y) };
-}
-
-/**
- * Moves the X pointer to `target` (X root pixels) with compositor moves,
- * measuring the gain after each, until it is within `tolerance` pixels or
- * `moves` moves are spent. `move` moves the compositor's pointer and returns
- * where the X pointer then is.
- */
-export const steerPointer = <E>(start: Point, target: Point, gain: Gain, tolerance: number, move: (dx: number, dy: number) => Effect.Effect<Point, E>, moves = 8) =>
-  Effect.gen(function*() {
-    const arrived = (at: Point) => Math.abs(at.x - target.x) <= tolerance && Math.abs(at.y - target.y) <= tolerance;
-    let at = start;
-    let current = gain;
-    const trace = [`pointer at X ${at.x},${at.y}`];
-    for (let made = 0; made < moves && !arrived(at); made++) {
-      const requested = steer(at, target, current);
-      const next = yield* move(requested.dx, requested.dy);
-      current = measuredGain(current, requested, { x: next.x - at.x, y: next.y - at.y });
-      trace.push(`moved ${requested.dx.toFixed(1)},${requested.dy.toFixed(1)} -> X ${next.x},${next.y} (gain ${current.x.toFixed(2)},${current.y.toFixed(2)})`);
-      at = next;
-    }
-    return { at, arrived: arrived(at), trace };
-  });
-
 /** The host: its processes and files. */
 export class PlayMachine extends Context.Service<PlayMachine, {
   readonly processes: Effect.Effect<readonly ProcessInfo[], PlayProblem>;
@@ -181,8 +101,6 @@ export class PlayMachine extends Context.Service<PlayMachine, {
   /** The SHA-256 of a file's bytes; undefined while it doesn't exist. */
   readonly digest: (path: string) => Effect.Effect<string | undefined, PlayProblem>;
   readonly list: (directory: string) => Effect.Effect<readonly string[], PlayProblem>;
-  /** Appends to a file, creating it and its folder. */
-  readonly append: (path: string, text: string) => Effect.Effect<void, PlayProblem>;
   /** Writes a file whole: a reader sees the old text or the new. */
   readonly write: (path: string, text: string) => Effect.Effect<void, PlayProblem>;
   /** Copies a file whole: the destination appears complete or not at all. */
@@ -198,16 +116,9 @@ export class PlayDesktop extends Context.Service<PlayDesktop, {
   readonly read: (output: string, ink: Ink) => Effect.Effect<Screen, PlayProblem>;
   /** The largest visible X window with this exact title, preferring those of process `pid`. */
   readonly xWindow: (title: string, pid?: number) => Effect.Effect<XWindow | undefined, PlayProblem>;
-  /** Saves a picture of an output to `path`, creating its folder. */
-  readonly snapshot: (output: string, path: string) => Effect.Effect<void, PlayProblem>;
-  /**
-   * Moves the compositor's pointer to a spot, as a mouse would, checks the X
-   * pointer got there, and clicks. Returns each move and where the pointer
-   * then was, for the click log.
-   */
-  readonly click: (spot: Spot) => Effect.Effect<readonly string[], PlayProblem>;
   readonly keys: (window: XWindow, ...keys: string[]) => Effect.Effect<void, PlayProblem>;
-  readonly typeText: (window: XWindow, text: string) => Effect.Effect<void, PlayProblem>;
+  /** The game's menu page when it reports on this port (wisp:scripts/wisp/menus.ts), connected until the scope closes. */
+  readonly menus: (reportPort: number) => Effect.Effect<MenuSocket | undefined, never, Scope.Scope>;
 }>()("wisp/PlayDesktop") {}
 
 /** The running game, as the consuming game's steps see it. */
@@ -237,8 +148,8 @@ export interface PlayDeclaration<R = never> {
   readonly map: { readonly folder: string; readonly file: string; readonly title: string; readonly source?: string };
   /** The hosted game's name; joining by name is case-sensitive. */
   readonly gameName: string;
-  /** The installed menu page's report port for this prefix. Absent uses ordinary menu controls. */
-  readonly menuReportPort?: number;
+  /** The installed menu page's report port for this prefix: play hosts only through it, as a private game. */
+  readonly menuReportPort: number;
   /**
    * The owner's display settings, `[Video]` keys of War3Preferences.txt.
    * Written in before the game starts and so into the saved copy, so a test
@@ -246,8 +157,6 @@ export interface PlayDeclaration<R = never> {
    * with them.
    */
   readonly displaySettings?: DisplaySettings;
-  /** Each run saves a picture before and after every click, and its click log, in a folder here named by its start time. */
-  readonly debugDirectory: string;
   /** Before Warcraft III starts the map: what the map reads at its start, left in Documents/Warcraft III. */
   readonly prepare: (documents: string) => Effect.Effect<void, PlayProblem, R>;
   /** When a run stops before the match: removes what prepare left, so a later session of the map runs as usual. */
@@ -352,28 +261,8 @@ export function findPhrase(words: readonly Word[], phrase: string, entry = false
   return found;
 }
 
-/** The lowest of a phrase's places: buttons sit below the titles that repeat their text. */
-const lowest = (places: readonly { readonly x: number; readonly y: number }[]) =>
-  places.reduce<{ readonly x: number; readonly y: number } | undefined>((best, place) => (best === undefined || place.y > best.y ? place : best), undefined);
-
-/** The highest of a phrase's places: a tab bar sits above the pages that repeat its words. */
-export const topmost = (places: readonly { readonly x: number; readonly y: number }[]) =>
-  places.reduce<{ readonly x: number; readonly y: number } | undefined>((best, place) => (best === undefined || place.y < best.y ? place : best), undefined);
-
-/** A spot outside the image its point is in: the pointer would only pin at the screen's edge. */
-export const offScreen = (spot: Spot) => spot.x < 0 || spot.y < 0 || spot.x >= spot.area.width || spot.y >= spot.area.height;
-
-/** Two reads of one control: within 6 px. */
-const samePlace = (a: Point, b: Point) => Math.abs(a.x - b.x) <= 6 && Math.abs(a.y - b.y) <= 6;
-
 const isFullscreen = (window: DesktopWindow) =>
   window.output !== undefined && window.width === window.output.width && window.height === window.output.height;
-
-/**
- * Create Game's game name field on a 2560x1440 frame. Warcraft's menus scale
- * with the frame's height and keep their left column on the left edge.
- */
-const GAME_NAME_FIELD = { x: 400, y: 340 };
 
 /** Runs the declared playtest, printing one status line per step. */
 export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) => void) => Effect.gen(function*() {
@@ -387,26 +276,6 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
 
   const status = (step: number, title: string, text: string) => Effect.sync(() => print(`${step}/${STEPS} ${title}: ${text}`));
 
-  const debug = join(declaration.debugDirectory, new Date(yield* Clock.currentTimeMillis).toISOString().replace(/[:.]/g, "-"));
-  const clickLog = join(debug, "clicks.log");
-  print(`Captures and click log: ${debug}`);
-  let clicks = 0;
-  /** A click, with a picture of its output before and after it and its pointer moves in the click log. */
-  const clickSpot = (what: string, window: number, spot: Spot) => Effect.gen(function*() {
-    const name = `${String(++clicks).padStart(2, "0")}-${what.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase()}`;
-    if (offScreen(spot)) {
-      const problem = `${what} would be clicked at ${spot.x},${spot.y}, outside the ${spot.area.width}x${spot.area.height} screen (pictures and click log: ${debug})`;
-      yield* machine.append(clickLog, `${name}: ${problem}\n`);
-      return yield* fail(problem);
-    }
-    yield* desktop.focus(window);
-    yield* desktop.snapshot(spot.output, join(debug, `${name}-before.jpg`));
-    const moves = yield* desktop.click(spot).pipe(Effect.tapError(({ problem }) => machine.append(clickLog, `${name}: ${spot.x},${spot.y} of ${spot.area.width}x${spot.area.height} on ${spot.output}: ${problem}\n`)));
-    yield* machine.append(clickLog, `${name}: ${spot.x},${spot.y} of ${spot.area.width}x${spot.area.height} on ${spot.output}; ${moves.join("; ")}\n`);
-    // The picture after shows what the click changed.
-    yield* Effect.sleep("300 millis");
-    yield* desktop.snapshot(spot.output, join(debug, `${name}-after.jpg`));
-  });
   const prefixState = machine.processes.pipe(Effect.map((processes) => prefixUse(processes, prefix, serverDirectory)));
   const pidList = (processes: readonly ProcessInfo[]) => processes.map(({ pid }) => pid).join(" ");
   const twoRuntimes = (use: PrefixUse) =>
@@ -520,11 +389,6 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   const leaveFullscreen = (id: number) => desktop.toggleFullscreen(id).pipe(Effect.tap(() => Effect.sync(() => asked.delete(id))));
   const outputOf = (id: number, what: string) => windowById(id).pipe(Effect.flatMap((window) =>
     window.output === undefined ? fail(`${what} isn't on any output`) : Effect.succeed(window.output.name)));
-  const sameShape = (screen: Screen, window: XWindow, what: string) =>
-    Math.abs(window.width / window.height - screen.width / screen.height) < 0.02
-      ? Effect.void
-      : fail(`${what} isn't covering its screen (window ${window.width}x${window.height}, screen ${screen.width}x${screen.height})`);
-
   /** The launcher's launch of Warcraft III, confirmed by its log: `LaunchBinary`, then a launch or a failure. */
   const launchGame = Effect.gen(function*() {
     const { launcher } = yield* prefixState;
@@ -576,7 +440,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   });
 
   const war3Log = war3LogPath(documents);
-  const watched = { name: "the game", documents, ...(declaration.menuReportPort === undefined ? {} : { menuReportPort: declaration.menuReportPort }) };
+  const watched = { name: "the game", documents, menuReportPort: declaration.menuReportPort };
   const clientState = Effect.gen(function*() {
     const watch = yield* Effect.serviceOption(ClientWatch);
     if (watch._tag === "None") return undefined;
@@ -643,7 +507,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     return { game: { documents, pid: process.pid, window: window.id, xWindow, display } satisfies PlayGame, since, earlierSession };
   });
 
-  // 4, through the menus: Multiplayer, Custom Games, Create Game, the map's folder, the map, the game's name, Create, Start.
+  // 4, through the menu page: a private game of the map, started. Without the page play stops: a game created by clicks is listed publicly.
   const host = (game: PlayGame) => Effect.scoped(Effect.gen(function*() {
     const { folder, title } = declaration.map;
     if ((yield* clientState)?.kind === "in match") {
@@ -661,116 +525,17 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       yield* key("Escape");
       yield* until(10, clientState.pipe(Effect.map((state) => state?.kind === "menus" ? true : undefined)), () => "Results didn't return to the menus");
     }
-    const driven = yield* Effect.gen(function*() {
-      const menus = yield* reportedMenus(declaration.menuReportPort);
-      if (menus === undefined) return false;
+    const menus = yield* desktop.menus(declaration.menuReportPort);
+    if (menus === undefined) {
+      return yield* fail(`Warcraft III's menu page didn't report on port ${declaration.menuReportPort}. play hosts only a private game through it, never a listed one by clicks: install the page once, with the owner's agreement, with \`wisp menus install RETAIL_DIR --port ${declaration.menuReportPort}\` (wisp:docs/driving-warcraft.md)`);
+    }
+    yield* Effect.gen(function*() {
       yield* hostLobby(menus, { folder, file: declaration.map.file, gameName: declaration.gameName, password: "" });
       const since = yield* Clock.currentTimeMillis;
       yield* startLobby(menus);
       yield* declaration.started(game, since);
-      return true;
     }).pipe(Effect.mapError((cause) => cause._tag === "MenuFailure" ? new PlayProblem({ problem: cause.message }) : cause));
-    if (driven) {
-      yield* status(4, "Map", `"${declaration.gameName}" of ${title} hosted through the menus (joining by name is case-sensitive)`);
-      return;
-    }
-    // The menus are read from the output, which only the fullscreen game covers.
-    yield* fullscreen(game.window, "Warcraft III's window", PLAY_TIMEOUTS.gameFullscreen);
-    const output = yield* outputOf(game.window, "Warcraft III's window");
-    const read = desktop.read(output, "gold");
-    const seen = (seconds: number, accept: (screen: Screen) => boolean, problem: string) =>
-      until(seconds, read.pipe(Effect.map((screen) => (accept(screen) ? screen : undefined))), () => problem);
-    const has = (screen: Screen, phrase: string, wholeLine = false) => findPhrase(screen.words, phrase, wholeLine).length > 0;
-    const click = (screen: Screen, place: { readonly x: number; readonly y: number } | undefined, what: string) => Effect.gen(function*() {
-      if (place === undefined) return yield* fail(`${what} isn't on the screen`);
-      yield* sameShape(screen, game.xWindow, "Warcraft III's window");
-      yield* clickSpot(what, game.window, { output, area: screen, x: place.x, y: place.y, window: game.xWindow });
-    });
-    const mapShown = (screen: Screen) => has(screen, title, true) || has(screen, folder, true);
-    const createButton = (screen: Screen) => lowest(findPhrase(screen.words, "Create Game"));
-
-    /**
-     * Reads until `find` gives the same place twice running: Warcraft's menus
-     * slide in (6 Oct: Battle.net's tabs moved 32 px down within 0.3 s of
-     * appearing), so a control is clicked only once it has stopped. A screen
-     * that already shows `next` ends the wait.
-     */
-    const settled = (find: (screen: Screen) => Point | undefined, next: (screen: Screen) => boolean, first: Screen | undefined, what: string) => Effect.gen(function*() {
-      let last = first === undefined ? undefined : find(first);
-      return yield* until(PLAY_TIMEOUTS.screen, read.pipe(Effect.map((screen) => {
-        if (next(screen)) return { screen, place: undefined };
-        const place = find(screen);
-        const previous = last;
-        last = place;
-        return place !== undefined && previous !== undefined && samePlace(previous, place) ? { screen, place } : undefined;
-      })), () => `${what} isn't on the screen, or doesn't stay still`);
-    });
-    /**
-     * Clicks a control found on the screen once it has settled and waits for
-     * the screen it leads to; clicks it once more when that doesn't come.
-     */
-    const advance = (what: string, find: (screen: Screen) => Point | undefined, next: (screen: Screen) => boolean, problem: string, first?: Screen, after: Effect.Effect<void, PlayProblem> = Effect.void) =>
-      Effect.gen(function*() {
-        let from = first;
-        for (let attempt = 1; attempt <= 2; attempt++) {
-          const at = yield* settled(find, next, from, what);
-          if (at.place === undefined) return at.screen;
-          yield* click(at.screen, at.place, attempt === 1 ? what : `${what} again`);
-          yield* after;
-          const reached = yield* poll(attempt === 1 ? PLAY_TIMEOUTS.next : PLAY_TIMEOUTS.screen, read.pipe(Effect.map((screen) => (next(screen) ? screen : undefined))));
-          if (reached !== undefined) return reached;
-          from = undefined;
-        }
-        return yield* fail(`${problem} (pictures and click log: ${debug})`);
-      });
-    const listed = (screen: Screen) => findPhrase(screen.words, title, true);
-    // A name field shows no label of its own on a 2560x1440 frame; when "Game Name" labels it, it is just below.
-    const nameField = (screen: Screen) => {
-      const scale = screen.height / 1440;
-      const label = topmost(findPhrase(screen.words, "Game Name"));
-      return label === undefined
-        ? { x: Math.round(GAME_NAME_FIELD.x * scale), y: Math.round(GAME_NAME_FIELD.y * scale) }
-        : { x: label.x, y: Math.round(label.y + 40 * scale) };
-    };
-    const named = (screen: Screen) => {
-      const field = nameField(screen);
-      const scale = screen.height / 1440;
-      return findPhrase(screen.words.filter((word) => Math.abs(word.x - field.x) < 400 * scale && Math.abs(word.y - field.y) < 40 * scale), declaration.gameName).length > 0;
-    };
-
-    let screen = yield* seen(PLAY_TIMEOUTS.mainMenu, (now) => has(now, "Multiplayer") || has(now, "Custom Games") || mapShown(now),
-      `Warcraft III didn't show its main menu within ${PLAY_TIMEOUTS.mainMenu} s`);
-    if (!mapShown(screen) && !has(screen, "Custom Games")) {
-      screen = yield* advance("Multiplayer", (now) => lowest(findPhrase(now.words, "Multiplayer")), (now) => has(now, "Custom Games"),
-        "Multiplayer didn't open Battle.net's Custom Games", screen);
-    }
-    if (!mapShown(screen)) {
-      if (createButton(screen) === undefined) {
-        screen = yield* advance("Custom Games", (now) => lowest(findPhrase(now.words, "Custom Games")), (now) => createButton(now) !== undefined,
-          "Custom Games didn't show Create Game", screen);
-      }
-      screen = yield* advance("Create Game", createButton, mapShown, `Create Game didn't list the folder ${folder}`, screen);
-    }
-    if (!has(screen, title, true)) {
-      screen = yield* advance(`the folder ${folder}`, (now) => findPhrase(now.words, folder, true)[0], (now) => has(now, title, true),
-        `the folder ${folder} doesn't list "${title}"`, screen);
-    }
-    // Selected, the map's title also heads the details beside the list.
-    if (listed(screen).length < 2) {
-      screen = yield* advance(`"${title}"`, (now) => listed(now)[0], (now) => listed(now).length >= 2, `"${title}" didn't become the selected map`, screen);
-    }
-    if (!named(screen)) {
-      const typeName = Effect.gen(function*() {
-        yield* desktop.keys(game.xWindow, "ctrl+a");
-        yield* desktop.typeText(game.xWindow, declaration.gameName);
-      });
-      screen = yield* advance("the game name field", nameField, named, `the game name field didn't take "${declaration.gameName}"`, screen, typeName);
-    }
-    screen = yield* advance("the Create button", (now) => lowest(findPhrase(now.words, "Create")), (now) => has(now, "Start"), "Create didn't open the game's lobby", screen);
-    const since = yield* Clock.currentTimeMillis;
-    yield* advance("the Start button", (now) => lowest(findPhrase(now.words, "Start")), (now) => !has(now, "Start"), "Start didn't start the game", screen);
-    yield* declaration.started(game, since);
-    yield* status(4, "Map", `"${declaration.gameName}" of ${title} hosted through the menus (joining by name is case-sensitive)`);
+    yield* status(4, "Map", `"${declaration.gameName}" of ${title} hosted as a private game through the menus`);
   }));
 
   // 4. The map, hosted once Warcraft III has signed in and read its ladder maps.
