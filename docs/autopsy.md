@@ -38,8 +38,10 @@ Every native session runner runs inside it:
 `wisp play` doesn't pass `autopsy`, because it is the owner's own game. Any other
 runner wraps its run in `withAutopsy({ clientsFile }, run)`
 (wisp:scripts/wisp/engine/autopsy.ts) with the clients file of its clients. For
-example, an offline LAN pool host passes the pool's file,
-`~/.local/state/wisp/lan/clients.json`.
+example, each offline LAN pool game (wisp:scripts/wisp/lan/pairAgent.ts) runs
+inside it with the pool's file, `~/.local/state/wisp/lan/clients.json`, from
+hosting until the game ends. Its findings go to the game's `autopsy.log`
+and its evidence to `autopsy/` beside its action log.
 
 ## What a session does
 

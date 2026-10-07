@@ -7,16 +7,18 @@
 //   POST /fresh {map}     host MAP as a LAN game and join both clients; answers once the match plays
 //   POST /end             end the current game
 // Each game writes its action log (host.ts) and packet record under the
-// pair's state folder.
+// pair's state folder, and runs inside the desync autopsy
+// (wisp:docs/autopsy.md): its findings go to the game's autopsy.log.
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { Effect, Exit, Scope } from "effect";
+import { Effect, Exit, Fiber, Scope } from "effect";
+import { withAutopsy } from "../engine/autopsy";
 import { findGameProcesses, readExecutable } from "../engine/memory";
 import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports } from "../menus";
 import { type LanHost, startHost } from "./host";
 import { LanFailure, enableLan, joinLanGame } from "./join";
 import { readMapFacts } from "./map";
-import { PAIR_SIDES, PROFILES, agentSocket, clientName, clientRoot, documentsOf, exeOf, pairDirectory, preferences, prefixOf, reportPort } from "./pool";
+import { PAIR_SIDES, PROFILES, agentSocket, clientName, clientRoot, documentsOf, exeOf, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
 
 const argument = (name: string) => {
   const at = process.argv.indexOf(`--${name}`);
@@ -79,6 +81,8 @@ interface Game {
   readonly log: string;
   readonly host: LanHost;
   readonly map: string;
+  /** The desync autopsy following this game until it ends. */
+  readonly autopsy: Fiber.Fiber<never>;
 }
 let game: Game | undefined;
 const scope = Scope.makeUnsafe();
@@ -98,6 +102,8 @@ const menusOf = (name: string): Effect.Effect<MenuSocket, LanFailure | MenuFailu
 const endGame = () => {
   if (game === undefined) return;
   game.host.stop();
+  // Interrupting the autopsy runs its last look at the reports and its summary.
+  Effect.runFork(Fiber.interrupt(game.autopsy));
   say(`ended ${game.id}`);
   game = undefined;
 };
@@ -132,7 +138,17 @@ const fresh = (mapFile: string, turnMs: number | undefined) => Effect.scoped(Eff
       appendFileSync(packets, `${((Date.now() - started) / 1000).toFixed(3)} ${direction} ${label} ${Buffer.from(bytes).toString("hex")}\n`);
     },
   });
-  game = { id, log, host, map: mapFile };
+  const autopsyLog = join(folder, "autopsy.log");
+  const autopsy = Effect.runFork(withAutopsy({
+    clientsFile: poolClientsFile(),
+    names: clients.map(({ name }) => name),
+    root: join(folder, "autopsy"),
+    print: (line) => {
+      appendFileSync(autopsyLog, `${line}\n`);
+      say(line);
+    },
+  }, Effect.never));
+  game = { id, log, host, map: mapFile, autopsy };
   say(`game ${id}: hosting ${inGame} on port ${host.port}`);
   for (const client of clients) {
     const pid = gamePid(client.name);
