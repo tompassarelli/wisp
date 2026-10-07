@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { startPairClients } from "../scripts/wisp/lan/startup";
+import { startPairClients, waitForFirstClient } from "../scripts/wisp/lan/startup";
 
 test("a peer starts only after the first client's locate check finishes", async () => {
   const events: string[] = [];
@@ -27,4 +27,29 @@ test("ordinary pool startup still starts both clients without a locate check", a
   const clients: string[] = [];
   await startPairClients(["a", "b"], async (client) => { clients.push(client); });
   expect(clients).toEqual(["a", "b"]);
+});
+
+test("locate waits for a delayed Warcraft process rather than the native launcher", async () => {
+  const events: string[] = [];
+  let polls = 0;
+  await startPairClients(["a", "b"], async (client) => { events.push(`start ${client}`); }, async () => {
+    await waitForFirstClient(() => polls === 3, () => false, async () => { polls++; events.push("waiting for Warcraft"); });
+    events.push("locate a");
+  });
+  expect(events).toEqual(["start a", "waiting for Warcraft", "waiting for Warcraft", "waiting for Warcraft", "locate a", "start b"]);
+});
+
+test("an exited native launcher fails before locate or peer startup", async () => {
+  const events: string[] = [];
+  await expect(startPairClients(["a", "b"], async (client) => { events.push(`start ${client}`); }, async () => {
+    await waitForFirstClient(() => false, () => true, async () => {});
+    events.push("locate a");
+  })).rejects.toThrow("native launcher stopped");
+  expect(events).toEqual(["start a"]);
+});
+
+test("a missing Warcraft process stops at the startup deadline", async () => {
+  let polls = 0;
+  await expect(waitForFirstClient(() => false, () => false, async () => { polls++; })).rejects.toThrow("within 60 s");
+  expect(polls).toBe(240);
 });

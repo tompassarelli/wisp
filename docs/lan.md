@@ -113,7 +113,8 @@ reads it and never changes it.
 
 `pool --locate-before-peer` starts client a, runs the read-only `engine locate`
 on it, and starts client b only after that succeeds. It uses the first client's
-private Documents folder and leaves the default startup unchanged. Locate
+private Documents folder and waits up to 60 seconds for its actual Warcraft
+process, stopping if its native launcher exits. The default startup is unchanged. Locate
 output is in `pair-K/desktop-a.out`. If no initialized presence table is found
 at startup, the pair stops with the locate error; the flag never loads a map
 to make a table appear. New-build offsets are printed, not automatically saved.

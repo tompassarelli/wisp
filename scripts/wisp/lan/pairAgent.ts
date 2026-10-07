@@ -21,7 +21,7 @@ import { readMapFacts } from "./map";
 import { PAIR_SIDES, poolProfile, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
 import { admissionFile, nativeCommand } from "./admission";
 import { makeEngine } from "../commands/engine";
-import { startPairClients } from "./startup";
+import { startPairClients, waitForFirstClient } from "./startup";
 
 const argument = (name: string) => {
   const at = process.argv.indexOf(`--${name}`);
@@ -110,6 +110,9 @@ try {
     if (early !== undefined) throw new Error(`${client.name}: its native launcher exited with ${early}`);
     say(`launched ${client.name}`);
   }, process.argv.includes("--locate-before-peer") ? async (client) => {
+    const first = games[0];
+    if (first === undefined) throw new Error("the first client's native launcher is missing");
+    await waitForFirstClient(() => findGameProcesses(prefixOf(client.name)).length > 0, () => first.exitCode !== null, () => Bun.sleep(250));
     const file = join(directory, "locate-client.json");
     writeFileSync(file, JSON.stringify({ clients: [{ name: client.name, documents: documentsOf(client.name) }] }));
     say(`${client.name}: locating engine offsets before starting its peer`);
