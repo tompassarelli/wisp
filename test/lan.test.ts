@@ -166,13 +166,16 @@ describe("host, replaying two recorded offline clients", () => {
 
   test("joins, retires lobby discovery, loads, logs actions and flags a checksum that differs", async () => {
     const lines: string[] = [];
+    const steps: number[] = [];
     let discoveryPort: number | undefined;
     let discoveryClosed = false;
     const announcements = await Bun.udpSocket({ hostname: "127.0.0.1", socket: {
       data: (_socket, _data, port) => { discoveryPort = port; },
       error: () => { discoveryClosed = true; announcements.close(); },
     } });
-    const host = startHost({ map: MAP, gameName: "t", clients: ["lan0a", "lan0b"], turnMs: 5, countdownMs: 0, settleMs: 0, log: (line) => lines.push(line), announcePorts: [announcements.port] });
+    const host = startHost({ map: MAP, gameName: "t", clients: ["lan0a", "lan0b"], turnMs: 5, countdownMs: 0, settleMs: 0, log: (line) => lines.push(line), announcePorts: [announcements.port], onPacket: (direction, client, packet) => {
+      if (direction === "out" && client === "lan0a" && packet[1] === PACKET.IncomingAction) steps.push(decodeIncomingAction(packet.subarray(4)).milliseconds);
+    } });
     try {
       await until(() => discoveryPort !== undefined, "a lobby announcement");
       const sockets = await Promise.all([0, 1].map(() => Bun.connect({ hostname: "127.0.0.1", port: host.port, socket: { data: () => {} } })));
@@ -204,6 +207,17 @@ describe("host, replaying two recorded offline clients", () => {
         "lan0b p2 key object=cbe:cbe event=525113 key=13 meta=0",
       ]);
       expect(lines.some((line) => line.endsWith('chat lan0b p2 "-dev quick"'))).toBe(true);
+      const beforeFast = steps.length;
+      const gameBeforeFast = host.status().gameSeconds;
+      host.setSpeed(4);
+      await until(() => steps.length >= beforeFast + 10, "accelerated turns");
+      expect(host.status().speed).toBe(4);
+      expect(steps.slice(beforeFast).every(step => step === 5)).toBe(true);
+      expect(host.status().gameSeconds - gameBeforeFast).toBeCloseTo((steps.length - beforeFast) * 0.005, 5);
+      expect(host.status().desyncs).toBe(0);
+      expect(() => host.setSpeed(NaN)).toThrow("between 1 and 16");
+      host.setSpeed(1);
+      expect(host.status().speed).toBe(1);
       // A keepalive whose checksum differs is a desync, named by its turn.
       send(0, encodePacket(PACKET.OutgoingKeepAlive, new Writer().u8(0).u32(1).bytes()));
       send(1, encodePacket(PACKET.OutgoingKeepAlive, new Writer().u8(0).u32(2).bytes()));
