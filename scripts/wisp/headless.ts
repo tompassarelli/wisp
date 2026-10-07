@@ -8,7 +8,8 @@
 import { readFileSync } from "node:fs";
 import type { FrameDefinition } from "./frames";
 import { join } from "node:path";
-import type { ClientScope, HeadlessClient, LocalNatives, MapEntry, NativeBehaviors } from "../../src/headless/client";
+import type { ClientScope, HeadlessClient, LocalNatives, MapEntry, NativeBehaviors, SoundCue } from "../../src/headless/client";
+import type { HeadlessRenderProject } from "./headlessRender";
 import { type NativeDeclarations, parseNativeDeclarations } from "../../src/headless/declarations";
 import { type Journey, type JourneyOptions, type JourneyResult, journeyLines, journeyProblems, runJourney } from "../../src/headless/journey";
 import { Lockstep, type LockstepOptions } from "../../src/headless/lockstep";
@@ -234,6 +235,7 @@ export interface HeadlessProject {
   /** The first is the default. */
   readonly journeys: Readonly<Record<string, Journey>>;
   readonly scene?: SceneExpectations;
+  readonly render?: HeadlessRenderProject;
 }
 
 /** The entry module's start() and install(); throws when it has none. */
@@ -251,6 +253,7 @@ export interface HeadlessReport {
   readonly frames: number;
   readonly clients: JourneyResult["clients"];
   readonly failures: readonly HeadlessFinding[];
+  readonly sounds: readonly (SoundCue & { readonly client: number })[];
 }
 
 export interface HeadlessFinding {
@@ -310,5 +313,6 @@ export function playHeadless(clients: Lockstep, journey: Journey, filePrefix: st
       failures.push({ kind: "scene", frame: result.frames, client: client.slot, message });
     }
   }
-  return { lines, problems, frames: result.frames, clients: result.clients, failures };
+  const sounds = clients.clients.flatMap((client) => client.soundLog.map((cue) => ({ ...cue, client: client.slot })));
+  return { lines, problems, frames: result.frames, clients: result.clients, failures, sounds };
 }

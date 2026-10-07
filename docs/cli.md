@@ -149,7 +149,10 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--opponent ID` | The computer players' named opponent identity | `farm balance` |
 | `--tier TIER` | The computer players' difficulty tier | `farm balance` |
 | `--per-pair N` | How many matches each fighter pair plays | `farm` |
-| `--frames N` | How many frames to play | `perf` |
+| `--frames N...` | Frame count for perf; chosen frame numbers for headless renders | `perf`, `headless` |
+| `--render DIR` | Write images from the headless match scene | `headless`, consumer pad checks |
+| `--journey FILE` | Read the headless journey's events from JSON | `headless` |
+| `--sound-cues FILE` | Write the headless sound cue log | `headless` |
 | `--samples` | Also print each frame's sample | `perf` |
 | `--threshold SHARE` | The rise that fails a comparison | `perf compare` |
 | `--cost` | Also print predicted Warcraft cost per frame | `headless` |
