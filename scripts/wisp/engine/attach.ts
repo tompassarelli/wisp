@@ -10,9 +10,9 @@
 //   passive and out of process, so it may follow an online dev client.
 //   "trap" (perf hardware breakpoints: watch) sets the process's debug
 //   registers, which code inside the process can observe, so it needs a
-//   verifiably offline client: not started by Battle.net (`-launch`), no
-//   Battle.net program in its prefix, and no connection to an address
-//   outside this machine and its local network.
+//   verifiably offline client: a network namespace with only loopback, no
+//   Battle.net program in its prefix, no Battle.net session argument (`-uid`)
+//   and no connection to an address outside this machine.
 // - Nothing writes to a game process, stops it, attaches a debugger or
 //   injects code; no command offers that.
 import { readdirSync, readFileSync, readlinkSync, statSync } from "node:fs";
@@ -82,6 +82,16 @@ export interface ProcessView {
   /** Socket inodes the process holds. */
   readonly sockets: ReadonlySet<number>;
   readonly connections: readonly Connection[];
+  /** Network interfaces in the process's network namespace, from /proc/PID/net/dev. */
+  readonly interfaces: readonly string[];
+}
+
+/** Interface names in /proc/PID/net/dev. */
+export function parseInterfaces(text: string): string[] {
+  return text.split("\n").slice(2).flatMap((line) => {
+    const name = /^\s*([^:\s]+):/.exec(line)?.[1];
+    return name === undefined ? [] : [name];
+  });
 }
 
 const BATTLE_NET = /(?:^|[\\/])(?:Battle\.net(?: Launcher)?|Agent|BlizzardBrowser|Blizzard Battle\.net)\.exe/i;
@@ -89,13 +99,16 @@ const BATTLE_NET = /(?:^|[\\/])(?:Battle\.net(?: Launcher)?|Agent|BlizzardBrowse
 /** Why `view`'s process may be online, or undefined when it is verifiably offline. */
 export function onlineProblem(view: ProcessView): string | undefined {
   const args = view.commandLine.split("\0");
-  if (args.some((arg) => arg === "-launch" || arg.startsWith("-uid"))) return `pid ${view.pid} was started by Battle.net (${args.slice(1).filter((arg) => arg !== "").join(" ")})`;
+  if (args.some((arg) => arg.startsWith("-uid"))) return `pid ${view.pid} was started by Battle.net (${args.slice(1).filter((arg) => arg !== "").join(" ")})`;
   const launcher = view.prefixCommandLines.find((line) => BATTLE_NET.test(line.split("\0")[0] ?? ""));
   if (launcher !== undefined) return `Battle.net runs in this client's prefix (${(launcher.split("\0")[0] ?? "").split("\\").pop()})`;
   // An established TCP connection, or a UDP socket connected to a peer, outside the local network.
   const remote = view.connections.find(({ protocol, state, inode, remote: address, remotePort }) =>
     view.sockets.has(inode) && !isLocalAddress(address) && (protocol === "tcp" ? state === 1 : remotePort !== 0));
   if (remote !== undefined) return `pid ${view.pid} has a ${remote.protocol} connection to ${remote.remote}:${remote.remotePort}`;
+  // Proof of offline: a network namespace that can reach nothing but itself.
+  const outside = view.interfaces.filter((name) => name !== "lo");
+  if (view.interfaces.length === 0 || outside.length > 0) return `pid ${view.pid}'s network namespace has ${outside.length > 0 ? `interfaces ${outside.join(", ")}` : "no readable interface list"}; an offline client runs in one with only loopback`;
   return undefined;
 }
 
@@ -122,6 +135,7 @@ export function viewProcess(pid: number, prefix: string, prefixPids: readonly nu
     commandLine: read(`/proc/${pid}/cmdline`),
     prefixCommandLines: [...processesInPrefix(prefix)].filter((other) => other !== pid && !prefixPids.includes(other)).map((other) => read(`/proc/${other}/cmdline`)),
     sockets,
+    interfaces: parseInterfaces(read(`/proc/${pid}/net/dev`)),
     connections: (["tcp", "udp"] as const).flatMap((protocol) => [...parseSocketTable(read(`/proc/${pid}/net/${protocol}`), protocol), ...parseSocketTable(read(`/proc/${pid}/net/${protocol}6`), protocol)]),
   };
 }
@@ -170,8 +184,9 @@ export function ownerProblem(environment: string): string | undefined {
 
 /**
  * Opens the client's one Warcraft III.exe, or says why it won't: "read"
- * needs memory access (ptrace_scope 0, or this process launched the client);
- * "trap" also needs the client verifiably offline.
+ * needs read access to its memory (Yama allows it at ptrace_scope 0, to an
+ * ancestor, or into a user namespace this user owns, as Proton's
+ * pressure-vessel makes); "trap" also needs the client verifiably offline.
  */
 export function attachClient({ name, prefix }: EngineClient, access: EngineAccess = "read"): AttachedClient | string {
   const processes = findGameProcesses(prefix);
@@ -186,21 +201,26 @@ export function attachClient({ name, prefix }: EngineClient, access: EngineAcces
   }
   const owner = ownerProblem(environment);
   if (owner !== undefined) return `client ${name}: refusing pid ${game.pid}: ${owner}`;
-  let scope: string | undefined;
-  try {
-    scope = readFileSync(PTRACE_SCOPE, "utf8");
-  } catch {
-    scope = undefined;
-  }
-  const blocked = scope?.trim() === "1" && isAncestorOf(game.pid) ? undefined : memoryAccessProblem(scope);
-  if (blocked !== undefined) return `client ${name}: ${blocked}`;
   if (access === "trap") {
     const online = onlineProblem(viewProcess(game.pid, prefix, []));
     if (online !== undefined) return `client ${name}: breakpoints need an offline client, and this one may be online: ${online} (wisp:docs/engine.md#guardrails)`;
   }
   const exe = readExecutable(game.exe);
   const maps = parseMaps(readFileSync(`/proc/${game.pid}/maps`, "latin1")).sort((x, y) => x.start - y.start);
-  const memory = procMemory(game.pid);
+  let memory: ReturnType<typeof procMemory>;
+  try {
+    memory = procMemory(game.pid);
+    const first = maps.find(({ permissions }) => permissions.startsWith("r"));
+    if (first !== undefined) memory.read(first.start, 1);
+  } catch (cause) {
+    let scope: string | undefined;
+    try {
+      scope = readFileSync(PTRACE_SCOPE, "utf8");
+    } catch {
+      scope = undefined;
+    }
+    return `client ${name}: can't read pid ${game.pid}'s memory (${cause instanceof Error ? cause.message : String(cause)})${scope === undefined ? "" : `. ${memoryAccessProblem(scope) ?? ""}`}`;
+  }
   const base = findImageBase(maps, memory, exe.header);
   if (base === undefined) {
     memory.close();

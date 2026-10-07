@@ -35,10 +35,12 @@ process, and it enforces these rules:
   that is signed in to Battle.net.
 - **Traps** (`watch`, `locate --watch`) set a perf hardware breakpoint, which
   loads the thread's debug registers. Traps refuse unless the client is
-  verifiably offline: not started by Battle.net (`-launch`, `-uid`), no
-  Battle.net program running in its prefix, and no TCP connection or
-  connected UDP socket to an address outside this machine and its local
-  network.
+  verifiably offline. That means its network namespace has only loopback
+  (`/proc/PID/net/dev` lists only `lo`), it has no Battle.net session
+  argument (`-uid`), no Battle.net program runs in its prefix, and it holds
+  no TCP connection or connected UDP socket to an address outside this
+  machine. An offline client also passes `-launch`, so that flag proves
+  nothing.
 - Nothing writes to a game process, stops it, attaches a debugger or injects
   code. No command offers any of these.
 
@@ -48,10 +50,12 @@ state, and modified memory. An external read of `/proc/PID/mem` leaves none of
 these behind. A `gdb` attach (ptrace) made signed-in client A exit with
 code 1 about 4 s later (#158), so there is no ptrace path at all.
 
-Memory reads need Yama's `kernel.yama.ptrace_scope=0`, or a Wisp process that
-launched the client (an ancestor may read its descendants at scope 1). The
-owner decides the setting; Wisp never changes it. At scope 1 a live command
-refuses and prints the exact commands:
+A command tries the read first. Yama's default `kernel.yama.ptrace_scope=1`
+still allows it in three cases: from an ancestor, at scope 0, or into a user
+namespace this user owns. Proton's pressure-vessel runs the game in such a
+namespace, so reads usually just work. When a read fails, the command
+refuses and prints the exact commands to change the scope. The owner decides
+the setting; Wisp never changes it.
 
 ```text
 sudo sysctl kernel.yama.ptrace_scope=0   # for the debugging session only
