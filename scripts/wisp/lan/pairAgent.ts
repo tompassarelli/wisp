@@ -22,7 +22,15 @@ const steam = join(process.env["HOME"] ?? "", ".local/share/Steam");
 const proton = join(steam, "compatibilitytools.d/GE-Proton11-7-x86_64/proton");
 const runtime = join(steam, "steamapps/common/SteamLinuxRuntime_4/_v2-entry-point");
 
-const clients = PAIR_SIDES.map((side, index) => ({ side, name: clientName(pair, side), port: reportPort(pair, side), windowX: index * (profile.width + 20) }));
+const runB = argument("run-b");
+const runs: Record<string, string | undefined> = { a: process.env["PRIVATE_DESKTOP_RUN"], b: runB };
+/** Client b's display: its own private desktop, from that desktop's run folder. */
+const displayOf = (run: string | undefined): Record<string, string> => {
+  if (run === undefined) return {};
+  const read = (file: string) => (existsSync(join(run, file)) ? readFileSync(join(run, file), "utf8").trim() : "");
+  return { DISPLAY: read("display"), WAYLAND_DISPLAY: read("wayland-display"), XAUTHORITY: read("xauthority"), XDG_RUNTIME_DIR: join(run, "runtime"), PRIVATE_DESKTOP_RUN: run };
+};
+const clients = PAIR_SIDES.map((side) => ({ side, name: clientName(pair, side), port: reportPort(pair, side), windowX: 0, env: side === "b" ? displayOf(runB) : {} }));
 
 // Each client plays into its own silent sink on the user's PipeWire, so a pool
 // never sounds on the owner's speakers and a check records exactly one
@@ -51,7 +59,7 @@ for (const client of clients) {
   writeFileSync(join(documentsOf(client.name), "War3Preferences.txt"), preferences(profile, client.windowX));
   const appId = String(3516115600 + pair * 2 + PAIR_SIDES.indexOf(client.side));
   Bun.spawn(["dbus-run-session", "--", "steam-run", "env", runtime, "--verb=waitforexitandrun", "--", proton, "waitforexitandrun", exeOf(client.name), "-launch", "-windowmode", "windowed", "-nowfpause"], {
-    env: { ...process.env, ...audioEnv(client.name), STEAM_COMPAT_DATA_PATH: clientRoot(client.name), STEAM_COMPAT_CLIENT_INSTALL_PATH: steam, STEAM_COMPAT_APP_ID: appId, SteamAppId: appId, SteamGameId: appId },
+    env: { ...process.env, ...client.env, ...audioEnv(client.name), STEAM_COMPAT_DATA_PATH: clientRoot(client.name), STEAM_COMPAT_CLIENT_INSTALL_PATH: steam, STEAM_COMPAT_APP_ID: appId, SteamAppId: appId, SteamGameId: appId },
     stdout: Bun.file(join(directory, `${client.name}.out`)),
     stderr: Bun.file(join(directory, `${client.name}.err`)),
   });
@@ -61,26 +69,28 @@ for (const client of clients) {
 
 const gamePid = (name: string) => findGameProcesses(prefixOf(name))[0]?.pid;
 
-// labwc opens every game window at the same spot, and Xwayland throttles a
-// window another covers: that game falls behind the lockstep. Each game's
-// window goes to its own column of the desktop instead.
+// The game may open its window larger than its settings ask, past the edge
+// of its desktop; each client's window is set to the profile's size at the
+// top left of its own desktop. (On one shared desktop, labwc stacked both
+// windows in one place, and Xwayland throttled the covered game until it fell
+// behind the lockstep: hence a desktop per client.)
 const xdotool = process.env["WISP_XDOTOOL"] ?? Bun.which("xdotool") ?? (() => {
   const built = Bun.spawnSync(["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#xdotool"], { stdout: "pipe", stderr: "ignore" });
   return built.exitCode === 0 ? join(built.stdout.toString().trim().split("\n")[0] ?? "", "bin/xdotool") : undefined;
 })();
-const x11 = (...args: string[]) => xdotool === undefined ? "" : Bun.spawnSync([xdotool, ...args], { stdout: "pipe", stderr: "ignore", timeout: 5000 }).stdout.toString();
+const x11 = (env: Record<string, string>, ...args: string[]) =>
+  xdotool === undefined ? "" : Bun.spawnSync([xdotool, ...args], { env: { ...process.env, ...env }, stdout: "pipe", stderr: "ignore", timeout: 5000 }).stdout.toString();
 const placeWindows = () => {
-  for (const window of x11("search", "--name", "^Warcraft III$").split("\n").filter((id) => id !== "")) {
-    const pid = Number(x11("getwindowpid", window).trim());
-    const client = clients.find(({ name }) => gamePid(name) === pid);
-    if (client === undefined) continue;
-    const geometry = x11("getwindowgeometry", window);
-    if (geometry.includes(`Position: ${client.windowX},0 `)) continue;
-    x11("windowsize", window, String(profile.width), String(profile.height), "windowmove", window, String(client.windowX), "0");
-    say(`placed ${client.name}'s window at ${client.windowX},0`);
+  for (const client of clients) {
+    for (const window of x11(client.env, "search", "--name", "^Warcraft III$").split("\n").filter((id) => id !== "")) {
+      const geometry = x11(client.env, "getwindowgeometry", window);
+      if (geometry.includes(`Position: ${client.windowX},0 `) && geometry.includes(`Geometry: ${profile.width + 4}x${profile.height + 4}`)) continue;
+      x11(client.env, "windowsize", window, String(profile.width), String(profile.height), "windowmove", window, String(client.windowX), "0");
+      say(`placed ${client.name}'s window at ${client.windowX},0, ${profile.width}x${profile.height}`);
+    }
   }
 };
-if (xdotool === undefined) say("no xdotool: game windows stay where the desktop puts them, and a covered one falls behind");
+if (xdotool === undefined) say("no xdotool: game windows keep the size and place the desktop gives them");
 setInterval(placeWindows, 3000);
 
 interface Game {
@@ -136,9 +146,9 @@ const server = Bun.serve({
       });
     }
     if (url.pathname === "/fresh" && request.method === "POST") {
-      const body = (await request.json()) as { map?: string; turnMs?: number };
+      const body = (await request.json()) as { map?: string; turnMs?: number; computers?: number };
       if (typeof body.map !== "string" || !existsSync(body.map)) return Response.json({ error: `no map at ${body.map}` }, { status: 400 });
-      const exit = await Effect.runPromiseExit(fresh(body.map, body.turnMs));
+      const exit = await Effect.runPromiseExit(fresh(body.map, body.turnMs, body.computers));
       if (Exit.isSuccess(exit)) return Response.json(exit.value);
       say(`fresh failed: ${String(exit.cause)}`);
       return Response.json({ error: String(exit.cause) }, { status: 500 });
@@ -150,7 +160,7 @@ const server = Bun.serve({
     return new Response("not found", { status: 404 });
   },
 });
-writeFileSync(join(directory, "agent.json"), `${JSON.stringify({ pid: process.pid, socket: agentSocket(pair), profile: profile.name, run: process.env["PRIVATE_DESKTOP_RUN"] })}\n`);
+writeFileSync(join(directory, "agent.json"), `${JSON.stringify({ pid: process.pid, socket: agentSocket(pair), profile: profile.name, runs })}\n`);
 say(`agent on ${agentSocket(pair)}`);
 process.on("SIGTERM", () => {
   endGame();
