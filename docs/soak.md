@@ -169,3 +169,23 @@ the TypeScript's in Bun scaled, not Warcraft's Lua and engine; a game sets
 `costScale` from its own measurements to judge it in native terms, and
 `wisp perf` predicts Warcraft's cost from 32-bit Lua, allocation included. The
 fuzzer finds what random edges reach; it makes no balance or feel judgments.
+
+## JSON results
+
+Add `--json` to a soak run or `soak --repro FILE` to write JSON Lines to
+stdout. Step timings and the final error message stay on stderr. Without
+`--json`, the usual output stays unchanged.
+
+Each completed match writes one `type: "result"` record with `ok`, `match`
+(including its seed), `frames`, `wallMs`, `costMs`, `worstFrameMs`, and
+`checksums`. Each finding writes a `type: "failure"` record with `kind`,
+`frame`, `client`, `message`, and `match`; `repro` names its saved repro when
+available. Missing frame or client values are `null`.
+
+Failure kinds are `desync`, `error` (including crashes), `scene` (including
+invisible fighters), `budget` (frame cost, typing, catch-up, or the run's time
+limit), and `check-fail` (stalls, unfinished matches, or game checks).
+The last line is always a `type: "summary"` record with `ok`,
+`counts: { results, failures }`, and monotonic `elapsedMs`. All records have
+`schema: 1` and `command: "soak"`. Findings and load errors keep the existing
+nonzero exit code.

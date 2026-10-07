@@ -3,17 +3,17 @@ import { Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { confirmedCommand, openObservedChat, type ChatEntry } from "../scripts/wisp/chatSetup";
 
-test("a missed Return ends at chat entry before command text or input execution", async () => {
-  let text = false, input = false;
+test("two missed Returns end at chat entry before command text or input execution", async () => {
+  let text = false, input = false, returns = 0;
   const entry: ChatEntry = { available: true, open: false, modified: 1 };
   const run = Effect.gen(function*() {
-    yield* openObservedChat({ name: "lan2a" }, Effect.sync(() => entry), Effect.void);
+    yield* openObservedChat({ name: "lan2a" }, Effect.sync(() => entry), Effect.sync(() => { returns++; }));
     text = true;
     input = true;
   });
   const result = await Effect.runPromise(Effect.gen(function*() {
     const fiber = yield* Effect.forkChild(run, { startImmediately: true });
-    yield* TestClock.adjust("9 seconds");
+    yield* TestClock.adjust("18 seconds");
     return yield* Fiber.await(fiber);
   }).pipe(Effect.provide(TestClock.layer())));
   expect(Exit.isFailure(result)).toBe(true);
@@ -21,6 +21,25 @@ test("a missed Return ends at chat entry before command text or input execution"
   expect(String(result._tag === "Failure" && result.cause)).toContain("lan2a");
   expect(text).toBe(false);
   expect(input).toBe(false);
+  expect(returns).toBe(2);
+});
+
+test("a missed first Return retries before typing and still requires the new open receipt", async () => {
+  let entry: ChatEntry = { available: true, open: false, modified: 1 };
+  let returns = 0, typed = false;
+  await Effect.runPromise(Effect.gen(function*() {
+    const fiber = yield* Effect.forkChild(openObservedChat({ name: "a" }, Effect.sync(() => entry), Effect.sync(() => {
+      returns++;
+      if (returns === 2) entry = { ...entry, open: true, modified: 2 };
+    })).pipe(Effect.tap(() => Effect.sync(() => { typed = true; }))), { startImmediately: true });
+    yield* TestClock.adjust("8 seconds");
+    expect(typed).toBe(false);
+    expect(returns).toBe(1);
+    yield* TestClock.adjust("1 second");
+    yield* Fiber.join(fiber);
+  }).pipe(Effect.provide(TestClock.layer())));
+  expect(returns).toBe(2);
+  expect(typed).toBe(true);
 });
 
 test("old open receipt is closed by Return and only a fresh open transition permits typing", async () => {
