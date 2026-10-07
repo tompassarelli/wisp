@@ -4,11 +4,12 @@
 // `wisp perf native` and `wisp perf fit` hold predictions to native overlay
 // readings (wisp:docs/frame-cost.md#checking-against-warcraft).
 import { join } from "node:path";
-import { Console, Effect, Schema } from "effect";
+import { Cause, Clock, Console, Effect, Exit, Option, Schema } from "effect";
 import { mapCompiler, report } from "../../compiler";
 import { type Command, UsageFailure, describeCause, flagValues } from "../command";
 import { DEFAULT_PERF_THRESHOLD, comparePerfRuns, parsePerfRun, predictionLines } from "../perf";
 import { step } from "../timings";
+import { emitJson } from "../jsonResults";
 import { type NativeCase, checkNative, fitNativeCost, nativeCheckLines, parseNativeReadings, parsePerfSamples } from "../nativeFit";
 import { type NativeCostModel, WARCRAFT_COST } from "../../../src/headless/nativeCost";
 
@@ -54,7 +55,18 @@ const readRun = (path: string) => Effect.tryPromise({
   catch: (cause) => new PerfFailure({ problem: `${path}: ${describeCause(cause)}` }),
 });
 
-const compare: Command = (args) => Effect.gen(function*() {
+interface PerfOutput {
+  readonly json: boolean;
+  readonly result: (data: Readonly<Record<string, unknown>>) => Effect.Effect<void>;
+  failureKind: "error" | "check-fail" | "budget";
+}
+
+const runData = (run: ReturnType<typeof parsePerfRun>) => ({
+  frames: run.frames, step: run.step, problems: run.problems, collector: run.collector,
+  clients: [...run.clients].map(([client, metrics]) => ({ client, metrics })),
+});
+
+const compare = (output: PerfOutput): Command => (args) => Effect.gen(function*() {
   const [thresholdText = String(DEFAULT_PERF_THRESHOLD)] = flagValues(args, "threshold");
   const paths = args.filter((arg, index) => !arg.startsWith("--") && args[index - 1] !== "--threshold");
   const threshold = Number(thresholdText);
@@ -62,12 +74,16 @@ const compare: Command = (args) => Effect.gen(function*() {
   if (a === undefined || b === undefined || paths.length !== 2 || !(threshold >= 0)) {
     return yield* new UsageFailure({ problem: "perf compare takes two runs and an optional --threshold share, such as 0.05" });
   }
-  const comparison = comparePerfRuns(yield* readRun(a), yield* readRun(b), threshold);
-  yield* Console.log(comparison.lines.join("\n"));
+  const before = yield* readRun(a);
+  const after = yield* readRun(b);
+  const comparison = comparePerfRuns(before, after, threshold);
+  if (output.json) yield* output.result({ before: runData(before), after: runData(after), threshold, regressions: comparison.regressions });
+  else yield* Console.log(comparison.lines.join("\n"));
   if (comparison.regressions.length > 0) {
+    output.failureKind = "budget";
     return yield* new PerfFailure({ problem: `B is worse than A by more than ${threshold * 100}%: ${comparison.regressions.join("; ")}` });
   }
-  yield* Console.log(`B is no worse than A beyond ${threshold * 100}%`);
+  if (!output.json) yield* Console.log(`B is no worse than A beyond ${threshold * 100}%`);
 });
 
 /** Frames a named run plays unless --frames says otherwise. */
@@ -117,7 +133,7 @@ const modelLine = (model: NativeCostModel) =>
  * predicted overlay against a native session's readings of the same build;
  * fails unless median and p95 are within 20%. Without --samples it plays RUN.
  */
-const native = (project: PerfProject): Command => (args) => Effect.gen(function*() {
+const native = (project: PerfProject, output: PerfOutput): Command => (args) => Effect.gen(function*() {
   const [samples] = flagValues(args, "samples");
   const [slotText = "0"] = flagValues(args, "slot");
   const [framesText = String(DEFAULT_FRAMES)] = flagValues(args, "frames");
@@ -126,8 +142,12 @@ const native = (project: PerfProject): Command => (args) => Effect.gen(function*
   if (readings === undefined || named.length > 2) return yield* new UsageFailure({ problem: "perf native takes the native readings (a session's bot-result.json), then a run, or --samples FILE" });
   const samplesText = samples === undefined ? (yield* measureRun(project, name, Number(framesText), true)).output : yield* readText(samples);
   const check = checkNative(WARCRAFT_COST, yield* readCase(samplesText, readings, Number(slotText)));
-  yield* Console.log([modelLine(WARCRAFT_COST), ...nativeCheckLines(check)].join("\n"));
-  if (!check.passed) return yield* new PerfFailure({ problem: "the prediction misses native by more than 20%, or the readings show no p95" });
+  if (output.json) yield* output.result({ model: WARCRAFT_COST, ...check });
+  else yield* Console.log([modelLine(WARCRAFT_COST), ...nativeCheckLines(check)].join("\n"));
+  if (!check.passed) {
+    output.failureKind = "check-fail";
+    return yield* new PerfFailure({ problem: "the prediction misses native by more than 20%, or the readings show no p95" });
+  }
 });
 
 /**
@@ -135,30 +155,38 @@ const native = (project: PerfProject): Command => (args) => Effect.gen(function*
  * costs fitted to every case, each case's error under them, and with two or
  * more cases each one's error under a fit to the others (held out).
  */
-const fit: Command = (args) => Effect.gen(function*() {
+const fit = (output: PerfOutput): Command => (args) => Effect.gen(function*() {
   const [slotText = "0"] = flagValues(args, "slot");
   const pairs = args.filter((arg, index) => !arg.startsWith("--") && args[index - 1] !== "--slot");
   if (pairs.length === 0 || pairs.some((pair) => !pair.includes("="))) return yield* new UsageFailure({ problem: "perf fit takes SAMPLES=READINGS pairs: a run's perf --samples output and its native overlay readings" });
   const cases = yield* Effect.forEach(pairs, (pair) => readText(pair.slice(0, pair.indexOf("="))).pipe(Effect.flatMap((text) => readCase(text, pair.slice(pair.indexOf("=") + 1), Number(slotText)))));
   const fitted = fitNativeCost(WARCRAFT_COST, cases);
   const lines = [`fitted to all ${cases.length}: ${modelLine(fitted)}`];
-  for (const item of cases) lines.push(...nativeCheckLines(checkNative(fitted, item)));
+  for (const item of cases) {
+    const check = checkNative(fitted, item);
+    if (output.json) yield* output.result({ fit: "all", model: fitted, ...check });
+    else lines.push(...nativeCheckLines(check));
+  }
   if (cases.length > 1) {
     for (const item of cases) {
       const others = fitNativeCost(WARCRAFT_COST, cases.filter((other) => other !== item));
-      lines.push(`held out ${item.name}, fitted to the others: native call ${others.nativeCallUs} µs, collector ${others.collectorUsPerKb} µs per KB`);
-      lines.push(...nativeCheckLines(checkNative(others, item)));
+      const check = checkNative(others, item);
+      if (output.json) yield* output.result({ fit: "held-out", model: others, ...check });
+      else {
+        lines.push(`held out ${item.name}, fitted to the others: native call ${others.nativeCallUs} µs, collector ${others.collectorUsPerKb} µs per KB`);
+        lines.push(...nativeCheckLines(check));
+      }
     }
   }
-  yield* Console.log(lines.join("\n"));
+  if (!output.json) yield* Console.log(lines.join("\n"));
 });
 
 
 /** `perf [RUN] [--frames N] [--samples] [--out FILE]` and `perf compare A B [--threshold SHARE]`. */
-export const makePerf = (project: PerfProject): Command => (args) => Effect.gen(function*() {
-  if (args[0] === "compare") return yield* compare(args.slice(1));
-  if (args[0] === "native") return yield* native(project)(args.slice(1));
-  if (args[0] === "fit") return yield* fit(args.slice(1));
+const perf = (project: PerfProject, output: PerfOutput): Command => (args) => Effect.gen(function*() {
+  if (args[0] === "compare") return yield* compare(output)(args.slice(1));
+  if (args[0] === "native") return yield* native(project, output)(args.slice(1));
+  if (args[0] === "fit") return yield* fit(output)(args.slice(1));
   const [out] = flagValues(args, "out");
   const [framesText = String(DEFAULT_FRAMES)] = flagValues(args, "frames");
   const named = args.filter((arg, index) => !arg.startsWith("--") && args[index - 1] !== "--out" && args[index - 1] !== "--frames");
@@ -168,9 +196,42 @@ export const makePerf = (project: PerfProject): Command => (args) => Effect.gen(
   if (named.length > 1 || runs[name] === undefined || !Number.isInteger(frames) || frames < 1) {
     return yield* new UsageFailure({ problem: `perf takes one run (${Object.keys(runs).join(", ")}), --frames N, --samples and --out FILE; or compare A B; native READINGS [RUN]; fit SAMPLES=READINGS ...` });
   }
-  const { output, summary, measured } = yield* measureRun(project, name, frames, args.includes("--samples"));
-  if (out !== undefined) yield* Effect.tryPromise({ try: () => Bun.write(out, output), catch: (cause) => new PerfFailure({ problem: `writing ${out}: ${describeCause(cause)}` }) });
-  yield* Console.log(summary);
-  yield* Console.log(predictionLines(measured).join("\n"));
-  if (measured.problems > 0) return yield* new PerfFailure({ problem: `the run found ${measured.problems} problem(s); its frames are not a measurement` });
+  const { output: stdout, summary, measured } = yield* measureRun(project, name, frames, args.includes("--samples"));
+  if (out !== undefined) yield* Effect.tryPromise({ try: () => Bun.write(out, stdout), catch: (cause) => new PerfFailure({ problem: `writing ${out}: ${describeCause(cause)}` }) });
+  if (output.json) yield* output.result({ name, ...runData(measured) });
+  else {
+    yield* Console.log(summary);
+    yield* Console.log(predictionLines(measured).join("\n"));
+  }
+  if (measured.problems > 0) {
+    output.failureKind = "check-fail";
+    return yield* new PerfFailure({ problem: `the run found ${measured.problems} problem(s); its frames are not a measurement` });
+  }
+});
+
+/** JSON Lines contain measurements, a failure when present, and one final summary. */
+export const makePerf = (project: PerfProject): Command => (args) => Effect.gen(function*() {
+  const json = args.includes("--json");
+  const clean = args.filter((arg) => arg !== "--json");
+  const command = ["compare", "native", "fit"].includes(clean[0] ?? "") ? `perf ${clean[0]}` : "perf";
+  const started = yield* Clock.currentTimeMillis;
+  let results = 0;
+  const output: PerfOutput = {
+    json, failureKind: "error",
+    result: (data) => emitJson(command, { type: "result", ...data }).pipe(Effect.tap(() => Effect.sync(() => { results++; }))),
+  };
+  if (!json) return yield* perf(project, output)(clean);
+  const exit = yield* Effect.exit(perf(project, output)(clean));
+  if (Exit.isFailure(exit)) {
+    const failure = Cause.findErrorOption(exit.cause);
+    yield* emitJson(command, {
+      type: "failure", kind: output.failureKind, frame: null, client: null,
+      message: Option.isSome(failure) ? failure.value.message : Cause.pretty(exit.cause),
+    });
+  }
+  yield* emitJson(command, {
+    type: "summary", ok: Exit.isSuccess(exit), counts: { results, failures: Exit.isFailure(exit) ? 1 : 0 },
+    elapsedMs: (yield* Clock.currentTimeMillis) - started,
+  });
+  if (Exit.isFailure(exit)) return yield* Effect.failCause(exit.cause);
 });

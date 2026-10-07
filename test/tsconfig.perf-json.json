@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": [
+      "ESNext"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noEmitOnError": true,
+    "skipLibCheck": true,
+    "types": [
+      "lua-types/5.3"
+    ],
+    "rootDir": "..",
+    "outDir": "../build/meter-tests"
+  },
+  "include": [
+    "frameMeter/perf-lua.ts"
+  ],
+  "tstl": {
+    "luaTarget": "5.3",
+    "luaBundle": "perf.lua",
+    "luaBundleEntry": "frameMeter/perf-lua.ts",
+    "noImplicitSelf": true,
+    "noHeader": true,
+    "luaPlugins": [
+      {
+        "name": "../plugins/warcraft-numbers.ts"
+      }
+    ]
+  }
+}

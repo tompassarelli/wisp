@@ -217,6 +217,21 @@ play and `samples` as its next arguments.
   problem. Each of these is made from counts, so the same code compares
   alike on any machine; Lua time is printed, not held to it.
 
+Add `--json` to `perf`, `perf compare`, `perf native`, or `perf fit` for
+JSON Lines on stdout. Each measurement is a `result` with `schema: 1` and
+`command` (`perf`, `perf compare`, `perf native`, or `perf fit`). Headless
+measurements include `name`, `frames`, `step`, `problems`, `collector` and a
+`clients` array of `{client, metrics}`. Comparisons include `before`, `after`,
+`threshold` and `regressions`. Native checks include the `model`, `native`,
+`predicted`, `errors` and `passed`; fitted cases also name `fit` as `all` or
+`held-out`. Samples still go to `--out FILE`, rather than JSON stdout.
+
+Failures print a `failure` with `kind` (`error`, `check-fail`, or `budget`),
+`frame: null`, `client: null` and `message`. The last line is always a
+`summary` with `schema: 1`, `command`, `ok`, `counts: {results, failures}` and
+`elapsedMs`; a failed command keeps its nonzero exit code. Text output is
+unchanged when `--json` is absent.
+
 For CI, run `perf --out` on both versions and `perf compare` the two files.
 Smashcraft's 0.0.48 four-fighter match against 0.0.49's fails it on
 allocation, its mean up 273% and its 95th percentile 501%: 0.0.48's binary32
