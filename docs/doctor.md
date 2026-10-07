@@ -25,6 +25,14 @@ b: Battle.net rejected its saved login (ERROR_TOKEN_NOT_FOUND); it needs its own
 Run it before a session on the clients; `play`, `accept` and the bot
 sessions run it for you (below). It exits 1 when it stopped.
 
+Clients marked `offline: true` in the clients file belong to the LAN pool.
+They need no Battle.net start declaration. Doctor reads their watch state
+without starting or ending programs or sending input. A closed, crashed or
+disconnected client stops with a line asking its pool owner to restart that
+pair. Other states are reported to the session runner, which starts its match
+through `lan fresh`. This applies per client, including mixed clients files;
+signed-in clients still require their own Battle.net start declaration.
+
 ## What it reads
 
 Nothing from the screen. Each client's state comes from

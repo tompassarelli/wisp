@@ -25,7 +25,7 @@ export class DesktopFailure extends Schema.TaggedError<DesktopFailure>()("Deskto
 
 const ClientsFile = Schema.Struct({
   tools: Schema.Struct({ grim: Schema.String, xdotool: Schema.String, wlrctl: Schema.String, tesseract: Schema.String }),
-  clients: Schema.NonEmptyArray(Schema.Struct({ name: Schema.String, run: Schema.String, documents: Schema.String, menuReportPort: Schema.optional(Schema.Int), displaySettings: Schema.optional(Schema.Record(Schema.String, Schema.String)) })),
+  clients: Schema.NonEmptyArray(Schema.Struct({ name: Schema.String, run: Schema.String, documents: Schema.String, menuReportPort: Schema.optional(Schema.Int), displaySettings: Schema.optional(Schema.Record(Schema.String, Schema.String)), offline: Schema.optionalKey(Schema.Boolean) })),
 });
 type Tools = typeof ClientsFile.Type["tools"];
 
