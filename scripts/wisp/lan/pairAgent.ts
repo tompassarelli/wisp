@@ -108,7 +108,14 @@ interface Game {
 let game: Game | undefined;
 const scope = Scope.makeUnsafe();
 const reports = new Map<string, MenuReports>();
-for (const client of clients) reports.set(client.name, await Effect.runPromise(listenForMenus(client.port).pipe(Scope.provide(scope))));
+// The agent holds each client's report port inside the pair's namespace, where
+// `wisp menus listen` can't reach; it keeps the requests each client's menus send instead.
+for (const client of clients) {
+  const sentLog = join(directory, `${client.name}-menus.log`);
+  const onSent = (sent: { readonly message: string; readonly payload?: unknown }) =>
+    appendFileSync(sentLog, `${new Date().toISOString()} ${sent.payload === undefined ? sent.message : `${sent.message} ${JSON.stringify(sent.payload)}`}\n`);
+  reports.set(client.name, await Effect.runPromise(listenForMenus(client.port, onSent).pipe(Scope.provide(scope))));
+}
 
 const menusOf = (name: string): Effect.Effect<MenuSocket, LanFailure | MenuFailure, Scope.Scope> => Effect.gen(function*() {
   const report = reports.get(name);

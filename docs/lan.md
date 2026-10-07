@@ -32,6 +32,9 @@ under `$XDG_STATE_HOME/wisp/lan/` (default `~/.local/state/wisp/lan/`):
 - `pair-K/clients.json`: one pair's clients, named `a` and `b`, for tools
   written against two clients A and B.
 
+`pair-K/<client>-menus.log` keeps every request that client's menus send, as
+`wisp menus listen` prints them: the agent holds the clients' report ports.
+
 Each game's files are under `pair-K/games/<time>/`: `actions.log` and
 `packets.log` (every packet except empty turns, in hex).
 
