@@ -25,6 +25,8 @@ export const retailOf = (name: string) => join(installOf(name), "_retail_");
 export const exeOf = (name: string) => join(retailOf(name), "x86_64/Warcraft III.exe");
 export const documentsOf = (name: string) => join(prefixOf(name), "drive_c/users/steamuser/Documents/Warcraft III");
 export const pairDirectory = (pair: number) => join(stateRoot(), `pair-${pair}`);
+/** The client's own silent sink on the user's PipeWire; record it from `<sink>.monitor`. */
+export const audioSinkOf = (name: string) => `wisp-lan-${name}`;
 /** The pair agent's control socket: a Unix socket, which reaches across network namespaces. */
 export const agentSocket = (pair: number) => join(pairDirectory(pair), "agent.sock");
 
