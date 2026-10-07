@@ -2,17 +2,19 @@ import { HeadlessClient, type Handle } from "../../src/headless/client";
 import type { NativeDeclarations } from "../../src/headless/declarations";
 import { f32 } from "../../src/sim/f32";
 
-export function coreFixture(declarations: NativeDeclarations): number {
+export function coreFixture(declarations: NativeDeclarations, executed?: Set<string>): number {
   const client = new HeadlessClient({ slot: 0, humans: [0], declarations, filePrefix: "warcraft3", localNatives: {}, network: [], screenWidth: 1920 });
   const tested = new Set<string>();
   const call = (name: string, ...args: unknown[]) => {
     const fn = client.natives[name];
     if (typeof fn !== "function") throw new Error(`missing declaration ${name}`);
     tested.add(name);
+    executed?.add(name);
     return (fn as (this: void, ...args: unknown[]) => unknown)(...args);
   };
   const equal = (actual: unknown, expected: unknown, name: string) => { if (actual !== expected) throw new Error(`${name}: ${String(actual)} != ${String(expected)}`); };
   const unit = call("CreateUnit", 0, 123, 0, 0, 0) as Handle;
+  for (const [name, value] of [["ConvertFogStyle", 5], ["ConvertEquipmentType", 6], ["ConvertItemTag", 7], ["ConvertLoadoutSlot", 8]] as const) equal(call(name, value), value, name);
   const second = call("CreateUnit", 0, 124, 0, 0, 0) as Handle;
   call("UnitAddAbility", unit, 456);
   call("BlzSetUnitAbilityCooldown", unit, 456, 0, 8);
@@ -62,6 +64,10 @@ export function coreFixture(declarations: NativeDeclarations): number {
   client.key(0, 65, 2, true);
   equal(call("BlzIsKeyPressed", 65), true, "key held");
   equal(call("BlzIsMetaKeyPressed", 2), true, "meta held");
+  client.key(0, 65, 3, true);
+  equal(call("BlzIsMetaKeyPressed", 1), true, "shift in combined modifiers");
+  equal(call("BlzIsMetaKeyPressed", 2), true, "ctrl in combined modifiers");
+  equal(call("BlzIsMetaKeyPressed", 4), false, "alt absent in combined modifiers");
   client.key(0, 65, 0, false);
   equal(call("BlzIsKeyPressed", 65), false, "key released");
   client.heldMouseButtons.add("MOUSE_BUTTON_TYPE_LEFT");

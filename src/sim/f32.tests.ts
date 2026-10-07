@@ -24,6 +24,16 @@ test("f32 arithmetic rounds the exact result to nearest", () => {
   same(f32((16777215 + 2)), 16777216);
   same(f32(-1 - 16777216), -16777216);
   same(f32(1.5 * 4096.5), 6144.75);
+  // Repeated operations share operands, while these offsets collide in the
+  // helper's lookup. Only exact operands and the operation may reuse a result.
+  for (let i = 0; i < 3; i++) {
+    same(f32(tenth + fifth), 0.30000001192092896);
+    same(f32(32.099998474121094 + fifth), 32.29999923706055);
+    same(f32(tenth * fifth), 0.020000001415610313);
+    same(f32(tenth / fifth), 0.5);
+    same(f32(tenth - fifth), -0.10000000149011612);
+    same(f32(speed * factor), 23.123998641967773);
+  }
 });
 
 test("f32 arithmetic keeps zero signs and small integers", () => {
