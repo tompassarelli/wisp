@@ -2,14 +2,15 @@
 // (wisp:docs/repro.md) in two simulated clients of the game's map. Each must
 // land on the checksum the game recorded; with --test, it then writes a test
 // that replays the moment.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join, relative } from "node:path";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { Console, Effect, Schema } from "effect";
-import { type Repro, type ReproReplay, type ReproResult, parseRepro } from "../../../src/runtime/repro";
+import { type Repro, type ReproInspector, type ReproInspection, type ReproReplay, type ReproResult, parseRepro } from "../../../src/runtime/repro";
 import { preloadRecord } from "../boundary";
 import { type Command, UsageFailure, describeCause, flagValues } from "../command";
 import { type HeadlessMap, installHeadless } from "../headless";
 import { step } from "../timings";
+import { diffReproStates } from "../reproInspection";
 
 /** What a game declares for `wisp repro`. */
 export interface ReproProject {
@@ -54,16 +55,41 @@ export async function loadReplay(path: string): Promise<ReproReplay> {
   return (repro) => replayRepro(repro);
 }
 
+/** Inspection is opt-in: existing replay modules need not export it. */
+export async function loadInspector(path: string): Promise<ReproInspector> {
+  const module: unknown = await import(path);
+  if (typeof module !== "object" || module === null || !("inspectRepro" in module) || typeof module.inspectRepro !== "function") throw new Error(`${path} exports no inspectRepro()`);
+  const { inspectRepro } = module;
+  return (repro, frame) => inspectRepro(repro, frame);
+}
+
 /** Each simulated client's replay of the repro, in its own scope of the map's natives and globals. */
 export function replayInClients(map: HeadlessMap, replay: ReproReplay, repro: Repro): ReproResult[] {
+  return inClients(map, () => replay(repro));
+}
+
+export function inspectInClients(map: HeadlessMap, inspect: ReproInspector, repro: Repro, frame: number): ReproInspection {
+  const results = inClients(map, () => inspect(repro, frame));
+  const first = results[0];
+  if (first === undefined) throw new Error("no inspection result");
+  if (typeof first === "string") throw new Error(first);
+  if (first.frame !== frame) throw new Error(`requested frame ${frame}, the inspector returned frame ${first.frame}`);
+  for (const result of results) {
+    if (typeof result === "string") throw new Error(result);
+    if (JSON.stringify(result) !== JSON.stringify(first)) throw new Error(`clients disagree on the state of frame ${frame}`);
+  }
+  return first;
+}
+
+function inClients<Result>(map: HeadlessMap, run: () => Result): Result[] {
   const runtime = installHeadless(map);
   try {
     // The replay restores the saved state itself, so the clients never start the map.
     const clients = runtime.clients({ start: () => undefined, install: () => undefined }, CLIENTS);
     return clients.clients.map((client) => {
-      let result: ReproResult | undefined;
+      let result: Result | undefined;
       client.run(() => {
-        result = replay(repro);
+        result = run();
       });
       if (result === undefined) throw new Error(`p${client.slot} replayed nothing`);
       return result;
@@ -118,12 +144,21 @@ function importFrom(directory: string, module: string): string {
 /** `repro FILE [--test NAME]`; loads the game's modules only when it runs. */
 export const makeRepro = (load: () => Promise<ReproProject>): Command => (args) => Effect.gen(function*() {
   const [name, ...extra] = flagValues(args, "test");
-  const files = args.filter((arg, index) => !arg.startsWith("--") && args[index - 1] !== "--test");
+  const [frameText, ...extraFrames] = flagValues(args, "frame");
+  const [diffText, ...extraDiffs] = flagValues(args, "diff-frame");
+  const [out, ...extraOut] = flagValues(args, "out");
+  const flags = ["--test", "--frame", "--diff-frame", "--out"];
+  const files = args.filter((arg, index) => !arg.startsWith("--") && !flags.includes(args[index - 1] ?? ""));
   const file = files[0];
-  if (file === undefined || files.length > 1 || extra.length > 0 || (args.includes("--test") && name === undefined)) {
-    return yield* new UsageFailure({ problem: "repro takes one repro file and at most one --test NAME" });
+  if (file === undefined || files.length > 1 || extra.length + extraFrames.length + extraDiffs.length + extraOut.length > 0 || flags.some(flag => args.includes(flag) && flagValues(args, flag.substring(2)).length === 0) || args.some(arg => arg.startsWith("--") && !flags.some(flag => arg === flag || arg.startsWith(`${flag}=`)))) {
+    return yield* new UsageFailure({ problem: "repro takes one file, --test NAME, or --frame N --out FILE [--diff-frame N|previous]" });
   }
   if (name !== undefined && !isTestName(name)) return yield* new UsageFailure({ problem: `test names are lowercase letters, digits and hyphens: ${name}` });
+  const frame = frameText === undefined ? undefined : Number(frameText);
+  const diffFrame = diffText === undefined ? undefined : diffText === "previous" ? (frame ?? 0) - 1 : Number(diffText);
+  if ((frame !== undefined && (!/^\d+$/.test(frameText ?? "") || !Number.isSafeInteger(frame))) || (diffFrame !== undefined && (diffText !== "previous" && !/^\d+$/.test(diffText ?? "") || !Number.isSafeInteger(diffFrame)))) return yield* new UsageFailure({ problem: "inspection frames must be nonnegative whole numbers" });
+  if ((frame !== undefined) !== (out !== undefined) || (diffFrame !== undefined && frame === undefined)) return yield* new UsageFailure({ problem: "inspection requires --frame N and --out FILE; --diff-frame needs --frame" });
+  if (out !== undefined && (resolve(out) === resolve(file) || existsSync(out) && realpathSync(out) === realpathSync(file))) return yield* new UsageFailure({ problem: "the inspection output must be a different file from the saved repro" });
   const { repro, lines } = yield* readRepro(file).pipe(step("read repro"));
   const project = yield* Effect.tryPromise({ try: load, catch: (cause) => new ReproFailure({ file, problem: `loading the project: ${describeCause(cause)}` }) });
   const replay = yield* Effect.tryPromise({ try: () => loadReplay(project.replay), catch: (cause) => new ReproFailure({ file, problem: describeCause(cause) }) }).pipe(step("load replay"));
@@ -134,6 +169,23 @@ export const makeRepro = (load: () => Promise<ReproProject>): Command => (args) 
   const report = reproReport(file, repro, results);
   yield* Console.log(report.lines.join("\n"));
   if (!report.landed) return yield* new ReproFailure({ file, problem: "the replay doesn't reproduce the moment" });
+  if (frame !== undefined && out !== undefined) {
+    const inspector = yield* Effect.tryPromise({ try: () => loadInspector(project.replay), catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) });
+    const inspection = yield* Effect.try({
+      try: () => {
+        const current = inspectInClients(project.map, inspector, repro, frame);
+        const before = diffFrame === undefined ? undefined : inspectInClients(project.map, inspector, repro, diffFrame);
+        return { build: repro.build, ...current, ...(before === undefined ? {} : { diff: { from: before.frame, to: current.frame, fields: diffReproStates(before, current) } }) };
+      },
+      catch: cause => new ReproFailure({ file, problem: describeCause(cause) }),
+    });
+    const target = resolve(out);
+    yield* Effect.try({ try: () => {
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, `${JSON.stringify(inspection, null, 2)}\n`);
+    }, catch: cause => new ReproFailure({ file, problem: `writing ${target}: ${describeCause(cause)}` }) });
+    yield* Console.log(`wrote frame ${frame}, checksum ${inspection.checksum} to ${target}`);
+  }
   if (name === undefined) return;
   const target = join(project.tests, `${name}.tests.ts`);
   if (existsSync(target)) return yield* new ReproFailure({ file, problem: `${target} already exists` });

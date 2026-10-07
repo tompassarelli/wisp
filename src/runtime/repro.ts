@@ -37,6 +37,17 @@ export interface ReproResult {
 /** A game's replay: restores the repro's state and runs its frames. `wisp repro` runs it in each simulated client. */
 export type ReproReplay = (this: void, repro: Repro) => ReproResult;
 
+/** A consumer's exact canonical state after a saved frame, with its canonical field paths for comparison. */
+export interface ReproInspection {
+  readonly frame: number;
+  readonly checksum: string;
+  readonly state: string;
+  readonly fields: readonly { readonly path: string; readonly value: string }[];
+}
+
+/** Restores and replays existing saved state; returns a clear refusal for an invalid frame or replay. */
+export type ReproInspector = (this: void, repro: Repro, frame: number) => ReproInspection | string;
+
 /** A new name for each repro a client saves, as Preloader runs the first content it read from a name for the rest of the session. */
 export const reproFile = (slot: number, frame: number, serial: number, prefix = "wisp") => `${prefix}-repro-p${slot}-f${frame}-${serial}.txt`;
 

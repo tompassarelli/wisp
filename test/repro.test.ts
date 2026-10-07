@@ -11,6 +11,7 @@ import { lineTokens, recordTokens, tokenLines } from "../src/runtime/recordText"
 import { REPRO_LINE_WIDTH, assertReproLands, reproLines } from "../src/runtime/repro";
 import { registeredTests } from "../src/runtime/testing";
 import { replayRepro } from "./fixtures/repro/replay";
+import { diffReproStates } from "../scripts/wisp/reproInspection";
 
 // Taken out of the shared registry, which other files of this process count.
 const registered = registeredTests.length;
@@ -61,4 +62,31 @@ test("a replay that misses the recorded checksum fails and writes no test; a fil
   writeFileSync(cut, writtenPreloadFile(["wisp-repro 1", "build fixture-dev", "frame 3", "checksum total-11", "add 1"]));
   const read = await Effect.runPromiseExit(readRepro(cut));
   expect(Exit.isFailure(read) ? String(read.cause) : "").toContain("cut short");
+});
+
+test("inspection writes exact state and a previous-frame diff without changing the saved repro", async () => {
+  const file = writeReproFile("total-11");
+  const saved = readFileSync(file, "utf8");
+  const out = join(directory, "inspection.json");
+  await Effect.runPromise(makeRepro(async () => project)([file, "--frame", "3", "--diff-frame", "previous", "--out", out]));
+  expect(JSON.parse(readFileSync(out, "utf8"))).toEqual({
+    build: "fixture-dev", frame: 3, checksum: "total-11", state: "Fixture|total=11", fields: [{ path: "total", value: "11" }],
+    diff: { from: 2, to: 3, fields: [{ path: "total", before: "8", after: "11" }] },
+  });
+  expect(readFileSync(file, "utf8")).toBe(saved);
+  for (const frame of ["-1", "1.5", "NaN", "4"]) {
+    expect(Exit.isFailure(await Effect.runPromiseExit(makeRepro(async () => project)([file, "--frame", frame, "--out", join(directory, `invalid-${frame}.json`)])))).toBe(true);
+  }
+  expect(Exit.isFailure(await Effect.runPromiseExit(makeRepro(async () => project)([file, "--frame", "1", "--out", file])))).toBe(true);
+  expect(Exit.isFailure(await Effect.runPromiseExit(makeRepro(async () => project)([file, "--frame", "1"])))).toBe(true);
+  const missed = writeReproFile("total-12");
+  expect(Exit.isFailure(await Effect.runPromiseExit(makeRepro(async () => project)([missed, "--frame", "1", "--out", join(directory, "missed.json")])))).toBe(true);
+  expect(() => readFileSync(join(directory, "missed.json"))).toThrow();
+});
+
+test("field diffs sort paths and distinguish added and removed canonical fields", () => {
+  const frame = { frame: 0, checksum: "x", state: "x", fields: [{ path: "z", value: "1" }, { path: "a", value: "2" }] };
+  expect(diffReproStates(frame, { ...frame, fields: [{ path: "z", value: "3" }, { path: "b", value: "4" }] })).toEqual([
+    { path: "a", before: "2", after: null }, { path: "b", before: null, after: "4" }, { path: "z", before: "1", after: "3" },
+  ]);
 });
