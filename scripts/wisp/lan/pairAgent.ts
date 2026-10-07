@@ -87,13 +87,25 @@ for (const client of clients) {
   // Admission uses the user's service bus; restore the private runtime only inside the game scope.
   const gameRuntime = client.env["XDG_RUNTIME_DIR"] ?? process.env["XDG_RUNTIME_DIR"] ?? userRuntime;
   const native = capacity === undefined ? [] : [process.execPath, capacity, "session", "--class", "native", "--owner", `wisp-lan:${client.name}`, "--", "env", `XDG_RUNTIME_DIR=${gameRuntime}`];
-  games.push(Bun.spawn([...native, "dbus-run-session", "--", "steam-run", "env", runtime, "--verb=waitforexitandrun", "--", proton, "waitforexitandrun", exeOf(client.name), "-launch", "-windowmode", "windowed", "-nowfpause"], {
-    env: { ...process.env, ...client.env, ...audioEnv(client.name), ...(capacity === undefined ? {} : { XDG_RUNTIME_DIR: userRuntime, DBUS_SESSION_BUS_ADDRESS: `unix:path=${userRuntime}/bus` }), STEAM_COMPAT_DATA_PATH: clientRoot(client.name), STEAM_COMPAT_CLIENT_INSTALL_PATH: steam, STEAM_COMPAT_APP_ID: appId, SteamAppId: appId, SteamGameId: appId },
-    stdout: Bun.file(join(directory, `${client.name}.out`)),
-    stderr: Bun.file(join(directory, `${client.name}.err`)),
-  }));
+  // The helper may defer the game's scope (exit 75, DEFER on stderr): wait
+  // for admission instead of leaving the pair without a game.
+  for (;;) {
+    const child = Bun.spawn([...native, "dbus-run-session", "--", "steam-run", "env", runtime, "--verb=waitforexitandrun", "--", proton, "waitforexitandrun", exeOf(client.name), "-launch", "-windowmode", "windowed", "-nowfpause"], {
+      env: { ...process.env, ...client.env, ...audioEnv(client.name), ...(capacity === undefined ? {} : { XDG_RUNTIME_DIR: userRuntime, DBUS_SESSION_BUS_ADDRESS: `unix:path=${userRuntime}/bus` }), STEAM_COMPAT_DATA_PATH: clientRoot(client.name), STEAM_COMPAT_CLIENT_INSTALL_PATH: steam, STEAM_COMPAT_APP_ID: appId, SteamAppId: appId, SteamGameId: appId },
+      stdout: Bun.file(join(directory, `${client.name}.out`)),
+      stderr: Bun.file(join(directory, `${client.name}.err`)),
+    });
+    const early = await Promise.race([child.exited, Bun.sleep(5000).then(() => undefined)]);
+    const said = early === 75 ? readFileSync(join(directory, `${client.name}.err`), "utf8") : "";
+    const deferred = /"decision":"DEFER","reason":"([A-Z_]+)"/.exec(said);
+    if (deferred === null) {
+      games.push(child);
+      break;
+    }
+    say(`${client.name}: the capacity helper defers its game (${deferred[1]}); trying again in 45 s`);
+    await Bun.sleep(45_000);
+  }
   say(`launched ${client.name}`);
-  await Bun.sleep(3000);
 }
 
 const gamePid = (name: string) => findGameProcesses(prefixOf(name))[0]?.pid;

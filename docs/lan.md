@@ -110,6 +110,10 @@ available. The agent stops its games when it is stopped, or when its pair's
 session ends.
 
 - `--pair K` (repeated) picks which pairs start, in that order of admission.
+- A game whose native scope the helper defers (exit 75, DEFER) is retried
+  every 45 s by the pair agent; until then the pair has no game and `lan pool`
+  keeps waiting for it. `--greedy` skips only the pair's admission, not the
+  games' native admission.
 - Several pools may run at once, each on its own pairs (one per agent). A
   pool merges its pairs into `pool.json` and `clients.json`, keeping every
   other pair whose agent socket exists, so starting pair 5 never unlists pair 3.
