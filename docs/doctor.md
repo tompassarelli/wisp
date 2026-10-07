@@ -6,8 +6,10 @@ crashes with its error dialog up, it sits in a lobby or on a loading screen
 from an earlier run, or a second Wine runtime starts on its prefix. Each has a
 known recovery. `wisp client doctor [CLIENT...]` finds which state each client of the
 clients file is in (all of them, or those named) and runs that state's
-recovery, printing each step. It stops with one plain line only when a person
-is needed: a Battle.net sign-in, or a state it doesn't know.
+recovery, printing each step. A launcher at its Battle.net sign-in form is
+signed in with the client's declared account. It stops with one plain line
+only when a person is needed: a state it doesn't know, or a sign-in form
+with no account declared.
 
 ```text
 a: ready: menus (MAIN_MENU)
@@ -19,7 +21,13 @@ b: ready: menus (MAIN_MENU), after disconnected, no game
 ```
 
 ```text
-b: Battle.net rejected its saved login (ERROR_TOKEN_NOT_FOUND); it needs its owner to sign in to Battle.net: sign in in its launcher on display :2 with "Keep me logged in" ticked, then run doctor again
+b: closed: neither Battle.net nor Warcraft III runs; starting Battle.net
+b: Battle.net started
+b: Battle.net signing in...
+b: sign-in form: Battle.net shows its password page; signing in with its account
+b: typing its password
+b: Battle.net signed in
+b: no game: Battle.net is signed in; Warcraft III isn't running; asking Battle.net to launch Warcraft III
 ```
 
 Run it before a session on the clients; `play`, `accept` and the bot
@@ -53,6 +61,9 @@ Doctor adds the client's Wine prefix:
   (client B, 3 Oct: every 46 s once its VPN address went away), which a
   restarted launcher reconnects
   (smashcraft:docs/warcraft-authentication.md).
+  Its sign-in form is read from its `[UnifiedAuth]` lines: `finished loading.
+  statusCode=200 state=Login` is the account page, `state=LoginCredential`
+  the password page, and `status changed: RequestingToken` a submitted page.
 
 ## States and recoveries
 
@@ -76,7 +87,8 @@ instead of looping.
 | Closed | Neither Battle.net nor Warcraft III runs. | Start Battle.net the way the game declares, then launch the game. |
 | No game | Battle.net is signed in; Warcraft III isn't running. | Ask the launcher to launch Warcraft III; its log must take it within 15 s and report the game running within 45 s. A launch it reports failed restarts Battle.net once and asks again, as `play` does. |
 | Connection failing | The launcher's log shows its connection lost (above). | Restart Battle.net (every program of the prefix), then launch the game. |
-| Sign-in needed | The launcher's log shows its saved login rejected, or no sign-in 90 s after it started. | Stop: one line naming the client, its display and what to do. |
+| Sign-in form | The launcher's log shows its account or password page loaded, and the client declares an account. | Sign in (below). |
+| Sign-in needed | The launcher's log shows its saved login rejected, or no sign-in 90 s after it started (240 s for its sign-in form when the client declares an account: on 7 Oct client B's password page took 47 s to load under load). | Stop: one line naming the client, its display and what to do. |
 
 A client in its menus, signed in, or in a match is ready. Signing in or
 loading for less than its bound is waited on. A game no source places yet
@@ -89,11 +101,41 @@ session that then signed in and played all evening, so it showed no sign-in
 for hours. A client that only its log calls "signing in", with no menu page
 reporting, is therefore left alone and reported, never ended.
 
-Doctor never signs in, never starts Warcraft III.exe itself (only the
+Doctor never starts Warcraft III.exe itself (only the
 launcher does, asked as `play` asks it), never starts Battle.net beside
 another runtime, and
-never touches a client that is ready. Battle.net's credential entry stays with
-the owner or the authorized login-field helper (warcraft-modding skill).
+never touches a client that is ready.
+
+## Sign in
+
+A client that declares an account (`accounts` in the declaration, below) is
+signed in at its launcher's sign-in form. On the account page doctor types
+the username and Return, waits up to 30 s for the password page, then types
+the password and Return and waits up to 30 s for `Logged into Battle.net
+successfully`. A launcher that remembers the account name opens on the
+password page and gets only the password. Each field goes into the
+`Battle.net Login` window (else `Battle.net`) on the client's own display:
+doctor focuses it, clicks the empty field where its placeholder (`Password`,
+`Email`) reads (the 7 Oct password page loaded with no field focused),
+selects any text there with ctrl+a, and types. It types only while that window
+has focus, and submits only if it still has it after typing.
+
+The account's commands print one field each on stdout. Doctor runs one only
+while typing that field and pipes its bytes to `xdotool type --file -`: the
+value is never an argument, a log line, a file or printed output, and its
+buffer is zeroed after. A command's failure is reported by its exit code
+alone. "Keep me logged in" is left as the form has it; doctor changes no
+account or launcher setting.
+
+## Sign out
+
+`wisp client sign-out CLIENT...` ends every program of each client's prefix
+(SIGTERM, SIGKILL after 20 s) and removes the launcher's saved login, the
+values of `HKCU\Software\Blizzard Entertainment\Battle.net\UnifiedAuth` in
+the prefix's `user.reg`, rewritten only while no Wine runtime runs there.
+Its next start shows the sign-in form, which the next doctor run fills: on
+7 Oct client B went from signed out to signed in that way. Use it to test a
+sign-in, or before handing a client's prefix to another account.
 
 ## Declare it
 
@@ -107,6 +149,10 @@ export const doctor = makeDoctor({
   start: {
     a: { kind: "command", command: [/* steam-run ... proton waitforexitandrun .../Battle.net Launcher.exe */], log: "/state/client-a.log" },
     b: { kind: "steam", appId: 3516115572, name: "Warcraft III B" },
+  },
+  // Optional: the Battle.net account each client signs in with, as commands that print one field on stdout.
+  accounts: {
+    b: { username: ["cat", "/run/secrets/bnet-b-username"], password: ["cat", "/run/secrets/bnet-b-password"] },
   },
 }, ClientWatch.layer({ filePrefix: "smashcraft" }));
 ```

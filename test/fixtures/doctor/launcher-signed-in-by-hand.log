@@ -1,0 +1,26 @@
+I 2026-10-06 14:38:39.030227 [UnifiedAuth] {Main} UAuth: setting url: https://account.battle.net/login/en/login.app?app=app reason: reset
+D 2026-10-06 14:38:39.719633 [UnifiedAuth] {} UAuth: browser state changed: Login
+D 2026-10-06 14:38:40.015435 [UnifiedAuth] {Main} UAuth: begin loading: https://account.battle.net/login/en/login.app?app=app
+D 2026-10-06 14:38:40.015501 [UnifiedAuth] {Main} UAuth: set size from headers: 376x226 popup=0
+D 2026-10-06 14:38:41.309959 [UnifiedAuth] {Main} UAuth: finished loading. statusCode=200 state=Login
+D 2026-10-06 14:39:19.573805 [UnifiedAuth] {Main} UAuth: status changed: RequestingToken
+D 2026-10-06 14:39:19.573847 [UnifiedAuth] {Main} UAuth: login submitted
+D 2026-10-06 14:39:19.716075 [UnifiedAuth] {Main} UAuth: browser state changed: None
+D 2026-10-06 14:39:20.221940 [UnifiedAuth] {} UAuth: browser state changed: LoginCredential
+D 2026-10-06 14:39:20.550870 [UnifiedAuth] {Main} UAuth: begin loading: https://account.battle.net/login/en/password?app=app
+D 2026-10-06 14:39:20.550926 [UnifiedAuth] {Main} UAuth: set size from headers: 376x226 popup=0
+D 2026-10-06 14:39:20.551104 [UnifiedAuth] {Main} UAuth: status changed: Ready
+D 2026-10-06 14:39:22.522446 [UnifiedAuth] {Main} UAuth: finished loading. statusCode=200 state=LoginCredential
+D 2026-10-06 14:40:15.449584 [UnifiedAuth] {Main} UAuth: browser state changed: None
+D 2026-10-06 14:40:15.823655 [UnifiedAuth] {Main} UAuth: status changed: ReceivedToken
+D 2026-10-06 14:40:15.829289 [UnifiedAuth] {Main} UAuth: web login complete, beginning connection.
+D 2026-10-06 14:40:15.831759 [UnifiedAuth] {Main} UAuth: status changed: Ready
+I 2026-10-06 14:40:15.832270 [UnifiedAuth] {Main} UAuth: setting url: https://account.battle.net/login/en/login.app?app=app reason: reset
+D 2026-10-06 14:40:15.915899 [UnifiedAuth] {Main} UAuth: browser state changed: Done
+D 2026-10-06 14:40:15.983169 [UnifiedAuth] {Main} UAuth: browser state changed: None
+D 2026-10-06 14:40:16.405964 [UnifiedAuth] {} UAuth: browser state changed: LoginCredential
+D 2026-10-06 14:40:16.556087 [UnifiedAuth] {Main} UAuth: begin loading: https://account.battle.net/login/en/password?app=app
+D 2026-10-06 14:40:16.556151 [UnifiedAuth] {Main} UAuth: set size from headers: 376x226 popup=0
+D 2026-10-06 14:40:17.866330 [UnifiedAuth] {Main} UAuth: finished loading. statusCode=200 state=LoginCredential
+I 2026-10-06 14:40:20.068196 [UnifiedAuth] {Main} UAuth: setting url: https://account.battle.net/login/en/login.app?app=app reason: reset
+I 2026-10-06 14:40:20.308314 [BNLogin] {Main} Logged into Battle.net successfully. |bnet=1:0:0|game=0:0:0

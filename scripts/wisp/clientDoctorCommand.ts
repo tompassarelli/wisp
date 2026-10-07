@@ -1,11 +1,12 @@
 // `wisp client doctor [CLIENT...]`: brings the clients of the clients file (all, or
 // those named) to a ready state, recovering each known bad state with its
-// documented recovery and printing each step (wisp:docs/doctor.md). It stops
-// with one plain line per client that needs a person, such as a sign-in.
+// documented recovery and printing each step (wisp:docs/doctor.md). It signs
+// a launcher in with the client's declared account, and stops with one plain
+// line per client that needs a person.
 import { Effect, Layer } from "effect";
 import * as desktop from "../warcraft/desktop";
 import { type Command, type CommandFailure, UsageFailure } from "./command";
-import { DoctorHands, DoctorStop, type DoctorTarget, doctor } from "./doctor";
+import { DoctorHands, DoctorStop, type DoctorTarget, doctor, signOut } from "./doctor";
 import { privateDoctorHands } from "./doctorHost";
 import { PlayMachine } from "./play";
 import { type PlayTools, playMachineLayer } from "./playHost";
@@ -16,6 +17,8 @@ export interface DoctorDeclaration {
   readonly clientsFile: string;
   /** How each signed-in client's Battle.net starts, by client name. Offline pool clients need no entry. */
   readonly start: Readonly<Record<string, Exclude<DoctorTarget["start"], { readonly kind: "offline-pool" }>>>;
+  /** The Battle.net account each client signs in with at its launcher's sign-in form, by client name (DoctorTarget.account). */
+  readonly accounts?: Readonly<Record<string, NonNullable<DoctorTarget["account"]>>>;
 }
 
 const DOCUMENTS = "/drive_c/users/steamuser/Documents/Warcraft III";
@@ -37,6 +40,7 @@ export const doctorTargets = (declaration: DoctorDeclaration, names: readonly st
       display: x11.DISPLAY,
       start,
       ...(entry.displaySettings === undefined ? {} : { displaySettings: entry.displaySettings }),
+      ...(declaration.accounts?.[entry.name] === undefined ? {} : { account: declaration.accounts[entry.name] }),
     } satisfies DoctorTarget;
   }));
 });
@@ -53,3 +57,12 @@ export const clientsDoctor = (declaration: DoctorDeclaration, names: readonly st
   Effect.gen(function*() {
     return yield* doctor(yield* doctorTargets(declaration, names), print);
   }).pipe(Effect.provide(doctorLayer(declaration, tools)));
+
+/** `sign-out CLIENT...`: signs the named clients out of Battle.net (wisp:docs/doctor.md, "Sign out"); `doctor` signs them in again. */
+export const makeSignOut = (declaration: DoctorDeclaration, tools: Partial<PlayTools> = {}): Command => (names) =>
+  names.length === 0 || names.some((name) => name.startsWith("-"))
+    ? Effect.fail(new UsageFailure({ problem: "sign-out takes client names" }))
+    : Effect.gen(function*() {
+      const targets = yield* doctorTargets(declaration, names);
+      yield* Effect.forEach(targets, (target) => signOut(target, (line) => console.log(line)), { discard: true });
+    }).pipe(Effect.provide(playMachineLayer(tools)));
