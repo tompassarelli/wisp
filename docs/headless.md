@@ -295,6 +295,27 @@ predicted native cost per frame ([frame cost](frame-cost.md#predicted-native-cos
 The entry module loads when the command runs, so the
 project's host type check never reads map code.
 
+## Native table iteration order
+
+`test/table-order/main.ts` walks a 1,000-key string table and a 1,000-key
+sparse integer table with Lua `pairs`. Each client writes `table-order.txt`
+in its CustomMapData folder, with the key count, an order checksum and every
+key in traversal order. The integer keys start above 1,000,000 so they use
+the table's hash part. The checksum folds each key's unique value in order;
+the full rows let the host compare the orders directly too.
+
+Build the two-player measurement map, then host it on an offline LAN pair:
+
+```sh
+bun test/table-order/build.ts BASE.w3m OUT_DIR/TableOrder.w3x
+bun examples/sample/scripts/sample.ts lan fresh OUT_DIR/TableOrder.w3x --pair K
+```
+
+The output folder must already exist and stay outside the checkout. Compare
+the `string` and `sparse-integer` rows from both clients, excluding the local
+`player=` row. This measurement uses the native Lua table traversal; the
+Bun headless runtime's JavaScript object order cannot decide this check.
+
 ## Boundaries
 
 The runtime emulates natives; it is not Warcraft. It has no engine frame
