@@ -7,7 +7,7 @@ import { readMapFacts } from "./map";
 import { PAIR_SIDES, poolProfile, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
 import { admissionFile, nativeCommand } from "./admission";
 import { makeEngine } from "../commands/engine";
-import { startPairClients } from "./startup";
+import { startPairClients, waitForFirstClient } from "./startup";
 
 const argument = (name: string) => {
   const at = process.argv.indexOf(`--${name}`);
