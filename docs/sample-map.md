@@ -77,19 +77,19 @@ names the clients file (default ~/.local/state/wisp/clients.json):
 ```
 
 A client may add `displaySettings`, the `[Video]` keys of War3Preferences.txt its display needs, which `doctor` restores ([display-settings.md](display-settings.md)). Each `run` directory holds its desktop's `display`, `xauthority` and
-`wayland-display` files. The first client hosts. Screen positions assume a
-2560x1440 client.
+`wayland-display` files. Each client also needs `menuReportPort` and the menu
+page installed ([driving-warcraft.md](driving-warcraft.md)). The first client hosts.
 
 1. `bun examples/sample/scripts/sample.ts fresh MAP.w3x` installs the map as
    the only map of each client's Maps/00-Wisp folder, leaves any game, hosts
-   from the first client, joins the others by name, starts, and waits until
-   every client acknowledges the match start. It first creates each client's
+   a private game from the first client through its menu page, joins the
+   others by name and password, starts, and waits until every client
+   acknowledges the match start. A client without a reporting page stops it
+   first: a game hosted by clicks is listed publicly. It first creates each client's
    `sample-hot` folder in CustomMapData, as `hot` does, so the map's lookups for
-   reloads stay cheap ([polling cost](hot-reload.md#what-polling-costs)). Create Game selects the first map
-   of the folder its list has open, and Warcraft keeps that folder for the
-   session: open Maps/00-Wisp once in the host's list, or pass
-   `--map-folder FOLDER` naming the folder it shows. `--rebuild` replaces the
-   script first; `--from-game` leaves a running game through its menu.
+   reloads stay cheap ([polling cost](hot-reload.md#what-polling-costs)). `--map-folder FOLDER`
+   installs and hosts from another folder under Maps. `--rebuild` replaces the
+   script first.
 2. `bun examples/sample/scripts/sample.ts hot --data CLIENT_A/CustomMapData --data CLIENT_B/CustomMapData --watch`
    compiles each save and installs it in every client on one frame.
 3. `bun examples/sample/scripts/sample.ts client chat a -ping` prints `ping 1`

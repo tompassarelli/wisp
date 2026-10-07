@@ -25,7 +25,7 @@ and what Wisp hasn't observed itself. W3Champions' code is in
 
 ## The steps to replace
 
-| Step | `wisp play` today | Bot sessions today (wisp:scripts/wisp/lobby.ts `freshMatch`) |
+| Step | `wisp play` today | Bot sessions before the menu socket (wisp:scripts/wisp/lobby.ts `freshMatch` now uses the socket) |
 | --- | --- | --- |
 | Start the game | Battle.net's Play, clicked on the launcher's page | Clients stay running |
 | Load the map | The menu socket, or menu clicks without a menu page, once the game's ladder scan is over ([play.md](play.md)) | Create Game → first map → name → Create, by clicks |
@@ -230,8 +230,11 @@ decision.
 - **`wisp play`.** It replaces the menu clicks of `host(game)` in
   wisp:scripts/wisp/play.ts when the game declares `menuReportPort`. It
   also allows rematches in the running game instead of a new Play per match.
-- **Bot sessions.** It replaces all of `freshMatch` except leaving a running
-  match: host, join, start, and leave from the lobby or score screen.
+- **Bot sessions.** `freshMatch` (wisp:scripts/wisp/lobby.ts) hosts a
+  private game, joins it by name and password, starts it and leaves a lobby
+  or match through each client's page, and the score screen with Escape. It
+  refuses a client without a reporting page: a game created by clicks is
+  listed publicly.
 - **Adding a computer** once its request is known.
 - **What it can't replace.** Battle.net's Play: Battle.net is a separate
   program, not the game. It also can't replace leaving a match in progress,
@@ -322,15 +325,17 @@ option can't be delayed, so `play` hosts after the scan instead
 
 ## 4. Menu clicks (fallback)
 
-**How it works.** wisp:scripts/wisp/play.ts and wisp:scripts/wisp/lobby.ts
-read each screen's text and click a control once two reads agree:
+**How it works.** wisp:scripts/wisp/play.ts, without a reporting page,
+reads each screen's text and clicks a control once two reads agree:
 
 - clicks go through the compositor on the owner's desktop and through XTEST
   on private desktops;
 - typing is XTEST;
 - each click waits for the next screen's text.
 
-**Risk:** none beyond a player's own input.
+**Risk:** a game created by clicks has no password, so Battle.net lists it
+publicly. Typing outside a match is refused by Wisp's private-desktop input
+(wisp:scripts/warcraft/desktop.ts `requireMatch`).
 
 **Costs:**
 

@@ -8,6 +8,7 @@ import { describeCause } from "../wisp/command";
 import { type Frame, decodePpm } from "../wisp/frameProbe";
 import { captureProcess } from "../wisp/mapBuild";
 import { step } from "../wisp/timings";
+import { ClientWatch, describeView, typesIntoMatch } from "../wisp/watch";
 import { inputBatches, type InputAction } from "./inputBatch";
 export type { InputAction } from "./inputBatch";
 
@@ -188,16 +189,45 @@ export const focus = (client: Client) =>
     yield* run(client.name, "activate Warcraft window", [client.tools.xdotool, "windowactivate", "--sync", client.window], client.x11);
   });
 
-/** Keys in order, for example `keys(a, "F10")` or `keys(a, "ctrl+a")`. */
+/** Keys that send what a chat box holds. */
+const SENDING_KEYS = new Set(["return", "kp_enter", "iso_enter", "linefeed"]);
+
+/** Whether any of these xdotool key names, chords included, is Return or another key that sends chat. */
+export const sendsChat = (names: readonly string[]) => names.some((name) => name.split("+").some((key) => SENDING_KEYS.has(key.toLowerCase())));
+
+/**
+ * Refuses typed text and Return unless the client is in a match with its menu
+ * page connected (wisp:scripts/wisp/watch.ts `typesIntoMatch`): in the menus
+ * they reach Battle.net's public channel, in a lobby its chat. Uses the
+ * ClientWatch provided, else watches the client once.
+ */
+export const requireMatch = (client: Client, input: string) =>
+  Effect.gen(function*() {
+    const provided = yield* Effect.serviceOption(ClientWatch);
+    const view = yield* (provided._tag === "Some"
+      ? provided.value.view(client)
+      : ClientWatch.use((watch) => watch.view(client)).pipe(Effect.provide(ClientWatch.layer())));
+    if (!typesIntoMatch(view)) {
+      return yield* new DesktopFailure({
+        operation: `send ${input}`,
+        client: client.name,
+        cause: `refused outside a match its menu page reports, where it would reach Battle.net's channel or a lobby's chat; now ${describeView(view)}${view.menus === true ? "" : " (no menu page connected)"}`,
+      });
+    }
+  }).pipe(Effect.catchTag("WatchFailure", (cause) => Effect.fail(new DesktopFailure({ operation: `send ${input}`, client: client.name, cause }))));
+
+/** Keys in order, for example `keys(a, "F10")` or `keys(a, "ctrl+a")`. Return needs a match (requireMatch). */
 export const keys = (client: Client, ...names: string[]) =>
   Effect.gen(function*() {
+    if (sendsChat(names)) yield* requireMatch(client, names.join(" "));
     yield* focus(client);
     yield* run(client.name, `press ${names.join(" ")}`, [client.tools.xdotool, "key", "--clearmodifiers", ...names], client.x11);
   });
 
-/** Types `value`, which may start with "-"; `delayMillis` spaces the keys for text fields that drop fast input. */
+/** Types `value`, which may start with "-", into a match (requireMatch); `delayMillis` spaces the keys for text fields that drop fast input. */
 export const typeText = (client: Client, value: string, delayMillis?: number) =>
   Effect.gen(function*() {
+    yield* requireMatch(client, "typed text");
     yield* focus(client);
     const delay = delayMillis === undefined ? [] : ["--delay", String(delayMillis)];
     yield* run(client.name, "type text", [client.tools.xdotool, "type", "--clearmodifiers", ...delay, "--", value], client.x11);
@@ -253,9 +283,10 @@ export const pressAt = (client: Client, x: number, y: number) =>
     yield* run(client.name, "release button", [client.tools.xdotool, "mouseup", "1"], client.x11);
   });
 
-/** Focuses once and batches recorded inputs, verifying relative pointer motion before each click. */
+/** Focuses once and batches recorded inputs, verifying relative pointer motion before each click. Text and Return need a match (requireMatch). */
 export const batch = Effect.fnUntraced(function*(client: Client, actions: readonly InputAction[]) {
   if (actions.length === 0) return;
+  if (actions.some((action) => action.kind === "text" || (action.kind === "keys" && sendsChat(action.keys)))) yield* requireMatch(client, "typed text or Return");
   yield* focus(client);
   const moved = actions.some((action) => action.kind === "click");
   const from = moved ? yield* pointer(client) : { x: 0, y: 0 };

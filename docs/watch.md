@@ -107,6 +107,22 @@ needs no ClientWatch: without one, the wait runs as before, so tests with fake
 clients are unchanged. `play`, `freshMatch` and the `client wait` action use
 them; tests replace the service with `Layer.succeed(ClientWatch, ...)`.
 
+## Typing only into a match
+
+Return and typed text reach Battle.net's public channel from the menus and a
+lobby's chat from a lobby. Wisp's private-desktop input
+(wisp:scripts/warcraft/desktop.ts) therefore checks the client before any
+Return, KP_Enter or typed text, in `keys`, `typeText` and `batch`, and so in
+`wisp client chat|keys`, accept's `chat` steps and every consumer that drives
+a client through them. It refuses unless `typesIntoMatch(view)`: the client is
+`in match` and its menu page was connected when that was decided. Without the
+page a match receipt can be an earlier match's while the client sits in a
+channel, so a client without a page can't be typed into. The check uses the
+ClientWatch provided; without one it watches the client once, with no map
+receipts, so a consumer provides `ClientWatch.layer({ filePrefix })`, and
+`makeClient(file, { filePrefix })` does for `wisp client`. Other keys, such as
+Escape or F10, are not checked.
+
 The decision is a pure function of its sources, `decide(client, sources,
 previous)`, tested against the 6 Oct recordings in
 wisp:test/fixtures/war3log/ and wisp:test/fixtures/watch/: the bad `-loadfile`

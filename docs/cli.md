@@ -112,7 +112,6 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--start` | Start the game once hosted | `menus host` |
 | `--port N` | A local TCP port | `tune`, `menus` |
 | `--rebuild` | Replace the map's script first | `fresh` |
-| `--from-game` | Start from the game's current screen instead of the menus | `fresh` |
 | `--no-quick` | Don't send the quick-match chat command | `fresh` |
 | `--watch` | Keep running and act on every save | `hot` |
 | `--wait` | Block until a remote run ends, then print its verdict | `farm` |

@@ -5,7 +5,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { type ProcessInfo, prefixUse } from "../scripts/warcraft/battleNet";
 import { sessionStart } from "../scripts/warcraft/war3Log";
-import { type ClientState, type ClientView, ClientWatch, type CrashReport, type SocketState, type Sources, changes, crashSummary, decide, eventLine, inState, socketEvent, unlessLost, waitFor } from "../scripts/wisp/watch";
+import { type ClientState, type ClientView, ClientWatch, type CrashReport, type SocketState, type Sources, changes, crashSummary, decide, eventLine, inState, socketEvent, typesIntoMatch, unlessLost, waitFor } from "../scripts/wisp/watch";
 
 const client: Client = { name: "a", documents: "/a/Documents/Warcraft III" };
 test("a rendered menu transition replaces old score data, while overlays do not", () => {
@@ -139,6 +139,21 @@ test("the map's match receipt places a client in its match when the socket says 
   expect(decide("a", sources(start, [LAUNCHER, GAME], { log, receipt: start - 1000 })).source).toBe("receipt");
   // A receipt from before this session's sign-in is an earlier session's.
   expect(decide("a", sources(start, [LAUNCHER, GAME], { log, receipt: on6Oct("16:00") })).state).toEqual({ kind: "signed in" });
+});
+
+test("chat goes only into a match its menu page reports, never on a receipt alone", () => {
+  const log = fixture("war3log/menus-after-scan.txt");
+  const start = on6Oct("16:30");
+  const at = (offset: number) => decide("a", sources(start + offset, [LAUNCHER, GAME], { log, socket: trace(fixture("watch/host-match.jsonl"), start, offset) }));
+  // The channel and Custom Games, the lobby, loading and the score screen: Return would reach Battle.net's channel or a lobby's chat.
+  for (const offset of [0, 4000, 6100, 9000, 76100, 80100]) expect(typesIntoMatch(at(offset))).toBe(false);
+  expect(typesIntoMatch(at(16000))).toBe(true);
+  // The socket last said loading; a newer receipt is the match.
+  expect(typesIntoMatch(decide("a", sources(start + 12_000, [LAUNCHER, GAME], { log, socket: trace(fixture("watch/host-match.jsonl"), start, 9000), receipt: start + 11_000 })))).toBe(true);
+  // Without the page, a receipt says "in match" even when it is an earlier match's and the client sits in a channel.
+  const receiptOnly = decide("a", sources(start, [LAUNCHER, GAME], { log, receipt: start - 1000 }));
+  expect(receiptOnly.state).toEqual({ kind: "in match" });
+  expect(typesIntoMatch(receiptOnly)).toBe(false);
 });
 
 test("processes alone: closed, launcher, and a clean exit's log as the last session's", () => {
