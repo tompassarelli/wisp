@@ -148,24 +148,23 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--samples` | Also print each frame's sample | `perf` |
 | `--threshold SHARE` | The rise that fails a comparison | `perf compare` |
 | `--cost` | Also print predicted Warcraft cost per frame | `headless` |
-
-| `--pool-profile NAME` | Offline pool display settings: parity, visual or hfr | game or Wisp, as the usage declares |
-| `--trace SECONDS` | Trap an offline process for this many seconds | game or Wisp, as the usage declares |
-| `--clients-file FILE` | The native clients configuration file | game or Wisp, as the usage declares |
-| `--four-fighters` | Capture the four-fighter match and rematch | game or Wisp, as the usage declares |
-| `--playable` | Capture a playable candidate match and rematch | game or Wisp, as the usage declares |
-| `--functions` | Report functions in the worst frames | game or Wisp, as the usage declares |
-| `--frame N` | Inspect this recorded frame | game or Wisp, as the usage declares |
-| `--diff-frame N\|previous` | Compare the inspected frame with this other frame | game or Wisp, as the usage declares |
-| `--from INSTALL` | The installation copied to create offline clients | game or Wisp, as the usage declares |
-| `--pair K` | Select a numbered client pair; repeatable | game or Wisp, as the usage declares |
-| `--headless-jobs N` | Number of simultaneous headless comparisons | game or Wisp, as the usage declares |
-| `--fresh-each` | Start a fresh game for each script when measuring startup cost | game or Wisp, as the usage declares |
-| `--p99 MS` | The 99th-percentile frame cost limit | game or Wisp, as the usage declares |
+| `--pool-profile NAME` | Offline pool display settings: parity, visual or hfr | `lan pool` |
+| `--trace SECONDS` | Trap an offline process for this many seconds | `engine locate` |
+| `--clients-file FILE` | The native clients configuration file | `integrity capture` |
+| `--four-fighters` | Capture the four-fighter match and rematch | `integrity capture` |
+| `--playable` | Capture a playable candidate match and rematch | `integrity capture` |
+| `--functions` | Report functions in the worst frames | `perf census` |
+| `--frame N` | Inspect this recorded frame | `repro` |
+| `--diff-frame N\|previous` | Compare the inspected frame with this other frame | `repro` |
+| `--from INSTALL` | The installation copied to create offline clients | `lan setup` |
+| `--pair K` | Select a numbered client pair; repeatable | `lan, pad` |
+| `--headless-jobs N` | Number of simultaneous headless comparisons | `pad` |
+| `--fresh-each` | Start a fresh game for each script when measuring startup cost | `pad` |
+| `--p99 MS` | The 99th-percentile frame cost limit | `perf budget` |
 | `--worst-frames N` | How many worst frames to report | `perf profile` |
-| `--worst MS` | The worst-frame cost limit | game or Wisp, as the usage declares |
-| `--rise-ms MS` | The permitted rise above the standing frame baseline | game or Wisp, as the usage declares |
-| `--jobs N` | Number of worker jobs | game or Wisp, as the usage declares |
+| `--worst MS` | The worst-frame cost limit | `perf budget` |
+| `--rise-ms MS` | The permitted rise above the standing frame baseline | `perf census` |
+| `--jobs N` | Number of worker jobs | `perf census` |
 
 ## Inventory
 
@@ -227,7 +226,6 @@ Every command and verb in Wisp's sample program and Smashcraft's `bun wisp`, gro
 | `oracle` | Melee situations beside decompiled values |
 | `agency` | Stretches a victim can't act in, per starter |
 | `interactions` | Writes the interaction graph; `--check`, `--move` |
-
 | `inputs add FAMILY PATH`, `inputs check`, `inputs path` | Registers and resolves private build inputs |
 | `lan setup`, `lan fresh`, `lan status`, `lan end` | Creates, starts, reads and ends offline matches |
 | `engine actions` | Reads the LAN host turn log |
