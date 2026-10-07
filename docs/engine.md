@@ -75,8 +75,9 @@ A project composes the command with `makeEngine(clientsFile)`
 | --- | --- |
 | `wisp engine desync A B [--turn N]` | Compares two clients' `*_Desync.log`. It prints the first differing turn and section, each differing record, and Tempest's `ipse` table decoded per turn. A and B may be log files, report folders, Errors folders or Documents/Warcraft III folders; a folder means its newest report. |
 | `wisp engine poll --client a,b [--seconds N] [--interval MS] [--out DIR]` | Follows each client's presence table every 2 ms and writes `DIR/<client>.log` with one line per agent born or freed. Each line carries the agent's class from RTTI and, for a `CAgentBaseAbs`, the class of the handle that owns it. |
-| `wisp engine diff A.log B.log [--skew S] [--limit N]` | Aligns two poll logs by birth number. It prints births one client has and the other lacks, the first class difference, and births whose time between clients differs from the median by more than S seconds (0.1 by default). |
+| `wisp engine diff A.log B.log [--skew S] [--limit N] [--source-maps DIR]` | Aligns two poll logs by birth number. It prints births one client has and the other lacks, the first class difference, and births whose time between clients differs from the median by more than S seconds (0.1 by default). With the map's source maps, a code callback's `at map-KEY:LINE` becomes its TypeScript line. |
 | `wisp engine watch --client a [--seconds N] [--depth N] [--out DIR]` | Sets a hardware write breakpoint on the birth counter and records the game's stack for every birth. Frames are named by known role. It writes `DIR/<client>.stacks.txt` and prints the most common stacks. Offline clients only. |
+| `wisp engine watch --client a --lua [--seconds N] [--limit N] [--source-maps DIR]` | Stops the game's main thread at every birth with a ptrace debug-register watchpoint, reads the Lua VM's exact call stack while the thread is stopped, then lets it go. It writes `DIR/<client>.lua-stacks.txt` with one line per birth, in the form `birth N CLASS owner CLASS: TimerStart <- FILE.ts:LINE <- FILE.ts:LINE`. Offline clients only, and the build needs `lua` chains in the offsets file. |
 | `wisp engine locate --client a [--watch SECONDS] [--span BYTES]` | Finds the presence table in a running client of any build and checks the offsets file's entry for it, or prints a new entry. With `--watch`, it also names the tag allocator and release from their writes (offline only). |
 
 Logs go under `$XDG_STATE_HOME/wisp/engine/<UTC time>/` unless you pass `--out`.
@@ -164,6 +165,36 @@ qwords on the stack that point into `.text` just after a call instruction in
 the client's decrypted code. `.pdata` gives each frame's function start, and
 the offsets file's `roles` names the known ones. In 24268, a birth's stack
 starts with `tag allocator+0xe7 < fn 0x19b550+0x1f5 < CAgentBaseAbs allocator+0x78`.
+
+## Lua stacks
+
+Warcraft III embeds Lua 5.3.4, built with 32-bit integers and floats.
+wisp:scripts/wisp/engine/lua.ts reads it with Lua's x64 structure offsets:
+
+- the lua_State's `ci` chain, back to its base CallInfo;
+- each Lua frame's closure, Proto, chunk name and current line, which is
+  `lineinfo[savedpc - code - 1]`;
+- each C frame's function, named from `_G` (the registry's array slot 2),
+  where Warcraft's natives such as `TimerStart` are C functions.
+
+A Wisp map's chunk names are `map-KEY` and `hot-KEY`, the same keys its
+source maps are kept under, so any position maps to a TypeScript line.
+
+Two routes find the code behind a birth:
+- **Closure provenance (read tier).** A code callback's agent points to its
+  `CScriptFunc`, which holds the Lua closure. The poller logs where that
+  function was defined (`owner CScriptFunc at map-KEY:LINE`). This works on
+  any development client, because nothing is stopped.
+- **Exact stack (trap tier).** By the time anything reads memory after a perf
+  sample, the Lua VM has moved on, since `savedpc` lives on the heap and not on
+  the C stack. `watch --lua` therefore stops the writing thread
+  (wisp:scripts/wisp/engine/stopWatch.ts: ptrace seize, DR0/DR7, and DR6 to
+  tell its own SIGTRAP from the game's) and reads the stack before it resumes.
+  Bun's FFI calls libc's ptrace and waitpid; no helper program is needed.
+
+The offsets file's optional `lua` entry holds the two pointer chains:
+`state`, from the image base to the map's main lua_State, and `closure`,
+from a `CScriptFunc` to its closure.
 
 ## A new Warcraft build
 

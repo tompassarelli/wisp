@@ -154,3 +154,34 @@ export function frameText(frame: LuaFrame): string {
   const { source, linedefined } = frame.function;
   return `${source}:${frame.line ?? linedefined}${frame.line === undefined ? "" : ` (function at ${source}:${linedefined})`}`;
 }
+
+/** Follows a pointer chain: from `start`, each offset is added and the pointer there read. */
+export function followChain(memory: Memory, start: number, chain: readonly number[]): number {
+  let address = start;
+  for (const offset of chain) address = u64(memory, address + offset);
+  return address;
+}
+
+/** The map's main lua_State through the offsets' chain, or undefined when no map runs (or the chain is unknown). */
+export function mainLuaState(memory: Memory, base: number, chain: readonly number[] | undefined): number | undefined {
+  if (chain === undefined) return undefined;
+  try {
+    const state = followChain(memory, base, chain);
+    return isLuaState(memory, state) ? state : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Where a CScriptFunc's Lua function was defined, `map-KEY:LINE`, through the offsets' chain. */
+export function scriptFuncDefinition(memory: Memory, scriptFunc: number, chain: readonly number[] | undefined): string | undefined {
+  if (chain === undefined) return undefined;
+  try {
+    const closure = followChain(memory, scriptFunc, chain);
+    if ((memory.read(closure + 8, 1).readUInt8(0) & 0x3f) !== (LUA_TAG.luaClosure & 0x3f)) return undefined;
+    const fn = closureFunction(memory, closure);
+    return `${fn.source}:${fn.linedefined}`;
+  } catch {
+    return undefined;
+  }
+}

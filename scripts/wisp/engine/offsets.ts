@@ -18,6 +18,12 @@ const Entry = Schema.Struct({
   agent: Schema.Struct({ tag: Hex, birth: Hex, owner: Hex }),
   /** Function start RVA to what it does, for naming stack frames. */
   roles: Schema.Record(Hex, Schema.String),
+  /**
+   * Pointer chains to the map's Lua VM. `state`: from the image base, an RVA
+   * then offsets, each step reading a pointer, ending at the main lua_State.
+   * `closure`: from a CScriptFunc, offsets ending at its Lua closure.
+   */
+  lua: Schema.optionalKey(Schema.Struct({ state: Schema.Array(Hex), closure: Schema.Array(Hex) })),
 });
 
 const OffsetsFile = Schema.Record(Schema.String, Entry);
@@ -29,6 +35,7 @@ export interface EngineOffsets {
   readonly table: { readonly entries: number; readonly count: number; readonly freeHead: number; readonly births: number };
   readonly agent: { readonly tag: number; readonly birth: number; readonly owner: number };
   readonly roles: ReadonlyMap<number, string>;
+  readonly lua?: { readonly state: readonly number[]; readonly closure: readonly number[] };
 }
 
 export const OFFSETS_FILE = join(import.meta.dir, "offsets.json");
@@ -45,6 +52,7 @@ export function parseOffsets(text: string): Map<string, EngineOffsets> {
     table: { entries: hex(entry.table.entries), count: hex(entry.table.count), freeHead: hex(entry.table.freeHead), births: hex(entry.table.births) },
     agent: { tag: hex(entry.agent.tag), birth: hex(entry.agent.birth), owner: hex(entry.agent.owner) },
     roles: new Map(Object.entries(entry.roles).map(([rva, role]) => [hex(rva), role])),
+    ...(entry.lua === undefined ? {} : { lua: { state: entry.lua.state.map(hex), closure: entry.lua.closure.map(hex) } }),
   }]));
 }
 
@@ -64,6 +72,7 @@ export function offsetsEntry(offsets: EngineOffsets): Record<string, unknown> {
       table: { entries: h(offsets.table.entries), count: h(offsets.table.count), freeHead: h(offsets.table.freeHead), births: h(offsets.table.births) },
       agent: { tag: h(offsets.agent.tag), birth: h(offsets.agent.birth), owner: h(offsets.agent.owner) },
       roles: Object.fromEntries([...offsets.roles].map(([rva, role]) => [h(rva), role])),
+      ...(offsets.lua === undefined ? {} : { lua: { state: offsets.lua.state.map(h), closure: offsets.lua.closure.map(h) } }),
     },
   };
 }

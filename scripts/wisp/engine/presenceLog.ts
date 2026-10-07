@@ -1,7 +1,8 @@
 // `wisp engine poll`'s per-client log and `wisp engine diff`, which aligns
 // two clients' logs by birth number. Each event line is
-//   SECONDS born BIRTH tag TAG CLASS [owner CLASS]
-//   SECONDS freed BIRTH tag TAG CLASS [owner CLASS]
+//   SECONDS born BIRTH tag TAG CLASS [owner CLASS [at CHUNK:LINE]]
+//   SECONDS freed BIRTH tag TAG CLASS [owner CLASS [at CHUNK:LINE]]
+// where CHUNK:LINE is where a code callback's Lua function was defined.
 // with SECONDS since the poll started (shared by every client one poll
 // follows); lines starting with # are notes. `cut -d' ' -f2-` of two logs
 // gives a plain `diff`.
@@ -11,7 +12,7 @@ export function eventLine(seconds: number, event: PresenceEvent): string {
   return `${seconds.toFixed(3)} ${event.kind} ${agentText(event.agent)}`;
 }
 
-const agentText = (agent: Agent) => `${agent.birth} tag ${agent.tag} ${agent.className}${agent.owner === undefined ? "" : ` owner ${agent.owner}`}`;
+const agentText = (agent: Agent) => `${agent.birth} tag ${agent.tag} ${agent.className}${agent.owner === undefined ? "" : ` owner ${agent.owner}`}${agent.defined === undefined ? "" : ` at ${agent.defined}`}`;
 
 export interface LoggedEvent {
   readonly seconds: number;
@@ -20,9 +21,10 @@ export interface LoggedEvent {
   readonly tag: number;
   readonly className: string;
   readonly owner: string | undefined;
+  readonly defined: string | undefined;
 }
 
-const LINE = /^(\d+(?:\.\d+)?) (born|freed) (-?\d+) tag (\d+) (\S+)(?: owner (\S+))?$/;
+const LINE = /^(\d+(?:\.\d+)?) (born|freed) (-?\d+) tag (\d+) (\S+)(?: owner (\S+))?(?: at (\S+))?$/;
 
 export function parsePresenceLog(text: string): LoggedEvent[] {
   return text.split(/\r?\n/).flatMap((line) => {
@@ -35,11 +37,12 @@ export function parsePresenceLog(text: string): LoggedEvent[] {
       tag: Number(match[4]),
       className: match[5] ?? "?",
       owner: match[6],
+      defined: match[7],
     }];
   });
 }
 
-const what = (event: LoggedEvent) => `${event.className}${event.owner === undefined ? "" : ` owner ${event.owner}`}`;
+const what = (event: LoggedEvent) => `${event.className}${event.owner === undefined ? "" : ` owner ${event.owner}`}${event.defined === undefined ? "" : ` at ${event.defined}`}`;
 const signed = (value: number) => `${value >= 0 ? "+" : ""}${value.toFixed(3)}`;
 
 function median(values: readonly number[]): number {

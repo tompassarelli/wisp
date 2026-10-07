@@ -3,9 +3,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isLocalAddress, onlineProblem, ownerProblem, parseInterfaces, parseSocketTable, tcpAddress } from "../scripts/wisp/engine/attach";
 import { compareDesyncLogs, compareDumps, fourCC, ipseStates, pairDumps, parseDesyncLog } from "../scripts/wisp/engine/desyncLog";
-import { type Mapping, type Memory, fileVersion, findImageBase, functionAt, memoryAccessProblem, parseMaps, peHeader, prefixOfDocuments, prefixPath } from "../scripts/wisp/engine/memory";
+import { type Mapping, type Memory, fileVersion, findImageBase, functionAt, memoryAccessProblem, parseMaps, peHeader, prefixOfDocuments, prefixPath, procMemory } from "../scripts/wisp/engine/memory";
 import { OFFSETS_FILE, offsetsEntry, offsetsFor, parseOffsets } from "../scripts/wisp/engine/offsets";
-import { closureFunction, frameText, globalFunctionNames, isLuaState, luaStack } from "../scripts/wisp/engine/lua";
+import { closureFunction, frameText, globalFunctionNames, isLuaState, luaStack, scriptFuncDefinition } from "../scripts/wisp/engine/lua";
+import { stopWatch } from "../scripts/wisp/engine/stopWatch";
 import { followsCall, parsePerfData, sampleFrames } from "../scripts/wisp/engine/perfData";
 import { PresenceTracker, demangle, scanForPresenceTable } from "../scripts/wisp/engine/presence";
 import { diffPresenceLogs, eventLine, parsePresenceLog } from "../scripts/wisp/engine/presenceLog";
@@ -371,3 +372,38 @@ test("a synthetic Lua 5.3.4 VM: the call stack from CallInfo, lines from savedpc
   expect(names.get(NATIVE)).toBe("TimerStart");
   expect(luaStack(memory, L, names).map(frameText)).toEqual(["TimerStart", "map-1-2:150 (function at map-1-2:148)"]);
 });
+
+test("a code callback's birth names where its Lua function was defined; logs keep it", () => {
+  const memory = new SparseMemory();
+  const H = 0x30000000;
+  memory.region(H, 0x1000);
+  const FUNC = H, CLOSURE = H + 0x100, PROTO = H + 0x200, SOURCE = H + 0x300;
+  memory.u64(FUNC + 0x18, CLOSURE);
+  memory.text(CLOSURE + 8, "\x06");
+  memory.u64(CLOSURE + 24, PROTO);
+  memory.i32(PROTO + 40, 23999);
+  memory.u64(PROTO + 104, SOURCE);
+  memory.text(SOURCE + 8, "\x04");
+  memory.text(SOURCE + 11, String.fromCharCode(20));
+  memory.text(SOURCE + 24, "@map-1504344-3666443");
+  expect(scriptFuncDefinition(memory, FUNC, [0x18])).toBe("map-1504344-3666443:23999");
+  expect(scriptFuncDefinition(memory, FUNC, undefined)).toBeUndefined();
+  expect(scriptFuncDefinition(memory, FUNC, [0x20])).toBeUndefined();
+  const [event] = parsePresenceLog("1.250 born 6279 tag 4210 CAgentBaseAbs owner CScriptFunc at map-1504344-3666443:23999");
+  expect(event).toMatchObject({ birth: 6279, owner: "CScriptFunc", defined: "map-1504344-3666443:23999" });
+});
+
+test("stopWatch stops the writing thread at each write and lets it go", async () => {
+  const child = Bun.spawn([process.execPath, join(fixtures, "writer.ts")], { stdout: "pipe" });
+  const { value } = await child.stdout.getReader().read();
+  const address = Number(new TextDecoder().decode(value).trim());
+  await Bun.sleep(200);
+  const memory = procMemory(child.pid);
+  const values: number[] = [];
+  const hits = stopWatch({ tid: child.pid, address, seconds: 3, limit: 5, onHit: () => values.push(memory.read(address, 4).readInt32LE(0)) });
+  memory.close();
+  expect(hits).toBe(5);
+  // Each stop lands right after one write.
+  expect(values.slice(1).map((v, index) => v - (values[index] ?? 0))).toEqual([1, 1, 1, 1]);
+  expect(await child.exited).toBe(0);
+}, 10_000);

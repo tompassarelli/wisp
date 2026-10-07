@@ -22,8 +22,11 @@ import { type GameExecutable, prefixOfDocuments } from "../engine/memory";
 import { type EngineOffsets, OFFSETS_FILE, offsetsEntry, offsetsFor, parseOffsets } from "../engine/offsets";
 import { pollPresence } from "../engine/poll";
 import { diffPresenceLogs, parsePresenceLog } from "../engine/presenceLog";
-import { presenceTable, readHeader, scanForPresenceTable } from "../engine/presence";
+import { type LuaFrame, frameText, globalFunctionNames, luaStack, mainLuaState } from "../engine/lua";
+import { PresenceTracker, presenceTable, readHeader, scanForPresenceTable } from "../engine/presence";
+import { stopWatch } from "../engine/stopWatch";
 import { type Frame, parsePerfData, sampleFrames } from "../engine/perfData";
+import { toTypeScript } from "../../sourceMaps";
 import { watchedClients } from "./watch";
 
 export class EngineFailure extends Schema.TaggedError<EngineFailure>()("EngineFailure", {
@@ -79,12 +82,15 @@ const desync: Command = (args) => Effect.gen(function*() {
 });
 
 const diff: Command = (args) => Effect.gen(function*() {
-  const paths = positionals(args, ["skew", "limit"]);
+  const paths = positionals(args, ["skew", "limit", "source-maps"]);
   if (paths.length !== 2) return yield* new UsageFailure({ problem: "diff takes two poll logs" });
   const skew = yield* number(args, "skew", 0.1);
   const limit = yield* number(args, "limit", 12);
+  const [sourceMaps] = flagValues(args, "source-maps");
   const logs = yield* Effect.forEach(paths, (path) => attempt(`read ${path}`, () => parsePresenceLog(readFileSync(path, "utf8"))));
-  yield* Console.log(diffPresenceLogs([paths[0] ?? "", paths[1] ?? ""], logs[0] ?? [], logs[1] ?? [], { skew, limit }));
+  const report = diffPresenceLogs([paths[0] ?? "", paths[1] ?? ""], logs[0] ?? [], logs[1] ?? [], { skew, limit });
+  // Code callbacks carry the chunk and line their Lua function was defined at; the map's source maps turn them into TypeScript lines.
+  yield* Console.log(sourceMaps === undefined ? report : yield* Effect.promise(() => toTypeScript(report, sourceMaps)));
 });
 
 const poll = (clientsFile: string): Command => (args) => Effect.gen(function*() {
@@ -138,9 +144,68 @@ const symbolizer = (client: AttachedClient, offsets: EngineOffsets) => ({ base: 
 
 const stackText = (frames: readonly Frame[]) => frames.map(({ label }) => label).join(" < ");
 
+/**
+ * `watch --lua`: stops the game's main thread at every birth (ptrace and a
+ * debug-register watchpoint) and reads the Lua VM's exact call stack while it
+ * is stopped. Offline clients only, like every trap.
+ */
+const watchLua = (client: AttachedClient, offsets: EngineOffsets, seconds: number, limit: number, out: string, sourceMaps: string | undefined) => Effect.gen(function*() {
+  const state = mainLuaState(client.memory, client.base, offsets.lua?.state);
+  if (state === undefined) return yield* new EngineFailure({ problem: `${client.name}: no map Lua VM found${offsets.lua === undefined ? ` (offsets.json has no lua chains for ${offsets.version})` : " (is a map running?)"}` });
+  const names = yield* attempt("read the Lua globals", () => globalFunctionNames(client.memory, state));
+  const table = presenceTable(client.memory, client.base, offsets);
+  const tracker = new PresenceTracker(client.memory, client.base, offsets);
+  tracker.poll();
+  const stacks: { birth: number; frames: LuaFrame[] }[] = [];
+  yield* Console.log(`${client.name}: stopping pid ${client.pid}'s main thread at each birth for ${seconds} s (at most ${limit})`);
+  const hits = yield* attempt("watch births", () => stopWatch({
+    tid: client.pid,
+    address: table + offsets.table.births,
+    seconds,
+    limit,
+    onHit: () => {
+      // The counter was just incremented: the birth being given is one less.
+      const birth = readHeader(client.memory, table, offsets).births - 1;
+      let frames: LuaFrame[] = [];
+      try {
+        frames = luaStack(client.memory, state, names);
+      } catch {
+        frames = [];
+      }
+      stacks.push({ birth, frames });
+    },
+  }));
+  const born = new Map(tracker.poll().filter(({ kind }) => kind === "born").map(({ agent }) => [agent.birth, agent]));
+  const lines = stacks.map(({ birth, frames }) => {
+    const agent = born.get(birth);
+    const what = agent === undefined ? "(freed before the next look)" : `${agent.className}${agent.owner === undefined ? "" : ` owner ${agent.owner}`}${agent.defined === undefined ? "" : ` at ${agent.defined}`}`;
+    return `birth ${birth} ${what}: ${frames.length === 0 ? "(not from Lua)" : frames.map(frameText).join(" <- ")}`;
+  });
+  const text = lines.join("\n");
+  const mapped = sourceMaps === undefined ? text : yield* Effect.promise(() => toTypeScript(text, sourceMaps));
+  const file = join(out, `${client.name}.lua-stacks.txt`);
+  yield* attempt(`write ${file}`, () => writeFileSync(file, `# wisp engine watch --lua: client ${client.name} pid ${client.pid} build ${client.exe.version}\n${mapped}\n`));
+  yield* Console.log(`${client.name}: ${hits} births stopped -> ${file}`);
+  const fromLua = mapped.split("\n").filter((line) => !line.endsWith("(not from Lua)"));
+  for (const line of fromLua.slice(0, 20)) yield* Console.log(`  ${line}`);
+});
+
 const watch = (clientsFile: string): Command => (args) => Effect.gen(function*() {
   const clients = yield* namedClients(clientsFile, args);
   const seconds = yield* number(args, "seconds", 10);
+  if (args.includes("--lua")) {
+    const limit = yield* number(args, "limit", 200);
+    const [out = stateDirectory()] = flagValues(args, "out");
+    const [sourceMaps] = flagValues(args, "source-maps");
+    yield* attempt("create the output folder", () => mkdirSync(out, { recursive: true }));
+    const attached = yield* attachAll(clients, "trap");
+    yield* Effect.forEach(attached, (client) => Effect.gen(function*() {
+      const offsets = yield* offsetsOf(client);
+      yield* watchLua(client, offsets, seconds, limit, out, sourceMaps);
+    }))
+      .pipe(Effect.ensuring(Effect.sync(() => { for (const client of attached) client.memory.close(); })));
+    return;
+  }
   const depth = yield* number(args, "depth", 8);
   const [out = stateDirectory()] = flagValues(args, "out");
   yield* perfAllowed;
@@ -249,7 +314,7 @@ const locate = (clientsFile: string): Command => (args) => Effect.gen(function*(
   }).pipe(Effect.ensuring(Effect.sync(() => client.memory.close())));
 });
 
-const USAGE = "(for debugging your own map on your own development clients; never other players' games) desync A B [--turn N] | poll --client a,b [--seconds N] [--out DIR] | diff A.log B.log [--skew S] | watch --client a [--seconds N] [--out DIR] [--perf BIN] | locate --client a [--watch SECONDS]";
+const USAGE = "(for debugging your own map on your own development clients; never other players' games) desync A B [--turn N] | poll --client a,b [--seconds N] [--out DIR] | diff A.log B.log [--skew S] [--source-maps DIR] | watch --client a [--seconds N] [--out DIR] [--perf BIN] [--lua [--limit N] [--source-maps DIR]] | locate --client a [--watch SECONDS]";
 
 /** `clientsFile` is the clients file `wisp watch` reads: each client's name and Documents folder, inside its Wine prefix. */
 export const makeEngine = (clientsFile: string): Command => ([sub, ...args]) => {

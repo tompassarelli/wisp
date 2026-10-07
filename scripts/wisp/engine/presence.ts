@@ -6,6 +6,7 @@
 // clients that make or free an agent on different turns desync
 // (wisp:docs/engine.md).
 import type { EngineOffsets } from "./offsets";
+import { scriptFuncDefinition } from "./lua";
 import { type Mapping, type Memory, readableAt, u32, u64 } from "./memory";
 
 /** `.?AVCPoFlag@NIpse@@` → `NIpse::CPoFlag`; anything else is returned as read. */
@@ -78,17 +79,20 @@ export interface Agent {
   readonly className: string;
   /** For a CAgentBaseAbs: the class of the handle object it points back to, when one is found. */
   readonly owner: string | undefined;
+  /** For a code callback (owner CScriptFunc): where its Lua function was defined, `map-KEY:LINE`. */
+  readonly defined?: string;
 }
 
 export type PresenceEvent =
   | { readonly kind: "born"; readonly agent: Agent }
   | { readonly kind: "freed"; readonly agent: Agent };
 
-/** The class of the handle object an agent points back to (a timer, a code callback), when it has RTTI. */
-export function ownerOf(memory: Memory, names: ClassNames, object: number, offsets: EngineOffsets): string | undefined {
+/** The handle object an agent points back to (a timer, a code callback) and its class, when it has RTTI. */
+export function ownerOf(memory: Memory, names: ClassNames, object: number, offsets: EngineOffsets): { readonly address: number; readonly className: string } | undefined {
   try {
-    const owner = u64(memory, object + offsets.agent.owner);
-    return owner === 0 || owner === object ? undefined : names.of(owner);
+    const address = u64(memory, object + offsets.agent.owner);
+    const className = address === 0 || address === object ? undefined : names.of(address);
+    return className === undefined ? undefined : { address, className };
   } catch {
     return undefined;
   }
@@ -126,7 +130,8 @@ export class PresenceTracker {
     }
     const className = this.names.of(object) ?? "?";
     const owner = className === "CAgentBaseAbs" ? ownerOf(this.memory, this.names, object, this.offsets) : undefined;
-    return { tag, object, birth, className, owner };
+    const defined = owner?.className === "CScriptFunc" ? scriptFuncDefinition(this.memory, owner.address, this.offsets.lua?.closure) : undefined;
+    return { tag, object, birth, className, owner: owner?.className, ...(defined === undefined ? {} : { defined }) };
   }
 
   /** Born and freed agents since the previous poll; the first poll records the table and returns none. */
