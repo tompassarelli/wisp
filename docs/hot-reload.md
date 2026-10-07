@@ -95,7 +95,10 @@ The incremental compiler rebuilds the Lua bundle and its source map from each
 unchanged module's cached text, mappings and resolved requires; the result
 equals a full TypeScriptToLua compile (see [compiler](../scripts/compiler.ts)
 and [bundle](../scripts/luaBundle.ts), wisp:scripts/compiler.ts and
-wisp:scripts/luaBundle.ts). The number rules scan only changed files again.
+wisp:scripts/luaBundle.ts). Plugins' `beforeEmit` and `afterEmit` run on its emit plan as they do
+in a full compile. A plugin's visitors run only on the modules a compile
+transpiles, so a visitor whose output depends on other files keeps an
+unchanged module's old text. The number rules scan only changed files again.
 
 ## What a reload sends
 

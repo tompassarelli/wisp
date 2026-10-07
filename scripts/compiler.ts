@@ -186,12 +186,17 @@ class IncrementalTranspiler extends Transpiler {
       }
       const { emitPlan } = plan;
       if (planDiagnostics.length > 0) return planDiagnostics;
-      const { sourceMap: writeSourceMap = false, emitBOM = false } = program.getCompilerOptions();
+      const options: CompilerOptions = program.getCompilerOptions();
+      // As TSTL 1.37.1's emit: plugins may rewrite the plan before it is written and see it after.
+      const emitDiagnostics: ts.Diagnostic[] = [];
+      for (const plugin of transpiled.plugins) emitDiagnostics.push(...(plugin.beforeEmit?.(program, options, this.emitHost, emitPlan) ?? []));
+      const { sourceMap: writeSourceMap = false, emitBOM = false } = options;
       for (const { outputPath, code, sourceMap, sourceFiles } of emitPlan) {
         writeFile(outputPath, code, emitBOM, undefined, sourceFiles);
         if (writeSourceMap && sourceMap !== undefined) writeFile(`${outputPath}.map`, sourceMap, emitBOM, undefined, sourceFiles);
       }
-      return [];
+      for (const plugin of transpiled.plugins) emitDiagnostics.push(...(plugin.afterEmit?.(program, options, this.emitHost, emitPlan) ?? []));
+      return emitDiagnostics;
     });
   }
 }
