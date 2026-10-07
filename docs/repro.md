@@ -205,3 +205,80 @@ has `schema: 1`, `command`, and `type`. Results carry `ok`, `frame`, `client`,
 `repro`, `frames`, `checksum`, and `expectedChecksum`. Failures add `kind`
 (desync or error) and `message`. The summary carries `ok`, `counts` (results
 and failures), and `elapsedMs`. Inspection files keep their existing format.
+
+## Importing a native replay
+
+`wisp repro import MATCH.w3g [HOST.log] --out ACTIONS.json` reads a native
+replay without opening Warcraft. The optional matching Wisp LAN host log
+compares every decoded action's count, order, turn, player and payload; any
+difference fails the command and stays in the output for inspection.
+
+The JSON includes players, slot assignments, the engine version/build, map
+metadata, zero-based host turns, cumulative milliseconds and original player
+action blocks. Each action has its name and fields, exact `raw` hex and its
+`offset` within that player's block. Add the command block's `offset` to get
+its offset in the **decompressed game-data stream**. These are not compressed
+file offsets. `records` retains every game-data block, including records the
+library does not emit. An unknown or clipped action is named `raw`; its entire
+remaining block stays intact instead of being interpreted as more actions.
+
+The parser is maintained [w3gjs 4.3.0](https://github.com/PBug90/w3gjs/tree/40efcfc7bdb8ccb0241823f9aa099b98a62ca0fe)
+(MIT; [notice](notices/w3gjs-MIT.txt)). Its low-level game-data parser supplies
+record and timeslot boundaries. Its melee action decoder misreads the current
+native sync opcode, so the adapter captures original command bytes before that
+decoder and uses Wisp's existing LAN action decoder. The adapter depends on
+the pinned parser's ordinary private properties. [w3grs's extended action documentation](https://github.com/wakamex/w3grs/tree/dc92490b7668d02793d3fefd00f749e454dc5858)
+was used to identify dropped-record coverage; no Rust implementation was copied.
+Current native sync, key, frame, mouse, order, selection, chat, trigger and
+cache records can be inspected. Their meanings for a particular game are not
+assumed to be simulated.
+
+A game can add `importReplay` to its `makeRepro` declaration:
+
+```ts
+importReplay: (nativeReplay) => ({
+  repro: convertSupportedInputs(nativeReplay),
+  simulatedActionOffsets: supportedOffsets,
+}),
+```
+
+The adapter returns an ordinary `Repro` and the decompressed offsets of the
+actions it actually used. It must decode the game's established input protocol,
+use its recorded simulation frame numbers (network times are not game frames),
+and retain the original starting snapshot and expected ending checksum from
+its Wisp recording. Unknown commands must not be counted as simulated.
+Missing input rows must fail conversion. The importer runs the result in two
+headless clients; only a matching recorded checksum writes
+`ACTIONS.json.repro.txt`. It reports the count of simulated actions and the
+other retained actions, and adds the simulated offsets to the JSON.
+`wisp repro ACTIONS.json.repro.txt --view` then uses the existing frame slider,
+client state comparison and backward scrubbing. For a long verified journey, set
+`viewerScanDivergence: false` in the project to open without replaying every
+frame first. The page says it compares the selected frame; it does not claim
+the whole interval agrees. The default still locates the first differing frame.
+Projects without this adapter
+still import and inspect every raw record; they do not claim reproduction.
+
+The current offline Wisp19 native fixture imported 6,241 turns and 2,392 actions
+against the same host's 2,392 records with zero differences. The matching
+packet log also compared 2,293 original player blocks byte for byte, with zero
+differences. Its `SC_GP` I5
+inputs decoded through Smashcraft's existing `decodeTransport`: 1,240 input
+rows over frames 361–980 reproduced the original `424399:834377` checksum
+in both headless clients. This supported 174 actions; 2,218 others were retained.
+The private adapter and replay remain in `~/.local/state/wisp/replay47/`;
+reproduce that check on the recording machine with:
+
+```sh
+bun ~/.local/state/wisp/replay47/journey.ts import \
+  ~/.local/state/wisp/replay47/native.w3g \
+  ~/.local/state/wisp/replay47/host.log \
+  --out ~/.local/state/wisp/replay47/import.json
+bun ~/.local/state/wisp/replay47/compare-packets.ts
+bun ~/.local/state/wisp/replay47/journey.ts \
+  ~/.local/state/wisp/replay47/import.json.repro.txt --view
+```
+
+Keep native `.w3g`, host logs and saved snapshots outside public checkouts.
+A replay contains synchronized actions; engine poses and local polling cannot
+be reconstructed from those bytes alone.
