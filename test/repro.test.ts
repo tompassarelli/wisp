@@ -2,7 +2,7 @@
 // must land on the recorded checksum, and --test writes a test that replays it.
 // The record text and repro contracts also run in 32-bit Lua (runtime.test.ts).
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Exit } from "effect";
 import { makeRepro, readRepro, replayInClients, reproReport } from "../scripts/wisp/commands/repro";
@@ -12,6 +12,10 @@ import { REPRO_LINE_WIDTH, assertReproLands, reproLines } from "../src/runtime/r
 import { registeredTests } from "../src/runtime/testing";
 import { replayRepro } from "./fixtures/repro/replay";
 import { diffReproStates } from "../scripts/wisp/reproInspection";
+import { loadSoakGame, playSoakMatch, readSoakRepro, soakRepro } from "../scripts/wisp/soak";
+import { installHeadless } from "../scripts/wisp/headless";
+import soakProject from "./soak/project";
+import { assertSoakReproFixed } from "../scripts/wisp/reproShrink";
 
 // Taken out of the shared registry, which other files of this process count.
 const registered = registeredTests.length;
@@ -35,6 +39,36 @@ function writeReproFile(checksum: string): string {
 }
 
 const project = { map: MAP, replay: join(import.meta.dir, "fixtures/repro/replay.ts"), tests: join(directory, "tests") };
+
+test("--shrink keeps a soak failure, saves the original, and --test writes an executable regression", async () => {
+  mkdirSync(directory, { recursive: true });
+  const game = await loadSoakGame(soakProject.game);
+  const runtime = installHeadless(soakProject.map);
+  let repro;
+  try {
+    repro = soakRepro(soakProject.name, playSoakMatch(runtime, game, soakProject, { index: 0, seed: 734, fighters: ["a", "b"], stage: "flat", policies: ["fuzz", "freeze"], frames: 600 }));
+  } finally {
+    runtime.restore();
+  }
+  const file = join(directory, "soak.json"), out = join(directory, "soak-smaller.json");
+  const saved = JSON.stringify(repro);
+  writeFileSync(file, saved);
+  const setup = { ...project, soak: { project: join(import.meta.dir, "soak/project.ts"), tests: join(directory, "headless-tests") } };
+  expect(Exit.isSuccess(await Effect.runPromiseExit(makeRepro(async () => setup)([file, "--shrink", "--out", out])))).toBe(true);
+  const shrunk = readSoakRepro(readFileSync(out, "utf8"));
+  expect(shrunk.inputs.edges).toEqual([]);
+  expect(shrunk.findings[0]?.kind).toBe("stall");
+  expect(readFileSync(file, "utf8")).toBe(saved);
+  const target = join(setup.soak.tests, "shrunk-stall.test.ts");
+  if (existsSync(target)) rmSync(target);
+  expect(Exit.isSuccess(await Effect.runPromiseExit(makeRepro(async () => setup)([out, "--test", "shrunk-stall"])))).toBe(true);
+  const source = readFileSync(target, "utf8");
+  expect(source).toContain('import { test } from "bun:test"');
+  expect(source).toContain('assertSoakReproFixed(project, game, REPRO)');
+  expect(() => assertSoakReproFixed(soakProject, game, shrunk)).toThrow("stall");
+  expect(() => assertSoakReproFixed(soakProject, game, { ...shrunk, match: { ...shrunk.match, policies: ["fuzz", "cpu"] } })).not.toThrow();
+  expect(Exit.isFailure(await Effect.runPromiseExit(makeRepro(async () => setup)([file, "--shrink", "--out", file])))).toBe(true);
+});
 
 test("every simulated client lands on the recorded checksum, and --test writes a test of the moment", async () => {
   rmSync(directory, { recursive: true, force: true });

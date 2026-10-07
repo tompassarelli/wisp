@@ -171,17 +171,24 @@ test("the command plays matches in worker processes and keeps a repro file for e
   const exit = await run(["--matches", "6", "--workers", "2", "--policy", "freeze", "--out", out]);
   expect(Exit.isFailure(exit)).toBe(true);
   const files = readdirSync(out).sort();
-  expect(files.filter((file) => file.endsWith(".json"))).toEqual(["match-0.json", "match-1.json", "match-2.json", "match-3.json", "match-4.json", "match-5.json"]);
+  expect(files.filter((file) => file.endsWith(".json"))).toEqual(Array.from({ length: 6 }, (_, index) => [`match-${index}.json`, `match-${index}.original.json`]).flat());
   // The game's repro of the moment of each match's first finding, as its repro key saves one.
   expect(files).toContain("match-0-p1.txt");
   expect(readFileSync(join(out, "match-0-p1.txt"), "utf8")).toContain("wisp-repro 1");
   expect(lines.join("\n")).toContain("6 matches, ");
   const repro = readSoakRepro(readFileSync(join(out, "match-0.json"), "utf8"));
   expect(repro.findings.map(({ kind }) => kind)).toEqual(["stall", "unfinished"]);
+  const original = readSoakRepro(readFileSync(join(out, "match-0.original.json"), "utf8"));
+  expect(original.inputs.edges.length).toBeGreaterThan(0);
+  expect(repro.inputs.edges).toEqual([]);
   lines.length = 0;
   const replayed = await run(["--repro", join(out, "match-0.json")]);
   expect(Exit.isFailure(replayed)).toBe(true);
   expect(lines.join("\n")).toContain("native call checksums equal the recorded ones");
+  const unshrunk = mkdtempSync(join(tmpdir(), "wisp-soak-unshrunk-"));
+  await run(["--matches", "1", "--workers", "1", "--policy", "freeze", "--out", unshrunk, "--no-shrink"]);
+  expect(readdirSync(unshrunk)).not.toContain("match-0.original.json");
+  expect(readSoakRepro(readFileSync(join(unshrunk, "match-0.json"), "utf8")).inputs.edges.length).toBeGreaterThan(0);
   expect(Exit.isFailure(await run(["--workers", "5"]))).toBe(true);
 });
 

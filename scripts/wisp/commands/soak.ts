@@ -15,6 +15,7 @@ import {
   readSoakRepro, soakRepro,
 } from "../soak";
 import { emitJson } from "../jsonResults";
+import { shrinkSoakRepro } from "../reproShrink";
 import { step } from "../timings";
 
 export class SoakFailure extends Schema.TaggedError<SoakFailure>()("SoakFailure", {
@@ -69,6 +70,7 @@ function scopeCpus(): number {
 }
 
 function parseRun(args: readonly string[], project: SoakProject): RunOptions | string {
+  args = args.filter(arg => arg !== "--no-shrink");
   for (let index = 0; index < args.length; index++) {
     const arg = args[index] ?? "";
     if (!arg.startsWith("--") || !VALUED.includes(arg.slice(2))) return `unknown argument ${arg}`;
@@ -138,7 +140,7 @@ interface Pool {
  * One worker process: it plays matches from `next` until none is left or it
  * stops; a match it stopped in comes back as a crash. Its scope kills it.
  */
-const runWorker = (worker: string, project: string, next: () => SoakMatch | undefined, pool: Pool, report: (reply: SoakReply) => Effect.Effect<void>) =>
+const runWorker = (worker: string, project: string, next: () => SoakMatch | undefined, pool: Pool, report: (reply: SoakReply) => Effect.Effect<void, SoakFailure>) =>
   Effect.acquireUseRelease(
     Effect.sync((): Worker => {
       pool.workersStarted++;
@@ -229,7 +231,7 @@ const replay = (options: SoakCommandOptions, file: string, report?: (reply: Soak
   if (result.findings.length > 0) return yield* new SoakFailure({ problem: `${plural(result.findings.length, "finding")} replaying ${file}` });
 });
 
-/** `soak [--matches N] [--seed N] [--workers N] [--minutes N] [--fighter NAME]... [--stage NAME]... [--policy NAME]... [--out DIR] | --repro FILE`. */
+/** `soak [--matches N] [--seed N] [--workers N] [--minutes N] [--fighter NAME]... [--stage NAME]... [--policy NAME]... [--out DIR] [--no-shrink] | --repro FILE`. */
 export const makeSoak = (options: SoakCommandOptions): Command => (allArgs) => Effect.suspend(() => {
   const json = allArgs.includes("--json");
   const args = allArgs.filter((arg) => arg !== "--json");
@@ -279,6 +281,9 @@ export const makeSoak = (options: SoakCommandOptions): Command => (allArgs) => E
     const started = performance.now();
     const cpuBefore = process.cpuUsage();
     const worker = join(import.meta.dir, "../soakWorker.ts");
+    const shrinkingGame = args.includes("--no-shrink") ? undefined : yield* Effect.tryPromise({
+      try: () => loadSoakGame(project.game), catch: cause => new SoakFailure({ problem: "loading the shrink replay", cause }),
+    });
     const report = (reply: SoakReply) => Effect.gen(function*() {
       if (reply.findings.length === 0) {
         if (json) yield* jsonReply(reply);
@@ -288,7 +293,15 @@ export const makeSoak = (options: SoakCommandOptions): Command => (allArgs) => E
       const written = reply.inputs === undefined ? undefined : path;
       if (reply.inputs !== undefined) {
         const repro = soakRepro(project.name, { ...reply, inputs: reply.inputs });
-        yield* Effect.try({ try: () => writeFileSync(path, `${JSON.stringify(repro)}\n`), catch: (cause) => new SoakFailure({ problem: `writing ${path}`, cause }) }).pipe(Effect.orDie);
+        yield* Effect.try({ try: () => {
+          writeFileSync(path, `${JSON.stringify(repro)}\n`);
+          if (shrinkingGame !== undefined) writeFileSync(join(out, `match-${reply.match.index}.original.json`), `${JSON.stringify(repro)}\n`);
+        }, catch: (cause) => new SoakFailure({ problem: `writing ${path}`, cause }) }).pipe(Effect.orDie);
+        if (shrinkingGame !== undefined) {
+          const shrunk = yield* Effect.try({ try: () => shrinkSoakRepro(project, shrinkingGame, repro), catch: cause => new SoakFailure({ problem: `shrinking ${path}`, cause }) });
+          yield* Effect.try({ try: () => writeFileSync(path, `${JSON.stringify(shrunk.repro)}\n`), catch: cause => new SoakFailure({ problem: `writing ${path}`, cause }) });
+          if (!json) yield* Console.log(`shrank ${path}: ${shrunk.before} -> ${shrunk.after} inputs in ${(shrunk.elapsedMs / 1000).toFixed(3)} s`);
+        }
       }
       const moments = (reply.repros ?? []).map(([slot, lines]) => [join(out, `match-${reply.match.index}-p${slot}.txt`), lines] as const);
       for (const [file, lines] of moments) {
