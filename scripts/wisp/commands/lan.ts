@@ -173,7 +173,7 @@ const pool: Command = (args) => Effect.gen(function*() {
     const pids = new Map(((status["clients"] ?? []) as { name: string; pid?: number }[]).map(({ name, pid }) => [name, pid]));
     const clientsPath = join(pairDirectory(pair), "clients.json");
     writeJson(clientsPath, { clients: pairClients(pair, runs).map((client) => ({ ...client, name: client.name.endsWith("a") ? "a" : "b", poolName: client.name, pid: pids.get(client.name) })) });
-    entries.push({ id: pair, clients: clientsPath, agentSocket: agentSocket(pair), runs, appIds: { a: "warcraft iii.exe", b: "warcraft iii.exe" } });
+    entries.push({ id: pair, clients: clientsPath, agentSocket: agentSocket(pair), runs, appIds: { a: `steam_app_${3516115600 + pair * 2}`, b: `steam_app_${3516115601 + pair * 2}` } });
     writeJson(poolFile(), { profile: profileText, pairs: entries.map((entry) => ({ ...entry, profile: profileOf(entry.id) })) });
     writeJson(poolClientsFile(), { clients: entries.flatMap(({ id, runs: desktops }) => pairClients(id, desktops)) });
     yield* Console.log(`pair ${pair}: ${clientName(pair, "a")} and ${clientName(pair, "b")} running (${profile}); desktops ${runs.a ?? "?"} and ${runs.b ?? "?"}`);

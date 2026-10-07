@@ -13,9 +13,10 @@ import { type LadderScan, SCAN_QUIET_MS, importFailures, ladderScan, logTime, se
 import type { Client } from "./clients";
 import { dataDirectory } from "./gameFiles";
 import { type MenuEvent, connectMenus, keptAddress, menuAddress } from "./menus";
+import { pairClients, readPool } from "./lan/pool";
 
 /** Where a state or event was learned. */
-export type Source = "socket" | "log" | "receipt" | "process";
+export type Source = "socket" | "log" | "receipt" | "process" | "lan";
 
 /** One client's state. `kind` names it; the rest is what the source said. */
 export type ClientState =
@@ -130,7 +131,7 @@ export const waitFor = (client: Client, predicate: (view: ClientView) => boolean
  * Battle.net's public channel, in a lobby its chat, and without the page a
  * match receipt may be one an earlier match left.
  */
-export const typesIntoMatch = (view: ClientView) => view.state.kind === "in match" && view.menus === true;
+export const typesIntoMatch = (view: ClientView) => view.state.kind === "in match" && (view.menus === true || view.source === "lan");
 
 /** A predicate for one of these states. */
 export const inState = (...kinds: readonly StateKind[]) => (view: ClientView) => kinds.includes(view.state.kind);
@@ -230,6 +231,8 @@ export interface Sources {
   /** When the map last wrote its match receipt (ms since the epoch). */
   readonly receipt?: number;
   readonly socket: SocketState;
+  /** Live offline host observation for this declared pool client's exact process. */
+  readonly lan?: { readonly pid: number; readonly map: string; readonly phase: string; readonly connected: boolean; readonly loaded: boolean; readonly left: boolean };
 }
 
 /** States of a client that had signed in: the login screen after one of them is a lost connection. */
@@ -262,6 +265,9 @@ export function decide(client: string, sources: Sources, previous?: ClientView):
     return keep(launcher !== undefined
       ? view({ kind: "launcher" }, "process", `Battle.net.exe pid ${launcher.pid}`)
       : view({ kind: "closed" }, "process", "no Battle.net.exe or Warcraft III.exe in the prefix"));
+  }
+  if (sources.lan?.pid === game.pid && sources.lan.phase === "playing" && sources.lan.connected && sources.lan.loaded && !sources.lan.left) {
+    return keep(view({ kind: "in match", map: sources.lan.map }, "lan", `offline host playing; Warcraft III.exe pid ${game.pid} loaded and connected`));
   }
 
   // War3Log.txt is written in bursts (6 Oct: client B's stopped 3 s after its start while B played all
@@ -333,6 +339,26 @@ const readText = (path: string) => {
     return undefined;
   }
 };
+
+const LanStatus = Schema.Struct({
+  clients: Schema.Array(Schema.Struct({ name: Schema.String, documents: Schema.String, pid: Schema.optional(Schema.Int) })),
+  game: Schema.optional(Schema.Struct({ map: Schema.String, phase: Schema.String, players: Schema.Array(Schema.Struct({ label: Schema.String, connected: Schema.Boolean, loaded: Schema.Boolean, left: Schema.Boolean })) })),
+});
+
+/** The host socket is outside the pool's isolated network; its menus' TCP sockets are inside. */
+const lanObservation = (documents: string) => Effect.tryPromise({
+  try: async () => {
+    const pair = readPool()?.pairs.find((pair) => pairClients(pair.id, pair.runs).some((client) => client.documents === documents));
+    if (pair === undefined) return undefined;
+    const response = await fetch("http://pair/status", { unix: pair.agentSocket, signal: AbortSignal.timeout(500) });
+    const status = Schema.decodeUnknownSync(LanStatus)(await response.json());
+    const client = status.clients.find((client) => client.documents === documents);
+    const player = status.game?.players.find((player) => player.label === client?.name);
+    return client?.pid === undefined || status.game === undefined || player === undefined ? undefined
+      : { pid: client.pid, map: status.game.map, phase: status.game.phase, connected: player.connected, loaded: player.loaded, left: player.left };
+  },
+  catch: () => undefined,
+}).pipe(Effect.orElseSucceed(() => undefined));
 const modified = (path: string) => statSync(path, { throwIfNoEntry: false })?.mtimeMs;
 
 export interface WatchOptions {
@@ -429,6 +455,7 @@ const liveWatch = (options: WatchOptions) => Effect.gen(function*() {
       tracker.log = stamp === undefined ? undefined : readText(path);
     }
     const { log } = tracker;
+    const lan = yield* lanObservation(client.documents);
     const sources: Sources = {
       now: yield* Clock.currentTimeMillis,
       prefix: prefixUse(processes, prefix, ""),
@@ -439,6 +466,7 @@ const liveWatch = (options: WatchOptions) => Effect.gen(function*() {
         return time === undefined ? {} : { receipt: time };
       })(),
       socket: tracker.socket,
+      ...(lan === undefined ? {} : { lan }),
     };
     tracker.view = decide(client.name, sources, tracker.view);
     return tracker.view;

@@ -59,6 +59,17 @@ const sources = (now: number, processes: readonly ProcessInfo[], extra: Partial<
   socket: { connected: false },
   ...extra,
 });
+
+test("offline host permits chat only for its exact loaded, connected, playing process", () => {
+  const lan = { pid: GAME.pid, map: "/private/test.w3x", phase: "playing", connected: true, loaded: true, left: false };
+  const observed = (value: typeof lan) => decide("a", sources(on6Oct("21:00"), [GAME], { lan: value }));
+  expect(typesIntoMatch(observed(lan))).toBe(true);
+  expect(observed(lan).source).toBe("lan");
+  for (const changed of [{ pid: GAME.pid + 1 }, { phase: "lobby" }, { phase: "loading" }, { phase: "over" }, { connected: false }, { loaded: false }, { left: true }]) {
+    expect(typesIntoMatch(observed({ ...lan, ...changed }))).toBe(false);
+  }
+  expect(typesIntoMatch(decide("a", sources(on6Oct("21:00"), [], { lan })))).toBe(false);
+});
 const crashFolder = "2026-10-06 13.30.33 f80136c8";
 const crash: CrashReport = {
   folder: crashFolder,
