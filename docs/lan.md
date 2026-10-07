@@ -11,6 +11,13 @@ never switches a signed-in Battle.net client, and never touches anyone else's
 game. It isn't for cheating. The terms are in
 [driving-warcraft.md](driving-warcraft.md#2-lan-hosting-offline-clients-and-wisps-host).
 
+## 3.0.1 startup failure
+
+A separate signed-in 3.0.1 client also failed to create a game window; the
+cause was not established as an offline restriction. The Agent-presence
+experiments were invalid or cancelled, and the temporary SDK substitution
+produced no valid comparison. The authentic 24342 SDK was restored.
+
 ## Commands
 
 | Command | What it does |
