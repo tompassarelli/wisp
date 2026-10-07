@@ -18,7 +18,9 @@
     "lua-types": "2.14.1"
   },
   "dependencies": {
+    "dds-parser": "1.0.1",
     "effect": "4.0.1",
+    "gl-matrix": "3.3.0",
     "source-map": "0.7.6",
     "typescript": "6.0.2",
     "typescript-native": "npm:typescript@7.0.2",

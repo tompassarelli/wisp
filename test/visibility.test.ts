@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { generateMDX, parseMDL } from "war3-model";
+import { generateMDX, parseMDL } from "../vendor/war3-model.mjs";
 import { type ModelFacts, drawsNothing, hiddenEmitters, modelFacts, modelReach } from "../scripts/wisp/models";
 import { type SceneExpectations, type SceneReport, sceneProblems } from "../scripts/wisp/scene";
 import { type CameraView, boxSeen } from "../scripts/wisp/visibility";

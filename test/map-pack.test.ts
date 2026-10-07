@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { generateMDX, parseMDL, parseMDX } from "war3-model";
+import { generateMDX, parseMDL, parseMDX } from "../vendor/war3-model.mjs";
 import { ensurePackager } from "../scripts/wisp/mapBuild";
 
 const build = join(import.meta.dir, "../build");
