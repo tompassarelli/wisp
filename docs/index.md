@@ -6,6 +6,8 @@ Wisp's native checks.
 [Warsmash behavior notes](warsmash-notes.md) record independently written
 life/death, animation/blending and map/model-format facts, separating source
 research from native confirmations for headless checks and a standalone player.
+They also map Smashcraft's relied-on behavior to Wisp and describe the shared
+unit/timer native fixture in `test/native-rules50/`.
 
 Start here when changing Wisp or building a map with it. The same pages ship
 in the installed package under your project's `node_modules/wisp/docs/`.
