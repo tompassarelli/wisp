@@ -327,6 +327,7 @@ export class HeadlessClient {
   private readonly filePrefix: string;
   private readonly timers: Timer[] = [];
   private readonly registrations: Registration[] = [];
+  private readonly heldKeys = new Set<number>();
   private readonly memo = new Map<string, Frame>();
   private allPlayers: Handle | undefined;
   private readonly effects = new Map<Handle, EffectPose>();
@@ -498,6 +499,7 @@ export class HeadlessClient {
       BlzGetLocalClientWidth: () => screenWidth,
       BlzGetLocalClientHeight: () => 1080,
       BlzIsLocalClientActive: () => true,
+      BlzIsKeyPressed: (key: number) => this.heldKeys.has(key),
       BlzLoadTOCFile: () => true,
       // A frame getter returns one handle per frame, made at its first call.
       BlzGetOriginFrame: (type: unknown, index: number) => this.memoized(`origin ${describeValue(type)} ${index}`),
@@ -774,6 +776,10 @@ export class HeadlessClient {
   }
 
   key(sender: number, key: number, meta: number, down: boolean): void {
+    if (sender === this.slot) {
+      if (down) this.heldKeys.add(key);
+      else this.heldKeys.delete(key);
+    }
     this.run(() => {
       for (const registration of [...this.registrations]) {
         if (registration.kind === "key" && registration.player === sender && registration.key === key && registration.meta === meta && registration.down === down) {

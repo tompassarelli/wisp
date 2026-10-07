@@ -87,6 +87,25 @@ test("each client keeps its own globals and files", () => {
   expect(globalThis.__fixtureFrames).toBeUndefined();
 });
 
+test("key polling sees only this client's held keys, including unregistered keys and releases", () => {
+  const clients = runtime.clients({ start: () => {}, install: () => {} });
+  clients.start();
+  const read = () => clients.clients.map((client) => {
+    let held = false;
+    client.run(() => { held = BlzIsKeyPressed(ConvertOsKeyType(0x57)); });
+    return held;
+  });
+  expect(read()).toEqual([false, false]);
+  for (const client of clients.clients) client.key(0, 0x57, 0, true);
+  expect(read()).toEqual([true, false]);
+  for (const client of clients.clients) client.key(1, 0x57, 0, true);
+  expect(read()).toEqual([true, true]);
+  for (const client of clients.clients) client.key(0, 0x57, 0, false);
+  expect(read()).toEqual([false, true]);
+  for (const client of clients.clients) client.key(1, 0x57, 0, false);
+  expect(read()).toEqual([false, false]);
+});
+
 test("a declared native's parameter count includes a callback parameter and not what its type holds", () => {
   const { functions } = parseNativeDeclarations([
     "declare function GetLocalPlayer(): player;",
