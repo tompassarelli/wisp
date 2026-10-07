@@ -101,7 +101,10 @@ moderate`. Admission uses the user's service bus and runtime directory;
 inside the scope the game receives its private desktop's runtime directory
 and its own session bus. Each game runs in its own `session --class native` scope: the
 high-weight slice for game clients, with no CPU quota, admitted on memory
-alone. The pool adds pairs while the helper admits them: a deferred pair is
+alone. Each offline client requests 1.5 GiB through `--memory-gib`; measured
+parity clients used 0.8–1.4 GB resident memory. This sizes admission and
+`MemoryHigh` while keeping the native class's CPU treatment. The pool adds
+pairs while the helper admits them: a deferred pair is
 retried every 45 s, for up to `--wait` seconds (default 1800). After that the
 pool keeps the pairs it has. `--greedy` is the owner's call for unattended
 runs: it skips the helper's admission, keeps each pair in a scope of the
@@ -162,6 +165,23 @@ bisect-588610b7, measured over 10 s from /proc):
 | CPU | 0.74 core | 0.52 core |
 | Resident memory | 1.37 GB | 0.80 GB |
 | GPU memory (VRAM + GTT, from DRM fdinfo) | 666 + 75 MiB | 666 + 75 MiB |
+
+**Rendering is on the GPU.** Pool clients render through DXVK (`d3d11=n`,
+`dxgi=n` in Proton's `WINEDLLOVERRIDES`) on RADV. The Vulkan loader maps every
+ICD it is offered, so lavapipe (`libvulkan_lvp.so`) and `libLLVM` appear in
+`/proc/PID/maps`, but that is enumeration, not use: on 7 October every pool
+client held 540–670 MiB of VRAM and accumulated `drm-engine-gfx` time on the
+AMD device (0000:c1:00.0) in its DRM fdinfo. Forcing the Radeon ICD cannot cut
+CPU; the CPU is spent in the game's own threads.
+
+**A spinning client costs three times a normal one.** Measured from
+`/proc/PID/task/*/stat` over 10 s with the machine at load ~140 on 24 cores,
+nine pool clients used 0.29–0.82 core each, their busiest thread sleeping
+thousands of times (voluntary context switches). Two clients (lan3a in a
+parity pair, lan1a) used 1.97 and 2.29 cores: three threads each at 60–80% of
+a core with zero voluntary context switches, so they never block and spin in
+user space. Check `voluntary_ctxt_switches` in each thread's `status` before
+blaming settings: such a client is the one to stop or restart.
 
 ## How a match starts
 

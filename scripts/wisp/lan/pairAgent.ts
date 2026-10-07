@@ -86,7 +86,7 @@ for (const client of clients) {
   // slice for game clients, no CPU quota, admitted on memory alone.
   // Admission uses the user's service bus; restore the private runtime only inside the game scope.
   const gameRuntime = client.env["XDG_RUNTIME_DIR"] ?? process.env["XDG_RUNTIME_DIR"] ?? userRuntime;
-  const native = capacity === undefined ? [] : [process.execPath, capacity, "session", "--class", "native", "--owner", `wisp-lan:${client.name}`, "--", "env", `XDG_RUNTIME_DIR=${gameRuntime}`];
+  const native = capacity === undefined ? [] : [process.execPath, capacity, "session", "--class", "native", "--memory-gib", "1.5", "--owner", `wisp-lan:${client.name}`, "--", "env", `XDG_RUNTIME_DIR=${gameRuntime}`];
   // The helper may defer the game's scope (exit 75, DEFER on stderr): wait
   // for admission instead of leaving the pair without a game.
   for (;;) {
