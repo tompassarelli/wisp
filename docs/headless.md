@@ -40,12 +40,33 @@ effects, and logs every native call except the local-only ones.
 | Conversions and math | `I2S`, `R2S`, `R2I`, `I2R`, `S2I`, `S2R`, `SubString`, `StringLength`, `SquareRoot`, `Atan2` and the bit operations, binary32 where Warcraft is. |
 | Messages | `DisplayTextToPlayer` for the local player and `DisplayTextToForce` show text in `client.messages`; Wisp's error reports go to `client.errors` as `error in HANDLER: ...` when the map writes them to its error file, shown or not ([error text](hot-reload.md#error-reports-on-screen)). |
 
-Every other declared native returns a new handle, 0, "", false or nothing,
-by its declared type, and each `Convert` native returns its argument. Constants of a handle type are their own name, so
+An unmodeled declared native fails the journey. Each client records its first
+call with the native name, client slot and frame, including local-only calls.
+The runtime continues with the declared type's default so the report can name
+all missing behavior; equal defaults and equal checksums cannot make it pass.
+Each `Convert` native returns its argument. Constants of a handle type are their own name, so
 comparisons with them work; global variables such as
 `bj_mapInitialPlayableArea` are handles. A game supplies `natives` for one its
 code needs answered otherwise. The declarations come from
 wisp:src/natives/warcraft.d.ts.
+
+### Intentional no-ops
+
+For behavior a particular journey deliberately ignores, declare exact native
+names and a concrete reason in `HeadlessMap` or `LuaHeadlessMap`:
+
+```ts
+intentionalNoops: {
+  StopMusic: "this logic journey has no music playback",
+}
+```
+
+These calls retain their declared defaults and synchronized call logging.
+Empty reasons and undeclared names (including wildcards) are rejected.
+`localNatives` only controls synchronization logging; it does not suppress
+missing-native failures. A function supplied through `natives` counts as
+modeled in both runtimes. Prefer supplied behavior when the return value
+matters, as the sample declares its playable rectangle's center at zero.
 
 ## Synchronized and local-only calls
 
@@ -372,8 +393,8 @@ beyond the [measured sync latency](network-model.md), and it emulates only
 natives a map has needed. A program that reads real devices can type into
 it, but focus belongs to the map's own frame calls, not to a window;
 edit-box text-changed and Enter events are not emulated, and a click reaches
-only frames placed by absolute points. A native answered by a default value
-can hide behavior that depends on what Warcraft would return. A passing
+only frames placed by absolute points. Explicit no-ops use the map's stated
+assumptions about behavior it ignores. A passing
 journey shows that the clients agree with each other on these stubs; native
 desyncs, timing and rendering beyond the matched checks above keep their
 native checks ([desync reports](hot-reload.md#desync-reports),
@@ -388,8 +409,9 @@ prediction.
 
 Each journey writes one `type: "result"` record with `journey`, `ok`,
 `frames`, and `clients` (each client's slot, native call count, checksum,
-and errors). Each problem writes a `type: "failure"` record with `kind`
-(`desync`, `error`, `scene`, or `check-fail`), `frame`, `client`, and `message`.
+and errors, plus `missingNatives`). Each problem writes a `type: "failure"` record with `kind`
+(`desync`, `error`, `scene`, `check-fail`, or `missing-native`), `frame`, `client`, and `message`.
+Missing-native records also include `native`, its exact declared name.
 Unavailable frame or client values are `null`. JSON mode compares calls on
 every frame so a desync names the first differing frame and client.
 
@@ -397,3 +419,9 @@ The last line is always a `type: "summary"` record with `ok`,
 `counts: { results, failures }`, and monotonic `elapsedMs`. All records have
 `schema: 1` and `command: "headless"`. A failed run retains its nonzero exit
 code, including a load or usage error before any result.
+
+The missing-native CLI fixture (`bun test test/headless-coverage.test.ts`)
+reported both clients and exited 1 in 1.51 s on 7 October 2026, below the 2 s
+target and the approximately 24 s native-check baseline in #38. The focused
+fixture also runs built-in, supplied and intentional no-op behavior in Bun
+and emitted 32-bit Lua.

@@ -26,6 +26,7 @@ test("both clients ping, take a hot reload and keep walking, with the same nativ
   expect(result.reloads).toEqual([]);
   for (const client of clients.clients) {
     expect(client.errors).toEqual([]);
+    expect(client.missingNatives).toEqual([]);
     expect(client.messages).toEqual(["ping 1", "hot reload 1 applied", "ping 2"]);
     // A move every 0.1 s: two units, X and Y, each of 20 moves.
     expect(client.log.filter(({ name }) => name === "SetUnitX" || name === "SetUnitY")).toHaveLength(80);

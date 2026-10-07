@@ -33,6 +33,15 @@ export interface MapEntry {
 /** Native name to why a client may call it when the others don't. */
 export type LocalNatives = Readonly<Record<string, string>>;
 
+/** Exact native names and why ignoring their behavior is intentional for this map. */
+export type IntentionalNoops = Readonly<Record<string, string>>;
+
+export interface MissingNative {
+  readonly native: string;
+  readonly client: number;
+  readonly frame: number;
+}
+
 /** A native's behavior; a host or game supplies one for a native the default stub can't answer. */
 export type NativeBehavior = (this: void, ...args: never[]) => unknown;
 /** Natives a host or game adds or replaces, and other globals its map code reads, such as Lua's. */
@@ -215,6 +224,7 @@ export interface ClientOptions {
   readonly humans: readonly number[];
   readonly declarations: NativeDeclarations;
   readonly localNatives: LocalNatives;
+  readonly intentionalNoops?: IntentionalNoops;
   readonly network: SyncMessage[];
   readonly screenWidth: number;
   readonly scope?: ClientScope;
@@ -379,6 +389,8 @@ export class HeadlessClient {
   private forgottenHash = 0;
   /** Error reports the map wrote to its error file, shown on screen or not: `error in HANDLER: MESSAGE`. */
   readonly errors: string[] = [];
+  /** First unmodeled call of each native, including local-only calls. */
+  readonly missingNatives: MissingNative[] = [];
   /** Every message the map showed this client. */
   readonly messages: string[] = [];
   /** Where the host keeps what a thrown error says beyond the map's report, such as a JavaScript stack. */
@@ -460,10 +472,24 @@ export class HeadlessClient {
     };
     const arity = new Map<string, number>();
     const declared = new Set<string>();
+    const missing = new Set<string>();
+    const noops = options.intentionalNoops ?? {};
+    for (const name of Object.keys(noops)) {
+      if (!options.declarations.functions.some(([native]) => native === name) || (noops[name] ?? "").trim() === "") {
+        throw new Error(`intentional no-op ${name} needs a declared native and a concrete reason`);
+      }
+    }
     for (const [name, returns, parameters] of options.declarations.functions) {
       declared.add(name);
       arity.set(name, parameters);
-      const behave = (behaviors[name] ?? (name.startsWith("Convert") ? (value: unknown) => value : this.defaultNative(returns))) as (this: void, ...args: unknown[]) => unknown;
+      const fallback = this.defaultNative(returns);
+      const behave = (behaviors[name] ?? (name.startsWith("Convert") ? (value: unknown) => value : noops[name] !== undefined ? fallback : () => {
+        if (!missing.has(name)) {
+          missing.add(name);
+          this.missingNatives.push({ native: name, client: this.slot, frame: this.frame });
+        }
+        return fallback();
+      })) as (this: void, ...args: unknown[]) => unknown;
       this.natives[name] = local[name] === undefined ? logged(name, parameters, behave) : behave;
     }
     // A constant of a handle type is its own name, so comparisons with it work.
@@ -786,6 +812,8 @@ export class HeadlessClient {
       PreloadGenClear: () => {
         this.preload = [];
       },
+      // PreloadGenClear starts the modeled buffer; Start only enables native file generation.
+      PreloadGenStart: () => undefined,
       Preload: (line: string) => {
         this.preload.push(line);
       },
