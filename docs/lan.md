@@ -52,6 +52,10 @@ within a minute. Offline experiments then stopped, and all three startup
 files were restored from the private 24342 baseline. The source SDK hash
 remained unchanged throughout.
 
+A subsequent authorized test ran the restored private 24342 copy on the
+main `:0` display. It produced the same loader assertion before loading
+D3D/Vulkan, with no game window or map acknowledgment. Its process was closed.
+
 The [official 3.0.1 notes](https://us.forums.blizzard.com/en/warcraft3/t/warcraft-iii-reforged-forsaken-kingdom-patch-notes/38400/4)
 include a game-start performance fix; the startup failure's cause is still
 being compared against recorded working launches.
