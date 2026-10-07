@@ -295,6 +295,54 @@ predicted native cost per frame ([frame cost](frame-cost.md#predicted-native-cos
 The entry module loads when the command runs, so the
 project's host type check never reads map code.
 
+### Rendered frames and sound cues
+
+`wisp headless [JOURNEY] --render PRIVATE_DIR --frames 64 132 206` writes
+`p0-frame-64.png` (and one image per requested frame and client), the captured
+scene JSON, and `render.json` naming the GPU and counts of models and textures.
+Frame numbers are headless client frames after that frame's journey events.
+`--journey FILE.json` replaces the named journey with `{ frames, events }`;
+key events may include `down: true` and a later `down: false` to hold a key.
+
+The map supplies `HeadlessProject.render.readAsset(path)`, returning the actual
+imported or stock asset bytes, or `undefined` when absent. Keep these assets and
+the output outside public repositories. MDX and MDL models, BLP1, TGA and PNG
+textures are supported; a resolver can return decoded PNG bytes for a stock
+BLP path backed by DDS or BLP2. Missing visible assets fail the render. The
+Maps drawing units also supply `render.unitModels`, mapping object type IDs to
+their model paths; a visible unit without a mapping fails the render. The
+optional `width` and `height` default to 1280×720; `chrome` or `CHROME` selects
+Chrome, otherwise `google-chrome-stable` is used. Chrome runs privately in
+headless mode, with the GPU's ANGLE OpenGL backend, falling back to SwiftShader
+only if GPU initialization fails. No Warcraft client is opened.
+
+The renderer uses the already declared `war3-model` 4.0.1 package, MIT,
+Copyright 2017–2023 4eb0da; its package retains the license. Wisp calls its
+public model/texture parsers and `ModelRenderer` API. Positions, model scales,
+animation times, rotations, camera fields and visible frame art come from the
+map's native calls. Particle and ribbon clocks advance to the captured time.
+This is a scene renderer for look checks, not pixel-identical Warcraft shading.
+
+Every started sound is printed with its client, frame, source or label, volume
+and pitch. `--sound-cues FILE.json` writes the complete creation/play log;
+`--json` emits each playback as a `type: "sound"` row. A map test can call
+`assertSoundCue(client.soundLog, { label: "LABEL", frame: 64, count: 1 })`
+from `wisp/src/headless/client`. Creating a sound without starting it fails a
+"plays the cue" assertion. This checks the game's calls, not audibility.
+
+| Check | Can close headless when | Still needs native |
+| --- | --- | --- |
+| A strike's model and pose on its first active frame | The same input replay and frame have a matched native comparison for that fighter/clip | Warcraft animation blending or a newly unsupported clip |
+| A spell, projectile or passive pip is present and follows the declared state | Its models/textures or UI frames render and the declared look check matches native | Unsupported emitter behavior, lighting, occlusion or shader appearance |
+| The game starts a named sound cue | The frame-stamped cue log passes the expected label/source/count assertion | Volume as heard, mixing, device output, automatic engine/model event sounds |
+| Timing, input latency, frame cost and native desync | — | Always native |
+
+Keep native and headless frames tied to the same map inputs, camera, replay
+and match frame. A keyboard journey is not an analog pad replay. Consumers
+with an existing headless pad path can call `captureScene(client)` at that
+path's recorded match frame and `renderScenes(render, scenes, PRIVATE_DIR)`
+after the run; no new input simulator is required.
+
 ## Native table iteration order
 
 `test/table-order/main.ts` walks a 1,000-key string table and a 1,000-key
@@ -319,7 +367,7 @@ Bun headless runtime's JavaScript object order cannot decide this check.
 ## Boundaries
 
 The runtime emulates natives; it is not Warcraft. It has no engine frame
-timing, rendering, terrain, pathing, combat, real input devices or Battle.net
+timing, terrain, pathing, combat, real input devices or Battle.net
 beyond the [measured sync latency](network-model.md), and it emulates only
 natives a map has needed. A program that reads real devices can type into
 it, but focus belongs to the map's own frame calls, not to a window;
@@ -327,7 +375,7 @@ edit-box text-changed and Enter events are not emulated, and a click reaches
 only frames placed by absolute points. A native answered by a default value
 can hide behavior that depends on what Warcraft would return. A passing
 journey shows that the clients agree with each other on these stubs; native
-desyncs, timing and what reaches the screen keep their
+desyncs, timing and rendering beyond the matched checks above keep their
 native checks ([desync reports](hot-reload.md#desync-reports),
 [player view](player-view.md)).
 
