@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit } from "effect";
@@ -56,7 +56,23 @@ test("a failed map step removes the staged copy and keeps the previous map", asy
   })));
   expect(Exit.isFailure(exit)).toBe(true);
   expect(readFileSync(map, "utf8")).toBe("previous");
-  expect(existsSync(`${map}.next`)).toBe(false);
+  expect(readdirSync(directory)).toEqual(["map.w3x"]);
+});
+
+test("a map stages in a file of its own process, writable even from a read-only source", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "wisp-stage-"));
+  const source = join(directory, "input.w3x");
+  writeFileSync(source, "input");
+  chmodSync(source, 0o444);
+  const map = join(directory, "map.w3x");
+  const staged: string[] = [];
+  await Effect.runPromise(stageMap(source, map, (path) => Effect.sync(() => {
+    staged.push(path);
+    writeFileSync(path, "built");
+  })));
+  expect(staged[0]).toBe(`${map}.${process.pid}.next`);
+  expect(readFileSync(map, "utf8")).toBe("built");
+  expect(readdirSync(directory).sort()).toEqual(["input.w3x", "map.w3x"]);
 });
 
 test("interrupting a map step stops its child process", async () => {

@@ -105,8 +105,8 @@ const local = ({ mapFolder, replacedMaps, preserveMaps }: MapDirectories): GameF
   }),
   write,
   replace: (path, text) => Effect.gen(function*() {
-    yield* write(`${path}.next`, text);
-    yield* retryTransient(trySync("replace game file", path, () => renameSync(`${path}.next`, path)));
+    yield* write(`${path}.${process.pid}.next`, text);
+    yield* retryTransient(trySync("replace game file", path, () => renameSync(`${path}.${process.pid}.next`, path)));
   }),
   list: (directory) => trySync("list game files", directory, () => (existsSync(directory) ? readdirSync(directory) : [])),
   remove: (path) => trySync("remove game file", path, () => rmSync(path)),
@@ -117,7 +117,7 @@ const local = ({ mapFolder, replacedMaps, preserveMaps }: MapDirectories): GameF
     mkdirSync(replaced, { recursive: true });
     if (!preserveMaps) for (const old of readdirSync(folder).filter((name) => name.endsWith(".w3x") && name !== basename(map))) renameSync(join(folder, old), join(replaced, old));
     // A running game may still read the old file: replace it by rename, never in place.
-    const next = join(folder, `${basename(map)}.next`);
+    const next = join(folder, `${basename(map)}.${process.pid}.next`);
     copyFileSync(map, next);
     renameSync(next, join(folder, basename(map)));
   }),

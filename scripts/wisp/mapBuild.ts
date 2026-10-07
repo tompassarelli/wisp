@@ -11,7 +11,7 @@
 // TypeScript-generated ones; every other base map file and every declared
 // import must equal its source. Imports the build does not declare stay
 // unverified.
-import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
+import { chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { Console, Context, Effect, Layer, Schema } from "effect";
 import { payloadKey } from "../../src/runtime/gameFiles";
@@ -303,8 +303,19 @@ export function withFileIo(objectData: readonly GeneratedFile[] = []): readonly 
 
 const PACKAGER_SOURCE = join(import.meta.dir, "../../native/map-pack.c");
 
-/** The map packager at `path`; when it is missing, compiles wisp:native/map-pack.c there against nixpkgs StormLib. */
-export const ensurePackager = (path: string) => Effect.suspend(() => existsSync(path) ? Effect.void : Effect.gen(function*() {
+/**
+ * The map packager at `path`; when it is missing or was compiled from other
+ * source (its `.source-sha256` stamp), compiles wisp:native/map-pack.c there
+ * against nixpkgs StormLib. Each compile writes its own file and renames it in.
+ */
+export const ensurePackager = (path: string) => Effect.suspend(() => {
+  const source = new Bun.CryptoHasher("sha256").update(readFileSync(PACKAGER_SOURCE)).digest("hex");
+  const stamp = `${path}.source-sha256`;
+  const current = existsSync(path) && existsSync(stamp) && readFileSync(stamp, "utf8").trim() === source;
+  return current ? Effect.void : compilePackager(path, source, stamp);
+});
+
+const compilePackager = (path: string, source: string, stamp: string) => Effect.gen(function*() {
   const stormlib = yield* captureProcess("build StormLib", path, ["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#stormlib"]).pipe(
     Effect.flatMap(({ exitCode, stdout, stderr }) => exitCode === 0
       ? Effect.succeed(stdout.trim().split("\n")[0] ?? "")
@@ -312,9 +323,13 @@ export const ensurePackager = (path: string) => Effect.suspend(() => existsSync(
   );
   yield* tryMapSync("create packager directory", path, () => mkdirSync(dirname(path), { recursive: true }));
   yield* runProcess("compile map packager", path, ["nix", "shell", "nixpkgs#gcc", "--command", "gcc", `-I${stormlib}/include`, PACKAGER_SOURCE,
-    `-L${stormlib}/lib`, `-Wl,-rpath,${stormlib}/lib`, "-lstorm", "-o", `${path}.next`]);
-  yield* tryMapSync("install map packager", path, () => renameSync(`${path}.next`, path));
-}).pipe(step("compile map packager")));
+    `-L${stormlib}/lib`, `-Wl,-rpath,${stormlib}/lib`, "-lstorm", "-o", `${path}.${process.pid}.next`]);
+  yield* tryMapSync("install map packager", path, () => {
+    renameSync(`${path}.${process.pid}.next`, path);
+    writeFileSync(`${stamp}.${process.pid}.next`, `${source}\n`);
+    renameSync(`${stamp}.${process.pid}.next`, stamp);
+  });
+}).pipe(step("compile map packager"));
 
 /** The Lua 5.3 compiler's package at `directory`; when it is missing, links nixpkgs' lua5_3 there, which keeps it from garbage collection so later builds need no nix. */
 export const ensureLua = (directory: string) => Effect.suspend(() => existsSync(join(directory, "bin/luac")) ? Effect.void : Effect.gen(function*() {
@@ -379,15 +394,19 @@ const workDirectory = (parent: string) =>
   );
 
 /**
- * Copies `source` to `destination.next`, lets `edit` change and verify the
- * copy, then renames it over `destination`. A failed or interrupted edit
- * removes the copy and leaves `destination` as it was.
+ * Copies `source` to a staged copy of this process's own, lets `edit`
+ * change and verify the copy, then renames it over `destination`. A failed
+ * or interrupted edit removes the copy and leaves `destination` as it was;
+ * concurrent builds of one destination never share a staged file. The copy is
+ * writable even when `source` is a read-only stored input.
  */
 export const stageMap = <E>(source: string, destination: string, edit: (staged: string) => Effect.Effect<void, E>) =>
   Effect.acquireUseRelease(
     tryMapSync("stage map", destination, () => {
-      copyFileSync(source, `${destination}.next`);
-      return `${destination}.next`;
+      const staged = `${destination}.${process.pid}.next`;
+      copyFileSync(source, staged);
+      chmodSync(staged, 0o644);
+      return staged;
     }),
     (staged) => edit(staged).pipe(Effect.andThen(tryMapSync("publish map", destination, () => renameSync(staged, destination)))),
     (staged) => Effect.sync(() => rmSync(staged, { force: true })),

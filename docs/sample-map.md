@@ -42,7 +42,10 @@ problem. `LUA` must be Lua 5.3 built with `LUA_32BITS`. The output must be outsi
 checkout. The build also needs `nix` on first use: it links nixpkgs `lua5_3`,
 which checks the script's syntax, into wisp:build/tools/lua and compiles the map
 packager from wisp:native/map-pack.c against nixpkgs StormLib into
-wisp:build/tools/map-pack.
+wisp:build/tools/map-pack, again whenever that source changes. The packager
+only reads the base map and container (they may be read-only); the build
+stages the map in a copy of its own process and renames it into `--out`, so
+concurrent builds never share a partial file.
 
 ## The base map
 

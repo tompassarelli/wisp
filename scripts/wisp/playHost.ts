@@ -146,16 +146,16 @@ const machine = (tools: PlayTools): PlayMachine["Service"] => ({
   write: (path, text) => Effect.try({
     try: () => {
       mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(`${path}.next`, text);
-      renameSync(`${path}.next`, path);
+      writeFileSync(`${path}.${process.pid}.next`, text);
+      renameSync(`${path}.${process.pid}.next`, path);
     },
     catch: problem(`couldn't write ${path}`),
   }),
   copy: (from, to) => Effect.try({
     try: () => {
       mkdirSync(dirname(to), { recursive: true });
-      copyFileSync(from, `${to}.next`);
-      renameSync(`${to}.next`, to);
+      copyFileSync(from, `${to}.${process.pid}.next`);
+      renameSync(`${to}.${process.pid}.next`, to);
     },
     catch: problem(`couldn't copy ${from} to ${to}`),
   }),
