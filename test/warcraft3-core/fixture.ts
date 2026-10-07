@@ -2,7 +2,59 @@ import { HeadlessClient, type Handle } from "../../src/headless/client";
 import type { NativeDeclarations } from "../../src/headless/declarations";
 import { f32 } from "../../src/sim/f32";
 
+export function unitReleaseFixture(declarations: NativeDeclarations): void {
+  const client = new HeadlessClient({ slot: 0, humans: [0], declarations, filePrefix: "unit-release", localNatives: {}, network: [], screenWidth: 1920 });
+  const call = (name: string, ...args: unknown[]) => {
+    const fn = client.natives[name];
+    if (typeof fn !== "function") throw new Error(`missing declaration ${name}`);
+    return (fn as (this: void, ...args: unknown[]) => unknown)(...args);
+  };
+  const equal = (actual: unknown, expected: unknown, name: string) => { if (actual !== expected) throw new Error(`${name}: ${String(actual)} != ${String(expected)}`); };
+  const released = () => {
+    equal(client.unitPoses().length, 0, "removed unit poses");
+    equal(client.abilities["units"].size, 0, "removed unit ability states");
+    equal(client.abilities["fields"].size, 0, "removed ability fields");
+    equal(client.abilities["ids"].size, 0, "removed ability IDs");
+  };
+  released();
+  for (let index = 0; index < 1000; index++) {
+    const unit = call("CreateUnit", call("Player", 0), 0x48303030, 0, 0, 0);
+    call("UnitAddAbility", unit, 0x416d7266);
+    call("UnitRemoveAbility", unit, 0x416d7266);
+    call("UnitAddAbility", unit, 0x416c6f63);
+    call("BlzSetUnitAttackCooldown", unit, 0, 0);
+    call("RemoveUnit", unit);
+  }
+  equal(client.checksum(), "-330030148", "unit lifecycle checksum");
+  client.forget(client.log.length);
+  equal(client.checksum(), "-330030148", "forgotten unit lifecycle checksum");
+  released();
+  const live = call("CreateUnit", 0, 123, 0, 0, 0);
+  call("UnitAddAbility", live, 456);
+  const liveAbility = call("BlzGetUnitAbility", live, 456);
+  const field = client.natives.ABILITY_RLF_CASTING_TIME;
+  call("BlzSetAbilityRealLevelField", liveAbility, field, 0, 2);
+  const removed = call("CreateUnit", 0, 123, 0, 0, 0);
+  call("UnitAddAbility", removed, 456);
+  const removedAbility = call("BlzGetUnitAbility", removed, 456);
+  call("RemoveUnit", removed);
+  call("RemoveUnit", removed);
+  equal(client.abilities["units"].size, 1, "live unit state retained");
+  equal(client.abilities["fields"].size, 1, "live ability fields retained");
+  equal(client.abilities["ids"].size, 1, "live ability ID retained");
+  equal(call("BlzGetAbilityId", liveAbility), 456, "live ability retained");
+  equal(call("BlzGetAbilityRealLevelField", liveAbility, field, 0), 2, "live ability field retained");
+  equal(call("BlzGetAbilityId", removedAbility), 0, "removed ability released");
+  equal(call("BlzSetAbilityRealLevelField", removedAbility, field, 0, 3), false, "removed ability fields released");
+  call("RemoveUnit", live);
+  const untouched = call("CreateUnit", 0, 123, 0, 0, 0);
+  call("RemoveUnit", untouched);
+  released();
+  equal(client.missingNatives.length, 0, "unit lifecycle native coverage");
+}
+
 export function coreFixture(declarations: NativeDeclarations, executed?: Set<string>): number {
+  unitReleaseFixture(declarations);
   const client = new HeadlessClient({ slot: 0, humans: [0], declarations, filePrefix: "warcraft3", localNatives: {}, network: [], screenWidth: 1920 });
   const tested = new Set<string>();
   const call = (name: string, ...args: unknown[]) => {
