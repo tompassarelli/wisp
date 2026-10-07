@@ -11,6 +11,51 @@ const runtime = installHeadless({ filePrefix: "observations", globalPrefixes: ["
 }] });
 afterAll(runtime.restore);
 
+test("unit snapshots capture fighters' transforms, animation clocks, hiding and removal", () => {
+  let fighter: unit;
+  const clients = runtime.clients({ start: () => {
+    fighter = CreateUnit(Player(2), 0x48303030, 10, 20, 180);
+    SetUnitX(fighter, 30);
+    SetUnitY(fighter, 40);
+    SetUnitFlyHeight(fighter, 300, 0);
+    SetUnitScale(fighter, 2, 3, 4);
+    BlzSetUnitFacingEx(fighter, 90);
+    SetUnitVertexColor(fighter, 128, 64, 32, 140);
+    SetUnitColor(fighter, PLAYER_COLOR_BLUE);
+    SetUnitAnimationByIndex(fighter, 7);
+    SetUnitTimeScale(fighter, 2);
+  }, install: () => {} }, [0]);
+  clients.start();
+  clients.frames(30);
+  const client = clients.client(0);
+  const first = client.unitPoses()[0];
+  expect(first).toMatchObject({ typeId: 0x48303030, owner: 2, x: 30, y: 40, z: 300, facing: 90, scale: [2, 3, 4],
+    alpha: 140, color: [128, 64, 32], teamColor: 1, animation: 7, timeScale: 2, visible: true });
+  expect(first?.animationElapsed).toBeCloseTo(1);
+  client.run(() => {
+    SetUnitAnimation(fighter, "Spell Two");
+    SetUnitTimeScale(fighter, 0);
+    SetUnitFacing(fighter, 270);
+    ShowUnit(fighter, false);
+  });
+  clients.frames(10);
+  expect(client.unitPoses()[0]).toMatchObject({ animation: "Spell Two", animationElapsed: 0, facing: 270, visible: false });
+  client.run(() => {
+    ShowUnit(fighter, true);
+    SetUnitTimeScale(fighter, 1);
+    SetUnitPosition(fighter, 50, 60);
+    SetUnitScale(fighter, 1, 1, 1);
+    SetUnitColor(fighter, ConvertPlayerColor(3));
+  });
+  clients.frames(15);
+  expect(client.unitPoses()[0]).toMatchObject({ x: 50, y: 60, scale: [1, 1, 1], teamColor: 3, visible: true });
+  expect(client.unitPoses()[0]?.animationElapsed).toBeCloseTo(0.25);
+  expect(first?.scale).toEqual([2, 3, 4]);
+  expect(client.log.filter(call => call.name === "CreateUnit").map(call => call.args)).toEqual([[2, 0x48303030, 10, 20, 180]]);
+  client.run(() => RemoveUnit(fighter));
+  expect(client.unitPoses()).toEqual([]);
+});
+
 test("effect snapshots preserve animation time, playback changes and complete transforms", () => {
   let effect: effect;
   const clients = runtime.clients({ start: () => {
