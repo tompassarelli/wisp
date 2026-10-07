@@ -7,6 +7,7 @@ export const SAMPLE_MAP = {
   filePrefix: "sample", globalPrefixes: ["__sample"],
   // The sample's playable rectangle is centered at the origin.
   natives: () => ({ GetRectCenterX: () => 0, GetRectCenterY: () => 0 }),
+  intentionalNoops: { SetUnitAbilityLevel: "the walking journey ignores abilities; object levels and tooltips are checked on the offline sample" },
 };
 
 export const SAMPLE_JOURNEY: Journey = {
