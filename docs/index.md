@@ -1,5 +1,9 @@
 # Wisp feature index
 
+[Warcraft verification prior art](prior-art.md) compares reusable runtimes,
+clients, renderers, hosts, replay parsers and engine access before extending
+Wisp's native checks.
+
 Start here when changing Wisp or building a map with it. The same pages ship
 in the installed package under your project's `node_modules/wisp/docs/`.
 Wisp supplies reusable services; the consuming game selects its commands,
