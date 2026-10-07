@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-import { ModelRenderer, decodeBLP, getBLPImageData, parseMDL, parseMDX, type model } from "war3-model";
+import { ModelRenderer, decodeBLP, getBLPImageData, parseMDL, parseMDX, type model } from "../../../vendor/war3-model.mjs";
 import type { EffectPose } from "../../../src/headless/client";
 import type { RenderScene } from "../headlessRender";
 import { parsableModel } from "../models";
