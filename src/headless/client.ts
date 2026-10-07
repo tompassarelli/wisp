@@ -133,10 +133,27 @@ export function assertSoundCue(log: readonly SoundCue[], expected: { readonly so
   if (count !== (expected.count ?? 1)) throw new Error(`sound cue ${expected.source ?? expected.label ?? "any"}: expected ${expected.count ?? 1} starts, got ${count}`);
 }
 
-interface Unit extends Handle {
+export interface UnitPose {
+  readonly handle: Handle;
+  readonly typeId: number;
+  owner: number;
   x: number;
   y: number;
-  readonly typeId: number;
+  z: number;
+  /** Warcraft's unit facing, in degrees. */
+  facing: number;
+  scale: [number, number, number];
+  alpha: number;
+  color: [number, number, number];
+  teamColor: number;
+  animation: string | number | undefined;
+  /** Seconds in the current animation, advancing with timeScale. */
+  animationElapsed: number;
+  timeScale: number;
+  visible: boolean;
+}
+
+interface Unit extends Handle, UnitPose {
   moveSpeed: number;
   attackCooldown: number;
 }
@@ -211,6 +228,7 @@ export interface ClientOptions {
 export const FRAMES_PER_SECOND = 60;
 
 const CAMERA_FIELDS = ["CAMERA_FIELD_TARGET_DISTANCE", "CAMERA_FIELD_FARZ", "CAMERA_FIELD_ANGLE_OF_ATTACK", "CAMERA_FIELD_FIELD_OF_VIEW", "CAMERA_FIELD_ROLL", "CAMERA_FIELD_ROTATION", "CAMERA_FIELD_ZOFFSET", "CAMERA_FIELD_NEARZ", "CAMERA_FIELD_LOCAL_PITCH", "CAMERA_FIELD_LOCAL_YAW", "CAMERA_FIELD_LOCAL_ROLL", "CAMERA_FIELD_DEPTH_OF_FIELD_DISTANCE", "CAMERA_FIELD_DEPTH_OF_FIELD_SCALE", "CAMERA_FIELD_ZABSOLUTE"];
+const PLAYER_COLORS = ["RED", "BLUE", "CYAN", "PURPLE", "YELLOW", "ORANGE", "GREEN", "PINK", "LIGHT_GRAY", "LIGHT_BLUE", "AQUA", "BROWN", "MAROON", "NAVY", "TURQUOISE", "VIOLET", "WHEAT", "PEACH", "MINT", "LAVENDER", "COAL", "SNOW", "EMERALD", "PEANUT", "BLACK"].map(name => "PLAYER_COLOR_" + name);
 
 const isHandle = (value: unknown): value is Handle =>
   typeof value === "object" && value !== null && "id" in value && "kind" in value;
@@ -387,6 +405,7 @@ export class HeadlessClient {
   private readonly memo = new Map<string, Frame>();
   private allPlayers: Handle | undefined;
   private readonly effects = new Map<Handle, EffectPose>();
+  private readonly units = new Map<Handle, Unit>();
   private readonly sounds = new Map<Handle, SoundState>();
   readonly soundLog: SoundCue[] = [];
   private cameraX = 0;
@@ -512,6 +531,20 @@ export class HeadlessClient {
     return handle;
   }
 
+  private unitAt(owner: number, typeId: number, x: number, y: number, facing: number): Unit {
+    const handle = this.handle("unit");
+    const unit: Unit = { ...handle, handle, typeId, owner, x, y, z: 0, facing, scale: [1, 1, 1], alpha: 255,
+      color: [255, 255, 255], teamColor: owner, animation: undefined, animationElapsed: 0, timeScale: 1,
+      visible: true, moveSpeed: 0, attackCooldown: 0 };
+    this.units.set(unit, unit);
+    return unit;
+  }
+
+  private unitAnimation(unit: Unit, animation: string | number): void {
+    unit.animation = animation;
+    unit.animationElapsed = 0;
+  }
+
   private sound(source: string | undefined, label: string | undefined): Handle {
     const handle = this.handle("sound");
     const sound: SoundState = { handle, source, label, volume: 127, pitch: 1, x: 0, y: 0, z: 0, unit: undefined };
@@ -563,7 +596,28 @@ export class HeadlessClient {
         if (this.allPlayers === undefined) this.allPlayers = this.handle("force");
         return this.allPlayers;
       },
-      CreateUnit: (_owner: number, typeId: number, x: number, y: number): Unit => ({ ...this.handle("unit"), typeId, x, y, moveSpeed: 0, attackCooldown: 0 }),
+      CreateUnit: (owner: number, typeId: number, x: number, y: number, facing: number) => this.unitAt(owner, typeId, x, y, facing),
+      CreateUnitByName: (owner: number, name: string, x: number, y: number, facing: number) => this.unitAt(owner, name.length === 4 ? name.charCodeAt(0) * 0x1000000 + name.charCodeAt(1) * 0x10000 + name.charCodeAt(2) * 0x100 + name.charCodeAt(3) : 0, x, y, facing),
+      RemoveUnit: (unit: Unit) => { this.units.delete(unit); },
+      ShowUnit: (unit: Unit, show: boolean) => { unit.visible = show; },
+      IsUnitHidden: (unit: Unit) => !unit.visible,
+      GetUnitFlyHeight: (unit: Unit) => unit.z,
+      SetUnitFlyHeight: (unit: Unit, height: number) => { unit.z = height; },
+      GetUnitFacing: (unit: Unit) => unit.facing,
+      SetUnitFacing: (unit: Unit, facing: number) => { unit.facing = facing; },
+      BlzSetUnitFacingEx: (unit: Unit, facing: number) => { unit.facing = facing; },
+      SetUnitScale: (unit: Unit, x: number, y: number, z: number) => { unit.scale = [x, y, z]; },
+      SetUnitTimeScale: (unit: Unit, timeScale: number) => { unit.timeScale = timeScale; },
+      SetUnitVertexColor: (unit: Unit, red: number, green: number, blue: number, alpha: number) => {
+        unit.color = [red, green, blue];
+        unit.alpha = alpha;
+      },
+      SetUnitColor: (unit: Unit, color: number | string) => {
+        unit.teamColor = typeof color === "number" ? color : PLAYER_COLORS.indexOf(color);
+      },
+      SetUnitAnimation: (unit: Unit, animation: string) => this.unitAnimation(unit, animation),
+      SetUnitAnimationByIndex: (unit: Unit, animation: number) => this.unitAnimation(unit, animation),
+      SetUnitAnimationWithRarity: (unit: Unit, animation: string) => this.unitAnimation(unit, animation),
       GetUnitTypeId: (unit: Unit) => unit.typeId,
       GetUnitX: (unit: Unit) => unit.x,
       GetUnitY: (unit: Unit) => unit.y,
@@ -943,6 +997,15 @@ export class HeadlessClient {
     return { x: this.cameraX, y: this.cameraY, fields: { ...this.cameraFields } };
   }
 
+  /** Live unit appearance copied in creation order; hidden units retain their pose. */
+  unitPoses(): UnitPose[] {
+    const poses: UnitPose[] = [];
+    for (const unit of this.units.values()) poses.push({ handle: unit.handle, typeId: unit.typeId, owner: unit.owner,
+      x: unit.x, y: unit.y, z: unit.z, facing: unit.facing, scale: [...unit.scale], alpha: unit.alpha, color: [...unit.color],
+      teamColor: unit.teamColor, animation: unit.animation, animationElapsed: unit.animationElapsed, timeScale: unit.timeScale, visible: unit.visible });
+    return poses;
+  }
+
   /** Makes this client's natives and state the ones map code sees, and runs `body`. */
   run(body: (this: void) => void): void {
     this.scope?.enter(this);
@@ -970,6 +1033,7 @@ export class HeadlessClient {
     this.run(() => {
       this.frame++;
       for (const pose of this.effects.values()) pose.animationElapsed += pose.timeScale / FRAMES_PER_SECOND;
+      for (const unit of this.units.values()) unit.animationElapsed += unit.timeScale / FRAMES_PER_SECOND;
       const count = this.timers.length;
       for (let index = 0; index < count; index++) {
         const timer = this.timers[index];
