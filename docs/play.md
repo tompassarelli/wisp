@@ -192,6 +192,8 @@ step. Model initialization leaves animation clocks and particles unchanged;
 `render.preloadModels` lists any additional models the map creates later.
 `standalone.json` records startup time and the prepared asset counts separately
 from the match's frame timing.
+The browser keeps one frame request pending while it draws the preceding scene.
+Each request advances one step; captures finish saving before the next request.
 Sound labels resolve through the installed sound tables. Assets remain
 outside Wisp. Closing the window closes the game session.
 
@@ -241,6 +243,8 @@ numbers). Scripted runs record a checksum after every step; ordinary live
 play skips that work. `recordChecksums` can explicitly enable or disable
 recording, including for scripted performance runs. Recorded runs write
 `checksums.jsonl`. The output contains `standalone.json` with
-frame timing (including each frame's work and presentation interval), graphics adapter, audio event/ready/playback counts and missing
+frame timing (each frame's callback work, loop-start interval, request and draw
+duration, plus rAF timestamp/deadline and HTTP readiness), graphics adapter,
+audio event/ready/playback counts and missing
 sounds, and a scene JSON and PNG for each chosen frame. Without `frames`,
 the window stays open after the match so the game's own menus can continue.
