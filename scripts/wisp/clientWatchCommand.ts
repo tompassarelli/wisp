@@ -1,7 +1,7 @@
 import { Console, Effect, Schema } from "effect";
-import type { Client } from "../clients";
-import { type Command, UsageFailure, flagValues } from "../command";
-import { ClientWatch, type ClientView, type WatchOptions, WatchFailure, changes, describeView, eventLine } from "../watch";
+import type { Client } from "./clients";
+import { type Command, UsageFailure, flagValues } from "./command";
+import { ClientWatch, type ClientView, type WatchOptions, WatchFailure, changes, describeView, eventLine } from "./watch";
 
 const ClientsFile = Schema.Struct({
   clients: Schema.NonEmptyArray(Schema.Struct({ name: Schema.String, documents: Schema.String, menuReportPort: Schema.optionalKey(Schema.Int) })),

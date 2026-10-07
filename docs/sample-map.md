@@ -23,7 +23,7 @@ comparable:
 | test/path.test.ts, test/lua.ts | The Bun test file: the registered tests in Bun, then compiled with tsconfig.tests.json and run in the Lua that `LUA` names. |
 | test/journey.ts | The headless journey and what it needs to know about the map, declared once for Bun and Lua. |
 | test/headless.test.ts, test/headless-lua.ts | The journey in two simulated clients of the map's TypeScript in Bun, then of its compiled bundle in the Lua that `LUA` names, compiled with tsconfig.headless.json; both print the same result. |
-| scripts/sample.ts | The map's program: `build`, `rebuild`, `hot`, `fresh`, `client` and `headless`, composed from Wisp's services with `runCli`. |
+| scripts/sample.ts | The map's program: `map build`, `map rebuild`, `hot`, `fresh`, `client` and `headless`, composed from Wisp's services with `runCli`. |
 | tsconfig.json, tsconfig.map.json, tsconfig.tests.json, tsconfig.headless.json | Host scripts and tests, which also see the natives and Lua's types because the headless test imports map code; the map bundle; the Lua test bundle; the Lua headless bundle. |
 
 ## Run it
@@ -33,7 +33,7 @@ From the Wisp checkout, with Bun at the version in wisp:typescript-toolchain.loc
 ```sh
 bun install --frozen-lockfile
 LUA=/path/to/lua32 bun test examples/sample
-bun examples/sample/scripts/sample.ts build --base BASE.w3m --out OUT_DIR/wisp-sample.w3x
+bun examples/sample/scripts/sample.ts map build --base BASE.w3m --out OUT_DIR/wisp-sample.w3x
 ```
 
 `bun examples/sample/scripts/sample.ts headless [--clients N]` plays the

@@ -15,7 +15,7 @@ whose code shows it, its licence, its account risk and what it would
 replace. A ranked recommendation closes the page.
 
 To know what a client is doing (its menu screen, lobby, match, a lost
-Battle.net or a crash) without reading its screen, use [`wisp watch`](watch.md):
+Battle.net or a crash) without reading its screen, use [`wisp client watch`](watch.md):
 it listens to the same socket.
 
 The facts are for Warcraft III 3.0.0.24268, the Windows build under Proton,

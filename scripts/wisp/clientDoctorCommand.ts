@@ -1,15 +1,15 @@
-// `wisp doctor [CLIENT...]`: brings the clients of the clients file (all, or
+// `wisp client doctor [CLIENT...]`: brings the clients of the clients file (all, or
 // those named) to a ready state, recovering each known bad state with its
 // documented recovery and printing each step (wisp:docs/doctor.md). It stops
 // with one plain line per client that needs a person, such as a sign-in.
 import { Effect, Layer } from "effect";
-import * as desktop from "../../warcraft/desktop";
-import { type Command, type CommandFailure, UsageFailure } from "../command";
-import { DoctorHands, DoctorStop, type DoctorTarget, doctor } from "../doctor";
-import { privateDoctorHands } from "../doctorHost";
-import { PlayMachine } from "../play";
-import { type PlayTools, playMachineLayer } from "../playHost";
-import type { ClientWatch } from "../watch";
+import * as desktop from "../warcraft/desktop";
+import { type Command, type CommandFailure, UsageFailure } from "./command";
+import { DoctorHands, DoctorStop, type DoctorTarget, doctor } from "./doctor";
+import { privateDoctorHands } from "./doctorHost";
+import { PlayMachine } from "./play";
+import { type PlayTools, playMachineLayer } from "./playHost";
+import type { ClientWatch } from "./watch";
 
 export interface DoctorDeclaration {
   /** The clients file (wisp:docs/sample-map.md): each client's desktop run folder, Documents folder, menu port and expected display settings. */

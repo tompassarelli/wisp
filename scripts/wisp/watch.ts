@@ -61,7 +61,7 @@ export interface ClientView {
   readonly menus?: boolean;
 }
 
-/** A change in a client's view, as `wisp watch` prints it. */
+/** A change in a client's view, as `wisp client watch` prints it. */
 export type WatchEvent =
   | { readonly type: "state"; readonly client: string; readonly at: number; readonly source: Source; readonly state: ClientState; readonly evidence: string }
   | { readonly type: "ladder scan"; readonly client: string; readonly at: number; readonly source: "log"; readonly scan: LadderScan["kind"] }
@@ -364,7 +364,7 @@ const modified = (path: string) => statSync(path, { throwIfNoEntry: false })?.mt
 export interface WatchOptions {
   /** The map's runtime file prefix (configureRuntime); its match start receipts count as "in match". */
   readonly filePrefix?: string;
-  /** Called with every message each client's menus send, as `{ client, at, messageType, payload }`; `wisp watch --record` writes them. */
+  /** Called with every message each client's menus send, as `{ client, at, messageType, payload }`; `wisp client watch --record` writes them. */
   readonly onMessage?: (client: string, at: number, event: MenuEvent) => void;
 }
 

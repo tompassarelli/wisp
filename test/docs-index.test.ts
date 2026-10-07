@@ -2,10 +2,24 @@ import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { vocabularyProblems } from "../scripts/wisp/vocabulary";
 
 const root = join(import.meta.dir, "..");
 const commandsDir = join(root, "scripts/wisp/commands");
 const commandNames = async () => (await readdir(commandsDir)).filter((file) => file.endsWith(".ts")).map((file) => file.slice(0, -3));
+
+test("registered sample nouns and usage flags follow docs/cli.md", async () => {
+  const vocabulary = await Bun.file(join(root, "docs/cli.md")).text();
+  const source = await Bun.file(join(root, "examples/sample/scripts/sample.ts")).text();
+  expect(vocabularyProblems(source, vocabulary)).toEqual([]);
+});
+
+test("the vocabulary gate rejects undeclared nouns, flags and shared-meaning drift", () => {
+  const vocabulary = "| `client` | Clients |\n| `--profile NAME` | Map profile |\n| `--clients N` | Count |\n| `--pairs N` | Count |";
+  expect(vocabularyProblems('  extra: { usage: "--secret X" },\n  client: { usage: "[--profile] --clients FILE --pairs IDS" },', vocabulary)).toEqual([
+    "undeclared noun extra", "extra: undeclared flag --secret", "client: --profile selects a map build profile", "client: --clients is a count; use --clients-file for configuration", "client: --pairs is a count",
+  ]);
+});
 
 // A command isn't done until the feature index lists it: future agents and
 // map authors find Wisp's commands there, not by reading scripts/wisp/commands/.

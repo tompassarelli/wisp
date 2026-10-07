@@ -11,9 +11,9 @@ const argument = (name: string) => {
   return at < 0 ? undefined : process.argv[at + 1];
 };
 const pair = Number(argument("pair") ?? "0");
-const profile = PROFILES[argument("profile") ?? "parity"];
+const profile = PROFILES[argument("pool-profile") ?? "parity"];
 const packager = argument("packager") ?? join(process.env["XDG_CACHE_HOME"] ?? join(process.env["HOME"] ?? "", ".cache"), "wisp/lan/map-pack");
-if (profile === undefined) throw new Error(`unknown profile ${argument("profile")}; parity or visual`);
+if (profile === undefined) throw new Error(`unknown profile ${argument("pool-profile")}; parity or visual`);
 const directory = pairDirectory(pair);
 mkdirSync(directory, { recursive: true });
 const agentLog = join(directory, "agent.log");

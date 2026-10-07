@@ -72,25 +72,23 @@ const fresh: Command = ([map, ...flags]) => Effect.gen(function*() {
 });
 
 process.exit(await runCli("bun examples/sample/scripts/sample.ts", {
-  build: { usage: "--base BASE.w3m --out OUT.w3x [--container MAP.w3x]", load: async () => build },
-  rebuild: { usage: "MAP.w3x", load: async () => rebuild },
+  map: { usage: "build --base BASE.w3m --out OUT.w3x [--container MAP.w3x] | rebuild MAP.w3x", load: async () => ([verb, ...args]) => verb === "build" ? build(args) : verb === "rebuild" ? rebuild(args) : Effect.fail(new UsageFailure({ problem: "map takes build or rebuild" })) },
   hot: { usage: "--data DIR [--data DIR ...] [--watch]", load: async () => makeHot({ project, sourceDirectory, sourceMapDirectory, filePrefix }) },
   fresh: { usage: "MAP.w3x [--rebuild] [--map-folder Maps/00-Wisp]   (WISP_CLIENTS=clients.json)", load: async () => fresh },
-  client: { usage: "look|read|click|keys|chat CLIENT ...   (WISP_CLIENTS=clients.json)", load: async () => makeClient(clientsFile, { filePrefix }) },
-  watch: { usage: "[CLIENT...] [--once] [--json] [--record FILE]   (WISP_CLIENTS=clients.json)", load: async () => (await import("wisp/scripts/wisp/commands/watch")).makeWatch(clientsFile, { filePrefix }) },
+  client: { usage: "look|read|click|keys|chat CLIENT ... | watch [CLIENT...] [--once] [--json] [--record FILE] | wait CLIENT STATE... [--seconds N]   (WISP_CLIENTS=clients.json)", load: async () => makeClient(clientsFile, { filePrefix }) },
   menus: {
     usage: "install|remove RETAIL_DIR | listen | host --folder F --map FILE --name NAME [--password P] [--start] | join --name NAME --password P | start | leave   [--port N]",
     load: async () => (await import("wisp/scripts/wisp/commands/menus")).makeMenus(),
   },
   engine: {
-    usage: "desync|poll|diff|watch|locate|actions ...   (WISP_CLIENTS=clients.json; a LAN pool's is ~/.local/state/wisp/lan/clients.json)",
+    usage: "desync|poll|diff|trace|locate|actions ...   (WISP_CLIENTS=clients.json; a LAN pool's is ~/.local/state/wisp/lan/clients.json)",
     load: async () => {
       const { makeEngine } = await import("wisp/scripts/wisp/commands/engine");
       return makeEngine(clientsFile);
     },
   },
   lan: {
-    usage: "setup --from INSTALL [--pairs N] | pool [--pairs N] [--profile parity|visual] | fresh MAP [--pair K] | status | end --pair K",
+    usage: "setup --from INSTALL [--pairs N] | pool [--pairs N] [--pool-profile parity|visual] | fresh MAP [--pair K] | status | end --pair K",
     load: async () => (await import("wisp/scripts/wisp/commands/lan")).lan,
   },
   headless: {

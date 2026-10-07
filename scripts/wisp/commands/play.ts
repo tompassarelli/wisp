@@ -1,7 +1,7 @@
 // `wisp play`: from the owner's desktop to a match of the game's declared
 // playtest (wisp:docs/play.md). The game declares its prefix, Steam shortcut,
 // map, match setup and helper; `layer` provides what its own steps use.
-// Given `wisp watch`'s ClientWatch, play runs `doctor` on its prefix first
+// Given `wisp client watch`'s ClientWatch, play runs `doctor` on its prefix first
 // and once after a failure (wisp:docs/doctor.md); play launches the game itself.
 import { Effect, Layer } from "effect";
 import { documentsFolder } from "../../warcraft/battleNet";

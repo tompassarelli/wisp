@@ -21,7 +21,7 @@ and values its display needs:
     "refreshrate": "60", "maxfps": "200" } }
 ```
 
-While Warcraft III is closed, `wisp doctor` compares them with the file. A
+While Warcraft III is closed, `wisp client doctor` compares them with the file. A
 difference is the state **display settings changed**: doctor writes the
 declared values into the `[Video]` section, keeps every other line, and prints
 the keys it found changed.
