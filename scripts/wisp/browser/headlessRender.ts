@@ -185,10 +185,10 @@ window.renderScene = async (scene) => {
   const visible = scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat);
   for (const pose of visible) await drawEffect(pose, view);
   const context = output.getContext("2d"); if (context === null) throw new Error("no output canvas"); context.drawImage(canvas, 0, 0);
-  const scaleX = output.width / 0.8, scaleY = output.height / 0.6;
+  const scaleX = output.height / 0.6, scaleY = output.height / 0.6;
   for (const frame of [...scene.ui].sort((a, b) => a.level - b.level)) {
     if (!frame.visible || frame.alpha <= 0 || frame.rectangle === undefined) continue;
-    const [left, top, right, bottom] = frame.rectangle, x = left * scaleX, y = (0.6 - top) * scaleY, width = (right - left) * scaleX, height = (top - bottom) * scaleY;
+    const [left, top, right, bottom] = frame.rectangle, x = output.width / 2 + (left - 0.4) * scaleX, y = (0.6 - top) * scaleY, width = (right - left) * scaleX, height = (top - bottom) * scaleY;
     context.globalAlpha = frame.alpha / 255;
     if (frame.texture !== "" && width > 0 && height > 0) { context.globalAlpha *= (frame.color >>> 24) / 255; context.drawImage(await uiTexture(frame.texture, frame.color), x, y, width, height); context.globalAlpha = frame.alpha / 255; }
     if (frame.text !== "") {
