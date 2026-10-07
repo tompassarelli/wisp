@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import type { FrameDefinition } from "./frames";
 import type { UnitStateFixtures } from "../../src/headless/client";
 import { join } from "node:path";
-import type { ClientScope, HeadlessClient, LocalNatives, MapEntry, NativeBehaviors, SoundCue } from "../../src/headless/client";
+import type { ClientScope, HeadlessClient, LocalNatives, MapEntry, NativeBehaviors, SoundCue, IntentionalNoops } from "../../src/headless/client";
 import type { HeadlessRenderProject } from "./headlessRender";
 import { type NativeDeclarations, parseNativeDeclarations } from "../../src/headless/declarations";
 import { type Journey, type JourneyOptions, type JourneyResult, journeyLines, journeyProblems, runJourney } from "../../src/headless/journey";
@@ -28,6 +28,7 @@ export interface HeadlessMap {
   readonly globalPrefixes: readonly string[];
   /** Natives the game's code calls on one client only, each with why that keeps the clients synchronized. */
   readonly localNatives?: LocalNatives;
+  readonly intentionalNoops?: IntentionalNoops;
   /** Natives the default stubs can't answer for this game. */
   readonly natives?: (client: HeadlessClient) => NativeBehaviors;
   /** Frame definitions (wisp:docs/ui.md) whose trees BlzCreateFrame makes by name, as their generated FDF does in Warcraft. */
@@ -210,6 +211,7 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
         scope,
         ...options,
         ...(map.localNatives === undefined ? {} : { localNatives: map.localNatives }),
+        ...(map.intentionalNoops === undefined ? {} : { intentionalNoops: map.intentionalNoops }),
         ...(map.frames === undefined ? {} : { frames: map.frames }),
         ...(map.unitStates === undefined ? {} : { unitStates: map.unitStates }),
         natives: (client) => ({ ...luaFunctions(client, bundles), ...map.natives?.(client) }),
@@ -260,10 +262,11 @@ export interface HeadlessReport {
 }
 
 export interface HeadlessFinding {
-  readonly kind: "desync" | "error" | "scene" | "check-fail";
+  readonly kind: "desync" | "error" | "scene" | "check-fail" | "missing-native";
   readonly frame: number | null;
   readonly client: number | null;
   readonly message: string;
+  readonly native?: string;
 }
 
 /**
@@ -286,6 +289,7 @@ export function playHeadless(clients: Lockstep, journey: Journey, filePrefix: st
   for (const message of result.reloads) failures.push({ kind: "check-fail", frame: result.frames, client: null, message });
   for (const client of result.clients) {
     for (const message of client.errors) failures.push({ kind: "error", frame: null, client: client.slot, message });
+    for (const missing of client.missingNatives) failures.push({ kind: "missing-native", ...missing, message: `unmodeled native ${missing.native}` });
   }
   for (const client of clients.clients) {
     const report = client.files.get(errorFile(client.slot, filePrefix));

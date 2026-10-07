@@ -10,6 +10,7 @@ import { type Hash, type ModuleSet, ModulePublisher, type VersionFiles } from ".
 import { type ClientFiles, type ClientScope, HeadlessClient, type LocalNatives, type MapEntry, type NativeBehaviors, type SyncMessage, WISP_LOCAL_NATIVES, describeCall, sameCall } from "./client";
 import type { NativeDeclarations } from "./declarations";
 import type { UnitStateFixtures } from "./client";
+import type { IntentionalNoops } from "./client";
 
 export interface LockstepOptions {
   readonly unitStates?: UnitStateFixtures;
@@ -26,6 +27,7 @@ export interface LockstepOptions {
   readonly hash?: Hash;
   /** The game's local-only natives, added to WISP_LOCAL_NATIVES. */
   readonly localNatives?: LocalNatives;
+  readonly intentionalNoops?: IntentionalNoops;
   readonly natives?: (this: void, client: HeadlessClient) => NativeBehaviors;
   readonly scope?: ClientScope;
   /** When synchronized messages arrive; without it, each arrives before the next frame. */
@@ -105,6 +107,7 @@ export class Lockstep {
         humans: options.players,
         declarations: options.declarations,
         localNatives,
+        ...(options.intentionalNoops === undefined ? {} : { intentionalNoops: options.intentionalNoops }),
         network: this.network,
         // Different screens, so layout that depends on the local screen is exercised.
         screenWidth: 1920 + 640 * index,
