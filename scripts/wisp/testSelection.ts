@@ -45,6 +45,8 @@ export interface TestDeclaration {
   readonly warm?: Readonly<Record<string, readonly string[]>>;
   /** Environment for test processes, such as engine settings for short-lived workers. */
   readonly env?: Readonly<Record<string, string>>;
+  /** Overrides env for a file-test process; paths are absolute. */
+  readonly envForFiles?: (files: readonly string[]) => Readonly<Record<string, string>>;
 }
 
 export interface TestUnit {

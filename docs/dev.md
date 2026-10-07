@@ -62,7 +62,8 @@ export const dev = makeDev({
   tests with wisp:src/runtime/testing.ts, each run as its own test. A
   `registryRunners` file only runs the registry, so the loop runs its modules
   instead. `preload` is bunfig.toml's test preload. `env` applies to every
-  test process.
+  test process. `envForFiles(absolutePaths)` replaces it for file-test
+  processes, including warmed files; return `{}` to use the normal runtime.
 - `tests.journeys` are the Bun test files that play journeys in simulated
   clients; they report with the project's own journey.
 - `tests.perFile` are audits that check each file they read on its own. When

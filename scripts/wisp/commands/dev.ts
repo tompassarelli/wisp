@@ -220,7 +220,7 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
   const waiting = new Map<string, Standby>();
   for (const [file, modules] of Object.entries(project.tests.warm ?? {})) {
     waiting.set(resolve(root, file), yield* Effect.acquireRelease(
-      Effect.sync(() => new Standby([...behind, process.execPath, "test", TEST_WAIT], root, 1, { ...project.tests.env, [WARM_ENV]: JSON.stringify(modules) })),
+      Effect.sync(() => new Standby([...behind, process.execPath, "test", TEST_WAIT], root, 1, { ...(project.tests.envForFiles?.([resolve(root, file)]) ?? project.tests.env), [WARM_ENV]: JSON.stringify(modules) })),
       (standby) => Effect.sync(() => standby.close()),
     ));
   }
@@ -257,7 +257,7 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
     const first = process.units[0];
     const standby = process.units.length === 1 && first !== undefined ? waiting.get(first.path) : undefined;
     const output = standby === undefined
-      ? yield* runProcess([...behind, globalThis.process.execPath, "test", ...process.units.map((unit) => unit.path)], root, { ...project.tests.env, ...savedFiles })
+      ? yield* runProcess([...behind, globalThis.process.execPath, "test", ...process.units.map((unit) => unit.path)], root, { ...(project.tests.envForFiles?.(process.units.map((unit) => unit.path)) ?? project.tests.env), ...savedFiles })
       : yield* standby.run({ file: first?.path ?? "", env: savedFiles } satisfies WaitingTestRequest);
     const elapsed = Date.now() - started;
     // An audit of saved files is timed apart from a whole one; a shared process's time is split by what each file was expected to take.
