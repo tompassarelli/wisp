@@ -43,12 +43,15 @@ export function declarationMap(config: ReproViewerSources): (path: string) => De
   };
 }
 
-export function createReproViewer(map: HeadlessMap, inspect: ReproInspector, repro: Repro, sources?: ReproViewerSources) {
+export function createReproViewer(map: HeadlessMap, inspect: ReproInspector, repro: Repro, sources?: ReproViewerSources, scanDivergence = true) {
   const cached = new Map<number, readonly ReproInspection[]>();
   const read = (frame: number) => {
     const prior = cached.get(frame);
     if (prior !== undefined) return prior;
     const states = inspectClientStates(map, inspect, repro, frame);
+    // The selected and previous frame suffice for scrubbing; a long scan need
+    // not retain a complete copy of each client's state at every frame.
+    if (cached.size >= 16) cached.delete(cached.keys().next().value ?? frame);
     cached.set(frame, states);
     return states;
   };
@@ -62,7 +65,7 @@ export function createReproViewer(map: HeadlessMap, inspect: ReproInspector, rep
   }
   const start = low;
   let firstDivergentFrame: number | null = null;
-  for (let frame = start; frame <= repro.frame; frame++) {
+  for (let frame = start; scanDivergence && frame <= repro.frame; frame++) {
     const states = read(frame);
     const a = states[0];
     const b = states[1];
@@ -71,7 +74,7 @@ export function createReproViewer(map: HeadlessMap, inspect: ReproInspector, rep
   const sourceFor = sources === undefined ? () => undefined : declarationMap(sources);
   const sourceFiles = new Set<string>();
   return {
-    metadata: { build: repro.build, start, end: repro.frame, firstDivergentFrame },
+    metadata: { build: repro.build, start, end: repro.frame, firstDivergentFrame, ...(scanDivergence ? {} : { divergenceScanned: false }) },
     frame(frame: number) {
       if (!Number.isSafeInteger(frame) || frame < start || frame > repro.frame) throw new Error(`frame must be in ${start}..${repro.frame}`);
       const states = read(frame);

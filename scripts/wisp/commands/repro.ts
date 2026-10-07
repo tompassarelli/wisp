@@ -15,10 +15,15 @@ import { replaySoakRepro } from "../reproSoak";
 import { emitJson } from "../jsonResults";
 import { createReproViewer, serveReproViewer, type ReproViewerSources } from "../reproViewer";
 import { waitForProcessStop } from "./hot";
+import { importNativeReplay, compareReplayHost, type NativeReplay } from "../replayImport";
+import { writtenPreloadFile } from "../headlessInput";
+import { reproLines } from "../../../src/runtime/repro";
 
 /** What a game declares for `wisp repro`. */
 export interface ReproProject {
   readonly viewerSources?: ReproViewerSources;
+  /** Large verified journeys can compare selected frames without scanning every frame before opening. */
+  readonly viewerScanDivergence?: boolean;
   readonly map: HeadlessMap;
   /**
    * The module exporting `replayRepro`, a ReproReplay (wisp:src/runtime/repro.ts):
@@ -28,6 +33,8 @@ export interface ReproProject {
   readonly replay: string;
   /** The directory where `--test NAME` writes NAME.tests.ts, a test registered with wisp:src/runtime/testing.ts. */
   readonly tests: string;
+  /** Convert only established game inputs; every other record stays in the raw import. */
+  readonly importReplay?: (replay: NativeReplay) => { readonly repro: Repro; readonly simulatedActionOffsets: readonly number[] };
   /** Soak JSON repros replay this module; their generated tests use Bun's headless runtime. */
   readonly soak?: { readonly project: string; readonly tests: string };
 }
@@ -158,6 +165,44 @@ function importFrom(directory: string, module: string): string {
 
 /** `repro FILE [--test NAME]`; loads the game's modules only when it runs. */
 export const makeRepro = (load: () => Promise<ReproProject>): Command => (args) => Effect.gen(function*() {
+  if (args[0] === "import") {
+    const values = flagValues(args, "out");
+    const out = values[0];
+    const objects = args.slice(1).filter((arg, index) => !arg.startsWith("--") && args[index] !== "--out");
+    const file = objects[0];
+    const host = objects[1];
+    if (file === undefined || objects.length > 2 || out === undefined || values.length !== 1 || args.some(arg => arg.startsWith("--") && arg !== "--out" && !arg.startsWith("--out="))) return yield* new UsageFailure({ problem: "repro import FILE.w3g [HOST.log] --out ACTIONS.json" });
+    if (resolve(file) === resolve(out) || existsSync(out) && realpathSync(out) === realpathSync(file)) return yield* new UsageFailure({ problem: "the import output must differ from the native replay" });
+    const imported = yield* Effect.tryPromise({ try: () => importNativeReplay(readFileSync(file)), catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) });
+    const comparison = host === undefined ? undefined : yield* Effect.try({ try: () => compareReplayHost(imported, readFileSync(host, "utf8")), catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) });
+    yield* Effect.try({ try: () => { mkdirSync(dirname(resolve(out)), { recursive: true }); writeFileSync(out, `${JSON.stringify({ ...imported, ...(comparison === undefined ? {} : { comparison }) }, null, 2)}\n`); }, catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) });
+    const actions = imported.commands.flatMap(command => command.actions);
+    yield* Console.log(`imported ${imported.turns} turns, ${actions.length} actions (${actions.filter(action => action.kind === "raw").length} unknown); raw bytes and offsets: ${out}`);
+    if (comparison !== undefined) {
+      yield* Console.log(`host ${comparison.hostActions}, replay ${comparison.replayActions}: ${comparison.differences.length} differences`);
+      if (comparison.differences.length > 0) return yield* new ReproFailure({ file, problem: comparison.differences.slice(0, 5).join("\n") });
+    }
+    const project = yield* Effect.tryPromise({ try: load, catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) });
+    if (project.importReplay !== undefined) {
+      const journey = yield* Effect.try({ try: () => project.importReplay?.(imported), catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) });
+      if (journey === undefined) return;
+      const replay = yield* Effect.tryPromise({ try: () => loadReplay(project.replay), catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) });
+      const results = yield* Effect.try({ try: () => replayInClients(project.map, replay, journey.repro), catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) });
+      const report = reproReport(file, journey.repro, results);
+      yield* Console.log(report.lines.join("\n"));
+      if (!report.landed) return yield* new ReproFailure({ file, problem: "the imported inputs do not reach the recorded checksum" });
+      const supported = new Set(journey.simulatedActionOffsets);
+      const offsets = imported.commands.flatMap(command => command.actions.map(action => command.offset + action.offset));
+      if (supported.size !== journey.simulatedActionOffsets.length || [...supported].some(offset => !offsets.includes(offset))) return yield* new ReproFailure({ file, problem: "the adapter names duplicate or absent action offsets" });
+      const saved = `${out}.repro.txt`;
+      yield* Effect.try({ try: () => {
+        writeFileSync(saved, writtenPreloadFile(reproLines(journey.repro, journey.repro.lines)));
+        writeFileSync(out, `${JSON.stringify({ ...imported, ...(comparison === undefined ? {} : { comparison }), simulatedActionOffsets: [...supported], journey: { file: saved, checksum: journey.repro.checksum, frame: journey.repro.frame } }, null, 2)}\n`);
+      }, catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) });
+      yield* Console.log(`simulated ${supported.size} actions; retained ${actions.length - supported.size} other actions. Saved journey: ${saved}; scrub with repro ${saved} --view`);
+    }
+    return;
+  }
   const json = args.includes("--json");
   const shrink = args.includes("--shrink");
   const view = args.includes("--view");
@@ -198,7 +243,7 @@ export const makeRepro = (load: () => Promise<ReproProject>): Command => (args) 
   if (view) {
     const inspector = yield* Effect.tryPromise({ try: () => loadInspector(project.replay), catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) });
     return yield* Effect.scoped(Effect.gen(function*() {
-      const server = yield* Effect.acquireRelease(Effect.try({ try: () => serveReproViewer(createReproViewer(project.map, inspector, repro, project.viewerSources)), catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) }), server => Effect.promise(() => server.stop(true)));
+      const server = yield* Effect.acquireRelease(Effect.try({ try: () => serveReproViewer(createReproViewer(project.map, inspector, repro, project.viewerSources, project.viewerScanDivergence)), catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) }), server => Effect.promise(() => server.stop(true)));
       const address = `http://127.0.0.1:${server.port}/`;
       yield* Console.log(`saved match: ${address}`);
       yield* Effect.try({ try: () => { Bun.spawn(["xdg-open", address], { stdout: "ignore", stderr: "ignore" }); }, catch: cause => new ReproFailure({ file, problem: `opening the page: ${describeCause(cause)}` }) });

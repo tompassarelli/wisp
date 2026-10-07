@@ -41,3 +41,15 @@ test("saved frames keep both desynced clients, previous changes and three declar
     expect(readFileSync(sources.file, "utf8")).toContain("readonly total");
   } finally { await server.stop(true); }
 });
+
+test("large imported moments compare selected frames without a full startup scan", () => {
+  const visited: number[] = [];
+  const viewer = createReproViewer({ filePrefix: "viewer", globalPrefixes: [] }, (_repro, frame) => {
+    visited.push(frame);
+    return { frame, checksum: String(frame), state: String(frame), fields: [{ path: "frame", value: String(frame) }] };
+  }, { build: "imported", frame: 100000, checksum: "100000", lines: [] }, undefined, false);
+  expect(viewer.metadata).toEqual({ build: "imported", start: 0, end: 100000, firstDivergentFrame: null, divergenceScanned: false });
+  expect(visited.length).toBeLessThan(40);
+  expect(viewer.frame(70000).clients.map(client => client.checksum)).toEqual(["70000", "70000"]);
+  expect(viewer.frame(0).clients[0]?.changes).toEqual([]);
+});

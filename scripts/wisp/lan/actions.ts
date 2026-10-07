@@ -16,6 +16,11 @@ export interface DecodedAction {
   readonly sync?: { readonly prefix: string; readonly data: string };
 }
 
+export interface ActionRecord extends DecodedAction {
+  readonly offset: number;
+  readonly raw: string;
+}
+
 const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString("hex");
 const fourcc = (value: number) => {
   const text = String.fromCharCode((value >>> 24) & 0xff, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff);
@@ -109,8 +114,13 @@ function decodeOne(reader: Reader): DecodedAction | undefined {
 
 /** Every action in one player's block; an unknown id or a short field ends it with a `raw` action. */
 export function decodeActions(block: Uint8Array): DecodedAction[] {
+  return decodeActionRecords(block).map(({ offset, raw, ...action }) => action);
+}
+
+/** Byte offsets are relative to the player's original action block. */
+export function decodeActionRecords(block: Uint8Array): ActionRecord[] {
   const reader = new Reader(block);
-  const actions: DecodedAction[] = [];
+  const actions: ActionRecord[] = [];
   while (reader.remaining > 0) {
     const start = reader.offset;
     let action: DecodedAction | undefined;
@@ -121,10 +131,10 @@ export function decodeActions(block: Uint8Array): DecodedAction[] {
       action = undefined;
     }
     if (action === undefined) {
-      actions.push({ kind: "raw", text: `id=0x${(block[start] ?? 0).toString(16)} bytes=${hex(block.subarray(start))}` });
+      actions.push({ kind: "raw", text: `id=0x${(block[start] ?? 0).toString(16)} bytes=${hex(block.subarray(start))}`, offset: start, raw: hex(block.subarray(start)) });
       break;
     }
-    actions.push(action);
+    actions.push({ ...action, offset: start, raw: hex(block.subarray(start, reader.offset)) });
   }
   return actions;
 }
