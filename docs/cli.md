@@ -127,7 +127,10 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--app-id SLOT=ID` | A client's private desktop window, per slot | `pad` |
 | `--chat TEXT` | A chat command typed before the script runs | `pad` |
 | `--retries N` | How many times an invalid run reruns | `pad` |
-| `--headless` | Play into headless clients instead of native ones | `pad` |
+| `--headless` | Play into headless clients instead of native ones; hide the standalone browser window | `pad`, `play --standalone` |
+| `--standalone` | Play in the game's browser window | `play` |
+| `--script FILE` | Read the game's scripted input from this file | `play --standalone` |
+| `--capture-frames N,N` | Save images of these simulation frames | `play --standalone` |
 | `--compare DIR` | A native run's folder to hold the headless run to | `pad` |
 | `--repro FILE` | Play a soak finding again | `soak` |
 | `--test NAME` | Write a test with this name | `repro` |
@@ -149,7 +152,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--opponent ID` | The computer players' named opponent identity | `farm balance` |
 | `--tier TIER` | The computer players' difficulty tier | `farm balance` |
 | `--per-pair N` | How many matches each fighter pair plays | `farm` |
-| `--frames N...` | Frame count for perf; chosen frame numbers for headless renders | `perf`, `headless` |
+| `--frames N...` | Frame count for perf or standalone play; chosen frame numbers for headless renders | `perf`, `headless`, `play --standalone` |
 | `--render DIR` | Write images from the headless match scene | `headless`, consumer pad checks |
 | `--journey FILE` | Read the headless journey's events from JSON | `headless` |
 | `--sound-cues FILE` | Write the headless sound cue log | `headless` |
