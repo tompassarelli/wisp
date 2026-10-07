@@ -143,6 +143,193 @@ support or native Warcraft's interpolation.
 [Hermite/Bezier behavior](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/util/Interpolator.java#L54-L69),
 [spherical formulas](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/util/RenderMathUtils.java#L405-L454).
 
+## Map-reliance observations for #50
+
+This section uses the original **f9e0aeed4be372d6016519d0e97b384aa873f374**
+revision and AGPL-3.0 license identified above. Every finding is
+**source-researched**, including behaviors that differ from the map's
+requirements. It supplies no additional native confirmations. The map
+inventory supplied by #50 uses direct body/effect positioning and timers;
+engine movement orders, queued unit animations and attachment natives are
+outside that inventory.
+
+### Smashcraft use and current Wisp verdicts
+
+The consumer inventory is Smashcraft **992ec9d3**: 179 distinct native names
+in authored `ts/src/` excluding `*.tests.ts`, including optional diagnostic
+entries. Wisp's imported FileIO, reload and scene code adds the file, sync and
+effect getter operations described below. The runtime comparison is Wisp
+**211b899**, its `src/headless/client.ts`, frame implementation, and
+Smashcraft's `scripts/wisp/headlessNatives.ts` declarations. A source match
+means the stated operation agrees with the researched behavior; it is not a
+Warcraft 3.0.1 confirmation. An unavailable Warsmash native cannot establish
+either a native match or a native mismatch.
+
+| Relied-on behavior and consumer | Warsmash rule from this page | Current Wisp behavior | Verdict and deciding measurement |
+| --- | --- | --- | --- |
+| `CreateTimer`, `TimerStart`, `GetExpiredTimer`, `DestroyTimer`: zero-time shell initialization, 60 Hz simulation, hot reload, trace and diagnostic clocks | 50 ms steps; deadline truncates to a step; timer context belongs to the queued callback | 60 Hz frames; timeout rounds to the nearest frame with a one-frame minimum; callback runs immediately with its timer context | **Mismatch with Warsmash's clock**, deliberately: existing measured native 60 Hz callbacks take precedence over its 20 Hz model. A native callback-order fixture is still needed for 3.0.1. |
+| Equal-deadline callbacks and callbacks scheduling other timers | Registration order, callback threads after due-timer notification | Creation order, inline callbacks; timers created inside a callback wait until the next frame | **Mismatch with Warsmash order** when creation and start order differ. The timer fixture below reverses those orders; no runtime change is justified before the native log. |
+| `TimerGetElapsed`, `PauseTimer`: trace periods, timeout reads, optional smooth drawing | Elapsed capped at timeout, repeating timer rescheduled; paused elapsed still uses its advancing clock | Elapsed is frames since the most recent explicit start, uncapped, including after pause/expiry and subsequent periodic callbacks | **Mismatch with Warsmash elapsed values**. Native fixture samples between periods and after pause/expiry; this is a candidate defect, not a confirmed native rule. |
+| `SetUnitX/Y`, `SetUnitFlyHeight(..., 0)`, `BlzSetUnitFacingEx`: fighter body placement each draw | Direct coordinate/height writes; immediate facing; normal body rendering can lag position | Immediate stored position, height and facing in snapshots | **Match for direct state writes and 0/180-degree facing**; rendered position lag remains unmeasured for the paused Locust bodies. #40's same-frame body capture decides the visible contract. |
+| `CreateUnit`, `RemoveUnit`, type/handle/owner, `ShowUnit`, scale, vertex color, move speed and attack cooldown: bodies and object-data readback | Object/state facts, separate visibility and rendering, with the life caveats above | Retained unit fields and snapshots; type becomes zero on removal | **Partial source match**. #44/#45's existing native fixture owns state/object-data confirmation. Life/death thresholds are outside Smashcraft's scripted fighting damage. |
+| `SetUnitPathing(false)`, `PauseUnit(true)`, Locust and Crow Form, invulnerability: disable ordinary engine interaction | Direct writes do not reject a paused unit; missing `SetUnitPathing` registration gives no disabled-pathing rule | Consumer explicitly ignores these flags because all fighting motion and damage are scripted | **Match for absence of engine movement in the headless journey**; native paused-body placement still requires #40. Engine collision/pathfinding is not called by this map. |
+| `SetUnitAnimation/ByIndex`, `SetUnitTimeScale`, `SetUnitBlendTime`: fallback bodies | Sequence clocks advance by elapsed time × speed; blend uses saved old pose and current pose | Stores selection, resets animation elapsed, advances at 60 Hz; consumer ignores unit blend time | **Mismatch: body blend is not modeled.** The active effect fighter path and native #40 capture determine whether this changes the measured scene. |
+| `BlzSetSpecialEffectAnimation`, `BlzPlaySpecialEffect`, `BlzSetSpecialEffectTime/TimeScale/AnimationBlendTime`: fighter/effect playback | These modern native contracts are absent; internal model clock/blend rules are recorded above | Selected clip and seek time retained; blend-time call is an explicit consumer no-op; renderer samples model tracks | **Native verdict unresolved**; #40's older run had 24/25 frame checks and one vertical landmark mismatch; all 25 require the shared 3.0.1 capture. Do not substitute Warsmash's internal seek for the missing native contract. |
+| Effect attachment: dizzy marks, weapons, projectiles, summons, aura and hit effects | Target attachments can follow animated model transforms; modern positioning native is absent | Map places every effect itself with `BlzSetSpecialEffectPosition`, axis setters and yaw/pitch/roll; Wisp retains the requested transforms | **Match for the map's manual attachment contract**. No `AddSpecialEffectTarget` call or skeletal attachment dependency exists in the inventory. #40 compares the resulting positions. |
+| Effect create/destroy, model/alpha/color/team color, scale and matrix scale | Point effect begins at surface/terrain height; other modern setters absent | Starts at Z=0 until explicitly placed; immediate removal; transforms and colors retained, model rendering supplies mesh/particles | **Native verdict unresolved** for create/destroy tails and model rendering. Scripted effects normally set their world Z before drawing; #40 and #48 own the visible checks. |
+| `CreateSound/FromLabel`, `StartSound`: hit, summon, selection and match cues | Creation loads; start requests playback during the call | Creation and each start produce separate frame-tagged cues | **Match for request order**. A create alone is not a start. Audible onset needs the same native capture; cue-log equality does not measure speaker timing. |
+| Sound position, pitch, volume, duration, stop and `KillSoundWhenDone` | Setters are missing or no-ops in the researched revision | Position/pitch/volume retained at start; completion/attenuation ignored by consumer; stop and lifetime are not represented in the cue log | **Native verdict unresolved**; Warsmash supplies no usable rule. #48 owns audible playback; #51 owns the 3.0.1 OGG playback capture. |
+| Music play/stop/theme and file duration: round, victory and stage music | Request forwarding only | Consumer ignores background playback and decoding; explicit sound starts are retained | **Mismatch in observable audio coverage**; soundtrack playback is not represented by the headless cue report. |
+| Engine order queues and `QueueUnitAnimation` | Queued orders begin in insertion order; immediate orders cancel or replace pending orders | No movement/order/animation-queue model | **Not used**: no engine order or queue native appears in Smashcraft's source. Fighter input buffers are map simulation data, already replayed by the checksum check. |
+| Sync send/delivery and trigger callbacks: journal rows, frame UI, chat and key events | Due timers precede tick triggers and script threads; no current Battle.net latency measurements | Ordered triggers; configured sync delivery uses native-measured 25 ms turns and 60 Hz callbacks | **Intentional mismatch with emulator timing**; [network model](network-model.md) records the native basis. Three 3.0.1 online pad runs must match saved checksums. |
+| UI creation/destruction, named frame lookup, parent/child visibility, size/anchors/text/texture, level, focus, enable and text limit | No researched current `BlzFrame*` native contract in this page | Retained frame tree, layout, text input and events; font rasterization/alignment/scale are consumer no-ops | **Native verdict unresolved** for pixels; existing frame-state tests cover the Wisp contract and #40 covers matched UI captures. |
+| Local keyboard/mouse/focus/window dimensions and player slot/controller/name | No current client-input rule researched here | Scripted key state and frame typing; fixed client dimensions; consumer returns no mouse input and a configured slot roster | **Mismatch with a physical client**, an intentional input source substitution. Pad runs use the actual helper and compare its delivered frames; they do not validate physical mouse input. |
+| Camera position/field/bounds/smoothing/pan: stage framing and zoom | No native camera-interpolation contract researched here | Camera fields and target retained immediately; bounds/smoothing ignored, pan maps to direct position | **Mismatch in interpolation coverage**; #40's captured camera values and pixels decide visible differences. |
+| Terrain/sky/fog/day-night, lightning and text tags: stage scene and feedback | No matching current native contract researched here | Scenery/fog globals are ignored by the consumer; core scene snapshots record units, effects, frames and cues rather than every engine primitive | **Mismatch in scene coverage**. These calls are not evidence that terrain, lightning or text-tag pixels match; #40/#48 are the existing scene owners. |
+| Numeric/string conversions, IDs and handles; FileIO/preload; map-origin locations; diagnostics and restart | Warsmash is not a current Lua/binary32 or Preloader-cache oracle | Shared 32-bit numeric rules, native-style conversions, per-client handle IDs; first-read Preloader cache; authored origin (0,0,0); diagnostic messages and file outputs retained | **Match to Wisp's existing native-derived contracts**, separately documented in [headless](headless.md) and [hot reload](hot-reload.md). Restart is an external session action, not a simulation behavior. |
+
+The timer capture entry is `test/native-rules50/main.ts`. It writes eleven
+ordered readings to `native-rules50-pSLOT.txt` after 1.25 game seconds, using
+0.5-second timers and 0.75/1.25-second observations. Both Bun and the native
+map execute this same authored fixture. In particular, it measures the
+disagreement before changing periodic clocks or same-deadline order. The
+current Bun output is identical on two clients: periodic reads are
+500/750/1000/1250 ms, the expired timer reaches 1250 ms, and the timer paused
+at 750 ms later reads 1250 ms. These are Wisp observations; the native
+fixture has not yet supplied its values.
+Its `start()` first writes the unchanged twelve unit-state cases, so one
+private game can supply #44 and #50 observations together. Build with
+`bun test/native-rules50/build.ts BASE.w3m PRIVATE_OUT.w3x`; both output
+files must be collected from each client. The earlier #44 fixture stays
+available for comparison.
+
+The replay surface at Smashcraft 992ec9d3 is **413 runnable `.pad` files**:
+54 at the root, 160 under `180/`, and 199 across the other 24 folders.
+Every script names a match and exports a View-held moment. The JSON file
+under `233/` configures a helper interruption and is not a pad script.
+The headless result now parses and replays every exported moment, compares
+the recorded intermediate and final checksums, and refuses missing or
+malformed exports. This is separate from native-to-headless comparison of
+the three unchanged online spot-check scripts.
+
+### Timer deadlines and callback order
+
+For a nonnegative timeout **T**, the emulator schedules a deadline at the
+start turn plus **trunc(T / 0.05)** turns. Registration takes effect at the
+next timer-processing phase. A zero timeout or positive timeout below
+50 ms can therefore fire on the next simulation step; a repeating timer
+in that range fires at most once per step, not at 60 Hz. Elapsed time is
+**min(T, elapsed turns × 0.05)**. These emulator values cannot resolve
+Smashcraft's 60 Hz shell, faster drawing timer, or native substep timing.
+[Timer clock](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/timers/CTimer.java#L33-L77),
+[registration and due timers](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CSimulation.java#L568-L597).
+
+Equal-deadline timers are notified in registration order. A timer's JASS
+handler is queued before its registered timer-event notifications; script
+threads run after the due-timer and tick-trigger phases. Newly queued
+non-sleeping handlers run in their queue order. A callback that sleeps does
+not promise completion before the next callback. `GetExpiredTimer` reads
+the timer carried by that callback's execution context.
+[Equal deadlines](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CSimulation.java#L272-L285),
+[handler and timer events](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/timers/CTimerJass.java#L44-L70),
+[thread execution](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/jassparser/src/com/etheller/interpreter/ast/scope/GlobalScope.java#L577-L588),
+[non-sleeping execution](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/jassparser/src/com/etheller/interpreter/ast/scope/GlobalScope.java#L636-L660),
+[expired context](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L5523-L5533).
+
+`TimerStart` ignores an already-running timer. A repeating timer is
+rescheduled before its queued JASS callback executes, so restarting it
+inside that callback is also ignored. A one-shot callback can restart its
+timer, with that registration considered on the following step.
+Pause/destroy requests remove a timer during the next timer-processing
+phase, after additions are considered; they do not cancel a callback that
+was already queued. Pausing stores the remaining duration, but the inspected
+elapsed-time getter still uses the advancing turn counter. Consequently
+restart and paused elapsed-time semantics need native evidence rather than
+adopting these emulator behaviors.
+[Start/pause/destroy natives](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L815-L874),
+[repeat rescheduling](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/timers/CTimer.java#L89-L102).
+
+### Direct unit position, facing and pathing
+
+`SetUnitX` and `SetUnitY` immediately store the requested binary32 coordinate,
+translate collision bookkeeping and check region membership. They do not
+search for a pathable alternative. Separate X/Y calls expose the intermediate
+position to region checks. `SetUnitPosition` instead performs an unstuck
+placement check, so it is not evidence for the map's manual movement.
+[Coordinate natives](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L3068-L3108),
+[position and region observations](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L2676-L2756).
+
+Simulation facing is normalized into **[0, 360)** degrees.
+`BlzSetUnitFacingEx` changes both simulation and displayed facing;
+`SetUnitFacing` changes simulation facing alone, with the renderer turning
+toward it on later updates. `SetUnitFlyHeight` assigns height directly and
+ignores the rate argument in this revision. `PauseUnit` sets a unit flag;
+the direct coordinate/facing writes above have no paused-unit rejection.
+[Facing normalization](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L1840-L1844),
+[normal facing/height natives](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L3110-L3141),
+[immediate facing native](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4565-L4573),
+[pause native](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4211-L4218).
+
+Ordinary displayed unit positions can lag simulation positions: the renderer
+moves by at most **move speed × elapsed seconds** toward the stored position
+when the gap exceeds that distance and elapsed time is below one second.
+Otherwise it displays the stored position. This is a renderer observation,
+not a native measured delay. The inspected registrations contain no
+`SetUnitPathing`; behavior with pathing disabled, Locust or Crow Form cannot
+be established from that missing native or from direct X/Y writes alone.
+[Displayed position](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/rendersim/RenderUnit.java#L205-L223),
+[inspected registrations](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java).
+
+### Effect placement and unavailable effect setters
+
+A point effect starts at its requested XY and at the higher of walkable
+surface height and terrain height. A target effect with a matching unit
+attachment follows that attachment's animated transform. A missing
+attachment falls back to the unit's displayed location at creation; item
+and destructable targets are explicitly unsupported. This does not answer
+the map's manually positioned effect behavior: the inspected registrations
+contain none of `BlzSetSpecialEffectPosition`, `BlzSetSpecialEffectAnimation`,
+`BlzSetSpecialEffectAnimationBlendTime`, `BlzSetSpecialEffectTime` or
+`BlzSetSpecialEffectTimeScale`. The animation-clock section describes model
+internals only; it supplies no native contract for those calls.
+[Attachment and point placement](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/War3MapViewer.java#L2104-L2203),
+[inspected effect registrations](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4415-L4439).
+
+### Sound start and unavailable sound controls
+
+`CreateSound` loads the file into a sound handle; `StartSound` asks its audio
+backend to play during that call. This establishes request order, not
+speaker onset timing. Filename sounds record start against wall-clock
+milliseconds; their predicted remaining duration is decoded duration minus
+elapsed wall time, clipped to zero. Label sounds select through their sound
+label and request playback at (0, 0, 0). The map's `SetSoundDuration`,
+`SetSoundPitch` and `SetSoundVolume` are registered but do nothing in this
+revision. No inspected registration exists for `SetSoundPosition`,
+`StopSound`, `KillSoundWhenDone` or `GetSoundFileDuration`. Those omissions
+cannot validate the map's cue positions, gain, pitch, stop or lifetime.
+[Creation and setters](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4012-L4051),
+[start native](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L2337-L2345),
+[filename playback and duration](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/sound/CSoundFilename.java#L46-L83),
+[label playback](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/sound/CSoundFromLabel.java#L31-L50),
+[no-op sound setters](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4153-L4174).
+
+Music play, stop and resume natives forward requests to the displayed game's
+music controls. Their registrations establish call order, not audible onset,
+fade completion or a simulation-step deadline.
+[Music requests](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L2346-L2385).
+
+### Order queues outside the map's relied-on behavior
+
+The emulator ordinarily appends queued orders while a unit is executing an
+order, and starts them in insertion order. An immediate interrupting order
+cancels pending orders; an immediate order during an uninterruptible
+behavior replaces pending orders while that behavior continues. Dead units
+reject orders. Ability-specific and patrol exceptions exist. These facts
+describe engine orders, which #50's map inventory does not use; they do not
+expand the required parity surface.
+[Order acceptance and cancellation](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L2436-L2511),
+[next queued order](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L3783-L3793).
+
 ## File-format facts for a standalone player (#48)
 
 These are parseable format facts. Native acceptance of a particular model

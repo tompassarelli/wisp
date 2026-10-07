@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { preferencesBackupPath, preferencesPath, restorePreferences } from "../scripts/warcraft/preferences";
+import { preferencesBackupPath, preferencesPath, restorePreferences, withGraphicsMode } from "../scripts/warcraft/preferences";
 
 const fixture = (name: string) => readFileSync(join(import.meta.dir, "fixtures/preferences", name), "utf8");
 
@@ -28,4 +28,11 @@ test("without a backup the file the game wrote stays", async () => {
   writeFileSync(preferencesPath(documents), fixture("main-display.txt"));
   expect(await restorePreferences(preferencesBackupPath(documents), preferencesPath(documents))).toBe(false);
   expect(readFileSync(preferencesPath(documents), "utf8")).toBe(fixture("main-display.txt"));
+});
+
+test("graphics mode changes [Misc] hd and preserves [Video]", () => {
+  const text = "[Misc]\nhd=2\nfoo=1\n\n[Video]\nassao=0\n";
+  expect(withGraphicsMode(text, "reforged")).toBe(text.replace("hd=2", "hd=1"));
+  expect(withGraphicsMode("[Video]\nassao=0\n", "classic")).toContain("[Misc]\nhd=0\n");
+  expect(withGraphicsMode(text, "definitive")).toBe(text);
 });
