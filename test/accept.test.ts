@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit, Layer } from "effect";
 import { expect, test } from "bun:test";
-import { AcceptDriver, AcceptFailure, type AcceptSuite, type NativeCheck, cropFrame, describePlan, planSessions, runAccept, selectChecks, suiteProblems } from "../scripts/wisp/accept";
+import { AcceptDriver, AcceptFailure, type AcceptSuite, type NativeCheck, cropFrame, describePlan, mergeReports, planSessions, shardSessions, runAccept, selectChecks, suiteProblems } from "../scripts/wisp/accept";
 import { makeAccept } from "../scripts/wisp/commands/accept";
 import { decodePpm, type Frame } from "../scripts/wisp/frameProbe";
 
@@ -247,4 +247,17 @@ test("the live driver reads receipts and War3Log from each client's Documents an
   expect(seen).toEqual({ receipts: [{ name: "game-dev-p0.txt", text: "receipt", modified: 1 }], log: "log", state: "not watched" });
   expect(started).toEqual(["m/shared"]);
   expect(chats).toEqual(["Return -dev effects 12 Return"]);
+});
+
+test("shardSessions balances sessions over shards and keeps plan order; mergeReports fills missing checks", () => {
+  const checks = [check("1-a", "m1"), check("2-a", "m2"), check("2-b", "m2"), check("3-a", "m3"), check("4-a", "m4", { session: "x" }), check("4-b", "m4")];
+  const sessions = planSessions(checks);
+  const shards = shardSessions(sessions, 3);
+  expect(shards).toHaveLength(3);
+  expect(shards.flat().map(({ map, session }) => `${map}/${session}`).sort()).toEqual(sessions.map(({ map, session }) => `${map}/${session}`).sort());
+  for (const shard of shards) expect(shard.map((session) => sessions.indexOf(session))).toEqual(shard.map((session) => sessions.indexOf(session)).sort((a, b) => a - b));
+  expect(shardSessions(sessions, 10)).toHaveLength(sessions.length);
+  const result = (id: string) => ({ id, closes: "", map: "", session: "", verdict: "pass" as const, reason: "", evidence: "", rules: [], readings: {}, files: [] });
+  const merged = mergeReports("/r", checks, [{ directory: "/r/a", started: 0, finished: 1, results: [result("2-b"), result("1-a")] }], 0, 2, (missing) => ({ ...result(missing.id), verdict: "fail" }));
+  expect(merged.results.map(({ id, verdict }) => `${id} ${verdict}`)).toEqual(["1-a pass", "2-a fail", "2-b pass", "3-a fail", "4-a fail", "4-b fail"]);
 });

@@ -59,6 +59,19 @@ Each run's folder (mode 0700) holds `report.txt` and `report.json`, and one
 folder per check with its frames, readings, `receipts-CLIENT.txt`,
 `war3log-CLIENT.txt` and `check.json` (the declaration, rules and verdict).
 
+## Sharding over several client sets
+
+A game that has more than one set of clients (Wisp's offline LAN pool pairs)
+passes `shards` to `makeAccept`. When a run's arguments select two or more
+shards (Smashcraft: `--pairs N` or `--pair K` repeated), `accept` plans the
+sessions, splits them over the shards (`shardSessions`: heaviest session onto
+the lightest shard, weighing a fresh match as four checks), runs the
+consumer's `prepare` once (a shared map build) and every shard's `run` at
+once. Each shard writes its own report into `shard-NAME/`; the run's
+`report.txt` and `report.json` merge them in the plan's check order, and a
+check whose shard wrote nothing fails with that shard's error. `--dry-run`
+prints each shard's share before the plan.
+
 ## Composing it
 
 ```ts

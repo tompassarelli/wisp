@@ -488,3 +488,33 @@ export function summaryLine(results: readonly CheckResult[]): string {
   const count = (verdict: Verdict) => results.filter((result) => result.verdict === verdict).length;
   return `${results.length} checks: ${count("pass")} pass, ${count("fail")} fail, ${count("needs-look")} needs-look`;
 }
+
+// ---- Shards ---------------------------------------------------------------
+
+/** A session's rough cost: its fresh match dominates, then each check. */
+const sessionWeight = (session: PlannedSession) => 4 + session.checks.length;
+
+/**
+ * `sessions` split over `count` shards (such as offline pool pairs), heaviest
+ * first onto the lightest shard, so the shards finish close together. Each
+ * shard keeps the plan's session order. Empty shards are dropped.
+ */
+export function shardSessions(sessions: readonly PlannedSession[], count: number): PlannedSession[][] {
+  const shards = Array.from({ length: Math.max(1, count) }, () => ({ weight: 0, indexes: [] as number[] }));
+  const order = sessions.map((session, index) => ({ index, weight: sessionWeight(session) })).sort((left, right) => right.weight - left.weight || left.index - right.index);
+  for (const { index, weight } of order) {
+    const lightest = shards.reduce((best, shard) => (shard.weight < best.weight ? shard : best));
+    lightest.weight += weight;
+    lightest.indexes.push(index);
+  }
+  return shards.filter(({ indexes }) => indexes.length > 0).map(({ indexes }) => indexes.sort((left, right) => left - right).map((index) => sessions[index]!));
+}
+
+/**
+ * One report from the shards' reports: each shard's results, in the plan's
+ * check order. A check whose shard wrote no result fails with `missing(id)`.
+ */
+export function mergeReports(directory: string, checks: readonly NativeCheck[], reports: readonly AcceptReport[], started: number, finished: number, missing: (check: NativeCheck) => CheckResult): AcceptReport {
+  const byId = new Map(reports.flatMap(({ results }) => results.map((result) => [result.id, result] as const)));
+  return { directory, started, finished, results: checks.map((check) => byId.get(check.id) ?? missing(check)) };
+}
