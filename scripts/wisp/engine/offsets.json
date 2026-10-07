@@ -1,0 +1,17 @@
+{
+  "3.0.0.24268": {
+    "sizeOfImage": "0xe155000",
+    "presenceTable": "0x2f80770",
+    "table": { "entries": "0x18", "count": "0x30", "freeHead": "0x70", "births": "0x80" },
+    "agent": { "tag": "0x20", "birth": "0x24", "owner": "0x90" },
+    "roles": {
+      "0x142a90": "Desync.log section writer",
+      "0x231720": "CAgentBaseAbs allocator",
+      "0x24d7d0": "tag allocator",
+      "0x24d8d0": "tag release",
+      "0x151ff10": "net message handler (desync detection)",
+      "0x1524220": "Desync.txt assertion builder",
+      "0x1530a10": "Desync.txt writer"
+    }
+  }
+}
