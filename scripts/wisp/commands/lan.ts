@@ -113,8 +113,14 @@ const pool: Command = (args) => Effect.gen(function*() {
   const stop = () => {
     for (const child of children) child.kill("SIGTERM");
   };
-  process.once("SIGINT", stop);
-  process.once("SIGTERM", stop);
+  process.once("SIGINT", () => {
+    stop();
+    process.exit(130);
+  });
+  process.once("SIGTERM", () => {
+    stop();
+    process.exit(143);
+  });
   const entries: PoolPair[] = [];
   // --pair K... picks which pairs and in what order the helper admits them; else 0..N-1.
   const chosen = flagValues(args, "pair").map(Number);
