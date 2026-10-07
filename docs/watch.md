@@ -128,6 +128,23 @@ previous)`, tested against the 6 Oct recordings in
 wisp:test/fixtures/war3log/ and wisp:test/fixtures/watch/: the bad `-loadfile`
 run, the crashed `play --menus` run and client B's silent log.
 
+## Confirmed chat setup
+
+Native runners use `openObservedChat` and `confirmedCommand`
+(wisp:scripts/wisp/chatSetup.ts) with their map's existing receipts. Wait for
+the selected pair's fresh binding-ready files first. `openObservedChat` observes
+a publication after Return rather than trusting an earlier game's open file;
+if Return closes an already-open entry, one further observed transition opens
+it. Missing entry or transition stops before typing, with the selected client
+and boundary. Each wait is bounded at eight seconds.
+
+`confirmedCommand` snapshots every selected client's receipt before sending,
+then waits for the consumer's predicate to confirm both freshness and the
+requested setup state. Only its successful return may release scripted input.
+Record setup failure as INVALID, retaining that first boundary instead of
+comparing absent gameplay. Journal chat leaves a match paused: a command that
+continues the same match must explicitly resume and observe its control receipt.
+
 ## Limits
 
 - Menu screens other than `GAME_LOBBY` and `LOADING_SCREEN` (which Wisp's
