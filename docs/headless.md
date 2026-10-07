@@ -330,3 +330,22 @@ journey shows that the clients agree with each other on these stubs; native
 desyncs, timing and what reaches the screen keep their
 native checks ([desync reports](hot-reload.md#desync-reports),
 [player view](player-view.md)).
+
+## JSON results
+
+`wisp headless [JOURNEY] --json` writes JSON Lines to stdout; step timings
+and the final error message stay on stderr. Without `--json`, output stays
+as described above. `--cost` adds a `type: "cost"` record with the measured
+prediction.
+
+Each journey writes one `type: "result"` record with `journey`, `ok`,
+`frames`, and `clients` (each client's slot, native call count, checksum,
+and errors). Each problem writes a `type: "failure"` record with `kind`
+(`desync`, `error`, `scene`, or `check-fail`), `frame`, `client`, and `message`.
+Unavailable frame or client values are `null`. JSON mode compares calls on
+every frame so a desync names the first differing frame and client.
+
+The last line is always a `type: "summary"` record with `ok`,
+`counts: { results, failures }`, and monotonic `elapsedMs`. All records have
+`schema: 1` and `command: "headless"`. A failed run retains its nonzero exit
+code, including a load or usage error before any result.

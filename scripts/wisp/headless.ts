@@ -10,7 +10,7 @@ import type { FrameDefinition } from "./frames";
 import { join } from "node:path";
 import type { ClientScope, HeadlessClient, LocalNatives, MapEntry, NativeBehaviors } from "../../src/headless/client";
 import { type NativeDeclarations, parseNativeDeclarations } from "../../src/headless/declarations";
-import { type Journey, type JourneyOptions, journeyLines, journeyProblems, runJourney } from "../../src/headless/journey";
+import { type Journey, type JourneyOptions, type JourneyResult, journeyLines, journeyProblems, runJourney } from "../../src/headless/journey";
 import { Lockstep, type LockstepOptions } from "../../src/headless/lockstep";
 import { errorFile } from "../../src/runtime/gameFiles";
 import { BUNDLE_MODULE, type ModuleSet } from "../../src/runtime/modules";
@@ -248,6 +248,16 @@ export async function loadMapEntry(path: string): Promise<MapEntry> {
 export interface HeadlessReport {
   readonly lines: readonly string[];
   readonly problems: number;
+  readonly frames: number;
+  readonly clients: JourneyResult["clients"];
+  readonly failures: readonly HeadlessFinding[];
+}
+
+export interface HeadlessFinding {
+  readonly kind: "desync" | "error" | "scene" | "check-fail";
+  readonly frame: number | null;
+  readonly client: number | null;
+  readonly message: string;
 }
 
 /**
@@ -261,6 +271,16 @@ export function playHeadless(clients: Lockstep, journey: Journey, filePrefix: st
   const result = runJourney(clients, journey, options);
   const lines = [...journeyLines(result)];
   let problems = journeyProblems(result);
+  const failures: HeadlessFinding[] = [];
+  if (result.divergence !== undefined) {
+    const frame = /^after frame (\d+),/.exec(result.divergence)?.[1];
+    const client = /differs between slot \d+ and slot (\d+):/.exec(result.divergence)?.[1];
+    failures.push({ kind: "desync", frame: frame === undefined ? null : Number(frame), client: client === undefined ? null : Number(client), message: result.divergence });
+  }
+  for (const message of result.reloads) failures.push({ kind: "check-fail", frame: result.frames, client: null, message });
+  for (const client of result.clients) {
+    for (const message of client.errors) failures.push({ kind: "error", frame: null, client: client.slot, message });
+  }
   for (const client of clients.clients) {
     const report = client.files.get(errorFile(client.slot, filePrefix));
     if (report !== undefined) lines.push(`p${client.slot} error report:`, ...report.map((line) => `  ${line}`));
@@ -269,20 +289,26 @@ export function playHeadless(clients: Lockstep, journey: Journey, filePrefix: st
     const written = client.files.get(sceneFile(client.slot, filePrefix));
     if (written === undefined) {
       problems++;
-      lines.push(`p${client.slot} wrote no scene report: does the entry start the scene recorder?`);
+      const message = `p${client.slot} wrote no scene report: does the entry start the scene recorder?`;
+      lines.push(message);
+      failures.push({ kind: "scene", frame: result.frames, client: client.slot, message });
       continue;
     }
     const read = readSceneLines(written);
     if ("problem" in read) {
       problems++;
-      lines.push(`p${client.slot} scene report line ${read.line}: ${read.problem}`);
+      const message = `p${client.slot} scene report line ${read.line}: ${read.problem}`;
+      lines.push(message);
+      failures.push({ kind: "scene", frame: result.frames, client: client.slot, message });
       continue;
     }
     lines.push(`p${client.slot} scene: ${describeScene(read, scene)}`);
     for (const { seen, evidence } of sceneProblems(read, scene)) {
       problems++;
-      lines.push(`p${client.slot} would see ${seen} (${evidence})`);
+      const message = `p${client.slot} would see ${seen} (${evidence})`;
+      lines.push(message);
+      failures.push({ kind: "scene", frame: result.frames, client: client.slot, message });
     }
   }
-  return { lines, problems };
+  return { lines, problems, frames: result.frames, clients: result.clients, failures };
 }
