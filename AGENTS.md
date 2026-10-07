@@ -1,5 +1,7 @@
 # Wisp
 
+## Direction
+
 Before implementing a feature here or in a consuming map, consult the
 [feature index](docs/index.md) (wisp:docs/index.md) for existing capabilities
 and opt-in setup, especially TypeScript stack traces. A feature isn't done
