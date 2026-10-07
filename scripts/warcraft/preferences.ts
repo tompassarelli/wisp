@@ -55,7 +55,7 @@ export function absentSettings(text: string, recommended: DisplaySettings): Disp
 }
 
 /** The file with the expected settings written into its [Video] section; every other line is kept as it is. */
-export function withDisplaySettings(text: string, expected: DisplaySettings): string {
+export function withDisplaySettings(text: string, expected: DisplaySettings, sectionName = "Video"): string {
   const lines = text.split("\n");
   const left = new Map(Object.entries(expected));
   const eol = (line: string) => (line.endsWith("\r") ? "\r" : text.includes("\r\n") ? "\r" : "");
@@ -64,7 +64,7 @@ export function withDisplaySettings(text: string, expected: DisplaySettings): st
   const out = lines.map((line, index) => {
     const section = SECTION.exec(line.replace(/\r$/, ""));
     if (section !== null) {
-      inVideo = section[1] === "Video";
+      inVideo = section[1] === sectionName;
       return line;
     }
     if (!inVideo) return line;
@@ -84,7 +84,7 @@ export function withDisplaySettings(text: string, expected: DisplaySettings): st
   }
   const tail = text.length === 0 || text.endsWith("\n") ? "" : "\n";
   const cr = eol(lines[0] ?? "");
-  return `${out.join("\n")}${tail}[Video]${cr}\n${missing.join("\n")}\n`;
+  return `${out.join("\n")}${tail}[${sectionName}]${cr}\n${missing.join("\n")}\n`;
 }
 
 /** Puts `backup` over `preferences` whole (through a temporary file) and removes the backup. Returns false when there is no backup. */
@@ -107,3 +107,8 @@ export const alive = (pid: number) => {
     return (error as NodeJS.ErrnoException).code === "EPERM";
   }
 };
+
+/** Warcraft 3.0.1's installed Graphics page maps SD/HD/DE to [Misc] hd=0/1/2. */
+export function withGraphicsMode(text: string, mode: "classic" | "reforged" | "definitive"): string {
+  return withDisplaySettings(text, { hd: String({ classic: 0, reforged: 1, definitive: 2 }[mode]) }, "Misc");
+}
