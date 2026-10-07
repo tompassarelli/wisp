@@ -1,3 +1,72 @@
+diff --git a/renderer/modelRenderer.ts b/renderer/modelRenderer.ts
+index a238c73..8085824 100644
+--- a/renderer/modelRenderer.ts
++++ b/renderer/modelRenderer.ts
+@@ -213,6 +213,7 @@ const GPU_LAYER_PROPS: [string, GPUBlendState, GPUDepthStencilState][] = [['none
+ 
+ export class ModelRenderer {
+     private isHD: boolean;
++    private hasWeightedSkin: boolean;
+ 
+     private canvas: HTMLCanvasElement;
+     private gl: WebGL2RenderingContext | WebGLRenderingContext;
+@@ -348,7 +349,9 @@ export class ModelRenderer {
+     private gpuFSUniformsBuffers: GPUBuffer[][] = [];
+ 
+     constructor(model: Model) {
+-        this.isHD = model.Geosets?.some(it => it.SkinWeights?.length > 0);
++        this.hasWeightedSkin = model.Geosets?.some(it => it.SkinWeights?.length > 0);
++        this.isHD = model.Materials.some(material => material.Shader === 'Shader_HD_DefaultUnit' ||
++            material.Layers.some(layer => layer.ShaderTypeId === 1));
+ 
+         this.shaderProgramLocations = {
+             vertexPositionAttribute: null,
+@@ -611,7 +614,8 @@ export class ModelRenderer {
+     public initGL (glContext: WebGL2RenderingContext | WebGLRenderingContext): void {
+         this.gl = glContext;
+         // Max bones + MV + P
+-        this.softwareSkinning = this.gl.getParameter(this.gl.MAX_VERTEX_UNIFORM_VECTORS) < 4 * (MAX_NODES + 2);
++        this.softwareSkinning = !this.isHD && this.hasWeightedSkin ||
++            this.gl.getParameter(this.gl.MAX_VERTEX_UNIFORM_VECTORS) < 4 * (MAX_NODES + 2);
+         this.anisotropicExt = (
+             this.gl.getExtension('EXT_texture_filter_anisotropic') ||
+             this.gl.getExtension('MOZ_EXT_texture_filter_anisotropic') ||
+@@ -1739,17 +1743,27 @@ export class ModelRenderer {
+ 
+         for (let i = 0; i < buffer.length; i += 3) {
+             const index = i / 3;
+-            const group = geoset.Groups[geoset.VertexGroup[index]];
+-
+             vec3.set(tempPos, geoset.Vertices[i], geoset.Vertices[i + 1], geoset.Vertices[i + 2]);
+             vec3.set(tempSum, 0, 0, 0);
+-            for (let j = 0; j < group.length; ++j) {
+-                vec3.add(
+-                    tempSum, tempSum,
+-                    vec3.transformMat4(tempVec3, tempPos, this.rendererData.nodes[group[j]].matrix)
+-                );
++            if (geoset.SkinWeights?.length > 0) {
++                const offset = index * 8;
++                for (let j = 0; j < 4; ++j) {
++                    const weight = geoset.SkinWeights[offset + 4 + j] / 255;
++                    if (weight === 0) continue;
++                    const node = this.rendererData.nodes[geoset.SkinWeights[offset + j]];
++                    vec3.scaleAndAdd(tempSum, tempSum, vec3.transformMat4(tempVec3, tempPos, node.matrix), weight);
++                }
++                vec3.copy(tempPos, tempSum);
++            } else {
++                const group = geoset.Groups[geoset.VertexGroup[index]];
++                for (let j = 0; j < group.length; ++j) {
++                    vec3.add(
++                        tempSum, tempSum,
++                        vec3.transformMat4(tempVec3, tempPos, this.rendererData.nodes[group[j]].matrix)
++                    );
++                }
++                vec3.scale(tempPos, tempSum, 1 / group.length);
+             }
+-            vec3.scale(tempPos, tempSum, 1 / group.length);
+             buffer[i]     = tempPos[0];
+             buffer[i + 1] = tempPos[1];
+             buffer[i + 2] = tempPos[2];
 diff --git a/renderer/shaders/webgl/prefilterEnv.fs.glsl b/renderer/shaders/webgl/prefilterEnv.fs.glsl
 index 25f5bdf..f766ed4 100644
 --- a/renderer/shaders/webgl/prefilterEnv.fs.glsl

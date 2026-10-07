@@ -3,7 +3,7 @@
 `war3-model.mjs` and `war3-model.d.mts` build
 4eb0da/war3-model's npm 4.0.1 source revision
 `542d884380c358b19db1b25f2d7d1072dd8c636f` with the adjacent source patch.
-The owning source commit is `beaa4ddef28d791753f0eaaeb6d21996b2c1e207`
+The owning source commit is `2d7b6490495240244808883876458a8bfb1bfad6`
 in `~/code/war3-model/worktrees/hd-prefilter-precision`.
 
 The HD environment prefilter shader reverses 32-bit sample indices.
@@ -13,6 +13,12 @@ then throws while initializing an HD model. The patch explicitly requests
 high integer precision and preserves the required uniform check. On the same
 Chrome WebGL2 context, the original and high-float-only shaders had no
 roughness location; high-integer-only and high-float-plus-integer shaders did.
+
+Warcraft's modern classic models also carry weighted bones with classic
+material layers. The renderer now identifies HD materials by their shader
+type, and draws weighted classic models through its existing WebGL software
+skin path, applying all four bone weights instead of averaging bone groups.
+This preserves the native classic texture layers without inventing PBR slots.
 
 Source: <https://github.com/4eb0da/war3-model>.
 License: MIT, Copyright (c) 2017-2023 4eb0da. The package retains LICENSE
