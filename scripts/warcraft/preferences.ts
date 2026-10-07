@@ -48,6 +48,12 @@ export function displayChanges(text: string, expected: DisplaySettings): Display
   return Object.entries(expected).flatMap(([key, value]) => (actual[key] === value ? [] : [{ key, expected: value, ...(actual[key] === undefined ? {} : { actual: actual[key] }) }]));
 }
 
+/** The recommended settings the file's [Video] section has no entry for: a value already there, the owner's choice, is never replaced. */
+export function absentSettings(text: string, recommended: DisplaySettings): DisplaySettings {
+  const actual = videoSettings(text);
+  return Object.fromEntries(Object.entries(recommended).filter(([key]) => actual[key] === undefined));
+}
+
 /** The file with the expected settings written into its [Video] section; every other line is kept as it is. */
 export function withDisplaySettings(text: string, expected: DisplaySettings): string {
   const lines = text.split("\n");
