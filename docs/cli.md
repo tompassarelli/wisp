@@ -156,6 +156,9 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--clients-file FILE` | The native clients configuration file | `integrity capture` |
 | `--four-fighters` | Capture the four-fighter match and rematch | `integrity capture` |
 | `--playable` | Capture a playable candidate match and rematch | `integrity capture` |
+| `--screen` | Capture native framebuffer samples on the stimulus clock | `integrity capture` |
+| `--count N` | How many samples to capture | `integrity capture --screen` |
+| `--region X,Y,WIDTH,HEIGHT` | The pixel rectangle to capture | `integrity capture --screen` |
 | `--functions` | Report functions in the worst frames | `perf census` |
 | `--frame N` | Inspect this recorded frame | `repro` |
 | `--diff-frame N\|previous` | Compare the inspected frame with this other frame | `repro` |
