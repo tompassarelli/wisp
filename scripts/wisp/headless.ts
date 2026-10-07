@@ -6,6 +6,7 @@
 // setmetatable, string.byte) are emulated; a hot reload's `load` returns the
 // entry it was published for. Plain functions, so tests use them without Effect.
 import { readFileSync } from "node:fs";
+import type { FrameDefinition } from "./frames";
 import { join } from "node:path";
 import type { ClientScope, HeadlessClient, LocalNatives, MapEntry, NativeBehaviors } from "../../src/headless/client";
 import { type NativeDeclarations, parseNativeDeclarations } from "../../src/headless/declarations";
@@ -26,6 +27,8 @@ export interface HeadlessMap {
   readonly localNatives?: LocalNatives;
   /** Natives the default stubs can't answer for this game. */
   readonly natives?: (client: HeadlessClient) => NativeBehaviors;
+  /** Frame definitions (wisp:docs/ui.md) whose trees BlzCreateFrame makes by name, as their generated FDF does in Warcraft. */
+  readonly frames?: readonly FrameDefinition[];
 }
 
 export interface HeadlessRuntime {
@@ -204,6 +207,7 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
         scope,
         ...options,
         ...(map.localNatives === undefined ? {} : { localNatives: map.localNatives }),
+        ...(map.frames === undefined ? {} : { frames: map.frames }),
         natives: (client) => ({ ...luaFunctions(client, bundles), ...map.natives?.(client) }),
       });
     },

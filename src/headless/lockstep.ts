@@ -5,6 +5,7 @@
 // calls. A hot reload goes through the map's own reloader, from the files the
 // host would write. Runtime-neutral, like client.ts.
 import { ackFile, formatManifest, hostFile, manifestFile } from "../runtime/gameFiles";
+import type { FrameTemplate } from "./frames";
 import { type Hash, type ModuleSet, ModulePublisher, type VersionFiles } from "../runtime/modules";
 import { type ClientFiles, type ClientScope, HeadlessClient, type LocalNatives, type MapEntry, type NativeBehaviors, type SyncMessage, WISP_LOCAL_NATIVES, describeCall, sameCall } from "./client";
 import type { NativeDeclarations } from "./declarations";
@@ -39,6 +40,8 @@ export interface LockstepOptions {
    * each client's last frame took, its arriving messages and its callbacks.
    */
   readonly cost?: (this: void) => number;
+  /** Frame definitions (wisp:docs/ui.md) whose trees BlzCreateFrame makes by name, as their generated FDF does in Warcraft. */
+  readonly frames?: readonly FrameTemplate[];
 }
 
 /**
@@ -106,6 +109,7 @@ export class Lockstep {
         ...(options.scope === undefined ? {} : { scope: options.scope }),
         ...(options.natives === undefined ? {} : { natives: options.natives }),
         ...(files === undefined ? {} : { files }),
+        ...(options.frames === undefined ? {} : { frames: options.frames }),
       }));
     }
     this.clients = clients;

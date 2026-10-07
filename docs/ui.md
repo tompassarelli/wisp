@@ -77,6 +77,15 @@ to a file of the map's source, and returns the archive entries a
 [MapBuild](../scripts/wisp/mapBuild.ts)'s `imports` take. Run it from the
 game's build before the map compiles, so the bindings exist when it does.
 
+## Headless clients
+
+A headless client (wisp:docs/headless.md) reads no FDF. Pass the definitions
+as `frames` in the game's `HeadlessMap` (or `LuaHeadlessMap`), and
+`BlzCreateFrame(name, ...)` makes the whole tree as Warcraft does: each child
+named, parented, sized and placed by its anchors, `TEXT` frames holding their
+static text. Clicks, shown text and hiding the root then behave in journeys as
+they do for hand-wired frames.
+
 ## Errors at build time
 
 `generateFrames` throws `FrameDefinitionError` listing every problem;

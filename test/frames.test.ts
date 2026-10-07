@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { FrameDefinitionError, frameDefinitionProblems, generateFrames, type FrameDefinition } from "../scripts/wisp/frames";
+import { FRAME_POINTS, Frames } from "../src/headless/frames";
 import { opponentSettings } from "./fixtures/frames/opponentSettings";
 
 test("the opponent-settings panel generates FDF, TOC and native bindings", () => {
@@ -69,4 +70,24 @@ test("a definition may inherit its own frames and declared templates", () => {
     ],
   };
   expect(generateFrames(definition).fdf).toContain('SetPoint LEFT, "PairLeft", RIGHT, 0.01, 0,');
+});
+
+test("a headless client makes a defined tree by name: named children under the root, placed by their anchors", () => {
+  const frames = new Frames(new Map(FRAME_POINTS.map(([name, fromLeft, fromTop]) => [name, [fromLeft, fromTop] as const])));
+  frames.define([opponentSettings]);
+  let id = 0;
+  const root = frames.create(() => ({ id: ++id, kind: "framehandle" }), "OpponentSettings", undefined, 3);
+  root.points.set("FRAMEPOINT_TOPLEFT", { x: 0.12, y: 0.44 });
+  const close = frames.named("OpponentSettingsClose", 3);
+  expect(close?.parent).toBe(root);
+  expect(frames.named("OpponentSettingsOpponentCaption", 3)?.text).toBe("Opponent");
+  expect(frames.named("OpponentSettingsClose", 0)).toBeUndefined();
+  // Close's top-left is the panel's plus (0.455, -0.009), 0.075 by 0.027.
+  const button = (frame: { type: string }) => frame.type === "GLUETEXTBUTTON";
+  expect(frames.at(0.12 + 0.455 + 0.01, 0.44 - 0.009 - 0.01, button)).toBe(close);
+  expect(frames.at(0.12 + 0.455 - 0.01, 0.44 - 0.009 - 0.01, button)).toBeUndefined();
+  expect(frames.shownText()).toEqual(["Opponent", "Difficulty"]);
+  root.visible = false;
+  expect(frames.shownText()).toEqual([]);
+  expect(frames.at(0.12 + 0.455 + 0.01, 0.44 - 0.009 - 0.01, button)).toBeUndefined();
 });

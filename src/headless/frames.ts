@@ -19,6 +19,8 @@ export interface Frame extends Handle {
   height: number;
   /** Absolute points, by framepointtype value. */
   readonly points: Map<unknown, { readonly x: number; readonly y: number }>;
+  /** Points relative to another frame, as a generated FDF's SetPoint lines place them. */
+  readonly anchors: Anchor[];
   destroyed: boolean;
 }
 
@@ -39,6 +41,39 @@ export const FRAME_POINTS: readonly (readonly [name: string, fromLeft: number, f
   ["FRAMEPOINT_BOTTOMRIGHT", 1, 1],
 ];
 
+/**
+ * The part of a frame definition (wisp:scripts/wisp/frames.ts, wisp:docs/ui.md)
+ * a headless client needs to make its tree; every FrameDefinition is one.
+ */
+export interface FrameTemplateNode {
+  readonly key: string;
+  readonly type: string;
+  readonly width?: number;
+  readonly height?: number;
+  readonly text?: string;
+  readonly points?: readonly { readonly point: string; readonly relative?: string; readonly relativePoint?: string; readonly x: number; readonly y: number }[];
+  readonly children?: readonly FrameTemplateNode[];
+}
+
+export interface FrameTemplate {
+  readonly name: string;
+  readonly width: number;
+  readonly height: number;
+  readonly children: readonly FrameTemplateNode[];
+}
+
+/** A SetPoint: this frame's point sits at the relative frame's point, offset. */
+export interface Anchor {
+  readonly point: string;
+  readonly relative: Frame;
+  readonly relativePoint: string;
+  readonly x: number;
+  readonly y: number;
+}
+
+/** Each point's place on a frame by its FDF name, such as TOPLEFT. */
+const NAMED_POINTS = new Map(FRAME_POINTS.map(([name, fromLeft, fromTop]) => [name.slice("FRAMEPOINT_".length), [fromLeft, fromTop] as const]));
+
 /** A text box's character limit until the map sets one. */
 const DEFAULT_TEXT_LIMIT = 4096;
 
@@ -48,6 +83,7 @@ type Rectangle = readonly [number, number, number, number];
 export class Frames {
   private readonly all: Frame[] = [];
   private focused: Frame | undefined;
+  private readonly templates = new Map<string, FrameTemplate>();
 
   /**
    * `points`: each framepointtype constant's value as the map's code sees it,
@@ -58,10 +94,46 @@ export class Frames {
   add(handle: Handle, type: string, name: string, parent: Frame | undefined, context: number): Frame {
     const frame: Frame = {
       ...handle, type, name, context, parent, text: "", visible: true, enabled: true, level: 0, textLimit: DEFAULT_TEXT_LIMIT,
-      width: 0, height: 0, points: new Map(), destroyed: false,
+      width: 0, height: 0, points: new Map(), anchors: [], destroyed: false,
     };
     this.all.push(frame);
     return frame;
+  }
+
+  /** Frame trees BlzCreateFrame makes by name, as the FDF wisp:scripts/wisp/frames.ts generates for them loads in Warcraft. */
+  define(definitions: readonly FrameTemplate[]): void {
+    for (const definition of definitions) this.templates.set(definition.name, definition);
+  }
+
+  /** BlzCreateFrame: a defined tree's root with every descendant, sized, placed and named as its FDF does; otherwise one frame. */
+  create(handle: (this: void) => Handle, name: string, parent: Frame | undefined, context: number): Frame {
+    const root = this.add(handle(), name, name, parent, context);
+    const definition = this.templates.get(name);
+    if (definition === undefined) return root;
+    root.width = definition.width;
+    root.height = definition.height;
+    const byKey = new Map<string, Frame>([["root", root]]);
+    const placed: (readonly [FrameTemplateNode, Frame])[] = [];
+    const make = (nodes: readonly FrameTemplateNode[], owner: Frame) => {
+      for (const node of nodes) {
+        const frame = this.add(handle(), node.type, definition.name + node.key.charAt(0).toUpperCase() + node.key.slice(1), owner, context);
+        frame.width = node.width ?? 0;
+        frame.height = node.height ?? 0;
+        if (node.type === "TEXT" && node.text !== undefined) frame.text = node.text;
+        byKey.set(node.key, frame);
+        placed.push([node, frame]);
+        make(node.children ?? [], frame);
+      }
+    };
+    make(definition.children, root);
+    for (const [node, frame] of placed) {
+      for (const anchor of node.points ?? []) {
+        const relative = anchor.relative === undefined ? frame.parent : byKey.get(anchor.relative);
+        if (relative === undefined) continue;
+        frame.anchors.push({ point: anchor.point, relative, relativePoint: anchor.relativePoint ?? anchor.point, x: anchor.x, y: anchor.y });
+      }
+    }
+    return root;
   }
 
   /** A frame the map made by name, if one is alive. */
@@ -104,9 +176,20 @@ export class Frames {
   private rectangle(frame: Frame): Rectangle | undefined {
     const corners: [number, number, number, number] = [0, 0, 0, 0];
     let found = 0;
+    const placed: (readonly [readonly [number, number], { readonly x: number; readonly y: number }])[] = [];
     for (const [point, at] of frame.points) {
       const share = this.points.get(point);
-      if (share === undefined) continue;
+      if (share !== undefined) placed.push([share, at]);
+    }
+    for (const anchor of frame.anchors) {
+      const share = NAMED_POINTS.get(anchor.point);
+      const relativeShare = NAMED_POINTS.get(anchor.relativePoint);
+      const relative = this.rectangle(anchor.relative);
+      if (share === undefined || relativeShare === undefined || relative === undefined) continue;
+      const [left, top, right, bottom] = relative;
+      placed.push([share, { x: left + relativeShare[0] * (right - left) + anchor.x, y: top - relativeShare[1] * (top - bottom) + anchor.y }]);
+    }
+    for (const [share, at] of placed) {
       const left = at.x - share[0] * frame.width;
       const top = at.y + share[1] * frame.height;
       if (found === 0) {
