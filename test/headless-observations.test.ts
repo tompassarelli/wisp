@@ -183,6 +183,47 @@ test("sound log records every creation and repeated start with the current param
   expect(client.log.filter(call => call.name.startsWith("StartSound"))).toHaveLength(3);
 });
 
+test("released sound records disappear, while playing and looping sounds finish before release", () => {
+  const clients = runtime.clients({ start: () => {}, install: () => {} }, [0]);
+  clients.start();
+  const client = clients.client(0);
+  const sounds = Reflect.get(client, "sounds") as Map<unknown, unknown>;
+  client.run(() => {
+    for (let index = 0; index < 1000; index++) {
+      const sound = CreateSound("released.wav", false, false, false, 0, 0, "");
+      KillSoundWhenDone(sound);
+    }
+  });
+  expect(sounds.size).toBe(0);
+  expect(client.missingNatives.filter(({ native }) => native === "KillSoundWhenDone")).toEqual([]);
+  let playing: sound;
+  let loop: sound;
+  client.run(() => {
+    playing = CreateSound("playing.wav", false, false, false, 0, 0, "");
+    SetSoundDuration(playing, 1000);
+    SetSoundPitch(playing, 2);
+    StartSound(playing);
+    KillSoundWhenDone(playing);
+    loop = CreateSound("loop.wav", true, false, false, 0, 0, "");
+    SetSoundDuration(loop, 100);
+    StartSound(loop);
+    KillSoundWhenDone(loop);
+  });
+  clients.frames(29);
+  client.run(() => expect(GetSoundIsPlaying(playing)).toBe(true));
+  clients.frames(2);
+  client.run(() => {
+    expect(GetSoundIsPlaying(playing)).toBe(false);
+    expect(GetSoundIsPlaying(loop)).toBe(true);
+    StopSound(loop, false, false);
+    expect(GetSoundIsPlaying(loop)).toBe(false);
+  });
+  expect(sounds.size).toBe(0);
+  const checksum = client.checksum();
+  client.soundLog.length = 0;
+  expect(client.checksum()).toBe(checksum);
+});
+
 test("journey observations run after all same-frame events without changing calls or checksums", () => {
   const map = { start: () => {
     const trigger = CreateTrigger();
