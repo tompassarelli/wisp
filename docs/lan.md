@@ -15,7 +15,7 @@ game. It isn't for cheating. The terms are in
 
 | Command | What it does |
 | --- | --- |
-| `wisp lan setup --from INSTALL [--pairs N]` | Creates the pool's clients from an existing Warcraft III install folder (the one holding `_retail_`). See "Setting up". |
+| `wisp lan setup --from INSTALL [--pairs N \| --pair K...]` | Creates the pool's clients from an existing Warcraft III install folder (the one holding `_retail_`): pairs 0..N-1, or only the pairs named, leaving clients other runners use alone. See "Setting up". |
 | `wisp lan pool [--pairs N \| --pair K...] [--pool-profile parity\|visual\|hfr[,...]] [--fps N] [--seconds S]` | Runs up to N pairs, each admitted by the machine-capacity helper. It stays in the foreground; Ctrl-C stops the pool. |
 | `wisp lan fresh MAP [--pair K] [--computers N] [--turn-ms MS]` | Hosts MAP on pair K, switches both clients to LAN, joins them, and returns once the match plays. It prints the game's action log. |
 | `wisp lan status [--pair K]` | Each pair's clients and processes, and its game: phase, turns, desyncs, players. |
@@ -110,6 +110,9 @@ available. The agent stops its games when it is stopped, or when its pair's
 session ends.
 
 - `--pair K` (repeated) picks which pairs start, in that order of admission.
+- Several pools may run at once, each on its own pairs (one per agent). A
+  pool merges its pairs into `pool.json` and `clients.json`, keeping every
+  other pair whose agent socket exists, so starting pair 5 never unlists pair 3.
 - `--profile` takes one profile, or one per pair separated by commas; the last
   one repeats.
 
