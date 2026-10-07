@@ -193,6 +193,13 @@ file and restore after. A test can also drive the `Lockstep` directly:
 `reload()`, and `everywhere(body)` to run code, such as an `install()`, in every
 client on one frame. `client.run(body)` runs code in one client.
 
+`client.key(player, key, modifiers, down)` delivers that player's key event.
+For the player's own client it also updates the held state read by
+`BlzIsKeyPressed`, even if no trigger registered the key. Other clients receive
+the event without acquiring the local held key. A press and release entirely
+between callbacks leaves polling neutral, as in Warcraft; hold across a frame
+when testing callback polling.
+
 The map's modules load once for every client. While a client runs, each
 global whose name starts with one of the game's prefixes, or `__wisp`, is that
 client's; module locals are shared. Map state that must survive a reload is

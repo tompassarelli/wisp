@@ -13,6 +13,7 @@ No Warcraft running? The [headless runtime](headless.md) (wisp:docs/headless.md)
 runs your map's real bundle in simulated clients, in Bun and in 32-bit Lua:
 desyncs between clients, error reports, hot reloads and what a player would see
 wrong, in under a second for Smashcraft's two-client, 600-frame quick match.
+Local held-key polling is modeled separately from other players' key events.
 Use it before reaching for the signed-in clients. [`wisp soak`](soak.md)
 (wisp:docs/soak.md) plays hundreds of its matches, computers and a fuzzed
 controller against each other, and keeps a repro file for each problem found.
