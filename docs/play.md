@@ -184,8 +184,10 @@ A game can route `wisp play --standalone` to `runStandalone` from
 `wisp/scripts/wisp/standalone`. It opens Chrome in a separate window and runs
 the map's headless callbacks once per frame, paced at 60 steps per second.
 Models, textures, camera and UI use the same renderer as headless captures.
-The asset reader supplies private map imports and installed Warcraft assets;
-sound labels resolve through the installed sound tables. Assets remain
+The asset reader supplies private map imports and installed Warcraft assets.
+Live frames snapshot only visible UI, including each frame's parent visibility;
+requested captures retain the full scene snapshot.
+Sound labels resolve through the installed sound tables. Assets remain
 outside Wisp. Closing the window closes the game session.
 
 ```ts

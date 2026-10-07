@@ -199,13 +199,15 @@ export class Frames {
   }
 
   /** Visual properties copied in creation order, including passive frames. */
-  snapshot(): FrameSnapshot[] {
+  snapshot(options: { readonly visibleOnly?: boolean } = {}): FrameSnapshot[] {
     const snapshots: FrameSnapshot[] = [];
     for (const frame of this.all) {
       if (frame.destroyed) continue;
+      const visible = this.shown(frame);
+      if (options.visibleOnly && (!visible || frame.alpha <= 0)) continue;
       snapshots.push({ handle: { kind: frame.kind, id: frame.id }, name: frame.name, type: frame.type,
         parentId: frame.parent?.id, rectangle: this.rectangle(frame), text: frame.text, texture: frame.texture,
-        color: frame.color, textColor: frame.textColor, alpha: frame.alpha, visible: this.shown(frame), level: frame.level });
+        color: frame.color, textColor: frame.textColor, alpha: frame.alpha, visible, level: frame.level });
     }
     return snapshots;
   }
