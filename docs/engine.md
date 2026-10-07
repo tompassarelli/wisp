@@ -287,7 +287,7 @@ Offsets live in one data file, wisp:scripts/wisp/engine/offsets.json, keyed by
 the executable's file version (for example `3.0.0.24268`). A build with no
 entry makes live commands stop with that message. To add one:
 
-1. On a running client of the new build, run
+1. Start a map on a client of the new build, then run
    `wisp engine locate --client a`. It scans the first 64 MiB of `.data` for a
    pointer to a table in the known layout whose sampled live agents hold their
    own tag, then prints the entry. Add `--trace 3` on an offline client to also
@@ -295,7 +295,13 @@ entry makes live commands stop with that message. To add one:
    free head.
 2. Copy the entry into offsets.json. Copy any `roles` that are still valid
    only after checking them with `watch` stacks.
-3. If `locate` finds nothing, the table's own layout moved. Re-derive it by hand:
+3. If `locate` finds nothing, read its failed signature checks: table header,
+   entry count, birth counter, free-list head, entries, live agents, or agent
+   tags and births. An empty scan before the map initializes does not mean
+   the layout moved. This happened during 3.0.1.24342 startup: the process
+   existed but had not created a window or initialized a map. Confirm the
+   client has entered a match before investigating changed offsets. If an
+   initialized match still fails the known layout, re-derive it by hand:
    - Dump a client's decrypted image (its pages through `/proc/PID/mem`).
    - Find `War3 next presence tag %05d next birth tag %05d` in `.rdata` and
      the code that formats it (the Desync.txt assertion builder, 24268 RVA

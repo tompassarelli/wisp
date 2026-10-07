@@ -8,7 +8,7 @@ import { OFFSETS_FILE, offsetsEntry, offsetsFor, parseOffsets } from "../scripts
 import { closureFunction, frameText, globalFunctionNames, isLuaState, luaStack, scriptFuncDefinition } from "../scripts/wisp/engine/lua";
 import { stopWatch } from "../scripts/wisp/engine/stopWatch";
 import { followsCall, parsePerfData, sampleFrames } from "../scripts/wisp/engine/perfData";
-import { PresenceTracker, demangle, scanForPresenceTable } from "../scripts/wisp/engine/presence";
+import { PresenceTracker, checkPresenceTable, demangle, presenceScanFailure, scanForPresenceTable } from "../scripts/wisp/engine/presence";
 import { diffPresenceLogs, eventLine, parsePresenceLog } from "../scripts/wisp/engine/presenceLog";
 
 const fixtures = join(import.meta.dir, "fixtures/engine");
@@ -170,7 +170,7 @@ test("a synthetic client: image base, the presence table found by scanning .data
   const known = offsetsFor("3.0.0.24268");
   if (typeof known === "string") throw new Error(known);
   const layout = { ...known, sizeOfImage: SIZE_OF_IMAGE, presenceTable: TABLE_RVA };
-  const found = scanForPresenceTable(memory, maps, BASE, DATA_RVA, 0x2000, layout);
+  const { candidates: found } = scanForPresenceTable(memory, maps, BASE, DATA_RVA, 0x2000, layout);
   expect(found.map(({ rva, table: at, header: { count, births } }) => [rva, at, count, births])).toEqual([[TABLE_RVA, table, 32, 40]]);
 
   const tracker = new PresenceTracker(memory, BASE, layout);
@@ -192,6 +192,30 @@ test("a synthetic client: image base, the presence table found by scanning .data
     "1.500 born 40 tag 32 CAgentBaseAbs owner CScriptFunc",
   ]);
   expect(demangle(".?AV?$TSList@VCFoo@@@@")).toBe(".?AV?$TSList@VCFoo@@@@");
+});
+
+test("locate names a failed signature and does not infer a layout change before map startup", () => {
+  const { memory, maps, table } = syntheticClient();
+  const known = offsetsFor("3.0.0.24268");
+  if (typeof known === "string") throw new Error(known);
+  const layout = { ...known, sizeOfImage: SIZE_OF_IMAGE };
+  expect(checkPresenceTable(memory, maps, table, layout)).toMatchObject({ matching: 32, sampled: 32 });
+  memory.u32(table + 0x30, 0);
+  const scan = scanForPresenceTable(memory, maps, BASE, DATA_RVA, 0x2000, layout);
+  expect(scan.candidates).toEqual([]);
+  expect(scan.scannedBytes).toBe(0x2000);
+  expect(presenceScanFailure(scan)).toContain("entry count: 1");
+  expect(presenceScanFailure(scan)).toContain("Start a map");
+  expect(presenceScanFailure(scan)).not.toContain("layout moved");
+  memory.u32(table + 0x30, 32);
+  memory.u32(table + 0x80, 0);
+  expect(checkPresenceTable(memory, maps, table, layout)).toBe("birth counter");
+  memory.u32(table + 0x80, 40);
+  memory.i32(table + 0x70, 32);
+  expect(checkPresenceTable(memory, maps, table, layout)).toBe("free-list head");
+  memory.i32(table + 0x70, -1);
+  for (let tag = 0; tag < 32; tag++) memory.u32(AGENTS + tag * 0x100 + 0x20, tag + 1);
+  expect(checkPresenceTable(memory, maps, table, layout)).toBe("agent tags and births");
 });
 
 test("poll logs align by birth number: a birth made at another moment on one client stands out", () => {

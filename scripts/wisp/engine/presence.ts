@@ -182,13 +182,28 @@ export interface PresenceCandidate {
   readonly matching: number;
 }
 
+export type PresencePattern = "readable table header" | "entry count" | "birth counter" | "free-list head" | "readable entries" | "live agents" | "agent tags and births";
+
+export interface PresenceScan {
+  readonly candidates: readonly PresenceCandidate[];
+  readonly scannedBytes: number;
+  readonly rejected: ReadonlyMap<PresencePattern, number>;
+}
+
+export function presenceScanFailure(scan: PresenceScan): string {
+  const checks = [...scan.rejected].map(([pattern, count]) => `${pattern}: ${count}`).join(", ") || "no readable heap pointers";
+  return `no pointer in .data leads to a presence table in the known layout (${scan.scannedBytes} bytes read; failed checks: ${checks}). Start a map before locating; if a match is already running, compare these checks with the build fixture (wisp:docs/engine.md#a-new-warcraft-build)`;
+}
+
 /**
  * Finds the presence table without knowing where it is: every pointer in the
  * image's writable data from `start` for `span` bytes that leads to a header
  * in `layout`'s shape whose live entries are agents holding their own tags.
  */
-export function scanForPresenceTable(memory: Memory, maps: readonly Mapping[], base: number, start: number, span: number, layout: EngineOffsets): PresenceCandidate[] {
+export function scanForPresenceTable(memory: Memory, maps: readonly Mapping[], base: number, start: number, span: number, layout: EngineOffsets): PresenceScan {
   const found: PresenceCandidate[] = [];
+  const rejected = new Map<PresencePattern, number>();
+  let scannedBytes = 0;
   const CHUNK = 0x100000;
   const imageEnd = base + layout.sizeOfImage;
   for (let offset = 0; offset < span; offset += CHUNK) {
@@ -199,32 +214,36 @@ export function scanForPresenceTable(memory: Memory, maps: readonly Mapping[], b
     } catch {
       continue;
     }
+    scannedBytes += chunk.length;
     for (let at = 0; at + 8 <= chunk.length; at += 8) {
       const table = Number(chunk.readBigUInt64LE(at));
       if (table % 8 !== 0 || (table >= base && table < imageEnd) || !readableAt(maps, table)) continue;
       const candidate = checkPresenceTable(memory, maps, table, layout);
-      if (candidate !== undefined) found.push({ ...candidate, rva: start + offset + at });
+      if (typeof candidate === "string") rejected.set(candidate, (rejected.get(candidate) ?? 0) + 1);
+      else found.push({ ...candidate, rva: start + offset + at });
     }
   }
-  return found;
+  return { candidates: found, scannedBytes, rejected };
 }
 
-/** `table` as a presence table in `layout`'s shape, or undefined when it isn't one. */
-export function checkPresenceTable(memory: Memory, maps: readonly Mapping[], table: number, layout: EngineOffsets): Omit<PresenceCandidate, "rva"> | undefined {
+/** `table` as a presence table in `layout`'s shape, or the first signature check it fails. */
+export function checkPresenceTable(memory: Memory, maps: readonly Mapping[], table: number, layout: EngineOffsets): Omit<PresenceCandidate, "rva"> | PresencePattern {
   let header: PresenceHeader;
   try {
     header = readHeader(memory, table, layout);
   } catch {
-    return undefined;
+    return "readable table header";
   }
-  if (header.count < 16 || header.count > 1 << 22 || header.births < header.count || header.freeHead < -1 || header.freeHead >= header.count) return undefined;
-  if (!readableAt(maps, header.entries)) return undefined;
+  if (header.count < 16 || header.count > 1 << 22) return "entry count";
+  if (header.births < header.count) return "birth counter";
+  if (header.freeHead < -1 || header.freeHead >= header.count) return "free-list head";
+  if (!readableAt(maps, header.entries)) return "readable entries";
   const sample = Math.min(header.count, 256);
   let entries: Buffer;
   try {
     entries = memory.read(header.entries, sample * ENTRY);
   } catch {
-    return undefined;
+    return "readable entries";
   }
   let sampled = 0;
   let matching = 0;
@@ -241,5 +260,6 @@ export function checkPresenceTable(memory: Memory, maps: readonly Mapping[], tab
       // An unreadable agent counts against the candidate.
     }
   }
-  return sampled >= 8 && matching >= sampled * 0.9 ? { table, header, sampled, matching } : undefined;
+  if (sampled < 8) return "live agents";
+  return matching >= sampled * 0.9 ? { table, header, sampled, matching } : "agent tags and births";
 }

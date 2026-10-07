@@ -25,7 +25,7 @@ import { diffPresenceLogs, parsePresenceLog } from "../engine/presenceLog";
 import { alignBirths, headerStart, isActionLog, parseActionLog } from "../engine/actionLog";
 import { actions } from "../lan/actionsCommand";
 import { type LuaFrame, findLuaStates, findLuaThreads, frameText, globalFunctionNames, luaStack, mainLuaState } from "../engine/lua";
-import { PresenceTracker, presenceTable, readHeader, scanForPresenceTable } from "../engine/presence";
+import { PresenceTracker, presenceScanFailure, presenceTable, readHeader, scanForPresenceTable } from "../engine/presence";
 import { stopWatch } from "../engine/stopWatch";
 import { type Frame, parsePerfData, sampleFrames } from "../engine/perfData";
 import { toTypeScript } from "../../sourceMaps";
@@ -299,15 +299,16 @@ const locate = (clientsFile: string): Command => (args) => Effect.gen(function*(
   yield* Effect.gen(function*() {
     const known = parseOffsets(readFileSync(OFFSETS_FILE, "utf8"));
     const existing = known.get(client.exe.version);
-    // The table's own layout is assumed unchanged from the newest known build; the scan fails when it moved.
+    // A new build starts with the newest known layout; a map must initialize the table before it can match.
     const layout = existing ?? [...known.values()].at(-1);
     if (layout === undefined) return yield* new EngineFailure({ problem: `${OFFSETS_FILE} has no entry to take the table layout from` });
     const data = client.exe.header.sections.find(({ name }) => name === ".data");
     if (data === undefined) return yield* new EngineFailure({ problem: `${client.exe.path} has no .data section` });
     const span = Math.min(data.virtualSize, yield* number(args, "span", 0x4000000));
     yield* Console.log(`${client.name}: Warcraft III ${client.exe.version}, pid ${client.pid}, image 0x${client.base.toString(16)}; scanning 0x${span.toString(16)} bytes of .data for the presence table`);
-    const candidates = scanForPresenceTable(client.memory, client.maps, client.base, data.rva, span, { ...layout, sizeOfImage: client.exe.header.sizeOfImage });
-    if (candidates.length === 0) return yield* new EngineFailure({ problem: "no pointer in .data leads to a presence table in the known layout; the layout moved, so derive it by hand (wisp:docs/engine.md#a-new-warcraft-build)" });
+    const scan = scanForPresenceTable(client.memory, client.maps, client.base, data.rva, span, { ...layout, sizeOfImage: client.exe.header.sizeOfImage });
+    const { candidates } = scan;
+    if (candidates.length === 0) return yield* new EngineFailure({ problem: presenceScanFailure(scan) });
     for (const candidate of candidates) {
       yield* Console.log(`  rva 0x${candidate.rva.toString(16)} -> table 0x${candidate.table.toString(16)}: entries ${candidate.header.count}, free head ${candidate.header.freeHead}, births ${candidate.header.births}; ${candidate.matching}/${candidate.sampled} sampled agents hold their own tag`);
     }
