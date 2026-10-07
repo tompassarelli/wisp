@@ -351,6 +351,14 @@ and pitch. `--sound-cues FILE.json` writes the complete creation/play log;
 from `wisp/src/headless/client`. Creating a sound without starting it fails a
 "plays the cue" assertion. This checks the game's calls, not audibility.
 
+`KillSoundWhenDone` drops an idle sound's retained state immediately. Playing
+sounds retain it until their `SetSoundDuration` milliseconds have elapsed at
+the current pitch; a loop waits for `StopSound`. Stopping with `killWhenDone`
+also releases the state. Duration starts at zero when no duration was supplied,
+because the cue-only emulator does not decode sound assets. This models release
+of declared playback and preserves the creation/start log; native audio timing
+and fades still require the game.
+
 | Check | Can close headless when | Still needs native |
 | --- | --- | --- |
 | A strike's model and pose on its first active frame | The same input replay and frame have a matched native comparison for that fighter/clip | Warcraft animation blending or a newly unsupported clip |
