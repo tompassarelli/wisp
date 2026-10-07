@@ -68,7 +68,7 @@ program can register it; "game" means the consuming game defines it.
 | `menus` | Warcraft III's menus through Wisp's menu page | `install`, `remove`, `listen`, `host`, `join`, `start`, `leave` | Wisp |
 | `online` | Direct play over Battle.net by join code | `setup`, `host`, `join` | game |
 | `lan` | The offline LAN client pool | `setup`, `pool`, `fresh`, `status`, `end` | Wisp |
-| `engine` | Warcraft III's engine inside a client, for desyncs | `desync`, `poll`, `diff`, `trace`, `locate`, `actions` | Wisp |
+| `engine` | Warcraft III's engine inside a client, for desyncs and offline scripted runs | `desync`, `poll`, `diff`, `trace`, `locate`, `actions`, `drive` | Wisp |
 | `headless` | A journey in simulated clients | (journey name) | Wisp |
 | `soak` | Many headless matches by computers and a fuzzed controller | (session) | Wisp |
 | `perf` | Predicted frame cost | (run name), `compare`, `native`, `fit`, `budget`, `profile`, `census` | Wisp |
