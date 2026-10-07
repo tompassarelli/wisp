@@ -258,13 +258,19 @@ export function groupReports(reports: readonly DesyncReport[], windowMs = 10_000
   return groups;
 }
 
-/** Why the poller can't read these clients now, as one line naming the sysctl, or undefined when it can read every one. */
-export function pollerProblem(scope: string | undefined, readable: (client: EngineClient) => boolean, clients: readonly EngineClient[]): string | undefined {
+/**
+ * The clients the poller can read, and for the rest one line naming the
+ * sysctl. At ptrace_scope 0 it reads every client; at 1 only those this
+ * process launched, so a client not running yet is followed in case this
+ * session's doctor launches it (the poller's attach decides then).
+ */
+export function pollerAccess<C extends EngineClient>(scope: string | undefined, readable: (client: C) => boolean, clients: readonly C[]): { readonly readable: readonly C[]; readonly problem: string | undefined } {
   const value = scope?.trim();
-  if (value === undefined || value === "0") return undefined;
-  const blocked = clients.filter((client) => !readable(client)).map(({ name }) => name);
-  if (blocked.length === 0) return undefined;
-  return `desync autopsy: no presence poller for client ${blocked.join(", ")}: kernel.yama.ptrace_scope=${value} lets only a client's launcher read it (with the owner's agreement: sudo sysctl kernel.yama.ptrace_scope=0); Desync.log autopsy only`;
+  if (value === undefined || value === "0") return { readable: clients, problem: undefined };
+  const blocked = clients.filter((client) => !readable(client));
+  const problem = blocked.length === 0 ? undefined
+    : `desync autopsy: no presence poller for client ${blocked.map(({ name }) => name).join(", ")}: kernel.yama.ptrace_scope=${value} lets only the process that launched a client read it (with the owner's agreement: sudo sysctl kernel.yama.ptrace_scope=0); Desync.log autopsy only`;
+  return { readable: clients.filter((client) => readable(client)), problem };
 }
 
 const readScope = () => {
@@ -275,10 +281,10 @@ const readScope = () => {
   }
 };
 
-/** A client this process launched (its ancestor) can be read at ptrace_scope 1. */
+/** At ptrace_scope 1: a client this process launched (its ancestor), or one not running yet that this session may launch. */
 const launchedHere = (client: EngineClient) => {
   const game = findGameProcesses(client.prefix)[0];
-  return game !== undefined && isAncestorOf(game.pid);
+  return game === undefined || isAncestorOf(game.pid);
 };
 
 type DeclaredClient = Pick<Client, "name" | "documents">;
@@ -352,12 +358,12 @@ export const withAutopsy = <A, E, R>(options: AutopsyOptions, run: Effect.Effect
   let pollDirectory: string | undefined;
   let poller: { readonly stop: () => Promise<void> } | undefined;
   if (options.poll !== false) {
-    const problem = pollerProblem(readScope(), launchedHere, engineClients);
-    if (problem !== undefined) print(problem);
-    else {
+    const access = pollerAccess(readScope(), launchedHere, engineClients);
+    if (access.problem !== undefined) print(access.problem);
+    if (access.readable.length > 0) {
       pollDirectory = join(session, "presence");
-      poller = startPollThread(engineClients, pollDirectory, options.interval ?? 2);
-      print(`desync autopsy: reading client ${engineClients.map(({ name }) => name).join(", ")}'s presence tables, read-only, into ${pollDirectory}. ${DISCLAIMER}`);
+      poller = startPollThread(access.readable, pollDirectory, options.interval ?? 2);
+      print(`desync autopsy: reading client ${access.readable.map(({ name }) => name).join(", ")}'s presence tables, read-only, into ${pollDirectory}. ${DISCLAIMER}`);
     }
   }
   const findings: string[] = [];

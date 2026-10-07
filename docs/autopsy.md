@@ -42,13 +42,16 @@ code wraps any Effect with `withAutopsy({ clientsFile }, run)`
 ## What a session does
 
 1. **The presence poller.** At the start the session reads
-   `kernel.yama.ptrace_scope`. At `0`, or when this process launched the
-   client (an ancestor may read it at `1`), it starts `wisp engine`'s
-   [presence poller](engine.md) on every declared client in its own thread, so
-   timed input such as pad scripts keeps its timing. It prints one line saying
-   which clients it reads and where the logs go. Otherwise it prints one line
-   naming the sysctl and continues without it. The poller retries a client
-   that isn't running yet every 2 s.
+   `kernel.yama.ptrace_scope`. At `0` it starts `wisp engine`'s
+   [presence poller](engine.md) on every declared client, in its own thread so
+   that timed input such as pad scripts keeps its timing. At `1` only an
+   ancestor may read a game. The poller then follows the clients this
+   process launched, plus those not running yet, which this session's doctor
+   may launch. For each running client that another process launched, it
+   prints one line naming the sysctl, and the session goes on without
+   polling that client. It also prints one line saying which clients it reads
+   and where the logs go. The poller tries again every 2 s to attach to a
+   client that isn't running yet.
 2. **Report watch.** Each client's `Documents/Warcraft III/Errors` folder is
    listed at the start. Every 500 ms the session looks for new report folders
    holding a `Desync.txt` or `*_Desync.log`. It skips crash reports and waits
@@ -99,7 +102,9 @@ The class of a birth comes only from a poll that was running before the
 desync. The table is in memory, and the game frees what it reveals. Without the
 poller, run the next session with memory reads allowed: set
 `kernel.yama.ptrace_scope=0` for the debugging session with the owner's
-agreement, or launch the clients from a Wisp process. Then reproduce. On
+agreement. Or stop the clients and let the session's doctor launch them: a
+client launched by the session stays readable for that session, because
+pressure-vessel keeps the game under its launcher. Then reproduce. On
 Smashcraft #158, about half of integrity brawl starts desynced.
 
 ## Tests

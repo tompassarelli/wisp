@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, utimesS
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { DesyncReports, bornAs, classOf, groupReports, pollerProblem, runAutopsy, withAutopsy } from "../scripts/wisp/engine/autopsy";
+import { DesyncReports, bornAs, classOf, groupReports, pollerAccess, runAutopsy, withAutopsy } from "../scripts/wisp/engine/autopsy";
 
 // #158's desync on turn 921: the clients' Desync.logs (wisp engine's fixtures)
 // and Desync.txt reports, and both clients' presence polls over two games.
@@ -104,9 +104,11 @@ test("only reports written after the start count, crash reports are skipped, and
 
 test("the poller runs only where the machine lets it read the clients, and otherwise one line names the sysctl", () => {
   const clients = [{ name: "a", prefix: "/pa" }, { name: "b", prefix: "/pb" }];
-  expect(pollerProblem("0\n", () => false, clients)).toBeUndefined();
-  expect(pollerProblem("1\n", () => true, clients)).toBeUndefined();
-  const line = pollerProblem("1\n", (client) => client.name === "a", clients) ?? "";
+  expect(pollerAccess("0\n", () => false, clients)).toEqual({ readable: clients, problem: undefined });
+  expect(pollerAccess("1\n", () => true, clients)).toEqual({ readable: clients, problem: undefined });
+  const access = pollerAccess("1\n", (client) => client.name === "a", clients);
+  expect(access.readable.map(({ name }) => name)).toEqual(["a"]);
+  const line = access.problem ?? "";
   expect(line).toContain("client b");
   expect(line).toContain("kernel.yama.ptrace_scope=1");
   expect(line).toContain("sudo sysctl kernel.yama.ptrace_scope=0");
