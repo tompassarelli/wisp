@@ -194,6 +194,8 @@ step. Model initialization leaves animation clocks and particles unchanged;
 from the match's frame timing.
 The browser keeps one frame request pending while it draws the preceding scene.
 Each request advances one step; captures finish saving before the next request.
+It keeps animation callbacks registered throughout drawing and waits for a fresh
+callback to deliver each scene. Idle callbacks do not count as delivered frames.
 Sound labels resolve through the installed sound tables. Assets remain
 outside Wisp. Closing the window closes the game session.
 
