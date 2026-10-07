@@ -2,15 +2,21 @@
 // so TypeScriptToLua's defaults would change results there. This plugin:
 // - keeps literals written with a decimal point or exponent as Lua floats (1.0
 //   would print as the integer 1, and `x * 2.0` could stay an integer and
-//   overflow), matching Wurst's real literals;
+//   overflow), matching Wurst's real literals, and prints each non-integer one
+//   as a hexadecimal float, its exact binary32 value: Warcraft parsed the
+//   decimal 0.016666667 toward zero where rounding to nearest gives the
+//   binary32 the host uses (smashcraft's native pose rate, 7 October 2026),
+//   and a decimal that isn't exactly binary32 depends on the parser's
+//   rounding. Number rule TS9300 rejects a literal that isn't binary32 outside f32();
 // - compiles floorDiv and floorMod from src/sim/intMath.ts to Lua's exact
 //   integer `//` and `%`;
-// - compiles f32(a + b), f32(a - b) and f32(a * b) from src/sim/f32.ts to
-//   f32(a, b, operation), which rounds the exact result to nearest: Warcraft's
-//   raw + and * don't. A product with a power-of-two literal is exact and
-//   stays raw;
+// - compiles f32(a + b), f32(a - b), f32(a * b) and f32(a / b) from
+//   src/sim/f32.ts to f32(a, b, operation), which rounds the exact result to
+//   nearest: Warcraft's raw + and * can land an ulp toward zero, and its raw
+//   / an ulp away from nearest. A product with a power-of-two literal, and a
+//   quotient by one, is exact and stays raw;
 // - compiles any other f32(x), and Math.fround(x), binary32 rounding on the
-//   host, to x;
+//   host, to x, and f32(literal) to the literal's binary32 value;
 // - rejects code that would compile but compute differently in Warcraft, by
 //   the number rules in wisp:plugins/number-rules.ts.
 //
@@ -21,16 +27,38 @@ import { dirname, relative } from "node:path";
 import * as ts from "typescript";
 import * as tstl from "typescript-to-lua";
 import { LuaPrinter } from "typescript-to-lua";
-import { F32_ADD, F32_MULTIPLY, F32_SUBTRACT } from "../src/sim/f32";
+import { F32_ADD, F32_DIVIDE, F32_MULTIPLY, F32_SUBTRACT } from "../src/sim/f32";
 import { ROUNDING_HELPER_FILE, declarationsOf, isDeclaredIn, programNumberRules } from "./number-rules";
 
 const floatLiterals = new WeakSet<tstl.NumericLiteral>();
 
+/**
+ * A finite non-integer binary32 value as a Lua hexadecimal float: its
+ * significand as an integer and a binary exponent, which any parser reads
+ * exactly. Undefined for a value that isn't binary32.
+ */
+export function exactFloatText(value: number): string | undefined {
+  if (!Number.isFinite(value) || Number.isInteger(value) || Math.fround(value) !== value) return undefined;
+  let significand = Math.abs(value);
+  let exponent = 0;
+  while (!Number.isInteger(significand)) {
+    significand *= 2;
+    exponent--;
+  }
+  return `${value < 0 ? "-" : ""}0x${significand.toString(16)}p${exponent}`;
+}
+
 class WarcraftNumberPrinter extends LuaPrinter {
   override printNumericLiteral(expression: tstl.NumericLiteral) {
-    const text = String(expression.value);
-    if (floatLiterals.has(expression) && Number.isInteger(expression.value) && !/[eE]/.test(text)) {
+    const { value } = expression;
+    const text = String(value);
+    if (floatLiterals.has(expression) && Number.isInteger(value) && !/[eE]/.test(text)) {
       return this.createSourceNode(expression, `${text}.0`);
+    }
+    if (Number.isFinite(value) && !Number.isInteger(value)) {
+      // A decimal that isn't binary32 already failed number rule TS9300.
+      const exact = exactFloatText(value);
+      if (exact !== undefined) return this.createSourceNode(expression, exact);
     }
     return super.printNumericLiteral(expression);
   }
@@ -72,9 +100,29 @@ function roundedOperation(node: ts.CallExpression): { left: ts.Expression; right
       return { left, right, code: F32_SUBTRACT };
     case ts.SyntaxKind.AsteriskToken:
       return isPowerOfTwo(left) || isPowerOfTwo(right) ? undefined : { left, right, code: F32_MULTIPLY };
+    case ts.SyntaxKind.SlashToken:
+      return isPowerOfTwo(right) ? undefined : { left, right, code: F32_DIVIDE };
     default:
       return undefined;
   }
+}
+
+/** f32(0.1) is the binary32 nearest 0.1: a rounded literal becomes that value, -0.1 its negation. */
+function roundLiteral(expression: tstl.Expression): tstl.Expression {
+  if (tstl.isNumericLiteral(expression)) {
+    const rounded = tstl.setNodePosition(tstl.createNumericLiteral(Math.fround(expression.value)), tstl.getOriginalPos(expression));
+    floatLiterals.add(rounded);
+    return rounded;
+  }
+  if (tstl.isUnaryExpression(expression) && expression.operator === tstl.SyntaxKind.NegationOperator) {
+    const operand = roundLiteral(expression.operand);
+    return operand === expression.operand ? expression : tstl.setNodePosition(tstl.createUnaryExpression(operand, tstl.SyntaxKind.NegationOperator), tstl.getOriginalPos(expression));
+  }
+  if (tstl.isParenthesizedExpression(expression)) {
+    const inner = roundLiteral(expression.expression);
+    return inner === expression.expression ? expression : tstl.setNodePosition(tstl.createParenthesizedExpression(inner), tstl.getOriginalPos(expression));
+  }
+  return expression;
 }
 
 /** f32(x) and Math.fround(x): binary32 rounding the Lua runtime already performs. */
@@ -133,7 +181,7 @@ const plugin = ({ sourcePrefix = "" }: { readonly sourcePrefix?: string }): tstl
     [ts.SyntaxKind.CallExpression]: (node, context) => {
       if (isRounding(node, context.program)) {
         const rounded = roundedOperation(node);
-        if (rounded === undefined) return context.transformExpression(node.arguments[0]!);
+        if (rounded === undefined) return roundLiteral(context.transformExpression(node.arguments[0]!));
         const { left, right, code } = rounded;
         return tstl.createCallExpression(
           context.transformExpression(node.expression),

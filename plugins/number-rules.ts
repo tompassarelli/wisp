@@ -140,7 +140,7 @@ export function scanNumberRules<N extends RuleNode<N>>(syntax: RuleSyntax<N>, fi
       const text = node.getText();
       const value = Number(node.text);
       if (/[.eE]/.test(text) && Math.fround(value) !== value) {
-        // `f32(0.1)` names the binary32 nearest 0.1, which Warcraft's parser also picks.
+        // `f32(0.1)` names the binary32 nearest 0.1; the compiler prints that value exactly, since Warcraft's parser may pick another.
         let outer: N = node;
         while (syntax.isParenthesizedExpression(outer.parent) || (syntax.isPrefixUnaryExpression(outer.parent) && outer.parent.operator === kind.MinusToken)) {
           outer = outer.parent;

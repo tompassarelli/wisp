@@ -1,6 +1,7 @@
 // wisp:native/toward-zero.h against an exact oracle: every binary32
-// sum, difference and product the toward-zero Lua computes must be the
-// exact result truncated toward zero, computed here with integers. The Lua is
+// sum, difference, product and quotient the toward-zero Lua computes, and
+// every decimal numeral it reads, must be the exact result truncated toward
+// zero, computed here with integers. The Lua is
 // TOWARD_ZERO_LUA when set (CI builds it with make), else one built with nix in
 // build/toward-zero-lua (wisp:scripts/wisp/towardZeroLua.ts).
 import { expect, test } from "bun:test";
@@ -61,6 +62,15 @@ function product(a: number, b: number): number {
   return result === 0 && negative ? -0 : result;
 }
 
+function quotient(a: number, b: number): number {
+  const x = exact(a);
+  const y = exact(b);
+  const negative = x.sign * y.sign < 0n;
+  // 80 extra bits: truncating the floored quotient truncates the exact one.
+  const result = towardZero(negative, (x.significand << 80n) / y.significand, x.exponent - y.exponent - 80);
+  return result === 0 && negative ? -0 : result;
+}
+
 /** A binary32 value as a C hex float Lua reads exactly. */
 function hex(value: number): string {
   const { sign, significand, exponent } = exact(value);
@@ -101,14 +111,14 @@ function operands(): [number, number][] {
 
 const same = (actual: number, expected: number) => Object.is(actual, expected) || (Number.isNaN(actual) && Number.isNaN(expected));
 
-test("the toward-zero Lua's + - * are the exact results truncated toward zero, and / rounds to nearest", async () => {
+test("the toward-zero Lua's + - * / are the exact results truncated toward zero", async () => {
   expect(luaRounding(lua)).toBe("toward-zero");
   const pairs = operands();
   const program = [
     "for line in io.lines() do",
     "  local x, y = line:match('(%S+) (%S+)')",
     "  local a, b = tonumber(x), tonumber(y)",
-    "  print(string.format('%a %a %a %a', a + b, a - b, a * b, a / 2))",
+    "  print(string.format('%a %a %a %a', a + b, a - b, a * b, b ~= 0 and a / b or 0))",
     "end",
   ].join("\n");
   const run = Bun.spawnSync([lua, "-e", program], { stdin: new TextEncoder().encode(`${pairs.map(([a, b]) => `${hex(a)} ${hex(b)}`).join("\n")}\n`), stdout: "pipe", stderr: "pipe" });
@@ -117,13 +127,21 @@ test("the toward-zero Lua's + - * are the exact results truncated toward zero, a
   expect(lines.length).toBe(pairs.length);
   const wrong: string[] = [];
   pairs.forEach(([a, b], index) => {
-    const [added = "", subtracted = "", multiplied = "", halved = ""] = (lines[index] ?? "").split(" ");
-    const expected = [sum(a, b), sum(a, -b), product(a, b), Math.fround(a / 2)];
-    [added, subtracted, multiplied, halved].map(parseHex).forEach((actual, operation) => {
+    const [added = "", subtracted = "", multiplied = "", divided = ""] = (lines[index] ?? "").split(" ");
+    const expected = [sum(a, b), sum(a, -b), product(a, b), b === 0 ? 0 : quotient(a, b)];
+    [added, subtracted, multiplied, divided].map(parseHex).forEach((actual, operation) => {
       if (!same(actual, expected[operation] ?? NaN)) wrong.push(`${hex(a)} ${"+-*/"[operation]} ${hex(b)}: ${actual} instead of ${expected[operation]}`);
     });
   });
   expect(wrong.slice(0, 10)).toEqual([]);
   // Rounding to nearest gives 3 for both.
   expect(lines[3]?.split(" ").slice(0, 2)).toEqual(["0x1.8p+1", "0x1.7ffffep+1"]);
+});
+
+test("the toward-zero Lua reads a decimal numeral as its value truncated toward zero, and a hexadecimal float exactly", () => {
+  // 0.016666667 lies between binary32 0x1.11111p-6 and 0x1.111112p-6, nearer the upper; Warcraft read the lower.
+  const numerals = ["0.016666667", "0.1", "-0.1", "1.417", "0.10000000149011612", "0x1.11111p-6", "0xcccccdp-27"];
+  const run = Bun.spawnSync([lua, "-e", `for _, x in ipairs({${numerals.join(", ")}}) do io.write(string.format('%a ', x)) end`], { stdout: "pipe", stderr: "pipe" });
+  expect(run.stderr.toString()).toBe("");
+  expect(run.stdout.toString().trim().split(" ")).toEqual(["0x1.11111p-6", "0x1.999998p-4", "-0x1.999998p-4", "0x1.6ac082p+0", "0x1.99999ap-4", "0x1.11111p-6", "0x1.99999ap-4"]);
 });

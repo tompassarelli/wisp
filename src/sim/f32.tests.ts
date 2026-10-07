@@ -1,6 +1,7 @@
-// f32 arithmetic as Lua runs it: the compiler sends f32(a + b), f32(a - b)
-// and f32(a * b) through f32's exact path (wisp:src/sim/f32.ts), which must
-// give the host's Math.fround result whatever Warcraft's raw operators do.
+// f32 arithmetic as Lua runs it: the compiler sends f32(a + b), f32(a - b),
+// f32(a * b) and f32(a / b) through f32's exact path (wisp:src/sim/f32.ts),
+// and prints literals as exact hexadecimal floats, which must give the host's
+// Math.fround result whatever Warcraft's raw operators and numerals do.
 import { assertEquals, test } from "../runtime/testing";
 import { f32 } from "./f32";
 
@@ -46,4 +47,33 @@ test("f32 differences within a factor of two and products with ±1 are exact", (
   same(f32(offset * -1), -3.0999999046325684);
   same(f32(1 * offset), 3.0999999046325684);
   same(f32(-1 * -offset), 3.0999999046325684);
+});
+
+test("f32 quotients round the exact quotient to nearest", () => {
+  // Smashcraft's camera zoom on 7 October 2026: Warcraft's raw quotient was 765.6729125976562, an ulp above the nearest.
+  const height = 379.64483642578125;
+  const span = 0.4958316385746002;
+  same(f32(height / span), 765.6728515625);
+  const seconds = 1.4170000553131104;
+  const clip = 0.5666667222976685;
+  same(f32(seconds / clip), 2.5005881786346436);
+  same(f32(1.0 / 3.0), 0.3333333432674408);
+  same(f32(-1.0 / 3.0), -0.3333333432674408);
+  same(f32(height / -2.0), -189.82241821289062);
+});
+
+test("f32 quotients keep zero signs and exact integer quotients", () => {
+  const zero = 0.0;
+  const negative = -5000.5;
+  same(f32(zero / negative), -0.0);
+  same(f32(84 / 7), 12);
+  same(f32(-84.0 / 7.0), -12);
+  same(f32(7 / 84), 0.0833333358168602);
+});
+
+test("f32 literals are the binary32 nearest their decimal", () => {
+  // Warcraft read the numeral 0.016666667 as 0.01666666567325592, the binary32 below the nearest.
+  same(f32(0.016666667), 0.01666666753590107);
+  same(f32(-0.1), -0.10000000149011612);
+  same(f32(1.417), 1.4170000553131104);
 });

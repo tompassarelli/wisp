@@ -1,22 +1,25 @@
 // Rounds a real result to binary32 (Math.fround on the host). Warcraft's Lua
-// numbers are binary32, but its raw + and * don't round to nearest: a product
-// can land an ulp toward zero. So the warcraft-numbers plugin compiles
-// f32(a + b), f32(a - b) and f32(a * b) to f32(a, b, F32_ADD/SUBTRACT/MULTIPLY),
-// which rounds the exact result to nearest with the binary32 helpers, and any
-// other f32(x) to x: division rounds to nearest in Warcraft, and x is already
-// binary32 there.
-import { addFloat32, multiplyFloat32, subtractFloat32 } from "./binary32";
+// numbers are binary32, but its raw arithmetic doesn't round to nearest: a
+// product can land an ulp toward zero, and a quotient an ulp away from the
+// nearest (smashcraft's native camera, 7 October 2026). So the
+// warcraft-numbers plugin compiles f32(a + b), f32(a - b), f32(a * b) and
+// f32(a / b) to f32(a, b, F32_ADD/SUBTRACT/MULTIPLY/DIVIDE), which rounds the
+// exact result to nearest with the binary32 helpers, and any other f32(x) to
+// x, which is already binary32 there.
+import { addFloat32, divideFloat32, multiplyFloat32, subtractFloat32 } from "./binary32";
 import { floorDiv } from "./intMath";
 
 // Module locals: Lua reads an exported constant from the module table on every use.
 const ADD = 1;
 const SUBTRACT = 2;
 const MULTIPLY = 3;
+const DIVIDE = 4;
 
 /** The operation codes the compiler passes as f32's third argument; no source writes them. */
 export const F32_ADD = ADD;
 export const F32_SUBTRACT = SUBTRACT;
 export const F32_MULTIPLY = MULTIPLY;
+export const F32_DIVIDE = DIVIDE;
 
 /** Integers up to 2^24 are binary32 values, so arithmetic that stays within it is exact under any rounding. */
 const EXACT_INTEGERS = 16777216;
@@ -35,6 +38,15 @@ export function f32(value: number, right?: number, operation?: number): number {
     // A product with ±1 is exact; * 1.0 keeps the float the helper would return.
     if (right === 1 || right === -1 || value === 1 || value === -1) return value * right * 1.0;
     return multiplyFloat32(value, right);
+  }
+  if (operation === DIVIDE) {
+    // A zero numerator keeps its IEEE sign; integers that divide evenly give an integer within 2^24. Both are exact under any rounding.
+    if (value === 0 || right === 0) return value / right;
+    if (value === floorDiv(value, 1) && right === floorDiv(right, 1) && value >= -EXACT_INTEGERS && value <= EXACT_INTEGERS) {
+      const quotient = floorDiv(value, right);
+      if (quotient * right === value) return quotient * 1.0;
+    }
+    return divideFloat32(value, right);
   }
   if (value === 0 || right === 0) return operation === SUBTRACT ? value - right : value + right;
   if (value === floorDiv(value, 1) && right === floorDiv(right, 1) && value >= -EXACT_INTEGERS && value <= EXACT_INTEGERS && right >= -EXACT_INTEGERS && right <= EXACT_INTEGERS) {
