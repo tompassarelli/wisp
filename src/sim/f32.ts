@@ -26,6 +26,39 @@ const EXACT_INTEGERS = 16777216;
 /** 2^-100: from there up, the difference of two values within a factor of two of each other is a normal number. */
 const STERBENZ_FLOOR = 7.888609052210118e-31;
 
+const cachedLeft: number[] = [];
+const cachedRight: number[] = [];
+const cachedOperation: number[] = [];
+const cachedResult: number[] = [];
+for (let i = 0; i < 8192; i++) {
+  cachedLeft.push(0);
+  cachedRight.push(0);
+  cachedOperation.push(0);
+  cachedResult.push(0);
+}
+
+function slowFloat32(left: number, right: number, operation: number): number {
+  // Zero signs and nonfinite values bypass equality keys. The hash uses exact
+  // power-of-two scaling and integer arithmetic below Warcraft's signed limit.
+  let index = -1;
+  if (left !== 0 && right !== 0 && left >= -32768 && left <= 32768 && right >= -32768 && right <= 32768) {
+    index = (floorDiv(left * 256.0, 1) ^ (floorDiv(right * 256.0, 1) * 31) ^ (operation * 131)) & 8191;
+    if (cachedLeft[index] === left && cachedRight[index] === right && cachedOperation[index] === operation) {
+      return cachedResult[index] ?? 0;
+    }
+  }
+  const result = operation === MULTIPLY ? multiplyFloat32(left, right)
+    : operation === DIVIDE ? divideFloat32(left, right)
+    : operation === SUBTRACT ? subtractFloat32(left, right) : addFloat32(left, right);
+  if (index >= 0) {
+    cachedLeft[index] = left;
+    cachedRight[index] = right;
+    cachedOperation[index] = operation;
+    cachedResult[index] = result;
+  }
+  return result;
+}
+
 // Every synchronized f32 operation runs this. Results exact under any
 // rounding take Lua's raw operator; the integer tests are inline, as
 // floorDiv(x, 1) is Lua's x // 1, without a call.
@@ -37,7 +70,7 @@ export function f32(value: number, right?: number, operation?: number): number {
     if (value === floorDiv(value, 1) && right === floorDiv(right, 1) && value >= -4096 && value <= 4096 && right >= -4096 && right <= 4096) return value * right;
     // A product with ±1 is exact; * 1.0 keeps the float the helper would return.
     if (right === 1 || right === -1 || value === 1 || value === -1) return value * right * 1.0;
-    return multiplyFloat32(value, right);
+    return slowFloat32(value, right, operation);
   }
   if (operation === DIVIDE) {
     // A zero numerator keeps its IEEE sign; integers that divide evenly give an integer within 2^24. Both are exact under any rounding.
@@ -46,7 +79,7 @@ export function f32(value: number, right?: number, operation?: number): number {
       const quotient = floorDiv(value, right);
       if (quotient * right === value) return quotient * 1.0;
     }
-    return divideFloat32(value, right);
+    return slowFloat32(value, right, operation);
   }
   if (value === 0 || right === 0) return operation === SUBTRACT ? value - right : value + right;
   if (value === floorDiv(value, 1) && right === floorDiv(right, 1) && value >= -EXACT_INTEGERS && value <= EXACT_INTEGERS && right >= -EXACT_INTEGERS && right <= EXACT_INTEGERS) {
@@ -62,5 +95,5 @@ export function f32(value: number, right?: number, operation?: number): number {
   ) {
     return operation === SUBTRACT ? value - right : value + right;
   }
-  return operation === SUBTRACT ? subtractFloat32(value, right) : addFloat32(value, right);
+  return slowFloat32(value, right, operation);
 }
