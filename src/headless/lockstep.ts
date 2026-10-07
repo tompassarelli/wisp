@@ -212,10 +212,13 @@ export class Lockstep {
 
   /** A key press and release with modifiers (2: Ctrl), as every client sees it. */
   press(sender: number, key: number, meta = 0): void {
-    for (const down of [true, false]) {
-      for (const client of this.clients) client.key(sender, key, meta, down);
-      this.flush();
-    }
+    for (const down of [true, false]) this.key(sender, key, meta, down);
+  }
+
+  /** A held key's press or release, delivered to every client before its next frame. */
+  key(sender: number, key: number, meta: number, down: boolean): void {
+    for (const client of this.clients) client.key(sender, key, meta, down);
+    this.flush();
   }
 
   /** The client of a player slot. */

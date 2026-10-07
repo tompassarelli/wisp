@@ -11,6 +11,10 @@ export interface Frame extends Handle {
   readonly context: number;
   readonly parent: Frame | undefined;
   text: string;
+  texture: string;
+  color: number;
+  textColor: number;
+  alpha: number;
   visible: boolean;
   enabled: boolean;
   level: number;
@@ -51,12 +55,15 @@ export interface FrameTemplateNode {
   readonly width?: number;
   readonly height?: number;
   readonly text?: string;
+  readonly texture?: string;
   readonly points?: readonly { readonly point: string; readonly relative?: string; readonly relativePoint?: string; readonly x: number; readonly y: number }[];
   readonly children?: readonly FrameTemplateNode[];
 }
 
 export interface FrameTemplate {
   readonly name: string;
+  readonly type?: string;
+  readonly texture?: string;
   readonly width: number;
   readonly height: number;
   readonly children: readonly FrameTemplateNode[];
@@ -78,7 +85,23 @@ const NAMED_POINTS = new Map(FRAME_POINTS.map(([name, fromLeft, fromTop]) => [na
 const DEFAULT_TEXT_LIMIT = 4096;
 
 /** A frame's rectangle: left, top, right, bottom. */
-type Rectangle = readonly [number, number, number, number];
+export type Rectangle = readonly [number, number, number, number];
+
+export interface FrameSnapshot {
+  readonly handle: Handle;
+  readonly name: string;
+  readonly type: string;
+  readonly parentId: number | undefined;
+  readonly rectangle: Rectangle | undefined;
+  readonly text: string;
+  readonly texture: string;
+  readonly color: number;
+  readonly textColor: number;
+  readonly alpha: number;
+  /** Includes the visibility of every ancestor. */
+  readonly visible: boolean;
+  readonly level: number;
+}
 
 export class Frames {
   private readonly all: Frame[] = [];
@@ -95,6 +118,7 @@ export class Frames {
     const frame: Frame = {
       ...handle, type, name, context, parent, text: "", visible: true, enabled: true, level: 0, textLimit: DEFAULT_TEXT_LIMIT,
       width: 0, height: 0, points: new Map(), anchors: [], destroyed: false,
+      texture: "", color: 0xffffffff, textColor: 0xffffffff, alpha: 255,
     };
     this.all.push(frame);
     return frame;
@@ -107,11 +131,12 @@ export class Frames {
 
   /** BlzCreateFrame: a defined tree's root with every descendant, sized, placed and named as its FDF does; otherwise one frame. */
   create(handle: (this: void) => Handle, name: string, parent: Frame | undefined, context: number): Frame {
-    const root = this.add(handle(), name, name, parent, context);
     const definition = this.templates.get(name);
+    const root = this.add(handle(), definition?.type ?? name, name, parent, context);
     if (definition === undefined) return root;
     root.width = definition.width;
     root.height = definition.height;
+    root.texture = definition.texture ?? "";
     const byKey = new Map<string, Frame>([["root", root]]);
     const placed: (readonly [FrameTemplateNode, Frame])[] = [];
     const make = (nodes: readonly FrameTemplateNode[], owner: Frame) => {
@@ -120,6 +145,7 @@ export class Frames {
         frame.width = node.width ?? 0;
         frame.height = node.height ?? 0;
         if (node.type === "TEXT" && node.text !== undefined) frame.text = node.text;
+        frame.texture = node.texture ?? "";
         byKey.set(node.key, frame);
         placed.push([node, frame]);
         make(node.children ?? [], frame);
@@ -172,8 +198,23 @@ export class Frames {
     return texts;
   }
 
+  /** Visual properties copied in creation order, including passive frames. */
+  snapshot(): FrameSnapshot[] {
+    const snapshots: FrameSnapshot[] = [];
+    for (const frame of this.all) {
+      if (frame.destroyed) continue;
+      snapshots.push({ handle: { kind: frame.kind, id: frame.id }, name: frame.name, type: frame.type,
+        parentId: frame.parent?.id, rectangle: this.rectangle(frame), text: frame.text, texture: frame.texture,
+        color: frame.color, textColor: frame.textColor, alpha: frame.alpha, visible: this.shown(frame), level: frame.level });
+    }
+    return snapshots;
+  }
+
   /** Where the frame is, from an absolute point and its size, or two opposite corners; undefined without one. */
-  private rectangle(frame: Frame): Rectangle | undefined {
+  private rectangle(frame: Frame, visited: Set<Frame> = new Set()): Rectangle | undefined {
+    if (visited.has(frame)) return undefined;
+    const ancestors = new Set(visited);
+    ancestors.add(frame);
     const corners: [number, number, number, number] = [0, 0, 0, 0];
     let found = 0;
     const placed: (readonly [readonly [number, number], { readonly x: number; readonly y: number }])[] = [];
@@ -184,7 +225,7 @@ export class Frames {
     for (const anchor of frame.anchors) {
       const share = NAMED_POINTS.get(anchor.point);
       const relativeShare = NAMED_POINTS.get(anchor.relativePoint);
-      const relative = this.rectangle(anchor.relative);
+      const relative = this.rectangle(anchor.relative, ancestors);
       if (share === undefined || relativeShare === undefined || relative === undefined) continue;
       const [left, top, right, bottom] = relative;
       placed.push([share, { x: left + relativeShare[0] * (right - left) + anchor.x, y: top - relativeShare[1] * (top - bottom) + anchor.y }]);
