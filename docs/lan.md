@@ -100,23 +100,21 @@ Each pair's desktops and agent run in one `machine-capacity session --class
 moderate`. Admission uses the user's service bus and runtime directory;
 inside the scope the game receives its private desktop's runtime directory
 and its own session bus. Each game runs in its own `session --class native` scope: the
-high-weight slice for game clients, with no CPU quota, admitted on memory
-alone. Each offline client requests 1.5 GiB through `--memory-gib`; measured
+high-weight slice for game clients, with no CPU quota. Each offline client
+requests 1.5 GiB through `--memory-gib`; measured
 parity clients used 0.8–1.4 GB resident memory. This sizes admission and
 `MemoryHigh` while keeping the native class's CPU treatment. The pool adds
-pairs while the helper admits them: a deferred pair is
-retried every 45 s, for up to `--wait` seconds (default 1800). After that the
-pool keeps the pairs it has. `--greedy` is the owner's call for unattended
-runs: it skips the helper's admission, keeps each pair in a scope of the
-helper's slice, and starts no pair while less than 12 GiB of memory is
-available. The agent stops its games when it is stopped, or when its pair's
-session ends.
+pairs while the helper admits them, probing native admission and requiring
+`protectedCpuSomeAvg10` below 20% before each new pair, in present and away
+mode. A deferred pair is retried every 45 s, for up to `--wait` seconds
+(default 1800). After that the pool keeps its admitted pairs and lists the
+remaining pair numbers as waiting. The agent stops its games when it is
+stopped, or when its pair's session ends.
 
 - `--pair K` (repeated) picks which pairs start, in that order of admission.
-- A game whose native scope the helper defers (exit 75, DEFER) is retried
-  every 45 s by the pair agent; until then the pair has no game and `lan pool`
-  keeps waiting for it. `--greedy` skips only the pair's admission, not the
-  games' native admission.
+- If the helper defers either game's native scope, the pair agent stops any
+  game already started for that pair. `lan pool` retries the whole pair.
+  Direct pair-session and agent entry points require the capacity helper too.
 - Several pools may run at once, each on its own pairs (one per agent). A
   pool merges its pairs into `pool.json` and `clients.json`, keeping every
   other pair whose agent socket exists, so starting pair 5 never unlists pair 3.
