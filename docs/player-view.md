@@ -118,6 +118,13 @@ functions: a game's tests can check the lines its recorder wrote with
 
 ## Frame probe
 
+The compositor read in wisp:scripts/warcraft/desktop.ts has an eight-second
+deadline. Cancellation or timeout stops and reaps the owned capture process
+before returning a failure. A framebuffer read establishes the image only;
+consumers that request a specific game frame must hold that pose and require
+matching drawn-frame receipts before and after the read. A later or absent
+completion receipt is INVALID, never evidence for the requested frame.
+
 wisp:scripts/wisp/frameProbe.ts measures a frame; it never needs the image
 viewed. Bands are fractions of the frame's width and height, so one
 declaration fits the 2560x1440 private-desktop capture and a downscaled

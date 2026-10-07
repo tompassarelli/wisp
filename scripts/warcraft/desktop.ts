@@ -60,15 +60,24 @@ function fail(operation: string, client: string) {
 }
 
 function run(client: string, operation: string, command: readonly string[], env: Record<string, string>, stdin?: Uint8Array) {
-  const effect = Effect.tryPromise({
-    try: async () => {
-      const process = Bun.spawn([...command], { env: { ...Bun.env, ...env }, stdin: stdin ?? "ignore", stdout: "pipe", stderr: "pipe" });
-      const [stdout, stderr, code] = await Promise.all([new Response(process.stdout).arrayBuffer(), new Response(process.stderr).text(), process.exited]);
-      if (code !== 0) throw new Error(`${command[0]} exited ${code}: ${stderr.trim()}`);
-      return new Uint8Array(stdout);
-    },
-    catch: fail(operation, client),
-  });
+  const effect = Effect.acquireUseRelease(
+    Effect.try({
+      try: () => Bun.spawn([...command], { env: { ...Bun.env, ...env }, stdin: stdin ?? "ignore", stdout: "pipe", stderr: "pipe" }),
+      catch: fail(operation, client),
+    }),
+    (child) => Effect.tryPromise({
+      try: async () => {
+        const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).arrayBuffer(), new Response(child.stderr).text(), child.exited]);
+        if (code !== 0) throw new Error(`${command[0]} exited ${code}: ${stderr.trim()}`);
+        return new Uint8Array(stdout);
+      },
+      catch: fail(operation, client),
+    }),
+    (child) => Effect.promise(async () => {
+      if (child.exitCode === null) child.kill("SIGKILL");
+      await child.exited;
+    }),
+  );
   return process.env.WISP_DESKTOP_TIMINGS === "1" ? effect.pipe(step(`${client}: ${operation}`)) : effect;
 }
 
@@ -120,11 +129,13 @@ export const loadClients = (path: string) =>
       }));
   });
 
-/** A raw frame from the compositor, about 50 ms for the full screen. */
+/** A raw frame from the compositor; an eight-second timeout kills and reaps a stalled capture. */
 export const capture = (client: Client, region?: Region) =>
   Effect.gen(function*() {
     const geometry = region === undefined ? [] : ["-g", `${region.x},${region.y} ${region.width}x${region.height}`];
-    const ppm = yield* run(client.name, "capture frame", [client.tools.grim, "-t", "ppm", ...geometry, "-"], client.wayland);
+    const ppm = yield* run(client.name, "capture frame", [client.tools.grim, "-t", "ppm", ...geometry, "-"], client.wayland).pipe(
+      Effect.timeoutOrElse({ duration: "8 seconds", orElse: () => Effect.fail(new DesktopFailure({ operation: "capture frame", client: client.name, cause: "framebuffer read exceeded 8 seconds; capture process stopped" })) }),
+    );
     const frame = decodePpm(ppm);
     if (frame === undefined) return yield* new DesktopFailure({ operation: "capture frame", client: client.name, cause: "not a PPM frame" });
     return frame;
