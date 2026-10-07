@@ -30,25 +30,26 @@ process, and it enforces these rules:
   Wine prefix. It takes only processes of the current user, never an
   arbitrary process ID, and never a game on the owner's display `:0`, because
   a `wisp play` session can share a development client's prefix.
-- **Reads** (`poll`, `locate`) open `/proc/PID/mem` read-only. They are
+- **Reads, online-OK** (`poll`, `locate`, the [Lua VM reader](#lua-stacks)) open `/proc/PID/mem` read-only. They are
   passive and run outside the process, so they may follow a development client
   that is signed in to Battle.net.
-- **Traps** (`watch`, `locate --watch`) set a perf hardware breakpoint, which
-  loads the thread's debug registers. Traps refuse unless the client is
+- **Traps, offline only** (`watch`, `locate --watch`) set a perf hardware breakpoint, which
+  loads the thread's debug registers. `watch --lua` also stops the writing
+  thread at each birth with ptrace (wisp:scripts/wisp/engine/stopWatch.ts). Traps refuse unless the client is
   verifiably offline. That means its network namespace has only loopback
   (`/proc/PID/net/dev` lists only `lo`), it has no Battle.net session
   argument (`-uid`), no Battle.net program runs in its prefix, and it holds
   no TCP connection or connected UDP socket to an address outside this
   machine. An offline client also passes `-launch`, so that flag proves
   nothing.
-- Nothing writes to a game process, stops it, attaches a debugger or injects
-  code. No command offers any of these.
+- Nothing writes to a game process or injects code, and nothing stops or
+  traces a client that isn't verifiably offline. No command offers any of these.
 
 Why two tiers: anti-cheat that runs inside the game can only notice what it
 can observe from inside. That covers debug registers, a traced or stopped
 state, and modified memory. An external read of `/proc/PID/mem` leaves none of
 these behind. A `gdb` attach (ptrace) made signed-in client A exit with
-code 1 about 4 s later (#158), so there is no ptrace path at all.
+code 1 about 4 s later (#158), so ptrace is a trap: offline clients only.
 
 A command tries the read first. Yama's default `kernel.yama.ptrace_scope=1`
 still allows it in three cases: from an ancestor, at scope 0, or into a user

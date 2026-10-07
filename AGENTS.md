@@ -5,7 +5,8 @@ Before implementing a feature here or in a consuming map, consult the
 and opt-in setup, especially TypeScript stack traces. A feature isn't done
 until wisp:docs/index.md lists it and a how-it-works page in wisp:docs/
 explains it; wisp:test/docs-index.test.ts enforces the index for every command
-in wisp:scripts/wisp/commands/.
+in wisp:scripts/wisp/commands/, and each subcommand on its command's own page
+(wisp:docs/NAME.md) when it has one.
 
 Wisp owns reusable Warcraft III TypeScript compilation, numeric guards,
 hot reload, runtime error reporting and host services. Its existing TypeScript
