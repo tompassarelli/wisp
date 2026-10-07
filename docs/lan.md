@@ -216,6 +216,14 @@ client's War3Preferences `[Video]`, `[Misc]` and `[Sound]` at launch:
 - `hfr` is parity at 144 frames a second, for comparing the game's clocks
   against the 60 fps cap.
 
+Warcraft **3.0.1.24342**'s installed `webui/GlueManager.js` maps
+`PREF_GENERAL_HD` to SD=0, HD=1 and DE=2; the saved preferences store that
+choice as `[Misc] hd`. The profiles choose Classic (`hd=0`) for parity,
+checks and hfr, and Reforged (`hd=1`) for visual. `graphicsMode: "definitive"`
+selects Definitive Edition (`hd=2`). Audio checks therefore use Classic
+sounds; Definitive Edition also uses Classic sounds. Profiles set Ambient Occlusion off (`assao=0`) and omit
+`bloom`, `portraitBloom`, `particles` and `spellfilter`. Smashcraft play explicitly chooses Reforged (`hd=1`) and Ambient Occlusion off too.
+
 The others cap the game at 60 frames a second, focused or not. A cap below
 the turn rate (33 turns a second at 30 ms) is untested.
 
