@@ -1,0 +1,193 @@
+# Reusable CI for a game built on Wisp (wisp:docs/ci.md). Call it from the
+# game's workflow, pinned to a Wisp commit:
+#   uses: tompassarelli/wisp/.github/workflows/consumer.yml@<wisp commit>
+# The public job runs only source and headless checks. The map build is
+# opt-in and runs only on the game's self-hosted runner, keeping the .w3x and
+# its digest in that runner's store; nothing here uploads a map, releases or
+# deploys.
+name: Wisp consumer CI
+
+on:
+  workflow_call:
+    inputs:
+      bun-version:
+        description: Exact Bun version, as in the game's packageManager
+        required: true
+        type: string
+      wisp-ref:
+        description: Full Wisp commit the game installs from vendor/wisp-<commit>.tgz; empty in Wisp itself
+        type: string
+        default: ""
+      working-directory:
+        description: The game's directory holding package.json
+        type: string
+        default: "."
+      install:
+        type: string
+        default: bun install --frozen-lockfile
+      check:
+        description: Type and number-rule check
+        type: string
+        default: bun run check
+      test:
+        description: Unit tests, emitted-Lua and numeric checks; LUA and TOWARD_ZERO_LUA name the built Lua32s
+        type: string
+        default: bun test
+      headless:
+        description: Headless journey command, such as `bun scripts/game.ts headless`; empty skips
+        type: string
+        default: ""
+      soak:
+        description: Bounded soak command, such as `bun scripts/game.ts soak --minutes 5`; empty skips
+        type: string
+        default: ""
+      lua:
+        description: Build Lua 5.3.6 with LUA_32BITS, and its toward-zero twin, for the test command
+        type: boolean
+        default: true
+      timeout-minutes:
+        type: number
+        default: 20
+      expect-failure:
+        description: The run passes only when a command fails; for a deliberately broken fixture
+        type: boolean
+        default: false
+      diagnostics:
+        description: Upload command output and repro-paths as an Actions artifact; turn off if they could hold private inputs
+        type: boolean
+        default: true
+      repro-paths:
+        description: Newline-separated repro files or folders the commands write, relative to working-directory
+        type: string
+        default: ""
+      artifact-name:
+        type: string
+        default: wisp-ci
+      private-map-build:
+        description: Also build the map on the self-hosted runner into its private store
+        type: boolean
+        default: false
+      private-runner:
+        description: JSON runs-on labels of the authorized self-hosted runner
+        type: string
+        default: '["self-hosted", "wisp-private"]'
+      map-build:
+        description: Map build command writing the map to $WISP_MAP_OUT; private inputs come from the runner's own environment
+        type: string
+        default: ""
+      map-name:
+        type: string
+        default: map
+      map-store:
+        description: Absolute store folder on the private runner, outside the checkout; default $HOME/.local/state/wisp/ci-maps
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  headless:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ inputs.bun-version }}
+      - name: Check the Wisp pin
+        if: inputs.wisp-ref != ''
+        env:
+          WISP_REF: ${{ inputs.wisp-ref }}
+        run: |
+          [[ "$WISP_REF" =~ ^[0-9a-f]{40}$ ]] || { echo "wisp-ref must be a full commit hash"; exit 1; }
+          grep -q "wisp-$WISP_REF.tgz" package.json || { echo "package.json does not install vendor/wisp-$WISP_REF.tgz"; exit 1; }
+      - run: ${{ inputs.install }}
+      - name: Build Warcraft's numeric Lua runtimes
+        if: inputs.lua
+        run: |
+          header="$PWD/native/toward-zero.h"
+          [ -f node_modules/wisp/native/toward-zero.h ] && header="$PWD/node_modules/wisp/native/toward-zero.h"
+          mkdir -p "$RUNNER_TEMP/lua32" "$RUNNER_TEMP/lua32-toward-zero"
+          curl -fsSL https://www.lua.org/ftp/lua-5.3.6.tar.gz -o "$RUNNER_TEMP/lua-5.3.6.tar.gz"
+          echo "fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60  $RUNNER_TEMP/lua-5.3.6.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/lua-5.3.6.tar.gz" -C "$RUNNER_TEMP/lua32"
+          tar -xzf "$RUNNER_TEMP/lua-5.3.6.tar.gz" -C "$RUNNER_TEMP/lua32-toward-zero"
+          make -C "$RUNNER_TEMP/lua32/lua-5.3.6" -j2 generic MYCFLAGS=-DLUA_32BITS
+          make -C "$RUNNER_TEMP/lua32-toward-zero/lua-5.3.6" -j2 generic "MYCFLAGS=-DLUA_32BITS -include $header"
+          echo "LUA=$RUNNER_TEMP/lua32/lua-5.3.6/src/lua" >> "$GITHUB_ENV"
+          echo "TOWARD_ZERO_LUA=$RUNNER_TEMP/lua32-toward-zero/lua-5.3.6/src/lua" >> "$GITHUB_ENV"
+      - run: mkdir -p wisp-ci
+      - id: check
+        name: Check
+        if: inputs.check != ''
+        continue-on-error: ${{ inputs.expect-failure }}
+        run: set -o pipefail; { ${{ inputs.check }} ; } 2>&1 | tee wisp-ci/check.txt
+      - id: test
+        name: Test
+        if: inputs.test != ''
+        continue-on-error: ${{ inputs.expect-failure }}
+        run: set -o pipefail; { ${{ inputs.test }} ; } 2>&1 | tee wisp-ci/test.txt
+      - id: headless
+        name: Headless journeys
+        if: inputs.headless != ''
+        continue-on-error: ${{ inputs.expect-failure }}
+        run: set -o pipefail; { ${{ inputs.headless }} ; } 2>&1 | tee wisp-ci/headless.txt
+      - id: soak
+        name: Soak
+        if: inputs.soak != ''
+        continue-on-error: ${{ inputs.expect-failure }}
+        run: set -o pipefail; { ${{ inputs.soak }} ; } 2>&1 | tee wisp-ci/soak.txt
+      - name: Expected failure
+        if: inputs.expect-failure
+        run: |
+          outcomes="${{ steps.check.outcome }} ${{ steps.test.outcome }} ${{ steps.headless.outcome }} ${{ steps.soak.outcome }}"
+          echo "outcomes: $outcomes"
+          [[ " $outcomes " == *" failure "* ]] || { echo "every command passed, but this run expects a failure"; exit 1; }
+      - name: Collect repros
+        if: always() && inputs.diagnostics && inputs.repro-paths != ''
+        env:
+          REPRO_PATHS: ${{ inputs.repro-paths }}
+        run: |
+          mkdir -p wisp-ci/repros
+          while IFS= read -r path; do
+            [ -n "$path" ] && [ -e "$path" ] && cp -r "$path" wisp-ci/repros/
+          done <<< "$REPRO_PATHS"
+      - uses: actions/upload-artifact@v4
+        if: always() && inputs.diagnostics
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ inputs.working-directory }}/wisp-ci
+          if-no-files-found: ignore
+          retention-days: 14
+
+  private-map:
+    if: inputs.private-map-build
+    needs: headless
+    runs-on: ${{ fromJSON(inputs.private-runner) }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ inputs.bun-version }}
+      - run: ${{ inputs.install }}
+      # The map and digest stay in the store on this runner. This job has no
+      # upload step: never add one, Actions artifacts of a public repository are public.
+      - name: Build the map into the private store
+        env:
+          MAP_BUILD: ${{ inputs.map-build }}
+          MAP_NAME: ${{ inputs.map-name }}
+          MAP_STORE: ${{ inputs.map-store }}
+        run: |
+          script=scripts/wisp/ciMapBuild.ts
+          [ -f node_modules/wisp/scripts/wisp/ciMapBuild.ts ] && script=node_modules/wisp/scripts/wisp/ciMapBuild.ts
+          bun "$script" --store "${MAP_STORE:-$HOME/.local/state/wisp/ci-maps}" --name "$MAP_NAME" --revision "$GITHUB_SHA" -- bash -c "$MAP_BUILD"
