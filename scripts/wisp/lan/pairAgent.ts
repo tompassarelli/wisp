@@ -72,6 +72,13 @@ const audioEnv = (name: string): Record<string, string> => {
 
 // Launch both clients.
 for (const client of clients) {
+  // A second runtime on a live prefix joins its wineserver and dies: a game left from before must be stopped first.
+  const left = findGameProcesses(prefixOf(client.name));
+  if (left.length > 0) {
+    say(`${client.name} still runs (pid ${left.map(({ pid }) => pid).join(", ")}); stopping it first`);
+    for (const { pid } of left) process.kill(pid, "SIGTERM");
+    await Bun.sleep(5000);
+  }
   mkdirSync(documentsOf(client.name), { recursive: true });
   writeFileSync(join(documentsOf(client.name), "War3Preferences.txt"), preferences(profile, client.windowX));
   const appId = String(3516115600 + pair * 2 + PAIR_SIDES.indexOf(client.side));
