@@ -142,5 +142,8 @@ export const runStandalone = (game: StandaloneGame, options: StandaloneOptions =
   ], { stdout: "ignore", stderr: Bun.file(join(directory, "chrome.log")) })), (process) => Effect.promise(async () => { if (process.exitCode === null) process.kill(); await process.exited; }));
   console.log(`${game.title}: standalone window opened. Connect a controller or use the keyboard.`);
   const result = yield* attempt(() => Promise.race([player.completed, browser.exited.then((code) => { if (code !== 0) throw new Error(`player window exited (${code})`); return undefined; })]));
-  if (result !== undefined) console.log(JSON.stringify(result));
+  if (result !== undefined) {
+    const { frameSamplesMs, intervalSamplesMs, requestSamplesMs, renderSamplesMs, frameTimings, ...summary } = result as Record<string, unknown>;
+    console.log(JSON.stringify(summary));
+  }
 }));
