@@ -436,6 +436,15 @@ client's held keys, modifiers, mouse buttons and screen position. Effect
 animation controls retain the blend duration and requested animation queue;
 `BlzRemoveEffect` removes the effect immediately.
 
+Scenery natives retain fog and HD water settings, camera types and blockers,
+input control, hotkey target lock, HUD scale, cinematic state, thematic music
+settings, doodad colors and animations, and all 24 destructable creation
+variants. `SceneryFixtures` supplies map doodads, cinematic shot durations,
+terrain pathing cells and HUD scale. Queries for missing cinematic or terrain
+facts fail with the needed fixture name.
+`LUA=/path/to/lua32 bun test test/warcraft3-scenery.test.ts` exercises 92
+native calls in Bun and Lua32, with zero missing-native reports.
+
 ## Native table iteration order
 
 `test/table-order/main.ts` walks a 1,000-key string table and a 1,000-key
