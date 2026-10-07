@@ -71,7 +71,23 @@ const capacityHelper = (args: readonly string[]) => {
  * for two parity clients), so the helper admits pairs one by one while the
  * machine has room; retries while it defers.
  */
-const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number) => Effect.tryPromise({
+/** MiB of memory the kernel can still give, from /proc/meminfo. */
+const memoryAvailableMiB = () => Math.floor(Number(/^MemAvailable:\s+(\d+) kB$/m.exec(readFileSync("/proc/meminfo", "utf8"))?.[1] ?? 0) / 1024);
+/** --greedy keeps this much memory free: it starts no pair below it. */
+const GREEDY_FLOOR_MIB = 12 * 1024;
+
+/**
+ * --greedy (the owner's call: unattended runs that may use the machine fully)
+ * skips the helper's admission gate but keeps a pair in a scope of the
+ * helper's slice, with the same kind of ceilings, so the desktop launcher
+ * recognizes it and the helper's accounting still sees it.
+ */
+const greedyScope = (pair: number) => [
+  "systemd-run", "--user", "--scope", "--quiet", "--collect", `--unit=agent-capacity-${crypto.randomUUID().replaceAll("-", "")}.scope`, "--slice=agent-capacity.slice",
+  "--property=CPUQuota=300%", "--property=MemoryHigh=6G", `--description=wisp lan pair ${pair} (greedy)`, "--",
+];
+
+const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, greedy = false) => Effect.tryPromise({
   try: async () => {
     const definition = PROFILES[profile];
     if (definition === undefined) throw new Error(`unknown profile ${profile}`);
@@ -79,7 +95,9 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
     mkdirSync(pairDirectory(pair), { recursive: true });
     rmSync(agentSocket(pair), { force: true });
     while (true) {
-      const child = Bun.spawn([process.execPath, capacity, "session", "--class", "moderate", "--owner", `wisp-lan-pair-${pair}`, "--", process.execPath, SESSION, "--pair", String(pair), "--profile", profile, "--launcher", launcher], {
+      if (greedy && memoryAvailableMiB() < GREEDY_FLOOR_MIB) throw new Error(`only ${memoryAvailableMiB()} MiB of memory available, under the 12 GiB --greedy keeps free`);
+      const scope = greedy ? greedyScope(pair) : [process.execPath, capacity, "session", "--class", "moderate", "--owner", `wisp-lan-pair-${pair}`, "--"];
+      const child = Bun.spawn([...scope, process.execPath, SESSION, "--pair", String(pair), "--profile", profile, "--launcher", launcher], {
         stdout: Bun.file(join(pairDirectory(pair), "session.out")),
         stderr: Bun.file(join(pairDirectory(pair), "session.err")),
       });
@@ -132,7 +150,7 @@ const pool: Command = (args) => Effect.gen(function*() {
   if (order.some((pair) => !Number.isInteger(pair) || pair < 0)) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
   for (const [admitted, pair] of order.entries()) {
     const profile = profileOf(pair);
-    const started = yield* startPair(pair, profile, launcher, capacity, waitSeconds).pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed(failure)));
+    const started = yield* startPair(pair, profile, launcher, capacity, waitSeconds, args.includes("--greedy")).pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed(failure)));
     if (started instanceof LanFailure) {
       // The pool is as big as the machine admits: keep the pairs that started.
       yield* Console.log(`${started.problem}; the pool stays at ${admitted} pair${admitted === 1 ? "" : "s"}`);
@@ -187,7 +205,7 @@ const end: Command = (args) => Effect.gen(function*() {
   yield* Console.log(`pair ${pair}: game ended`);
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N] | pool [--pairs N | --pair K...] [--profile parity|visual|hfr[,...]] [--seconds S] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | status [--pair K] | end --pair K";
+export const LAN_USAGE = "setup --from INSTALL [--pairs N] | pool [--pairs N | --pair K...] [--profile parity|visual|hfr[,...]] [--seconds S] [--greedy] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | status [--pair K] | end --pair K";
 
 export const lan: Command = ([sub, ...args]) => {
   switch (sub) {
