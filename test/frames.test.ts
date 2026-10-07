@@ -8,7 +8,7 @@ test("the opponent-settings panel generates FDF, TOC and native bindings", () =>
   expect(generated.tocEntry).toBe("war3mapImported\\OpponentSettings.toc");
   expect(generated.toc).toBe("war3mapImported\\OpponentSettings.fdf\r\n\r\n");
   expect(generated.fdf.split("\n").slice(0, 8)).toEqual([
-    'IncludeFile "UI\\FrameDef\\UI\\EscMenuTemplates.fdf",',
+    'IncludeFile "UI\\FrameDef\\UI\\ScriptDialog.fdf",',
     "",
     'Frame "BACKDROP" "OpponentSettings" {',
     "    Width 0.56,",

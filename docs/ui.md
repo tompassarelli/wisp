@@ -37,8 +37,10 @@ A child can set:
 - `type`: `FRAME`, `BACKDROP`, `TEXT` or `GLUETEXTBUTTON`;
 - `inherits`: a template defined in this definition, listed in `templates`,
   or a Warcraft template (`ScriptDialogButton`, `EscMenuBackdrop`), inherited
-  `WITHCHILDREN`. Generated FDF includes `UI\\FrameDef\\UI\\EscMenuTemplates.fdf`
-  before using those templates: script-side availability does not load them
+  `WITHCHILDREN`. Generated FDF includes the template's defining file
+  (`UI\\FrameDef\\UI\\ScriptDialog.fdf` for `ScriptDialogButton`,
+  `UI\\FrameDef\\UI\\EscMenuTemplates.fdf` for `EscMenuBackdrop`)
+  before using it: script-side availability does not load templates
   into a custom FDF's template scope;
 - `width`, `height` and `points`: `SetPoint` anchors to the parent, `"root"`
   or another child's key;

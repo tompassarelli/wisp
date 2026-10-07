@@ -15,7 +15,10 @@ export type FramePoint = (typeof FRAME_POINTS)[number];
 
 /** Warcraft templates whose defining FDF is included before a generated tree. */
 export const WARCRAFT_TEMPLATES = ["ScriptDialogButton", "EscMenuBackdrop"] as const;
-const WARCRAFT_TEMPLATE_FDF = "UI\\FrameDef\\UI\\EscMenuTemplates.fdf";
+const WARCRAFT_TEMPLATE_FDFS = new Map<string, string>([
+  ["ScriptDialogButton", "UI\\FrameDef\\UI\\ScriptDialog.fdf"],
+  ["EscMenuBackdrop", "UI\\FrameDef\\UI\\EscMenuTemplates.fdf"],
+]);
 
 export interface FrameAnchor {
   readonly point: FramePoint;
@@ -207,8 +210,11 @@ export function generateFrames(definition: FrameDefinition): GeneratedFrames {
   const tocEntry = `war3mapImported\\${definition.name}.toc`;
   const root: FrameNode = { key: "root", type: definition.type, width: definition.width, height: definition.height, children: definition.children, ...(definition.texture === undefined ? {} : { texture: definition.texture }) };
   const rootLines = fdfFrame(definition, root, definition.name, definition.name, 0);
-  const includes = flatten(definition.children).some((node) => node.inherits !== undefined && (WARCRAFT_TEMPLATES as readonly string[]).includes(node.inherits))
-    ? [`IncludeFile "${WARCRAFT_TEMPLATE_FDF}",`, ""] : [];
+  const sources = [...new Set(flatten(definition.children).flatMap((node) => {
+    const source = node.inherits === undefined ? undefined : WARCRAFT_TEMPLATE_FDFS.get(node.inherits);
+    return source === undefined ? [] : [source];
+  }))];
+  const includes = sources.length === 0 ? [] : [...sources.map((source) => `IncludeFile "${source}",`), ""];
   // A TOC lists one FDF per line and needs a line break after the last.
   return { fdfEntry, tocEntry, fdf: `${[...includes, ...rootLines].join("\n")}\n`, toc: `${fdfEntry}\r\n\r\n`, bindings: bindingsSource(definition, tocEntry) };
 }
