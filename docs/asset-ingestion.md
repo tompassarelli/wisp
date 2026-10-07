@@ -31,8 +31,15 @@ compression, exactly the bytes of its source. Nothing is re-encoded,
 stripped or converted, so models keep every sequence, bone and material
 reference and textures keep their alpha and team-colour layers by
 construction. wisp:test/map-pack.test.ts checks this on synthetic clip
-models, 32-bit TGAs and BLPs. Source inputs are only read, and the map is
+models, 32-bit TGAs, BLPs and a real Ogg Vorbis sound. Source inputs are only read, and the map is
 written outside the checkout.
+
+Warcraft 3.0 accepts OGG sound imports. Declare the `.ogg` archive path and
+pass it to `CreateSound` just like another sound import; ingestion keeps its
+encoded bytes. Conversion is a separate consumer choice: measure its bytes
+and listen in the target client before replacing a game's sound family.
+The authored test tone is 440 Hz, mono, 48 kHz, 0.1 s, encoded with
+`ffmpeg -f lavfi -i sine=frequency=440:sample_rate=48000:duration=0.1 -c:a libvorbis -q:a 4 tone.ogg`.
 
 ## Why packaging, not the asset bytes
 
