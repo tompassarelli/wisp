@@ -18,7 +18,7 @@ test("the opponent-settings panel generates FDF, TOC and native bindings", () =>
   expect(generated.fdf).toContain('    Frame "GLUETEXTBUTTON" "OpponentSettingsClose" INHERITS WITHCHILDREN "ScriptDialogButton" {\n        Width 0.075,\n        Height 0.027,\n        SetPoint TOPLEFT, "OpponentSettings", TOPLEFT, 0.455, -0.009,\n    }');
   expect(generated.fdf).toContain('        FrameFont "Fonts\\FRIZQT__.TTF", 0.012, "",\n        FontJustificationH JUSTIFYCENTER,\n        FontJustificationV JUSTIFYMIDDLE,\n        Text "Opponent",');
   expect(generated.fdf.match(/^\s*Frame /gm)?.length).toBe(14);
-  expect(generated.bindings).toContain('if (!loaded) loaded = BlzLoadTOCFile(OPPONENTSETTINGS_TOC);');
+  expect(generated.bindings).toContain('if (!BlzLoadTOCFile(OPPONENTSETTINGS_TOC)) return undefined;');
   expect(generated.bindings).toContain('const root = BlzCreateFrame("OpponentSettings", parent, 0, context);');
   expect(generated.bindings).toContain("BlzFrameSetAbsPoint(root, FRAMEPOINT_TOPLEFT, 0.12, 0.44);");
   expect(generated.bindings).toContain('    opponentNext: BlzGetFrameByName("OpponentSettingsOpponentNext", context),');
