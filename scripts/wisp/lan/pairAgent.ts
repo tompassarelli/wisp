@@ -20,6 +20,8 @@ import { LanFailure, enableLan, joinLanGame } from "./join";
 import { readMapFacts } from "./map";
 import { PAIR_SIDES, poolProfile, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
 import { admissionFile, nativeCommand } from "./admission";
+import { makeEngine } from "../commands/engine";
+import { startPairClients } from "./startup";
 
 const argument = (name: string) => {
   const at = process.argv.indexOf(`--${name}`);
@@ -76,7 +78,7 @@ const audioEnv = (name: string): Record<string, string> => {
 
 // A refused second client ends the first too: a pool only keeps whole pairs.
 try {
-  for (const client of clients) {
+  await startPairClients(clients, async (client) => {
     // A second runtime on a live prefix joins its wineserver and dies: a game left from before must be stopped first.
     const left = findGameProcesses(prefixOf(client.name));
     if (left.length > 0) {
@@ -107,10 +109,17 @@ try {
     }
     if (early !== undefined) throw new Error(`${client.name}: its native launcher exited with ${early}`);
     say(`launched ${client.name}`);
-  }
+  }, process.argv.includes("--locate-before-peer") ? async (client) => {
+    const file = join(directory, "locate-client.json");
+    writeFileSync(file, JSON.stringify({ clients: [{ name: client.name, documents: documentsOf(client.name) }] }));
+    say(`${client.name}: locating engine offsets before starting its peer`);
+    await Effect.runPromise(makeEngine(file)(["locate", "--client", client.name]));
+    say(`${client.name}: engine locate passed; starting its peer`);
+  } : undefined);
 } catch (cause) {
   stopGames();
   await Promise.all(games.map((game) => game.exited));
+  if (process.argv.includes("--locate-before-peer")) writeFileSync(join(directory, "startup-error.json"), JSON.stringify({ error: cause instanceof Error ? cause.message : String(cause) }));
   throw cause;
 }
 

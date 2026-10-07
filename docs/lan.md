@@ -111,6 +111,13 @@ reads it and never changes it.
 
 ## Running a pool
 
+`pool --locate-before-peer` starts client a, runs the read-only `engine locate`
+on it, and starts client b only after that succeeds. It uses the first client's
+private Documents folder and leaves the default startup unchanged. Locate
+output is in `pair-K/desktop-a.out`. If no initialized presence table is found
+at startup, the pair stops with the locate error; the flag never loads a map
+to make a table appear. New-build offsets are printed, not automatically saved.
+
 Each client has its own private desktop (the private-desktop-development
 launcher), so each display has exactly one game window, as on clients A and
 B. Tools that find "the" Warcraft window on a display work unchanged, and so
