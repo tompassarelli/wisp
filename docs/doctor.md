@@ -1,10 +1,10 @@
-# Clients that heal themselves: `wisp doctor`
+# Clients that heal themselves: `wisp client doctor`
 
 A signed-in Warcraft III client breaks in a handful of known ways: it drops
 from Battle.net, its login closes to an empty Options/Exit Game shell, it
 crashes with its error dialog up, it sits in a lobby or on a loading screen
 from an earlier run, or a second Wine runtime starts on its prefix. Each has a
-known recovery. `wisp doctor [CLIENT...]` finds which state each client of the
+known recovery. `wisp client doctor [CLIENT...]` finds which state each client of the
 clients file is in (all of them, or those named) and runs that state's
 recovery, printing each step. It stops with one plain line only when a person
 is needed: a Battle.net sign-in, or a state it doesn't know.
@@ -28,7 +28,7 @@ sessions run it for you (below). It exits 1 when it stopped.
 ## What it reads
 
 Nothing from the screen. Each client's state comes from
-[`wisp watch`](../scripts/wisp/watch.ts) (wisp:scripts/wisp/watch.ts): the
+[`wisp client watch`](../scripts/wisp/watch.ts) (wisp:scripts/wisp/watch.ts): the
 menus' socket, Warcraft III's own log, the map's receipts and the processes.
 Doctor adds the client's Wine prefix:
 
@@ -90,7 +90,7 @@ the owner or the authorized login-field helper (warcraft-modding skill).
 ## Declare it
 
 The game adds the command with `makeDoctor`
-(wisp:scripts/wisp/commands/doctor.ts):
+(wisp:scripts/wisp/clientDoctorCommand.ts):
 
 ```ts
 export const doctor = makeDoctor({
@@ -121,7 +121,7 @@ client's launcher container, never a click in its window.
   `retry: false`: its clients are healed for the next run and its failure
   stands. Pass `autopsy: { clientsFile }` too, and the session runs inside the
   [desync autopsy](autopsy.md) (wisp:docs/autopsy.md): it names the first
-  divergent birth of any desync the clients report. `wisp doctor` itself
+  divergent birth of any desync the clients report. `wisp client doctor` itself
   always runs inside it.
 - **`wisp accept`:** pass `clientsDoctor(...)` as the live driver's
   `prepare` (wisp:scripts/wisp/acceptLive.ts).

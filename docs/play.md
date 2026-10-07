@@ -25,7 +25,7 @@ message that says what to do. It takes no arguments.
 ```
 
 Before step 1, and once more after a failure, `play` runs
-[`doctor`](doctor.md) on its prefix when the game gives it `wisp watch`'s
+[`doctor`](doctor.md) on its prefix when the game gives it `wisp client watch`'s
 ClientWatch (`makePlay`'s fourth argument). Doctor ends a second runtime, a
 runtime without Battle.net, a crashed game and its error dialog, a game that
 lost Battle.net, sits at the empty login shell, loaded the map without its

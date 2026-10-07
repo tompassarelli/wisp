@@ -16,7 +16,7 @@ game. It isn't for cheating. The terms are in
 | Command | What it does |
 | --- | --- |
 | `wisp lan setup --from INSTALL [--pairs N]` | Creates the pool's clients from an existing Warcraft III install folder (the one holding `_retail_`). See "Setting up". |
-| `wisp lan pool [--pairs N \| --pair K...] [--profile parity\|visual\|hfr[,...]] [--seconds S]` | Runs up to N pairs, each admitted by the machine-capacity helper. It stays in the foreground; Ctrl-C stops the pool. |
+| `wisp lan pool [--pairs N \| --pair K...] [--pool-profile parity\|visual\|hfr[,...]] [--seconds S]` | Runs up to N pairs, each admitted by the machine-capacity helper. It stays in the foreground; Ctrl-C stops the pool. |
 | `wisp lan fresh MAP [--pair K] [--computers N] [--turn-ms MS]` | Hosts MAP on pair K, switches both clients to LAN, joins them, and returns once the match plays. It prints the game's action log. |
 | `wisp lan status [--pair K]` | Each pair's clients and processes, and its game: phase, turns, desyncs, players. |
 | `wisp lan end --pair K` | Ends pair K's game. The clients go back to their menus. |
@@ -217,7 +217,7 @@ game in a user namespace this user owns, and Yama allows a tracer that holds
 
 ## The action log
 
-`wisp watch` observes each declared pool client through its host's Unix
+`wisp client watch` observes each declared pool client through its host's Unix
 socket, since the client's menu socket is inside the isolated network.
 Typing a developer command requires the host to report that exact running
 process as loaded, connected and playing. Lobby, loading, ended and stale

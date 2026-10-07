@@ -1,6 +1,6 @@
 // One pool pair's session (wisp:docs/lan.md, "Running a pool"), run by
 // `wisp lan pool` inside the pair's machine-capacity session:
-//   bun pairSession.ts --pair K --profile P --launcher PRIVATE_DESKTOP_SH
+//   bun pairSession.ts --pair K --pool-profile P --launcher PRIVATE_DESKTOP_SH
 // Each client gets its own private desktop, so every client has one game
 // window on its own display, as the signed-in clients A and B do: tools that
 // find "the" Warcraft window on a display, and controller helpers that type
@@ -17,11 +17,11 @@ const argument = (name: string) => {
   return at < 0 ? undefined : process.argv[at + 1];
 };
 const pair = Number(argument("pair") ?? "0");
-const profileName = argument("profile") ?? "parity";
+const profileName = argument("pool-profile") ?? "parity";
 const launcher = argument("launcher");
 const capacity = argument("capacity");
 const profile = PROFILES[profileName];
-if (profile === undefined || launcher === undefined) throw new Error("pairSession takes --pair K --profile parity|visual --launcher PRIVATE_DESKTOP_SH");
+if (profile === undefined || launcher === undefined) throw new Error("pairSession takes --pair K --pool-profile parity|visual --launcher PRIVATE_DESKTOP_SH");
 const directory = pairDirectory(pair);
 mkdirSync(directory, { recursive: true });
 const size = desktopSize(profile);
@@ -48,7 +48,7 @@ void (async () => {
 })();
 
 const desktopA = Bun.spawn([launcher, "start", "--resolution", size, "--", "bwrap", "--dev-bind", "/", "/", "--unshare-net", "--die-with-parent", "--",
-  process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--profile", profileName, "--run-b", runB, "--session-pid", String(process.pid), ...(capacity === undefined ? [] : ["--capacity", capacity])], {
+  process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", profileName, "--run-b", runB, "--session-pid", String(process.pid), ...(capacity === undefined ? [] : ["--capacity", capacity])], {
   stdout: Bun.file(join(directory, "desktop-a.out")),
   stderr: Bun.file(join(directory, "desktop-a.err")),
 });

@@ -99,7 +99,7 @@ export function preferences(profile: Profile, windowX: number): string {
 /** The private desktop one client needs: its window and a margin. */
 export const desktopSize = (profile: Profile) => `${profile.width + 40}x${profile.height + 40}`;
 
-/** A pool client as a clients file lists it (the schema `wisp watch` and the engine tools read). */
+/** A pool client as a clients file lists it (the schema `wisp client watch` and the engine tools read). */
 export interface PoolClient {
   readonly name: string;
   readonly documents: string;

@@ -33,7 +33,7 @@ process, and it enforces these rules:
 - **Reads, online-OK** (`poll`, `locate`, the [Lua VM reader](#lua-stacks)) open `/proc/PID/mem` read-only. They are
   passive and run outside the process, so they may follow a development client
   that is signed in to Battle.net.
-- **Traps, offline only** (`watch`, `locate --watch`) set a perf hardware breakpoint, which
+- **Traps, offline only** (`trace`, `locate --trace`) set a perf hardware breakpoint, which
   loads the thread's debug registers. `watch --lua` also stops the writing
   thread at each birth with ptrace (wisp:scripts/wisp/engine/stopWatch.ts). Traps refuse unless the client is
   verifiably offline. That means its network namespace has only loopback
@@ -70,7 +70,7 @@ usual default. It uses `perf` from PATH, `--perf BIN`, or `nix build nixpkgs#per
 
 A project composes the command with `makeEngine(clientsFile)`
 (wisp:scripts/wisp/commands/engine.ts), passing the same clients file that
-`wisp watch` reads. Smashcraft runs it as `bun wisp engine ...`.
+`wisp client watch` reads. Smashcraft runs it as `bun wisp engine ...`.
 
 | Command | What it does |
 | --- | --- |
@@ -79,9 +79,9 @@ A project composes the command with `makeEngine(clientsFile)`
 | `wisp engine diff A.log B.log [--skew S] [--limit N] [--source-maps DIR]` | Aligns two poll logs by birth number. It prints births one client has and the other lacks, the first class difference, and births whose time between clients differs from the median by more than S seconds (0.1 by default). With the map's source maps, a code callback's `at map-KEY:LINE` becomes its TypeScript line. |
 | `wisp engine diff ACTIONS.log POLL.log [--class REGEX] [--turn-ms MS]` | Places each birth of a poll log in the turn of a LAN host's action log it fell in, with the last actions delivered before it ([Actions](#actions)). |
 | `wisp engine actions --client lan0a,lan0b [--map MAP] [--follow]` | Prints what Warcraft's network layer delivered to an offline pool pair, turn by turn: each player's orders, BlzSendSyncData payloads with their prefixes, key and frame events, chat, joins, loads, leaves, and every desync by turn ([Actions](#actions)). |
-| `wisp engine watch --client a [--seconds N] [--depth N] [--out DIR]` | Sets a hardware write breakpoint on the birth counter and records the game's stack for every birth. Frames are named by known role. It writes `DIR/<client>.stacks.txt` and prints the most common stacks. Offline clients only. |
-| `wisp engine watch --client a --lua [--seconds N] [--limit N] [--source-maps DIR]` | Stops the game's main thread at every birth with a ptrace debug-register watchpoint, reads the Lua VM's exact call stack while the thread is stopped, then lets it go. It writes `DIR/<client>.lua-stacks.txt` with one line per birth, in the form `birth N CLASS owner CLASS: TimerStart <- FILE.ts:LINE <- FILE.ts:LINE`. Offline clients only. It finds the map's Lua VM by signature; no offsets are needed. |
-| `wisp engine locate --client a [--watch SECONDS] [--span BYTES]` | Finds the presence table in a running client of any build and checks the offsets file's entry for it, or prints a new entry. With `--watch`, it also names the tag allocator and release from their writes (offline only). |
+| `wisp engine trace --client a [--seconds N] [--depth N] [--out DIR]` | Sets a hardware write breakpoint on the birth counter and records the game's stack for every birth. Frames are named by known role. It writes `DIR/<client>.stacks.txt` and prints the most common stacks. Offline clients only. |
+| `wisp engine trace --client a --lua [--seconds N] [--limit N] [--source-maps DIR]` | Stops the game's main thread at every birth with a ptrace debug-register watchpoint, reads the Lua VM's exact call stack while the thread is stopped, then lets it go. It writes `DIR/<client>.lua-stacks.txt` with one line per birth, in the form `birth N CLASS owner CLASS: TimerStart <- FILE.ts:LINE <- FILE.ts:LINE`. Offline clients only. It finds the map's Lua VM by signature; no offsets are needed. |
+| `wisp engine locate --client a [--trace SECONDS] [--span BYTES]` | Finds the presence table in a running client of any build and checks the offsets file's entry for it, or prints a new entry. With `--trace`, it also names the tag allocator and release from their writes (offline only). |
 
 Logs go under `$XDG_STATE_HOME/wisp/engine/<UTC time>/` unless you pass `--out`.
 Session runners use the same modules: `startPresencePoll` and `pollPresence`
@@ -126,7 +126,7 @@ desync that happened outside a session.
    `wisp engine diff` on its two logs. The birth that stands out names the
    class and owner, for example `CAgentBaseAbs owner CScriptFunc`, which is a
    code callback.
-3. On offline clients, `wisp engine watch --client a` gives that birth's
+3. On offline clients, `wisp engine trace --client a` gives that birth's
    stack in the game's code.
 
 Real output for #158's turn-921 desync (paths shortened):
@@ -243,7 +243,7 @@ entry makes live commands stop with that message. To add one:
 1. On a running client of the new build, run
    `wisp engine locate --client a`. It scans the first 64 MiB of `.data` for a
    pointer to a table in the known layout whose sampled live agents hold their
-   own tag, then prints the entry. Add `--watch 3` on an offline client to also
+   own tag, then prints the entry. Add `--trace 3` on an offline client to also
    name the tag allocator and release from the writes to the birth counter and
    free head.
 2. Copy the entry into offsets.json. Copy any `roles` that are still valid

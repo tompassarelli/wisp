@@ -1,16 +1,16 @@
-# Watching clients: `wisp watch`
+# Watching clients: `wisp client watch`
 
-`wisp watch` tells you what each Warcraft III client is doing without looking
+`wisp client watch` tells you what each Warcraft III client is doing without looking
 at its screen. Before you click, read or wait on a client, run it to find out
 whether the client is signed in, in a lobby, in a match, signed out, or
 crashed, and whether its map loaded.
 
 ```sh
-wisp watch              # every client in the clients file, one line per change
-wisp watch a --once     # client a's current state, then exit
-wisp watch --json       # the same events as JSON lines
-wisp watch --record socket.jsonl   # also save every menu socket message (test fixtures)
-wisp client state a     # one client's state
+wisp client watch              # every client in the clients file, one line per change
+wisp client watch a --once     # client a's current state, then exit
+wisp client watch --json       # the same events as JSON lines
+wisp client watch --record socket.jsonl   # also save every menu socket message (test fixtures)
+wisp client watch a --once     # one client's state
 wisp client wait b lobby --seconds 20   # until b is in a lobby; a crash or lost Battle.net fails at once
 ```
 
@@ -26,11 +26,11 @@ A line looks like this:
 ```
 
 The project composes the command with `makeWatch(clientsFile, { filePrefix })`
-(wisp:scripts/wisp/commands/watch.ts). The clients file is the same one
+(wisp:scripts/wisp/clientWatchCommand.ts). The clients file is the same one
 `wisp client` reads; watching needs each client's `documents` and, for menu
 screens, its `menuReportPort`. It doesn't need the client's private desktop.
 
-Without `--once`, `wisp watch` runs inside the [desync autopsy](autopsy.md)
+Without `--once`, `wisp client watch` runs inside the [desync autopsy](autopsy.md)
 (wisp:docs/autopsy.md). When the clients report a desync, it prints the first
 divergent birth with its class, turn and client.
 
@@ -133,7 +133,7 @@ run, the crashed `play --menus` run and client B's silent log.
 - Menu screens other than `GAME_LOBBY` and `LOADING_SCREEN` (which Wisp's
   menu driving already waits for), and the `DISABLED_SCREEN`, `UpdateScoreInfo`
   and `LoggedOut` messages, are named as other menu tools name them; no socket
-  trace of them has been recorded yet. `wisp watch --record FILE` records one.
+  trace of them has been recorded yet. `wisp client watch --record FILE` records one.
 - A client without a menu page shows only `closed`, `launcher`, `running`,
   `signed in`, `in match` (from receipts) and `crashed`.
 - Warcraft III killed without a crash report shows as `launcher` or `closed`.

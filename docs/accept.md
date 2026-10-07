@@ -44,8 +44,8 @@ reading something no capture takes.
 
 ## How a run goes
 
-Before each session the driver prepares the clients (wisp doctor, or by
-default: none crashed or disconnected by `wisp watch`), marks each client's
+Before each session the driver prepares the clients (wisp client doctor, or by
+default: none crashed or disconnected by `wisp client watch`), marks each client's
 receipts and War3Log, starts the session's map with the game's own
 fresh-match command and waits until `watch` reports every client in the
 match. Without a ClientWatch service the live driver skips both watch steps

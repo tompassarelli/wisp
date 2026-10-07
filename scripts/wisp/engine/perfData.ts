@@ -1,5 +1,5 @@
 // Samples from a perf.data file that `perf record --call-graph dwarf` wrote,
-// and the game frames in each sample's user stack. `wisp engine watch` sets a
+// and the game frames in each sample's user stack. `wisp engine trace` sets a
 // hardware write breakpoint with perf (no ptrace: a debugger attach makes a
 // signed-in client exit), so every sample is one write to the watched address.
 // Warcraft III's code has no frame pointers or symbols, so the frames are the

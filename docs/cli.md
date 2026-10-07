@@ -55,6 +55,7 @@ program can register it; "game" means the consuming game defines it.
 
 | Noun | What it acts on | Verbs | Defined by |
 | --- | --- | --- | --- |
+| `inputs` | Private build inputs | `add`, `check`, `path` | game |
 | `map` | The game's Warcraft III map file | `build`, `rebuild` | Wisp services, game command |
 | `dev` | The every-save development session | (session) | Wisp |
 | `hot` | Hot reload into running clients | (session) | Wisp |
@@ -66,18 +67,18 @@ program can register it; "game" means the consuming game defines it.
 | `client` | One native client: its screen, input, state and recovery | `look`, `read`, `click`, `keys`, `chat`, `wait`, `watch`, `doctor` | Wisp |
 | `menus` | Warcraft III's menus through Wisp's menu page | `install`, `remove`, `listen`, `host`, `join`, `start`, `leave` | Wisp |
 | `online` | Direct play over Battle.net by join code | `setup`, `host`, `join` | game |
-| `lan` | The offline LAN client pool | `pool` | Wisp |
-| `engine` | Warcraft III's engine inside a client, for desyncs | `desync`, `poll`, `diff`, `trace`, `locate` | Wisp |
+| `lan` | The offline LAN client pool | `setup`, `pool`, `fresh`, `status`, `end` | Wisp |
+| `engine` | Warcraft III's engine inside a client, for desyncs | `desync`, `poll`, `diff`, `trace`, `locate`, `actions` | Wisp |
 | `headless` | A journey in simulated clients | (journey name) | Wisp |
 | `soak` | Many headless matches by computers and a fuzzed controller | (session) | Wisp |
-| `perf` | Predicted frame cost | (run name), `compare`, `native`, `fit` | Wisp |
+| `perf` | Predicted frame cost | (run name), `compare`, `native`, `fit`, `budget`, `profile`, `census` | Wisp |
 | `repro` | A saved moment of play | (file) | Wisp |
 | `replay` | A full-match replay | (file) | game |
 | `parity` | Bun against 32-bit Lua on the same numbers | `numeric`, `tapes` | game |
 | `integrity` | Native input-integrity sessions and their evidence | `capture`, `result`, `headless` | game |
 | `pad` | Scripted virtual-pad input through the real helper | (script) | game |
-| `farm` | Headless work on hosted CI runners | `balance`, `pads` | game |
-| `view` | What a player would see, and the model facts it reads | `scene`, `frame`, `models`, `strikes`, `reach`, `hurtboxes` | game |
+| `farm` | Headless work on hosted CI runners | `balance`, `pads`, `perf`, `memory` | game |
+| `view` | What a player would see, and the model facts it reads | `scene`, `frame`, `models`, `strikes`, `reach`, `hurtboxes`, `motion` | game |
 | `oracle` | Melee situations against decompiled values | (session) | game |
 | `agency` | Stretches a victim can't act in | (session) | game |
 | `interactions` | The fighters' interaction graph | (session) | game |
@@ -90,7 +91,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | --- | --- | --- |
 | `--client NAME` | A native client by its name in the clients file; repeatable or `a,b` | `engine`, `online`, `lan` |
 | `--clients N` | How many simulated clients | `headless` |
-| `--pairs N` | How many client pairs | `lan` |
+| `--pairs N` | How many client pairs | `lan`, `pad` |
 | `--data DIR` | A running client's CustomMapData folder, once per client | `dev`, `hot`, `tune` |
 | `--profile NAME` | The map's build profile (`main`, `integrity`, `playable`, `physics-probe`, `frame-cost`, `stack-trace`) | `map`, `fresh`, `hot`, `tune`, `accept` |
 | `--map MAP.w3x` | A built map the command plays or hosts, when the map isn't its object | `pad`, `menus host` |
@@ -148,64 +149,89 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--threshold SHARE` | The rise that fails a comparison | `perf compare` |
 | `--cost` | Also print predicted Warcraft cost per frame | `headless` |
 
+| `--pool-profile NAME` | Offline pool display settings: parity, visual or hfr | game or Wisp, as the usage declares |
+| `--trace SECONDS` | Trap an offline process for this many seconds | game or Wisp, as the usage declares |
+| `--clients-file FILE` | The native clients configuration file | game or Wisp, as the usage declares |
+| `--four-fighters` | Capture the four-fighter match and rematch | game or Wisp, as the usage declares |
+| `--playable` | Capture a playable candidate match and rematch | game or Wisp, as the usage declares |
+| `--functions` | Report functions in the worst frames | game or Wisp, as the usage declares |
+| `--frame N` | Inspect this recorded frame | game or Wisp, as the usage declares |
+| `--diff-frame N\|previous` | Compare the inspected frame with this other frame | game or Wisp, as the usage declares |
+| `--from INSTALL` | The installation copied to create offline clients | game or Wisp, as the usage declares |
+| `--pair K` | Select a numbered client pair; repeatable | game or Wisp, as the usage declares |
+| `--headless-jobs N` | Number of simultaneous headless comparisons | game or Wisp, as the usage declares |
+| `--fresh-each` | Start a fresh game for each script when measuring startup cost | game or Wisp, as the usage declares |
+| `--p99 MS` | The 99th-percentile frame cost limit | game or Wisp, as the usage declares |
+| `--worst-frames N` | How many worst frames to report | `perf profile` |
+| `--worst MS` | The worst-frame cost limit | game or Wisp, as the usage declares |
+| `--rise-ms MS` | The permitted rise above the standing frame baseline | game or Wisp, as the usage declares |
+| `--jobs N` | Number of worker jobs | game or Wisp, as the usage declares |
+
 ## Inventory
 
-Every command and verb in Wisp's sample program and Smashcraft's `bun wisp`,
-grouped by noun. "Today" gives the spelling on `main` where it differs.
+Every command and verb in Wisp's sample program and Smashcraft's `bun wisp`, grouped by noun.
 
-| Command | What it does | Today |
-| --- | --- | --- |
-| `map build` | Builds the TypeScript map from a base map, assets and declaration | `build` |
-| `map rebuild MAP.w3x` | Replaces only a built map's script | `rebuild` |
-| `dev` | Every save's type errors, affected tests, journeys and whole check | |
-| `hot --data DIR... [--watch]` | Hot-reloads saves into running clients | |
-| `tune --data DIR...` | Panel that changes declared values in a running match | |
-| `fresh MAP.w3x` | New match in every client, waits for each receipt | |
-| `play` | Owner's desktop to a match against a computer | |
-| `controller` | Points the always-on controller service at main's helper | |
-| `accept` | Runs the declared native checks in as few matches as possible | |
-| `client look CLIENT` | Screenshot of one client | |
-| `client read CLIENT` | Reads one client's screen text | |
-| `client click CLIENT X Y` | Clicks in one client | |
-| `client keys CLIENT KEYS` | Types keys into one client | |
-| `client chat CLIENT TEXT` | Sends a chat message or chat command | |
-| `client wait CLIENT STATE...` | Waits until a client reaches a state | |
-| `client watch [CLIENT...]` | Each client's state from its events; `--once` prints it once | `watch`; `client state CLIENT` is `client watch CLIENT --once` |
-| `client doctor [CLIENT...]` | Brings clients to a ready state | `doctor` |
-| `menus install\|remove RETAIL_DIR` | Installs or removes Wisp's menu page | |
-| `menus listen` | Prints menu requests while you act by hand | |
-| `menus host\|join\|start\|leave` | Lobby steps through the menu page | |
-| `online setup` | Menu page and Allow Local Files on a player's install | |
-| `online host` | Hosts a private game, prints its join code | |
-| `online join CODE` | Joins a game by code | |
-| `lan pool --pairs N` | Pairs of offline throwaway clients on LAN | in flight |
-| `engine desync A B` | First differing turn and section of two Desync.logs | |
-| `engine poll --client a,b` | Follows births and frees in each client's presence table | |
-| `engine diff A.log B.log` | Aligns two clients' births | |
-| `engine trace --client a` | Game stack at each birth (traps; offline clients only) | `engine watch` |
-| `engine locate --client a` | Finds the presence table after a Warcraft update; `--trace` traps | `--watch` for `--trace` |
-| `headless [JOURNEY]` | A journey in simulated clients: desyncs, errors, scene problems | |
-| `soak` | Hundreds of headless matches; a repro file per finding | |
-| `perf [RUN]` | Predicted Warcraft cost per frame in 32-bit Lua | |
-| `perf compare A B` | Fails on a rise in predicted cost | |
-| `perf native READINGS` | Holds the prediction to native overlay readings | |
-| `perf fit` | Fits the cost model to native readings | |
-| `repro FILE` | Replays a saved moment to its recorded checksum | |
-| `replay FILE` | Replays a full match in Bun and 32-bit Lua | |
-| `parity numeric` | Numeric corpus in Bun and both 32-bit Luas | |
-| `parity tapes` | Replay tapes across Bun and both 32-bit Luas | `tapes` |
-| `integrity capture` | Native input-integrity session (two fighters, `--four-fighters`, or `--playable`) | `parity capture`, `integrity capture`, `four-fighters capture`, `playable capture` |
-| `integrity result DIR` | Reconciles a capture folder by the session it records | `parity result`, `integrity result`, `four-fighters result`, `playable result` |
-| `integrity headless` | The same session through the real helper into headless clients | `parity headless`, `integrity headless` |
-| `pad SCRIPT...` | Timed virtual-pad input through the real helpers | |
-| `farm balance` | The balance gate's computer field on hosted runners | |
-| `farm pads` | Every pad script headless on hosted runners | |
-| `view scene DATA_DIR...` | What a player would see wrong in recorded scenes | |
-| `view frame FRAME.ppm...` | The same from captured frames | |
-| `view models` | Rewrites the model facts the checks read | |
-| `view strikes` | Rewrites hero strike moments | |
-| `view reach --assets DIR` | Rewrites how far swings draw | |
-| `view hurtboxes --assets DIR --out DIR` | Side-view sheets of every fighter's hurt volumes | |
-| `oracle` | Melee situations beside decompiled values | |
-| `agency` | Stretches a victim can't act in, per starter | |
-| `interactions` | Writes the interaction graph; `--check`, `--move` | |
+| Command | What it does |
+| --- | --- |
+| `map build` | Builds the TypeScript map from a base map, assets and declaration |
+| `map rebuild MAP.w3x` | Replaces only a built map's script |
+| `dev` | Every save's type errors, affected tests, journeys and whole check |
+| `hot --data DIR... [--watch]` | Hot-reloads saves into running clients |
+| `tune --data DIR...` | Panel that changes declared values in a running match |
+| `fresh MAP.w3x` | New match in every client, waits for each receipt |
+| `play` | Owner's desktop to a match against a computer |
+| `controller` | Points the always-on controller service at main's helper |
+| `accept` | Runs the declared native checks in as few matches as possible |
+| `client look CLIENT` | Screenshot of one client |
+| `client read CLIENT` | Reads one client's screen text |
+| `client click CLIENT X Y` | Clicks in one client |
+| `client keys CLIENT KEYS` | Types keys into one client |
+| `client chat CLIENT TEXT` | Sends a chat message or chat command |
+| `client wait CLIENT STATE...` | Waits until a client reaches a state |
+| `client watch [CLIENT...]` | Each client's state from its events; `--once` prints it once |
+| `client doctor [CLIENT...]` | Brings clients to a ready state |
+| `menus install\|remove RETAIL_DIR` | Installs or removes Wisp's menu page |
+| `menus listen` | Prints menu requests while you act by hand |
+| `menus host\|join\|start\|leave` | Lobby steps through the menu page |
+| `online setup` | Menu page and Allow Local Files on a player's install |
+| `online host` | Hosts a private game, prints its join code |
+| `online join CODE` | Joins a game by code |
+| `lan pool --pairs N` | Pairs of offline throwaway clients on LAN |
+| `engine desync A B` | First differing turn and section of two Desync.logs |
+| `engine poll --client a,b` | Follows births and frees in each client's presence table |
+| `engine diff A.log B.log` | Aligns two clients' births |
+| `engine trace --client a` | Game stack at each birth (traps; offline clients only) |
+| `engine locate --client a` | Finds the presence table after a Warcraft update; `--trace` traps |
+| `headless [JOURNEY]` | A journey in simulated clients: desyncs, errors, scene problems |
+| `soak` | Hundreds of headless matches; a repro file per finding |
+| `perf [RUN]` | Predicted Warcraft cost per frame in 32-bit Lua |
+| `perf compare A B` | Fails on a rise in predicted cost |
+| `perf native READINGS` | Holds the prediction to native overlay readings |
+| `perf fit` | Fits the cost model to native readings |
+| `repro FILE` | Replays a saved moment to its recorded checksum |
+| `replay FILE` | Replays a full match in Bun and 32-bit Lua |
+| `parity numeric` | Numeric corpus in Bun and both 32-bit Luas |
+| `parity tapes` | Replay tapes across Bun and both 32-bit Luas |
+| `integrity capture` | Native input-integrity session (two fighters, `--four-fighters`, or `--playable`) |
+| `integrity result DIR` | Reconciles a capture folder by the session it records |
+| `integrity headless` | The same session through the real helper into headless clients |
+| `pad SCRIPT...` | Timed virtual-pad input through the real helpers |
+| `farm balance` | The balance gate's computer field on hosted runners |
+| `farm pads` | Every pad script headless on hosted runners |
+| `view scene DATA_DIR...` | What a player would see wrong in recorded scenes |
+| `view frame FRAME.ppm...` | The same from captured frames |
+| `view models` | Rewrites the model facts the checks read |
+| `view strikes` | Rewrites hero strike moments |
+| `view reach --assets DIR` | Rewrites how far swings draw |
+| `view hurtboxes --assets DIR --out DIR` | Side-view sheets of every fighter's hurt volumes |
+| `oracle` | Melee situations beside decompiled values |
+| `agency` | Stretches a victim can't act in, per starter |
+| `interactions` | Writes the interaction graph; `--check`, `--move` |
+
+| `inputs add FAMILY PATH`, `inputs check`, `inputs path` | Registers and resolves private build inputs |
+| `lan setup`, `lan fresh`, `lan status`, `lan end` | Creates, starts, reads and ends offline matches |
+| `engine actions` | Reads the LAN host turn log |
+| `perf budget`, `perf profile`, `perf census` | Checks frame budgets and reports costly functions |
+| `soak memory` | Measures retained match state after warm-up |
+| `farm perf`, `farm memory` | Runs frame measurements and memory soak on hosted runners |
+| `view motion` | Measures fighter movement and recovery animation cadence |

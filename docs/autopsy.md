@@ -30,7 +30,7 @@ opens game processes only through [`wisp engine`'s guardrails](engine.md#guardra
 
 Every native session runner runs inside it:
 
-- `wisp doctor` and `wisp watch` (not `watch --once`).
+- `wisp client doctor` and `wisp client watch` (not `watch --once`).
 - Every run wrapped by `withDoctor(check, print, run, { autopsy: { clientsFile } })`
   (wisp:scripts/wisp/doctor.ts). Smashcraft's native pad runs, integrity and
   bot captures, `fresh` and `accept` all go through it.

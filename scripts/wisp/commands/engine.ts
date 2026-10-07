@@ -29,7 +29,7 @@ import { PresenceTracker, presenceTable, readHeader, scanForPresenceTable } from
 import { stopWatch } from "../engine/stopWatch";
 import { type Frame, parsePerfData, sampleFrames } from "../engine/perfData";
 import { toTypeScript } from "../../sourceMaps";
-import { watchedClients } from "./watch";
+import { watchedClients } from "../clientWatchCommand";
 
 export class EngineFailure extends Schema.TaggedError<EngineFailure>()("EngineFailure", {
   problem: Schema.String,
@@ -210,7 +210,7 @@ const watchLua = (client: AttachedClient, offsets: EngineOffsets, seconds: numbe
   const text = lines.join("\n");
   const mapped = sourceMaps === undefined ? text : yield* Effect.promise(() => toTypeScript(text, sourceMaps));
   const file = join(out, `${client.name}.lua-stacks.txt`);
-  yield* attempt(`write ${file}`, () => writeFileSync(file, `# wisp engine watch --lua: client ${client.name} pid ${client.pid} build ${client.exe.version}\n${mapped}\n`));
+  yield* attempt(`write ${file}`, () => writeFileSync(file, `# wisp engine trace --lua: client ${client.name} pid ${client.pid} build ${client.exe.version}\n${mapped}\n`));
   yield* Console.log(`${client.name}: ${hits} births stopped -> ${file}`);
   const fromLua = mapped.split("\n").filter((line) => !line.endsWith("(not from Lua)"));
   for (const line of fromLua.slice(0, 20)) yield* Console.log(`  ${line}`);
@@ -246,7 +246,7 @@ const watch = (clientsFile: string): Command => (args) => Effect.gen(function*()
     const data = yield* recordWrites(perf, client.pid, table + offsets.table.births, seconds, join(out, `${client.name}.perf.data`));
     const symbols = symbolizer(client, offsets);
     const first = data.samples[0]?.time ?? 0n;
-    const lines = [`# wisp engine watch: client ${client.name} pid ${client.pid} build ${client.exe.version} base 0x${client.base.toString(16)}; one line per write to the birth counter, from ${before}${data.lost > 0 ? `; ${data.lost} writes lost, so births after a loss are estimates` : ""}`];
+    const lines = [`# wisp engine trace: client ${client.name} pid ${client.pid} build ${client.exe.version} base 0x${client.base.toString(16)}; one line per write to the birth counter, from ${before}${data.lost > 0 ? `; ${data.lost} writes lost, so births after a loss are estimates` : ""}`];
     const stacks = new Map<string, { count: number; births: number[] }>();
     for (const [index, sample] of data.samples.entries()) {
       const frames = sampleFrames(sample, symbols);
@@ -289,7 +289,7 @@ function writer(samples: readonly { ip: number }[], client: AttachedClient, excl
 const locate = (clientsFile: string): Command => (args) => Effect.gen(function*() {
   const clients = yield* namedClients(clientsFile, args);
   if (clients.length !== 1) return yield* new UsageFailure({ problem: "locate takes one client" });
-  const watchSeconds = yield* number(args, "watch", Number.NaN).pipe(Effect.orElseSucceed(() => Number.NaN));
+  const watchSeconds = yield* number(args, "trace", Number.NaN).pipe(Effect.orElseSucceed(() => Number.NaN));
   const [client] = yield* attachAll(clients, Number.isFinite(watchSeconds) ? "trap" : "read");
   if (client === undefined) return;
   yield* Effect.gen(function*() {
@@ -334,22 +334,22 @@ const locate = (clientsFile: string): Command => (args) => Effect.gen(function*(
       yield* Console.log(same ? `${basename(OFFSETS_FILE)}'s entry for ${client.exe.version} matches this client` : `${basename(OFFSETS_FILE)}'s entry for ${client.exe.version} differs; this client's:`);
       if (same) return;
     } else {
-      yield* Console.log(`add this entry to ${OFFSETS_FILE}${Number.isFinite(watchSeconds) ? "" : " (with --watch SECONDS it also names the tag allocator and release from their writes)"}:`);
+      yield* Console.log(`add this entry to ${OFFSETS_FILE}${Number.isFinite(watchSeconds) ? "" : " (with --trace SECONDS it also names the tag allocator and release from their writes)"}:`);
     }
     yield* Console.log(JSON.stringify(offsetsEntry(derived), null, 2));
   }).pipe(Effect.ensuring(Effect.sync(() => client.memory.close())));
 });
 
-const USAGE = "(for debugging your own map on your own development clients; never other players' games) desync A B [--turn N] | poll --client a,b [--seconds N] [--out DIR] | diff A.log B.log [--skew S] [--source-maps DIR] | diff ACTIONS.log POLL.log [--class REGEX] | actions --client a,b [--map MAP] [--follow] | watch --client a [--seconds N] [--out DIR] [--perf BIN] [--lua [--limit N] [--source-maps DIR]] | locate --client a [--watch SECONDS]";
+const USAGE = "(for debugging your own map on your own development clients; never other players' games) desync A B [--turn N] | poll --client a,b [--seconds N] [--out DIR] | diff A.log B.log [--skew S] [--source-maps DIR] | diff ACTIONS.log POLL.log [--class REGEX] | actions --client a,b [--map MAP] [--follow] | trace --client a [--seconds N] [--out DIR] [--perf BIN] [--lua [--limit N] [--source-maps DIR]] | locate --client a [--trace SECONDS]";
 
-/** `clientsFile` is the clients file `wisp watch` reads: each client's name and Documents folder, inside its Wine prefix. */
+/** `clientsFile` is the clients file `wisp client watch` reads: each client's name and Documents folder, inside its Wine prefix. */
 export const makeEngine = (clientsFile: string): Command => ([sub, ...args]) => {
   switch (sub) {
     case "desync": return desync(args);
     case "diff": return diff(args);
     case "actions": return actions(args);
     case "poll": return poll(clientsFile)(args);
-    case "watch": return watch(clientsFile)(args);
+    case "trace": return watch(clientsFile)(args);
     case "locate": return locate(clientsFile)(args);
     default: return Effect.fail(new UsageFailure({ problem: `engine takes ${USAGE}` }));
   }

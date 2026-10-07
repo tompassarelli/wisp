@@ -18,7 +18,7 @@ export interface LiveAcceptOptions<R> {
   /** Which files of a client's CustomMapData are the map's receipts. */
   readonly receipt: (name: string) => boolean;
   /**
-   * Makes every client usable before a session, such as `wisp doctor`.
+   * Makes every client usable before a session, such as `wisp client doctor`.
    * Without it a session starts only when no client is crashed or disconnected.
    */
   readonly prepare?: Effect.Effect<void, CommandFailure, R>;

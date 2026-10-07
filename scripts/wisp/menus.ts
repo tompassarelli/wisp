@@ -191,7 +191,7 @@ const Announcement = Schema.Struct({ port: Schema.Int, guid: Schema.String, rece
 /**
  * One program at a time can listen on a report port. The listener keeps the
  * newest announced address in a file only this user can read, so another
- * Wisp program (`wisp watch` beside `play` or `fresh`) finds the menus too.
+ * Wisp program (`wisp client watch` beside `play` or `fresh`) finds the menus too.
  */
 export const menuAddressFile = (reportPort: number) => join(process.env["XDG_RUNTIME_DIR"] ?? tmpdir(), `wisp-menus-${reportPort}.json`);
 /** Several announcements long: an address file older than this has no listener behind it. */

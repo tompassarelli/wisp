@@ -1,16 +1,16 @@
-// `wisp doctor [CLIENT...]`: brings the clients of the clients file (all, or
+// `wisp client doctor [CLIENT...]`: brings the clients of the clients file (all, or
 // those named) to a ready state, recovering each known bad state with its
 // documented recovery and printing each step (wisp:docs/doctor.md). It stops
 // with one plain line per client that needs a person, such as a sign-in.
 import { Effect, Layer } from "effect";
-import * as desktop from "../../warcraft/desktop";
-import { type Command, type CommandFailure, UsageFailure } from "../command";
-import { DoctorHands, DoctorStop, type DoctorTarget, doctor } from "../doctor";
-import { privateDoctorHands } from "../doctorHost";
-import { withAutopsy } from "../engine/autopsy";
-import { PlayMachine } from "../play";
-import { type PlayTools, playMachineLayer } from "../playHost";
-import type { ClientWatch } from "../watch";
+import * as desktop from "../warcraft/desktop";
+import { type Command, type CommandFailure, UsageFailure } from "./command";
+import { DoctorHands, DoctorStop, type DoctorTarget, doctor } from "./doctor";
+import { privateDoctorHands } from "./doctorHost";
+import { withAutopsy } from "./engine/autopsy";
+import { PlayMachine } from "./play";
+import { type PlayTools, playMachineLayer } from "./playHost";
+import type { ClientWatch } from "./watch";
 
 export interface DoctorDeclaration {
   /** The clients file (wisp:docs/sample-map.md): each client's desktop run folder, Documents folder, menu port and expected display settings. */
@@ -55,7 +55,7 @@ export const clientsDoctor = (declaration: DoctorDeclaration, names: readonly st
     return yield* doctor(yield* doctorTargets(declaration, names), print);
   }).pipe(Effect.provide(doctorLayer(declaration, tools)));
 
-/** `doctor [CLIENT...]`, watching the clients through `watch` (`wisp watch`'s ClientWatch layer), inside the desync autopsy (wisp:docs/autopsy.md). */
+/** `doctor [CLIENT...]`, watching the clients through `watch` (`wisp client watch`'s ClientWatch layer), inside the desync autopsy (wisp:docs/autopsy.md). */
 export const makeDoctor = (declaration: DoctorDeclaration, watch: Layer.Layer<ClientWatch, CommandFailure>, tools: Partial<PlayTools> = {}): Command => (names) =>
   names.some((name) => name.startsWith("-"))
     ? Effect.fail(new UsageFailure({ problem: "doctor takes client names only" }))

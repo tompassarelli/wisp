@@ -1,4 +1,4 @@
-// `wisp watch [CLIENT...] [--once] [--json] [--record FILE]`: what each
+// `wisp client watch [CLIENT...] [--once] [--json] [--record FILE]`: what each
 // configured Warcraft III client is doing, from the menus' socket, its log,
 // its crash reports, the map's match receipts and its processes; never from
 // its screen (wisp:docs/watch.md).
@@ -8,10 +8,10 @@
 //   --record FILE  also append every menu socket message to FILE (JSON lines), for test fixtures
 import { appendFileSync } from "node:fs";
 import { Console, Effect, Schema } from "effect";
-import type { Client } from "../clients";
-import { type Command, UsageFailure, flagValues } from "../command";
-import { withAutopsy } from "../engine/autopsy";
-import { ClientWatch, type ClientView, type WatchOptions, WatchFailure, changes, describeView, eventLine } from "../watch";
+import type { Client } from "./clients";
+import { type Command, UsageFailure, flagValues } from "./command";
+import { withAutopsy } from "./engine/autopsy";
+import { ClientWatch, type ClientView, type WatchOptions, WatchFailure, changes, describeView, eventLine } from "./watch";
 
 const ClientsFile = Schema.Struct({
   clients: Schema.NonEmptyArray(Schema.Struct({ name: Schema.String, documents: Schema.String, menuReportPort: Schema.optionalKey(Schema.Int) })),

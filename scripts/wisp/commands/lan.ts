@@ -1,7 +1,7 @@
 // `wisp lan ...`: offline Warcraft III clients that play LAN matches against
 // Wisp's own host, for development on your own maps (wisp:docs/lan.md).
 //   setup --from INSTALL --pairs N     make the pool's clients (no Battle.net, no account)
-//   pool --pairs N [--profile parity|visual|hfr] [--seconds S]
+//   pool --pairs N [--pool-profile parity|visual|hfr] [--seconds S]
 //                                      run N pairs, each in a private network namespace with only loopback
 //   fresh MAP --pair K [--turn-ms MS]  host MAP on pair K and join both clients; returns once the match plays
 //   status [--pair K]                  each pair's clients and current game
@@ -104,7 +104,7 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
     while (true) {
       if (greedy && memoryAvailableMiB() < GREEDY_FLOOR_MIB) throw new Error(`only ${memoryAvailableMiB()} MiB of memory available, under the 12 GiB --greedy keeps free`);
       const scope = greedy ? greedyScope(pair) : [process.execPath, capacity, "session", "--class", "moderate", "--owner", `wisp-lan-pair-${pair}`, "--"];
-      const child = Bun.spawn([...scope, process.execPath, SESSION, "--pair", String(pair), "--profile", profile, "--launcher", launcher, "--capacity", capacity], {
+      const child = Bun.spawn([...scope, process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity], {
         stdout: Bun.file(join(pairDirectory(pair), "session.out")),
         stderr: Bun.file(join(pairDirectory(pair), "session.err")),
       });
@@ -132,9 +132,9 @@ const pool: Command = (args) => Effect.gen(function*() {
   const seconds = yield* number(args, "seconds", 0);
   const waitSeconds = yield* number(args, "wait", 1800);
   // One profile for every pair, or one per pair (parity,parity,visual): the last one repeats.
-  const [profileText = "parity"] = flagValues(args, "profile");
+  const [profileText = "parity"] = flagValues(args, "pool-profile");
   const profiles = profileText.split(",");
-  if (profiles.some((name) => PROFILES[name] === undefined)) return yield* new UsageFailure({ problem: `--profile takes ${Object.keys(PROFILES).join(" or ")}, or one per pair separated by commas` });
+  if (profiles.some((name) => PROFILES[name] === undefined)) return yield* new UsageFailure({ problem: `--pool-profile takes ${Object.keys(PROFILES).join(" or ")}, or one per pair separated by commas` });
   const profileOf = (pair: number) => profiles[pair] ?? profiles.at(-1) ?? "parity";
   const launcher = desktopLauncher(args);
   const capacity = capacityHelper(args);
@@ -213,7 +213,7 @@ const end: Command = (args) => Effect.gen(function*() {
   yield* Console.log(`pair ${pair}: game ended`);
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N] | pool [--pairs N | --pair K...] [--profile parity|visual|hfr[,...]] [--seconds S] [--greedy] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | status [--pair K] | end --pair K";
+export const LAN_USAGE = "setup --from INSTALL [--pairs N] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--seconds S] [--greedy] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | status [--pair K] | end --pair K";
 
 export const lan: Command = ([sub, ...args]) => {
   switch (sub) {
