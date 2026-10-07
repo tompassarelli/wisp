@@ -16,7 +16,7 @@ game. It isn't for cheating. The terms are in
 | Command | What it does |
 | --- | --- |
 | `wisp lan setup --from INSTALL [--pairs N]` | Creates the pool's clients from an existing Warcraft III install folder (the one holding `_retail_`). See "Setting up". |
-| `wisp lan pool [--pairs N \| --pair K...] [--pool-profile parity\|visual\|hfr[,...]] [--seconds S]` | Runs up to N pairs, each admitted by the machine-capacity helper. It stays in the foreground; Ctrl-C stops the pool. |
+| `wisp lan pool [--pairs N \| --pair K...] [--pool-profile parity\|visual\|hfr[,...]] [--fps N] [--seconds S]` | Runs up to N pairs, each admitted by the machine-capacity helper. It stays in the foreground; Ctrl-C stops the pool. |
 | `wisp lan fresh MAP [--pair K] [--computers N] [--turn-ms MS]` | Hosts MAP on pair K, switches both clients to LAN, joins them, and returns once the match plays. It prints the game's action log. |
 | `wisp lan status [--pair K]` | Each pair's clients and processes, and its game: phase, turns, desyncs, players. |
 | `wisp lan end --pair K` | Ends pair K's game. The clients go back to their menus. |
@@ -136,6 +136,16 @@ client's War3Preferences `[Video]`, `[Misc]` and `[Sound]` at launch:
 
 The others cap the game at 60 frames a second, focused or not. A cap below
 the turn rate (33 turns a second at 30 ms) is untested.
+
+`wisp lan pool --pair K --pool-profile parity --fps N` overrides both
+foreground and background caps while holding the profile's resolution,
+quality, model set and sound fixed. The agent status and metadata record the
+effective cap. Use one active script and map revision for both caps, measuring
+per-client CPU and DRM GPU-engine time over the same interval, alongside
+protected CPU pressure. Keep the cap only when the same script passes parity
+and game time keeps pace with wall time; reduced rendering can delay input
+even when the LAN turn rate is lower than the cap. A different cap applies
+when that pair starts, through the normal capacity admission path.
 
 **Cost at parity** (7 October, two clients in a match on Smashcraft
 bisect-588610b7, measured over 10 s from /proc):

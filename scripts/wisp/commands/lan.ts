@@ -94,7 +94,7 @@ const greedyArgs = (pair: number, unit: string) => [
   "--property=CPUQuota=300%", "--property=MemoryHigh=6G", `--description=wisp lan pair ${pair} (greedy)`, "--",
 ];
 
-const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, greedy = false) => Effect.tryPromise({
+const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, greedy = false, fps?: number) => Effect.tryPromise({
   try: async () => {
     const definition = PROFILES[profile];
     if (definition === undefined) throw new Error(`unknown profile ${profile}`);
@@ -104,7 +104,7 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
     while (true) {
       if (greedy && memoryAvailableMiB() < GREEDY_FLOOR_MIB) throw new Error(`only ${memoryAvailableMiB()} MiB of memory available, under the 12 GiB --greedy keeps free`);
       const scope = greedy ? greedyScope(pair) : [process.execPath, capacity, "session", "--class", "moderate", "--owner", `wisp-lan-pair-${pair}`, "--"];
-      const child = Bun.spawn([...scope, process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity], {
+      const child = Bun.spawn([...scope, process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity, ...(fps === undefined ? [] : ["--fps", String(fps)])], {
         stdout: Bun.file(join(pairDirectory(pair), "session.out")),
         stderr: Bun.file(join(pairDirectory(pair), "session.err")),
       });
@@ -131,6 +131,9 @@ const pool: Command = (args) => Effect.gen(function*() {
   const pairs = yield* number(args, "pairs", 1);
   const seconds = yield* number(args, "seconds", 0);
   const waitSeconds = yield* number(args, "wait", 1800);
+  const [fpsText] = flagValues(args, "fps");
+  const fps = fpsText === undefined ? undefined : Number(fpsText);
+  if (args.includes("--fps") && fpsText === undefined || fps !== undefined && (!Number.isInteger(fps) || fps < 1)) return yield* new UsageFailure({ problem: "--fps takes a positive whole number" });
   // One profile for every pair, or one per pair (parity,parity,visual): the last one repeats.
   const [profileText = "parity"] = flagValues(args, "pool-profile");
   const profiles = profileText.split(",");
@@ -158,7 +161,7 @@ const pool: Command = (args) => Effect.gen(function*() {
   if (order.some((pair) => !Number.isInteger(pair) || pair < 0)) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
   for (const [admitted, pair] of order.entries()) {
     const profile = profileOf(pair);
-    const started = yield* startPair(pair, profile, launcher, capacity, waitSeconds, args.includes("--greedy")).pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed(failure)));
+    const started = yield* startPair(pair, profile, launcher, capacity, waitSeconds, args.includes("--greedy"), fps).pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed(failure)));
     if (started instanceof LanFailure) {
       // The pool is as big as the machine admits: keep the pairs that started.
       yield* Console.log(`${started.problem}; the pool stays at ${admitted} pair${admitted === 1 ? "" : "s"}`);
@@ -174,9 +177,9 @@ const pool: Command = (args) => Effect.gen(function*() {
     const clientsPath = join(pairDirectory(pair), "clients.json");
     writeJson(clientsPath, { clients: pairClients(pair, runs).map((client) => ({ ...client, name: client.name.endsWith("a") ? "a" : "b", poolName: client.name, pid: pids.get(client.name) })) });
     entries.push({ id: pair, clients: clientsPath, agentSocket: agentSocket(pair), runs, appIds: { a: `steam_app_${3516115600 + pair * 2}`, b: `steam_app_${3516115601 + pair * 2}` } });
-    writeJson(poolFile(), { profile: profileText, pairs: entries.map((entry) => ({ ...entry, profile: profileOf(entry.id) })) });
+    writeJson(poolFile(), { profile: profileText, ...(fps === undefined ? {} : { fps }), pairs: entries.map((entry) => ({ ...entry, profile: profileOf(entry.id) })) });
     writeJson(poolClientsFile(), { clients: entries.flatMap(({ id, runs: desktops }) => pairClients(id, desktops)) });
-    yield* Console.log(`pair ${pair}: ${clientName(pair, "a")} and ${clientName(pair, "b")} running (${profile}); desktops ${runs.a ?? "?"} and ${runs.b ?? "?"}`);
+    yield* Console.log(`pair ${pair}: ${clientName(pair, "a")} and ${clientName(pair, "b")} running (${profile}${fps === undefined ? "" : `, ${fps} fps`}); desktops ${runs.a ?? "?"} and ${runs.b ?? "?"}`);
   }
   yield* Console.log(`pool: ${poolFile()}; clients: ${poolClientsFile()}. Ctrl-C stops it.`);
   yield* Effect.tryPromise({
@@ -213,7 +216,7 @@ const end: Command = (args) => Effect.gen(function*() {
   yield* Console.log(`pair ${pair}: game ended`);
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--seconds S] [--greedy] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | status [--pair K] | end --pair K";
+export const LAN_USAGE = "setup --from INSTALL [--pairs N] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--greedy] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | status [--pair K] | end --pair K";
 
 export const lan: Command = ([sub, ...args]) => {
   switch (sub) {

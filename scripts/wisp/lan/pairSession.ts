@@ -10,7 +10,7 @@
 // desktop b. Either desktop ending ends the pair.
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { PROFILES, desktopSize, pairDirectory } from "./pool";
+import { poolProfile, desktopSize, pairDirectory } from "./pool";
 
 const argument = (name: string) => {
   const at = process.argv.indexOf(`--${name}`);
@@ -20,8 +20,9 @@ const pair = Number(argument("pair") ?? "0");
 const profileName = argument("pool-profile") ?? "parity";
 const launcher = argument("launcher");
 const capacity = argument("capacity");
-const profile = PROFILES[profileName];
-if (profile === undefined || launcher === undefined) throw new Error("pairSession takes --pair K --pool-profile parity|visual --launcher PRIVATE_DESKTOP_SH");
+const fpsText = argument("fps");
+const profile = poolProfile(profileName, fpsText === undefined ? undefined : Number(fpsText));
+if (launcher === undefined) throw new Error("pairSession takes --pair K --pool-profile parity|visual --launcher PRIVATE_DESKTOP_SH");
 const directory = pairDirectory(pair);
 mkdirSync(directory, { recursive: true });
 const size = desktopSize(profile);
@@ -48,7 +49,7 @@ void (async () => {
 })();
 
 const desktopA = Bun.spawn([launcher, "start", "--resolution", size, "--", "bwrap", "--dev-bind", "/", "/", "--unshare-net", "--die-with-parent", "--",
-  process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", profileName, "--run-b", runB, "--session-pid", String(process.pid), ...(capacity === undefined ? [] : ["--capacity", capacity])], {
+  process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", profileName, "--run-b", runB, "--session-pid", String(process.pid), ...(capacity === undefined ? [] : ["--capacity", capacity]), ...(fpsText === undefined ? [] : ["--fps", fpsText])], {
   stdout: Bun.file(join(directory, "desktop-a.out")),
   stderr: Bun.file(join(directory, "desktop-a.err")),
 });

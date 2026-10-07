@@ -18,16 +18,16 @@ import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type M
 import { type LanHost, startHost } from "./host";
 import { LanFailure, enableLan, joinLanGame } from "./join";
 import { readMapFacts } from "./map";
-import { PAIR_SIDES, PROFILES, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
+import { PAIR_SIDES, poolProfile, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
 
 const argument = (name: string) => {
   const at = process.argv.indexOf(`--${name}`);
   return at < 0 ? undefined : process.argv[at + 1];
 };
 const pair = Number(argument("pair") ?? "0");
-const profile = PROFILES[argument("pool-profile") ?? "parity"];
+const fpsText = argument("fps");
+const profile = poolProfile(argument("pool-profile") ?? "parity", fpsText === undefined ? undefined : Number(fpsText));
 const packager = argument("packager") ?? join(process.env["XDG_CACHE_HOME"] ?? join(process.env["HOME"] ?? "", ".cache"), "wisp/lan/map-pack");
-if (profile === undefined) throw new Error(`unknown profile ${argument("pool-profile")}; parity or visual`);
 const directory = pairDirectory(pair);
 mkdirSync(directory, { recursive: true });
 const agentLog = join(directory, "agent.log");
@@ -230,6 +230,7 @@ const server = Bun.serve({
       return Response.json({
         pair,
         profile: profile.name,
+        fps: profile.maxFps,
         clients: clients.map(({ name }) => ({ name, pid: gamePid(name), documents: documentsOf(name) })),
         game: game === undefined ? undefined : { id: game.id, log: game.log, map: game.map, ...game.host.status() },
       });
@@ -249,7 +250,7 @@ const server = Bun.serve({
     return new Response("not found", { status: 404 });
   },
 });
-writeFileSync(join(directory, "agent.json"), `${JSON.stringify({ pid: process.pid, socket: agentSocket(pair), profile: profile.name, runs })}\n`);
+writeFileSync(join(directory, "agent.json"), `${JSON.stringify({ pid: process.pid, socket: agentSocket(pair), profile: profile.name, fps: profile.maxFps, runs })}\n`);
 say(`agent on ${agentSocket(pair)}`);
 const shutdown = (why: string) => {
   say(`stopping: ${why}`);
