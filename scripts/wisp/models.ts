@@ -4,7 +4,7 @@
 // scale or time scale, so an emitter that runs while an effect is shown also
 // runs while the game hides the effect that way. Plain functions over bytes;
 // the game reads its imported files and the game's archives itself.
-import { type model as mdx, parseMDX } from "war3-model";
+import { type model as mdx, parseMDX } from "../../vendor/war3-model.mjs";
 
 export type Vector3 = readonly [x: number, y: number, z: number];
 
