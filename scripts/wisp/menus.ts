@@ -7,6 +7,7 @@
 // installs a page of its own in the game's _retail_/webui folder (read only
 // while the registry value "Allow Local Files" is 1). It loads the game's own
 // menus and tells Wisp its address.
+import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -443,7 +444,7 @@ export interface HostOptions {
   readonly folder: string;
   readonly file: string;
   readonly gameName: string;
-  /** A passworded game is private: it is joined by name and never listed. */
+  /** A passworded game is private: it is joined by name and never listed. Empty draws a random one: Wisp never lists a game publicly. */
   readonly password: string;
   /** 0 slowest to 2 fast (Warcraft's default); 3 is not offered by the menus. */
   readonly gameSpeed?: 0 | 1 | 2;
@@ -459,13 +460,14 @@ const lobbyHost = (event: MenuEvent): Outcome<"host" | "refresh"> => {
 /** Creates a lobby of the map, as Create Game does; returns once the game reports this client hosting it. */
 export const hostLobby = (menus: MenuSocket, options: HostOptions) => Effect.gen(function*() {
   const filename = yield* findMap(menus, options.folder, options.file);
+  const password = options.password === "" ? randomBytes(6).toString("hex") : options.password;
   yield* menus.forget;
   yield* menus.send("CreateLobby", {
     filename,
     gameName: options.gameName,
     gameSpeed: options.gameSpeed ?? 2,
-    privateGame: options.password !== "",
-    password: options.password,
+    privateGame: true,
+    password,
     mapSettings: {
       flagLockTeams: true,
       flagPlaceTeamsTogether: true,
