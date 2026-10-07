@@ -72,7 +72,7 @@ program can register it; "game" means the consuming game defines it.
 | `headless` | A journey in simulated clients | (journey name) | Wisp |
 | `soak` | Many headless matches by computers and a fuzzed controller | (session) | Wisp |
 | `perf` | Predicted frame cost | (run name), `compare`, `native`, `fit`, `budget`, `profile`, `census` | Wisp |
-| `repro` | A saved moment of play | (file) | Wisp |
+| `repro` | A saved moment of play or native replay actions | (file), `import` | Wisp |
 | `replay` | A full-match replay | (file) | game |
 | `parity` | Bun against 32-bit Lua on the same numbers | `numeric`, `tapes` | game |
 | `integrity` | Native input-integrity sessions and their evidence | `capture`, `result`, `headless` | game |
