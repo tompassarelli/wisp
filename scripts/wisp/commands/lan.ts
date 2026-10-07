@@ -70,7 +70,7 @@ const capacityHelper = (args: readonly string[]) => {
   return join(dirname(skill), "scripts/machine-capacity.mjs");
 };
 
-const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, fps?: number) => Effect.tryPromise({
+const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, fps?: number, locateBeforePeer = false) => Effect.tryPromise({
   try: async () => {
     const definition = PROFILES[profile];
     if (definition === undefined) throw new Error(`unknown profile ${profile}`);
@@ -87,13 +87,19 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
       }
       rmSync(admissionFile(pairDirectory(pair)), { force: true });
       const scope = [process.execPath, capacity, "session", "--class", "moderate", "--owner", `wisp-lan-pair-${pair}`, "--"];
-      const child = Bun.spawn([...scope, process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity, ...(fps === undefined ? [] : ["--fps", String(fps)])], {
+      const child = Bun.spawn([...scope, process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity, ...(locateBeforePeer ? ["--locate-before-peer"] : []), ...(fps === undefined ? [] : ["--fps", String(fps)])], {
         stdout: Bun.file(join(pairDirectory(pair), "session.out")),
         stderr: Bun.file(join(pairDirectory(pair), "session.err")),
       });
       let refused: string | undefined;
       for (;;) {
         const exited = await Promise.race([child.exited, Bun.sleep(1000).then(() => undefined)]);
+        if (existsSync(join(pairDirectory(pair), "startup-error.json"))) {
+          const failure = (JSON.parse(readFileSync(join(pairDirectory(pair), "startup-error.json"), "utf8")) as { error: string }).error;
+          child.kill("SIGTERM");
+          await child.exited;
+          throw new Error(failure);
+        }
         if (existsSync(admissionFile(pairDirectory(pair)))) {
           refused = (JSON.parse(readFileSync(admissionFile(pairDirectory(pair)), "utf8")) as { reason: string }).reason;
           child.kill("SIGTERM");
@@ -163,7 +169,7 @@ const pool: Command = (args) => Effect.gen(function*() {
   if (order.some((pair) => !Number.isInteger(pair) || pair < 0)) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
   for (const [admitted, pair] of order.entries()) {
     const profile = profileOf(pair);
-    const started = yield* startPair(pair, profile, launcher, capacity, waitSeconds, fps).pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed(failure)));
+    const started = yield* startPair(pair, profile, launcher, capacity, waitSeconds, fps, args.includes("--locate-before-peer")).pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed(failure)));
     if (started instanceof LanFailure) {
       // The pool is as big as the machine admits: keep the pairs that started.
       yield* Console.log(`${started.problem}; the pool stays at ${admitted} pair${admitted === 1 ? "" : "s"}; waiting: ${order.slice(admitted).join(", ")}`);
@@ -249,7 +255,7 @@ const speed: Command = (args) => Effect.gen(function*() {
   yield* Console.log(`pair ${pair}: delivering turns at ${value}x; compare client frame progress to measure game speed`);
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | status [--pair K] | end --pair K";
+export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--locate-before-peer] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | status [--pair K] | end --pair K";
 
 export const lan: Command = ([sub, ...args]) => {
   switch (sub) {

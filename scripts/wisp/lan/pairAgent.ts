@@ -6,6 +6,8 @@ import { LanFailure, enableLan, joinLanGame } from "./join";
 import { readMapFacts } from "./map";
 import { PAIR_SIDES, poolProfile, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
 import { admissionFile, nativeCommand } from "./admission";
+import { makeEngine } from "../commands/engine";
+import { startPairClients, waitForFirstClient } from "./startup";
 
 const argument = (name: string) => {
   const at = process.argv.indexOf(`--${name}`);
@@ -59,46 +61,6 @@ const audioEnv = (name: string): Record<string, string> => {
   }
   return { PULSE_SERVER: `unix:${pulse}`, PULSE_SINK: sink };
 };
-
-// A refused second client ends the first too: a pool only keeps whole pairs.
-try {
-  for (const client of clients) {
-    // A second runtime on a live prefix joins its wineserver and dies: a game left from before must be stopped first.
-    const left = findGameProcesses(prefixOf(client.name));
-    if (left.length > 0) {
-      say(`${client.name} still runs (pid ${left.map(({ pid }) => pid).join(", ")}); stopping it first`);
-      for (const { pid } of left) process.kill(pid, "SIGTERM");
-      await Bun.sleep(5000);
-    }
-    mkdirSync(documentsOf(client.name), { recursive: true });
-    writeFileSync(join(documentsOf(client.name), "War3Preferences.txt"), preferences(profile, client.windowX));
-    const appId = String(3516115600 + pair * 2 + PAIR_SIDES.indexOf(client.side));
-    // Each game in its own machine-capacity native scope: the high-weight
-    // slice for game clients, no CPU quota.
-    // Admission uses the user's service bus; restore the private runtime only inside the game scope.
-    const gameRuntime = client.env["XDG_RUNTIME_DIR"] ?? process.env["XDG_RUNTIME_DIR"] ?? userRuntime;
-    const native = nativeCommand(capacity, client.name, gameRuntime);
-    const child = Bun.spawn([...native, "dbus-run-session", "--", "steam-run", "env", runtime, "--verb=waitforexitandrun", "--", proton, "waitforexitandrun", exeOf(client.name), "-launch", "-windowmode", "windowed", "-nowfpause"], {
-      env: { ...process.env, ...client.env, ...audioEnv(client.name), XDG_RUNTIME_DIR: userRuntime, DBUS_SESSION_BUS_ADDRESS: `unix:path=${userRuntime}/bus`, STEAM_COMPAT_DATA_PATH: clientRoot(client.name), STEAM_COMPAT_CLIENT_INSTALL_PATH: steam, STEAM_COMPAT_APP_ID: appId, SteamAppId: appId, SteamGameId: appId },
-      stdout: Bun.file(join(directory, `${client.name}.out`)),
-      stderr: Bun.file(join(directory, `${client.name}.err`)),
-    });
-    games.push(child);
-    const early = await Promise.race([child.exited, Bun.sleep(5000).then(() => undefined)]);
-    const said = early === 75 ? readFileSync(join(directory, `${client.name}.err`), "utf8") : "";
-    const deferred = /"decision":"DEFER","reason":"([A-Z_]+)"/.exec(said);
-    if (deferred !== null) {
-      writeFileSync(admissionFile(directory), JSON.stringify({ reason: `${client.name}: ${deferred[1]}` }));
-      throw new Error(`${client.name}: waiting for native capacity (${deferred[1]})`);
-    }
-    if (early !== undefined) throw new Error(`${client.name}: its native launcher exited with ${early}`);
-    say(`launched ${client.name}`);
-  }
-} catch (cause) {
-  stopGames();
-  await Promise.all(games.map((game) => game.exited));
-  throw cause;
-}
 
 const gamePid = (name: string) => findGameProcesses(prefixOf(name))[0]?.pid;
 

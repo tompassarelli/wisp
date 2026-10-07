@@ -8,7 +8,7 @@
 // hosts client b's window. Desktop a runs the pair's network namespace (only
 // loopback) with the pair agent in it, which starts both games, client b on
 // desktop b. Either desktop ending ends the pair.
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { poolProfile, desktopSize, pairDirectory } from "./pool";
 
@@ -26,6 +26,7 @@ const profile = poolProfile(profileName, fpsText === undefined ? undefined : Num
 if (launcher === undefined) throw new Error("pairSession takes --pair K --pool-profile parity|visual --launcher PRIVATE_DESKTOP_SH");
 const directory = pairDirectory(pair);
 mkdirSync(directory, { recursive: true });
+rmSync(join(directory, "startup-error.json"), { force: true });
 const size = desktopSize(profile);
 
 const desktopB = Bun.spawn([launcher, "start", "--resolution", size], { stdout: "pipe", stderr: Bun.file(join(directory, "desktop-b.err")) });
@@ -50,7 +51,7 @@ void (async () => {
 })();
 
 const desktopA = Bun.spawn([launcher, "start", "--resolution", size, "--", "bwrap", "--dev-bind", "/", "/", "--unshare-net", "--die-with-parent", "--",
-  process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", profileName, "--run-b", runB, "--session-pid", String(process.pid), "--capacity", capacity, ...(fpsText === undefined ? [] : ["--fps", fpsText])], {
+  process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", profileName, "--run-b", runB, "--session-pid", String(process.pid), "--capacity", capacity, ...(process.argv.includes("--locate-before-peer") ? ["--locate-before-peer"] : []), ...(fpsText === undefined ? [] : ["--fps", fpsText])], {
   stdout: Bun.file(join(directory, "desktop-a.out")),
   stderr: Bun.file(join(directory, "desktop-a.err")),
 });
