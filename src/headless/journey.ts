@@ -2,10 +2,10 @@
 // game declares once and runs in Bun or 32-bit Lua (wisp:docs/headless.md).
 import type { Lockstep } from "./lockstep";
 
-/** After `frame` frames have run: a player's chat line, a key press and release, or a hot reload of the map's bundle. */
+/** After `frame` frames have run: a player's chat line, a key event, or a hot reload of the map's bundle. */
 export type JourneyEvent =
   | { readonly frame: number; readonly player: number; readonly chat: string }
-  | { readonly frame: number; readonly player: number; readonly key: number; readonly meta: number }
+  | { readonly frame: number; readonly player: number; readonly key: number; readonly meta: number; readonly down?: boolean }
   | { readonly frame: number; readonly reload: true };
 
 export interface Journey {
@@ -68,7 +68,10 @@ export function runJourney(clients: Lockstep, journey: Journey, options: Journey
     if (event.frame > clients.frame) capture();
     advance(event.frame);
     if ("chat" in event) clients.chat(event.player, event.chat);
-    else if ("key" in event) clients.press(event.player, event.key, event.meta);
+    else if ("key" in event) {
+      if (event.down === undefined) clients.press(event.player, event.key, event.meta);
+      else clients.key(event.player, event.key, event.meta, event.down);
+    }
     else clients.reload();
   }
   capture();

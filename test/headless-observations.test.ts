@@ -151,3 +151,21 @@ test("journey observations run after all same-frame events without changing call
   expect(observed).toEqual(plain);
   expect(captured).toEqual([[0, ["first"]], [2, ["first"]], [4, ["first", "second", "third"]], [12, ["first", "second", "third"]]]);
 });
+
+test("journey key down and release keep local polling held across frames", () => {
+  const clients = runtime.clients({ start: () => {}, install: () => {} });
+  const held: unknown[] = [];
+  const result = runJourney(clients, { frames: 5, events: [
+    { frame: 1, player: 0, key: 65, meta: 0, down: true },
+    { frame: 3, player: 0, key: 65, meta: 0, down: false },
+    { frame: 4, player: 0, key: 65, meta: 0 },
+  ] }, { observationFrames: [0, 1, 2, 3, 4, 5], observe: (clients, frame) => {
+    held.push([frame, clients.clients.map(client => {
+      let pressed = false;
+      client.run(() => { pressed = BlzIsKeyPressed(ConvertOsKeyType(65)); });
+      return pressed;
+    })]);
+  } });
+  expect(result.divergence).toBeUndefined();
+  expect(held).toEqual([[0, [false, false]], [1, [true, false]], [2, [true, false]], [3, [false, false]], [4, [false, false]], [5, [false, false]]]);
+});
