@@ -23,8 +23,8 @@ export interface RenderScene {
   readonly ui: ReturnType<HeadlessClient["frames"]["snapshot"]>;
 }
 
-export const captureScene = (client: HeadlessClient): RenderScene => ({
-  frame: client.frame, client: client.slot, effects: client.effectPoses(), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot(),
+export const captureScene = (client: HeadlessClient, options: { readonly visibleUiOnly?: boolean } = {}): RenderScene => ({
+  frame: client.frame, client: client.slot, effects: client.effectPoses(), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot({ visibleOnly: options.visibleUiOnly ?? false }),
 });
 
 /** Both the still renderer and the player draw unit objects with the same model poses. */
