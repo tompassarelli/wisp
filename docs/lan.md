@@ -16,8 +16,8 @@ game. It isn't for cheating. The terms are in
 | Command | What it does |
 | --- | --- |
 | `wisp lan setup --from INSTALL [--pairs N]` | Creates the pool's clients from an existing Warcraft III install folder (the one holding `_retail_`). See "Setting up". |
-| `wisp lan pool [--pairs N] [--profile parity\|visual] [--seconds S]` | Runs up to N pairs, each admitted by the machine-capacity helper. It stays in the foreground; Ctrl-C stops the pool. |
-| `wisp lan fresh MAP [--pair K] [--turn-ms MS]` | Hosts MAP on pair K, switches both clients to LAN, joins them, and returns once the match plays. It prints the game's action log. |
+| `wisp lan pool [--pairs N \| --pair K...] [--profile parity\|visual[,...]] [--seconds S]` | Runs up to N pairs, each admitted by the machine-capacity helper. It stays in the foreground; Ctrl-C stops the pool. |
+| `wisp lan fresh MAP [--pair K] [--computers N] [--turn-ms MS]` | Hosts MAP on pair K, switches both clients to LAN, joins them, and returns once the match plays. It prints the game's action log. |
 | `wisp lan status [--pair K]` | Each pair's clients and processes, and its game: phase, turns, desyncs, players. |
 | `wisp lan end --pair K` | Ends pair K's game. The clients go back to their menus. |
 | `wisp engine actions --client lan0a,lan0b [--map MAP] [--follow]` | Prints the pair's action log, and follows it with `--follow`. With `--map`, it starts the match first ([engine.md](engine.md#actions)). |
@@ -72,15 +72,22 @@ reads it and never changes it.
 
 ## Running a pool
 
-Each pair is one private desktop (the private-desktop-development launcher),
-with one `bwrap --dev-bind / / --unshare-net` namespace on it. Inside that
-namespace runs the pair agent (wisp:scripts/wisp/lan/pairAgent.ts). The agent:
+Each client has its own private desktop (the private-desktop-development
+launcher), so each display has exactly one game window, as on clients A and
+B. Tools that find "the" Warcraft window on a display work unchanged, and so
+do controller helpers that type into it. A pair's session
+(wisp:scripts/wisp/lan/pairSession.ts) starts client b's desktop, then client
+a's. Client a's desktop runs the pair's `bwrap --dev-bind / / --unshare-net`
+namespace, and the pair agent (wisp:scripts/wisp/lan/pairAgent.ts) runs inside
+it. The agent:
 
 - writes each client's `War3Preferences.txt` for the profile;
 - launches both games with `-launch -windowmode windowed -nowfpause`, through
   steam-run, Steam Linux Runtime 4 and GE-Proton 11-7, as the signed-in
-  clients run;
-- places their windows side by side;
+  clients run. Both share the namespace, and client b draws on its own
+  desktop;
+- sets each window to the profile's size at its desktop's top left. The game
+  can open a window larger than its settings ask;
 - plays each client's sound into its own silent sink, `wisp-lan-<name>`, on
   the user's PipeWire (a null sink the agent creates, `PULSE_SINK` at launch).
   The owner's speakers stay quiet, and `pw-record --target wisp-lan-lan0a.monitor
@@ -94,12 +101,18 @@ The pool adds pairs while the helper admits them: a deferred pair is retried
 every 45 s, for up to `--wait` seconds (default 1800). After that the pool
 keeps the pairs it has.
 
-**Window placement matters.** labwc opens every game window at the same
-place, and Xwayland throttles a window that another window covers. On 7
-October, the covered client of the first pair loaded 70 s after the other.
-Once playing, it ran 51 turns behind, so the host kept pausing the game. The
-agent now moves each window to its own column with xdotool, every 3 s, and
-both clients keep within a few turns at 1:1 game time.
+- `--pair K` (repeated) picks which pairs start, in that order of admission.
+- `--profile` takes one profile, or one per pair separated by commas; the last
+  one repeats.
+
+`pair-K/clients.json` gives each client its own `run` (desktop) and `pid`.
+
+**Why a desktop per client.** labwc opens every game window at the same
+place, and Xwayland throttles a window another window covers. On 7 October,
+both clients of a pair shared one desktop. The covered client loaded 70 s
+after the other, then ran 51 turns behind, so the host kept pausing the game.
+With the windows apart, both kept within a few turns at 1:1 game time. Two
+controller helpers typing on one display would also take each other's focus.
 
 **Profiles.** `parity` (the default) is for checksum and input runs that need
 no pixels: an 800×600 window with every quality setting at its lowest. `visual`
