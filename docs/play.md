@@ -112,21 +112,12 @@ command that clears them.
    its scan is hosted at once. A running match is first left through Game Menu,
    End Game and Quit Mission, retaining the signed-in game; its results screen
    closes with Escape in the game's window: Warcraft III 3.0.0.24268 ignores the
-   menus' `ScoreScreenClose`. Hosting goes through the menu socket when the game declares
-   `menuReportPort` and its installed page reports within 3 s
-   ([driving-warcraft.md](driving-warcraft.md)); otherwise through the
-   menus: Multiplayer, Custom Games, Create Game, the map's folder, the
-   map, the game's name, Create, Start. Each control is found by the text
-   Warcraft shows, so any screen size works. Warcraft's menus slide in (on 6
-   Oct Battle.net's tabs moved 32 px down within 0.3 s of appearing, and a
-   click read before the move missed), so a control is clicked only when two
-   reads in a row put it in the same place. Each click then waits up to 10 s
-   for the next screen's text; without it, the control is found and clicked
-   once more, then `play` stops with the pictures. The game name field is
-   just below a "Game Name" label when there is one, and otherwise where it
-   is on a 2560x1440 frame scaled by the frame's height; the name typed into
-   it must read back beside it. A click aimed outside the screen is refused
-   before the pointer moves. The step ends when the game's `started`
+   menus' `ScoreScreenClose`. Hosting goes only through the game's menu page
+   on `menuReportPort` ([driving-warcraft.md](driving-warcraft.md)): a
+   private game with a random password, then its start. When the page doesn't
+   report within 3 s, `play` stops and names `wisp menus install`, which the
+   account owner runs once per prefix; it never creates a game by clicks,
+   since Battle.net lists a game without a password publicly. The step ends when the game's `started`
    resolves, and prints the time from the launch to fighter selection. Any
    `model creation failed - war3mapImported/` line the log gains from
    hosting on, checked then and again after step 6, stops `play` with the
@@ -160,7 +151,7 @@ export const play = makePlay({
   shortcut: { appId: 3775098022, name: "Warcraft III (Battle.net)" },
   map: { folder: "00-Smashcraft", file: "Smashcraft 0.0.47.w3x", title: "Smashcraft 0.0.47", source: BUILT_MAP },
   gameName: "Smashcraft",
-  debugDirectory: join(homedir(), ".local/state/smashcraft/play-debug"),
+  menuReportPort: 47124,
   prepare: (documents) => /* the map's request file in CustomMapData */,
   cleanup: (documents) => /* removes it when a run stops */,
   started: (game, since) => /* the map's first-screen file, newer than since */,
@@ -172,34 +163,16 @@ export const play = makePlay({
 
 ## What it needs
 
-The owner's niri session (`niri msg`), `grim`, `tesseract`, `wlrctl`,
-`xdotool` and `steam`; each is looked up on PATH unless the game passes its
+The owner's niri session (`niri msg`), `grim`, `tesseract`, `xdotool` and
+`steam`, and Wisp's menu page installed in the prefix; each is looked up on PATH unless the game passes its
 path in `tools`. The game runs on the declared X display under niri's
 Xwayland (xwayland-satellite). Every wait has a bound (`PLAY_TIMEOUTS`); none
 is a readiness delay.
 
-Clicks move the compositor's own pointer with `wlrctl pointer move` (niri's
-virtual pointer) and click with `wlrctl pointer click`, as a mouse does. On
-the owner's desktop the X pointer stays where the compositor's pointer is, so
-XTEST motion doesn't move it: on 6 Oct an XTEST move to 2075,1518 left the X
-pointer at 1194,882. A target is read in the capture's pixels (2880x1920 on a
-1440x960 output at scale 2) and checked in the X root's pixels, which match
-the capture there. How far the X pointer moves per logical pixel depends on
-the window under it: 2 X pixels over a scaled window, as the scale says, but 1
-over fullscreen Warcraft III from its Battle.net screens on (6 Oct). Each
-move starts from the scale's gain and divides the next by the gain the last
-one showed, until the X pointer is within 2 pixels, at most 8 moves. Targets
-and the initial gain use the captured output's size, so a letterboxed window
-does not rescale or offset the point read from that capture. Typed
-text and keys are XTEST (`xdotool`) into the focused game window.
-
-Each run prints a folder under the game's `debugDirectory`, named by its
-start time. It holds a picture of the output before and after every click
-(`NN-what-before.jpg`, `NN-what-after.jpg`) and `clicks.log`: each click's
-target in the capture, in logical and in X root pixels, where the X pointer
-was, each `wlrctl` move and where the X pointer then was.
+Keys are XTEST (`xdotool`) into the focused game window, only to leave a
+running match.
 
 The fakes in wisp:test/play.test.ts cover each step's success and failure
-messages with the recorded window, log and process shapes. Reading the menus
-at the owner's resolution and the buttons taking the compositor's clicks are
-properties of the real desktop, which only a native run checks.
+messages with the recorded window, log and process shapes. Hosting goes through a
+fake menu page there; the real page's answers are covered by
+wisp:test/menus.test.ts and native runs.

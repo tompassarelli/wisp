@@ -120,7 +120,6 @@ function world(scenario: Scenario) {
     size: (path) => Effect.sync(() => files.get(path)?.length),
     digest: () => Effect.die("unused"),
     list: (directory) => Effect.sync(() => [...files.keys()].filter((path) => path.startsWith(`${directory}/`)).map((path) => path.slice(directory.length + 1))),
-    append: () => Effect.die("unused"),
     write: (path, text) => Effect.sync(() => {
       events.push(`write ${path.slice(DOCUMENTS.length + 1)}`);
       files.set(path, text);
