@@ -32,6 +32,15 @@ controller helper, has the map start the match and leaves the game fullscreen.
 (wisp:docs/driving-warcraft.md) compares the ways to make the game host,
 join and start games without clicking its menus, with their account risk.
 
+Testing in the real game without a Battle.net account? [`wisp lan`](lan.md)
+(wisp:docs/lan.md) runs pairs of offline Warcraft III clients, each pair in a
+network namespace with nothing but loopback, playing LAN matches that Wisp
+hosts: `wisp lan pool --pairs N` starts them, `wisp lan fresh MAP` starts a
+match, and the host logs every turn's actions and compares every client's
+checksum each turn (`wisp engine actions`). Every `wisp engine` command works
+on them, breakpoints included. Keep signed-in clients for what needs
+Battle.net itself.
+
 Checking on the signed-in clients? [`wisp accept`](accept.md)
 (wisp:docs/accept.md) runs every native check a game declares, next to the
 issue each closes, in as few fresh matches as their maps allow, and prints
