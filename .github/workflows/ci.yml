@@ -32,3 +32,24 @@ jobs:
           tar -xzf build/lua-5.3.6.tar.gz -C build/toward-zero-lua
           make -C build/toward-zero-lua/lua-5.3.6 -j2 generic "MYCFLAGS=-DLUA_32BITS -include $PWD/native/toward-zero.h"
       - run: CC=gcc STORMLIB_PREFIX=/usr LUA="$PWD/build/lua-5.3.6/src/lua" TOWARD_ZERO_LUA="$PWD/build/toward-zero-lua/lua-5.3.6/src/lua" bun run test
+
+  # The consumer template (wisp:docs/ci.md) on the neutral sample: its checks
+  # and headless journey pass, and its desync fixture fails as expected.
+  sample:
+    uses: ./.github/workflows/consumer.yml
+    with:
+      bun-version: 1.3.13
+      test: bun test examples/sample
+      headless: bun examples/sample/scripts/sample.ts headless
+      artifact-name: wisp-ci-sample
+
+  sample-failing-fixture:
+    uses: ./.github/workflows/consumer.yml
+    with:
+      bun-version: 1.3.13
+      check: ""
+      test: ""
+      lua: false
+      headless: bun examples/sample/test/fixtures/desync-sample.ts headless
+      expect-failure: true
+      artifact-name: wisp-ci-sample-failing-fixture

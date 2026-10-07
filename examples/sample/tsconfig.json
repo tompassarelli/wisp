@@ -12,5 +12,5 @@
     "types": ["bun", "lua-types/5.3"],
     "paths": { "wisp/*": ["../../*"] }
   },
-  "include": ["scripts/**/*.ts", "test/**/*.test.ts", "../../src/natives/warcraft.d.ts"]
+  "include": ["scripts/**/*.ts", "test/**/*.test.ts", "test/fixtures/**/*.ts", "../../src/natives/warcraft.d.ts"]
 }
