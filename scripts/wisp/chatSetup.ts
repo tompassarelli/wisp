@@ -14,7 +14,7 @@ export const openObservedChat = <E, R>(client: { readonly name: string }, entry:
     if (!before.available) return yield* new DesktopFailure({ operation: "open chat entry", client: client.name, cause: "the map cannot observe Warcraft's chat entry; no text sent" });
     yield* pressReturn;
     const current = yield* waitFor(client, "new chat entry after Return", 8, entry.pipe(Effect.map((value) => value !== undefined && value.available && value.modified > before.modified ? value : undefined))).pipe(
-      Effect.catchTag("DesktopFailure", (failure) => attempt === 0 && failure.operation === "wait for new chat entry after Return" ? Effect.succeed(undefined) : Effect.fail(failure)),
+      Effect.catchTag("DesktopFailure", (failure) => attempt === 0 && failure instanceof DesktopFailure && failure.operation === "wait for new chat entry after Return" ? Effect.succeed(undefined) : Effect.fail(failure)),
     );
     if (current?.open) return;
   }
