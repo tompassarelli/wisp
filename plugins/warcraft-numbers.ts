@@ -29,6 +29,7 @@ import * as tstl from "typescript-to-lua";
 import { LuaPrinter } from "typescript-to-lua";
 import { F32_ADD, F32_DIVIDE, F32_MULTIPLY, F32_SUBTRACT } from "../src/sim/f32";
 import { ROUNDING_HELPER_FILE, declarationsOf, isDeclaredIn, programNumberRules } from "./number-rules";
+import { transformForBindings } from "./loop-bindings";
 
 const floatLiterals = new WeakSet<tstl.NumericLiteral>();
 
@@ -172,6 +173,7 @@ const plugin = ({ sourcePrefix = "" }: { readonly sourcePrefix?: string }): tstl
     return program.getSourceFiles().flatMap((file) => programNumberRules(ts, program, file));
   },
   visitors: {
+    [ts.SyntaxKind.ForStatement]: transformForBindings,
     [ts.SyntaxKind.NumericLiteral]: (node, context) => {
       const result = context.superTransformExpression(node);
       // Synthesized literals (for example from i++) have no source text.
