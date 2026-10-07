@@ -38,8 +38,8 @@ export interface Profile {
   readonly maxFps: number;
   /** War3Preferences [Video] values besides the window. */
   readonly video: Readonly<Record<string, number>>;
-  /** Classic (SD) models and textures instead of Reforged's (War3Preferences [Misc] hd=0). */
-  readonly classic: boolean;
+  /** Warcraft 3.0.1 [Misc] hd: Classic=0, Reforged=1, Definitive Edition=2. */
+  readonly graphicsMode: "classic" | "reforged" | "definitive";
   /** Sound on; off, the game loads and mixes no sound at all. */
   readonly sound: boolean;
   /** Music too: off for checks that score effects, which music sits under. */
@@ -47,8 +47,8 @@ export interface Profile {
 }
 
 const LOWEST: Readonly<Record<string, number>> = {
-  antialiasing: 0, assao: 0, bloom: 0, foliagequality: 0, lightingquality: 0, particles: 0, pointlightshadowquality: 0,
-  portraitBloom: 0, shadowquality: 0, spellfilter: 0, texquality: 0, waterquality: 0, vsync: 0,
+  antialiasing: 0, foliagequality: 0, lightingquality: 0, pointlightshadowquality: 0,
+  shadowquality: 0, texquality: 0, waterquality: 0, vsync: 0,
 };
 
 /**
@@ -59,11 +59,11 @@ const LOWEST: Readonly<Record<string, number>> = {
  * 60 frames a second, focused or not (wisp:docs/lan.md, "Profiles").
  */
 export const PROFILES: Readonly<Record<string, Profile>> = {
-  parity: { name: "parity", width: 800, height: 600, maxFps: 60, video: LOWEST, classic: true, sound: false, music: false },
-  checks: { name: "checks", width: 800, height: 600, maxFps: 60, video: LOWEST, classic: true, sound: true, music: false },
+  parity: { name: "parity", width: 800, height: 600, maxFps: 60, video: LOWEST, graphicsMode: "classic", sound: false, music: false },
+  checks: { name: "checks", width: 800, height: 600, maxFps: 60, video: LOWEST, graphicsMode: "classic", sound: true, music: false },
   /** parity at 144 frames a second, focused or not, to compare the game's clocks against a 60 fps cap. */
-  hfr: { name: "hfr", width: 800, height: 600, maxFps: 144, video: LOWEST, classic: true, sound: false, music: false },
-  visual: { name: "visual", width: 1280, height: 720, maxFps: 60, video: { ...LOWEST, lightingquality: 2, particles: 2, texquality: 1 }, classic: false, sound: true, music: true },
+  hfr: { name: "hfr", width: 800, height: 600, maxFps: 144, video: LOWEST, graphicsMode: "classic", sound: false, music: false },
+  visual: { name: "visual", width: 1280, height: 720, maxFps: 60, video: { ...LOWEST, lightingquality: 2, texquality: 1 }, graphicsMode: "reforged", sound: true, music: true },
 };
 
 /** Hold every graphics choice fixed while measuring a different frame cap. */
@@ -98,7 +98,7 @@ export function preferences(profile: Profile, windowX: number): string {
   const sound = profile.sound ? 1 : 0;
   const sections: Record<string, Record<string, number>> = {
     Video: video,
-    Misc: { hd: profile.classic ? 0 : 1 },
+    Misc: { hd: { classic: 0, reforged: 1, definitive: 2 }[profile.graphicsMode] },
     Sound: { ambient: sound, environmental: sound, movement: sound, music: profile.music ? 1 : 0, positional: sound, sfx: sound, unit: sound, nosoundwarn: 1 },
   };
   return Object.entries(sections).map(([name, values]) => `[${name}]\n${Object.keys(values).sort().map((key) => `${key}=${values[key]}`).join("\n")}\n`).join("\n");
