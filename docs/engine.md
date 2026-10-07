@@ -77,6 +77,8 @@ A project composes the command with `makeEngine(clientsFile)`
 | `wisp engine desync A B [--turn N]` | Compares two clients' `*_Desync.log`. It prints the first differing turn and section, each differing record, and Tempest's `ipse` table decoded per turn. A and B may be log files, report folders, Errors folders or Documents/Warcraft III folders; a folder means its newest report. |
 | `wisp engine poll --client a,b [--seconds N] [--interval MS] [--out DIR]` | Follows each client's presence table every 2 ms and writes `DIR/<client>.log` with one line per agent born or freed. Each line carries the agent's class from RTTI and, for a `CAgentBaseAbs`, the class of the handle that owns it. |
 | `wisp engine diff A.log B.log [--skew S] [--limit N] [--source-maps DIR]` | Aligns two poll logs by birth number. It prints births one client has and the other lacks, the first class difference, and births whose time between clients differs from the median by more than S seconds (0.1 by default). With the map's source maps, a code callback's `at map-KEY:LINE` becomes its TypeScript line. |
+| `wisp engine diff ACTIONS.log POLL.log [--class REGEX] [--turn-ms MS]` | Places each birth of a poll log in the turn of a LAN host's action log it fell in, with the last actions delivered before it ([Actions](#actions)). |
+| `wisp engine actions --client lan0a,lan0b [--map MAP] [--follow]` | Prints what Warcraft's network layer delivered to an offline pool pair, turn by turn: each player's orders, BlzSendSyncData payloads with their prefixes, key and frame events, chat, joins, loads, leaves, and every desync by turn ([Actions](#actions)). |
 | `wisp engine watch --client a [--seconds N] [--depth N] [--out DIR]` | Sets a hardware write breakpoint on the birth counter and records the game's stack for every birth. Frames are named by known role. It writes `DIR/<client>.stacks.txt` and prints the most common stacks. Offline clients only. |
 | `wisp engine watch --client a --lua [--seconds N] [--limit N] [--source-maps DIR]` | Stops the game's main thread at every birth with a ptrace debug-register watchpoint, reads the Lua VM's exact call stack while the thread is stopped, then lets it go. It writes `DIR/<client>.lua-stacks.txt` with one line per birth, in the form `birth N CLASS owner CLASS: TimerStart <- FILE.ts:LINE <- FILE.ts:LINE`. Offline clients only, and the build needs `lua` chains in the offsets file. |
 | `wisp engine locate --client a [--watch SECONDS] [--span BYTES]` | Finds the presence table in a running client of any build and checks the offsets file's entry for it, or prints a new entry. With `--watch`, it also names the tag allocator and release from their writes (offline only). |
@@ -86,6 +88,29 @@ Session runners use the same modules: `startPresencePoll` and `pollPresence`
 (wisp:scripts/wisp/engine/poll.ts), `compareDesyncLogs` and `compareDumps`
 (wisp:scripts/wisp/engine/desyncLog.ts), and `parsePresenceLog` and
 `diffPresenceLogs` (wisp:scripts/wisp/engine/presenceLog.ts).
+
+## Actions
+
+The per-turn action stream comes from the LAN host, not from memory. Offline
+pool clients ([lan.md](lan.md)) play against Wisp's own host, which relays
+every turn and so sees every action every client sent. It decodes them into
+the game's action log, `pair-K/games/<time>/actions.log`, and compares
+each client's state checksum for every turn. `wisp engine actions --client
+lan0a,lan0b` prints the pair's current log; `--follow` keeps printing until
+the game ends, and `--map MAP` starts a match first. Only the pool's own
+clients are accepted: a client signed in to Battle.net has no action log here,
+and no tool reads its network traffic.
+
+To see what each action caused in the engine, run `wisp engine poll` on the
+pair (`WISP_CLIENTS=~/.local/state/wisp/lan/clients.json`) while the match
+runs, then `wisp engine diff ACTIONS.log POLL/<client>.log`. Both logs name
+their start time, so each birth lands in its turn:
+
+```
+256.614 birth 4281 CAgentBaseAbs owner CPlayerChatMatchEventData in turn 4470; 2 turns after turn 4468: lan0b chat trigger=10a3:10a3 text="-dev quick"; ...
+```
+
+The log format and how the host builds it are in [lan.md](lan.md#the-action-log).
 
 ## Debugging a desync
 

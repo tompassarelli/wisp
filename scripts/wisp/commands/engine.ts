@@ -22,6 +22,8 @@ import { type GameExecutable, prefixOfDocuments } from "../engine/memory";
 import { type EngineOffsets, OFFSETS_FILE, offsetsEntry, offsetsFor, parseOffsets } from "../engine/offsets";
 import { pollPresence } from "../engine/poll";
 import { diffPresenceLogs, parsePresenceLog } from "../engine/presenceLog";
+import { alignBirths, headerStart, isActionLog, parseActionLog } from "../engine/actionLog";
+import { actions } from "../lan/actionsCommand";
 import { type LuaFrame, frameText, globalFunctionNames, luaStack, mainLuaState } from "../engine/lua";
 import { PresenceTracker, presenceTable, readHeader, scanForPresenceTable } from "../engine/presence";
 import { stopWatch } from "../engine/stopWatch";
@@ -82,12 +84,25 @@ const desync: Command = (args) => Effect.gen(function*() {
 });
 
 const diff: Command = (args) => Effect.gen(function*() {
-  const paths = positionals(args, ["skew", "limit", "source-maps"]);
-  if (paths.length !== 2) return yield* new UsageFailure({ problem: "diff takes two poll logs" });
+  const paths = positionals(args, ["skew", "limit", "source-maps", "turn-ms", "class"]);
+  if (paths.length !== 2) return yield* new UsageFailure({ problem: "diff takes two poll logs, or a LAN action log and a poll log" });
   const skew = yield* number(args, "skew", 0.1);
   const limit = yield* number(args, "limit", 12);
   const [sourceMaps] = flagValues(args, "source-maps");
-  const logs = yield* Effect.forEach(paths, (path) => attempt(`read ${path}`, () => parsePresenceLog(readFileSync(path, "utf8"))));
+  const texts = yield* Effect.forEach(paths, (path) => attempt(`read ${path}`, () => readFileSync(path, "utf8")));
+  const actionIndex = texts.findIndex(isActionLog);
+  if (actionIndex >= 0) {
+    // One LAN host action log and one poll log: each birth placed in the turn the network had just delivered.
+    const poll = texts[1 - actionIndex] ?? "";
+    const pollStart = headerStart(poll);
+    if (pollStart === undefined) return yield* new EngineFailure({ problem: `${paths[1 - actionIndex]} names no start time; is it a wisp engine poll log?` });
+    const [turnText] = flagValues(args, "turn-ms");
+    const [classes] = flagValues(args, "class");
+    const lines = yield* attempt("align births with turns", () => alignBirths(parseActionLog(texts[actionIndex] ?? ""), parsePresenceLog(poll), pollStart, { turnMs: turnText === undefined ? 30 : Number(turnText), limit: limit * 50, ...(classes === undefined ? {} : { classes: new RegExp(classes) }) }));
+    yield* Console.log(lines.length === 0 ? "no births in the action log's time" : lines.join("\n"));
+    return;
+  }
+  const logs = texts.map(parsePresenceLog);
   const report = diffPresenceLogs([paths[0] ?? "", paths[1] ?? ""], logs[0] ?? [], logs[1] ?? [], { skew, limit });
   // Code callbacks carry the chunk and line their Lua function was defined at; the map's source maps turn them into TypeScript lines.
   yield* Console.log(sourceMaps === undefined ? report : yield* Effect.promise(() => toTypeScript(report, sourceMaps)));
@@ -314,13 +329,14 @@ const locate = (clientsFile: string): Command => (args) => Effect.gen(function*(
   }).pipe(Effect.ensuring(Effect.sync(() => client.memory.close())));
 });
 
-const USAGE = "(for debugging your own map on your own development clients; never other players' games) desync A B [--turn N] | poll --client a,b [--seconds N] [--out DIR] | diff A.log B.log [--skew S] [--source-maps DIR] | watch --client a [--seconds N] [--out DIR] [--perf BIN] [--lua [--limit N] [--source-maps DIR]] | locate --client a [--watch SECONDS]";
+const USAGE = "(for debugging your own map on your own development clients; never other players' games) desync A B [--turn N] | poll --client a,b [--seconds N] [--out DIR] | diff A.log B.log [--skew S] [--source-maps DIR] | diff ACTIONS.log POLL.log [--class REGEX] | actions --client a,b [--map MAP] [--follow] | watch --client a [--seconds N] [--out DIR] [--perf BIN] [--lua [--limit N] [--source-maps DIR]] | locate --client a [--watch SECONDS]";
 
 /** `clientsFile` is the clients file `wisp watch` reads: each client's name and Documents folder, inside its Wine prefix. */
 export const makeEngine = (clientsFile: string): Command => ([sub, ...args]) => {
   switch (sub) {
     case "desync": return desync(args);
     case "diff": return diff(args);
+    case "actions": return actions(args);
     case "poll": return poll(clientsFile)(args);
     case "watch": return watch(clientsFile)(args);
     case "locate": return locate(clientsFile)(args);

@@ -1,0 +1,18 @@
+# wisp lan host: pair 0, map Maps\Wisp\bisect-588610b7.w3x, clients lan0a lan0b; seconds since 2026-10-07T02:51:29.433Z (1791341489433)
+246.306 mark turn 4128 game 124.604
+247.269 mark turn 4160 game 125.566
+247.599 turn 4170 lan0b p2 key object=cbc:cbc event=525112 key=13 meta=0
+248.228 mark turn 4192 game 126.526
+249.190 mark turn 4224 game 127.488
+250.150 mark turn 4256 game 128.448
+251.112 mark turn 4288 game 129.410
+252.072 mark turn 4320 game 130.370
+253.033 mark turn 4352 game 131.331
+253.993 mark turn 4384 game 132.291
+254.955 mark turn 4416 game 133.253
+255.917 mark turn 4448 game 134.216
+256.536 chat lan0b p2 "-dev quick"
+256.548 turn 4468 lan0b p2 chat trigger=10a3:10a3 text="-dev quick"
+256.548 turn 4468 lan0b p2 key object=cbe:cbe event=525113 key=13 meta=0
+256.880 mark turn 4480 game 135.179
+257.840 mark turn 4512 game 136.139

@@ -84,7 +84,7 @@ two ways:
   its own URL. W3Champions' install page gives exactly this procedure:
   index.html in `_retail_\webui\` plus the `reg add` below.
 - **They read the game's memory.** wc3-slop-lan's activator does this, and
-  it is excluded (see [Excluded](#excluded-reading-or-writing-game-memory)).
+  it is excluded (see [Excluded](#excluded-memory-on-signed-in-clients)).
 
 A third way, not tried, is to capture the browser's handshake on the loopback
 interface at launch. That needs root and sees other loopback traffic.
@@ -249,45 +249,57 @@ decision.
 | [Promises/wc3-slop-lan](https://github.com/Promises/wc3-slop-lan) | `harness/webui/index.html` (host, join, LAN join and start sequences); `activator/src/menus.rs`, `harness/webui/bridge.py` (an outside socket client); `docs/porting.md` §2.2 (the Windows build) | No licence: read only. |
 | Wisp | wisp:scripts/wisp/menus.ts, wisp:scripts/wisp/commands/menus.ts, wisp:test/menus.test.ts | MIT. Written from the observed protocol: message names and JSON shapes are the interface, not copied code. |
 
-## 2. LAN hosting: FLO and gowarcraft3 (excluded)
+## 2. LAN hosting: offline clients and Wisp's host
 
-**How it works.** A local program advertises a "LAN" game and hosts or
-relays it. The client joins it as a LAN game, and the match never touches
-Blizzard's game servers.
+**Why and on what terms.**
 
-- **FLO** is W3Champions' hosting. In
-  `~/code/resources/w3champions/flo-2022`:
-  - `crates/lan` publishes a Bonjour record, `_blizzard._udp,_w3xp2730`,
-    with the game's protobuf `GameInfo`;
-  - `crates/client/src/lan/game/proxy.rs` accepts the client's W3GS
-    connection and relays it to a FLO node;
-  - `crates/client/src/message` is the WebSocket that W3Champions' page uses
-    to drive the FLO worker.
-- **gowarcraft3** (`~/code/resources/w3champions/gowarcraft3`, a mirror of
-  nielsAD/gowarcraft3) has:
-  - `network/lan`: UDP 6112 and mDNS advertisers;
-  - `network/lobby`: a W3GS lobby;
-  - `network/dummy`: a scripted W3GS player.
+- Warcraft III was a LAN game for over 20 years. Patch 3.0.0 removed LAN, and
+  this restores local play for development and testing.
+- Wisp follows W3Champions' precedent: the same transient switch of the game's
+  network provider from `LOOP` to `TCPN`, undone within a fraction of a
+  second. As far as we can tell, Blizzard acknowledges third-party services
+  like W3Champions and hasn't taken action against them.
+- No statement from Blizzard authorizes or condemns this. A player's answer
+  on Blizzard's forums, with no staff reply, is in [Sources](#sources).
+- From what W3Champions publishes, we understand that it has some contact or
+  coordination with Blizzard, so that Warcraft III patches don't break it at
+  once; the extent is undisclosed. This is our reading. We found no
+  w3champions.com page that says it, so no link is given.
+- **Development and testing on your own offline clients and maps only.**
+  Never switch a signed-in Battle.net client. It isn't for cheating, or for
+  touching anyone else's game.
 
-**Why it no longer works by itself.** Patch 3.0.0 (12 Sep 2026) removed LAN
-from Reforged:
+**How it works.** `wisp lan` ([lan.md](lan.md)) runs offline clients in pairs:
 
-- **No search.** The stock client runs its local provider, `LOOP`, and never
-  searches for LAN games.
-- **No Bonjour.** Bonjour records aren't listed (wc3-slop-lan, docs/protocol.md).
-- **A code patch turns it back on.** W3Champions' current client (its
-  `native_tcpn` helper) and wc3-slop-lan's activator write `TCPN` over the
-  `LOOP` constant in the running game's code for one provider rebuild, then
-  restore it. Left in place, the patch makes `war3_loader.dll` close the game
-  within about a minute.
+- Each client is a fresh Wine prefix with a reflinked install and no
+  Battle.net account. It stops at the login screen, where the local network
+  provider still works.
+- Each pair shares a network namespace with nothing but loopback.
+- To join, a client's provider is switched to `TCPN` for one rebuild, the
+  W3Champions way.
+- Wisp's own TypeScript host lists the game to the clients' LAN ports, takes
+  their joins and relays the match in 30 ms turns.
 
-**Excluded.** It writes into the game's memory, which wisp#20 excludes for
-account risk, and it depends on per-build code patterns. FLO's and
-gowarcraft3's MPL-2.0 licences would allow reuse with file-level copyleft,
-but that doesn't matter while the client can't see a LAN game.
+Prior art: W3Champions' Flo (`~/code/resources/w3champions/flo-2022`;
+current source github.com/BogdanW3/W3C-Flo, MPL-2.0), gowarcraft3 (MPL-2.0)
+and wc3-slop-lan (github.com/Promises/wc3-slop-lan, no licence: read for
+facts only). Wisp copies no file from any of them.
 
-**What it would replace:** hosting and joining for bot sessions, a host-side
-seat to inject actions, and a desync check on every tick.
+**Account risk:** none to an account. The clients never sign in, and the
+code switch is made only after a check that the client can reach nothing but
+loopback.
+
+**What it replaces.** Bot and parity sessions run on as many pairs as the
+machine admits, in parallel, instead of on the two signed-in clients. The
+host logs every turn's actions and compares every client's checksum each turn
+(`wisp engine actions`, [engine.md](engine.md#actions)). Owner playtests and
+anything Battle.net itself must show keep the menu socket.
+
+**Limits:**
+
+- Builds checked: 3.0.0.24268.
+- A map has to be on disk at both clients: `wisp lan fresh` copies it there.
+- The map's players are the pool clients: two to a pair for now.
 
 ## 3. `-loadfile` through Battle.net (solo)
 
@@ -345,19 +357,20 @@ publicly. Typing outside a match is refused by Wisp's private-desktop input
 
 **Still needed for:** Battle.net's Play, and leaving a match in progress.
 
-## Excluded: reading or writing game memory
+## Excluded: memory on signed-in clients
 
-wisp#20 rules out every approach that reads or writes the running game's
-memory. That covers:
+Wisp never writes to a client signed in to Battle.net. That rules out
+wc3-slop-lan's activator and W3Champions' `native_tcpn` on the signed-in
+clients. The activator also finds the menus' GUID with `ReadProcessMemory`;
+Wisp's menu page reports it instead.
 
-- wc3-slop-lan's activator, which finds the menus' GUID with
-  `ReadProcessMemory`;
-- W3Champions' `native_tcpn` and the same activator, which write `TCPN` into
-  the game's code to bring LAN back.
-
-Blizzard's loader watches the game's code, and changing another process's
-memory is what anti-cheat systems look for. The account risk is of a
-different kind from a UI file, and Wisp doesn't take it.
+- Blizzard's loader watches the game's code, and changing another
+  process's memory is what anti-cheat systems look for.
+- That account risk is of a different kind from a UI file.
+- Wisp takes it only where no account exists: the offline pool clients of
+  [section 2](#2-lan-hosting-offline-clients-and-wisps-host).
+- Reading a signed-in client's memory, without writing, is
+  `wisp engine`'s passive tier ([engine.md](engine.md#guardrails)).
 
 ## Ranked recommendation
 
@@ -371,8 +384,8 @@ different kind from a UI file, and Wisp doesn't take it.
    `wisp play` doesn't use it.
 3. **Menu clicks.** Keep them for Battle.net's Play, for leaving a running
    match, and for any prefix whose owner declines the menu page.
-4. **LAN hosting.** Excluded while the 3.0 client needs a code patch to see
-   LAN games.
+4. **LAN hosting on offline clients.** For parallel bot, parity and engine
+   sessions, not for the owner's play: `wisp lan` (section 2).
 
 ## Sources
 
