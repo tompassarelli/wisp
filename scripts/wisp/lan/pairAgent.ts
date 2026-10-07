@@ -1,21 +1,10 @@
-// One pool pair's agent (wisp:docs/lan.md). `wisp lan pool` runs it inside
-// the pair's private network namespace, on the pair's private desktop:
-//   bun pairAgent.ts --pair K --profile parity|visual
-// It launches the pair's two offline clients and answers on a Unix socket
-// (pool.ts agentSocket), which reaches across network namespaces:
-//   GET  /status          the clients and the current game
-//   POST /fresh {map}     host MAP as a LAN game and join both clients; answers once the match plays
-//   POST /end             end the current game
-// Each game writes its action log (host.ts) and packet record under the
-// pair's state folder.
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { Effect, Exit, Scope } from "effect";
+import { Effect, Exit, Fiber, Scope } from "effect";
 import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports } from "../menus";
 import { type LanHost, startHost } from "./host";
 import { LanFailure, enableLan, joinLanGame } from "./join";
 import { readMapFacts } from "./map";
-import { PAIR_SIDES, PROFILES, agentSocket, clientName, clientRoot, documentsOf, exeOf, pairDirectory, preferences, prefixOf, reportPort } from "./pool";
+import { PAIR_SIDES, PROFILES, agentSocket, clientName, clientRoot, documentsOf, exeOf, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
 
 const argument = (name: string) => {
   const at = process.argv.indexOf(`--${name}`);
@@ -78,6 +67,8 @@ interface Game {
   readonly log: string;
   readonly host: LanHost;
   readonly map: string;
+  /** The desync autopsy following this game until it ends. */
+  readonly autopsy: Fiber.Fiber<never>;
 }
 let game: Game | undefined;
 const scope = Scope.makeUnsafe();
@@ -97,58 +88,11 @@ const menusOf = (name: string): Effect.Effect<MenuSocket, LanFailure | MenuFailu
 const endGame = () => {
   if (game === undefined) return;
   game.host.stop();
+  // Interrupting the autopsy runs its last look at the reports and its summary.
+  Effect.runFork(Fiber.interrupt(game.autopsy));
   say(`ended ${game.id}`);
   game = undefined;
 };
-
-/** Hosts `mapFile` and joins both clients; resolves when the match plays. */
-const fresh = (mapFile: string, turnMs: number | undefined) => Effect.scoped(Effect.gen(function*() {
-  endGame();
-  const id = new Date().toISOString().replace(/[:.]/g, "-");
-  const folder = join(directory, "games", id);
-  mkdirSync(folder, { recursive: true });
-  const inGame = `Maps\\Wisp\\${basename(mapFile)}`;
-  for (const client of clients) {
-    const target = join(documentsOf(client.name), "Maps/Wisp", basename(mapFile));
-    mkdirSync(join(target, ".."), { recursive: true });
-    if (existsSync(target)) rmSync(target);
-    copyFileSync(mapFile, target);
-  }
-  const map = readMapFacts(mapFile, packager, inGame);
-  const log = join(folder, "actions.log");
-  const packets = join(folder, "packets.log");
-  const started = Date.now();
-  writeFileSync(log, `# wisp lan host: pair ${pair}, map ${inGame}, clients ${clients.map(({ name }) => name).join(" ")}; seconds since ${new Date(started).toISOString()} (${started})\n`);
-  const host = startHost({
-    map,
-    gameName: `wisp-${pair}-${id.slice(11, 19)}`,
-    clients: clients.map(({ name }) => name),
-    ...(turnMs === undefined ? {} : { turnMs }),
-    log: (line) => appendFileSync(log, `${line}\n`),
-    onPacket: (direction, label, bytes) => {
-      // Empty turns are most of the traffic and carry nothing.
-      if (bytes[1] === 0x0c && bytes.length <= 6) return;
-      appendFileSync(packets, `${((Date.now() - started) / 1000).toFixed(3)} ${direction} ${label} ${Buffer.from(bytes).toString("hex")}\n`);
-    },
-  });
-  game = { id, log, host, map: mapFile };
-  say(`game ${id}: hosting ${inGame} on port ${host.port}`);
-  for (const client of clients) {
-    const pid = gamePid(client.name);
-    if (pid === undefined) return yield* Effect.fail(new LanFailure({ problem: `${client.name} isn't running` }));
-    const menus = yield* menusOf(client.name);
-    yield* enableLan(pid, exeOf(client.name), readExecutable(exeOf(client.name)).version, menus, say);
-    yield* joinLanGame(menus, `wisp-${pair}-${id.slice(11, 19)}`);
-    for (let tries = 0; tries < 80 && !host.status().players.some(({ label, connected }) => label === client.name && connected); tries++) yield* Effect.sleep("250 millis");
-  }
-  for (let tries = 0; tries < 480; tries++) {
-    const status = host.status();
-    if (status.phase === "playing") return { log, game: id };
-    if (status.phase === "over") break;
-    yield* Effect.sleep("250 millis");
-  }
-  return yield* Effect.fail(new LanFailure({ problem: `the match didn't start: ${JSON.stringify(host.status())}` }));
-}));
 
 rmSync(agentSocket(pair), { force: true });
 const server = Bun.serve({
