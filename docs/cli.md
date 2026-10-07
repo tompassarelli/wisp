@@ -143,6 +143,8 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--matches N` | How many matches | `soak` |
 | `--workers N` | How many worker processes | `soak` |
 | `--level N` | The computer players' level | `farm` |
+| `--opponent ID` | The computer players' named opponent identity | `farm balance` |
+| `--tier TIER` | The computer players' difficulty tier | `farm balance` |
 | `--per-pair N` | How many matches each fighter pair plays | `farm` |
 | `--frames N` | How many frames to play | `perf` |
 | `--samples` | Also print each frame's sample | `perf` |
