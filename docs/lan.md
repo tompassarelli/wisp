@@ -217,6 +217,13 @@ game in a user namespace this user owns, and Yama allows a tracer that holds
 
 ## The action log
 
+`wisp watch` observes each declared pool client through its host's Unix
+socket, since the client's menu socket is inside the isolated network.
+Typing a developer command requires the host to report that exact running
+process as loaded, connected and playing. Lobby, loading, ended and stale
+process observations permit no chat. Helpers use the client's Steam window
+ID (`steam_app_3516115600` and up) to verify private-desktop focus.
+
 Every `turn-ms` (30 by default) the host sends each client the actions
 collected since the last turn (IncomingAction, with a CRC16). Each client
 answers every turn with a checksum of its game state (OutgoingKeepAlive). The
