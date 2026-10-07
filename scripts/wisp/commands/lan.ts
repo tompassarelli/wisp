@@ -17,6 +17,7 @@ import {
   PAIR_SIDES, PROFILES, type PoolPair, agentSocket, clientName, desktopSize, pairClients, pairDirectory, poolClientsFile, poolFile, readPool, reportPort, writeJson,
 } from "../lan/pool";
 import { setupClient } from "../lan/setup";
+import { admissionFile, pairAdmission } from "../lan/admission";
 
 const SESSION = join(import.meta.dir, "../lan/pairSession.ts");
 
@@ -68,36 +69,7 @@ const capacityHelper = (args: readonly string[]) => {
   return join(dirname(skill), "scripts/machine-capacity.mjs");
 };
 
-/**
- * Starts pair `pair`'s desktop, namespace and agent inside its own
- * machine-capacity session (class moderate: two cores and 2 GiB of headroom
- * for two parity clients), so the helper admits pairs one by one while the
- * machine has room; retries while it defers.
- */
-/** MiB of memory the kernel can still give, from /proc/meminfo. */
-const memoryAvailableMiB = () => Math.floor(Number(/^MemAvailable:\s+(\d+) kB$/m.exec(readFileSync("/proc/meminfo", "utf8"))?.[1] ?? 0) / 1024);
-/** --greedy keeps this much memory free: it starts no pair below it. */
-const GREEDY_FLOOR_MIB = 12 * 1024;
-
-/**
- * --greedy (the owner's call: unattended runs that may use the machine fully)
- * skips the helper's admission gate but keeps a pair in a scope of the
- * helper's slice, with the same kind of ceilings, so the desktop launcher
- * recognizes it and the helper's accounting still sees it.
- */
-/** The greedy scopes started: a scope outlives the systemd-run that made it, so stopping the pool stops each by name. */
-const greedyUnits: string[] = [];
-const greedyScope = (pair: number) => {
-  const unit = `agent-capacity-${crypto.randomUUID().replaceAll("-", "")}.scope`;
-  greedyUnits.push(unit);
-  return greedyArgs(pair, unit);
-};
-const greedyArgs = (pair: number, unit: string) => [
-  "systemd-run", "--user", "--scope", "--quiet", "--collect", `--unit=${unit}`, "--slice=agent-capacity.slice",
-  "--property=CPUQuota=300%", "--property=MemoryHigh=6G", `--description=wisp lan pair ${pair} (greedy)`, "--",
-];
-
-const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, greedy = false, fps?: number) => Effect.tryPromise({
+const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, fps?: number) => Effect.tryPromise({
   try: async () => {
     const definition = PROFILES[profile];
     if (definition === undefined) throw new Error(`unknown profile ${profile}`);
@@ -105,25 +77,39 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
     mkdirSync(pairDirectory(pair), { recursive: true });
     rmSync(agentSocket(pair), { force: true });
     while (true) {
-      if (greedy && memoryAvailableMiB() < GREEDY_FLOOR_MIB) throw new Error(`only ${memoryAvailableMiB()} MiB of memory available, under the 12 GiB --greedy keeps free`);
-      const scope = greedy ? greedyScope(pair) : [process.execPath, capacity, "session", "--class", "moderate", "--owner", `wisp-lan-pair-${pair}`, "--"];
+      const waiting = pairAdmission(capacity);
+      if (waiting !== undefined) {
+        if (Date.now() >= deadline) throw new Error(waiting);
+        console.log(`pair ${pair}: waiting (${waiting}); trying again in 45 s`);
+        await Bun.sleep(45_000);
+        continue;
+      }
+      rmSync(admissionFile(pairDirectory(pair)), { force: true });
+      const scope = [process.execPath, capacity, "session", "--class", "moderate", "--owner", `wisp-lan-pair-${pair}`, "--"];
       const child = Bun.spawn([...scope, process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity, ...(fps === undefined ? [] : ["--fps", String(fps)])], {
         stdout: Bun.file(join(pairDirectory(pair), "session.out")),
         stderr: Bun.file(join(pairDirectory(pair), "session.err")),
       });
+      let refused: string | undefined;
       for (;;) {
         const exited = await Promise.race([child.exited, Bun.sleep(1000).then(() => undefined)]);
+        if (existsSync(admissionFile(pairDirectory(pair)))) {
+          refused = (JSON.parse(readFileSync(admissionFile(pairDirectory(pair)), "utf8")) as { reason: string }).reason;
+          child.kill("SIGTERM");
+          await child.exited;
+          break;
+        }
         if (exited !== undefined) break;
         const status = await fetch("http://pair/status", { unix: agentSocket(pair) }).then((response) => response.json() as Promise<{ clients: { pid?: number }[] }>).catch(() => undefined);
-        if (status !== undefined && status.clients.every(({ pid }) => pid !== undefined)) return child;
+        if (status !== undefined && status.clients.length === 2 && status.clients.every(({ pid }) => pid !== undefined)) return child;
       }
-      if (child.exitCode !== 75) throw new Error(`its session exited with ${child.exitCode}; see ${pairDirectory(pair)}/session.err and desktop-*.err`);
+      if (refused === undefined && child.exitCode !== 75) throw new Error(`its session exited with ${child.exitCode}; see ${pairDirectory(pair)}/session.err and desktop-*.err`);
       // Exit 75 is a deferral only when the helper says DEFER; it also exits 75 when it can't reach systemd --user (a user namespace, as run-bounded makes).
       const said = readFileSync(join(pairDirectory(pair), "session.err"), "utf8");
       const reason = /"decision":"DEFER","reason":"([A-Z_]+)".*?"cpuSomeAvg10":([\d.]+)/.exec(said);
-      if (reason === null) throw new Error(`the capacity helper refused: ${said.trim().split("\n").slice(-2).join(" | ")}`);
-      if (Date.now() > deadline) throw new Error(`the capacity helper kept deferring it for ${waitSeconds} s (${reason[1]})`);
-      console.log(`pair ${pair}: the capacity helper defers it (${reason[1]}, CPU pressure ${reason[2]}%); trying again in 45 s`);
+      if (reason === null && refused === undefined) throw new Error(`the capacity helper refused: ${said.trim().split("\n").slice(-2).join(" | ")}`);
+      if (Date.now() >= deadline) throw new Error(`the capacity helper kept deferring it for ${waitSeconds} s (${refused ?? reason?.[1]})`);
+      console.log(`pair ${pair}: the capacity helper defers it (${refused ?? reason?.[1]}, CPU pressure ${reason?.[2] ?? "?"}%); trying again in 45 s`);
       await Bun.sleep(45_000);
     }
   },
@@ -160,7 +146,6 @@ const pool: Command = (args) => Effect.gen(function*() {
   const children: Bun.Subprocess[] = [];
   const stop = () => {
     for (const child of children) child.kill("SIGTERM");
-    for (const unit of greedyUnits) Bun.spawnSync(["systemctl", "--user", "stop", unit], { stdout: "ignore", stderr: "ignore" });
   };
   process.once("SIGINT", () => {
     stop();
@@ -177,10 +162,10 @@ const pool: Command = (args) => Effect.gen(function*() {
   if (order.some((pair) => !Number.isInteger(pair) || pair < 0)) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
   for (const [admitted, pair] of order.entries()) {
     const profile = profileOf(pair);
-    const started = yield* startPair(pair, profile, launcher, capacity, waitSeconds, args.includes("--greedy"), fps).pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed(failure)));
+    const started = yield* startPair(pair, profile, launcher, capacity, waitSeconds, fps).pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed(failure)));
     if (started instanceof LanFailure) {
       // The pool is as big as the machine admits: keep the pairs that started.
-      yield* Console.log(`${started.problem}; the pool stays at ${admitted} pair${admitted === 1 ? "" : "s"}`);
+      yield* Console.log(`${started.problem}; the pool stays at ${admitted} pair${admitted === 1 ? "" : "s"}; waiting: ${order.slice(admitted).join(", ")}`);
       if (admitted === 0) return yield* started;
       break;
     }
@@ -231,7 +216,7 @@ const end: Command = (args) => Effect.gen(function*() {
   yield* Console.log(`pair ${pair}: game ended`);
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--greedy] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | status [--pair K] | end --pair K";
+export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | status [--pair K] | end --pair K";
 
 export const lan: Command = ([sub, ...args]) => {
   switch (sub) {
