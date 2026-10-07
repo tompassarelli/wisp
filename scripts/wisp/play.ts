@@ -23,7 +23,7 @@ import {
   newestLauncherLog, prefixUse, shortcutAppId, shortcutUrl, signedIn, withLaunchOptions,
 } from "../warcraft/battleNet";
 import type { Ink, Word } from "../warcraft/desktop";
-import { type DisplaySettings, displayChanges, preferencesBackupPath, preferencesPath, withDisplaySettings } from "../warcraft/preferences";
+import { type DisplaySettings, absentSettings, displayChanges, preferencesBackupPath, preferencesPath, withDisplaySettings } from "../warcraft/preferences";
 import { SCAN_QUIET_MS, importFailures, ladderScan, sessionStart, war3LogPath } from "../warcraft/war3Log";
 import { step } from "./timings";
 import { type MenuSocket, hostLobby, startLobby } from "./menus";
@@ -157,6 +157,12 @@ export interface PlayDeclaration<R = never> {
    * with them.
    */
   readonly displaySettings?: DisplaySettings;
+  /**
+   * Recommended `[Video]` values (graphics quality, frame cap): written only
+   * for keys the file has no entry for, so they never replace a value the
+   * owner set. Applied after `displaySettings`, into the saved copy too.
+   */
+  readonly recommendedSettings?: DisplaySettings;
   /** Before Warcraft III starts the map: what the map reads at its start, left in Documents/Warcraft III. */
   readonly prepare: (documents: string) => Effect.Effect<void, PlayProblem, R>;
   /** When a run stops before the match: removes what prepare left, so a later session of the map runs as usual. */
@@ -462,8 +468,11 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     if (found === undefined) return;
     const declared = declaration.displaySettings;
     const changes = declared === undefined ? [] : displayChanges(found, declared);
-    const text = declared === undefined || changes.length === 0 ? found : withDisplaySettings(found, declared);
+    const restored = declared === undefined || changes.length === 0 ? found : withDisplaySettings(found, declared);
     if (changes.length > 0) yield* status(3, "Warcraft III", `restored the declared display settings (${changes.map((change) => `${change.key} was ${change.actual ?? "unset"}`).join(", ")})`);
+    const absent = declaration.recommendedSettings === undefined ? {} : absentSettings(restored, declaration.recommendedSettings);
+    const text = Object.keys(absent).length === 0 ? restored : withDisplaySettings(restored, absent);
+    if (Object.keys(absent).length > 0) yield* status(3, "Warcraft III", `added the recommended settings the file has no value for (${Object.keys(absent).join(", ")})`);
     if (saved === undefined || text !== saved) yield* machine.write(backup, text);
     if (saved !== undefined || text !== found) yield* machine.write(preferences, text);
     yield* status(3, "Warcraft III", `saved ${preferences} as ${backup}; it is put back when the game exits`);

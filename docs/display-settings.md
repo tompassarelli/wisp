@@ -49,6 +49,7 @@ declaration.
   down with the game) is the file to keep: play writes it back first and keeps
   it for the new helper.
 - A declaration may name the owner's display settings (`PlayDeclaration.displaySettings`, the same `[Video]` keys as a client's). Play writes them into the file before saving it, so the backup and the game both carry them. On 7 Oct the owner's file held a test desktop's windowed 1920x1080 settings left by an earlier run outside `play`; play saved them and the helper put them back each time.
+- A declaration may also name `recommendedSettings` (graphics quality, frame cap). Play writes each one only when the file has no entry for that key, after the declared display settings, so a value the owner chose is never replaced.
 - A game already running when `play` starts has its own backup and helper;
   play saves and starts nothing for it.
 - The whole file goes back, so preference changes made during the session

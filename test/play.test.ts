@@ -77,6 +77,8 @@ interface Scenario {
   readonly backup?: string;
   /** The owner's display settings the declaration names. */
   readonly displaySettings?: Readonly<Record<string, string>>;
+  /** Recommended values the declaration names, written only where the file has none. */
+  readonly recommendedSettings?: Readonly<Record<string, string>>;
   readonly runtimes?: "none" | "launcher" | "two" | "other display" | "lingering" | "lingering exits";
   readonly signsIn?: boolean;
   readonly steamStarts?: boolean;
@@ -401,6 +403,7 @@ function world(scenario: Scenario = {}) {
     map: { folder: "00-Smashcraft", file: "Smashcraft 0.0.47.w3x", title: "Smashcraft 0.0.47", ...(scenario.mapSource === undefined ? {} : { source: SOURCE }) },
     gameName: "Smashcraft",
     ...(scenario.displaySettings === undefined ? {} : { displaySettings: scenario.displaySettings }),
+    ...(scenario.recommendedSettings === undefined ? {} : { recommendedSettings: scenario.recommendedSettings }),
     menuReportPort: 47124,
     prepare: (documents) => Effect.sync(() => {
       expect(documents).toBe(`${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III`);
@@ -756,6 +759,15 @@ test("declared display settings replace a test run's before the game starts, so 
   expect(result.prefFiles.get(BACKUP)).toBe(owner);
   expect(result.lines).toContain("3/7 Warcraft III: restored the declared display settings (windowmode was 2, windowwidth was 1920)");
   expect(result.events.indexOf("write War3Preferences.txt")).toBeLessThan(result.events.indexOf("launch"));
+});
+
+test("recommended settings fill only keys the file has no value for, never replacing the owner's", async () => {
+  const result = await world({ preferences: "[Video]\nmaxfps=61\nshadowquality=3\n", recommendedSettings: { shadowquality: "0", vsync: "0" } }).run();
+  expect(result.failure).toBeUndefined();
+  const filled = "[Video]\nmaxfps=61\nshadowquality=3\nvsync=0\n";
+  expect(result.prefFiles.get(PREFERENCES)).toBe(filled);
+  expect(result.prefFiles.get(BACKUP)).toBe(filled);
+  expect(result.lines).toContain("3/7 Warcraft III: added the recommended settings the file has no value for (vsync)");
 });
 
 test("a game already running keeps its own backup and helper: play saves and starts nothing for it", async () => {
