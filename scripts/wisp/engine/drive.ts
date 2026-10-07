@@ -19,12 +19,24 @@ export interface DriverStatus {
   readonly refused: boolean;
 }
 
-export function readDriverStatus(client: DriverClient, prefix: string): DriverStatus {
-  const file = hostPath(dataDirectory(client.documents), driverStatusFile(prefix));
+function statusPath(client: DriverClient, prefix: string): string {
+  return hostPath(dataDirectory(client.documents), driverStatusFile(prefix));
+}
+
+/** A receipt may be read between PreloadGenStart and PreloadGenEnd. */
+function currentStatus(client: DriverClient, prefix: string): DriverStatus | undefined {
+  const file = statusPath(client, prefix);
+  if (!existsSync(file)) return undefined;
   const line = preloadLines(readFileSync(file, "utf8"))?.[0];
   const fields = /^drive (\d+) (\d+) (\S+) ([01]) (\d+) (\d+) ([01])$/.exec(line ?? "");
-  if (fields === null) throw new Error(`${client.name}: no complete native driver status in ${file}; start a map with startNativeDriver`);
+  if (fields === null) return undefined;
   return { client: client.name, serial: Number(fields[1]), frame: Number(fields[2]), checksum: fields[3] ?? "", paused: fields[4] === "1", players: Number(fields[5]), slot: Number(fields[6]), refused: fields[7] === "1" };
+}
+
+export function readDriverStatus(client: DriverClient, prefix: string): DriverStatus {
+  const status = currentStatus(client, prefix);
+  if (status === undefined) throw new Error(`${client.name}: no complete native driver status in ${statusPath(client, prefix)}; start a map with startNativeDriver`);
+  return status;
 }
 
 /** Files cause in-map actions, so use exactly the trap tier's offline and owner-display checks. */
@@ -62,9 +74,10 @@ export function publishDriverCommand(clients: readonly DriverClient[], prefix: s
 export async function waitDriverCommand(clients: readonly DriverClient[], prefix: string, serial: number, timeoutMs = 10000, frame?: number): Promise<readonly DriverStatus[]> {
   const deadline = performance.now() + timeoutMs;
   while (true) {
-    const statuses = clients.map(client => readDriverStatus(client, prefix));
-    if (statuses.some(status => status.refused)) throw new Error(`native driver refused command ${serial}: clients received different payloads`);
-    if (statuses.every(status => status.serial === serial && (frame === undefined || status.frame === frame && status.paused))) return statuses;
+    const statuses = clients.map(client => currentStatus(client, prefix));
+    if (statuses.some(status => status?.refused)) throw new Error(`native driver refused command ${serial}: clients received different payloads`);
+    const completed = statuses.filter((status): status is DriverStatus => status !== undefined && status.serial === serial && (frame === undefined || status.frame === frame && status.paused));
+    if (completed.length === clients.length) return completed;
     if (performance.now() >= deadline) throw new Error(`native driver command ${serial} timed out: ${JSON.stringify(statuses)}`);
     await Bun.sleep(10);
   }
