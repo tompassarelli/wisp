@@ -30,15 +30,28 @@ const buffers = new Map<string, Promise<AudioBuffer>>();
 const pendingAudio = new Set<Promise<void>>();
 const missing = new Set<string>();
 let audioPlayed = 0, audioEvents = 0, audioReadyEvents = 0;
+let soundRequests = 0;
+const soundQueue: (() => void)[] = [];
+async function soundBytes(cue: SoundCue): Promise<ArrayBuffer> {
+  // Leave HTTP connections available for frame delivery while sound assets load.
+  if (soundRequests === 4) await new Promise<void>((resolve) => soundQueue.push(resolve));
+  else soundRequests++;
+  try {
+    const response = await fetch("/sound", { method: "POST", body: JSON.stringify(cue) });
+    if (!response.ok) throw new Error(await response.text());
+    return await response.arrayBuffer();
+  } finally {
+    const next = soundQueue.shift();
+    if (next === undefined) soundRequests--;
+    else next();
+  }
+}
 function sound(cue: SoundCue): void {
   audioEvents++;
   const key = `${cue.source ?? cue.label}:${cue.handle.id}`;
   let buffer = buffers.get(key);
   if (buffer === undefined) {
-    buffer = fetch("/sound", { method: "POST", body: JSON.stringify(cue) }).then(async (response) => {
-      if (!response.ok) throw new Error(await response.text());
-      return audio.decodeAudioData(await response.arrayBuffer());
-    });
+    buffer = soundBytes(cue).then((bytes) => audio.decodeAudioData(bytes));
     buffers.set(key, buffer);
   }
   const task = buffer.then(async (decoded) => {

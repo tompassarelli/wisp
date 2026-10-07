@@ -196,8 +196,9 @@ The browser keeps one frame request pending while it draws the preceding scene.
 Each request advances one step; captures finish saving before the next request.
 It keeps animation callbacks registered throughout drawing and waits for a fresh
 callback to deliver each scene. Idle callbacks do not count as delivered frames.
-Sound labels resolve through the installed sound tables. Assets remain
-outside Wisp. Closing the window closes the game session.
+Sound labels resolve through the installed sound tables. Sound downloads run
+four at a time so slow asset loading leaves connections available for game
+frames. Assets remain outside Wisp. Closing the window closes the game session.
 
 ```ts
 import { runStandalone, type StandaloneGame } from "wisp/scripts/wisp/standalone";
