@@ -121,9 +121,16 @@ after the match began. `limits` in the declaration change the thresholds
 A match with findings writes `OUT/match-N.json` (`SoakRepro`): the match
 (fighters, stage, policies, seed, frames), its findings, each client's native
 call checksum and its inputs: every fuzzed edge, quiet spell, lag spike and
-costlier frame by frame. `soak --repro FILE` plays it again in this process
+costlier frame by frame. By default, soak preserves the full match as
+`OUT/match-N.original.json`, then removes inputs from `match-N.json` while
+keeping its first recorded failure kind. `--no-shrink` keeps only the full
+repro. Shrinking replays the existing game module in the host process as well
+as the workers. `soak --repro FILE` plays it again in this process
 and prints its findings and whether the native call checksums equal the
 recorded ones.
+
+`wisp repro FILE --shrink [--out FILE]` also shrinks an existing soak JSON
+repro; see [shrinking and regression tests](repro.md#shrinking-a-soak-failure).
 
 A game that saves [repros](repro.md) gives its driver `repro(client)`: at a
 match's first finding the soak asks each client for the lines its repro key

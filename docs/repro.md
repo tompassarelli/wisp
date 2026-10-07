@@ -92,6 +92,43 @@ what should have happened.
 Bun replays what Warcraft's Lua recorded: a moment lands only where the game's
 Bun and Lua runs agree, which a game's own Bun/Lua comparisons check.
 
+## Shrinking a soak failure
+
+`wisp repro FILE --shrink [--out FILE]` takes a soak JSON repro and replays
+the match headlessly. Delta debugging removes groups of recorded inputs,
+keeping a cut only if the first recorded failure kind still occurs. Inputs
+include controller edges, quiet spells, lag spikes, slow frames, typed text
+and published files. Their original frame numbers stay intact. The match's
+setup and saved state are not changed. A repro that no longer fails with its
+recorded kind is refused.
+
+The output defaults to `FILE.shrunk.json` (replacing a `.json` suffix). The
+original file stays intact. The command prints the input counts before and
+after, replay count and elapsed time. Delta debugging stops when no single
+remaining input can be removed while preserving the failure kind; it does
+not search every possible combination.
+
+The project adds `soak` to its `makeRepro` declaration:
+
+```ts
+soak: {
+  project: join(sourceDirectory, "scripts/wisp/soak.ts"),
+  tests: join(sourceDirectory, "test/repros"),
+},
+```
+
+`project` names the existing module whose default export is `defineSoak()`.
+`wisp repro SHRUNK.json --test NAME` writes `tests/NAME.test.ts`, a Bun test
+that imports that module and its game, replays the shrunk input log, and
+fails while the recorded failure kind still occurs. After fixing the game,
+run it with `bun test tests/NAME.test.ts`. `--shrink --test NAME` combines
+both steps. These soak tests use the headless runtime and belong outside
+the game's Lua test sources.
+
+Soak shrinks new repros by default and preserves the original beside each;
+`soak --no-shrink` opts out. Saved text moments keep their checksum replay
+and inspection commands.
+
 ## Inspecting a saved frame
 
 `wisp repro FILE --frame N --out STATE.json` writes the state **after** frame
