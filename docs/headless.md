@@ -414,6 +414,28 @@ The 0.405 cutoff was identified in WurstScript's Apache-2.0
 Wisp's TypeScript implementation is independently authored; no Wurst source
 was copied or adapted.
 
+## Warcraft 3.0 natives
+
+The typed API is generated from the installed 3.0.1 build 24342 `common.j`
+and `Blizzard.j`. The nineteen equipment natives renamed in 3.0.1 are
+declared only with their `Blz` names. The installed script names the music
+native `BlzSetThematicMusicAbsoluteVolume`. No dedicated Ability Amp, Crit,
+or Resolve stat native or unit field is exposed there; the new ability
+level fields are declared as the script defines them.
+
+```bash
+bun scripts/natives.ts /private/common.j /private/blizzard.j src/natives/warcraft.d.ts
+LUA=/path/to/lua32 bun test test/headless-warcraft3.test.ts
+```
+
+Attack reset clears the selected weapon's remaining wait while retaining
+its configured attack period. Ability cooldowns track each unit and ability
+independently and advance with the headless clock. The aura toggle tracks
+both aura operation and its optional UI change. Input queries read the
+client's held keys, modifiers, mouse buttons and screen position. Effect
+animation controls retain the blend duration and requested animation queue;
+`BlzRemoveEffect` removes the effect immediately.
+
 ## Native table iteration order
 
 `test/table-order/main.ts` walks a 1,000-key string table and a 1,000-key
