@@ -11,9 +11,13 @@ import { type ClientFiles, type ClientScope, HeadlessClient, type LocalNatives, 
 import type { NativeDeclarations } from "./declarations";
 import type { UnitStateFixtures } from "./client";
 import type { IntentionalNoops } from "./client";
+import type { SceneryFixtures } from "./warcraft3Scenery";
+import type { Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 
 export interface LockstepOptions {
   readonly unitStates?: UnitStateFixtures;
+  readonly scenery?: SceneryFixtures;
+  readonly inventory?: Warcraft3InventoryFixtures;
   readonly declarations: NativeDeclarations;
   /** One client per human player slot. */
   readonly players: readonly number[];
@@ -116,6 +120,8 @@ export class Lockstep {
         ...(files === undefined ? {} : { files }),
         ...(options.frames === undefined ? {} : { frames: options.frames }),
         ...(options.unitStates === undefined ? {} : { unitStates: options.unitStates }),
+        ...(options.scenery === undefined ? {} : { scenery: options.scenery }),
+        ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
       }));
     }
     this.clients = clients;

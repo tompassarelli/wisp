@@ -13,6 +13,8 @@ import type { NativeDeclarations } from "./declarations";
 import { FRAME_POINTS, type Frame, Frames } from "./frames";
 import { Warcraft3Abilities } from "./warcraft3Abilities";
 import { WARCRAFT3_ENUM_VALUES } from "./warcraft3Natives";
+import { Scenery, type SceneryFixtures } from "./warcraft3Scenery";
+import { Warcraft3Inventory, type Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 
 export type Handle = { readonly kind: string; readonly id: number };
 
@@ -132,6 +134,11 @@ interface SoundState {
   y: number;
   z: number;
   unit: Unit | undefined;
+  readonly looping: boolean;
+  duration: number;
+  elapsed: number;
+  playing: boolean;
+  killWhenDone: boolean;
 }
 
 /** One pure assertion over emitted cues; creation alone never counts as playing. */
@@ -241,6 +248,8 @@ export interface ClientScope {
 
 export interface ClientOptions {
   readonly unitStates?: UnitStateFixtures;
+  readonly scenery?: SceneryFixtures;
+  readonly inventory?: Warcraft3InventoryFixtures;
   readonly slot: number;
   /** The map's configureRuntime() filePrefix, which names the file its error reports go to. */
   readonly filePrefix: string;
@@ -405,6 +414,8 @@ function mixValue(hash: number, value: unknown): number {
 }
 
 export class HeadlessClient {
+  readonly scenery: Scenery;
+  readonly inventory: Warcraft3Inventory;
   readonly abilities = new Warcraft3Abilities();
   readonly textAreaAutoScroll = new Map<Handle, boolean>();
   readonly heldMouseButtons = new Set<unknown>();
@@ -464,6 +475,14 @@ export class HeadlessClient {
   readonly frames: Frames;
 
   constructor(options: ClientOptions) {
+    this.scenery = new Scenery(options.scenery);
+    this.inventory = new Warcraft3Inventory({
+      handle: kind => this.handle(kind),
+      getUnitTypeId: unit => (unit as Unit).typeId,
+      readLife: unit => this.unitValue(unit as Unit, "life"),
+      readMaxLife: unit => this.unitValue(unit as Unit, "maxLife"),
+      writeLife: (unit, life) => this.setLife(unit as Unit, life),
+    }, options.inventory);
     this.unitStates = options.unitStates ?? {};
     this.slot = options.slot;
     this.scope = options.scope;
@@ -618,9 +637,10 @@ export class HeadlessClient {
     unit.animationElapsed = 0;
   }
 
-  private sound(source: string | undefined, label: string | undefined): Handle {
+  private sound(source: string | undefined, label: string | undefined, looping: boolean): Handle {
     const handle = this.handle("sound");
-    const sound: SoundState = { handle, source, label, volume: 127, pitch: 1, x: 0, y: 0, z: 0, unit: undefined };
+    const sound: SoundState = { handle, source, label, volume: 127, pitch: 1, x: 0, y: 0, z: 0, unit: undefined,
+      looping, duration: 0, elapsed: 0, playing: false, killWhenDone: false };
     this.sounds.set(handle, sound);
     this.cue(sound, "create");
     return handle;
@@ -629,6 +649,15 @@ export class HeadlessClient {
   private cue(sound: SoundState, event: "create" | "start"): void {
     this.soundLog.push({ event, frame: this.frame, handle: sound.handle, source: sound.source, label: sound.label,
       volume: sound.volume, pitch: sound.pitch, x: sound.unit?.x ?? sound.x, y: sound.unit?.y ?? sound.y, z: sound.z });
+  }
+
+  private startSound(handle: Handle): void {
+    const sound = this.sounds.get(handle);
+    if (sound === undefined) return;
+    this.cue(sound, "start");
+    sound.elapsed = 0;
+    sound.playing = sound.looping || sound.duration > 0;
+    if (!sound.playing && sound.killWhenDone) this.sounds.delete(handle);
   }
 
   private cameraField(field: unknown): string {
@@ -658,6 +687,8 @@ export class HeadlessClient {
   private behaviors({ humans, network, screenWidth }: ClientOptions): Readonly<Record<string, NativeBehavior>> {
     const playing = (player: number) => humans.includes(player);
     return {
+      ...this.scenery.behaviors({ handle: kind => this.handle(kind) }),
+      ...this.inventory.behaviors(),
       GetLocalPlayer: () => this.slot,
       Player: (n: number) => n,
       GetPlayerId: (player: number) => player,
@@ -736,7 +767,7 @@ export class HeadlessClient {
       BlzGetLocalClientHeight: () => 1080,
       BlzIsLocalClientActive: () => true,
       BlzIsKeyPressed: (key: number) => this.heldKeys.has(key),
-      BlzIsMetaKeyPressed: (meta: number) => this.heldMeta === meta,
+      BlzIsMetaKeyPressed: (meta: number) => (this.heldMeta & meta) === meta,
       BlzIsMouseButtonPressed: (button: unknown) => this.heldMouseButtons.has(button),
       BlzGetMouseScreenPosX: () => this.mouseScreenX,
       BlzGetMouseScreenPosY: () => this.mouseScreenY,
@@ -919,13 +950,33 @@ export class HeadlessClient {
         this.cameraX = x;
         this.cameraY = y;
       },
+      SetCameraTargetController: () => { this.scenery.cameraAllowsHotkeyTargetLock = false; },
+      SetCameraOrientController: () => { this.scenery.cameraAllowsHotkeyTargetLock = false; },
       SetCameraField: (field: unknown, value: number) => {
         this.cameraFields[this.cameraField(field)] = value;
       },
       GetCameraField: (field: unknown) => this.cameraFields[this.cameraField(field)] ?? 0,
-      CreateSound: (source: string) => this.sound(source, undefined),
-      CreateSoundFromLabel: (label: string) => this.sound(undefined, label),
-      CreateSoundFilenameWithLabel: (source: string, _loop: boolean, _is3D: boolean, _stop: boolean, _fadeIn: number, _fadeOut: number, label: string) => this.sound(source, label),
+      CreateSound: (source: string, loop: boolean) => this.sound(source, undefined, loop),
+      CreateSoundFromLabel: (label: string, loop: boolean) => this.sound(undefined, label, loop),
+      CreateSoundFilenameWithLabel: (source: string, loop: boolean, _is3D: boolean, _stop: boolean, _fadeIn: number, _fadeOut: number, label: string) => this.sound(source, label, loop),
+      SetSoundDuration: (handle: Handle, duration: number) => {
+        const sound = this.sounds.get(handle);
+        if (sound !== undefined) sound.duration = Math.max(0, duration);
+      },
+      GetSoundDuration: (handle: Handle) => this.sounds.get(handle)?.duration ?? 0,
+      GetSoundIsPlaying: (handle: Handle) => this.sounds.get(handle)?.playing ?? false,
+      KillSoundWhenDone: (handle: Handle) => {
+        const sound = this.sounds.get(handle);
+        if (sound === undefined) return;
+        sound.killWhenDone = true;
+        if (!sound.playing) this.sounds.delete(handle);
+      },
+      StopSound: (handle: Handle, killWhenDone: boolean) => {
+        const sound = this.sounds.get(handle);
+        if (sound === undefined) return;
+        sound.playing = false;
+        if (killWhenDone || sound.killWhenDone) this.sounds.delete(handle);
+      },
       SetSoundParamsFromLabel: (handle: Handle, label: string) => {
         const sound = this.sounds.get(handle);
         if (sound !== undefined) sound.label = label;
@@ -951,14 +1002,8 @@ export class HeadlessClient {
         const sound = this.sounds.get(handle);
         if (sound !== undefined) sound.unit = unit;
       },
-      StartSound: (handle: Handle) => {
-        const sound = this.sounds.get(handle);
-        if (sound !== undefined) this.cue(sound, "start");
-      },
-      StartSoundEx: (handle: Handle) => {
-        const sound = this.sounds.get(handle);
-        if (sound !== undefined) this.cue(sound, "start");
-      },
+      StartSound: (handle: Handle) => this.startSound(handle),
+      StartSoundEx: (handle: Handle) => this.startSound(handle),
       AddSpecialEffectLoc: (model: string) => this.effectAt(model, 0, 0),
       AddSpecialEffectTarget: (model: string, target: unknown) => {
         const unit = target as Partial<Unit>;
@@ -1163,8 +1208,16 @@ export class HeadlessClient {
     this.run(() => {
       this.frame++;
       this.abilities.tick(f32(1 / FRAMES_PER_SECOND));
+      this.scenery.tick(f32(1 / FRAMES_PER_SECOND));
       for (const pose of this.effects.values()) pose.animationElapsed += pose.timeScale / FRAMES_PER_SECOND;
       for (const unit of this.units.values()) unit.animationElapsed += unit.timeScale / FRAMES_PER_SECOND;
+      for (const sound of this.sounds.values()) {
+        if (!sound.playing || sound.looping) continue;
+        sound.elapsed += sound.pitch * 1000 / FRAMES_PER_SECOND;
+        if (sound.elapsed < sound.duration) continue;
+        sound.playing = false;
+        if (sound.killWhenDone) this.sounds.delete(sound.handle);
+      }
       const count = this.timers.length;
       for (let index = 0; index < count; index++) {
         const timer = this.timers[index];
