@@ -61,8 +61,11 @@ imports.
 
 The build packages into a copy of the base. It adds war3map.w3a holding
 FileIO's ability, which hot reload needs, and the 512-byte map header when the
-base was saved without one. A map with imported assets passes `--container`, a
-packaged map whose archive has room for them.
+base was saved without one. Imported assets can be added directly to the base:
+when its MPQ hash table is full, the packager doubles that table and retries
+the addition once. Existing entries stay in the archive. A map may still pass
+`--container` to retain assets from another packaged map; growth happens only
+on the staged output, never on the base or container.
 
 ## Play it and change it while it runs
 
