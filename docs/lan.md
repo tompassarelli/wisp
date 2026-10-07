@@ -169,7 +169,10 @@ bisect-588610b7, measured over 10 s from /proc):
    second to UDP 16000–16007. Each client takes the first free port from 16000
    for its LAN socket, and the game's own search goes to 16000 (held by the
    first client), so the host announces to the clients instead of answering
-   searches;
+   searches. Discovery closes when countdown starts. An unused announcement
+   port can leave Bun 1.3.13 spending nearly one core on the UDP socket even
+   after announcements stop. A two-second isolated sample used 1.66 CPU-seconds
+   with that socket open and 0.003 after closing it; gameplay needs only TCP;
 4. for each client, switches its provider to LAN (below), then sends its
    menus `SendGameListing` and `GetGameList` until the game is listed, then
    `JoinGame` with the listed id;

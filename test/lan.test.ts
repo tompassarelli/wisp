@@ -164,10 +164,17 @@ describe("host, replaying two recorded offline clients", () => {
     if (!done()) throw new Error(`timed out waiting for ${what}`);
   };
 
-  test("joins, loads, logs each turn's decoded actions and flags a checksum that differs", async () => {
+  test("joins, retires lobby discovery, loads, logs actions and flags a checksum that differs", async () => {
     const lines: string[] = [];
-    const host = startHost({ map: MAP, gameName: "t", clients: ["lan0a", "lan0b"], turnMs: 5, countdownMs: 0, settleMs: 0, log: (line) => lines.push(line), announcePorts: [] });
+    let discoveryPort: number | undefined;
+    let discoveryClosed = false;
+    const announcements = await Bun.udpSocket({ hostname: "127.0.0.1", socket: {
+      data: (_socket, _data, port) => { discoveryPort = port; },
+      error: () => { discoveryClosed = true; announcements.close(); },
+    } });
+    const host = startHost({ map: MAP, gameName: "t", clients: ["lan0a", "lan0b"], turnMs: 5, countdownMs: 0, settleMs: 0, log: (line) => lines.push(line), announcePorts: [announcements.port] });
     try {
+      await until(() => discoveryPort !== undefined, "a lobby announcement");
       const sockets = await Promise.all([0, 1].map(() => Bun.connect({ hostname: "127.0.0.1", port: host.port, socket: { data: () => {} } })));
       const send = (client: number, packet: Uint8Array) => sockets[client]?.write(packet);
       const kind = (packet: Uint8Array) => packet[1];
@@ -179,6 +186,10 @@ describe("host, replaying two recorded offline clients", () => {
       await until(() => host.status().phase === "loading", "loading");
       for (const { client, packet } of fixture.filter(({ packet }) => kind(packet) === PACKET.GameLoadedSelf)) send(client, packet);
       await until(() => host.status().phase === "playing", "the game");
+      if (discoveryPort === undefined) throw new Error("no lobby discovery port");
+      announcements.send("closed?", discoveryPort, "127.0.0.1");
+      await until(() => discoveryClosed, "the retired discovery socket");
+      expect(discoveryClosed).toBe(true);
       // The game: every recorded action and chat, then each client's keepalives, which agree.
       for (const { client, packet } of fixture.filter(({ packet }) => kind(packet) === PACKET.OutgoingAction || kind(packet) === PACKET.ChatToHost)) send(client, packet);
       for (const { client, packet } of fixture.filter(({ packet }) => kind(packet) === PACKET.OutgoingKeepAlive)) send(client, packet);
@@ -201,6 +212,7 @@ describe("host, replaying two recorded offline clients", () => {
       for (const socket of sockets) socket.end();
     } finally {
       host.stop();
+      if (!discoveryClosed) announcements.close();
     }
   });
 });

@@ -156,9 +156,16 @@ export function startHost(options: HostOptions): LanHost {
   let lastJoin = 0;
   let connections = 0;
   let lastPing = 0;
+  let discovery: udp.Socket<"buffer"> | undefined;
   const reported = new Set<number>();
   const setPhase = (next: Phase) => {
     phase = next;
+    // Discovery serves only the lobby. Bun 1.3.13 can spin on a socket that
+    // received ECONNREFUSED from an unused announcement port.
+    if (next !== "lobby") {
+      discovery?.close();
+      discovery = undefined;
+    }
     line(`phase ${next}`);
     options.onPhase?.(next);
   };
@@ -315,7 +322,6 @@ export function startHost(options: HostOptions): LanHost {
     },
   });
 
-  let discovery: udp.Socket<"buffer"> | undefined;
   const listing = () => gameInfo({
     product: PRODUCT,
     version: PROTOCOL_VERSION,
@@ -340,7 +346,8 @@ export function startHost(options: HostOptions): LanHost {
       },
     },
   }).then((socket) => {
-    discovery = socket;
+    if (phase === "lobby") discovery = socket;
+    else socket.close();
   });
 
   const tick = () => {
