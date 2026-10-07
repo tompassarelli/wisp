@@ -7,6 +7,7 @@
 // entry it was published for. Plain functions, so tests use them without Effect.
 import { readFileSync } from "node:fs";
 import type { FrameDefinition } from "./frames";
+import type { UnitStateFixtures } from "../../src/headless/client";
 import { join } from "node:path";
 import type { ClientScope, HeadlessClient, LocalNatives, MapEntry, NativeBehaviors, SoundCue } from "../../src/headless/client";
 import type { HeadlessRenderProject } from "./headlessRender";
@@ -20,6 +21,7 @@ import { type SceneExpectations, describeScene, readSceneLines, sceneProblems } 
 
 /** What a game declares about its map for a headless run. */
 export interface HeadlessMap {
+  readonly unitStates?: UnitStateFixtures;
   /** The map's configureRuntime() filePrefix. */
   readonly filePrefix: string;
   /** Prefixes of the map's own globals, such as its configureRuntime() globalPrefix. Wisp's `__wisp` is always one. */
@@ -209,6 +211,7 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
         ...options,
         ...(map.localNatives === undefined ? {} : { localNatives: map.localNatives }),
         ...(map.frames === undefined ? {} : { frames: map.frames }),
+        ...(map.unitStates === undefined ? {} : { unitStates: map.unitStates }),
         natives: (client) => ({ ...luaFunctions(client, bundles), ...map.natives?.(client) }),
       });
     },
