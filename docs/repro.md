@@ -159,6 +159,45 @@ null denotes an absent field and all other values preserve canonical text,
 including exact numeric encodings. Renderer and operating-system state are
 outside this gameplay snapshot.
 
+## Scrubbing a saved moment
+
+`wisp repro FILE --view` opens a page on this computer and keeps its local
+server running until Ctrl-C. Move the frame slider to inspect the canonical
+state tree. Yellow fields changed since the previous saved frame; outlined
+fields differ between clients. Both clients' values are shown side by side.
+For a desync, the page names the first differing frame and offers a button
+to jump there. Viewing does not require the two clients to agree or reach the
+recorded ending checksum. The inspector must return each client's actual
+state, including when they differ.
+
+The viewer uses the same loopback panel server as `tune`. Its read-only
+`GET /meta` returns `build`, `start`, `end`, and `firstDivergentFrame` (null
+when clients agree). `GET /frame?frame=N` returns `frame`, `clients`, and
+`differences`. Each client has the inspection's `checksum`, `state`, and
+`fields`, its `client` number, and `changes` since the previous frame.
+The first saved frame has no previous-frame changes. Backward scrubbing
+restores and replays the saved state, using the same inspector as `--frame`.
+
+To link fields to the TypeScript declarations defining them, add
+`viewerSources` to the `makeRepro` project:
+
+```ts
+viewerSources: {
+  project: join(root, "tsconfig.game.json"),
+  file: join(root, "src/game/replay/snapshot.ts"),
+  type: "ReplayState",
+},
+```
+
+Wisp generates a declaration source map with the project's pinned TypeScript
+compiler: property paths walk this type, arrays follow their numeric element
+type, and each property maps to its original declaration's file and line.
+Canonical paths must match the declared state shape. A resolved field carries
+`source: { file, line }`; its link opens that declaration with the line
+highlighted. Fields with custom serializer labels need paths matching their
+declared state to resolve. The server serves only declaration files reached
+by a displayed field.
+
 ## JSON Lines
 
 `repro FILE --json` writes one result per client, then a summary. Every object
