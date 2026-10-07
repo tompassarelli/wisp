@@ -1,6 +1,6 @@
 # Warsmash behavior notes
 
-Research date: 7 October 2026. These independently written facts inform
+Research dates: 7–8 October 2026. These independently written facts inform
 Wisp's unit-state work (#44), matched rendered frames (#40), and standalone
 player investigation (#48). They describe the public source at
 [`f9e0aeed4be372d6016519d0e97b384aa873f374`](https://github.com/Retera/WarsmashModEngine/tree/f9e0aeed4be372d6016519d0e97b384aa873f374).
@@ -190,13 +190,48 @@ reproducing a captured pose, not infer it from the simulation step count.
 [configuration](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L9394-L9403),
 [render and simulation timing](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/War3MapViewer.java#L1140-L1207).
 
+## Browser player: asset readiness and pacing for #48
+
+The browser-focused [ErikSom HTML fork](https://github.com/ErikSom/WarsmashModEngine/tree/d69e772b4dede6fd3569f9949a3180cdfea4635b)
+was inspected at **d69e772b4dede6fd3569f9949a3180cdfea4635b**, which declares
+[AGPL-3.0](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/LICENSE).
+The same facts-only scope above applies. These findings are independently
+worded observations of that revision, not a Wisp implementation recipe.
+
+**Live-page observation, 8 October 2026:** [warsmash.pages.dev](https://warsmash.pages.dev/)
+displays **v0.2.0**, offers single-player/campaign and multiplayer entry
+points, and describes user-supplied Warcraft files and maps retained in
+private browser storage (OPFS). Its multiplayer description specifies
+lockstep WebRTC peer-to-peer play without requiring a server installation.
+This verifies the displayed claims, not a played match. The deployed page
+does not establish that its engine bytes match the inspected Git revision.
+“No server installation” also does not mean no service dependency: the
+fork's [0.2.0 changelog](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/CHANGELOG.md#020--may-2026)
+explicitly describes a signalling server for lobby departure notifications.
+
+| Source-researched fact in the HTML fork | Meaning for the current #48 measurement | Primary source |
+| --- | --- | --- |
+| Asset staging finishes each file write and closes it before publishing the staged-file index and ready marker. The marker means staged bytes are available; it does not record model parsing, texture decoding or GPU uploads. | Keep staging completion separate from the measured first playable frame. | [staging completion](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/web-src/src/lib/assetStaging.ts#L129-L170), [ready marker](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/web-src/src/lib/assetStaging.ts#L38-L48) |
+| Before engine startup, its bundled asset fetches, OPFS file indexing and WebAssembly startup finish. The menu is installed before the render clock starts. The browser UI treats installation of the map screen as reaching the game. | Those events are useful loading milestones; neither is a measured GPU warmup or first-simulation-step duration. | [startup prerequisites](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/webapp-src/engine-worker-boot.js#L254-L272), [menu before rendering](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/src/com/etheller/warsmash/html/engineworker/EngineWorkerMain.java#L137-L156), [visible readiness events](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/web-src/src/lib/engineBoot.ts#L85-L99) |
+| The inspected browser startup mounts `war3.mpq`, `war3local.mpq`, `war3x.mpq` and `war3xlocal.mpq`, with later archives taking precedence, and reads loose maps. It bypasses the older extracted-files boot screen. | The README's `.w3-ready` extraction wait and preload tuning describe another startup path. They should not be treated as proof that the current browser prepares all scene assets before play, or accepts current CASC installations. | [mounted archives and loose maps](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/src/com/etheller/warsmash/html/engineworker/EngineWorkerMain.java#L196-L278), [extraction-screen bypass](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/src/com/etheller/warsmash/html/engineworker/EngineWorkerMain.java#L294-L315), [older documented boot](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/README.md#asset-staging) |
+| A requested BLP texture is read and decoded during texture loading. Map initialization loads post-UI map content and schedules map script initialization before its first render. Later script-created content can still request resources during play. | Source inspection supplies no measured absence of first-use stalls after ready. The current #48 work should decide that from its own first-round intervals, including new effects. | [texture loading](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/core/src/com/etheller/warsmash/viewer5/handlers/blp/BlpGdxTexture.java#L32-L40), [map initialization](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/core/src/com/etheller/warsmash/WarsmashGdxMapScreen.java#L222-L230) |
+| Render elapsed time is the actual difference between successive worker `requestAnimationFrame` timestamps, expressed in seconds. The first frame has zero elapsed time. A late rendered frame therefore advances the render clock by its actual gap. | Render work duration and the interval between displayed frames are separate measurements. This helps explain why a work-time p95 can pass while interval p95 misses. | [frame scheduling](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/src/com/etheller/warsmash/html/engineworker/EngineWorkerMain.java#L579-L583), [elapsed time](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/src/com/etheller/warsmash/html/engineworker/WorkerGraphics.java#L72-L87) |
+| Simulation advances in **50 ms** steps from accumulated elapsed time. Multiple already-completed turns can advance during one rendered frame; the inspected timing path has no maximum catch-up count. When waiting for a completed network turn, accumulated delay is discarded only when it is strictly greater than **150 ms**. Rendering and animation also consume elapsed time independently of the simulation step count. | These are fork behaviors, not native Warcraft confirmation or pacing values to adopt in Smashcraft. Late-frame behavior must be judged against #48's declared pace check. | [step duration](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/core/src/com/etheller/warsmash/util/WarsmashConstants.java#L20), [render and simulation clocks](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/core/src/com/etheller/warsmash/viewer5/handlers/w3x/War3MapViewer.java#L1140-L1196) |
+
+The fork's [0.1.2 changelog](https://github.com/ErikSom/WarsmashModEngine/blob/d69e772b4dede6fd3569f9949a3180cdfea4635b/html/CHANGELOG.md#012--april-2026)
+attributes faster startup partly to disabling heavy first-tick AI
+initialization, and describes single-player without computer opponents.
+That is a documented change, not a timing measurement or equivalent workload
+to #48's four-fighter match. No browser gameplay, GPU first-use timing or
+Warcraft-native behavior was measured in this research pass.
+
 ## Native confirmations still queued
 
 | Question | Existing fixture or next observation | Status |
 | --- | --- | --- |
-| Warcraft life threshold, clipping, corpse writes and removal | #44's [unit-state fixture](headless.md#unit-states), including exact binary32 0.40625 and 0.3984375 | Native executor stopped clients under Tom's playtest hold; no values measured. Ready map retained privately at `~/.local/state/wisp/unit-states44/`; await explicit release. |
-| Widget/unit/player death callback order and repeated kills | A callback log with before/inside/after life and event names | Requested from the shared native executor; source-researched only. |
-| Blend setting, frozen clock and the 0.3/0.4-second pose discrepancy | #40's retained frames, then one-variable blend-zero comparison if needed | Native pose discrepancy observed; cause unresolved. |
+| Warcraft life threshold, clipping, corpse writes and removal | #44's existing twelve-case [unit-state fixture](headless.md#unit-states), including exact binary32 0.40625 and 0.3984375 | No native values measured. Ready map retained privately at `~/.local/state/wisp/unit-states44/`. Sole native coordinator has the required journey; current blocker is Warcraft 3.0.1/build 24342 startup, with a private online fallback authorized. |
+| Widget/unit/player death callback order and repeated kills | A callback log with before/inside/after life and event names | Source-researched only; not an additional #44 acceptance fixture. Defer until a consuming check needs this order. |
+| Blend setting, frozen clock and the pose discrepancy | #40's existing same-frame-262 capture, followed by the held-frame capture at least 250 ms later and recorded camera state | Retained comparison is 24 of 25 passing; the red-flag landmark differs vertically by 40.73 pixels. Diagnostic candidate `8aad61e8` has produced no new captures because of build 24342 startup. Cause unresolved; native coordinator owns execution. |
 | Sequence end/loop overshoot and queued animation timing | A model with explicit interval bounds at time scales 0, 0.5, 1 and 2 | Source-researched only; defer until a consuming check requires it. |
 
 The existing native executor owns clients and fixture scheduling. Research
