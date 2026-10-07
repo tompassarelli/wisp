@@ -143,6 +143,134 @@ support or native Warcraft's interpolation.
 [Hermite/Bezier behavior](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/util/Interpolator.java#L54-L69),
 [spherical formulas](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/util/RenderMathUtils.java#L405-L454).
 
+## Map-reliance observations for #50
+
+This section uses the original **f9e0aeed4be372d6016519d0e97b384aa873f374**
+revision and AGPL-3.0 license identified above. Every finding is
+**source-researched**, including behaviors that differ from the map's
+requirements. It supplies no additional native confirmations. The map
+inventory supplied by #50 uses direct body/effect positioning and timers;
+engine movement orders, queued unit animations and attachment natives are
+outside that inventory.
+
+### Timer deadlines and callback order
+
+For a nonnegative timeout **T**, the emulator schedules a deadline at the
+start turn plus **trunc(T / 0.05)** turns. Registration takes effect at the
+next timer-processing phase. A zero timeout or positive timeout below
+50 ms can therefore fire on the next simulation step; a repeating timer
+in that range fires at most once per step, not at 60 Hz. Elapsed time is
+**min(T, elapsed turns × 0.05)**. These emulator values cannot resolve
+Smashcraft's 60 Hz shell, faster drawing timer, or native substep timing.
+[Timer clock](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/timers/CTimer.java#L33-L77),
+[registration and due timers](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CSimulation.java#L568-L597).
+
+Equal-deadline timers are notified in registration order. A timer's JASS
+handler is queued before its registered timer-event notifications; script
+threads run after the due-timer and tick-trigger phases. Newly queued
+non-sleeping handlers run in their queue order. A callback that sleeps does
+not promise completion before the next callback. `GetExpiredTimer` reads
+the timer carried by that callback's execution context.
+[Equal deadlines](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CSimulation.java#L272-L285),
+[handler and timer events](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/timers/CTimerJass.java#L44-L70),
+[thread execution](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/jassparser/src/com/etheller/interpreter/ast/scope/GlobalScope.java#L577-L588),
+[non-sleeping execution](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/jassparser/src/com/etheller/interpreter/ast/scope/GlobalScope.java#L636-L660),
+[expired context](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L5523-L5533).
+
+`TimerStart` ignores an already-running timer. A repeating timer is
+rescheduled before its queued JASS callback executes, so restarting it
+inside that callback is also ignored. A one-shot callback can restart its
+timer, with that registration considered on the following step.
+Pause/destroy requests remove a timer during the next timer-processing
+phase, after additions are considered; they do not cancel a callback that
+was already queued. Pausing stores the remaining duration, but the inspected
+elapsed-time getter still uses the advancing turn counter. Consequently
+restart and paused elapsed-time semantics need native evidence rather than
+adopting these emulator behaviors.
+[Start/pause/destroy natives](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L815-L874),
+[repeat rescheduling](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/timers/CTimer.java#L89-L102).
+
+### Direct unit position, facing and pathing
+
+`SetUnitX` and `SetUnitY` immediately store the requested binary32 coordinate,
+translate collision bookkeeping and check region membership. They do not
+search for a pathable alternative. Separate X/Y calls expose the intermediate
+position to region checks. `SetUnitPosition` instead performs an unstuck
+placement check, so it is not evidence for the map's manual movement.
+[Coordinate natives](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L3068-L3108),
+[position and region observations](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L2676-L2756).
+
+Simulation facing is normalized into **[0, 360)** degrees.
+`BlzSetUnitFacingEx` changes both simulation and displayed facing;
+`SetUnitFacing` changes simulation facing alone, with the renderer turning
+toward it on later updates. `SetUnitFlyHeight` assigns height directly and
+ignores the rate argument in this revision. `PauseUnit` sets a unit flag;
+the direct coordinate/facing writes above have no paused-unit rejection.
+[Facing normalization](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L1840-L1844),
+[normal facing/height natives](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L3110-L3141),
+[immediate facing native](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4565-L4573),
+[pause native](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4211-L4218).
+
+Ordinary displayed unit positions can lag simulation positions: the renderer
+moves by at most **move speed × elapsed seconds** toward the stored position
+when the gap exceeds that distance and elapsed time is below one second.
+Otherwise it displays the stored position. This is a renderer observation,
+not a native measured delay. The inspected registrations contain no
+`SetUnitPathing`; behavior with pathing disabled, Locust or Crow Form cannot
+be established from that missing native or from direct X/Y writes alone.
+[Displayed position](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/rendersim/RenderUnit.java#L205-L223),
+[inspected registrations](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java).
+
+### Effect placement and unavailable effect setters
+
+A point effect starts at its requested XY and at the higher of walkable
+surface height and terrain height. A target effect with a matching unit
+attachment follows that attachment's animated transform. A missing
+attachment falls back to the unit's displayed location at creation; item
+and destructable targets are explicitly unsupported. This does not answer
+the map's manually positioned effect behavior: the inspected registrations
+contain none of `BlzSetSpecialEffectPosition`, `BlzSetSpecialEffectAnimation`,
+`BlzSetSpecialEffectAnimationBlendTime`, `BlzSetSpecialEffectTime` or
+`BlzSetSpecialEffectTimeScale`. The animation-clock section describes model
+internals only; it supplies no native contract for those calls.
+[Attachment and point placement](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/War3MapViewer.java#L2104-L2203),
+[inspected effect registrations](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4415-L4439).
+
+### Sound start and unavailable sound controls
+
+`CreateSound` loads the file into a sound handle; `StartSound` asks its audio
+backend to play during that call. This establishes request order, not
+speaker onset timing. Filename sounds record start against wall-clock
+milliseconds; their predicted remaining duration is decoded duration minus
+elapsed wall time, clipped to zero. Label sounds select through their sound
+label and request playback at (0, 0, 0). The map's `SetSoundDuration`,
+`SetSoundPitch` and `SetSoundVolume` are registered but do nothing in this
+revision. No inspected registration exists for `SetSoundPosition`,
+`StopSound`, `KillSoundWhenDone` or `GetSoundFileDuration`. Those omissions
+cannot validate the map's cue positions, gain, pitch, stop or lifetime.
+[Creation and setters](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4012-L4051),
+[start native](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L2337-L2345),
+[filename playback and duration](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/sound/CSoundFilename.java#L46-L83),
+[label playback](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/sound/CSoundFromLabel.java#L31-L50),
+[no-op sound setters](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4153-L4174).
+
+Music play, stop and resume natives forward requests to the displayed game's
+music controls. Their registrations establish call order, not audible onset,
+fade completion or a simulation-step deadline.
+[Music requests](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L2346-L2385).
+
+### Order queues outside the map's relied-on behavior
+
+The emulator ordinarily appends queued orders while a unit is executing an
+order, and starts them in insertion order. An immediate interrupting order
+cancels pending orders; an immediate order during an uninterruptible
+behavior replaces pending orders while that behavior continues. Dead units
+reject orders. Ability-specific and patrol exceptions exist. These facts
+describe engine orders, which #50's map inventory does not use; they do not
+expand the required parity surface.
+[Order acceptance and cancellation](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L2436-L2511),
+[next queued order](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L3783-L3793).
+
 ## File-format facts for a standalone player (#48)
 
 These are parseable format facts. Native acceptance of a particular model
