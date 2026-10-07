@@ -43,6 +43,10 @@ within a minute. Offline experiments then stopped, and all three startup
 files were restored from the private 24342 baseline. The source SDK hash
 remained unchanged throughout.
 
+A subsequent authorized test ran the restored private 24342 copy on the
+main `:0` display. It produced the same loader assertion before loading
+D3D/Vulkan, with no game window or map acknowledgment. Its process was closed.
+
 ## Commands
 
 | Command | What it does |
