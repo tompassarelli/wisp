@@ -123,10 +123,12 @@ test("camera and passive frame snapshots retain art, rectangles and ancestor vis
   const client = clients.client(0);
   expect(client.cameraPose()).toEqual({ x: 120, y: 240, fields: { CAMERA_FIELD_TARGET_DISTANCE: 600, CAMERA_FIELD_ZOFFSET: 300 } });
   const initial = client.frames.snapshot();
+  expect(client.frames.snapshot({ visibleOnly: true })).toEqual(initial);
   expect(initial[0]).toMatchObject({ type: "BACKDROP", texture: "panel.blp", color: 0xffffffff, alpha: 255 });
   expect(initial[1]).toMatchObject({ rectangle: [0.3125, 0.46875, 0.375, 0.40625], text: "2", texture: "active.blp", color: 0xff804020, textColor: 0xff204080, alpha: 128, visible: true });
   client.run(() => BlzFrameSetVisible(root, false));
   expect(client.frames.snapshot().map(frame => frame.visible)).toEqual([false, false]);
+  expect(client.frames.snapshot({ visibleOnly: true })).toEqual([]);
   expect(initial[1]?.visible).toBe(true);
   client.run(() => {
     BlzFrameSetVisible(root, true);
@@ -139,6 +141,9 @@ test("camera and passive frame snapshots retain art, rectangles and ancestor vis
     BlzFrameSetPoint(pip, FRAMEPOINT_TOPLEFT, root, FRAMEPOINT_TOPLEFT, 0, 0);
   });
   expect(client.frames.snapshot()[1]?.rectangle).toEqual([0.25, 0.5, 0.3125, 0.4375]);
+  client.run(() => BlzFrameSetAlpha(root, 0));
+  expect(client.frames.snapshot({ visibleOnly: true })).toEqual(client.frames.snapshot().filter(frame => frame.visible && frame.alpha > 0));
+  expect(client.frames.snapshot({ visibleOnly: true })[0]?.rectangle).toEqual([0.25, 0.5, 0.3125, 0.4375]);
 });
 
 test("sound log records every creation and repeated start with the current parameters", () => {

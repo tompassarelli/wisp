@@ -96,10 +96,10 @@ export async function openStandalone(game: StandaloneGame, options: StandaloneOp
         const checksum = recordChecksums ? session.checksum() : undefined;
         steps++;
         if (checksum !== undefined) checksums.push({ step: steps, frame, checksum, simulationMs: performance.now() - start });
-        const scene = sceneWithUnits(game.render, captureScene(session.client));
+        const capture = captures.delete(frame);
+        const scene = sceneWithUnits(game.render, captureScene(session.client, { visibleUiOnly: !capture }));
         const cues = session.client.soundLog.slice(soundOffset);
         soundOffset = session.client.soundLog.length;
-        const capture = captures.delete(frame);
         if (capture && options.out !== undefined) await Bun.write(join(options.out, `p${scene.client}-frame-${frame}.json`), JSON.stringify(scene));
         const packet: StandaloneFrame = { scene: { ...scene, frame, units: [], effects: scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat), ui: scene.ui.filter((element) => element.visible && element.alpha > 0) },
           sounds: cues, step: steps, frame, ...(checksum === undefined ? {} : { checksum }), capture, done: options.frames !== undefined && steps >= options.frames };
