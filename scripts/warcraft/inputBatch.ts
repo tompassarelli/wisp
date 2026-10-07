@@ -12,6 +12,9 @@ export interface InputBatch {
   readonly pointer?: PointerPosition;
 }
 
+const SENDING_KEYS = new Set(["return", "kp_enter", "iso_enter", "linefeed"]);
+export const sendsChat = (names: readonly string[]) => names.some((name) => name.split("+").some((key) => SENDING_KEYS.has(key.toLowerCase())));
+
 /**
  * xdotool type consumes the rest of its argv, so it ends one command batch.
  * Arguments are passed directly to the process, never through a shell or its script expander.
@@ -24,7 +27,15 @@ export function inputBatches(actions: readonly InputAction[], pointer: PointerPo
   for (const action of actions) {
     switch (action.kind) {
       case "keys":
-        current.push("key", "--clearmodifiers", "--delay", String(action.delayMillis ?? 12), ...action.keys);
+        for (const key of action.keys) {
+          if (sendsChat([key])) {
+            // Warcraft samples its chat control per frame; a 12 ms Return can disappear between samples.
+            current.push("keydown", "--clearmodifiers", key);
+            wait(60);
+            current.push("keyup", "--clearmodifiers", key);
+            wait(60);
+          } else current.push("key", "--clearmodifiers", "--delay", String(action.delayMillis ?? 12), key);
+        }
         break;
       case "text":
         current.push("type", "--clearmodifiers", "--delay", String(action.delayMillis ?? 12), "--", action.text);
