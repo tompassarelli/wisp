@@ -2,6 +2,7 @@
 // loads the map's compiled bundle into its own environment, whose globals are
 // that client's natives over Lua's own, so clients share no state.
 import type { ClientScope, LocalNatives, MapEntry } from "./client";
+import type { FrameTemplate } from "./frames";
 import type { SyncDelivery } from "./lockstep";
 import { parseNativeDeclarations } from "./declarations";
 import { type Journey, journeyLines, journeyProblems, runJourney } from "./journey";
@@ -16,6 +17,8 @@ export interface LuaHeadlessMap {
   readonly localNatives?: LocalNatives;
   /** Human player slots, one client each; two by default. */
   readonly players?: readonly number[];
+  /** Frame definitions (wisp:docs/ui.md) whose trees BlzCreateFrame makes by name, as their generated FDF does in Warcraft. */
+  readonly frames?: readonly FrameTemplate[];
 }
 
 /** A file's bytes, for a host program running in Lua. */
@@ -44,6 +47,7 @@ export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: s
     modules: bundleModules(bundle),
     hash: stringChecksum,
     ...(map.localNatives === undefined ? {} : { localNatives: map.localNatives }),
+    ...(map.frames === undefined ? {} : { frames: map.frames }),
     natives: (client) => {
       const environment = client.natives;
       setmetatable(environment, { __index: _G });

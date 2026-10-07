@@ -7,6 +7,7 @@
 // in Bun and, compiled with TypeScriptToLua, in 32-bit Lua; each host puts the
 // natives where its map code finds them.
 import { errorFile, FILE_IO_ABILITY } from "../runtime/gameFiles";
+import type { FrameTemplate } from "./frames";
 import type { NativeDeclarations } from "./declarations";
 import { FRAME_POINTS, type Frame, Frames } from "./frames";
 
@@ -149,6 +150,8 @@ export interface ClientOptions {
   /** Added or replacing natives; values that aren't declared natives, such as Lua globals, are set unlogged. */
   readonly natives?: (this: void, client: HeadlessClient) => NativeBehaviors;
   readonly files?: ClientFiles;
+  /** Frame definitions (wisp:docs/ui.md) whose trees BlzCreateFrame makes by name, as their generated FDF does in Warcraft. */
+  readonly frames?: readonly FrameTemplate[];
 }
 
 export const FRAMES_PER_SECOND = 60;
@@ -392,6 +395,7 @@ export class HeadlessClient {
       points.set(index, [fromLeft, fromTop]);
     }
     this.frames = new Frames(points);
+    this.frames.define(options.frames ?? []);
     const extra = options.natives?.(this) ?? {};
     for (const name of Object.keys(extra)) {
       const value = extra[name];
@@ -499,7 +503,7 @@ export class HeadlessClient {
       BlzGetOriginFrame: (type: unknown, index: number) => this.memoized(`origin ${describeValue(type)} ${index}`),
       BlzGetFrameByName: (name: string, context: number) => this.frames.named(name, context) ?? this.memoized(`name ${name} ${context}`, name),
       BlzFrameGetChild: (frame: Handle, index: number) => this.memoized(`child ${frame.id} ${index}`),
-      BlzCreateFrame: (name: string, owner: unknown, _priority: number, context: number) => this.created(name, name, owner, context),
+      BlzCreateFrame: (name: string, owner: unknown, _priority: number, context: number) => this.frames.create(() => this.handle("framehandle"), name, isFrame(owner) ? owner : undefined, context),
       BlzCreateSimpleFrame: (name: string, owner: unknown, context: number) => this.created(name, name, owner, context),
       BlzCreateFrameByType: (type: string, name: string, owner: unknown, _inherits: string, context: number) => this.created(type, name, owner, context),
       BlzDestroyFrame: (frame: unknown) => {
