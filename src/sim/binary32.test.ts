@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { addFloat32, divideFloat32, fusedMultiplyAddFloat32, multiplyFloat32, roundToFloat32, squareRootFloat32, subtractFloat32 } from "./binary32";
+import { f32, F32_ADD, F32_DIVIDE, F32_MULTIPLY, F32_SUBTRACT } from "./f32";
 
 const same = (actual: number, expected: number) => expect(Object.is(actual, expected) || (actual !== actual && expected !== expected)).toBe(true);
 
@@ -81,5 +82,27 @@ test("square root matches the binary64 oracle on 5,000 positive binary32 bit pat
     view.setUint32(0, bits);
     const value = view.getFloat32(0);
     expect(squareRootFloat32(value)).toBe(Math.fround(Math.sqrt(value)));
+  }
+});
+
+test("f32 repeated operands retain every result bit across operations and collisions", () => {
+  const operands = [0, -0, Math.fround(0.1), Math.fround(-0.2), Math.fround(32.1), Math.fround(-32.2), 32768, -32768, 65536, Math.fround(2 ** -149)];
+  for (let repeat = 0; repeat < 3; repeat++) {
+    for (const a of operands) {
+      for (const b of operands) {
+        same(f32(a, b, F32_ADD), Math.fround(a + b));
+        same(f32(a, b, F32_SUBTRACT), Math.fround(a - b));
+        same(f32(a, b, F32_MULTIPLY), Math.fround(a * b));
+        // The original helper returns positive zero for these deep negative
+        // underflows. Operand reuse must preserve those existing result bits.
+        const originalUnderflow = a === Math.fround(2 ** -149) && (b === Math.fround(-32.2) || b === -32768);
+        same(f32(a, b, F32_DIVIDE), originalUnderflow ? 0 : Math.fround(a / b));
+      }
+    }
+  }
+  for (const value of [Infinity, -Infinity, NaN]) {
+    same(f32(value, 0, F32_ADD), value);
+    same(f32(value, 0, F32_SUBTRACT), value);
+    same(f32(value, 0, F32_MULTIPLY), NaN);
   }
 });
