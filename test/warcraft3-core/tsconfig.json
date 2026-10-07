@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.coverage.json",
+  "compilerOptions": { "outDir": "../../build/warcraft3-core" },
+  "include": ["lua.ts"],
+  "tstl": {
+    "luaBundle": "core.lua", "luaBundleEntry": "lua.ts",
+    "luaPlugins": [{ "name": "../../plugins/warcraft-numbers.ts" }]
+  }
+}

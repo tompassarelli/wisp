@@ -17,6 +17,12 @@ const PRIMITIVES: Record<string, string> = {
 // Natives that may legitimately return null in Lua are many; declare handle
 // returns as possibly undefined only where callers must check (left to wrappers).
 const RESERVED = new Set(["function", "class", "new", "delete", "in", "default", "var", "let", "const", "this", "type", "interface", "enum"]);
+const RENAMED_30_NATIVES = new Set([
+  "GetEquippedItem", "GetUnequippedItem", "SetItemColor", "IsItemEquipped", "IsItemInBag", "GetItemEquipmentType", "GetItemTag",
+  "UnitEquipItem", "UnitUnequipItem", "UnitUnequipItemFromSlot", "UnitHasItemBagged", "UnitExtendedInventorySize",
+  "UnitItemInBagSlot", "UnitItemInEquipmentSlot", "UnitHasItemEquipped", "UnitHasLoadoutSlotEmpty", "UnitHasAnyItemEquiped",
+  "UnitHasItemEquipmentOfType", "UnitCanEquipItemOfEquipmentType",
+]);
 
 function tsType(jass: string): string {
   return PRIMITIVES[jass] ?? jass;
@@ -60,6 +66,7 @@ for (const path of [commonPath, blizzardPath]) {
     }
     if ((m = /^(?:constant\s+)?native\s+(\w+)\s+takes\s+(.+?)\s+returns\s+(\w+)/.exec(line))
       || (m = /^function\s+(\w+)\s+takes\s+(.+?)\s+returns\s+(\w+)/.exec(line))) {
+      if (RENAMED_30_NATIVES.has(m[1]!)) continue;
       if (declaredValues.has(m[1]!)) continue;
       declaredValues.add(m[1]!);
       out.push(`declare function ${m[1]}(${parameters(m[2]!)}): ${tsType(m[3]!)};`);
