@@ -153,6 +153,65 @@ inventory supplied by #50 uses direct body/effect positioning and timers;
 engine movement orders, queued unit animations and attachment natives are
 outside that inventory.
 
+### Smashcraft use and current Wisp verdicts
+
+The consumer inventory is Smashcraft **992ec9d3**: 179 distinct native names
+in authored `ts/src/` excluding `*.tests.ts`, including optional diagnostic
+entries. Wisp's imported FileIO, reload and scene code adds the file, sync and
+effect getter operations described below. The runtime comparison is Wisp
+**211b899**, its `src/headless/client.ts`, frame implementation, and
+Smashcraft's `scripts/wisp/headlessNatives.ts` declarations. A source match
+means the stated operation agrees with the researched behavior; it is not a
+Warcraft 3.0.1 confirmation. An unavailable Warsmash native cannot establish
+either a native match or a native mismatch.
+
+| Relied-on behavior and consumer | Warsmash rule from this page | Current Wisp behavior | Verdict and deciding measurement |
+| --- | --- | --- | --- |
+| `CreateTimer`, `TimerStart`, `GetExpiredTimer`, `DestroyTimer`: zero-time shell initialization, 60 Hz simulation, hot reload, trace and diagnostic clocks | 50 ms steps; deadline truncates to a step; timer context belongs to the queued callback | 60 Hz frames; timeout rounds to the nearest frame with a one-frame minimum; callback runs immediately with its timer context | **Mismatch with Warsmash's clock**, deliberately: existing measured native 60 Hz callbacks take precedence over its 20 Hz model. A native callback-order fixture is still needed for 3.0.1. |
+| Equal-deadline callbacks and callbacks scheduling other timers | Registration order, callback threads after due-timer notification | Creation order, inline callbacks; timers created inside a callback wait until the next frame | **Mismatch with Warsmash order** when creation and start order differ. The timer fixture below reverses those orders; no runtime change is justified before the native log. |
+| `TimerGetElapsed`, `PauseTimer`: trace periods, timeout reads, optional smooth drawing | Elapsed capped at timeout, repeating timer rescheduled; paused elapsed still uses its advancing clock | Elapsed is frames since the most recent explicit start, uncapped, including after pause/expiry and subsequent periodic callbacks | **Mismatch with Warsmash elapsed values**. Native fixture samples between periods and after pause/expiry; this is a candidate defect, not a confirmed native rule. |
+| `SetUnitX/Y`, `SetUnitFlyHeight(..., 0)`, `BlzSetUnitFacingEx`: fighter body placement each draw | Direct coordinate/height writes; immediate facing; normal body rendering can lag position | Immediate stored position, height and facing in snapshots | **Match for direct state writes and 0/180-degree facing**; rendered position lag remains unmeasured for the paused Locust bodies. #40's same-frame body capture decides the visible contract. |
+| `CreateUnit`, `RemoveUnit`, type/handle/owner, `ShowUnit`, scale, vertex color, move speed and attack cooldown: bodies and object-data readback | Object/state facts, separate visibility and rendering, with the life caveats above | Retained unit fields and snapshots; type becomes zero on removal | **Partial source match**. #44/#45's existing native fixture owns state/object-data confirmation. Life/death thresholds are outside Smashcraft's scripted fighting damage. |
+| `SetUnitPathing(false)`, `PauseUnit(true)`, Locust and Crow Form, invulnerability: disable ordinary engine interaction | Direct writes do not reject a paused unit; missing `SetUnitPathing` registration gives no disabled-pathing rule | Consumer explicitly ignores these flags because all fighting motion and damage are scripted | **Match for absence of engine movement in the headless journey**; native paused-body placement still requires #40. Engine collision/pathfinding is not called by this map. |
+| `SetUnitAnimation/ByIndex`, `SetUnitTimeScale`, `SetUnitBlendTime`: fallback bodies | Sequence clocks advance by elapsed time × speed; blend uses saved old pose and current pose | Stores selection, resets animation elapsed, advances at 60 Hz; consumer ignores unit blend time | **Mismatch: body blend is not modeled.** The active effect fighter path and native #40 capture determine whether this changes the measured scene. |
+| `BlzSetSpecialEffectAnimation`, `BlzPlaySpecialEffect`, `BlzSetSpecialEffectTime/TimeScale/AnimationBlendTime`: fighter/effect playback | These modern native contracts are absent; internal model clock/blend rules are recorded above | Selected clip and seek time retained; blend-time call is an explicit consumer no-op; renderer samples model tracks | **Native verdict unresolved**; #40's older run had 24/25 frame checks and one vertical landmark mismatch; all 25 require the shared 3.0.1 capture. Do not substitute Warsmash's internal seek for the missing native contract. |
+| Effect attachment: dizzy marks, weapons, projectiles, summons, aura and hit effects | Target attachments can follow animated model transforms; modern positioning native is absent | Map places every effect itself with `BlzSetSpecialEffectPosition`, axis setters and yaw/pitch/roll; Wisp retains the requested transforms | **Match for the map's manual attachment contract**. No `AddSpecialEffectTarget` call or skeletal attachment dependency exists in the inventory. #40 compares the resulting positions. |
+| Effect create/destroy, model/alpha/color/team color, scale and matrix scale | Point effect begins at surface/terrain height; other modern setters absent | Starts at Z=0 until explicitly placed; immediate removal; transforms and colors retained, model rendering supplies mesh/particles | **Native verdict unresolved** for create/destroy tails and model rendering. Scripted effects normally set their world Z before drawing; #40 and #48 own the visible checks. |
+| `CreateSound/FromLabel`, `StartSound`: hit, summon, selection and match cues | Creation loads; start requests playback during the call | Creation and each start produce separate frame-tagged cues | **Match for request order**. A create alone is not a start. Audible onset needs the same native capture; cue-log equality does not measure speaker timing. |
+| Sound position, pitch, volume, duration, stop and `KillSoundWhenDone` | Setters are missing or no-ops in the researched revision | Position/pitch/volume retained at start; completion/attenuation ignored by consumer; stop and lifetime are not represented in the cue log | **Native verdict unresolved**; Warsmash supplies no usable rule. #48 owns audible playback; #51 owns the 3.0.1 OGG playback capture. |
+| Music play/stop/theme and file duration: round, victory and stage music | Request forwarding only | Consumer ignores background playback and decoding; explicit sound starts are retained | **Mismatch in observable audio coverage**; soundtrack playback is not represented by the headless cue report. |
+| Engine order queues and `QueueUnitAnimation` | Queued orders begin in insertion order; immediate orders cancel or replace pending orders | No movement/order/animation-queue model | **Not used**: no engine order or queue native appears in Smashcraft's source. Fighter input buffers are map simulation data, already replayed by the checksum check. |
+| Sync send/delivery and trigger callbacks: journal rows, frame UI, chat and key events | Due timers precede tick triggers and script threads; no current Battle.net latency measurements | Ordered triggers; configured sync delivery uses native-measured 25 ms turns and 60 Hz callbacks | **Intentional mismatch with emulator timing**; [network model](network-model.md) records the native basis. Three 3.0.1 online pad runs must match saved checksums. |
+| UI creation/destruction, named frame lookup, parent/child visibility, size/anchors/text/texture, level, focus, enable and text limit | No researched current `BlzFrame*` native contract in this page | Retained frame tree, layout, text input and events; font rasterization/alignment/scale are consumer no-ops | **Native verdict unresolved** for pixels; existing frame-state tests cover the Wisp contract and #40 covers matched UI captures. |
+| Local keyboard/mouse/focus/window dimensions and player slot/controller/name | No current client-input rule researched here | Scripted key state and frame typing; fixed client dimensions; consumer returns no mouse input and a configured slot roster | **Mismatch with a physical client**, an intentional input source substitution. Pad runs use the actual helper and compare its delivered frames; they do not validate physical mouse input. |
+| Camera position/field/bounds/smoothing/pan: stage framing and zoom | No native camera-interpolation contract researched here | Camera fields and target retained immediately; bounds/smoothing ignored, pan maps to direct position | **Mismatch in interpolation coverage**; #40's captured camera values and pixels decide visible differences. |
+| Terrain/sky/fog/day-night, lightning and text tags: stage scene and feedback | No matching current native contract researched here | Scenery/fog globals are ignored by the consumer; core scene snapshots record units, effects, frames and cues rather than every engine primitive | **Mismatch in scene coverage**. These calls are not evidence that terrain, lightning or text-tag pixels match; #40/#48 are the existing scene owners. |
+| Numeric/string conversions, IDs and handles; FileIO/preload; map-origin locations; diagnostics and restart | Warsmash is not a current Lua/binary32 or Preloader-cache oracle | Shared 32-bit numeric rules, native-style conversions, per-client handle IDs; first-read Preloader cache; authored origin (0,0,0); diagnostic messages and file outputs retained | **Match to Wisp's existing native-derived contracts**, separately documented in [headless](headless.md) and [hot reload](hot-reload.md). Restart is an external session action, not a simulation behavior. |
+
+The timer capture entry is `test/native-rules50/main.ts`. It writes eleven
+ordered readings to `native-rules50-pSLOT.txt` after 1.25 game seconds, using
+0.5-second timers and 0.75/1.25-second observations. Both Bun and the native
+map execute this same authored fixture. In particular, it measures the
+disagreement before changing periodic clocks or same-deadline order. The
+current Bun output is identical on two clients: periodic reads are
+500/750/1000/1250 ms, the expired timer reaches 1250 ms, and the timer paused
+at 750 ms later reads 1250 ms. These are Wisp observations; the native
+fixture has not yet supplied its values.
+Its `start()` first writes the unchanged twelve unit-state cases, so one
+private game can supply #44 and #50 observations together. Build with
+`bun test/native-rules50/build.ts BASE.w3m PRIVATE_OUT.w3x`; both output
+files must be collected from each client. The earlier #44 fixture stays
+available for comparison.
+
+The replay surface at Smashcraft 992ec9d3 is **413 runnable `.pad` files**:
+54 at the root, 160 under `180/`, and 199 across the other 24 folders.
+Every script names a match and exports a View-held moment. The JSON file
+under `233/` configures a helper interruption and is not a pad script.
+The headless result now parses and replays every exported moment, compares
+the recorded intermediate and final checksums, and refuses missing or
+malformed exports. This is separate from native-to-headless comparison of
+the three unchanged online spot-check scripts.
+
 ### Timer deadlines and callback order
 
 For a nonnegative timeout **T**, the emulator schedules a deadline at the
