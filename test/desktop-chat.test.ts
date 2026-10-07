@@ -64,6 +64,7 @@ test("without a ClientWatch the client is watched once, and one that can't be wa
 test("in a match its page reports, chat is sent; other keys are never checked", async () => {
   const inMatch = await send(chat, watched({ kind: "in match" }));
   expect(Exit.isSuccess(inMatch.exit)).toBe(true);
+  expect(inMatch.sent).toContain("keydown --clearmodifiers Return sleep 0.3 keyup --clearmodifiers Return sleep 0.66");
   expect(inMatch.sent).toContain("type --clearmodifiers --delay 12 -- -dev quick");
   const escape = await send(keys(client, "Escape"), watched({ kind: "menus", screen: "MAIN_MENU" }));
   expect(Exit.isSuccess(escape.exit)).toBe(true);
