@@ -10,7 +10,8 @@ int main(int argc, char **argv) {
     }
     const char * archiveName = argc == 5 ? argv[4] : "war3map.lua";
     HANDLE archive;
-    if (!SFileOpenArchive(argv[2], 0, 0, &archive)) {
+    /* Extraction opens read-only: inputs may be sealed, and are never changed. */
+    if (!SFileOpenArchive(argv[2], 0, strcmp(argv[1], "extract") ? 0 : MPQ_OPEN_READ_ONLY, &archive)) {
         fprintf(stderr, "Cannot open map archive (%u)\n", GetLastError());
         return 1;
     }
