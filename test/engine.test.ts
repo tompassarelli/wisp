@@ -325,7 +325,7 @@ test("guardrails: breakpoints need an offline client; reads never touch the owne
   expect(ownerProblem("WINEPREFIX=/x/pfx/\0DISPLAY=:1\0")).toBeUndefined();
 });
 
-test("a synthetic Lua 5.3.4 VM: the call stack from CallInfo, lines from savedpc, natives named from _G", () => {
+test("a synthetic Warcraft Lua 5.3.4 VM (16-byte object headers): the call stack from CallInfo, lines from savedpc, natives named from _G", () => {
   const memory = new SparseMemory();
   const H = 0x20000000;
   memory.region(H, 0x10000);
@@ -334,16 +334,16 @@ test("a synthetic Lua 5.3.4 VM: the call stack from CallInfo, lines from savedpc
   const CLOSURE = H + 0x1000, PROTO = H + 0x1100, CODE = H + 0x1200, LINES = H + 0x1300;
   const NATIVE = 0x140100000;
   const tvalue = (at: number, value: number, tag: number) => { memory.u64(at, value); memory.u32(at + 8, tag); };
-  const tstring = (at: number, text: string) => { memory.text(at + 8, "\x04"); memory.text(at + 11, String.fromCharCode(text.length)); memory.text(at + 24, text); };
+  const tstring = (at: number, text: string) => { memory.text(at + 8, "\x04"); memory.text(at + 0x11, String.fromCharCode(text.length)); memory.text(at + 0x20, text); };
   memory.text(L + 8, "\x08");
-  memory.u64(L + 24, G);
-  memory.u64(L + 32, CI_C);
-  memory.u64(G + 200, L);
-  tvalue(G + 64, REGISTRY, 0x45);
-  memory.u64(REGISTRY + 16, ARRAY);
+  memory.u64(L + 0x20, G);
+  memory.u64(L + 0x28, CI_C);
+  memory.u64(G + 0xd0, L);
+  tvalue(G + 0x40, REGISTRY, 0x45);
+  memory.u64(REGISTRY + 0x18, ARRAY);
   tvalue(ARRAY + 16, GLOBALS, 0x45);
-  memory.text(GLOBALS + 11, "\x01");
-  memory.u64(GLOBALS + 24, NODES);
+  memory.text(GLOBALS + 0x11, "\x01");
+  memory.u64(GLOBALS + 0x20, NODES);
   tvalue(NODES, NATIVE, 0x16);
   tvalue(NODES + 16, NAME, 0x44);
   tstring(NAME, "TimerStart");
@@ -354,16 +354,16 @@ test("a synthetic Lua 5.3.4 VM: the call stack from CallInfo, lines from savedpc
   memory.u64(CI_C + 16, CI_LUA);
   tvalue(STACK + 16, CLOSURE, 0x46);
   memory.u64(CI_LUA, STACK + 16);
-  memory.u64(CI_LUA + 16, L + 96);
+  memory.u64(CI_LUA + 16, L + 0x68);
   memory.u64(CI_LUA + 40, CODE + 3 * 4);
   memory.text(CI_LUA + 66, "\x02");
-  memory.u64(CLOSURE + 24, PROTO);
-  memory.i32(PROTO + 40, 148);
-  memory.i32(PROTO + 44, 152);
-  memory.u32(PROTO + 28, 4);
-  memory.u64(PROTO + 56, CODE);
-  memory.u64(PROTO + 72, LINES);
-  memory.u64(PROTO + 104, SOURCE);
+  memory.u64(CLOSURE + 0x20, PROTO);
+  memory.i32(PROTO + 0x2c, 148);
+  memory.i32(PROTO + 0x30, 152);
+  memory.u32(PROTO + 0x20, 4);
+  memory.u64(PROTO + 0x40, CODE);
+  memory.u64(PROTO + 0x50, LINES);
+  memory.u64(PROTO + 0x70, SOURCE);
   for (const [index, line] of [148, 149, 150, 151].entries()) memory.i32(LINES + index * 4, line);
   expect(isLuaState(memory, L)).toBe(true);
   expect(isLuaState(memory, G)).toBe(false);
@@ -380,12 +380,12 @@ test("a code callback's birth names where its Lua function was defined; logs kee
   const FUNC = H, CLOSURE = H + 0x100, PROTO = H + 0x200, SOURCE = H + 0x300;
   memory.u64(FUNC + 0x18, CLOSURE);
   memory.text(CLOSURE + 8, "\x06");
-  memory.u64(CLOSURE + 24, PROTO);
-  memory.i32(PROTO + 40, 23999);
-  memory.u64(PROTO + 104, SOURCE);
+  memory.u64(CLOSURE + 0x20, PROTO);
+  memory.i32(PROTO + 0x2c, 23999);
+  memory.u64(PROTO + 0x70, SOURCE);
   memory.text(SOURCE + 8, "\x04");
-  memory.text(SOURCE + 11, String.fromCharCode(20));
-  memory.text(SOURCE + 24, "@map-1504344-3666443");
+  memory.text(SOURCE + 0x11, String.fromCharCode(20));
+  memory.text(SOURCE + 0x20, "@map-1504344-3666443");
   expect(scriptFuncDefinition(memory, FUNC, [0x18])).toBe("map-1504344-3666443:23999");
   expect(scriptFuncDefinition(memory, FUNC, undefined)).toBeUndefined();
   expect(scriptFuncDefinition(memory, FUNC, [0x20])).toBeUndefined();

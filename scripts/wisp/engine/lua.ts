@@ -7,15 +7,20 @@
 // TypeScript through the bundle's source map (wisp:scripts/sourceMaps.ts).
 import { type Memory, u32, u64 } from "./memory";
 
-/** Lua 5.3.4 structure offsets on x64. */
+/**
+ * Warcraft III's Lua 5.3.4 structure offsets on x64. Its collectable objects
+ * have a 16-byte header (Lua's is 10 bytes), so every object's fields start 8
+ * bytes later than in stock Lua; CallInfo and TValue are unchanged. Measured
+ * on 3.0.0.24268.
+ */
 export const LUA_53_X64 = {
-  state: { tt: 8, top: 16, global: 24, ci: 32, baseCi: 96 },
-  global: { registry: 64, mainThread: 200 },
+  state: { tt: 8, top: 0x18, global: 0x20, ci: 0x28, baseCi: 0x68 },
+  global: { registry: 0x40, mainThread: 0xd0, version: 0xd8 },
   callInfo: { func: 0, previous: 16, savedpc: 40, callstatus: 66 },
-  closure: { proto: 24, cFunction: 24 },
-  proto: { linedefined: 40, lastlinedefined: 44, sizecode: 24, sizelineinfo: 28, code: 56, lineinfo: 72, source: 104 },
-  string: { shortLength: 11, longLength: 16, contents: 24 },
-  table: { lsizenode: 11, sizearray: 12, array: 16, node: 24 },
+  closure: { proto: 0x20, cFunction: 0x20 },
+  proto: { linedefined: 0x2c, lastlinedefined: 0x30, sizecode: 0x1c, sizelineinfo: 0x20, code: 0x40, lineinfo: 0x50, source: 0x70 },
+  string: { shortLength: 0x11, longLength: 0x18, contents: 0x20 },
+  table: { lsizenode: 0x11, sizearray: 0x14, array: 0x18, node: 0x20 },
 } as const;
 
 /** Type tags (lobject.h), with the collectable bit where the value is a GC object. */
@@ -81,7 +86,7 @@ export function closureFunction(memory: Memory, closure: number): LuaFunction {
 
 export type LuaFrame =
   | { readonly kind: "lua"; readonly function: LuaFunction; /** The line running, from savedpc; undefined when unreadable. */ readonly line: number | undefined }
-  | { readonly kind: "c"; /** The C function's address. */ readonly address: number; /** Its global name, such as TimerStart, when it has one. */ readonly name: string | undefined };
+  | { readonly kind: "c"; /** The C closure's address, or a light C function's. */ readonly address: number; /** Its global name, such as TimerStart, when it has one. */ readonly name: string | undefined };
 
 /** The line `savedpc` is at in a Lua function: lineinfo[pc - 1]. */
 function currentLine(memory: Memory, proto: number, savedpc: number): number | undefined {
@@ -93,7 +98,11 @@ function currentLine(memory: Memory, proto: number, savedpc: number): number | u
   return memory.read(u64(memory, proto + p.lineinfo) + index * 4, 4).readInt32LE(0);
 }
 
-/** C functions in _G by address: Warcraft's natives and Lua's own library functions. */
+/**
+ * C functions in _G, keyed by what a call frame holds: a C closure's object
+ * address (Warcraft's natives are C closures sharing one dispatcher, told
+ * apart by their upvalues) or a light C function's address.
+ */
 export function globalFunctionNames(memory: Memory, state: number): Map<number, string> {
   const names = new Map<number, string>();
   const global = u64(memory, state + LUA_53_X64.state.global);
@@ -112,7 +121,7 @@ export function globalFunctionNames(memory: Memory, state: number): Map<number, 
     const value = Number(nodes.readBigUInt64LE(at));
     let address: number | undefined;
     if (valueTag === LUA_TAG.lightC) address = value;
-    else if (valueTag === LUA_TAG.cClosure) address = u64(memory, value + LUA_53_X64.closure.cFunction);
+    else if (valueTag === LUA_TAG.cClosure) address = value;
     if (address === undefined) continue;
     try {
       names.set(address, readString(memory, Number(nodes.readBigUInt64LE(at + TVALUE))));
@@ -141,8 +150,7 @@ export function luaStack(memory: Memory, state: number, names: ReadonlyMap<numbe
       }
       frames.push({ kind: "lua", function: closureFunction(memory, func.value), line });
     } else if (func.tag === LUA_TAG.lightC || func.tag === LUA_TAG.cClosure) {
-      const address = func.tag === LUA_TAG.lightC ? func.value : u64(memory, func.value + LUA_53_X64.closure.cFunction);
-      frames.push({ kind: "c", address, name: names.get(address) });
+      frames.push({ kind: "c", address: func.value, name: names.get(func.value) });
     }
   }
   return frames;
@@ -184,4 +192,60 @@ export function scriptFuncDefinition(memory: Memory, scriptFunc: number, chain: 
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Every main lua_State in the process, found by signature: a global state's
+ * `version` points to the float 503 (Lua 5.3, 32-bit numbers), and the main
+ * thread before it is a thread whose global state is that one. Scans the
+ * writable anonymous mappings, about 1-2 GiB in a few seconds.
+ */
+export function findLuaStates(memory: Memory, maps: readonly { start: number; end: number; permissions: string; path: string }[]): number[] {
+  const g = LUA_53_X64.global;
+  const found = new Set<number>();
+  for (const mapping of maps) {
+    if (!mapping.permissions.startsWith("rw") || mapping.path.includes("wine-mapping") || mapping.end - mapping.start > 0x40000000) continue;
+    for (let at = mapping.start; at < mapping.end; at += 0x100000) {
+      let chunk: Buffer;
+      try {
+        chunk = memory.read(at, Math.min(0x100000, mapping.end - at));
+      } catch {
+        continue;
+      }
+      for (let i = g.version - g.mainThread; i + 8 <= chunk.length; i += 8) {
+        const version = Number(chunk.readBigUInt64LE(i));
+        if (version < 0x10000 || version > 0x7fffffffffff) continue;
+        try {
+          if (memory.read(version, 4).readFloatLE(0) !== 503) continue;
+          const global = at + i - g.version;
+          const state = Number(chunk.readBigUInt64LE(i - (g.version - g.mainThread)));
+          if (u64(memory, state + LUA_53_X64.state.global) === global && isLuaState(memory, state)) found.add(state);
+        } catch {
+          // Not a global state.
+        }
+      }
+    }
+  }
+  return [...found];
+}
+
+/** Every thread (coroutine) of `state`'s VM: objects tagged as threads whose global state is its. */
+export function findLuaThreads(memory: Memory, maps: readonly { start: number; end: number; permissions: string; path: string }[], state: number): number[] {
+  const global = BigInt(u64(memory, state + LUA_53_X64.state.global));
+  const threads: number[] = [];
+  for (const mapping of maps) {
+    if (!mapping.permissions.startsWith("rw") || mapping.path.includes("wine-mapping") || mapping.end - mapping.start > 0x40000000) continue;
+    for (let at = mapping.start; at < mapping.end; at += 0x100000) {
+      let chunk: Buffer;
+      try {
+        chunk = memory.read(at, Math.min(0x100000, mapping.end - at));
+      } catch {
+        continue;
+      }
+      for (let i = 0; i + LUA_53_X64.state.ci + 8 <= chunk.length; i += 8) {
+        if (chunk[i + LUA_53_X64.state.tt] === LUA_TAG.thread && chunk.readBigUInt64LE(i + LUA_53_X64.state.global) === global) threads.push(at + i);
+      }
+    }
+  }
+  return threads;
 }

@@ -80,7 +80,7 @@ A project composes the command with `makeEngine(clientsFile)`
 | `wisp engine diff ACTIONS.log POLL.log [--class REGEX] [--turn-ms MS]` | Places each birth of a poll log in the turn of a LAN host's action log it fell in, with the last actions delivered before it ([Actions](#actions)). |
 | `wisp engine actions --client lan0a,lan0b [--map MAP] [--follow]` | Prints what Warcraft's network layer delivered to an offline pool pair, turn by turn: each player's orders, BlzSendSyncData payloads with their prefixes, key and frame events, chat, joins, loads, leaves, and every desync by turn ([Actions](#actions)). |
 | `wisp engine watch --client a [--seconds N] [--depth N] [--out DIR]` | Sets a hardware write breakpoint on the birth counter and records the game's stack for every birth. Frames are named by known role. It writes `DIR/<client>.stacks.txt` and prints the most common stacks. Offline clients only. |
-| `wisp engine watch --client a --lua [--seconds N] [--limit N] [--source-maps DIR]` | Stops the game's main thread at every birth with a ptrace debug-register watchpoint, reads the Lua VM's exact call stack while the thread is stopped, then lets it go. It writes `DIR/<client>.lua-stacks.txt` with one line per birth, in the form `birth N CLASS owner CLASS: TimerStart <- FILE.ts:LINE <- FILE.ts:LINE`. Offline clients only, and the build needs `lua` chains in the offsets file. |
+| `wisp engine watch --client a --lua [--seconds N] [--limit N] [--source-maps DIR]` | Stops the game's main thread at every birth with a ptrace debug-register watchpoint, reads the Lua VM's exact call stack while the thread is stopped, then lets it go. It writes `DIR/<client>.lua-stacks.txt` with one line per birth, in the form `birth N CLASS owner CLASS: TimerStart <- FILE.ts:LINE <- FILE.ts:LINE`. Offline clients only. It finds the map's Lua VM by signature; no offsets are needed. |
 | `wisp engine locate --client a [--watch SECONDS] [--span BYTES]` | Finds the presence table in a running client of any build and checks the offsets file's entry for it, or prints a new entry. With `--watch`, it also names the tag allocator and release from their writes (offline only). |
 
 Logs go under `$XDG_STATE_HOME/wisp/engine/<UTC time>/` unless you pass `--out`.
@@ -194,14 +194,24 @@ starts with `tag allocator+0xe7 < fn 0x19b550+0x1f5 < CAgentBaseAbs allocator+0x
 
 ## Lua stacks
 
-Warcraft III embeds Lua 5.3.4, built with 32-bit integers and floats.
-wisp:scripts/wisp/engine/lua.ts reads it with Lua's x64 structure offsets:
+Warcraft III embeds Lua 5.3.4, built with 32-bit integers and floats. Blizzard
+changed its object header, measured on 3.0.0.24268 on an offline client: every
+collectable object has a 16-byte header, so each field sits 8 bytes later than
+in stock Lua. In a lua_State, `l_G` is at +0x20, `ci` at +0x28 and `base_ci`
+at +0x68; in the global state, `mainthread` is at +0xd0. CallInfo and TValue
+are unchanged. wisp:scripts/wisp/engine/lua.ts reads:
 
 - the lua_State's `ci` chain, back to its base CallInfo;
 - each Lua frame's closure, Proto, chunk name and current line, which is
   `lineinfo[savedpc - code - 1]`;
-- each C frame's function, named from `_G` (the registry's array slot 2),
-  where Warcraft's natives such as `TimerStart` are C functions.
+- each C frame's function, named from `_G` (the registry's array slot 2).
+  Warcraft's natives, such as `TimerStart`, are about 1,800 C closures that
+  share one dispatcher, so they are named by closure address.
+
+The map's VM is found by signature, which survives updates: a global state's
+`version` points to the float 503, and its main thread points back to it.
+Map callbacks run in coroutines of that VM, not in its main state, so
+`watch --lua` reads the thread whose innermost frame is a native call.
 
 A Wisp map's chunk names are `map-KEY` and `hot-KEY`, the same keys its
 source maps are kept under, so any position maps to a TypeScript line.
@@ -218,9 +228,11 @@ Two routes find the code behind a birth:
   tell its own SIGTRAP from the game's) and reads the stack before it resumes.
   Bun's FFI calls libc's ptrace and waitpid; no helper program is needed.
 
-The offsets file's optional `lua` entry holds the two pointer chains:
-`state`, from the image base to the map's main lua_State, and `closure`,
-from a `CScriptFunc` to its closure.
+The offsets file's optional `lua` entry can hold two pointer chains:
+`state`, from the image base to the map's main lua_State (the signature scan
+is used without it), and `closure`, from a `CScriptFunc` to its closure.
+The closure chain isn't known for 24268 yet: `CScriptFunc` looks Jass-side,
+with a function ID at +0x38.
 
 ## A new Warcraft build
 

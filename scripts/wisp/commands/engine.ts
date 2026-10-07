@@ -24,7 +24,7 @@ import { pollPresence } from "../engine/poll";
 import { diffPresenceLogs, parsePresenceLog } from "../engine/presenceLog";
 import { alignBirths, headerStart, isActionLog, parseActionLog } from "../engine/actionLog";
 import { actions } from "../lan/actionsCommand";
-import { type LuaFrame, frameText, globalFunctionNames, luaStack, mainLuaState } from "../engine/lua";
+import { type LuaFrame, findLuaStates, findLuaThreads, frameText, globalFunctionNames, luaStack, mainLuaState } from "../engine/lua";
 import { PresenceTracker, presenceTable, readHeader, scanForPresenceTable } from "../engine/presence";
 import { stopWatch } from "../engine/stopWatch";
 import { type Frame, parsePerfData, sampleFrames } from "../engine/perfData";
@@ -165,9 +165,13 @@ const stackText = (frames: readonly Frame[]) => frames.map(({ label }) => label)
  * is stopped. Offline clients only, like every trap.
  */
 const watchLua = (client: AttachedClient, offsets: EngineOffsets, seconds: number, limit: number, out: string, sourceMaps: string | undefined) => Effect.gen(function*() {
-  const state = mainLuaState(client.memory, client.base, offsets.lua?.state);
-  if (state === undefined) return yield* new EngineFailure({ problem: `${client.name}: no map Lua VM found${offsets.lua === undefined ? ` (offsets.json has no lua chains for ${offsets.version})` : " (is a map running?)"}` });
+  const states = mainLuaState(client.memory, client.base, offsets.lua?.state) ?? findLuaStates(client.memory, client.maps);
+  const state = typeof states === "number" ? states : states[0];
+  if (state === undefined) return yield* new EngineFailure({ problem: `${client.name}: no Lua VM found (is a map running?)` });
+  if (Array.isArray(states) && states.length > 1) return yield* new EngineFailure({ problem: `${client.name}: ${states.length} Lua VMs found; can't tell the map's` });
   const names = yield* attempt("read the Lua globals", () => globalFunctionNames(client.memory, state));
+  // Map callbacks run in coroutines of the map's VM, not in its main state.
+  let threads = yield* attempt("find the Lua threads", () => findLuaThreads(client.memory, client.maps, state));
   const table = presenceTable(client.memory, client.base, offsets);
   const tracker = new PresenceTracker(client.memory, client.base, offsets);
   tracker.poll();
@@ -181,13 +185,20 @@ const watchLua = (client: AttachedClient, offsets: EngineOffsets, seconds: numbe
     onHit: () => {
       // The counter was just incremented: the birth being given is one less.
       const birth = readHeader(client.memory, table, offsets).births - 1;
-      let frames: LuaFrame[] = [];
-      try {
-        frames = luaStack(client.memory, state, names);
-      } catch {
-        frames = [];
+      // The thread making the birth is the one whose innermost frame is a native call.
+      const running = (candidates: readonly number[]) => candidates.map((thread) => {
+        try {
+          return luaStack(client.memory, thread, names);
+        } catch {
+          return [];
+        }
+      }).find((frames) => frames[0]?.kind === "c" && frames[0].name !== undefined);
+      let frames = running(threads);
+      if (frames === undefined) {
+        threads = findLuaThreads(client.memory, client.maps, state);
+        frames = running(threads);
       }
-      stacks.push({ birth, frames });
+      stacks.push({ birth, frames: frames ?? [] });
     },
   }));
   const born = new Map(tracker.poll().filter(({ kind }) => kind === "born").map(({ agent }) => [agent.birth, agent]));
