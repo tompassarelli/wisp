@@ -315,6 +315,8 @@ test("guardrails: breakpoints need an offline client; reads never touch the owne
   expect(onlineProblem({ ...offline, interfaces: ["lo", "eth0"] })).toContain("interfaces eth0");
   expect(onlineProblem({ ...offline, interfaces: [] })).toContain("no readable interface list");
   expect(onlineProblem({ ...offline, prefixCommandLines: ["C:\\Program Files (x86)\\Battle.net\\Battle.net.exe\0"] })).toContain("Battle.net runs in this client's prefix");
+  // The game's own menu renderer is not Battle.net.
+  expect(onlineProblem({ ...offline, prefixCommandLines: ["C:\\Program Files (x86)\\Warcraft III\\_retail_\\x86_64\\BlizzardBrowser\\BlizzardBrowser.exe\0--type=gpu-process\0"] })).toBeUndefined();
   expect(onlineProblem({ ...offline, sockets: new Set([101, 102, 103]) })).toContain("tcp connection to 13.12.11.10:1119");
   const udp = parseSocketTable(tcp.replace(" 01 00000000", " 07 00000000"), "udp");
   expect(onlineProblem({ ...offline, sockets: new Set([103]), connections: udp })).toContain("udp connection to 13.12.11.10:1119");

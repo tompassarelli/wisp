@@ -94,7 +94,7 @@ export function parseInterfaces(text: string): string[] {
   });
 }
 
-const BATTLE_NET = /(?:^|[\\/])(?:Battle\.net(?: Launcher)?|Agent|BlizzardBrowser|Blizzard Battle\.net)\.exe/i;
+const BATTLE_NET = /(?:^|[\\/])(?:Battle\.net(?: Launcher)?|Agent)\.exe/i;
 
 /** Why `view`'s process may be online, or undefined when it is verifiably offline. */
 export function onlineProblem(view: ProcessView): string | undefined {
