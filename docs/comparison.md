@@ -135,3 +135,83 @@ Each rival built on this NixOS machine only after these changes:
   from ~/Documents/Warcraft III/JassHelper/; the port used patch 3.0's files.
 - warcraft-vscode: `wc3 build` could not open the template's
   objediting/main.lua, so the port declares no object data, like the others.
+
+## What Wurst does that Wisp doesn't
+
+Capability survey for [#41](https://github.com/tompassarelli/wisp/issues/41),
+7 October 2026. Wisp coverage was read at `f81edc82bbdf526fb55479f290ffdcb03c43e711`
+against its [feature index](index.md) and the implementations linked below.
+This extends the latency measurements above; it does not rerun them.
+
+Source revisions, all available in the upstream repositories:
+
+- **C**: `wurst-compiler@9913e1bd300c2053637d756a11bae8c3c8ed568f`, read from
+  `~/code/wurst-compiler/pins/9913e1bd300c2053637d756a11bae8c3c8ed568f`.
+  Compiler paths below are relative to
+  `de.peeeq.wurstscript/src/main/java/de/peeeq/`.
+- **S**: `wurst-stdlib@e3714f629113ee682353c3244065fee3e7d9ae16`, read from
+  `~/code/wurst-stdlib/pins/e3714f629113`.
+- **G**: `WurstSetup@2c676ddf1aaa6a729c5c495f91a4e863716c6d9b`, read from
+  `~/WurstSetup`.
+
+The savings and effort columns are implementation estimates, not new measured
+results. For checks moved from native to headless, the target is at most 2 s
+per check: 1,800 checks/hour instead of the approximately 24 s/check,
+150 checks/hour baseline in [#38](https://github.com/tompassarelli/wisp/issues/38),
+before setup time. That is a target for the named small checks, not a prediction
+for an entire match. Effort means focused agent implementation time, including
+the row's check, using Wisp's existing TypeScript and Lua runners.
+
+| Capability and actual gap | Wurst source (`repo:path` at revision above) | Wisp coverage now | What it would save Wisp or Smashcraft; effort |
+| --- | --- | --- | --- |
+| **1. Report an unsupported native instead of silently passing with a default.** | **C**: [`wurstscript/intermediatelang/interpreter/ILInterpreter.java`](https://github.com/wurstscript/WurstScript/blob/9913e1bd300c2053637d756a11bae8c3c8ed568f/de.peeeq.wurstscript/src/main/java/de/peeeq/wurstscript/intermediatelang/interpreter/ILInterpreter.java): exhausted providers record a compilation error; the interpreter can then return a default. | [`src/headless/client.ts`](../src/headless/client.ts) installs every declared native. Without a built-in or consumer behavior, `defaultNative` returns zero, false, empty text, a new handle or nothing, without reporting missing behavior. Agreement between clients can therefore pass a check whose native behavior was never modeled. | Find the missing behavior in one ≤2 s headless run, before spending a native setup/check on it. Explicitly declare intentional no-ops so existing display-only calls stay usable. **2–4 h**; highest impact because it makes every headless verdict more useful. Follow-up: [#43](https://github.com/tompassarelli/wisp/issues/43). |
+| **2. Stateful unit life, death, mana, owner and facing in the interpreter.** | **C**: [`wurstio/jassinterpreter/providers/UnitProvider.java`](https://github.com/wurstscript/WurstScript/blob/9913e1bd300c2053637d756a11bae8c3c8ed568f/de.peeeq.wurstscript/src/main/java/de/peeeq/wurstio/jassinterpreter/providers/UnitProvider.java), including the measured 0.405 death threshold; `GetOwningPlayer`, unit states, kill/remove and facing operate on a unit mock. | [`src/headless/client.ts`](../src/headless/client.ts)'s unit stores type, position, move speed and attack cooldown. `CreateUnit` discards owner; life/mana/death and facing calls take the default path. Smashcraft's own fighting simulation already runs headless; this gap is in Warcraft unit interactions, not its damage/stock calculations. | Move small map-unit state and cleanup checks to ≤2 s, targeting 1,800 rather than 150 checks/hour; catch incorrect life/death assumptions without a new game. **4–8 h** for the named states, with one native comparison, not combat/pathing. Follow-up: [#44](https://github.com/tompassarelli/wisp/issues/44). |
+| **3. Typed compile-time object definitions, including ability data columns and unreal fields.** | **S**: [`wurst/objediting/UnitObjEditing.wurst`](https://github.com/wurstscript/WurstStdlib2/blob/e3714f629113ee682353c3244065fee3e7d9ae16/wurst/objediting/UnitObjEditing.wurst), [`AbilityObjEditing.wurst`](https://github.com/wurstscript/WurstStdlib2/blob/e3714f629113ee682353c3244065fee3e7d9ae16/wurst/objediting/AbilityObjEditing.wurst); **C**: [`wurstio/intermediateLang/interpreter/CompiletimeNatives.java`](https://github.com/wurstscript/WurstScript/blob/9913e1bd300c2053637d756a11bae8c3c8ed568f/de.peeeq.wurstscript/src/main/java/de/peeeq/wurstio/intermediateLang/interpreter/CompiletimeNatives.java). Wurst executes authored definitions during its build; setters carry field types, levels and data columns. | [`scripts/objectData.ts`](../scripts/objectData.ts) already generates binary custom objects and FileIO's ability in Bun; no new compile-time interpreter is needed. Its fields are arbitrary four-character strings, values have int/real/string only, and the ability data-column slot is always zero. | A typed unit/ability builder removes raw field lookups while authoring; a nonzero ability column becomes expressible, and wrong value types fail before building a map. Target: author a unit and two-level ability without raw field IDs; malformed examples fail before packaging. **4–8 h** for a useful subset, not the whole library. Follow-up: [#45](https://github.com/tompassarelli/wisp/issues/45). |
+| Game-free test discovery and execution in the compiler's intermediate-language interpreter. | **C**: [`wurstio/languageserver/requests/RunTests.java`](https://github.com/wurstscript/WurstScript/blob/9913e1bd300c2053637d756a11bae8c3c8ed568f/de.peeeq.wurstscript/src/main/java/de/peeeq/wurstio/languageserver/requests/RunTests.java), [`wurstscript/intermediatelang/interpreter/ILInterpreter.java`](https://github.com/wurstscript/WurstScript/blob/9913e1bd300c2053637d756a11bae8c3c8ed568f/de.peeeq.wurstscript/src/main/java/de/peeeq/wurstscript/intermediatelang/interpreter/ILInterpreter.java); **S**: [`wurst/_wurst/Wurstunit.wurst`](https://github.com/wurstscript/WurstStdlib2/blob/e3714f629113ee682353c3244065fee3e7d9ae16/wurst/_wurst/Wurstunit.wurst). Tests have name filters, failures, timeouts and timer completion. | Already covered by [dual Bun/Lua tests](index.md), [headless journeys](headless.md), [affected tests after a save](dev.md), and [CI](ci.md). Wisp executes the actual emitted Lua in its 32-bit runner rather than adding a second compiler interpreter. The measured test latency above is lower. | **No runner gap and no new ticket.** Improve native behaviors in that runner (rows 1–2), rather than paying **days** for a redundant interpreter with no measured checks/hour gain. |
+| Standard-library packages for geometry, collections and spatial queries. | **S**: [`wurst/math/Vectors.wurst`](https://github.com/wurstscript/WurstStdlib2/blob/e3714f629113ee682353c3244065fee3e7d9ae16/wurst/math/Vectors.wurst), [`wurst/data/KeyedMap.wurst`](https://github.com/wurstscript/WurstStdlib2/blob/e3714f629113ee682353c3244065fee3e7d9ae16/wurst/data/KeyedMap.wurst), [`wurst/util/UnitSpatialIndex.wurst`](https://github.com/wurstscript/WurstStdlib2/blob/e3714f629113ee682353c3244065fee3e7d9ae16/wurst/util/UnitSpatialIndex.wurst). The surveyed library contains **230 `.wurst` files**, including tests and generated definitions, not 230 independent packages. | TypeScript/TSTL provide collections; Wisp has numeric helpers and `src/sim/`. Wisp has no comparable Warcraft unit spatial index. Smashcraft supplies its game-specific geometry, so counting all Wurst math as missing would overstate the gap. | A reusable unit-radius query could remove a consumer's hand-built index: target one API with tests instead of native enumeration glue. **4–8 h** for one requested index. Lower priority until a consuming map needs it; importing the entire library brings no demonstrated current gain. |
+| Managed one-shot, counted and periodic timer callbacks; event and damage systems. | **S**: [`wurst/closures/ClosureTimers.wurst`](https://github.com/wurstscript/WurstStdlib2/blob/e3714f629113ee682353c3244065fee3e7d9ae16/wurst/closures/ClosureTimers.wurst), [`wurst/event/DamageEvent.wurst`](https://github.com/wurstscript/WurstStdlib2/blob/e3714f629113ee682353c3244065fee3e7d9ae16/wurst/event/DamageEvent.wurst). The timer API includes callback destruction and timer reuse; damage listeners are a reusable game system. | [`src/platform/dispatch.ts`](../src/platform/dispatch.ts) supplies reloadable callbacks; timers/triggers work in headless. Wisp has no general timer-pool API or Warcraft damage-event framework. Smashcraft's synchronized frame loop and custom fighting damage already own those behaviors. | A conventional spell map could save repeated timer cleanup and event glue. Target one cancellable callback with no live timer after completion. **2–4 h** for timers, **1–2 days** for a tested damage system. Current Smashcraft benefit is smaller than the first three rows. |
+| Runtime frame-event helpers, including releasing button focus and edit-box callbacks. | **S**: [`wurst/closures/ClosureFrames.wurst`](https://github.com/wurstscript/WurstStdlib2/blob/e3714f629113ee682353c3244065fee3e7d9ae16/wurst/closures/ClosureFrames.wurst), `onClickReleaseFocus`, `onEditboxEnter`, `onEditboxChange`. | [Typed frames](ui.md) generate FDF and handles; behavior remains consumer code. Headless has click/focus/text state but does not emulate edit-box change/Enter events. Wurst's own **C** `wurstio/jassinterpreter/providers/FrameProvider.java` is smaller than Wisp's frame model and does not close that gap. | A release-focus helper saves repeated button glue; modeled edit events would move menu-input checks to ≤2 s. **1–2 h** for the helper, **2–4 h** for event behavior and one native comparison. Below current look-check rendering [#40](https://github.com/tompassarelli/wisp/issues/40). |
+| Compiler static checks: definite assignment, return/reachability, visibility, override and initialization order. | **C**: [`wurstscript/validation/WurstValidator.java`](https://github.com/wurstscript/WurstScript/blob/9913e1bd300c2053637d756a11bae8c3c8ed568f/de.peeeq.wurstscript/src/main/java/de/peeeq/wurstscript/validation/WurstValidator.java), `checkUninitializedVars`, `checkReachability`, `checkOverride`, `checkClassMemberInitializerOrder`, `checkLocalShadowing`. | [`tsconfig.game.json`](../tsconfig.game.json) enables strict typing and unchecked-index/optional checks; TypeScript covers assignment, visibility and override rules. [`scripts/numberRules.ts`](../scripts/numberRules.ts) adds Warcraft-specific guards. Wisp does not add Wurst's local-shadowing warning or equivalent cross-field initializer diagnostics for arbitrary map globals. | Most benefit is already present at the measured 0.39 s check. A specific shadowing/initializer mistake could be caught before launch; target a failing source fixture if one occurs. **1–3 h** for a narrow diagnostic. No new static-check ticket without a current defect. |
+| Export existing map object data back into authored source, resolving WTS strings and skin object files. | **C**: [`wurstio/objectreader/ObjectExportService.java`](https://github.com/wurstscript/WurstScript/blob/9913e1bd300c2053637d756a11bae8c3c8ed568f/de.peeeq.wurstscript/src/main/java/de/peeeq/wurstio/objectreader/ObjectExportService.java). | Wisp's object writer and map packager preserve/package supplied data; there is no object-to-TypeScript importer. | Saves re-entering object fields when moving an existing authored map to code. Target one exported unit and ability rebuild with identical field values. **1–2 days**. Useful for a migration, but no current migration beats runtime coverage or the native frontier. |
+| CLI patch-aware core JASS, standard-library selection and explicit project/client alignment. | **G**: [`src/main/kotlin/file/CoreJassProvider.kt`](https://github.com/wurstscript/WurstSetup/blob/2c676ddf1aaa6a729c5c495f91a4e863716c6d9b/src/main/kotlin/file/CoreJassProvider.kt), [`SetupApp.kt`](https://github.com/wurstscript/WurstSetup/blob/2c676ddf1aaa6a729c5c495f91a4e863716c6d9b/src/main/kotlin/file/SetupApp.kt), `grill patch` and `grill patch align`. | Wisp pins its TS toolchain and has engine offsets per client build. Its map format/natives are the current consumer's target; there is no multi-patch project alignment command. | Could turn a future patch mismatch into one setup error before launch. **4–8 h** for a read-only mismatch check. Tom's current main-only target needs no legacy compatibility or automatic patch migration. |
+
+### Three follow-ups and the current frontier
+
+The first three rows are the highest-impact additions found in this survey:
+native coverage reporting, a bounded unit-state model, and typed object
+authoring. The concrete follow-ups are:
+
+- [#43](https://github.com/tompassarelli/wisp/issues/43): headless native coverage reports unmodeled calls instead of silently passing on defaults.
+- [#44](https://github.com/tompassarelli/wisp/issues/44): headless unit states model owner, life, mana, facing, death and removal.
+- [#45](https://github.com/tompassarelli/wisp/issues/45): typed unit and ability setters with data columns and unreal fields.
+
+They reuse Wisp's current runtime and Bun build; none adopts WurstScript or
+copies its interpreter.
+
+[#38](https://github.com/tompassarelli/wisp/issues/38) still addresses the observed
+native setup failures, [#39](https://github.com/tompassarelli/wisp/issues/39)
+accelerates checks that need the engine, and
+[#40](https://github.com/tompassarelli/wisp/issues/40) removes look checks from the
+native queue. The new gaps do not replace those current priorities: coverage
+reporting improves the meaning of today's headless results; unit state expands
+which small checks can run there; object builders reduce authoring mistakes.
+No Wurst source inspected supplies the inside-game driver, native fast-forward
+or headless asset renderer those frontier issues ask for.
+
+### Reuse rights
+
+Checked with the `external-code` skill at the exact revisions above. This
+survey copies no code; the proposed tickets are original TypeScript work using
+Wurst's observed behavior and APIs as prior art. Each implementation must name
+any actual derived files and retain the required notices when it chooses to
+adapt source rather than independently implement a capability.
+
+| Proposed reference/reuse | Revision and licence source | Decision and obligations |
+| --- | --- | --- |
+| Compiler native providers, interpreter diagnostics and object writer behavior | **C**, [WurstScript LICENSE](https://github.com/wurstscript/WurstScript/blob/9913e1bd300c2053637d756a11bae8c3c8ed568f/LICENSE): **Apache-2.0** | Permissive adaptation is compatible with Wisp's MIT project if Apache-derived files retain Apache terms: include the licence and existing attribution/copyright notices, mark changed files, and retain applicable NOTICE material if present. No root NOTICE file was found at this revision. Native semantics are evidence to compare with the actual game, not a reason to import Java or all transitive dependencies. |
+| Typed object setters, timer/frame helpers and library systems | **S**, [WurstStdlib2 LICENSE](https://github.com/wurstscript/WurstStdlib2/blob/e3714f629113ee682353c3244065fee3e7d9ae16/LICENSE): **Apache-2.0** | Same obligations for adapted Wurst expressions or generated wrapper code. No root NOTICE file was found. Prefer a small TypeScript API matching Wisp's existing object writer and reloadable dispatch; do not copy the library wholesale. |
+| Grill's patch-selection and CLI setup behavior | **G**, [WurstSetup LICENSE](https://github.com/wurstscript/WurstSetup/blob/2c676ddf1aaa6a729c5c495f91a4e863716c6d9b/LICENSE): **Apache-2.0** | Same obligations if adapted; no root NOTICE file found. No Grill implementation is proposed for reuse now. These repository licences do not establish redistribution rights for Blizzard game files or other dependencies. |
+
+The material uncertainty is the forecast savings: the follow-up issues measure
+their named cases; this survey establishes source-backed gaps, not their
+delivered speedups.
