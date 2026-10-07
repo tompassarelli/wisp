@@ -10,6 +10,7 @@ import { SourceErrors } from "../sourceErrors";
 import { Tune, type Tunable } from "../tune";
 import { TUNE_PAGE } from "../tunePage";
 import { step } from "../timings";
+import { panelServer } from "../panelServer";
 import { type HotProject, validateDataDirectories, waitForProcessStop } from "./hot";
 
 export interface TuneProject extends HotProject {
@@ -45,13 +46,8 @@ export const servePanel = (port: number) => Effect.gen(function*() {
     );
   const server = yield* Effect.acquireRelease(
     Effect.try({
-      try: () => Bun.serve({
-        hostname: "127.0.0.1",
-        port,
-        fetch: (request) => {
+      try: () => panelServer(port, (request) => {
           const url = new URL(request.url);
-          const host = request.headers.get("host");
-          if (host !== `127.0.0.1:${url.port}` && host !== `localhost:${url.port}`) return json({ error: "the panel answers only its own address" }, 403);
           if (request.method === "GET" && url.pathname === "/") return new Response(TUNE_PAGE, { headers: { "content-type": "text/html; charset=utf-8" } });
           if (request.method === "GET" && url.pathname === "/tunables") return run(tune.state);
           if (request.method !== "POST" || request.headers.get("content-type")?.startsWith("application/json") !== true) return json({ error: "not found" }, 404);
@@ -65,8 +61,7 @@ export const servePanel = (port: number) => Effect.gen(function*() {
             default:
               return json({ error: "not found" }, 404);
           }
-        },
-      }),
+        }),
       catch: (cause) => new UsageFailure({ problem: `can't serve the panel on 127.0.0.1:${port}: ${String(cause)}` }),
     }),
     (server) => Effect.promise(() => server.stop(true)),

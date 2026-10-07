@@ -13,9 +13,12 @@ import { step } from "../timings";
 import { diffReproStates } from "../reproInspection";
 import { replaySoakRepro } from "../reproSoak";
 import { emitJson } from "../jsonResults";
+import { createReproViewer, serveReproViewer, type ReproViewerSources } from "../reproViewer";
+import { waitForProcessStop } from "./hot";
 
 /** What a game declares for `wisp repro`. */
 export interface ReproProject {
+  readonly viewerSources?: ReproViewerSources;
   readonly map: HeadlessMap;
   /**
    * The module exporting `replayRepro`, a ReproReplay (wisp:src/runtime/repro.ts):
@@ -73,7 +76,7 @@ export function replayInClients(map: HeadlessMap, replay: ReproReplay, repro: Re
 }
 
 export function inspectInClients(map: HeadlessMap, inspect: ReproInspector, repro: Repro, frame: number): ReproInspection {
-  const results = inClients(map, () => inspect(repro, frame));
+  const results = inspectClientStates(map, inspect, repro, frame);
   const first = results[0];
   if (first === undefined) throw new Error("no inspection result");
   if (typeof first === "string") throw new Error(first);
@@ -83,6 +86,14 @@ export function inspectInClients(map: HeadlessMap, inspect: ReproInspector, repr
     if (JSON.stringify(result) !== JSON.stringify(first)) throw new Error(`clients disagree on the state of frame ${frame}`);
   }
   return first;
+}
+
+export function inspectClientStates(map: HeadlessMap, inspect: ReproInspector, repro: Repro, frame: number): ReproInspection[] {
+  return inClients(map, () => inspect(repro, frame)).map(result => {
+    if (typeof result === "string") throw new Error(result);
+    if (result.frame !== frame) throw new Error(`requested frame ${frame}, the inspector returned frame ${result.frame}`);
+    return result;
+  });
 }
 
 function inClients<Result>(map: HeadlessMap, run: () => Result): Result[] {
@@ -149,8 +160,9 @@ function importFrom(directory: string, module: string): string {
 export const makeRepro = (load: () => Promise<ReproProject>): Command => (args) => Effect.gen(function*() {
   const json = args.includes("--json");
   const shrink = args.includes("--shrink");
+  const view = args.includes("--view");
   const started = performance.now();
-  args = args.filter(arg => arg !== "--json" && arg !== "--shrink");
+  args = args.filter(arg => arg !== "--json" && arg !== "--shrink" && arg !== "--view");
   const [name, ...extra] = flagValues(args, "test");
   const [frameText, ...extraFrames] = flagValues(args, "frame");
   const [diffText, ...extraDiffs] = flagValues(args, "diff-frame");
@@ -158,6 +170,7 @@ export const makeRepro = (load: () => Promise<ReproProject>): Command => (args) 
   const flags = ["--test", "--frame", "--diff-frame", "--out"];
   const files = args.filter((arg, index) => !arg.startsWith("--") && !flags.includes(args[index - 1] ?? ""));
   const file = files[0];
+  if (view && (json || shrink || name !== undefined || frameText !== undefined || out !== undefined || diffText !== undefined)) return yield* new UsageFailure({ problem: "--view takes only the saved repro file" });
   if (file === undefined || files.length > 1 || extra.length + extraFrames.length + extraDiffs.length + extraOut.length > 0 || flags.some(flag => args.includes(flag) && flagValues(args, flag.substring(2)).length === 0) || args.some(arg => arg.startsWith("--") && !flags.some(flag => arg === flag || arg.startsWith(`${flag}=`)))) {
     return yield* new UsageFailure({ problem: "repro takes one file, --test NAME, --shrink [--out FILE], or --frame N --out FILE [--diff-frame N|previous]" });
   }
@@ -170,6 +183,7 @@ export const makeRepro = (load: () => Promise<ReproProject>): Command => (args) 
   const project = yield* Effect.tryPromise({ try: load, catch: (cause) => new ReproFailure({ file, problem: `loading the project: ${describeCause(cause)}` }) });
   const soak = yield* Effect.try({ try: () => readFileSync(file, "utf8").trimStart().startsWith("{"), catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) });
   if (soak) {
+    if (view) return yield* new UsageFailure({ problem: "--view takes a saved text moment with inspectRepro support" });
     if (project.soak === undefined) return yield* new ReproFailure({ file, problem: "the project needs a soak declaration to replay a soak JSON repro" });
     if (frame !== undefined) return yield* new UsageFailure({ problem: "--frame inspects saved text moments; soak repros support --shrink and --test" });
     const result = yield* replaySoakRepro(file, project.soak, { shrink, ...(out === undefined ? {} : { out }), ...(name === undefined ? {} : { name }) }).pipe(Effect.mapError(error => new ReproFailure({ file, problem: error.problem })));
@@ -181,6 +195,16 @@ export const makeRepro = (load: () => Promise<ReproProject>): Command => (args) 
   }
   if (shrink) return yield* new UsageFailure({ problem: "--shrink takes a soak JSON repro; saved state and text moments are not shrunk" });
   const { repro, lines } = yield* readRepro(file).pipe(step("read repro"));
+  if (view) {
+    const inspector = yield* Effect.tryPromise({ try: () => loadInspector(project.replay), catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) });
+    return yield* Effect.scoped(Effect.gen(function*() {
+      const server = yield* Effect.acquireRelease(Effect.try({ try: () => serveReproViewer(createReproViewer(project.map, inspector, repro, project.viewerSources)), catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) }), server => Effect.promise(() => server.stop(true)));
+      const address = `http://127.0.0.1:${server.port}/`;
+      yield* Console.log(`saved match: ${address}`);
+      yield* Effect.try({ try: () => { Bun.spawn(["xdg-open", address], { stdout: "ignore", stderr: "ignore" }); }, catch: cause => new ReproFailure({ file, problem: `opening the page: ${describeCause(cause)}` }) });
+      yield* waitForProcessStop;
+    }));
+  }
   const replay = yield* Effect.tryPromise({ try: () => loadReplay(project.replay), catch: (cause) => new ReproFailure({ file, problem: describeCause(cause) }) }).pipe(step("load replay"));
   const results = yield* Effect.try({
     try: () => replayInClients(project.map, replay, repro),

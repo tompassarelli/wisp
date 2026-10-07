@@ -131,6 +131,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--compare DIR` | A native run's folder to hold the headless run to | `pad` |
 | `--repro FILE` | Play a soak finding again | `soak` |
 | `--test NAME` | Write a test with this name | `repro` |
+| `--view` | Open a saved moment with a frame slider and client field differences | `repro` |
 | `--shrink` | Remove inputs while keeping the same failure kind | `repro` |
 | `--no-shrink` | Keep new soak repros without shrinking | `soak` |
 | `--check` | Compare against what this checkout last wrote | `interactions` |
