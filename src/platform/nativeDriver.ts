@@ -46,7 +46,7 @@ export function installNativeDriver(handler: (text: string) => void): void {
     const state = globalThis.__wispDrive;
     if (state === undefined) return;
     const fields = BlzGetTriggerSyncData().split(" ");
-    const serial = tonumber(fields[1]) ?? -1;
+    const serial = Number(fields[1]);
     const sender = GetPlayerId(GetTriggerPlayer());
     if (serial !== state.serial + 1 || (state.players & (1 << sender)) === 0) return;
     if (fields[0] === "offer") {

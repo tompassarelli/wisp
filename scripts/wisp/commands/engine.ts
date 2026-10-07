@@ -1,4 +1,4 @@
-// `wisp engine ...`: a read-only debugger into Warcraft III's engine for
+// `wisp engine ...`: a debugger and opt-in file driver for Warcraft III's engine for
 // network desyncs (wisp:docs/engine.md).
 //   desync A B [--turn N]        compare two clients' Desync.log dumps: first differing turn and section, decoded ipse
 //   poll --client a,b            log every agent born and freed in each client's presence table, with its class
@@ -9,7 +9,7 @@
 // cheating or touching other players' games. Live commands attach only to
 // clients in the clients file, through wisp:scripts/wisp/engine/attach.ts:
 // reads on any dev client, breakpoints only on an offline one. Nothing writes
-// to a game process, stops it or injects code.
+// to process memory or injects code; drive sends files to an opted-in offline map.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
@@ -344,7 +344,7 @@ const locate = (clientsFile: string): Command => (args) => Effect.gen(function*(
   }).pipe(Effect.ensuring(Effect.sync(() => client.memory.close())));
 });
 
-const USAGE = "(for debugging your own map on your own development clients; never other players' games) desync A B [--turn N] | poll --client a,b [--seconds N] [--out DIR] | diff A.log B.log [--skew S] [--source-maps DIR] | diff ACTIONS.log POLL.log [--class REGEX] | actions --client a,b [--map MAP] [--follow] | trace --client a [--seconds N] [--out DIR] [--perf BIN] [--lua [--limit N] [--source-maps DIR]] | locate --client a [--trace SECONDS]";
+const USAGE = "(for debugging your own map on your own development clients; never other players' games) desync A B [--turn N] | poll --client a,b [--seconds N] [--out DIR] | diff A.log B.log [--skew S] [--source-maps DIR] | diff ACTIONS.log POLL.log [--class REGEX] | actions --client a,b [--map MAP] [--follow] | trace --client a [--seconds N] [--out DIR] [--perf BIN] [--lua [--limit N] [--source-maps DIR]] | locate --client a [--trace SECONDS] | drive SCRIPT|status|pause|resume|step [N] --client a,b [--frames N] [--timeout S] [--out FILE]";
 
 const drive = (clientsFile: string, prefix: string): Command => args => Effect.gen(function*() {
   const clients = yield* namedClients(clientsFile, args);
