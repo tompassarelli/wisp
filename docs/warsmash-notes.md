@@ -31,7 +31,7 @@ would require a separate license decision; these notes do not authorize it.
 | Dead means life at or below **0**, not 0.405. A direct life assignment stores the supplied float. | Native fixtures must determine the actual Warcraft threshold and clipping. Warsmash cannot validate Wisp's 0.405 assumption. | [life/dead observations](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CWidget.java#L69-L89) |
 | An alive-to-dead life write dispatches death processing before it returns. A write to an already-dead unit does not repeat that transition. Raising life alone does not clear corpse bookkeeping or perform a full resurrection. | Record life and dead state both inside death callbacks and after the call; separately test positive life writes on a corpse. | [life-write behavior](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L3893-L3901) |
 | KillUnit assigns zero only while alive. RemoveUnit suppresses death events by default. | Count events for first kill, repeated kill and removal separately. | [kill behavior](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L3139-L3143), [removal behavior](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L4435-L4456), [default](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/util/WarsmashConstants.java#L52) |
-| Observable death notifications occur in this order: widget-death, unit-death, owning-player unit-death. The life value is already dead, orders have ended, and food bookkeeping has been updated. Explosion removal follows these notifications. | Register all three kinds of callback and append their names, observed life and food to one log. Replacement/reincarnation abilities need a separate fixture. | [death notifications](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L2975-L3040), [notification order](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L3116-L3129) |
+| Death notifications occur in this order: widget-death, unit-death, owning-player unit-death. Life is already dead, orders have ended, and food bookkeeping has been updated. Explosion removal follows these notifications. This is condition-check and action-scheduling order, not synchronous action completion. | Log conditions separately from actions for all three event kinds, including observed life and food. Replacement/reincarnation abilities need a separate fixture. | [death notifications](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L2975-L3040), [notification order](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L3116-L3129) |
 
 Warsmash simulation steps are **0.05 seconds**, or 20 Hz. Each corpse phase
 ends on the first step strictly later than its start step plus the duration
@@ -42,6 +42,16 @@ remain hidden awaiting revival. These are emulator timing facts, not values
 to adopt for current Warcraft. See [step constant](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/util/WarsmashConstants.java#L20),
 [corpse transitions](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L1897-L1949),
 and [decay data](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CGameplayConstants.java#L137-L140).
+
+Event filters and conditions are evaluated at notification time; JASS action
+callbacks are scheduled as threads. A simulation step updates units and
+projectiles, advances the turn, dispatches due timers, checks tick triggers,
+then runs those script threads. Thus the notification order above does not
+answer whether an action completes before a life-setting native returns in
+Warcraft. Measure condition and action logs independently.
+[Event dispatch](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/jassparser/src/com/etheller/interpreter/ast/scope/GlobalScope.java#L693-L705),
+[script action scheduling](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/jassparser/src/com/etheller/interpreter/ast/scope/trigger/Trigger.java#L128-L140),
+[simulation event order](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CSimulation.java#L510-L597).
 
 **Native-confirmed, existing Wisp evidence:** synchronized network turns in
 the measured Warcraft run are 25 game-ms apart, on a 24.87–24.99 ms observed
@@ -145,6 +155,19 @@ Wisp's current Lua maps or provides current `Blz*` coverage. Game assets are
 supplied privately by the owner's Warcraft installation.
 [Launcher](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/desktop/src/com/etheller/warsmash/desktop/DesktopLauncher.java#L47-L126),
 [installation/data-source notes](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/README.md#before-you-begin-ini-file).
+
+The inspected default script list contains `common.j`, `Blizzard.j` and
+`war3map.j`. At game initialization, ability initialization is scheduled
+before map `main`; map `config` is run to completion in its configuration
+context. Those are JASS execution observations. A player for Wisp's compiled
+Lua must provide Lua execution and its declared natives independently.
+Rendering also has its own elapsed-time updates, separate from 50 ms
+simulation steps; a player should use the recorded animation time when
+reproducing a captured pose, not infer it from the simulation step count.
+[Default script list](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/util/WarsmashConstants.java#L60),
+[initialization order](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L9201-L9223),
+[configuration](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L9394-L9403),
+[render and simulation timing](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/War3MapViewer.java#L1140-L1207).
 
 ## Native confirmations still queued
 
