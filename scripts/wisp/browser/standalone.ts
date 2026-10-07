@@ -79,10 +79,21 @@ async function run(): Promise<void> {
     return { frame, requestedMs, readyMs: performance.now() };
   };
   let pending = loadFrame();
+  let waiting: { deadlineMs: number; resolve(timestamp: number): void } | undefined;
+  let animationFrame = 0;
+  const animate = (timestamp: number) => {
+    animationFrame = requestAnimationFrame(animate);
+    if (waiting !== undefined && timestamp >= waiting.deadlineMs) {
+      const resolve = waiting.resolve;
+      waiting = undefined;
+      resolve(timestamp);
+    }
+  };
+  animationFrame = requestAnimationFrame(animate);
+  try {
   while (true) {
     const deadlineMs = nextFrame;
-    let presented: number;
-    do { presented = await new Promise<number>((resolve) => requestAnimationFrame(resolve)); } while (presented < nextFrame);
+    const presented = await new Promise<number>((resolve) => { waiting = { deadlineMs, resolve }; });
     nextFrame = Math.max(nextFrame + 1000 / 60, presented);
     const began = performance.now();
     if (previous !== 0) intervals.push(began - previous);
@@ -109,6 +120,7 @@ async function run(): Promise<void> {
       return;
     }
   }
+  } finally { cancelAnimationFrame(animationFrame); }
 }
 void run().catch(async (cause: unknown) => {
   const error = cause instanceof Error ? cause.message : String(cause);
