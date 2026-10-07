@@ -157,3 +157,37 @@ test("f32 sums, differences and products compile to f32's exact path in Lua: War
     nested: "f32( a, f32(b, c, 1), 3 )",
   });
 });
+
+test("a plugin's beforeEmit and afterEmit run as in a full compile, so the bundle stays the same", () => {
+  const build = join(import.meta.dir, "../build");
+  mkdirSync(build, { recursive: true });
+  const directory = mkdtempSync(join(build, "compiler-emit-"));
+  mkdirSync(join(directory, "src"));
+  const config = join(directory, "tsconfig.json");
+  const seen = join(directory, "seen.txt");
+  writeFileSync(join(directory, "src/main.ts"), "export const result = 7;\n");
+  writeFileSync(join(directory, "stamp.ts"), [
+    "import { writeFileSync } from \"node:fs\";",
+    "export default () => ({",
+    "  beforeEmit(_program: unknown, _options: unknown, _host: unknown, files: { code: string }[]) { for (const file of files) file.code = `STAMP = 1; ${file.code}`; },",
+    `  afterEmit(_program: unknown, _options: unknown, _host: unknown, files: { code: string }[]) { writeFileSync(${JSON.stringify(seen)}, String(files.length)); },`,
+    "});",
+    "",
+  ].join("\n"));
+  writeFileSync(config, JSON.stringify({
+    compilerOptions: {
+      target: "ESNext", module: "ESNext", moduleResolution: "Bundler", strict: true,
+      types: [], skipLibCheck: true, rootDir: "src", outDir: "out", sourceMap: true,
+    },
+    include: ["src/**/*.ts"],
+    tstl: { luaTarget: "5.3", luaBundle: "map.lua", luaBundleEntry: "src/main.ts", noHeader: true, luaPlugins: [{ name: "./stamp.ts" }] },
+  }));
+  const bundle = join(directory, "out/map.lua");
+  const output = () => [readFileSync(bundle, "utf8"), readFileSync(`${bundle}.map`, "utf8")];
+  expect(report(mapCompiler(config)())).toBe("");
+  const incremental = output();
+  expect(incremental[0]?.startsWith("STAMP = 1; ")).toBe(true);
+  expect(readFileSync(seen, "utf8")).toBe("1");
+  expect(report(transpileProject(config).diagnostics)).toBe("");
+  expect(output()).toEqual(incremental);
+});
