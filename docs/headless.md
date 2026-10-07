@@ -337,7 +337,8 @@ Chrome, otherwise `google-chrome-stable` is used. Chrome runs privately in
 headless mode, with the GPU's ANGLE OpenGL backend, falling back to SwiftShader
 only if GPU initialization fails. No Warcraft client is opened.
 
-The renderer uses the already declared `war3-model` 4.0.1 package, MIT,
+The renderer uses the declared MIT `war3-model` 4.0.1 package with the HD
+sampling precision fix recorded in `vendor/README.md`,
 Copyright 2017–2023 4eb0da; its package retains the license. Wisp calls its
 public model/texture parsers and `ModelRenderer` API. Positions, model scales,
 animation times, rotations, camera fields and visible frame art come from the
