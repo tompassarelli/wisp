@@ -42,6 +42,8 @@ export interface Profile {
   readonly classic: boolean;
   /** Sound on; off, the game loads and mixes no sound at all. */
   readonly sound: boolean;
+  /** Music too: off for checks that score effects, which music sits under. */
+  readonly music: boolean;
 }
 
 const LOWEST: Readonly<Record<string, number>> = {
@@ -57,11 +59,11 @@ const LOWEST: Readonly<Record<string, number>> = {
  * 60 frames a second, focused or not (wisp:docs/lan.md, "Profiles").
  */
 export const PROFILES: Readonly<Record<string, Profile>> = {
-  parity: { name: "parity", width: 800, height: 600, maxFps: 60, video: LOWEST, classic: true, sound: false },
-  checks: { name: "checks", width: 800, height: 600, maxFps: 60, video: LOWEST, classic: true, sound: true },
+  parity: { name: "parity", width: 800, height: 600, maxFps: 60, video: LOWEST, classic: true, sound: false, music: false },
+  checks: { name: "checks", width: 800, height: 600, maxFps: 60, video: LOWEST, classic: true, sound: true, music: false },
   /** parity at 144 frames a second, focused or not, to compare the game's clocks against a 60 fps cap. */
-  hfr: { name: "hfr", width: 800, height: 600, maxFps: 144, video: LOWEST, classic: true, sound: false },
-  visual: { name: "visual", width: 1280, height: 720, maxFps: 60, video: { ...LOWEST, lightingquality: 2, particles: 2, texquality: 1 }, classic: false, sound: true },
+  hfr: { name: "hfr", width: 800, height: 600, maxFps: 144, video: LOWEST, classic: true, sound: false, music: false },
+  visual: { name: "visual", width: 1280, height: 720, maxFps: 60, video: { ...LOWEST, lightingquality: 2, particles: 2, texquality: 1 }, classic: false, sound: true, music: true },
 };
 
 /** War3Preferences.txt with the sections a profile sets: the game fills in the rest. */
@@ -89,7 +91,7 @@ export function preferences(profile: Profile, windowX: number): string {
   const sections: Record<string, Record<string, number>> = {
     Video: video,
     Misc: { hd: profile.classic ? 0 : 1 },
-    Sound: { ambient: sound, environmental: sound, movement: sound, music: sound, positional: sound, sfx: sound, unit: sound, nosoundwarn: 1 },
+    Sound: { ambient: sound, environmental: sound, movement: sound, music: profile.music ? 1 : 0, positional: sound, sfx: sound, unit: sound, nosoundwarn: 1 },
   };
   return Object.entries(sections).map(([name, values]) => `[${name}]\n${Object.keys(values).sort().map((key) => `${key}=${values[key]}`).join("\n")}\n`).join("\n");
 }

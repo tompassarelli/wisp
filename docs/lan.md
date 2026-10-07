@@ -126,7 +126,7 @@ client's War3Preferences `[Video]`, `[Misc]` and `[Sound]` at launch:
 - `parity` (the default) is for checksum and input runs, which need no pixels
   and no sound. It has an 800×600 window, every quality setting at its
   lowest, classic models and textures (`hd=0`), and sound off.
-- `checks` is parity with sound, for checks that record a client's audio.
+- `checks` is parity with sound effects (music off), for checks that record a client's audio.
 - `visual` is 1280×720, with Reforged models and more lighting and texture
   detail.
 - `hfr` is parity at 144 frames a second, for comparing the game's clocks
