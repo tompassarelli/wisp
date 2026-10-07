@@ -83,6 +83,10 @@ Session runners use the same modules: `startPresencePoll` and `pollPresence`
 
 ## Debugging a desync
 
+Native session runners do the steps below on their own: see the
+[desync autopsy](autopsy.md) (wisp:docs/autopsy.md). Follow them by hand for a
+desync that happened outside a session.
+
 1. `wisp engine desync` on the two clients' Documents folders names the
    section. If `ipse` is the only one, a client made or freed an agent (a
    handle, a timer, a code callback) on a different turn. The signature is

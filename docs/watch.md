@@ -30,6 +30,10 @@ The project composes the command with `makeWatch(clientsFile, { filePrefix })`
 `wisp client` reads; watching needs each client's `documents` and, for menu
 screens, its `menuReportPort`. It doesn't need the client's private desktop.
 
+Without `--once`, `wisp watch` runs inside the [desync autopsy](autopsy.md)
+(wisp:docs/autopsy.md). When the clients report a desync, it prints the first
+divergent birth with its class, turn and client.
+
 ## States
 
 | State | Meaning | Decided by |

@@ -7,6 +7,7 @@ import * as desktop from "../../warcraft/desktop";
 import { type Command, type CommandFailure, UsageFailure } from "../command";
 import { DoctorHands, DoctorStop, type DoctorTarget, doctor } from "../doctor";
 import { privateDoctorHands } from "../doctorHost";
+import { withAutopsy } from "../engine/autopsy";
 import { PlayMachine } from "../play";
 import { type PlayTools, playMachineLayer } from "../playHost";
 import type { ClientWatch } from "../watch";
@@ -54,8 +55,8 @@ export const clientsDoctor = (declaration: DoctorDeclaration, names: readonly st
     return yield* doctor(yield* doctorTargets(declaration, names), print);
   }).pipe(Effect.provide(doctorLayer(declaration, tools)));
 
-/** `doctor [CLIENT...]`, watching the clients through `watch` (`wisp watch`'s ClientWatch layer). */
+/** `doctor [CLIENT...]`, watching the clients through `watch` (`wisp watch`'s ClientWatch layer), inside the desync autopsy (wisp:docs/autopsy.md). */
 export const makeDoctor = (declaration: DoctorDeclaration, watch: Layer.Layer<ClientWatch, CommandFailure>, tools: Partial<PlayTools> = {}): Command => (names) =>
   names.some((name) => name.startsWith("-"))
     ? Effect.fail(new UsageFailure({ problem: "doctor takes client names only" }))
-    : clientsDoctor(declaration, names, (line) => console.log(line), tools).pipe(Effect.provide(watch), Effect.asVoid);
+    : withAutopsy({ clientsFile: declaration.clientsFile, names }, clientsDoctor(declaration, names, (line) => console.log(line), tools)).pipe(Effect.provide(watch), Effect.asVoid);

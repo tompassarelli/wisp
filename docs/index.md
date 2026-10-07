@@ -57,7 +57,10 @@ turn where two clients' `Desync.log` dumps differ, follows every agent born
 and freed in each client's presence table with its class, aligns two clients'
 births, and records the game's stack at each birth. It is for your own
 development clients only. [Why these tools exist](engine.md#why-these-tools-exist):
-on Smashcraft #158 they cut a desync hunt from hours to minutes.
+on Smashcraft #158 they cut a desync hunt from hours to minutes. Session
+runners do it on their own: the [desync autopsy](autopsy.md)
+(wisp:docs/autopsy.md) polls the clients during a session and prints
+"first divergent birth #N Class at turn T on client X" when they desync.
 
 Tuning the feel? [`wisp tune`](tune.md) (wisp:docs/tune.md) serves a panel
 on this computer that changes declared values, such as speeds and knockback,
@@ -99,6 +102,7 @@ warcraft-vscode on the same map is measured in the
 | Drive simulated clients from the game's own input helper, in real time | [Input from another program](headless.md#input-from-another-program) (wisp:scripts/wisp/headlessInput.ts) | Each client's CustomMapData as a real folder in Warcraft's file formats, typed text read from a file the helper appends to, 60 frames a second of wall time with stalls; typing into edit boxes and clicks on frames placed by absolute points. |
 | Check what a player sees: the stage is drawn, no effect is missing its model, lingers, or shows particles while hidden | [Player view checks](player-view.md) (wisp:docs/player-view.md) | Opt-in scene recorder for development builds, game-declared kinds and lifetimes; one off-screen frame per client measured against game-declared pixel features; render visibility from game-read MDX facts (wisp:scripts/wisp/models.ts) and declared cameras and parking places. |
 | Give a project its command-line program | [runCli](../scripts/wisp/cli.ts) (wisp:scripts/wisp/cli.ts) | The project names its commands; a failure prints its message and exits 1, a usage problem exits 2. |
+| Name a native desync's cause without a human step: every native session runner (`wisp doctor`, `wisp watch`, runs wrapped by `withDoctor` with `autopsy`) polls the clients' presence tables, and on a new desync report prints the first divergent birth, its class, turn and client, and saves the evidence | [Desync autopsy](autopsy.md) and [withAutopsy](../scripts/wisp/engine/autopsy.ts) (wisp:docs/autopsy.md, wisp:scripts/wisp/engine/autopsy.ts) | Your own maps and clients only, not cheating ([guardrails](autopsy.md#guardrails)). Clients from the clients file; read-only. Without memory reads (`kernel.yama.ptrace_scope`), one line says so and the autopsy uses the Desync.logs alone. |
 | Find why two clients desynced, inside the engine: the first differing turn and section of their `Desync.log`, every agent born and freed in each client's presence table with its class, the two clients' births aligned, the game's stack at each birth, and the table found again after a Warcraft update | [`wisp engine`](engine.md) and [makeEngine](../scripts/wisp/commands/engine.ts) (wisp:docs/engine.md, wisp:scripts/wisp/engine/) | Development clients from the clients file only, never other players' games ([guardrails](engine.md#guardrails)). Memory reads need `kernel.yama.ptrace_scope=0` (the owner sets it; Wisp prints the commands) or a Wisp launcher as the client's ancestor. `watch` needs `perf` and an offline client. Offsets per build are in wisp:scripts/wisp/engine/offsets.json. |
 | Name the engine subsystem a native desync diverged in | [Desync reports](hot-reload.md#desync-reports) (wisp:scripts/wisp/desyncs.ts) | `hot --watch` compares the Desync.txt each client writes beside its `--data` folder; it does not replace the game's replay or integrity checks. |
 | Generate the package for an immutable pin | [Package instructions](../README.md#consume-a-pinned-revision) (wisp:README.md) | Authored TypeScript, emitted Lua, declarations and this documentation ship together. |

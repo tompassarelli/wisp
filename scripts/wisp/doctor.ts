@@ -17,6 +17,7 @@ import {
 import { type DisplayChange, type DisplaySettings, displayChanges, preferencesPath, withDisplaySettings } from "../warcraft/preferences";
 import { sessionLines, war3LogPath } from "../warcraft/war3Log";
 import type { Client } from "./clients";
+import { type AutopsyOptions, withAutopsy } from "./engine/autopsy";
 import { PlayMachine, type PlayProblem } from "./play";
 import { type ClientView, ClientWatch, type StateKind, waitFor } from "./watch";
 
@@ -483,8 +484,16 @@ export const recoveredAny = (results: readonly DoctorResult[]) => results.some((
  * any failure of a run that can't repeat (a capture into its own folder): its
  * clients are healed for the next run. `check` runs apart from `run`, so a
  * watch it holds (a menu report port) is free again while `run` runs.
+ * With `autopsy`, the whole session runs inside the desync autopsy
+ * (wisp:docs/autopsy.md): the presence poller on the clients file's clients
+ * and an autopsy of every desync they report. Never for the owner's own play.
  */
-export const withDoctor = <A, E, R, E2, R2>(check: Effect.Effect<readonly DoctorResult[], E2, R2>, print: (line: string) => void, run: Effect.Effect<A, E, R>, { retry = true, attempts = 2 }: { readonly retry?: boolean; readonly attempts?: number } = {}) => Effect.gen(function*() {
+export const withDoctor = <A, E, R, E2, R2>(check: Effect.Effect<readonly DoctorResult[], E2, R2>, print: (line: string) => void, run: Effect.Effect<A, E, R>, { retry = true, attempts = 2, autopsy }: { readonly retry?: boolean; readonly attempts?: number; readonly autopsy?: AutopsyOptions } = {}) => {
+  const session = healedRun(check, print, run, retry, attempts);
+  return autopsy === undefined ? session : withAutopsy({ print, ...autopsy }, session);
+};
+
+const healedRun = <A, E, R, E2, R2>(check: Effect.Effect<readonly DoctorResult[], E2, R2>, print: (line: string) => void, run: Effect.Effect<A, E, R>, retry: boolean, attempts: number) => Effect.gen(function*() {
   yield* check;
   for (let attempt = 1; ; attempt++) {
     const result = yield* run.pipe(Effect.result);

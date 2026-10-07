@@ -2,7 +2,7 @@
 // configured Warcraft III client is doing, from the menus' socket, its log,
 // its crash reports, the map's match receipts and its processes; never from
 // its screen (wisp:docs/watch.md).
-//   (default)      one line per change, until interrupted
+//   (default)      one line per change, until interrupted, with the desync autopsy (wisp:docs/autopsy.md)
 //   --once         each client's current state, then exit
 //   --json         the same events as JSON lines
 //   --record FILE  also append every menu socket message to FILE (JSON lines), for test fixtures
@@ -10,6 +10,7 @@ import { appendFileSync } from "node:fs";
 import { Console, Effect, Schema } from "effect";
 import type { Client } from "../clients";
 import { type Command, UsageFailure, flagValues } from "../command";
+import { withAutopsy } from "../engine/autopsy";
 import { ClientWatch, type ClientView, type WatchOptions, WatchFailure, changes, describeView, eventLine } from "../watch";
 
 const ClientsFile = Schema.Struct({
@@ -60,13 +61,16 @@ export const makeWatch = (clientsFile: string, options: Pick<WatchOptions, "file
       return;
     }
     const last = new Map<string, ClientView>();
-    while (true) {
-      for (const client of clients) {
-        const view = yield* watcher.view(client);
-        for (const event of changes(last.get(client.name), view)) yield* Console.log(json ? JSON.stringify(event) : eventLine(event));
-        last.set(client.name, view);
+    const print = (line: string) => console.log(json ? JSON.stringify({ autopsy: line }) : line);
+    return yield* withAutopsy({ clientsFile, names, print }, Effect.gen(function*() {
+      while (true) {
+        for (const client of clients) {
+          const view = yield* watcher.view(client);
+          for (const event of changes(last.get(client.name), view)) yield* Console.log(json ? JSON.stringify(event) : eventLine(event));
+          last.set(client.name, view);
+        }
+        yield* Effect.sleep("250 millis");
       }
-      yield* Effect.sleep("250 millis");
-    }
+    }));
   }).pipe(Effect.provide(watch));
 });
