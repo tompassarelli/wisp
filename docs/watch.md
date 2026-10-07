@@ -145,6 +145,11 @@ Record setup failure as INVALID, retaining that first boundary instead of
 comparing absent gameplay. Journal chat leaves a match paused: a command that
 continues the same match must explicitly resume and observe its control receipt.
 
+A batch key action may set `settleMillis: 0` when submitting a command whose
+receipt is observed separately. This keeps Return's hold and release but skips
+the usual 660 ms wait, so an already-started match cannot pass its first scripted
+input while the host waits after submission.
+
 ## Limits
 
 - Menu screens other than `GAME_LOBBY` and `LOADING_SCREEN` (which Wisp's

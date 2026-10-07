@@ -1,6 +1,6 @@
 /** Inputs between two observed screen boundaries. Waits are calibrated by the consuming journey. */
 export type InputAction =
-  | { readonly kind: "keys"; readonly keys: readonly string[]; readonly delayMillis?: number }
+  | { readonly kind: "keys"; readonly keys: readonly string[]; readonly delayMillis?: number; readonly settleMillis?: number }
   | { readonly kind: "text"; readonly text: string; readonly delayMillis?: number }
   | { readonly kind: "click"; readonly x: number; readonly y: number; readonly settleMillis?: number; readonly holdMillis?: number }
   | { readonly kind: "wait"; readonly millis: number };
@@ -34,7 +34,7 @@ export function inputBatches(actions: readonly InputAction[], pointer: PointerPo
             wait(300);
             current.push("keyup", "--clearmodifiers", key);
             // Chat accepts text after its opening transition, beyond key release.
-            wait(660);
+            wait(action.settleMillis ?? 660);
           } else current.push("key", "--clearmodifiers", "--delay", String(action.delayMillis ?? 12), key);
         }
         break;

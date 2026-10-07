@@ -1,6 +1,13 @@
 import { expect, test } from "bun:test";
 import { inputBatches } from "../scripts/warcraft/inputBatch";
 
+test("observed command submission can return after key release before the first scripted frame", () => {
+  expect(inputBatches([{ kind: "keys", keys: ["Return"], settleMillis: 0 }], { x: 0, y: 0 })).toEqual([
+    { args: ["keydown", "--clearmodifiers", "Return", "sleep", "0.3", "keyup", "--clearmodifiers", "Return"] },
+  ]);
+  expect(inputBatches([{ kind: "keys", keys: ["Return"] }], { x: 0, y: 0 })[0]?.args.slice(-2)).toEqual(["sleep", "0.66"]);
+});
+
 test("batched input keeps text literal and moves relative to the preceding click", () => {
   const plan = inputBatches([
     { kind: "click", x: 400, y: 300 },
