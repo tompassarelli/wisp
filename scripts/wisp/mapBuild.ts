@@ -200,11 +200,10 @@ const baseMapFiles = (packager: string, base: string, generated: ReadonlySet<str
   const listPath = join(work, "base-listfile");
   yield* mapPack(packager).extract(base, listPath, "(listfile)");
   const list = yield* tryMapPromise("read base map file list", base, () => Bun.file(listPath).text());
-  const entries = list.split(/\r?\n/).filter((entry) => entry.length > 0 && !generated.has(entry));
-  return yield* Effect.forEach(entries, (entry, index) => {
-    const source = join(work, `base-${index}`);
-    return mapPack(packager).extract(base, source, entry).pipe(Effect.as({ entry, source } satisfies ArchiveEntry));
-  }, { concurrency: 4 });
+  const entries = list.split(/\r?\n/).filter((entry) => entry.length > 0 && !generated.has(entry))
+    .map((entry, index): ArchiveEntry => ({ entry, source: join(work, `base-${index}`) }));
+  yield* mapPack(packager).extractAll(base, entries, join(work, "base-entries"));
+  return entries;
 });
 
 /**
@@ -278,7 +277,7 @@ const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compil
 
   yield* stageMap(options.container ?? options.base, out, (staged) => Effect.gen(function*() {
     yield* Effect.gen(function*() {
-      yield* packageEntries(({ entry, source }) => pack.replace(staged, source, entry), assets, files);
+      yield* packageEntries((entries) => pack.replaceAll(staged, entries, join(work, "package-entries")), assets, files);
       yield* writeHeader(staged, generated.header);
     }).pipe(step("package"));
     yield* Effect.gen(function*() {
@@ -375,9 +374,28 @@ export const runProcess = (operation: string, path: string, command: readonly st
       : Effect.fail(new MapBuildFailure({ operation, path, cause: `${command[0]} exited with ${exitCode}: ${stderr.trim()}` })),
   ));
 
-/** The supplied map packager: extracts or replaces one archive entry, war3map.lua by default. */
+/** One FILE<TAB>ARCHIVE_NAME line per entry, the packager's list format. */
+const entryList = (entries: readonly ArchiveEntry[]) => entries.map(({ entry, source }) => {
+  if (/[\t\r\n]/.test(entry + source)) throw new Error(`${entry} or its file ${source} holds a tab or line break`);
+  return `${source}\t${entry}\n`;
+}).join("");
+
+const writeEntryList = (path: string, entries: readonly ArchiveEntry[]) =>
+  tryMapSync("write entry list", path, () => writeFileSync(path, entryList(entries)));
+
+/**
+ * The supplied map packager: extracts or replaces one archive entry,
+ * war3map.lua by default, or every entry of a list in one archive opening.
+ * Each entry is stored zlib-compressed, byte for byte: nothing is re-encoded.
+ */
 function mapPack(packager: string) {
   return {
+    /** Later entries win, as separate replaces would. */
+    replaceAll: (archive: string, entries: readonly ArchiveEntry[], list: string) =>
+      writeEntryList(list, entries).pipe(Effect.andThen(runProcess(`replace ${entries.length} entries`, archive, [packager, "replace-list", archive, list]))),
+    /** Writes each entry to its `source`. */
+    extractAll: (archive: string, entries: readonly ArchiveEntry[], list: string) =>
+      writeEntryList(list, entries).pipe(Effect.andThen(runProcess(`extract ${entries.length} entries`, archive, [packager, "extract-list", archive, list]))),
     extract: (archive: string, file: string, entry = "war3map.lua") =>
       runProcess(`extract ${entry}`, archive, [packager, "extract", archive, file, entry]),
     replace: (archive: string, file: string, entry = "war3map.lua") =>
@@ -419,23 +437,22 @@ export interface ArchiveEntry {
 
 /** Add base assets and declared imports before generated files, so generated entries win collisions. */
 export const packageEntries = (
-  replace: (entry: ArchiveEntry) => Effect.Effect<void, BuildFailure>,
+  replaceAll: (entries: readonly ArchiveEntry[]) => Effect.Effect<void, BuildFailure>,
   assets: readonly ArchiveEntry[],
   files: readonly ArchiveEntry[],
-) => Effect.gen(function*() {
-  for (const entry of assets) yield* replace(entry);
-  for (const entry of files) yield* replace(entry);
-});
+) => replaceAll([...assets, ...files]);
 
-/** Extracts every entry, four at a time, and compares it with its source file. */
-const verifyArchive = (packager: string, archive: string, entries: readonly ArchiveEntry[], scratch: string) =>
-  Effect.forEach(entries, ({ entry, source }, index) => Effect.gen(function*() {
+/** Extracts every entry in one archive opening, then compares each with its source file, four at a time. */
+const verifyArchive = (packager: string, archive: string, entries: readonly ArchiveEntry[], scratch: string) => Effect.gen(function*() {
+  const extracted = entries.map(({ entry }, index): ArchiveEntry => ({ entry, source: join(scratch, `verify-${index}`) }));
+  yield* mapPack(packager).extractAll(archive, extracted, join(scratch, "verify-entries"));
+  yield* Effect.forEach(entries, ({ entry, source }, index) => Effect.gen(function*() {
     const extracted = join(scratch, `verify-${index}`);
-    yield* mapPack(packager).extract(archive, extracted, entry);
     const [actual, expected] = yield* tryMapPromise("compare archive entry", entry, () =>
       Promise.all([Bun.file(extracted).bytes(), Bun.file(source).bytes()]));
     if (Buffer.compare(actual, expected) !== 0) return yield* new MapBuildFailure({ operation: "compare archive entry", path: entry, cause: `differs from ${source}` });
   }), { concurrency: 4, discard: true });
+});
 
 const decode = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, path: string, value: unknown) =>
   Schema.decodeUnknownEffect(schema)(value).pipe(Effect.mapError((cause) => new MapBuildFailure({ operation: "decode", path, cause })));

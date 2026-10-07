@@ -26,10 +26,12 @@ test("a declared import absent from the container is packaged and generated file
     { entry: "war3mapImported\\Card.tga", source: "private/card.tga" },
   ];
   const files = [{ entry: "war3mapImported\\Card.tga", source: "generated/card.tga" }];
-  await Effect.runPromise(packageEntries((item) => Effect.sync(() => {
-    const contents = sources.get(item.source);
-    if (contents === undefined) throw new Error(`missing source ${item.source}`);
-    archive.set(item.entry, contents);
+  await Effect.runPromise(packageEntries((entries) => Effect.sync(() => {
+    for (const item of entries) {
+      const contents = sources.get(item.source);
+      if (contents === undefined) throw new Error(`missing source ${item.source}`);
+      archive.set(item.entry, contents);
+    }
   }), assets, files));
   expect(archive.get("war3mapImported\\Nordrassil.tga")).toBe("declared import");
   expect(archive.get("war3mapImported\\Card.tga")).toBe("generated art");
