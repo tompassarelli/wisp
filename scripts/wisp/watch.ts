@@ -345,13 +345,28 @@ const LanStatus = Schema.Struct({
   game: Schema.optional(Schema.Struct({ map: Schema.String, phase: Schema.String, players: Schema.Array(Schema.Struct({ label: Schema.String, connected: Schema.Boolean, loaded: Schema.Boolean, left: Schema.Boolean })) })),
 });
 
+/**
+ * The pair agent's status. A loaded machine (many pairs, high CPU pressure)
+ * can delay the agent's answer past a second; a missing answer reads as "not
+ * playing" and refuses chat, so each try waits 3 s and a failed try is retried once.
+ */
+const pairStatus = async (socket: string): Promise<unknown> => {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const response = await fetch("http://pair/status", { unix: socket, signal: AbortSignal.timeout(3000) });
+      return await response.json();
+    } catch (cause) {
+      if (attempt >= 2) throw cause;
+    }
+  }
+};
+
 /** The host socket is outside the pool's isolated network; its menus' TCP sockets are inside. */
 const lanObservation = (documents: string) => Effect.tryPromise({
   try: async () => {
     const pair = readPool()?.pairs.find((pair) => pairClients(pair.id, pair.runs).some((client) => client.documents === documents));
     if (pair === undefined) return undefined;
-    const response = await fetch("http://pair/status", { unix: pair.agentSocket, signal: AbortSignal.timeout(500) });
-    const status = Schema.decodeUnknownSync(LanStatus)(await response.json());
+    const status = Schema.decodeUnknownSync(LanStatus)(await pairStatus(pair.agentSocket));
     const client = status.clients.find((client) => client.documents === documents);
     const player = status.game?.players.find((player) => player.label === client?.name);
     return client?.pid === undefined || status.game === undefined || player === undefined ? undefined
