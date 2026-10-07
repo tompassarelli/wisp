@@ -8,7 +8,8 @@ replace the owner's play declaration. Consumer-owned versioned map libraries
 can set `GameFiles.layer({ ..., preserveMaps: true })` and install diagnostics
 in a `tests/` subfolder; menu hosting accepts nested map folders.
 It reports each step on one line and stops at the first problem with a plain
-message that says what to do. It takes no arguments.
+message that says what to do. Native play takes no arguments. Games may also
+declare [standalone play](#standalone-window).
 
 ```text
 1/7 Wine prefix: free
@@ -176,3 +177,58 @@ The fakes in wisp:test/play.test.ts cover each step's success and failure
 messages with the recorded window, log and process shapes. Hosting goes through a
 fake menu page there; the real page's answers are covered by
 wisp:test/menus.test.ts and native runs.
+
+## Standalone window
+
+A game can route `wisp play --standalone` to `runStandalone` from
+`wisp/scripts/wisp/standalone`. It opens Chrome in a separate window and runs
+the map's headless callbacks once per frame, paced at 60 steps per second.
+Models, textures, camera and UI use the same renderer as headless captures.
+The asset reader supplies private map imports and installed Warcraft assets;
+sound labels resolve through the installed sound tables. Assets remain
+outside Wisp. Closing the window closes the game session.
+
+```ts
+import { runStandalone, type StandaloneGame } from "wisp/scripts/wisp/standalone";
+
+const game: StandaloneGame = {
+  title: "My game",
+  render: { readAsset, unitModels, width: 1280, height: 720 },
+  create: async (options) => ({
+    client,
+    step: (input) => advanceMap(input),
+    checksum: () => currentChecksum(),
+    frame: () => currentSimulationFrame(),
+    finished: () => matchFinished(),
+    close: () => restoreHeadless(),
+  }),
+};
+// The consumer's play command returns this Effect when --standalone is set.
+runStandalone(game);
+```
+
+`create` receives optional `{ script }`, containing the text read from
+`--script FILE`. Each `step` receives `{ buttons, axisX, axisY }`;
+axes run from -1 to 1, with positive Y pointing up. Button names are `left`,
+`right`, `up`, `down`, `attack`, `special`, `jump`, `grab`, `shield`, `walk`,
+`start` and `view`. The game maps these names to its own actions.
+
+Keyboard controls: arrows or WASD move, J attacks, K uses special, Space
+jumps, L grabs, Shift shields, Ctrl walks, Enter starts or pauses and V
+selects view. A standard gamepad uses its left stick and directional pad,
+A attack, X special, B/Y jump, left shoulder walk, right shoulder grab,
+triggers shield and the menu buttons. Input is cleared when the window loses
+focus; browser input stays in the window.
+
+For a recorded run, games can expose:
+
+```bash
+bun wisp play --standalone --script test/journey.pad --headless --frames 1070 --out build/standalone --capture-frames 200,600,1000
+```
+
+The generic options are `script` (file path), `frames` (step count), `out`
+(folder), `headless` (hidden Chrome) and `captureFrames` (simulation frame
+numbers). The output contains `checksums.jsonl`, `standalone.json` with
+frame timing, graphics adapter, audio event/ready/playback counts and missing
+sounds, and a scene JSON and PNG for each chosen frame. Without `frames`,
+the window stays open after the match so the game's own menus can continue.

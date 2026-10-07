@@ -170,7 +170,7 @@ async function uiTexture(path: string, color: number): Promise<HTMLCanvasElement
 }
 
 declare global {
-  interface Window { prepareRenderer: (width: number, height: number) => string; renderScene: (scene: RenderScene) => Promise<{ png: string; models: number; textures: number }> }
+  interface Window { prepareRenderer: (width: number, height: number) => string; renderScene: (scene: RenderScene, options?: { capture?: boolean }) => Promise<{ png: string; models: number; textures: number }> }
 }
 window.prepareRenderer = (width, height) => {
   canvas.width = output.width = width; canvas.height = output.height = height;
@@ -181,7 +181,7 @@ window.prepareRenderer = (width, height) => {
   const debug = gl.getExtension("WEBGL_debug_renderer_info");
   return debug === null ? String(gl.getParameter(gl.RENDERER)) : String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL));
 };
-window.renderScene = async (scene) => {
+window.renderScene = async (scene, options) => {
   gl.viewport(0, 0, canvas.width, canvas.height); gl.depthMask(true); gl.clearColor(0.04, 0.06, 0.09, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
   const view = camera(scene, canvas.width / canvas.height);
   const visible = scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat);
@@ -200,5 +200,5 @@ window.renderScene = async (scene) => {
     }
   }
   context.globalAlpha = 1;
-  return { png: output.toDataURL("image/png"), models: visible.length, textures: textures.size };
+  return { png: options?.capture === false ? "" : output.toDataURL("image/png"), models: visible.length, textures: textures.size };
 };

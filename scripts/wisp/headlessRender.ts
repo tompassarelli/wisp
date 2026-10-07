@@ -27,6 +27,17 @@ export const captureScene = (client: HeadlessClient): RenderScene => ({
   frame: client.frame, client: client.slot, effects: client.effectPoses(), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot(),
 });
 
+/** Both the still renderer and the player draw unit objects with the same model poses. */
+export function sceneWithUnits(project: HeadlessRenderProject, scene: RenderScene): RenderScene {
+  const units: EffectPose[] = scene.units.filter((unit) => unit.visible && unit.alpha > 0).map((unit) => {
+    const model = project.unitModels?.[unit.typeId];
+    if (model === undefined) throw new Error(`no render.unitModels entry for visible unit type ${unit.typeId}`);
+    return { handle: unit.handle, model, created: 0, x: unit.x, y: unit.y, z: unit.z, alpha: unit.alpha, scale: 1, timeScale: unit.timeScale,
+      animation: unit.animation, subAnimations: [], animationElapsed: unit.animationElapsed, yaw: unit.facing * Math.PI / 180, pitch: 0, roll: 0, color: unit.color, teamColor: unit.teamColor, matrixScale: unit.scale, flat: unit.scale.some((value) => value === 0) };
+  });
+  return { ...scene, effects: [...scene.effects, ...units] };
+}
+
 export class RenderFailure extends Schema.TaggedError<RenderFailure>()("RenderFailure", {
   cause: Schema.Unknown,
 }) {
@@ -127,13 +138,7 @@ export const renderScenes = (project: HeadlessRenderProject, scenes: readonly Re
     await mkdir(directory, { recursive: true });
     const images: { frame: number; client: number; image: string; models: number; textures: number }[] = [];
     for (const scene of scenes) {
-      const unitEffects: EffectPose[] = scene.units.filter((unit) => unit.visible && unit.alpha > 0).map((unit) => {
-        const model = project.unitModels?.[unit.typeId];
-        if (model === undefined) throw new Error(`no render.unitModels entry for visible unit type ${unit.typeId}`);
-        return { handle: unit.handle, model, created: 0, x: unit.x, y: unit.y, z: unit.z, alpha: unit.alpha, scale: 1, timeScale: unit.timeScale,
-          animation: unit.animation, subAnimations: [], animationElapsed: unit.animationElapsed, yaw: unit.facing * Math.PI / 180, pitch: 0, roll: 0, color: unit.color, teamColor: unit.teamColor, matrixScale: unit.scale, flat: unit.scale.some((value) => value === 0) };
-      });
-      const result = await browser.devtools.evaluate(`window.renderScene(${JSON.stringify({ ...scene, effects: [...scene.effects, ...unitEffects] })})`) as { png: string; models: number; textures: number };
+      const result = await browser.devtools.evaluate(`window.renderScene(${JSON.stringify(sceneWithUnits(project, scene))})`) as { png: string; models: number; textures: number };
       const image = `p${scene.client}-frame-${scene.frame}.png`;
       await Bun.write(join(directory, image), Buffer.from(result.png.split(",")[1] ?? "", "base64"));
       await Bun.write(join(directory, `p${scene.client}-frame-${scene.frame}.json`), JSON.stringify(scene));
