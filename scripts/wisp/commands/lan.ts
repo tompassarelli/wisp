@@ -82,8 +82,15 @@ const GREEDY_FLOOR_MIB = 12 * 1024;
  * helper's slice, with the same kind of ceilings, so the desktop launcher
  * recognizes it and the helper's accounting still sees it.
  */
-const greedyScope = (pair: number) => [
-  "systemd-run", "--user", "--scope", "--quiet", "--collect", `--unit=agent-capacity-${crypto.randomUUID().replaceAll("-", "")}.scope`, "--slice=agent-capacity.slice",
+/** The greedy scopes started: a scope outlives the systemd-run that made it, so stopping the pool stops each by name. */
+const greedyUnits: string[] = [];
+const greedyScope = (pair: number) => {
+  const unit = `agent-capacity-${crypto.randomUUID().replaceAll("-", "")}.scope`;
+  greedyUnits.push(unit);
+  return greedyArgs(pair, unit);
+};
+const greedyArgs = (pair: number, unit: string) => [
+  "systemd-run", "--user", "--scope", "--quiet", "--collect", `--unit=${unit}`, "--slice=agent-capacity.slice",
   "--property=CPUQuota=300%", "--property=MemoryHigh=6G", `--description=wisp lan pair ${pair} (greedy)`, "--",
 ];
 
@@ -134,6 +141,7 @@ const pool: Command = (args) => Effect.gen(function*() {
   const children: Bun.Subprocess[] = [];
   const stop = () => {
     for (const child of children) child.kill("SIGTERM");
+    for (const unit of greedyUnits) Bun.spawnSync(["systemctl", "--user", "stop", unit], { stdout: "ignore", stderr: "ignore" });
   };
   process.once("SIGINT", () => {
     stop();
