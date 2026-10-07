@@ -2,8 +2,10 @@
 import "./headlessRender";
 import type { SoundCue } from "../../../src/headless/client";
 import type { StandaloneFrame, StandaloneInput } from "../standalone";
+import type { RenderScene } from "../headlessRender";
 
 const held = new Set<string>();
+let gamepadIndex: number | undefined;
 const keys: Readonly<Record<string, string>> = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down", KeyA: "left", KeyD: "right", KeyW: "up", KeyS: "down", KeyJ: "attack", KeyK: "special", Space: "jump", KeyL: "grab", ShiftLeft: "shield", ShiftRight: "shield", ControlLeft: "walk", Enter: "start", KeyV: "view" };
 window.addEventListener("keydown", (event) => { const action = keys[event.code]; if (action !== undefined) { event.preventDefault(); held.add(action); } });
 window.addEventListener("keyup", (event) => { const action = keys[event.code]; if (action !== undefined) { event.preventDefault(); held.delete(action); } });
@@ -11,7 +13,8 @@ window.addEventListener("blur", () => held.clear());
 const status = document.createElement("div"); status.id = "status"; document.body.append(status);
 function input(): StandaloneInput {
   const buttons = new Set(held);
-  const pad = navigator.getGamepads().find((candidate) => candidate !== null && candidate.connected);
+  const pads = navigator.getGamepads();
+  const pad = gamepadIndex === undefined ? pads.find((candidate) => candidate !== null && candidate.connected) : pads[gamepadIndex];
   let axisX = 0, axisY = 0;
   if (pad !== undefined && pad !== null && document.hasFocus()) {
     const mapping = ["attack", "jump", "special", "jump", "walk", "grab", "shield", "shield", "view", "start", "", "", "up", "down", "left", "right"];
@@ -58,8 +61,15 @@ async function post(path: string, body: unknown): Promise<Response> {
   return response;
 }
 async function run(): Promise<void> {
-  const config = await fetch("/config").then((response) => response.json()) as { width: number; height: number; scripted: boolean; samples: boolean };
+  status.textContent = "Loading game…";
+  const startup = performance.now();
+  const config = await fetch("/config").then((response) => response.json()) as { width: number; height: number; scripted: boolean; samples: boolean; gamepadIndex?: number };
+  gamepadIndex = config.gamepadIndex;
   const gpu = window.prepareRenderer(config.width, config.height);
+  const preparation = await fetch("/prepare").then((response) => response.json()) as { scene: RenderScene; models: readonly string[]; step: number };
+  const prepared = await window.prepareScene(preparation.scene, preparation.models, (completed, total) => { status.textContent = `Loading game… ${Math.floor(completed * 100 / Math.max(1, total))}%`; });
+  const startupMs = performance.now() - startup;
+  status.textContent = "Ready to play";
   const start = performance.now();
   let nextFrame = start;
   while (true) {
@@ -80,7 +90,7 @@ async function run(): Promise<void> {
     milliseconds.push(performance.now() - began);
     if (frame.done) {
       await Promise.all(pendingAudio);
-      await post("/complete", { gpu, frames: milliseconds.length, elapsedMs: performance.now() - start, frameMs: { p50: percentile(milliseconds, 0.5), p95: percentile(milliseconds, 0.95), p99: percentile(milliseconds, 0.99) }, intervalMs: { p50: percentile(intervals, 0.5), p95: percentile(intervals, 0.95) }, ...(config.samples ? { frameSamplesMs: milliseconds, intervalSamplesMs: intervals } : {}), audioEvents, audioReadyEvents, audioPlayed, missingSounds: [...missing] });
+      await post("/complete", { gpu, startupMs, prepared: { ...prepared, step: preparation.step }, frames: milliseconds.length, elapsedMs: performance.now() - start, frameMs: { p50: percentile(milliseconds, 0.5), p95: percentile(milliseconds, 0.95), p99: percentile(milliseconds, 0.99) }, intervalMs: { p50: percentile(intervals, 0.5), p95: percentile(intervals, 0.95) }, ...(config.samples ? { frameSamplesMs: milliseconds, intervalSamplesMs: intervals } : {}), audioEvents, audioReadyEvents, audioPlayed, missingSounds: [...missing] });
       return;
     }
   }

@@ -187,6 +187,11 @@ Models, textures, camera and UI use the same renderer as headless captures.
 The asset reader supplies private map imports and installed Warcraft assets.
 Live frames snapshot only visible UI, including each frame's parent visibility;
 requested captures retain the full scene snapshot.
+The window loads the session's known models and textures before its first input
+step. Model initialization leaves animation clocks and particles unchanged;
+`render.preloadModels` lists any additional models the map creates later.
+`standalone.json` records startup time and the prepared asset counts separately
+from the match's frame timing.
 Sound labels resolve through the installed sound tables. Assets remain
 outside Wisp. Closing the window closes the game session.
 
@@ -221,6 +226,8 @@ selects view. A standard gamepad uses its left stick and directional pad,
 A attack, X special, B/Y jump, left shoulder walk, right shoulder grab,
 triggers shield and the menu buttons. Input is cleared when the window loses
 focus; browser input stays in the window.
+`gamepadIndex` optionally selects one browser gamepad index; the default uses
+the first connected pad.
 
 For a recorded run, games can expose:
 
