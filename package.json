@@ -23,6 +23,7 @@
     "typescript": "6.0.2",
     "typescript-native": "npm:typescript@7.0.2",
     "typescript-to-lua": "1.37.1",
+    "w3gjs": "4.3.0",
     "war3-model": "4.0.1"
   }
 }
