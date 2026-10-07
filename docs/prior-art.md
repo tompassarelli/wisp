@@ -104,10 +104,15 @@ No code was copied, adapted or vendored during this research.
 
 ## Delivery to issues
 
-GitHub writes and pushes are returning HTTP 500 during this session. The parent
-holds one publishing queue at `~/.local/state/wisp/prior-art-r4-20261007/queue.json`:
-the research issue, comments for #38/#39/#40/#41, the dummy-client issue and
-retail-replay import issue. Each useful verdict above names its destination.
-The #41 comment adds evidence to its existing drafts rather than duplicating
-native-coverage, unit-state or object-authoring issues. Publish and add the
-resulting links here when writes recover; no repeated mutation polling.
+GitHub writes recovered during research. The shortcuts were published and read
+back: [native driver #38](https://github.com/tompassarelli/wisp/issues/38#issuecomment-6041036681),
+[fast-forward #39](https://github.com/tompassarelli/wisp/issues/39#issuecomment-6041037623),
+[headless frames #40](https://github.com/tompassarelli/wisp/issues/40#issuecomment-6041038476)
+and [additional simulation evidence #41](https://github.com/tompassarelli/wisp/issues/41#issuecomment-6041039368).
+The latter strengthens [native coverage #43](https://github.com/tompassarelli/wisp/issues/43),
+[unit states #44](https://github.com/tompassarelli/wisp/issues/44) and
+[object authoring #45](https://github.com/tompassarelli/wisp/issues/45).
+The new measured work is [dummy lobby clients #46](https://github.com/tompassarelli/wisp/issues/46)
+and [retail replay import #47](https://github.com/tompassarelli/wisp/issues/47).
+Each useful verdict above names one of these destinations. The owning research
+issue is [#42](https://github.com/tompassarelli/wisp/issues/42).
