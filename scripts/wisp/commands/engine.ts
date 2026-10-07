@@ -30,6 +30,7 @@ import { stopWatch } from "../engine/stopWatch";
 import { type Frame, parsePerfData, sampleFrames } from "../engine/perfData";
 import { toTypeScript } from "../../sourceMaps";
 import { watchedClients } from "../clientWatchCommand";
+import { publishDriverCommand, readDriverStatus, verifyDriverClients, waitDriverCommand } from "../engine/drive";
 
 export class EngineFailure extends Schema.TaggedError<EngineFailure>()("EngineFailure", {
   problem: Schema.String,
@@ -48,7 +49,10 @@ const namedClients = (clientsFile: string, args: readonly string[]) => Effect.ge
   const all: readonly Client[] = yield* watchedClients(clientsFile).pipe(Effect.mapError((failure) => new EngineFailure({ problem: failure.message })));
   const unknown = names.filter((name) => !all.some((client) => client.name === name));
   if (unknown.length > 0) return yield* new UsageFailure({ problem: `unknown client ${unknown.join(", ")}; known: ${all.map(({ name }) => name).join(", ")}` });
-  return names.map((name) => ({ name, prefix: prefixOfDocuments(all.find((client) => client.name === name)?.documents ?? "") }));
+  return names.map((name) => {
+    const documents = all.find((client) => client.name === name)?.documents ?? "";
+    return { name, prefix: prefixOfDocuments(documents), documents };
+  });
 });
 
 const attachAll = (clients: readonly EngineClient[], access: EngineAccess) => Effect.forEach(clients, (client) =>
@@ -342,8 +346,37 @@ const locate = (clientsFile: string): Command => (args) => Effect.gen(function*(
 
 const USAGE = "(for debugging your own map on your own development clients; never other players' games) desync A B [--turn N] | poll --client a,b [--seconds N] [--out DIR] | diff A.log B.log [--skew S] [--source-maps DIR] | diff ACTIONS.log POLL.log [--class REGEX] | actions --client a,b [--map MAP] [--follow] | trace --client a [--seconds N] [--out DIR] [--perf BIN] [--lua [--limit N] [--source-maps DIR]] | locate --client a [--trace SECONDS]";
 
+const drive = (clientsFile: string, prefix: string): Command => args => Effect.gen(function*() {
+  const clients = yield* namedClients(clientsFile, args);
+  const words = positionals(args, ["client", "frames", "timeout", "out"]);
+  const [action, ...rest] = words;
+  const statuses = yield* Effect.tryPromise({
+    try: async () => {
+      if (action === "status") {
+        verifyDriverClients(clients);
+        return clients.map(client => readDriverStatus(client, prefix));
+      }
+      if (action === undefined) throw new Error("drive takes SCRIPT, status, pause, resume [FRAME], or step N");
+      const command = ["pause", "resume", "step", "reset", "capture"].includes(action) ? words.join(" ")
+        : rest.length === 0 ? readFileSync(action, "utf8") : (() => { throw new Error("drive takes one script file"); })();
+      const [frames] = flagValues(args, "frames");
+      const [timeout = "30"] = flagValues(args, "timeout");
+      const frame = frames === undefined ? undefined : Number(frames);
+      if (frame !== undefined && (!Number.isInteger(frame) || frame < 0)) throw new Error("--frames takes a nonnegative integer");
+      if (!Number.isFinite(Number(timeout)) || Number(timeout) <= 0) throw new Error("--timeout takes positive seconds");
+      const serial = publishDriverCommand(clients, prefix, command);
+      return waitDriverCommand(clients, prefix, serial, Number(timeout) * 1000, frame);
+    },
+    catch: cause => new EngineFailure({ problem: describeCause(cause) }),
+  });
+  const text = JSON.stringify({ transport: "file", clients: statuses });
+  const [out] = flagValues(args, "out");
+  if (out !== undefined) yield* attempt(`write ${out}`, () => writeFileSync(out, `${text}\n`));
+  yield* Console.log(text);
+});
+
 /** `clientsFile` is the clients file `wisp client watch` reads: each client's name and Documents folder, inside its Wine prefix. */
-export const makeEngine = (clientsFile: string): Command => ([sub, ...args]) => {
+export const makeEngine = (clientsFile: string, filePrefix = "wisp"): Command => ([sub, ...args]) => {
   switch (sub) {
     case "desync": return desync(args);
     case "diff": return diff(args);
@@ -351,6 +384,7 @@ export const makeEngine = (clientsFile: string): Command => ([sub, ...args]) => 
     case "poll": return poll(clientsFile)(args);
     case "trace": return watch(clientsFile)(args);
     case "locate": return locate(clientsFile)(args);
+    case "drive": return drive(clientsFile, filePrefix)(args);
     default: return Effect.fail(new UsageFailure({ problem: `engine takes ${USAGE}` }));
   }
 };

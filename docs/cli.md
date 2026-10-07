@@ -68,7 +68,7 @@ program can register it; "game" means the consuming game defines it.
 | `menus` | Warcraft III's menus through Wisp's menu page | `install`, `remove`, `listen`, `host`, `join`, `start`, `leave` | Wisp |
 | `online` | Direct play over Battle.net by join code | `setup`, `host`, `join` | game |
 | `lan` | The offline LAN client pool | `setup`, `pool`, `fresh`, `status`, `end` | Wisp |
-| `engine` | Warcraft III's engine inside a client, for desyncs | `desync`, `poll`, `diff`, `trace`, `locate`, `actions` | Wisp |
+| `engine` | Warcraft III's engine inside a client, for desyncs and offline scripted runs | `desync`, `poll`, `diff`, `trace`, `locate`, `actions`, `drive` | Wisp |
 | `headless` | A journey in simulated clients | (journey name) | Wisp |
 | `soak` | Many headless matches by computers and a fuzzed controller | (session) | Wisp |
 | `perf` | Predicted frame cost | (run name), `compare`, `native`, `fit`, `budget`, `profile`, `census` | Wisp |
@@ -238,6 +238,7 @@ Every command and verb in Wisp's sample program and Smashcraft's `bun wisp`, gro
 | `inputs add FAMILY PATH`, `inputs check`, `inputs path` | Registers and resolves private build inputs |
 | `lan setup`, `lan fresh`, `lan status`, `lan end` | Creates, starts, reads and ends offline matches |
 | `engine actions` | Reads the LAN host turn log |
+| `engine drive SCRIPT --client a,b` | Delivers a numbered command file through the opted-in map's synchronized driver; `pause`, `step N`, `resume FRAME`, and `status` use the same entry |
 | `perf budget`, `perf profile`, `perf census` | Checks frame budgets and reports costly functions |
 | `soak memory` | Measures retained match state after warm-up |
 | `farm perf`, `farm memory` | Runs frame measurements and memory soak on hosted runners |

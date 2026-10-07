@@ -1,9 +1,9 @@
 # Engine debugging
 
-`wisp engine` is a read-only debugger into Warcraft III's engine for network
+`wisp engine` includes a read-only debugger into Warcraft III's engine for network
 desyncs. It compares the state dumps clients write on a desync, follows each
 client's Tempest presence table as agents are born and freed, and records the
-game's own call stack at every birth.
+game’s own call stack at every birth.
 
 ## Why these tools exist
 
@@ -68,6 +68,12 @@ usual default. It uses `perf` from PATH, `--perf BIN`, or `nix build nixpkgs#per
 
 ## Commands
 
+`wisp engine drive` also writes command files for an opted-in diagnostic map.
+These files cause in-map actions, so the driver requires the same verified
+offline clients as traps. It writes no process memory and sends no OS keys or
+chat. Ordinary maps, missing clients, mismatched payloads and reused command
+numbers are refused.
+
 A project composes the command with `makeEngine(clientsFile)`
 (wisp:scripts/wisp/commands/engine.ts), passing the same clients file that
 `wisp client watch` reads. Smashcraft runs it as `bun wisp engine ...`.
@@ -88,6 +94,47 @@ Session runners use the same modules: `startPresencePoll` and `pollPresence`
 (wisp:scripts/wisp/engine/poll.ts), `compareDesyncLogs` and `compareDumps`
 (wisp:scripts/wisp/engine/desyncLog.ts), and `parsePresenceLog` and
 `diffPresenceLogs` (wisp:scripts/wisp/engine/presenceLog.ts).
+
+## Native driver
+
+Compose `makeEngine(clientsFile, filePrefix)` using the map's runtime file
+prefix. The diagnostic entry calls `installNativeDriver(handler)` on each
+install and `startNativeDriver(players)` once at synchronized startup. Its
+existing callback calls `serviceNativeDriver()` even while simulation is
+held; the map adapter handles setup, input scripts and its frame gate, then
+reports exact state with `publishNativeDriverStatus(frame, checksum, paused)`.
+
+```sh
+wisp engine drive SCRIPT.pad --client lan0a,lan0b
+wisp engine drive resume 120 --client lan0a,lan0b --frames 120
+wisp engine drive step 10 --client lan0a,lan0b --frames 130
+wisp engine drive pause --client lan0a,lan0b
+wisp engine drive status --client lan0a,lan0b
+```
+
+`--frames N` waits for every client to hold exactly that frame; `--timeout S`
+sets the wait in seconds (30 by default), and `--out FILE` saves the JSON
+receipt. A command without `--frames` waits for every client to acknowledge
+execution. Script syntax and the simulation checksum belong to the map.
+Stepping holds that map's simulation callback; Warcraft keeps rendering and
+servicing its network. The driver does not change the native clock or the
+playable input path.
+
+The host stages immutable `driver-N.txt` payloads in every client's existing
+`<prefix>-hot` folder using Wisp's `payloadPreloadFile`. Only after all
+payloads exist does it publish numbered ready markers. The leader offers the
+command with `BlzSendSyncData`; each client reads its payload through the
+existing `readChunk`/Preloader path and answers with its checksum. The last
+matching answer dispatches the command on every client in the same network
+event. A mismatch refuses the command. Acknowledgements and later held-frame
+reports use `driver-status.txt`, read only by the host. The next process
+invocation takes its serial from those receipts; a fresh map skips the
+already-published numbered files. This respects Preloader's lifetime cache.
+
+The file-channel approach is also demonstrated by the author's
+[Lua Live Coding resource](https://www.hiveworkshop.com/threads/lua-live-coding.366724/);
+Wisp uses its own existing FileIO implementation and adds multiplayer
+agreement before dispatch.
 
 ## Actions
 
