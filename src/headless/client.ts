@@ -7,6 +7,7 @@
 // in Bun and, compiled with TypeScriptToLua, in 32-bit Lua; each host puts the
 // natives where its map code finds them.
 import { errorFile, FILE_IO_ABILITY } from "../runtime/gameFiles";
+import { f32 } from "../sim/f32";
 import type { FrameTemplate } from "./frames";
 import type { NativeDeclarations } from "./declarations";
 import { FRAME_POINTS, type Frame, Frames } from "./frames";
@@ -153,9 +154,25 @@ export interface UnitPose {
   visible: boolean;
 }
 
+/** Object-data values declared by the map, keyed by its unit type ID. */
+export interface UnitStateFixture {
+  readonly life: number;
+  readonly maxLife: number;
+  readonly mana: number;
+  readonly maxMana: number;
+}
+
+export type UnitStateFixtures = Readonly<Record<number, UnitStateFixture>>;
+
 interface Unit extends Handle, UnitPose {
   moveSpeed: number;
   attackCooldown: number;
+  life: number | undefined;
+  maxLife: number | undefined;
+  mana: number | undefined;
+  maxMana: number | undefined;
+  dead: boolean;
+  removed: boolean;
 }
 
 type Callback = (this: void) => void;
@@ -208,6 +225,7 @@ export interface ClientScope {
 }
 
 export interface ClientOptions {
+  readonly unitStates?: UnitStateFixtures;
   readonly slot: number;
   /** The map's configureRuntime() filePrefix, which names the file its error reports go to. */
   readonly filePrefix: string;
@@ -406,6 +424,7 @@ export class HeadlessClient {
   private allPlayers: Handle | undefined;
   private readonly effects = new Map<Handle, EffectPose>();
   private readonly units = new Map<Handle, Unit>();
+  private readonly unitStates: UnitStateFixtures;
   private readonly sounds = new Map<Handle, SoundState>();
   readonly soundLog: SoundCue[] = [];
   private cameraX = 0;
@@ -421,6 +440,7 @@ export class HeadlessClient {
   readonly frames: Frames;
 
   constructor(options: ClientOptions) {
+    this.unitStates = options.unitStates ?? {};
     this.slot = options.slot;
     this.scope = options.scope;
     this.filePrefix = options.filePrefix;
@@ -533,11 +553,26 @@ export class HeadlessClient {
 
   private unitAt(owner: number, typeId: number, x: number, y: number, facing: number): Unit {
     const handle = this.handle("unit");
+    const state = this.unitStates[typeId];
     const unit: Unit = { ...handle, handle, typeId, owner, x, y, z: 0, facing, scale: [1, 1, 1], alpha: 255,
       color: [255, 255, 255], teamColor: owner, animation: undefined, animationElapsed: 0, timeScale: 1,
-      visible: true, moveSpeed: 0, attackCooldown: 0 };
+      visible: true, moveSpeed: 0, attackCooldown: 0, life: state?.life, maxLife: state?.maxLife,
+      mana: state?.mana, maxMana: state?.maxMana, dead: state !== undefined && state.life <= f32(0.405), removed: false };
     this.units.set(unit, unit);
     return unit;
+  }
+
+  private unitValue(unit: Unit, field: "life" | "maxLife" | "mana" | "maxMana"): number {
+    if (unit.removed) return 0;
+    const value = unit[field];
+    if (value === undefined) throw new Error(`unit type ${unit.typeId}: declare unitStates.${unit.typeId}.${field} or set it before reading`);
+    return value;
+  }
+
+  private setLife(unit: Unit, life: number): void {
+    if (unit.dead || unit.removed) return;
+    unit.life = f32(life);
+    if (unit.life <= f32(0.405)) unit.dead = true;
   }
 
   private unitAnimation(unit: Unit, animation: string | number): void {
@@ -598,7 +633,30 @@ export class HeadlessClient {
       },
       CreateUnit: (owner: number, typeId: number, x: number, y: number, facing: number) => this.unitAt(owner, typeId, x, y, facing),
       CreateUnitByName: (owner: number, name: string, x: number, y: number, facing: number) => this.unitAt(owner, name.length === 4 ? name.charCodeAt(0) * 0x1000000 + name.charCodeAt(1) * 0x10000 + name.charCodeAt(2) * 0x100 + name.charCodeAt(3) : 0, x, y, facing),
-      RemoveUnit: (unit: Unit) => { this.units.delete(unit); },
+      RemoveUnit: (unit: Unit) => { unit.removed = true; unit.dead = true; this.units.delete(unit); },
+      GetOwningPlayer: (unit: Unit) => unit.owner,
+      GetWidgetLife: (unit: Unit) => this.unitValue(unit, "life"),
+      SetWidgetLife: (unit: Unit, life: number) => this.setLife(unit, life),
+      KillUnit: (unit: Unit) => { if (!unit.removed) { unit.life = 0; unit.dead = true; } },
+      GetUnitState: (unit: Unit, state: string) => {
+        if (state === "UNIT_STATE_LIFE") return this.unitValue(unit, "life");
+        if (state === "UNIT_STATE_MAX_LIFE") return this.unitValue(unit, "maxLife");
+        if (state === "UNIT_STATE_MANA") return this.unitValue(unit, "mana");
+        if (state === "UNIT_STATE_MAX_MANA") return this.unitValue(unit, "maxMana");
+        throw new Error(`GetUnitState: unsupported state ${state}`);
+      },
+      SetUnitState: (unit: Unit, state: string, value: number) => {
+        if (unit.removed) return;
+        if (state === "UNIT_STATE_LIFE") this.setLife(unit, value);
+        else if (state === "UNIT_STATE_MAX_LIFE") unit.maxLife = f32(value);
+        else if (state === "UNIT_STATE_MANA") unit.mana = f32(value);
+        else if (state === "UNIT_STATE_MAX_MANA") unit.maxMana = f32(value);
+        else throw new Error(`SetUnitState: unsupported state ${state}`);
+      },
+      BlzGetUnitMaxHP: (unit: Unit) => this.unitValue(unit, "maxLife"),
+      BlzSetUnitMaxHP: (unit: Unit, value: number) => { if (!unit.removed) unit.maxLife = value; },
+      BlzGetUnitMaxMana: (unit: Unit) => this.unitValue(unit, "maxMana"),
+      BlzSetUnitMaxMana: (unit: Unit, value: number) => { if (!unit.removed) unit.maxMana = value; },
       ShowUnit: (unit: Unit, show: boolean) => { unit.visible = show; },
       IsUnitHidden: (unit: Unit) => !unit.visible,
       GetUnitFlyHeight: (unit: Unit) => unit.z,
@@ -618,7 +676,7 @@ export class HeadlessClient {
       SetUnitAnimation: (unit: Unit, animation: string) => this.unitAnimation(unit, animation),
       SetUnitAnimationByIndex: (unit: Unit, animation: number) => this.unitAnimation(unit, animation),
       SetUnitAnimationWithRarity: (unit: Unit, animation: string) => this.unitAnimation(unit, animation),
-      GetUnitTypeId: (unit: Unit) => unit.typeId,
+      GetUnitTypeId: (unit: Unit) => unit.removed ? 0 : unit.typeId,
       GetUnitX: (unit: Unit) => unit.x,
       GetUnitY: (unit: Unit) => unit.y,
       SetUnitX: (unit: Unit, x: number) => {

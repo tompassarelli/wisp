@@ -343,6 +343,56 @@ with an existing headless pad path can call `captureScene(client)` at that
 path's recorded match frame and `renderScenes(render, scenes, PRIVATE_DIR)`
 after the run; no new input simulator is required.
 
+## Unit states
+
+The Bun and emitted Lua runtimes retain a unit's owner and facing, and model
+`GetOwningPlayer`, `GetUnitFacing`, `SetUnitFacing`, `BlzSetUnitFacingEx`,
+life and mana through `GetUnitState`/`SetUnitState`, `GetWidgetLife`/
+`SetWidgetLife`, `BlzGetUnitMaxHP`/`BlzSetUnitMaxHP`,
+`BlzGetUnitMaxMana`/`BlzSetUnitMaxMana`, `KillUnit`, and `RemoveUnit`.
+Removal drops the unit from rendered poses; its type ID and life read zero.
+Life at or below the binary32 value of 0.405 marks a unit dead. Life writes
+to a dead unit cannot revive it; `KillUnit` leaves zero life.
+
+Declare initial object-data values in `unitStates`, keyed by numeric unit
+type ID, on the map passed to `installHeadless` or `luaLockstep`:
+
+```ts
+unitStates: {
+  [0x68666f6f]: { life: 100, maxLife: 100, mana: 80, maxMana: 80 },
+},
+```
+
+These are fixture values, not guessed defaults for the stock footman. For a
+native comparison, establish the same values with `BlzSetUnitMaxHP`,
+`BlzSetUnitMaxMana`, `SetWidgetLife`, and `SetUnitState(UNIT_STATE_MANA)`
+immediately after creation. Without a fixture, set each field before reading
+it; a missing field throws an error naming the unit type and field.
+
+`test/unit-states/cases.ts` authors twelve cases shared by the Bun, Lua32,
+and offline native map. They cover owner, facing, life, mana, both maximums,
+the exactly representable life values 0.40625 and 0.3984375 around the death
+cutoff, killing, two attempted writes after death, and removal. The two-client
+journey took 25.1 ms in Bun on 7 October 2026; its injected different life
+write is reported by the existing call comparison.
+
+Run the shared cases and build their native measurement map:
+
+```sh
+LUA=PATH_TO_LUA32 bun test test/headless-unit-states.test.ts
+bun test/unit-states/build.ts BASE.w3m PRIVATE_OUT.w3x
+```
+
+The native map writes `unit-states-p0.txt` and `unit-states-p1.txt` to
+CustomMapData. Each named row contains integers equal to the observed values
+multiplied by 128, retaining every bit of the selected fractional values.
+Compare the twelve rows with the `EXPECTED` list in the test.
+
+The 0.405 cutoff was identified in WurstScript's Apache-2.0
+[UnitProvider at 9913e1b](https://github.com/wurstscript/WurstScript/blob/9913e1bd300c2053637d756a11bae8c3c8ed568f/de.peeeq.wurstscript/src/main/java/de/peeeq/wurstio/jassinterpreter/providers/UnitProvider.java).
+Wisp's TypeScript implementation is independently authored; no Wurst source
+was copied or adapted.
+
 ## Native table iteration order
 
 `test/table-order/main.ts` walks a 1,000-key string table and a 1,000-key
