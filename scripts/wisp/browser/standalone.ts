@@ -58,7 +58,7 @@ async function post(path: string, body: unknown): Promise<Response> {
   return response;
 }
 async function run(): Promise<void> {
-  const config = await fetch("/config").then((response) => response.json()) as { width: number; height: number; scripted: boolean };
+  const config = await fetch("/config").then((response) => response.json()) as { width: number; height: number; scripted: boolean; samples: boolean };
   const gpu = window.prepareRenderer(config.width, config.height);
   const start = performance.now();
   let nextFrame = start;
@@ -80,7 +80,7 @@ async function run(): Promise<void> {
     milliseconds.push(performance.now() - began);
     if (frame.done) {
       await Promise.all(pendingAudio);
-      await post("/complete", { gpu, frames: milliseconds.length, elapsedMs: performance.now() - start, frameMs: { p50: percentile(milliseconds, 0.5), p95: percentile(milliseconds, 0.95), p99: percentile(milliseconds, 0.99) }, intervalMs: { p50: percentile(intervals, 0.5), p95: percentile(intervals, 0.95) }, audioEvents, audioReadyEvents, audioPlayed, missingSounds: [...missing] });
+      await post("/complete", { gpu, frames: milliseconds.length, elapsedMs: performance.now() - start, frameMs: { p50: percentile(milliseconds, 0.5), p95: percentile(milliseconds, 0.95), p99: percentile(milliseconds, 0.99) }, intervalMs: { p50: percentile(intervals, 0.5), p95: percentile(intervals, 0.95) }, ...(config.samples ? { frameSamplesMs: milliseconds, intervalSamplesMs: intervals } : {}), audioEvents, audioReadyEvents, audioPlayed, missingSounds: [...missing] });
       return;
     }
   }

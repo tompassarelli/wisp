@@ -75,7 +75,7 @@ export async function openStandalone(game: StandaloneGame, options: StandaloneOp
     try {
       if (url.pathname === "/") return new Response(`<!doctype html><html><head><title>${game.title.replaceAll("<", "&lt;")}</title><style>html,body{margin:0;width:100%;height:100%;background:#101522;overflow:hidden}body{display:flex;align-items:center;justify-content:center}canvas{max-width:100%;max-height:100%;object-fit:contain}#status{position:fixed;bottom:12px;left:16px;color:white;font:14px sans-serif;background:#101522bb;padding:6px 10px;border-radius:5px}</style></head><body><script type="module" src="/player.js"></script></body></html>`, { headers: { "content-type": "text/html" } });
       if (url.pathname === "/player.js") return new Response(javascript, { headers: { "content-type": "text/javascript" } });
-      if (url.pathname === "/config") return Response.json({ title: game.title, width: game.render.width ?? 1280, height: game.render.height ?? 720, scripted: options.script !== undefined });
+      if (url.pathname === "/config") return Response.json({ title: game.title, width: game.render.width ?? 1280, height: game.render.height ?? 720, scripted: options.script !== undefined, samples: options.out !== undefined });
       if (url.pathname === "/asset") {
         const path = url.searchParams.get("path") ?? "";
         let data = assets.get(path);
