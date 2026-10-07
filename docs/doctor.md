@@ -59,7 +59,7 @@ instead of looping.
 | Runtime without Battle.net | A wineserver without Battle.net or Warcraft III, still there after 20 s. | End it, then start Battle.net. |
 | Crashed with the error dialog up | BlizzardError.exe runs, or `watch` says crashed (an exited game, a new `Errors/*/Crash.txt`). | End the dialog and Warcraft III, then launch the game from the retained launcher. |
 | Disconnected | `watch` says Warcraft III lost Battle.net. | End Warcraft III, check the launcher, launch the game. A dropped game isn't asked to sign in again: its Login button would open another sign-in. |
-| Empty login shell | The menus report a login screen (`LOGIN_DOORS`, `LOGIN_OPTIONS`), or signing in, for 120 s (Warcraft III signed in within 14 s on 6 Oct). | End Warcraft III and launch it from the retained launcher: the observed recovery (warcraft3-development skill). |
+| Empty login shell | The menus report a login screen (`LOGIN_DOORS`, `LOGIN_OPTIONS`), or signing in, for 120 s (Warcraft III signed in within 14 s on 6 Oct). | End Warcraft III and launch it from the retained launcher: the observed recovery (warcraft-modding skill). |
 | Map without its imports | Warcraft III's log has `model creation failed - war3mapImported/...` lines: the map loaded while its ladder scan ran ([play.md](play.md), step 4). | End Warcraft III and launch it again. |
 | Stuck loading | On the loading screen for 120 s. | End Warcraft III and launch it again. |
 | Display settings changed | The client declares `displaySettings` and its closed game's War3Preferences.txt holds other `[Video]` values ([display-settings.md](display-settings.md)). | Write the declared values into the file, keeping its other lines. |
@@ -85,7 +85,7 @@ Doctor never signs in, never starts Warcraft III.exe itself (only the
 launcher does, asked as `play` asks it), never starts Battle.net beside
 another runtime, and
 never touches a client that is ready. Battle.net's credential entry stays with
-the owner or the authorized login-field helper (warcraft3-development skill).
+the owner or the authorized login-field helper (warcraft-modding skill).
 
 ## Declare it
 
