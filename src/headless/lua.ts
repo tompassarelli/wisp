@@ -9,10 +9,14 @@ import { type Journey, journeyLines, journeyProblems, runJourney } from "./journ
 import { Lockstep } from "./lockstep";
 import { bundleModules } from "../runtime/modules";
 import { stringChecksum } from "../platform/payloadChecksum";
+import type { SceneryFixtures } from "./warcraft3Scenery";
+import type { Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 
 /** What a game declares about its map for a headless run. */
 export interface LuaHeadlessMap {
   readonly unitStates?: UnitStateFixtures;
+  readonly scenery?: SceneryFixtures;
+  readonly inventory?: Warcraft3InventoryFixtures;
   /** The map's configureRuntime() filePrefix. */
   readonly filePrefix: string;
   readonly localNatives?: LocalNatives;
@@ -53,6 +57,8 @@ export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: s
     ...(map.intentionalNoops === undefined ? {} : { intentionalNoops: map.intentionalNoops }),
     ...(map.frames === undefined ? {} : { frames: map.frames }),
     ...(map.unitStates === undefined ? {} : { unitStates: map.unitStates }),
+    ...(map.scenery === undefined ? {} : { scenery: map.scenery }),
+    ...(map.inventory === undefined ? {} : { inventory: map.inventory }),
     natives: (client) => {
       const environment = client.natives;
       setmetatable(environment, { __index: _G });

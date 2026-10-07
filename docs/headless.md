@@ -445,6 +445,19 @@ facts fail with the needed fixture name.
 `LUA=/path/to/lua32 bun test test/warcraft3-scenery.test.ts` exercises 92
 native calls in Bun and Lua32, with zero missing-native reports.
 
+Set `scenery` and `inventory` on `HeadlessMap` or `LuaHeadlessMap`; both are
+passed to every client. `inventory.items` declares item types, levels,
+equipment types and tags. `inventory.units` declares bag, inventory and
+extended inventory capacities, supported equipment slots, animation
+durations, talent defaults and healing multipliers. Missing animation,
+equipment or healing-bonus facts ask for their fixture instead of making up
+a value. `BlzUnitHeal` reads and writes the same life as `GetWidgetLife`.
+
+The combined fixture executes all 145 added native names in Bun and Lua32,
+checks zero unmodelled calls, and exercises the default client's inventory,
+healing and scenery clock. `WARCRAFT3_NATIVES` in
+`wisp:src/headless/warcraft3Natives.ts` is the checked list.
+
 ## Native table iteration order
 
 `test/table-order/main.ts` walks a 1,000-key string table and a 1,000-key

@@ -13,6 +13,8 @@ import type { NativeDeclarations } from "./declarations";
 import { FRAME_POINTS, type Frame, Frames } from "./frames";
 import { Warcraft3Abilities } from "./warcraft3Abilities";
 import { WARCRAFT3_ENUM_VALUES } from "./warcraft3Natives";
+import { Scenery, type SceneryFixtures } from "./warcraft3Scenery";
+import { Warcraft3Inventory, type Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 
 export type Handle = { readonly kind: string; readonly id: number };
 
@@ -241,6 +243,8 @@ export interface ClientScope {
 
 export interface ClientOptions {
   readonly unitStates?: UnitStateFixtures;
+  readonly scenery?: SceneryFixtures;
+  readonly inventory?: Warcraft3InventoryFixtures;
   readonly slot: number;
   /** The map's configureRuntime() filePrefix, which names the file its error reports go to. */
   readonly filePrefix: string;
@@ -405,6 +409,8 @@ function mixValue(hash: number, value: unknown): number {
 }
 
 export class HeadlessClient {
+  readonly scenery: Scenery;
+  readonly inventory: Warcraft3Inventory;
   readonly abilities = new Warcraft3Abilities();
   readonly textAreaAutoScroll = new Map<Handle, boolean>();
   readonly heldMouseButtons = new Set<unknown>();
@@ -464,6 +470,14 @@ export class HeadlessClient {
   readonly frames: Frames;
 
   constructor(options: ClientOptions) {
+    this.scenery = new Scenery(options.scenery);
+    this.inventory = new Warcraft3Inventory({
+      handle: kind => this.handle(kind),
+      getUnitTypeId: unit => (unit as Unit).typeId,
+      readLife: unit => this.unitValue(unit as Unit, "life"),
+      readMaxLife: unit => this.unitValue(unit as Unit, "maxLife"),
+      writeLife: (unit, life) => this.setLife(unit as Unit, life),
+    }, options.inventory);
     this.unitStates = options.unitStates ?? {};
     this.slot = options.slot;
     this.scope = options.scope;
@@ -658,6 +672,8 @@ export class HeadlessClient {
   private behaviors({ humans, network, screenWidth }: ClientOptions): Readonly<Record<string, NativeBehavior>> {
     const playing = (player: number) => humans.includes(player);
     return {
+      ...this.scenery.behaviors({ handle: kind => this.handle(kind) }),
+      ...this.inventory.behaviors(),
       GetLocalPlayer: () => this.slot,
       Player: (n: number) => n,
       GetPlayerId: (player: number) => player,
@@ -736,7 +752,7 @@ export class HeadlessClient {
       BlzGetLocalClientHeight: () => 1080,
       BlzIsLocalClientActive: () => true,
       BlzIsKeyPressed: (key: number) => this.heldKeys.has(key),
-      BlzIsMetaKeyPressed: (meta: number) => this.heldMeta === meta,
+      BlzIsMetaKeyPressed: (meta: number) => (this.heldMeta & meta) === meta,
       BlzIsMouseButtonPressed: (button: unknown) => this.heldMouseButtons.has(button),
       BlzGetMouseScreenPosX: () => this.mouseScreenX,
       BlzGetMouseScreenPosY: () => this.mouseScreenY,
@@ -919,6 +935,8 @@ export class HeadlessClient {
         this.cameraX = x;
         this.cameraY = y;
       },
+      SetCameraTargetController: () => { this.scenery.cameraAllowsHotkeyTargetLock = false; },
+      SetCameraOrientController: () => { this.scenery.cameraAllowsHotkeyTargetLock = false; },
       SetCameraField: (field: unknown, value: number) => {
         this.cameraFields[this.cameraField(field)] = value;
       },
@@ -1163,6 +1181,7 @@ export class HeadlessClient {
     this.run(() => {
       this.frame++;
       this.abilities.tick(f32(1 / FRAMES_PER_SECOND));
+      this.scenery.tick(f32(1 / FRAMES_PER_SECOND));
       for (const pose of this.effects.values()) pose.animationElapsed += pose.timeScale / FRAMES_PER_SECOND;
       for (const unit of this.units.values()) unit.animationElapsed += unit.timeScale / FRAMES_PER_SECOND;
       const count = this.timers.length;
