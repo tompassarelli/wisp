@@ -73,6 +73,8 @@ interface Scenario {
   readonly preferences?: string;
   /** Views the started game reports as `afterPlay` before its menus report MAIN_MENU. */
   readonly settlesAfter?: number;
+  /** Escape presses the score screen takes to leave (1 by default); Infinity never leaves. */
+  readonly scoreEscapes?: number;
 }
 
 function world(scenario: Scenario) {
@@ -88,6 +90,7 @@ function world(scenario: Scenario) {
   let state: ClientState = scenario.state ?? { kind: "menus", screen: "MAIN_MENU" };
   let source: Source = scenario.source ?? "socket";
   let plays = 0;
+  let escapes = 0;
   const newestLog = () => [...files.keys()].filter((path) => path.startsWith(LOGS)).sort().at(-1)!;
 
   const machine = PlayMachine.of({
@@ -139,8 +142,9 @@ function world(scenario: Scenario) {
       state = { kind: "menus", screen: "CUSTOM_GAMES" };
     }),
     closeScore: () => Effect.sync(() => {
-      events.push("close score");
-      state = { kind: "menus", screen: "CUSTOM_GAMES" };
+      // The state the key lands on: doctor may press only on the score screen.
+      events.push(state.kind === "results" ? "close score" : `close score at ${state.kind}`);
+      if (++escapes >= (scenario.scoreEscapes ?? 1)) state = { kind: "menus", screen: "CUSTOM_GAMES" };
     }),
   });
 
@@ -237,6 +241,21 @@ test("stale lobby: leaves it through the menus; the score screen likewise", asyn
   expect(lobby.lines.at(-1)).toBe("b: ready: menus (CUSTOM_GAMES), after stale lobby");
   const results = await world({ processes: "game", state: { kind: "results" } }).run();
   expect(results.events).toEqual(["close score"]);
+});
+
+test("a score screen that ignores Escape gets it again, only while it shows, then Warcraft III is ended and launched", async () => {
+  // Client B on 7 Oct stayed on the score screen after one Escape; a later press left it.
+  const second = await world({ processes: "game", state: { kind: "results" }, scoreEscapes: 2 }).run();
+  expect(second.failure).toBeUndefined();
+  expect(second.events).toEqual(["close score", "close score"]);
+  expect(second.lines).toContain("b: still on the score screen; Escape again (2 of 3)");
+  expect(second.lines.at(-1)).toBe("b: ready: menus (CUSTOM_GAMES), after score screen");
+
+  const stuck = await world({ processes: "game", state: { kind: "results" }, scoreEscapes: Infinity }).run();
+  expect(stuck.failure).toBeUndefined();
+  expect(stuck.events).toEqual(["close score", "close score", "close score", "SIGTERM 52713", "launch 43924"]);
+  expect(stuck.lines).toContain("b: still on the score screen after 3 Escapes; ending Warcraft III so it starts again at the menus");
+  expect(stuck.lines.at(-1)).toBe("b: ready: menus (MAIN_MENU), after score screen, no game");
 });
 
 test("stuck loading: 120 s on the loading screen ends the game and launches the game", async () => {
