@@ -373,17 +373,18 @@ still playing Death return its position, now `EXPECTED`. The two
 FaerieFireTarget effects were not visible: the base map's black mask covers
 (±200, 0) for the players, so their Death timing stays unmeasured.
 
-The capture: build
-`bun test/effects59/build.ts BASE.w3m OUT.w3x`, play it once on 3.0.1 with
-two clients, collect `effects-p0.txt` and `effects-p1.txt`, and compare them
-with `EXPECTED` in `test/headless-effects.test.ts` (`created-at-point`'s Z is
-the base map's ground height at (100.25, -50.5), not 0, on a non-flat map).
-While the map runs, watch FaerieFireTarget at (-200, 0), destroyed frozen at
-time scale 0 (expected: stays, frozen), and at (200, 0), destroyed while
-playing (expected: Death plays about 2 s, then gone; note whether its stand
-loop finishes first). In the same Smashcraft session: end one match and
-record whether any effect stays visible after teardown, and toggle `-dev backdrop off` then `on` and
-compare the deck and scenery widths before and after.
+The rest of the capture moved to the ruler map's third column
+([headless: animation and effect lifetime](headless.md#animation-and-effect-lifetime-read-from-a-screenshot)),
+read from one screenshot with no mask: `death-frozen` (destroyed at time
+scale 0: Death's first frame, for good), `no-death-frozen` (a model without
+Death: gone at once), `death-playing` beside `death-reference` (destroyed
+mid-Stand: Death from that moment, or 750 ms later if the loop finishes
+first), `teardown-hidden` (collapsed to scale 0, then destroyed, as the
+victory pose is: nothing shown) and `matrix-scale-once`, `-twice`, `-reset`
+(whether a second `BlzSetSpecialEffectMatrixScale` multiplies, which decides
+whether `-dev backdrop on` widens existing scenery). They replace the
+Smashcraft session's teardown and backdrop checks: both depend only on these
+rules.
 
 ### Effect placement and unavailable effect setters
 
@@ -486,24 +487,25 @@ Blademaster is not among 3.0.1's reanimated models. What remains is the
 native seek itself: whether a frozen effect hidden and shown again re-poses on
 `BlzSetSpecialEffectTime`, and in what units.
 
-Capture needed (wisp#58's third box, one private 3.0.1 game, fixed camera and
-graphics mode):
+**Capture** (wisp#58's third box): the ruler map
+([headless: animation and effect lifetime](headless.md#animation-and-effect-lifetime-read-from-a-screenshot))
+sets up all six items in one private 3.0.1 game, read from one screenshot:
 
-1. A model listing `Stand Hit` before `Stand`: `SetUnitAnimation("stand")`
-   shows Stand; `"stand hit"` shows Stand Hit.
-2. A looping 1000 ms sequence at time scale 1 captured after 5.0 s, and a
-   non-looping one held 2 s past its end: frame positions decide overshoot
-   and the end − 1 ms hold.
-3. `AddSpecialEffect` with no animation call, captured during and after
-   Birth.
-4. A unit with `SetUnitBlendTime` 0.15 and 0, switching sequence, captured
-   50 ms later; plus time scale 0 during a blend, and `SetUnitTimeScale`
-   followed by `SetUnitAnimation`.
-5. A global-sequence helper under time scale 0, and a frozen out-of-range
-   `SetUnitAnimationByIndex`.
-6. Blademaster clip 48 and 49 at 0.4 s, time scale 0, shown after being
-   hidden, with and without a second seek one frame later: the frame 262
-   repeat.
+1. Selection by name on a model listing `Stand Hit` before `Stand`:
+   `unit-stand`, `unit-stand-hit`.
+2. Loop ends and holds: `loop-played` beside `loop-reference` (4.5 s of a
+   1002 ms loop), `nonloop-held`, and both sought past their end
+   (`loop-seek-past-end`, `nonloop-seek-past-end`).
+3. No animation call: `birth-during`, `birth-after`.
+4. Blends: `blend-150` and `blend-0` 50 ms after a switch, and switches made
+   at time scale 0 (`blend-switch-frozen`, `timescale-then-select`), which
+   also decide whether a selection resets the speed to 1.
+5. `global-frozen`, `global-kept` (across a selection and a seek), and
+   `index-out-of-range`.
+6. Frame 262's calls on a ruler clip with Blademaster clip 48's interval and
+   key times: collapsed and parked, then shown and sought to 0.4 s, without
+   and with a second seek 50 ms later (`clip-shown`, `clip-second-seek`).
+   The needle reads the seek in milliseconds from the interval start.
 
 ### Collision, pathing and orders
 
@@ -785,7 +787,7 @@ Warcraft-native behavior was measured in this research pass.
 | Warcraft life threshold, clipping, corpse writes and removal | #44's existing twelve-case [unit-state fixture](headless.md#unit-states), including exact binary32 0.40625 and 0.3984375 | No native values measured. Ready map retained privately at `~/.local/state/wisp/unit-states44/`. Sole native coordinator has the required journey; current blocker is Warcraft 3.0.1/build 24342 startup, with a private online fallback authorized. |
 | Widget/unit/player death callback order and repeated kills | A callback log with before/inside/after life and event names | Source-researched only; not an additional #44 acceptance fixture. Defer until a consuming check needs this order. |
 | Blend setting, frozen clock and the pose discrepancy | #40's existing same-frame-262 capture, followed by the held-frame capture at least 250 ms later and recorded camera state | Retained comparison is 24 of 25 passing; the red-flag landmark differs vertically by 40.73 pixels. Diagnostic candidate `8aad61e8` has produced no new captures because of build 24342 startup. Cause unresolved; native coordinator owns execution. |
-| Sequence end/loop overshoot and queued animation timing | The [animation playback capture](#animation-playback) | Headless follows the source-researched rules since wisp#58; queued animations stay unused by Smashcraft. |
+| Sequence end/loop overshoot and queued animation timing | The ruler map of the [animation playback capture](#animation-playback) | Headless follows the source-researched rules since wisp#58; the ruler map awaits its 3.0.1 capture. Queued animations stay unused by Smashcraft. |
 
 The existing native executor owns clients and fixture scheduling. Research
 does not start another client. Unit and pose workers received the factual
