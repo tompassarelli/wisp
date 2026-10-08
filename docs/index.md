@@ -58,7 +58,10 @@ checksum each turn. Keep signed-in clients for what needs Battle.net itself.
 
 For lobby protocol checks, [`wisp lan dummy`](lan.md#dummy-lobby-checks)
 uses the separate GoWarcraft3 dummy beside side a for repeated joins, map and
-profile messages, handicap changes and leaves; it does not execute the map.
+profile messages, handicap changes and leaves. Failed setup saves its build,
+elapsed time and first failed step. Warcraft 3.0.1 has no native LAN provider;
+Wisp's host protocol checks use simulated players without Wine. The dummy
+does not execute the map.
 
 Checking on the signed-in clients? [`wisp accept`](accept.md)
 (wisp:docs/accept.md) runs every native check a game declares, next to the
