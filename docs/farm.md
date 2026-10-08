@@ -22,7 +22,10 @@ failed. Without `--ref` it runs the checkout's HEAD.
    `--wait` says, and deletes the branch afterwards.
 2. **Dispatch.** The command starts the repository's
    `.github/workflows/farm-test.yml` on main with the commit and a random tag,
-   finds the run by the tag at the end of its name, and polls its jobs.
+   finds the run by the tag at the end of its name, and polls its jobs
+   (from every 10 s backing off to every 60 s while nothing moves; a commit
+   that already has a queued or running farm test joins that run instead;
+   [Runner capacity and waiting](ci.md#runner-capacity-and-waiting)).
 3. **Plan.** The plan job restores the newest `farm-timings.json` from the
    Actions cache and splits the test files (Bun) and tests (Lua) over the
    shards, slowest first, each to the shard with the least time so far

@@ -206,3 +206,27 @@ commit: `gh workflow run autoland.yml -f branch=claude/NAME`. A commit that
 changes `.github/workflows/` can't land this way (the workflow token may not
 push workflow changes); the run says so on the issue, and it lands through a
 normal `safe-push`.
+
+## Runner capacity and waiting
+
+The account runs at most 20 jobs at once across all of its repositories
+(GitHub Free), and further jobs wait in one first-come queue. Workflows keep
+their share bounded so a new run's first job starts within a minute: a large
+matrix sets `max-parallel` and packs enough work in each job that setup stays
+a small part of it, and CI runs once per ref (a newer push replaces the queued
+run). Autoland's group holds only Autoland runs; farm runs have no group, so
+landings never hold them back.
+
+`bun wisp farm ... --wait` (`waitFor` in wisp:scripts/wisp/farm.ts) polls the
+run with one `gh run view` (two API calls). It polls 10 s after the dispatch,
+then waits 1.5 times longer after each poll that shows no change, up to 60 s,
+and goes back to 10 s whenever a job starts or finishes. A run's jobs move a
+few dozen times in all, so most polls come at the cap: twenty workers waiting
+there use 40 API calls a minute (2,400 an hour, inside the 5,000 limit). `farm test` for a commit that
+already has a queued or running farm test joins that run instead of starting
+another.
+
+To see where runs wait, compare each run's `created_at` with its first job's
+`started_at` (`gh api repos/OWNER/REPO/actions/runs/ID/jobs`); a queued job
+has no `runner_name` yet. A run's status alone hides the jobs running inside
+a queued run, so count jobs, not runs.

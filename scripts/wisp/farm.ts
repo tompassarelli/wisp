@@ -107,18 +107,43 @@ export const dispatch = (repo: string, workflow: string, inputs: Readonly<Record
   return yield* new FarmFailure({ problem: `no ${workflow} run named ${inputs.tag} appeared within a minute` });
 });
 
-/** Polls the run until it completes, printing a line when its jobs move. */
-export const waitFor = (repo: string, id: number, every: "5 seconds" | "15 seconds" = "15 seconds") => Effect.gen(function*() {
+/** A queued or running run of `workflow` whose name starts with `prefix`, announced, so a second caller for the same commit joins it instead of starting another. */
+export const activeRun = (repo: string, workflow: string, prefix: string) => Effect.gen(function*() {
+  for (const status of ["in_progress", "queued"]) {
+    const listed = yield* run(["gh", "run", "list", "-R", repo, "--workflow", workflow, "--status", status, "-L", "50", "--json", "databaseId,displayTitle,url"]);
+    const found = (yield* decoded(Runs, listed)).find((item) => item.displayTitle.startsWith(prefix));
+    if (found !== undefined) {
+      console.error(`joining the run already testing this commit: ${found.displayTitle}: ${found.url}`);
+      return found;
+    }
+  }
+  return undefined;
+});
+
+/** Seconds between `waitFor`'s polls: the first, the growth while nothing moves, and the cap. */
+export const POLL = { first: 10, growth: 1.5, most: 60 } as const;
+
+/** The wait before the next poll: back to the first after a change, otherwise grown up to the cap. */
+export const nextPoll = (seconds: number, moved: boolean) => moved ? POLL.first : Math.min(POLL.most, Math.round(seconds * POLL.growth));
+
+/**
+ * Polls the run until it completes, printing a line when its jobs move. Polls
+ * back off from POLL.first to POLL.most seconds while nothing changes, so many
+ * waiting workers cost little CPU and API.
+ */
+export const waitFor = (repo: string, id: number) => Effect.gen(function*() {
   let last = "";
+  let seconds: number = POLL.first;
   for (;;) {
     const state = yield* decoded(RunState, yield* run(["gh", "run", "view", String(id), "-R", repo, "--json", "status,conclusion,jobs"]));
     const done = state.jobs.filter((job) => job.status === "completed").length;
     const running = state.jobs.filter((job) => job.status === "in_progress").length;
     const line = `${state.status}: ${done} jobs done, ${running} running, ${state.jobs.length - done - running} waiting`;
     if (line !== last) console.error(line);
+    seconds = nextPoll(seconds, line !== last);
     last = line;
     if (state.status === "completed") return state;
-    yield* Effect.sleep(every);
+    yield* Effect.sleep(`${seconds} seconds`);
   }
 });
 
@@ -149,9 +174,9 @@ export const farmTest = (options: { readonly ref: string | undefined; readonly w
   const { ref, scratch } = yield* resolveRef(options.ref, repo);
   const started = performance.now();
   yield* Effect.gen(function*() {
-    const found = yield* dispatch(repo, "farm-test.yml", { ref, tag: runTag() });
+    const found = (yield* activeRun(repo, "farm-test.yml", `Farm test ${ref} `)) ?? (yield* dispatch(repo, "farm-test.yml", { ref, tag: runTag() }));
     if (!options.wait && scratch === undefined) return;
-    const state = yield* waitFor(repo, found.databaseId, "5 seconds");
+    const state = yield* waitFor(repo, found.databaseId);
     console.error(`${((performance.now() - started) / 60000).toFixed(1)} min from dispatch to the result`);
     const summary = yield* withArtifact(repo, found.databaseId, "farm-test-summary", (folder) => Effect.try({
       try: () => readFileSync(join(folder, "summary.json"), "utf8"),

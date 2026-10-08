@@ -11,6 +11,13 @@ on:
 permissions:
   contents: read
 
+# The account runs 20 jobs at once across every repository. One run per ref
+# finishes; a newer push replaces only the queued run, so the newest commit is
+# always the next verified.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   framework:
     runs-on: ubuntu-latest
