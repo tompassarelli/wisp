@@ -12,7 +12,7 @@ afterAll(runtime.restore);
 
 export const EXPECTED = [
   "zero-one-shot-reads-ms=0",
-  "started-in-callback-fast-before=8",
+  "started-in-callback-fast-before=1",
   "same-deadline=second-started-first",
   "same-deadline=first-created-first",
   "fast-512th-reads-ms=500",
@@ -24,7 +24,7 @@ export const EXPECTED = [
   "ticks-in-one-second=60",
   "fast-in-one-second=1024",
   "fast-between-ticks=17..18",
-  "zero-period-in-one-second=10240",
+  "zero-period-in-one-second=10002",
   "paused-later-ms=750",
   "periodic-after-ms=250",
 ];

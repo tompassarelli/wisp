@@ -425,6 +425,65 @@ export function subtractFloat32(a: number, b: number): number {
   return limbFusedMultiplyAdd(-1.0, b, a);
 }
 
+/**
+ * a + b rounded toward zero, for binary32 a and b that are zero or positive
+ * and normal: Warcraft's timer clock (wisp:docs/warsmash-notes.md#timers-and-frame-stepping).
+ */
+export function addFloat32TowardZero(a: number, b: number): number {
+  if (a === 0) return b;
+  if (b === 0) return a;
+  split(a);
+  let large = splitSignificand;
+  let exponent = splitExponent;
+  split(b);
+  let small = splitSignificand;
+  let shift = exponent - splitExponent;
+  if (shift < 0) {
+    small = large;
+    large = splitSignificand;
+    exponent = splitExponent;
+    shift = -shift;
+  }
+  // large is whole, so the floor of the exact sum drops only the smaller one's shifted-out bits.
+  let sum = shift > 24 ? large : large + floorDiv(small, TWO_POWERS[shift] ?? 1);
+  if (sum >= 16777216) {
+    sum = floorDiv(sum, 2);
+    exponent += 1;
+  }
+  return normalResult(sum, exponent, false) ?? a + b;
+}
+
+/** a - b rounded toward zero, for binary32 a >= b that are zero or positive and normal. */
+export function subtractFloat32TowardZero(a: number, b: number): number {
+  if (b === 0) return a;
+  if (a === b) return 0.0;
+  split(a);
+  const large = splitSignificand;
+  let exponent = splitExponent;
+  split(b);
+  const shift = exponent - splitExponent;
+  let difference: number;
+  if (shift <= 6) {
+    difference = large * (TWO_POWERS[shift] ?? 1) - splitSignificand;
+    exponent = splitExponent;
+  } else {
+    // Six guard bits below the larger one; the floor of the exact difference subtracts the ceiling of the shifted smaller one.
+    const unit = shift - 6 > 30 ? 0 : TWO_POWERS[shift - 6] ?? 0;
+    const part = unit === 0 ? 0 : floorDiv(splitSignificand, unit);
+    difference = large * 64 - part - (part * unit === splitSignificand ? 0 : 1);
+    exponent -= 6;
+  }
+  while (difference >= 16777216) {
+    difference = floorDiv(difference, 2);
+    exponent += 1;
+  }
+  while (difference < 8388608) {
+    difference *= 2;
+    exponent -= 1;
+  }
+  return normalResult(difference, exponent, false) ?? a - b;
+}
+
 // The last product: (productHigh * 2^24 + productLow) * 2^productExponent is the
 // exact product of two split values, with productHigh in [2^23, 2^24).
 let productHigh = 0;
