@@ -9,6 +9,7 @@ import { type Frame, decodePpm } from "../wisp/frameProbe";
 import { captureProcess } from "../wisp/mapBuild";
 import { step } from "../wisp/timings";
 import { ClientWatch, describeView, typesIntoMatch } from "../wisp/watch";
+import { CLIENT_PROFILE_NAMES } from "../wisp/lan/pool";
 import { inputBatches, sendsChat, type InputAction } from "./inputBatch";
 export type { InputAction } from "./inputBatch";
 export { sendsChat } from "./inputBatch";
@@ -25,7 +26,7 @@ export class DesktopFailure extends Schema.TaggedError<DesktopFailure>()("Deskto
 
 const ClientsFile = Schema.Struct({
   tools: Schema.Struct({ grim: Schema.String, xdotool: Schema.String, wlrctl: Schema.String, tesseract: Schema.String }),
-  clients: Schema.NonEmptyArray(Schema.Struct({ name: Schema.String, run: Schema.String, documents: Schema.String, menuReportPort: Schema.optional(Schema.Int), displaySettings: Schema.optional(Schema.Record(Schema.String, Schema.String)), profile: Schema.optional(Schema.Literals(["minimal", "visual", "player"])), offline: Schema.optionalKey(Schema.Boolean) })),
+  clients: Schema.NonEmptyArray(Schema.Struct({ name: Schema.String, run: Schema.String, documents: Schema.String, menuReportPort: Schema.optional(Schema.Int), displaySettings: Schema.optional(Schema.Record(Schema.String, Schema.String)), profile: Schema.optional(Schema.Literals(CLIENT_PROFILE_NAMES)), offline: Schema.optionalKey(Schema.Boolean) })),
 });
 type Tools = typeof ClientsFile.Type["tools"];
 
