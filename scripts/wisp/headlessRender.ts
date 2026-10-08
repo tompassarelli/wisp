@@ -153,7 +153,8 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
     (path) => Effect.promise(() => rm(path, { recursive: true, force: true })),
   );
   const assets = new Map<string, Promise<Uint8Array | undefined>>();
-  const server = yield* Effect.acquireRelease(Effect.sync(() => Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
+  // A stock Reforged asset is extracted and converted on first read; the page asks for dozens at once and one can wait past Bun's 10 s default.
+  const server = yield* Effect.acquireRelease(Effect.sync(() => Bun.serve({ hostname: "127.0.0.1", port: 0, idleTimeout: 255, async fetch(request) {
     const url = new URL(request.url);
     if (url.pathname === "/") return new Response('<!doctype html><html><body style="margin:0;background:#101522"><script type="module" src="/renderer.js"></script></body></html>', { headers: { "content-type": "text/html" } });
     if (url.pathname === "/renderer.js") return new Response(bundle, { headers: { "content-type": "text/javascript" } });
