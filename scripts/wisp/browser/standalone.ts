@@ -141,7 +141,8 @@ async function run(): Promise<void> {
     milliseconds.push(performance.now() - began);
     if (frame.done) {
       await Promise.all(pendingAudio);
-      await post("/complete", { gpu, startupMs, prepared: { ...prepared, step: preparation.step }, frames: milliseconds.length, elapsedMs: performance.now() - start, frameMs: { p50: percentile(milliseconds, 0.5), p95: percentile(milliseconds, 0.95), p99: percentile(milliseconds, 0.99) }, intervalMs: { p50: percentile(intervals, 0.5), p95: percentile(intervals, 0.95) }, requestMs: { p50: percentile(requests, 0.5), p95: percentile(requests, 0.95) }, renderMs: { p50: percentile(renders, 0.5), p95: percentile(renders, 0.95) }, ...(config.samples ? { frameSamplesMs: milliseconds, intervalSamplesMs: intervals, requestSamplesMs: requests, renderSamplesMs: renders, frameTimings: timings } : {}), audioEvents, audioReadyEvents, audioPlayed, audioDecodedAssets, missingSounds: [...missing] });
+      const elapsedMs = performance.now() - start;
+      await post("/complete", { gpu, startupMs, prepared: { ...prepared, step: preparation.step }, frames: milliseconds.length, elapsedMs, fps: milliseconds.length * 1000 / elapsedMs, frameMs: { p50: percentile(milliseconds, 0.5), p95: percentile(milliseconds, 0.95), p99: percentile(milliseconds, 0.99) }, intervalMs: { p50: percentile(intervals, 0.5), p95: percentile(intervals, 0.95), p99: percentile(intervals, 0.99) }, requestMs: { p50: percentile(requests, 0.5), p95: percentile(requests, 0.95) }, renderMs: { p50: percentile(renders, 0.5), p95: percentile(renders, 0.95) }, ...(config.samples ? { frameSamplesMs: milliseconds, intervalSamplesMs: intervals, requestSamplesMs: requests, renderSamplesMs: renders, frameTimings: timings } : {}), audioEvents, audioReadyEvents, audioPlayed, audioDecodedAssets, missingSounds: [...missing] });
       return;
     }
   }
