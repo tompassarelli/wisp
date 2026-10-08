@@ -68,6 +68,8 @@ const failed = (problem: string) => new RenderFailure({ cause: new Error(problem
 const problemOf = (failure: RenderFailure) => (failure.cause instanceof Error ? failure.cause.message : String(failure.cause));
 const decode = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, input: unknown) =>
   Schema.decodeUnknownEffect(schema)(input).pipe(Effect.mapError((cause) => failed(cause.message)));
+/** Game and scene code may throw; the page still gets the thrown text as its reply. */
+const thrownAsFailure = Effect.catchDefect((cause) => Effect.fail(new RenderFailure({ cause })));
 
 /**
  * One fixed simulation step per presented frame; wall-clock delays never change game arithmetic.
@@ -147,12 +149,12 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
       return new Response("saved");
     }
     return new Response("not found", { status: 404 });
-  }).pipe(Effect.catch((failure) => Effect.succeed(new Response(problemOf(failure), { status: 500 }))));
+  }).pipe(thrownAsFailure, Effect.catch((failure) => Effect.succeed(new Response(problemOf(failure), { status: 500 }))));
   const run = yield* FiberSet.makeRuntimePromise<never>();
   // Frames travel over one WebSocket: a fetch per frame cost about 10 ms of browser request handling under load.
   const server = yield* Effect.acquireRelease(Effect.sync(() => Bun.serve({ hostname: "127.0.0.1", port: 0, websocket: {
     async message(socket, message) {
-      socket.send(JSON.stringify(await run(step(String(message)).pipe(Effect.catch((failure) => Effect.succeed({ error: problemOf(failure) }))))));
+      socket.send(JSON.stringify(await run(step(String(message)).pipe(thrownAsFailure, Effect.catch((failure) => Effect.succeed({ error: problemOf(failure) }))))));
     },
   }, fetch: (request, server) => run(handle(request, server)) })), (open) => Effect.promise(() => open.stop(true)));
   return { url: `http://127.0.0.1:${server.port}/`, completed: Deferred.await(completion) };
