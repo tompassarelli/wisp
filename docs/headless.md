@@ -781,6 +781,23 @@ visible headless and absent natively. Headless also clears to a dark
 backdrop where native draws the stage sky; a sky-coloured clear brings
 electric hit's +8 from 538 to 269 (native 256) but leaves +2 at 4356.
 
+The effect's alpha is the renderer's model alpha (`setInstanceAlpha`) and
+fades every layer once; the three rules are pinned in
+`test/effect-opacity.test.ts`. With the map's sky drawn, two further
+variants were measured on all 42 frames:
+
+- Fading additive colour by the effect alpha a second time: electric hit
+  2383/269, electric shield 1595, still 12/14, and floor, wall and ceiling
+  tech and ledge catch +8 fall to 0 against native ~1,700. Native fades
+  additive layers once.
+- Sampling effect meshes two frames earlier (emitters unchanged): electric
+  shield 741 agrees, electric hit 1274/269 does not, and ice spark +2 falls
+  from 23088 to 10786 (native 19072): 13/14.
+
+ForkedLightningTarget grows on a Bezier scaling track from 0.165 at Birth's
+start to about 0.325 at +2's 33 ms, so the electric counts depend on when
+native samples Birth; which engine rule sets that time is not yet measured.
+
 Only measured numbers and authored code are kept here. Screenshots, stock
 models and textures stay in private local storage under the clean-room rules.
 

@@ -185,6 +185,12 @@ declare interface Layer {
     ReflectionsTextureID?: AnimVector | number;
 }
 
+/** GL blend factors [source RGB, destination RGB, source alpha, destination alpha] for a layer's filter mode; None draws without blending. */
+export declare function layerBlendFactors(filterMode: FilterMode): [number, number, number, number] | null;
+
+/** A layer fragment's alpha: its geoset's alpha times its own times the model's (an effect's alpha), whatever its filter mode. */
+export declare function layerOpacity(geosetAlpha: number, layerAlpha: number, instanceAlpha: number): number;
+
 declare enum LayerShading {
     Unshaded = 1,
     SphereEnvMap = 2,
@@ -322,6 +328,7 @@ declare interface ModelInfo {
 }
 
 export declare class ModelRenderer {
+    private instanceAlpha;
     private isHD;
     private hasWeightedSkin;
     private canvas;
@@ -487,6 +494,10 @@ export declare class ModelRenderer {
     private updateNode;
     private findAlpha;
     private getTexCoordMatrix;
+    /** A layer's opacity is its geoset's animated alpha times the layer's own animated alpha. */
+    private setLayerAlpha;
+    /** The whole model's opacity, as a game sets an effect's alpha. Particles and ribbons ignore it. */
+    setInstanceAlpha(alpha: number): void;
     private setLayerProps;
     private setLayerPropsHD;
 }
