@@ -34,6 +34,10 @@ export function sceneryFixture(this: void, declarations: NativeDeclarations, tes
   }
   call("BlzSetTerrainFogColor", 12, 13, 14);
   equal((scenery.fog.color as number[])[2], 14, "fog blue");
+  call("SetSkyModel", "Environment\\Sky\\Test\\Test.mdl");
+  equal(scenery.sky, "Environment\\Sky\\Test\\Test.mdl", "sky model");
+  call("BlzShowTerrain", false);
+  equal(scenery.terrainShown, false, "terrain hidden");
   call("BlzSetMinShadowCastingPointLightCount", 6);
   equal(call("BlzGetMinShadowCastingPointLightCount"), 6, "point light shadow count");
   call("SetCameraFieldControlledByInput", "camera-field", true);

@@ -26,6 +26,8 @@ export interface RenderScene {
   readonly units: ReturnType<HeadlessClient["unitPoses"]>;
   readonly camera: ReturnType<HeadlessClient["cameraPose"]>;
   readonly ui: ReturnType<HeadlessClient["frames"]["snapshot"]>;
+  /** SetSkyModel's model, drawn around the camera behind everything else; absent or "" draws no sky. */
+  readonly sky?: string;
 }
 
 /** A pose the renderer draws: an effect, or a unit drawn like one, which starts on Stand rather than Birth. */
@@ -33,6 +35,7 @@ export type DrawnPose = EffectPose & { readonly unit?: true };
 
 export const captureScene = (client: HeadlessClient, options: { readonly visibleOnly?: boolean } = {}): RenderScene => ({
   frame: client.frame, client: client.slot, effects: client.effectPoses({ visibleOnly: options.visibleOnly ?? false }), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot({ visibleOnly: options.visibleOnly ?? false }),
+  ...(client.scenery.sky ? { sky: client.scenery.sky } : {}),
 });
 
 /** The Death sequence lengths of `models`, read from the map's assets, for clients whose destroyed effects are drawn. */
