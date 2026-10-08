@@ -11,11 +11,9 @@ const runtime = installHeadless({ filePrefix: "unit-states", globalPrefixes: ["_
 afterAll(runtime.restore);
 
 /**
- * The rows as Warcraft 3.0.1.24342 wrote them on 8 October 2026 (clone-a,
- * ~/.local/share/smashcraft-native/clone-a-20261008b/wisp44-unit-states-p0.txt), except
- * `death-cutoff`, which read 0,0,0 there (wisp#44: the cutoff rule waits on
- * `death-cutoff-first-alive` and the exact reads). Those rows and `life-after-max-change` await
- * their first native capture, and the removal rows their second, at full life.
+ * Warcraft 3.0.1.24342, 8 October 2026, client A, Classic graphics:
+ * ~/.local/state/smashcraft/native-corpus70-20261008/unit44/unit-states-p0.txt.
+ * All twenty-four rows are native observations; the first twelve also repeat clone-a's earlier run.
  */
 export const EXPECTED = [
   "owner-retained=256",
@@ -30,10 +28,10 @@ export const EXPECTED = [
   "dead-widget-life-write=6400",
   "dead-unit-state-write=6400",
   "removal=859289472,6400",
-  "death-cutoff=0,0,51",
-  "death-cutoff-first-alive=13589547p-25",
-  "life-write-exact=15p-1,7025459p-20,27p-1",
-  "mana-write-exact=13421773p-27,13421773p-22",
+  "death-cutoff=0,0,0",
+  "death-cutoff-first-alive=106169p-18",
+  "life-write-exact=15p-1,439091p-16,27p-1",
+  "mana-write-exact=13107p-17,209715p-16",
   "life-after-max-change=6400",
   "dead-low-write=51",
   "dead-raised-low-write=51",
@@ -53,14 +51,14 @@ function play() {
   return { clients, result };
 }
 
-test("the named unit state cases agree in two clients", () => {
+test("[native #44] all 24 unit state rows match Warcraft in two clients", () => {
   const { clients, result } = play();
   expect(result.divergence).toBeUndefined();
   expect(result.clients.map(client => client.errors)).toEqual([[], []]);
   for (const client of clients.clients) expect(client.files.get(`unit-states-p${client.slot}.txt`)).toEqual(EXPECTED);
 });
 
-timingTest("the named unit state cases complete in two clients within two seconds", () => {
+timingTest("[spec #44] the unit state cases complete in two clients within two seconds", () => {
   const before = performance.now();
   play();
   const elapsed = performance.now() - before;
@@ -68,7 +66,7 @@ timingTest("the named unit state cases complete in two clients within two second
   console.info(`unit states: ${EXPECTED.length} cases, 2 clients, ${elapsed.toFixed(1)} ms`);
 });
 
-test("an injected different life write is detected by the existing call check", () => {
+test("[invariant] an injected different life write is detected by the existing call check", () => {
   const clients = runtime.clients({ install, start: () => {
     const u = CreateUnit(Player(2), UNIT_TYPE, 0, 0, 180);
     SetWidgetLife(u, GetPlayerId(GetLocalPlayer()) === 0 ? 50 : 51);
@@ -77,7 +75,7 @@ test("an injected different life write is detected by the existing call check", 
   expect(result.divergence).toContain("SetWidgetLife");
 });
 
-test("object-data values are supplied by the declared fixture", () => {
+test("[spec #44] object-data values are supplied by the declared fixture", () => {
   const clients = runtime.clients({ install, start: () => {
     const u = CreateUnit(Player(2), UNIT_TYPE, 0, 0, 180);
     expect([GetWidgetLife(u), GetUnitState(u, UNIT_STATE_MAX_LIFE), GetUnitState(u, UNIT_STATE_MANA), GetUnitState(u, UNIT_STATE_MAX_MANA)]).toEqual([100, 100, 80, 80]);
@@ -85,7 +83,7 @@ test("object-data values are supplied by the declared fixture", () => {
   clients.start();
 });
 
-test("the same authored cases pass in emitted 32-bit Lua", () => {
+test("[native #44] the same 24 unit state rows match Warcraft in emitted 32-bit Lua", () => {
   for (const config of ["test/unit-states/tsconfig.json", "test/unit-states/tsconfig.headless.json"]) expect(report(mapCompiler(join(import.meta.dir, "..", config))())).toBe("");
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "../build/unit-states/headless/headless.lua"), join(import.meta.dir, "../build/unit-states/map.lua"), join(import.meta.dir, "../src/natives/warcraft.d.ts")], { stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });

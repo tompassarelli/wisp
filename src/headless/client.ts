@@ -7,7 +7,7 @@
 // in Bun and, compiled with TypeScriptToLua, in 32-bit Lua; each host puts the
 // natives where its map code finds them.
 import { errorFile, FILE_IO_ABILITY } from "../runtime/gameFiles";
-import { addFloat32TowardZero, divideFloat32, multiplyFloat32TowardZero, roundToFloat32, subtractFloat32TowardZero } from "../sim/binary32";
+import { addFloat32, addFloat32TowardZero, divideFloat32, multiplyFloat32TowardZero, roundToFloat32, subtractFloat32, subtractFloat32TowardZero } from "../sim/binary32";
 import { f32 } from "../sim/f32";
 import { advanceAnimation, type AnimationBlend, type AnimationState, freshAnimation, seekAnimation, selectAnimation } from "./animation";
 import type { FrameTemplate } from "./frames";
@@ -727,12 +727,12 @@ export class HeadlessClient {
   }
 
   /**
-   * A write that takes a living unit to the cutoff or below kills it and leaves zero life; a dead unit
-   * stores whatever is written and stays dead (wisp:docs/warsmash-notes.md, "Life and death: facts for #44").
+   * Native life writes round the change from current life before applying it, with halfway changes
+   * toward zero; the cutoff applies to that result (wisp:docs/warsmash-notes.md#native-results-for-44).
    */
   private setLife(unit: Unit, life: number): void {
     if (unit.removed) return;
-    const value = f32(life);
+    const value = unit.life === undefined ? f32(life) : addFloat32(unit.life, subtractFloat32(f32(life), unit.life, true));
     if (!unit.dead && value <= DEATH_CUTOFF) {
       unit.life = 0;
       unit.dead = true;
@@ -842,7 +842,7 @@ export class HeadlessClient {
       SetUnitState: (unit: Unit, state: string, value: number) => {
         if (unit.removed) return;
         if (state === "UNIT_STATE_LIFE") this.setLife(unit, value);
-        else if (state === "UNIT_STATE_MANA") unit.mana = f32(value);
+        else if (state === "UNIT_STATE_MANA") unit.mana = unit.mana === undefined ? f32(value) : addFloat32(unit.mana, subtractFloat32(f32(value), unit.mana, true));
         // Warcraft ignores maximum life and mana writes here; BlzSetUnitMaxHP and BlzSetUnitMaxMana set them.
         else if (state !== "UNIT_STATE_MAX_LIFE" && state !== "UNIT_STATE_MAX_MANA") throw new Error(`SetUnitState: unsupported state ${state}`);
       },
