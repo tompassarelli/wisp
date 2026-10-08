@@ -45,6 +45,8 @@ export interface StandaloneFrame {
   readonly checksum?: string;
   readonly capture: boolean;
   readonly done: boolean;
+  /** The server's step and scene copy for this frame, in milliseconds. */
+  readonly serverMs: number;
 }
 
 const Input = Schema.Struct({ buttons: Schema.Array(Schema.String), axisX: Schema.Finite, axisY: Schema.Finite });
@@ -104,7 +106,7 @@ export async function openStandalone(game: StandaloneGame, options: StandaloneOp
         soundOffset = session.client.soundLog.length;
         if (capture && options.out !== undefined) await Bun.write(join(options.out, `p${scene.client}-frame-${frame}.json`), JSON.stringify(scene));
         const packet: StandaloneFrame = { scene: { ...scene, frame, units: [], effects: scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat), ui: scene.ui.filter((element) => element.visible && element.alpha > 0) },
-          sounds: cues, step: steps, frame, ...(checksum === undefined ? {} : { checksum }), capture, done: options.frames !== undefined && steps >= options.frames };
+          sounds: cues, step: steps, frame, ...(checksum === undefined ? {} : { checksum }), capture, done: options.frames !== undefined && steps >= options.frames, serverMs: performance.now() - start };
         return Response.json(packet);
       }
       if (url.pathname === "/capture" && request.method === "POST" && options.out !== undefined) {
