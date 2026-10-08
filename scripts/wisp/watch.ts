@@ -369,7 +369,8 @@ const pairStatus = (client: string, socket: string) => Effect.tryPromise({
 /** What the offline host says of a pool client; none for a client outside the pool. The host socket is outside the pool's isolated network; its menus' TCP sockets are inside. */
 export const lanObservation = (client: Pick<Client, "name" | "documents">) => Effect.gen(function*() {
   const { documents } = client;
-  const pair = readPool()?.pairs.find((pair) => pairClients(pair.id, pair.runs).some((client) => client.documents === documents));
+  const pool = yield* readPool.pipe(Effect.mapError((failure) => new WatchFailure({ client: client.name, operation: "read the LAN pool", problem: failure.problem })));
+  const pair = pool?.pairs.find((pair) => pairClients(pair.id, pair.runs).some((client) => client.documents === documents));
   if (pair === undefined) return undefined;
   const status = yield* pairStatus(client.name, pair.agentSocket);
   const known = status.clients.find((client) => client.documents === documents);

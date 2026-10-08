@@ -25,7 +25,7 @@ const agent = (pair: number, path: string, body?: unknown) => Effect.tryPromise(
 export const actions: Command = (args) => Effect.gen(function*() {
   const names = flagValues(args, "client").flatMap((value) => value.split(",")).filter((name) => name !== "");
   if (names.length === 0) return yield* new UsageFailure({ problem: "name the pool clients with --client lan0a,lan0b" });
-  const pool = readPool();
+  const pool = yield* readPool;
   if (pool === undefined) return yield* new LanFailure({ problem: `no LAN pool is running; start one with wisp lan pool (actions come from its host; online clients are never touched)` });
   const pair = pairOf(pool, names);
   if (pair === undefined) return yield* new LanFailure({ problem: `${names.join(", ")} aren't one pair of ${poolClientsFile()}; only the pool's offline clients have an action log` });

@@ -137,7 +137,7 @@ test("[repro #62] watch: a pair agent that doesn't answer is a timeout, not a cl
   mkdirSync(join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${pair}`), { recursive: true });
   const silent = Bun.serve({ unix: agentSocket(pair), fetch: () => new Promise<Response>(() => {}) });
   cleanups.push(() => silent.stop(true));
-  writeFileSync(poolFile(), JSON.stringify({ profile: "parity", pairs: [{ id: pair, clients: "", agentSocket: agentSocket(pair), runs: {}, appIds: {} }] }));
+  writeFileSync(poolFile(), JSON.stringify({ profile: "parity", pairs: [{ id: pair, clients: "", agentSocket: agentSocket(pair), runs: {}, appIds: { a: "steam_app_1", b: "steam_app_2" } }] }));
   const [client] = pairClients(pair, {});
   const exit = await Effect.runPromise(Effect.gen(function*() {
     const looking = yield* Effect.forkChild(Effect.exit(lanObservation({ name: client!.name, documents: client!.documents })));
