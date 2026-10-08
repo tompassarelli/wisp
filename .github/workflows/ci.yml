@@ -48,7 +48,8 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Install the native archive test dependency
         run: sudo apt-get update && sudo apt-get install -y libstorm-dev
-      - run: CC=gcc STORMLIB_PREFIX=/usr bun test --timeout 120000 --preload ./scripts/wisp/testCostPreload.ts -t "farm: " $(git grep -l 'farmTest(' -- '*.test.ts' | sed 's#^#./#')
+      - run: |
+          CC=gcc STORMLIB_PREFIX=/usr bun test --timeout 120000 --preload ./scripts/wisp/testCostPreload.ts -t "farm: " $(git grep -l 'farmTest(' -- '*.test.ts' | sed 's#^#./#')
 
   # The consumer template (wisp:docs/ci.md) on the neutral sample: its checks
   # and headless journey pass, and its desync fixture fails as expected.
