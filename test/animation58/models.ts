@@ -1,7 +1,7 @@
-// The #58 fixture's models as MDL text, compiled to MDX with war3-model, the
-// path Smashcraft's stage models take into the real game. Every surface is a
-// flat, unshaded, team-colored square, so a top-down screenshot shows each
-// part as one solid patch of its player color.
+// The ruler fixture's models as MDL text, compiled to MDX with war3-model,
+// the path Smashcraft's stage models take into the real game. Every surface
+// is a flat, unshaded, unfogged, team-colored square, so a top-down
+// screenshot shows each part as one solid patch of its player color.
 import { generateMDX, parseMDL } from "../../vendor/war3-model.mjs";
 import { BOARD, CLIP, CLIP_SEQUENCES, CLOCK_DY, GLOBAL_LENGTH, MARK, RULER, RULER_SEQUENCES, type RulerSequence } from "./layout";
 
@@ -72,7 +72,7 @@ Sequences ${model.sequences.length} {
 ${model.sequences.map((sequence) => `    Anim "${sequence.name}" { Interval { ${sequence.start}, ${sequence.end} }, ${sequence.looping ? "" : "NonLooping, "}${extent} }`).join("\n")}
 }
 ${model.globalLength === undefined ? "" : `GlobalSequences 1 { Duration ${model.globalLength}, }\n`}Textures 1 { Bitmap { Image "", ReplaceableId 1, } }
-Materials 1 { Material { Layer { FilterMode None, Unshaded, TwoSided, static TextureID 0, static Alpha 1, } } }
+Materials 1 { Material { Layer { FilterMode None, Unshaded, Unfogged, TwoSided, static TextureID 0, static Alpha 1, } } }
 ${model.quads.map((quad) => geoset(quad, extent)).join("\n")}
 Bone "Needle" { ObjectId 0, GeosetId Multiple, GeosetAnimId None,
     ${needle}
