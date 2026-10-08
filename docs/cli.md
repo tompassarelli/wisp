@@ -163,7 +163,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--journey FILE` | Read the headless journey's events from JSON | `headless` |
 | `--step N` | Advance at most N simulation frames at a time | `headless` |
 | `--runs N` | Fresh scripted starts compared with the first run | `headless` |
-| `--sound-cues FILE` | Write the headless sound cue log | `headless` |
+| `--sound-cues FILE` | Write the headless sound/music event log, including stops, loops and volume | `headless` |
 | `--samples` | Also print each frame's sample | `perf` |
 | `--threshold SHARE` | The rise that fails a comparison | `perf compare` |
 | `--cost` | Also print predicted Warcraft cost per frame | `headless` |

@@ -167,9 +167,9 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
       if (json) yield* emitJson("headless", { type: "benchmark", ...benchmark, speedMultiple });
       else yield* Console.log(`${benchmark.runs} starts, ${benchmark.failures} failed runs; ${speedMultiple.toFixed(1)}x real time, ${elapsedMs.toFixed(1)} ms wall, ${benchmark.cpuMs.toFixed(1)} ms CPU`);
     }
-    for (const cue of report.sounds) if (cue.event === "start") {
+    for (const cue of report.sounds) if (cue.event !== "create") {
       if (json) yield* emitJson("headless", { type: "sound", ...cue });
-      else yield* Console.log(`p${cue.client} frame ${cue.frame}: sound ${cue.label ?? cue.source ?? "unknown"} volume ${cue.volume} pitch ${cue.pitch}`);
+      else yield* Console.log(`p${cue.client} frame ${cue.frame}: ${cue.kind} ${cue.event} ${cue.label ?? cue.source ?? "unknown"} loop ${cue.looping} volume ${cue.volume} effective ${cue.effectiveVolume} pitch ${cue.pitch}`);
     }
     if (options.sounds !== undefined) yield* Effect.tryPromise({ try: () => Bun.write(options.sounds ?? "", JSON.stringify(report.sounds, null, 2) + "\n"), catch: (cause) => new HeadlessFailure({ journey: name, problems: 1, cause }) });
     if (options.render !== undefined && project.render !== undefined) {

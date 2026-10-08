@@ -4,7 +4,7 @@ import { createSoundResolver } from "../scripts/wisp/standaloneSound";
 
 const cue = (source: string | undefined, label: string | undefined): SoundCue => ({
   event: "create", frame: 1, handle: { kind: "sound", id: 2 }, source, label,
-  volume: 127, pitch: 1, x: 0, y: 0, z: 0,
+  kind: "sound", looping: false, volume: 127, effectiveVolume: 1, pitch: 1, x: 0, y: 0, z: 0,
 });
 
 test("[spec docs/play.md] stock SLK labels and direct paths resolve installed encodings with one read per sound", async () => {
