@@ -73,7 +73,28 @@ export async function openStandalone(game: StandaloneGame, options: StandaloneOp
   if (!bundle.success || bundle.outputs[0] === undefined) { session.close(); throw new Error(bundle.logs.join("\n")); }
   const javascript = await bundle.outputs[0].text();
   if (options.out !== undefined) await mkdir(options.out, { recursive: true });
-  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
+  const step = async (body: string): Promise<StandaloneFrame> => {
+    const input = Schema.decodeUnknownSync(Schema.fromJsonString(Input))(body);
+    const start = performance.now();
+    session.step(input);
+    const frame = session.frame?.() ?? session.client.frame;
+    const checksum = recordChecksums ? session.checksum() : undefined;
+    steps++;
+    if (checksum !== undefined) checksums.push({ step: steps, frame, checksum, simulationMs: performance.now() - start });
+    const capture = captures.delete(frame);
+    const scene = sceneWithUnits(game.render, captureScene(session.client, { visibleOnly: !capture }));
+    const cues = session.client.soundLog.slice(soundOffset);
+    soundOffset = session.client.soundLog.length;
+    if (capture && options.out !== undefined) await Bun.write(join(options.out, `p${scene.client}-frame-${frame}.json`), JSON.stringify(scene));
+    return { scene: { ...scene, frame, units: [], effects: scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat), ui: scene.ui.filter((element) => element.visible && element.alpha > 0) },
+      sounds: cues, step: steps, frame, ...(checksum === undefined ? {} : { checksum }), capture, done: options.frames !== undefined && steps >= options.frames, serverMs: performance.now() - start };
+  };
+  // Frames travel over one WebSocket: a fetch per frame cost about 10 ms of browser request handling under load.
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, websocket: {
+    async message(socket, message) {
+      socket.send(JSON.stringify(await step(String(message)).catch((cause: unknown) => ({ error: cause instanceof Error ? cause.message : String(cause) }))));
+    },
+  }, async fetch(request, server) {
     const url = new URL(request.url);
     try {
       if (url.pathname === "/") return new Response(`<!doctype html><html><head><title>${game.title.replaceAll("<", "&lt;")}</title><style>html,body{margin:0;width:100%;height:100%;background:#101522;overflow:hidden}body{display:flex;align-items:center;justify-content:center}canvas{max-width:100%;max-height:100%;object-fit:contain}#status{position:fixed;bottom:12px;left:16px;color:white;font:14px sans-serif;background:#101522bb;padding:6px 10px;border-radius:5px}</style></head><body><script type="module" src="/player.js"></script></body></html>`, { headers: { "content-type": "text/html" } });
@@ -92,23 +113,7 @@ export async function openStandalone(game: StandaloneGame, options: StandaloneOp
         const resolved = await sounds({ ...cue, source: cue.source, label: cue.label });
         return resolved === undefined ? new Response(`missing sound: ${cue.source ?? cue.label}`, { status: 404 }) : new Response(new Uint8Array(resolved.bytes), { headers: { "x-wisp-sound-path": resolved.path } });
       }
-      if (url.pathname === "/frame" && request.method === "POST") {
-        const input = Schema.decodeUnknownSync(Input)(await request.json());
-        const start = performance.now();
-        session.step(input);
-        const frame = session.frame?.() ?? session.client.frame;
-        const checksum = recordChecksums ? session.checksum() : undefined;
-        steps++;
-        if (checksum !== undefined) checksums.push({ step: steps, frame, checksum, simulationMs: performance.now() - start });
-        const capture = captures.delete(frame);
-        const scene = sceneWithUnits(game.render, captureScene(session.client, { visibleOnly: !capture }));
-        const cues = session.client.soundLog.slice(soundOffset);
-        soundOffset = session.client.soundLog.length;
-        if (capture && options.out !== undefined) await Bun.write(join(options.out, `p${scene.client}-frame-${frame}.json`), JSON.stringify(scene));
-        const packet: StandaloneFrame = { scene: { ...scene, frame, units: [], effects: scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat), ui: scene.ui.filter((element) => element.visible && element.alpha > 0) },
-          sounds: cues, step: steps, frame, ...(checksum === undefined ? {} : { checksum }), capture, done: options.frames !== undefined && steps >= options.frames, serverMs: performance.now() - start };
-        return Response.json(packet);
-      }
+      if (url.pathname === "/frames") return server.upgrade(request) ? undefined : new Response("frames need a WebSocket", { status: 400 });
       if (url.pathname === "/capture" && request.method === "POST" && options.out !== undefined) {
         const frame = Number(url.searchParams.get("frame")), slot = session.client.slot;
         if (!Number.isSafeInteger(frame) || frame < 0) throw new Error("invalid capture frame");

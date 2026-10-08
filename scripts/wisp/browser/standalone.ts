@@ -98,11 +98,23 @@ async function run(): Promise<void> {
   status.textContent = "Ready to play";
   const start = performance.now();
   let nextFrame = start;
+  const socket = new WebSocket(`ws://${location.host}/frames`);
+  const replies: { resolve(text: string): void; reject(cause: Error): void }[] = [];
+  socket.addEventListener("message", (event) => replies.shift()?.resolve(String(event.data)));
+  socket.addEventListener("close", () => { for (const reply of replies.splice(0)) reply.reject(new Error("frame connection closed")); });
+  await new Promise<void>((resolve, reject) => {
+    socket.addEventListener("open", () => resolve(), { once: true });
+    socket.addEventListener("error", () => reject(new Error("frame connection failed")), { once: true });
+  });
   const loadFrame = async () => {
     const requestedMs = performance.now();
-    const response = await post("/frame", config.scripted ? { buttons: [], axisX: 0, axisY: 0 } : input());
+    const text = await new Promise<string>((resolve, reject) => {
+      replies.push({ resolve, reject });
+      socket.send(JSON.stringify(config.scripted ? { buttons: [], axisX: 0, axisY: 0 } : input()));
+    });
     const respondedMs = performance.now();
-    const frame = await response.json() as StandaloneFrame;
+    const frame = JSON.parse(text) as StandaloneFrame | { error: string };
+    if ("error" in frame) throw new Error(frame.error);
     return { frame, requestedMs, respondedMs, readyMs: performance.now() };
   };
   let pending = loadFrame();
