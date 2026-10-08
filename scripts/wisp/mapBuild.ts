@@ -196,11 +196,16 @@ const rebuildMap = (map: string, compile: Effect.Effect<CompiledBundle, BuildFai
 }));
 
 /** The base map's other files (terrain, doodads, strings ...), which the container must carry unchanged. */
-const baseMapFiles = (packager: string, base: string, generated: ReadonlySet<string>, work: string) => Effect.gen(function*() {
+export const baseMapEntryNames = (list: string, replacements: readonly ArchiveEntry[]) => {
+  const replaced = new Set(replacements.map(({ entry }) => entry.toLowerCase()));
+  return list.split(/\r?\n/).filter((entry) => entry.length > 0 && !replaced.has(entry.toLowerCase()));
+};
+
+const baseMapFiles = (packager: string, base: string, replacements: readonly ArchiveEntry[], work: string) => Effect.gen(function*() {
   const listPath = join(work, "base-listfile");
   yield* mapPack(packager).extract(base, listPath, "(listfile)");
   const list = yield* tryMapPromise("read base map file list", base, () => Bun.file(listPath).text());
-  const entries = list.split(/\r?\n/).filter((entry) => entry.length > 0 && !generated.has(entry))
+  const entries = baseMapEntryNames(list, replacements)
     .map((entry, index): ArchiveEntry => ({ entry, source: join(work, `base-${index}`) }));
   yield* mapPack(packager).extractAll(base, entries, join(work, "base-entries"));
   return entries;
@@ -269,7 +274,7 @@ const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compil
     const scriptPath = join(work, "war3map.lua");
     yield* runProcess("check map script syntax", scriptPath, [join(lua, "bin/luac"), "-p", scriptPath]).pipe(step("check script syntax"));
     const assets = [
-      ...yield* baseMapFiles(packager, options.base, new Set(files.map(({ entry }) => entry)), work).pipe(step("extract base files")),
+      ...yield* baseMapFiles(packager, options.base, [...files, ...options.imports ?? []], work).pipe(step("extract base files")),
       ...options.imports ?? [],
     ];
     return { generated, files, assets };
