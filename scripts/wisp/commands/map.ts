@@ -8,7 +8,7 @@ import { type Command, UsageFailure, describeCause } from "../command";
 import { encodePpm } from "../frameProbe";
 import { collect } from "../hostProcess";
 import { ensurePackager } from "../mapBuild";
-import { decodePreviewTexture, selectMapPreview } from "../mapPreview";
+import { decodePreviewTexture, decodePreviewRgba, decodeMinimapMarkers, drawStartMarkers, selectMapPreview } from "../mapPreview";
 
 export class MapPreviewFailure extends Schema.TaggedError<MapPreviewFailure>()("MapPreviewFailure", { problem: Schema.String }) {
   override get message() { return this.problem; }
@@ -16,7 +16,7 @@ export class MapPreviewFailure extends Schema.TaggedError<MapPreviewFailure>()("
 
 export const map: Command = (args) => Effect.gen(function*() {
   const { values, positionals } = yield* Effect.try({
-    try: () => parseArgs({ args: [...args], allowPositionals: true, options: { out: { type: "string" }, packager: { type: "string" } } }),
+    try: () => parseArgs({ args: [...args], allowPositionals: true, options: { out: { type: "string" }, packager: { type: "string" }, assets: { type: "string" } } }),
     catch: (cause) => new UsageFailure({ problem: describeCause(cause) }),
   });
   if (positionals[0] !== "preview" || positionals.length !== 2 || values.out === undefined) return yield* new UsageFailure({ problem: "map preview MAP.w3x --out IMAGE.ppm [--packager PATH]" });
@@ -36,7 +36,13 @@ export const map: Command = (args) => Effect.gen(function*() {
   const info = yield* Effect.try({ try: () => decodeMapInfo(infoBytes), catch: (cause) => new MapPreviewFailure({ problem: describeCause(cause) }) });
   const selected = yield* Effect.try({ try: () => selectMapPreview(info, entries), catch: (cause) => new MapPreviewFailure({ problem: describeCause(cause) }) });
   const texture = yield* extract(selected.entry, join(scratch, "texture"));
-  const frame = yield* Effect.try({ try: () => decodePreviewTexture(texture), catch: (cause) => new MapPreviewFailure({ problem: describeCause(cause) }) });
+  let frame = yield* Effect.try({ try: () => decodePreviewTexture(texture), catch: (cause) => new MapPreviewFailure({ problem: describeCause(cause) }) });
+  const markerBytes = entries.has("war3map.mmp") ? yield* extract("war3map.mmp", join(scratch, "markers")) : undefined;
+  const markers = yield* Effect.try({ try: () => markerBytes === undefined ? [] : decodeMinimapMarkers(markerBytes), catch: (cause) => new MapPreviewFailure({ problem: describeCause(cause) }) });
+  if (values.assets !== undefined && markers.length > 0) {
+    const iconBytes = yield* fs.readFile(join(values.assets, "UI/MiniMap/MinimapIcon/MinimapIconStartLoc.tga"));
+    frame = yield* Effect.try({ try: () => drawStartMarkers(frame, markers, decodePreviewRgba(iconBytes)), catch: (cause) => new MapPreviewFailure({ problem: describeCause(cause) }) });
+  }
   yield* fs.writeFile(out, encodePpm(frame));
-  console.log(JSON.stringify({ map: archive, name: info.name, author: info.author, players: info.players.length, ...selected, width: frame.width, height: frame.height, out }));
+  console.log(JSON.stringify({ map: archive, name: info.name, author: info.author, players: info.players.length, ...selected, markers, iconsRendered: markers.length === 0 || values.assets !== undefined, width: frame.width, height: frame.height, out }));
 }).pipe(Effect.scoped, Effect.provide(BunServices.layer), Effect.mapError((cause) => new MapPreviewFailure({ problem: cause.message })));

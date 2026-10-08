@@ -16,6 +16,15 @@ export function selectMapPreview(info: Pick<MapInfo, "flags">, entries: Readonly
 }
 
 export function decodePreviewTexture(bytes: Uint8Array): Frame {
+  const { width, height, rgba } = decodePreviewRgba(bytes);
+  const rgb = new Uint8Array(width * height * 3);
+  for (let pixel = 0; pixel < width * height; pixel++) {
+    for (let channel = 0; channel < 3; channel++) rgb[pixel * 3 + channel] = rgba[pixel * 4 + channel] ?? 0;
+  }
+  return { width, height, rgb };
+}
+
+export function decodePreviewRgba(bytes: Uint8Array) {
   let width: number, height: number, rgba: Uint8Array | Uint8ClampedArray;
   if (bytes[0] === 66 && bytes[1] === 76) {
     const image = getBLPImageData(decodeBLP(bytes.slice().buffer), 0);
@@ -24,11 +33,38 @@ export function decodePreviewTexture(bytes: Uint8Array): Frame {
     const image = decodeTga(bytes);
     ({ width, height } = image); rgba = image.rgba;
   }
-  const rgb = new Uint8Array(width * height * 3);
-  for (let pixel = 0; pixel < width * height; pixel++) {
-    for (let channel = 0; channel < 3; channel++) rgb[pixel * 3 + channel] = rgba[pixel * 4 + channel] ?? 0;
+  return { width, height, rgba };
+}
+
+export interface MinimapMarker { readonly type: number; readonly x: number; readonly y: number; readonly color: number }
+
+export function decodeMinimapMarkers(bytes: Uint8Array): readonly MinimapMarker[] {
+  if (bytes.length < 8) throw new Error("truncated war3map.mmp");
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint32(0, true) !== 0) throw new Error("unsupported war3map.mmp version");
+  const count = view.getUint32(4, true);
+  if (8 + count * 16 !== bytes.length) throw new Error("truncated war3map.mmp marker table");
+  return Array.from({ length: count }, (_, i) => ({ type: view.getUint32(8 + i * 16, true), x: view.getUint32(12 + i * 16, true), y: view.getUint32(16 + i * 16, true), color: view.getUint32(20 + i * 16, true) }));
+}
+
+export function drawStartMarkers(frame: Frame, markers: readonly MinimapMarker[], icon: ReturnType<typeof decodePreviewRgba>): Frame {
+  const rgb = frame.rgb.slice();
+  for (const marker of markers) {
+    if (marker.type !== 2) throw new Error(`minimap marker type ${marker.type} needs its native icon and reference`);
+    const left = Math.round(marker.x * frame.width / 256 - icon.width / 2), top = Math.round(marker.y * frame.height / 256 - icon.height / 2);
+    for (let y = 0; y < icon.height; y++) for (let x = 0; x < icon.width; x++) {
+      const targetX = left + x, targetY = top + y;
+      if (targetX < 0 || targetY < 0 || targetX >= frame.width || targetY >= frame.height) continue;
+      const source = (y * icon.width + x) * 4, target = (targetY * frame.width + targetX) * 3;
+      const alpha = ((icon.rgba[source + 3] ?? 0) / 255) * ((marker.color >>> 24) / 255);
+      for (let channel = 0; channel < 3; channel++) {
+        const tint = (marker.color >>> ((2 - channel) * 8)) & 255;
+        const foreground = (icon.rgba[source + channel] ?? 0) * tint / 255;
+        rgb[target + channel] = Math.round(foreground * alpha + (rgb[target + channel] ?? 0) * (1 - alpha));
+      }
+    }
   }
-  return { width, height, rgb };
+  return { ...frame, rgb };
 }
 
 function decodeTga(bytes: Uint8Array) {
