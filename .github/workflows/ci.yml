@@ -58,7 +58,7 @@ jobs:
     uses: ./.github/workflows/consumer.yml
     with:
       bun-version: 1.3.13
-      test: bun test examples/sample
+      test: WISP_TEST_COST_SHARD=1 bun run test examples/sample
       headless: bun examples/sample/scripts/sample.ts headless
       artifact-name: wisp-ci-sample
 

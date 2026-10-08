@@ -67,6 +67,7 @@ jobs:
     timeout-minutes: 20
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
         shard: ${{ fromJSON(needs.plan.outputs.bun) }}
     name: bun ${{ matrix.shard }}
@@ -94,13 +95,48 @@ jobs:
       - name: Test shard ${{ matrix.shard }}
         run: |
           set +e
-          bun test --preload ./scripts/wisp/testCostPreload.ts $(jq -r ".bun[${{ matrix.shard }}][] | \"./\" + ." plan.json) --reporter=junit --reporter-outfile=junit.xml
+          WISP_TEST_COST_SHARD=1 bun run test $(jq -r ".bun[${{ matrix.shard }}][] | \"./\" + ." plan.json) --reporter=junit --reporter-outfile=junit.xml
           code=$?
-          bun scripts/wisp/farmShards.ts junit --shard ${{ matrix.shard }} --exit-code "$code" junit.xml > result.json
+          mapfile -t farm_files < <(jq -r ".bun[${{ matrix.shard }}][]" plan.json | while IFS= read -r file; do
+            if rg -q 'farmTest\(' "$file"; then echo "./$file"; fi
+          done)
+          if [ "${#farm_files[@]}" -gt 0 ]; then
+            bun test --timeout 120000 --preload ./scripts/wisp/testCostPreload.ts -t "farm: " "${farm_files[@]}" --reporter=junit --reporter-outfile=junit-farm.xml
+            farm_code=$?
+            if [ "$farm_code" -ne 0 ]; then code=$farm_code; fi
+          fi
+          bun scripts/wisp/farmShards.ts junit --shard ${{ matrix.shard }} --exit-code "$code" junit*.xml > result.json
           exit "$code"
         env:
           CC: gcc
           STORMLIB_PREFIX: /usr
+      - name: Scratch CPU ceiling checks (#65)
+        if: ${{ matrix.shard == 0 && !cancelled() }}
+        run: |
+          scratch=$(mktemp -d .cost-proof-XXXXXX)
+          trap 'rm -rf "$scratch"' EXIT
+          cat > "$scratch/cheap.test.ts" <<'EOF'
+          import { expect, test } from "bun:test";
+          for (let i = 0; i < 10; i++) test(`[spec #65] cheap input ${i}`, () => expect(i + 1).toBeGreaterThan(i));
+          EOF
+          bun run test "./$scratch/cheap.test.ts"
+          cat > "$scratch/slow.test.ts" <<'EOF'
+          import { test } from "bun:test";
+          test("[spec #65] scratch test burns five CPU seconds", () => {
+            const start = process.cpuUsage();
+            while (true) {
+              const used = process.cpuUsage(start);
+              if (used.user + used.system >= 5_000_000) break;
+            }
+          }, 120000);
+          EOF
+          set +e
+          bun run test "./$scratch/slow.test.ts" > "$scratch/slow.log" 2>&1
+          code=$?
+          set -e
+          cat "$scratch/slow.log"
+          test "$code" -eq 1
+          rg 'slow.test.ts: this test used .*over the 4 s ceiling per test; shrink it or move it to the farm' "$scratch/slow.log"
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
