@@ -39,6 +39,22 @@ test("headless JSON has a clean result, then a summary", async () => {
   expect(summary.counts).toEqual({ results: 1, failures: 0 });
 });
 
+test("[invariant] scripted frame stepping and fresh fast-forward starts preserve each client's checksum", async () => {
+  const normal = await capture(headless(30), []);
+  const stepped = await capture(headless(30), ["--step", "1", "--runs", "3"]);
+  expect(Exit.isSuccess(stepped.exit)).toBe(true);
+  const clients = normal.records.find((record) => record.type === "result").clients;
+  for (const result of stepped.records.filter((record) => record.type === "result")) expect(result.clients).toEqual(clients);
+  expect(stepped.records.find((record) => record.type === "benchmark")).toMatchObject({ runs: 3, requestedRuns: 3, frames: 90, failures: 0 });
+});
+
+test("[invariant] repeated driver runs stop and name a detected desync", async () => {
+  const { exit, records } = await capture(headless(180), ["--step", "7", "--runs", "3"]);
+  expect(Exit.isFailure(exit)).toBe(true);
+  expect(records.find((record) => record.type === "failure")).toMatchObject({ kind: "desync", frame: 60, client: 1 });
+  expect(records.find((record) => record.type === "benchmark")).toMatchObject({ runs: 1, requestedRuns: 3, failures: 1 });
+});
+
 test("headless JSON identifies the first divergent frame and client", async () => {
   const { exit, records } = await capture(headless(180), []);
   expect(Exit.isFailure(exit)).toBe(true);

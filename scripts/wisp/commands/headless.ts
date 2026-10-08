@@ -41,24 +41,32 @@ const JourneyFile = Schema.Struct({
 export function headlessArguments(args: readonly string[]) {
   const named: string[] = [], frames: number[] = [];
   let render: string | undefined, journey: string | undefined, sounds: string | undefined;
+  let runs = 1, stepFrames: number | undefined;
   for (let index = 0; index < args.length; index++) {
     const arg = args[index] ?? "";
     if (arg === "--frames") {
       while (index + 1 < args.length && /^\d+(,\d+)*$/.test(args[index + 1] ?? "")) frames.push(...(args[++index] ?? "").split(",").map(Number));
       if (frames.length === 0) throw new Error("--frames needs one or more frame numbers");
-    } else if (["--render", "--journey", "--sound-cues", "--clients"].includes(arg)) {
+    } else if (["--render", "--journey", "--sound-cues", "--clients", "--runs", "--step"].includes(arg)) {
       const value = args[++index];
       if (value === undefined || value.startsWith("--")) throw new Error(`${arg} needs a value`);
       if (arg === "--render") render = value;
       if (arg === "--journey") journey = value;
       if (arg === "--sound-cues") sounds = value;
+      if (arg === "--runs" || arg === "--step") {
+        const number = Number(value);
+        if (!Number.isSafeInteger(number) || number < 1) throw new Error(`${arg} needs a positive integer`);
+        if (arg === "--runs") runs = number;
+        else stepFrames = number;
+      }
     } else if (arg.startsWith("--clients=") || arg === "--cost" || arg === "--json") continue;
     else if (arg.startsWith("--")) throw new Error(`unknown headless option: ${arg}`);
     else named.push(arg);
   }
   if ((render === undefined) !== (frames.length === 0)) throw new Error("--render DIR and --frames N... are used together");
   if (journey !== undefined && named.length > 0) throw new Error("--journey FILE takes the place of a named journey");
-  return { named, frames: [...new Set(frames)].sort((a, b) => a - b), render, journey, sounds };
+  if (runs > 1 && render !== undefined) throw new Error("--render captures one run; use --runs for checks without rendering");
+  return { named, frames: [...new Set(frames)].sort((a, b) => a - b), render, journey, sounds, runs, stepFrames };
 }
 
 /**
@@ -95,18 +103,39 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
     let scenes: RenderScene[] = [];
     const players = Array.from({ length: count }, (_, slot) => slot);
     const destroyedModels = new Set<string>();
+    const samples: ReturnType<typeof playHeadless>[] = [];
+    const runStarted = performance.now();
+    const cpuStarted = process.cpuUsage();
     const report = yield* Effect.try({
       try: () => {
         const runtime = installHeadless(project.map);
         try {
-          const clients = runtime.clients(entry, players, { ...(json ? { keepCalls: 1 } : {}), effectDeaths: (model) => { destroyedModels.add(model); return undefined; } });
-          return playHeadless(clients, journey, project.map.filePrefix, project.scene, { observationFrames: options.frames, observe: (running) => { for (const client of running.clients) scenes.push(captureScene(client)); } });
+          let first: string | undefined;
+          for (let run = 0; run < options.runs; run++) {
+            const clients = runtime.clients(entry, players, { keepCalls: 64, effectDeaths: (model) => { destroyedModels.add(model); return undefined; } });
+            let sample = playHeadless(clients, journey, project.map.filePrefix, project.scene, { ...(options.stepFrames === undefined ? {} : { stepFrames: options.stepFrames }), observationFrames: options.frames, observe: (running) => { for (const client of running.clients) scenes.push(captureScene(client)); } });
+            const fingerprint = JSON.stringify(sample.clients.map(({ slot, calls, checksum }) => ({ slot, calls, checksum })));
+            if (first !== undefined && first !== fingerprint) {
+              const message = `run ${run + 1} differs from the first run's calls or checksum`;
+              sample = { ...sample, problems: sample.problems + 1, lines: [...sample.lines, message], failures: [...sample.failures, { kind: "check-fail", frame: sample.frames, client: null, message }] };
+            }
+            first ??= fingerprint;
+            samples.push(sample);
+            if (sample.problems > 0) return sample;
+          }
+          const last = samples[samples.length - 1];
+          if (last === undefined) throw new Error("no headless run");
+          return last;
         } finally {
           runtime.restore();
         }
       },
       catch: (cause) => new HeadlessFailure({ journey: name, problems: 1, cause }),
     }).pipe(step(`${name} in ${count} clients`));
+    const elapsedMs = performance.now() - runStarted;
+    const cpu = process.cpuUsage(cpuStarted);
+    const benchmark = { runs: samples.length, requestedRuns: options.runs, frames: samples.reduce((sum, sample) => sum + sample.frames, 0), failures: samples.filter((sample) => sample.problems > 0).length, elapsedMs, cpuMs: (cpu.user + cpu.system) / 1000 };
+    const speedMultiple = benchmark.frames * (1000 / 60) / Math.max(elapsedMs, Number.EPSILON);
     const render = project.render;
     if (options.render !== undefined && render !== undefined && destroyedModels.size > 0) {
       // Death sequences come from model files read asynchronously, so the deterministic journey is played again to draw them during effect cleanup.
@@ -125,14 +154,19 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
         catch: (cause) => new HeadlessFailure({ journey: name, problems: 1, cause }),
       }).pipe(step(`${name} again with death sequences`));
     }
-    if (json) {
+    for (const sample of samples) if (json) {
       results++;
-      yield* emitJson("headless", { type: "result", journey: name, ok: report.problems === 0, frames: report.frames, clients: report.clients });
-      for (const finding of report.failures) {
+      yield* emitJson("headless", { type: "result", journey: name, ok: sample.problems === 0, frames: sample.frames, clients: sample.clients });
+      for (const finding of sample.failures) {
         failures++;
         yield* emitJson("headless", { type: "failure", ...finding });
       }
-    } else yield* Console.log(report.lines.join("\n"));
+    }
+    if (!json) yield* Console.log(report.lines.join("\n"));
+    if (options.runs > 1 || options.stepFrames !== undefined) {
+      if (json) yield* emitJson("headless", { type: "benchmark", ...benchmark, speedMultiple });
+      else yield* Console.log(`${benchmark.runs} starts, ${benchmark.failures} failed runs; ${speedMultiple.toFixed(1)}x real time, ${elapsedMs.toFixed(1)} ms wall, ${benchmark.cpuMs.toFixed(1)} ms CPU`);
+    }
     for (const cue of report.sounds) if (cue.event === "start") {
       if (json) yield* emitJson("headless", { type: "sound", ...cue });
       else yield* Console.log(`p${cue.client} frame ${cue.frame}: sound ${cue.label ?? cue.source ?? "unknown"} volume ${cue.volume} pitch ${cue.pitch}`);

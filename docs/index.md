@@ -30,6 +30,10 @@ runs your map's real bundle in simulated clients, in Bun and in 32-bit Lua:
 desyncs between clients, error reports, hot reloads and what a player would see
 wrong, in under a second for Smashcraft's two-client, 600-frame quick match.
 Local held-key polling is modeled separately from other players' key events.
+The [scripted driver and fast-forward](headless.md#scripted-driver-and-fast-forward)
+deliver journey inputs directly, step with `--step N`, and compare fresh starts
+with `--runs N`, reporting CPU time and the speed multiple without Warcraft
+or rendering (#38/#39 under [M1](https://github.com/tompassarelli/wisp/issues/75)).
 Use it before reaching for the signed-in clients. [`wisp soak`](soak.md)
 (wisp:docs/soak.md) plays hundreds of its matches, computers and a fuzzed
 controller against each other, and keeps a repro file for each problem found.

@@ -37,6 +37,8 @@ export interface JourneyResult {
 }
 
 export interface JourneyOptions {
+  /** Maximum frames per advance; input events and observations still keep their exact frame. */
+  readonly stepFrames?: number;
   /** Whether to hash each client's calls, which fingerprints a run to compare it with another runtime's. */
   readonly checksums?: boolean;
   /** Frames observed after all journey events at that frame, including frame zero after start. */
@@ -47,6 +49,8 @@ export interface JourneyOptions {
 
 /** Starts the map in every client and plays the journey. */
 export function runJourney(clients: Lockstep, journey: Journey, options: JourneyOptions = {}): JourneyResult {
+  const stepFrames = options.stepFrames ?? journey.frames + 1;
+  if (!Number.isInteger(stepFrames) || stepFrames < 1) throw new Error("stepFrames must be a positive integer");
   clients.start();
   const frames = [...new Set(options.observationFrames ?? [])].sort((a, b) => a - b);
   for (const frame of frames) if (!Number.isInteger(frame) || frame < 0 || frame > journey.frames) throw new Error(`observation frame ${frame} is outside the journey`);
@@ -57,13 +61,16 @@ export function runJourney(clients: Lockstep, journey: Journey, options: Journey
     observation++;
   };
   const advance = (target: number) => {
+    const stepTo = (frame: number) => {
+      while (clients.frame < frame) clients.frames(Math.min(stepFrames, frame - clients.frame));
+    };
     while ((frames[observation] ?? target) < target) {
       const frame = frames[observation];
       if (frame === undefined) break;
-      clients.frames(frame - clients.frame);
+      stepTo(frame);
       capture();
     }
-    clients.frames(target - clients.frame);
+    stepTo(target);
   };
   for (const event of journey.events) {
     if (event.frame < clients.frame) throw new Error(`journey event at frame ${event.frame} is out of order`);
