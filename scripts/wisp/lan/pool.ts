@@ -62,12 +62,20 @@ const LOWEST: Readonly<Record<string, number>> = {
  */
 const PARITY: Profile = { name: "parity", width: 800, height: 600, maxFps: 60, video: LOWEST, graphicsMode: "classic", sound: false, music: false };
 const VISUAL: Profile = { name: "visual", width: 1280, height: 720, maxFps: 60, video: { ...LOWEST, lightingquality: 2, texquality: 1 }, graphicsMode: "reforged", sound: true, music: true };
+const CAPTURE_VIDEO = { ...LOWEST, lightingquality: 2, texquality: 1, shadowquality: 2, pointlightshadowquality: 2, waterquality: 2, assao: 1 };
+const captureProfile = (graphicsMode: Profile["graphicsMode"]): Profile => ({ ...VISUAL, name: `capture-${graphicsMode}`, video: CAPTURE_VIDEO, graphicsMode, sound: false, music: false });
+const CAPTURE_PROFILES = {
+  "capture-classic": captureProfile("classic"),
+  "capture-reforged": captureProfile("reforged"),
+  "capture-definitive": captureProfile("definitive"),
+};
 export const PROFILES: Readonly<Record<string, Profile>> = {
   parity: PARITY,
   checks: { name: "checks", width: 800, height: 600, maxFps: 60, video: LOWEST, graphicsMode: "classic", sound: true, music: false },
   /** parity at 144 frames a second, focused or not, to compare the game's clocks against a 60 fps cap. */
   hfr: { name: "hfr", width: 800, height: 600, maxFps: 144, video: LOWEST, graphicsMode: "classic", sound: false, music: false },
   visual: VISUAL,
+  ...CAPTURE_PROFILES,
 };
 
 /** Hold every graphics choice fixed while measuring a different frame cap. */
@@ -123,6 +131,7 @@ export function preferences(profile: Profile, windowX: number): string {
 export const CLIENT_PROFILES = {
   minimal: { ...PARITY, name: "minimal" },
   visual: VISUAL,
+  ...CAPTURE_PROFILES,
   player: { name: "player", width: 1920, height: 1080, maxFps: 60, video: { ...LOWEST, lightingquality: 2 }, graphicsMode: "reforged", sound: true, music: true },
 } as const satisfies Readonly<Record<string, Profile>>;
 export type ClientProfile = keyof typeof CLIENT_PROFILES;

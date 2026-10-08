@@ -155,6 +155,7 @@ first launch the client with it; the entry's `displaySettings` override its
 |---|---|---|
 | `minimal` (default) | The pool's `parity`: 800×600, every quality setting lowest, Classic models, sound off, 60 fps focused or not | Functional and gameplay checks |
 | `visual` | The pool's `visual`: 1280×720, Reforged, lighting high, textures medium, sound on, 60 fps | Captures where looks matter |
+| `capture-classic`, `capture-reforged`, `capture-definitive` | 1280×720, named graphics mode, high lighting/shadows/point-light shadows/water, ambient occlusion on, textures medium, sound off, 60 fps | Matched lighting captures on 3.0.1 |
 | `player` | Tom's own settings, read from his prefix's War3Preferences.txt on 8 Oct: Reforged, lighting high, every other quality setting lowest, sound and music on; 1920×1080 (the desktop) at 60 fps focused or not | Every performance or frame-pacing measurement |
 
 `player` starts from the owner's file rather than the game's default preset:
