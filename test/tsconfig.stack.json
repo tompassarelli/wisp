@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.runtime.json",
-  "compilerOptions": { "outDir": "../build/stack-tests" },
-  "include": ["../src/natives/*.d.ts", "stack/entry.ts"],
+  "compilerOptions": { "outDir": "../build/stack-tests", "lib": ["ES5"] },
+  "include": ["stack/natives.d.ts", "stack/entry.ts"],
   "tstl": {
     "luaTarget": "5.3", "luaBundle": "map.lua", "luaBundleEntry": "stack/entry.ts",
     "noImplicitSelf": true, "noHeader": true,
