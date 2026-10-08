@@ -282,7 +282,15 @@ export const SCORE_ESCAPES = 3;
 const LOG_START_SLACK_MS = 1000;
 
 /** Brings one client to a ready state, printing each step as "NAME: ...". */
-export const doctorClient = (target: DoctorTarget, print: (line: string) => void) => Effect.gen(function*() {
+export const doctorClient = (target: DoctorTarget, print: (line: string) => void) => {
+  /** The start lock's release, once this run starts Battle.net or the game: held until the run ends (its menus, or a stop). */
+  let releaseStart: Effect.Effect<void> | undefined;
+  return doctorRun(target, print, (taken) => {
+    releaseStart = taken;
+  }).pipe(Effect.ensuring(Effect.suspend(() => releaseStart ?? Effect.void)));
+};
+
+const doctorRun = (target: DoctorTarget, print: (line: string) => void, holdStart: (release: Effect.Effect<void>) => void) => Effect.gen(function*() {
   const { start } = target;
   if (start.kind === "offline-pool") {
     const view = yield* ClientWatch.use((watch) => watch.view(target.client)).pipe(Effect.mapError((cause) => new DoctorStop({ problem: cause.message })));
@@ -298,6 +306,13 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
   const say = (text: string) => Effect.sync(() => print(`${name}: ${text}`));
   const stop = (problem: string) => Effect.fail(new DoctorStop({ problem: `${name}: ${problem}` }));
   const failed = (cause: PlayProblem) => new DoctorStop({ problem: `${name}: ${cause.problem}` });
+  /** Clients start one at a time on the machine: this run takes the start lock before it starts Battle.net or the game. */
+  let lockHeld = false;
+  const takeStartLock = Effect.gen(function*() {
+    if (lockHeld) return;
+    holdStart(yield* machine.startLock(name, (line) => print(`${name}: ${line}`)).pipe(Effect.mapError(failed)));
+    lockHeld = true;
+  });
   const logs = launcherLogDirectory(prefix);
   const war3Log = war3LogPath(client.documents);
   const preferences = preferencesPath(client.documents);
@@ -390,6 +405,7 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
   const startLauncher = Effect.gen(function*() {
     const before = yield* newestLog;
     priorSessionLog = before;
+    yield* takeStartLock;
     const how = start.kind === "steam" ? `the Steam shortcut "${start.name}" (steam ${shortcutUrl(start.appId)})` : `its launch command (${start.command.join(" ")})`;
     yield* say(`starting Battle.net with ${start.kind === "steam" ? `the Steam shortcut "${start.name}"` : "its launch command"}`);
     if (start.kind === "steam") yield* machine.openSteam(shortcutUrl(start.appId)).pipe(Effect.mapError(failed));
@@ -415,6 +431,7 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
     if (log === undefined) return yield* stop(`Battle.net has no log in ${logs}`);
     const path = join(logs, log);
     const offset = (yield* machine.size(path).pipe(Effect.mapError(failed))) ?? 0;
+    yield* takeStartLock;
     yield* machine.launch(launcher).pipe(Effect.mapError(failed));
     const written = machine.read(path, offset).pipe(Effect.map((text) => text ?? ""), Effect.mapError(failed));
     const taken = yield* poll(DOCTOR_TIMEOUTS.request, written.pipe(Effect.map((text) => (launchRequested(text) || launchOutcome(text) !== undefined ? true : undefined))));

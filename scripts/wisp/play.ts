@@ -98,6 +98,8 @@ export class PlayMachine extends Context.Service<PlayMachine, {
   readonly start: (command: readonly string[], log?: string) => Effect.Effect<number, PlayProblem>;
   /** Runs a program as the user service `unit`, which outlives every caller until stopped (wisp:docs/doctor.md, "Clients as services"); its output goes to `log`, appended. */
   readonly startService: (unit: string, command: readonly string[], log?: string) => Effect.Effect<void, PlayProblem>;
+  /** Waits for the machine's client start-up lock (wisp:scripts/wisp/startLock.ts), printing who holds it; returns its release. */
+  readonly startLock: (holder: string, print: (line: string) => void) => Effect.Effect<Effect.Effect<void>, PlayProblem>;
   /** A file's text from byte `from`; undefined while it doesn't exist. */
   readonly read: (path: string, from?: number) => Effect.Effect<string | undefined, PlayProblem>;
   readonly size: (path: string) => Effect.Effect<number | undefined, PlayProblem>;

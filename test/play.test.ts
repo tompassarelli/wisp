@@ -309,6 +309,7 @@ function world(scenario: Scenario = {}) {
       if (scenario.steamStarts !== false) later(1, startLauncher);
     }),
     startService: () => Effect.die("play starts no services"),
+    startLock: () => Effect.die("play takes no start lock"),
     start: (command, log) => Effect.sync(() => {
       const pid = nextPid++;
       events.push(`start ${command.join(" ")} > ${log}`);
