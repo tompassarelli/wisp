@@ -391,10 +391,17 @@ The Bun and emitted Lua runtimes retain a unit's owner and facing, and model
 `GetOwningPlayer`, `GetUnitFacing`, `SetUnitFacing`, `BlzSetUnitFacingEx`,
 life and mana through `GetUnitState`/`SetUnitState`, `GetWidgetLife`/
 `SetWidgetLife`, `BlzGetUnitMaxHP`/`BlzSetUnitMaxHP`,
-`BlzGetUnitMaxMana`/`BlzSetUnitMaxMana`, `KillUnit`, and `RemoveUnit`.
-Removal drops the unit from rendered poses; its type ID and life read zero.
-Life at or below the binary32 value of 0.405 marks a unit dead. Life writes
-to a dead unit cannot revive it; `KillUnit` leaves zero life.
+`BlzGetUnitMaxMana`/`BlzSetUnitMaxMana`, `KillUnit`, and `RemoveUnit`, as
+Warcraft 3.0.1 does ([Warsmash notes](warsmash-notes.md#native-results-for-44)):
+
+- A life write that takes a living unit to binary32 0.405 or below kills it
+  and leaves life 0. A dead unit stores any life write and stays dead.
+  `KillUnit` leaves life 0.
+- `SetUnitState` ignores maximum life and mana writes; `BlzSetUnitMaxHP` and
+  `BlzSetUnitMaxMana` set them.
+- `RemoveUnit` takes the unit out of the world and the rendered poses at once.
+  Its handle keeps its type, life and mana, and takes life writes, until the
+  frame ends; then its type ID and life read 0.
 
 Declare initial object-data values in `unitStates`, keyed by numeric unit
 type ID, on the map passed to `installHeadless` or `luaLockstep`:
@@ -411,12 +418,15 @@ native comparison, establish the same values with `BlzSetUnitMaxHP`,
 immediately after creation. Without a fixture, set each field before reading
 it; a missing field throws an error naming the unit type and field.
 
-`test/unit-states/cases.ts` authors twelve cases shared by the Bun, Lua32,
-and offline native map. They cover owner, facing, life, mana, both maximums,
-the exactly representable life values 0.40625 and 0.3984375 around the death
-cutoff, killing, two attempted writes after death, and removal. The two-client
-journey took 25.1 ms in Bun on 7 October 2026; its injected different life
-write is reported by the existing call comparison.
+`test/unit-states/cases.ts` authors the cases shared by Bun, Lua32 and the
+native map. Twelve cover owner, facing, life, mana, both maximums, the exactly
+representable life values 0.40625 and 0.3984375 around the death cutoff,
+killing, two writes after death, and removal; 3.0.1 wrote all twelve on 8
+October 2026, and `EXPECTED` holds its rows. The rows after them pin the
+cutoff's binary32 neighbours, low writes to a corpse, the exact facing read
+and when a removed unit's handle empties. The two-client journey took 39.5 ms
+in Bun on 8 October 2026; its injected different life write is reported by the
+existing call comparison.
 
 Run the shared cases and build their native measurement map:
 
@@ -426,9 +436,11 @@ bun test/unit-states/build.ts BASE.w3m PRIVATE_OUT.w3x
 ```
 
 The native map writes `unit-states-p0.txt` and `unit-states-p1.txt` to
-CustomMapData. Each named row contains integers equal to the observed values
-multiplied by 128, retaining every bit of the selected fractional values.
-Compare the twelve rows with the `EXPECTED` list in the test.
+CustomMapData 1.3125 game seconds after start. Each named row contains
+integers equal to the observed values multiplied by 128 and wrapped to 32 bits
+as Warcraft's Lua integers wrap, so a unit type ID reads 859289472 for
+`hfoo`; `facing-writes-exact` gives the facing exactly as `MpE`. Compare the
+rows with the `EXPECTED` list in the test.
 
 ### Unit position and facing
 

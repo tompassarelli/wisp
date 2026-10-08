@@ -59,6 +59,41 @@ grid. This concerns network delivery, not proof of every simulation or
 animation update's frequency. [Network measurements](network-model.md#what-it-models)
 take precedence over Warsmash's 50 ms choice.
 
+### Native results for #44
+
+**Native-confirmed** on Warcraft 3.0.1.24342 (8 October 2026, clone-a, one
+client): the twelve cases of `test/unit-states/`, read as floor(value × 128).
+Five matched Wisp at once; the rules below fixed the rest, except facing.
+
+| Behavior | Wisp before | Native 3.0.1 | Verdict |
+| --- | --- | --- | --- |
+| `SetUnitState(u, UNIT_STATE_MAX_LIFE, 240)` after `BlzSetUnitMaxHP(u, 200)`; the same for mana with 160 and 180 | Stored the write | Ignored: `BlzGetUnitMaxHP` and `GetUnitState` still read 200 (mana 160) | **Mismatch, fixed**: ignored. Only the `Blz` setters change the maximums |
+| A life write that takes a living unit to the cutoff or below (`SetUnitState(u, UNIT_STATE_LIFE, 0.3984375)`) | Stored 0.3984375 and marked the unit dead | Life reads 0 at once | **Mismatch, fixed**: the unit dies and life is 0 |
+| A life write to a dead unit: 10 after that death; 50 after `KillUnit`, through `SetWidgetLife` and through `SetUnitState` | Ignored | Stored: reads 10 and 50 | **Mismatch, fixed**: stored as binary32; the unit stays dead (row `dead-raised-low-write` confirms) |
+| Living at 0.40625, then a write of 10 | Stored both | Stored both | **Match** |
+| `KillUnit` | Life 0 | Life 0 through both getters | **Match** |
+| `RemoveUnit`, then in the same callback `SetWidgetLife(u, 50)`, `GetUnitTypeId` and `GetWidgetLife` | Type 0, life 0, the write ignored | Type `hfoo`, life 50 | **Mismatch, fixed**: the handle keeps its state and takes life writes until the frame ends, then reads type 0 and life 0 (rows `removal-*` confirm when) |
+| `SetUnitFacing(u, 180)` then `BlzSetUnitFacingEx(u, 90)` | 90 | Just under 90 (floor × 128 is 11519) | **Mismatch, owned by wisp#57**'s facing rule |
+| Owner, life and mana getter/setter agreement | Retained | Retained | **Match** |
+
+Warcraft's Lua integers are 32 bits, so the removal row's type ID times 128
+wraps to 859289472; the fixture wraps its rows the same way so Bun prints the
+native number.
+
+The 0.405 cutoff is from WurstScript's measured `UnitProvider`
+([comparison](comparison.md)); the twelve cases only show it lies between
+0.3984375 and 0.40625.
+
+**Capture queued** (wisp#44, `needs:native-single`): the rows after the twelve
+decide what the twelve leave open. `death-cutoff` writes binary32 0.405 and its
+two neighbours (alive reads 51, dead 0). `dead-low-write` writes 0.3984375 to a
+killed unit, and `dead-raised-low-write` writes 50 first: 51 means stored and
+still dead, 0 means a low write zeroes or the corpse revived.
+`facing-writes-exact` gives the facing case's read exactly for wisp#57.
+`removal-same-deadline`, `-next-frame`, `-quarter-second` and `-one-second`
+read a unit removed by a timer at 0.25 s from a second timer at the same
+deadline, then 0.265625, 0.5 and 1.25 s.
+
 ## Animation clock, pose and blending: facts for #40
 
 MDX sequence intervals and sampled frames use milliseconds. Warsmash
@@ -849,7 +884,7 @@ Warcraft-native behavior was measured in this research pass.
 
 | Question | Existing fixture or next observation | Status |
 | --- | --- | --- |
-| Warcraft life threshold, clipping, corpse writes and removal | #44's existing twelve-case [unit-state fixture](headless.md#unit-states), including exact binary32 0.40625 and 0.3984375 | No native values measured. Ready map retained privately at `~/.local/state/wisp/unit-states44/`. Sole native coordinator has the required journey; current blocker is Warcraft 3.0.1/build 24342 startup, with a private online fallback authorized. |
+| Warcraft life threshold, clipping, corpse writes and removal | #44's [unit-state fixture](headless.md#unit-states): twelve cases measured, plus rows for the exact cutoff, low corpse writes and removal timing | Twelve measured on 3.0.1 ([results](#native-results-for-44)); the added rows await a `needs:native-single` capture. |
 | Widget/unit/player death callback order and repeated kills | A callback log with before/inside/after life and event names | Source-researched only; not an additional #44 acceptance fixture. Defer until a consuming check needs this order. |
 | Blend setting, frozen clock and the pose discrepancy | #40's existing same-frame-262 capture, followed by the held-frame capture at least 250 ms later and recorded camera state | Retained comparison is 24 of 25 passing; the red-flag landmark differs vertically by 40.73 pixels. Diagnostic candidate `8aad61e8` has produced no new captures because of build 24342 startup. Cause unresolved; native coordinator owns execution. |
 | Sequence end/loop overshoot and queued animation timing | The ruler map of the [animation playback capture](#animation-playback) | Headless follows the source-researched rules since wisp#58; the ruler map awaits its 3.0.1 capture. Queued animations stay unused by Smashcraft. |

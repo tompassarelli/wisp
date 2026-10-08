@@ -53,7 +53,7 @@ function row(name: string, values: readonly number[]): string {
 }
 
 /** A binary32 value exactly: "M p E" is M × 2^E with M an odd integer, and 0 is "0". Doubling and halving are exact. */
-function exact(value: number): string {
+export function exact(value: number): string {
   if (value === 0) return "0";
   let magnitude = value < 0 ? -value : value;
   let exponent = 0;

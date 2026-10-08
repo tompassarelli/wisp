@@ -199,6 +199,7 @@ interface Unit extends Handle, UnitPose {
   mana: number | undefined;
   maxMana: number | undefined;
   dead: boolean;
+  /** Removal is complete: the handle reads type 0 and life 0 and takes no writes. */
   removed: boolean;
 }
 
@@ -311,6 +312,9 @@ const isHandle = (value: unknown): value is Handle =>
   typeof value === "object" && value !== null && "id" in value && "kind" in value;
 
 const isFrame = (value: unknown): value is Frame => typeof value === "object" && value !== null && "points" in value;
+
+/** Life at or below this kills a living unit. */
+const DEATH_CUTOFF = f32(0.405);
 
 /** A facing write as Warcraft keeps it: binary32 degrees in [0, 360) (wisp:docs/warsmash-notes.md, "Unit position and facing"). */
 function unitFacing(facing: number): number {
@@ -535,6 +539,8 @@ export class HeadlessClient {
   private readonly effects = new Map<Handle, EffectPose>();
   private readonly effectDeaths: EffectDeaths | undefined;
   private readonly units = new Map<Handle, Unit>();
+  /** Units RemoveUnit took out of the world this frame; their handles keep their state until the frame ends. */
+  private removals: Unit[] = [];
   /** Effects attached to each unit, which follow its position. */
   private readonly attachments = new Map<Unit, Handle[]>();
   private readonly unitStates: UnitStateFixtures;
@@ -693,7 +699,7 @@ export class HeadlessClient {
     const unit: Unit = { ...handle, ...freshAnimation(), handle, typeId, owner, x, y, z: 0, facing, scale: [1, 1, 1], alpha: 255,
       color: [255, 255, 255], teamColor: owner, timeScale: 1,
       visible: true, moveSpeed: 0, attackCooldown: 0, life: state?.life, maxLife: state?.maxLife,
-      mana: state?.mana, maxMana: state?.maxMana, dead: state !== undefined && state.life <= f32(0.405), removed: false };
+      mana: state?.mana, maxMana: state?.maxMana, dead: state !== undefined && state.life <= DEATH_CUTOFF, removed: false };
     this.units.set(unit, unit);
     return unit;
   }
@@ -717,10 +723,17 @@ export class HeadlessClient {
     return value;
   }
 
+  /**
+   * A write that takes a living unit to the cutoff or below kills it and leaves zero life; a dead unit
+   * stores whatever is written and stays dead (wisp:docs/warsmash-notes.md, "Life and death: facts for #44").
+   */
   private setLife(unit: Unit, life: number): void {
-    if (unit.dead || unit.removed) return;
-    unit.life = f32(life);
-    if (unit.life <= f32(0.405)) unit.dead = true;
+    if (unit.removed) return;
+    const value = f32(life);
+    if (!unit.dead && value <= DEATH_CUTOFF) {
+      unit.life = 0;
+      unit.dead = true;
+    } else unit.life = value;
   }
 
   private unitAnimation(unit: Unit, animation: string | number): void {
@@ -812,7 +825,7 @@ export class HeadlessClient {
       },
       CreateUnit: (owner: number, typeId: number, x: number, y: number, facing: number) => this.unitAt(owner, typeId, x, y, facing),
       CreateUnitByName: (owner: number, name: string, x: number, y: number, facing: number) => this.unitAt(owner, name.length === 4 ? name.charCodeAt(0) * 0x1000000 + name.charCodeAt(1) * 0x10000 + name.charCodeAt(2) * 0x100 + name.charCodeAt(3) : 0, x, y, facing),
-      RemoveUnit: (unit: Unit) => { unit.removed = true; unit.dead = true; this.units.delete(unit); this.attachments.delete(unit); this.abilities.removeUnit(unit); },
+      RemoveUnit: (unit: Unit) => { this.removals.push(unit); this.units.delete(unit); this.attachments.delete(unit); this.abilities.removeUnit(unit); },
       GetOwningPlayer: (unit: Unit) => unit.owner,
       GetWidgetLife: (unit: Unit) => this.unitValue(unit, "life"),
       SetWidgetLife: (unit: Unit, life: number) => this.setLife(unit, life),
@@ -827,10 +840,9 @@ export class HeadlessClient {
       SetUnitState: (unit: Unit, state: string, value: number) => {
         if (unit.removed) return;
         if (state === "UNIT_STATE_LIFE") this.setLife(unit, value);
-        else if (state === "UNIT_STATE_MAX_LIFE") unit.maxLife = f32(value);
         else if (state === "UNIT_STATE_MANA") unit.mana = f32(value);
-        else if (state === "UNIT_STATE_MAX_MANA") unit.maxMana = f32(value);
-        else throw new Error(`SetUnitState: unsupported state ${state}`);
+        // Warcraft ignores maximum life and mana writes here; BlzSetUnitMaxHP and BlzSetUnitMaxMana set them.
+        else if (state !== "UNIT_STATE_MAX_LIFE" && state !== "UNIT_STATE_MAX_MANA") throw new Error(`SetUnitState: unsupported state ${state}`);
       },
       BlzGetUnitMaxHP: (unit: Unit) => this.unitValue(unit, "maxLife"),
       BlzSetUnitMaxHP: (unit: Unit, value: number) => { if (!unit.removed) unit.maxLife = value; },
@@ -1360,6 +1372,8 @@ export class HeadlessClient {
       if (sound.killWhenDone) this.sounds.delete(sound.handle);
     }
     this.run(() => this.runDueTimers());
+    for (const unit of this.removals) unit.removed = true;
+    this.removals = [];
   }
 
   /** Seconds into a timer's current period, at the game time natives read: its period less what remains, each rounded toward zero. */
