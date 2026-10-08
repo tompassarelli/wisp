@@ -26,13 +26,17 @@ additive layers blend with (source alpha, one), as the MDX filter mode tables
 describe. `layerOpacity` and `layerBlendFactors` export those rules. Particle texture cells run row by row and repeat past
 the grid's last cell.
 
-Wisp adds three changes to the built file. Light records read the 1200,
+Wisp adds four changes to the built file. Light records read the 1200,
 1300 and 1600 fields (shadow intensity, shadow casting, falloff), as Tom's
 `fix/mdx1800-light` branch (`ddda8d7`) reads them, so a whole day/night model
 parses. `ModelRenderer.setWispEnvironment` gives the SD and WebGL2 HD model
 shaders a directional key light, an ambient fill and linear eye-depth fog;
 without it they draw as upstream. Each layer's Unshaded and Unfogged flags,
 and additive filter modes, select per layer how that light and fog apply.
+Each geoset's animated colour tints its layers in both shaders, in the
+order the file stores it: native Classic draws a map's charcoal deck
+body (stored 0.20, 0.24, 0.28 over Dalaran_BlackMarble) at rgb 11,8,11,
+and the tint read as red, green, blue gives 10,7,9.
 
 Source: <https://github.com/4eb0da/war3-model>.
 License: MIT, Copyright (c) 2017-2023 4eb0da. The package retains LICENSE

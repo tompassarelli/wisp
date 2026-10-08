@@ -442,7 +442,9 @@ saves them as the scene's `environment`.
   light) light every model. Classic (SD) materials take Warcraft's
   fixed-function rule, texture × clamp(ambient + key × max(N·L, 0)). HD
   materials take the same key and ambient in their PBR shader, without the
-  upstream tone mapping. Layers flagged Unshaded take no light. Lights are
+  upstream tone mapping. Layers flagged Unshaded take no light. Each
+  geoset's animated colour tints its texels first, lit or Unshaded, as
+  native Classic does whatever the geoset animation's flags say. Lights are
   parsed from the whole file, including the 1200, 1300 and 1600 light fields.
   The headless clock does not advance the time of day. Before the map sets
   day/night models, models draw unlit, as before.
