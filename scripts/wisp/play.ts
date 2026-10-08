@@ -25,6 +25,7 @@ import {
 import type { Ink, Word } from "../warcraft/desktop";
 import { type DisplaySettings, absentSettings, displayChanges, preferencesBackupPath, preferencesPath, withGraphicsMode, withDisplaySettings } from "../warcraft/preferences";
 import { SCAN_QUIET_MS, importFailures, ladderScan, sessionStart, war3LogPath } from "../warcraft/war3Log";
+import { pollFor } from "./hostProcess";
 import { step } from "./timings";
 import { type MenuSocket, hostLobby, startLobby } from "./menus";
 import { ClientWatch, unlessLost } from "./watch";
@@ -221,15 +222,7 @@ export const PLAY_TIMEOUTS = {
 const POLL = "250 millis";
 
 /** Polls `observe` until it returns a value, or undefined after `seconds` of the Effect Clock. */
-const poll = <A, R>(seconds: number, observe: Effect.Effect<A | undefined, PlayProblem, R>) =>
-  Effect.gen(function*() {
-    const deadline = (yield* Clock.currentTimeMillis) + seconds * 1000;
-    while (true) {
-      const value = yield* observe;
-      if (value !== undefined || (yield* Clock.currentTimeMillis) >= deadline) return value;
-      yield* Effect.sleep(POLL);
-    }
-  });
+const poll = <A, R>(seconds: number, observe: Effect.Effect<A | undefined, PlayProblem, R>) => pollFor(seconds, POLL, observe);
 
 /** Polls `observe` until it returns a value; after `seconds` fails with `problem`. */
 const until = <A, R>(seconds: number, observe: Effect.Effect<A | undefined, PlayProblem, R>, problem: () => string) =>
