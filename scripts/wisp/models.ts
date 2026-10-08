@@ -48,8 +48,8 @@ type Track = mdx.AnimVector | number | undefined;
 /** Chunks that facts don't use and the pinned war3-model 4.0.1 misreads: a version 1800 light record carries 24 bytes more than it reads, and some camera records don't parse. */
 const SKIPPED = new Set(["LITE", "CAMS"]);
 
-/** The file without the chunks parsing skips, and how many light records it holds. */
-export function parsableModel(bytes: Uint8Array): { readonly bytes: Uint8Array; readonly lights: number } {
+/** The file without the chunks parsing skips (lights too unless `keepLights`), and how many light records it holds. */
+export function parsableModel(bytes: Uint8Array, keepLights = false): { readonly bytes: Uint8Array; readonly lights: number } {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const tag = (at: number) => String.fromCharCode(...bytes.subarray(at, at + 4));
   if (bytes.length < 4 || tag(0) !== "MDLX") throw new Error("not an MDX model");
@@ -65,7 +65,7 @@ export function parsableModel(bytes: Uint8Array): { readonly bytes: Uint8Array; 
       // Each light record starts with its own size, that size included.
       for (let record = at + 8; record < end; lights++) record += Math.max(4, view.getUint32(record, true));
     }
-    if (!SKIPPED.has(name)) kept.push(bytes.subarray(at, end));
+    if (!SKIPPED.has(name) || (keepLights && name === "LITE")) kept.push(bytes.subarray(at, end));
     at = end;
   }
   const joined = new Uint8Array(kept.reduce((sum, part) => sum + part.length, 0));
