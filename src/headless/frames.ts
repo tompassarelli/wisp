@@ -178,6 +178,13 @@ export class Frames {
     return undefined;
   }
 
+  /** The live frames the map made under a parent, in creation order. Warcraft's own children of its origin frames are not modeled. */
+  children(parent: Frame): Frame[] {
+    const found: Frame[] = [];
+    for (const frame of this.all) if (frame.parent === parent && !frame.destroyed) found.push(frame);
+    return found;
+  }
+
   /** BlzDestroyFrame: the frame and its descendants. */
   destroy(frame: Frame): void {
     frame.destroyed = true;
