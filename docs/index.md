@@ -7,7 +7,9 @@ Wisp's native checks.
 life/death, animation/blending and map/model-format facts, separating source
 research from native confirmations for headless checks and a standalone player.
 They also map Smashcraft's relied-on behavior to Wisp and describe the shared
-unit/timer native fixture in `test/native-rules50/`.
+unit/timer native fixture in `test/native-rules50/`, and the
+[timer and frame-stepping rules](warsmash-notes.md#timers-and-frame-stepping)
+the headless runtime follows, checked in Bun and Lua32 by `test/timers56/`.
 
 Start here when changing Wisp or building a map with it. The same pages ship
 in the installed package under your project's `node_modules/wisp/docs/`.

@@ -26,7 +26,7 @@ const everyFrame = (frame: () => void) => ({
     configure();
     installDispatch();
     on("fixture.frame", frame);
-    TimerStart(CreateTimer(), 0.0, true, trampoline("fixture.frame"));
+    TimerStart(CreateTimer(), 1 / 60, true, trampoline("fixture.frame"));
   },
   install: () => {},
 });
@@ -134,7 +134,7 @@ test("the report lists an error report, a reload no client runs and what a playe
         globalThis.__fixtureFrame = (globalThis.__fixtureFrame ?? 0) + 1;
         if (globalThis.__fixtureFrame === 20) throw new Error("boom");
       });
-      TimerStart(CreateTimer(), 0.0, true, trampoline("fixture.frame"));
+      TimerStart(CreateTimer(), 1 / 60, true, trampoline("fixture.frame"));
     },
     install: () => {},
   });
@@ -165,7 +165,7 @@ test("a map that turns error text off shows no report, while its error file and 
       on("fixture.frame", () => {
         throw new Error("boom");
       });
-      TimerStart(CreateTimer(), 0.0, true, trampoline("fixture.frame"));
+      TimerStart(CreateTimer(), 1 / 60, true, trampoline("fixture.frame"));
     },
     install: () => {},
   });
@@ -215,7 +215,7 @@ test("with a delivery, a sync message reaches every client on its arrival frame,
       const trigger = CreateTrigger();
       BlzTriggerRegisterPlayerSyncEvent(trigger, Player(0), "FX_SYNC", false);
       TriggerAddAction(trigger, trampoline("fixture.sync"));
-      TimerStart(CreateTimer(), 0.0, true, trampoline("fixture.frame"));
+      TimerStart(CreateTimer(), 1 / 60, true, trampoline("fixture.frame"));
     },
     install: () => {},
   });

@@ -21,7 +21,7 @@ const entry = {
   start() {
     this.install();
     startNativeDriver([0, 1]);
-    TimerStart(CreateTimer(), 0.0, true, trampoline("fixture.tick"));
+    TimerStart(CreateTimer(), 1 / 60, true, trampoline("fixture.tick"));
   },
 };
 
