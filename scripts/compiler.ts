@@ -67,6 +67,7 @@ class IncrementalTranspiler extends Transpiler {
   private readonly bundler = new LuaBundler();
   /** Each module's resolved requires, while its transpiled code and tree are unchanged. */
   private readonly resolutions = new Map<string, Resolution>();
+  private readonly resolvedTrees = new Set<CachedModule>();
   private resolvedProgramFiles = "";
 
   /** The modules of the last bundle; undefined when TypeScriptToLua built it. */
@@ -91,6 +92,7 @@ class IncrementalTranspiler extends Transpiler {
       return [{ fileName: normalizeSlashes(resolve(getSourceDir(program), "lualib_bundle.lua")), code }, ...modules];
     };
     const fullResolution = () => {
+      for (const module of this.modules.values()) this.resolvedTrees.add(module);
       const resolution = resolveDependencies(program, files.map((file) => ({ ...file, code: this.modules.get(file.fileName)?.file.code ?? file.code })), this.emitHost, plugins);
       return { resolved: withLualib(resolution.resolvedFiles), diagnostics: resolution.diagnostics };
     };
@@ -137,6 +139,8 @@ class IncrementalTranspiler extends Transpiler {
       live.add(file.fileName);
       let resolution = this.resolutions.get(file.fileName);
       if (resolution === undefined || resolution.source !== file.code || resolution.node !== file.sourceMapNode) {
+        const cached = this.modules.get(file.fileName);
+        if (cached !== undefined) this.resolvedTrees.add(cached);
         const source = file.code;
         const result = resolveDependencies(program, [file], this.emitHost, plugins);
         diagnostics.push(...result.diagnostics);
@@ -180,9 +184,10 @@ class IncrementalTranspiler extends Transpiler {
       } finally {
         // Bundling is synchronous and has finished reading these trees. Restore
         // the original requires before the next emission reuses unchanged modules.
-        for (const module of this.modules.values()) {
+        for (const module of this.resolvedTrees) {
           for (const { node, children } of module.sourceMapChildren) node.children = children;
         }
+        this.resolvedTrees.clear();
       }
       const { emitPlan } = plan;
       if (planDiagnostics.length > 0) return planDiagnostics;

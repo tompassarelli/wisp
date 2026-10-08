@@ -41,6 +41,9 @@ interface Encoded {
   readonly middle: string;
   readonly crossName: boolean;
   readonly tail: string;
+  readonly lastMapped: number;
+  readonly lastNamed: number;
+  readonly firstNamed: number;
 }
 
 interface Cached {
@@ -231,6 +234,9 @@ function encodeModule(walk: Walk, sourceIndices: readonly number[], nameIndices:
   let tail = "";
   let crossName = false;
   let afterCross = false;
+  let lastMapped = 0;
+  let lastNamed = m[5]! >= 0 ? 0 : -1;
+  let firstNamed = lastNamed;
   for (let index = FIELDS; index < m.length; index += FIELDS) {
     let next = "";
     const line = m[index]!;
@@ -244,12 +250,15 @@ function encodeModule(walk: Walk, sourceIndices: readonly number[], nameIndices:
     next += vlq(m[index + 1]! - previousColumn);
     previousColumn = m[index + 1]!;
     if (m[index + 2]! >= 0) {
+      lastMapped = index;
       const source = sourceIndices[m[index + 2]!]!;
       next += vlq(source - previousSource) + vlq(m[index + 3]! - 1 - previousOriginalLine) + vlq(m[index + 4]! - previousOriginalColumn);
       previousSource = source;
       previousOriginalLine = m[index + 3]! - 1;
       previousOriginalColumn = m[index + 4]!;
       if (m[index + 5]! >= 0) {
+        lastNamed = index;
+        if (firstNamed < 0) firstNamed = index;
         const name = nameIndices[m[index + 5]!]!;
         if (previousName < 0) {
           middle += next;
@@ -265,7 +274,7 @@ function encodeModule(walk: Walk, sourceIndices: readonly number[], nameIndices:
     if (afterCross) tail += next;
     else middle += next;
   }
-  return { sourceIndices, nameIndices, head: vlq(m[1]!), middle, crossName, tail };
+  return { sourceIndices, nameIndices, head: vlq(m[1]!), middle, crossName, tail, lastMapped, lastNamed, firstNamed };
 }
 
 /**
@@ -381,15 +390,8 @@ export class LuaBundler {
         }
         mappings += encoded.middle;
         // The module's last mapped and named mappings carry the state to the next module.
-        let lastMapped = 0;
-        let lastNamed = m[5]! >= 0 ? 0 : -1;
-        for (let at = FIELDS; at < m.length; at += FIELDS) {
-          if (m[at + 2]! >= 0) lastMapped = at;
-          if (m[at + 5]! >= 0) lastNamed = at;
-        }
+        const { lastMapped, lastNamed, firstNamed } = encoded;
         if (encoded.crossName) {
-          let firstNamed = FIELDS;
-          while (m[firstNamed + 5]! < 0) firstNamed += FIELDS;
           const name = nameIndices[m[firstNamed + 5]!]!;
           mappings += vlq(name - previousName);
         }
