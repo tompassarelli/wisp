@@ -53,3 +53,17 @@ jobs:
       headless: bun examples/sample/test/fixtures/desync-sample.ts headless
       expect-failure: true
       artifact-name: wisp-ci-sample-failing-fixture
+
+  # Autoland dispatches this workflow after a landing, and a dispatched run
+  # starts no workflow_run, so it hands its own result to "Main is red".
+  main-red:
+    needs: [framework, sample, sample-failing-fixture]
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - run: gh workflow run main-red.yml -R "${{ github.repository }}" -f run="${{ github.run_id }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
