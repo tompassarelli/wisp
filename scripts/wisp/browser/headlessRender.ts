@@ -4,6 +4,7 @@ import { type AnimationSequence, animationSample, blendWeight, globalSequenceFra
 import type { DrawnPose as EffectPose, RenderScene } from "../headlessRender";
 import { parsableModel } from "../models";
 import { orderDrawnModels } from "../drawOrder";
+import { drawnPoses } from "../culling";
 import { advanceEmitters, type EmitterRenderer } from "./emitters";
 
 type Matrix = Float32Array;
@@ -457,7 +458,7 @@ declare global {
   interface Window {
     prepareRenderer: (width: number, height: number) => string;
     prepareScene: (scene: RenderScene, models?: readonly string[], progress?: (completed: number, total: number) => void) => Promise<{ models: number; instances: number; textures: number }>;
-    renderScene: (scene: RenderScene, options?: { capture?: boolean }) => Promise<{ png: string; models: number; textures: number }>;
+    renderScene: (scene: RenderScene, options?: { capture?: boolean }) => Promise<{ png: string; models: number; textures: number; notDrawn: string[] }>;
   }
 }
 window.prepareRenderer = (width, height) => {
@@ -482,14 +483,17 @@ window.prepareScene = async (scene, extraModels = [], progress) => {
 window.renderScene = async (scene, options) => {
   gl.viewport(0, 0, canvas.width, canvas.height); gl.depthMask(true); gl.clearColor(0.04, 0.06, 0.09, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
   const view = camera(scene, canvas.width / canvas.height);
-  // Warcraft skips a model whose origin lies beyond the far plane from the eye, even when part of it reaches nearer.
-  const beyondFar = (effect: EffectPose) => Math.hypot(effect.x - (view.eye[0] ?? 0), effect.y - (view.eye[1] ?? 0), effect.z - (view.eye[2] ?? 0)) > view.far;
-  const visible = scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat && !beyondFar(effect));
-  await Promise.all(visible.map(prepareInstance));
+  const visible: EffectPose[] = [], notDrawn: string[] = [];
+  for (const pose of drawnPoses(scene.effects, view.eye, view.far, scene.world)) {
+    // A model the renderer can't load or draw is left out and named, so the rest of the frame still draws.
+    try { await prepareInstance(pose); visible.push(pose); } catch (cause) { notDrawn.push(`${pose.model}: ${String(cause)}`); }
+  }
   await drawSky(scene, view);
   const light = scene.environment === undefined ? undefined : await dayNightLight(scene.environment.dayNight.unit, scene.environment.timeOfDay);
   const fog = sceneFog(scene, view, false);
-  for (const pose of orderDrawnModels(visible, (pose) => instances.get(pose.handle.id)?.model.Materials ?? [])) await drawEffect(pose, view, light, fog);
+  for (const pose of orderDrawnModels(visible, (pose) => instances.get(pose.handle.id)?.model.Materials ?? [])) {
+    try { await drawEffect(pose, view, light, fog); } catch (cause) { notDrawn.push(`${pose.model}: ${String(cause)}`); }
+  }
   if (scene.filter !== undefined) await drawFilter(scene.filter);
   const live = options?.capture === false;
   const shown = live ? "block" : "none";
@@ -522,5 +526,5 @@ window.renderScene = async (scene, options) => {
     }
   }
   context.globalAlpha = 1;
-  return { png: options?.capture === false ? "" : output.toDataURL("image/png"), models: visible.length, textures: textures.size };
+  return { png: options?.capture === false ? "" : output.toDataURL("image/png"), models: visible.length, textures: textures.size, notDrawn: [...new Set(notDrawn)] };
 };

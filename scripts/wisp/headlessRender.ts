@@ -9,6 +9,7 @@ import type { Environment } from "../../src/headless/warcraft3Scenery";
 import { pollFor, spawnLogged } from "./hostProcess";
 import { deathSeconds } from "./models";
 import type { Graphics, RenderAssetResolution, ResolvedRenderAsset } from "./renderAssets";
+import { decodeTerrain, shiftedBounds, worldBounds, type WorldBounds } from "./terrain";
 
 export type { Graphics } from "./renderAssets";
 
@@ -26,6 +27,12 @@ export interface HeadlessRenderProject {
   readonly height?: number;
   readonly chrome?: string;
   readonly preloadModels?: readonly string[];
+  /**
+   * The map's terrain: its war3map.w3e, or only its world bounds, and the map
+   * point the headless world's 0,0 stands on. No effect draws outside the
+   * world bounds (wisp:docs/headless.md, "Lighting, fog and sky", world bounds).
+   */
+  readonly terrain?: { readonly w3e?: Uint8Array; readonly bounds?: WorldBounds; readonly origin?: readonly [number, number] };
 }
 
 export interface RenderScene {
@@ -40,6 +47,8 @@ export interface RenderScene {
   readonly filter?: ReturnType<HeadlessClient["cineFilterPose"]>;
   /** Floating text tags, drawn over the world at their place and under the UI. */
   readonly textTags?: ReturnType<HeadlessClient["textTags"]["poses"]>;
+  /** The world bounds in headless coordinates, when the project gives its terrain. */
+  readonly world?: WorldBounds;
 }
 
 /** The sky, day/night light and terrain fog the map last set (wisp:docs/headless.md, "Lighting, fog and sky"). */
@@ -94,8 +103,17 @@ export async function loadEffectDeaths(project: HeadlessRenderProject, models: I
   return (model) => deaths.get(model);
 }
 
-/** Both the still renderer and the player draw unit objects with the same model poses. */
+const terrainBounds = new WeakMap<Uint8Array, WorldBounds>();
+function projectWorld(project: HeadlessRenderProject): WorldBounds | undefined {
+  const terrain = project.terrain, w3e = terrain?.w3e;
+  let bounds = terrain?.bounds ?? (w3e === undefined ? undefined : terrainBounds.get(w3e));
+  if (bounds === undefined && w3e !== undefined) terrainBounds.set(w3e, bounds = worldBounds(decodeTerrain(w3e)));
+  return bounds === undefined ? undefined : shiftedBounds(bounds, terrain?.origin);
+}
+
+/** Both the still renderer and the player draw unit objects with the same model poses, in the project's world bounds. */
 export function sceneWithUnits(project: HeadlessRenderProject, scene: RenderScene): RenderScene {
+  const world = projectWorld(project);
   const units: DrawnPose[] = scene.units.filter((unit) => unit.visible && unit.alpha > 0).map((unit) => {
     const model = project.unitModels?.[unit.typeId];
     if (model === undefined) throw new Error(`no render.unitModels entry for visible unit type ${unit.typeId}`);
@@ -104,7 +122,7 @@ export function sceneWithUnits(project: HeadlessRenderProject, scene: RenderScen
       animationClock: unit.animationClock, animationBlendTime: unit.animationBlendTime, animationBlend: unit.animationBlend,
       unit: true, queuedAnimations: [], yaw: unit.facing * Math.PI / 180, pitch: 0, roll: 0, color: unit.color, teamColor: unit.teamColor, matrixScale: unit.scale, flat: unit.scale.some((value) => value === 0) };
   });
-  return { ...scene, effects: [...scene.effects, ...units] };
+  return { ...scene, effects: [...scene.effects, ...units], ...(world === undefined ? {} : { world }) };
 }
 
 export class RenderFailure extends Schema.TaggedError<RenderFailure>()("RenderFailure", {
@@ -231,13 +249,14 @@ export const renderScenes = (project: HeadlessRenderProject, scenes: readonly Re
   const browser = yield* openAnyBrowser(project, bundle, graphics);
   return yield* Effect.tryPromise({ try: async () => {
     await mkdir(directory, { recursive: true });
-    const images: { frame: number; client: number; image: string; models: number; textures: number }[] = [];
+    const images: { frame: number; client: number; image: string; models: number; textures: number; notDrawn: string[] }[] = [];
     for (const scene of scenes) {
-      const result = await browser.devtools.evaluate(`window.renderScene(${JSON.stringify(sceneWithUnits(project, scene))})`) as { png: string; models: number; textures: number };
+      const result = await browser.devtools.evaluate(`window.renderScene(${JSON.stringify(sceneWithUnits(project, scene))})`) as { png: string; models: number; textures: number; notDrawn: string[] };
+      for (const failure of result.notDrawn) console.error(`p${scene.client} frame ${scene.frame}: not drawn: ${failure}`);
       const image = `p${scene.client}-frame-${scene.frame}.png`;
       await Bun.write(join(directory, image), Buffer.from(result.png.split(",")[1] ?? "", "base64"));
       await Bun.write(join(directory, `p${scene.client}-frame-${scene.frame}.json`), JSON.stringify(scene));
-      images.push({ frame: scene.frame, client: scene.client, image, models: result.models, textures: result.textures });
+      images.push({ frame: scene.frame, client: scene.client, image, models: result.models, textures: result.textures, notDrawn: result.notDrawn });
     }
     await Bun.write(join(directory, "render.json"), JSON.stringify({ renderer: "war3-model 4.0.1 + HD sampling precision", graphics, gpu: browser.gpu, assets: [...browser.resolutions.values()], images }, null, 2) + "\n");
     return images;
