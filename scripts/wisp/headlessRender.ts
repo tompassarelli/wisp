@@ -8,9 +8,9 @@ import type { EffectDeaths, EffectPose, HeadlessClient } from "../../src/headles
 import type { Environment } from "../../src/headless/warcraft3Scenery";
 import { pollFor, spawnLogged } from "./hostProcess";
 import { deathSeconds } from "./models";
+import type { Graphics, RenderAssetResolution, ResolvedRenderAsset } from "./renderAssets";
 
-/** Which art Warcraft draws: Classic (SD) or Reforged (HD) models, textures and day/night lights. */
-export type Graphics = "classic" | "reforged";
+export type { Graphics } from "./renderAssets";
 
 export interface HeadlessRenderProject {
   /**
@@ -18,6 +18,8 @@ export interface HeadlessRenderProject {
    * In Reforged graphics a path takes its `_hd.w3mod` version where one exists.
    */
   readonly readAsset: (path: string, graphics?: Graphics) => Promise<Uint8Array | undefined>;
+  /** Layer-aware reads record each attempted location and the selected import or stock file. */
+  readonly resolveAsset?: (path: string, graphics: Graphics) => Promise<ResolvedRenderAsset>;
   /** Unit object type IDs to model paths; effect models already name their paths. */
   readonly unitModels?: Readonly<Record<number, string>>;
   readonly width?: number;
@@ -86,7 +88,7 @@ export const captureScene = (client: HeadlessClient, options: { readonly visible
 export async function loadEffectDeaths(project: HeadlessRenderProject, models: Iterable<string>, graphics: Graphics = "classic"): Promise<EffectDeaths> {
   const deaths = new Map<string, number | undefined>();
   for (const model of models) {
-    const bytes = await project.readAsset(model, graphics);
+    const bytes = project.resolveAsset === undefined ? await project.readAsset(model, graphics) : (await project.resolveAsset(model, graphics)).bytes;
     deaths.set(model, bytes === undefined ? undefined : deathSeconds(bytes));
   }
   return (model) => deaths.get(model);
@@ -155,6 +157,7 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
     (path) => Effect.promise(() => rm(path, { recursive: true, force: true })),
   );
   const assets = new Map<string, Promise<Uint8Array | undefined>>();
+  const resolutions = new Map<string, RenderAssetResolution>();
   // A stock Reforged asset is extracted and converted on first read; the page asks for dozens at once and one can wait past Bun's 10 s default.
   const server = yield* Effect.acquireRelease(Effect.sync(() => Bun.serve({ hostname: "127.0.0.1", port: 0, idleTimeout: 255, async fetch(request) {
     const url = new URL(request.url);
@@ -163,7 +166,17 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
     if (url.pathname !== "/asset") return new Response("not found", { status: 404 });
     const path = url.searchParams.get("path") ?? "";
     let pending = assets.get(path);
-    if (pending === undefined) assets.set(path, pending = project.readAsset(path, graphics));
+    if (pending === undefined) assets.set(path, pending = (async () => {
+      if (project.resolveAsset !== undefined) {
+        const { bytes, ...resolution } = await project.resolveAsset(path, graphics);
+        resolutions.set(path, resolution);
+        return bytes;
+      }
+      const bytes = await project.readAsset(path, graphics);
+      const location = { source: "project", layer: "base", path } as const;
+      resolutions.set(path, { requested: path, graphics, attempts: [location], selected: bytes === undefined ? undefined : location });
+      return bytes;
+    })());
     const data = await pending;
     return data === undefined ? new Response(`missing map asset: ${path}`, { status: 404 }) : new Response(new Uint8Array(data));
   }})), (open) => Effect.promise(() => open.stop(true)));
@@ -196,7 +209,7 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
   const loaded = yield* pollFor(10, "50 millis", evaluate("typeof window.renderScene === 'function'").pipe(Effect.map((ready) => (ready ? true : undefined))));
   if (loaded === undefined) return yield* new RenderFailure({ cause: "The model renderer did not load within 10 seconds" });
   const gpu = yield* evaluate(`window.prepareRenderer(${project.width ?? 1280},${project.height ?? 720})`);
-  return { devtools, gpu };
+  return { devtools, gpu, resolutions };
 });
 
 /** Chrome on the GPU, or on SwiftShader once that fails; a failed attempt's resources are released before the next. */
@@ -226,7 +239,7 @@ export const renderScenes = (project: HeadlessRenderProject, scenes: readonly Re
       await Bun.write(join(directory, `p${scene.client}-frame-${scene.frame}.json`), JSON.stringify(scene));
       images.push({ frame: scene.frame, client: scene.client, image, models: result.models, textures: result.textures });
     }
-    await Bun.write(join(directory, "render.json"), JSON.stringify({ renderer: "war3-model 4.0.1 + HD sampling precision", graphics, gpu: browser.gpu, images }, null, 2) + "\n");
+    await Bun.write(join(directory, "render.json"), JSON.stringify({ renderer: "war3-model 4.0.1 + HD sampling precision", graphics, gpu: browser.gpu, assets: [...browser.resolutions.values()], images }, null, 2) + "\n");
     return images;
   }, catch: (cause) => new RenderFailure({ cause }) });
 })).pipe(Effect.provide(BunServices.layer), Effect.timeout("2 minutes"));
