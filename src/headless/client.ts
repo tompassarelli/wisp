@@ -405,10 +405,14 @@ export function sameCall(left: NativeCall, right: NativeCall): boolean {
   return true;
 }
 
-/** JASS S2I and S2R read a leading number and ignore the rest; no digits read as 0. */
+/**
+ * JASS S2I and S2R read a leading number and ignore the rest; no digits read
+ * as 0. S2I skips leading spaces and S2R doesn't (3.0.1: `S2I(" -7")` is -7,
+ * `S2R(" 7.25")` is 0; wisp#50).
+ */
 function leadingNumber(text: string, fraction: boolean): number {
   let start = 0;
-  while (start < text.length && text.charAt(start) === " ") start++;
+  while (!fraction && start < text.length && text.charAt(start) === " ") start++;
   let end = start;
   if (end < text.length && (text.charAt(end) === "-" || text.charAt(end) === "+")) end++;
   let digits = 0;
@@ -426,25 +430,22 @@ function leadingNumber(text: string, fraction: boolean): number {
 }
 
 /**
- * C's `%.Nf` of a binary32 real: correctly rounded, exact ties to even, the
- * sign kept on a negative that rounds to zero. Lua's string.format gives
- * this; JavaScript's toFixed rounds ties up, so Bun formats by hand.
+ * A binary32 real with `digits` decimals, as Warcraft's R2S and R2SW print
+ * it: correctly rounded, exact ties away from zero (3.0.1: 0.0625 reads
+ * "0.063", -0.0625 "-0.063"; wisp#50), the sign kept on a negative that
+ * rounds to zero. Neither Lua's string.format (ties to even) nor
+ * JavaScript's toFixed (ties up, inexact) gives this, so it's done by hand.
  */
 function fixed(value: number, digits: number): string {
   const real = roundToFloat32(value);
   if (real !== real || real === Infinity || real === -Infinity || real >= f32(1e21) || real <= -f32(1e21)) return real.toFixed(digits);
-  // 30 more digits than kept: a binary32 within that of a tie is the tie.
+  // 30 more digits than kept: no binary32 is that close to a tie without being one.
   const expanded = (real < 0 ? -real : real).toFixed(digits + 30);
   const point = expanded.indexOf(".");
   const kept = expanded.slice(0, point) + expanded.slice(point + 1, point + 1 + digits);
   const rest = expanded.slice(point + 1 + digits);
-  const first = rest.charAt(0);
-  let tail = false;
-  for (let index = 1; index < rest.length; index++) if (rest.charAt(index) !== "0") tail = true;
-  const last = kept.charCodeAt(kept.length - 1) - 48;
-  const up = first > "5" || (first === "5" && (tail || last === 1 || last === 3 || last === 5 || last === 7 || last === 9));
   let digitsText = kept;
-  if (up) {
+  if (rest.charAt(0) >= "5") {
     let carry = digitsText.length - 1;
     while (carry >= 0 && digitsText.charAt(carry) === "9") carry--;
     digitsText = carry < 0
@@ -455,6 +456,9 @@ function fixed(value: number, digits: number): string {
   const text = digits > 0 ? `${whole}.${digitsText.slice(digitsText.length - digits)}` : whole;
   return real < 0 ? `-${text}` : text;
 }
+
+/** Characters of a sync message's data that arrive; the prefix doesn't count (3.0.1: 300 arrive as 255, 252 whole; wisp#50). */
+const SYNC_DATA_LIMIT = 255;
 
 /**
  * Mixes an integer into a 32-bit hash. The product stays below 2^53, so
@@ -915,7 +919,7 @@ export class HeadlessClient {
       BlzFrameGetName: (frame: unknown) => (isFrame(frame) ? frame.name : ""),
       BlzFrameGetParent: (frame: unknown) => (isFrame(frame) ? frame.parent : undefined),
       BlzFrameSetText: (frame: unknown, text: string) => {
-        if (isFrame(frame)) frame.text = text;
+        if (isFrame(frame)) frame.text = frame.textLimit >= 0 ? text.slice(0, frame.textLimit) : text;
       },
       BlzFrameGetText: (frame: unknown) => (isFrame(frame) ? frame.text : ""),
       BlzFrameSetTexture: (frame: unknown, texture: string) => {
@@ -944,7 +948,7 @@ export class HeadlessClient {
       BlzFrameSetVisible: (frame: unknown, visible: boolean) => {
         if (isFrame(frame)) frame.visible = visible;
       },
-      BlzFrameIsVisible: (frame: unknown) => (isFrame(frame) ? frame.visible : false),
+      BlzFrameIsVisible: (frame: unknown) => (isFrame(frame) ? this.frames.shown(frame) : false),
       BlzFrameSetEnable: (frame: unknown, enabled: boolean) => {
         if (isFrame(frame)) frame.enabled = enabled;
       },
@@ -1049,7 +1053,7 @@ export class HeadlessClient {
       },
       TimerGetElapsed: (timer: Timer) => this.timerElapsed(timer),
       BlzSendSyncData: (prefix: string, data: string) => {
-        network.push({ sender: this.slot, prefix, data });
+        network.push({ sender: this.slot, prefix, data: data.slice(0, SYNC_DATA_LIMIT) });
         return true;
       },
       DisplayTextToPlayer: (player: number, _x: number, _y: number, text: string) => {
@@ -1271,8 +1275,10 @@ export class HeadlessClient {
       I2S: (n: number) => describeNumber(n),
       R2S: (n: number) => fixed(n, 3),
       R2SW: (n: number, width: number, precision: number) => {
+        // 3.0.1 (wisp#50): R2SW(1.5, 8, 2) is "     1.50", R2SW(2.5, 0, 0) and R2SW(3.14159, 0, 0) are "3.0".
         let text = fixed(n, precision > 0 ? precision : 0);
-        while (text.length < width) text = ` ${text}`;
+        if (precision <= 0) text = `${text}.0`;
+        while (text.length < width + 1) text = ` ${text}`;
         return text;
       },
       R2I: (n: number) => (n < 0 ? Math.ceil(n) : Math.floor(n)),
