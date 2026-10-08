@@ -1,8 +1,0 @@
-# wisp engine poll: client lan0b, presence table births and frees; seconds since 2026-10-07T02:55:30.316Z
-# 0.187 attach pid 471107 build 3.0.0.24268 base 0x6fffe0a30000; entries 4275 free head 1316 births 4279; live CAgentBaseAbs:2286 NIpse::CPoFlag:1193 NIpse::CPmRegion:470 NIpse::CPoPos:233 NIpse::CPoFgLis:28 NIpse::CPoReal:12 NIpse::CPoReThresholdLis:11 NIpse::CAcceleratorMap:4 NIpse::CProximityMap:2 NIpse::CPoReContinuousMod:2 NIpse::CPoPosCl:2 NIpse::CLrPath:2 NIpse::CLrPathingSys:1 NIpse::CLrPathingAcc:1
-15.731 born 4281 tag 1316 CAgentBaseAbs owner CPlayerChatMatchEventData
-15.731 born 4282 tag 1315 CAgentBaseAbs owner CTriggerExecution
-15.746 born 4283 tag 1323 NIpse::CPoReThresholdLis
-15.746 born 4284 tag 3152 CAgentBaseAbs owner CTaskAction
-15.746 born 4285 tag 3153 CAgentBaseAbs owner CTask
-15.746 born 4286 tag 3154 CAgentBaseAbs owner CTask

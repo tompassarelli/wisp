@@ -25,7 +25,7 @@ const entry = {
   },
 };
 
-test("numbered FileIO commands execute on the same event after both payloads agree", () => {
+test("[invariant] numbered FileIO commands execute on the same event after both payloads agree", () => {
   const clients = runtime.clients(entry);
   clients.start();
   for (let serial = 1; serial <= 3; serial++) {
@@ -42,7 +42,7 @@ test("numbered FileIO commands execute on the same event after both payloads agr
   expect(clients.firstDivergence()).toBeUndefined();
 });
 
-test("different client payloads refuse the command on both clients", () => {
+test("[invariant] different client payloads refuse the command on both clients", () => {
   const clients = runtime.clients(entry);
   clients.start();
   clients.client(0).published.set(driverCommandFile("fixture", 1), ["10"]);
