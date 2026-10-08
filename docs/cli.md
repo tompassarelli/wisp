@@ -138,6 +138,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--script FILE` | Read the game's scripted input from this file | `play --standalone` |
 | `--capture-frames N,N` | Save images of these simulation frames | `play --standalone` |
 | `--compare DIR` | A native run's folder to hold the headless run to | `pad` |
+| `--replay-arrivals DIR` | A native run's folder whose measured sync-message arrivals the headless run replays ([Replayed arrivals](network-model.md#replayed-arrivals)) | `pad` |
 | `--repro FILE` | Play a soak finding again | `soak` |
 | `--test NAME` | Write a test with this name | `repro` |
 | `--view` | Open a saved moment with a frame slider and client field differences | `repro` |
