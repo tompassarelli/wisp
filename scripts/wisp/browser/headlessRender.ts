@@ -29,7 +29,7 @@ function transform(pose: EffectPose): Matrix {
 }
 const normalize = (v: readonly number[]): number[] => { const length = Math.hypot(...v); return v.map((value) => value / length); };
 const cross = (a: readonly number[], b: readonly number[]): number[] => [(a[1] ?? 0) * (b[2] ?? 0) - (a[2] ?? 0) * (b[1] ?? 0), (a[2] ?? 0) * (b[0] ?? 0) - (a[0] ?? 0) * (b[2] ?? 0), (a[0] ?? 0) * (b[1] ?? 0) - (a[1] ?? 0) * (b[0] ?? 0)];
-function camera(scene: RenderScene, aspect: number, farOverride?: number) {
+function camera(scene: RenderScene, aspect: number) {
   const field = (name: string, fallback: number) => scene.camera.fields[`CAMERA_FIELD_${name}`] ?? fallback;
   const yaw = field("ROTATION", 90) * Math.PI / 180, pitch = field("ANGLE_OF_ATTACK", 350) * Math.PI / 180;
   const distance = field("TARGET_DISTANCE", 1650);
@@ -45,19 +45,94 @@ function camera(scene: RenderScene, aspect: number, farOverride?: number) {
     view[14] = (view[14] ?? 0) - (z[axis] ?? 0) * (eye[axis] ?? 0);
   }
   const tangent = Math.tan(field("FIELD_OF_VIEW", 70) * Math.PI / 360);
-  const near = field("NEARZ", 10), far = farOverride ?? field("FARZ", 10000), projection = new Float32Array(16);
-  projection[0] = 1 / tangent; projection[5] = aspect / tangent;
-  projection[10] = (far + near) / (near - far); projection[11] = -1; projection[14] = 2 * far * near / (near - far);
+  const near = field("NEARZ", 10), far = field("FARZ", 10000);
+  const perspective = (to: number) => {
+    const out = new Float32Array(16);
+    out[0] = 1 / tangent; out[5] = aspect / tangent;
+    out[10] = (to + near) / (near - to); out[11] = -1; out[14] = 2 * to * near / (near - to);
+    return out;
+  };
+  const projection = perspective(far);
   const rotation = yaw - Math.PI, elevation = -pitch;
   const halfYaw = rotation / 2, halfPitch = -elevation / 2;
   const quaternion: [number, number, number, number] = [-Math.sin(halfYaw) * Math.sin(halfPitch), Math.cos(halfYaw) * Math.sin(halfPitch), Math.sin(halfYaw) * Math.cos(halfPitch), Math.cos(halfYaw) * Math.cos(halfPitch)];
-  return { view, projection, eye, quaternion };
+  // The sky surrounds the eye beyond the far plane, so it gets its own depth range.
+  return { view, projection, skyProjection: perspective(SKY_FAR), eye, quaternion, near, far };
+}
+const SKY_FAR = 1_000_000;
+
+/** A track's value at `frame`: its static value, or its keys stepped or interpolated linearly (curves are drawn as lines). */
+function sample(track: model.AnimVector | ArrayLike<number> | number | undefined, frame: number, fallback: readonly number[]): number[] {
+  if (track === undefined) return [...fallback];
+  if (typeof track === "number") return [track];
+  if (!("Keys" in track)) return Array.from(track);
+  const keys = track.Keys;
+  const first = keys[0];
+  if (first === undefined) return [...fallback];
+  if (frame <= first.Frame) return Array.from(first.Vector);
+  for (let index = 1; index < keys.length; index++) {
+    const before = keys[index - 1], after = keys[index];
+    if (before === undefined || after === undefined || frame >= after.Frame) continue;
+    if (track.LineType === 0) return Array.from(before.Vector);
+    const t = (frame - before.Frame) / (after.Frame - before.Frame);
+    return Array.from(before.Vector, (value, i) => value + ((after.Vector[i] ?? value) - value) * t);
+  }
+  return Array.from(keys[keys.length - 1]?.Vector ?? fallback);
+}
+function rotate(q: readonly number[], v: readonly number[]): number[] {
+  const [x = 0, y = 0, z = 0, w = 1] = normalize(q), [vx = 0, vy = 0, vz = 0] = v;
+  const tx = 2 * (y * vz - z * vy), ty = 2 * (z * vx - x * vz), tz = 2 * (x * vy - y * vx);
+  return [vx + w * tx + (y * tz - z * ty), vy + w * ty + (z * tx - x * tz), vz + w * tz + (x * ty - y * tx)];
+}
+/** The world light a draw takes: toward the light, and the key and ambient colours, red first. */
+interface WorldLight { readonly toward: readonly number[]; readonly key: readonly number[]; readonly ambient: readonly number[] }
+const dayNightModels = new Map<string, Promise<model.Model | undefined>>();
+/**
+ * A day/night model's directional light at the time of day: its one sequence
+ * spans the day from midnight. The model's light points down its local Z
+ * axis; MDX stores colours blue first.
+ */
+async function dayNightLight(path: string, hours: number): Promise<WorldLight | undefined> {
+  if (path === "") return undefined;
+  let loading = dayNightModels.get(path);
+  if (loading === undefined) {
+    // Lights are read whole: the drawing parser drops them.
+    loading = asset(path).then((bytes) => new TextDecoder().decode(bytes.slice(0, 4)) === "MDLX" ? parseMDX(bytes) : parseMDL(new TextDecoder().decode(bytes)));
+    dayNightModels.set(path, loading);
+  }
+  const data = await loading;
+  const light = data?.Lights.find((candidate) => candidate.LightType === 1) ?? data?.Lights[0];
+  if (data === undefined || light === undefined) return undefined;
+  const [start = 0, end = 0] = Array.from(data.Sequences[0]?.Interval ?? [0, 0]);
+  const frame = start + (end - start) * (((hours % 24) + 24) % 24) / 24;
+  if ((sample(light.Visibility, frame, [1])[0] ?? 1) <= 0) return undefined;
+  const colour = (track: typeof light.Color, intensity: typeof light.Intensity) => {
+    const [blue = 1, green = 1, red = 1] = sample(track, frame, [1, 1, 1]), scale = sample(intensity, frame, [1])[0] ?? 1;
+    return [red * scale, green * scale, blue * scale];
+  };
+  const toward = light.LightType === 1 ? normalize(rotate(sample(light.Rotation, frame, [0, 0, 0, 1]), [0, 0, 1])) : [0, 0, 1];
+  return { toward, key: light.LightType === 2 ? [0, 0, 0] : colour(light.Color, light.Intensity), ambient: colour(light.AmbColor, light.AmbIntensity) };
+}
+/** The direction toward the light in a draw's model space, where its normals are: the inverse of its world transform applied to the world direction. */
+function modelDirection(matrix: Matrix, toward: readonly number[]): number[] {
+  const m = (row: number, column: number) => matrix[column * 4 + row] ?? 0;
+  const [x = 0, y = 0, z = 1] = toward;
+  const a = [[m(0, 0), m(0, 1), m(0, 2)], [m(1, 0), m(1, 1), m(1, 2)], [m(2, 0), m(2, 1), m(2, 2)]] as const;
+  const c = (r: number, k: number) => a[r]?.[k] ?? 0;
+  const cofactor = (r: number, k: number) => c((r + 1) % 3, (k + 1) % 3) * c((r + 2) % 3, (k + 2) % 3) - c((r + 1) % 3, (k + 2) % 3) * c((r + 2) % 3, (k + 1) % 3);
+  // The adjugate is the inverse up to scale, which normalizing removes.
+  const out = [0, 1, 2].map((k) => cofactor(0, k) * x + cofactor(1, k) * y + cofactor(2, k) * z);
+  return Math.hypot(...out) > 0 ? normalize(out) : [0, 0, 1];
+}
+/** Terrain fog as eye-depth linear fog: a height fog (style 3) draws its linear range, up to its maximum density. */
+function sceneFog(scene: RenderScene, view: ReturnType<typeof camera>, sky: boolean) {
+  const fog = scene.environment?.fog;
+  if (fog === undefined || (sky && fog.drawOverSky !== true)) return undefined;
+  const height = fog.style === 3;
+  const start = height ? fog.linearStart ?? fog.zStart : fog.zStart, end = height ? fog.linearEnd ?? fog.zEnd : fog.zEnd;
+  return { color: fog.color, start, end, near: view.near, far: sky ? SKY_FAR : view.far, max: fog.maxLinearDensity ?? 1 };
 }
 
-/** The sky's handle id, below every handle the map's effects use. */
-const SKY_HANDLE = -1;
-/** The sky's far plane: far enough for any sky model around the eye. */
-const SKY_FAR = 1_000_000;
 const canvas = document.createElement("canvas");
 const output = document.createElement("canvas");
 const overlay = document.createElement("canvas");
@@ -202,7 +277,7 @@ async function createInstance(path: string): Promise<ModelInstance> {
   const sequences = data.Sequences.map((sequence) => ({ name: sequence.Name, start: sequence.Interval[0] ?? 0, end: sequence.Interval[1] ?? 0, looping: !sequence.NonLooping, rarity: sequence.Rarity }));
   return { renderer, model: data, path, sequences, sequence: -2, clock: 0, alpha: 255, originalAlpha: data.GeosetAnims.map((animation) => animation.Alpha) };
 }
-async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>) {
+async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, light: WorldLight | undefined, fog: ReturnType<typeof sceneFog>) {
   const instance = await prepareInstance(pose);
   const { renderer, model: data } = instance;
   if (instance.alpha !== pose.alpha) {
@@ -233,7 +308,28 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>) {
   if (saved !== undefined && weight > 0) poseNodes(sampler, data, saved, weight);
   renderer.setTeamColor(new Float32Array((teams[pose.teamColor] ?? [160, 160, 160]).map((v) => v / 255)));
   renderer.setLightPosition([1000, -1000, 3000]); renderer.setLightColor([1, 1, 1]);
-  renderer.render(multiply(view.view, transform(pose)), view.projection, {});
+  const placed = transform(pose);
+  renderer.setWispEnvironment({ ...(light === undefined ? {} : { light: { direction: modelDirection(placed, light.toward), key: light.key, ambient: light.ambient } }), ...(fog === undefined ? {} : { fog }) });
+  renderer.render(multiply(view.view, placed), view.projection, {});
+}
+const skies = new Map<string, Promise<ModelInstance>>();
+/** The sky model around the eye, behind everything else, unlit, fogged only when the fog draws over the sky. */
+async function drawSky(scene: RenderScene, view: ReturnType<typeof camera>) {
+  const environment = scene.environment;
+  if (environment === undefined || environment.sky === "" || !environment.skyVisible) return;
+  let loading = skies.get(environment.sky);
+  if (loading === undefined) skies.set(environment.sky, loading = createInstance(environment.sky));
+  const { renderer, model: data } = await loading;
+  const placed = identity();
+  placed[12] = view.eye[0] ?? 0; placed[13] = view.eye[1] ?? 0; placed[14] = view.eye[2] ?? 0;
+  renderer.setCamera(new Float32Array(view.eye), view.quaternion);
+  if (data.Sequences.length > 0) { renderer.setSequence(0); show(renderer as unknown as Sampler, data, { sequence: 0, frame: data.Sequences[0]?.Interval[0] ?? 0 }); }
+  renderer.update(0);
+  const fog = sceneFog(scene, view, true);
+  renderer.setWispEnvironment(fog === undefined ? undefined : { fog });
+  renderer.render(multiply(view.view, placed), view.skyProjection, {});
+  // The sky's layers leave depth writes off, and a masked depth clear clears nothing.
+  gl.depthMask(true); gl.clear(gl.DEPTH_BUFFER_BIT);
 }
 function cssColor(color: number, alpha = 255): string { return `rgba(${(color >>> 16) & 255},${(color >>> 8) & 255},${color & 255},${((color >>> 24) / 255) * alpha / 255})`; }
 async function uiTexture(path: string, color: number): Promise<HTMLCanvasElement> {
@@ -279,18 +375,12 @@ window.prepareScene = async (scene, extraModels = [], progress) => {
 window.renderScene = async (scene, options) => {
   gl.viewport(0, 0, canvas.width, canvas.height); gl.depthMask(true); gl.clearColor(0.04, 0.06, 0.09, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
   const view = camera(scene, canvas.width / canvas.height);
-  if (scene.sky !== undefined && scene.sky !== "") {
-    // The sky follows the camera's eye and lies beyond the far plane: it is drawn first, then the depth buffer is cleared.
-    const seconds = scene.frame / 60;
-    const sky: EffectPose = { handle: { id: SKY_HANDLE } as EffectPose["handle"], model: scene.sky, created: 0, x: view.eye[0] ?? 0, y: view.eye[1] ?? 0, z: view.eye[2] ?? 0,
-      alpha: 255, scale: 1, timeScale: 1, queuedAnimations: [], yaw: 0, pitch: 0, roll: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1], flat: false,
-      animation: "stand", subAnimations: [], animationElapsed: seconds, animationClock: seconds, animationBlendTime: 0, animationBlend: undefined, unit: true };
-    await drawEffect(sky, camera(scene, canvas.width / canvas.height, SKY_FAR));
-    gl.depthMask(true); gl.clear(gl.DEPTH_BUFFER_BIT);
-  }
   const visible = scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat);
   await Promise.all(visible.map(prepareInstance));
-  for (const pose of orderDrawnModels(visible, (pose) => instances.get(pose.handle.id)?.model.Materials ?? [])) await drawEffect(pose, view);
+  await drawSky(scene, view);
+  const light = scene.environment === undefined ? undefined : await dayNightLight(scene.environment.dayNight.unit, scene.environment.timeOfDay);
+  const fog = sceneFog(scene, view, false);
+  for (const pose of orderDrawnModels(visible, (pose) => instances.get(pose.handle.id)?.model.Materials ?? [])) await drawEffect(pose, view, light, fog);
   const live = options?.capture === false;
   const shown = live ? "block" : "none";
   if (canvas.style.display !== shown) { canvas.style.display = overlay.style.display = shown; output.style.display = live ? "none" : "block"; }

@@ -5,6 +5,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Exit, Schema, Scope } from "effect";
 import { ChildProcess } from "effect/process";
 import type { EffectDeaths, EffectPose, HeadlessClient } from "../../src/headless/client";
+import type { Environment } from "../../src/headless/warcraft3Scenery";
 import { pollFor, spawnLogged } from "./hostProcess";
 import { deathSeconds } from "./models";
 
@@ -26,8 +27,41 @@ export interface RenderScene {
   readonly units: ReturnType<HeadlessClient["unitPoses"]>;
   readonly camera: ReturnType<HeadlessClient["cameraPose"]>;
   readonly ui: ReturnType<HeadlessClient["frames"]["snapshot"]>;
-  /** SetSkyModel's model, drawn around the camera behind everything else; absent or "" draws no sky. */
-  readonly sky?: string;
+  readonly environment: SceneEnvironment;
+}
+
+/** The sky, day/night light and terrain fog the map last set (wisp:docs/headless.md, "Lighting, fog and sky"). */
+export interface SceneEnvironment extends Environment {
+  /** SetTerrainFogEx/ExV's fields, absent after ResetTerrainFog or before any fog is set. */
+  readonly fog?: SceneFog;
+}
+
+export interface SceneFog {
+  /** 0 linear, 1 exponential, 2 exponential squared, 3 height (3.0). */
+  readonly style: number;
+  readonly zStart: number;
+  readonly zEnd: number;
+  readonly density: number;
+  /** Red, green and blue, 0 to 1. */
+  readonly color: readonly [number, number, number];
+  /** The linear range a height fog keeps, which Classic draws. */
+  readonly linearStart?: number | undefined;
+  readonly linearEnd?: number | undefined;
+  readonly maxLinearDensity?: number | undefined;
+  readonly drawOverSky?: boolean | undefined;
+}
+
+function sceneEnvironment(client: HeadlessClient): SceneEnvironment {
+  const { environment, fog } = client.scenery;
+  const number = (value: unknown) => (typeof value === "number" ? value : undefined);
+  const color = Array.isArray(fog.color) ? fog.color.map(Number) as [number, number, number] : undefined;
+  const style = number(fog.style), zStart = number(fog.zStart), zEnd = number(fog.zEnd);
+  const drawn = style === undefined || zStart === undefined || zEnd === undefined || color === undefined ? undefined : {
+    style, zStart, zEnd, density: number(fog.density) ?? 0, color,
+    linearStart: number(fog.linearStart), linearEnd: number(fog.linearEnd), maxLinearDensity: number(fog.maxLinearDensity),
+    drawOverSky: typeof fog.drawOverSky === "boolean" ? fog.drawOverSky : undefined,
+  };
+  return { ...environment, dayNight: { ...environment.dayNight }, ...(drawn === undefined ? {} : { fog: drawn }) };
 }
 
 /** A pose the renderer draws: an effect, or a unit drawn like one, which starts on Stand rather than Birth. */
@@ -35,7 +69,7 @@ export type DrawnPose = EffectPose & { readonly unit?: true };
 
 export const captureScene = (client: HeadlessClient, options: { readonly visibleOnly?: boolean } = {}): RenderScene => ({
   frame: client.frame, client: client.slot, effects: client.effectPoses({ visibleOnly: options.visibleOnly ?? false }), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot({ visibleOnly: options.visibleOnly ?? false }),
-  ...(client.scenery.sky ? { sky: client.scenery.sky } : {}),
+  environment: sceneEnvironment(client),
 });
 
 /** The Death sequence lengths of `models`, read from the map's assets, for clients whose destroyed effects are drawn. */

@@ -380,12 +380,11 @@ optional `width` and `height` default to 1280×720; `chrome` or `CHROME` selects
 Chrome, otherwise `google-chrome-stable` is used. Chrome runs privately in
 headless mode, with the GPU's ANGLE OpenGL backend, falling back to SwiftShader
 only if GPU initialization fails. No Warcraft client is opened.
-The scene keeps the map's latest `SetSkyModel` as `sky`; the renderer draws it
-first, centred on the camera's eye with a far plane beyond any sky model, then
-clears depth, so the stage draws over it. On Smashcraft's Durotar near camera
+The renderer draws the map's sky model first, centred on the camera's eye with
+a far plane beyond any sky model, then clears depth, so the stage draws over it
+("Lighting, fog and sky" below). On Smashcraft's Durotar near camera
 (Warcraft III 3.0.1.24342, Reforged) the drawn horizon sits 12 rows of 720
-above the native capture's. `BlzShowTerrain` is recorded; the renderer draws no
-terrain.
+above the native capture's.
 
 The renderer uses the declared MIT `war3-model` 4.0.1 package with the HD
 sampling precision fix recorded in `vendor/README.md`,
@@ -423,6 +422,35 @@ because the cue-only emulator does not decode sound assets. This models release
 of declared playback and preserves the event log. Music playback, stop,
 loop mode and map gain (including zero) are recorded from the actual calls;
 audible mixing and fade envelopes use Warcraft references.
+
+### Lighting, fog and sky
+
+The renderer draws each frame in the light the map last set. The headless
+client records `SetSkyModel`, `BlzShowSkyBox`, `BlzShowTerrain`,
+`SetDayNightModels`, `SetTimeOfDay`, `SetTerrainFogEx`, `SetTerrainFogExV`,
+the `BlzSetTerrainFog*` setters and `ResetTerrainFog`, and `captureScene`
+saves them as the scene's `environment`.
+
+- **Day/night light.** The unit day/night model's first directional light,
+  sampled at the time of day: its one sequence spans the day from midnight.
+  Its key colour times intensity, its ambient colour times ambient intensity,
+  and its direction (the light node's rotation applied to +Z, toward the
+  light) light every model. Classic (SD) materials take Warcraft's
+  fixed-function rule, texture × clamp(ambient + key × max(N·L, 0)). HD
+  materials take the same key and ambient in their PBR shader, without the
+  upstream tone mapping. Layers flagged Unshaded take no light. Lights are
+  parsed from the whole file, including the 1200, 1300 and 1600 light fields.
+  The headless clock does not advance the time of day. Before the map sets
+  day/night models, models draw unlit, as before.
+- **Fog.** Linear fog by eye depth from `zStart` to `zEnd` in the fog colour.
+  A height fog (style 3) draws its linear range, `linearStart` to
+  `linearEnd`, capped at its maximum linear density; the height falloff is
+  not drawn. Additive layers fade to black, and Unfogged layers skip fog.
+  Exponential styles are drawn as linear.
+- **Sky.** The sky model around the eye, behind everything else, unlit, and
+  fogged only when the fog draws over the sky. `BlzShowSkyBox(false)` hides it.
+- **Not drawn.** Terrain, shadows, point lights from models, bloom and other
+  post-processing.
 
 | Check | Can close headless when | Still needs native |
 | --- | --- | --- |
