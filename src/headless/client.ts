@@ -1052,7 +1052,11 @@ export class HeadlessClient {
         if (sound !== undefined) sound.duration = Math.max(0, duration);
       },
       GetSoundDuration: (handle: Handle) => this.sounds.get(handle)?.duration ?? 0,
-      GetSoundIsPlaying: (handle: Handle) => this.sounds.get(handle)?.playing ?? false,
+      // 3.0.1 reads a handle set to be killed as not playing, though it plays out.
+      GetSoundIsPlaying: (handle: Handle) => {
+        const sound = this.sounds.get(handle);
+        return sound !== undefined && sound.playing && !sound.killWhenDone;
+      },
       KillSoundWhenDone: (handle: Handle) => {
         const sound = this.sounds.get(handle);
         if (sound === undefined) return;
