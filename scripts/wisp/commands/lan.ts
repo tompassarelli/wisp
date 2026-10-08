@@ -11,7 +11,7 @@
 // Development and testing on your own offline clients and maps only: never
 // signed-in Battle.net clients, never anyone else's game, not for cheating.
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Console, Effect, Exit, Schedule, Schema, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -153,7 +153,7 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
         Effect.repeat({ schedule: Schedule.spaced("1 second"), until: (ready) => ready }),
         Effect.timeoutOrElse({ duration: READY, orElse: () => Effect.fail(new LanFailure({ problem: `its clients weren't both running within ${READY}; see ${directory}` })) }),
       );
-      return session.handle;
+      return { ...session.handle, stop: Scope.close(scope, Exit.void) };
     }).pipe(Scope.provide(scope), Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))));
   });
   return attempt.pipe(
@@ -209,6 +209,12 @@ const pool: Command = (args) => Effect.gen(function*() {
     sessions.push(started);
     const agentFile = join(pairDirectory(pair), "agent.json");
     const runs = existsSync(agentFile) ? (yield* readJson(agentFile, AgentFile)).runs ?? {} : {};
+    // The capacity scope can kill the desktop's own cleanup; the pool outlives that scope.
+    yield* Effect.addFinalizer(() => started.stop.pipe(Effect.andThen(Effect.sync(() => {
+      for (const run of [runs.a, runs.b]) {
+        if (run !== undefined && basename(run).startsWith("private-desktop.") && existsSync(join(run, "lifecycle-owned"))) rmSync(join(run, "active"), { force: true });
+      }
+    }))));
     const status = yield* agent(pair, "/status").pipe(Effect.flatMap(Schema.decodeUnknownEffect(AgentStatus)), Effect.orElseSucceed(() => ({ clients: [] })));
     const pids = new Map(status.clients.map(({ name, pid }) => [name, pid]));
     const clientsPath = join(pairDirectory(pair), "clients.json");

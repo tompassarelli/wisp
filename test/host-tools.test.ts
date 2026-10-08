@@ -37,6 +37,7 @@ const sandbox = () => {
     XDG_DATA_HOME: join(folder, "data"),
     WISP_XDOTOOL: "/bin/true",
     WISP_TEST_SESSIONS: join(folder, "sessions"),
+    WISP_TEST_DESKTOPS: join(folder, "desktops"),
     WISP_TEST_MARK: mark,
   };
   const marked = () => readdirSync("/proc").filter((entry) => /^\d+$/.test(entry)).filter((pid) => {
@@ -55,7 +56,8 @@ const sandbox = () => {
     }
     rmSync(folder, { recursive: true, force: true });
   });
-  return { env, marked, sessions };
+  const activeDesktops = () => ["a", "b"].filter((side) => existsSync(join(env.WISP_TEST_DESKTOPS, `private-desktop.${side}`, "active")));
+  return { env, marked, sessions, activeDesktops };
 };
 
 const until = async (check: () => boolean, seconds: number, what: string) => {
@@ -122,6 +124,17 @@ test("[repro #62] lan pool: a step failing after a pair started stops its sessio
   const result = await leftovers(runner, box);
   expect(result.code).toBe(1);
   expect({ processes: result.processes, sessions: result.sessions }).toEqual({ processes: 0, sessions: 0 });
+}, 60_000);
+
+test("[repro #62] lan pool: SIGTERM removes desktop markers after its native scope exits", async () => {
+  const box = sandbox();
+  const runner = pool(box, {});
+  await until(() => existsSync(join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${poolPair}`, "clients.json")), 30, "the ready pool pair");
+  expect(box.activeDesktops()).toEqual(["a", "b"]);
+  runner.kill("SIGTERM");
+  const result = await leftovers(runner, box);
+  expect(result.code).not.toBe("still running");
+  expect({ processes: result.processes, sessions: result.sessions, activeDesktops: box.activeDesktops() }).toEqual({ processes: 0, sessions: 0, activeDesktops: [] });
 }, 60_000);
 
 test("[repro #62] watch: a pair agent that doesn't answer is a timeout, not a client that isn't playing", async () => {
