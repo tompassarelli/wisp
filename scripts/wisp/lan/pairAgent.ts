@@ -6,6 +6,7 @@
 //   GET  /status          the clients and the current game
 //   POST /fresh {map}     host MAP as a LAN game and join both clients; answers once the match plays
 //   POST /end             end the current game
+//   POST /solo {map}      each client plays MAP alone, as a local game on its loopback provider
 // Each game writes its action log (host.ts) and packet record under the
 // pair's state folder, and runs inside the desync autopsy
 // (wisp:docs/autopsy.md): its findings go to the game's autopsy.log.
@@ -23,7 +24,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { withAutopsy } from "../engine/autopsy";
 import { findGameProcesses, readExecutable } from "../engine/memory";
 import { spawnLogged } from "../hostProcess";
-import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports } from "../menus";
+import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports, playLocalGame } from "../menus";
 import { type LanHost, startHost } from "./host";
 import { LanFailure, enableLan, joinLanGame } from "./join";
 import { readMapFacts } from "./map";
@@ -148,6 +149,7 @@ interface Game {
 }
 
 const FreshRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, turnMs: Schema.optionalKey(Schema.Finite), computers: Schema.optionalKey(Schema.Finite) }));
+const SoloRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String }));
 const SpeedRequest = Schema.fromJsonString(Schema.Struct({ speed: Schema.Finite }));
 
 const agent = Effect.gen(function*() {
@@ -284,6 +286,29 @@ const agent = Effect.gen(function*() {
     return yield* new LanFailure({ problem: `the match didn't start: ${JSON.stringify(host.status())}` });
   }));
 
+  /**
+   * Each client hosts MAP on the menus' own local provider (loopback, the one
+   * 3.0.1 kept) and starts it alone, as Single Player's Custom Game does;
+   * succeeds once every client's game UI is up. No LAN switch and no Wisp
+   * host: nothing is written into the game (wisp:docs/lan.md, "Solo games").
+   */
+  const solo = (mapFile: string) => Effect.scoped(Effect.gen(function*() {
+    yield* endGame;
+    const started = Date.now();
+    return yield* Effect.forEach(clients, (client) => Effect.gen(function*() {
+      const target = join(documentsOf(client.name), "Maps/Wisp", basename(mapFile));
+      mkdirSync(join(target, ".."), { recursive: true });
+      if (existsSync(target)) rmSync(target);
+      copyFileSync(mapFile, target);
+      if (gamePid(client.name) === undefined) return yield* new LanFailure({ problem: `${client.name} isn't running` });
+      const menus = yield* menusOf(client.name);
+      yield* playLocalGame(menus, { folder: "Wisp", file: basename(mapFile), playerName: client.name });
+      const seconds = (Date.now() - started) / 1000;
+      say(`${client.name}: solo ${basename(mapFile)} playing after ${seconds.toFixed(1)} s`);
+      return { client: client.name, seconds };
+    }), { concurrency: "unbounded" });
+  }));
+
   const run = yield* FiberSet.makeRuntimePromise<never>();
   const decode = <A>(schema: Schema.Decoder<A>, request: Request) =>
     Effect.tryPromise({ try: () => request.text(), catch: (cause) => new LanFailure({ problem: String(cause) }) }).pipe(
@@ -307,6 +332,14 @@ const agent = Effect.gen(function*() {
       const exit = yield* Effect.exit(fresh(body.map, body.turnMs, body.computers));
       if (Exit.isSuccess(exit)) return Response.json(exit.value);
       say(`fresh failed: ${String(exit.cause)}`);
+      return Response.json({ error: String(exit.cause) }, { status: 500 });
+    }
+    if (url.pathname === "/solo" && request.method === "POST") {
+      const body = yield* decode(SoloRequest, request);
+      if (!existsSync(body.map)) return Response.json({ error: `no map at ${body.map}` }, { status: 400 });
+      const exit = yield* Effect.exit(solo(body.map));
+      if (Exit.isSuccess(exit)) return Response.json({ clients: exit.value });
+      say(`solo failed: ${String(exit.cause)}`);
       return Response.json({ error: String(exit.cause) }, { status: 500 });
     }
     if (url.pathname === "/end" && request.method === "POST") {

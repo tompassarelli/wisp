@@ -175,9 +175,19 @@ const stackText = (frames: readonly Frame[]) => frames.map(({ label }) => label)
  */
 const watchLua = (client: AttachedClient, offsets: EngineOffsets, seconds: number, limit: number, out: string, sourceMaps: string | undefined) => Effect.gen(function*() {
   const states = mainLuaState(client.memory, client.base, offsets.lua?.state) ?? findLuaStates(client.memory, client.maps, imageRange(client));
-  const state = typeof states === "number" ? states : states[0];
+  // Another VM can live beside the map's (seen on 3.0.1 after a hot reload): the map's holds the most global functions.
+  const globalCount = (found: number) => {
+    try {
+      return globalFunctionNames(client.memory, found).size;
+    } catch {
+      return 0;
+    }
+  };
+  const ranked = (typeof states === "number" ? [states] : states).map((found) => ({ found, count: globalCount(found) })).sort((x, y) => y.count - x.count);
+  const state = ranked[0]?.found;
   if (state === undefined) return yield* new EngineFailure({ problem: `${client.name}: no Lua VM found (is a map running?)` });
-  if (Array.isArray(states) && states.length > 1) return yield* new EngineFailure({ problem: `${client.name}: ${states.length} Lua VMs found; can't tell the map's` });
+  if (ranked.length > 1 && ranked[0]!.count === ranked[1]!.count) return yield* new EngineFailure({ problem: `${client.name}: ${ranked.length} Lua VMs with ${ranked[0]!.count} global functions each; can't tell the map's` });
+  if (ranked.length > 1) yield* Console.log(`${client.name}: ${ranked.length} Lua VMs (${ranked.map(({ count }) => count).join(", ")} global functions); using the largest`);
   const names = yield* attempt("read the Lua globals", () => globalFunctionNames(client.memory, state));
   // Map callbacks run in coroutines of the map's VM, not in its main state.
   let threads = yield* attempt("find the Lua threads", () => findLuaThreads(client.memory, client.maps, state));

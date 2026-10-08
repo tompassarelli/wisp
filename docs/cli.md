@@ -246,7 +246,7 @@ Every command and verb in Wisp's sample program and Smashcraft's `bun wisp`, gro
 | `agency` | Stretches a victim can't act in, per starter |
 | `interactions` | Writes the interaction graph; `--check`, `--move` |
 | `inputs add FAMILY PATH`, `inputs check`, `inputs path` | Registers and resolves private build inputs |
-| `lan setup`, `lan fresh`, `lan status`, `lan end` | Creates, starts, reads and ends offline matches |
+| `lan setup`, `lan fresh`, `lan solo`, `lan status`, `lan end` | Creates, starts, reads and ends offline matches; `solo` plays one client per game |
 | `engine actions` | Reads the LAN host turn log |
 | `engine drive SCRIPT --client a,b` | Delivers a numbered command file through the opted-in map's synchronized driver; `pause`, `step N`, `resume FRAME`, and `status` use the same entry |
 | `perf budget`, `perf profile`, `perf census` | Checks frame budgets and reports costly functions |

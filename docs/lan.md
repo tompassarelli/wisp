@@ -30,7 +30,7 @@ held no `TCPN` immediate and no 3.0.0 selector. The executable's RTTI names
 only `NetProviderBNET` and `NetProviderLOOP`. `lan fresh` stops with "the
 provider factory isn't in the decrypted code", and `KNOWN_BUILDS` stays at
 3.0.0.24268. A LAN match on 3.0.1 would need a provider written into the
-game, not a switch.
+game, not a switch. Single-client games still work: see "Solo games" below.
 
 **The clients themselves start.** A pool client on 3.0.1 shows the intro
 cinematic, then the same offline sequence 3.0.0 showed (`LOGIN_DOORS`,
@@ -54,6 +54,75 @@ games straight from that modal. An earlier diagnosis blamed the prefix and a
   loaded. With the desktops in a `native` scope (below), the same pair
   loaded its menus about 75 s after launch and reached the modal at 3
   minutes.
+
+## Solo games: one offline client, one local game
+
+`wisp lan solo MAP [--pair K...]` puts every client of the running pairs named
+(default: every pair in the pool) into its own single-client game of MAP, on
+the loopback provider 3.0.1 kept. Each client plays alone, so this is for
+single-client checks and engine tools, not checksums between clients. Start
+the pairs with `wisp lan pool` first; `lan solo` returns once every client's
+game UI is up and prints the seconds each took.
+
+The pair agent (wisp:scripts/wisp/lan/pairAgent.ts, `POST /solo`) copies MAP
+into each client's `Maps/Wisp/` and drives each client's menus
+(`playLocalGame`, wisp:scripts/wisp/menus.ts) as Single Player's Custom Game
+does, with no click, keyboard or memory write:
+
+1. `LoginDoorClose`. A client that never signed in sits at its login doors
+   (the "Please check your VPN" modal). There the game refuses every map,
+   stock maps included, with "The map is unavailable or corrupted". The
+   main menu sends `LoginDoorClose` the first time it shows. After it, the
+   game opens every map in the listed folders, as after a sign-in.
+2. `InitializeLocalNetProvider`, answered by `OnNetProviderChanged
+   {providerId: "LOOP"}` (9 s after the doors closed, under load).
+3. `SetLocalPlayerName {playerName}`: a client without an account plays as
+   its pool name (`lan0a`). The menus send it from their player-name prompt.
+4. `GetMapList` then `CreateLobby`, as `hostLobby` does for signed-in
+   clients, then `LobbyStart`.
+5. After `MapLoadComplete`, `LoadingScreenGameStart`: the loading screen's
+   "press any key". `IsGameUIActive {isActive: "true"}` means the game is
+   playing.
+
+Measured 8 October 2026 on 3.0.1.24342, with the machine at load 40 and
+three signed-in clients running:
+
+| Map | Clients | `lan solo` to game UI |
+| --- | --- | --- |
+| Booty Bay (stock, through the menu socket by hand) | lan0b | 13 s |
+| SmashcraftBC (177 MB) | lan1a, lan1b | 35 s, 24 s |
+| Smashcraft render40-single | lan0a, lan0b | 43 s, 48 s, then both crashed |
+
+Playing the sample map at the parity profile, the two solo clients of pair 0
+used 1.07 and 0.97 cores (measured from /proc over about 10 s). From the
+pool reporting the pair running to both game UIs up took 67 s, the first
+`lan solo` included.
+
+The first `lan solo` on a fresh pair can fail with "list maps: no answer
+within 10 s": the game was still opening every map in the folder. Running it
+again worked. Both render40-single clients crashed about 8 s into the game
+with the same read of address 0x54. Clone-a crashed hosting that map too, so
+the map is the cause, not the solo path.
+
+**One game per launch.** After `EndGame` returned both SmashcraftBC
+clients to their menus, `lan solo` with another map crashed both while
+loading (a null read). Start the pool again for the next map.
+
+**Engine tools.** A solo client is offline (loopback-only namespace, no
+`-uid`, no Battle.net), so traps are allowed on it. On 3.0.1 the pool's
+`--locate-before-peer` stops with "no pointer in .data leads to a presence
+table" because no map runs yet. `engine locate` on a solo client in a map
+found the same 3.0.1.24342 presence table (RVA 0x2fe9b68) that
+wisp:scripts/wisp/engine/offsets.json holds from signed-in client B.
+
+On 8 October, `engine trace --client lan0a --lua --seconds 5 --limit 20`
+stopped 20 births on a solo client playing the sample map, each with its Lua
+stack (`Location <- hot-…:49 <- xpcall <- …`). The births came from a
+`RemoveLocation(Location(0, 0))` sent into `move` with `wisp hot --data
+<lan0a CustomMapData>`: hot reload works on a solo client too. Finding the
+Lua VM took about 150 s of the run, before the image-pointer scan that
+landed beside this. After that hot reload the client held two
+Lua VMs, so `trace --lua` takes the one with the most global functions.
 
 ## Signed-in 3.0.1 clients cloned from Tom's install
 
@@ -200,6 +269,7 @@ Tom's `system.reg`, `user.reg`, `Warcraft III/.build.info` and Battle.net
 | `wisp lan pool [--pairs N \| --pair K...] [--pool-profile parity\|visual\|hfr[,...]] [--fps N] [--seconds S]` | Runs up to N pairs, each admitted by the machine-capacity helper. It stays in the foreground; Ctrl-C stops the pool. |
 | `wisp lan fresh MAP [--pair K] [--computers N] [--turn-ms MS]` | Hosts MAP on pair K, switches both clients to LAN, joins them, and returns once the match plays. It prints the game's action log. |
 | `wisp lan dummy MAP --program W3GSCLIENT [--pair K] [--count N]` | Joins side a to a lobby, then runs N dummy joins, handicap changes and leaves (default 20). The pair must have no active game. |
+| `wisp lan solo MAP [--pair K...]` | Each client of the named running pairs (default: all) plays MAP alone, as a local game on the loopback provider; returns once every client's game UI is up. Works on 3.0.1. See "Solo games". |
 | `wisp lan status [--pair K]` | Each pair's clients and processes, and its game: phase, turns, desyncs, players. |
 | `wisp lan speed N --pair K` | Diagnostic turn delivery at 1–16 times real time; 1 restores normal delivery. Measure client frame progress to establish actual game speed. |
 | `wisp lan end --pair K` | Ends pair K's game. The clients go back to their menus. |

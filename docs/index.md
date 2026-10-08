@@ -55,6 +55,11 @@ checksum each turn (`wisp engine actions`). Every `wisp engine` command works
 on them, breakpoints included. Keep signed-in clients for what needs
 Battle.net itself.
 
+On Warcraft 3.0.1, which removed LAN, [`wisp lan solo MAP`](lan.md#solo-games-one-offline-client-one-local-game)
+puts each offline pool client into its own single-client local game through
+its menus, for single-client checks and engine tools that only offline
+clients allow (`engine trace`, `trace --lua`, gdb).
+
 For lobby protocol checks, [`wisp lan dummy`](lan.md#dummy-lobby-checks)
 uses the separate GoWarcraft3 dummy beside side a for repeated joins, map and
 profile messages, handicap changes and leaves; it does not execute the map.
