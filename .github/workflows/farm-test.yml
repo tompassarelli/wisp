@@ -84,7 +84,7 @@ jobs:
           key: bun-install-${{ hashFiles('bun.lock') }}
       - run: bun install --frozen-lockfile
       - name: Install the native archive test dependency
-        run: sudo apt-get update -q && sudo apt-get install -y -q libstorm-dev
+        run: sudo apt-get update -q && sudo apt-get install -y -q libstorm-dev ripgrep
       - uses: actions/cache@v4
         with:
           path: ~/.cache/wisp/lua32

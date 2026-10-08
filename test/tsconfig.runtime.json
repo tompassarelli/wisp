@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ESNext", "lib": ["ESNext"], "module": "ESNext",
+    "target": "ESNext", "lib": ["ES2015"], "module": "ESNext",
     "moduleResolution": "Bundler", "strict": true, "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true, "noEmitOnError": true,
     "skipLibCheck": true, "types": ["lua-types/5.3"], "rootDir": "..",
