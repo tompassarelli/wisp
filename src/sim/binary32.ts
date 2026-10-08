@@ -324,7 +324,7 @@ function addToLimbs(high: number, low: number, exponent: number, negative: boole
  * lowest kept bit, with a sticky bit for what shifts out of the smaller
  * operand; rounding is inline, as every f32 sum and difference runs it.
  */
-function sumOfSplits(aSignificand: number, aExponent: number, aNegative: boolean, bSignificand: number, bExponent: number, bNegative: boolean): number | undefined {
+function sumOfSplits(aSignificand: number, aExponent: number, aNegative: boolean, bSignificand: number, bExponent: number, bNegative: boolean, tiesTowardZero = false): number | undefined {
   // Order by magnitude: the result takes the larger operand's sign.
   let large = aSignificand;
   let largeExponent = aExponent;
@@ -377,7 +377,7 @@ function sumOfSplits(aSignificand: number, aExponent: number, aNegative: boolean
     const remainder = sum - significand * unit;
     const half = TWO_POWERS[dropped - 1] ?? 0;
     exponent += dropped;
-    if (remainder > half || (remainder === half && (sticky || floorMod(significand, 2) !== 0))) {
+    if (remainder > half || (remainder === half && (sticky || (!tiesTowardZero && floorMod(significand, 2) !== 0)))) {
       significand += 1;
       if (significand === 16777216) {
         significand = 8388608;
@@ -408,7 +408,8 @@ export function addFloat32(a: number, b: number): number {
   return limbFusedMultiplyAdd(1.0, a, b);
 }
 
-export function subtractFloat32(a: number, b: number): number {
+/** Unit-state writes use halfway differences toward zero; ordinary subtraction keeps nearest-even. */
+export function subtractFloat32(a: number, b: number, tiesTowardZero = false): number {
   if (b === 0) return -1.0 * b + a;
   if (a < INFINITY && a > -INFINITY && b < INFINITY && b > -INFINITY) {
     split(b);
@@ -418,7 +419,7 @@ export function subtractFloat32(a: number, b: number): number {
       const significand = splitSignificand;
       const exponent = splitExponent;
       split(a);
-      result = sumOfSplits(splitSignificand, splitExponent, a < 0, significand, exponent, !(b < 0));
+      result = sumOfSplits(splitSignificand, splitExponent, a < 0, significand, exponent, !(b < 0), tiesTowardZero);
     }
     if (result !== undefined) return result;
   }
