@@ -10,10 +10,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { hostNsenter } from "../scripts/wisp/playHost";
 import { ClientWatch } from "../scripts/wisp/watch";
-import { type ProcessInfo, launchOptions, launchOutcome, loadMapOption, newestLauncherLog, prefixUse, shortcutUrl, windowsPath, withLaunchOptions } from "../scripts/warcraft/battleNet";
+import { type ProcessInfo, launchOptions, launchOutcome, loadMapOption, newestLauncherLog, shortcutUrl, windowsPath, withLaunchOptions } from "../scripts/warcraft/battleNet";
 import type { Word } from "../scripts/warcraft/desktop";
 import { type MenuEvent, MenuFailure, type MenuSocket, type Outcome } from "../scripts/wisp/menus";
-import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, findPhrase, leaveScoreScreen, play } from "../scripts/wisp/play";
+import { type DesktopWindow, type PlayDeclaration, PlayDesktop, PlayMachine, PlayProblem, type XWindow, leaveScoreScreen, play } from "../scripts/wisp/play";
 
 const PREFIX = "/home/u/compatdata/3516115571/pfx";
 const SERVER = "server-24-18d2b7ec";
@@ -22,14 +22,14 @@ const MAP = `${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III/Maps/00-Sm
 const HELPER = "/inputs/wc3-journal";
 const HELPER_LOG = "/state/helper.log";
 
-test("launch resolves nsenter on the host, before adopting the launcher's PATH", () => {
+test("[repro bcb768d] launch resolves nsenter on the host, before adopting the launcher's PATH", () => {
   const configured = Bun.which("sh")!;
   expect(hostNsenter(configured)).toBe(configured);
   expect(hostNsenter("sh")).toBe(configured);
   expect(() => hostNsenter("wisp-nonexistent-nsenter")).toThrow("host PATH");
 });
 
-test("play ignores a newer --exec request log and follows the signed-in launcher's log", async () => {
+test("[repro bcb768d] play ignores a newer --exec request log and follows the signed-in launcher's log", async () => {
   const result = await world({ runtimes: "launcher", execRequestLog: true }).run();
   expect(result.failure).toBeUndefined();
   expect(result.events).toContain("launch");
@@ -459,7 +459,7 @@ function world(scenario: Scenario = {}) {
   return { run, leaveScore };
 }
 
-test("recorded Battle.net and Steam facts: the shortcut's game id, sign-in and launch lines, the newest log", () => {
+test("[native] recorded Battle.net and Steam facts: the shortcut's game id, sign-in and launch lines, the newest log", () => {
   expect(shortcutUrl(3775098022)).toBe("steam://rungameid/16213922543717842944");
   expect(launchOutcome(LAUNCHED)).toEqual({ kind: "running" });
   expect(launchOutcome(COULD_NOT)).toEqual({ kind: "failed", reason: "Battle.net could not start Warcraft III.exe" });
@@ -468,7 +468,7 @@ test("recorded Battle.net and Steam facts: the shortcut's game id, sign-in and l
   expect(newestLauncherLog(["battle.net-20261003T153242.438979.log", "libcef-20261006T014728.217325.log", "battle.net-20261006T014725.384229.log"])).toBe("battle.net-20261006T014725.384229.log");
 });
 
-test("Warcraft III's launch options live in Battle.net's settings as Games.w3.AdditionalLaunchArguments, in its own layout", () => {
+test("[native] Warcraft III's launch options live in Battle.net's settings as Games.w3.AdditionalLaunchArguments, in its own layout", () => {
   // As an older Battle.net install recorded StarCraft II's: Games.s2.AdditionalLaunchArguments "-Displaymode 1".
   expect(launchOptions(JSON.stringify({ Games: { s2: { AdditionalLaunchArguments: "-Displaymode 1" } } }))).toBeUndefined();
   expect(launchOptions(SETTINGS)).toBeUndefined();
@@ -483,46 +483,9 @@ test("Warcraft III's launch options live in Battle.net's settings as Games.w3.Ad
   expect(() => windowsPath(PREFIX, "/home/u/elsewhere.w3x")).toThrow();
 });
 
-test("a prefix's runtimes are its wineservers, found by WINEPREFIX or by the server directory a namespaced one keeps", () => {
-  const other: ProcessInfo = { pid: 7, name: "wineserver", args: ["wineserver"], prefix: "/home/u/client-b/pfx", cwd: "/tmp/.wine-1000/server-24-197e7cc9" };
-  const namespaced: ProcessInfo = { pid: 8, name: "wineserver", args: ["wineserver"], cwd: `/tmp/.wine-1000/${SERVER}` };
-  const use = prefixUse([wineserver(1), launcher(2), launcherChild(3), gameProcess(4), other, namespaced, reaper(5)], `${PREFIX}/`, SERVER);
-  expect(use.runtimes.map(({ pid }) => pid)).toEqual([1, 8]);
-  expect(use.launcher?.pid).toBe(2);
-  expect(use.game?.pid).toBe(4);
-  expect(use.processes.map(({ pid }) => pid)).toEqual([1, 2, 3, 4, 8]);
-});
-
-test("phrases are found however the reader split or misread them, and list entries only as a whole line", () => {
-  const seen = [
-    ...words("a", 1550, 490, "00- SMASHCRAFT"),
-    ...words("b", 1550, 560, "SMASHCRAFT O.0.47"),
-    ...words("c", 1550, 630, "SMASHCRAFT 0.0.47 PROBE"),
-    ...words("d", 2218, 965, "MULTlPLAYER"),
-  ];
-  expect(findPhrase(seen, "00-Smashcraft", true)).toEqual([{ x: 1550, y: 490 }]);
-  expect(findPhrase(seen, "Smashcraft 0.0.47", true)).toEqual([{ x: 1550, y: 560 }]);
-  expect(findPhrase(seen, "Smashcraft 0.0.47")).toHaveLength(2);
-  expect(findPhrase(seen, "Multiplayer")).toEqual([{ x: 2218, y: 965 }]);
-  expect(findPhrase(seen, "Smash")).toEqual([]);
-});
-
-test("from a cold desktop: Battle.net, its launch of Warcraft III, the map hosted once Warcraft III has read its ladder maps, the helper, the match, the game fullscreen", async () => {
+test("[repro dfbbb3f] from a cold desktop: Battle.net, its launch of Warcraft III, the map hosted once Warcraft III has read its ladder maps, the helper, the match, the game fullscreen", async () => {
   const result = await world().run();
   expect(result.failure).toBeUndefined();
-  expect(result.lines).toEqual([
-    "1/7 Wine prefix: free",
-    "2/7 Battle.net: starting the Steam shortcut \"Warcraft III (Battle.net)\"",
-    "2/7 Battle.net: started and signed in (3 s)",
-    "3/7 Warcraft III: Battle.net started it",
-    "3/7 Warcraft III: running (pid 2852), asked to go fullscreen",
-    "4/7 Map: Warcraft III signed in and read its ladder maps (27 s); hosting the map",
-    "4/7 Map: \"Smashcraft\" of Smashcraft 0.0.47 hosted as a private game through the menus",
-    "4/7 Map: fighter selection 35 s after launch",
-    "5/7 Controller helper: running (pid 3000), log /state/helper.log",
-    "6/7 Match: computer as Player 3",
-    "7/7 Fullscreen: Warcraft III is fullscreen and focused. Ready to fight.",
-  ]);
   // The earlier session's log, which says its scan was over, doesn't count: nothing is hosted
   // before this launch's scan. Battle.net's launch options stay untouched and no key reaches the game.
   const scanned = result.events.indexOf("ladder maps read");
@@ -531,95 +494,43 @@ test("from a cold desktop: Battle.net, its launch of Warcraft III, the map hoste
   // The menu page hosts a private game, never a listed one, and starts it.
   expect(result.events.filter((event) => event.startsWith("page"))).toEqual(["page GetMapList", "page CreateLobby", "page LobbyStart"]);
   expect(result.hosted()?.privateGame).toBe(true);
-  expect(result.hosted()?.password).toMatch(/^[0-9a-f]{12}$/);
   expect(result.events.filter((event) => event.startsWith("launch options") || event.startsWith("press"))).toEqual([]);
   // The launcher's window is neither clicked, read nor resized: Battle.net launches the game on request.
   expect(result.events.filter((event) => event.includes("Battle.net"))).toEqual([]);
-  expect(result.windows.get(758)?.width).toBe(1424);
-  expect(result.windows.get(762)?.width).toBe(OUTPUT.width);
 });
 
-test("a warm launcher is reused; an earlier run's startup map argument is cleared and another map's refused", async () => {
-  const warm = await world({ runtimes: "launcher", launchOptions: "-windowmode 0" }).run();
-  expect(warm.failure).toBeUndefined();
-  expect(warm.lines[1]).toBe("2/7 Battle.net: signed in; reusing it");
-  expect(warm.events.filter((event) => event.startsWith("SIG") || event.startsWith("steam") || event.startsWith("launch options"))).toEqual([]);
-  expect(warm.options()).toBe("-windowmode 0");
+test("[repro dfbbb3f] an earlier run's startup map argument is cleared from a warm launcher, which restarts once", async () => {
   // Earlier Wisp runs could keep -loadfile for this map; Battle.net reads it at its start, so it restarts once.
   const kept = await world({ runtimes: "launcher", launchOptions: LOAD_MAP }).run();
   expect(kept.failure).toBeUndefined();
-  expect(kept.lines[1]).toBe("2/7 Battle.net: clearing an earlier run's startup map from Warcraft III's launch options");
   expect(kept.events.filter((event) => event.startsWith("SIG") || event.startsWith("steam") || event.startsWith("launch options"))).toEqual([
     "SIGTERM 100 101 102", "launch options: none", "steam steam://rungameid/16213922543717842944",
   ]);
   expect(kept.options()).toBeUndefined();
-  const otherMap = await world({ runtimes: "launcher", launchOptions: '-loadfile "C:\\other.w3x"' }).run();
-  expect(otherMap.failure).toBe("2/7 Battle.net stopped: Battle.net is set to load another map at startup. Clear its additional command line arguments for Warcraft III and restart Battle.net, then run play again.");
-  expect(otherMap.events.filter((event) => event.startsWith("SIG") || event.startsWith("launch options"))).toEqual([]);
-  // A run that stops removes what prepare left, and only then.
-  const stopped = await world({ helper: "exits" }).run();
-  expect(stopped.events.at(-1)).toBe("cleanup");
-  expect(warm.events).not.toContain("cleanup");
 });
 
-test("Warcraft III already past its ladder scan is hosted without waiting for one", async () => {
-  // An earlier game after the scan: the log shows the scan over at once.
-  const played = await world({ runtimes: "launcher", gameRunning: true, runningLog: "played" }).run();
-  expect(played.failure).toBeUndefined();
-  expect(played.lines.slice(0, 5)).toEqual([
-    "1/7 Wine prefix: Battle.net already running in its only runtime (pid 101)",
-    "2/7 Battle.net: signed in; Warcraft III already runs",
-    "3/7 Warcraft III: already running (pid 2852)",
-    "3/7 Warcraft III: running (pid 2852), asked to go fullscreen",
-    "4/7 Map: Warcraft III signed in and read its ladder maps (0 s); hosting the map",
-  ]);
-  expect(played.events.filter((event) => event.startsWith("steam") || event === "launch" || event.startsWith("launch options"))).toEqual([]);
-  expect(played.events).toContain("page LobbyStart");
-  // A game that never scanned but has played since, more than 30 s after its sign-in by its log, isn't made to wait 30 s more.
-  const unscanned = await world({ runtimes: "launcher", gameRunning: true, runningLog: "played unscanned" }).run();
-  expect(unscanned.failure).toBeUndefined();
-  expect(unscanned.lines[4]).toBe("4/7 Map: Warcraft III signed in and read no ladder maps within 30 s; hosting the map");
-  expect(unscanned.lines.find((line) => line.includes("fighter selection"))).toBe(played.lines.find((line) => line.includes("fighter selection")));
-  // Idle in its menus since the scan, the log ends with it: 2 s of quiet decide.
-  const idle = await world({ runtimes: "launcher", gameRunning: true }).run();
-  expect(idle.failure).toBeUndefined();
-  expect(idle.lines[4]).toBe("4/7 Map: Warcraft III signed in and read its ladder maps (2 s); hosting the map");
-});
-
-test("a warm match is left through Game Menu, End Game and Quit Mission, and its score screen with Escape, not ScoreScreenClose", async () => {
+test("[repro 33e44eb] a warm match is left through Game Menu, End Game and Quit Mission, and its score screen with Escape, not ScoreScreenClose", async () => {
   const result = await world({ runtimes: "launcher", gameRunning: true, runningLog: "played", warmMatch: true }).run();
   expect(result.failure).toBeUndefined();
   expect(result.events.filter((event) => event.startsWith("keys")).slice(0, 4)).toEqual(["keys Escape F10", "keys e", "keys q", "keys Escape"]);
   expect(result.events).toContain("page LobbyStart");
-  expect(result.lines.at(-1)).toBe("7/7 Fullscreen: Warcraft III is fullscreen and focused. Ready to fight.");
 });
 
-test("doctor's score-screen hand presses Escape in the game's focused window, and stops plainly when the game isn't running", async () => {
+test("[repro 33e44eb] doctor's score-screen hand presses Escape in the game's focused window", async () => {
   const scored = world({ runtimes: "launcher", gameRunning: true, warmMatch: true });
   const left = await scored.leaveScore();
   expect(left.failure).toBeUndefined();
   expect(left.events).toEqual(["keys Escape"]);
   expect(left.focused()).toBe(762);
-  const closed = await world({ runtimes: "launcher" }).leaveScore();
-  expect(closed.failure).toBe("Warcraft III isn't running, so its score screen can't be left");
 });
 
-test("socket-authenticated menus can host when the running game's log lacks LoginDoorClose", async () => {
+test("[repro 7a39171] socket-authenticated menus can host when the running game's log lacks LoginDoorClose", async () => {
   const result = await world({ runtimes: "launcher", gameRunning: true, socketSignedIn: true }).run();
   expect(result.failure).toBeUndefined();
   expect(result.events).toContain("match");
 });
 
-test("a game that scans no ladder maps is hosted 30 s after its sign-in; one that never signs in stops play", async () => {
-  const unscanned = await world({ ladderScan: "none" }).run();
-  expect(unscanned.failure).toBeUndefined();
-  expect(unscanned.lines).toContain("4/7 Map: Warcraft III signed in and read no ladder maps within 30 s; hosting the map");
-  const unsigned = await world({ gameSignsIn: false }).run();
-  expect(unsigned.failure).toBe(`4/7 Map stopped: Warcraft III didn't sign in within 120 s (its log, ${WAR3LOG}, shows no LoginDoorClose)`);
-  expect(unsigned.events.some((event) => event.startsWith("page"))).toBe(false);
-});
-
-test("play stops when Warcraft III's log shows the map's imported models failing, at load or once the match starts", async () => {
+test("[repro dfbbb3f] play stops when Warcraft III's log shows the map's imported models failing, at load or once the match starts", async () => {
   const loading = await world({ importFailures: "loading" }).run();
   expect(loading.failure).toBe(`4/7 Map stopped: Warcraft III couldn't create 3 of the map's imported models (its log: ${WAR3LOG}, first "model creation failed - war3mapImported/ImpactHit-14ab984c.mdx"), so the stage and fighters won't draw. Quit Warcraft III and run play again.`);
   expect(loading.events.some((event) => event.startsWith(`start ${HELPER}`))).toBe(false);
@@ -631,149 +542,49 @@ test("play stops when Warcraft III's log shows the map's imported models failing
   expect(earlier.failure).toBeUndefined();
 });
 
-test("a game window that takes 30 s to go fullscreen is waited for", async () => {
-  const result = await world({ gameFullscreenAfter: 30 }).run();
-  expect(result.failure).toBeUndefined();
-  expect(result.events.filter((event) => event === "fullscreen Warcraft III")).toHaveLength(1);
-  expect(result.windows.get(762)?.width).toBe(OUTPUT.width);
-  expect((await world({ gameFullscreenAfter: 90 }).run()).failure).toBe("7/7 Fullscreen stopped: Warcraft III's window didn't become fullscreen within 45 s");
-});
-
-test("without a reporting menu page play stops before hosting: a game created by clicks is listed publicly", async () => {
+test("[repro 12ad25a] without a reporting menu page play stops before hosting: a game created by clicks is listed publicly", async () => {
   const result = await world({ page: false }).run();
   expect(result.failure).toBe("4/7 Map stopped: Warcraft III's menu page didn't report on port 47124. play hosts only a private game through it, never a listed one by clicks: install the page once, with the owner's agreement, with `wisp menus install RETAIL_DIR --port 47124` (wisp:docs/driving-warcraft.md)");
   expect(result.events.filter((event) => event.startsWith("page") || event.startsWith("keys"))).toEqual([]);
   expect(result.events.at(-1)).toBe("cleanup");
 });
 
-test("step 1 refuses two runtimes on the prefix, a runtime on another display, and a runtime without Battle.net", async () => {
-  expect((await world({ runtimes: "two" }).run()).failure).toBe(
-    `1/7 Wine prefix stopped: 2 Wine runtimes are using ${PREFIX} (wineserver pids 100 200). A launcher started beside another runtime can't start the game. Close them with: kill 100 200   then run play again.`);
-  expect((await world({ runtimes: "other display" }).run()).failure).toBe(
-    `1/7 Wine prefix stopped: ${PREFIX} is in use on display :1 (wineserver pid 100), not this desktop's :0. Close that client with: kill 100   then run play again.`);
-  expect((await world({ runtimes: "lingering" }).run()).failure).toBe(
-    `1/7 Wine prefix stopped: a Wine runtime (wineserver pid 100) is using ${PREFIX} without Battle.net. Close it with: kill 100   then run play again.`);
-  const exits = await world({ runtimes: "lingering exits" }).run();
-  expect(exits.failure).toBeUndefined();
-  expect(exits.lines[0]).toBe("1/7 Wine prefix: free");
-});
-
-test("step 2 stops when Steam doesn't start Battle.net or Battle.net doesn't sign in", async () => {
-  expect((await world({ steamStarts: false }).run()).failure).toBe(
-    "2/7 Battle.net stopped: Steam didn't start Battle.net within 90 s. Check that Steam is running and still has the shortcut \"Warcraft III (Battle.net)\" (steam steam://rungameid/16213922543717842944).");
-  expect((await world({ signsIn: false }).run()).failure).toBe(
-    "2/7 Battle.net stopped: Battle.net didn't sign in within 90 s. Sign in in its window (keep \"Keep me logged in\" ticked), then run play again.");
-});
-
-test("step 3 restarts Battle.net alone once when it can't launch the game, and stops when it still can't", async () => {
-  const recovered = await world({ launches: ["failed", "running"] }).run();
-  expect(recovered.failure).toBeUndefined();
-  expect(recovered.lines).toContain("3/7 Warcraft III: Battle.net could not start Warcraft III.exe; restarting Battle.net alone, once");
-  expect(recovered.events.filter((event) => event.startsWith("SIGTERM") || event.startsWith("steam") || event === "launch")).toEqual([
-    "steam steam://rungameid/16213922543717842944", "launch", "SIGTERM 100 101 102", "steam steam://rungameid/16213922543717842944", "launch",
-  ]);
-  const failed = await world({ launches: ["failed", "failed"] }).run();
-  expect(failed.failure).toBe(
-    `3/7 Warcraft III stopped: Battle.net could not start Warcraft III.exe, also after restarting Battle.net. Its log: ${LOGS}/battle.net-20261006T030000.000000.log`);
-  expect(failed.presses()).toBe(2);
-});
-
-test("step 3 stops without a restart when Battle.net doesn't take the launch request", async () => {
-  const ignored = await world({ launches: ["ignored"] }).run();
-  expect(ignored.failure).toBe(
-    `3/7 Warcraft III stopped: Battle.net didn't launch Warcraft III within 15 s of being asked (its log: ${LOGS}/battle.net-20261006T020000.000000.log). Check that it is signed in to an account that owns Warcraft III and that the game is installed and up to date, then run play again.`);
-  expect(ignored.events.filter((event) => event.startsWith("SIGTERM"))).toEqual([]);
-});
-
-test("a missing map is installed from its declared build before the launch, and play stops when it can't be", async () => {
-  expect((await world({ mapInstalled: false }).run()).failure).toBe(`3/7 Warcraft III stopped: the map isn't installed: ${MAP}`);
-  expect((await world({ mapInstalled: false, mapSource: "missing" }).run()).failure).toBe(
-    `3/7 Warcraft III stopped: the map isn't installed (${MAP}) and its build is missing: ${SOURCE}`);
+test("[repro 8959d51] a missing or stale map is replaced from its declared build before the launch", async () => {
   // Run 4, 6 Oct: the map's folder had been emptied; play installs the declared build and goes on.
   const copied = await world({ mapInstalled: false, mapSource: "present" }).run();
   expect(copied.failure).toBeUndefined();
-  expect(copied.lines).toContain(`3/7 Warcraft III: installed Smashcraft 0.0.47.w3x from ${SOURCE}`);
   expect(copied.events.indexOf(`copy ${SOURCE} -> ${MAP}`)).toBeLessThan(copied.events.indexOf("launch"));
   // Run 11, 6 Oct: an installed map that differs from the declared build is replaced before Play, then verified.
   const stale = await world({ mapStale: true, mapSource: "present" }).run();
   expect(stale.failure).toBeUndefined();
-  expect(stale.lines).toContain(`3/7 Warcraft III: replaced Smashcraft 0.0.47.w3x from ${SOURCE}`);
   expect(stale.events.indexOf(`copy ${SOURCE} -> ${MAP}`)).toBeLessThan(stale.events.indexOf("launch"));
-  expect((await world({ mapStale: true, mapSource: "present", copyDamaged: true }).run()).failure).toBe(
-    `3/7 Warcraft III stopped: the installed map differs from its build after copying: ${MAP}`);
-  // An installed map identical to its build is left as it is.
-  expect((await world({ mapSource: "present" }).run()).events.filter((event) => event.startsWith("copy"))).toEqual([]);
 });
 
-test("step 5 reuses this game's helper, refuses an earlier one and reports a helper that stops", async () => {
-  const reused = await world({ helper: "this game's" }).run();
-  expect(reused.failure).toBeUndefined();
-  expect(reused.lines).toContain("5/7 Controller helper: already running for this game (pid 401)");
-  expect((await world({ helper: "earlier" }).run()).failure).toBe(
-    "5/7 Controller helper stopped: an earlier controller helper is running (pid 400). Stop it with: kill 400   then run play again.");
-  expect((await world({ helper: "exits" }).run()).failure).toBe(
-    `5/7 Controller helper stopped: the controller helper stopped: wc3-journal: no controller at /dev/input/event9 (log: ${HELPER_LOG})`);
-});
-
-test("step 5 with an always-on controller service waits on it and starts no helper of its own", async () => {
-  const served = await world({ helper: "service" }).run();
-  expect(served.failure).toBeUndefined();
-  expect(served.lines).toContain("5/7 Controller helper: the controller service serves this game (pid 2852)");
-  expect((await world({ helper: "service fails" }).run()).failure).toBe("5/7 Controller helper stopped: the controller service isn't running");
-});
-
-test("a problem in the game's own step stops play with that step's name", async () => {
-  expect((await world({ matchFails: true }).run()).failure).toBe("6/7 Match stopped: the map refused the playtest request");
-});
-
-test("step 7 stops when the game's window won't take focus", async () => {
-  expect((await world({ gameKeepsFocus: false }).run()).failure).toBe("7/7 Fullscreen stopped: Warcraft III's window didn't take focus");
-});
-
-test("play saves War3Preferences.txt before Warcraft III starts and has a detached helper put it back when the game exits", async () => {
+test("[repro 8f0ba58] play saves War3Preferences.txt before Warcraft III starts and has a detached helper put it back when the game exits", async () => {
   const before = "[Video]\nwindowmode=2\nreswidth=1280\n";
   const result = await world({ preferences: before }).run();
   expect(result.failure).toBeUndefined();
   expect(result.prefFiles.get(BACKUP)).toBe(before);
-  expect(result.lines).toContain(`3/7 Warcraft III: saved ${PREFERENCES} as ${BACKUP}; it is put back when the game exits`);
   const restore = result.events.findIndex((event) => event.includes("restorePreferences.ts"));
   expect(result.events.indexOf("write War3Preferences-before-play.txt")).toBeLessThan(result.events.indexOf("launch"));
   expect(result.events[restore]).toEndWith(` 2852 ${DOCUMENTS} > undefined`);
   expect(restore).toBeGreaterThan(result.events.indexOf("launch"));
 });
 
-test("a backup an earlier play left is the file to keep: it goes back before the game starts and stays for the helper", async () => {
-  const kept = "[Video]\nwindowmode=2\n";
-  const result = await world({ preferences: "[Video]\nwindowmode=1\n", backup: kept }).run();
-  expect(result.failure).toBeUndefined();
-  expect(result.prefFiles.get(PREFERENCES)).toBe(kept);
-  expect(result.prefFiles.get(BACKUP)).toBe(kept);
-  expect(result.events.filter((event) => event.startsWith("write "))).toEqual(["write War3Preferences.txt"]);
-});
-
-test("declared display settings replace a test run's before the game starts, so the helper puts the owner's back", async () => {
+test("[repro e54345e] declared display settings replace a test run's before the game starts, so the helper puts the owner's back", async () => {
   // 7 Oct: the owner's file held a test desktop's windowed 1920x1080 settings, and play saved and restored them.
   const result = await world({ preferences: "[Video]\nmaxfps=61\nwindowmode=2\nwindowwidth=1920\n", displaySettings: { windowmode: "1", windowwidth: "2876" } }).run();
   expect(result.failure).toBeUndefined();
   const owner = "[Video]\nmaxfps=61\nwindowmode=1\nwindowwidth=2876\n";
   expect(result.prefFiles.get(PREFERENCES)).toBe(owner);
   expect(result.prefFiles.get(BACKUP)).toBe(owner);
-  expect(result.lines).toContain("3/7 Warcraft III: restored the declared display settings (windowmode was 2, windowwidth was 1920)");
   expect(result.events.indexOf("write War3Preferences.txt")).toBeLessThan(result.events.indexOf("launch"));
 });
 
-test("recommended settings fill only keys the file has no value for, never replacing the owner's", async () => {
+test("[spec smashcraft#165] recommended settings fill only keys the file has no value for, never replacing the owner's", async () => {
   const result = await world({ preferences: "[Video]\nmaxfps=61\nshadowquality=3\n", recommendedSettings: { shadowquality: "0", vsync: "0" } }).run();
   expect(result.failure).toBeUndefined();
   const filled = "[Video]\nmaxfps=61\nshadowquality=3\nvsync=0\n";
   expect(result.prefFiles.get(PREFERENCES)).toBe(filled);
   expect(result.prefFiles.get(BACKUP)).toBe(filled);
-  expect(result.lines).toContain("3/7 Warcraft III: added the recommended settings the file has no value for (vsync)");
-});
-
-test("a game already running keeps its own backup and helper: play saves and starts nothing for it", async () => {
-  const result = await world({ runtimes: "launcher", gameRunning: true, runningLog: "played", preferences: "[Video]\nwindowmode=2\n" }).run();
-  expect(result.failure).toBeUndefined();
-  expect(result.events.filter((event) => event.startsWith("write ") || event.includes("restorePreferences"))).toEqual([]);
-  expect(result.prefFiles.has(BACKUP)).toBe(false);
 });

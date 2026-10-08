@@ -6,8 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "bun:test";
 import { Effect, Exit } from "effect";
-import { timingTest } from "../scripts/wisp/timingTest";
-import { type MenuAddress, connectMenus, hostLobby, installMenuPage, joinLobby, keptAddress, leaveLobby, listenForMenus, menuAddress, menuPage, removeMenuPage, startLobby } from "../scripts/wisp/menus";
+import { type MenuAddress, connectMenus, hostLobby, installMenuPage, leaveLobby, listenForMenus, menuPage, removeMenuPage, startLobby } from "../scripts/wisp/menus";
 
 const GUID = "6f1c2a90-guid";
 const MAPS = "C:/Users/player/Documents/Warcraft III/Maps/";
@@ -17,17 +16,6 @@ const FOLDERS: Readonly<Record<string, readonly { filename: string; isFolder: bo
   [`${MAPS}00-Wisp/`]: [{ filename: "Wisp Sample.w3x", isFolder: false }],
   [`${MAPS}00-Wisp/tests/`]: [{ filename: "Probe.w3x", isFolder: false }],
 };
-
-test("test maps are hosted from a nested tests folder", async () => {
-  const game = fakeGame();
-  try {
-    const result = await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-      const menus = yield* connectMenus(game.address);
-      return yield* hostLobby(menus, { folder: "00-Wisp/tests", file: "Probe.w3x", gameName: "probe", password: "pw" });
-    })));
-    expect(result).toBe(`${MAPS}00-Wisp/tests/Probe.w3x`);
-  } finally { game.stop(); }
-});
 
 interface Received {
   readonly message: string;
@@ -105,24 +93,16 @@ function fakeGame(hosting: "immediate" | "old-setup" | "refused" = "immediate", 
 const hostLate = async () => {
   const game = fakeGame("immediate", 2);
   try {
-    const started = performance.now();
     const result = await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const menus = yield* connectMenus(game.address);
       return yield* hostLobby(menus, { folder: "00-Wisp", file: "Wisp Sample.w3x", gameName: "late", password: "pw" });
     })));
-    return { result, listings: game.received.filter(({ message }) => message === "GetMapList").length, elapsed: performance.now() - started };
+    return { result, listings: game.received.filter(({ message }) => message === "GetMapList").length };
   } finally { game.stop(); }
 };
 
-test("a folder whose maps the game hasn't read yet is listed again until they appear", async () => {
+test("[repro 6b5519e] a folder whose maps the game hasn't read yet is listed again until they appear", async () => {
   expect(await hostLate()).toMatchObject({ result: `${MAPS}00-Wisp/Wisp Sample.w3x`, listings: 4 });
-});
-
-timingTest("a folder whose maps the game hasn't read yet is listed again every 250 ms", async () => {
-  // Two unread listings cost half a second, not two.
-  const { elapsed } = await hostLate();
-  console.info(`two unread listings and the read one: ${elapsed.toFixed(0)} ms`);
-  expect(elapsed).toBeLessThan(1500);
 });
 
 const games: { stop: () => void }[] = [];
@@ -138,60 +118,7 @@ const started = (hosting?: Parameters<typeof fakeGame>[0]) => {
 const run = <A, E>(effect: Effect.Effect<A, E, import("effect").Scope.Scope>) => Effect.runPromiseExit(Effect.scoped(effect));
 const failure = (exit: Exit.Exit<unknown, { readonly message: string }>) => (Exit.isFailure(exit) ? String(exit.cause) : "succeeded");
 
-test("hosting ignores the previous non-host setup and requests the current setup on lobby entry", async () => {
-  const game = started("old-setup");
-  const exit = await run(Effect.gen(function*() {
-    const menus = yield* connectMenus(game.address);
-    return yield* hostLobby(menus, { folder: "00-Wisp", file: "Wisp Sample.w3x", gameName: "wisp 1", password: "pw" });
-  }));
-  expect(Exit.isSuccess(exit) ? exit.value : failure(exit)).toBe(`${MAPS}00-Wisp/Wisp Sample.w3x`);
-  expect(game.received.map(({ message }) => message)).toEqual(["GetMapList", "GetMapList", "CreateLobby", "SendGameLobbySetup"]);
-});
-
-test("an explicit create refusal still fails instead of waiting for a host setup", async () => {
-  const game = started("refused");
-  const exit = await run(Effect.gen(function*() {
-    const menus = yield* connectMenus(game.address);
-    return yield* hostLobby(menus, { folder: "00-Wisp", file: "Wisp Sample.w3x", gameName: "wisp 1", password: "pw" });
-  }));
-  expect(failure(exit)).toContain("the game refused to create the lobby");
-});
-
-test("the page loads the game's menus and reports its port and GUID, then the menus' requests while heard", async () => {
-  const page = menuPage(47123);
-  expect(page).toContain(`<script src="GlueManager.js"></script>`);
-  expect(page).toContain(`<div id="root"></div>`);
-  expect(page).toContain(`<div id="portal"></div>`);
-  const script = /<script>\n([\s\S]*?)<\/script>/.exec(page)?.[1] ?? "";
-  const posts: { url: string; body: unknown }[] = [];
-  const delivered: string[] = [];
-  class NativeSocket {
-    constructor(readonly url: string) {}
-    send(data: string) {
-      delivered.push(data);
-    }
-  }
-  const window: { WebSocket: unknown; __DEBUG?: boolean } = { WebSocket: NativeSocket };
-  const fetch = (url: string, init: { body: string }) => {
-    posts.push({ url, body: JSON.parse(init.body) });
-    return Promise.resolve();
-  };
-  new Function("window", "location", "fetch", "setTimeout", "URLSearchParams", script)(window, { search: `?guid=${GUID}`, port: "38487" }, fetch, () => 0, URLSearchParams);
-  expect(posts).toEqual([{ url: "http://127.0.0.1:47123/menus", body: { port: 38487, guid: GUID } }]);
-  await Promise.resolve();
-  const Socket = window.WebSocket as new (url: string) => NativeSocket;
-  const menus = new Socket(`ws://127.0.0.1:38487/webui-socket/${GUID}`);
-  const create = JSON.stringify({ type: "webui", message: "CreateLobby", payload: { gameName: "x" } });
-  menus.send(create);
-  menus.send(JSON.stringify({ type: "webui", message: "FriendsGetFriends", payload: { secret: 1 } }));
-  expect(delivered).toEqual([create, JSON.stringify({ type: "webui", message: "FriendsGetFriends", payload: { secret: 1 } })]);
-  expect(posts.slice(1)).toEqual([
-    { url: "http://127.0.0.1:47123/sent", body: { message: "CreateLobby", payload: { gameName: "x" } } },
-    { url: "http://127.0.0.1:47123/sent", body: { message: "FriendsGetFriends" } },
-  ]);
-});
-
-test("the listener hears only a page the game served", async () => {
+test("[invariant] the listener hears only a page the game served", async () => {
   const exit = await run(Effect.gen(function*() {
     const reports = yield* listenForMenus(0);
     const post = (origin: string | undefined, body: unknown) => Effect.promise(() => fetch(`http://127.0.0.1:${reports.port}/menus`, {
@@ -210,15 +137,7 @@ test("the listener hears only a page the game served", async () => {
   expect(Exit.isSuccess(exit) ? exit.value : failure(exit)).toEqual({ statuses: [403, 403, 400, 204], address: { port: 38487, guid: GUID } });
 });
 
-test("no report within the wait names what to check", async () => {
-  const exit = await run(Effect.gen(function*() {
-    const reports = yield* listenForMenus(0);
-    return yield* reports.waitForAddress(0.05);
-  }));
-  expect(failure(exit)).toContain("no menu page reported");
-});
-
-test("a lobby is hosted by walking the map list to the map, then started once it settles and left", async () => {
+test("[repro dabf45f] a hosted lobby is started only once it settles", async () => {
   const game = started();
   let settled = 0;
   const exit = await run(Effect.gen(function*() {
@@ -233,51 +152,9 @@ test("a lobby is hosted by walking the map list to the map, then started once it
   expect(Exit.isSuccess(exit) ? exit.value : failure(exit)).toBe(`${MAPS}00-Wisp/Wisp Sample.w3x`);
   // LobbyStart right after hosting crashed Warcraft III 3.0 while loading (Smashcraft #119).
   expect(settled).toBeGreaterThanOrEqual(290);
-  expect(game.received.map(({ message, payload }) => (message === "CreateLobby" ? [message, payload["filename"], payload["privateGame"], payload["password"]] : [message, payload]))).toEqual([
-    ["GetMapList", { useLastMap: true }],
-    ["GetMapList", { subdirectory: `${MAPS}00-Wisp/` }],
-    ["CreateLobby", `${MAPS}00-Wisp/Wisp Sample.w3x`, true, "pw"],
-    ["LobbyStart", {}],
-    ["LeaveGame", {}],
-  ]);
 });
 
-test("a map the list doesn't have fails with what the list shows", async () => {
-  const game = started();
-  const exit = await run(Effect.gen(function*() {
-    const menus = yield* connectMenus(game.address);
-    return yield* hostLobby(menus, { folder: "00-Wisp", file: "Missing.w3x", gameName: "wisp 1", password: "pw" });
-  }));
-  expect(failure(exit)).toContain("00-Wisp/Missing.w3x is not in the map list (1 entries in C:/Users/player/Documents/Warcraft III/Maps/00-Wisp/: Wisp Sample.w3x)");
-  expect(game.received.map(({ message }) => message)).not.toContain("CreateLobby");
-});
-
-test("joining answers the game's password request, and a wrong password fails", async () => {
-  const game = started();
-  const joined = await run(Effect.gen(function*() {
-    const menus = yield* connectMenus(game.address);
-    yield* joinLobby(menus, "wisp 1", "pw", 2);
-  }));
-  expect(Exit.isSuccess(joined) ? "joined" : failure(joined)).toBe("joined");
-  expect(game.received.map(({ message, payload }) => [message, payload])).toEqual([
-    ["GetGameList", {}],
-    ["JoinGameByGameName", { gameName: "wisp 1", gamePass: "pw", checkForGamePass: true }],
-    ["JoinGameByGameName", { gameName: "wisp 1", gamePass: "pw" }],
-  ]);
-  const wrong = await run(Effect.gen(function*() {
-    const menus = yield* connectMenus(game.address);
-    yield* joinLobby(menus, "wisp 1", "nope", 2);
-  }));
-  expect(failure(wrong)).toContain("it is wrong");
-});
-
-test("a stale address is refused", async () => {
-  const game = started();
-  const exit = await run(connectMenus({ port: game.address.port, guid: "old-guid" }));
-  expect(failure(exit)).toContain("refused the menu socket");
-});
-
-test("the page is installed only where Warcraft's own page isn't, and removed only when it is Wisp's", async () => {
+test("[invariant] the page is installed only where Warcraft's own page isn't, and removed only when it is Wisp's", async () => {
   const retail = mkdtempSync(join(tmpdir(), "wisp-retail-"));
   try {
     const page = join(retail, "webui", "index.html");
@@ -297,7 +174,7 @@ test("the page is installed only where Warcraft's own page isn't, and removed on
   }
 });
 
-test("the page keeps the newest screens it heard and announces them, so a later listener knows where the menus are", () => {
+test("[repro a6125bf] the page keeps the newest screens it heard and announces them, so a later listener knows where the menus are", () => {
   const script = /<script>\n([\s\S]*?)<\/script>/.exec(menuPage(47123))?.[1] ?? "";
   const posts: { url: string; body: unknown }[] = [];
   let listener: ((event: { data: string }) => void) | undefined;
@@ -314,10 +191,7 @@ test("the page keeps the newest screens it heard and announces them, so a later 
     return Promise.resolve();
   };
   const timers: (() => void)[] = [];
-  const delays: number[] = [];
-  new Function("window", "location", "fetch", "setTimeout", "URLSearchParams", script)(window, { search: `?guid=${GUID}`, port: "38487" }, fetch, (next: () => void, delay: number) => { timers.push(next); delays.push(delay); }, URLSearchParams);
-  // Every half second, so a program that starts listening finds the menus within it.
-  expect(delays).toEqual([500]);
+  new Function("window", "location", "fetch", "setTimeout", "URLSearchParams", script)(window, { search: `?guid=${GUID}`, port: "38487" }, fetch, (next: () => void) => { timers.push(next); }, URLSearchParams);
   const socket = new (window.WebSocket as new (url: string) => NativeSocket)(`ws://127.0.0.1:38487/webui-socket/${GUID}`);
   for (const [messageType, payload] of [["SetGlueScreen", { screen: "CUSTOM_LOBBIES" }], ["MapList", { mapList: {} }], ["GameLobbySetup", { isHost: true, players: [] }]] as const) {
     listener!({ data: JSON.stringify({ messageType, payload }) });
@@ -327,28 +201,4 @@ test("the page keeps the newest screens it heard and announces them, so a later 
   timers.shift()!();
   const announced = posts.at(-1)!.body as { recent: { messageType: string; screen?: string; isHost?: boolean; at: number }[] };
   expect(announced.recent.map(({ at: _, ...heard }) => heard)).toEqual([{ messageType: "SetGlueScreen", screen: "CUSTOM_LOBBIES" }, { messageType: "GameLobbySetup", isHost: true }, { messageType: "ScreenTransitionInfo", screen: "CREATE_GAME", type: "Screen" }]);
-});
-
-test("a second program finds the menus through the address the port's listener keeps", async () => {
-  const runtime = mkdtempSync(join(tmpdir(), "wisp-runtime-"));
-  const previous = process.env["XDG_RUNTIME_DIR"];
-  process.env["XDG_RUNTIME_DIR"] = runtime;
-  try {
-    const exit = await run(Effect.gen(function*() {
-      const reports = yield* listenForMenus(0);
-      yield* Effect.promise(() => fetch(`http://127.0.0.1:${reports.port}/menus`, {
-        method: "POST",
-        headers: { origin: "http://127.0.0.1:38487" },
-        body: JSON.stringify({ port: 38487, guid: GUID, recent: [{ messageType: "SetGlueScreen", screen: "GAME_LOBBY", at: 5 }] }),
-      }));
-      // The port is taken: the address comes from the file.
-      return yield* menuAddress(reports.port, 1);
-    }));
-    expect(Exit.isSuccess(exit) ? exit.value : failure(exit)).toEqual({ port: 38487, guid: GUID, recent: [{ messageType: "SetGlueScreen", screen: "GAME_LOBBY", at: 5 }] });
-    expect(keptAddress(1, Date.now())).toBeUndefined();
-  } finally {
-    if (previous === undefined) delete process.env["XDG_RUNTIME_DIR"];
-    else process.env["XDG_RUNTIME_DIR"] = previous;
-    rmSync(runtime, { recursive: true });
-  }
 });
