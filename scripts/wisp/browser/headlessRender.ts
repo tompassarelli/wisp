@@ -29,7 +29,7 @@ function transform(pose: EffectPose): Matrix {
 }
 const normalize = (v: readonly number[]): number[] => { const length = Math.hypot(...v); return v.map((value) => value / length); };
 const cross = (a: readonly number[], b: readonly number[]): number[] => [(a[1] ?? 0) * (b[2] ?? 0) - (a[2] ?? 0) * (b[1] ?? 0), (a[2] ?? 0) * (b[0] ?? 0) - (a[0] ?? 0) * (b[2] ?? 0), (a[0] ?? 0) * (b[1] ?? 0) - (a[1] ?? 0) * (b[0] ?? 0)];
-function camera(scene: RenderScene, aspect: number) {
+function camera(scene: RenderScene, aspect: number, farOverride?: number) {
   const field = (name: string, fallback: number) => scene.camera.fields[`CAMERA_FIELD_${name}`] ?? fallback;
   const yaw = field("ROTATION", 90) * Math.PI / 180, pitch = field("ANGLE_OF_ATTACK", 350) * Math.PI / 180;
   const distance = field("TARGET_DISTANCE", 1650);
@@ -45,7 +45,7 @@ function camera(scene: RenderScene, aspect: number) {
     view[14] = (view[14] ?? 0) - (z[axis] ?? 0) * (eye[axis] ?? 0);
   }
   const tangent = Math.tan(field("FIELD_OF_VIEW", 70) * Math.PI / 360);
-  const near = field("NEARZ", 10), far = field("FARZ", 10000), projection = new Float32Array(16);
+  const near = field("NEARZ", 10), far = farOverride ?? field("FARZ", 10000), projection = new Float32Array(16);
   projection[0] = 1 / tangent; projection[5] = aspect / tangent;
   projection[10] = (far + near) / (near - far); projection[11] = -1; projection[14] = 2 * far * near / (near - far);
   const rotation = yaw - Math.PI, elevation = -pitch;
@@ -54,6 +54,10 @@ function camera(scene: RenderScene, aspect: number) {
   return { view, projection, eye, quaternion };
 }
 
+/** The sky's handle id, below every handle the map's effects use. */
+const SKY_HANDLE = -1;
+/** The sky's far plane: far enough for any sky model around the eye. */
+const SKY_FAR = 1_000_000;
 const canvas = document.createElement("canvas");
 const output = document.createElement("canvas");
 const overlay = document.createElement("canvas");
@@ -275,6 +279,15 @@ window.prepareScene = async (scene, extraModels = [], progress) => {
 window.renderScene = async (scene, options) => {
   gl.viewport(0, 0, canvas.width, canvas.height); gl.depthMask(true); gl.clearColor(0.04, 0.06, 0.09, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
   const view = camera(scene, canvas.width / canvas.height);
+  if (scene.sky !== undefined && scene.sky !== "") {
+    // The sky follows the camera's eye and lies beyond the far plane: it is drawn first, then the depth buffer is cleared.
+    const seconds = scene.frame / 60;
+    const sky: EffectPose = { handle: { id: SKY_HANDLE } as EffectPose["handle"], model: scene.sky, created: 0, x: view.eye[0] ?? 0, y: view.eye[1] ?? 0, z: view.eye[2] ?? 0,
+      alpha: 255, scale: 1, timeScale: 1, queuedAnimations: [], yaw: 0, pitch: 0, roll: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1], flat: false,
+      animation: "stand", subAnimations: [], animationElapsed: seconds, animationClock: seconds, animationBlendTime: 0, animationBlend: undefined, unit: true };
+    await drawEffect(sky, camera(scene, canvas.width / canvas.height, SKY_FAR));
+    gl.depthMask(true); gl.clear(gl.DEPTH_BUFFER_BIT);
+  }
   const visible = scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat);
   await Promise.all(visible.map(prepareInstance));
   for (const pose of orderDrawnModels(visible, (pose) => instances.get(pose.handle.id)?.model.Materials ?? [])) await drawEffect(pose, view);

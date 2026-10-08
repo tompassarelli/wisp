@@ -58,6 +58,10 @@ export class Scenery {
   readonly cameraBlockers = new Map<Handle, boolean>();
   cameraType = 0;
   cameraAllowsHotkeyTargetLock = true;
+  /** SetSkyModel's latest model; "" clears the sky. */
+  sky: string | undefined;
+  /** BlzShowTerrain's latest flag. */
+  terrainShown = true;
   minShadowCastingPointLightCount = 0;
   cinematicEnabledDE = true;
   thematicMusicPauseOnFocusLost = false;
@@ -127,6 +131,8 @@ export class Scenery {
         this.fog.style = style; this.fog.zStart = zstart; this.fog.zEnd = zend; this.fog.density = density;
         this.fog.heightStart = heightStart; this.fog.heightEnd = heightEnd; this.fog.linearStart = linearStart; this.fog.linearEnd = linearEnd; this.fog.color = [red, green, blue];
       },
+      SetSkyModel: (model: string) => { this.sky = model; },
+      BlzShowTerrain: (show: boolean) => { this.terrainShown = show; },
       BlzSetTerrainFogColor: (red: number, green: number, blue: number) => { this.fog.color = [red, green, blue]; },
       BlzSetMinShadowCastingPointLightCount: (count: number) => { this.minShadowCastingPointLightCount = count; },
       BlzGetMinShadowCastingPointLightCount: () => this.minShadowCastingPointLightCount,

@@ -380,6 +380,12 @@ optional `width` and `height` default to 1280×720; `chrome` or `CHROME` selects
 Chrome, otherwise `google-chrome-stable` is used. Chrome runs privately in
 headless mode, with the GPU's ANGLE OpenGL backend, falling back to SwiftShader
 only if GPU initialization fails. No Warcraft client is opened.
+The scene keeps the map's latest `SetSkyModel` as `sky`; the renderer draws it
+first, centred on the camera's eye with a far plane beyond any sky model, then
+clears depth, so the stage draws over it. On Smashcraft's Durotar near camera
+(Warcraft III 3.0.1.24342, Reforged) the drawn horizon sits 12 rows of 720
+above the native capture's. `BlzShowTerrain` is recorded; the renderer draws no
+terrain.
 
 The renderer uses the declared MIT `war3-model` 4.0.1 package with the HD
 sampling precision fix recorded in `vendor/README.md`,
