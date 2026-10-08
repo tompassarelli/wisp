@@ -4,6 +4,7 @@ import { mapCompiler, report } from "../scripts/compiler";
 import { installHeadless } from "../scripts/wisp/headless";
 import { runJourney } from "../src/headless/journey";
 import { install, start } from "./script-rules50/main";
+import { farmTest } from "../scripts/wisp/farmTest";
 
 const runtime = installHeadless({ filePrefix: "script-rules", globalPrefixes: ["__scriptRules"] });
 afterAll(runtime.restore);
@@ -52,7 +53,7 @@ test("[native] each script rule's 3.0.1 row agrees in two clients", () => {
   }
 });
 
-test("[native] the same 3.0.1 script rule rows in emitted 32-bit Lua", () => {
+farmTest("[native] the same 3.0.1 script rule rows in emitted 32-bit Lua", () => {
   for (const config of ["test/script-rules50/tsconfig.json", "test/script-rules50/tsconfig.headless.json"]) expect(report(mapCompiler(join(import.meta.dir, "..", config))())).toBe("");
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "../build/script-rules50/headless/headless.lua"), join(import.meta.dir, "../build/script-rules50/map.lua"), join(import.meta.dir, "../src/natives/warcraft.d.ts")], { stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });

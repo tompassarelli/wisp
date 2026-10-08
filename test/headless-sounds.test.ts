@@ -8,6 +8,7 @@ import { assertSoundCue } from "../src/headless/client";
 import { runJourney } from "../src/headless/journey";
 import { install, start } from "./sounds60/main";
 import { SOUND_NATIVES, SOUND_PATH } from "./sounds60/cases";
+import { farmTest } from "../scripts/wisp/farmTest";
 
 const runtime = installHeadless({ filePrefix: "sounds60", globalPrefixes: ["__sounds60"], natives: SOUND_NATIVES });
 afterAll(runtime.restore);
@@ -51,7 +52,7 @@ test("a start on a playing sound is not a cue, and pitch and position are binary
   }
 });
 
-test("the same sound rules pass in emitted 32-bit Lua", { timeout: 120_000 }, () => {
+farmTest("the same sound rules pass in emitted 32-bit Lua", { timeout: 120_000 }, () => {
   for (const config of ["test/sounds60/tsconfig.json", "test/sounds60/tsconfig.headless.json"]) expect(report(mapCompiler(join(import.meta.dir, "..", config))())).toBe("");
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "../build/sounds60/headless/headless.lua"), join(import.meta.dir, "../build/sounds60/map.lua"), join(import.meta.dir, "../src/natives/warcraft.d.ts")], { stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });

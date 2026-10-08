@@ -60,6 +60,43 @@ to end.
 
 A plain `bun test` still runs timing tests like any other test.
 
+## Test cost
+
+One test may use at most 4 s of CPU (`TEST_CEILING_S` in
+[testCost](../scripts/wisp/testCost.ts), wisp:scripts/wisp/testCost.ts):
+its process's user plus system time, plus the Lua32, compiler and other
+children it waited for. The runner preloads
+[testCostPreload](../scripts/wisp/testCostPreload.ts)
+(wisp:scripts/wisp/testCostPreload.ts), which charges each test's CPU to its
+file. Time outside tests (loading, `beforeAll`) is charged to the file too.
+
+- A test over the ceiling fails:
+  `test/x.test.ts: this test used 5.02 s CPU, over the 4 s ceiling per test; shrink it or move it to the farm`.
+- On a whole run (no path or `-t` filter), a file whose CPU per test rises
+  more than 25%, and more than 1 s, over its row in `test/cost-baseline.tsv`
+  at the same test count fails the same way, naming the file. Rows are
+  scaled by the run's median ratio to the baseline, so a slower machine
+  compares fairly.
+- A new file, or a file whose test count changed, passes under the ceiling
+  and rewrites its row: commit the row with the tests.
+  `TEST_COST_UPDATE=1 bun run test` rewrites every row, after a cut.
+- A cost verdict reached above 30% CPU pressure is inconclusive (exit 75).
+- Every run prints the five heaviest tests and the suite's CPU, test count
+  and CPU per test against the baseline:
+
+```
+suite CPU: 30.8 s for 261 tests; 0.118 s per test against the baseline's 0.120 s (-2%), this machine at 1.00x the reference
+```
+
+A test that would come near the ceiling, typically one that compiles a
+fixture to 32-bit Lua, is a farm test: declare it with `farmTest` from
+[farmTest](../scripts/wisp/farmTest.ts) (wisp:scripts/wisp/farmTest.ts)
+instead of `test`. `bun run test` skips it; CI's farm-tests job and every
+`bun wisp farm test` shard run it on each push, so it keeps its coverage.
+The ceiling doesn't apply to it. Keep its cheap Bun-side twin in the suite.
+Each farm shard runs `bun test --preload ./scripts/wisp/testCostPreload.ts`,
+so the ceiling holds for every other test there as well.
+
 ## The last line
 
 Every run ends with the machine's CPU pressure during the run:

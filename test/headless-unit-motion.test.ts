@@ -5,6 +5,7 @@ import { installHeadless } from "../scripts/wisp/headless";
 import { runJourney } from "../src/headless/journey";
 import { install, start } from "./unit-motion57/main";
 import { UNIT_MOTION_NOOPS, UNIT_TYPE } from "./unit-motion57/cases";
+import { farmTest } from "../scripts/wisp/farmTest";
 
 const runtime = installHeadless({ filePrefix: "unit-motion", globalPrefixes: ["__unitMotion"], intentionalNoops: UNIT_MOTION_NOOPS });
 afterAll(runtime.restore);
@@ -83,7 +84,7 @@ test("unit coordinates and height are stored as binary32 like Warcraft's Lua num
   clients.start();
 });
 
-test("the same unit motion cases pass in emitted 32-bit Lua", () => {
+farmTest("the same unit motion cases pass in emitted 32-bit Lua", () => {
   for (const config of ["test/unit-motion57/tsconfig.json", "test/unit-motion57/tsconfig.headless.json"]) expect(report(mapCompiler(join(import.meta.dir, "..", config))())).toBe("");
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "../build/unit-motion57/headless/headless.lua"), join(import.meta.dir, "../build/unit-motion57/map.lua"), join(import.meta.dir, "../src/natives/warcraft.d.ts")], { stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });

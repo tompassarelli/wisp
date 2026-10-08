@@ -6,6 +6,7 @@ import { mapCompiler, report } from "../scripts/compiler";
 import { installHeadless } from "../scripts/wisp/headless";
 import { runJourney } from "../src/headless/journey";
 import { install, start } from "./timers56/main";
+import { farmTest } from "../scripts/wisp/farmTest";
 
 const runtime = installHeadless({ filePrefix: "timers56", globalPrefixes: ["__timers56"] });
 afterAll(runtime.restore);
@@ -37,7 +38,7 @@ test("each timer rule's row agrees in two clients", () => {
   for (const client of clients.clients) expect(client.files.get(`timers56-p${client.slot}.txt`)).toEqual(EXPECTED);
 });
 
-test("the same timer rules pass in emitted 32-bit Lua", { timeout: 120_000 }, () => {
+farmTest("the same timer rules pass in emitted 32-bit Lua", { timeout: 120_000 }, () => {
   for (const config of ["test/timers56/tsconfig.json", "test/timers56/tsconfig.headless.json"]) expect(report(mapCompiler(join(import.meta.dir, "..", config))())).toBe("");
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "../build/timers56/headless/headless.lua"), join(import.meta.dir, "../build/timers56/map.lua"), join(import.meta.dir, "../src/natives/warcraft.d.ts")], { stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });

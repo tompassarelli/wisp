@@ -8,7 +8,9 @@
 //    runner takes, while it samples /proc/pressure/cpu. A timing test that
 //    failed while CPU pressure was above BUSY_PRESSURE is inconclusive, not
 //    failed: it runs again once the machine is quiet.
-// 3. The last line is the machine's CPU pressure during the whole run.
+// 3. Each test's CPU is held to the ceiling, and on a whole run each file's
+//    CPU per test to its baseline row (wisp:scripts/wisp/testCost.ts).
+// 4. The last line is the machine's CPU pressure during the whole run.
 //
 // Usage: bun scripts/wisp/testRunner.ts [BUN_TEST_ARGS...]
 // A consuming project runs its own suite the same way, from its root.
@@ -19,6 +21,7 @@ import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Cause, Effect, Exit, Fiber, Option, Ref, Schedule, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { BASELINE_PATH, TEST_COST_OUT_ENV, addCost, judge, type Costs } from "./testCost";
 import { TEST_PHASE_ENV, TIMING_TEST_PREFIX } from "./timingTest";
 
 /**
@@ -133,6 +136,9 @@ export function timingTestFiles(root: string, filters: readonly string[]): strin
   return files.sort();
 }
 
+/** Preloaded into each test process: it measures each test's CPU (wisp:scripts/wisp/testCostPreload.ts). */
+const COST_PRELOAD = join(import.meta.dir, "testCostPreload.ts");
+
 /** Written when the timing files start: the lease was admitted. */
 const startedFile = (resultsFile: string) => `${resultsFile}.started`;
 
@@ -147,7 +153,7 @@ const runTimingFiles = (resultsFile: string, files: readonly string[], args: rea
   for (const file of files) {
     const { value: code, pressure } = yield* withPressure(run(
       process.execPath,
-      ["test", "--timeout", String(TEST_TIMEOUT_MS), ...flags, "-t", TIMING_TEST_PREFIX, `./${file}`],
+      ["test", "--timeout", String(TEST_TIMEOUT_MS), "--preload", COST_PRELOAD, ...flags, "-t", TIMING_TEST_PREFIX, `./${file}`],
       { [TEST_PHASE_ENV]: "timing" },
     ));
     const result: TimingResult = { file, code, ...(pressure.peak === undefined ? {} : { peak: pressure.peak }), ...(pressure.average === undefined ? {} : { average: pressure.average }) };
@@ -262,27 +268,62 @@ export const timingTests = (files: readonly string[], args: readonly string[], p
   return verdicts;
 });
 
-/** The whole suite; succeeds with the process's exit code. */
-export const runTests = (args: readonly string[], print: (line: string) => void = (line) => console.log(line)) => Effect.gen(function*() {
-  const { value: summary, pressure } = yield* withPressure(Effect.gen(function*() {
-    const correctness = yield* run(
-      process.execPath,
-      ["test", "--timeout", String(TEST_TIMEOUT_MS), "--pass-with-no-tests", ...args],
-      { [TEST_PHASE_ENV]: "correctness" },
-    );
-    const files = timingTestFiles(process.cwd(), pathFilters(args));
-    const verdicts = files.length === 0 ? new Map<string, Verdict>() : yield* timingTests(files, args, print);
-    return { correctness, verdicts: [...verdicts.values()] };
-  }));
-  const count = (verdict: Verdict) => summary.verdicts.filter((value) => value === verdict).length;
-  const timing = summary.verdicts.length === 0
-    ? "no timing tests"
-    : `timing tests: ${count("passed")} passed, ${count("failed")} failed, ${count("inconclusive")} inconclusive`;
-  print(`correctness tests ${summary.correctness === 0 ? "passed" : "FAILED"}; ${timing}`);
-  print(`CPU pressure during this run: average ${percent(pressure.average)}, peak some avg10 ${percent(pressure.peak)} (timing tests count as inconclusive above ${BUSY_PRESSURE}%)`);
-  if (summary.correctness !== 0 || count("failed") > 0) return 1;
-  return count("inconclusive") > 0 ? INCONCLUSIVE_EXIT : 0;
+/** One line of wisp:scripts/wisp/testCostPreload.ts's output. */
+const CostRow = Schema.Struct({
+  unit: Schema.optionalKey(Schema.String),
+  tests: Schema.optionalKey(Schema.Int),
+  cpu: Schema.optionalKey(Schema.Finite),
+  max: Schema.optionalKey(Schema.Finite),
+  inconclusive: Schema.optionalKey(Schema.String),
 });
+const decodeCostRow = Schema.decodeUnknownEffect(Schema.fromJsonString(CostRow));
+
+/** A run of every test: no path filter and no name filter. */
+export const wholeRun = (args: readonly string[]) =>
+  pathFilters(args).length === 0 && !args.some((arg) => arg === "-t" || arg === "--test-name-pattern" || arg.startsWith("--test-name-pattern="));
+
+/** The whole suite; succeeds with the process's exit code. */
+export const runTests = (args: readonly string[], print: (line: string) => void = (line) => console.log(line)) => Effect.acquireUseRelease(
+  Effect.sync(() => mkdtempSync(join(tmpdir(), "wisp-test-cost-"))),
+  (directory) => Effect.gen(function*() {
+    const costFile = join(directory, "costs.jsonl");
+    const { value: summary, pressure } = yield* withPressure(Effect.gen(function*() {
+      const correctness = yield* run(
+        process.execPath,
+        ["test", "--timeout", String(TEST_TIMEOUT_MS), "--pass-with-no-tests", "--preload", COST_PRELOAD, ...args],
+        { [TEST_PHASE_ENV]: "correctness", [TEST_COST_OUT_ENV]: costFile },
+      );
+      const files = timingTestFiles(process.cwd(), pathFilters(args));
+      const verdicts = files.length === 0 ? new Map<string, Verdict>() : yield* timingTests(files, args, print);
+      return { correctness, verdicts: [...verdicts.values()] };
+    }));
+    const busy = pressure.peak !== undefined && pressure.peak > BUSY_PRESSURE;
+    const measured: Costs = new Map();
+    const notes: string[] = [];
+    const text = existsSync(costFile) ? readFileSync(costFile, "utf8") : "";
+    for (const line of text.split("\n").filter((row) => row !== "")) {
+      const row = yield* decodeCostRow(line).pipe(Effect.mapError((failure) => new TestRunFailure({ problem: `test cost row ${line}: ${failure.message}` })));
+      if (row.inconclusive !== undefined) notes.push(row.inconclusive);
+      else if (row.unit !== undefined) addCost(measured, row.unit, row.tests ?? 0, row.cpu ?? 0, row.max ?? 0);
+    }
+    const judgement = judge({ label: "suite", measured, baselinePath: join(process.cwd(), BASELINE_PATH), project: process.cwd(), whole: wholeRun(args) });
+    for (const note of notes) print(note);
+    for (const line of judgement.risen) print(busy ? `${line} (inconclusive: CPU pressure ${percent(pressure.peak)})` : line);
+    if (judgement.updated > 0) print(`test cost baseline: ${judgement.updated} rows updated in ${BASELINE_PATH}; commit them with the tests`);
+    const risen = judgement.risen.length > 0 && !busy;
+    const count = (verdict: Verdict) => summary.verdicts.filter((value) => value === verdict).length;
+    const timing = summary.verdicts.length === 0
+      ? "no timing tests"
+      : `timing tests: ${count("passed")} passed, ${count("failed")} failed, ${count("inconclusive")} inconclusive`;
+    print(`correctness tests ${summary.correctness === 0 ? "passed" : "FAILED"}; ${timing}`);
+    print(judgement.heaviest);
+    print(judgement.summary);
+    print(`CPU pressure during this run: average ${percent(pressure.average)}, peak some avg10 ${percent(pressure.peak)} (timing and cost verdicts count as inconclusive above ${BUSY_PRESSURE}%)`);
+    if (summary.correctness !== 0 || count("failed") > 0 || risen) return 1;
+    return count("inconclusive") > 0 || notes.length > 0 || (judgement.risen.length > 0 && busy) ? INCONCLUSIVE_EXIT : 0;
+  }),
+  (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+);
 
 if (import.meta.main) {
   const argv = Bun.argv.slice(2);

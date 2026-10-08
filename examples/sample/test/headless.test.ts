@@ -9,6 +9,7 @@ import { installHeadless } from "wisp/scripts/wisp/headless";
 import { journeyLines, runJourney } from "wisp/src/headless/journey";
 import { install, start } from "../src/main";
 import { SAMPLE_JOURNEY, SAMPLE_MAP } from "./journey";
+import { farmTest } from "wisp/scripts/wisp/farmTest";
 
 const headless = installHeadless(SAMPLE_MAP);
 afterAll(headless.restore);
@@ -36,7 +37,7 @@ test("both clients ping, take a hot reload and keep walking, with the same nativ
   expect(first?.checksum).toBe(second?.checksum ?? "");
 });
 
-test("the compiled bundle in 32-bit Lua makes the same native calls as the TypeScript in Bun", () => {
+farmTest("the compiled bundle in 32-bit Lua makes the same native calls as the TypeScript in Bun", () => {
   expect(report(mapCompiler(join(sample, "tsconfig.map.json"))())).toBe("");
   expect(report(mapCompiler(join(sample, "tsconfig.headless.json"))())).toBe("");
   const run = Bun.spawnSync([

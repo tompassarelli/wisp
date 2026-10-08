@@ -8,6 +8,7 @@ import { parseConfigFileWithSystem, transpileFiles } from "typescript-to-lua";
 import { NUMBER_RULE_CODE, programNumberRules } from "../plugins/number-rules";
 import { numberRuleReport } from "../scripts/numberRules";
 import { writeEditorPlugin } from "../scripts/package";
+import { farmTest } from "../scripts/wisp/farmTest";
 
 const root = join(import.meta.dir, "..");
 
@@ -17,7 +18,7 @@ const line = (diagnostic: ts.Diagnostic, cwd: string) => {
   return `${relative(cwd, file.fileName)}(${line + 1},${character + 1}): error TS${diagnostic.code}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`;
 };
 
-test("[spec #7] the check command reports the compiler's number-rule errors, from scratch and from its cache", async () => {
+farmTest("[spec #7] the check command reports the compiler's number-rule errors, from scratch and from its cache", async () => {
   const fixtures = join(import.meta.dir, "traps");
   const files = (await readdir(fixtures)).map((name) => join(fixtures, name));
   const { options } = parseConfigFileWithSystem(join(root, "test/tsconfig.traps.json"));
@@ -63,7 +64,7 @@ async function tsserver(cwd: string, probe: string, requests: readonly { readonl
   return awaited.map((seq) => responses.get(seq));
 }
 
-test("[spec #7] the editor reports the same number-rule errors through tsserver, only in the map's files", async () => {
+farmTest("[spec #7] the editor reports the same number-rule errors through tsserver, only in the map's files", async () => {
   await mkdir(join(root, "build"), { recursive: true });
   const directory = await mkdtemp(join(root, "build/editor-"));
   try {

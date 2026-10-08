@@ -5,6 +5,7 @@
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
+import { farmTest } from "../scripts/wisp/farmTest";
 import { mapCompiler, report } from "../scripts/compiler";
 import { moduleChunk, moduleHashText, moduleIndex, modulePayload, textChecksum } from "../src/runtime/modules";
 
@@ -41,7 +42,7 @@ export function start(): void {
 }
 `;
 
-test("[invariant] full and incremental module reloads end in the same modules, state and native calls in two Lua32 clients; damaged and broken versions are refused everywhere", () => {
+farmTest("[invariant] full and incremental module reloads end in the same modules, state and native calls in two Lua32 clients; damaged and broken versions are refused everywhere", () => {
   mkdirSync(join(root, "build"), { recursive: true });
   const directory = mkdtempSync(join(root, "build/modules-"));
   try {

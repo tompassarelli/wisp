@@ -6,6 +6,7 @@ import { timingTest } from "../scripts/wisp/timingTest";
 import { runJourney } from "../src/headless/journey";
 import { install, start } from "./unit-states/main";
 import { UNIT_FIXTURE, UNIT_TYPE } from "./unit-states/cases";
+import { farmTest } from "../scripts/wisp/farmTest";
 
 const runtime = installHeadless({ filePrefix: "unit-states", globalPrefixes: ["__unitStates"], unitStates: UNIT_FIXTURE });
 afterAll(runtime.restore);
@@ -83,7 +84,7 @@ test("[spec #44] object-data values are supplied by the declared fixture", () =>
   clients.start();
 });
 
-test("[native #44] the same 24 unit state rows match Warcraft in emitted 32-bit Lua", () => {
+farmTest("[native #44] the same 24 unit state rows match Warcraft in emitted 32-bit Lua", () => {
   for (const config of ["test/unit-states/tsconfig.json", "test/unit-states/tsconfig.headless.json"]) expect(report(mapCompiler(join(import.meta.dir, "..", config))())).toBe("");
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "../build/unit-states/headless/headless.lua"), join(import.meta.dir, "../build/unit-states/map.lua"), join(import.meta.dir, "../src/natives/warcraft.d.ts")], { stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
