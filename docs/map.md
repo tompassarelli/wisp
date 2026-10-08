@@ -28,9 +28,15 @@ asset directory, it writes the underlying texture and reports
 `iconsRendered: false` when markers exist. Other marker types require their
 own assets and reference calibration.
 
-A second capture with a custom
-minimap, the Create Game list, and hide-minimap behavior remain open in
-[Wisp #85](https://github.com/tompassarelli/wisp/issues/85). Hidden-minimap
+The 9 October 2026 Classic and Definitive lobby references for
+`smashcraft-0911b5da` (parchment) and `custom-minimap-d8fe5996` (fighter lineup)
+both select `war3mapMap.blp` with flags 40016. The custom candidate's panels
+are identical between modes. Resizing Wisp's marked prediction to the captured
+154-pixel panel gives 6.99% RMS pixel error for parchment and 5.24% for the
+lineup. Package the desired lobby art as the minimap texture; importing only
+`war3mapPreview.tga` leaves the existing parchment in place.
+
+Hidden-minimap
 maps and archives containing both supported minimap encodings fail with a
 request for a reference instead of selecting an unmeasured fallback.
 

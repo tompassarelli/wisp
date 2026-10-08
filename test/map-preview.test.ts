@@ -1,12 +1,19 @@
 import { expect, test } from "bun:test";
 import { decodePreviewTexture, decodeMinimapMarkers, drawStartMarkers, selectMapPreview } from "../scripts/wisp/mapPreview";
 
-test("[native] #85 Smashcraft d8fe5996 lobby selects parchment minimap despite the custom preview", () => {
-  // Warcraft 3.0.1 capture: smashcraft#317 comment 6064778830; private archive flags 40016.
-  const selected = selectMapPreview({ flags: 40016 }, new Set(["war3mapmap.blp", "war3mappreview.tga"]));
-  expect(selected.entry).toBe("war3mapMap.blp");
-  expect(selected.hideMinimap).toBe(false);
-  expect(selected.customPreviewPresent).toBe(true);
+test("[native] #85 parchment and custom-lineup archive choices match two captured maps in Classic and Definitive", () => {
+  // 9 Oct 2026: ref-85-preview/lobby-classic-definitive-20261009; both
+  // real archives were read by `wisp map preview` and compared with their panels.
+  // 0911b5da: parchment 6.99% RMS; custom-minimap-d8fe5996: lineup 5.24% RMS.
+  for (const reference of [
+    { map: "smashcraft-0911b5da", flags: 40016, shown: "war3mapMap.blp" },
+    { map: "custom-minimap-d8fe5996", flags: 40016, shown: "war3mapMap.blp" },
+  ]) {
+    const selected = selectMapPreview({ flags: reference.flags }, new Set(["war3mapmap.blp", "war3mappreview.tga"]));
+    expect(selected.entry, reference.map).toBe(reference.shown);
+    expect(selected.hideMinimap, reference.map).toBe(false);
+    expect(selected.customPreviewPresent, reference.map).toBe(true);
+  }
 });
 
 test("[native] #85 captured Smashcraft start marker keeps position and red player color", () => {
