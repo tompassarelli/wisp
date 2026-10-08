@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, r
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Clock, Deferred, Effect, Option, Queue, Schema, type Scope } from "effect";
+import { pollFor } from "./hostProcess";
 
 /** Where an installed menu page reports its address and the menus' own requests. */
 export const DEFAULT_MENU_REPORT_PORT = 47123;
@@ -359,15 +360,9 @@ export const connectMenus = (address: MenuAddress): Effect.Effect<MenuSocket, Me
 export const menuAddress = (reportPort: number, seconds: number): Effect.Effect<MenuAddress, MenuFailure, Scope.Scope> =>
   listenForMenus(reportPort).pipe(
     Effect.flatMap((reports) => reports.waitForAddress(seconds)),
-    Effect.catchTag("MenuFailure", (failure) => failure.operation !== "listen for the menu page" ? Effect.fail(failure) : Effect.gen(function*() {
-      const deadline = (yield* Clock.currentTimeMillis) + seconds * 1000;
-      while (true) {
-        const kept = keptAddress(reportPort);
-        if (kept !== undefined) return kept;
-        if ((yield* Clock.currentTimeMillis) >= deadline) return yield* failure;
-        yield* Effect.sleep("250 millis");
-      }
-    })),
+    Effect.catchTag("MenuFailure", (failure) => failure.operation !== "listen for the menu page" ? Effect.fail(failure) : pollFor(seconds, "250 millis", Effect.sync(() => keptAddress(reportPort))).pipe(
+      Effect.filterOrFail((kept): kept is MenuAddress => kept !== undefined, () => failure),
+    )),
   );
 
 /** Finds this client's installed page. No page means the caller may use its ordinary menu controls. */
