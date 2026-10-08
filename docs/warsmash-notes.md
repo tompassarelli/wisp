@@ -624,12 +624,12 @@ samples it at a fraction of the file's length, away from the start and end.
 | --- | --- | --- | --- | --- | --- | --- |
 | `StartSound` on a handle that is still playing (Immolation re-lit; why hover and item cues stop first) | A handle has one voice: the call neither restarts it nor adds a voice | A new voice each call | A second start cue; the remaining time restarted | Ignored: no cue, the first playback ends on time | **Mismatch, fixed** | `start-while-playing-at-1.25=false` |
 | `StopSound(s, false, false)` then `StartSound(s)` in one call (hover, item cues) | Restarts from the beginning | Not registered | Restarts | Restarts | **Match** | `stop-then-start-at-1.25=true` |
-| `KillSoundWhenDone` right after `StartSound` (every one-shot cue) | The sound plays out, then the handle is released | Not registered | Plays out, then released | Same | **Match** | `kill-when-done-at-0.5=true` |
+| `KillSoundWhenDone` right after `StartSound` (every one-shot cue) | The sound plays out, then the handle is released; from the call on, `GetSoundIsPlaying` reads false (3.0.1 capture, both clients) | Not registered | Plays out, then released; read as playing until it ends | Plays out, then released; read as not playing from the call | **Mismatch, fixed** from the native rows. Smashcraft never reads `GetSoundIsPlaying` | `kill-when-done-at-0.5=false` |
 | `StopSound` on a handle set to be killed (voice cut-off, Immolation release) releases it; stopping or starting a released handle does nothing | Released by the stop; later calls on it are ignored | Not registered | Released; later calls ignored | Same | **Match** | `stopped-kill-when-done-restarted=false`, `released-handle-started=false` |
 | `SetSoundPitch` changes how long a cue plays (swing pitch per tier) | Pitch is a playback-rate factor: pitch 2 ends in half the time | Setter does nothing | Ends at duration ÷ pitch | Same | **Match** | `pitch-two-at-0.25=true`, `pitch-two-at-0.75=false` |
 | `SetSoundPitch` and `SetSoundPosition` values (cue log) | `real` arguments are binary32 | Position not registered; pitch ignored | Stored unrounded: Bun's cue log kept doubles that Lua32 rounds | Stored as binary32 | **Mismatch, fixed** | Bun-only case in `test/headless-sounds.test.ts` (no getter in the game) |
 | `StopSound(loop, false, true)` then a later `StartSound` (Immolation out, then lit again) | The fade-out ends the loop; a later start plays it again | Not registered | Stops at once; a later start plays | Same | **Match** for the later start. How long the fade lasts is audible only and stays with the capture | `fade-stopped-loop-at-1=false`, `fade-stopped-loop-restarted=true` |
-| Several new handles of one file or label started in one frame (a burst of hits and swings) | Each handle has its own voice; no per-file or per-channel cap is established. The engine's total voice count is finite and the quietest or lowest-priority voices may be dropped, which a script cannot see | No cap | No cap; each start is a cue | Same | **Match with Warsmash; native unresolved**: the capture's count decides whether 12 handles of one file all play | `same-file-playing=12/12` |
+| Several new handles of one file or label started in one frame (a burst of hits and swings) | Each handle has its own voice; no per-file or per-channel cap is established. The engine's total voice count is finite and the quietest or lowest-priority voices may be dropped, which a script cannot see | No cap | No cap; each start is a cue | Same | **Native unresolved**: the fixture's 12 handles are set to be killed, so 3.0.1 reads all of them as not playing and the row can't count voices. Smashcraft can't observe a dropped voice either | `same-file-playing=0/12` |
 | `GetSoundFileDuration` feeding `SetSoundDuration` (announcer, voice, item and hover cues) | The file's length in milliseconds; 0 when missing | Decoded duration | Unmodelled: a map declares it or supplies it | Same; the fixture supplies 2,000 ms for its file | **Not applicable**: headless decodes no sound files, so a game supplies lengths through `natives` | (every case is timed from it) |
 
 A label sound with no `SetSoundDuration`, or a file whose length a game does
@@ -644,7 +644,11 @@ times the fixture file's length and collects `sounds60-p0.txt` and `sounds60-p1.
 Each must equal `EXPECTED` in `test/headless-sounds.test.ts`; the rows'
 order depends only on fractions of the file's length, so the stock file's
 real length (rather than headless's 2,000 ms) keeps the same rows. A
-`missing-file=...` row means the stock path is wrong for that build.
+`missing-file=...` row means the stock path is wrong for that build, or the
+client has no audio device: `GetSoundFileDuration` then reads 0 on that client
+only, and the game desyncs. On 8 Oct 2026 (3.0.1.24342, two signed-in clients,
+each on its own silent PipeWire sink) both clients wrote the ten `EXPECTED`
+rows.
 
 ## File-format facts for a standalone player (#48)
 
