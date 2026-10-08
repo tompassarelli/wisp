@@ -22,9 +22,9 @@ export const EXPECTED = [
   // A hidden, frozen clip shown and sought to 0.4 s draws frame start + 400, with or without a second seek.
   "clip-shown=400,24,0",
   "clip-second-seek=400,24,0",
-  // Walk selected and sought to 0.25 s in the call that freezes it at 1 s, and on an effect frozen at 0.5 s.
-  "select-freeze-seek=250,36,500",
-  "freeze-then-select-seek=250,36,250",
+  // 3.0.1 capture 2: a selection restarts on the next drawn frame, replacing a seek made in the same callback.
+  "select-freeze-seek=0,36,500",
+  "freeze-then-select-seek=0,36,250",
   // 4.5 s of a 1002 ms loop wraps by its length, keeping the overshoot: 492 (3.0.1, 8 Oct capture).
   "loop-played=492,36,250",
   "loop-reference=900,72,250",

@@ -1,6 +1,7 @@
 // One test per animation playback rule in wisp:docs/warsmash-notes.md,
 // "Animation playback", run in Bun and in 32-bit Lua.
 import { assertEquals, assertTrue, test } from "../runtime/testing";
+import { f32 } from "../sim/f32";
 import {
   advanceAnimation, type AnimationSequence, animationSample, blendWeight, freshAnimation, globalSequenceFrame, seekAnimation,
   selectAnimation, selectSequence, sequenceFrame,
@@ -78,6 +79,23 @@ test("animation: a seek sets the sequence time without spending blend time", () 
   same([state.animationElapsed, blendWeight(state)], [0.25, 1]);
   const { animation, subAnimations, animationElapsed: elapsed } = state;
   assertEquals(animationSample(MODEL, { animation, subAnimations, elapsed }, "unit").frame, 4250);
+});
+
+// 3.0.1 ruler capture 2: both effects selected and sought in one callback drew Walk at 0;
+// the frozen pooled clips, selected earlier, drew the later seek at 400 ms.
+test("animation: [native #58] an effect selection resets a same-frame seek on the next drawn frame", () => {
+  for (const frozenBefore of [false, true]) {
+    const state = freshAnimation();
+    advanceAnimation(state, 1, 0.5);
+    if (frozenBefore) advanceAnimation(state, 0, 0.5);
+    selectAnimation(state, "walk", undefined, true);
+    seekAnimation(state, 0.25);
+    advanceAnimation(state, 0, 1 / 60);
+    assertEquals(state.animationElapsed, 0, "the pending selection restarts after the callback's seek");
+    seekAnimation(state, f32(0.4));
+    advanceAnimation(state, 0, 1 / 60);
+    assertEquals(state.animationElapsed, f32(0.4), "a seek after the selection was drawn persists while frozen");
+  }
 });
 
 test("animation: the sample is the clock's whole millisecond", () => {

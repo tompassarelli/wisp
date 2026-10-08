@@ -37,6 +37,8 @@ export interface AnimationState {
   animationClock: number;
   animationBlendTime: number;
   animationBlend: AnimationBlend | undefined;
+  /** Effect selections restart once on the next drawn frame, after the caller's writes. */
+  animationRestartPending?: boolean;
 }
 
 export function freshAnimation(): AnimationState {
@@ -48,7 +50,7 @@ export function freshAnimation(): AnimationState {
  * already animated keeps its old pose and fades it out; a selection during a
  * blend leaves that blend running.
  */
-export function selectAnimation(state: AnimationState, animation: string | number, subAnimations?: readonly (string | number)[]): void {
+export function selectAnimation(state: AnimationState, animation: string | number, subAnimations?: readonly (string | number)[], restartOnNextFrame = false): void {
   if (state.animationBlendTime > 0 && state.animation !== undefined && state.animationBlend === undefined && state.animationClock * 1000 >= 1) {
     state.animationBlend = {
       from: { animation: state.animation, subAnimations: [...state.subAnimations], elapsed: state.animationElapsed },
@@ -58,6 +60,7 @@ export function selectAnimation(state: AnimationState, animation: string | numbe
   state.animation = animation;
   if (subAnimations !== undefined) state.subAnimations = [...subAnimations];
   state.animationElapsed = 0;
+  state.animationRestartPending = restartOnNextFrame;
 }
 
 /** A seek moves the sample time without spending blend time. */
@@ -70,6 +73,10 @@ export function seekAnimation(state: AnimationState, seconds: number): void {
  * time scale, held as binary32 so Bun and 32-bit Lua floor the same frames.
  */
 export function advanceAnimation(state: AnimationState, timeScale: number, frameSeconds: number): void {
+  if (state.animationRestartPending) {
+    state.animationElapsed = 0;
+    state.animationRestartPending = false;
+  }
   const step = f32(timeScale * frameSeconds);
   if (step === 0) return;
   state.animationElapsed = f32(state.animationElapsed + step);

@@ -798,7 +798,7 @@ export class HeadlessClient {
   private playEffect(effect: Handle, animation: string | number, timeScale?: number): void {
     const pose = this.liveEffect(effect);
     if (pose === undefined) return;
-    selectAnimation(pose, animation);
+    selectAnimation(pose, animation, undefined, true);
     if (timeScale !== undefined) pose.timeScale = f32(timeScale);
   }
 

@@ -7,8 +7,8 @@
 import { inflateSync } from "node:zlib";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Console, Effect, Schema } from "effect";
-import { EXPECTED } from "./expected";
-import { CLOCK_DX, CLOCK_DY, DEATH_SECONDS, MARK_DY, ORIENTATION_MARK, ORIGIN_DY, READY_SECONDS, RULER_LENGTH, SLOTS, type Slot } from "./layout";
+import { EXPECTED, EXPECTED_FILE } from "./expected";
+import { CLOCK_DX, CLOCK_DY, DEATH_SECONDS, GLOBAL_LENGTH, MARK_DY, ORIENTATION_MARK, ORIGIN_DY, READY_SECONDS, RULER_LENGTH, SLOTS, type Slot } from "./layout";
 
 class ReadFailure extends Schema.TaggedError<ReadFailure>()("ReadFailure", { problem: Schema.String }) {
   override get message(): string { return this.problem; }
@@ -236,12 +236,18 @@ const parse = (row: string) => (row.split("=")[1] ?? "").split(",").map(Number);
  * apart), X within 6 units, plus the ruler's timing allowance where a clock
  * ran (half of it for the global marker, which moves half a unit a millisecond).
  */
-export function compare(reading: Reading): { row: string; matches: boolean } {
+export function compare(reading: Reading, effectGlobalPhase = 0): { row: string; matches: boolean } {
   const row = `${reading.slot.name}=${Math.round(reading.dx)},${Math.round(reading.dy)},${Math.round(reading.gx)}`;
   const expected = EXPECTED.find((line) => line.startsWith(`${reading.slot.name}=`)) ?? "";
   if (expected.endsWith("=gone")) return { row, matches: false };
   const [dx = Number.NaN, dy = Number.NaN, gx = Number.NaN] = parse(expected);
-  const matches = Math.abs(reading.dx - dx) <= 6 + reading.slot.timing && Math.abs(reading.dy - dy) <= 4 && Math.abs(reading.gx - gx) <= 6 + reading.slot.timing / 2;
+  // Warcraft's effects share a renderer-clock starting phase; units start at zero.
+  // The frozen-in-creation effect measures that phase without spending animation time.
+  const unit = EXPECTED_FILE.some((line) => line.startsWith(`${reading.slot.name}-at=`));
+  const period = GLOBAL_LENGTH / 2;
+  const delta = reading.gx - gx - (unit ? 0 : effectGlobalPhase);
+  const globalDifference = ((delta + period / 2) % period + period) % period - period / 2;
+  const matches = Math.abs(reading.dx - dx) <= 6 + reading.slot.timing && Math.abs(reading.dy - dy) <= 4 && Math.abs(globalDifference) <= 6 + reading.slot.timing / 2;
   return { row, matches };
 }
 
@@ -292,11 +298,15 @@ const program = (path: string | undefined) => Effect.gen(function*() {
   const image = yield* Effect.try({ try: () => decodePng(bytes), catch: (cause) => new ReadFailure({ problem: `${path}: ${String(cause)}` }) });
   const { readings, matched } = readRulers(image);
   yield* Console.log(`marks matched: ${matched} of ${SLOTS.length * 2 + 1}`);
+  const effectGlobalPhase = reading(readings, "global-frozen")?.gx ?? 0;
+  yield* Console.log(`effect-global-start=${Math.round(effectGlobalPhase)} (global markers compared relative to the frozen creation reference)`);
   let matching = 0;
+  let matchingAnimation = 0;
   for (const [index, result] of readings.entries()) {
     const expected = EXPECTED[index] ?? "";
-    const { row, matches } = typeof result === "string" ? { row: result, matches: result === expected } : compare(result);
+    const { row, matches } = typeof result === "string" ? { row: result, matches: result === expected } : compare(result, effectGlobalPhase);
     if (matches) matching++;
+    if (matches && SLOTS[index]?.issue === 58) matchingAnimation++;
     yield* Console.log(`${row}  ${matches ? "matches" : `differs from ${expected}`}`);
   }
   const lost = overshoot(readings);
@@ -306,6 +316,7 @@ const program = (path: string | undefined) => Effect.gen(function*() {
   for (const line of deathLags(readings)) yield* Console.log(line);
   yield* Console.log(`drawn-away=${offsets(readings)}`);
   yield* Console.log(`${matching} of ${SLOTS.length} rulers match the headless rows`);
+  yield* Console.log(`animation #58: ${matchingAnimation} of ${SLOTS.filter((slot) => slot.issue === 58).length} rulers match`);
 });
 
 if (import.meta.main) BunRuntime.runMain(program(process.argv[2]));
