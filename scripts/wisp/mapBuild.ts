@@ -304,7 +304,9 @@ const PACKAGER_SOURCE = join(import.meta.dir, "../../native/map-pack.c");
 /**
  * The map packager at `path`; when it is missing or was compiled from other
  * source (its `.source-sha256` stamp), compiles wisp:native/map-pack.c there
- * against nixpkgs StormLib. Each compile writes its own file and renames it in.
+ * against nixpkgs StormLib, or the StormLib installed under `STORMLIB_PREFIX`
+ * with the compiler `CC` when they are set (CI runners have no nix). Each
+ * compile writes its own file and renames it in.
  */
 export const ensurePackager = (path: string) => Effect.suspend(() => {
   const source = new Bun.CryptoHasher("sha256").update(readFileSync(PACKAGER_SOURCE)).digest("hex");
@@ -314,13 +316,14 @@ export const ensurePackager = (path: string) => Effect.suspend(() => {
 });
 
 const compilePackager = (path: string, source: string, stamp: string) => Effect.gen(function*() {
-  const stormlib = yield* captureProcess("build StormLib", path, ["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#stormlib"]).pipe(
+  const stormlib = process.env.STORMLIB_PREFIX ?? (yield* captureProcess("build StormLib", path, ["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#stormlib"]).pipe(
     Effect.flatMap(({ exitCode, stdout, stderr }) => exitCode === 0
       ? Effect.succeed(stdout.trim().split("\n")[0] ?? "")
       : Effect.fail(new MapBuildFailure({ operation: "build StormLib", path, cause: `nix exited with ${exitCode}: ${stderr.trim()}` }))),
-  );
+  ));
+  const compiler = process.env.CC === undefined ? ["nix", "shell", "nixpkgs#gcc", "--command", "gcc"] : [process.env.CC];
   yield* tryMapSync("create packager directory", path, () => mkdirSync(dirname(path), { recursive: true }));
-  yield* runProcess("compile map packager", path, ["nix", "shell", "nixpkgs#gcc", "--command", "gcc", `-I${stormlib}/include`, PACKAGER_SOURCE,
+  yield* runProcess("compile map packager", path, [...compiler, `-I${stormlib}/include`, PACKAGER_SOURCE,
     `-L${stormlib}/lib`, `-Wl,-rpath,${stormlib}/lib`, "-lstorm", "-o", `${path}.${process.pid}.next`]);
   yield* tryMapSync("install map packager", path, () => {
     renameSync(`${path}.${process.pid}.next`, path);
