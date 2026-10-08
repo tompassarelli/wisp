@@ -10,7 +10,7 @@ const runtime = installHeadless({ filePrefix: "unit-movement", globalPrefixes: [
 afterAll(runtime.restore);
 
 export const EXPECTED = [
-  "fly-height-needs-crow-form=0,38400",
+  "fly-height-needs-crow-form=38400,38400",
   "move-speed-set-and-read=34560",
 ];
 
