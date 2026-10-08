@@ -4,10 +4,10 @@ import { profileSettings } from "../scripts/wisp/clientDoctorCommand";
 import { preferenceChanges, withPreferences } from "../scripts/warcraft/preferences";
 
 test("[reference] 3.0.1 profiles select the installed graphics modes without the video keys the 3.0 patch notes retired", () => {
-  for (const name of Object.keys(PROFILES)) {
+  for (const [name, hd, assao] of [["parity", 0, 0], ["checks", 0, 0], ["hfr", 0, 0], ["visual", 1, 0], ["capture-classic", 0, 1], ["capture-reforged", 1, 1], ["capture-definitive", 2, 1]] as const) {
     const text = preferences(poolProfile(name), 0);
-    expect(text).toContain("assao=0\n");
-    expect(text).toContain(`hd=${name === "visual" ? 1 : 0}\n`);
+    expect(text).toContain(`assao=${assao}\n`);
+    expect(text).toContain(`hd=${hd}\n`);
     for (const key of ["bloom", "portraitBloom", "particles", "spellfilter"]) expect(text).not.toContain(`${key}=`);
   }
   expect(preferences({ ...poolProfile("visual"), graphicsMode: "definitive" }, 0)).toContain("hd=2\n");

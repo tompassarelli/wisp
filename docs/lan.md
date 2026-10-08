@@ -461,13 +461,18 @@ client's War3Preferences `[Video]`, `[Misc]` and `[Sound]` at launch:
   detail.
 - `hfr` is parity at 144 frames a second, for comparing the game's clocks
   against the 60 fps cap.
+- `capture-classic`, `capture-reforged` and `capture-definitive` use a
+  1280×720 window at 60 fps with high lighting, shadows, point-light shadows
+  and water, medium textures, and ambient occlusion enabled. Sound is off.
+  Each profile names its graphics mode; pool metadata records the selected
+  profile. Retain that metadata and the saved preferences with captures.
 
 Warcraft **3.0.1.24342**'s installed `webui/GlueManager.js` maps
 `PREF_GENERAL_HD` to SD=0, HD=1 and DE=2; the saved preferences store that
 choice as `[Misc] hd`. The profiles choose Classic (`hd=0`) for parity,
 checks and hfr, and Reforged (`hd=1`) for visual. `graphicsMode: "definitive"`
 selects Definitive Edition (`hd=2`). Audio checks therefore use Classic
-sounds; Definitive Edition also uses Classic sounds. Profiles set Ambient Occlusion off (`assao=0`) and omit
+sounds; Definitive Edition also uses Classic sounds. The capture profiles set Ambient Occlusion on (`assao=1`); the other profiles set it off (`assao=0`). All omit
 `bloom`, `portraitBloom`, `particles` and `spellfilter`. Smashcraft play explicitly chooses Reforged (`hd=1`) and Ambient Occlusion off too.
 
 The others cap the game at 60 frames a second, focused or not. A cap below
