@@ -407,6 +407,37 @@ function leadingNumber(text: string, fraction: boolean): number {
 }
 
 /**
+ * C's `%.Nf` of a binary32 real: correctly rounded, exact ties to even, the
+ * sign kept on a negative that rounds to zero. Lua's string.format gives
+ * this; JavaScript's toFixed rounds ties up, so Bun formats by hand.
+ */
+function fixed(value: number, digits: number): string {
+  const real = roundToFloat32(value);
+  if (real !== real || real === Infinity || real === -Infinity || real >= f32(1e21) || real <= -f32(1e21)) return real.toFixed(digits);
+  // 30 more digits than kept: a binary32 within that of a tie is the tie.
+  const expanded = (real < 0 ? -real : real).toFixed(digits + 30);
+  const point = expanded.indexOf(".");
+  const kept = expanded.slice(0, point) + expanded.slice(point + 1, point + 1 + digits);
+  const rest = expanded.slice(point + 1 + digits);
+  const first = rest.charAt(0);
+  let tail = false;
+  for (let index = 1; index < rest.length; index++) if (rest.charAt(index) !== "0") tail = true;
+  const last = kept.charCodeAt(kept.length - 1) - 48;
+  const up = first > "5" || (first === "5" && (tail || last === 1 || last === 3 || last === 5 || last === 7 || last === 9));
+  let digitsText = kept;
+  if (up) {
+    let carry = digitsText.length - 1;
+    while (carry >= 0 && digitsText.charAt(carry) === "9") carry--;
+    digitsText = carry < 0
+      ? `1${"0".repeat(digitsText.length)}`
+      : digitsText.slice(0, carry) + String.fromCharCode(digitsText.charCodeAt(carry) + 1) + "0".repeat(digitsText.length - carry - 1);
+  }
+  const whole = digitsText.slice(0, digitsText.length - digits);
+  const text = digits > 0 ? `${whole}.${digitsText.slice(digitsText.length - digits)}` : whole;
+  return real < 0 ? `-${text}` : text;
+}
+
+/**
  * Mixes an integer into a 32-bit hash. The product stays below 2^53, so
  * JavaScript computes it exactly, and `| 0` keeps its low 32 bits, as 32-bit
  * Lua's wrapping integers do.
@@ -853,7 +884,8 @@ export class HeadlessClient {
       // A frame getter returns one handle per frame, made at its first call.
       BlzGetOriginFrame: (type: unknown, index: number) => this.memoized(`origin ${describeValue(type)} ${index}`),
       BlzGetFrameByName: (name: string, context: number) => this.frames.named(name, context) ?? this.memoized(`name ${name} ${context}`, name),
-      BlzFrameGetChild: (frame: Handle, index: number) => this.memoized(`child ${frame.id} ${index}`),
+      BlzFrameGetChildrenCount: (frame: unknown) => (isFrame(frame) ? this.frames.children(frame).length : 0),
+      BlzFrameGetChild: (frame: Handle, index: number) => (isFrame(frame) ? this.frames.children(frame)[index] : undefined) ?? this.memoized(`child ${frame.id} ${index}`),
       BlzCreateFrame: (name: string, owner: unknown, _priority: number, context: number) => this.frames.create(() => this.handle("framehandle"), name, isFrame(owner) ? owner : undefined, context),
       BlzCreateSimpleFrame: (name: string, owner: unknown, context: number) => this.created(name, name, owner, context),
       BlzCreateFrameByType: (type: string, name: string, owner: unknown, _inherits: string, context: number) => this.created(type, name, owner, context),
@@ -1222,7 +1254,12 @@ export class HeadlessClient {
       BlzGetLocalSpecialEffectY: (effect: Handle) => this.effects.get(effect)?.y ?? 0,
       BlzGetLocalSpecialEffectZ: (effect: Handle) => this.effects.get(effect)?.z ?? 0,
       I2S: (n: number) => describeNumber(n),
-      R2S: (n: number) => n.toFixed(3),
+      R2S: (n: number) => fixed(n, 3),
+      R2SW: (n: number, width: number, precision: number) => {
+        let text = fixed(n, precision > 0 ? precision : 0);
+        while (text.length < width) text = ` ${text}`;
+        return text;
+      },
       R2I: (n: number) => (n < 0 ? Math.ceil(n) : Math.floor(n)),
       I2R: (n: number) => n,
       S2I: (text: string) => {
