@@ -375,7 +375,9 @@ window.prepareScene = async (scene, extraModels = [], progress) => {
 window.renderScene = async (scene, options) => {
   gl.viewport(0, 0, canvas.width, canvas.height); gl.depthMask(true); gl.clearColor(0.04, 0.06, 0.09, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
   const view = camera(scene, canvas.width / canvas.height);
-  const visible = scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat);
+  // Warcraft skips a model whose origin lies beyond the far plane from the eye, even when part of it reaches nearer.
+  const beyondFar = (effect: EffectPose) => Math.hypot(effect.x - (view.eye[0] ?? 0), effect.y - (view.eye[1] ?? 0), effect.z - (view.eye[2] ?? 0)) > view.far;
+  const visible = scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat && !beyondFar(effect));
   await Promise.all(visible.map(prepareInstance));
   await drawSky(scene, view);
   const light = scene.environment === undefined ? undefined : await dayNightLight(scene.environment.dayNight.unit, scene.environment.timeOfDay);
