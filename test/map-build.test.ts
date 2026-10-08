@@ -80,12 +80,15 @@ test("a map stages in a file of its own process, writable even from a read-only 
 test("interrupting a map step stops its child process", async () => {
   const directory = mkdtempSync(join(tmpdir(), "wisp-process-"));
   const pidFile = join(directory, "pid");
+  // Interrupted once the child has started, however long that takes.
+  const started = Effect.promise(async () => {
+    while (!existsSync(pidFile) || readFileSync(pidFile, "utf8").trim() === "") await Bun.sleep(10);
+  });
   const exit = await Effect.runPromiseExit(
-    runProcess("sleep", directory, ["sh", "-c", `echo $$ > ${pidFile}; exec sleep 30`]).pipe(Effect.timeout("200 millis")),
+    runProcess("sleep", directory, ["sh", "-c", `echo $$ > ${pidFile}; exec sleep 600`]).pipe(Effect.raceFirst(started.pipe(Effect.andThen(Effect.fail("started" as const))))),
   );
   expect(Exit.isFailure(exit)).toBe(true);
   const pid = Number(readFileSync(pidFile, "utf8"));
-  await Bun.sleep(50);
   expect(() => process.kill(pid, 0)).toThrow();
 });
 

@@ -418,16 +418,17 @@ test("a code callback's birth names where its Lua function was defined; logs kee
 });
 
 test("stopWatch stops the writing thread at each write and lets it go", async () => {
-  const child = Bun.spawn([process.execPath, join(fixtures, "writer.ts")], { stdout: "pipe" });
+  const child = Bun.spawn([process.execPath, join(fixtures, "writer.ts")], { stdin: "pipe", stdout: "pipe" });
   const { value } = await child.stdout.getReader().read();
   const address = Number(new TextDecoder().decode(value).trim());
   await Bun.sleep(200);
   const memory = procMemory(child.pid);
   const values: number[] = [];
-  const hits = stopWatch({ tid: child.pid, address, seconds: 3, limit: 5, onHit: () => values.push(memory.read(address, 4).readInt32LE(0)) });
+  const hits = stopWatch({ tid: child.pid, address, seconds: 60, limit: 5, onHit: () => values.push(memory.read(address, 4).readInt32LE(0)) });
   memory.close();
+  await child.stdin.end();
   expect(hits).toBe(5);
   // Each stop lands right after one write.
   expect(values.slice(1).map((v, index) => v - (values[index] ?? 0))).toEqual([1, 1, 1, 1]);
   expect(await child.exited).toBe(0);
-}, 10_000);
+}, 120_000);

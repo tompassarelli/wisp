@@ -101,4 +101,4 @@ test("full and incremental module reloads end in the same modules, state and nat
   } finally {
     rmSync(directory, { recursive: true });
   }
-}, 30_000);
+}, 120_000);

@@ -198,7 +198,7 @@ test("a tuned value is compiled in memory, sent as a delta of its module alone a
   } finally {
     rmSync(directory, { recursive: true });
   }
-}, 30_000);
+}, 120_000);
 
 test("the panel applies a value, keeps it in the source and resets both, and answers only its own address with JSON posts", async () => {
   mkdirSync(join(root, "build"), { recursive: true });

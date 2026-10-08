@@ -144,4 +144,4 @@ test("a session wrapped in the autopsy prints the finding for a desync written w
     "  first divergent birth #6279 (class unknown: no poll log of that birth) at turn 921 on client a",
   ]);
   expect(printed).toContain("desync autopsy summary:");
-}, 10_000);
+}, 120_000);

@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { join } from "node:path";
 import { mapCompiler, report } from "../scripts/compiler";
 import { installHeadless } from "../scripts/wisp/headless";
+import { timingTest } from "../scripts/wisp/timingTest";
 import { runJourney } from "../src/headless/journey";
 import { install, start } from "./unit-states/main";
 import { UNIT_FIXTURE, UNIT_TYPE } from "./unit-states/cases";
@@ -30,13 +31,17 @@ function play() {
   return { clients, result };
 }
 
-test("twelve named unit state cases agree in two clients and complete within two seconds", () => {
-  const before = performance.now();
+test("twelve named unit state cases agree in two clients", () => {
   const { clients, result } = play();
-  const elapsed = performance.now() - before;
   expect(result.divergence).toBeUndefined();
   expect(result.clients.map(client => client.errors)).toEqual([[], []]);
   for (const client of clients.clients) expect(client.files.get(`unit-states-p${client.slot}.txt`)).toEqual(EXPECTED);
+});
+
+timingTest("twelve named unit state cases complete in two clients within two seconds", () => {
+  const before = performance.now();
+  play();
+  const elapsed = performance.now() - before;
   expect(elapsed).toBeLessThanOrEqual(2000);
   console.info(`unit states: 12 cases, 2 clients, ${elapsed.toFixed(1)} ms`);
 });

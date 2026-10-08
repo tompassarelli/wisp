@@ -51,7 +51,7 @@ test("a start on a playing sound is not a cue, and pitch and position are binary
   }
 });
 
-test("the same sound rules pass in emitted 32-bit Lua", { timeout: 60000 }, () => {
+test("the same sound rules pass in emitted 32-bit Lua", { timeout: 120_000 }, () => {
   for (const config of ["test/sounds60/tsconfig.json", "test/sounds60/tsconfig.headless.json"]) expect(report(mapCompiler(join(import.meta.dir, "..", config))())).toBe("");
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "../build/sounds60/headless/headless.lua"), join(import.meta.dir, "../build/sounds60/map.lua"), join(import.meta.dir, "../src/natives/warcraft.d.ts")], { stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });

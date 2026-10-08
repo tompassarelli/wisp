@@ -7,6 +7,7 @@ import { TestClock } from "effect/testing";
 import { runHotWatch } from "../scripts/wisp/commands/hot";
 import { type DesyncReport, Desyncs, PARTNER_WAIT_MILLIS, decodeDesyncSummary, divergedValues, formatDesync } from "../scripts/wisp/desyncs";
 import { GameFiles, type StoredFile } from "../scripts/wisp/gameFiles";
+import { timingTest } from "../scripts/wisp/timingTest";
 
 // The observed Desync.txt grammar, without the machine description around it.
 // Values are those of a native reload desync: one client allocated one more handle.
@@ -94,7 +95,8 @@ test("desync watcher reports a lone client's desync once its partner has had tim
   expect(result === undefined ? "" : formatDesync(result)).toStartWith(`Warcraft desync on turn 12585, client 0 wrote no desync report within ${PARTNER_WAIT_MILLIS} ms;`);
 });
 
-test("hot watch prints a desync's diverged subsystem, turn and both clients' values within 1 s of the game writing it", async () => {
+/** Hot watch while the game writes one client's desync report, then the other's: what it prints, and how soon. */
+async function watchDesync() {
   const root = mkdtempSync(join(tmpdir(), "wisp-desync-"));
   const data = ["a", "b"].map((client) => join(root, client, "CustomMapData"));
   for (const directory of [...data, join(root, "source")]) mkdirSync(directory, { recursive: true });
@@ -119,12 +121,23 @@ test("hot watch prints a desync's diverged subsystem, turn and both clients' val
       written = performance.now();
     });
     yield* Effect.forkChild(game);
-    yield* runHotWatch(join(root, "source"), Effect.void, poll, Deferred.await(done).pipe(Effect.asVoid, Effect.timeout("3 seconds"), Effect.ignore));
+    // The bound only catches a watch that never reports.
+    yield* runHotWatch(join(root, "source"), Effect.void, poll, Deferred.await(done).pipe(Effect.asVoid, Effect.timeout("60 seconds"), Effect.ignore));
     const { report: found, at } = yield* Deferred.await(done).pipe(Effect.timeout("1 millis"));
     return { text: formatDesync(found), latency: found.latency, elapsed: at - written };
   }).pipe(Effect.provide(Desyncs.layer(data).pipe(Layer.provide(GameFiles.layer())))));
+  return { root, printed };
+}
+
+test("hot watch prints a desync's diverged subsystem, turn and both clients' values", async () => {
+  const { root, printed } = await watchDesync();
   expect(printed.text).toStartWith("Warcraft desync on turn 12585, diverged: next birth tag (client 0: 08102, client 1: 08103), tempest checksum (client 0: cb35df6c, client 1: cbb742b8);");
   expect(printed.text).toContain(join(root, "b", "Errors", "2026-10-05 12.05.09 983fad00", "Desync.txt"));
+});
+
+timingTest("hot watch prints a desync within 1 s of the game writing it", async () => {
+  const { printed } = await watchDesync();
+  console.info(`desync printed ${printed.elapsed.toFixed(0)} ms after the second write, ${printed.latency.toFixed(0)} ms after its file time`);
   expect(printed.elapsed).toBeLessThan(1000);
   expect(printed.latency).toBeLessThan(1000);
 });

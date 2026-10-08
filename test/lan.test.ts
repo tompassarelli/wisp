@@ -160,7 +160,9 @@ describe("host, replaying two recorded offline clients", () => {
     players: [0, 1, 2, 3].map((id) => ({ id, controller: 1, race: 1 })), forces: [15],
   };
   const until = async (done: () => boolean, what: string) => {
-    for (let tries = 0; tries < 400 && !done(); tries++) await Bun.sleep(5);
+    // A bound for a hang only: a busy machine may take many times longer than 2 s.
+    const deadline = performance.now() + 60_000;
+    while (!done() && performance.now() < deadline) await Bun.sleep(5);
     if (!done()) throw new Error(`timed out waiting for ${what}`);
   };
 

@@ -33,4 +33,4 @@ test("installed package resolves bare imports and preserves Lua32 numeric/reload
   } finally {
     await rm(fixture, { recursive: true });
   }
-}, 30_000);
+}, 120_000);

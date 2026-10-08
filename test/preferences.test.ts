@@ -13,10 +13,12 @@ test("the helper waits for the game's process, then puts the saved file back and
   const documents = mkdtempSync(join(tmpdir(), "wisp-preferences-"));
   writeFileSync(preferencesBackupPath(documents), fixture("private-desktop.txt"));
   writeFileSync(preferencesPath(documents), fixture("main-display.txt"));
-  const game = Bun.spawn(["sleep", "1"]);
+  const game = Bun.spawn(["sleep", "600"]);
   const helper = Bun.spawn([process.execPath, join(import.meta.dir, "../scripts/wisp/restorePreferences.ts"), String(game.pid), documents], { stdout: "pipe" });
+  // While the game runs, the helper leaves its file alone.
   await Bun.sleep(300);
   expect(readFileSync(preferencesPath(documents), "utf8")).toBe(fixture("main-display.txt"));
+  game.kill();
   await game.exited;
   expect((await new Response(helper.stdout).text()).trim()).toBe("restored War3Preferences.txt");
   expect(readFileSync(preferencesPath(documents), "utf8")).toBe(fixture("private-desktop.txt"));

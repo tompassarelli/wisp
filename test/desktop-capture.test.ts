@@ -36,10 +36,13 @@ test("timed capture brackets the framebuffer producer on the supplied stimulus c
 
 test("cancelling a stalled framebuffer read stops and reaps its exact child", async () => {
   const pidFile = join(folder, "pid");
-  const pending = capture(client("stalled", `await Bun.write(${JSON.stringify(pidFile)}, String(process.pid)); await Bun.sleep(30000);`));
-  const exit = await Effect.runPromiseExit(pending.pipe(Effect.timeout("200 millis")));
+  const pending = capture(client("stalled", `await Bun.write(${JSON.stringify(pidFile)}, String(process.pid)); await Bun.sleep(600000);`));
+  // Cancelled once the child has started, however long that takes.
+  const started = Effect.promise(async () => {
+    while (!existsSync(pidFile) || readFileSync(pidFile, "utf8") === "") await Bun.sleep(10);
+  });
+  const exit = await Effect.runPromiseExit(pending.pipe(Effect.raceFirst(started.pipe(Effect.andThen(Effect.fail("started" as const))))));
   expect(Exit.isFailure(exit)).toBe(true);
-  expect(existsSync(pidFile)).toBe(true);
   const pid = Number(readFileSync(pidFile, "utf8"));
   expect(() => process.kill(pid, 0)).toThrow();
 });

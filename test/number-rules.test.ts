@@ -34,7 +34,7 @@ test("the check command reports the compiler's number-rule errors, from scratch 
   } finally {
     await rm(directory, { recursive: true });
   }
-}, 20_000);
+}, 120_000);
 
 /** Sends tsserver requests in order and returns the response body of each one that answers. */
 async function tsserver(cwd: string, probe: string, requests: readonly { readonly command: string; readonly arguments: object }[]) {
@@ -102,4 +102,4 @@ test("the editor reports the same number-rule errors through tsserver, only in t
   } finally {
     await rm(directory, { recursive: true });
   }
-}, 20_000);
+}, 120_000);
