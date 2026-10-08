@@ -21,7 +21,7 @@ export function seededTwoInputRepro() {
   }
 }
 
-test("a seeded failure shrinks to exactly its two required inputs and keeps the original intact", () => {
+test("[invariant] a seeded failure shrinks to exactly its two required inputs and keeps the original intact", () => {
   const { required, repro } = seededTwoInputRepro();
   const saved = JSON.stringify(repro);
   const shrunk = shrinkSoakRepro(project, game, repro);

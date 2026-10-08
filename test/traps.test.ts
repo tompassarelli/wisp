@@ -11,7 +11,7 @@ import { parseConfigFileWithSystem, transpileFiles } from "typescript-to-lua";
 const root = join(import.meta.dir, "..");
 const fixtures = join(import.meta.dir, "traps");
 
-test("each fixture is rejected exactly on its marked lines", () => {
+test("[spec #35] each fixture is rejected exactly on its marked lines", () => {
   const { options } = parseConfigFileWithSystem(join(root, "test/tsconfig.traps.json"));
   const { luaBundle, luaBundleEntry, ...unbundled } = options;
   const files = readdirSync(fixtures).map((name) => join(fixtures, name));

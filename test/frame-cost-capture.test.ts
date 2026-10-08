@@ -9,7 +9,7 @@ const recording = (times: readonly number[], changed = false) => writtenPreloadF
   ...times.map((time, index) => frameCostCaptureSample(index + 1, time, 200, 1)),
 ]);
 
-test("a five-minute raw capture keeps every callback and computes full-run percentiles", () => {
+test("[reference] a five-minute raw capture keeps every callback; full-run median and nearest-rank p95 and p99", () => {
   const times = Array.from({ length: 18000 }, (_, index) => index + 1);
   const capture = parseFrameCostCapture(recording(times));
   expect(capture.elapsedMs).toBe(300000);
@@ -17,14 +17,14 @@ test("a five-minute raw capture keeps every callback and computes full-run perce
   expect(capture.samples[17999]).toEqual({ luaUs: 18000, natives: 200, catchUp: 1 });
 });
 
-test("raw native readings preserve observed times rather than rounding them as predictions", () => {
+test("[invariant] raw native readings preserve observed times rather than rounding them as predictions", () => {
   const text = recording(Array.from({ length: 240 }, () => 2500));
   const capture = parseFrameCostCapture(text);
   expect(frameCostCaptureReadings(capture).windows).toEqual(Array.from({ length: 5 }, () => ({ median: 2.5, p95: 2.5, max: 2.5 })));
   expect(parseNativeReadings(text)).toEqual(frameCostCaptureReadings(capture));
 });
 
-test("missing samples, reordered samples, unavailable clocks and code changes cannot produce passing readings", () => {
+test("[invariant] missing samples, reordered samples, unavailable clocks and code changes cannot produce passing readings", () => {
   const text = recording([1, 2, 3]);
   expect(() => parseFrameCostCapture(text.replace('sample 2 lua-us=2', 'sample 3 lua-us=2'))).toThrow("sample 2");
   expect(() => parseFrameCostCapture(text.replace('frames=3', 'frames=4'))).toThrow("expected 4");
