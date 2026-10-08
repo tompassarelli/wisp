@@ -255,7 +255,7 @@ const agent = Effect.gen(function*() {
         say(line);
       },
     }, Effect.never), scope);
-    const host = yield* Effect.acquireRelease(Effect.sync(() => startHost({
+    const host = yield* startHost({
       map,
       gameName: `wisp-${pair}-${id.slice(11, 19)}`,
       clients: clients.map(({ name }) => name),
@@ -267,7 +267,7 @@ const agent = Effect.gen(function*() {
         if (bytes[1] === 0x0c && bytes.length <= 6) return;
         appendFileSync(packets, `${((Date.now() - started) / 1000).toFixed(3)} ${direction} ${label} ${Buffer.from(bytes).toString("hex")}\n`);
       },
-    })), (host) => Effect.sync(() => host.stop())).pipe(Scope.provide(scope));
+    }).pipe(Scope.provide(scope));
     game = { id, log, host, map: mapFile, scope };
     say(`game ${id}: hosting ${inGame} on port ${host.port}`);
     for (const client of clients) {
@@ -350,7 +350,7 @@ const agent = Effect.gen(function*() {
       const body = yield* decode(SpeedRequest, request);
       if (game === undefined || game.host.status().phase !== "playing") return Response.json({ error: "no match is playing" }, { status: 400 });
       if (!Number.isFinite(body.speed) || body.speed < 1 || body.speed > 16) return Response.json({ error: "speed must be between 1 and 16" }, { status: 400 });
-      game.host.setSpeed(body.speed);
+      yield* game.host.setSpeed(body.speed);
       return Response.json(game.host.status());
     }
     return new Response("not found", { status: 404 });
