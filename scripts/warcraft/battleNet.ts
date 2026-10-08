@@ -7,6 +7,8 @@ import { Schema } from "effect";
 
 /** One host process, as /proc shows it. */
 export interface ProcessInfo {
+  /** User and system CPU consumed, in milliseconds, from /proc/PID/stat. */
+  readonly cpuMs?: number;
   readonly pid: number;
   /** The kernel's short name (/proc/PID/comm). */
   readonly name: string;

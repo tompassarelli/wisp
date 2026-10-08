@@ -76,7 +76,9 @@ The sources, in the order they count:
 4. **The map's match receipt.** With the map's `filePrefix`, the match start
    acknowledgement the runtime writes in CustomMapData
    (`PREFIX-hot-ack-pN.txt`) places a client in its match when the socket
-   last said lobby or loading, or said nothing.
+   last said lobby or loading, or said nothing. Receipts older than the
+   current Warcraft III process are ignored, as are the previous process's
+   log and menu announcements.
 5. **War3Log.txt.** Only for what it contains: the sign-in, the ladder scan
    and load errors. Warcraft III writes it in bursts: on 6 Oct client B's log
    stopped 3 s after its start, without a sign-in, while B played all evening.

@@ -85,6 +85,8 @@ interface Scenario {
   readonly signsIn?: "works" | "stuck";
   /** The prefix was copied from another install: that install's signed-in log is there, written before this launcher started. */
   readonly copiedLog?: boolean;
+  readonly hungFirstLaunch?: boolean;
+  readonly hungEveryLaunch?: boolean;
 }
 
 /** When the launcher of a copied prefix started, and when the copied install last wrote its log. */
@@ -121,8 +123,9 @@ function world(scenario: Scenario) {
       events.push(`launch ${launcher.pid}`);
       const log = [...files.keys()].sort().findLast((path) => path.startsWith(LOGS) && path !== COPIED_LOG && files.get(path)!.includes("[BNLogin]")) ?? newestLog();
       files.set(log, files.get(log)! + LAUNCH);
-      processes = [...processes, gameProcess(70000 + plays)];
-      state = scenario.afterPlay ?? { kind: "menus", screen: "MAIN_MENU" };
+      const hung = scenario.hungEveryLaunch === true || (scenario.hungFirstLaunch === true && plays === 1);
+      processes = [...processes, { ...gameProcess(70000 + plays), cpuMs: 0 }];
+      state = hung ? { kind: "running" } : scenario.afterPlay ?? { kind: "menus", screen: "MAIN_MENU" };
       source = "socket";
     }),
     start: () => Effect.die("doctor starts a client's command as a service"),
@@ -198,6 +201,16 @@ function world(scenario: Scenario) {
   };
   return { run, finish, events, drop, written };
 }
+
+test("[repro #88] a silent zero-CPU relaunch is ended after 60 seconds and retried once", async () => {
+  const recovered = await world({ processes: "launcher", hungFirstLaunch: true }).run();
+  expect(recovered.failure).toBeUndefined();
+  expect(recovered.events).toEqual(["launch 43924", "SIGTERM 70001", "launch 43924"]);
+  expect(recovered.lines.join("\n")).toContain("0.00% CPU and added no War3Log line for 60 s");
+  const twice = await world({ processes: "launcher", hungEveryLaunch: true }).run();
+  expect(twice.failure).toContain("still hung startup");
+  expect(twice.events).toEqual(["launch 43924", "SIGTERM 70001", "launch 43924"]);
+});
 
 test("[native] recorded launcher logs: signed in, a lost connection, a reconnect, a rejected saved login", () => {
   expect(launcherHealth(PLAYED)).toEqual({ kind: "signed in" });
