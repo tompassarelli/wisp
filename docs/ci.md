@@ -226,13 +226,17 @@ there use 40 API calls a minute (2,400 an hour, inside the 5,000 limit).
 `farm test` for a commit that already has a queued or running farm test joins
 that run before pushing anything: no scratch branch and no dispatch.
 
-GitHub also refuses bursts (its secondary limits: many requests at once, or
-many dispatches and pushes a minute), with "HTTP 403: API rate limit
-exceeded" even while `gh api rate_limit` shows the hourly budget untouched;
-that endpoint doesn't reflect what the requests themselves report. Every
-`gh` call the farm makes (`run` in wisp:scripts/wisp/farm.ts) retries such a
-refusal after 30 s, then twice as long each time with jitter, for at most 20
-minutes, and says so on stderr. To read the real budget, look at a real
+The 5,000 an hour is one budget for every agent and script using Tom's
+GitHub login. On 8 Oct it ran out by 05:26 UTC (5,000 used since about 04:32,
+some 90 calls a minute), when each waiting `farm test` polled every 5 s and
+other agents ran their own `gh run view` loops; GitHub then answers "HTTP 403:
+API rate limit exceeded" until the hour resets. `gh api rate_limit` showed
+5,000 left throughout, and some requests reported a fuller budget than others,
+so neither shows the refusal coming. Every `gh` call the farm makes (`run` in
+wisp:scripts/wisp/farm.ts) retries a rate-limit refusal (this one, or a
+secondary limit on bursts) after 30 s, then twice as long each time up to 5
+minutes, with jitter, for up to 65 minutes, and says so on stderr. Wait on a
+run with `bun wisp farm ... --wait` rather than a `gh run view` loop. To read the real budget, look at a real
 request's headers:
 `curl -sI -H "Authorization: token $(gh auth token)" https://api.github.com/repos/OWNER/REPO | grep -i x-ratelimit`.
 

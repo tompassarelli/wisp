@@ -48,12 +48,13 @@ export const RATE_LIMITED = /rate limit|HTTP 429|abuse detection/i;
 
 /**
  * Runs a program like `runOnce`. A `gh` call GitHub refuses for a rate limit
- * waits and tries again, 30 s and then twice as long each time with jitter,
- * for at most 20 minutes, instead of failing the caller's run.
+ * waits and tries again, 30 s and then twice as long each time (at most 5
+ * minutes) with jitter, for up to 65 minutes, since the hourly budget can take
+ * that long to reset, instead of failing the caller's run.
  */
 export const run = (argv: readonly string[], inherit = false, cwd?: string) => argv[0] !== "gh" ? runOnce(argv, inherit, cwd) : runOnce(argv, inherit, cwd).pipe(
   Effect.tapError((failure) => RATE_LIMITED.test(failure.message) ? Effect.sync(() => console.error(`GitHub is rate-limiting requests; retrying ${argv.slice(0, 3).join(" ")} with backoff`)) : Effect.void),
-  Effect.retry({ while: (failure) => RATE_LIMITED.test(failure.message), schedule: Schedule.exponential("30 seconds").pipe(Schedule.jittered, Schedule.upTo({ duration: "20 minutes" })) }),
+  Effect.retry({ while: (failure) => RATE_LIMITED.test(failure.message), schedule: Schedule.min([Schedule.exponential("30 seconds"), Schedule.spaced("5 minutes")]).pipe(Schedule.jittered, Schedule.upTo({ duration: "65 minutes" })) }),
 );
 
 /** The checkout's GitHub repository, OWNER/NAME. */
