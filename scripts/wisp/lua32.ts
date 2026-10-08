@@ -1,4 +1,5 @@
-// The pinned 32-bit Luas tests run in: Lua 5.3.6 from its checksummed release,
+// The pinned 32-bit Luas tests run in: Lua 5.3.6 from its release tarball,
+// committed at wisp:vendor/lua-5.3.6.tar.gz and checksummed before each build,
 // `make generic` with LUA_32BITS, and its twin whose raw float + - * / and
 // decimal numerals round toward zero (wisp:native/toward-zero.h). Warcraft's
 // raw float arithmetic doesn't always round to nearest, and toward zero is the
@@ -8,11 +9,11 @@
 //
 // Each is built once per user into ~/.cache/wisp/lua32/KEY/lua, KEY hashing
 // the source checksum, make target and flags; a lock file lets parallel
-// worktrees share one build. Building needs gcc and make, or nix.
+// worktrees share one build. Building needs gcc and make, or nix, and no network.
 //
 // `bun node_modules/wisp/scripts/wisp/lua32.ts [stock|toward-zero]` prints the
 // executable, building it on first use.
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync, copyFileSync } from "node:fs";
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, homedir } from "node:os";
 import { join } from "node:path";
 import { Console, Effect, Schedule, Schema } from "effect";
@@ -21,13 +22,9 @@ import { step } from "./timings";
 
 export const TOWARD_ZERO_HEADER = join(import.meta.dir, "../../native/toward-zero.h");
 
+const LUA_SOURCE = join(import.meta.dir, "../../vendor/lua-5.3.6.tar.gz");
 /** lua.org's SHA-256 of lua-5.3.6.tar.gz. */
 const LUA_SOURCE_SHA256 = "fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60";
-/** Debian's copy is byte-identical; it answers where lua.org is unreachable. */
-const LUA_SOURCE_URLS = [
-  "https://www.lua.org/ftp/lua-5.3.6.tar.gz",
-  "https://deb.debian.org/debian/pool/main/l/lua5.3/lua5.3_5.3.6.orig.tar.gz",
-];
 
 /** Prints 3 - 1e-30 in binary32: the binary32 below 3 when subtraction rounds toward zero, 3 when it rounds to nearest. */
 const ROUNDING_PROBE = "local a, b = 3.0, 1e-30 io.write(string.format('%a', a - b))";
@@ -57,28 +54,12 @@ const flagsFor = (variant: Lua32Variant) => variant === "stock"
   ? { flags: "-DLUA_32BITS", header: "" }
   : { flags: "-DLUA_32BITS -include toward-zero.h", header: readFileSync(TOWARD_ZERO_HEADER, "utf8") };
 
-/** The checked source tarball in `root`, downloaded on first use. */
-const luaSource = (root: string) => Effect.gen(function*() {
-  const tarball = join(root, "lua-5.3.6.tar.gz");
-  if (existsSync(tarball) && sha256(readFileSync(tarball)) === LUA_SOURCE_SHA256) return tarball;
-  const download = (url: string) => Effect.tryPromise({
-    try: async () => {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return new Uint8Array(await response.arrayBuffer());
-    },
-    catch: (cause) => fail("download Lua 5.3.6 source", url, cause),
-  }).pipe(Effect.flatMap((bytes) => {
-    const digest = sha256(bytes);
-    return digest === LUA_SOURCE_SHA256 ? Effect.succeed(bytes) : Effect.fail(fail("check Lua source", url, `SHA-256 ${digest} is not lua-5.3.6.tar.gz's`));
-  }));
-  const bytes = yield* Effect.firstSuccessOf(LUA_SOURCE_URLS.map(download));
-  yield* trySync("save Lua source", tarball, () => {
-    writeFileSync(`${tarball}.${process.pid}`, bytes);
-    renameSync(`${tarball}.${process.pid}`, tarball);
-  });
-  return tarball;
-});
+/** The vendored source tarball, once its checksum matches lua.org's. */
+const luaSource = trySync("read Lua source", LUA_SOURCE, () => sha256(readFileSync(LUA_SOURCE))).pipe(
+  Effect.flatMap((digest) => digest === LUA_SOURCE_SHA256
+    ? Effect.succeed(LUA_SOURCE)
+    : Effect.fail(fail("check Lua source", LUA_SOURCE, `SHA-256 ${digest} is not lua-5.3.6.tar.gz's`))),
+);
 
 /** `make` arguments run with gcc and make from PATH, else from nixpkgs. */
 const makeCommand = (args: readonly string[]) => Bun.which("gcc") !== null && Bun.which("make") !== null
@@ -123,13 +104,13 @@ export const lua32 = (variant: Lua32Variant) => Effect.gen(function*() {
   return yield* Effect.scoped(Effect.gen(function*() {
     yield* buildLock(`${directory}.lock`);
     if (existsSync(lua)) return lua;
-    const source = yield* luaSource(root);
+    const source = yield* luaSource;
     const build = `${directory}.build`;
     yield* trySync("prepare build", build, () => {
       rmSync(build, { recursive: true, force: true });
       mkdirSync(build, { recursive: true });
     });
-    yield* runProcess("unpack Lua source", build, ["tar", "-xzf", source, "-C", build]);
+    yield* runProcess("unpack Lua source", build, ["tar", "--no-same-owner", "-xzf", source, "-C", build]);
     const src = join(build, "lua-5.3.6/src");
     if (header !== "") yield* trySync("write header", src, () => writeFileSync(join(src, "toward-zero.h"), header));
     yield* runProcess(`compile Lua32 ${variant}`, src, makeCommand(["-C", src, `-j${availableParallelism()}`, "generic", `MYCFLAGS=${flags}`]));
