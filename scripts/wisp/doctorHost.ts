@@ -3,9 +3,12 @@
 // without a menu page, the score screen with Escape, and the launcher's sign-in
 // form with the client's account. Doctor launches Warcraft III itself, through
 // the launcher's own --exec (wisp:scripts/wisp/doctor.ts).
+import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Layer } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as desktop from "../warcraft/desktop";
 import { DoctorHands, type DoctorTarget } from "./doctor";
+import { collect } from "./hostProcess";
 import { leaveLobby, reportedMenus } from "./menus";
 import { PlayProblem } from "./play";
 
@@ -24,6 +27,7 @@ const problem = (cause: { readonly message: string }) => new PlayProblem({ probl
 /** DoctorHands for the clients of a clients file, each on its own private desktop. */
 export const privateDoctorHands = (clientsFile: string) => Layer.effect(DoctorHands, Effect.gen(function*() {
   const config = yield* desktop.readClientsFile(clientsFile).pipe(Effect.mapError(problem));
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
   /** The client's desktop, addressed at its window titled `title`. */
   const windowOf = (target: DoctorTarget, title: string) => Effect.gen(function*() {
@@ -59,23 +63,20 @@ export const privateDoctorHands = (clientsFile: string) => Layer.effect(DoctorHa
     if (command === undefined) return yield* new PlayProblem({ problem: "it declares no account to sign in with" });
     const title = (yield* windowsTitled(target, "Battle.net Login")).length > 0 ? "Battle.net Login" : "Battle.net";
     const login = yield* windowOf(target, title);
-    const secret = yield* Effect.tryPromise({
-      try: async () => {
-        const reader = Bun.spawn([...command], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
-        const [bytes, code] = await Promise.all([new Response(reader.stdout).bytes(), reader.exited]);
-        if (code !== 0) {
-          bytes.fill(0);
-          throw new Error(`its ${field} command (${command[0]}) exited ${code}`);
-        }
-        let end = bytes.length;
-        while (end > 0 && (bytes[end - 1] === 0x0a || bytes[end - 1] === 0x0d)) end--;
-        const value = bytes.slice(0, end);
-        bytes.fill(0);
-        if (value.length === 0) throw new Error(`its ${field} command printed nothing`);
-        return value;
-      },
-      catch: (cause) => new PlayProblem({ problem: cause instanceof Error ? cause.message : `its ${field} command failed` }),
-    });
+    const printed = yield* collect(ChildProcess.make(command[0]!, command.slice(1), { stdin: "ignore", stderr: "ignore" })).pipe(
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Effect.mapError(() => new PlayProblem({ problem: `its ${field} command (${command[0]}) couldn't run` })),
+    );
+    const bytes = printed.stdout;
+    if (printed.exitCode !== 0) {
+      bytes.fill(0);
+      return yield* new PlayProblem({ problem: `its ${field} command (${command[0]}) exited ${printed.exitCode}` });
+    }
+    let end = bytes.length;
+    while (end > 0 && (bytes[end - 1] === 0x0a || bytes[end - 1] === 0x0d)) end--;
+    const secret = bytes.slice(0, end);
+    bytes.fill(0);
+    if (secret.length === 0) return yield* new PlayProblem({ problem: `its ${field} command printed nothing` });
     yield* desktop.enterLoginField(login, title, PLACEHOLDERS[field], secret).pipe(Effect.mapError(problem));
   });
 
@@ -92,4 +93,4 @@ export const privateDoctorHands = (clientsFile: string) => Layer.effect(DoctorHa
     closeScore: closeScoreOf,
     enterLogin: enterLoginOf,
   });
-}));
+})).pipe(Layer.provide(BunServices.layer));
