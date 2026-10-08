@@ -85,8 +85,8 @@ export interface Anchor {
 /** Each point's place on a frame by its FDF name, such as TOPLEFT. */
 const NAMED_POINTS = new Map(FRAME_POINTS.map(([name, fromLeft, fromTop]) => [name.slice("FRAMEPOINT_".length), [fromLeft, fromTop] as const]));
 
-/** A text box's character limit until the map sets one. */
-const DEFAULT_TEXT_LIMIT = 4096;
+/** BlzFrameGetTextSizeLimit of an edit box the map made and gave no limit (3.0.1, wisp#50); a negative limit cuts no text. */
+const DEFAULT_TEXT_LIMIT = -256;
 
 /** A frame's rectangle: left, top, right, bottom. */
 export type Rectangle = readonly [number, number, number, number];
@@ -290,7 +290,7 @@ export class Frames {
   type(text: string): boolean {
     const box = this.focused;
     if (box === undefined || box.type !== "EDITBOX" || !box.enabled || !this.shown(box)) return false;
-    box.text = (box.text + text).slice(0, Math.max(box.textLimit, box.text.length));
+    box.text = box.textLimit >= 0 ? (box.text + text).slice(0, Math.max(box.textLimit, box.text.length)) : box.text + text;
     return true;
   }
 }

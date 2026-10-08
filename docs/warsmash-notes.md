@@ -221,7 +221,7 @@ either a native match or a native mismatch.
 | Local keyboard/mouse/focus/window dimensions and player slot/controller/name | No current client-input rule researched here | Scripted key state and frame typing; fixed client dimensions; consumer returns no mouse input and a configured slot roster | **Mismatch with a physical client**, an intentional input source substitution. Pad runs use the actual helper and compare its delivered frames; they do not validate physical mouse input. |
 | Camera position/field/bounds/smoothing/pan: stage framing and zoom | No native camera-interpolation contract researched here | Camera fields and target retained immediately; bounds/smoothing ignored, pan maps to direct position | **Mismatch in interpolation coverage**; #40's captured camera values and pixels decide visible differences. |
 | Terrain/sky/fog/day-night, lightning and text tags: stage scene and feedback | No matching current native contract researched here | Scenery/fog globals are ignored by the consumer; core scene snapshots record units, effects, frames and cues rather than every engine primitive | **Mismatch in scene coverage**. These calls are not evidence that terrain, lightning or text-tag pixels match; #40/#48 are the existing scene owners. |
-| Numeric/string conversions, IDs and handles; FileIO/preload; map-origin locations; diagnostics and restart | Warsmash is not a current Lua/binary32 or Preloader-cache oracle | Shared 32-bit numeric rules, native-style conversions, per-client handle IDs; first-read Preloader cache; authored origin (0,0,0); diagnostic messages and file outputs retained | Conversions: see [script rules](#script-rules-outside-the-six-families); `R2S` ties and `R2SW` fixed by wisp#50, the rest pending capture. Preloader cache and handles: **match** to Wisp's native-derived contracts in [headless](headless.md) and [hot reload](hot-reload.md). Restart is an external session action, not a simulation behavior. |
+| Numeric/string conversions, IDs and handles; FileIO/preload; map-origin locations; diagnostics and restart | Warsmash is not a current Lua/binary32 or Preloader-cache oracle | Shared 32-bit numeric rules, native-style conversions, per-client handle IDs; first-read Preloader cache; authored origin (0,0,0); diagnostic messages and file outputs retained | Conversions: **match** 3.0.1 after wisp#50's fixes ([script rules](#script-rules-outside-the-six-families)). Preloader cache and handles: **match** to Wisp's native-derived contracts in [headless](headless.md) and [hot reload](hot-reload.md). Restart is an external session action, not a simulation behavior. |
 
 The timer capture entry is `test/native-rules50/main.ts`. It writes eleven
 ordered readings to `native-rules50-pSLOT.txt` after 1.25 game seconds, using
@@ -643,11 +643,11 @@ that pins headless's rule in Bun and 32-bit Lua, and the native evidence.
 | Sound start, stop, kill-when-done, position, volume, pitch, duration (`CreateSound(FromLabel)`, `StartSound`, `StopSound`, `KillSoundWhenDone`, `SetSound*`, `GetSoundFileDuration`) | `game/render/{combatEffects,matchPresentation,specialEffects,modelSoundPresentation,bearFeedback}.ts` | `test/headless-sounds.test.ts` (`test/sounds60/`) | 3.0.1 rows match (#60); voice cap unresolved |
 | Music (`PlayMusic`, `StopMusic`, `ClearMapMusic`, `PlayThematicMusic`, `EndThematicMusic`) | `game/render/matchPresentation.ts` | Intentional no-ops (Smashcraft's `SMASHCRAFT_NOOPS`) | Audible only; not a simulation rule |
 | Collision, pathing and engine orders | none: no `Issue*Order`, group, range or `SetUnitPosition` call | `overlapping-bodies-held` in `test/headless-unit-motion.test.ts` | Not used |
-| Number and text conversions (`R2S`, `R2SW`, `I2S`, `R2I`, `I2R`, `S2I`, `S2R`) | `S2I` of sync data in `game/ui/{stageUi,selectionUi}.ts`; chat arguments in `platform/shell/keys.ts`; `R2S`/`R2SW` in `platform/shell/{trace,view,diagnostics,frame,frameCost,renderClock}.ts` | `test/headless-script-rules.test.ts` rows `r2s` to `s2r` | Pending (this section) |
-| Synchronized messages: every client receives each one, the sender included, in each sender's order, with its sender and prefix; the size limit (`BlzSendSyncData`, `BlzTriggerRegisterPlayerSyncEvent`, `BlzGetTriggerSync{Data,Prefix}`, `GetTriggerPlayer`) | `platform/shell/{journal,rollback,playerFiles,stageLoad,journalPause,playtest}.ts`, `game/ui/{selectionUi,stageUi,frames}.ts` | `sync-*` rows in `test/headless-script-rules.test.ts`; latency in `test/sync-channel.test.ts` | Latency native-measured ([network model](network-model.md)); order and size pending |
-| Trigger actions: registration order across triggers, `DestroyTrigger` from its own action (`CreateTrigger`, `TriggerAddAction`, `DestroyTrigger`) | `platform/shell/{keyEvents,shell,playerFiles,analogPad}.ts`, `game/ui/{frames,selectionUi,stageUi}.ts` | `sync-order-*`, `trigger-destroyed-in-own-action` | Pending |
-| Player slots (`Player`, `GetPlayerId`, `GetLocalPlayer`, `GetPlayerController`, `GetPlayerSlotState`) | `platform/shell/{inputs,playerFiles}.ts` and 20 files reading the local player | `player-*` rows | Pending |
-| Map-made frame reads (`BlzFrameGetChildrenCount`, `BlzFrameGetChild`, `BlzFrameGetName`, `BlzFrameGetEnable`, `BlzFrameGetText`, `BlzFrameGetTextSizeLimit`, `BlzFrameIsVisible`) and frame writes | `platform/editboxJournal.ts`, `game/ui/*.ts` | `frame-*` rows; `test/frames.test.ts` | Pending. The chat box's place in Warcraft's own UI (children 2, 0, 4, 5) is not modeled: headless has no Warcraft UI, so `editboxJournal` takes its typed path |
+| Number and text conversions (`R2S`, `R2SW`, `I2S`, `R2I`, `I2R`, `S2I`, `S2R`) | `S2I` of sync data in `game/ui/{stageUi,selectionUi}.ts`; chat arguments in `platform/shell/keys.ts`; `R2S`/`R2SW` in `platform/shell/{trace,view,diagnostics,frame,frameCost,renderClock}.ts` | `test/headless-script-rules.test.ts` rows `r2s` to `s2r` | 3.0.1, 7 rows match after the fixes below |
+| Synchronized messages: every client receives each one, the sender included, in each sender's order, with its sender and prefix; the size limit (`BlzSendSyncData`, `BlzTriggerRegisterPlayerSyncEvent`, `BlzGetTriggerSync{Data,Prefix}`, `GetTriggerPlayer`) | `platform/shell/{journal,rollback,playerFiles,stageLoad,journalPause,playtest}.ts`, `game/ui/{selectionUi,stageUi,frames}.ts` | `sync-*` rows in `test/headless-script-rules.test.ts`; latency in `test/sync-channel.test.ts` | Latency native-measured ([network model](network-model.md)); 3.0.1 order, sender and size rows match (size after the fix below) |
+| Trigger actions: registration order across triggers, `DestroyTrigger` from its own action (`CreateTrigger`, `TriggerAddAction`, `DestroyTrigger`) | `platform/shell/{keyEvents,shell,playerFiles,analogPad}.ts`, `game/ui/{frames,selectionUi,stageUi}.ts` | `sync-order-*`, `trigger-destroyed-in-own-action` | 3.0.1 rows match |
+| Player slots (`Player`, `GetPlayerId`, `GetLocalPlayer`, `GetPlayerController`, `GetPlayerSlotState`) | `platform/shell/{inputs,playerFiles}.ts` and 20 files reading the local player | `player-*` rows | 3.0.1 rows match |
+| Map-made frame reads (`BlzFrameGetChildrenCount`, `BlzFrameGetChild`, `BlzFrameGetName`, `BlzFrameGetEnable`, `BlzFrameGetText`, `BlzFrameGetTextSizeLimit`, `BlzFrameIsVisible`) and frame writes | `platform/editboxJournal.ts`, `game/ui/*.ts` | `frame-*` rows; `test/frames.test.ts` | 3.0.1, 6 rows match after the fixes below. The chat box's place in Warcraft's own UI (children 2, 0, 4, 5) is not modeled: headless has no Warcraft UI, so `editboxJournal` takes its typed path |
 | Input events: chat (exact or substring), key press and release, mouse, frame clicks and edit boxes (`TriggerRegisterPlayerChatEvent`, `BlzTriggerRegisterPlayerKeyEvent`, `BlzTriggerRegisterFrameEvent`, `TriggerRegisterPlayerEvent`, `BlzIsKeyPressed`, `BlzGetTriggerPlayerKey`, mouse getters) | `platform/shell/{keys,keyEvents,inputs,analogPad}.ts`, `platform/{keyboardJournal,editboxJournal}.ts`, `game/ui/frames.ts` | `test/headless-input.test.ts` | Intentional substitution: scripted input. wisp#19's pad parity compares delivered frames |
 | Files: `Preload` output and `Preloader`'s first read per path | Wisp's FileIO and reloader; `platform/shell/{frameCost,renderClock}.ts` | `test/headless.test.ts` (Bun and Lua call logs; dropping the cache fails it), `test/headless-input.test.ts` | Native-derived ([hot reload](hot-reload.md)) |
 | Handle ids (`GetHandleId`): key codes, frame lookup keys, a diagnostic unit id | `platform/shell/{keys,objectData}.ts`, `game/ui/frames.ts` | `ConvertOsKeyType` returns its code; frames keep one handle each (`test/frames.test.ts`) | Key codes match by declaration; unit numbers differ per runtime and are diagnostic text only |
@@ -666,28 +666,41 @@ it registers no sync, frame-read or chat native. None of that is taken as the
 real rule.
 [Conversion natives](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L10435-L10476).
 
-| Rule | Headless before #50 | Headless now | Row |
-| --- | --- | --- | --- |
-| `R2S` of an exact tie (0.0625 is 62.5 thousandths) | Bun rounded up (`0.063`), 32-bit Lua to even (`0.062`): the runtimes disagreed | **Fixed**: both format the binary32 value as C's `%.3f` does, exact ties to even | `r2s-ties` |
-| `R2SW(r, width, precision)` | Unmodeled; a call failed the journey | **Fixed**: `precision` decimals as `R2S` rounds them, padded with spaces to `width` | `r2sw` |
-| `S2I`, `S2R` | Leading number after spaces, sign allowed, the rest ignored; no digits read 0; no exponent | Unchanged | `s2i`, `s2r` (`1e3` reads 1 headless) |
-| `R2I`, `I2S` | Truncate toward zero; integer text | Unchanged | `r2i`, `i2s` |
-| `GetPlayerController`, `GetPlayerSlotState` | Playing slots are user and playing; the rest none and empty | Unchanged | `player-controllers`, `player-slot-states` |
-| `BlzFrameGetChildrenCount`, `BlzFrameGetChild` | Count unmodeled; a child lookup returned a new frame, not the child | **Fixed** for frames the map made: their live children in creation order | `frame-children` |
-| `BlzFrameIsVisible` | The frame's own flag, whatever its parent | Unchanged | `frame-visible-under-hidden-parent` |
-| `BlzFrameSetText` past a text limit; default limit; enabled by default | Text kept whole; limit 4096; enabled | Unchanged | `frame-text-*`, `frame-enabled-default` |
-| Sync arrival | Every client, sender included, each sender's order; triggers in registration order | Unchanged | `sync-order-from-p0/p1`, `sync-sender-mismatches` |
-| Sync size (Smashcraft sends at most 200 data bytes, `MESSAGE_MAX_BYTES`) | No limit: 300 bytes arrive whole, `BlzSendSyncData` returns true | Unchanged until the capture gives the limit | `sync-send-returns`, `sync-lengths-from-p0/p1` (200, 251, 252, 300 bytes after a four-letter prefix) |
-| `DestroyTrigger` inside the trigger's own first action | Its later actions still run; later events don't fire it | Unchanged | `trigger-destroyed-in-own-action` |
+3.0.1 capture (8 Oct 2026, wisp#50): one private online game, two signed-in
+clients, both writing identical files
+(~/.local/state/wisp/script-rules50-20261008/out/). Those 22 rows are now
+`EXPECTED` and `EXPECTED_SYNC` in `test/headless-script-rules.test.ts`,
+tagged `[native]`; 14 matched headless as it was and 8 needed the fixes
+below.
 
-**Capture needed** (wisp#50): build `bun test/script-rules50/build.ts
-BASE.w3m OUT.w3x`, play it once on 3.0.1 with two clients for at least 3
-seconds, collect `script-rules-p0.txt`, `script-rules-p1.txt`,
+| Rule (native evidence) | Headless before the capture | Headless now | Row |
+| --- | --- | --- | --- |
+| `R2S` rounds an exact tie away from zero: 0.0625, 0.3125, -0.0625 and 0.1875 read `0.063`, `0.313`, `-0.063`, `0.188`; other values are correctly rounded binary32 (`R2S(f32(123456.789))` is `123456.789`) | C's `%.3f`, ties to even (`0.062`) | **Fixed**: ties away from zero, in Bun and Lua | `r2s`, `r2s-ties` |
+| `R2SW(r, width, precision)` rounds as `R2S` to `precision` decimals but shows at least one: precision 0 reads `3.0` for both 3.14159 and 2.5. It pads with spaces to `width + 1` characters (`width` not counting the point): `R2SW(1.5, 8, 2)` is five spaces then `1.50`, and `R2SW(-0.0625, 1, 3)` is `-0.063` | Padded to `width`; precision 0 printed no point | **Fixed** | `r2sw` |
+| `S2I` skips leading spaces (`" -7"` reads -7); `S2R` doesn't (`" 7.25"` reads 0). Both read a sign, then digits (`S2R` also one point), ignore the rest, read 0 without digits and know no exponent (`S2R("1e3")` is 1) | Both skipped spaces | **Fixed**: only `S2I` skips them | `s2i`, `s2r` |
+| `R2I` truncates toward zero; `I2S` prints the integer | Same | Unchanged | `r2i`, `i2s` |
+| `GetPlayerController`, `GetPlayerSlotState`: playing slots are user and playing, open slots none and empty | Same | Unchanged | `player-controllers`, `player-slot-states` |
+| `BlzFrameGetChildrenCount`, `BlzFrameGetChild` of a frame the map made: its children in creation order | Same | Unchanged | `frame-children` |
+| `BlzFrameIsVisible` is false under a hidden parent | The frame's own flag | **Fixed**: false unless the frame and every parent are visible | `frame-visible-under-hidden-parent` |
+| `BlzFrameGetTextSizeLimit` of an `EDITBOX` the map made and gave no limit reads -256 | 4096 | **Fixed**: -256; a negative limit cuts nothing | `frame-text-limit-default` |
+| `BlzFrameSetText` keeps only the first `limit` characters once a limit is set (limit 3, `"abcdef"` reads `"abc"`) | Kept whole | **Fixed**: cut to the limit | `frame-text-limit-on-set` |
+| A frame starts enabled; `BlzFrameGetText` reads what was set | Same | Unchanged | `frame-enabled-default`, `frame-text-read` |
+| Sync arrival: every client, sender included, each sender's order, triggers in registration order, the right sender and prefix | Same | Unchanged | `sync-order-from-p0/p1`, `sync-sender-mismatches` |
+| A sync message's data arrives cut to its first 255 characters, and the prefix doesn't count (four-letter prefix: 200, 251 and 252 arrive whole, 300 as 255); `BlzSendSyncData` still returns true. Smashcraft sends at most 200 data bytes (`MESSAGE_MAX_BYTES`) | No limit | **Fixed**: data cut to 255 characters | `sync-send-returns`, `sync-lengths-from-p0/p1` |
+| `DestroyTrigger` inside the trigger's own first action: its later actions still run; later events don't fire it | Same | Unchanged | `trigger-destroyed-in-own-action` |
+
+Not measured, so headless keeps its earlier choice: the sign of a negative
+`R2S` that rounds to zero (`-0.000`), how `R2SW` pads a negative or treats a
+negative precision, `S2R` of a leading `+`, a limit of 0, text set before the
+limit, and the default limit of frames other than `EDITBOX`.
+
+To repeat the capture, build `bun test/script-rules50/build.ts BASE.w3m
+OUT.w3x`, play it once on 3.0.1 with two clients for at least 3 seconds,
+collect `script-rules-p0.txt`, `script-rules-p1.txt`,
 `script-rules-sync-p0.txt` and `script-rules-sync-p1.txt`, and compare them
-with `EXPECTED` and `EXPECTED_SYNC` in `test/headless-script-rules.test.ts`.
-Both clients send at 0.25 s and write the sync rows at 2 s; a sync row that
-differs between the two clients is itself a finding. Each differing row
-becomes a headless fix with that row as its test.
+with `EXPECTED` and `EXPECTED_SYNC`. Both clients send at 0.25 s and write the
+sync rows at 2 s; a sync row that differs between the two clients is itself a
+finding.
 
 ## Timers and frame stepping
 
