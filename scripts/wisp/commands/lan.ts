@@ -169,13 +169,13 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
  * merges its pairs into pool.json and clients.json instead of replacing them:
  * it keeps every other pair whose agent socket still exists.
  */
-const registerPairs = (mine: readonly PoolPair[], profile: string, fps: number | undefined) => {
+const registerPairs = (mine: readonly PoolPair[], profile: string, fps: number | undefined) => Effect.gen(function*() {
   const ids = new Set(mine.map(({ id }) => id));
-  const others = (readPool()?.pairs ?? []).filter(({ id, agentSocket: socket }) => !ids.has(id) && existsSync(socket));
+  const others = ((yield* readPool)?.pairs ?? []).filter(({ id, agentSocket: socket }) => !ids.has(id) && existsSync(socket));
   const pairs = [...others, ...mine].sort((left, right) => left.id - right.id);
   writeJson(poolFile(), { profile, ...(fps === undefined ? {} : { fps }), pairs });
   writeJson(poolClientsFile(), { clients: pairs.flatMap(({ id, runs }) => pairClients(id, runs)) });
-};
+});
 
 const pool: Command = (args) => Effect.gen(function*() {
   const pairs = yield* number(args, "pairs", 1);
@@ -214,7 +214,7 @@ const pool: Command = (args) => Effect.gen(function*() {
     const clientsPath = join(pairDirectory(pair), "clients.json");
     writeJson(clientsPath, { clients: pairClients(pair, runs).map((client) => ({ ...client, name: client.name.endsWith("a") ? "a" : "b", poolName: client.name, pid: pids.get(client.name) })) });
     entries.push({ id: pair, clients: clientsPath, agentSocket: agentSocket(pair), runs, appIds: { a: `steam_app_${3516115600 + pair * 2}`, b: `steam_app_${3516115601 + pair * 2}` } });
-    registerPairs(entries.map((entry) => ({ ...entry, profile: profileOf(entry.id) })), profileText, fps);
+    yield* registerPairs(entries.map((entry) => ({ ...entry, profile: profileOf(entry.id) })), profileText, fps);
     yield* Console.log(`pair ${pair}: ${clientName(pair, "a")} and ${clientName(pair, "b")} running (${profile}${fps === undefined ? "" : `, ${fps} fps`}); desktops ${runs.a ?? "?"} and ${runs.b ?? "?"}`);
   }
   yield* Console.log(`pool: ${poolFile()}; clients: ${poolClientsFile()}. Ctrl-C stops it.`);
@@ -242,7 +242,7 @@ const solo: Command = (args) => Effect.gen(function*() {
   if (map === undefined || !existsSync(map)) return yield* new UsageFailure({ problem: "solo takes a built map file (MAP.w3x)" });
   const chosen = flagValues(args, "pair").map(Number);
   if (chosen.some((pair) => !Number.isInteger(pair) || pair < 0)) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
-  const pairs = chosen.length > 0 ? chosen : (readPool()?.pairs ?? []).filter(({ agentSocket: socket }) => existsSync(socket)).map(({ id }) => id);
+  const pairs = chosen.length > 0 ? chosen : ((yield* readPool)?.pairs ?? []).filter(({ agentSocket: socket }) => existsSync(socket)).map(({ id }) => id);
   if (pairs.length === 0) return yield* new LanFailure({ problem: "no pool pair is running; start one with wisp lan pool" });
   yield* Effect.forEach(pairs, (pair) => agent(pair, "/solo", { map: resolve(map) }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(SoloResult)),
@@ -252,7 +252,7 @@ const solo: Command = (args) => Effect.gen(function*() {
 });
 
 const status: Command = (args) => Effect.gen(function*() {
-  const known = readPool();
+  const known = yield* readPool;
   if (known === undefined) return yield* new LanFailure({ problem: `no pool is running (${poolFile()} is missing); start one with wisp lan pool` });
   const [only] = flagValues(args, "pair");
   for (const { id } of known.pairs.filter(({ id }) => only === undefined || id === Number(only))) {

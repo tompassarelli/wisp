@@ -6,6 +6,8 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { Effect, Schema } from "effect";
+import { LanFailure } from "./join";
 
 export const stateRoot = () => join(process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local/state"), "wisp/lan");
 export const dataRoot = () => join(process.env["XDG_DATA_HOME"] ?? join(homedir(), ".local/share"), "wisp/lan");
@@ -188,9 +190,27 @@ export function writeJson(path: string, value: unknown): void {
   renameSync(`${path}.next`, path);
 }
 
-export function readPool(): PoolFile | undefined {
-  return existsSync(poolFile()) ? (JSON.parse(readFileSync(poolFile(), "utf8")) as PoolFile) : undefined;
-}
+const PoolFileJson = Schema.fromJsonString(Schema.Struct({
+  profile: Schema.String,
+  fps: Schema.optionalKey(Schema.Number),
+  pairs: Schema.Array(Schema.Struct({
+    id: Schema.Int,
+    clients: Schema.String,
+    agentSocket: Schema.String,
+    runs: Schema.Struct({ a: Schema.optionalKey(Schema.String), b: Schema.optionalKey(Schema.String) }),
+    appIds: Schema.Struct({ a: Schema.String, b: Schema.String }),
+    profile: Schema.optionalKey(Schema.String),
+  })),
+}));
+
+/** pool.json, decoded; undefined when no pool has run. Pools replace it by rename, so a read sees one whole file. */
+export const readPool: Effect.Effect<PoolFile | undefined, LanFailure> = Effect.suspend(() => {
+  if (!existsSync(poolFile())) return Effect.succeed(undefined);
+  return Effect.try({ try: () => readFileSync(poolFile(), "utf8"), catch: (cause) => new LanFailure({ problem: `${poolFile()}: ${String(cause)}` }) }).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(PoolFileJson)),
+    Effect.mapError((cause) => (cause instanceof LanFailure ? cause : new LanFailure({ problem: `${poolFile()}: ${cause.message}` }))),
+  );
+});
 
 /** The pair whose clients include every one of `names`. */
 export function pairOf(pool: PoolFile, names: readonly string[]): PoolPair | undefined {
