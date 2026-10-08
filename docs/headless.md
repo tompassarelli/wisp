@@ -434,9 +434,12 @@ Compare the twelve rows with the `EXPECTED` list in the test.
 
 Unit coordinates, fly height and facing are stored as binary32 when set, and
 facing writes wrap into [0, 360) degrees; reads in the same callback see the
-write. `test/unit-motion57/cases.ts` authors five cases shared by Bun, Lua32
+write. An effect attached to a unit is drawn at the unit's new position at
+once. `test/unit-motion57/cases.ts` authors the cases shared by Bun, Lua32
 and a native measurement map, with bodies set up as Smashcraft's fighter
-bodies are (pathing off, Crow Form, Locust, paused). The rules and their
+bodies are (pathing off, Crow Form, Locust, paused): position, height, 43
+exact facing reads (`facing-ex-exact-*` after `BlzSetUnitFacingEx`,
+`facing-created-exact-*` after `CreateUnit`) and a dash. The rules and their
 evidence are in [Warsmash notes](warsmash-notes.md#unit-position-and-facing).
 
 ```sh
@@ -445,7 +448,14 @@ bun test/unit-motion57/build.ts BASE.w3m PRIVATE_OUT.w3x
 ```
 
 The native map writes `unit-motion-p0.txt` and `unit-motion-p1.txt` to
-CustomMapData 0.25 game seconds after start, in the same ×128 integer form.
+CustomMapData about 1.8 game seconds after start. Most rows are ×128
+integers; an `exact` row gives the read value exactly as `MpE`, the odd
+integer M times 2^E. The dash moves a body 20 units a tick at 60 ticks a
+second, reads an effect attached at its origin with
+`BlzGetLocalSpecialEffectX` before each move, and counts the ticks it read the
+drawn body more than three ticks of travel behind its set position
+(`dash-ticks-drawn-behind`); its raw reads go to `unit-motion-dash-p0.txt`
+and `-p1.txt`.
 
 ### Unit movement: fly height and move speed
 

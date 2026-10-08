@@ -7,7 +7,7 @@ const declarations = arg[2];
 if (bundle === undefined || declarations === undefined) throw new Error("usage: lua headless.lua MAP_LUA WARCRAFT_D_TS");
 const clients = luaLockstep({ filePrefix: "unit-motion", intentionalNoops: UNIT_MOTION_NOOPS }, readFile(bundle), readFile(declarations));
 clients.start();
-clients.frames(30);
+clients.frames(150);
 for (const client of clients.clients) {
   for (const row of client.files.get(`unit-motion-p${client.slot}.txt`) ?? []) print(`p${client.slot} ${row}`);
 }
