@@ -80,7 +80,8 @@ file. Time outside tests (loading, `beforeAll`) is charged to the file too.
 - A new file, or a file whose test count changed, passes under the ceiling
   and rewrites its row: commit the row with the tests.
   `TEST_COST_UPDATE=1 bun run test` rewrites every row, after a cut.
-- A cost verdict reached above 30% CPU pressure is inconclusive (exit 75).
+- CPU cost failures count at any CPU pressure; waiting for a CPU adds wall time, not CPU time.
+- CI shards set `WISP_TEST_COST_SHARD=1` to compare their selected files with the same baseline and print the same totals.
 - Every run prints the five heaviest tests and the suite's CPU, test count
   and CPU per test against the baseline:
 
@@ -94,8 +95,9 @@ fixture to 32-bit Lua, is a farm test: declare it with `farmTest` from
 instead of `test`. `bun run test` skips it; CI's farm-tests job and every
 `bun wisp farm test` shard run it on each push, so it keeps its coverage.
 The ceiling doesn't apply to it. Keep its cheap Bun-side twin in the suite.
-Each farm shard runs `bun test --preload ./scripts/wisp/testCostPreload.ts`,
-so the ceiling holds for every other test there as well.
+Each farm shard runs the suite files with `WISP_TEST_COST_SHARD=1 bun run test`,
+then its farm tests with `bun test --preload ./scripts/wisp/testCostPreload.ts`.
+Farm tests keep their coverage without changing the suite baseline.
 
 ## The last line
 

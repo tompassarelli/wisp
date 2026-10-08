@@ -12,7 +12,6 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { relative } from "node:path";
 import { FARM_TEST_RUNNING } from "./farmTest";
 import { TEST_CEILING_S, TEST_COST_OUT_ENV } from "./testCost";
-import { BUSY_PRESSURE } from "./testRunner";
 
 const out = process.env[TEST_COST_OUT_ENV] ?? "";
 /** Linux's USER_HZ: /proc reports child CPU in these ticks. */
@@ -33,13 +32,6 @@ const seconds = (): number => {
   return (user + system) / 1e6 + children;
 };
 
-const pressure = (): number => {
-  try {
-    return Number(/^some avg10=([\d.]+)/m.exec(readFileSync("/proc/pressure/cpu", "utf8"))?.[1] ?? "0");
-  } catch {
-    return 0;
-  }
-};
 
 {
   const costs = new Map<string, { tests: number; cpu: number; max: number }>();
@@ -67,9 +59,7 @@ const pressure = (): number => {
     globals[FARM_TEST_RUNNING] = false;
     if (!farm && used > TEST_CEILING_S) {
       const line = `${file()}: this test used ${used.toFixed(2)} s CPU, over the ${TEST_CEILING_S} s ceiling per test; shrink it or move it to the farm`;
-      const current = pressure();
-      if (current > BUSY_PRESSURE) write(JSON.stringify({ inconclusive: `${line} (inconclusive: CPU pressure ${current.toFixed(0)}%)` }));
-      else throw new Error(line);
+      throw new Error(line);
     }
   });
   afterAll(() => {
