@@ -17,6 +17,56 @@ const stub = (bin: string, name: string, body: string) => {
 
 const isolatedGit = { GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" };
 
+test("[repro #78] interleaved balance dispatches wait for and report their own run", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "host-tools-farm-interleaved-"));
+  try {
+    const bin = join(dir, "bin");
+    mkdirSync(bin);
+    const log = join(dir, "calls.log");
+    stub(bin, "gh", `
+if (args[0] === "workflow") { process.exit(0); }
+if (args[0] === "run" && args[1] === "list") {
+  console.log(JSON.stringify([
+    {databaseId:202,displayTitle:"Balance sylvanas sylvanas-tag",url:"https://example.test/202"},
+    {databaseId:101,displayTitle:"Balance archer archer-tag",url:"https://example.test/101"},
+  ])); process.exit(0);
+}
+if (args[0] === "run" && args[1] === "view") {
+  appendFileSync(${JSON.stringify(log)}, "wait " + args[2] + "\\n");
+  console.log(JSON.stringify({status:"completed",conclusion:"success",jobs:[]})); process.exit(0);
+}
+if (args[0] === "run" && args[1] === "download") {
+  appendFileSync(${JSON.stringify(log)}, "download " + args[2] + "\\n");
+  writeFileSync(require("node:path").join(args[args.indexOf("-D") + 1], "field.md"), args[2] === "101" ? "Archer 61%" : "Sylvanas 43%"); process.exit(0);
+}
+process.exit(1);`);
+    const program = `
+import { Effect } from "effect";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { dispatch, waitFor, withArtifact } from "./scripts/wisp/farm";
+const results = await Effect.runPromise(Effect.all(["archer", "sylvanas"].map(fighter => Effect.gen(function*() {
+  const found = yield* dispatch("owner/repo", "balance.yml", {ref:fighter,tag:fighter+"-tag"});
+  yield* waitFor("owner/repo", found.databaseId);
+  const field = yield* withArtifact("owner/repo", found.databaseId, "balance-field", folder => Effect.sync(() => readFileSync(join(folder,"field.md"),"utf8")));
+  return {fighter,id:found.databaseId,field};
+})), {concurrency:2}));
+console.log(JSON.stringify(results));`;
+    const child = Bun.spawn([process.execPath, "--eval", program], { cwd: resolve(import.meta.dir, ".."), env: { ...process.env, PATH: `${bin}:${process.env["PATH"] ?? ""}` }, stdout: "pipe", stderr: "pipe" });
+    const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+    expect(stderr).toContain("https://example.test/101");
+    expect(stderr).toContain("https://example.test/202");
+    expect(code).toBe(0);
+    expect(JSON.parse(stdout)).toEqual([
+      { fighter: "archer", id: 101, field: "Archer 61%" },
+      { fighter: "sylvanas", id: 202, field: "Sylvanas 43%" },
+    ]);
+    expect(readFileSync(log, "utf8").trim().split("\n").sort()).toEqual(["download 101", "download 202", "wait 101", "wait 202"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 20_000);
+
 test.each([
   ["safe-push", "push"],
   ["the dispatch", "dispatch"],
