@@ -486,6 +486,42 @@ graphics mode):
    hidden, with and without a second seek one frame later: the frame 262
    repeat.
 
+### Collision, pathing and orders
+
+Owner: wisp#61. Smashcraft relies on very little here. Its **main**
+(`ts/src/`, excluding tests) issues no orders, enumerates no groups, never
+asks for a range or collision size, and calls no `SetUnitPosition`. The whole
+surface is the fighter body setup in `platform/shell/fighterBody.ts`
+(`SetUnitPathing(false)`, Crow Form added and removed, Locust, `PauseUnit`)
+and `SetUnitMoveSpeed(270)` in `platform/objectData.ts`, read back once by a
+diagnostic row. The bodies derive from `earc` (a ground unit); object data
+sets only move speed (`umvs`) among the movement fields. #57's notes above
+already settle that position writes cause no pathing push and leave orders
+alone. Fixture: `test/unit-movement61/` (two cases, Bun and 32-bit Lua in
+`test/headless-unit-movement.test.ts`, native map via its `build.ts`).
+
+| Behavior Smashcraft relies on | Real rule | Wisp before #61 | Verdict |
+| --- | --- | --- | --- |
+| Crow Form added and removed so `SetUnitFlyHeight` works on a ground body | A ground unit ignores fly height writes until Crow Form (`Amrf`) or Storm Crow Form (`Arav`) has been added; removing it keeps the unlock. Warsmash assigns height unconditionally, so this rule comes from established map practice and the capture below confirms it | Applied every height write | **Mismatch, fixed**: height writes apply only after either form was added. Wisp has no unit movement types, so a natively flying or hovering type also needs the form headlessly. Case `fly-height-needs-crow-form` |
+| `SetUnitMoveSpeed(u, 270)` then `GetUnitMoveSpeed` | Speed is a real; Warsmash narrows it to an integer, the real game stores it as a real clamped to the gameplay constants' range | Stored the argument unrounded, so Bun kept doubles that Lua32 rounds | **Mismatch, fixed**: stored as binary32. 270 is integral and in range under every rule, so Smashcraft's reading is unchanged; clamping and integer narrowing stay unmodeled. Case `move-speed-set-and-read` |
+| `SetUnitPathing(false)`: bodies never pushed or pushing | Turns off the unit's pathing and collision with other units; position writes do no pathability search anyway | No pathing or collision at all | **Match**; #57's `overlapping-bodies-held` reads two overlapping bodies unmoved |
+| Locust: no collision, no selection | Locust removes the unit from collision, selection, targeting and range enumeration | No collision, selection or enumeration exists | **Match** for what Smashcraft uses. Smashcraft enumerates no groups, so Locust's enumeration exclusion is not relied on |
+| `PauseUnit(true)`: bodies never act on their own | A paused unit runs no orders, acquires no targets and does not move; direct position and facing writes still apply | No orders, AI or movement; the map declares `PauseUnit` a no-op | **Match** |
+| Order queues | See [order queues](#order-queues-outside-the-maps-relied-on-behavior) | No order model | **Not used**: no `Issue*Order` call in Smashcraft |
+| `CreateUnit` placement | A ground unit with collision is placed at the nearest free spot, so a second body at the same point can be displaced | Stores the requested point | **Not relied on**: Smashcraft overwrites X/Y in the same call (`placeFighterBody`) before anything reads them |
+
+[Move speed native](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L3125-L3131),
+[speed field](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L1872-L1879),
+[pause native](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4211-L4217),
+[ability add native](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4629-L4650),
+[height setter](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L2633-L2690).
+
+**Capture needed** (wisp#61's third box, batched with #56–#59): build
+`bun test/unit-movement61/build.ts BASE.w3m OUT.w3x`, play it once on 3.0.1
+with two clients, collect `unit-movement-p0.txt` and `unit-movement-p1.txt`
+from CustomMapData, and compare them with `EXPECTED` in
+`test/headless-unit-movement.test.ts`.
+
 ## Timers and frame stepping
 
 wisp#56 checks the timer behaviour Smashcraft relies on. Smashcraft

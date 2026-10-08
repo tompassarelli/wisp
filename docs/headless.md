@@ -445,6 +445,25 @@ bun test/unit-motion57/build.ts BASE.w3m PRIVATE_OUT.w3x
 The native map writes `unit-motion-p0.txt` and `unit-motion-p1.txt` to
 CustomMapData 0.25 game seconds after start, in the same ×128 integer form.
 
+### Unit movement: fly height and move speed
+
+A unit accepts `SetUnitFlyHeight` only after Crow Form (`Amrf`) or Storm Crow
+Form (`Arav`) has been added to it, as a ground unit in Warcraft does; before
+that the write is ignored. Wisp has no unit movement types, so a natively
+flying type needs the same step headlessly. `SetUnitMoveSpeed` stores the
+speed as binary32. `test/unit-movement61/cases.ts` authors the cases shared by
+Bun, Lua32 and a native measurement map; the rules, and why Smashcraft relies
+on nothing else in collision, pathing or orders, are in
+[Warsmash notes](warsmash-notes.md#collision-pathing-and-orders).
+
+```sh
+LUA=PATH_TO_LUA32 bun test test/headless-unit-movement.test.ts
+bun test/unit-movement61/build.ts BASE.w3m PRIVATE_OUT.w3x
+```
+
+The native map writes `unit-movement-p0.txt` and `unit-movement-p1.txt` to
+CustomMapData at start, in the same ×128 integer form.
+
 ### Effect positions and lifetime
 
 Effect coordinates, scale, matrix scale, orientation, time scale, time and

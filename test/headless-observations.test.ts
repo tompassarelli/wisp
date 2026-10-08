@@ -17,6 +17,8 @@ test("unit snapshots capture fighters' transforms, animation clocks, hiding and 
     fighter = CreateUnit(Player(2), 0x48303030, 10, 20, 180);
     SetUnitX(fighter, 30);
     SetUnitY(fighter, 40);
+    UnitAddAbility(fighter, 0x416d7266);
+    UnitRemoveAbility(fighter, 0x416d7266);
     SetUnitFlyHeight(fighter, 300, 0);
     SetUnitScale(fighter, 2, 3, 4);
     BlzSetUnitFacingEx(fighter, 90);
