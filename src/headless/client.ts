@@ -8,6 +8,7 @@
 // natives where its map code finds them.
 import { errorFile, FILE_IO_ABILITY } from "../runtime/gameFiles";
 import { f32 } from "../sim/f32";
+import { floorMod } from "../sim/intMath";
 import type { FrameTemplate } from "./frames";
 import type { NativeDeclarations } from "./declarations";
 import { FRAME_POINTS, type Frame, Frames } from "./frames";
@@ -277,6 +278,12 @@ const isHandle = (value: unknown): value is Handle =>
   typeof value === "object" && value !== null && "id" in value && "kind" in value;
 
 const isFrame = (value: unknown): value is Frame => typeof value === "object" && value !== null && "points" in value;
+
+/** A facing write as Warcraft keeps it: binary32 degrees in [0, 360) (wisp:docs/warsmash-notes.md, "Unit position and facing"). */
+function unitFacing(facing: number): number {
+  const normalized = f32(floorMod(f32(facing), 360));
+  return normalized >= 360 ? 0 : normalized;
+}
 
 function isDigits(text: string): boolean {
   const start = text.startsWith("-") ? 1 : 0;
@@ -729,10 +736,10 @@ export class HeadlessClient {
       ShowUnit: (unit: Unit, show: boolean) => { unit.visible = show; },
       IsUnitHidden: (unit: Unit) => !unit.visible,
       GetUnitFlyHeight: (unit: Unit) => unit.z,
-      SetUnitFlyHeight: (unit: Unit, height: number) => { unit.z = height; },
+      SetUnitFlyHeight: (unit: Unit, height: number) => { unit.z = f32(height); },
       GetUnitFacing: (unit: Unit) => unit.facing,
-      SetUnitFacing: (unit: Unit, facing: number) => { unit.facing = facing; },
-      BlzSetUnitFacingEx: (unit: Unit, facing: number) => { unit.facing = facing; },
+      SetUnitFacing: (unit: Unit, facing: number) => { unit.facing = unitFacing(facing); },
+      BlzSetUnitFacingEx: (unit: Unit, facing: number) => { unit.facing = unitFacing(facing); },
       SetUnitScale: (unit: Unit, x: number, y: number, z: number) => { unit.scale = [x, y, z]; },
       SetUnitTimeScale: (unit: Unit, timeScale: number) => { unit.timeScale = timeScale; },
       SetUnitVertexColor: (unit: Unit, red: number, green: number, blue: number, alpha: number) => {
@@ -749,14 +756,14 @@ export class HeadlessClient {
       GetUnitX: (unit: Unit) => unit.x,
       GetUnitY: (unit: Unit) => unit.y,
       SetUnitX: (unit: Unit, x: number) => {
-        unit.x = x;
+        unit.x = f32(x);
       },
       SetUnitY: (unit: Unit, y: number) => {
-        unit.y = y;
+        unit.y = f32(y);
       },
       SetUnitPosition: (unit: Unit, x: number, y: number) => {
-        unit.x = x;
-        unit.y = y;
+        unit.x = f32(x);
+        unit.y = f32(y);
       },
       SetUnitMoveSpeed: (unit: Unit, value: number) => {
         unit.moveSpeed = value;
