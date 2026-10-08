@@ -77,6 +77,7 @@ program can register it; "game" means the consuming game defines it.
 | `parity` | Bun against 32-bit Lua on the same numbers | `numeric`, `tapes`, `corpus` | game |
 | `integrity` | Native input-integrity sessions and their evidence | `capture`, `result`, `headless` | game |
 | `pad` | Scripted virtual-pad input through the real helper | (script) | game |
+| `judge` | Retained captures against a measurement rubric | (capture folder) | game |
 | `farm` | Headless work on hosted CI runners | `test` (Wisp); `balance`, `pads`, `perf`, `memory` (game) | Wisp |
 | `view` | What a player would see, and the model facts it reads | `scene`, `frame`, `models`, `strikes`, `reach`, `hurtboxes`, `motion` | game |
 | `oracle` | Melee situations against decompiled values | (session) | game |
@@ -102,6 +103,9 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--out PATH` | Where the command writes its result, a file or folder as its usage says | many |
 | `--helper BINARY` | The controller helper that plays input | `integrity`, `pad`, `soak` |
 | `--build BUILD` | The build under test, recorded in the result | `pad` |
+| `--rubric FILE` | Measurement rules for retained captures | `judge` |
+| `--hot` | Reload the current map script between batch checks | `pad` |
+| `--solo` | Run each selected client in a separate single-player game | `accept` |
 | `--base BASE.w3m` | The base map a build starts from | `map build` |
 | `--container MAP.w3x` | The map whose contents a build keeps | `map build` |
 | `--assets DIR` | The game's private asset folder | `map build`, `view` |
