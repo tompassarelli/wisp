@@ -56,8 +56,8 @@ agent and contributor, in code, tests, fixtures, docs and history.
 ## The check
 
 wisp:scripts/cleanRoom.ts runs before every push and in CI. It refuses
-game-format files (by extension or leading bytes) and files with more than 20
-JASS declaration lines, unless wisp:clean-room-allowlist.tsv lists the path
+game-format files (by extension or leading bytes) and files up to 2 MB with more
+than 20 JASS declaration lines, unless wisp:clean-room-allowlist.tsv lists the path
 as `original` or `generated` with how it was made. A refusal names the file:
 delete it, regenerate it from our own source, or load it from the install.
 Don't rewrite pushed history; open an issue for a file already pushed.
