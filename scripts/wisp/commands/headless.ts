@@ -58,7 +58,7 @@ export function headlessArguments(args: readonly string[]) {
         if (!(musicVolume >= 0 && musicVolume <= 1)) throw new Error("--music-volume needs a number from 0 to 1");
       }
       if (arg === "--graphics") {
-        if (value !== "classic" && value !== "reforged") throw new Error("--graphics is classic or reforged");
+        if (value !== "classic" && value !== "reforged" && value !== "definitive") throw new Error("--graphics is classic, definitive or reforged");
         graphics = value;
       }
       if (arg === "--runs" || arg === "--step") {

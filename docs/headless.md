@@ -364,14 +364,24 @@ to verifiably offline loopback clients; M1 checks do not require them.
 
 `wisp headless [JOURNEY] --render PRIVATE_DIR --frames 64 132 206` writes
 `p0-frame-64.png` (and one image per requested frame and client), the captured
-scene JSON, and `render.json` naming the GPU and counts of models and textures.
+scene JSON, and `render.json` naming the GPU, counts of models and textures,
+and each asset's attempted and selected location.
 Frame numbers are headless client frames after that frame's journey events.
 `--journey FILE.json` replaces the named journey with `{ frames, events }`;
 key events may include `down: true` and a later `down: false` to hold a key.
 
 The map supplies `HeadlessProject.render.readAsset(path, graphics)`, returning the actual
-imported or stock asset bytes, or `undefined` when absent. `--graphics reforged`
-(default `classic`) passes `"reforged"`: the map then returns a path's
+imported or stock asset bytes, or `undefined` when absent. `--graphics definitive`
+selects Definitive Edition; the default is `classic`. Layer-aware projects
+also supply `resolveAsset(path, graphics)`, returning `resolveRenderAsset` from
+`scripts/wisp/renderAssets.ts` through their Effect runtime. Its two readers
+read map imports and stock files separately. Definitive tries `_de.w3mod`,
+`_hd.w3mod`, then base imports, followed by the same stock layers. Classic
+tries only base files. `war3mapImported` paths stay within the map. A reader
+returns `undefined` for a missing layer so the next one can supply the asset.
+The selected source, layer and path and every attempted location appear in
+`render.json`; byte-only readers record the supplied project path.
+`--graphics reforged` passes `"reforged"`: the map then returns a path's
 `_hd.w3mod` import or the game's HD file where one exists, as Reforged loads
 them, and the renderer draws HD materials with their PBR shader. `render.json`
 records the choice. Keep these assets and
