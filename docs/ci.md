@@ -179,12 +179,13 @@ it locally.
 3. **Suites.** The [farm](farm.md) test workflow runs the full suite for the
    rebased commit inside the autoland run (wisp:.github/workflows/farm-test.yml
    is also a reusable workflow for this).
-4. **Compare.** At the same time, main's own failures at the base commit come
-   from the summary the previous landing saved for it (artifact
-   `autoland-summary-SHA`, kept 14 days), or else from
-   `bun wisp farm test --ref BASE`. A test that fails on the branch but not
-   on main is a new failure; a shard that crashed without naming a test is
-   new unless main's run also had one.
+4. **Compare.** At the same time, main's own failures come from the newest
+   farm result for the base or one of its last 30 main ancestors: the
+   summary a previous landing saved (artifact `autoland-summary-SHA`, kept
+   14 days) or a `bun wisp farm test` run's. Only when none exists does it
+   run `bun wisp farm test --ref BASE`. A test that fails on the branch but
+   not in that result is a new failure; a shard that crashed without naming
+   a test is new unless main's result also had one in that suite.
 5. **Land.** With no new failures, the rebased commits are pushed to main
    (a plain fast-forward) and the branch is
    deleted. Pushes made with the workflow token start no workflows, so the
