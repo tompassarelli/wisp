@@ -3,6 +3,7 @@
 import { runCli } from "./cli";
 
 process.exit(await runCli("bun wisp", {
+  map: { usage: "preview MAP.w3x --out IMAGE.ppm [--packager PATH]", load: async () => (await import("./commands/map")).map },
   farm: { usage: "test [--ref REF] [--wait]   (the full suites on GitHub's free runners: docs/farm.md)", load: async () => (await import("./commands/farm")).farm },
   headless: {
     usage: "audio-acceptance [--sound-cues FILE] [--json]   (map sound/music calls: docs/audio.md)",

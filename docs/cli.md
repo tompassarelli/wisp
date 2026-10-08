@@ -56,7 +56,7 @@ program can register it; "game" means the consuming game defines it.
 | Noun | What it acts on | Verbs | Defined by |
 | --- | --- | --- | --- |
 | `inputs` | Private build inputs | `add`, `check`, `path` | game |
-| `map` | The game's Warcraft III map file | `build`, `rebuild` | Wisp services, game command |
+| `map` | The game's Warcraft III map file | `build`, `rebuild`, `preview` | Wisp services, game command |
 | `dev` | The every-save development session | (session) | Wisp |
 | `hot` | Hot reload into running clients | (session) | Wisp |
 | `tune` | Live tuning of declared values | (session) | Wisp |
@@ -200,6 +200,7 @@ Every command and verb in Wisp's sample program and Smashcraft's `bun wisp`, gro
 | --- | --- |
 | `map build` | Builds the TypeScript map from a base map, assets and declaration |
 | `map rebuild MAP.w3x` | Replaces only a built map's script |
+| `map preview MAP.w3x --out IMAGE.ppm` | Reads the map's lobby preview texture and selection metadata |
 | `dev` | Every save's type errors, affected tests, journeys and whole check |
 | `hot --data DIR... [--watch]` | Hot-reloads saves into running clients |
 | `tune --data DIR...` | Panel that changes declared values in a running match |
