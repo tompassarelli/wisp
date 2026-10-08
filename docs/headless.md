@@ -411,7 +411,10 @@ The selected source, layer and path and every attempted location appear in
 them, and the renderer draws HD materials with their PBR shader. `render.json`
 records the choice. Keep these assets and
 the output outside public repositories. MDX and MDL models, BLP1, TGA and PNG
-textures are supported; a resolver can return decoded PNG bytes for a stock
+textures are supported, including raw version-1800 Definitive SKIN records
+with four UINT16 bone IDs and four UINT16 weights per vertex. Host silhouette
+and motion readers use `parseModelMDX` from `scripts/wisp/models.ts` to read
+the same skin. A resolver can return decoded PNG bytes for a stock
 BLP path backed by DDS or BLP2. Missing visible assets fail the render. The
 Maps drawing units also supply `render.unitModels`, mapping object type IDs to
 their model paths; a visible unit without a mapping fails the render. The

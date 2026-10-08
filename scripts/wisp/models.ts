@@ -77,6 +77,11 @@ export function parsableModel(bytes: Uint8Array): { readonly bytes: Uint8Array; 
   return { bytes: joined, lights };
 }
 
+/** The shared stock-model reader: skips unused camera/light chunks and decodes version-1800 skin elements. */
+export function parseModelMDX(bytes: ArrayBuffer): mdx.Model {
+  return parseMDX(parsableModel(new Uint8Array(bytes)).bytes.slice().buffer);
+}
+
 /** The values `track` takes over [from, to]: its keys there, or `fallback` when it has none there. */
 function valuesIn(model: mdx.Model, track: Track, from: number, to: number, fallback: number): number[] {
   if (track === undefined) return [fallback];

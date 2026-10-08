@@ -48,6 +48,13 @@ and `dist/war3-model.d.ts` (renamed to `war3-model.d.mts`) into this directory.
 The built files ship inside Wisp because Bun cannot resolve a nested local
 tarball dependency relative to an installed Wisp tarball.
 
+Version-1800 SKIN records store four bone IDs and four weights as little-endian
+UINT16 elements; the count names elements, not bytes. Wisp decodes each element
+into the renderer's byte palette before uploading it. Weights still total 255.
+The adjacent patch keeps this parser change in its upstream TypeScript form.
+`scripts/wisp/models.ts` exports `parseModelMDX` for host silhouette and motion
+readers, skipping camera/light records those readers do not use.
+
 # Lua 5.3.6 source
 
 `lua-5.3.6.tar.gz` is lua.org's release tarball,
