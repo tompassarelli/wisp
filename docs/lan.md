@@ -72,7 +72,7 @@ presence table is not evidence of a changed table layout.
 
 ## Signed-in 3.0.1 clients cloned from Tom's install
 
-Until the offline pool starts again, two signed-in clients run 3.0.1 from
+Until the offline pool starts again, signed-in clients run 3.0.1 from
 copies of Tom's working Steam/Proton prefix
 (`~/.local/share/Steam/steamapps/compatdata/3516115571`), as decided in
 [#53](https://github.com/tompassarelli/wisp/issues/53). On 8 October 2026
@@ -86,6 +86,30 @@ so the prefix, not the Proton build, decides whether 3.0.1 starts.
 | --- | --- | --- | --- |
 | A | `~/.local/share/wisp/online/clone-c` | c | 47135 |
 | B | `~/.local/share/wisp/online/clone-b` | b | 47133 |
+| third client | `~/.local/share/wisp/online/clone-a` | a (Tom's) | 47137 |
+
+### Clone-a: Tom's account, only while he isn't playing
+
+Clone-a is a third test client, made the same way as the others on 8 October
+but keeping Tom's saved account-a sign-in (steps 2 and 3 below remove the
+sign-in from the other clones; clone-a skips step 2). It reached the main menu
+signed in as account a on 3.0.1.24342. Battle.net allows one session per
+account, so Tom's own game and clone-a would sign each other out.
+`launch.sh a RUN_DIR` therefore:
+
+- refuses to start (exit 3) while any process runs Proton or Wine in Tom's
+  prefix (its environment names `compatdata/3516115571`) or Tom's desktop
+  (Niri, display `:0`) shows a Wine window or one titled `Warcraft III` or
+  `Battle.net`;
+- checks the same every 2 s while clone-a runs, and when Tom's game or
+  Battle.net appears, ends clone-a's capacity session and kills any clone-a
+  process left after 6 s (exit 4). With a stand-in process carrying Tom's
+  prefix in its environment, clone-a's 22 processes were gone 3.4 s after it
+  started.
+
+Run clone-a only through `launch.sh`. In a doctor clients file, don't name it
+`a` or `b`: doctor maps those names to its own prefixes and to accounts c and
+b, and would start the wrong launcher or type the wrong account.
 
 ### Making a clone
 
@@ -107,7 +131,7 @@ With nothing running in Tom's prefix:
 
 ### Launching
 
-`~/.local/share/wisp/online/launch.sh b|c RUN_DIR` starts the clone's
+`~/.local/share/wisp/online/launch.sh a|b|c RUN_DIR` starts the clone's
 Battle.net on a private desktop, in its own `native` capacity scope. It runs
 what Steam's `Warcraft III (Battle.net)` shortcut runs, with
 `STEAM_COMPAT_DATA_PATH` pointed at the clone and no Steam shortcut added:
