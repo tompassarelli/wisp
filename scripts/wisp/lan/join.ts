@@ -1,12 +1,9 @@
-// Putting one offline client into a LAN game (wisp:docs/lan.md): switch its
-// provider to TCPN for one rebuild (provider.ts), then list LAN games through
-// its menus and join the one named. The switch lasts until the provider is
-// rebuilt again (leaving a LAN lobby or game does that), so it runs before
-// every join.
-import { readFileSync } from "node:fs";
+// Putting one offline client into a LAN game (wisp:docs/lan.md): after the
+// private LAN plugin (plugin.ts) has switched its provider, list LAN games
+// through its menus and join the one named.
 import { Effect, Schedule, Schema } from "effect";
 import type { MenuSocket } from "../menus";
-import { isolatedNetworkProblem } from "./offline";
+
 export class LanFailure extends Schema.TaggedError<LanFailure>()("LanFailure", {
   problem: Schema.String,
 }) {
@@ -16,13 +13,6 @@ export class LanFailure extends Schema.TaggedError<LanFailure>()("LanFailure", {
 }
 
 const fail = (problem: string) => Effect.fail(new LanFailure({ problem }));
-const attempt = <A>(what: string, run: () => A) => Effect.try({ try: run, catch: (cause) => new LanFailure({ problem: `${what}: ${cause instanceof Error ? cause.message : String(cause)}` }) });
-
-export interface Switch {
-  readonly address: number;
-  readonly before: string;
-  readonly after: string;
-}
 
 interface ListedGame {
   readonly id: number;

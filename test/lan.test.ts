@@ -11,7 +11,13 @@ import {
   encodeStatString, incomingAction, outgoingAction, splitPackets,
 } from "../scripts/wisp/lan/w3gs";
 
-const FACTORY_BYTES = [0x81, 0xfb, 0x54, 0x45, 0x4e, 0x42, 0x74, 0x3a, 0x81, 0xfb, 0x50, 0x4f, 0x4f, 0x4c, 0x74, 0x1f, 0x81, 0xfb, 0x4e, 0x50, 0x43, 0x54, 0x0f, 0x85, 0x9b, 0, 0, 0];
+describe("offline check", () => {
+  test("[spec docs/lan.md] only loopback counts as offline", () => {
+    const netDev = "Inter-|   Receive\n face |bytes\n    lo: 1 2 3\n";
+    expect(interfaces(netDev)).toEqual(["lo"]);
+    expect(interfaces(`${netDev}  eth0: 4 5 6\n`)).toEqual(["lo", "eth0"]);
+  });
+});
 
 describe("W3GS", () => {
   test("[invariant] packets split at their lengths and keep a partial one for the next read", () => {

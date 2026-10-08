@@ -37,3 +37,26 @@ inside a network namespace or on a private desktop, write the smallest wrapper
 over it in one module, with one comment saying why.
 
 ## Examples
+
+- wisp:scripts/wisp/lan/pairAgent.ts: a whole agent as one `runMain`
+  program. Each game launcher, the menu listeners, the socket server and
+  each game's host are in its scope. Request bodies are decoded with
+  `Schema`, and HTTP handlers run through `FiberSet.makeRuntimePromise`.
+- wisp:scripts/wisp/commands/lan.ts (`startPair`): a capacity session in its
+  own child scope (`Scope.fork`), closed when that attempt fails and held by
+  the pool otherwise. Readiness is polled under `Effect.timeoutOrElse`, and
+  deferrals are retried every 45 s within `--wait`.
+- wisp:scripts/wisp/watch.ts (`lanObservation`, `waitFor`): a 3 s timeout
+  with one retry, reported as a `WatchFailure`, and a `Schedule.spaced` poll
+  under a deadline.
+- wisp:scripts/wisp/lan/host.ts (`startHost`): the caller's scope holds the
+  TCP listener and turn fibers; a child scope closes UDP discovery when the
+  lobby ends. `Schedule.fixed` keeps the turn cadence when work takes time.
+- wisp:scripts/wisp/lan/dummy.ts (`checkDummy`): the native join runs in the
+  same fiber as the check. Each dummy is a scoped Bun subprocess because its
+  CPU report needs Bun's `resourceUsage`; cleanup stops and reaps it.
+
+wisp:test/host-tools.test.ts runs the launchers with stand-in processes and a
+stand-in capacity helper (wisp:test/fixtures/host-tools/). After SIGTERM, or a
+step that fails once the launchers have started, it checks that no process and
+no capacity session is left.

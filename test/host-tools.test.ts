@@ -8,7 +8,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { whileStopped } from "../scripts/wisp/lan/join";
 import { agentSocket, pairClients, poolFile, reportPort } from "../scripts/wisp/lan/pool";
 import { lanObservation } from "../scripts/wisp/watch";
 import { farmTest } from "../scripts/wisp/farmTest";
@@ -163,19 +162,4 @@ test("[repro #62] watch: a pair agent that doesn't answer is a timeout, not a cl
   }).pipe(Effect.provide(TestClock.layer())));
   expect(Exit.isFailure(exit)).toBe(true);
   expect(String(Exit.isFailure(exit) ? exit.cause : "")).toContain("didn't answer within 3 s");
-});
-
-test("[repro #62] join: a client whose threads don't stop within a second is let go again", async () => {
-  const sleeper = Bun.spawn(["sleep", "600"]);
-  cleanups.push(() => sleeper.kill("SIGKILL"));
-  const state = () => readFileSync(`/proc/${sleeper.pid}/stat`, "latin1").split(") ")[1]?.[0];
-  let used = false;
-  const exit = await Effect.runPromiseExit(whileStopped(sleeper.pid, Effect.sync(() => { used = true; }), () => false));
-  expect(String(Exit.isFailure(exit) ? exit.cause : "")).toContain("didn't stop within a second");
-  expect(used).toBe(false);
-  expect(state()).not.toBe("T");
-  // A client that does stop is patched while stopped and let go after.
-  const stopped = await Effect.runPromise(whileStopped(sleeper.pid, Effect.sync(state)));
-  expect(stopped).toBe("T");
-  expect(state()).not.toBe("T");
 });

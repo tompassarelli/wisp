@@ -13,6 +13,35 @@ game. It isn't for cheating. The terms are in
 
 ## 3.0.1: the pool starts, but the game has no LAN provider
 
+**3.0.1.24342 removed the LAN provider, so pool pairs can't play a LAN
+match.** Its code has no LAN provider left for the switch (below) to select;
+the switch refuses it, and the checked build stays 3.0.0.24268. A LAN match on
+3.0.1 would need a provider written into the game, not a switch.
+Single-client games still work: see "Solo games" below.
+
+**The clients themselves start.** A pool client on 3.0.1 shows the intro
+cinematic, then the same offline sequence 3.0.0 showed (`LOGIN_DOORS`,
+`AUTHENTICATION_OVERLAY`, then the `ERROR` modal "There was an error in
+handling the request. Please check your VPN"). On 3.0.0 the pool joined LAN
+games straight from that modal. An earlier diagnosis blamed the prefix and a
+`war3_loader.dll` assertion. Neither held up:
+
+- The game raises a breakpoint and an `0xc0000420` assertion every 10 s and
+  handles them itself (30 in 5 minutes on a client that reached the modal).
+  A `PROTON_LOG` that shows them isn't a crash.
+- The earlier bisection counted a run as a pass only when War3Log said
+  `GameMain Started` within 75 s. A fresh prefix writes nothing to War3Log
+  while it plays the intro and sits at the modal (still empty after 5
+  minutes), and some of those runs were still queued for capacity. Started
+  the same way, 16 of 16 fresh prefixes opened the game window.
+- The actual hang came from the pool's launch: its private desktops ran in a
+  `moderate` batch scope. With the machine at load 70–90 and protected CPU
+  pressure at 20–55%, both games of pair 1 sat at 0% CPU with no window for
+  10 minutes, their main thread waiting on a lock before `winex11.drv`
+  loaded. With the desktops in a `native` scope (below), the same pair
+  loaded its menus about 75 s after launch and reached the modal at 3
+  minutes.
+
 ## Solo games: one offline client, one local game
 
 `wisp lan solo MAP [--pair K...]` puts every client of the running pairs named
@@ -292,11 +321,14 @@ measurement is tracked in [#46](https://github.com/tompassarelli/wisp/issues/46)
   saved account to sign in with. A client with any other network is refused.
 - **Declared clients only.** `wisp lan` works on the clients it created. `wisp
   engine actions` accepts only a pair from the pool's clients file.
+- **Checked builds only.** The switch (Wisp's private LAN plugin) refuses
+  builds it hasn't been checked on (3.0.0.24268), logs each change, and puts
+  the client back within a fraction of a second.
 
 ## Setting up
 
 Running `setup` again refreshes an existing client's install when its Warcraft
-executable version differs from `--from`, then reinstalls that client's menu
+executable differs (size or modification time) from `--from`, then reinstalls that client's menu
 page. Stop the pool first, and use an install whose update has finished.
 
 `wisp lan setup --from "<a prefix>/drive_c/Program Files (x86)/Warcraft III" --pairs N`
@@ -474,6 +506,15 @@ wc3-slop-lan (github.com/Promises/wc3-slop-lan, no licence: read for facts
 only). Wisp's code is its own; no file of either is copied.
 
 ### The switch to LAN
+
+Patch 3.0.0 left the LAN provider in the game, but the menus only ever ask for
+the loopback one. Before each join, the agent briefly switches the client to
+the LAN provider and puts it back within a fraction of a second. That code reads
+and patches the running game, so it isn't in this repository
+(wisp:docs/clean-room.md): Wisp loads it from Wisp's private LAN plugin at
+`~/.local/share/wisp-private/lan/` (wisp:scripts/wisp/lan/plugin.ts) when
+the owner has it. Without the plugin, `wisp lan pool` stops and says the plugin
+is missing.
 
 ## The action log
 
