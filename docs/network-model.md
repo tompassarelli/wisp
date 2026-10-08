@@ -31,6 +31,23 @@ the first match of Smashcraft's #26 runs r7 and r8 (Smashcraft 0.0.42,
 smashcraft:evidence/input-integrity-0042-r7-20261005/ and -r8-). Chat and key
 events still arrive at once.
 
+## Replayed arrivals
+
+`replayedDelivery(arrivals, fallback, nowMs)` replays the arrival times a
+native capture measured for particular messages and leaves every other one
+to `fallback` (usually `syncDelivery()`). Each `ReplayedArrival` names the
+message it takes (`accepts`, used once) and the time it arrived (`atMs`). The
+message reaches every client at the first frame due at or after that time;
+`nowMs` gives when the sending frame was due on the same clock, so with
+`RealtimeClients` it is `() => realtime.frameDueMs()` and frames run late
+under load still land on the measured time. `arrivals` is read at every
+send, so a consumer can anchor the times to its own run, such as the moment
+its scripted Start press went in. A sender's messages still arrive in order.
+
+Smashcraft's `pad SCRIPT --headless --replay-arrivals NATIVE_DIR` measures
+its pause and resume control messages from a native run's helper journals
+this way (wisp#86, [Pause and drawn-frame timing](headless.md#pause-and-drawn-frame-timing)).
+
 ## Limits
 
 **Saturation is not modeled.** In r7, r8 and the 6 October send-rate sweep
