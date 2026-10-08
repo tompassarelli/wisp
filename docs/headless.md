@@ -420,7 +420,7 @@ write is reported by the existing call comparison.
 Run the shared cases and build their native measurement map:
 
 ```sh
-LUA=PATH_TO_LUA32 bun test test/headless-unit-states.test.ts
+bun test test/headless-unit-states.test.ts
 bun test/unit-states/build.ts BASE.w3m PRIVATE_OUT.w3x
 ```
 
@@ -439,7 +439,7 @@ bodies are (pathing off, Crow Form, Locust, paused). The rules and their
 evidence are in [Warsmash notes](warsmash-notes.md#unit-position-and-facing).
 
 ```sh
-LUA=PATH_TO_LUA32 bun test test/headless-unit-motion.test.ts
+bun test test/headless-unit-motion.test.ts
 bun test/unit-motion57/build.ts BASE.w3m PRIVATE_OUT.w3x
 ```
 
@@ -456,7 +456,7 @@ on nothing else in collision, pathing or orders, are in
 [Warsmash notes](warsmash-notes.md#collision-pathing-and-orders).
 
 ```sh
-LUA=PATH_TO_LUA32 bun test test/headless-unit-movement.test.ts
+bun test test/headless-unit-movement.test.ts
 bun test/unit-movement61/build.ts BASE.w3m PRIVATE_OUT.w3x
 ```
 
@@ -482,7 +482,7 @@ and their evidence are in
 [Warsmash notes](warsmash-notes.md#effects-attachment-scale-and-lifetime).
 
 ```sh
-LUA=PATH_TO_LUA32 bun test test/headless-effects.test.ts
+bun test test/headless-effects.test.ts
 bun test/effects59/build.ts BASE.w3m PRIVATE_OUT.w3x
 ```
 
@@ -505,7 +505,7 @@ level fields are declared as the script defines them.
 
 ```bash
 bun scripts/natives.ts /private/common.j /private/blizzard.j src/natives/warcraft.d.ts
-LUA=/path/to/lua32 bun test test/headless-warcraft3.test.ts
+bun test test/headless-warcraft3.test.ts
 ```
 
 Attack reset clears the selected weapon's remaining wait while retaining
@@ -523,7 +523,7 @@ settings, doodad colors and animations, and all 24 destructable creation
 variants. `SceneryFixtures` supplies map doodads, cinematic shot durations,
 terrain pathing cells and HUD scale. Queries for missing cinematic or terrain
 facts fail with the needed fixture name.
-`LUA=/path/to/lua32 bun test test/warcraft3-scenery.test.ts` exercises 92
+`bun test test/warcraft3-scenery.test.ts` exercises 92
 native calls in Bun and Lua32, with zero missing-native reports.
 
 Set `scenery` and `inventory` on `HeadlessMap` or `LuaHeadlessMap`; both are

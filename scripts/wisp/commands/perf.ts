@@ -8,6 +8,7 @@ import { Cause, Clock, Console, Effect, Exit, Option, Schema } from "effect";
 import { mapCompiler, report } from "../../compiler";
 import { type Command, UsageFailure, describeCause, flagValues } from "../command";
 import { DEFAULT_PERF_THRESHOLD, comparePerfRuns, parsePerfRun, predictionLines } from "../perf";
+import { lua32 } from "../lua32";
 import { step } from "../timings";
 import { emitJson } from "../jsonResults";
 import { type NativeCase, checkNative, fitNativeCost, nativeCheckLines, parseNativeReadings, parsePerfSamples } from "../nativeFit";
@@ -99,7 +100,7 @@ export const measureRun = (project: PerfProject, name: string, frames: number, s
   yield* compile(map).pipe(step("compile map"));
   yield* compile(project.program).pipe(step("compile perf program"));
   const declarations = project.declarations ?? join(import.meta.dir, "../../../src/natives/warcraft.d.ts");
-  const lua = process.env.LUA ?? "lua";
+  const lua = process.env.LUA ?? (yield* lua32("stock").pipe(Effect.mapError((failure) => new PerfFailure({ problem: failure.message }))));
   const run = yield* Effect.try({
     try: () => Bun.spawnSync([lua, project.program.bundle, map.bundle, declarations, name, String(frames), ...(samples ? ["samples"] : [])], { stdout: "pipe", stderr: "pipe" }),
     catch: (cause) => new PerfFailure({ problem: `running ${lua}: ${describeCause(cause)}` }),
