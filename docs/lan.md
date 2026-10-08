@@ -185,6 +185,16 @@ them `clone-a` and `clone-d`, so doctor starts each through `launch.sh`
 
 with absolute paths in place of `~`.
 
+The lanes' clients files are kept in `~/.local/state/wisp/online/`:
+`ad-clients.json` (clone-a + clone-d) and `bc-clients.json` (A and B, named
+`a` and `b`). Each private desktop gets a new run folder, so update a client's
+`run` after starting its desktop. On 8 October clone-d kept its login: after
+Battle.net was closed and `launch.sh d` started again, it signed in by itself
+in 16 s, and `bun wisp client doctor --clients-file
+~/.local/state/wisp/online/ad-clients.json clone-d` pressed Play and reached
+the main menu in 97 s. On that desktop `wc3-login-field`'s typing didn't reach
+the login form; typing through the desktop's VNC port did.
+
 ### Making a clone
 
 With nothing running in Tom's prefix:
