@@ -194,6 +194,42 @@ clock. A consumer's pad check must retain the native pause capture's helper
 acknowledgments and use this draw observation with its actual map and helper;
 callback pose equality alone cannot decide visible pose equality (#86).
 
+The native #86 reference is the Classic + Definitive capture of Smashcraft
+`0911b5dac` on Warcraft 3.0.1.24342, retained privately at
+`~/.local/state/wisp/ref-86-pause/` and linked from
+[the native result](https://github.com/tompassarelli/wisp/issues/86#issuecomment-6066025581).
+Its producer and helper monotonic stamps give these measured intervals:
+
+| Interval | Classic (helper 0) | Definitive (helper 1) |
+| --- | ---: | ---: |
+| Start injection → PAUSE_COMMIT | 584.670528 ms | 588.480869 ms |
+| PAUSE_COMMIT → RESUME | 2538.985246 ms | 2536.219687 ms |
+| Resume Start injection → RESUME | 123.680774 ms | 124.725556 ms |
+| Helper PREPARE / PAUSE / RESUME frame | 168 / 168 / 168 | 187 / 168 / 168 |
+
+The two map traces acknowledge PREPARE at callback 196, PAUSE at 205 and
+RESUME at 356. During the pause, callbacks 240 and 300 still run with
+simulation frame 168; native map pause therefore freezes presentation and
+simulation through the map's own state, rather than calling
+`RealtimeClients.hold()`. The focused native-reference test uses the measured
+committed pause interval to check that the local clock and timer callbacks
+continue while a fighter with time scale zero stays frozen.
+
+The videos contain every drawn picture under the capture's load. Classic
+frames 498 and 647, and Definitive frames 408 and 532, have zero changed
+fighter pixels across resume. Movement begins on the next changed pictures,
+649 and 535 respectively. These video indices are pictures, not callback
+numbers; the recordings do not identify the exact callback of each picture.
+
+The existing real-helper headless run at
+`~/.local/state/smashcraft/wisp-pause86-current-helper/` matches PAUSE/RESUME
+168/168 and the first resumed fighter pose on both clients, but its measured
+Start-to-commit delay is 403.881069/405.436109 ms. The #86 timing-calibration
+box stays open: the current network model is from another session, and the
+native capture's 585–588 ms is not a universal pause delay. A capture-specific
+check needs measured control-message arrival timing through the real map
+and helper; a constant delay or a synthetic acknowledgment is insufficient.
+
 ```ts
 const clients = installHeadless(MAP).clients(entry, [0, 1], {
   files: (slot) => customMapData(dataFolder(slot)),

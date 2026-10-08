@@ -8,6 +8,43 @@ declare const os: { clock(): number };
 const runtime = installHeadless({ filePrefix: "pause86", globalPrefixes: [] });
 afterAll(runtime.restore);
 
+test("[native #86] a committed map pause keeps fighter animation frozen while callbacks and the local wall clock continue", () => {
+  // Classic helper-0 PAUSE_COMMIT/RESUME in ref-86-pause/native206/helper-0.log;
+  // trace-a.txt callbacks 205..356 continue while the simulation stays at 168.
+  const frameOneNs = 205729362458791;
+  const commitNs = 205732733883528;
+  const resumeNs = 205735272868774;
+  let fighter: unit;
+  let callbacks = 0;
+  let callbackClock = 0;
+  const clients = runtime.clients({ start: () => {
+    fighter = CreateUnit(Player(0), 0x48303030, 10, 20, 0);
+    TimerStart(CreateTimer(), 1 / 60, true, () => {
+      callbacks++;
+      callbackClock = os.clock();
+    });
+  }, install: () => {} }, [0]);
+  let now = 0;
+  const pictures: { timing: DrawTiming; scene: ReturnType<typeof captureScene> }[] = [];
+  const realtime = new RealtimeClients(clients, new Map(), () => now, undefined,
+    timing => pictures.push({ timing, scene: captureScene(clients.client(0)) }));
+  realtime.start();
+  now = (commitNs - frameOneNs) / 1e6;
+  realtime.advance();
+  const client = clients.client(0);
+  client.run(() => SetUnitTimeScale(fighter, 0));
+  const frozen = captureScene(client);
+  const pausedCallbacks = callbacks;
+  now = (resumeNs - frameOneNs) / 1e6;
+  realtime.advance();
+  expect(callbackClock).toBeCloseTo(5.910409983, 9);
+  expect(now - (commitNs - frameOneNs) / 1e6).toBeCloseTo(2538.985246, 6);
+  expect(callbacks).toBeGreaterThan(pausedCallbacks);
+  expect(pictures.at(-1)?.scene.units).toEqual(frozen.units);
+  expect(pictures.at(-1)?.timing.callbackFrame).toBe(callbacks);
+  expect(client.errors).toEqual([]);
+});
+
 test("[repro #86] the presentation clock includes a three-second pause while frozen animation and callback clocks hold", () => {
   let fighter: unit;
   let effect: effect;
