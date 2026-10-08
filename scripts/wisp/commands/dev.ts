@@ -10,8 +10,8 @@
 import { type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { availableParallelism } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { Console, Deferred, Effect, Fiber, Layer, Queue, Result, Semaphore } from "effect";
-import { type Command, type CommandFailure, UsageFailure, flagValues } from "../command";
+import { Console, Deferred, Effect, Fiber, Layer, Queue, Result, Schema, Semaphore } from "effect";
+import { type Command, type CommandFailure, UsageFailure, describeCause, flagValues } from "../command";
 import { Desyncs, formatDesync } from "../desyncs";
 import { FrameCosts, formatFrameCost } from "../frameCosts";
 import { type ProcessOutput, Standby, runProcess } from "../devProcesses";
@@ -183,6 +183,19 @@ function registryResult(modules: readonly TestUnit[], { exitCode, results, outpu
 const isJourneyOutcome = (value: unknown): value is JourneyOutcome =>
   typeof value === "object" && value !== null && ("stopped" in value || ("lines" in value && "problems" in value));
 
+/** The TypeScript checker that answers each save failed to start or to check. */
+export class TypeCheckFailure extends Schema.TaggedError<TypeCheckFailure>()("TypeCheckFailure", {
+  operation: Schema.String,
+  problem: Schema.String,
+}) {
+  override get message(): string {
+    return `type checker: ${this.operation}: ${this.problem}`;
+  }
+}
+
+const typeChecking = <A>(operation: string, run: () => Promise<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TypeCheckFailure({ operation, problem: describeCause(cause) }) });
+
 /** The hot reload's part of the loop, when --data names clients. */
 interface HotSide {
   /** Hot-reloads the saved code; a request during a reload makes one more afterwards. */
@@ -210,7 +223,7 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
   const unitProcesses = cpus < CONCURRENT_CPUS ? Math.max(1, cpus - 2) : Math.floor(cpus / 2) - 1;
   const turns = cpus < CONCURRENT_CPUS ? Semaphore.makeUnsafe(Math.max(1, cpus - 1)) : undefined;
   const checker = yield* Effect.acquireRelease(
-    Effect.promise(() => TypeChecker.open(root, project.typeCheck.projects)),
+    typeChecking(`open ${project.typeCheck.projects.join(", ")}`, () => TypeChecker.open(root, project.typeCheck.projects)),
     (opened) => Effect.promise(() => opened.close()),
   );
   const registry = yield* Standby.make([...behind, process.execPath, REGISTRY_RUN], root, Math.min(REGISTRY_STANDBY, unitProcesses), project.tests.env);
@@ -221,11 +234,13 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
   const journeys = project.journey === undefined ? undefined : yield* Standby.make([process.execPath, JOURNEY_RUN], root, 1);
 
   const types = (changed: readonly string[], savedAt: number) => Effect.gen(function*() {
-    const result = yield* Effect.promise(() => checker.check(changed));
+    const checked = yield* typeChecking("check the saved files", () => checker.check(changed)).pipe(Effect.result);
+    if (Result.isFailure(checked)) return yield* Console.log(`${seconds(savedAt)}types: ${checked.failure.message}`);
+    const result = checked.success;
     if (result.files.length === 0) return;
-    const checked = result.files.map(local).join(", ");
-    if (result.errors.length === 0) return yield* Console.log(`${seconds(savedAt)}types: no errors in ${checked}`);
-    yield* Console.log(`${seconds(savedAt)}types: ${plural(result.errors.length, "error")} in ${checked}\n${result.errors.map((error) => indent(formatTypeError(root, error))).join("\n")}`);
+    const names = result.files.map(local).join(", ");
+    if (result.errors.length === 0) return yield* Console.log(`${seconds(savedAt)}types: no errors in ${names}`);
+    yield* Console.log(`${seconds(savedAt)}types: ${plural(result.errors.length, "error")} in ${names}\n${result.errors.map((error) => indent(formatTypeError(root, error))).join("\n")}`);
   });
 
   const wholeCheck = (savedAt: number) => Effect.gen(function*() {
@@ -326,7 +341,8 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
     const saved = changes === undefined ? [] : [...changes.changed, ...changes.created, ...changes.deleted];
     const projectFiles = saved.filter((path) => files.isProjectFile(path));
     if (changes !== undefined && (projectFiles.length > 0 || changes.created.length > 0 || changes.deleted.length > 0)) {
-      yield* Effect.promise(() => checker.reopen());
+      // A checker that can't reopen keeps answering from the old program; the next project change tries again.
+      yield* typeChecking("reopen the projects", () => checker.reopen()).pipe(Effect.catch((failure) => Console.log(failure.message)));
     }
     const selection: Selection = changes === undefined
       ? { units: plan.all(), full: "the first run" }
