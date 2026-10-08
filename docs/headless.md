@@ -224,11 +224,24 @@ numbers; the recordings do not identify the exact callback of each picture.
 The existing real-helper headless run at
 `~/.local/state/smashcraft/wisp-pause86-current-helper/` matches PAUSE/RESUME
 168/168 and the first resumed fighter pose on both clients, but its measured
-Start-to-commit delay is 403.881069/405.436109 ms. The #86 timing-calibration
-box stays open: the current network model is from another session, and the
-native capture's 585–588 ms is not a universal pause delay. A capture-specific
-check needs measured control-message arrival timing through the real map
-and helper; a constant delay or a synthetic acknowledgment is insufficient.
+Start-to-commit delay is 403.881069/405.436109 ms with `syncDelivery()`. The
+gap is in the control messages' delivery, not in the map or helper: natively
+the Start's pause request took 109 ms to leave client A (typed text reaching
+the map) against 22 ms headless, client B read PREPARE 101 ms after client A,
+and the last PREPARE acknowledgment took 183–187 ms from client B's send to
+the PAUSE_COMMIT read against 107–108 ms headless. The capture's 585–588 ms is
+therefore not a universal pause delay.
+
+Smashcraft's `pad SCRIPT --headless --replay-arrivals NATIVE_DIR` replays the
+capture's measured arrivals, from each Start press, through the real map and
+helpers ([Replayed arrivals](network-model.md#replayed-arrivals)): the pause
+request at the first PREPARE read (+219.214 ms), both PREPARE acknowledgments
+at the first PAUSE_COMMIT read (+584.671 ms) and the resume request at the
+first RESUME read (+123.681 ms). Its run of Smashcraft's
+`test/native/pads/206/pause-dash.pad` with the reference's helper commits
+the pause 600.912/603.108 ms after Start (native 584.671/588.481, within one
+frame on both clients) and resumes 128.746 ms after the second Start (native
+123.681/124.726), PAUSE/RESUME 168/168, under a load average of about 24.
 
 ```ts
 const clients = installHeadless(MAP).clients(entry, [0, 1], {

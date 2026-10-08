@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { MEASURED_BATTLE_NET, syncAgeMs, syncDelivery } from "../src/headless/syncChannel";
+import { MEASURED_BATTLE_NET, replayedDelivery, syncAgeMs, syncDelivery } from "../src/headless/syncChannel";
 
 /** Own-echo ages the model gives a message sent on any frame: the frame cycle repeats every 3 frames (2 turns). */
 function modelAges(samples: number): number[] {
@@ -41,4 +41,16 @@ test("[invariant] delivery is seeded, later than the send, and keeps each sender
   }
   // 80 ms plus at least part of a turn: no message arrives within 5 frames.
   expect(Math.min(...first.flat().map((arrival, index) => arrival - ((index % 600) + 1)))).toBeGreaterThanOrEqual(5);
+});
+
+test("[invariant] a replayed arrival lands at its measured time, once, and other messages keep the model", () => {
+  let now = 1000;
+  const arrivals = [{ accepts: (message: { prefix: string }) => message.prefix === "JP", atMs: 1100 }];
+  const delivery = replayedDelivery(() => arrivals, { arrivalFrame: (_sender, frame) => frame + 2 }, () => now);
+  expect(delivery.arrivalFrame(0, 60, { sender: 0, prefix: "JP", data: "" })).toBe(66);
+  expect(delivery.arrivalFrame(0, 61, { sender: 0, prefix: "JP", data: "" })).toBe(66);
+  now = 1200;
+  expect(delivery.arrivalFrame(1, 70, { sender: 1, prefix: "JC", data: "" })).toBe(72);
+  const late = replayedDelivery(() => arrivals, { arrivalFrame: (_sender, frame) => frame + 2 }, () => now);
+  expect(late.arrivalFrame(0, 72, { sender: 0, prefix: "JP", data: "" })).toBe(73);
 });

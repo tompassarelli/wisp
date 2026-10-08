@@ -162,6 +162,11 @@ export class RealtimeClients {
     return this.origin + (this.ran + 1) * frameMillis - this.now();
   }
 
+  /** When the frame now running was due, on the `now` clock: a frame run late still sends at its own time (replayedDelivery). */
+  frameDueMs(): number {
+    return this.origin + ((this.ran + 1) * 1000) / FRAMES_PER_SECOND;
+  }
+
   hold(slot: number): void {
     this.clients.client(slot);
     this.held.add(slot);

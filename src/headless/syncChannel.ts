@@ -74,3 +74,37 @@ export function syncDelivery(latency: SyncLatency = MEASURED_BATTLE_NET, seed = 
     },
   };
 }
+
+/** A message whose arrival a native capture measured: the first unused one `accepts` takes arrives at `atMs` on the delivery's clock. */
+export interface ReplayedArrival {
+  readonly accepts: (this: void, message: SyncMessage) => boolean;
+  readonly atMs: number;
+}
+
+/**
+ * Delivery that replays a capture's measured arrivals and leaves every other
+ * message to `fallback`: a replayed message reaches every client at the
+ * first frame due at or after `atMs`, where `nowMs` gives when the sending
+ * frame was due on the same clock (RealtimeClients.frameDueMs), so frames run
+ * late under load still land on the measured time. `arrivals` is read at each send, so a run can add
+ * arrivals anchored to events it sees, such as when its Start press went in.
+ * Each sender's messages still arrive in the order it sent them.
+ */
+export function replayedDelivery(arrivals: (this: void) => readonly ReplayedArrival[], fallback: SyncDelivery, nowMs: (this: void) => number): SyncDelivery {
+  const used = new Set<ReplayedArrival>();
+  const last = new Map<number, number>();
+  return {
+    arrivalFrame: (sender, frame, message) => {
+      const replayed = arrivals().find((arrival) => !used.has(arrival) && arrival.accepts(message));
+      let arrival: number;
+      if (replayed === undefined) arrival = fallback.arrivalFrame(sender, frame, message);
+      else {
+        used.add(replayed);
+        arrival = frame + Math.ceil((replayed.atMs - nowMs()) / CALLBACK_MS - f32(1e-9));
+      }
+      arrival = Math.max(frame + 1, last.get(sender) ?? 0, arrival);
+      last.set(sender, arrival);
+      return arrival;
+    },
+  };
+}
