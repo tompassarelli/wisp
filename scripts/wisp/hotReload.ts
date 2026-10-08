@@ -11,7 +11,7 @@
 // its first version is read in full. The hot folder and its host marker exist
 // before the first publish: see prepareHotFolders.
 import { join } from "node:path";
-import { Clock, Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Schedule, Schema } from "effect";
 import { type Manifest, NO_BASE, ackFile, formatManifest, hotFolder, manifestFile, payloadKey } from "../../src/runtime/gameFiles";
 import { ModulePublisher, type ModuleSet, type VersionFiles, moduleChunk } from "../../src/runtime/modules";
 import type { BundledModule, BundledModules } from "../luaBundle";
@@ -104,12 +104,11 @@ export class HotReload extends Context.Service<HotReload, {
       }));
     });
 
-    /** Waits until every client acknowledges `current` or a later version. */
-    const acknowledgements = (current: number) => Effect.gen(function*() {
-      const deadline = (yield* Clock.currentTimeMillis) + ACK_TIMEOUT_MS;
+    /** Waits until every client acknowledges `current` or a later version, reading their files every 5 ms. */
+    const acknowledgements = (current: number) => {
       const pending = new Set(directories);
       const problems = new Map<string, MalformedGameFile>();
-      while (true) {
+      const look = Effect.gen(function*() {
         for (const directory of [...pending]) {
           for (const slot of FILE_SLOT_NUMBERS) {
             // A file the game is still writing can read as malformed; it is read again on the next poll.
@@ -126,13 +125,17 @@ export class HotReload extends Context.Service<HotReload, {
             }
           }
         }
-        if (pending.size === 0) return;
-        if ((yield* Clock.currentTimeMillis) >= deadline) {
-          return yield* new NotAcknowledged({ version: current, directories: [...pending], problems: [...problems.values()].map((problem) => problem.message) });
-        }
-        yield* Effect.sleep("5 millis");
-      }
-    });
+        return pending.size === 0;
+      });
+      return look.pipe(
+        Effect.repeat({ schedule: Schedule.spaced("5 millis"), until: (done) => done }),
+        Effect.timeoutOrElse({
+          duration: ACK_TIMEOUT_MS,
+          orElse: () => Effect.fail(new NotAcknowledged({ version: current, directories: [...pending], problems: [...problems.values()].map((problem) => problem.message) })),
+        }),
+        Effect.asVoid,
+      );
+    };
 
     const publish = Effect.gen(function*() {
       const compiled = yield* build.compile;
