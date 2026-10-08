@@ -187,8 +187,9 @@ Models, textures, camera and UI use the same renderer as headless captures.
 The asset reader supplies private map imports and installed Warcraft assets.
 Live frames copy only visible effects and UI, including each frame's parent visibility;
 requested captures retain the full scene snapshot.
-The window loads the session's known models and textures before its first input
-step. Model initialization leaves animation clocks and particles unchanged;
+The window loads the visible scene's models and textures before its first input
+step. Hidden pooled effects and UI load when shown, so an unused stage's assets
+cannot block startup. Model initialization leaves animation clocks and particles unchanged;
 `render.preloadModels` lists any additional models the map creates later.
 `standalone.json` records startup time and the prepared asset counts separately
 from the match's frame timing.

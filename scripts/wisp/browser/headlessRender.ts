@@ -544,11 +544,13 @@ window.prepareRenderer = (width, height, mode = "classic") => {
   return debug === null ? String(gl.getParameter(gl.RENDERER)) : String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL));
 };
 window.prepareScene = async (scene, extraModels = [], progress) => {
-  const frames = scene.ui.filter(frame => frame.texture !== "");
-  const total = scene.effects.length + extraModels.length + frames.length;
+  const view = camera(scene, canvas.width / canvas.height);
+  const poses = drawnPoses(scene.effects, view.eye, view.far, scene.world);
+  const frames = scene.ui.filter(frame => frame.visible && frame.alpha > 0 && frame.texture !== "");
+  const total = poses.length + extraModels.length + frames.length;
   let completed = 0;
   const advanced = () => progress?.(++completed, total);
-  for (const pose of scene.effects) { await prepareInstance(pose); advanced(); }
+  for (const pose of poses) { await prepareInstance(pose); advanced(); }
   for (const path of extraModels) { preparedModels.set(path, await createInstance(path)); advanced(); }
   for (const frame of frames) { await uiTexture(frame.texture, frame.color); advanced(); }
   return { models: models.size, instances: instances.size + preparedModels.size, textures: textures.size };
