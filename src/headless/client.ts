@@ -1213,9 +1213,10 @@ export class HeadlessClient {
           pose.roll = 0;
         }
       },
-      BlzGetLocalSpecialEffectX: (effect: Handle) => this.liveEffect(effect)?.x ?? 0,
-      BlzGetLocalSpecialEffectY: (effect: Handle) => this.liveEffect(effect)?.y ?? 0,
-      BlzGetLocalSpecialEffectZ: (effect: Handle) => this.liveEffect(effect)?.z ?? 0,
+      // A destroyed effect still playing Death reads where it stands (3.0.1 capture, wisp#59).
+      BlzGetLocalSpecialEffectX: (effect: Handle) => this.effects.get(effect)?.x ?? 0,
+      BlzGetLocalSpecialEffectY: (effect: Handle) => this.effects.get(effect)?.y ?? 0,
+      BlzGetLocalSpecialEffectZ: (effect: Handle) => this.effects.get(effect)?.z ?? 0,
       I2S: (n: number) => describeNumber(n),
       R2S: (n: number) => n.toFixed(3),
       R2I: (n: number) => (n < 0 ? Math.ceil(n) : Math.floor(n)),

@@ -17,7 +17,7 @@ export const EXPECTED = [
   "axis-setters-independent=-1024,4096,576",
   "scale-zero-parked=8192,4096,-537088",
   "scale-orientation-time-keep-position=1280,2560,3840",
-  "destroyed-frozen-reads=0,0,0",
+  "destroyed-frozen-reads=-25600,0,0",
   "held-after-quarter-second=96,6144,12288,96,6144,12288",
 ];
 
@@ -28,7 +28,7 @@ const DEATH_TIMELINE = [0, 60, 118, 122, 600].flatMap(frame => {
 });
 
 test("seven effect cases agree in two clients", () => {
-  const clients = runtime.clients({ install, start });
+  const clients = runtime.clients({ install, start }, [0, 1], { effectDeaths: EFFECT_DEATHS });
   const result = runJourney(clients, { frames: 30, events: [] });
   expect(result.divergence).toBeUndefined();
   expect(result.clients.map(client => client.errors)).toEqual([[], []]);
@@ -79,14 +79,14 @@ test("a destroyed effect plays its Death sequence, then is gone; without one it 
   expect(deathTimeline(runtime.clients({ install, start }))[0]).toBe("p0 drawn@0=0 stand,0 stand");
 });
 
-test("the map can't reach an effect playing Death", () => {
+test("the map can't change an effect playing Death, but reads where it stands", () => {
   const clients = runtime.clients({ install, start: () => {
     const e = AddSpecialEffect(DYING, 10, 20);
     DestroyEffect(e);
     BlzSetSpecialEffectPosition(e, 1, 2, 3);
     BlzSetSpecialEffectTimeScale(e, 0);
     BlzPlaySpecialEffect(e, ANIM_TYPE_STAND);
-    expect([BlzGetLocalSpecialEffectX(e), BlzGetLocalSpecialEffectY(e), BlzGetLocalSpecialEffectZ(e)]).toEqual([0, 0, 0]);
+    expect([BlzGetLocalSpecialEffectX(e), BlzGetLocalSpecialEffectY(e), BlzGetLocalSpecialEffectZ(e)]).toEqual([10, 20, 0]);
     DestroyEffect(e);
     BlzRemoveEffect(e);
   } }, [0, 1], { effectDeaths: EFFECT_DEATHS });
