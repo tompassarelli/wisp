@@ -18,6 +18,7 @@ import { type DisplayChange, type DisplaySettings, displayChanges, preferencesPa
 import { sessionLines, war3LogPath } from "../warcraft/war3Log";
 import type { Client } from "./clients";
 import { type AutopsyOptions, withAutopsy } from "./engine/autopsy";
+import { pollFor } from "./hostProcess";
 import { PlayMachine, type PlayProblem } from "./play";
 import { type ClientView, ClientWatch, type StateKind, waitFor } from "./watch";
 
@@ -356,14 +357,7 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
     return { use, ...(errorDialog === undefined ? {} : { errorDialog }), ...(launcher === undefined ? {} : { launcher }), ...(view === undefined ? {} : { view }), ...(unknown === undefined ? {} : { unknown }), ...(changes === undefined ? {} : { displayChanges: changes }), held } satisfies Observation;
   });
 
-  const poll = <A>(seconds: number, check: Effect.Effect<A | undefined, DoctorStop>) => Effect.gen(function*() {
-    const deadline = (yield* Clock.currentTimeMillis) + seconds * 1000;
-    while (true) {
-      const value = yield* check;
-      if (value !== undefined || (yield* Clock.currentTimeMillis) >= deadline) return value;
-      yield* Effect.sleep(POLL);
-    }
-  });
+  const poll = <A>(seconds: number, check: Effect.Effect<A | undefined, DoctorStop>) => pollFor(seconds, POLL, check);
 
   /** Ends `pick`'s processes: SIGTERM, then SIGKILL after DOCTOR_TIMEOUTS.exit; stops doctor when they outlive that. */
   const end = (what: string, pick: (use: PrefixUse) => readonly ProcessInfo[]) => Effect.gen(function*() {
@@ -566,13 +560,7 @@ export const signOut = (target: DoctorTarget, print: (line: string) => void) => 
   const failed = (cause: PlayProblem) => new DoctorStop({ problem: `${name}: ${cause.problem}` });
   const server = yield* machine.serverDirectory(target.prefix).pipe(Effect.mapError(failed));
   const programs = machine.processes.pipe(Effect.map((processes) => prefixUse(processes, target.prefix, server).processes), Effect.mapError(failed));
-  const gone = (seconds: number) => Effect.gen(function*() {
-    for (let left = seconds; left > 0; left--) {
-      if ((yield* programs).length === 0) return true;
-      yield* Effect.sleep(POLL);
-    }
-    return (yield* programs).length === 0;
-  });
+  const gone = (seconds: number) => pollFor(seconds, POLL, programs.pipe(Effect.map((left) => (left.length === 0 ? true : undefined)))).pipe(Effect.map((done) => done === true));
   const running = yield* programs;
   if (running.length > 0) {
     print(`${name}: ending every program of the prefix (pids ${pids(running)})`);
