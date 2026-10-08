@@ -12,8 +12,12 @@ interface UnitAbilities {
   auraUI: boolean;
 }
 
+/** Crow Form and Storm Crow Form: adding either lets a ground unit's flying height change for good. */
+const FLY_HEIGHT_FORMS: readonly number[] = [0x416d7266, 0x41726176];
+
 export class Warcraft3Abilities {
   private readonly units = new Map<Handle, UnitAbilities>();
+  private readonly flyHeightUnlocked = new Set<Handle>();
   private readonly fields = new Map<Handle, Map<string, unknown>>();
   private readonly ids = new Map<Handle, number>();
 
@@ -26,7 +30,12 @@ export class Warcraft3Abilities {
     return state;
   }
 
+  canChangeFlyHeight(unit: Handle): boolean {
+    return this.flyHeightUnlocked.has(unit);
+  }
+
   removeUnit(unit: Handle): void {
+    this.flyHeightUnlocked.delete(unit);
     const state = this.units.get(unit);
     if (state === undefined) return;
     for (const ability of state.handles.values()) {
@@ -63,6 +72,7 @@ export class Warcraft3Abilities {
         state.levels.set(id, 1);
         this.fields.set(ability, new Map());
         this.ids.set(ability, id);
+        if (FLY_HEIGHT_FORMS.includes(id)) this.flyHeightUnlocked.add(unit);
         return true;
       },
       UnitRemoveAbility: (unit: Handle, id: number) => {
