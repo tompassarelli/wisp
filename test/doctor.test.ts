@@ -188,7 +188,7 @@ function world(scenario: Scenario) {
   const run = async () => {
     const lines: string[] = [];
     const account = scenario.signsIn === undefined ? {} : { account: { username: ["print", "username"], password: ["print", "password"] } };
-    const { failure } = await finish(doctor([{ ...(scenario.preferences === undefined ? target : { ...target, displaySettings: DISPLAY }), ...account }], (line) => lines.push(line)));
+    const { failure } = await finish(doctor([{ ...(scenario.preferences === undefined ? target : { ...target, settings: { Video: DISPLAY } }), ...account }], (line) => lines.push(line)));
     return { lines, failure, events };
   };
   const written = () => files.get(PREFERENCES);

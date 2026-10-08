@@ -6,6 +6,7 @@
 import { Effect, Layer } from "effect";
 import * as desktop from "../warcraft/desktop";
 import { type Command, type CommandFailure, UsageFailure } from "./command";
+import { type ClientProfile, clientSettings } from "./lan/pool";
 import { DoctorHands, DoctorStop, type DoctorTarget, doctor, signOut } from "./doctor";
 import { privateDoctorHands } from "./doctorHost";
 import { withAutopsy } from "./engine/autopsy";
@@ -24,6 +25,12 @@ export interface DoctorDeclaration {
 
 const DOCUMENTS = "/drive_c/users/steamuser/Documents/Warcraft III";
 
+/** A signed-in client's preference settings: its graphics profile (minimal when it names none), the entry's own display settings over its [Video]. */
+export const profileSettings = (entry: { readonly profile?: ClientProfile | undefined; readonly displaySettings?: Readonly<Record<string, string>> | undefined }) => {
+  const settings = clientSettings(entry.profile ?? "minimal");
+  return { ...settings, Video: { ...settings["Video"], ...entry.displaySettings } };
+};
+
 /** Doctor's targets for the named clients of the clients file, or all of them. */
 export const doctorTargets = (declaration: DoctorDeclaration, names: readonly string[] = []) => Effect.gen(function*() {
   const config = yield* desktop.readClientsFile(declaration.clientsFile).pipe(Effect.mapError((cause) => new DoctorStop({ problem: cause.message })));
@@ -40,7 +47,8 @@ export const doctorTargets = (declaration: DoctorDeclaration, names: readonly st
       prefix: entry.documents.slice(0, -DOCUMENTS.length),
       display: x11.DISPLAY,
       start,
-      ...(entry.displaySettings === undefined ? {} : { displaySettings: entry.displaySettings }),
+      // The pool writes its own clients' preferences at launch (lan/pool.ts).
+      ...(entry.offline === true ? {} : { settings: profileSettings(entry) }),
       ...(declaration.accounts?.[entry.name] === undefined ? {} : { account: declaration.accounts[entry.name] }),
     } satisfies DoctorTarget;
   }));

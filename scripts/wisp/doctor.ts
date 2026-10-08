@@ -14,7 +14,7 @@ import {
   type LauncherHealth, type PrefixUse, type ProcessInfo, hasSavedLogin, isErrorDialog, launchOutcome, launchRequested, launcherHealth, launcherLogDirectory, newestLauncherLog,
   prefixUse, shortcutUrl, withoutSavedLogin,
 } from "../warcraft/battleNet";
-import { type DisplayChange, type DisplaySettings, displayChanges, preferencesPath, withDisplaySettings } from "../warcraft/preferences";
+import { type DisplayChange, type PreferenceSettings, preferenceChanges, preferencesPath, withPreferences } from "../warcraft/preferences";
 import { sessionLines, war3LogPath } from "../warcraft/war3Log";
 import type { Client } from "./clients";
 import { clientUnit } from "./clientServices";
@@ -42,11 +42,13 @@ export interface DoctorTarget {
     /** Offline clients are started and recovered by their LAN pool owner. */
     | { readonly kind: "offline-pool" };
   /**
-   * The [Video] settings of War3Preferences.txt this client's display needs
-   * (windowmode, windowwidth, reswidth, ...). Doctor writes them back while
-   * Warcraft III is closed: a run on another display rewrites them on exit.
+   * The War3Preferences.txt settings this client needs, by section: its
+   * graphics profile's [Video], [Misc] and [Sound] (windowmode, reswidth, hd,
+   * sfx, ...) with the clients file's own display settings over them. Doctor
+   * writes them back while Warcraft III is closed: a run on another display
+   * rewrites them on exit, and settings apply only at launch.
    */
-  readonly displaySettings?: DisplaySettings;
+  readonly settings?: PreferenceSettings;
   /**
    * The Battle.net account doctor signs in with when the launcher shows its
    * sign-in form: commands that print the account's username and password on
@@ -339,9 +341,9 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
     const launcher = log === undefined ? undefined : launcherHealth((yield* machine.read(join(logs, log)).pipe(Effect.mapError(failed))) ?? "");
     // Warcraft III rewrites the file when it exits, so only a closed game's file is settled.
     let changes: readonly DisplayChange[] | undefined;
-    if (target.displaySettings !== undefined && use.game === undefined && errorDialog === undefined) {
+    if (target.settings !== undefined && use.game === undefined && errorDialog === undefined) {
       const text = yield* machine.read(preferences).pipe(Effect.mapError(failed));
-      if (text !== undefined) changes = displayChanges(text, target.displaySettings);
+      if (text !== undefined) changes = preferenceChanges(text, target.settings);
     }
     let view: ClientView | undefined;
     let unknown: string | undefined;
@@ -480,8 +482,8 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
         return yield* endGame;
       case "display settings changed": {
         const text = yield* machine.read(preferences).pipe(Effect.mapError(failed));
-        if (text === undefined || target.displaySettings === undefined) return;
-        yield* machine.write(preferences, withDisplaySettings(text, target.displaySettings)).pipe(Effect.mapError(failed));
+        if (text === undefined || target.settings === undefined) return;
+        yield* machine.write(preferences, withPreferences(text, target.settings)).pipe(Effect.mapError(failed));
         return;
       }
       case "stale lobby":

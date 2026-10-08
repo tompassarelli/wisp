@@ -58,12 +58,14 @@ const LOWEST: Readonly<Record<string, number>> = {
  * window big enough to judge what players see, Reforged models. All run at
  * 60 frames a second, focused or not (wisp:docs/lan.md, "Profiles").
  */
+const PARITY: Profile = { name: "parity", width: 800, height: 600, maxFps: 60, video: LOWEST, graphicsMode: "classic", sound: false, music: false };
+const VISUAL: Profile = { name: "visual", width: 1280, height: 720, maxFps: 60, video: { ...LOWEST, lightingquality: 2, texquality: 1 }, graphicsMode: "reforged", sound: true, music: true };
 export const PROFILES: Readonly<Record<string, Profile>> = {
-  parity: { name: "parity", width: 800, height: 600, maxFps: 60, video: LOWEST, graphicsMode: "classic", sound: false, music: false },
+  parity: PARITY,
   checks: { name: "checks", width: 800, height: 600, maxFps: 60, video: LOWEST, graphicsMode: "classic", sound: true, music: false },
   /** parity at 144 frames a second, focused or not, to compare the game's clocks against a 60 fps cap. */
   hfr: { name: "hfr", width: 800, height: 600, maxFps: 144, video: LOWEST, graphicsMode: "classic", sound: false, music: false },
-  visual: { name: "visual", width: 1280, height: 720, maxFps: 60, video: { ...LOWEST, lightingquality: 2, texquality: 1 }, graphicsMode: "reforged", sound: true, music: true },
+  visual: VISUAL,
 };
 
 /** Hold every graphics choice fixed while measuring a different frame cap. */
@@ -74,8 +76,8 @@ export function poolProfile(name: string, fps?: number): Profile {
   return fps === undefined ? profile : { ...profile, maxFps: fps };
 }
 
-/** War3Preferences.txt with the sections a profile sets: the game fills in the rest. */
-export function preferences(profile: Profile, windowX: number): string {
+/** War3Preferences sections a profile sets, by section and key: the game fills in the rest. */
+export function profileSections(profile: Profile, windowX: number): Record<string, Record<string, number>> {
   const video: Record<string, number> = {
     ...profile.video,
     adapter: 0,
@@ -96,13 +98,51 @@ export function preferences(profile: Profile, windowX: number): string {
     windowy: 0,
   };
   const sound = profile.sound ? 1 : 0;
-  const sections: Record<string, Record<string, number>> = {
+  return {
     Video: video,
     Misc: { hd: { classic: 0, reforged: 1, definitive: 2 }[profile.graphicsMode] },
     Sound: { ambient: sound, environmental: sound, movement: sound, music: profile.music ? 1 : 0, positional: sound, sfx: sound, unit: sound, nosoundwarn: 1 },
   };
-  return Object.entries(sections).map(([name, values]) => `[${name}]\n${Object.keys(values).sort().map((key) => `${key}=${values[key]}`).join("\n")}\n`).join("\n");
 }
+
+/** War3Preferences.txt with the sections a profile sets: the game fills in the rest. */
+export function preferences(profile: Profile, windowX: number): string {
+  return Object.entries(profileSections(profile, windowX)).map(([name, values]) => `[${name}]\n${Object.keys(values).sort().map((key) => `${key}=${values[key]}`).join("\n")}\n`).join("\n");
+}
+
+/**
+ * Signed-in clients' graphics, named by a clients file entry's `profile`
+ * (wisp:docs/doctor.md, "Graphics profiles"). `minimal`, the default, is the
+ * pool's parity settings for functional and gameplay checks; `visual` is for
+ * captures where looks matter; `player` is the owner's own Reforged settings
+ * (high lighting, everything else lowest, sound on) at 1920x1080, for every
+ * performance or frame-pacing measurement.
+ */
+export const CLIENT_PROFILES = {
+  minimal: { ...PARITY, name: "minimal" },
+  visual: VISUAL,
+  player: { name: "player", width: 1920, height: 1080, maxFps: 60, video: { ...LOWEST, lightingquality: 2 }, graphicsMode: "reforged", sound: true, music: true },
+} as const satisfies Readonly<Record<string, Profile>>;
+export type ClientProfile = keyof typeof CLIENT_PROFILES;
+export const CLIENT_PROFILE_NAMES = Object.keys(CLIENT_PROFILES) as readonly ClientProfile[];
+
+/** A clients file entry's graphics profile: its declared one, minimal when it names none, or the pool's own for an offline client. */
+export const profileOf = (client: { readonly profile?: ClientProfile | undefined; readonly offline?: boolean | undefined }) =>
+  client.offline === true ? "pool" : client.profile ?? "minimal";
+
+/** The line a session prints so its output records each client's graphics profile. */
+export const profilesLine = (clients: readonly { readonly name: string; readonly profile?: ClientProfile | undefined; readonly offline?: boolean | undefined }[]) =>
+  `graphics profiles: ${clients.map((client) => `${client.name}=${profileOf(client)}`).join(" ")}`;
+
+/** Why these clients can't take a performance or frame-pacing measurement, which runs only under `player`; undefined when every one runs it. */
+export const measurementRefusal = (clients: readonly { readonly name: string; readonly profile?: ClientProfile | undefined; readonly offline?: boolean | undefined }[]) => {
+  const others = clients.filter((client) => profileOf(client) !== "player");
+  return others.length === 0 ? undefined : `performance and frame-pacing measurements run under the player graphics profile, and ${others.map((client) => `${client.name} runs ${profileOf(client)}`).join(", ")}: set "profile": "player" in the clients file and restart the client`;
+};
+
+/** A signed-in client's War3Preferences settings for its profile, as the file spells them, by section. */
+export const clientSettings = (profile: ClientProfile): Record<string, Record<string, string>> =>
+  Object.fromEntries(Object.entries(profileSections(CLIENT_PROFILES[profile], 0)).map(([section, values]) => [section, Object.fromEntries(Object.entries(values).map(([key, value]) => [key, String(value)]))]));
 
 /** The private desktop one client needs: its window and a margin. */
 export const desktopSize = (profile: Profile) => `${profile.width + 40}x${profile.height + 40}`;

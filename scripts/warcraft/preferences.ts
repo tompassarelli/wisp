@@ -19,14 +19,17 @@ export const preferencesBackupPath = (documents: string) => join(documents, "War
 const SECTION = /^\s*\[([^\]]*)\]\s*$/;
 const ENTRY = /^([^=;/\s][^=]*)=(.*?)\r?$/;
 
-/** The [Video] section's entries, by key. */
-export function videoSettings(text: string): Record<string, string> {
+/** Settings by section, then key, as the file spells them: a client's [Video], [Misc] and [Sound] (pool.ts `clientSettings`). */
+export type PreferenceSettings = Readonly<Record<string, DisplaySettings>>;
+
+/** A section's entries, by key ([Video] by default). */
+export function videoSettings(text: string, sectionName = "Video"): Record<string, string> {
   const settings: Record<string, string> = {};
   let inVideo = false;
   for (const line of text.split("\n")) {
     const section = SECTION.exec(line.replace(/\r$/, ""));
     if (section !== null) {
-      inVideo = section[1] === "Video";
+      inVideo = section[1] === sectionName;
       continue;
     }
     const entry = inVideo ? ENTRY.exec(line) : null;
@@ -42,11 +45,20 @@ export interface DisplayChange {
   readonly actual?: string;
 }
 
-/** The expected settings the file's [Video] section doesn't hold. */
-export function displayChanges(text: string, expected: DisplaySettings): DisplayChange[] {
-  const actual = videoSettings(text);
-  return Object.entries(expected).flatMap(([key, value]) => (actual[key] === value ? [] : [{ key, expected: value, ...(actual[key] === undefined ? {} : { actual: actual[key] }) }]));
+/** The expected settings the file's [Video] section (or `sectionName`) doesn't hold; another section's keys read `Section.key`. */
+export function displayChanges(text: string, expected: DisplaySettings, sectionName = "Video"): DisplayChange[] {
+  const actual = videoSettings(text, sectionName);
+  const named = (key: string) => (sectionName === "Video" ? key : `${sectionName}.${key}`);
+  return Object.entries(expected).flatMap(([key, value]) => (actual[key] === value ? [] : [{ key: named(key), expected: value, ...(actual[key] === undefined ? {} : { actual: actual[key] }) }]));
 }
+
+/** The expected settings of every section that the file doesn't hold. */
+export const preferenceChanges = (text: string, expected: PreferenceSettings): DisplayChange[] =>
+  Object.entries(expected).flatMap(([section, settings]) => displayChanges(text, settings, section));
+
+/** The file with every section's expected settings written in; every other line is kept as it is. */
+export const withPreferences = (text: string, expected: PreferenceSettings): string =>
+  Object.entries(expected).reduce((written, [section, settings]) => withDisplaySettings(written, settings, section), text);
 
 /** The recommended settings the file's [Video] section has no entry for: a value already there, the owner's choice, is never replaced. */
 export function absentSettings(text: string, recommended: DisplaySettings): DisplaySettings {

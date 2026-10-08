@@ -86,7 +86,7 @@ names the clients file (default ~/.local/state/wisp/clients.json):
 }
 ```
 
-A client may add `displaySettings`, the `[Video]` keys of War3Preferences.txt its display needs, which `doctor` restores ([display-settings.md](display-settings.md)). Each `run` directory holds its desktop's `display`, `xauthority` and
+A client may add `profile` (`minimal`, the default, `visual` or `player`; [doctor.md](doctor.md#graphics-profiles)) and `displaySettings`, the `[Video]` keys of War3Preferences.txt its display needs over its profile's, which `doctor` writes ([display-settings.md](display-settings.md)). Each `run` directory holds its desktop's `display`, `xauthority` and
 `wayland-display` files. Each client also needs `menuReportPort` and the menu
 page installed ([driving-warcraft.md](driving-warcraft.md)). The first client hosts.
 

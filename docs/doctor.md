@@ -83,7 +83,7 @@ instead of looping.
 | Empty login shell | The menus report a login screen (`LOGIN_DOORS`, `LOGIN_OPTIONS`), or signing in, for 120 s (Warcraft III signed in within 14 s on 6 Oct). | End Warcraft III and launch it from the retained launcher: the observed recovery (warcraft-modding skill). |
 | Map without its imports | Warcraft III's log has `model creation failed - war3mapImported/...` lines: the map loaded while its ladder scan ran ([play.md](play.md), step 4). | End Warcraft III and launch it again. |
 | Stuck loading | On the loading screen for 120 s. | End Warcraft III and launch it again. |
-| Display settings changed | The client declares `displaySettings` and its closed game's War3Preferences.txt holds other `[Video]` values ([display-settings.md](display-settings.md)). | Write the declared values into the file, keeping its other lines. |
+| Display settings changed | A signed-in client's closed game's War3Preferences.txt holds other `[Video]`, `[Misc]` or `[Sound]` values than its graphics profile and declared `displaySettings` ([Graphics profiles](#graphics-profiles), [display-settings.md](display-settings.md)). | Write the expected values into the file, keeping its other lines. |
 | Stale lobby | In a lobby from an earlier run. | `LeaveGame` on the menus' socket, or the Back button without a menu page. |
 | Score screen | An earlier match's score screen. | Escape in its window, up to 3 presses 10 s apart, each only while the watch still shows the score screen (a key at the menus could reach Battle.net's channel); Warcraft III 3.0 ignores the menus' `ScoreScreenClose` there. Still there after the third: end Warcraft III, and the launcher starts it again at the menus. |
 | Closed | Neither Battle.net nor Warcraft III runs. | Start Battle.net the way the game declares, then launch the game. |
@@ -141,6 +141,26 @@ the prefix's `user.reg`, rewritten only while no Wine runtime runs there.
 Its next start shows the sign-in form, which the next doctor run fills: on
 7 Oct client B went from signed out to signed in that way. Use it to test a
 sign-in, or before handing a client's prefix to another account.
+
+## Graphics profiles
+
+Each signed-in client of the clients file runs one graphics profile, named by
+its entry's `profile` (wisp:scripts/wisp/lan/pool.ts `CLIENT_PROFILES`).
+Doctor writes the profile's War3Preferences `[Video]`, `[Misc]` and `[Sound]`
+while the game is closed, so `client start` and every session that runs doctor
+first launch the client with it; the entry's `displaySettings` override its
+`[Video]` keys. A running game keeps its settings until it restarts.
+
+| Profile | Settings | For |
+|---|---|---|
+| `minimal` (default) | The pool's `parity`: 800×600, every quality setting lowest, Classic models, sound off, 60 fps focused or not | Functional and gameplay checks |
+| `visual` | The pool's `visual`: 1280×720, Reforged, lighting high, textures medium, sound on, 60 fps | Captures where looks matter |
+| `player` | Tom's own settings, read from his prefix's War3Preferences.txt on 8 Oct: Reforged, lighting high, every other quality setting lowest, sound and music on; 1920×1080 (the desktop) at 60 fps focused or not | Every performance or frame-pacing measurement |
+
+`player` starts from the owner's file rather than the game's default preset:
+it is what a player of this machine actually runs. Performance and
+frame-pacing runners refuse any other profile with one line
+(`measurementRefusal`) and print each client's profile (`profilesLine`).
 
 ## Clients as services
 
