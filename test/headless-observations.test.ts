@@ -31,7 +31,8 @@ test("unit snapshots capture fighters' transforms, animation clocks, hiding and 
   clients.frames(30);
   const client = clients.client(0);
   const first = client.unitPoses()[0];
-  expect(first).toMatchObject({ typeId: 0x48303030, owner: 2, x: 30, y: 40, z: 300, facing: 90, scale: [2, 3, 4],
+  // Facing reads as 3.0.1 keeps it: 90 and 270 come back one ulp below (test/headless-unit-motion.test.ts).
+  expect(first).toMatchObject({ typeId: 0x48303030, owner: 2, x: 30, y: 40, z: 300, facing: 89.99999237060547, scale: [2, 3, 4],
     alpha: 140, color: [128, 64, 32], teamColor: 1, animation: 7, timeScale: 2, visible: true });
   expect(first?.animationElapsed).toBeCloseTo(1);
   client.run(() => {
@@ -41,7 +42,7 @@ test("unit snapshots capture fighters' transforms, animation clocks, hiding and 
     ShowUnit(fighter, false);
   });
   clients.frames(10);
-  expect(client.unitPoses()[0]).toMatchObject({ animation: "Spell Two", animationElapsed: 0, facing: 270, visible: false });
+  expect(client.unitPoses()[0]).toMatchObject({ animation: "Spell Two", animationElapsed: 0, facing: 269.9999694824219, visible: false });
   client.run(() => {
     ShowUnit(fighter, true);
     SetUnitTimeScale(fighter, 1);

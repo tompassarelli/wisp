@@ -535,6 +535,17 @@ export function multiplyFloat32(a: number, b: number): number {
   return limbFusedMultiplyAdd(a, b, 0.0);
 }
 
+/** a * b rounded toward zero, as Warcraft's raw * rounds (wisp:docs/headless.md#raw-float-rounding); a result outside the normal range rounds to nearest. */
+export function multiplyFloat32TowardZero(a: number, b: number): number {
+  if (a === 0 || b === 0) return a * b + 0.0;
+  if (a < INFINITY && a > -INFINITY && b < INFINITY && b > -INFINITY) {
+    multiplySplit(a, b);
+    const result = normalResult(productHigh, productExponent + 24, a < 0 !== b < 0);
+    if (result !== undefined) return result;
+  }
+  return limbFusedMultiplyAdd(a, b, 0.0);
+}
+
 /**
  * a * b + c with one binary32 rounding. Inputs must be finite binary32 values;
  * the exact product may leave binary32 range before cancellation.
