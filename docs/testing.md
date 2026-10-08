@@ -78,3 +78,9 @@ A game uses the same runner from its own root, for example
 `"test": "bun node_modules/wisp/scripts/wisp/testRunner.ts"`, and marks its
 timing tests with `timingTest` from `wisp/scripts/wisp/timingTest`. Arguments
 pass through to `bun test`, so path filters also select timing files.
+
+A project whose own runner spreads the correctness tests over several
+processes sets `WISP_TEST_PHASE=correctness` and the hang-only
+`--timeout` (`TEST_TIMEOUT_MS`) on them, then runs
+`timingTests(timingTestFiles(root, filters), args, print)` from the same
+module for the timing phase, and reports with `INCONCLUSIVE_EXIT`.
