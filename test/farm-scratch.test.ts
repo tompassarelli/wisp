@@ -44,6 +44,7 @@ test.each([
     stub(bin, "gh", `
 const ref = (prefix) => args.find((arg) => arg.startsWith(prefix))?.slice(prefix.length);
 if (args[0] === "repo") { console.log("owner/repo"); process.exit(0); }
+if (args[0] === "run" && args[1] === "list") { console.log("[]"); process.exit(0); }
 if (args[0] === "api" && args[2] === "POST") {
   ${originGit(`"update-ref", ref("ref="), ref("sha=")`)};
   appendFileSync(${JSON.stringify(log)}, "create " + ref("ref=") + "\\n");
