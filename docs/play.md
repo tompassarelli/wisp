@@ -248,8 +248,9 @@ numbers). Scripted runs record a checksum after every step; ordinary live
 play skips that work. `recordChecksums` can explicitly enable or disable
 recording, including for scripted performance runs. Recorded runs write
 `checksums.jsonl`. The output contains `standalone.json` with
-frame timing (each frame's callback work, loop-start interval, request and draw
-duration, plus rAF timestamp/deadline and HTTP readiness), graphics adapter,
+frame timing (each frame's callback work, loop-start interval with its p50,
+p95 and p99, frames per second, request and draw duration, plus rAF
+timestamp/deadline and HTTP readiness), graphics adapter,
 audio event/ready/playback counts and missing
 sounds, and a scene JSON and PNG for each chosen frame. Without `frames`,
 the window stays open after the match so the game's own menus can continue.
