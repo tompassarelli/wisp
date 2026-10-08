@@ -377,3 +377,30 @@ test("[spec #22] a sign-in form without an account, or one that doesn't move, st
   expect(stuck.events).toEqual(["enter username"]);
   expect(stuck.failure?.split("\n")).toHaveLength(1);
 });
+
+test("[repro 8 Oct clone lanes] client doctor after client stop starts a new private desktop instead of failing on the old run folder's display", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { reviveDesktops } = await import("../scripts/wisp/clientServicesCommand");
+  const directory = mkdtempSync(join(tmpdir(), "doctor-desktop-"));
+  try {
+    const live = join(directory, "private-desktop.live");
+    mkdirSync(join(live, "runtime"), { recursive: true });
+    writeFileSync(join(live, "runtime/wayland-0"), "");
+    writeFileSync(join(live, "display"), ":7");
+    const fresh = join(directory, "private-desktop.fresh");
+    const clientsFile = join(directory, "clients.json");
+    const client = (name: string, run: string) => ({ name, run, documents: `/clones/${name}/pfx/drive_c/users/steamuser/Documents/Warcraft III` });
+    writeFileSync(clientsFile, JSON.stringify({ tools: { grim: "grim", xdotool: "xdotool", wlrctl: "wlrctl", tesseract: "tesseract" }, clients: [client("clone-a", join(directory, "private-desktop.stopped")), client("clone-b", live)] }));
+    const started: string[] = [];
+    await Effect.runPromise(reviveDesktops(clientsFile, [], (name) => Effect.sync(() => {
+      started.push(name);
+      return fresh;
+    })));
+    expect(started).toEqual(["clone-a"]);
+    const runs = (JSON.parse(readFileSync(clientsFile, "utf8")) as { clients: { name: string; run: string }[] }).clients.map(({ name, run }) => `${name} ${run}`);
+    expect(runs).toEqual([`clone-a ${fresh}`, `clone-b ${live}`]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

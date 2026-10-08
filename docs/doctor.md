@@ -187,6 +187,9 @@ wisp client stop [CLIENT...] --clients-file FILE
 - **status** prints, per client, its desktop and its Battle.net with the
   service that runs each (and since when), or the process each would end
   with when it isn't a service, and its game's state from `client watch`.
+- **doctor** first gives a named client whose desktop a `stop` ended a new
+  one, as start does, so it heals a stopped client instead of failing on the
+  old run folder's `display`.
 - **stop** stops each named client's Battle.net service, then its desktop
   service, whatever the services are called. A client some other process
   started is left running and named.

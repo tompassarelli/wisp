@@ -44,6 +44,32 @@ const statusLines = (clientsFile: string, names: readonly string[], watch: Watch
 
 export const serviceStatus = (clientsFile: string, names: readonly string[], watch: WatchOptions) => statusLines(clientsFile, names, watch);
 
+/** The private desktop service the launcher starts for `name`; returns its live run folder. */
+const desktopService = (name: string) => Effect.gen(function*() {
+  const capacity = yield* skillScript("machine-capacity", "scripts/machine-capacity.mjs");
+  const launcher = yield* skillScript("private-desktop-development", "scripts/private-desktop.sh");
+  return yield* startDesktop(name, desktopCommand(capacity, launcher, name));
+});
+
+/**
+ * Starts a new private desktop for each named signed-in client whose desktop
+ * isn't live (after `client stop`, its run folder is gone) and points the
+ * clients file at it, so the game's doctor declaration reads a live display.
+ */
+export const reviveDesktops = <E = never>(clientsFile: string, names: readonly string[], start: (name: string) => Effect.Effect<string, ServiceProblem | E> = desktopService) => Effect.gen(function*() {
+  const missing = (yield* chosenClients(clientsFile, names)).filter((entry) => !liveDesktop(entry.run));
+  for (const entry of missing) {
+    yield* Console.log(`${entry.name}: no live desktop at ${entry.run}; starting its private desktop as the service ${desktopUnit(entry.name)}`);
+    const runDir = yield* start(entry.name);
+    yield* writeRun(clientsFile, entry.name, runDir);
+    yield* Console.log(`${entry.name}: desktop ${runDir}`);
+  }
+});
+
+/** `client doctor`: a client stopped with `client stop` gets its desktop back first. */
+export const serviceDoctor = (clientsFile: string, names: readonly string[], doctor: Command) =>
+  reviveDesktops(clientsFile, names).pipe(Effect.andThen(doctor(names)));
+
 /**
  * Starts a desktop service for each named client whose desktop isn't live
  * and writes its run folder into the clients file; doctor then starts each
@@ -52,17 +78,7 @@ export const serviceStatus = (clientsFile: string, names: readonly string[], wat
  */
 export const serviceStart = (clientsFile: string, names: readonly string[], doctor: Command, watch: WatchOptions) => Effect.gen(function*() {
   const clients = yield* chosenClients(clientsFile, names);
-  const missing = clients.filter((entry) => !liveDesktop(entry.run));
-  if (missing.length > 0) {
-    const capacity = yield* skillScript("machine-capacity", "scripts/machine-capacity.mjs");
-    const launcher = yield* skillScript("private-desktop-development", "scripts/private-desktop.sh");
-    for (const entry of missing) {
-      yield* Console.log(`${entry.name}: starting its private desktop as the service ${desktopUnit(entry.name)}`);
-      const runDir = yield* startDesktop(entry.name, desktopCommand(capacity, launcher, entry.name));
-      yield* writeRun(clientsFile, entry.name, runDir);
-      yield* Console.log(`${entry.name}: desktop ${runDir}`);
-    }
-  }
+  yield* reviveDesktops(clientsFile, names);
   yield* doctor(clients.map(({ name }) => name));
   // Doctor leaves a game still opening the ladder maps ("running"); start returns once each reached its menu or is already further on.
   yield* Effect.forEach(clients, (entry) => {
