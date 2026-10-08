@@ -52,7 +52,8 @@ games straight from that modal. An earlier diagnosis blamed the prefix and a
   pressure at 20–55%, both games of pair 1 sat at 0% CPU with no window for
   10 minutes, their main thread waiting on a lock before `winex11.drv`
   loaded. With the desktops in a `native` scope (below), the same pair
-  reached the modal 75 s after launch.
+  loaded its menus about 75 s after launch and reached the modal at 3
+  minutes.
 
 ## Signed-in 3.0.1 clients cloned from Tom's install
 
