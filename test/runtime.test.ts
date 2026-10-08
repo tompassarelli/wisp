@@ -40,7 +40,7 @@ test("[reference] numeric, payload and record text contracts pass in emitted Lua
   expect(report(diagnostics)).toBe("");
   const towardZero = process.env.TOWARD_ZERO_LUA ?? await Effect.runPromise(lua32("toward-zero"));
   // Warcraft's Lua rounds toward zero; the binary32 contracts assume a Lua rounding to nearest, f32 and the record text neither.
-  for (const [lua, only, passed] of [[process.env.LUA ?? "lua", [], /(\d+) of \1 passed/], [towardZero, ["record text"], /4 of 4 passed/], [towardZero, ["f32"], /6 of 6 passed/]] as const) {
+  for (const [lua, only, passed] of [[process.env.LUA ?? "lua", [], /(\d+) of \1 passed/], [towardZero, ["record text"], /4 of 4 passed/], [towardZero, ["f32"], /7 of 7 passed/]] as const) {
     const run = Bun.spawnSync([lua, join(root, "build/lua-tests/tests.lua"), ...only], { cwd: root, stdout: "pipe", stderr: "pipe" });
     expect({ lua, code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ lua, code: 0, stderr: "" });
     expect(run.stdout.toString()).toMatch(passed);
