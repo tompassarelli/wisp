@@ -4,7 +4,7 @@
 //   poll --client a,b            log every agent born and freed in each client's presence table, with its class
 //   diff A.log B.log             align two poll logs by birth number
 //   watch --client a             hardware breakpoint on the birth counter; each birth's game stack, frames named
-//   locate --client a            find the presence table in a running client of any build; check or derive offsets.json's entry
+//   locate --client a            find the presence table and the map's Lua VM in a running client of any build; check or derive offsets.json's entry
 // For debugging your own map on your own development clients, never for
 // cheating or touching other players' games. Live commands attach only to
 // clients in the clients file, through wisp:scripts/wisp/engine/attach.ts:
@@ -24,8 +24,10 @@ import { pollPresence } from "../engine/poll";
 import { diffPresenceLogs, parsePresenceLog } from "../engine/presenceLog";
 import { alignBirths, headerStart, isActionLog, parseActionLog } from "../engine/actionLog";
 import { actions } from "../lan/actionsCommand";
-import { type LuaFrame, findLuaStates, findLuaThreads, frameText, globalFunctionNames, luaStack, mainLuaState } from "../engine/lua";
-import { PresenceTracker, presenceScanFailure, presenceTable, readHeader, scanForPresenceTable } from "../engine/presence";
+import { type LuaFrame, findLuaStates, findLuaThreads, frameText, globalFunctionNames, luaGlobals, luaStack, mainLuaState } from "../engine/lua";
+import { LOCATE_SPAN, locatePresence } from "../engine/locate";
+import { captureFixture, withLua } from "../engine/locatorFixture";
+import { PresenceTracker, presenceTable, readHeader } from "../engine/presence";
 import { stopWatch } from "../engine/stopWatch";
 import { type Frame, parsePerfData, sampleFrames } from "../engine/perfData";
 import { toTypeScript } from "../../sourceMaps";
@@ -161,6 +163,9 @@ const codeEnd = (exe: GameExecutable) => {
 
 const symbolizer = (client: AttachedClient, offsets: EngineOffsets) => ({ base: client.base, codeEnd: codeEnd(client.exe), functions: client.exe.functions, offsets, memory: client.memory });
 
+/** The executable's mapped range, where Warcraft's statically linked Lua keeps its version number. */
+const imageRange = (client: AttachedClient) => ({ start: client.base, end: client.base + client.exe.header.sizeOfImage });
+
 const stackText = (frames: readonly Frame[]) => frames.map(({ label }) => label).join(" < ");
 
 /**
@@ -169,7 +174,7 @@ const stackText = (frames: readonly Frame[]) => frames.map(({ label }) => label)
  * is stopped. Offline clients only, like every trap.
  */
 const watchLua = (client: AttachedClient, offsets: EngineOffsets, seconds: number, limit: number, out: string, sourceMaps: string | undefined) => Effect.gen(function*() {
-  const states = mainLuaState(client.memory, client.base, offsets.lua?.state) ?? findLuaStates(client.memory, client.maps);
+  const states = mainLuaState(client.memory, client.base, offsets.lua?.state) ?? findLuaStates(client.memory, client.maps, imageRange(client));
   const state = typeof states === "number" ? states : states[0];
   if (state === undefined) return yield* new EngineFailure({ problem: `${client.name}: no Lua VM found (is a map running?)` });
   if (Array.isArray(states) && states.length > 1) return yield* new EngineFailure({ problem: `${client.name}: ${states.length} Lua VMs found; can't tell the map's` });
@@ -294,37 +299,41 @@ const locate = (clientsFile: string): Command => (args) => Effect.gen(function*(
   const clients = yield* namedClients(clientsFile, args);
   if (clients.length !== 1) return yield* new UsageFailure({ problem: "locate takes one client" });
   const watchSeconds = yield* number(args, "trace", Number.NaN).pipe(Effect.orElseSucceed(() => Number.NaN));
+  const [out] = flagValues(args, "out");
   const [client] = yield* attachAll(clients, Number.isFinite(watchSeconds) ? "trap" : "read");
   if (client === undefined) return;
   yield* Effect.gen(function*() {
-    const known = parseOffsets(readFileSync(OFFSETS_FILE, "utf8"));
-    const existing = known.get(client.exe.version);
-    // A new build starts with the newest known layout; a map must initialize the table before it can match.
-    const layout = existing ?? [...known.values()].at(-1);
-    if (layout === undefined) return yield* new EngineFailure({ problem: `${OFFSETS_FILE} has no entry to take the table layout from` });
-    const data = client.exe.header.sections.find(({ name }) => name === ".data");
-    if (data === undefined) return yield* new EngineFailure({ problem: `${client.exe.path} has no .data section` });
-    const span = Math.min(data.virtualSize, yield* number(args, "span", 0x4000000));
-    yield* Console.log(`${client.name}: Warcraft III ${client.exe.version}, pid ${client.pid}, image 0x${client.base.toString(16)}; scanning 0x${span.toString(16)} bytes of .data for the presence table`);
-    const scan = scanForPresenceTable(client.memory, client.maps, client.base, data.rva, span, { ...layout, sizeOfImage: client.exe.header.sizeOfImage });
-    const { candidates } = scan;
-    if (candidates.length === 0) return yield* new EngineFailure({ problem: presenceScanFailure(scan) });
-    for (const candidate of candidates) {
+    const span = yield* number(args, "span", LOCATE_SPAN);
+    yield* Console.log(`${client.name}: Warcraft III ${client.exe.version}, pid ${client.pid}, image 0x${client.base.toString(16)}; scanning up to 0x${span.toString(16)} bytes of .data for the presence table`);
+    const location = locatePresence(client, parseOffsets(readFileSync(OFFSETS_FILE, "utf8")), span);
+    if (typeof location === "string") return yield* new EngineFailure({ problem: location });
+    for (const candidate of location.scan.candidates) {
       yield* Console.log(`  rva 0x${candidate.rva.toString(16)} -> table 0x${candidate.table.toString(16)}: entries ${candidate.header.count}, free head ${candidate.header.freeHead}, births ${candidate.header.births}; ${candidate.matching}/${candidate.sampled} sampled agents hold their own tag`);
     }
-    const tables = new Set(candidates.map(({ table }) => table));
-    if (tables.size > 1) return yield* new EngineFailure({ problem: `${tables.size} different tables match; check them by hand` });
-    const rva = candidates[0]?.rva ?? 0;
-    const roles = new Map(existing?.roles ?? []);
+    const fixture = out === undefined ? undefined : captureFixture(client, location);
+    // The map's Lua VM by signature: a read, like the scan, so it runs on any dev client.
+    const lua = findLuaStates(client.memory, client.maps, imageRange(client)).map((state) => ({ state, globals: luaGlobals(client.memory, state) }));
+    for (const { state, globals } of lua) {
+      const chunks = [...globals.chunks].sort((x, y) => y[1] - x[1]).map(([source, count]) => `${source}:${count}`).join(" ") || "none";
+      yield* Console.log(`  Lua VM 0x${state.toString(16)}: ${globals.natives} natives in _G; Lua functions by chunk ${chunks}`);
+    }
+    if (lua.length === 0) yield* Console.log("  no Lua VM found by signature (global state version 503 with its main thread)");
+    if (out !== undefined && fixture !== undefined) {
+      yield* attempt(`write ${out}`, () => writeFileSync(out, `${JSON.stringify(withLua(fixture, lua), null, 2)}\n`));
+      yield* Console.log(`  locator fixture -> ${out}`);
+    }
+    const { existing } = location;
+    if (location.offsets === undefined) return yield* new EngineFailure({ problem: location.problem ?? "no presence table" });
+    const roles = new Map(location.offsets.roles);
     if (Number.isFinite(watchSeconds)) {
       yield* perfAllowed;
       const perf = yield* perfProgram(args);
-      const table = candidates[0]?.table ?? 0;
-      const out = stateDirectory();
-      yield* attempt("create the output folder", () => mkdirSync(out, { recursive: true }));
-      const births = yield* recordWrites(perf, client.pid, table + layout.table.births, watchSeconds, join(out, "births.perf.data"));
+      const table = location.scan.candidates[0]?.table ?? 0;
+      const traceOut = stateDirectory();
+      yield* attempt("create the output folder", () => mkdirSync(traceOut, { recursive: true }));
+      const births = yield* recordWrites(perf, client.pid, table + location.layout.table.births, watchSeconds, join(traceOut, "births.perf.data"));
       const allocator = writer(births.samples, client, new Set());
-      const heads = yield* recordWrites(perf, client.pid, table + layout.table.freeHead, watchSeconds, join(out, "free-head.perf.data"));
+      const heads = yield* recordWrites(perf, client.pid, table + location.layout.table.freeHead, watchSeconds, join(traceOut, "free-head.perf.data"));
       const release = writer(heads.samples, client, new Set(allocator === undefined ? [] : [allocator]));
       yield* Console.log(`  births written by ${allocator === undefined ? "nothing seen" : `fn 0x${allocator.toString(16)}`} (${births.samples.length} writes); free head also by ${release === undefined ? "nothing seen" : `fn 0x${release.toString(16)}`} (${heads.samples.length} writes)`);
       if (existing === undefined) {
@@ -333,9 +342,9 @@ const locate = (clientsFile: string): Command => (args) => Effect.gen(function*(
         if (release !== undefined) roles.set(release, "tag release");
       }
     }
-    const derived: EngineOffsets = { ...layout, version: client.exe.version, sizeOfImage: client.exe.header.sizeOfImage, presenceTable: rva, roles };
+    const derived: EngineOffsets = { ...location.offsets, roles };
     if (existing !== undefined) {
-      const same = existing.presenceTable === rva && existing.sizeOfImage === client.exe.header.sizeOfImage;
+      const same = existing.presenceTable === derived.presenceTable && existing.sizeOfImage === derived.sizeOfImage;
       yield* Console.log(same ? `${basename(OFFSETS_FILE)}'s entry for ${client.exe.version} matches this client` : `${basename(OFFSETS_FILE)}'s entry for ${client.exe.version} differs; this client's:`);
       if (same) return;
     } else {
@@ -345,7 +354,7 @@ const locate = (clientsFile: string): Command => (args) => Effect.gen(function*(
   }).pipe(Effect.ensuring(Effect.sync(() => client.memory.close())));
 });
 
-const USAGE = "(for debugging your own map on your own development clients; never other players' games) desync A B [--turn N] | poll --client a,b [--seconds N] [--out DIR] | diff A.log B.log [--skew S] [--source-maps DIR] | diff ACTIONS.log POLL.log [--class REGEX] | actions --client a,b [--map MAP] [--follow] | trace --client a [--seconds N] [--out DIR] [--perf BIN] [--lua [--limit N] [--source-maps DIR]] | locate --client a [--trace SECONDS] | drive SCRIPT|status|pause|resume|step [N] --client a,b [--frames N] [--timeout S] [--out FILE]";
+const USAGE = "(for debugging your own map on your own development clients; never other players' games) desync A B [--turn N] | poll --client a,b [--seconds N] [--out DIR] | diff A.log B.log [--skew S] [--source-maps DIR] | diff ACTIONS.log POLL.log [--class REGEX] | actions --client a,b [--map MAP] [--follow] | trace --client a [--seconds N] [--out DIR] [--perf BIN] [--lua [--limit N] [--source-maps DIR]] | locate --client a [--trace SECONDS] [--span BYTES] [--out FILE] | drive SCRIPT|status|pause|resume|step [N] --client a,b [--frames N] [--timeout S] [--out FILE]";
 
 const drive = (clientsFile: string, prefix: string): Command => args => Effect.gen(function*() {
   const clients = yield* namedClients(clientsFile, args);

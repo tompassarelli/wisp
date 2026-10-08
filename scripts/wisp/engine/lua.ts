@@ -98,6 +98,45 @@ function currentLine(memory: Memory, proto: number, savedpc: number): number | u
   return memory.read(u64(memory, proto + p.lineinfo) + index * 4, 4).readInt32LE(0);
 }
 
+interface HashEntry {
+  readonly keyTag: number;
+  readonly key: number;
+  readonly valueTag: number;
+  readonly value: number;
+}
+
+/** A table's hash part: each node's key and value tags and payloads. */
+function hashEntries(memory: Memory, table: number): HashEntry[] {
+  const t = LUA_53_X64.table;
+  const log = memory.read(table + t.lsizenode, 1).readUInt8(0);
+  // Over a million nodes is not a table this reader needs; it would be 32+ MiB of reads.
+  if (log > 20) return [];
+  const size = 1 << log;
+  const nodes = memory.read(u64(memory, table + t.node), size * NODE);
+  const entries: HashEntry[] = [];
+  for (let index = 0; index < size; index++) {
+    const at = index * NODE;
+    entries.push({
+      valueTag: nodes.readUInt32LE(at + 8) & 0x7f,
+      value: Number(nodes.readBigUInt64LE(at)),
+      keyTag: nodes.readUInt32LE(at + TVALUE + 8) & 0x7f,
+      key: Number(nodes.readBigUInt64LE(at + TVALUE)),
+    });
+  }
+  return entries;
+}
+
+/** `state`'s _G table: the registry's array slot LUA_RIDX_GLOBALS, or undefined when it isn't a table. */
+function globalsTable(memory: Memory, state: number): number | undefined {
+  const global = u64(memory, state + LUA_53_X64.state.global);
+  const registry = readValue(memory, global + LUA_53_X64.global.registry);
+  if (registry.tag !== (LUA_TAG.table & 0x7f)) return undefined;
+  const globals = readValue(memory, u64(memory, registry.value + LUA_53_X64.table.array) + (RIDX_GLOBALS - 1) * TVALUE);
+  return globals.tag === (LUA_TAG.table & 0x7f) ? globals.value : undefined;
+}
+
+const isStringKey = (tag: number) => tag === LUA_TAG.shortString || tag === LUA_TAG.longString;
+
 /**
  * C functions in _G, keyed by what a call frame holds: a C closure's object
  * address (Warcraft's natives are C closures sharing one dispatcher, told
@@ -105,31 +144,53 @@ function currentLine(memory: Memory, proto: number, savedpc: number): number | u
  */
 export function globalFunctionNames(memory: Memory, state: number): Map<number, string> {
   const names = new Map<number, string>();
-  const global = u64(memory, state + LUA_53_X64.state.global);
-  const registry = readValue(memory, global + LUA_53_X64.global.registry);
-  if (registry.tag !== (LUA_TAG.table & 0x7f)) return names;
-  const t = LUA_53_X64.table;
-  const globals = readValue(memory, u64(memory, registry.value + t.array) + (RIDX_GLOBALS - 1) * TVALUE);
-  if (globals.tag !== (LUA_TAG.table & 0x7f)) return names;
-  const size = 1 << memory.read(globals.value + t.lsizenode, 1).readUInt8(0);
-  const nodes = memory.read(u64(memory, globals.value + t.node), size * NODE);
-  for (let index = 0; index < size; index++) {
-    const at = index * NODE;
-    const valueTag = nodes.readUInt32LE(at + 8) & 0x7f;
-    const keyTag = nodes.readUInt32LE(at + TVALUE + 8) & 0x7f;
-    if (keyTag !== LUA_TAG.shortString && keyTag !== LUA_TAG.longString) continue;
-    const value = Number(nodes.readBigUInt64LE(at));
-    let address: number | undefined;
-    if (valueTag === LUA_TAG.lightC) address = value;
-    else if (valueTag === LUA_TAG.cClosure) address = value;
-    if (address === undefined) continue;
+  const globals = globalsTable(memory, state);
+  if (globals === undefined) return names;
+  for (const { keyTag, key, valueTag, value } of hashEntries(memory, globals)) {
+    if (!isStringKey(keyTag) || (valueTag !== LUA_TAG.lightC && valueTag !== LUA_TAG.cClosure)) continue;
     try {
-      names.set(address, readString(memory, Number(nodes.readBigUInt64LE(at + TVALUE))));
+      names.set(value, readString(memory, key));
     } catch {
       // A key we can't read names nothing.
     }
   }
   return names;
+}
+
+export interface LuaGlobals {
+  /** C functions in _G: Warcraft's natives. */
+  readonly natives: number;
+  /** Lua functions in _G and in tables _G holds, counted by chunk name (`map-KEY` for a Wisp map's bundle). */
+  readonly chunks: ReadonlyMap<string, number>;
+}
+
+/** What a VM's globals hold: its natives, and where its Lua functions come from, which tells the map's VM from another. */
+export function luaGlobals(memory: Memory, state: number): LuaGlobals {
+  const globals = globalsTable(memory, state);
+  const chunks = new Map<string, number>();
+  let natives = 0;
+  if (globals === undefined) return { natives, chunks };
+  const count = (closure: number) => {
+    try {
+      const { source } = closureFunction(memory, closure);
+      chunks.set(source, (chunks.get(source) ?? 0) + 1);
+    } catch {
+      // An unreadable function counts toward nothing.
+    }
+  };
+  for (const { keyTag, valueTag, value } of hashEntries(memory, globals)) {
+    if (!isStringKey(keyTag)) continue;
+    if (valueTag === LUA_TAG.lightC || valueTag === LUA_TAG.cClosure) natives++;
+    else if (valueTag === LUA_TAG.luaClosure) count(value);
+    else if (valueTag === (LUA_TAG.table & 0x7f) && value !== globals) {
+      try {
+        for (const inner of hashEntries(memory, value)) if (inner.valueTag === LUA_TAG.luaClosure) count(inner.value);
+      } catch {
+        // A table we can't read adds nothing.
+      }
+    }
+  }
+  return { natives, chunks };
 }
 
 /** The stack of `state`, innermost call first, down to its base CallInfo. */
@@ -198,11 +259,37 @@ export function scriptFuncDefinition(memory: Memory, scriptFunc: number, chain: 
  * Every main lua_State in the process, found by signature: a global state's
  * `version` points to the float 503 (Lua 5.3, 32-bit numbers), and the main
  * thread before it is a thread whose global state is that one. Scans the
- * writable anonymous mappings, about 1-2 GiB in a few seconds.
+ * writable anonymous mappings (4.6 GiB on a 3.0.1 client). With `image`, the
+ * executable's range, it first takes only `version` pointers into the image,
+ * where Warcraft's statically linked Lua keeps that float, reading each such
+ * address once; the whole scan runs only when that finds nothing.
  */
-export function findLuaStates(memory: Memory, maps: readonly { start: number; end: number; permissions: string; path: string }[]): number[] {
+export function findLuaStates(memory: Memory, maps: readonly { start: number; end: number; permissions: string; path: string }[], image?: { readonly start: number; readonly end: number }): number[] {
+  if (image !== undefined) {
+    const found = scanLuaStates(memory, maps, image);
+    if (found.length > 0) return found;
+  }
+  return scanLuaStates(memory, maps, undefined);
+}
+
+function scanLuaStates(memory: Memory, maps: readonly { start: number; end: number; permissions: string; path: string }[], image: { readonly start: number; readonly end: number } | undefined): number[] {
   const g = LUA_53_X64.global;
   const found = new Set<number>();
+  const is503 = new Map<number, boolean>();
+  const floatIs503 = (address: number) => {
+    let known = is503.get(address);
+    if (known === undefined) {
+      try {
+        known = memory.read(address, 4).readFloatLE(0) === 503;
+      } catch {
+        known = false;
+      }
+      if (image !== undefined) is503.set(address, known);
+    }
+    return known;
+  };
+  const low = image?.start ?? 0x10000;
+  const high = image?.end ?? 0x800000000000;
   for (const mapping of maps) {
     if (!mapping.permissions.startsWith("rw") || mapping.path.includes("wine-mapping") || mapping.end - mapping.start > 0x40000000) continue;
     for (let at = mapping.start; at < mapping.end; at += 0x100000) {
@@ -212,11 +299,11 @@ export function findLuaStates(memory: Memory, maps: readonly { start: number; en
       } catch {
         continue;
       }
+      const words = new Uint32Array(chunk.buffer, chunk.byteOffset, chunk.length >> 2);
       for (let i = g.version - g.mainThread; i + 8 <= chunk.length; i += 8) {
-        const version = Number(chunk.readBigUInt64LE(i));
-        if (version < 0x10000 || version > 0x7fffffffffff) continue;
+        const version = (words[(i >> 2) + 1] ?? 0) * 0x100000000 + (words[i >> 2] ?? 0);
+        if (version < low || version >= high || !floatIs503(version)) continue;
         try {
-          if (memory.read(version, 4).readFloatLE(0) !== 503) continue;
           const global = at + i - g.version;
           const state = Number(chunk.readBigUInt64LE(i - (g.version - g.mainThread)));
           if (u64(memory, state + LUA_53_X64.state.global) === global && isLuaState(memory, state)) found.add(state);

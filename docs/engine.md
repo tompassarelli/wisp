@@ -87,7 +87,7 @@ A project composes the command with `makeEngine(clientsFile)`
 | `wisp engine actions --client lan0a,lan0b [--map MAP] [--follow]` | Prints what Warcraft's network layer delivered to an offline pool pair, turn by turn: each player's orders, BlzSendSyncData payloads with their prefixes, key and frame events, chat, joins, loads, leaves, and every desync by turn ([Actions](#actions)). |
 | `wisp engine trace --client a [--seconds N] [--depth N] [--out DIR]` | Sets a hardware write breakpoint on the birth counter and records the game's stack for every birth. Frames are named by known role. It writes `DIR/<client>.stacks.txt` and prints the most common stacks. Offline clients only. |
 | `wisp engine trace --client a --lua [--seconds N] [--limit N] [--source-maps DIR]` | Stops the game's main thread at every birth with a ptrace debug-register watchpoint, reads the Lua VM's exact call stack while the thread is stopped, then lets it go. It writes `DIR/<client>.lua-stacks.txt` with one line per birth, in the form `birth N CLASS owner CLASS: TimerStart <- FILE.ts:LINE <- FILE.ts:LINE`. Offline clients only. It finds the map's Lua VM by signature; no offsets are needed. |
-| `wisp engine locate --client a [--trace SECONDS] [--span BYTES]` | Finds the presence table in a running client of any build and checks the offsets file's entry for it, or prints a new entry. With `--trace`, it also names the tag allocator and release from their writes (offline only). |
+| `wisp engine locate --client a [--trace SECONDS] [--span BYTES] [--out FILE]` | Finds the presence table in a running client of any build and checks the offsets file's entry for it, or prints a new entry. It also finds each Lua VM by signature and prints its natives and the chunks its global functions come from; a Wisp map's VM shows `map-KEY`. `--out` writes the build's [locator fixture](#a-new-warcraft-build). With `--trace`, it also names the tag allocator and release from their writes (offline only). |
 
 Logs go under `$XDG_STATE_HOME/wisp/engine/<UTC time>/` unless you pass `--out`.
 Session runners use the same modules: `startPresencePoll` and `pollPresence`
@@ -257,6 +257,10 @@ are unchanged. wisp:scripts/wisp/engine/lua.ts reads:
 
 The map's VM is found by signature, which survives updates: a global state's
 `version` points to the float 503, and its main thread points back to it.
+Warcraft links Lua into its executable, so that float lies in the image: the
+scan tries only pointers into the image first, and the whole heap only when
+that finds nothing. On a 3.0.1 client in a match, `locate` took 43 s; a
+locate that scanned the whole 4.6 GiB heap and found no VM took 184 s.
 Map callbacks run in coroutines of that VM, not in its main state, so
 `watch --lua` reads the thread whose innermost frame is a native call.
 
@@ -284,17 +288,27 @@ with a function ID at +0x38.
 ## A new Warcraft build
 
 Offsets live in one data file, wisp:scripts/wisp/engine/offsets.json, keyed by
-the executable's file version (for example `3.0.0.24268`). A build with no
-entry makes live commands stop with that message. To add one:
+the executable's file version (for example `3.0.0.24268`). Until a build has
+an entry, `poll` (and the desync autopsy) locates the table by scan when it
+attaches, using the newest known layout, and notes the RVA it used; it
+retries every 10 s until a map has started. To add an entry:
 
 1. Start a map on a client of the new build, then run
-   `wisp engine locate --client a`. It scans the first 64 MiB of `.data` for a
-   pointer to a table in the known layout whose sampled live agents hold their
-   own tag, then prints the entry. Add `--trace 3` on an offline client to also
-   name the tag allocator and release from the writes to the birth counter and
-   free head.
-2. Copy the entry into offsets.json. Copy any `roles` that are still valid
-   only after checking them with `watch` stacks.
+   `wisp engine locate --client a --out FILE`. It scans the first 64 MiB of
+   `.data` for a pointer to a table in the known layout whose sampled live
+   agents hold their own tag, then prints the entry and the Lua VMs it found.
+   These are reads, so a signed-in client is fine. Add `--trace 3` on an
+   offline client to also name the tag allocator and release from the writes
+   to the birth counter and free head.
+2. Copy the entry into offsets.json and FILE to
+   wisp:test/fixtures/engine/builds/VERSION.json. The fixture holds the scan's
+   signature checks (the table found, each check's rejection count, each Lua
+   VM's chunks) and the bytes those checks read. wisp:test/engine.test.ts
+   requires one for every build after 3.0.0.24268 and replays it against the
+   entry, so a changed layout or check names the signature it breaks. After
+   the next update, compare its failed checks with the last fixture's
+   `rejected` counts. Copy any `roles` that are still valid only after
+   checking them with `watch` stacks.
 3. If `locate` finds nothing, read its failed signature checks: table header,
    entry count, birth counter, free-list head, entries, live agents, or agent
    tags and births. An empty scan before the map initializes does not mean
@@ -310,3 +324,17 @@ entry makes live commands stop with that message. To add one:
    - Confirm the layout with a `poll` against `Desync.txt`'s values.
    Keep decrypted dumps and decompiler output in private storage outside
    every repository.
+
+**3.0.1.24342.** The layout is unchanged. On 8 October 2026 a passive
+`locate` on signed-in client B, during a Smashcraft match, found the table
+pointer at RVA `0x2fe9b68` (a second copy at `0x2fe9be8` holds the same
+pointer), with 256 of 256 sampled agents holding their own tags. Its fixture
+is wisp:test/fixtures/engine/builds/3.0.1.24342.json. The Lua VM reader found
+the map's VM with the 3.0.0 Lua offsets: 2,928 functions from chunk `map-KEY`,
+5 from `war3map.lua` and 4 from `luahelper.lua`. Its `_G` held only 18 C
+functions (3.0.0: about 1,800), so `trace --lua` may name fewer natives on
+3.0.1. On disk, `.text` is still encrypted (8.0 bits per byte), so the code
+that loads the pointer can't be read offline. `.rdata` and the initialized
+part of `.data` are plain. SizeOfImage grew from `0xe155000` to `0xe1be000`,
+and `.data` moved from RVA `0x2e8d000` to `0x2ef6000`. Its zero-filled part,
+which holds the pointer, is `0xaee2060` bytes in both builds.

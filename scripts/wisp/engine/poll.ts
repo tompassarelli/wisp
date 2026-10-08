@@ -2,11 +2,12 @@
 // session runner: it follows each named client's table read-only, appends
 // born and freed agents to OUT/<client>.log (wisp:scripts/wisp/engine/presenceLog.ts),
 // reattaches when a client restarts, and stops on request.
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { type AttachedClient, type EngineClient, attachClient } from "./attach";
-import { offsetsFor } from "./offsets";
+import { locatePresence } from "./locate";
+import { type EngineOffsets, OFFSETS_FILE, offsetsFor, parseOffsets } from "./offsets";
 import { PresenceTracker } from "./presence";
 import { eventLine } from "./presenceLog";
 
@@ -68,15 +69,23 @@ export function startPresencePoll(clients: readonly EngineClient[], options: Pol
       entry.lastProblem = attached;
       return;
     }
-    entry.lastProblem = undefined;
-    const offsets = offsetsFor(attached.exe.version);
+    let offsets: EngineOffsets | string = offsetsFor(attached.exe.version);
     if (typeof offsets === "string") {
-      attached.memory.close();
-      // Retrying won't find offsets that aren't in the file.
-      entry.retryAt = Number.POSITIVE_INFINITY;
-      note(entry, offsets);
-      return;
+      // A build offsets.json doesn't list yet: locate its table by scan, as `wisp engine locate` does.
+      const location = locatePresence(attached, parseOffsets(readFileSync(OFFSETS_FILE, "utf8")));
+      if (typeof location === "string" || location.offsets === undefined) {
+        attached.memory.close();
+        // The scan reads 64 MiB; before a map starts it fails, so it retries less often than an attach.
+        entry.retryAt = elapsed() + 10;
+        const problem = `${offsets}; locating it by scan: ${typeof location === "string" ? location : location.problem}`;
+        if (problem !== entry.lastProblem) note(entry, problem);
+        entry.lastProblem = problem;
+        return;
+      }
+      offsets = location.offsets;
+      note(entry, `build ${attached.exe.version} has no offsets.json entry; using the presence table located at rva 0x${offsets.presenceTable.toString(16)}`);
     }
+    entry.lastProblem = undefined;
     try {
       const tracker = new PresenceTracker(attached.memory, attached.base, offsets);
       tracker.poll();

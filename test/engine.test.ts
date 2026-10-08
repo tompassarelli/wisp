@@ -1,11 +1,13 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isLocalAddress, onlineProblem, ownerProblem, parseInterfaces, parseSocketTable, tcpAddress } from "../scripts/wisp/engine/attach";
 import { compareDesyncLogs, compareDumps, fourCC, ipseStates, pairDumps, parseDesyncLog } from "../scripts/wisp/engine/desyncLog";
 import { type Mapping, type Memory, fileVersion, findImageBase, functionAt, memoryAccessProblem, parseMaps, peHeader, prefixOfDocuments, prefixPath, procMemory } from "../scripts/wisp/engine/memory";
 import { OFFSETS_FILE, offsetsEntry, offsetsFor, parseOffsets } from "../scripts/wisp/engine/offsets";
-import { closureFunction, frameText, globalFunctionNames, isLuaState, luaStack, scriptFuncDefinition } from "../scripts/wisp/engine/lua";
+import { closureFunction, findLuaStates, frameText, globalFunctionNames, isLuaState, luaGlobals, luaStack, scriptFuncDefinition } from "../scripts/wisp/engine/lua";
+import { locatePresence } from "../scripts/wisp/engine/locate";
+import { captureFixture, fixtureMemory, parseFixture, readFixture, replayFixture, withLua } from "../scripts/wisp/engine/locatorFixture";
 import { stopWatch } from "../scripts/wisp/engine/stopWatch";
 import { followsCall, parsePerfData, sampleFrames } from "../scripts/wisp/engine/perfData";
 import { PresenceTracker, checkPresenceTable, demangle, presenceScanFailure, scanForPresenceTable } from "../scripts/wisp/engine/presence";
@@ -218,6 +220,57 @@ test("locate names a failed signature and does not infer a layout change before 
   expect(checkPresenceTable(memory, maps, table, layout)).toBe("agent tags and births");
 });
 
+test("a locate run's fixture replays its signature checks, and a moved field names the check it breaks", () => {
+  const { memory, maps, header, table } = syntheticClient();
+  const exeHeader = peHeader(header);
+  const known = offsetsFor("3.0.0.24268");
+  if (exeHeader === undefined || typeof known === "string") throw new Error("no synthetic client");
+  // A build offsets.json doesn't list: located with the newest known layout.
+  const target = { memory, maps, base: BASE, exe: { path: "Warcraft III.exe", header: exeHeader, version: "9.9.9.1", functions: new Uint32Array() } };
+  const location = locatePresence(target, new Map([[known.version, known]]), 0x2000);
+  if (typeof location === "string") throw new Error(location);
+  expect(location.offsets).toMatchObject({ version: "9.9.9.1", presenceTable: TABLE_RVA, sizeOfImage: SIZE_OF_IMAGE, table: known.table, agent: known.agent });
+  expect(location.offsets?.roles.size).toBe(0);
+  // The game grows its table while locate runs: the entries move after the scan.
+  const moved = HEAP + 0xa000;
+  for (let tag = 0; tag < 32; tag++) {
+    memory.i32(moved + tag * 16, -2);
+    memory.u64(moved + tag * 16 + 8, AGENTS + tag * 0x100);
+    memory.i32(ENTRIES + tag * 16, -1);
+  }
+  memory.u64(table + 0x18, moved);
+  const fixture = parseFixture(JSON.stringify(withLua(captureFixture(target, location), [{ state: 0x20000000, globals: { natives: 1800, chunks: new Map([["map-1-2", 3]]) } }])));
+  expect(fixture.scan.candidates).toEqual([{ rva: `0x${TABLE_RVA.toString(16)}`, table: `0x${table.toString(16)}`, count: 32, freeHead: -1, births: 40, sampled: 32, matching: 32 }]);
+  expect(fixture.lua).toEqual([{ state: "0x20000000", natives: 1800, chunks: { "map-1-2": 3 } }]);
+  const { memory: recorded } = fixtureMemory(fixture);
+  expect(Number(recorded.read(BASE + TABLE_RVA, 8).readBigUInt64LE(0))).toBe(table);
+  expect(replayFixture(fixture, known)).toMatchObject([{ table, sampled: 32, matching: 32 }]);
+  expect(replayFixture(fixture, { ...known, table: { ...known.table, count: 0x34 } })).toEqual(["entry count"]);
+  expect(replayFixture(fixture, { ...known, agent: { ...known.agent, tag: 0x28, birth: 0x2c } })).toEqual(["agent tags and births"]);
+});
+
+test("every build after 3.0.0.24268 in offsets.json has a locator fixture that its entry still finds", () => {
+  const builds = join(fixtures, "builds");
+  const recorded = new Map(readdirSync(builds).filter((name) => name.endsWith(".json")).map((name) => {
+    const fixture = readFixture(join(builds, name));
+    return [fixture.version, fixture] as const;
+  }));
+  const all = parseOffsets(readFileSync(OFFSETS_FILE, "utf8"));
+  for (const [version, offsets] of all) {
+    if (version === "3.0.0.24268") continue;
+    const fixture = recorded.get(version);
+    expect(fixture, `no locator fixture for ${version} in ${builds}`).toBeDefined();
+    if (fixture === undefined) continue;
+    expect(fixture.sizeOfImage).toBe(`0x${offsets.sizeOfImage.toString(16)}`);
+    expect(fixture.scan.candidates.map(({ rva }) => rva)).toContain(`0x${offsets.presenceTable.toString(16)}`);
+    const replayed = replayFixture(fixture, offsets);
+    expect(replayed).toMatchObject(fixture.scan.candidates.map(({ sampled, matching }) => ({ sampled, matching })));
+    // The map's Lua VM: a VM whose globals hold a Wisp map's functions.
+    expect(fixture.lua.some(({ chunks }) => Object.keys(chunks).some((source) => source.startsWith("map-")))).toBe(true);
+  }
+  for (const version of recorded.keys()) expect(all.has(version), `fixture for ${version} has no offsets.json entry`).toBe(true);
+});
+
 test("poll logs align by birth number: a birth made at another moment on one client stands out", () => {
   const log = (offset: number, late: number) => [
     "# wisp engine poll: client x",
@@ -395,6 +448,21 @@ test("a synthetic Warcraft Lua 5.3.4 VM (16-byte object headers): the call stack
   const names = globalFunctionNames(memory, L);
   expect(names.get(NATIVE)).toBe("TimerStart");
   expect(luaStack(memory, L, names).map(frameText)).toEqual(["TimerStart", "map-1-2:150 (function at map-1-2:148)"]);
+  // A map function in _G marks this VM as the map's.
+  tvalue(NODES + 32, CLOSURE, 0x46);
+  tvalue(NODES + 48, H + 0x1400, 0x44);
+  tstring(H + 0x1400, "main");
+  const globals = luaGlobals(memory, L);
+  expect(globals.natives).toBe(1);
+  expect([...globals.chunks]).toEqual([["map-1-2", 1]]);
+  // Found by signature: the global state's version points to the float 503, in the image when Lua is linked into it.
+  const VERSION = 0x140200000;
+  memory.region(VERSION, 0x10).writeFloatLE(503, 0);
+  memory.u64(G + 0xd8, VERSION);
+  const maps = parseMaps(`${H.toString(16)}-${(H + 0x10000).toString(16)} rw-p 00000000 00:00 0`);
+  expect(findLuaStates(memory, maps, { start: 0x140000000, end: 0x150000000 })).toEqual([L]);
+  expect(findLuaStates(memory, maps, { start: 0x150000000, end: 0x160000000 })).toEqual([L]);
+  expect(findLuaStates(memory, maps)).toEqual([L]);
 });
 
 test("a code callback's birth names where its Lua function was defined; logs keep it", () => {
