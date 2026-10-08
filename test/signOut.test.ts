@@ -22,7 +22,7 @@ const REG = [
   "",
 ].join("\n");
 
-test("a sign-out drops only the UnifiedAuth key's values", () => {
+test("[native] a sign-out drops only the UnifiedAuth key's values", () => {
   const out = withoutSavedLogin(REG);
   expect(out).not.toContain("C2CE228D");
   expect(out).not.toContain("03,04,05");

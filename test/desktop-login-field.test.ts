@@ -17,7 +17,7 @@ afterAll(() => rmSync(folder, { recursive: true, force: true }));
 
 const client: Client = { name: "a", documents: "/not/a/prefix", tools: { grim: tool, xdotool: tool, wlrctl: tool, tesseract: tool }, x11: {}, wayland: {}, window: "42" };
 
-test("the account name is typed into the focused field as wc3-login-field types it: no pointer, then Return", async () => {
+test("[reference] the account name is typed into the focused field as wc3-login-field types it: no pointer, then Return", async () => {
   writeFileSync(sent, "");
   const secret = new TextEncoder().encode("someone@example.com");
   const exit = await Effect.runPromiseExit(enterLoginField(client, "Battle.net", undefined, secret));

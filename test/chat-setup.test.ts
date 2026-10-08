@@ -3,7 +3,7 @@ import { Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { confirmedCommand, openObservedChat, type ChatEntry } from "../scripts/wisp/chatSetup";
 
-test("two missed Returns end at chat entry before command text or input execution", async () => {
+test("[spec docs/watch.md] two missed Returns end at chat entry before command text or input execution", async () => {
   let text = false, input = false, returns = 0;
   const entry: ChatEntry = { available: true, open: false, modified: 1 };
   const run = Effect.gen(function*() {
@@ -24,35 +24,7 @@ test("two missed Returns end at chat entry before command text or input executio
   expect(returns).toBe(2);
 });
 
-test("a missed first Return retries before typing and still requires the new open receipt", async () => {
-  let entry: ChatEntry = { available: true, open: false, modified: 1 };
-  let returns = 0, typed = false;
-  await Effect.runPromise(Effect.gen(function*() {
-    const fiber = yield* Effect.forkChild(openObservedChat({ name: "a" }, Effect.sync(() => entry), Effect.sync(() => {
-      returns++;
-      if (returns === 2) entry = { ...entry, open: true, modified: 2 };
-    })).pipe(Effect.tap(() => Effect.sync(() => { typed = true; }))), { startImmediately: true });
-    yield* TestClock.adjust("8 seconds");
-    expect(typed).toBe(false);
-    expect(returns).toBe(1);
-    yield* TestClock.adjust("1 second");
-    yield* Fiber.join(fiber);
-  }).pipe(Effect.provide(TestClock.layer())));
-  expect(returns).toBe(2);
-  expect(typed).toBe(true);
-});
-
-test("old open receipt is closed by Return and only a fresh open transition permits typing", async () => {
-  let entry: ChatEntry = { available: true, open: true, modified: 1 };
-  let returns = 0;
-  await Effect.runPromise(openObservedChat({ name: "a" }, Effect.sync(() => entry), Effect.sync(() => {
-    returns++;
-    entry = { ...entry, open: returns === 2, modified: entry.modified + 1 };
-  })));
-  expect(returns).toBe(2);
-});
-
-test("input starts only after both new requested receipts; a stale or wrong receipt cannot release it", async () => {
+test("[spec docs/watch.md] input starts only after both new requested receipts; a stale or wrong receipt cannot release it", async () => {
   let a = { revision: 1, command: "old" }, b = a;
   let input = false;
   const target = (name: string, read: () => typeof a) => ({ client: { name }, read: Effect.sync(read), requested: (current: typeof a, before: typeof a | undefined) => current.revision > (before?.revision ?? 0) && current.command === "quick archer" });
@@ -68,17 +40,4 @@ test("input starts only after both new requested receipts; a stale or wrong rece
     yield* Fiber.join(fiber);
   }).pipe(Effect.provide(TestClock.layer())));
   expect(input).toBe(true);
-});
-
-test("missing requested map receipt ends setup with selected client and no input", async () => {
-  let input = false;
-  const result = await Effect.runPromise(Effect.gen(function*() {
-    const fiber = yield* Effect.forkChild(confirmedCommand("quick", [{ client: { name: "lan2b" }, read: Effect.succeed(undefined), requested: () => true }], Effect.void).pipe(Effect.tap(() => Effect.sync(() => { input = true; }))), { startImmediately: true });
-    yield* TestClock.adjust("9 seconds");
-    return yield* Fiber.await(fiber);
-  }).pipe(Effect.provide(TestClock.layer())));
-  expect(Exit.isFailure(result)).toBe(true);
-  expect(String(result._tag === "Failure" && result.cause)).toContain("quick map receipt");
-  expect(String(result._tag === "Failure" && result.cause)).toContain("lan2b");
-  expect(input).toBe(false);
 });

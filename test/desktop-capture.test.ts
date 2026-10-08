@@ -15,14 +15,14 @@ function client(name: string, source: string): Client {
   return { name, documents: folder, tools: { grim: tool, xdotool: tool, wlrctl: tool, tesseract: tool }, x11: {}, wayland: {}, window: "42" };
 }
 
-test("framebuffer capture preserves binary pixel bytes", async () => {
+test("[invariant] framebuffer capture preserves binary pixel bytes", async () => {
   const frame = await Effect.runPromise(capture(client("pixels", 'process.stdout.write(Buffer.concat([Buffer.from("P6\\n1 1\\n255\\n"), Buffer.from([0, 128, 255])]));')));
   expect(frame.width).toBe(1);
   expect(frame.height).toBe(1);
   expect([...frame.rgb]).toEqual([0, 128, 255]);
 });
 
-test("timed capture brackets the framebuffer producer on the supplied stimulus clock", async () => {
+test("[invariant] timed capture brackets the framebuffer producer on the supplied stimulus clock", async () => {
   const stamped = join(folder, "producer-stamp");
   const before = performance.now();
   const result = await Effect.runPromise(captureTimed(client("timed", `await Bun.sleep(20); await Bun.write(${JSON.stringify(stamped)}, String(Date.now())); process.stdout.write(Buffer.concat([Buffer.from("P6\\n1 1\\n255\\n"), Buffer.from([8, 16, 32])]));`), () => Date.now() * 1_000_000));
@@ -34,7 +34,7 @@ test("timed capture brackets the framebuffer producer on the supplied stimulus c
   expect([...result.frame.rgb]).toEqual([8, 16, 32]);
 });
 
-test("cancelling a stalled framebuffer read stops and reaps its exact child", async () => {
+test("[invariant] cancelling a stalled framebuffer read stops and reaps its exact child", async () => {
   const pidFile = join(folder, "pid");
   const pending = capture(client("stalled", `await Bun.write(${JSON.stringify(pidFile)}, String(process.pid)); await Bun.sleep(600000);`));
   // Cancelled once the child has started, however long that takes.

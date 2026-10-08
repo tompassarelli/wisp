@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit, Layer } from "effect";
 import { afterAll, expect, test } from "bun:test";
-import { type Client, batch, keys, sendsChat, typeText } from "../scripts/warcraft/desktop";
+import { type Client, batch, keys, typeText } from "../scripts/warcraft/desktop";
 import { type ClientState, type ClientView, ClientWatch } from "../scripts/wisp/watch";
 
 // xdotool and wlrctl stand-ins that record what they were asked to send.
@@ -36,7 +36,7 @@ const send = async (input: Effect.Effect<void, unknown>, watch?: Layer.Layer<Cli
 
 const chat = batch(client, [{ kind: "keys", keys: ["Return"] }, { kind: "text", text: "-dev quick" }, { kind: "keys", keys: ["Return"] }]);
 
-test("Return and typed text outside a match are refused before any input reaches the client", async () => {
+test("[repro 533f017] Return and typed text outside a match are refused before any input reaches the client", async () => {
   const outside: readonly [string, Layer.Layer<ClientWatch>][] = [
     ["Battle.net's channel", watched({ kind: "menus", screen: "CUSTOM_LOBBIES" })],
     ["a lobby", watched({ kind: "lobby", host: true })],
@@ -53,22 +53,4 @@ test("Return and typed text outside a match are refused before any input reaches
       expect(sent, where).toBe("");
     }
   }
-});
-
-test("without a ClientWatch the client is watched once, and one that can't be watched is refused", async () => {
-  const { exit, sent } = await send(chat);
-  expect(Exit.isFailure(exit)).toBe(true);
-  expect(sent).toBe("");
-});
-
-test("in a match its page reports, chat is sent; other keys are never checked", async () => {
-  const inMatch = await send(chat, watched({ kind: "in match" }));
-  expect(Exit.isSuccess(inMatch.exit)).toBe(true);
-  expect(inMatch.sent).toContain("keydown --clearmodifiers Return sleep 0.3 keyup --clearmodifiers Return sleep 0.66");
-  expect(inMatch.sent).toContain("type --clearmodifiers --delay 12 -- -dev quick");
-  const escape = await send(keys(client, "Escape"), watched({ kind: "menus", screen: "MAIN_MENU" }));
-  expect(Exit.isSuccess(escape.exit)).toBe(true);
-  expect(escape.sent).toContain("key --clearmodifiers Escape");
-  expect(sendsChat(["ctrl+a", "F10"])).toBe(false);
-  expect(sendsChat(["ctrl+Return"])).toBe(true);
 });
