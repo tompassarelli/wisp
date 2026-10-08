@@ -173,8 +173,8 @@ either a native match or a native mismatch.
 | `SetUnitX/Y`, `SetUnitFlyHeight(..., 0)`, `BlzSetUnitFacingEx`: fighter body placement each draw | Direct coordinate/height writes; immediate facing; normal body rendering can lag position | Immediate stored position, height and facing in snapshots | **Match for direct state writes and 0/180-degree facing**; rendered position lag remains unmeasured for the paused Locust bodies. #40's same-frame body capture decides the visible contract. |
 | `CreateUnit`, `RemoveUnit`, type/handle/owner, `ShowUnit`, scale, vertex color, move speed and attack cooldown: bodies and object-data readback | Object/state facts, separate visibility and rendering, with the life caveats above | Retained unit fields and snapshots; type becomes zero on removal | **Partial source match**. #44/#45's existing native fixture owns state/object-data confirmation. Life/death thresholds are outside Smashcraft's scripted fighting damage. |
 | `SetUnitPathing(false)`, `PauseUnit(true)`, Locust and Crow Form, invulnerability: disable ordinary engine interaction | Direct writes do not reject a paused unit; missing `SetUnitPathing` registration gives no disabled-pathing rule | Consumer explicitly ignores these flags because all fighting motion and damage are scripted | **Match for absence of engine movement in the headless journey**; native paused-body placement still requires #40. Engine collision/pathfinding is not called by this map. |
-| `SetUnitAnimation/ByIndex`, `SetUnitTimeScale`, `SetUnitBlendTime`: fallback bodies | Sequence clocks advance by elapsed time × speed; blend uses saved old pose and current pose | Stores selection, resets animation elapsed, advances at 60 Hz; consumer ignores unit blend time | **Mismatch: body blend is not modeled.** The active effect fighter path and native #40 capture determine whether this changes the measured scene. |
-| `BlzSetSpecialEffectAnimation`, `BlzPlaySpecialEffect`, `BlzSetSpecialEffectTime/TimeScale/AnimationBlendTime`: fighter/effect playback | These modern native contracts are absent; internal model clock/blend rules are recorded above | Selected clip and seek time retained; blend-time call is an explicit consumer no-op; renderer samples model tracks | **Native verdict unresolved**; #40's older run had 24/25 frame checks and one vertical landmark mismatch; all 25 require the shared 3.0.1 capture. Do not substitute Warsmash's internal seek for the missing native contract. |
+| `SetUnitAnimation/ByIndex`, `SetUnitTimeScale`, `SetUnitBlendTime`: fallback bodies | Sequence clocks advance by elapsed time × speed; blend uses saved old pose and current pose | Stores selection, resets animation elapsed, advances at 60 Hz; consumer ignores unit blend time | Changed by wisp#58; see [Animation playback](#animation-playback). |
+| `BlzSetSpecialEffectAnimation`, `BlzPlaySpecialEffect`, `BlzSetSpecialEffectTime/TimeScale/AnimationBlendTime`: fighter/effect playback | These modern native contracts are absent; internal model clock/blend rules are recorded above | Selected clip and seek time retained; blend-time call is an explicit consumer no-op; renderer samples model tracks | Changed by wisp#58; see [Animation playback](#animation-playback). The seek's native contract stays unresolved. |
 | Effect attachment: dizzy marks, weapons, projectiles, summons, aura and hit effects | Target attachments can follow animated model transforms; modern positioning native is absent | Map places every effect itself with `BlzSetSpecialEffectPosition`, axis setters and yaw/pitch/roll; Wisp retains the requested transforms | **Match for the map's manual attachment contract**. No `AddSpecialEffectTarget` call or skeletal attachment dependency exists in the inventory. #40 compares the resulting positions. |
 | Effect create/destroy, model/alpha/color/team color, scale and matrix scale | Point effect begins at surface/terrain height; other modern setters absent | Starts at Z=0 until explicitly placed; immediate removal; transforms and colors retained, model rendering supplies mesh/particles | **Native verdict unresolved** for create/destroy tails and model rendering. Scripted effects normally set their world Z before drawing; #40 and #48 own the visible checks. |
 | `CreateSound/FromLabel`, `StartSound`: hit, summon, selection and match cues | Creation loads; start requests playback during the call | Creation and each start produce separate frame-tagged cues | **Match for request order**. A create alone is not a start. Audible onset needs the same native capture; cue-log equality does not measure speaker timing. |
@@ -416,6 +416,76 @@ expand the required parity surface.
 [Order acceptance and cancellation](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L2436-L2511),
 [next queued order](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L3783-L3793).
 
+### Animation playback
+
+Owner: wisp#58. Smashcraft **main** (`ts/src/`, excluding tests) draws each
+fighter from a pool of one-sequence clip models (`game/render/fighterPool.ts`):
+blend time 0, sequence `Stand`, time scale 0, and a `BlzSetSpecialEffectTime`
+seek every draw; the map crossfades clips itself by showing two effects. Other
+effects select named sequences (`Stand`, `stand hit`, victory, impact and cue
+names), seek, and toggle time scale between 0 and 1 for pauses and hitlag.
+Fallback bodies (`platform/shell/view.ts`) call `SetUnitAnimation(ByIndex)`,
+then `SetUnitTimeScale`, after `SetUnitBlendTime` from object data. It calls
+no `QueueUnitAnimation`, `BlzQueueSpecialEffectAnimation` or rarity control.
+Rules live in wisp:src/headless/animation.ts, used by the headless runtime and
+the renderer; wisp:src/headless/animation.tests.ts holds one test per rule,
+run in Bun (`test/animation.test.ts`) and 32-bit Lua (`test/runtime.test.ts`).
+
+| Behavior Smashcraft relies on | Warsmash rule | Wisp before #58 | Verdict |
+| --- | --- | --- | --- |
+| Selecting by name | A name's leading words that are animation tags give one primary tag and a set of secondary tags; the first other word ends it (`Stand - 2` is stand). The sequence needs the primary tag and exactly that secondary set; failing that, the set sharing most requested tags; failing that, the primary tag's sequence with fewest tags (stand when the name has none). Effect sub-animations add tags | First sequence whose name contained every word, so `stand` could pick `Stand Hit` | **Mismatch, fixed** |
+| Equal variants | Drawn at random, weighted by rarity, on each client | First variant | **Unmatchable**: native picks differ per client. Wisp takes the first of the most common. Pool clip models have one sequence |
+| Selecting by index | An index outside the model selects no sequence; tracks take their defaults (identity pose) | Clamped to the last or first sequence | **Mismatch, fixed** |
+| Clock start on selection | Interval start; selecting again restarts | Restart | **Match** |
+| Time scale | Animation time advances by elapsed seconds × 1000 × scale; 0 freezes the clock, global sequences and blend | Clock matched; blend and global clock not modeled | **Match for the clock; the rest fixed** (rows below) |
+| Time scale across a selection | `SetUnitAnimation(ByIndex)` resets the speed to 1 | Keeps the set time scale | **Warsmash differs; no change**: Smashcraft sets the time scale after every selection, so both give the same result. The capture checks persistence |
+| Seek (`BlzSetSpecialEffectTime`) | No such native; the internal frame seek moves the sample time and spends no blend time | Set the elapsed time | **Match to the internal rule**; native seek units stay unresolved |
+| Sampled frame | Whole milliseconds; fractions kept in the clock | Fractional frame | **Mismatch, fixed** |
+| End of a looping sequence | On reaching interval end − 1 ms, restart at the start, dropping the overshoot | Wrapped modulo the interval length | **Mismatch, fixed**: the renderer replays the 60 Hz steps since the last selection or seek. A seek at or past the end shows the start |
+| End of a non-looping sequence | Hold at interval end − 1 ms | Held at the interval end | **Mismatch, fixed** |
+| Effect with no selection | Plays Birth once, then Stand, which always loops; a unit shows Stand | Stand from creation | **Mismatch, fixed** |
+| Blend (`SetUnitBlendTime`, `BlzSetSpecialEffectAnimationBlendTime`) | On a selection with blend time > 0, after the instance has animated at least 1 ms, and with no blend running: save each node's local translation, rotation and scale. Each step spends the same animation time from the blend; the shown pose is new × (1 − r) + saved × r, rotation by shortest-arc slerp, r = remaining ÷ blend time. A selection during a blend leaves it running | Not modeled; `SetUnitBlendTime` was a consumer no-op | **Mismatch, fixed** in runtime and renderer. Wisp's unit blend time starts at 0 until set (Warcraft reads `uble`); effects start at 0. Smashcraft's pool sets 0, so its fighters are unchanged |
+| Global sequences | Whole milliseconds of animation time since creation, modulo the length (0 for length 0); kept across selections; seeks do not move it | Advanced to the seek time only for models with emitters, else 0 | **Mismatch, fixed** |
+| Shown sequence | The selected index | war3-model's `setFrame` re-picked the first sequence whose interval held the frame | **Mismatch, fixed**: the renderer sets the frame on the selected sequence |
+| Queued animations | Played in order when a non-looping sequence ends | Recorded, never played | **Not used** by Smashcraft |
+
+Track sampling between keys is outside this family: Warsmash interpolates
+from the last key back to the first across the sequence when a frame lies
+outside a sequence's keys, war3-model holds the nearest key. Smashcraft's clip
+models carry keys at both interval ends, so their poses do not depend on it.
+
+**Blademaster frame 262 is not explained by these rules.** Clip 48
+(victimThrowBack, interval 80435–81435, non-looping) and clip 49 are
+one-sequence models with keys at 0, 300, 500, 600 and 1000 ms and no emitters.
+Both clients seek them to 0.4 s with time scale 0 and blend 0, and no
+sequence switch happens on either effect. Every rule above gives frame 80835
+before and after this change, and a re-render with the fixes still shows the
+upright headless pose.
+Their global-sequence tracks move only the whirlwind and glow helpers (about
+18% of vertex bone references), held at time 0 by both Warsmash's rule and Wisp. The
+Blademaster is not among 3.0.1's reanimated models. What remains is the
+native seek itself: whether a frozen effect hidden and shown again re-poses on
+`BlzSetSpecialEffectTime`, and in what units.
+
+Capture needed (wisp#58's third box, one private 3.0.1 game, fixed camera and
+graphics mode):
+
+1. A model listing `Stand Hit` before `Stand`: `SetUnitAnimation("stand")`
+   shows Stand; `"stand hit"` shows Stand Hit.
+2. A looping 1000 ms sequence at time scale 1 captured after 5.0 s, and a
+   non-looping one held 2 s past its end: frame positions decide overshoot
+   and the end − 1 ms hold.
+3. `AddSpecialEffect` with no animation call, captured during and after
+   Birth.
+4. A unit with `SetUnitBlendTime` 0.15 and 0, switching sequence, captured
+   50 ms later; plus time scale 0 during a blend, and `SetUnitTimeScale`
+   followed by `SetUnitAnimation`.
+5. A global-sequence helper under time scale 0, and a frozen out-of-range
+   `SetUnitAnimationByIndex`.
+6. Blademaster clip 48 and 49 at 0.4 s, time scale 0, shown after being
+   hidden, with and without a second seek one frame later: the frame 262
+   repeat.
+
 ## Timers and frame stepping
 
 wisp#56 checks the timer behaviour Smashcraft relies on. Smashcraft
@@ -567,7 +637,7 @@ Warcraft-native behavior was measured in this research pass.
 | Warcraft life threshold, clipping, corpse writes and removal | #44's existing twelve-case [unit-state fixture](headless.md#unit-states), including exact binary32 0.40625 and 0.3984375 | No native values measured. Ready map retained privately at `~/.local/state/wisp/unit-states44/`. Sole native coordinator has the required journey; current blocker is Warcraft 3.0.1/build 24342 startup, with a private online fallback authorized. |
 | Widget/unit/player death callback order and repeated kills | A callback log with before/inside/after life and event names | Source-researched only; not an additional #44 acceptance fixture. Defer until a consuming check needs this order. |
 | Blend setting, frozen clock and the pose discrepancy | #40's existing same-frame-262 capture, followed by the held-frame capture at least 250 ms later and recorded camera state | Retained comparison is 24 of 25 passing; the red-flag landmark differs vertically by 40.73 pixels. Diagnostic candidate `8aad61e8` has produced no new captures because of build 24342 startup. Cause unresolved; native coordinator owns execution. |
-| Sequence end/loop overshoot and queued animation timing | A model with explicit interval bounds at time scales 0, 0.5, 1 and 2 | Source-researched only; defer until a consuming check requires it. |
+| Sequence end/loop overshoot and queued animation timing | The [animation playback capture](#animation-playback) | Headless follows the source-researched rules since wisp#58; queued animations stay unused by Smashcraft. |
 
 The existing native executor owns clients and fixture scheduling. Research
 does not start another client. Unit and pose workers received the factual

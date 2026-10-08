@@ -340,9 +340,14 @@ only if GPU initialization fails. No Warcraft client is opened.
 The renderer uses the declared MIT `war3-model` 4.0.1 package with the HD
 sampling precision fix recorded in `vendor/README.md`,
 Copyright 2017–2023 4eb0da; its package retains the license. Wisp calls its
-public model/texture parsers and `ModelRenderer` API. Positions, model scales,
+public model/texture parsers and `ModelRenderer` API, and sets its frame,
+global-sequence clocks and node poses directly. Positions, model scales,
 animation times, rotations, camera fields and visible frame art come from the
 map's native calls. Particle and ribbon clocks advance to the captured time.
+Sequence selection, loop ends, Birth before Stand, blending and global
+sequences follow Warcraft's playback rules in wisp:src/headless/animation.ts,
+listed in [Animation playback](warsmash-notes.md#animation-playback); the
+headless runtime keeps each unit's and effect's clock, seek and blend.
 This is a scene renderer for look checks, not pixel-identical Warcraft shading.
 
 Every started sound is printed with its client, frame, source or label, volume

@@ -9,6 +9,7 @@
 import { errorFile, FILE_IO_ABILITY } from "../runtime/gameFiles";
 import { f32 } from "../sim/f32";
 import { floorMod } from "../sim/intMath";
+import { advanceAnimation, type AnimationBlend, type AnimationState, freshAnimation, seekAnimation, selectAnimation } from "./animation";
 import type { FrameTemplate } from "./frames";
 import type { NativeDeclarations } from "./declarations";
 import { FRAME_POINTS, type Frame, Frames } from "./frames";
@@ -78,7 +79,7 @@ export const WISP_LOCAL_NATIVES: LocalNatives = {
 };
 
 /** A special effect as the client shows it. */
-export interface EffectPose {
+export interface EffectPose extends AnimationState {
   readonly handle: Handle;
   readonly model: string;
   /** The client frame it was created on. */
@@ -90,11 +91,6 @@ export interface EffectPose {
   alpha: number;
   scale: number;
   timeScale: number;
-  animation: string | number | undefined;
-  subAnimations: (string | number)[];
-  /** Seconds elapsed in the current animation, advancing with timeScale. */
-  animationElapsed: number;
-  animationBlendTime: number;
   queuedAnimations: string[];
   yaw: number;
   pitch: number;
@@ -105,6 +101,9 @@ export interface EffectPose {
   /** A matrix scale of zero on some axis since the matrix was last reset. */
   flat: boolean;
 }
+
+const copyBlend = (blend: AnimationBlend | undefined): AnimationBlend | undefined =>
+  blend === undefined ? undefined : { from: { ...blend.from, subAnimations: [...blend.from.subAnimations] }, remaining: blend.remaining };
 
 export interface CameraPose {
   readonly x: number;
@@ -155,7 +154,7 @@ export function assertSoundCue(log: readonly SoundCue[], expected: { readonly so
   if (count !== (expected.count ?? 1)) throw new Error(`sound cue ${expected.source ?? expected.label ?? "any"}: expected ${expected.count ?? 1} starts, got ${count}`);
 }
 
-export interface UnitPose {
+export interface UnitPose extends AnimationState {
   readonly handle: Handle;
   readonly typeId: number;
   owner: number;
@@ -168,9 +167,6 @@ export interface UnitPose {
   alpha: number;
   color: [number, number, number];
   teamColor: number;
-  animation: string | number | undefined;
-  /** Seconds in the current animation, advancing with timeScale. */
-  animationElapsed: number;
   timeScale: number;
   visible: boolean;
 }
@@ -648,16 +644,16 @@ export class HeadlessClient {
 
   private effectAt(model: string, x: number, y: number): Handle {
     const handle = this.handle("effect");
-    this.effects.set(handle, { handle, model, created: this.frame, x: f32(x), y: f32(y), z: 0, alpha: 255, scale: 1, timeScale: 1, flat: false, animationBlendTime: 0, queuedAnimations: [],
-      animation: undefined, subAnimations: [], animationElapsed: 0, yaw: 0, pitch: 0, roll: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1] });
+    this.effects.set(handle, { ...freshAnimation(), handle, model, created: this.frame, x: f32(x), y: f32(y), z: 0, alpha: 255, scale: 1, timeScale: 1, flat: false, queuedAnimations: [],
+      yaw: 0, pitch: 0, roll: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1] });
     return handle;
   }
 
   private unitAt(owner: number, typeId: number, x: number, y: number, facing: number): Unit {
     const handle = this.handle("unit");
     const state = this.unitStates[typeId];
-    const unit: Unit = { ...handle, handle, typeId, owner, x, y, z: 0, facing, scale: [1, 1, 1], alpha: 255,
-      color: [255, 255, 255], teamColor: owner, animation: undefined, animationElapsed: 0, timeScale: 1,
+    const unit: Unit = { ...handle, ...freshAnimation(), handle, typeId, owner, x, y, z: 0, facing, scale: [1, 1, 1], alpha: 255,
+      color: [255, 255, 255], teamColor: owner, timeScale: 1,
       visible: true, moveSpeed: 0, attackCooldown: 0, life: state?.life, maxLife: state?.maxLife,
       mana: state?.mana, maxMana: state?.maxMana, dead: state !== undefined && state.life <= f32(0.405), removed: false };
     this.units.set(unit, unit);
@@ -678,8 +674,7 @@ export class HeadlessClient {
   }
 
   private unitAnimation(unit: Unit, animation: string | number): void {
-    unit.animation = animation;
-    unit.animationElapsed = 0;
+    selectAnimation(unit, animation);
   }
 
   private sound(source: string | undefined, label: string | undefined, looping: boolean): Handle {
@@ -714,8 +709,7 @@ export class HeadlessClient {
   private playEffect(effect: Handle, animation: string | number, timeScale?: number): void {
     const pose = this.effects.get(effect);
     if (pose === undefined) return;
-    pose.animation = animation;
-    pose.animationElapsed = 0;
+    selectAnimation(pose, animation);
     if (timeScale !== undefined) pose.timeScale = f32(timeScale);
   }
 
@@ -780,6 +774,7 @@ export class HeadlessClient {
       BlzSetUnitFacingEx: (unit: Unit, facing: number) => { unit.facing = unitFacing(facing); },
       SetUnitScale: (unit: Unit, x: number, y: number, z: number) => { unit.scale = [x, y, z]; },
       SetUnitTimeScale: (unit: Unit, timeScale: number) => { unit.timeScale = timeScale; },
+      SetUnitBlendTime: (unit: Unit, blendTime: number) => { unit.animationBlendTime = blendTime; },
       SetUnitVertexColor: (unit: Unit, red: number, green: number, blue: number, alpha: number) => {
         unit.color = [red, green, blue];
         unit.alpha = alpha;
@@ -1118,7 +1113,7 @@ export class HeadlessClient {
       },
       BlzSetSpecialEffectTime: (effect: Handle, time: number) => {
         const pose = this.effects.get(effect);
-        if (pose !== undefined) pose.animationElapsed = f32(time);
+        if (pose !== undefined) seekAnimation(pose, f32(time));
       },
       BlzPlaySpecialEffect: (effect: Handle, animation: string | number) => this.playEffect(effect, animation),
       BlzPlaySpecialEffectWithTimeScale: (effect: Handle, animation: string | number, timeScale: number) => this.playEffect(effect, animation, timeScale),
@@ -1211,7 +1206,7 @@ export class HeadlessClient {
   /** The effects this client shows now, as copies, in creation order. */
   effectPoses(): EffectPose[] {
     const poses: EffectPose[] = [];
-    for (const pose of this.effects.values()) poses.push({ ...pose, subAnimations: [...pose.subAnimations], color: [...pose.color], matrixScale: [...pose.matrixScale] });
+    for (const pose of this.effects.values()) poses.push({ ...pose, subAnimations: [...pose.subAnimations], animationBlend: copyBlend(pose.animationBlend), color: [...pose.color], matrixScale: [...pose.matrixScale] });
     return poses;
   }
 
@@ -1224,7 +1219,9 @@ export class HeadlessClient {
     const poses: UnitPose[] = [];
     for (const unit of this.units.values()) poses.push({ handle: unit.handle, typeId: unit.typeId, owner: unit.owner,
       x: unit.x, y: unit.y, z: unit.z, facing: unit.facing, scale: [...unit.scale], alpha: unit.alpha, color: [...unit.color],
-      teamColor: unit.teamColor, animation: unit.animation, animationElapsed: unit.animationElapsed, timeScale: unit.timeScale, visible: unit.visible });
+      teamColor: unit.teamColor, timeScale: unit.timeScale, visible: unit.visible, animation: unit.animation, subAnimations: [...unit.subAnimations],
+      animationElapsed: unit.animationElapsed, animationSought: unit.animationSought, animationTicks: unit.animationTicks, animationClock: unit.animationClock,
+      animationBlendTime: unit.animationBlendTime, animationBlend: copyBlend(unit.animationBlend) });
     return poses;
   }
 
@@ -1268,8 +1265,8 @@ export class HeadlessClient {
       this.frame++;
       this.abilities.tick(f32(1 / FRAMES_PER_SECOND));
       this.scenery.tick(f32(1 / FRAMES_PER_SECOND));
-      for (const pose of this.effects.values()) pose.animationElapsed += pose.timeScale / FRAMES_PER_SECOND;
-      for (const unit of this.units.values()) unit.animationElapsed += unit.timeScale / FRAMES_PER_SECOND;
+      for (const pose of this.effects.values()) advanceAnimation(pose, pose.timeScale, 1 / FRAMES_PER_SECOND);
+      for (const unit of this.units.values()) advanceAnimation(unit, unit.timeScale, 1 / FRAMES_PER_SECOND);
       for (const sound of this.sounds.values()) {
         if (!sound.playing || sound.looping) continue;
         sound.elapsed += sound.pitch * 1000 / FRAMES_PER_SECOND;
