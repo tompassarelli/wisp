@@ -11,10 +11,12 @@
 // - compiles floorDiv and floorMod from src/sim/intMath.ts to Lua's exact
 //   integer `//` and `%`;
 // - compiles f32(a + b), f32(a - b), f32(a * b) and f32(a / b) from
-//   src/sim/f32.ts to f32(a, b, operation), which rounds the exact result to
-//   nearest: Warcraft's raw + and * can land an ulp toward zero, and its raw
-//   / an ulp away from nearest. A product with a power-of-two literal, and a
-//   quotient by one, is exact and stays raw;
+//   src/sim/f32.ts to __wispF32Add(a, b), __wispF32Subtract(a, b),
+//   __wispF32Multiply(a, b) and __wispF32Divide(a, b), which that module
+//   defines and which round the exact result to nearest: Warcraft's raw + and
+//   * can land an ulp toward zero, and its raw / an ulp away from nearest. A
+//   product with a power-of-two literal, and a quotient by one, is exact and
+//   stays raw;
 // - compiles any other f32(x), and Math.fround(x), binary32 rounding on the
 //   host, to x, and f32(literal) to the literal's binary32 value;
 // - rejects code that would compile but compute differently in Warcraft, by
@@ -27,7 +29,6 @@ import { dirname, relative } from "node:path";
 import * as ts from "typescript";
 import * as tstl from "typescript-to-lua";
 import { LuaPrinter } from "typescript-to-lua";
-import { F32_ADD, F32_DIVIDE, F32_MULTIPLY, F32_SUBTRACT } from "../src/sim/f32";
 import { ROUNDING_HELPER_FILE, declarationsOf, isDeclaredIn, programNumberRules } from "./number-rules";
 import { transformForBindings } from "./loop-bindings";
 
@@ -87,8 +88,8 @@ function isPowerOfTwo(node: ts.Expression): boolean {
   return value > 0 && 2 ** Math.round(Math.log2(value)) === value;
 }
 
-/** f32(a + b), f32(a - b) or f32(a * b): the operands and the code f32 takes for the operation in Lua. */
-function roundedOperation(node: ts.CallExpression): { left: ts.Expression; right: ts.Expression; code: number } | undefined {
+/** f32(a + b), f32(a - b), f32(a * b) or f32(a / b): the operands and the global src/sim/f32.ts defines for the operation in Lua. */
+function roundedOperation(node: ts.CallExpression): { left: ts.Expression; right: ts.Expression; operation: string } | undefined {
   const argument = node.arguments[0];
   if (!ts.isIdentifier(node.expression) || argument === undefined) return undefined;
   const operation = strip(argument);
@@ -96,13 +97,13 @@ function roundedOperation(node: ts.CallExpression): { left: ts.Expression; right
   const { left, right } = operation;
   switch (operation.operatorToken.kind) {
     case ts.SyntaxKind.PlusToken:
-      return { left, right, code: F32_ADD };
+      return { left, right, operation: "__wispF32Add" };
     case ts.SyntaxKind.MinusToken:
-      return { left, right, code: F32_SUBTRACT };
+      return { left, right, operation: "__wispF32Subtract" };
     case ts.SyntaxKind.AsteriskToken:
-      return isPowerOfTwo(left) || isPowerOfTwo(right) ? undefined : { left, right, code: F32_MULTIPLY };
+      return isPowerOfTwo(left) || isPowerOfTwo(right) ? undefined : { left, right, operation: "__wispF32Multiply" };
     case ts.SyntaxKind.SlashToken:
-      return isPowerOfTwo(right) ? undefined : { left, right, code: F32_DIVIDE };
+      return isPowerOfTwo(right) ? undefined : { left, right, operation: "__wispF32Divide" };
     default:
       return undefined;
   }
@@ -184,10 +185,10 @@ const plugin = ({ sourcePrefix = "" }: { readonly sourcePrefix?: string }): tstl
       if (isRounding(node, context.program)) {
         const rounded = roundedOperation(node);
         if (rounded === undefined) return roundLiteral(context.transformExpression(node.arguments[0]!));
-        const { left, right, code } = rounded;
+        const { left, right, operation } = rounded;
         return tstl.createCallExpression(
-          context.transformExpression(node.expression),
-          [context.transformExpression(left), context.transformExpression(right), tstl.createNumericLiteral(code)],
+          tstl.createIdentifier(operation, node.expression),
+          [context.transformExpression(left), context.transformExpression(right)],
           node,
         );
       }
