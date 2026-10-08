@@ -190,8 +190,9 @@ it locally.
 5. **Land.** With no new failures, the rebased commits are pushed to main
    (a plain fast-forward) and the branch is
    deleted. Pushes made with the workflow token start no workflows, so the
-   run dispatches main's CI for the landed commit; "main is red" follows that
-   CI run as usual. If main moved during the run, the tested commits are
+   run dispatches main's CI for the landed commit. A dispatched run starts no
+   `workflow_run` either, so that CI run's last job dispatches "Main is red"
+   with its own run ID. If main moved during the run, the tested commits are
    replayed onto it, as a local landing would; only a conflict sends the
    branch through again.
 6. **Refuse.** On a conflict, a failed check or new failures, the branch
