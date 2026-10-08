@@ -63,17 +63,21 @@ take precedence over Warsmash's 50 ms choice.
 
 **Native-confirmed** on Warcraft 3.0.1.24342 (8 October 2026, clone-a, one
 client): the twelve cases of `test/unit-states/`, read as floor(value × 128).
-Five matched Wisp at once; the rules below fixed the rest, except facing.
+Five matched Wisp at once; the rules below fixed the rest. A second run of the
+same map with eight more rows (8 October, 14:09) repeated all twelve and
+confirmed the corpse and removal rules.
 
 | Behavior | Wisp before | Native 3.0.1 | Verdict |
 | --- | --- | --- | --- |
 | `SetUnitState(u, UNIT_STATE_MAX_LIFE, 240)` after `BlzSetUnitMaxHP(u, 200)`; the same for mana with 160 and 180 | Stored the write | Ignored: `BlzGetUnitMaxHP` and `GetUnitState` still read 200 (mana 160) | **Mismatch, fixed**: ignored. Only the `Blz` setters change the maximums |
 | A life write that takes a living unit to the cutoff or below (`SetUnitState(u, UNIT_STATE_LIFE, 0.3984375)`) | Stored 0.3984375 and marked the unit dead | Life reads 0 at once | **Mismatch, fixed**: the unit dies and life is 0 |
-| A life write to a dead unit: 10 after that death; 50 after `KillUnit`, through `SetWidgetLife` and through `SetUnitState` | Ignored | Stored: reads 10 and 50 | **Mismatch, fixed**: stored as binary32; the unit stays dead (row `dead-raised-low-write` confirms) |
+| A life write to a dead unit: 10 after that death; 50 after `KillUnit`, through `SetWidgetLife` and through `SetUnitState` | Ignored | Stored: reads 10 and 50 | **Mismatch, fixed**: stored as binary32, and the unit stays dead: 0.3984375 written to a corpse, with or without 50 written first, reads back 0.3984375 |
 | Living at 0.40625, then a write of 10 | Stored both | Stored both | **Match** |
 | `KillUnit` | Life 0 | Life 0 through both getters | **Match** |
-| `RemoveUnit`, then in the same callback `SetWidgetLife(u, 50)`, `GetUnitTypeId` and `GetWidgetLife` | Type 0, life 0, the write ignored | Type `hfoo`, life 50 | **Mismatch, fixed**: the handle keeps its state and takes life writes until the frame ends, then reads type 0 and life 0 (rows `removal-*` confirm when) |
-| `SetUnitFacing(u, 180)` then `BlzSetUnitFacingEx(u, 90)` | 90 | Just under 90 (floor × 128 is 11519) | **Mismatch, owned by wisp#57**'s facing rule |
+| `RemoveUnit`, then in the same callback `SetWidgetLife(u, 50)`, `GetUnitTypeId` and `GetWidgetLife` | Type 0, life 0, the write ignored | Type `hfoo`, life 50 | **Mismatch, fixed**: the handle keeps its state and takes life writes until the frame ends, then reads type 0 and life 0. Removed by a timer at 0.25 s, it still reads `hfoo` from a second timer at the same deadline and reads 0, 0 at 0.265625, 0.5 and 1.25 s |
+| `SetUnitFacing(u, 180)` then `BlzSetUnitFacingEx(u, 90)` | 90 | `11796479p-17` (89.99999237) | **Mismatch, fixed** by wisp#57's facing rule |
+| A life write of binary32 0.405 plus one ulp (0.40500003) to a living unit | Lives | Dies: `death-cutoff` reads 0, 0, 0 for 0.405 less one ulp, 0.405 and 0.405 plus one ulp | **Mismatch, open**: the cutoff lies above 0.40500003 and below 0.40625. Either Warcraft's cutoff is not 0.405, or a life write is kept as a fraction of maximum life (0.40500003 / 100 × 100 rounds to binary32 0.405). The next capture decides |
+| Life of a living footman over time | Constant | 37.5 written at start reads 37.5547 or more, under 37.5625, at 0.25 s: it regenerates | **Not modeled**: Wisp has no life regeneration. The removal rows now keep the unit at full life |
 | Owner, life and mana getter/setter agreement | Retained | Retained | **Match** |
 
 Warcraft's Lua integers are 32 bits, so the removal row's type ID times 128
@@ -81,18 +85,16 @@ wraps to 859289472; the fixture wraps its rows the same way so Bun prints the
 native number.
 
 The 0.405 cutoff is from WurstScript's measured `UnitProvider`
-([comparison](comparison.md)); the twelve cases only show it lies between
-0.3984375 and 0.40625.
+([comparison](comparison.md)); on 3.0.1 a unit at 0.40500003 dies too.
 
-**Capture queued** (wisp#44, `needs:native-single`): the rows after the twelve
-decide what the twelve leave open. `death-cutoff` writes binary32 0.405 and its
-two neighbours (alive reads 51, dead 0). `dead-low-write` writes 0.3984375 to a
-killed unit, and `dead-raised-low-write` writes 50 first: 51 means stored and
-still dead, 0 means a low write zeroes or the corpse revived.
-`facing-writes-exact` gives the facing case's read exactly for wisp#57.
-`removal-same-deadline`, `-next-frame`, `-quarter-second` and `-one-second`
-read a unit removed by a timer at 0.25 s from a second timer at the same
-deadline, then 0.265625, 0.5 and 1.25 s.
+**Capture queued** (wisp#44, `needs:native-single`) for the cutoff rule.
+`death-cutoff-first-alive` bisects M × 2^-25 between 0.40500003 and 0.40625
+in the map and gives the smallest life a living unit survives, exactly.
+`life-write-exact` (7.5, 6.7, 13.5 at maximum 100) and `mana-write-exact`
+(0.1, 3.2 at maximum 80) read writes back exactly: a value kept as a fraction
+of its maximum reads 7.5000005 for 7.5. `life-after-max-change` writes 50 at
+maximum 100, then raises the maximum to 200: 50 means life is kept as a value,
+100 that it keeps its fraction.
 
 ## Animation clock, pose and blending: facts for #40
 
