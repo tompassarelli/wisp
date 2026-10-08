@@ -693,7 +693,8 @@ export class HeadlessClient {
 
   private startSound(handle: Handle): void {
     const sound = this.sounds.get(handle);
-    if (sound === undefined) return;
+    // A handle has one voice: starting it while it plays changes nothing.
+    if (sound === undefined || sound.playing) return;
     this.cue(sound, "start");
     sound.elapsed = 0;
     sound.playing = sound.looping || sound.duration > 0;
@@ -1040,14 +1041,14 @@ export class HeadlessClient {
       },
       SetSoundPitch: (handle: Handle, pitch: number) => {
         const sound = this.sounds.get(handle);
-        if (sound !== undefined) sound.pitch = pitch;
+        if (sound !== undefined) sound.pitch = f32(pitch);
       },
       SetSoundPosition: (handle: Handle, x: number, y: number, z: number) => {
         const sound = this.sounds.get(handle);
         if (sound !== undefined) {
-          sound.x = x;
-          sound.y = y;
-          sound.z = z;
+          sound.x = f32(x);
+          sound.y = f32(y);
+          sound.z = f32(z);
           sound.unit = undefined;
         }
       },

@@ -357,6 +357,11 @@ and pitch. `--sound-cues FILE.json` writes the complete creation/play log;
 from `wisp/src/headless/client`. Creating a sound without starting it fails a
 "plays the cue" assertion. This checks the game's calls, not audibility.
 
+A sound handle has one voice: `StartSound` on a handle that is still playing
+neither restarts it nor logs a cue; `StopSound` then `StartSound` restarts it.
+Pitch and position are stored as binary32, as Warcraft's `real` arguments are
+([rules](warsmash-notes.md#sound-start-stop-and-channel-limits)).
+
 `KillSoundWhenDone` drops an idle sound's retained state immediately. Playing
 sounds retain it until their `SetSoundDuration` milliseconds have elapsed at
 the current pitch; a loop waits for `StopSound`. Stopping with `killWhenDone`

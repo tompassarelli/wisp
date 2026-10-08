@@ -178,7 +178,7 @@ either a native match or a native mismatch.
 | Effect attachment: dizzy marks, weapons, projectiles, summons, aura and hit effects | Target attachments can follow animated model transforms; modern positioning native is absent | Map places every effect itself with `BlzSetSpecialEffectPosition`, axis setters and yaw/pitch/roll; Wisp retains the requested transforms | **Match for the map's manual attachment contract**. No `AddSpecialEffectTarget` call or skeletal attachment dependency exists in the inventory. #40 compares the resulting positions. |
 | Effect create/destroy, model/alpha/color/team color, scale and matrix scale | Point effect begins at surface/terrain height; other modern setters absent | Starts at Z=0 until explicitly placed; immediate removal; transforms and colors retained, model rendering supplies mesh/particles | **Native verdict unresolved** for create/destroy tails and model rendering. Scripted effects normally set their world Z before drawing; #40 and #48 own the visible checks. |
 | `CreateSound/FromLabel`, `StartSound`: hit, summon, selection and match cues | Creation loads; start requests playback during the call | Creation and each start produce separate frame-tagged cues | **Match for request order**. A create alone is not a start. Audible onset needs the same native capture; cue-log equality does not measure speaker timing. |
-| Sound position, pitch, volume, duration, stop and `KillSoundWhenDone` | Setters are missing or no-ops in the researched revision | Position/pitch/volume retained at start; completion/attenuation ignored by consumer; stop and lifetime are not represented in the cue log | **Native verdict unresolved**; Warsmash supplies no usable rule. #48 owns audible playback; #51 owns the 3.0.1 OGG playback capture. |
+| Sound position, pitch, volume, duration, stop and `KillSoundWhenDone` | Setters are missing or no-ops in the researched revision | Position/pitch/volume retained at start; completion/attenuation ignored by consumer; stop and lifetime are not represented in the cue log | See [Sound start, stop and channel limits](#sound-start-stop-and-channel-limits) (wisp#60) for each rule. #48 owns audible playback; #51 owns the 3.0.1 OGG playback capture. |
 | Music play/stop/theme and file duration: round, victory and stage music | Request forwarding only | Consumer ignores background playback and decoding; explicit sound starts are retained | **Mismatch in observable audio coverage**; soundtrack playback is not represented by the headless cue report. |
 | Engine order queues and `QueueUnitAnimation` | Queued orders begin in insertion order; immediate orders cancel or replace pending orders | No movement/order/animation-queue model | **Not used**: no engine order or queue native appears in Smashcraft's source. Fighter input buffers are map simulation data, already replayed by the checksum check. |
 | Sync send/delivery and trigger callbacks: journal rows, frame UI, chat and key events | Due timers precede tick triggers and script threads; no current Battle.net latency measurements | Ordered triggers; configured sync delivery uses native-measured 25 ms turns and 60 Hz callbacks | **Intentional mismatch with emulator timing**; [network model](network-model.md) records the native basis. Three 3.0.1 online pad runs must match saved checksums. |
@@ -547,6 +547,63 @@ it in a two-player 3.0.1 private game for at least 1.25 game seconds and
 collects `timers56-p0.txt` and `timers56-p1.txt`. Each must equal
 `EXPECTED` in `test/headless-timers.test.ts`, except the zero-period count,
 which should be about 10,080.
+
+## Sound start, stop and channel limits
+
+wisp#60 checks the sound behaviour Smashcraft relies on. Smashcraft
+**98fcf4b** (`ts/src/`, excluding tests) calls `StartSound` (8 sites),
+`SetSoundPosition` (7), `KillSoundWhenDone` (6), `SetSoundVolume` (5),
+`StopSound` (5), `CreateSoundFromLabel` (5), `CreateSound` (4),
+`SetSoundDuration` and `GetSoundFileDuration` (3 each), `SetSoundDistances`
+and `SetSoundDistanceCutoff` (2 each) and `SetSoundPitch` (1), in
+`game/render/`: `combatEffects.ts`, `matchPresentation.ts`,
+`specialEffects.ts`, `bearFeedback.ts` and `modelSoundPresentation.ts`. Its
+patterns are: a new handle per cue, positioned, started and released with
+`KillSoundWhenDone` in one call (hits, swings, model sounds, voice lines,
+announcer); a kept handle replayed with `StopSound` then `StartSound` (menu
+hover, item cues); a fighter's voice cut off by `StopSound` on its last line,
+which may already have been released; and Immolation's looping label sound,
+started when lit, stopped with a fade-out when it goes out, and released with
+`StopSound` plus `KillSoundWhenDone`. It never reads `GetSoundIsPlaying` or
+`GetSoundDuration`; it calls no `SetSoundChannel`, `AttachSoundToUnit`,
+`StartSoundEx` or volume groups. Music natives are listed as not modelled by
+Smashcraft's headless declarations and are outside this section.
+
+Warsmash (the researched revision above) gives little here: `StartSound`
+asks the audio backend for a new voice on every call, with no check that the
+handle is already playing and no cap on voices per file, label or channel;
+`StopSound`, `KillSoundWhenDone` and `GetSoundIsPlaying` are not registered;
+pitch and volume setters do nothing. The Warcraft rules below are the ones map
+authors work around (Smashcraft's own `StopSound`-before-`StartSound` on kept
+handles exists because of the first), recorded here for the capture to
+confirm. The fixture reads `GetSoundIsPlaying` only as a probe; each case
+samples it at a fraction of the file's length, away from the start and end.
+
+| Rule Smashcraft relies on | Warcraft rule | Warsmash rule | Wisp before | Wisp now | Verdict | Fixture row |
+| --- | --- | --- | --- | --- | --- | --- |
+| `StartSound` on a handle that is still playing (Immolation re-lit; why hover and item cues stop first) | A handle has one voice: the call neither restarts it nor adds a voice | A new voice each call | A second start cue; the remaining time restarted | Ignored: no cue, the first playback ends on time | **Mismatch, fixed** | `start-while-playing-at-1.25=false` |
+| `StopSound(s, false, false)` then `StartSound(s)` in one call (hover, item cues) | Restarts from the beginning | Not registered | Restarts | Restarts | **Match** | `stop-then-start-at-1.25=true` |
+| `KillSoundWhenDone` right after `StartSound` (every one-shot cue) | The sound plays out, then the handle is released | Not registered | Plays out, then released | Same | **Match** | `kill-when-done-at-0.5=true` |
+| `StopSound` on a handle set to be killed (voice cut-off, Immolation release) releases it; stopping or starting a released handle does nothing | Released by the stop; later calls on it are ignored | Not registered | Released; later calls ignored | Same | **Match** | `stopped-kill-when-done-restarted=false`, `released-handle-started=false` |
+| `SetSoundPitch` changes how long a cue plays (swing pitch per tier) | Pitch is a playback-rate factor: pitch 2 ends in half the time | Setter does nothing | Ends at duration ÷ pitch | Same | **Match** | `pitch-two-at-0.25=true`, `pitch-two-at-0.75=false` |
+| `SetSoundPitch` and `SetSoundPosition` values (cue log) | `real` arguments are binary32 | Position not registered; pitch ignored | Stored unrounded: Bun's cue log kept doubles that Lua32 rounds | Stored as binary32 | **Mismatch, fixed** | Bun-only case in `test/headless-sounds.test.ts` (no getter in the game) |
+| `StopSound(loop, false, true)` then a later `StartSound` (Immolation out, then lit again) | The fade-out ends the loop; a later start plays it again | Not registered | Stops at once; a later start plays | Same | **Match** for the later start. How long the fade lasts is audible only and stays with the capture | `fade-stopped-loop-at-1=false`, `fade-stopped-loop-restarted=true` |
+| Several new handles of one file or label started in one frame (a burst of hits and swings) | Each handle has its own voice; no per-file or per-channel cap is established. The engine's total voice count is finite and the quietest or lowest-priority voices may be dropped, which a script cannot see | No cap | No cap; each start is a cue | Same | **Match with Warsmash; native unresolved**: the capture's count decides whether 12 handles of one file all play | `same-file-playing=12/12` |
+| `GetSoundFileDuration` feeding `SetSoundDuration` (announcer, voice, item and hover cues) | The file's length in milliseconds; 0 when missing | Decoded duration | Unmodelled: a map declares it or supplies it | Same; the fixture supplies 2,000 ms for its file | **Not applicable**: headless decodes no sound files, so a game supplies lengths through `natives` | (every case is timed from it) |
+
+A label sound with no `SetSoundDuration`, or a file whose length a game does
+not supply, has a headless length of 0, so it is never playing after its
+start and a second start is always a new cue. Natively it plays for its
+file's length; a map that restarts such a handle without stopping it should
+supply the length.
+
+The native capture builds `bun test/sounds60/build.ts BASE.w3m OUT.w3x`, plays
+it in a two-player 3.0.1 private game for at least 0.5 game seconds plus 1.5
+times the fixture file's length and collects `sounds60-p0.txt` and `sounds60-p1.txt`.
+Each must equal `EXPECTED` in `test/headless-sounds.test.ts`; the rows'
+order depends only on fractions of the file's length, so the stock file's
+real length (rather than headless's 2,000 ms) keeps the same rows. A
+`missing-file=...` row means the stock path is wrong for that build.
 
 ## File-format facts for a standalone player (#48)
 
