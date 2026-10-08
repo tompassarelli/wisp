@@ -861,7 +861,8 @@ function playOnce(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, ma
         const typedCharacters = (driver.typed?.(client.slot) ?? 0) + (step.typed.get(client.slot) ?? []).reduce((sum, line) => sum + line.length, 0);
         const predicted = nativeFrameCost(model, { instructions: 0, natives, allocatedKb: 0, typedCharacters });
         typingMs.push(predicted.typingUs / 1000);
-        return (clients.costs[index] ?? 0) * limits.costScale + predicted.callbacksUs / 1000;
+        const measured = framesPlayed > limits.warmUpFrames ? clients.costs[index] ?? 0 : 0;
+        return measured * limits.costScale + predicted.callbacksUs / 1000;
       });
       // The wall clock waits for the costliest client's frame, its typing stall included.
       const frameMs = Math.max(0, ...nativeMs.map((ms, index) => ms + (typingMs[index] ?? 0)));

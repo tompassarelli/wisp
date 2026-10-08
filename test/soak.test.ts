@@ -44,6 +44,13 @@ farmTest("[invariant] a clean match ends with no findings and repeats from its s
   expect(second.inputs).toEqual(first.inputs);
 });
 
+test("[repro #73] CPU warm-up does not change the seeded match's clock", () => {
+  const result = playSoakMatch(runtime, game, { ...project, limits: { costScale: 1_000_000, warmUpFrames: 1_000_000 }, fuzz: { hitch: 0, silence: 0 } }, { ...match(["fuzz", "fuzz"]), frames: 20 });
+  expect(result.costMs).toBeGreaterThan(0);
+  expect(result.inputs.slow).toEqual([]);
+  expect(result.wallMs).toBeCloseTo((20 * 1000) / 60, 8);
+});
+
 test("[spec #16] each fault is found by its detector", () => {
   const kinds = (policies: readonly string[], setup = project) => play(policies, setup).findings.map(({ kind, text }) => `${kind}: ${text.split("\n")[0]}`);
   expect(kinds(["fuzz", "freeze"])).toEqual([
