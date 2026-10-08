@@ -24,6 +24,9 @@ export const JASS_DECLARATION = String.raw`^[[:space:]]*((constant[[:space:]]+)?
 /** More JASS declaration lines than this in one file reads as a copied game script. */
 export const JASS_LIMIT = 20;
 
+/** Files larger than this (data and evidence dumps) aren't scanned for JASS; common.j is about 0.3 MB. */
+export const JASS_SCAN_BYTES = 2_000_000;
+
 export type Origin = "original" | "generated" | "stock-path";
 
 export interface Policy {
@@ -89,16 +92,22 @@ export const cleanRoom = (root: string, policy: Policy) => Effect.gen(function*(
   if (listed.exitCode !== 0) return yield* Effect.fail(new CleanRoomError({ message: `clean room: git ls-files failed: ${listed.stderr.trim()}` }));
   const paths = listed.stdout.split("\0").filter((path) => path !== "");
   const files = yield* Effect.forEach(paths, (path) => Effect.promise(async () => {
-    const bytes = await Bun.file(join(root, path)).slice(0, 4).bytes().catch(() => new Uint8Array());
-    return { path, head: String.fromCharCode(...bytes) };
+    const file = Bun.file(join(root, path));
+    const bytes = await file.slice(0, 4).bytes().catch(() => new Uint8Array());
+    return { path, head: String.fromCharCode(...bytes), size: file.size };
   }), { concurrency: 64 });
-  // git grep exits 1 when nothing matches.
-  const grep = yield* git(root, ["grep", "--cached", "-z", "-c", "-I", "-E", JASS_DECLARATION]);
-  if (grep.exitCode > 1) return yield* Effect.fail(new CleanRoomError({ message: `clean room: git grep failed: ${grep.stderr.trim()}` }));
-  const jassLines = new Map(grep.stdout.split("\n").filter((line) => line !== "").map((line) => {
-    const [path = "", count = "0"] = line.split("\0");
-    return [path, Number(count)] as const;
-  }));
+  const scanned = files.filter(({ size }) => size <= JASS_SCAN_BYTES).map(({ path }) => path);
+  const batches = Array.from({ length: Math.ceil(scanned.length / 1000) }, (_, n) => scanned.slice(n * 1000, n * 1000 + 1000));
+  const jassLines = new Map<string, number>();
+  for (const batch of batches) {
+    // git grep exits 1 when nothing matches.
+    const grep = yield* git(root, ["grep", "--cached", "-z", "-c", "-I", "-E", JASS_DECLARATION, "--", ...batch.map((path) => `:(literal)${path}`)]);
+    if (grep.exitCode > 1) return yield* Effect.fail(new CleanRoomError({ message: `clean room: git grep failed: ${grep.stderr.trim()}` }));
+    for (const line of grep.stdout.split("\n").filter((line) => line !== "")) {
+      const [path = "", count = "0"] = line.split("\0");
+      jassLines.set(path, Number(count));
+    }
+  }
   const allowlistFile = Bun.file(join(root, ALLOWLIST));
   const allowlist = parseAllowlist((yield* Effect.promise(() => allowlistFile.exists())) ? yield* Effect.promise(() => allowlistFile.text()) : "");
   return cleanRoomProblems({ files, jassLines, allowlist, policy });
