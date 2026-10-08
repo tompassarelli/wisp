@@ -1338,29 +1338,28 @@ export class HeadlessClient {
     }
   }
 
-  /** One game frame: every timer callback due by its end. */
+  /** One game frame: the engine's clocks advance, then every timer callback due by its end runs. */
   step(): void {
-    this.run(() => {
-      this.frame++;
-      this.abilities.tick(f32(1 / FRAMES_PER_SECOND));
-      this.scenery.tick(f32(1 / FRAMES_PER_SECOND));
-      const died: Handle[] = [];
-      for (const pose of this.effects.values()) {
-        advanceAnimation(pose, pose.timeScale, 1 / FRAMES_PER_SECOND);
-        // A sequence ends on its last millisecond, as Warcraft's sequence clock does.
-        if (pose.death !== undefined && pose.animationElapsed >= pose.death - f32(0.001)) died.push(pose.handle);
-      }
-      for (const handle of died) this.effects.delete(handle);
-      for (const unit of this.units.values()) advanceAnimation(unit, unit.timeScale, 1 / FRAMES_PER_SECOND);
-      for (const sound of this.sounds.values()) {
-        if (!sound.playing || sound.looping) continue;
-        sound.elapsed += sound.pitch * 1000 / FRAMES_PER_SECOND;
-        if (sound.elapsed < sound.duration) continue;
-        sound.playing = false;
-        if (sound.killWhenDone) this.sounds.delete(sound.handle);
-      }
-      this.runDueTimers();
-    });
+    this.frame++;
+    // Outside run(): the scope measures map code (wisp perf), and these clocks are Warcraft's own work, not the map's.
+    this.abilities.tick(f32(1 / FRAMES_PER_SECOND));
+    this.scenery.tick(f32(1 / FRAMES_PER_SECOND));
+    const died: Handle[] = [];
+    for (const pose of this.effects.values()) {
+      advanceAnimation(pose, pose.timeScale, 1 / FRAMES_PER_SECOND);
+      // A sequence ends on its last millisecond, as Warcraft's sequence clock does.
+      if (pose.death !== undefined && pose.animationElapsed >= pose.death - f32(0.001)) died.push(pose.handle);
+    }
+    for (const handle of died) this.effects.delete(handle);
+    for (const unit of this.units.values()) advanceAnimation(unit, unit.timeScale, 1 / FRAMES_PER_SECOND);
+    for (const sound of this.sounds.values()) {
+      if (!sound.playing || sound.looping) continue;
+      sound.elapsed += sound.pitch * 1000 / FRAMES_PER_SECOND;
+      if (sound.elapsed < sound.duration) continue;
+      sound.playing = false;
+      if (sound.killWhenDone) this.sounds.delete(sound.handle);
+    }
+    this.run(() => this.runDueTimers());
   }
 
   /** Seconds into a timer's current period, at the game time natives read: its period less what remains, each rounded toward zero. */
