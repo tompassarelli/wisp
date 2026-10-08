@@ -331,7 +331,7 @@ Smashcraft's retained #19 references were recorded on 7 October 2026 at
 the integrity build's solo bot and four-fighter bot workloads, player 0,
 1,800 callbacks each. The 57 windows compare callback p50/p95, using the native
 clock steps; this calibration does not cover GPU/render time, native RSS,
-or native p99. A candidate's printed p99 and worst prediction remain useful
+or native p99. A candidate's computed p99 and worst prediction remain useful
 diagnostics, but #19's 20% guarantee applies to p50 and p95 at this scope.
 
 From Smashcraft's `ts/`, first save the current candidate:
@@ -353,8 +353,8 @@ bun wisp perf compare test/fixtures/perf/playable-bot-four.perf \
 ```
 
 The references predict solo p50 7.00 ms against 8.00 ms (-12.5%), p95
-20.99 ms against 21.00 ms (-0.1%); four-fighter p50 9.06 ms against
-8.00 ms (+13.2%), p95 26.18 ms against 28.99 ms (-9.7%). Each is within
+20.99 ms against 21.00 ms (-0.04%); four-fighter p50 9.06 ms against
+8.00 ms (+13.36%), p95 26.18 ms against 28.99 ms (-9.68%). Each is within
 20%. The native files stay in private local storage; do not recreate native
 timing from headless event counts. Other workloads or hardware need their own
 matched reference before inheriting this calibration claim.
