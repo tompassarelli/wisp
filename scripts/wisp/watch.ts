@@ -252,7 +252,11 @@ const CRASH_FRESH_MS = 60_000;
  * closing while watched); the log's sign-in; the socket; the map's receipt.
  */
 export function decide(client: string, sources: Sources, previous?: ClientView): ClientView {
-  const { now, log = "", socket } = sources;
+  const { now } = sources;
+  const started = sources.prefix.game?.started;
+  const start = sessionMarks(sources.log ?? "").start;
+  const log = started !== undefined && (start === undefined || logTime(start.at, now) < started) ? "" : sources.log ?? "";
+  const socket = started !== undefined && (sources.socket.last?.at ?? 0) < started ? { connected: false } : sources.socket;
   const marks = sessionMarks(log);
   const session = sessionStart(log);
   const scanned = ladderScan(log);
@@ -279,7 +283,7 @@ export function decide(client: string, sources: Sources, previous?: ClientView):
   // evening), so a line it lacks says nothing: the socket outranks it, and the log only adds what it has.
   // A log that ended cleanly is the last launch's until this one writes.
   const login = marks.login === undefined || marks.ended !== undefined ? undefined : logTime(marks.login.at, now);
-  const receipt = sources.receipt !== undefined && (login === undefined || sources.receipt >= login) ? sources.receipt : undefined;
+  const receipt = sources.receipt !== undefined && (started === undefined || sources.receipt >= started) && (login === undefined || sources.receipt >= login) ? sources.receipt : undefined;
   const said = socket.last;
   if (said !== undefined) {
     if (said.state.kind === "signing in") {
@@ -294,7 +298,7 @@ export function decide(client: string, sources: Sources, previous?: ClientView):
   }
   if (receipt !== undefined && login !== undefined) return keep(view({ kind: "in match" }, "receipt", "match start receipt", receipt));
   if (login !== undefined) return keep(view({ kind: "signed in" }, "log", "LoginDoorClose", login));
-  return keep(view({ kind: "running" }, "process", `Warcraft III.exe pid ${game.pid}; no menu screen heard and no LoginDoorClose in its log yet`));
+  return keep(view({ kind: "running" }, "process", `Warcraft III.exe pid ${game.pid}; starting: no menu screen heard and no LoginDoorClose in its log yet`));
 }
 
 const sameState = (a: ClientState, b: ClientState) => JSON.stringify(a) === JSON.stringify(b);

@@ -116,6 +116,8 @@ export interface Observation {
   readonly displayChanges?: readonly DisplayChange[];
   /** Milliseconds this observation's state has held. */
   readonly held: number;
+  /** CPU percent while the current game's log stayed unchanged for at least 60 seconds. */
+  readonly startupCpu?: number;
 }
 
 /** A known bad state, or a step toward a running client, each with its recovery. */
@@ -129,6 +131,7 @@ export type Problem =
   | "empty login shell"
   | "map without its imports"
   | "stuck loading"
+  | "hung startup"
   | "display settings changed"
   | "stale lobby"
   | "score screen"
@@ -155,6 +158,7 @@ export const RECOVERY: Readonly<Record<Problem, string>> = {
   "empty login shell": "ending Warcraft III",
   "map without its imports": "ending Warcraft III",
   "stuck loading": "ending Warcraft III",
+  "hung startup": "ending Warcraft III and relaunching once",
   "display settings changed": "restoring the display settings",
   "stale lobby": "leaving the lobby",
   "score screen": "leaving the score screen",
@@ -220,8 +224,9 @@ export function diagnose(seen: Observation, canPlay: boolean, display?: string, 
       case "in match":
         return { kind: "ready", detail: describeView(view) };
       case "running":
+        if (seen.startupCpu !== undefined && seen.startupCpu < 1) return problem("hung startup", `Warcraft III used ${seen.startupCpu.toFixed(2)}% CPU and added no War3Log line for 60 s`);
         // A game this run started says where it is within its sign-in; one found running is left as it is.
-        if (started && held < DOCTOR_TIMEOUTS.loginShell * 1000) return { kind: "wait", detail: "Warcraft III starting" };
+        if ((started || use.game.cpuMs !== undefined) && held < DOCTOR_TIMEOUTS.loginShell * 1000) return { kind: "wait", detail: "Warcraft III starting" };
         return { kind: "ready", detail: `${describeView(view)}; no source says where it is, so doctor leaves it` };
       case "closed":
       case "launcher":
@@ -348,6 +353,7 @@ const doctorRun = (target: DoctorTarget, print: (line: string) => void, holdStar
   }), Effect.mapError(failed));
 
   let since: { readonly key: string; readonly at: number } | undefined;
+  let startup: { readonly pid: number; readonly log: string; readonly at: number; readonly cpu: number } | undefined;
   const observe = Effect.gen(function*() {
     const use = yield* prefixState;
     const errorDialog = use.processes.find(isErrorDialog);
@@ -368,10 +374,16 @@ const doctorRun = (target: DoctorTarget, print: (line: string) => void, holdStar
     }
     const key = [changes === undefined || changes.length === 0 ? "-" : "display", use.runtimes.length, use.launcher === undefined ? "-" : launcher?.kind, use.game === undefined ? "-" : view === undefined ? "?" : describeView(view)].join("|");
     const now = yield* Clock.currentTimeMillis;
+    let startupCpu: number | undefined;
+    if (use.game !== undefined && view?.state.kind === "running" && use.game.cpuMs !== undefined) {
+      const text = (yield* machine.read(war3Log).pipe(Effect.mapError(failed))) ?? "";
+      if (startup === undefined || startup.pid !== use.game.pid || startup.log !== text) startup = { pid: use.game.pid, log: text, at: now, cpu: use.game.cpuMs };
+      if (now - startup.at >= 60_000) startupCpu = (use.game.cpuMs - startup.cpu) * 100 / (now - startup.at);
+    } else startup = undefined;
     if (since === undefined || since.key !== key) since = { key, at: now };
     let held = now - since.at;
     if (view?.state.kind === "signing in") held = Math.max(held, yield* sessionSpan);
-    return { use, ...(errorDialog === undefined ? {} : { errorDialog }), ...(launcher === undefined ? {} : { launcher }), ...(view === undefined ? {} : { view }), ...(unknown === undefined ? {} : { unknown }), ...(changes === undefined ? {} : { displayChanges: changes }), held } satisfies Observation;
+    return { use, ...(startupCpu === undefined ? {} : { startupCpu }), ...(errorDialog === undefined ? {} : { errorDialog }), ...(launcher === undefined ? {} : { launcher }), ...(view === undefined ? {} : { view }), ...(unknown === undefined ? {} : { unknown }), ...(changes === undefined ? {} : { displayChanges: changes }), held } satisfies Observation;
   });
 
   const poll = <A>(seconds: number, check: Effect.Effect<A | undefined, DoctorStop>) => pollFor(seconds, POLL, check);
@@ -495,6 +507,7 @@ const doctorRun = (target: DoctorTarget, print: (line: string) => void, holdStar
       case "empty login shell":
       case "map without its imports":
       case "stuck loading":
+      case "hung startup":
         return yield* endGame;
       case "display settings changed": {
         const text = yield* machine.read(preferences).pipe(Effect.mapError(failed));
@@ -560,7 +573,7 @@ const doctorRun = (target: DoctorTarget, print: (line: string) => void, holdStar
         const then = yield* recover(problem);
         if (then !== undefined) next = then;
         // A launcher restarted after a failed launch starts and launches once more, as `play` does.
-        if (problem === "launch failed") {
+        if (problem === "launch failed" || problem === "hung startup") {
           tried.delete("closed");
           tried.delete("no game");
         }

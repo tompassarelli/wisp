@@ -43,8 +43,12 @@ export function listProcesses(): ProcessInfo[] {
         if (variable.startsWith("WINEPREFIX=")) process.prefix = variable.slice("WINEPREFIX=".length).replace(/\/+$/, "");
         if (variable.startsWith("DISPLAY=")) process.display = variable.slice("DISPLAY=".length);
       }
-      const started = startedAt(readText(`${base}/stat`), bootMs);
+      const stat = readText(`${base}/stat`);
+      const started = startedAt(stat, bootMs);
       if (started !== undefined) process.started = started;
+      const fields = stat?.slice(stat.lastIndexOf(")") + 2).split(" ");
+      const cpu = Number(fields?.[11]) + Number(fields?.[12]);
+      if (Number.isFinite(cpu)) process.cpuMs = cpu * 1000 / TICKS_PER_SECOND;
       if (name === "wineserver") {
         try {
           process.cwd = readlinkSync(`${base}/cwd`);

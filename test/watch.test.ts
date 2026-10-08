@@ -55,6 +55,22 @@ const sources = (now: number, processes: readonly ProcessInfo[], extra: Partial<
   ...extra,
 });
 
+test("[repro #88] a previous launch's receipt and sign-in cannot place the new process in a match", () => {
+  const log = fixture("war3log/menus-after-scan.txt");
+  const started = on6Oct("16:30");
+  const game = { ...GAME, started };
+  const old = { log, receipt: started - 1000 };
+  expect(decide("a", sources(started + 9000, [LAUNCHER, { ...game, started: on6Oct("16:20") }], { log, receipt: started + 2000 })).state.kind).toBe("in match");
+  expect(decide("a", sources(started + 9000, [LAUNCHER, game], old)).state.kind).toBe("running");
+  expect(decide("a", sources(started + 9000, [LAUNCHER, game], old)).evidence).toContain("starting");
+  expect(decide("a", sources(started + 9000, [LAUNCHER, game], { ...old, socket: { connected: true, last: { state: { kind: "in match" }, at: started - 1000, evidence: "old match" } } })).state.kind).toBe("running");
+  const current = { ...old, socket: { connected: true, last: { state: { kind: "loading" as const }, at: started + 1000, evidence: "loading" } }, receipt: started + 2000 };
+  expect(decide("a", sources(started + 9000, [LAUNCHER, game], current)).state.kind).toBe("in match");
+  for (const state of [{ kind: "menus" as const, screen: "MAIN_MENU" }, { kind: "signed in" as const }]) {
+    expect(decide("a", sources(started + 9000, [LAUNCHER, game], { ...old, socket: { connected: true, last: { state, at: started + 1000, evidence: "current" } } })).state).toEqual(state);
+  }
+});
+
 test("[spec docs/watch.md] offline host permits chat only for its exact loaded, connected, playing process", () => {
   const lan = { pid: GAME.pid, map: "/private/test.w3x", phase: "playing", connected: true, loaded: true, left: false };
   const observed = (value: typeof lan) => decide("a", sources(on6Oct("21:00"), [GAME], { lan: value }));

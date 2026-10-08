@@ -95,8 +95,12 @@ instead of looping.
 A client in its menus, signed in, or in a match is ready. Signing in or
 loading for less than its bound is waited on. A game no source places yet
 (`running`: its process, no menu screen heard, no sign-in in its log) is
-left alone when doctor finds it, and waited on for up to 120 s when doctor
-just launched it.
+waited on for up to 120 s when doctor just launched it or can read its CPU.
+If it consumes under 1% CPU over 60 s without adding a War3Log line,
+doctor ends Warcraft III and asks Battle.net to relaunch it once. A second
+hung startup stops the run. A game already in its menus, signed in or in a
+match is preserved, even when its log is quiet. Old match receipts and
+sign-in logs from before the current process started do not make it ready.
 
 War3Log.txt is written in bursts: on 6 Oct client B's log stopped 3 s into a
 session that then signed in and played all evening, so it showed no sign-in
