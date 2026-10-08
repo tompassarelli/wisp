@@ -8,5 +8,5 @@ export function install(this: void): void {
 
 export function start(this: void): void {
   install();
-  writeLines(`unit-states-p${GetPlayerId(GetLocalPlayer())}.txt`, unitStateCases());
+  unitStateCases(rows => writeLines(`unit-states-p${GetPlayerId(GetLocalPlayer())}.txt`, rows));
 }

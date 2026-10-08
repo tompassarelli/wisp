@@ -1,3 +1,5 @@
+import { exact } from "../unit-motion57/cases";
+
 export const UNIT_TYPE = 0x68666f6f;
 export const UNIT_FIXTURE = { [UNIT_TYPE]: { life: 100, maxLife: 100, mana: 80, maxMana: 80 } };
 
@@ -10,11 +12,16 @@ function fixture(): unit {
   return created;
 }
 
-/** Each recorded integer is the observed native value times 128. */
-export function unitStateCases(this: void): string[] {
+/**
+ * Each recorded integer is the observed native value times 128, wrapped to 32 bits as Warcraft's Lua
+ * integers wrap, so a unit type ID times 128 reads the same in Bun. The twelve original cases and the
+ * cutoff, corpse-write and exact facing cases run at once; the removal timing cases read a unit
+ * removed by a timer at 0.25 s, then later; `done` gets every row 1.3125 game seconds after start.
+ */
+export function unitStateCases(this: void, done: (this: void, rows: readonly string[]) => void): void {
   const rows: string[] = [];
   const record = (name: string, values: readonly number[]) => {
-    rows.push(`${name}=${values.map(value => `${Math.floor(value * 128)}`).join(",")}`);
+    rows.push(`${name}=${values.map(value => `${Math.floor(value * 128) | 0}`).join(",")}`);
   };
   let u = fixture();
   record("owner-retained", [GetPlayerId(GetOwningPlayer(u))]);
@@ -87,5 +94,44 @@ export function unitStateCases(this: void): string[] {
   RemoveUnit(u);
   SetWidgetLife(u, 50);
   record("removal", [GetUnitTypeId(u), GetWidgetLife(u)]);
-  return rows;
+
+  // The cutoff's binary32 neighbours: f32(0.405) less one ulp, f32(0.405), and one ulp more.
+  const cutoff: number[] = [];
+  for (const life of [0.4049999713897705, 0.4050000011920929, 0.4050000309944153]) {
+    u = fixture();
+    SetWidgetLife(u, life);
+    cutoff.push(GetWidgetLife(u));
+    RemoveUnit(u);
+  }
+  record("death-cutoff", cutoff);
+
+  u = fixture();
+  KillUnit(u);
+  SetWidgetLife(u, 0.3984375);
+  record("dead-low-write", [GetWidgetLife(u)]);
+  RemoveUnit(u);
+
+  u = fixture();
+  KillUnit(u);
+  SetWidgetLife(u, 50);
+  SetWidgetLife(u, 0.3984375);
+  record("dead-raised-low-write", [GetWidgetLife(u)]);
+  RemoveUnit(u);
+
+  u = fixture();
+  SetUnitFacing(u, 180);
+  BlzSetUnitFacingEx(u, 90);
+  rows.push(`facing-writes-exact=${exact(GetUnitFacing(u))}`);
+  RemoveUnit(u);
+
+  // Equal deadlines run in TimerStart order in one frame: the second callback reads after the removal.
+  const removed = fixture();
+  SetWidgetLife(removed, 37.5);
+  const read = (name: string) => record(name, [GetUnitTypeId(removed), GetWidgetLife(removed)]);
+  TimerStart(CreateTimer(), 0.25, false, () => RemoveUnit(removed));
+  TimerStart(CreateTimer(), 0.25, false, () => read("removal-same-deadline"));
+  TimerStart(CreateTimer(), 0.265625, false, () => read("removal-next-frame"));
+  TimerStart(CreateTimer(), 0.5, false, () => read("removal-quarter-second"));
+  TimerStart(CreateTimer(), 1.25, false, () => read("removal-one-second"));
+  TimerStart(CreateTimer(), 1.3125, false, () => done(rows));
 }
