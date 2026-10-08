@@ -7,6 +7,11 @@
 // The command writes the map to $WISP_MAP_OUT; an argument `{out}` is replaced by that path.
 import { mkdir, rename, rm, stat } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import * as BunRuntime from "@effect/platform-bun/BunRuntime";
+import * as BunServices from "@effect/platform-bun/BunServices";
+import { Cause, Console, Effect, Exit, Schema } from "effect";
+import { ChildProcess } from "effect/process";
+import { describeCause } from "./command";
 
 export interface MapBuildStep {
   readonly store: string;
@@ -39,34 +44,58 @@ export function stepProblem(step: MapBuildStep): string | undefined {
   return undefined;
 }
 
-export async function buildIntoStore(step: MapBuildStep): Promise<StoredMap> {
-  const problem = stepProblem(step);
-  if (problem !== undefined) throw new Error(problem);
-  const store = resolve(step.store);
-  const file = `${step.name}-${step.revision}.w3x`;
-  const staging = join(store, `.staging-${process.pid}-${Date.now()}`);
-  await mkdir(staging, { recursive: true });
-  try {
-    const out = join(staging, file);
-    const command = step.command.map((arg) => arg === "{out}" ? out : arg);
-    const child = Bun.spawn([...command], { cwd: step.checkout, env: { ...(step.env ?? process.env), WISP_MAP_OUT: out }, stdout: "inherit", stderr: "inherit" });
-    const code = await child.exited;
-    if (code !== 0) throw new Error(`the map build exited ${code}`);
-    if (!(await stat(out).catch(() => undefined))?.size) throw new Error(`the map build wrote no map to ${out}`);
-    const sha256 = new Bun.CryptoHasher("sha256").update(await Bun.file(out).arrayBuffer()).digest("hex");
-    const map = join(store, file);
-    const digestFile = `${map}.sha256`;
-    await Bun.write(join(staging, `${file}.sha256`), `${sha256}  ${basename(map)}\n`);
-    await rename(out, map);
-    await rename(join(staging, `${file}.sha256`), digestFile);
-    return { map, digestFile, sha256 };
-  } finally {
-    await rm(staging, { recursive: true, force: true });
+export class CiMapBuildFailure extends Schema.TaggedError<CiMapBuildFailure>()("CiMapBuildFailure", {
+  problem: Schema.String,
+}) {
+  override get message(): string {
+    return this.problem;
   }
 }
 
-if (import.meta.main) {
-  const args = process.argv.slice(2);
+const attempt = <A>(what: string, run: () => Promise<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new CiMapBuildFailure({ problem: `${what}: ${describeCause(cause)}` }) });
+
+/**
+ * Builds the map into a staging folder in the store and publishes it there.
+ * Interrupting the step (SIGINT or SIGTERM under runMain) stops the build's
+ * process group; the staging folder is removed however the step ends.
+ */
+export const buildMapIntoStore = (step: MapBuildStep) => Effect.gen(function*() {
+  const problem = stepProblem(step);
+  if (problem !== undefined) return yield* new CiMapBuildFailure({ problem });
+  const store = resolve(step.store);
+  const file = `${step.name}-${step.revision}.w3x`;
+  const staging = join(store, `.staging-${process.pid}-${Date.now()}`);
+  yield* attempt(`create ${staging}`, () => mkdir(staging, { recursive: true }));
+  return yield* Effect.gen(function*() {
+    const out = join(staging, file);
+    const [program = "", ...args] = step.command.map((arg) => arg === "{out}" ? out : arg);
+    const code = yield* Effect.scoped(Effect.flatMap(
+      ChildProcess.make(program, args, { cwd: step.checkout, env: { ...(step.env ?? process.env), WISP_MAP_OUT: out }, extendEnv: false, stdin: "ignore", stdout: "inherit", stderr: "inherit" }),
+      (child) => child.exitCode,
+    )).pipe(Effect.mapError((failure) => new CiMapBuildFailure({ problem: `the map build: ${failure.message}` })));
+    if (code !== 0) return yield* new CiMapBuildFailure({ problem: `the map build exited ${code}` });
+    if (!(yield* Effect.promise(() => stat(out).catch(() => undefined)))?.size) return yield* new CiMapBuildFailure({ problem: `the map build wrote no map to ${out}` });
+    const sha256 = new Bun.CryptoHasher("sha256").update(yield* attempt(`read ${out}`, () => Bun.file(out).arrayBuffer())).digest("hex");
+    const map = join(store, file);
+    const digestFile = `${map}.sha256`;
+    yield* attempt(`write ${digestFile}`, async () => {
+      await Bun.write(join(staging, `${file}.sha256`), `${sha256}  ${basename(map)}\n`);
+      await rename(out, map);
+      await rename(join(staging, `${file}.sha256`), digestFile);
+    });
+    return { map, digestFile, sha256 } satisfies StoredMap;
+  }).pipe(Effect.ensuring(Effect.promise(() => rm(staging, { recursive: true, force: true }))));
+});
+
+/** `buildMapIntoStore` as a promise; it rejects with the step's CiMapBuildFailure. */
+export const buildIntoStore = (step: MapBuildStep): Promise<StoredMap> =>
+  Effect.runPromise(buildMapIntoStore(step).pipe(Effect.provide(BunServices.layer)));
+
+const USAGE = "usage: bun ciMapBuild.ts --store DIR --name NAME --revision SHA -- COMMAND [ARG...]";
+
+/** The step from the command line: 0 when the map is published, 1 when the build failed, 2 for a usage problem. */
+const main = (args: readonly string[]) => Effect.gen(function*() {
   const split = args.indexOf("--");
   const flags = split < 0 ? args : args.slice(0, split);
   const flag = (name: string) => {
@@ -75,14 +104,18 @@ if (import.meta.main) {
   };
   const [store, name, revision] = [flag("store"), flag("name"), flag("revision")];
   if (store === undefined || name === undefined || revision === undefined || split < 0) {
-    console.error("usage: bun ciMapBuild.ts --store DIR --name NAME --revision SHA -- COMMAND [ARG...]");
-    process.exit(2);
+    yield* Console.error(USAGE);
+    return 2;
   }
-  try {
-    const stored = await buildIntoStore({ store, name, revision, command: args.slice(split + 1), checkout: process.cwd() });
-    console.log(`${stored.map}\n${stored.digestFile}\nsha256 ${stored.sha256}`);
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+  return yield* buildMapIntoStore({ store, name, revision, command: args.slice(split + 1), checkout: process.cwd() }).pipe(
+    Effect.flatMap((stored) => Console.log(`${stored.map}\n${stored.digestFile}\nsha256 ${stored.sha256}`).pipe(Effect.as(0))),
+    Effect.catch((failure) => Console.error(failure.message).pipe(Effect.as(1))),
+  );
+});
+
+if (import.meta.main) {
+  BunRuntime.runMain(main(process.argv.slice(2)).pipe(Effect.provide(BunServices.layer)), {
+    disableErrorReporting: true,
+    teardown: (exit) => process.exit(Exit.isSuccess(exit) ? Number(exit.value) : Cause.hasInterruptsOnly(exit.cause) ? 130 : 1),
+  });
 }
