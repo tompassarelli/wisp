@@ -140,6 +140,7 @@ what Steam's `Warcraft III (Battle.net)` shortcut runs, with
 exec bun "$capacity" session --class native --owner "wisp-online-clone-$1" -- \
   env -i HOME="$HOME" USER="$USER" PATH=/run/current-system/sw/bin \
   DISPLAY="$(<"$run/display")" WAYLAND_DISPLAY="$(<"$run/wayland-display")" XDG_RUNTIME_DIR="$run/runtime" XAUTHORITY= \
+  PULSE_SERVER="unix:/run/user/$(id -u)/pulse/native" PULSE_SINK="wisp-online-clone-$1" \
   dbus-run-session -- steam-run env \
   STEAM_COMPAT_DATA_PATH="$clone" STEAM_COMPAT_CLIENT_INSTALL_PATH="$steam" STEAM_COMPAT_APP_ID=3775098022 \
   SteamAppId=3775098022 SteamGameId=16213922543717842944 PROTON_LOG=1 PROTON_LOG_DIR="$clone" \
@@ -147,6 +148,11 @@ exec bun "$capacity" session --class native --owner "wisp-online-clone-$1" -- \
   "$steam/compatibilitytools.d/GE-Proton11-7-x86_64/proton" waitforexitandrun \
   "$clone/pfx/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe"
 ```
+
+Before that it creates the clone's silent PipeWire sink, `wisp-online-clone-<a|b|c>`,
+as `lan pool` does for its clients. Without one, the first client takes the
+sound device and the second starts with "Unable to initialize audio device":
+its `GetSoundFileDuration` reads 0 and a map that reads it desyncs (wisp#60).
 
 A full session, from smashcraft:ts/:
 
