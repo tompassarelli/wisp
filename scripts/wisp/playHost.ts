@@ -6,12 +6,15 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
-import { Effect, Layer, Schema } from "effect";
+import * as BunServices from "@effect/platform-bun/BunServices";
+import { Effect, Layer, type PlatformError, Schema, Stream } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { serverDirectoryName } from "../warcraft/battleNet";
 import { listProcesses } from "../warcraft/processes";
 import { parseWords, separateInk } from "../warcraft/desktop";
 import { describeCause } from "./command";
 import { decodePpm } from "./frameProbe";
+import { type Collected, collect } from "./hostProcess";
 import { reportedMenus } from "./menus";
 import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow } from "./play";
 
@@ -72,23 +75,29 @@ const startDetached = (command: readonly string[], log?: string) => Effect.tryPr
  * instead. Proton's wine is three folders above the launcher's
  * wine-preloader (files/lib/wine/i386-unix).
  */
-const launchInContainer = (tools: PlayTools, launcher: { readonly pid: number }) => Effect.tryPromise({
-  try: async () => {
-    const base = `/proc/${launcher.pid}`;
-    const env = Object.fromEntries(readFileSync(`${base}/environ`, "utf8").split("\0").filter((entry) => entry.includes("="))
-      .map((entry) => [entry.slice(0, entry.indexOf("=")), entry.slice(entry.indexOf("=") + 1)] as const)
-      .filter(([name]) => name !== "WINESERVERSOCKET" && name !== "WINELOADERNOEXEC"));
-    const wine = resolve(dirname(readlinkSync(`${base}/exe`)), "../../../bin/wine");
-    const nsenter = hostNsenter(tools.nsenter);
-    const child = Bun.spawn([nsenter, "-t", String(launcher.pid), "-U", "-m", "--preserve-credentials", `--wd=${readlinkSync(`${base}/cwd`)}`, "--",
-      wine, "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe", "--exec=launch W3"], { env, stdin: "ignore", stdout: "ignore", stderr: "pipe", timeout: 30_000 });
-    const [stderr, code] = await Promise.all([new Response(child.stderr).text(), child.exited]);
-    if (code !== 0) throw new Error(`exited ${code}: ${stderr.trim().split("\n").slice(-3).join(" ")}`);
-  },
-  catch: problem("couldn't ask Battle.net to launch Warcraft III"),
+const launchInContainer = (run: Runner, tools: PlayTools, launcher: { readonly pid: number }) => Effect.gen(function*() {
+  const failed = problem("couldn't ask Battle.net to launch Warcraft III");
+  const { env, wine, nsenter, cwd } = yield* Effect.try({
+    try: () => {
+      const base = `/proc/${launcher.pid}`;
+      const env = Object.fromEntries(readFileSync(`${base}/environ`, "utf8").split("\0").filter((entry) => entry.includes("="))
+        .map((entry) => [entry.slice(0, entry.indexOf("=")), entry.slice(entry.indexOf("=") + 1)] as const)
+        .filter(([name]) => name !== "WINESERVERSOCKET" && name !== "WINELOADERNOEXEC"));
+      const wine = resolve(dirname(readlinkSync(`${base}/exe`)), "../../../bin/wine");
+      return { env, wine, nsenter: hostNsenter(tools.nsenter), cwd: readlinkSync(`${base}/cwd`) };
+    },
+    catch: failed,
+  });
+  const child = ChildProcess.make(nsenter, ["-t", String(launcher.pid), "-U", "-m", "--preserve-credentials", `--wd=${cwd}`, "--",
+    wine, "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe", "--exec=launch W3"], { env, stdin: "ignore", stdout: "ignore" });
+  const { exitCode, stderr } = yield* run(child).pipe(
+    Effect.mapError(failed),
+    Effect.timeoutOrElse({ duration: "30 seconds", orElse: () => Effect.fail(failed("didn't exit within 30 s")) }),
+  );
+  if (exitCode !== 0) return yield* failed(`exited ${exitCode}: ${stderr.trim().split("\n").slice(-3).join(" ")}`);
 });
 
-const machine = (tools: PlayTools): PlayMachine["Service"] => ({
+const machine = (run: Runner, tools: PlayTools): PlayMachine["Service"] => ({
   processes: Effect.try({ try: listProcesses, catch: problem("couldn't read the process table") }),
   serverDirectory: (prefix) => Effect.try({
     try: () => {
@@ -106,7 +115,7 @@ const machine = (tools: PlayTools): PlayMachine["Service"] => ({
       }
     }
   }),
-  launch: (launcher) => launchInContainer(tools, launcher),
+  launch: (launcher) => launchInContainer(run, tools, launcher),
   openSteam: (url) => startDetached([tools.steam, url]).pipe(Effect.asVoid),
   start: startDetached,
   read: (path, from = 0) => Effect.try({
@@ -162,16 +171,22 @@ const machine = (tools: PlayTools): PlayMachine["Service"] => ({
   }),
 });
 
-/** Runs a tool to completion; its stdout on success. A nonzero exit is a problem unless `allowExit` lists it. */
-const run = (command: readonly string[], env: Record<string, string>, stdin?: Uint8Array, allowExit: readonly number[] = []) => Effect.tryPromise({
-  try: async () => {
-    const child = Bun.spawn([...command], { env: { ...Bun.env, ...env }, stdin: stdin ?? "ignore", stdout: "pipe", stderr: "pipe" });
-    const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).arrayBuffer(), new Response(child.stderr).text(), child.exited]);
-    if (code !== 0 && !allowExit.includes(code)) throw new Error(`exited ${code}: ${stderr.trim()}`);
-    return new Uint8Array(stdout);
-  },
-  catch: problem(`${basename(command[0] ?? "")} ${command.slice(1, 3).join(" ")} failed`),
+/** Runs a child to completion in its own scope, so interrupting the step stops and reaps it. */
+type Runner = (command: ChildProcess.Command) => Effect.Effect<Collected, PlatformError.PlatformError>;
+
+const runner = Effect.gen(function*() {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  return ((command) => collect(command).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner))) satisfies Runner;
 });
+
+/** Runs a tool to completion; its stdout on success. A nonzero exit is a problem unless `allowExit` lists it. */
+const tool = (run: Runner, command: readonly string[], env: Record<string, string>, stdin?: Uint8Array, allowExit: readonly number[] = []) => {
+  const failed = problem(`${basename(command[0] ?? "")} ${command.slice(1, 3).join(" ")} failed`);
+  return run(ChildProcess.make(command[0]!, command.slice(1), { env, extendEnv: true, stdin: stdin === undefined ? "ignore" : Stream.make(stdin) })).pipe(
+    Effect.mapError(failed),
+    Effect.flatMap(({ exitCode, stdout, stderr }) => (exitCode !== 0 && !allowExit.includes(exitCode) ? Effect.fail(failed(`exited ${exitCode}: ${stderr.trim()}`)) : Effect.succeed(stdout))),
+  );
+};
 
 const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 
@@ -190,8 +205,8 @@ const NiriOutput = Schema.Struct({
 });
 
 /** `niri msg --json` replies, decoded; outputs come keyed by name. */
-const niri = <S extends Schema.Top & { readonly DecodingServices: never }>(tools: PlayTools, what: string, schema: S) =>
-  run([tools.niri, "msg", "--json", what], {}).pipe(
+const niri = <S extends Schema.Top & { readonly DecodingServices: never }>(run: Runner, tools: PlayTools, what: string, schema: S) =>
+  tool(run, [tools.niri, "msg", "--json", what], {}).pipe(
     Effect.flatMap((bytes) => Effect.try({ try: () => JSON.parse(text(bytes)) as unknown, catch: problem(`niri's ${what} reply isn't JSON`) })),
     Effect.flatMap((reply) => Schema.decodeUnknownEffect(Schema.Array(schema))(Array.isArray(reply) || reply === null || typeof reply !== "object" ? reply : Object.values(reply))),
     Effect.mapError((cause) => (cause instanceof PlayProblem ? cause : new PlayProblem({ problem: `niri's ${what} reply: ${describeCause(cause)}` }))),
@@ -202,12 +217,12 @@ const shellValues = (output: string) =>
 
 const escapeTitle = (title: string) => title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const desktop = (tools: PlayTools, display: string): PlayDesktop["Service"] => {
+const desktop = (run: Runner, tools: PlayTools, display: string): PlayDesktop["Service"] => {
   const x11 = { DISPLAY: display };
-  const xdotool = (...args: string[]) => run([tools.xdotool, ...args], x11);
+  const xdotool = (...args: string[]) => tool(run, [tools.xdotool, ...args], x11);
   return {
     windows: Effect.gen(function*() {
-      const [windows, workspaces, outputs] = yield* Effect.all([niri(tools, "windows", NiriWindow), niri(tools, "workspaces", NiriWorkspace), niri(tools, "outputs", NiriOutput)]);
+      const [windows, workspaces, outputs] = yield* Effect.all([niri(run, tools, "windows", NiriWindow), niri(run, tools, "workspaces", NiriWorkspace), niri(run, tools, "outputs", NiriOutput)]);
       return windows.map((window): DesktopWindow => {
         const outputName = workspaces.find((workspace) => workspace.id === window.workspace_id)?.output ?? undefined;
         const logical = outputs.find((output) => output.name === outputName)?.logical ?? undefined;
@@ -218,21 +233,21 @@ const desktop = (tools: PlayTools, display: string): PlayDesktop["Service"] => {
         };
       });
     }),
-    focus: (window) => run([tools.niri, "msg", "action", "focus-window", "--id", String(window)], {}).pipe(Effect.asVoid),
-    toggleFullscreen: (window) => run([tools.niri, "msg", "action", "fullscreen-window", "--id", String(window)], {}).pipe(Effect.asVoid),
+    focus: (window) => tool(run, [tools.niri, "msg", "action", "focus-window", "--id", String(window)], {}).pipe(Effect.asVoid),
+    toggleFullscreen: (window) => tool(run, [tools.niri, "msg", "action", "fullscreen-window", "--id", String(window)], {}).pipe(Effect.asVoid),
     read: (output, ink) => Effect.gen(function*() {
-      const frame = decodePpm(yield* run([tools.grim, "-o", output, "-t", "ppm", "-"], {}));
+      const frame = decodePpm(yield* tool(run, [tools.grim, "-o", output, "-t", "ppm", "-"], {}));
       if (frame === undefined) return yield* new PlayProblem({ problem: `grim's capture of ${output} isn't a PPM image` });
-      const tsv = text(yield* run([tools.tesseract, "stdin", "stdout", "--psm", "11", "tsv"], {}, separateInk(frame, ink)));
+      const tsv = text(yield* tool(run, [tools.tesseract, "stdin", "stdout", "--psm", "11", "tsv"], {}, separateInk(frame, ink)));
       return { width: frame.width, height: frame.height, words: parseWords(tsv) };
     }),
     xWindow: (title, pid) => Effect.gen(function*() {
       // xdotool search exits 1 when no window matches.
-      const ids = text(yield* run([tools.xdotool, "search", "--onlyvisible", "--name", `^${escapeTitle(title)}$`], x11, undefined, [1])).split("\n").filter((line) => line !== "");
+      const ids = text(yield* tool(run, [tools.xdotool, "search", "--onlyvisible", "--name", `^${escapeTitle(title)}$`], x11, undefined, [1])).split("\n").filter((line) => line !== "");
       const candidates: { readonly window: XWindow; readonly owned: boolean }[] = [];
       for (const id of ids) {
         // Wine sets _NET_WM_PID to the Linux process; a window without one is still a candidate.
-        const owned = pid !== undefined && Number(text(yield* run([tools.xdotool, "getwindowpid", id], x11, undefined, [1])).trim()) === pid;
+        const owned = pid !== undefined && Number(text(yield* tool(run, [tools.xdotool, "getwindowpid", id], x11, undefined, [1])).trim()) === pid;
         const values = shellValues(text(yield* xdotool("getwindowgeometry", "--shell", id)));
         candidates.push({ owned, window: { id, x: Number(values.X), y: Number(values.Y), width: Number(values.WIDTH), height: Number(values.HEIGHT) } });
       }
@@ -248,8 +263,12 @@ const desktop = (tools: PlayTools, display: string): PlayDesktop["Service"] => {
 /** The live machine and the owner's desktop, with the game on X display `display`. */
 export const playHostLayer = (display: string, tools: Partial<PlayTools> = {}) => {
   const resolved = { ...PLAY_TOOLS, ...tools };
-  return Layer.merge(Layer.succeed(PlayMachine, PlayMachine.of(machine(resolved))), Layer.succeed(PlayDesktop, PlayDesktop.of(desktop(resolved, display))));
+  return Layer.mergeAll(
+    Layer.effect(PlayMachine, Effect.map(runner, (run) => PlayMachine.of(machine(run, resolved)))),
+    Layer.effect(PlayDesktop, Effect.map(runner, (run) => PlayDesktop.of(desktop(run, resolved, display)))),
+  ).pipe(Layer.provide(BunServices.layer));
 };
 
 /** The host alone (processes, files, Steam), for commands that drive no desktop of their own, like `doctor`. */
-export const playMachineLayer = (tools: Partial<PlayTools> = {}) => Layer.succeed(PlayMachine, PlayMachine.of(machine({ ...PLAY_TOOLS, ...tools })));
+export const playMachineLayer = (tools: Partial<PlayTools> = {}) =>
+  Layer.effect(PlayMachine, Effect.map(runner, (run) => PlayMachine.of(machine(run, { ...PLAY_TOOLS, ...tools })))).pipe(Layer.provide(BunServices.layer));
