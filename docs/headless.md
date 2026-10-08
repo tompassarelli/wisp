@@ -710,14 +710,34 @@ first because they were created first. Drawing opaque models before blended
 models increases its counts to 1970/2260/0 and agreement to 11/14. The
 native-pinned regression is `test/draw-order.test.ts`.
 
-The electric models use additive mesh layers. The renderer uses source RGB
-as the blend factor and ignores mesh alpha, so multiplying fragment alpha
-alone does not correct their false passes. Ledge dust has no mesh and a
-continuous particle emitter; its particles are missing. Its native captures
-hold animation time at zero speed while particles continue, whereas headless
-advances particles only by animation time. Independent particle time and
-additive opacity remain to be matched before #72 can close. Layer/geoset
-opacity alone was tried on all 42 frames and left agreement at 10/14.
+The renderer now multiplies each layer's alpha by its geoset's animated
+alpha and blends additive layers with source alpha, so fades scale what an
+additive layer adds. Particle texture cells repeat past the grid's last cell:
+ledge dust's 1×1 Dust5A grid had been sampled outside the texture and drew
+nothing. Emitters run one frame behind animation time. On all 42 frames:
+
+| Case | Native +2/+8/+20 | Headless +2/+8/+20 | Agreement |
+| --- | --- | --- | --- |
+| Electric hit | 889/256/0 | 4625/538/0 | Fail |
+| Slash spark | 4034/0/0 | 4414/0/0 | Pass |
+| Ice spark | 19072/0/0 | 24303/0/0 | Pass |
+| Shield hit | 2950/0/0 | 3727/0/0 | Pass |
+| Electric shield | 424/0/0 | 3223/0/0 | Fail |
+| Shield break | 11686/0/0 | 13060/0/0 | Pass |
+| Floor tech | 1518/1789/0 | 1970/1934/0 | Pass |
+| Wall tech | 1365/1660/0 | 1870/1794/0 | Pass |
+| Ceiling tech | 1365/1656/0 | 1868/1774/0 | Pass |
+| Ledge catch | 1811/1430/0 | 2365/1793/0 | Pass |
+| Ledge dust | 6313/61246/0 | 5137/35843/0 | Pass |
+| Double jump | 3604/0/0 | 4274/0/0 | Pass |
+| Wall jump | 2292/0/0 | 2779/0/0 | Pass |
+| Landing | 7841/8799/0 | 6934/8242/0 | Pass |
+
+Agreement is 12/14. Both electric cases still pass headless: the stock
+ForkedLightningTarget's additive Blue_Glow2 halo (effect alpha 113) is
+visible headless and absent natively. Headless also clears to a dark
+backdrop where native draws the stage sky; a sky-coloured clear brings
+electric hit's +8 from 538 to 269 (native 256) but leaves +2 at 4356.
 
 Only measured numbers and authored code are kept here. Screenshots, stock
 models and textures stay in private local storage under the clean-room rules.
