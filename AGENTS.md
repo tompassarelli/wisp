@@ -46,6 +46,7 @@ the installed package.
 No Smashcraft source imports or filesystem dependencies. Games supply their
 configuration, assets, map declaration and acceptance journeys. Keep proprietary
 assets and binaries outside this repository. No releases are authorized.
+Follow [the clean-room rules](docs/clean-room.md) (wisp:docs/clean-room.md, [wisp#75](https://github.com/tompassarelli/wisp/issues/75)).
 
 Test cost: one test may use at most 4 s of CPU (user plus system, with the
 Lua32 and compiler children it waits for; wisp:scripts/wisp/testCost.ts). It
