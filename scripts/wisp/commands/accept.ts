@@ -3,13 +3,13 @@
 // prints pass, fail or needs-look per check with its evidence folder
 // (wisp:docs/accept.md). --only takes ids, or prefixes ending in `*`;
 // --dry-run prints the plan without touching a client.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { Clock, Console, Effect, type Layer } from "effect";
+import { Clock, Console, Effect, type Layer, Option, Result, Schema } from "effect";
 import {
   AcceptDriver, AcceptFailure, type AcceptReport, type AcceptSuite, type PlannedSession, describePlan, mergeReports, planSessions, privateDirectory, resultLine, runAccept, selectChecks, shardSessions, suiteProblems, summaryLine,
 } from "../accept";
-import { type Command, type CommandFailure, UsageFailure, flagValues } from "../command";
+import { type Command, type CommandFailure, UsageFailure, describeCause, flagValues } from "../command";
 import { emitJson } from "../jsonResults";
 
 export interface AcceptOptions {
@@ -37,6 +37,33 @@ export interface AcceptShards {
   /** Flags the consumer handles in `select`, with their values. */
   readonly flags: readonly string[];
 }
+
+/** A shard's report.json, as runAccept writes it (AcceptReport). */
+const ShardReport = Schema.fromJsonString(Schema.Struct({
+  directory: Schema.String,
+  started: Schema.Finite,
+  finished: Schema.Finite,
+  results: Schema.Array(Schema.Struct({
+    id: Schema.String,
+    closes: Schema.String,
+    map: Schema.String,
+    session: Schema.String,
+    verdict: Schema.Literals(["pass", "fail", "needs-look"]),
+    reason: Schema.String,
+    evidence: Schema.String,
+    rules: Schema.Array(Schema.Struct({ rule: Schema.String, holds: Schema.Boolean, observed: Schema.String, orLook: Schema.Boolean })),
+    readings: Schema.Record(Schema.String, Schema.NullOr(Schema.Union([Schema.Finite, Schema.String]))),
+    files: Schema.Array(Schema.String),
+  })),
+}));
+
+/** The shard's report.json, if it wrote one; a file that doesn't decode is the shard's failure. */
+const readShardReport = (file: string) => Effect.gen(function*() {
+  if (!existsSync(file)) return undefined;
+  const text = yield* Effect.tryPromise({ try: () => Bun.file(file).text(), catch: (cause) => new AcceptFailure({ operation: "read shard report", problem: `${file}: ${describeCause(cause)}` }) });
+  const report: AcceptReport = yield* Schema.decodeEffect(ShardReport)(text).pipe(Effect.mapError((issue) => new AcceptFailure({ operation: "read shard report", problem: `${file}: ${issue.message}` })));
+  return report;
+});
 
 const FLAGS = new Set(["--only", "--dry-run", "--out", "--json"]);
 
@@ -93,6 +120,9 @@ export const makeAccept = ({ suite, evidenceRoot, driver, clients = ["host"], sh
   if (failed.length > 0) return yield* new AcceptFailure({ operation: "accept", problem: `${failed.length} failed: ${failed.map(({ id }) => id).join(", ")}; report ${join(directory, "report.txt")}` });
 });
 
+/** A shard's failure as its checks' reason gives it: the failure's problem when it has one. */
+const shardProblem = (shard: string, failure: CommandFailure) => `shard ${shard}: ${"problem" in failure && typeof failure.problem === "string" ? failure.problem : failure.message}`;
+
 /** Plays each shard's sessions at once and merges their reports into `directory`. */
 const runShards = (shards: AcceptShards, selected: readonly string[], split: readonly (readonly PlannedSession[])[], checks: AcceptSuite["checks"], directory: string, json = false) => Effect.gen(function*() {
   const started = yield* Clock.currentTimeMillis;
@@ -102,20 +132,19 @@ const runShards = (shards: AcceptShards, selected: readonly string[], split: rea
   const outcomes = yield* Effect.forEach(split, (part, index) => {
     const shard = selected[index]!;
     const folder = join(directory, `shard-${shard}`);
-    return shards.run(shard, part.flatMap(({ checks: grouped }) => grouped.map(({ id }) => id)), folder).pipe(
-      Effect.as(""),
-      Effect.catch((failure) => Effect.succeed(`shard ${shard}: ${String((failure as { problem?: string }).problem ?? failure)}`)),
-      Effect.map((problem) => ({ shard, folder, problem })),
-    );
+    return Effect.gen(function*() {
+      const failure = yield* shards.run(shard, part.flatMap(({ checks: grouped }) => grouped.map(({ id }) => id)), folder).pipe(Effect.flip, Effect.option);
+      const read = yield* readShardReport(join(folder, "report.json")).pipe(Effect.result);
+      const report = Result.isSuccess(read) ? read.success : undefined;
+      const failures: readonly CommandFailure[] = [...Option.toArray(failure), ...(Result.isFailure(read) ? [read.failure] : [])];
+      return { shard, folder, failures, report };
+    });
   }, { concurrency: "unbounded" });
-  const reports = outcomes.flatMap(({ folder }) => {
-    const file = join(folder, "report.json");
-    return existsSync(file) ? [JSON.parse(readFileSync(file, "utf8")) as AcceptReport] : [];
-  });
+  const reports = outcomes.flatMap(({ report }) => (report === undefined ? [] : [report]));
   const shardOf = new Map(split.flatMap((part, index) => part.flatMap(({ checks: grouped }) => grouped.map(({ id }) => [id, outcomes[index]!] as const))));
   const report = mergeReports(directory, checks, reports, started, yield* Clock.currentTimeMillis, (check) => {
     const outcome = shardOf.get(check.id);
-    return { id: check.id, closes: check.closes, map: check.map, session: check.session ?? "shared", verdict: "fail", reason: `its shard wrote no result${outcome?.problem ? `: ${outcome.problem}` : ""}`, evidence: outcome?.folder ?? directory, rules: [], readings: {}, files: [] };
+    return { id: check.id, closes: check.closes, map: check.map, session: check.session ?? "shared", verdict: "fail", reason: `its shard wrote no result${outcome === undefined || outcome.failures.length === 0 ? "" : `: ${outcome.failures.map((failure) => shardProblem(outcome.shard, failure)).join("; ")}`}`, evidence: outcome?.folder ?? directory, rules: [], readings: {}, files: [] };
   });
   const lines = [...report.results.map(resultLine), summaryLine(report.results), `wall ${((report.finished - started) / 1000).toFixed(0)} s over ${split.length} shards`];
   yield* Effect.tryPromise({
