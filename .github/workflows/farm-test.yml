@@ -75,21 +75,10 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Install the native archive test dependency
         run: sudo apt-get update -q && sudo apt-get install -y -q libstorm-dev
-      - id: lua
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
-          path: build/lua
-          key: lua-5.3.6-32-fc5fd69bb873-${{ hashFiles('native/toward-zero.h') }}
-      - name: Build Warcraft's numeric Lua runtimes
-        if: steps.lua.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p build/lua/stock build/lua/toward-zero
-          curl -fsSL https://www.lua.org/ftp/lua-5.3.6.tar.gz -o build/lua-5.3.6.tar.gz
-          echo 'fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60  build/lua-5.3.6.tar.gz' | sha256sum --check
-          tar -xzf build/lua-5.3.6.tar.gz -C build/lua/stock
-          tar -xzf build/lua-5.3.6.tar.gz -C build/lua/toward-zero
-          make -C build/lua/stock/lua-5.3.6 -j4 generic MYCFLAGS=-DLUA_32BITS
-          make -C build/lua/toward-zero/lua-5.3.6 -j4 generic "MYCFLAGS=-DLUA_32BITS -include $PWD/native/toward-zero.h"
+          path: ~/.cache/wisp/lua32
+          key: wisp-lua32-${{ hashFiles('scripts/wisp/lua32.ts', 'native/toward-zero.h') }}
       - uses: actions/download-artifact@v4
         with:
           name: farm-test-plan
@@ -103,8 +92,6 @@ jobs:
         env:
           CC: gcc
           STORMLIB_PREFIX: /usr
-          LUA: ${{ github.workspace }}/build/lua/stock/lua-5.3.6/src/lua
-          TOWARD_ZERO_LUA: ${{ github.workspace }}/build/lua/toward-zero/lua-5.3.6/src/lua
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:

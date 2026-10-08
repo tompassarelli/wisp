@@ -34,7 +34,8 @@ failed. Without `--ref` it runs the checkout's HEAD.
    process per core, each writing a line per test with its status and
    seconds. `bun install`'s download cache and the pinned 32-bit Lua build
    (5.3.6 with `LUA_32BITS`, from the checksum-pinned source, plus the
-   round-toward-zero build) come from the Actions cache.
+   round-toward-zero build, wisp:scripts/wisp/lua32.ts's ~/.cache/wisp/lua32)
+   come from the Actions cache.
 5. **Merge.** The merge job reads every shard's result into `summary.json`,
    which the command downloads and prints, and saves this run's measured
    seconds as the next run's `farm-timings.json`.
