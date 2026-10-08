@@ -26,6 +26,7 @@ export interface HeadlessMap {
   readonly unitStates?: UnitStateFixtures;
   readonly scenery?: SceneryFixtures;
   readonly inventory?: Warcraft3InventoryFixtures;
+  readonly playerNames?: Readonly<Record<number, string>>;
   /** The map's configureRuntime() filePrefix. */
   readonly filePrefix: string;
   /** Prefixes of the map's own globals, such as its configureRuntime() globalPrefix. Wisp's `__wisp` is always one. */
@@ -224,6 +225,7 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
         ...(map.unitStates === undefined ? {} : { unitStates: map.unitStates }),
         ...(map.scenery === undefined ? {} : { scenery: map.scenery }),
         ...(map.inventory === undefined ? {} : { inventory: map.inventory }),
+        ...(map.playerNames === undefined ? {} : { playerNames: map.playerNames }),
         natives: (client) => ({ ...luaFunctions(client, bundles), ...map.natives?.(client) }),
       });
     },

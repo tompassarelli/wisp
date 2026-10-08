@@ -21,6 +21,11 @@ in the installed package under your project's `node_modules/wisp/docs/`.
 Wisp supplies reusable services; the consuming game selects its commands,
 paths, map content and acceptance journeys.
 
+Results-screen journeys can read configured `playerNames` with
+`GetPlayerName`, read the current `SetCameraPosition` target with
+`GetCameraTargetPositionX`, and log nonlooping `PlayThematicMusic` in the
+existing [audio events](audio.md) log ([headless runtime](headless.md)).
+
 New map? Start from the [sample map](sample-map.md) (wisp:docs/sample-map.md):
 a complete two-player map with its build, test, fresh-match and hot-reload
 commands, and what a base map needs.
