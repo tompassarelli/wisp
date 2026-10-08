@@ -15,6 +15,8 @@ export interface ProcessInfo {
   readonly display?: string;
   /** Its working directory; a wineserver's is its prefix's server directory. */
   readonly cwd?: string;
+  /** When it started, in epoch milliseconds, to the second; read for Wine's processes only. */
+  readonly started?: number;
 }
 
 /** The processes of one Wine prefix. */

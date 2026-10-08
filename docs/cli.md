@@ -163,7 +163,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--pool-profile NAME` | Offline pool display settings: parity, visual or hfr | `lan pool` |
 | `--fps N` | The foreground and background frame cap for native pool clients | `lan pool` |
 | `--trace SECONDS` | Trap an offline process for this many seconds | `engine locate` |
-| `--clients-file FILE` | The native clients configuration file | `integrity capture` |
+| `--clients-file FILE` | The native clients configuration file | `integrity capture`, `pad`, `fresh` |
 | `--four-fighters` | Capture the four-fighter match and rematch | `integrity capture` |
 | `--playable` | Capture a playable candidate match and rematch | `integrity capture` |
 | `--screen` | Capture native framebuffer samples on the stimulus clock | `integrity capture` |

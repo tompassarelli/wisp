@@ -102,11 +102,7 @@ With nothing running in Tom's prefix:
    `Client.AutoLogin` to `"false"`; and, with no wineserver on the clone,
    drop the `Battle.net\\UnifiedAuth`, `Battle.net\\Identity` and
    `Battle.net\\EncryptionKey` sections from its `pfx/user.reg`.
-3. Delete the copied `battle.net-*.log` files under
-   `Local/Battle.net/Logs` and the copied `smashcraft-*` receipts in
-   `Documents/Warcraft III/CustomMapData`. Doctor reads the newest launcher
-   log and the pad runner reads old receipts, and both misread Tom's.
-4. `bun wisp menus install "<clone>/pfx/drive_c/Program Files (x86)/Warcraft III/_retail_" --port PORT`
+3. `bun wisp menus install "<clone>/pfx/drive_c/Program Files (x86)/Warcraft III/_retail_" --port PORT`
    with the port in the table (Tom's install uses 47124).
 
 ### Launching
@@ -143,16 +139,20 @@ A full session, from smashcraft:ts/:
    desktop's `run`, the clone's `Documents/Warcraft III` and its port) and run
    `bun wisp client doctor --clients-file FILE`: it presses Play and waits for
    the main menu (83 s and 118 s on 8 October).
-4. `pad` and `fresh` read `~/.local/state/smashcraft/clients.json`, so put
-   that file there for the session and restore the old one afterwards. Then
-   `bun wisp fresh MAP --no-quick` hosts the private passworded game (56 s to
-   fighter selection), and
-   `bun wisp pad SCRIPT --helper H --build typescript-integrity --out NATIVE --app-id a=steam_app_3775098022 --app-id b=steam_app_3775098022 --map MAP`
+4. Pass the same file to `pad` and `fresh`, which leave
+   `~/.local/state/smashcraft/clients.json` alone:
+   `bun wisp fresh MAP --no-quick --clients-file FILE` hosts the private
+   passworded game (56 s to fighter selection), and
+   `bun wisp pad SCRIPT --helper H --build typescript-integrity --out NATIVE --app-id a=steam_app_3775098022 --app-id b=steam_app_3775098022 --map MAP --clients-file FILE`
    followed by
    `bun wisp pad SCRIPT --headless --helper H --out HEADLESS --compare NATIVE`
    checks parity. On 8 October `archer-neutral.pad` landed 32 of 32 edges on
    their frames and passed: 10 native checksums replayed equal, 376 frames of
    rows, 39 fighter lines and 11 expectations.
+
+The copied launcher logs and `smashcraft-*` receipts from Tom's install can
+stay: doctor reads only launcher logs written since the running launcher
+started, and the pad runner ignores receipts written before its session began.
 
 Tom's `system.reg`, `user.reg`, `Warcraft III/.build.info` and Battle.net
 `product.db` hashed the same before and after the session.
