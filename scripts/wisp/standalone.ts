@@ -99,7 +99,7 @@ export async function openStandalone(game: StandaloneGame, options: StandaloneOp
         steps++;
         if (checksum !== undefined) checksums.push({ step: steps, frame, checksum, simulationMs: performance.now() - start });
         const capture = captures.delete(frame);
-        const scene = sceneWithUnits(game.render, captureScene(session.client, { visibleUiOnly: !capture }));
+        const scene = sceneWithUnits(game.render, captureScene(session.client, { visibleOnly: !capture }));
         const cues = session.client.soundLog.slice(soundOffset);
         soundOffset = session.client.soundLog.length;
         if (capture && options.out !== undefined) await Bun.write(join(options.out, `p${scene.client}-frame-${frame}.json`), JSON.stringify(scene));

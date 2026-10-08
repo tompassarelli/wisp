@@ -1157,9 +1157,9 @@ export class HeadlessClient {
   }
 
   /** The effects this client shows now, as copies, in creation order. */
-  effectPoses(): EffectPose[] {
+  effectPoses(options: { readonly visibleOnly?: boolean } = {}): EffectPose[] {
     const poses: EffectPose[] = [];
-    for (const pose of this.effects.values()) poses.push({ ...pose, subAnimations: [...pose.subAnimations], color: [...pose.color], matrixScale: [...pose.matrixScale] });
+    for (const pose of this.effects.values()) if (options.visibleOnly !== true || (pose.alpha > 0 && pose.scale > 0 && !pose.flat)) poses.push({ ...pose, subAnimations: [...pose.subAnimations], color: [...pose.color], matrixScale: [...pose.matrixScale] });
     return poses;
   }
 

@@ -21,7 +21,9 @@ function input(): StandaloneInput {
     pad.buttons.forEach((button, index) => { const action = mapping[index]; if (action && button.pressed) buttons.add(action); });
     axisX = pad.axes[0] ?? 0; axisY = -(pad.axes[1] ?? 0);
   }
-  status.textContent = pad ? `${pad.id} · A attack · X special · B/Y jump · triggers shield` : "Arrows / WASD move · J attack · K special · Space jump · L grab · Shift shield · Enter pause";
+  const help = pad ? `${pad.id} · A attack · X special · B/Y jump · triggers shield` : "Arrows / WASD move · J attack · K special · Space jump · L grab · Shift shield · Enter pause";
+  // Rewriting identical text still relayouts and repaints the whole page every frame.
+  if (status.textContent !== help) status.textContent = help;
   return { buttons: [...buttons], axisX, axisY };
 }
 

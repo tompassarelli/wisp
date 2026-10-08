@@ -185,7 +185,7 @@ A game can route `wisp play --standalone` to `runStandalone` from
 the map's headless callbacks once per frame, paced at 60 steps per second.
 Models, textures, camera and UI use the same renderer as headless captures.
 The asset reader supplies private map imports and installed Warcraft assets.
-Live frames snapshot only visible UI, including each frame's parent visibility;
+Live frames copy only visible effects and UI, including each frame's parent visibility;
 requested captures retain the full scene snapshot.
 The window loads the session's known models and textures before its first input
 step. Model initialization leaves animation clocks and particles unchanged;
