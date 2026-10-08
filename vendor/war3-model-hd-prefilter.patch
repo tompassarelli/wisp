@@ -88,7 +88,7 @@ index 25f5bdf..f766ed4 100644
 diff --git a/mdx/parse.ts b/mdx/parse.ts
 --- a/mdx/parse.ts
 +++ b/mdx/parse.ts
-@@ -459,7 +459,15 @@ function parseGeosets (model: Model, state: State, size: number): void {
+@@ -459,7 +459,14 @@ function parseGeosets (model: Model, state: State, size: number): void {
                          throw new Error('Incorrect geoset, multiple SkinWeights');
                      }
                      const len = state.int32();
