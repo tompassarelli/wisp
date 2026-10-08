@@ -883,6 +883,12 @@ export class HeadlessClient {
         if (isFrame(frame)) frame.textLimit = size;
       },
       BlzFrameGetTextSizeLimit: (frame: unknown) => (isFrame(frame) ? frame.textLimit : 0),
+      BlzFrameSetFont: (frame: unknown, file: string, height: number, flags: number) => {
+        if (isFrame(frame)) frame.font = { file, height, flags };
+      },
+      BlzFrameSetTextAlignment: (frame: unknown, vertical: unknown, horizontal: unknown) => {
+        if (isFrame(frame)) frame.alignment = { vertical, horizontal };
+      },
       BlzFrameSetVisible: (frame: unknown, visible: boolean) => {
         if (isFrame(frame)) frame.visible = visible;
       },

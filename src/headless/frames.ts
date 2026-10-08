@@ -19,6 +19,10 @@ export interface Frame extends Handle {
   enabled: boolean;
   level: number;
   textLimit: number;
+  /** BlzFrameSetFont's file, height and flags; "" until set. */
+  font: { readonly file: string; readonly height: number; readonly flags: number };
+  /** BlzFrameSetTextAlignment's vertical and horizontal textaligntype values. */
+  alignment: { readonly vertical: unknown; readonly horizontal: unknown } | undefined;
   width: number;
   height: number;
   /** Absolute points, by framepointtype value. */
@@ -119,6 +123,7 @@ export class Frames {
       ...handle, type, name, context, parent, text: "", visible: true, enabled: true, level: 0, textLimit: DEFAULT_TEXT_LIMIT,
       width: 0, height: 0, points: new Map(), anchors: [], destroyed: false,
       texture: "", color: 0xffffffff, textColor: 0xffffffff, alpha: 255,
+      font: { file: "", height: 0, flags: 0 }, alignment: undefined,
     };
     this.all.push(frame);
     return frame;
