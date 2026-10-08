@@ -112,6 +112,38 @@ const copyBlend = (blend: AnimationBlend | undefined): AnimationBlend | undefine
 /** Seconds of a model's Death sequence at time scale 1; undefined when it has none. */
 export type EffectDeaths = (this: void, model: string) => number | undefined;
 
+/**
+ * The cinematic filter over the world, under the UI, as SetCineFilter* sets
+ * it: a texture tinted by a colour that moves from the start to the end
+ * colour over `duration` seconds from DisplayCineFilter(true).
+ */
+export interface CineFilterPose {
+  readonly texture: string;
+  /** A blendmode constant's name, such as "BLEND_MODE_MODULATE_2X". */
+  readonly blendMode: string;
+  readonly texMapFlags: unknown;
+  /** Red, green, blue and alpha, 0-255, at the capture: the start colour moved toward the end colour by the elapsed share of the duration. */
+  readonly color: readonly [number, number, number, number];
+  /** Minimum u, minimum v, maximum u, maximum v at the capture, moved the same way. */
+  readonly uv: readonly [number, number, number, number];
+}
+
+/** blendmode values in ConvertBlendMode order. */
+const BLEND_MODES = ["BLEND_MODE_NONE", "BLEND_MODE_DONT_CARE", "BLEND_MODE_KEYALPHA", "BLEND_MODE_BLEND", "BLEND_MODE_ADDITIVE", "BLEND_MODE_MODULATE", "BLEND_MODE_MODULATE_2X"];
+
+interface CineFilter {
+  texture: string;
+  blendMode: string;
+  texMapFlags: unknown;
+  startColor: [number, number, number, number];
+  endColor: [number, number, number, number];
+  startUV: [number, number, number, number];
+  endUV: [number, number, number, number];
+  duration: number;
+  /** The frame DisplayCineFilter(true) was called, while it shows. */
+  shown: number | undefined;
+}
+
 export interface CameraPose {
   readonly x: number;
   readonly y: number;
@@ -573,6 +605,7 @@ export class HeadlessClient {
   private cameraX = 0;
   private cameraY = 0;
   private readonly cameraFields: Record<string, number> = {};
+  private readonly cineFilter: CineFilter = { texture: "", blendMode: "BLEND_MODE_NONE", texMapFlags: undefined, startColor: [255, 255, 255, 255], endColor: [255, 255, 255, 255], startUV: [0, 0, 1, 1], endUV: [0, 0, 1, 1], duration: 0, shown: undefined };
   private readonly tooltips = new Map<string, string>();
   /** Preloader runs the content it first read from a path for the rest of the session. */
   private readonly preloaded = new Map<string, readonly string[]>();
@@ -1123,6 +1156,16 @@ export class HeadlessClient {
         this.cameraFields[this.cameraField(field)] = value;
       },
       GetCameraField: (field: unknown) => this.cameraFields[this.cameraField(field)] ?? 0,
+      SetCineFilterTexture: (texture: string) => { this.cineFilter.texture = texture; },
+      SetCineFilterBlendMode: (mode: unknown) => { this.cineFilter.blendMode = typeof mode === "number" ? BLEND_MODES[mode] ?? "BLEND_MODE_NONE" : String(mode); },
+      SetCineFilterTexMapFlags: (flags: unknown) => { this.cineFilter.texMapFlags = flags; },
+      SetCineFilterStartUV: (minU: number, minV: number, maxU: number, maxV: number) => { this.cineFilter.startUV = [minU, minV, maxU, maxV]; },
+      SetCineFilterEndUV: (minU: number, minV: number, maxU: number, maxV: number) => { this.cineFilter.endUV = [minU, minV, maxU, maxV]; },
+      SetCineFilterStartColor: (red: number, green: number, blue: number, alpha: number) => { this.cineFilter.startColor = [red, green, blue, alpha]; },
+      SetCineFilterEndColor: (red: number, green: number, blue: number, alpha: number) => { this.cineFilter.endColor = [red, green, blue, alpha]; },
+      SetCineFilterDuration: (duration: number) => { this.cineFilter.duration = duration; },
+      DisplayCineFilter: (flag: boolean) => { this.cineFilter.shown = flag ? this.frame : undefined; },
+      IsCineFilterDisplayed: () => this.cineFilter.shown !== undefined,
       CreateSound: (source: string, loop: boolean) => this.sound(source, undefined, loop),
       CreateSoundFromLabel: (label: string, loop: boolean) => this.sound(undefined, label, loop),
       CreateSoundFilenameWithLabel: (source: string, loop: boolean, _is3D: boolean, _stop: boolean, _fadeIn: number, _fadeOut: number, label: string) => this.sound(source, label, loop),
@@ -1348,6 +1391,16 @@ export class HeadlessClient {
     const poses: EffectPose[] = [];
     for (const pose of this.effects.values()) if (options.visibleOnly !== true || (pose.alpha > 0 && pose.scale > 0 && !pose.flat)) poses.push({ ...pose, subAnimations: [...pose.subAnimations], animationBlend: copyBlend(pose.animationBlend), color: [...pose.color], matrixScale: [...pose.matrixScale] });
     return poses;
+  }
+
+  /** The cinematic filter as this client draws it now; undefined while none shows. */
+  cineFilterPose(): CineFilterPose | undefined {
+    const filter = this.cineFilter;
+    if (filter.shown === undefined) return undefined;
+    const share = filter.duration <= 0 ? 1 : Math.min(1, (this.frame - filter.shown) / FRAMES_PER_SECOND / filter.duration);
+    const mix = (from: readonly number[], to: readonly number[]): [number, number, number, number] =>
+      [0, 1, 2, 3].map((i) => (from[i] ?? 0) + ((to[i] ?? 0) - (from[i] ?? 0)) * share) as [number, number, number, number];
+    return { texture: filter.texture, blendMode: filter.blendMode, texMapFlags: filter.texMapFlags, color: mix(filter.startColor, filter.endColor), uv: mix(filter.startUV, filter.endUV) };
   }
 
   cameraPose(): CameraPose {

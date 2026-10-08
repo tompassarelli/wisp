@@ -262,3 +262,25 @@ test("journey key down and release keep local polling held across frames", () =>
   expect(result.divergence).toBeUndefined();
   expect(held).toEqual([[0, [false, false]], [1, [true, false]], [2, [true, false]], [3, [false, false]], [4, [false, false]], [5, [false, false]]]);
 });
+
+test("[spec #40] the cinematic filter shows from DisplayCineFilter(true) until false, moving from its start to its end colour over its duration", () => {
+  const clients = runtime.clients({ start: () => {
+    SetCineFilterTexture("ReplaceableTextures\\CameraMasks\\White_Mask.blp");
+    SetCineFilterBlendMode(BLEND_MODE_MODULATE_2X);
+    SetCineFilterTexMapFlags(TEXMAP_FLAG_NONE);
+    SetCineFilterStartColor(185, 185, 185, 255);
+    SetCineFilterEndColor(255, 255, 255, 255);
+    SetCineFilterDuration(1);
+  }, install: () => {} }, [0]);
+  clients.start();
+  const client = clients.client(0);
+  expect(client.cineFilterPose()).toBeUndefined();
+  client.run(() => DisplayCineFilter(true));
+  expect(client.cineFilterPose()).toMatchObject({ texture: "ReplaceableTextures\\CameraMasks\\White_Mask.blp", blendMode: "BLEND_MODE_MODULATE_2X", color: [185, 185, 185, 255], uv: [0, 0, 1, 1] });
+  clients.frames(30);
+  expect(client.cineFilterPose()?.color[0]).toBeCloseTo(220, 0);
+  clients.frames(60);
+  expect(client.cineFilterPose()?.color).toEqual([255, 255, 255, 255]);
+  client.run(() => DisplayCineFilter(false));
+  expect(client.cineFilterPose()).toBeUndefined();
+});

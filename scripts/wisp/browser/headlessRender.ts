@@ -321,6 +321,70 @@ async function drawSky(scene: RenderScene, view: ReturnType<typeof camera>) {
   // The sky's layers leave depth writes off, and a masked depth clear clears nothing.
   gl.depthMask(true); gl.clear(gl.DEPTH_BUFFER_BIT);
 }
+type FilterPose = NonNullable<RenderScene["filter"]>;
+let filterQuad: { program: WebGLProgram; vao: WebGLVertexArrayObject; color: WebGLUniformLocation | null; uv: WebGLUniformLocation | null; textured: WebGLUniformLocation | null } | undefined;
+const filterTextures = new Map<string, Promise<WebGLTexture>>();
+function filterProgram() {
+  if (filterQuad !== undefined) return filterQuad;
+  const shader = (type: number, source: string) => {
+    const made = gl.createShader(type); if (made === null) throw new Error("no filter shader");
+    gl.shaderSource(made, source); gl.compileShader(made);
+    if (!gl.getShaderParameter(made, gl.COMPILE_STATUS)) throw new Error(`filter shader: ${gl.getShaderInfoLog(made)}`);
+    return made;
+  };
+  const program = gl.createProgram(), vao = gl.createVertexArray(), buffer = gl.createBuffer();
+  gl.attachShader(program, shader(gl.VERTEX_SHADER, `#version 300 es
+in vec2 position; uniform vec4 uvRect; out vec2 uv;
+void main() { uv = mix(uvRect.xy, uvRect.zw, vec2(position.x * 0.5 + 0.5, 0.5 - position.y * 0.5)); gl_Position = vec4(position, 0.0, 1.0); }`));
+  gl.attachShader(program, shader(gl.FRAGMENT_SHADER, `#version 300 es
+precision mediump float; in vec2 uv; uniform sampler2D map; uniform vec4 color; uniform bool textured; out vec4 fragment;
+void main() { fragment = (textured ? texture(map, uv) : vec4(1.0)) * color; }`));
+  gl.bindAttribLocation(program, 0, "position"); gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(`filter program: ${gl.getProgramInfoLog(program)}`);
+  gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.bindVertexArray(null);
+  filterQuad = { program, vao, color: gl.getUniformLocation(program, "color"), uv: gl.getUniformLocation(program, "uvRect"), textured: gl.getUniformLocation(program, "textured") };
+  return filterQuad;
+}
+function filterTexture(path: string, wrap: boolean): Promise<WebGLTexture> {
+  const key = `${path}:${wrap}`;
+  let result = filterTextures.get(key);
+  if (result === undefined) {
+    result = textureAt(path).then((image) => {
+      const texture = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      for (const axis of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D, axis, wrap ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+      return texture;
+    });
+    filterTextures.set(key, result);
+  }
+  return result;
+}
+/** The cinematic filter over the drawn world: its texture times its colour, combined with the scene by its blend mode. */
+async function drawFilter(filter: FilterPose): Promise<void> {
+  const quad = filterProgram();
+  const texture = filter.texture === "" ? undefined : await filterTexture(filter.texture, /WRAP/.test(String(filter.texMapFlags)));
+  gl.disable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.CULL_FACE);
+  gl.useProgram(quad.program); gl.bindVertexArray(quad.vao);
+  gl.uniform4f(quad.color, ...filter.color.map((value) => Math.max(0, Math.min(255, value)) / 255) as [number, number, number, number]);
+  gl.uniform4f(quad.uv, ...filter.uv);
+  gl.uniform1i(quad.textured, texture === undefined ? 0 : 1);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texture ?? null);
+  gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD);
+  switch (filter.blendMode) {
+    case "BLEND_MODE_BLEND": case "BLEND_MODE_KEYALPHA": gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); break;
+    case "BLEND_MODE_ADDITIVE": gl.blendFunc(gl.SRC_ALPHA, gl.ONE); break;
+    case "BLEND_MODE_MODULATE": gl.blendFunc(gl.DST_COLOR, gl.ZERO); break;
+    // Twice the product: the scene's colour times the filter's, plus the same again.
+    case "BLEND_MODE_MODULATE_2X": gl.blendFunc(gl.DST_COLOR, gl.SRC_COLOR); break;
+    default: gl.disable(gl.BLEND);
+  }
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  gl.bindVertexArray(null); gl.disable(gl.BLEND); gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
+}
 function cssColor(color: number, alpha = 255): string { return `rgba(${(color >>> 16) & 255},${(color >>> 8) & 255},${color & 255},${((color >>> 24) / 255) * alpha / 255})`; }
 async function uiTexture(path: string, color: number): Promise<HTMLCanvasElement> {
   const original = await textureAt(path);
@@ -373,6 +437,7 @@ window.renderScene = async (scene, options) => {
   const light = scene.environment === undefined ? undefined : await dayNightLight(scene.environment.dayNight.unit, scene.environment.timeOfDay);
   const fog = sceneFog(scene, view, false);
   for (const pose of orderDrawnModels(visible, (pose) => instances.get(pose.handle.id)?.model.Materials ?? [])) await drawEffect(pose, view, light, fog);
+  if (scene.filter !== undefined) await drawFilter(scene.filter);
   const live = options?.capture === false;
   const shown = live ? "block" : "none";
   if (canvas.style.display !== shown) { canvas.style.display = overlay.style.display = shown; output.style.display = live ? "none" : "block"; }

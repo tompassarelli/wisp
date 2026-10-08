@@ -453,6 +453,16 @@ saves them as the scene's `environment`.
   camera's `FARZ` is not drawn, even where part of it reaches nearer. At
   Smashcraft's `FARZ` 8000, native captures show neither Nordrassil's World
   Tree (origin 8054 from the eye) nor the Frozen Throne landmark (8049-9300).
+- **Cinematic filter.** The client records the `SetCineFilter*` setters and
+  `DisplayCineFilter`, and `captureScene` saves the filter showing at that
+  frame as the scene's `filter`: its texture tinted by the start colour moved
+  toward the end colour by the elapsed share of its duration. It draws over
+  the world and under the UI in its blend mode; `BLEND_MODE_MODULATE_2X` is
+  twice the scene times the filter. Smashcraft's KO flash (#289, a white mask
+  at grey 185-255) on Classic, 8 Oct, frames 300-367: the headless curve
+  tracks the native one frame for frame, the flash on at KO, its peak at
+  KO+1 and off at KO+37; at grey 185 native lifts the scene 1.42 times and
+  headless 1.41.
 - **Not drawn.** Terrain, shadows, point lights from models, bloom and other
   post-processing.
 
