@@ -54,7 +54,8 @@ export interface StandaloneFrame {
 
 const Input = Schema.Struct({ buttons: Schema.Array(Schema.String), axisX: Schema.Finite, axisY: Schema.Finite });
 const Sound = Schema.Struct({
-  event: Schema.Literals(["create", "start"]), frame: Schema.Finite,
+  event: Schema.Literals(["create", "start", "stop", "volume"]), frame: Schema.Finite,
+  kind: Schema.Literals(["sound", "music"]), looping: Schema.Boolean, effectiveVolume: Schema.Finite,
   source: Schema.optional(Schema.String), label: Schema.optional(Schema.String),
   handle: Schema.Struct({ kind: Schema.String, id: Schema.Finite }),
   volume: Schema.Finite, pitch: Schema.Finite, x: Schema.Finite, y: Schema.Finite, z: Schema.Finite,
