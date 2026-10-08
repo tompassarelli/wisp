@@ -1,6 +1,6 @@
 # Map preview
 
-`wisp map preview MAP.w3x --out IMAGE.ppm [--packager PATH]` reads a built
+`wisp map preview MAP.w3x --out IMAGE.ppm [--packager PATH] [--assets DIR]` reads a built
 map and writes its lobby preview texture as a binary RGB PPM image. It prints
 the map name, author, player count, source archive entry, `war3map.w3i` flags,
 image dimensions and whether a custom preview was imported. The default
@@ -20,8 +20,15 @@ The captured map's flags are 40016, with hide-minimap (`0x1`) unset;
 measured choice rather than treating the presence of Preview.tga as success.
 TGA minimap textures are also decoded, including RLE and image orientation.
 
-This command currently writes the underlying texture. The start-location
-icons from `war3map.mmp` are not drawn. A second capture with a custom
+The command reads `war3map.mmp` and reports its markers. Add `--assets DIR`
+to draw start-location icons using your installed game's texture, converted
+to TGA at `DIR/UI/MiniMap/MinimapIcon/MinimapIconStartLoc.tga`. The game supplies
+the art; Wisp supplies placement, color tint and alpha blending. Without the
+asset directory, it writes the underlying texture and reports
+`iconsRendered: false` when markers exist. Other marker types require their
+own assets and reference calibration.
+
+A second capture with a custom
 minimap, the Create Game list, and hide-minimap behavior remain open in
 [Wisp #85](https://github.com/tompassarelli/wisp/issues/85). Hidden-minimap
 maps and archives containing both supported minimap encodings fail with a
