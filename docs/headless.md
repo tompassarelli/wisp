@@ -614,7 +614,7 @@ listed first, then absent ones, then unsupported ones in bold:
 | 2 Frozen Throne | light, fog (height fog's linear range, cap, over sky), sky; falloff, bloom absent; **shadows** | light, fog, sky; **height-fog falloff, bloom, shadows** |
 | 3 Durotar | light, fog, sky; falloff, bloom absent; **shadows** | light, fog, sky; **height-fog falloff, bloom, shadows** |
 | 4 Naxxramas | light, fog, sky; omni light, point-light shadow absent; NaxxDeco0 absent; **shadows** | light, fog, sky, omni light, NaxxDeco0; **point-light shadow, shadows** |
-| 6 Stratholme | not renderable: the map's art names `TerrainArt\Misc\misc_CharredEarth.blp`, which no mode's files hold | same |
+| 6 Stratholme | light, fog, sky; omni lights absent; **shadows**; 2 models naming the missing `TerrainArt\Misc\misc_CharredEarth.blp` not drawn | light, fog, sky, omni lights; **point-light shadow, shadows**; the same 2 models not drawn |
 | 7 Tomb of Sargeras | light, fog, sky, ordinary waterfall; falloff absent; **shadows** (HD water skipped: terrain hidden) | light, fog, sky, `_de` WaterfallNoMist; **height-fog falloff, shadows** |
 | 10 Nordrassil | light, fog, sky; bloom, falloff absent; **shadows** | light, fog, sky; **bloom, height-fog falloff, shadows** |
 | 11 Gryphon Aerie | light, fog (GA-4 linear range, over sky), sky; falloff absent; **shadows** | light, fog, sky; **height-fog falloff, shadows** |
@@ -627,7 +627,7 @@ listed first, then absent ones, then unsupported ones in bold:
 Rubric: smashcraft#170's stage-light check, "neither |ΔL| nor ΔE00 falls
 against stock", measured with `bun tools/stage/contrast.ts MASK STOCK STAGE`
 (Smashcraft) on a stock / mask / stage triple. Headless triples: Smashcraft
-main 36f3f1d4 with this Wisp, `-dev quick stage N`, `-dev view off`, then at
+main fe3fc382 with Wisp 86d2e37, `-dev quick stage N`, `-dev view off`, then at
 frame 350 `-dev lighting stock`, `-dev lighting stock` with
 `-dev backdrop off`, or `-dev lighting stage`, each its own run and drawn at
 frame 410, so all three hold the same pose (the deterministic simulation in
@@ -640,16 +640,16 @@ renderer); the verdict is what is compared.
 | Stage | Classic native abs ΔL, ΔE00 stock → stage | verdict | Classic Wisp | verdict | Definitive Wisp | verdict |
 | --- | --- | --- | --- | --- | --- | --- |
 | 0 Sky Deck | no reference | — | 0.6, 10.7 → 4.0, 11.4 | pass | 1.6, 11.6 → 7.3, 13.2 | pass |
-| 2 Frozen Throne | 3.9, 3.8 → 5.0, 5.5 | pass | 3.1, 7.9 → 4.8, 8.4 | pass | 3.3, 7.8 → 7.9, 9.9 | pass |
+| 2 Frozen Throne | 3.9, 3.8 → 5.0, 5.5 | pass | 3.1, 7.9 → 4.8, 8.4 | pass | 4.6, 8.6 → 9.2, 10.9 | pass |
 | 3 Durotar | 7.6, 11.9 → 6.4, 11.7 | fail | 1.7, 31.5 → 5.0, 31.2 | fail | 3.2, 30.5 → 2.3, 30.2 | fail |
 | 4 Naxxramas | 5.6, 21.1 → 16.1, 23.7 | pass | 10.0, 16.8 → 12.4, 17.7 | pass | 8.9, 14.4 → 13.7, 16.7 | pass |
-| 6 Stratholme | no reference | — | not renderable | — | not renderable | — |
-| 7 Tomb of Sargeras | no reference | — | 8.7, 24.1 → 12.2, 24.6 | pass | 9.7, 20.2 → 14.9, 22.0 | pass |
-| 10 Nordrassil | no reference | — | 15.6, 32.0 → 19.2, 32.3 | pass | 18.7, 23.8 → 24.1, 26.5 | pass |
-| 11 Gryphon Aerie | 0.7, 7.3 → 0.7, 7.3 | pass | 1.5, 17.6 → 9.5, 20.1 | pass | 2.3, 17.4 → 0.7, 17.0 | fail |
+| 6 Stratholme | no reference | — | 0.1, 13.6 → 2.3, 12.9 (2 models not drawn) | fail | 15.9, 26.3 → 20.1, 28.3 (2 not drawn) | pass |
+| 7 Tomb of Sargeras | no reference | — | 8.7, 24.1 → 12.2, 24.6 | pass | 10.5, 20.7 → 15.9, 22.7 | pass |
+| 10 Nordrassil | no reference | — | 15.6, 32.0 → 19.2, 32.3 | pass | 19.9, 27.7 → 25.8, 29.6 | pass |
+| 11 Gryphon Aerie | 0.7, 7.3 → 0.7, 7.3 | pass | 1.5, 17.6 → 9.5, 20.1 | pass | 1.9, 17.5 → 0.1, 17.3 | fail |
 | 12 Blackrock | 4.9, 9.6 → 5.0, 10.2 | pass | 14.2, 26.4 → 17.2, 26.6 | pass | 12.8, 24.9 → 17.8, 26.2 | pass |
-| 13 Ahn'Qiraj | 10.4, 14.5 → 9.9, 14.2 | fail | 1.7, 30.2 → 1.5, 28.7 | fail | 5.3, 29.9 → 7.1, 29.2 | fail |
-| 14 Hellfire | no reference | — | 12.3, 32.8 → 15.1, 32.6 | fail | 19.6, 28.2 → 24.6, 30.2 | pass |
+| 13 Ahn'Qiraj | 10.4, 14.5 → 9.9, 14.2 | fail | 1.7, 30.2 → 1.5, 28.7 | fail | 3.8, 29.9 → 5.2, 29.2 | fail |
+| 14 Hellfire | no reference | — | 12.3, 32.8 → 15.1, 32.6 | fail | 21.6, 30.0 → 26.7, 32.5 | pass |
 
 Classic: Wisp's verdict agrees with Warcraft's on 6 of the 6 stages that
 have a native reference (2, 3, 4, 11, 12, 13), 0 disagreements. Drawing the
@@ -657,10 +657,11 @@ three frames at different match frames instead (one run, 60 frames apart)
 flipped Blackrock to a false fail: its lava and platforms move between the
 frames, so same-frame triples are the method. Missing references (16 of
 22): Classic 0, 6, 7, 10 and 14; Definitive all eleven (the 8 Oct
-Definitive batch never reached a match). Stratholme (6) doesn't render in
-either mode until its missing texture is fixed in the map. In Definitive,
-Naxxramas draws 2 omni lights, Blackrock 3 and Hellfire 3 in their frames
-(the stage lights plus a fighter effect's own); Classic draws none.
+Definitive batch never reached a match). Stratholme (6) draws without the 2
+models that use its missing texture (`notDrawn`), so its verdicts are
+provisional. In Definitive, Naxxramas draws 2 omni lights, Blackrock 3,
+Stratholme 3 and Hellfire 3 in their frames (the stage lights plus a fighter
+effect's own); Classic draws none.
 
 ## Unit states
 
