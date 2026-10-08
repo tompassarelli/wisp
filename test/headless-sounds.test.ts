@@ -42,6 +42,13 @@ test("[spec #80] map sound and stage music record loop, stop and mute in event o
   }
 });
 
+test("player music volume slider scales music cues' effective gain and leaves sound effects unchanged", () => {
+  const clients = runtime.clients(audio80, [0], { musicSlider: 0.5 });
+  runJourney(clients, { frames: 48, events: [] });
+  const cues = clients.clients[0]?.soundLog ?? [];
+  expect(cues.map(cue => cue.effectiveVolume)).toEqual([1, 1, 0.5, 64 / 127, 32 / 127, 0, 0, 0, 0, 0, 0.5, 0.5, 0.5, 0.5]);
+});
+
 farmTest("[spec #80] emitted Lua32 map records the same sound and stage music events", { timeout: 120_000 }, () => {
   for (const config of ["test/audio80/tsconfig.json", "test/audio80/tsconfig.headless.json"]) expect(report(mapCompiler(join(import.meta.dir, "..", config))())).toBe("");
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "../build/audio80/headless/headless.lua"), join(import.meta.dir, "../build/audio80/map.lua"), join(import.meta.dir, "../src/natives/warcraft.d.ts")], { stdout: "pipe", stderr: "pipe" });

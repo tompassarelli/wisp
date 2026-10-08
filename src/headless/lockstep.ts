@@ -45,6 +45,8 @@ export interface LockstepOptions {
   readonly keepCalls?: number;
   /** Death sequence lengths of the effect models, for drawing destroyed effects; without it they are gone at once. */
   readonly effectDeaths?: EffectDeaths;
+  /** The player's music volume slider, 0 to 1, as ClientOptions.musicSlider. */
+  readonly musicSlider?: number;
   /**
    * A clock, such as process CPU milliseconds: with it, `costs` holds what
    * each client's last frame took, its arriving messages and its callbacks.
@@ -125,6 +127,7 @@ export class Lockstep {
         ...(options.scenery === undefined ? {} : { scenery: options.scenery }),
         ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
         ...(options.effectDeaths === undefined ? {} : { effectDeaths: options.effectDeaths }),
+        ...(options.musicSlider === undefined ? {} : { musicSlider: options.musicSlider }),
       }));
     }
     this.clients = clients;

@@ -286,6 +286,8 @@ export interface ClientOptions {
   readonly frames?: readonly FrameTemplate[];
   /** Death sequences of the models drawn; without one, a destroyed effect keeps its animation until cleanup. */
   readonly effectDeaths?: EffectDeaths;
+  /** The player's Options > Sound music slider, 0 to 1 (default 1): it scales music cues' effectiveVolume, not sound effects'. */
+  readonly musicSlider?: number;
 }
 
 export const FRAMES_PER_SECOND = 60;
@@ -559,6 +561,7 @@ export class HeadlessClient {
   /** Effects shown, in creation order, including destroyed ones still playing Death. */
   private readonly effects = new Map<Handle, EffectPose>();
   private readonly effectDeaths: EffectDeaths | undefined;
+  private readonly musicSlider: number;
   private readonly units = new Map<Handle, Unit>();
   /** Units RemoveUnit took out of the world this frame; their handles keep their state until the frame ends. */
   private removals: Unit[] = [];
@@ -590,6 +593,7 @@ export class HeadlessClient {
     }, options.inventory);
     this.unitStates = options.unitStates ?? {};
     this.effectDeaths = options.effectDeaths;
+    this.musicSlider = options.musicSlider ?? 1;
     this.slot = options.slot;
     this.scope = options.scope;
     this.filePrefix = options.filePrefix;
@@ -760,7 +764,7 @@ export class HeadlessClient {
 
   private cue(sound: SoundState, event: SoundCue["event"]): void {
     this.soundLog.push({ event, kind: sound.kind, frame: this.frame, handle: sound.handle, source: sound.source, label: sound.label,
-      volume: sound.volume, effectiveVolume: sound.volume / 127, looping: sound.looping,
+      volume: sound.volume, effectiveVolume: sound.volume / 127 * (sound.kind === "music" ? this.musicSlider : 1), looping: sound.looping,
       pitch: sound.pitch, x: sound.unit?.x ?? sound.x, y: sound.unit?.y ?? sound.y, z: sound.z });
   }
 
