@@ -9,6 +9,8 @@ offline client from inside under wisp:docs/engine.md's guardrails, never
 through the OS keyboard or chat. Judge each step by checks per hour per
 machine and by setup failures, and prefer the frontier move over another
 workaround around the client.
+A native check of a TypeScript-only change hot-reloads into the running
+match (`wisp hot --watch`, wisp:docs/hot-reload.md) instead of rebuilding.
 
 Before implementing a feature here or in a consuming map, consult the
 [feature index](docs/index.md) (wisp:docs/index.md) for existing capabilities
