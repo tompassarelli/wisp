@@ -65,7 +65,7 @@ jobs:
       # verdict: test (rebased and checked), conflict, check, empty (main holds it) or gone.
       - id: rebase
         run: |
-          set -uo pipefail
+          set +e -uo pipefail
           out() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
           detail() { { echo "detail<<AUTOLAND_EOF"; printf '%s\n' "$1"; echo "AUTOLAND_EOF"; } >> "$GITHUB_OUTPUT"; }
           git config user.name "github-actions[bot]"
@@ -127,7 +127,7 @@ jobs:
           fetch-depth: 0
       - id: cached
         run: |
-          set -uo pipefail
+          set +e -uo pipefail
           gh api "repos/$GH_REPO/actions/workflows/farm-test.yml/runs?event=workflow_dispatch&status=completed&per_page=100" \
             --jq '.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure") | "\(.display_title | split(" ")[2]) \(.id)"' > farm-runs.txt
           for sha in $(git rev-list --first-parent -n 30 "$BASE"); do
@@ -146,7 +146,7 @@ jobs:
           bun-version: 1.3.13
       - if: steps.cached.outputs.from == ''
         run: |
-          set -uo pipefail
+          set +e -uo pipefail
           bun install --frozen-lockfile
           bun wisp farm test --ref "$BASE" --wait | tee farm.txt
           grep -qE '^(bun|lua32): [0-9]+ passed' farm.txt || { echo "main's farm run printed no result"; exit 1; }
@@ -201,7 +201,7 @@ jobs:
           bun-version: 1.3.13
       - id: land
         run: |
-          set -uo pipefail
+          set +e -uo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898183+github-actions[bot]@users.noreply.github.com"
           short=${SHA:0:10}
@@ -262,7 +262,7 @@ jobs:
           [ -n "$pushed" ] || refuse "pushing to main failed:" "$(cat push.log)"
           git push origin --delete "$BRANCH"
           # Pushes made with this token start no workflows: start main's CI (main-red follows it).
-          gh workflow run ci.yml --ref main
+          gh workflow run ci.yml --ref main || echo "::warning::couldn't start main's CI"
           echo "Landed $BRANCH on main as ${landed:0:10}; deleted the branch." >> "$GITHUB_STEP_SUMMARY"
           if [ "$landed" = "$SHA" ]; then echo "landed=true" >> "$GITHUB_OUTPUT"; fi
       # The landed commit is main's next base: its result saves the next landing a baseline run.
