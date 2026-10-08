@@ -108,8 +108,9 @@ jobs:
     with:
       ref: ${{ needs.rebase.outputs.sha }}
 
-  # Main's failures at the base commit: the summary a previous landing left for
-  # it, else a farm run of the base.
+  # Main's failures at the base commit, from the newest farm result for it or
+  # one of its last 30 main ancestors (a previous landing's saved summary or a
+  # `bun wisp farm test` run), else from a farm run of the base itself.
   baseline:
     needs: rebase
     if: needs.rebase.outputs.verdict == 'test'
@@ -118,20 +119,30 @@ jobs:
     env:
       BASE: ${{ needs.rebase.outputs.base }}
     steps:
-      - id: cached
-        run: echo "run=$(gh api "repos/$GH_REPO/actions/artifacts?name=autoland-summary-$BASE" --jq '[.artifacts[] | select(.expired | not)][0].workflow_run.id // empty')" >> "$GITHUB_OUTPUT"
-      - if: steps.cached.outputs.run != ''
-        run: gh run download "${{ steps.cached.outputs.run }}" -n "autoland-summary-$BASE" -D baseline
-      - if: steps.cached.outputs.run == ''
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
-      - if: steps.cached.outputs.run == ''
+      - id: cached
+        run: |
+          set -uo pipefail
+          gh api "repos/$GH_REPO/actions/workflows/farm-test.yml/runs?event=workflow_dispatch&status=completed&per_page=100" \
+            --jq '.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure") | "\(.display_title | split(" ")[2]) \(.id)"' > farm-runs.txt
+          for sha in $(git rev-list --first-parent -n 30 "$BASE"); do
+            run=$(gh api "repos/$GH_REPO/actions/artifacts?name=autoland-summary-$sha" --jq '[.artifacts[] | select(.expired | not)][0].workflow_run.id // empty')
+            name=autoland-summary-$sha
+            if [ -z "$run" ]; then run=$(awk -v sha="$sha" '$1 == sha { print $2; exit }' farm-runs.txt); name=farm-test-summary; fi
+            if [ -n "$run" ] && gh run download "$run" -n "$name" -D baseline; then
+              echo "from=$sha" >> "$GITHUB_OUTPUT"
+              echo "Main's failures: the farm result of ${sha:0:10} (run $run)." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          done
+      - if: steps.cached.outputs.from == ''
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.13
-      - if: steps.cached.outputs.run == ''
+      - if: steps.cached.outputs.from == ''
         run: |
           set -uo pipefail
           bun install --frozen-lockfile
@@ -139,7 +150,7 @@ jobs:
           grep -qE '^(bun|lua32): [0-9]+ passed' farm.txt || { echo "main's farm run printed no result"; exit 1; }
           mkdir -p baseline
           jq -Rn '[inputs] | {failures: map(select(startswith("FAIL ")) | .[5:]), problems: map(select(startswith("PROBLEM ")) | .[8:])}' farm.txt > baseline/summary.json
-      - if: steps.cached.outputs.run == ''
+      - if: steps.cached.outputs.from == ''
         uses: actions/upload-artifact@v4
         with:
           name: autoland-summary-${{ env.BASE }}
