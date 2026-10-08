@@ -274,8 +274,9 @@ wisp:native/toward-zero.h makes a LUA_32BITS Lua 5.3.6 round its raw float
 `+ - * /` and its decimal numerals toward zero.
 `bun node_modules/wisp/scripts/wisp/lua32.ts toward-zero` prints its path,
 and `bun node_modules/wisp/scripts/wisp/lua32.ts` the stock Lua32's; each is
-built on first use from lua.org's checksummed source, with gcc and make (or
-`nix` when they are missing), into a per-user cache,
+built on first use from lua.org's release tarball, committed at
+wisp:vendor/lua-5.3.6.tar.gz and checksummed before each build, with gcc and
+make (or `nix` when they are missing) and no network, into a per-user cache,
 `~/.cache/wisp/lua32/KEY/lua`, keyed by the source checksum and flags. A lock
 lets parallel worktrees share one build. `lua32(variant)` does the same in a
 host program, and `luaRounding(lua)` tells which rounding a Lua has. Wisp's
