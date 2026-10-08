@@ -913,6 +913,20 @@ the `string` and `sparse-integer` rows from both clients, excluding the local
 `player=` row. This measurement uses the native Lua table traversal; the
 Bun headless runtime's JavaScript object order cannot decide this check.
 
+The 9 October 2026 Warcraft 3.0.1 reference for #35 ran `TableOrder.w3x`
+in one healthy match on clients B and C. Both returned all 1,000 string keys
+and 1,000 sparse integer keys, with order checksums 19,332 and 59,101.
+The two 106,725-byte outputs are identical after excluding `player=0` versus
+`player=1`: zero differing lines. Every key and value matches the fixture,
+and folding the recorded values reproduces both checksums. No desync report
+was written. This measured result requires no unordered-iteration rule.
+The reference files are private at
+`~/.local/state/wisp/table-order-35-20261008/client-{A,B}.txt`;
+[the native run](https://github.com/tompassarelli/wisp/issues/35#issuecomment-6064849160)
+records the session. The launcher reported a selection-screen timeout after
+the game started because this fixture has no Smashcraft selection screen;
+both clients nevertheless completed the fixture and wrote their output.
+
 ## Effect visibility comparison (#72)
 
 Smashcraft's `f9d0fbf3` Classic batch on 8 October 2026 has 14 graded
