@@ -4,7 +4,7 @@
 // rebuilt again (leaving a LAN lobby or game does that), so it runs before
 // every join.
 import { readFileSync } from "node:fs";
-import { Effect, Schema } from "effect";
+import { Effect, Schedule, Schema } from "effect";
 import type { MenuSocket } from "../menus";
 import { isolatedNetworkProblem } from "./offline";
 export class LanFailure extends Schema.TaggedError<LanFailure>()("LanFailure", {
@@ -35,20 +35,18 @@ const listedGames = (payload: unknown): ListedGame[] => {
   return Array.isArray(games) ? games.filter((game): game is ListedGame => typeof game === "object" && game !== null && typeof (game as ListedGame).name === "string") : [];
 };
 
-/** Lists LAN games until `gameName` appears, then joins it. */
+/** Lists LAN games every second until `gameName` appears, then joins it. */
 export const joinLanGame = (menus: MenuSocket, gameName: string, seconds = 30) => Effect.gen(function*() {
   yield* menus.forget;
   yield* menus.send("SendGameListing");
-  const deadline = Date.now() + seconds * 1000;
-  while (Date.now() < deadline) {
+  const listed = Effect.gen(function*() {
     yield* menus.send("GetGameList");
     const games = yield* menus.expect("list LAN games", 3, (event) => (event.messageType === "GameList" ? { done: listedGames(event.payload) } : undefined)).pipe(Effect.orElseSucceed((): ListedGame[] => []));
-    const game = games.find(({ name }) => name === gameName);
-    if (game !== undefined) {
-      yield* menus.send("JoinGame", { gameId: game.id, password: "", mapFile: game.mapFile });
-      return;
-    }
-    yield* Effect.sleep("1 second");
-  }
-  return yield* fail(`no LAN game named ${gameName} listed within ${seconds} s`);
+    return games.find(({ name }) => name === gameName);
+  });
+  const game = yield* listed.pipe(
+    Effect.repeat({ schedule: Schedule.spaced("1 second"), until: (found) => found !== undefined }),
+    Effect.timeoutOrElse({ duration: `${seconds} seconds`, orElse: () => fail(`no LAN game named ${gameName} listed within ${seconds} s`) }),
+  );
+  if (game !== undefined) yield* menus.send("JoinGame", { gameId: game.id, password: "", mapFile: game.mapFile });
 }).pipe(Effect.mapError((failure) => (failure instanceof LanFailure ? failure : new LanFailure({ problem: failure.message }))));

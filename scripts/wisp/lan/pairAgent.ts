@@ -1,5 +1,9 @@
 import { basename, join } from "node:path";
-import { Effect, Exit, Fiber, Scope } from "effect";
+import * as BunRuntime from "@effect/platform-bun/BunRuntime";
+import * as BunServices from "@effect/platform-bun/BunServices";
+import { Cause, Effect, Exit, FiberSet, Option, Schedule, Schema, Scope, Stream } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { spawnLogged } from "../hostProcess";
 import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports } from "../menus";
 import { type LanHost, startHost } from "./host";
 import { LanFailure, enableLan, joinLanGame } from "./join";
@@ -14,13 +18,11 @@ const argument = (name: string) => {
   return at < 0 ? undefined : process.argv[at + 1];
 };
 const pair = Number(argument("pair") ?? "0");
-const capacity = argument("capacity");
-if (capacity === undefined) throw new Error("pairAgent requires --capacity MACHINE_CAPACITY_HELPER");
 const fpsText = argument("fps");
 const profile = poolProfile(argument("pool-profile") ?? "parity", fpsText === undefined ? undefined : Number(fpsText));
 const packager = argument("packager") ?? join(process.env["XDG_CACHE_HOME"] ?? join(process.env["HOME"] ?? "", ".cache"), "wisp/lan/map-pack");
+const locateBeforePeer = process.argv.includes("--locate-before-peer");
 const directory = pairDirectory(pair);
-mkdirSync(directory, { recursive: true });
 const agentLog = join(directory, "agent.log");
 const say = (text: string) => appendFileSync(agentLog, `${new Date().toISOString()} ${text}\n`);
 const steam = join(process.env["HOME"] ?? "", ".local/share/Steam");
@@ -28,10 +30,6 @@ const proton = join(steam, "compatibilitytools.d/GE-Proton11-7-x86_64/proton");
 const runtime = join(steam, "steamapps/common/SteamLinuxRuntime_4/_v2-entry-point");
 
 const runB = argument("run-b");
-/** The games' launchers: each game sits in its own scope, so it outlives this agent unless stopped. */
-const games: Bun.Subprocess[] = [];
-const stopGames = () => { for (const game of games) game.kill("SIGTERM"); };
-process.on("SIGTERM", stopGames);
 const runs: Record<string, string | undefined> = { a: process.env["PRIVATE_DESKTOP_RUN"], b: runB };
 /** Client b's display: its own private desktop, from that desktop's run folder. */
 const displayOf = (run: string | undefined): Record<string, string> => {
@@ -40,6 +38,14 @@ const displayOf = (run: string | undefined): Record<string, string> => {
   return { DISPLAY: read("display"), WAYLAND_DISPLAY: read("wayland-display"), XAUTHORITY: read("xauthority"), XDG_RUNTIME_DIR: join(run, "runtime"), PRIVATE_DESKTOP_RUN: run };
 };
 const clients = PAIR_SIDES.map((side) => ({ side, name: clientName(pair, side), port: reportPort(pair, side), windowX: 0, env: side === "b" ? displayOf(runB) : {} }));
+type PoolClient = (typeof clients)[number];
+
+/** A short helper run's stdout; empty when it fails or takes over 5 s. */
+const output = (command: string, args: readonly string[], env: Record<string, string | undefined>) =>
+  ChildProcessSpawner.ChildProcessSpawner.use((spawner) => spawner.string(ChildProcess.make(command, args, { env, extendEnv: true, stderr: "ignore" }))).pipe(
+    Effect.timeout("5 seconds"),
+    Effect.orElseSucceed(() => ""),
+  );
 
 // Each client plays into its own silent sink on the user's PipeWire, so a pool
 // never sounds on the owner's speakers and a check records exactly one
@@ -47,141 +53,85 @@ const clients = PAIR_SIDES.map((side) => ({ side, name: clientName(pair, side), 
 // one is named. Without PipeWire the clients run without sound, as before.
 const userRuntime = `/run/user/${process.getuid?.() ?? 1000}`;
 const pulse = join(userRuntime, "pulse/native");
-const audioEnv = (name: string): Record<string, string> => {
+const audioEnv = (name: string) => Effect.gen(function*() {
   if (!existsSync(pulse)) return {};
   const sink = audioSinkOf(name);
-  const pw = { ...process.env, XDG_RUNTIME_DIR: userRuntime };
-  const nodes = Bun.spawnSync(["pw-dump"], { env: pw, stdout: "pipe", stderr: "ignore", timeout: 5000 }).stdout.toString();
+  const pw = { XDG_RUNTIME_DIR: userRuntime };
+  const nodes = yield* output("pw-dump", [], pw);
   if (!nodes.includes(`"node.name": "${sink}"`)) {
-    const made = Bun.spawnSync(["pw-cli", "create-node", "adapter", `{ factory.name=support.null-audio-sink node.name=${sink} node.description="Wisp ${name}" media.class=Audio/Sink object.linger=true audio.position=[ FL FR ] priority.session=0 priority.driver=0 }`], { env: pw, stdout: "ignore", stderr: "pipe", timeout: 5000 });
-    if (made.exitCode !== 0) {
-      say(`no sink for ${name} (${made.stderr.toString().trim()}): it runs without sound`);
+    const made = yield* Effect.scoped(Effect.gen(function*() {
+      const child = yield* ChildProcess.make("pw-cli", ["create-node", "adapter", `{ factory.name=support.null-audio-sink node.name=${sink} node.description="Wisp ${name}" media.class=Audio/Sink object.linger=true audio.position=[ FL FR ] priority.session=0 priority.driver=0 }`], { env: pw, extendEnv: true, stdout: "ignore" });
+      const [said, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(child.stderr)), child.exitCode], { concurrency: 2 });
+      return { said, code };
+    })).pipe(Effect.timeout("5 seconds"), Effect.orElseSucceed(() => ({ said: "pw-cli failed", code: 1 })));
+    if (made.code !== 0) {
+      say(`no sink for ${name} (${made.said.trim()}): it runs without sound`);
       return {};
     }
   }
   return { PULSE_SERVER: `unix:${pulse}`, PULSE_SINK: sink };
-};
+});
+
+/** Polls `check` every 250 ms until it holds, for at most `limit`; says whether it held. */
+const until = (check: () => boolean, limit: `${number} seconds`) =>
+  Effect.sync(check).pipe(
+    Effect.repeat({ schedule: Schedule.spaced("250 millis"), until: (held) => held }),
+    Effect.timeoutOption(limit),
+    Effect.map(Option.isSome),
+  );
+
+/** Launches one client's game in its own native capacity scope, held by the agent's scope. */
+const launch = (capacity: string, client: PoolClient) => Effect.gen(function*() {
+  // A second runtime on a live prefix joins its wineserver and dies: a game left from before must be stopped first.
+  const left = findGameProcesses(prefixOf(client.name));
+  if (left.length > 0) {
+    say(`${client.name} still runs (pid ${left.map(({ pid }) => pid).join(", ")}); stopping it first`);
+    for (const { pid } of left) process.kill(pid, "SIGTERM");
+    yield* until(() => findGameProcesses(prefixOf(client.name)).length === 0, "5 seconds");
+  }
+  mkdirSync(documentsOf(client.name), { recursive: true });
+  writeFileSync(join(documentsOf(client.name), "War3Preferences.txt"), preferences(profile, client.windowX));
+  const appId = String(3516115600 + pair * 2 + PAIR_SIDES.indexOf(client.side));
+  // Each game in its own machine-capacity native scope: the high-weight
+  // slice for game clients, no CPU quota.
+  // Admission uses the user's service bus; restore the private runtime only inside the game scope.
+  const gameRuntime = client.env["XDG_RUNTIME_DIR"] ?? process.env["XDG_RUNTIME_DIR"] ?? userRuntime;
+  const [command = process.execPath, ...native] = nativeCommand(capacity, client.name, gameRuntime);
+  const env = { ...client.env, ...(yield* audioEnv(client.name)), XDG_RUNTIME_DIR: userRuntime, DBUS_SESSION_BUS_ADDRESS: `unix:path=${userRuntime}/bus`, STEAM_COMPAT_DATA_PATH: clientRoot(client.name), STEAM_COMPAT_CLIENT_INSTALL_PATH: steam, STEAM_COMPAT_APP_ID: appId, SteamAppId: appId, SteamGameId: appId };
+  const errFile = join(directory, `${client.name}.err`);
+  const game = yield* spawnLogged(ChildProcess.make(command, [...native, "dbus-run-session", "--", "steam-run", "env", runtime, "--verb=waitforexitandrun", "--", proton, "waitforexitandrun", exeOf(client.name), "-launch", "-windowmode", "windowed", "-nowfpause"], {
+    env, extendEnv: true, stdin: "ignore", forceKillAfter: "15 seconds",
+  }), { stdout: join(directory, `${client.name}.out`), stderr: errFile });
+  const early = yield* game.handle.exitCode.pipe(Effect.map(Number), Effect.orElseSucceed(() => -1), Effect.timeoutOption("5 seconds"));
+  if (Option.isSome(early)) {
+    yield* game.written;
+    const said = early.value === 75 ? readFileSync(errFile, "utf8") : "";
+    const deferred = /"decision":"DEFER","reason":"([A-Z_]+)"/.exec(said);
+    if (deferred !== null) {
+      writeFileSync(admissionFile(directory), JSON.stringify({ reason: `${client.name}: ${deferred[1]}` }));
+      return yield* new LanFailure({ problem: `${client.name}: waiting for native capacity (${deferred[1]})` });
+    }
+    return yield* new LanFailure({ problem: `${client.name}: its native launcher exited with ${early.value}` });
+  }
+  say(`launched ${client.name}`);
+  return game.handle;
+});
 
 const gamePid = (name: string) => findGameProcesses(prefixOf(name))[0]?.pid;
-
-// The game may open its window larger than its settings ask, past the edge
-// of its desktop; each client's window is set to the profile's size at the
-// top left of its own desktop. (On one shared desktop, labwc stacked both
-// windows in one place, and Xwayland throttled the covered game until it fell
-// behind the lockstep: hence a desktop per client.)
-const xdotool = process.env["WISP_XDOTOOL"] ?? Bun.which("xdotool") ?? (() => {
-  const built = Bun.spawnSync(["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#xdotool"], { stdout: "pipe", stderr: "ignore" });
-  return built.exitCode === 0 ? join(built.stdout.toString().trim().split("\n")[0] ?? "", "bin/xdotool") : undefined;
-})();
-const x11 = (env: Record<string, string>, ...args: string[]) =>
-  xdotool === undefined ? "" : Bun.spawnSync([xdotool, ...args], { env: { ...process.env, ...env }, stdout: "pipe", stderr: "ignore", timeout: 5000 }).stdout.toString();
-const placeWindows = () => {
-  for (const client of clients) {
-    for (const window of x11(client.env, "search", "--name", "^Warcraft III$").split("\n").filter((id) => id !== "")) {
-      const geometry = x11(client.env, "getwindowgeometry", window);
-      if (geometry.includes(`Position: ${client.windowX},0 `) && geometry.includes(`Geometry: ${profile.width + 4}x${profile.height + 4}`)) continue;
-      x11(client.env, "windowsize", window, String(profile.width), String(profile.height), "windowmove", window, String(client.windowX), "0");
-      say(`placed ${client.name}'s window at ${client.windowX},0, ${profile.width}x${profile.height}`);
-    }
-  }
-};
-if (xdotool === undefined) say("no xdotool: game windows keep the size and place the desktop gives them");
-setInterval(placeWindows, 3000);
 
 interface Game {
   readonly id: string;
   readonly log: string;
   readonly host: LanHost;
   readonly map: string;
-  /** The desync autopsy following this game until it ends. */
-  readonly autopsy: Fiber.Fiber<never>;
-}
-let game: Game | undefined;
-const scope = Scope.makeUnsafe();
-const reports = new Map<string, MenuReports>();
-// The agent holds each client's report port inside the pair's namespace, where
-// `wisp menus listen` can't reach; it keeps the requests each client's menus send instead.
-for (const client of clients) {
-  const sentLog = join(directory, `${client.name}-menus.log`);
-  const onSent = (sent: { readonly message: string; readonly payload?: unknown }) =>
-    appendFileSync(sentLog, `${new Date().toISOString()} ${sent.payload === undefined ? sent.message : `${sent.message} ${JSON.stringify(sent.payload)}`}\n`);
-  reports.set(client.name, await Effect.runPromise(listenForMenus(client.port, onSent).pipe(Scope.provide(scope))));
+  /** Holds the game's host and its desync autopsy; closing it ends the game. */
+  readonly scope: Scope.Closeable;
 }
 
-const menusOf = (name: string): Effect.Effect<MenuSocket, LanFailure | MenuFailure, Scope.Scope> => Effect.gen(function*() {
-  const report = reports.get(name);
-  if (report === undefined) return yield* Effect.fail(new LanFailure({ problem: `no listener for ${name}` }));
-  // The newest announcement: a client that restarted has a new port and guid.
-  yield* report.waitForAddress(120);
-  const latest = yield* report.address;
-  if (latest === undefined) return yield* Effect.fail(new LanFailure({ problem: `${name}'s menus never reported` }));
-  return yield* connectMenus(latest);
-});
+const FreshRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, turnMs: Schema.optionalKey(Schema.Finite), computers: Schema.optionalKey(Schema.Finite) }));
+const SpeedRequest = Schema.fromJsonString(Schema.Struct({ speed: Schema.Finite }));
 
-const endGame = () => {
-  if (game === undefined) return;
-  game.host.stop();
-  // Interrupting the autopsy runs its last look at the reports and its summary.
-  Effect.runFork(Fiber.interrupt(game.autopsy));
-  say(`ended ${game.id}`);
-  game = undefined;
-};
-
-rmSync(agentSocket(pair), { force: true });
-const server = Bun.serve({
-  unix: agentSocket(pair),
-  fetch: async (request) => {
-    const url = new URL(request.url);
-    if (url.pathname === "/status") {
-      return Response.json({
-        pair,
-        profile: profile.name,
-        fps: profile.maxFps,
-        clients: clients.map(({ name }) => ({ name, pid: gamePid(name), documents: documentsOf(name) })),
-        game: game === undefined ? undefined : { id: game.id, log: game.log, map: game.map, ...game.host.status() },
-      });
-    }
-    if (url.pathname === "/fresh" && request.method === "POST") {
-      const body = (await request.json()) as { map?: string; turnMs?: number; computers?: number };
-      if (typeof body.map !== "string" || !existsSync(body.map)) return Response.json({ error: `no map at ${body.map}` }, { status: 400 });
-      const exit = await Effect.runPromiseExit(fresh(body.map, body.turnMs, body.computers));
-      if (Exit.isSuccess(exit)) return Response.json(exit.value);
-      say(`fresh failed: ${String(exit.cause)}`);
-      return Response.json({ error: String(exit.cause) }, { status: 500 });
-    }
-    if (url.pathname === "/end" && request.method === "POST") {
-      endGame();
-      return Response.json({ ended: true });
-    }
-    if (url.pathname === "/speed" && request.method === "POST") {
-      const body = (await request.json()) as { speed?: number };
-      if (game === undefined || game.host.status().phase !== "playing") return Response.json({ error: "no match is playing" }, { status: 400 });
-      if (typeof body.speed !== "number" || !Number.isFinite(body.speed) || body.speed < 1 || body.speed > 16) return Response.json({ error: "speed must be between 1 and 16" }, { status: 400 });
-      game.host.setSpeed(body.speed);
-      return Response.json(game.host.status());
-    }
-    return new Response("not found", { status: 404 });
-  },
-});
-writeFileSync(join(directory, "agent.json"), `${JSON.stringify({ pid: process.pid, socket: agentSocket(pair), profile: profile.name, fps: profile.maxFps, runs })}\n`);
-say(`agent on ${agentSocket(pair)}`);
-const shutdown = (why: string) => {
-  say(`stopping: ${why}`);
-  endGame();
-  for (const launched of games) launched.kill("SIGTERM");
-  server.stop(true);
-  Effect.runSync(Scope.close(scope, Exit.void));
-  process.exit(0);
-};
-process.on("SIGTERM", () => shutdown("asked to"));
-// The pair's session gone (its desktops stopped) means the pair is over.
-const sessionPid = Number(argument("session-pid") ?? "0");
-if (sessionPid > 0) {
-  setInterval(() => {
-    try {
-      process.kill(sessionPid, 0);
-    } catch {
-      shutdown(`the pair session ${sessionPid} ended`);
-    }
-  }, 2000);
-}
+BunRuntime.runMain(Effect.scoped(agent).pipe(
+  Effect.tapCause((cause) => (Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.sync(() => console.error(Cause.pretty(cause))))),
+  Effect.provide(BunServices.layer),
+), { disableErrorReporting: true });
