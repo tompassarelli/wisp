@@ -1,0 +1,1 @@
+Autoland test: this file lands by itself and is removed the same way.
