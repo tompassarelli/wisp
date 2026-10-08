@@ -772,7 +772,11 @@ The renderer now multiplies each layer's alpha by its geoset's animated
 alpha and blends additive layers with source alpha, so fades scale what an
 additive layer adds. Particle texture cells repeat past the grid's last cell:
 ledge dust's 1×1 Dust5A grid had been sampled outside the texture and drew
-nothing. Emitters run one frame behind animation time. On all 42 frames:
+nothing. Emitters run one frame behind animation time, and each step poses
+the model at that step's own time (wisp:scripts/wisp/browser/emitters.ts).
+A squirt fires only when emitter time reaches its key: Frost Nova's ring,
+keyed at 33 ms, is absent two frames in, as natively
+(`test/effect-emitters.test.ts`). On all 42 frames:
 
 | Case | Native +2/+8/+20 | Headless +2/+8/+20 | Agreement |
 | --- | --- | --- | --- |

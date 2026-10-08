@@ -4,6 +4,7 @@ import { type AnimationSequence, animationSample, blendWeight, globalSequenceFra
 import type { DrawnPose as EffectPose, RenderScene } from "../headlessRender";
 import { parsableModel } from "../models";
 import { orderDrawnModels } from "../drawOrder";
+import { advanceEmitters, type EmitterRenderer } from "./emitters";
 
 type Matrix = Float32Array;
 const identity = (): Matrix => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -287,8 +288,7 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
     instance.sequence = sample.sequence; instance.clock = 0;
   }
   if (sample.sequence >= 0 && (data.ParticleEmitters2.length > 0 || data.RibbonEmitters.length > 0)) {
-    // Emitters run one frame behind the animation: natively a 50/s emitter has no particle two frames after it starts, a 60/s one has one.
-    const emitted = elapsed - 1000 / 60; while (instance.clock < emitted) { const delta = Math.min(1000 / 60, emitted - instance.clock); renderer.update(delta); instance.clock += delta; }
+    instance.clock = advanceEmitters(renderer as unknown as EmitterRenderer, data.Sequences, instance.sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, kind, instance.clock, elapsed);
   }
   show(sampler, data, sample);
   data.GlobalSequences.forEach((length, index) => { sampler.rendererData.globalSequencesFrames[index] = globalSequenceFrame(pose.animationClock, length); });

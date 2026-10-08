@@ -6047,7 +6047,7 @@ var ParticlesController = class {
 		if (this.interp.animVectorVal(emitter.props.Visibility, 1) > 0) {
 			if (emitter.props.Squirt && typeof emitter.props.EmissionRate !== "number") {
 				const interp = this.interp.findKeyframes(emitter.props.EmissionRate);
-				if (interp && interp.left && interp.left.Frame !== emitter.squirtFrame) {
+				if (delta > 0 && interp && interp.left && interp.left.Frame !== emitter.squirtFrame) {
 					emitter.squirtFrame = interp.left.Frame;
 					if (interp.left.Vector[0] > 0) emitter.emission += interp.left.Vector[0] * 1e3;
 				}
