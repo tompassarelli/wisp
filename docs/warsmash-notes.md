@@ -333,32 +333,60 @@ exact facing reads and a dash, Bun and 32-bit Lua in
 | Orders on a position write | `setX`/`setY` touch only coordinates, collision bookkeeping and region events, never the order queue | No orders | **Match**; Smashcraft's bodies are paused and never ordered |
 | Pathing or collision side effects | No pathability search or push for X/Y writes; collision entry is translated by the delta. Only `SetUnitPosition` runs an unstuck search | No collision | **Match** for X/Y; case `overlapping-bodies-held` reads two overlapping bodies 0.25 s later unmoved. Region events: no region in Smashcraft |
 | `SetUnitFlyHeight(u, h, 0)` | Height narrowed to binary32 and assigned; rate ignored in this revision | Stored unrounded, rate ignored | **Mismatch, fixed**: stored as binary32. A nonzero rate (real game interpolates) is unused |
-| `BlzSetUnitFacingEx` | Sets simulation and rendered facing at once, normalized as `((f mod 360) + 360) mod 360` in binary32 | Stored the argument unchanged | **Mismatch, fixed**: binary32 floor-modulo into [0, 360). Smashcraft's 0 and 180 were already equal; `facing-ex-normalized` covers -90, 450, 360, 720.5, -720 |
-| `SetUnitFacing` turn-rate interpolation | Sets simulation facing immediately; only the renderer turns at the turn rate | Immediate | **Not relied on**: Smashcraft uses `BlzSetUnitFacingEx`. Wisp's `SetUnitFacing` shares the normalization |
-| Displayed body position | Renderer closes a gap larger than move speed × elapsed seconds by at most that distance per update | Snapshots show the stored position | **Unresolved, renderer only**: snapshot state matches the simulation. Smashcraft bodies (move speed 270) dash faster than that, so the capture below decides whether the real game lags |
+| `BlzSetUnitFacingEx` | Sets simulation and rendered facing at once, normalized as `((f mod 360) + 360) mod 360` in binary32 | Stored the argument unchanged | **Mismatch, fixed; now matches 3.0.1**: the radian rule below. 0 reads 0 and 180 reads 179.99998; Smashcraft never reads facing back |
+| `CreateUnit` facing | Same normalization | Stored the argument unchanged | **Mismatch, fixed**: the same rule; the 8 `facing-created-exact-*` rows equal the `BlzSetUnitFacingEx` reads |
+| `SetUnitFacing` turn-rate interpolation | Sets simulation facing immediately; only the renderer turns at the turn rate | Immediate | **Not relied on**: Smashcraft uses `BlzSetUnitFacingEx`. Wisp's `SetUnitFacing` shares the rule |
+| Displayed body position | Renderer closes a gap larger than move speed × elapsed seconds by at most that distance per update | Snapshots show the stored position | **Unresolved, renderer only**: 3.0.1's `BlzGetLocalSpecialEffectX/Y` read an effect attached to the dashing body at 0, 0 on all 90 ticks, so no map read sees where a unit is drawn. Smashcraft reads no drawn position |
 
-Warsmash's `(x + 360) mod 360` step re-rounds positive facings (0.1 reads
-back as about 0.1000061). Wisp keeps an in-range binary32 facing unchanged;
-Smashcraft's 0 and 180 read the same under either rule.
+**The 3.0.1 facing rule.** Warsmash keeps degrees; 3.0.1 keeps radians, and
+every product rounds toward zero, as its raw `*` does
+([raw float rounding](headless.md#raw-float-rounding)). With D = 0x1.1df46ap-6
+(π/180), R = 0x1.ca5dc2p+5 (180/π) and T = 0x1.921fb6p+2 (2π), the nearest
+binary32 values, a write of f degrees keeps a = f × D. If -T ≤ a < 0 it keeps
+T - a, also rounded toward zero. Otherwise, if a ≥ T or a < -T, it keeps
+(t - ⌊t⌋) × T where t = a × 0x1.45f30ap-3, a factor two ulps above the
+nearest 1/T. `GetUnitFacing` reads a × R. Wisp's `unitFacing`
+(wisp:src/headless/client.ts) is this rule.
+
+Evidence: 3.0.1.24342, two signed-in clients writing identical files, 8 Oct
+(`~/.local/state/wisp/unit-motion57-exact/native-20261008/`). The rule
+reproduces all 43 exact rows (35 `BlzSetUnitFacingEx`, 8 `CreateUnit`), the 7
+facing values of the first ×128 capture and wisp#44's `SetUnitFacing(180)`
+then `BlzSetUnitFacingEx(90)` (11519). Each part is forced by the data:
+
+- In range, the 21 values from 0 to 360 read exactly (f × D) × R with both
+  products rounded toward zero: 180 reads 179.99998, 360 reads 359.99997 (its
+  radians are one ulp under T, so it isn't wrapped), and 0.1, 1/3, 30, 45,
+  60, 90 read one or two ulps under the value written. Rounding either
+  product to nearest misses 30, 45, 60 or 90.
+- -0.001, -90, -180 and -360 equal one added turn (-360 keeps 2^-21 radians,
+  read 2.7e-5). The fraction-of-a-turn step misses -180 and -360.
+- 360.5, 450, 540, 720, 720.5, 1080, 3600, 36000, -720 and -3600 equal the
+  fraction of a turn (450 reads 90.00004, 540 reads 180, 3600 reads 0.00034,
+  720 reads 0). Subtracting T misses all eight positive ones: 450's radians
+  less T read under 90, and 3.0.1 reads over 90. Adding a turn before the
+  fraction step misses -3600.
+- Among multipliers within 24 ulps of 1/T and 2π constants within 4 ulps,
+  only 0x1.45f30ap-3 times, rounded toward zero, and T fit all 8 positive
+  wrapped rows. Division toward zero by 0x1.921fb2p+2 fits the same 43 rows
+  but reads differently for some other writes: 363 reads 3.00004 with the
+  multiplier and 2.999997 with the division. One native read of 363 would
+  decide between them. The multiplier
+  is taken because it matches the
+  quotient an ulp above nearest that Warcraft's raw `/` gave in
+  [raw float rounding](headless.md#raw-float-rounding).
 [Position natives](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L3068-L3108),
 [facing, move speed and height natives](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L3110-L3141),
 [immediate facing native](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4565-L4573),
 [facing normalization](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L1840-L1844),
 [height and coordinate setters](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L2633-L2690).
 
-**First capture** (8 Oct, 3.0.1.24342, two signed-in clients): position,
-height and held rows match; `BlzSetUnitFacingEx(u, 180)` reads just under 180
-and 360 reads just under 360, not 0, while -90, 450, 720.5 and -720 read 270,
-90, 0.5 and 0. The ×128 rows can't pin the conversion.
-
-**Capture needed** (wisp#57): build `bun test/unit-motion57/build.ts BASE.w3m
-OUT.w3x`, play it once on 3.0.1 with two clients, collect
-`unit-motion-p0.txt`, `unit-motion-p1.txt`, `unit-motion-dash-p0.txt` and
-`unit-motion-dash-p1.txt`, and compare the first two with `EXPECTED` in
-`test/headless-unit-motion.test.ts`. The `facing-*-exact-*` rows give each
-read facing exactly; `dash-ticks-drawn-behind` is 0 when the drawn body keeps
-up with a 1200 units-a-second dash, and the dash files show where it was drawn
-each tick.
+**Native rows.** `EXPECTED` in `test/headless-unit-motion.test.ts` is the
+3.0.1 file, all 49 rows; Bun and both 32-bit Luas write it exactly. The dash
+row reads 26 there and headless, because the attached effect reads 0, 0. To
+recapture, build `bun test/unit-motion57/build.ts BASE.w3m OUT.w3x`, play it
+once with two clients and compare `unit-motion-p0.txt` and
+`unit-motion-p1.txt` with `EXPECTED`.
 
 ### Effects: attachment, scale and lifetime
 
@@ -390,7 +418,7 @@ effects belong to wisp#58 and are not repeated here. Fixture:
 | Position held between frames, frozen (time scale 0) or playing | Effects are placed once; only attached effects follow a parent | Position changes only through setters | **Match**: case `held-after-quarter-second` reads both 0.25 s later unmoved |
 | `DestroyEffect` lifetime | The drawn instance stops looping, plays the model's Death sequence, then is removed; without one it is removed when its current sequence ends. Warsmash's engine-side removals (buffs, missiles) start Death at once; its `DestroyEffect` native first lets the current loop finish | Removed from the scene at once; later setters and reads on the handle do nothing | **Mismatch, fixed; now matches**: setters on the handle do nothing at once, while position reads return where the dying effect stands until it is gone (3.0.1 read (-200, 0, 0) for the frozen one; case `destroyed-frozen-reads`). The drawn effect switches to its Death sequence at once, at its last time scale, and is gone on that sequence's last millisecond; without a Death sequence it is gone at once. Lengths come from the model files the renderer loads (`effectDeaths`). Test: the Death timeline in Bun and Lua32 (gone at frame 120 for a 2 s Death). Whether 3.0.1 also finishes the current loop first is the capture's playing effect at (200, 0) |
 | `DestroyEffect` on an effect frozen at time scale 0 | An instance advances `dt × 1000 × speed` ms a frame and ends a non-looping sequence only when it reaches the sequence's last millisecond; destroying doesn't change the speed, so a frozen effect never ends and is never removed | Removed from the scene at once | **Mismatch, fixed; now matches**: the frozen effect stays drawn on Death's first frame for good (timeline frame 600). Smashcraft hides its victory pose and light before destroying them, so a frozen leftover is invisible. Capture: the frozen effect at (-200, 0) |
-| `AddSpecialEffectTarget` attachment | Picks the shortest attachment name containing every requested token, `origin` when empty; falls back to the unit's position | Placed at the unit's X/Y, no attachment | **Not relied on**: no Smashcraft call |
+| `AddSpecialEffectTarget` attachment | Picks the shortest attachment name containing every requested token, `origin` when empty; falls back to the unit's position | Placed at the unit's X/Y, no attachment | **Not relied on**: no Smashcraft call. On 3.0.1 the local position getters read an origin attachment at 0, 0 however its unit moves (wisp#57's dash, 90 ticks), and Wisp now places it there |
 
 Wisp still creates point effects at Z 0 because headless has no terrain; a
 map that reads a fresh effect's Z on a non-flat map would see the real

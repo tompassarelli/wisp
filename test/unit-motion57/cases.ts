@@ -76,6 +76,7 @@ export function exact(value: number): string {
 /**
  * A body dashes along X at 1200 units a second, each tick read before it moves: the drawn position is an
  * effect attached at its origin, read with the local position getter, less the offset measured at rest.
+ * 3.0.1 reads an attached effect at 0, 0 wherever its unit is, so the count is 26 and says nothing of drawing.
  * `samples` gets each read as tick, set X, drawn X, drawn Y, times 128; `done` gets how many dash ticks
  * read the drawn body more than DASH_TRAIL_TICKS ticks of travel behind its set position.
  */

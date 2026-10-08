@@ -444,15 +444,18 @@ rows with the `EXPECTED` list in the test.
 
 ### Unit position and facing
 
-Unit coordinates, fly height and facing are stored as binary32 when set, and
-facing writes wrap into [0, 360) degrees; reads in the same callback see the
-write. An effect attached to a unit is drawn at the unit's new position at
-once. `test/unit-motion57/cases.ts` authors the cases shared by Bun, Lua32
-and a native measurement map, with bodies set up as Smashcraft's fighter
-bodies are (pathing off, Crow Form, Locust, paused): position, height, 43
-exact facing reads (`facing-ex-exact-*` after `BlzSetUnitFacingEx`,
-`facing-created-exact-*` after `CreateUnit`) and a dash. The rules and their
-evidence are in [Warsmash notes](warsmash-notes.md#unit-position-and-facing).
+Unit coordinates and fly height are stored as binary32 when set; reads in
+the same callback see the write. Facing is kept as 3.0.1 keeps it: in radians
+with products rounded toward zero, wrapped by its own rule, so 180 reads
+179.99998 and 360 reads 359.99997. An effect attached to a unit reads 0, 0
+from the local position getters, as on 3.0.1. `test/unit-motion57/cases.ts`
+authors the cases shared by Bun, Lua32 and a native measurement map, with
+bodies set up as Smashcraft's fighter bodies are (pathing off, Crow Form,
+Locust, paused): position, height, 43 exact facing reads
+(`facing-ex-exact-*` after `BlzSetUnitFacingEx`, `facing-created-exact-*`
+after `CreateUnit`) and a dash. All 49 rows equal the 3.0.1 capture. The
+rules and their evidence are in
+[Warsmash notes](warsmash-notes.md#unit-position-and-facing).
 
 ```sh
 bun test test/headless-unit-motion.test.ts
@@ -467,7 +470,8 @@ second, reads an effect attached at its origin with
 `BlzGetLocalSpecialEffectX` before each move, and counts the ticks it read the
 drawn body more than three ticks of travel behind its set position
 (`dash-ticks-drawn-behind`); its raw reads go to `unit-motion-dash-p0.txt`
-and `-p1.txt`.
+and `-p1.txt`. On 3.0.1 the attached effect reads 0, 0 on every tick, so the
+count is 26 and shows nothing about drawing.
 
 ### Unit movement: fly height and move speed
 

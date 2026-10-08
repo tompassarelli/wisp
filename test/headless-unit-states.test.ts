@@ -12,13 +12,12 @@ afterAll(runtime.restore);
 
 /**
  * The twelve cases as Warcraft 3.0.1.24342 wrote them on 8 October 2026 (clone-a,
- * ~/.local/share/smashcraft-native/clone-a-20261008/wisp44/unit-states-p0.txt), except
- * `facing-writes`, which read 11519 there and waits on wisp#57's facing rule. The rows after
+ * ~/.local/share/smashcraft-native/clone-a-20261008/wisp44/unit-states-p0.txt). The rows after
  * them await their first native capture.
  */
 export const EXPECTED = [
   "owner-retained=256",
-  "facing-writes=11520",
+  "facing-writes=11519",
   "life-getter-setter-agreement=4800,4800,3200,3200",
   "mana-getter-setter-agreement=1600",
   "max-life-writes=25600,25600,25600,25600",
@@ -32,7 +31,7 @@ export const EXPECTED = [
   "death-cutoff=0,0,51",
   "dead-low-write=51",
   "dead-raised-low-write=51",
-  "facing-writes-exact=45p1",
+  "facing-writes-exact=11796479p-17",
   "removal-same-deadline=859289472,4800",
   "removal-next-frame=0,0",
   "removal-quarter-second=0,0",
