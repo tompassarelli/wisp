@@ -85,3 +85,22 @@ index 25f5bdf..f766ed4 100644
 -}
 \ No newline at end of file
 +}
+diff --git a/mdx/parse.ts b/mdx/parse.ts
+--- a/mdx/parse.ts
++++ b/mdx/parse.ts
+@@ -459,7 +459,15 @@ function parseGeosets (model: Model, state: State, size: number): void {
+                         throw new Error('Incorrect geoset, multiple SkinWeights');
+                     }
+                     const len = state.int32();
+-                    geoset.SkinWeights = state.uint8Array(len);
++                    if (model.Version >= 1800) {
++                        geoset.SkinWeights = new Uint8Array(len);
++                        for (let index = 0; index < len; index++) {
++                            const value = state.uint16();
++                            if (value > 255) throw new Error("Skin element exceeds the renderer's 256-bone palette");
++                            geoset.SkinWeights[index] = value;
++                        }
++                    } else geoset.SkinWeights = state.uint8Array(len);
+                 } else if (keyword === 'UVAS') {
+                     break;
+                 }

@@ -1498,7 +1498,14 @@ function parseGeosets(model, state, size) {
 			} else if (keyword === "SKIN") {
 				if (geoset.SkinWeights) throw new Error("Incorrect geoset, multiple SkinWeights");
 				const len = state.int32();
-				geoset.SkinWeights = state.uint8Array(len);
+				if (model.Version >= 1800) {
+					geoset.SkinWeights = new Uint8Array(len);
+					for (let index = 0; index < len; index++) {
+						const value = state.uint16();
+						if (value > 255) throw new Error("Skin element exceeds the renderer's 256-bone palette");
+						geoset.SkinWeights[index] = value;
+					}
+				} else geoset.SkinWeights = state.uint8Array(len);
 			} else if (keyword === "UVAS") break;
 			keyword = state.keyword();
 		}
