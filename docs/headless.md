@@ -418,6 +418,23 @@ CustomMapData. Each named row contains integers equal to the observed values
 multiplied by 128, retaining every bit of the selected fractional values.
 Compare the twelve rows with the `EXPECTED` list in the test.
 
+### Unit position and facing
+
+Unit coordinates, fly height and facing are stored as binary32 when set, and
+facing writes wrap into [0, 360) degrees; reads in the same callback see the
+write. `test/unit-motion57/cases.ts` authors five cases shared by Bun, Lua32
+and a native measurement map, with bodies set up as Smashcraft's fighter
+bodies are (pathing off, Crow Form, Locust, paused). The rules and their
+evidence are in [Warsmash notes](warsmash-notes.md#unit-position-and-facing).
+
+```sh
+LUA=PATH_TO_LUA32 bun test test/headless-unit-motion.test.ts
+bun test/unit-motion57/build.ts BASE.w3m PRIVATE_OUT.w3x
+```
+
+The native map writes `unit-motion-p0.txt` and `unit-motion-p1.txt` to
+CustomMapData 0.25 game seconds after start, in the same ×128 integer form.
+
 The 0.405 cutoff was identified in WurstScript's Apache-2.0
 [UnitProvider at 9913e1b](https://github.com/wurstscript/WurstScript/blob/9913e1bd300c2053637d756a11bae8c3c8ed568f/de.peeeq.wurstscript/src/main/java/de/peeeq/wurstio/jassinterpreter/providers/UnitProvider.java).
 Wisp's TypeScript implementation is independently authored; no Wurst source

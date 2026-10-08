@@ -280,6 +280,46 @@ be established from that missing native or from direct X/Y writes alone.
 [Displayed position](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/rendersim/RenderUnit.java#L205-L223),
 [inspected registrations](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java).
 
+### Unit position and facing
+
+Owner: wisp#57. Smashcraft **main** (`ts/src/`, excluding tests) moves units
+only in `platform/shell/fighterBody.ts`: each draw calls `SetUnitX`,
+`SetUnitY`, `SetUnitFlyHeight(..., 0)` and `BlzSetUnitFacingEx` with 0 or
+180 on a body created with pathing off, Crow Form added and removed, Locust
+and `PauseUnit`. It never reads a unit's position, height or facing back, and
+calls no `SetUnitPosition`, `SetUnitFacing`, `SetUnitFacingTimed`, nonzero fly
+rate, order or region native. Rules for those calls are recorded only where
+they explain a verdict. Fixture: `test/unit-motion57/` (five cases, Bun and
+32-bit Lua in `test/headless-unit-motion.test.ts`, native map via its
+`build.ts`).
+
+| Behavior Smashcraft relies on | Warsmash rule | Wisp before #57 | Verdict |
+| --- | --- | --- | --- |
+| `SetUnitX`/`SetUnitY` value | Argument narrowed to binary32 and stored | Stored the argument unrounded; Bun kept doubles that Lua32 rounds | **Mismatch, fixed**: stored as binary32 |
+| Read after a position write in the same callback | The setter writes the field the getter reads; no deferral | Immediate | **Match**; fixture case `position-read-in-same-call` |
+| Orders on a position write | `setX`/`setY` touch only coordinates, collision bookkeeping and region events, never the order queue | No orders | **Match**; Smashcraft's bodies are paused and never ordered |
+| Pathing or collision side effects | No pathability search or push for X/Y writes; collision entry is translated by the delta. Only `SetUnitPosition` runs an unstuck search | No collision | **Match** for X/Y; case `overlapping-bodies-held` reads two overlapping bodies 0.25 s later unmoved. Region events: no region in Smashcraft |
+| `SetUnitFlyHeight(u, h, 0)` | Height narrowed to binary32 and assigned; rate ignored in this revision | Stored unrounded, rate ignored | **Mismatch, fixed**: stored as binary32. A nonzero rate (real game interpolates) is unused |
+| `BlzSetUnitFacingEx` | Sets simulation and rendered facing at once, normalized as `((f mod 360) + 360) mod 360` in binary32 | Stored the argument unchanged | **Mismatch, fixed**: binary32 floor-modulo into [0, 360). Smashcraft's 0 and 180 were already equal; `facing-ex-normalized` covers -90, 450, 360, 720.5, -720 |
+| `SetUnitFacing` turn-rate interpolation | Sets simulation facing immediately; only the renderer turns at the turn rate | Immediate | **Not relied on**: Smashcraft uses `BlzSetUnitFacingEx`. Wisp's `SetUnitFacing` shares the normalization |
+| Displayed body position | Renderer closes a gap larger than move speed × elapsed seconds by at most that distance per update | Snapshots show the stored position | **Unresolved, renderer only**: snapshot state matches the simulation. Smashcraft bodies (move speed 270) dash faster than that, so the capture below decides whether the real game lags |
+
+Warsmash's `(x + 360) mod 360` step re-rounds positive facings (0.1 reads
+back as about 0.1000061). Wisp keeps an in-range binary32 facing unchanged;
+Smashcraft's 0 and 180 read the same under either rule.
+[Position natives](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L3068-L3108),
+[facing, move speed and height natives](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L3110-L3141),
+[immediate facing native](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4565-L4573),
+[facing normalization](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L1840-L1844),
+[height and coordinate setters](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L2633-L2690).
+
+**Capture needed** (wisp#57's third box, batched with #56/#58): build
+`bun test/unit-motion57/build.ts BASE.w3m OUT.w3x`, play it once on 3.0.1 with
+two clients, collect `unit-motion-p0.txt` and `unit-motion-p1.txt`, and
+compare them with `EXPECTED` in `test/headless-unit-motion.test.ts`. In the
+same session, record one Smashcraft dash at native speed and compare the body's
+drawn position with its set position on the same frame.
+
 ### Effect placement and unavailable effect setters
 
 A point effect starts at its requested XY and at the higher of walkable
