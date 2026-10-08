@@ -7,7 +7,7 @@
 // without Warcraft.
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Clock, Context, Duration, Effect, Schema } from "effect";
+import { Clock, Context, Duration, Effect, Schedule, Schema } from "effect";
 import { logLines, sessionStart } from "../warcraft/war3Log";
 import type { Ink, Region } from "../warcraft/desktop";
 import { preloadLines } from "./boundary";
@@ -359,11 +359,10 @@ export const runAccept = (suite: AcceptSuite, sessions: readonly PlannedSession[
           const client = step.client ?? host;
           const pattern = new RegExp(step.receipt);
           const seconds = step.seconds ?? DEFAULT_RECEIPT_SECONDS;
-          const deadline = (yield* Clock.currentTimeMillis) + seconds * 1000;
-          while (!(yield* newReceipts(client, markOf(client))).some((line) => pattern.test(line))) {
-            if ((yield* Clock.currentTimeMillis) > deadline) return yield* new AcceptFailure({ operation: describeStep(step, host), problem: `no matching receipt within ${seconds} s` });
-            yield* Effect.sleep(RECEIPT_POLL);
-          }
+          yield* newReceipts(client, markOf(client)).pipe(
+            Effect.repeat({ schedule: Schedule.spaced(RECEIPT_POLL), until: (lines) => lines.some((line) => pattern.test(line)) }),
+            Effect.timeoutOrElse({ duration: Duration.seconds(seconds), orElse: () => Effect.fail(new AcceptFailure({ operation: describeStep(step, host), problem: `no matching receipt within ${seconds} s` })) }),
+          );
         }
       }
 
