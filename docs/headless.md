@@ -396,7 +396,8 @@ Warcraft 3.0.1 does ([Warsmash notes](warsmash-notes.md#native-results-for-44)):
 
 - A life write that takes a living unit to binary32 0.405 or below kills it
   and leaves life 0. A dead unit stores any life write and stays dead.
-  `KillUnit` leaves life 0.
+  `KillUnit` leaves life 0. On 3.0.1 a write of 0.40500003 also kills; the
+  exact cutoff awaits its capture (wisp#44). Life doesn't regenerate.
 - `SetUnitState` ignores maximum life and mana writes; `BlzSetUnitMaxHP` and
   `BlzSetUnitMaxMana` set them.
 - `RemoveUnit` takes the unit out of the world and the rendered poses at once.
@@ -423,8 +424,8 @@ native map. Twelve cover owner, facing, life, mana, both maximums, the exactly
 representable life values 0.40625 and 0.3984375 around the death cutoff,
 killing, two writes after death, and removal; 3.0.1 wrote all twelve on 8
 October 2026, and `EXPECTED` holds its rows. The rows after them pin the
-cutoff's binary32 neighbours, low writes to a corpse, the exact facing read
-and when a removed unit's handle empties. The two-client journey took 39.5 ms
+cutoff, low writes to a corpse, the exact facing read, exact life and mana
+reads, life after a new maximum, and when a removed unit's handle empties. The two-client journey took 39.5 ms
 in Bun on 8 October 2026; its injected different life write is reported by the
 existing call comparison.
 

@@ -11,9 +11,11 @@ const runtime = installHeadless({ filePrefix: "unit-states", globalPrefixes: ["_
 afterAll(runtime.restore);
 
 /**
- * The twelve cases as Warcraft 3.0.1.24342 wrote them on 8 October 2026 (clone-a,
- * ~/.local/share/smashcraft-native/clone-a-20261008/wisp44/unit-states-p0.txt). The rows after
- * them await their first native capture.
+ * The rows as Warcraft 3.0.1.24342 wrote them on 8 October 2026 (clone-a,
+ * ~/.local/share/smashcraft-native/clone-a-20261008b/wisp44-unit-states-p0.txt), except
+ * `death-cutoff`, which read 0,0,0 there (wisp#44: the cutoff rule waits on
+ * `death-cutoff-first-alive` and the exact reads). Those rows and `life-after-max-change` await
+ * their first native capture, and the removal rows their second, at full life.
  */
 export const EXPECTED = [
   "owner-retained=256",
@@ -29,10 +31,14 @@ export const EXPECTED = [
   "dead-unit-state-write=6400",
   "removal=859289472,6400",
   "death-cutoff=0,0,51",
+  "death-cutoff-first-alive=13589547p-25",
+  "life-write-exact=15p-1,7025459p-20,27p-1",
+  "mana-write-exact=13421773p-27,13421773p-22",
+  "life-after-max-change=6400",
   "dead-low-write=51",
   "dead-raised-low-write=51",
   "facing-writes-exact=11796479p-17",
-  "removal-same-deadline=859289472,4800",
+  "removal-same-deadline=859289472,12800",
   "removal-next-frame=0,0",
   "removal-quarter-second=0,0",
   "removal-one-second=0,0",
