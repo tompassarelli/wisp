@@ -24,6 +24,10 @@ source and immutable compiler/tool pins are declared in
 wisp:typescript-toolchain.lock. Use Bun. Keep Effect in host code;
 synchronized Lua code remains pure TypeScript and Warcraft native calls.
 
+Every check gets one run on a commit: it passes, ship; a failure gets fixed
+and run once more. Load-bearing rules get one run of the broader check (the
+farm sweep or parity corpus), not repeats: Bun/Lua parity and determinism.
+
 Read warcraft-modding and verification for
 changes. The operator explicitly authorized extracting the existing framework;
 the skill's earlier in-Smashcraft deferral does not apply to this extraction.
