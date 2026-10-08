@@ -316,6 +316,49 @@ Three summaries don't pin both costs on a 1 ms clock when a frame's native
 calls rise with its Lua work, as they do in a match. A fit is judged by
 what it predicts on readings it wasn't fitted to.
 
+### Wisp-only acceptance
+
+The existing `perf native` and `perf compare` gates provide acceptance without
+Warcraft. Check the unchanged `WARCRAFT_COST` against every retained reference,
+then compare the candidate with its published baseline. The command below
+exits nonzero if either reference misses native p50/p95 by over 20% or the
+candidate regresses beyond the comparison threshold (5% by default). Each
+check reads saved files and starts no Warcraft client. `--json` gives the
+measured comparisons and their pass/fail summaries for a saved report.
+
+Smashcraft's retained #19 references were recorded on 7 October 2026 at
+`4ec5b823`, with Wisp's current cost constants, on a quiet machine. They cover
+the integrity build's solo bot and four-fighter bot workloads, player 0,
+1,800 callbacks each. The 57 windows compare callback p50/p95, using the native
+clock steps; this calibration does not cover GPU/render time, native RSS,
+or native p99. A candidate's printed p99 and worst prediction remain useful
+diagnostics, but #19's 20% guarantee applies to p50 and p95 at this scope.
+
+From Smashcraft's `ts/`, first save the current candidate:
+
+```sh
+bun wisp perf playable-bot-four --samples --out build/frame-cost-candidate.perf
+```
+
+Then accept it against the published baseline and unchanged retained inputs:
+
+```sh
+cost_refs="$HOME/.local/state/smashcraft/wisp19-20261007/4ec5b823"
+bun wisp perf native "$cost_refs/exclusive-1791383217845/bot-native-p0.txt" \
+  --samples "$cost_refs/bot.perf" --json &&
+bun wisp perf native "$cost_refs/exclusive-1791383217845/bot-four-native-p0.txt" \
+  --samples "$cost_refs/bot-four.perf" --json &&
+bun wisp perf compare test/fixtures/perf/playable-bot-four.perf \
+  build/frame-cost-candidate.perf --json
+```
+
+The references predict solo p50 7.00 ms against 8.00 ms (-12.5%), p95
+20.99 ms against 21.00 ms (-0.1%); four-fighter p50 9.06 ms against
+8.00 ms (+13.2%), p95 26.18 ms against 28.99 ms (-9.7%). Each is within
+20%. The native files stay in private local storage; do not recreate native
+timing from headless event counts. Other workloads or hardware need their own
+matched reference before inheriting this calibration claim.
+
 The four-fighter overlays of Smashcraft 0.0.48 and 0.0.49 show only medians
 and maxima (smashcraft:evidence/cost-model-20261007). On the 1 ms clock,
 their medians don't move with either cost, so the fit follows the maxima and
