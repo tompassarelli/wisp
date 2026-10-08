@@ -287,9 +287,9 @@ only in `platform/shell/fighterBody.ts`: each draw calls `SetUnitX`,
 and `PauseUnit`. It never reads a unit's position, height or facing back, and
 calls no `SetUnitPosition`, `SetUnitFacing`, `SetUnitFacingTimed`, nonzero fly
 rate, order or region native. Rules for those calls are recorded only where
-they explain a verdict. Fixture: `test/unit-motion57/` (five cases, Bun and
-32-bit Lua in `test/headless-unit-motion.test.ts`, native map via its
-`build.ts`).
+they explain a verdict. Fixture: `test/unit-motion57/` (position, height,
+exact facing reads and a dash, Bun and 32-bit Lua in
+`test/headless-unit-motion.test.ts`, native map via its `build.ts`).
 
 | Behavior Smashcraft relies on | Warsmash rule | Wisp before #57 | Verdict |
 | --- | --- | --- | --- |
@@ -311,12 +311,19 @@ Smashcraft's 0 and 180 read the same under either rule.
 [facing normalization](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L1840-L1844),
 [height and coordinate setters](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L2633-L2690).
 
-**Capture needed** (wisp#57's third box, batched with #56/#58): build
-`bun test/unit-motion57/build.ts BASE.w3m OUT.w3x`, play it once on 3.0.1 with
-two clients, collect `unit-motion-p0.txt` and `unit-motion-p1.txt`, and
-compare them with `EXPECTED` in `test/headless-unit-motion.test.ts`. In the
-same session, record one Smashcraft dash at native speed and compare the body's
-drawn position with its set position on the same frame.
+**First capture** (8 Oct, 3.0.1.24342, two signed-in clients): position,
+height and held rows match; `BlzSetUnitFacingEx(u, 180)` reads just under 180
+and 360 reads just under 360, not 0, while -90, 450, 720.5 and -720 read 270,
+90, 0.5 and 0. The ×128 rows can't pin the conversion.
+
+**Capture needed** (wisp#57): build `bun test/unit-motion57/build.ts BASE.w3m
+OUT.w3x`, play it once on 3.0.1 with two clients, collect
+`unit-motion-p0.txt`, `unit-motion-p1.txt`, `unit-motion-dash-p0.txt` and
+`unit-motion-dash-p1.txt`, and compare the first two with `EXPECTED` in
+`test/headless-unit-motion.test.ts`. The `facing-*-exact-*` rows give each
+read facing exactly; `dash-ticks-drawn-behind` is 0 when the drawn body keeps
+up with a 1200 units-a-second dash, and the dash files show where it was drawn
+each tick.
 
 ### Effects: attachment, scale and lifetime
 

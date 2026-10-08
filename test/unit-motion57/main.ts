@@ -8,5 +8,9 @@ export function install(this: void): void {
 
 export function start(this: void): void {
   install();
-  unitMotionCases(rows => writeLines(`unit-motion-p${GetPlayerId(GetLocalPlayer())}.txt`, rows));
+  unitMotionCases((rows, dashSamples) => {
+    const slot = GetPlayerId(GetLocalPlayer());
+    writeLines(`unit-motion-p${slot}.txt`, rows);
+    writeLines(`unit-motion-dash-p${slot}.txt`, dashSamples);
+  });
 }

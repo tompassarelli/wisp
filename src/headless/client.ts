@@ -513,6 +513,8 @@ export class HeadlessClient {
   private readonly effects = new Map<Handle, EffectPose>();
   private readonly effectDeaths: EffectDeaths | undefined;
   private readonly units = new Map<Handle, Unit>();
+  /** Effects attached to each unit, which follow its position. */
+  private readonly attachments = new Map<Unit, Handle[]>();
   private readonly unitStates: UnitStateFixtures;
   private readonly sounds = new Map<Handle, SoundState>();
   readonly soundLog: SoundCue[] = [];
@@ -674,6 +676,18 @@ export class HeadlessClient {
     return unit;
   }
 
+  /** Coordinates are stored as binary32; attached effects are drawn at the new position at once (wisp:docs/warsmash-notes.md, "Unit position and facing"). */
+  private moveUnit(unit: Unit, x: number, y: number): void {
+    unit.x = f32(x);
+    unit.y = f32(y);
+    for (const effect of this.attachments.get(unit) ?? []) {
+      const pose = this.liveEffect(effect);
+      if (pose === undefined) continue;
+      pose.x = unit.x;
+      pose.y = unit.y;
+    }
+  }
+
   private unitValue(unit: Unit, field: "life" | "maxLife" | "mana" | "maxMana"): number {
     if (unit.removed) return 0;
     const value = unit[field];
@@ -776,7 +790,7 @@ export class HeadlessClient {
       },
       CreateUnit: (owner: number, typeId: number, x: number, y: number, facing: number) => this.unitAt(owner, typeId, x, y, facing),
       CreateUnitByName: (owner: number, name: string, x: number, y: number, facing: number) => this.unitAt(owner, name.length === 4 ? name.charCodeAt(0) * 0x1000000 + name.charCodeAt(1) * 0x10000 + name.charCodeAt(2) * 0x100 + name.charCodeAt(3) : 0, x, y, facing),
-      RemoveUnit: (unit: Unit) => { unit.removed = true; unit.dead = true; this.units.delete(unit); this.abilities.removeUnit(unit); },
+      RemoveUnit: (unit: Unit) => { unit.removed = true; unit.dead = true; this.units.delete(unit); this.attachments.delete(unit); this.abilities.removeUnit(unit); },
       GetOwningPlayer: (unit: Unit) => unit.owner,
       GetWidgetLife: (unit: Unit) => this.unitValue(unit, "life"),
       SetWidgetLife: (unit: Unit, life: number) => this.setLife(unit, life),
@@ -823,16 +837,9 @@ export class HeadlessClient {
       GetUnitTypeId: (unit: Unit) => unit.removed ? 0 : unit.typeId,
       GetUnitX: (unit: Unit) => unit.x,
       GetUnitY: (unit: Unit) => unit.y,
-      SetUnitX: (unit: Unit, x: number) => {
-        unit.x = f32(x);
-      },
-      SetUnitY: (unit: Unit, y: number) => {
-        unit.y = f32(y);
-      },
-      SetUnitPosition: (unit: Unit, x: number, y: number) => {
-        unit.x = f32(x);
-        unit.y = f32(y);
-      },
+      SetUnitX: (unit: Unit, x: number) => this.moveUnit(unit, x, unit.y),
+      SetUnitY: (unit: Unit, y: number) => this.moveUnit(unit, unit.x, y),
+      SetUnitPosition: (unit: Unit, x: number, y: number) => this.moveUnit(unit, x, y),
       SetUnitMoveSpeed: (unit: Unit, value: number) => {
         unit.moveSpeed = f32(value);
       },
@@ -1098,8 +1105,11 @@ export class HeadlessClient {
       StartSoundEx: (handle: Handle) => this.startSound(handle),
       AddSpecialEffectLoc: (model: string) => this.effectAt(model, 0, 0),
       AddSpecialEffectTarget: (model: string, target: unknown) => {
-        const unit = target as Partial<Unit>;
-        return this.effectAt(model, unit.x ?? 0, unit.y ?? 0);
+        const widget = target as Partial<Unit>;
+        const effect = this.effectAt(model, widget.x ?? 0, widget.y ?? 0);
+        const unit = isHandle(target) ? this.units.get(target) : undefined;
+        if (unit !== undefined) this.attachments.set(unit, [...this.attachments.get(unit) ?? [], effect]);
+        return effect;
       },
       DestroyEffect: (effect: Handle) => this.destroyEffect(effect),
       BlzRemoveEffect: (effect: Handle) => { if (this.liveEffect(effect) !== undefined) this.effects.delete(effect); },

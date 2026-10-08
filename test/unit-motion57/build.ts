@@ -26,7 +26,7 @@ await Effect.runPromise(MapBuild.use(maps => maps.build({
   name: "Wisp Unit Motion",
   declaration: {
     author: "Wisp",
-    description: "Measures five unit position, height and facing cases.",
+    description: "Measures unit position, height and facing writes and a dash's drawn position.",
     suggestedPlayers: "2",
     players: [{ id: 0, name: "Player 1" }, { id: 1, name: "Player 2" }],
     forces: [{ name: "Players", playerIds: [0, 1] }],
