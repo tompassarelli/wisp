@@ -463,7 +463,8 @@ client's War3Preferences `[Video]`, `[Misc]` and `[Sound]` at launch:
   against the 60 fps cap.
 - `capture-classic`, `capture-reforged` and `capture-definitive` use a
   1280×720 window at 60 fps with high lighting, shadows, point-light shadows
-  and water, medium textures, and ambient occlusion enabled. Sound is off.
+  and water, medium textures, and ambient occlusion enabled. Sound effects are
+  on and music is off, so the same profile can record effect audio.
   Each profile names its graphics mode; pool metadata records the selected
   profile. Retain that metadata and the saved preferences with captures.
 
