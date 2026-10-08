@@ -446,6 +446,10 @@ saves them as the scene's `environment`.
   geoset's animated colour tints its texels first, lit or Unshaded, as
   native Classic does whatever the geoset animation's flags say. Lights are
   parsed from the whole file, including the 1200, 1300 and 1600 light fields.
+  Reforged's day/night lights carry no ambient (intensity 0 or below); under
+  one the fill is the stock `ReplaceableTextures\EnvironmentMap`'s mean linear
+  radiance (rows weighted by solid angle), and Classic materials then light
+  in linear colour, texture × clamp(ambient + key × max(N·L, 0))^(1/2.2).
   The headless clock does not advance the time of day. Before the map sets
   day/night models, models draw unlit, as before.
 - **Fog.** Linear fog by eye depth from `zStart` to `zEnd` in the fog colour.

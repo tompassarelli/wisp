@@ -85,8 +85,28 @@ function rotate(q: readonly number[], v: readonly number[]): number[] {
   const tx = 2 * (y * vz - z * vy), ty = 2 * (z * vx - x * vz), tz = 2 * (x * vy - y * vx);
   return [vx + w * tx + (y * tz - z * ty), vy + w * ty + (z * tx - x * tz), vz + w * tz + (x * ty - y * tx)];
 }
-/** The world light a draw takes: toward the light, and the key and ambient colours, red first. */
-interface WorldLight { readonly toward: readonly number[]; readonly key: readonly number[]; readonly ambient: readonly number[] }
+/** The world light a draw takes: toward the light, and the key and ambient colours, red first; linear lights in linear colour, as Reforged does. */
+interface WorldLight { readonly toward: readonly number[]; readonly key: readonly number[]; readonly ambient: readonly number[]; readonly linear: boolean }
+let environmentLight: Promise<number[]> | undefined;
+/**
+ * Reforged's ambient fill: the stock environment map's mean linear radiance,
+ * each equirectangular row weighted by its solid angle, red first.
+ */
+function environmentAmbient(): Promise<number[]> {
+  environmentLight ??= textureAt("ReplaceableTextures\\EnvironmentMap.blp").then((texture) => {
+    const context = texture.getContext("2d"); if (context === null) throw new Error("no 2D texture context");
+    const { data, width, height } = context.getImageData(0, 0, texture.width, texture.height), sum = [0, 0, 0];
+    const linear = (value: number) => { const c = value / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+    let weights = 0;
+    for (let row = 0; row < height; row++) {
+      const weight = Math.cos(((row + 0.5) / height - 0.5) * Math.PI);
+      for (let column = 0; column < width; column++) for (let channel = 0; channel < 3; channel++) sum[channel]! += weight * linear(data[(row * width + column) * 4 + channel] ?? 0);
+      weights += weight * width;
+    }
+    return sum.map((value) => value / weights);
+  });
+  return environmentLight;
+}
 const dayNightModels = new Map<string, Promise<model.Model | undefined>>();
 /**
  * A day/night model's directional light at the time of day: its one sequence
@@ -112,7 +132,10 @@ async function dayNightLight(path: string, hours: number): Promise<WorldLight | 
     return [red * scale, green * scale, blue * scale];
   };
   const toward = light.LightType === 1 ? normalize(rotate(sample(light.Rotation, frame, [0, 0, 0, 1]), [0, 0, 1])) : [0, 0, 1];
-  return { toward, key: light.LightType === 2 ? [0, 0, 0] : colour(light.Color, light.Intensity), ambient: colour(light.AmbColor, light.AmbIntensity) };
+  const key = light.LightType === 2 ? [0, 0, 0] : colour(light.Color, light.Intensity);
+  // Reforged's day/night lights carry no ambient (intensity 0 or below): its fill comes from the environment map.
+  if ((sample(light.AmbIntensity, frame, [1])[0] ?? 1) <= 0) return { toward, key, ambient: await environmentAmbient(), linear: true };
+  return { toward, key, ambient: colour(light.AmbColor, light.AmbIntensity), linear: false };
 }
 /** The direction toward the light in a draw's model space, where its normals are: the inverse of its world transform applied to the world direction. */
 function modelDirection(matrix: Matrix, toward: readonly number[]): number[] {
@@ -299,7 +322,7 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
   renderer.setTeamColor(new Float32Array((teams[pose.teamColor] ?? [160, 160, 160]).map((v) => v / 255)));
   renderer.setLightPosition([1000, -1000, 3000]); renderer.setLightColor([1, 1, 1]);
   const placed = transform(pose);
-  renderer.setWispEnvironment({ ...(light === undefined ? {} : { light: { direction: modelDirection(placed, light.toward), key: light.key, ambient: light.ambient } }), ...(fog === undefined ? {} : { fog }) });
+  renderer.setWispEnvironment({ ...(light === undefined ? {} : { light: { direction: modelDirection(placed, light.toward), key: light.key, ambient: light.ambient, linear: light.linear } }), ...(fog === undefined ? {} : { fog }) });
   // An HD model's first initGL draws its BRDF table at that table's size and leaves the viewport there.
   gl.viewport(0, 0, canvas.width, canvas.height);
   renderer.render(multiply(view.view, placed), view.projection, {});

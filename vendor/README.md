@@ -34,6 +34,7 @@ parses. `ModelRenderer.setWispEnvironment` gives the SD and WebGL2 HD model
 shaders a directional key light, an ambient fill and linear eye-depth fog;
 without it they draw as upstream. Each layer's Unshaded and Unfogged flags,
 and additive filter modes, select per layer how that light and fog apply.
+A light passed with `linear: true` lights SD layers in linear colour.
 Each geoset's animated colour tints its layers in both shaders, in the
 order the file stores it: native Classic draws a map's charcoal deck
 body (stored 0.20, 0.24, 0.28 over Dalaran_BlackMarble) at rgb 11,8,11,
