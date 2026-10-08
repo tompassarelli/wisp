@@ -12,8 +12,12 @@ import { PlayProblem } from "./play";
 /** The Back button of a lobby, on the 2560x1440 client frame. */
 const BACK = { x: 155, y: 1389 };
 
-/** The empty fields' placeholders on Battle.net's sign-in pages (password page, 7 Oct). */
-const PLACEHOLDERS = { username: /^(?:Email|E-mail|Phone)\b/i, password: /^Password$/ } as const;
+/**
+ * The empty fields' placeholders doctor clicks on Battle.net's sign-in pages
+ * (password page, 7 Oct). The account page focuses its own field, so its name
+ * is typed where the focus is, as wc3-login-field types it (desktop.enterLoginField).
+ */
+const PLACEHOLDERS = { username: undefined, password: /^Password$/ } as const;
 
 const problem = (cause: { readonly message: string }) => new PlayProblem({ problem: cause.message });
 

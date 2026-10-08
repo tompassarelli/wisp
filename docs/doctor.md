@@ -52,7 +52,9 @@ Doctor adds the client's Wine prefix:
   Warcraft III.exe and the crash reporter `_retail_\x86_64\BlizzardError.exe`,
   which holds Warcraft's error dialog up after a crash. A prefix's processes
   are found as `play` finds them ([play.md](play.md), step 1).
-- **The launcher's newest log** (`AppData/Local/Battle.net/Logs/battle.net-*.log`).
+- **The launcher's newest log** (`AppData/Local/Battle.net/Logs/battle.net-*.log`)
+  written since the running launcher started: a prefix copied from another
+  install carries that install's logs ([lan.md](lan.md), cloned clients).
   Signed in is `Logged into Battle.net successfully`. After the last sign-in,
   `ERROR_TOKEN_NOT_FOUND` means Battle.net rejected the saved login: only the
   account's owner can sign in again. A failed Warcraft III sign-in token
@@ -115,10 +117,13 @@ the password and Return and waits up to 30 s for `Logged into Battle.net
 successfully`. A launcher that remembers the account name opens on the
 password page and gets only the password. Each field goes into the
 `Battle.net Login` window (else `Battle.net`) on the client's own display:
-doctor focuses it, clicks the empty field where its placeholder (`Password`,
-`Email`) reads (the 7 Oct password page loaded with no field focused),
-selects any text there with ctrl+a, and types. It types only while that window
-has focus, and submits only if it still has it after typing.
+doctor focuses it. The account page focuses its own field, so the account
+name is typed where the focus is, as nixos-config:dotfiles/bin/wc3-login-field
+types it (a pointer move on the launcher window failed on the cloned clients
+of 8 Oct). On the password page, which loaded with no field focused on 7 Oct,
+doctor clicks the empty field where its placeholder `Password` reads and
+selects any text there with ctrl+a before typing. It types only while that
+window has focus, and submits only if it still has it after typing.
 
 The account's commands print one field each on stdout. Doctor runs one only
 while typing that field and pipes its bytes to `xdotool type --file -`: the
