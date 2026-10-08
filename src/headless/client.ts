@@ -198,12 +198,29 @@ interface Unit extends Handle, UnitPose {
 
 type Callback = (this: void) => void;
 
+/** A game time: whole frames, then 1/1024ths of a frame (1/61,440 s), which hold 1/60 s and 1/1024 s exactly. */
+interface Instant {
+  frame: number;
+  sub: number;
+}
+
 interface Timer extends Handle {
   callback: Callback | undefined;
-  periodFrames: number;
-  dueFrame: number;
-  startFrame: number;
+  periodic: boolean;
+  /** The timeout as started, which a read after expiry returns. */
+  timeout: number;
+  period: Instant;
+  /** When the current period began and when it ends. */
+  start: Instant;
+  due: Instant;
+  /** The frame TimerStart ran in: the timer first fires in a later frame. */
+  armedFrame: number;
+  /** Equal deadlines run in TimerStart order; a periodic timer keeps its place. */
+  order: number;
   running: boolean;
+  expired: boolean;
+  /** Elapsed seconds frozen by PauseTimer. */
+  paused: number | undefined;
 }
 
 interface Trigger extends Handle {
@@ -270,6 +287,24 @@ export interface ClientOptions {
 }
 
 export const FRAMES_PER_SECOND = 60;
+/** Timer resolution inside a frame (wisp:docs/warsmash-notes.md#timers-and-frame-stepping). */
+export const TIMER_STEPS_PER_FRAME = 1024;
+/** The shortest repeating period, 0.0001 s at 61,440 steps a second: a zero period still fires about 10,000 times a game second. */
+const MIN_PERIOD_STEPS = 6;
+
+const instant = (seconds: number): Instant => {
+  const scaled = Math.max(0, seconds) * FRAMES_PER_SECOND;
+  const frame = Math.floor(scaled);
+  const sub = Math.round((scaled - frame) * TIMER_STEPS_PER_FRAME);
+  return sub >= TIMER_STEPS_PER_FRAME ? { frame: frame + 1, sub: sub - TIMER_STEPS_PER_FRAME } : { frame, sub };
+};
+const later = (at: Instant, by: Instant): Instant => {
+  const sub = at.sub + by.sub;
+  return sub >= TIMER_STEPS_PER_FRAME ? { frame: at.frame + by.frame + 1, sub: sub - TIMER_STEPS_PER_FRAME } : { frame: at.frame + by.frame, sub };
+};
+const before = (a: Instant, b: Instant): boolean => a.frame < b.frame || (a.frame === b.frame && a.sub < b.sub);
+const secondsBetween = (from: Instant, to: Instant): number =>
+  (to.frame - from.frame) / FRAMES_PER_SECOND + (to.sub - from.sub) / (FRAMES_PER_SECOND * TIMER_STEPS_PER_FRAME);
 
 const CAMERA_FIELDS = ["CAMERA_FIELD_TARGET_DISTANCE", "CAMERA_FIELD_FARZ", "CAMERA_FIELD_ANGLE_OF_ATTACK", "CAMERA_FIELD_FIELD_OF_VIEW", "CAMERA_FIELD_ROLL", "CAMERA_FIELD_ROTATION", "CAMERA_FIELD_ZOFFSET", "CAMERA_FIELD_NEARZ", "CAMERA_FIELD_LOCAL_PITCH", "CAMERA_FIELD_LOCAL_YAW", "CAMERA_FIELD_LOCAL_ROLL", "CAMERA_FIELD_DEPTH_OF_FIELD_DISTANCE", "CAMERA_FIELD_DEPTH_OF_FIELD_SCALE", "CAMERA_FIELD_ZABSOLUTE"];
 const PLAYER_COLORS = ["RED", "BLUE", "CYAN", "PURPLE", "YELLOW", "ORANGE", "GREEN", "PINK", "LIGHT_GRAY", "LIGHT_BLUE", "AQUA", "BROWN", "MAROON", "NAVY", "TURQUOISE", "VIOLET", "WHEAT", "PEACH", "MINT", "LAVENDER", "COAL", "SNOW", "EMERALD", "PEANUT", "BLACK"].map(name => "PLAYER_COLOR_" + name);
@@ -460,6 +495,9 @@ export class HeadlessClient {
   private readonly scope: ClientScope | undefined;
   private readonly filePrefix: string;
   private readonly timers: Timer[] = [];
+  private timerOrder = 0;
+  /** Game time as natives read it: a timer callback's own deadline, otherwise the end of the latest frame. */
+  private now: Instant = { frame: 0, sub: 0 };
   private readonly registrations: Registration[] = [];
   private readonly heldKeys = new Set<number>();
   private readonly memo = new Map<string, Frame>();
@@ -895,25 +933,38 @@ export class HeadlessClient {
         return this.handle("event");
       },
       CreateTimer: (): Timer => {
-        const timer: Timer = { ...this.handle("timer"), callback: undefined, periodFrames: 0, dueFrame: 0, startFrame: 0, running: false };
+        const zero = { frame: 0, sub: 0 };
+        const timer: Timer = { ...this.handle("timer"), callback: undefined, periodic: false, timeout: 0, period: zero, start: zero, due: zero,
+          armedFrame: 0, order: 0, running: false, expired: false, paused: undefined };
         this.timers.push(timer);
         return timer;
       },
       TimerStart: (timer: Timer, timeout: number, periodic: boolean, callback: Callback) => {
-        const frames = Math.max(periodic ? 1 : 0, Math.round(timeout * FRAMES_PER_SECOND));
+        const length = instant(timeout);
+        if (periodic && length.frame === 0 && length.sub < MIN_PERIOD_STEPS) length.sub = MIN_PERIOD_STEPS;
         timer.callback = callback;
-        timer.periodFrames = periodic ? frames : 0;
-        timer.dueFrame = this.frame + Math.max(1, frames);
-        timer.startFrame = this.frame;
+        timer.periodic = periodic;
+        timer.timeout = timeout;
+        timer.period = length;
+        // A start takes effect at the end of the current frame, even from inside a callback.
+        timer.start = { frame: this.frame, sub: 0 };
+        timer.due = later(timer.start, length);
+        timer.armedFrame = this.frame;
+        timer.order = ++this.timerOrder;
         timer.running = true;
+        timer.expired = false;
+        timer.paused = undefined;
       },
       PauseTimer: (timer: Timer) => {
+        if (timer.running) timer.paused = this.timerElapsed(timer);
         timer.running = false;
       },
       DestroyTimer: (timer: Timer) => {
         timer.running = false;
+        const index = this.timers.indexOf(timer);
+        if (index >= 0) this.timers.splice(index, 1);
       },
-      TimerGetElapsed: (timer: Timer) => (this.frame - timer.startFrame) / FRAMES_PER_SECOND,
+      TimerGetElapsed: (timer: Timer) => this.timerElapsed(timer),
       BlzSendSyncData: (prefix: string, data: string) => {
         network.push({ sender: this.slot, prefix, data });
         return true;
@@ -1210,7 +1261,7 @@ export class HeadlessClient {
     }
   }
 
-  /** One game frame: every due timer, in creation order. */
+  /** One game frame: every timer callback due by its end. */
   step(): void {
     this.run(() => {
       this.frame++;
@@ -1225,16 +1276,49 @@ export class HeadlessClient {
         sound.playing = false;
         if (sound.killWhenDone) this.sounds.delete(sound.handle);
       }
-      const count = this.timers.length;
-      for (let index = 0; index < count; index++) {
-        const timer = this.timers[index];
-        if (timer === undefined || !timer.running || timer.dueFrame > this.frame || timer.callback === undefined) continue;
-        if (timer.periodFrames > 0) timer.dueFrame += timer.periodFrames;
-        else timer.running = false;
-        this.event.timer = timer;
-        timer.callback();
-      }
+      this.runDueTimers();
     });
+  }
+
+  /** Seconds into a timer's current period, at the game time natives read. */
+  private timerElapsed(timer: Timer): number {
+    if (timer.paused !== undefined) return timer.paused;
+    if (timer.expired) return timer.timeout;
+    if (!timer.running) return 0;
+    const elapsed = secondsBetween(timer.start, this.now);
+    return elapsed < 0 ? 0 : Math.min(elapsed, secondsBetween({ frame: 0, sub: 0 }, timer.period));
+  }
+
+  /**
+   * Every callback due by the end of this frame, earliest deadline first and
+   * equal deadlines in TimerStart order; a period shorter than a frame
+   * catches up within it. Each callback reads its own deadline as the time.
+   */
+  private runDueTimers(): void {
+    const end = { frame: this.frame, sub: 0 };
+    this.now = end;
+    for (;;) {
+      let next: Timer | undefined;
+      for (const timer of this.timers) {
+        if (!timer.running || timer.callback === undefined || timer.armedFrame >= this.frame || before(end, timer.due)) continue;
+        if (next === undefined || before(timer.due, next.due) || (timer.due.frame === next.due.frame && timer.due.sub === next.due.sub && timer.order < next.order)) next = timer;
+      }
+      if (next === undefined || next.callback === undefined) break;
+      this.now = next.due;
+      if (next.periodic) {
+        next.start = next.due;
+        next.due = later(next.due, next.period);
+      } else {
+        next.running = false;
+        next.expired = true;
+      }
+      this.event.timer = next;
+      try {
+        next.callback();
+      } finally {
+        this.now = end;
+      }
+    }
   }
 
   deliverSync({ sender, prefix, data }: SyncMessage): void {

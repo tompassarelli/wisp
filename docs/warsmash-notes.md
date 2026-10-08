@@ -167,9 +167,9 @@ either a native match or a native mismatch.
 
 | Relied-on behavior and consumer | Warsmash rule from this page | Current Wisp behavior | Verdict and deciding measurement |
 | --- | --- | --- | --- |
-| `CreateTimer`, `TimerStart`, `GetExpiredTimer`, `DestroyTimer`: zero-time shell initialization, 60 Hz simulation, hot reload, trace and diagnostic clocks | 50 ms steps; deadline truncates to a step; timer context belongs to the queued callback | 60 Hz frames; timeout rounds to the nearest frame with a one-frame minimum; callback runs immediately with its timer context | **Mismatch with Warsmash's clock**, deliberately: existing measured native 60 Hz callbacks take precedence over its 20 Hz model. A native callback-order fixture is still needed for 3.0.1. |
-| Equal-deadline callbacks and callbacks scheduling other timers | Registration order, callback threads after due-timer notification | Creation order, inline callbacks; timers created inside a callback wait until the next frame | **Mismatch with Warsmash order** when creation and start order differ. The timer fixture below reverses those orders; no runtime change is justified before the native log. |
-| `TimerGetElapsed`, `PauseTimer`: trace periods, timeout reads, optional smooth drawing | Elapsed capped at timeout, repeating timer rescheduled; paused elapsed still uses its advancing clock | Elapsed is frames since the most recent explicit start, uncapped, including after pause/expiry and subsequent periodic callbacks | **Mismatch with Warsmash elapsed values**. Native fixture samples between periods and after pause/expiry; this is a candidate defect, not a confirmed native rule. |
+| `CreateTimer`, `TimerStart`, `GetExpiredTimer`, `DestroyTimer`: zero-time shell initialization, 60 Hz simulation, hot reload, trace and diagnostic clocks | 50 ms steps; deadline truncates to a step; timer context belongs to the queued callback | 60 Hz frames with deadlines kept to 1/61,440 s; sub-frame periods catch up inside a frame | **Mismatch with Warsmash's clock**, deliberately; see [Timers and frame stepping](#timers-and-frame-stepping) for each rule. |
+| Equal-deadline callbacks and callbacks scheduling other timers | Registration order, callback threads after due-timer notification | Deadline order, then `TimerStart` order; timers started inside a callback wait until the next frame | Changed by wisp#56; see [Timers and frame stepping](#timers-and-frame-stepping). |
+| `TimerGetElapsed`, `PauseTimer`: trace periods, timeout reads, optional smooth drawing | Elapsed capped at timeout, repeating timer rescheduled; paused elapsed still uses its advancing clock | Elapsed restarts each period; expired reads the timeout; paused stays frozen | Changed by wisp#56; see [Timers and frame stepping](#timers-and-frame-stepping). |
 | `SetUnitX/Y`, `SetUnitFlyHeight(..., 0)`, `BlzSetUnitFacingEx`: fighter body placement each draw | Direct coordinate/height writes; immediate facing; normal body rendering can lag position | Immediate stored position, height and facing in snapshots | **Match for direct state writes and 0/180-degree facing**; rendered position lag remains unmeasured for the paused Locust bodies. #40's same-frame body capture decides the visible contract. |
 | `CreateUnit`, `RemoveUnit`, type/handle/owner, `ShowUnit`, scale, vertex color, move speed and attack cooldown: bodies and object-data readback | Object/state facts, separate visibility and rendering, with the life caveats above | Retained unit fields and snapshots; type becomes zero on removal | **Partial source match**. #44/#45's existing native fixture owns state/object-data confirmation. Life/death thresholds are outside Smashcraft's scripted fighting damage. |
 | `SetUnitPathing(false)`, `PauseUnit(true)`, Locust and Crow Form, invulnerability: disable ordinary engine interaction | Direct writes do not reject a paused unit; missing `SetUnitPathing` registration gives no disabled-pathing rule | Consumer explicitly ignores these flags because all fighting motion and damage are scripted | **Match for absence of engine movement in the headless journey**; native paused-body placement still requires #40. Engine collision/pathfinding is not called by this map. |
@@ -192,11 +192,9 @@ The timer capture entry is `test/native-rules50/main.ts`. It writes eleven
 ordered readings to `native-rules50-pSLOT.txt` after 1.25 game seconds, using
 0.5-second timers and 0.75/1.25-second observations. Both Bun and the native
 map execute this same authored fixture. In particular, it measures the
-disagreement before changing periodic clocks or same-deadline order. The
-current Bun output is identical on two clients: periodic reads are
-500/750/1000/1250 ms, the expired timer reaches 1250 ms, and the timer paused
-at 750 ms later reads 1250 ms. These are Wisp observations; the native
-fixture has not yet supplied its values.
+disagreement before changing periodic clocks or same-deadline order.
+wisp#56 changed those headless readings; `test/timers56/` now carries the
+timer rules (see [Timers and frame stepping](#timers-and-frame-stepping)).
 Its `start()` first writes the unchanged twelve unit-state cases, so one
 private game can supply #44 and #50 observations together. Build with
 `bun test/native-rules50/build.ts BASE.w3m PRIVATE_OUT.w3x`; both output
@@ -369,6 +367,68 @@ describe engine orders, which #50's map inventory does not use; they do not
 expand the required parity surface.
 [Order acceptance and cancellation](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L2436-L2511),
 [next queued order](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L3783-L3793).
+
+## Timers and frame stepping
+
+wisp#56 checks the timer behaviour Smashcraft relies on. Smashcraft
+**db050997** calls `CreateTimer` (15 sites), `TimerStart` (14),
+`TimerGetElapsed` (12), `DestroyTimer` (6), `PauseTimer` (4) and
+`GetExpiredTimer` (1) in `ts/src/`. It calls no `TriggerSleepAction`,
+`PolledWait`, timer events, `ExecuteFunc` or coroutines, so waits inside a
+callback are outside this list. The uses are the 1/60 s simulation tick, the
+zero-timeout start-up timer, the 1/32 s hot-reload poll, the 1,000-second
+trace clock read as whole periods plus `TimerGetElapsed`, the smooth-draw
+timer's fraction of a tick, and the development probes' 0.01 s, 1/1024 s and
+zero periods.
+
+Native evidence is Smashcraft's render-clock probe on Warcraft III
+3.0.0.24268 (smashcraft:docs/high-refresh.md; raw reports in
+`~/.local/state/smashcraft/accept/codex-native-render-clock-20261007/`). It
+started a 3,600 s reference timer, a zero-period timer, a 1/1024 s timer and a
+4 s stop timer in that order, and the stop timer paused the others. Three runs
+at different frame rates gave the same counts:
+
+- the 1/1024 s timer fired 4,096 times and the zero-period timer 40,329 times
+  (about 10,080 a game second);
+- callbacks came in bursts, one per game step, and steps lasted 1.2 to 67 ms of
+  game time (median 16.6 ms at a 60 Hz output and 24.9 ms at 144 Hz); a burst
+  held up to 61 callbacks of the 1/1024 s timer and up to 673 of the zero one;
+- the reference timer's reading at the first callback of each 1/1024 s burst
+  was a whole number of 1/1024 s;
+- the last 1/1024 s callback read 3,999.023 ms, and the last zero-period
+  callback read 3,999.756 ms.
+
+Each rule below gives Warsmash's rule (from the subsection above), Wisp's
+behaviour before and after wisp#56, and a verdict. The row is the fixture line
+in `test/timers56/main.ts` that `test/headless-timers.test.ts` checks in Bun
+and 32-bit Lua, and that the native capture must reproduce.
+
+| Rule Smashcraft relies on | Warsmash rule | Wisp before | Wisp now | Verdict | Fixture row |
+| --- | --- | --- | --- | --- | --- |
+| A 1/60 s periodic timer fires 60 times a game second, one callback per headless frame (the simulation tick) | 50 ms turns, at most one callback per turn | 60 a second | 60 a second | **Match** with the native count. Warsmash's 20 Hz is not followed. | `ticks-in-one-second=60` |
+| A period shorter than a frame catches up: the 1/1024 s timer fires 1,024 times a second | At most once per turn | Once per frame, 60 a second | 1,024 a second, 17 or 18 between two 1/60 s ticks | **Mismatch, fixed**, matching the native 4,096 in 4 s | `fast-in-one-second=1024`, `fast-between-ticks=17..18` |
+| A zero period still repeats (smooth-draw, render-clock probe) | Once per turn | Once per frame, 60 a second | Minimum period 0.0001 s, 10,240 a second (about 170 a frame) | **Mismatch, fixed to within 1.6%**: native measured about 10,080 a second. The capture's count decides the exact minimum. | `zero-period-in-one-second=10240` |
+| A zero-timeout one-shot fires once on the first step after it starts, at its start time (shell start-up) | Next turn | Next frame, reading 1/60 s later | Next frame, reading 0 | **Mismatch, fixed** | `zero-one-shot-reads-ms=0` |
+| A timeout off a frame boundary fires when game time reaches it (1/32 s poll: 32 a second; 0.01 s probe) | Truncated to whole 50 ms turns | Rounded to the nearest frame: the poll ran every 2 frames, 30 a second | Kept to 1/61,440 s; fires in the frame whose end reaches it | **Mismatch, fixed** (test/hot-poll.test.ts now expects 32) | `in-frame-order=...` |
+| Within a frame, callbacks run earliest deadline first | Per turn, then registration order | Creation order, ignoring deadlines inside the frame | Deadline order | **Mismatch, fixed** | `in-frame-order=earlier-deadline-first` first |
+| Equal deadlines run in `TimerStart` order, and a periodic timer keeps its place | Registration order; a periodic timer re-registers each time it fires | Creation order | `TimerStart` order; a periodic timer keeps its place | **Mismatch, fixed.** The native 1/1024 s timer, started before the stop timer, still fired at their shared 4.0 s deadline (4,096 callbacks), so it keeps its place rather than re-registering. | `same-deadline=second-started-first` first; `ticks-in-one-second=60` |
+| A timer started inside a callback first fires in a later step, after the callbacks still due in this one | Next timer phase | Next frame | Next frame | **Match** with Warsmash; no native evidence yet | `started-in-callback-fast-before=8` |
+| Inside a callback, game time is that callback's deadline (trace clock and smooth-draw fraction) | Turn time | End of the frame | The callback's deadline | **Mismatch, fixed**, from the native readings on whole 1/1024 s. Open: the native last 1/1024 s callback read 3,999.023 ms where this model reads 4,000 ms; the capture's row decides whether a reading lags one period. | `fast-512th-reads-ms=500` |
+| A periodic timer's elapsed time restarts each period (trace clock: periods × 1,000 s + elapsed) | Restarts at each period, capped at the period | Time since `TimerStart`, never reset: the trace clock would double-count after 1,000 s | Restarts each period | **Mismatch, fixed** | `periodic-between-ms=250`, `periodic-after-ms=250` |
+| `GetExpiredTimer` is the timer whose callback runs (shell start-up destroys it) | The callback's own timer | Same | Same | **Match** | (start-up path of every headless journey) |
+| `PauseTimer`/`DestroyTimer` stop later callbacks, including ones due later in the same step (render-clock stop) | Removed at the next timer phase; a callback already queued still runs | Stops at once | Stops at once | **Match** with the native counts, which show no callback after the stop | `zero-period-in-one-second`, `fast-in-one-second` |
+| An expired one-shot reads its timeout; a paused timer keeps its elapsed time | Capped at the timeout; a paused timer's reading keeps advancing | Time since start, uncapped, also when paused | Timeout; frozen at the pause | Not read by Smashcraft after expiry or pause. Wisp follows the common Warcraft behaviour, not Warsmash; the capture confirms. | `expired-after-ms=500`, `paused-at-pause-ms=750`, `paused-later-ms=750` |
+
+Headless deadlines are whole frames plus 1/1024ths of a frame (1/61,440 s),
+so 1/60 s, 1/1024 s and 1/32 s are exact; a frame still ends at a whole 1/60 s,
+as Smashcraft's netcode was measured against. Sync messages keep arriving
+before a frame's timers ([network model](network-model.md)).
+
+The native capture builds `bun test/timers56/build.ts BASE.w3m OUT.w3x`, plays
+it in a two-player 3.0.1 private game for at least 1.25 game seconds and
+collects `timers56-p0.txt` and `timers56-p1.txt`. Each must equal
+`EXPECTED` in `test/headless-timers.test.ts`, except the zero-period count,
+which should be about 10,080.
 
 ## File-format facts for a standalone player (#48)
 

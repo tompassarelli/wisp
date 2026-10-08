@@ -125,7 +125,7 @@ test("a client's CustomMapData folder: the map's files are there as Warcraft wri
         const chunk = readChunk("fixture-in.pld");
         if (chunk !== undefined) seen(chunk);
       });
-      TimerStart(CreateTimer(), 0.0, true, trampoline("fixture.frame"));
+      TimerStart(CreateTimer(), 1 / 60, true, trampoline("fixture.frame"));
     },
     install: () => {},
   }, [0, 1], { files: (slot) => (slot === 0 ? customMapData(data) : undefined) });

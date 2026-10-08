@@ -14,6 +14,8 @@ const runtime = installHeadless({ filePrefix: "fixture", globalPrefixes: ["__fix
 afterAll(runtime.restore);
 
 const FRAMES_PER_SECOND = 60;
+/** A 1/32 s periodic timer fires 32 times a game second, some frames twice as often as others. */
+const POLLS_PER_SECOND = 32;
 /** Wine's measured cost of one missing-file lookup in a CustomMapData of 94,057 files with no hot folder. */
 const WHOLE_FOLDER_SECONDS = 0.035;
 
@@ -55,10 +57,10 @@ test("the host's marker switches clients to a lookup every poll, and the next re
   clients.start({ hostFolder: false });
   clients.frames(100);
   clients.prepareHostFolder();
-  // The marker is found within a second: 32 polls, two frames each.
+  // The marker is found within a second of 32 polls.
   clients.frames(64);
   const polls = lookupsDuring(clients, FRAMES_PER_SECOND);
-  for (const lookups of polls) expect(lookups).toBe(FRAMES_PER_SECOND / 2);
+  for (const lookups of polls) expect(lookups).toBe(POLLS_PER_SECOND);
   clients.reload();
   clients.frames(3);
   expect(clients.unappliedReloads()).toEqual([]);
@@ -70,7 +72,7 @@ test("a reload published to clients that have seen no host is found within a sec
   clients.start({ hostFolder: false });
   clients.frames(100);
   clients.reload();
-  // 32 polls, two frames each, and the clients' answers.
+  // A second of 32 polls, and the clients' answers.
   clients.frames(64 + 3);
   expect(clients.unappliedReloads()).toEqual([]);
   expect(clients.firstDivergence()).toBeUndefined();
@@ -79,7 +81,7 @@ test("a reload published to clients that have seen no host is found within a sec
 test("clients started after a host prepared the hot folder look up at every poll from the start", () => {
   const clients = runtime.clients(reloader);
   clients.start();
-  for (const lookups of lookupsDuring(clients, FRAMES_PER_SECOND)) expect(lookups).toBe(FRAMES_PER_SECOND / 2);
+  for (const lookups of lookupsDuring(clients, FRAMES_PER_SECOND)) expect(lookups).toBe(POLLS_PER_SECOND);
   clients.reload();
   clients.frames(3);
   expect(clients.unappliedReloads()).toEqual([]);
