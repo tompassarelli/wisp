@@ -64,7 +64,7 @@ export interface HeadlessRuntime {
   restore(): void;
 }
 
-const LUA_GLOBALS = ["xpcall", "pcall", "load", "setmetatable", "string"];
+const LUA_GLOBALS = ["xpcall", "pcall", "load", "setmetatable", "string", "os"];
 
 const declarationsRead = new Map<string, NativeDeclarations>();
 
@@ -82,6 +82,7 @@ const describeThrown = (error: unknown) => (error instanceof Error ? error.stack
 /** Lua's functions as Wisp's runtime calls them, for one client. */
 function luaFunctions(client: HeadlessClient, bundles: ReadonlyMap<string, MapEntry>): NativeBehaviors {
   return {
+    os: { clock: () => client.clockSeconds() },
     xpcall: (callback: (...args: unknown[]) => unknown, handler: (error: unknown) => unknown, ...args: unknown[]) => {
       try {
         return [true, callback(...args)];

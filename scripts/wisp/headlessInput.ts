@@ -89,6 +89,13 @@ export function typedFile(path: string): TypedInput {
 
 export const FRAMES_PER_SECOND = 60;
 
+export interface DrawTiming {
+  readonly draw: number;
+  readonly wallTimeMs: number;
+  readonly callbackFrame: number;
+  readonly callbacks: number;
+}
+
 /**
  * Clients in real time: each frame runs when its time comes, after the text
  * each player's program typed reaches that player's client. A held client is
@@ -99,6 +106,9 @@ export const FRAMES_PER_SECOND = 60;
 export class RealtimeClients {
   private origin = 0;
   private ran = 0;
+  private started = 0;
+  private drawnAt = 0;
+  private draws = 0;
   private readonly held = new Set<number>();
 
   /** `now`: milliseconds on a steady clock. */
@@ -108,13 +118,19 @@ export class RealtimeClients {
     private readonly now: () => number = () => performance.now(),
     /** Runs after each frame, such as a soak's detectors. */
     private readonly afterFrame: (this: void) => void = () => undefined,
+    /** Once per actual draw, after all due callbacks; its scene is the first visible result of that batch. */
+    private readonly afterDraw: (this: void, timing: DrawTiming) => void = () => undefined,
   ) {}
 
   /** Starts the map in every client; frame 1 is due one frame later. */
   start(): void {
     this.clients.start();
     this.origin = this.now();
+    this.started = this.origin;
+    this.drawnAt = this.origin;
     this.ran = 0;
+    this.draws = 0;
+    for (const client of this.clients.clients) client.setWallTime(0);
   }
 
   private deliver(): void {
@@ -127,13 +143,21 @@ export class RealtimeClients {
   /** Runs every frame that is due, and returns the milliseconds until the next. */
   advance(): number {
     const frameMillis = 1000 / FRAMES_PER_SECOND;
+    const now = this.now();
+    for (const client of this.clients.clients) client.setWallTime((now - this.started) / 1000);
     if (this.held.size > 0) return frameMillis;
-    const due = Math.floor(((this.now() - this.origin) * FRAMES_PER_SECOND) / 1000);
+    const due = Math.floor(((now - this.origin) * FRAMES_PER_SECOND) / 1000);
+    const before = this.ran;
+    if (now > this.drawnAt) for (const client of this.clients.clients) client.draw((now - this.drawnAt) / 1000);
     while (this.ran < due) {
       this.deliver();
-      this.clients.frames(1);
+      this.clients.frames(1, { draw: false });
       this.ran++;
       this.afterFrame();
+    }
+    if (now > this.drawnAt) {
+      this.drawnAt = now;
+      this.afterDraw({ draw: ++this.draws, wallTimeMs: now - this.started, callbackFrame: this.clients.frame, callbacks: this.ran - before });
     }
     return this.origin + (this.ran + 1) * frameMillis - this.now();
   }
@@ -146,5 +170,6 @@ export class RealtimeClients {
   release(slot: number): void {
     if (!this.held.delete(slot) || this.held.size > 0) return;
     this.origin = this.now() - (this.ran * 1000) / FRAMES_PER_SECOND;
+    this.drawnAt = this.now();
   }
 }

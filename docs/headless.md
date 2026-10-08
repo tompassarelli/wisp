@@ -169,6 +169,31 @@ lets the same program drive headless clients:
   returns the milliseconds until the next, for the host's loop; a hook given
   after the clock runs after every frame, as the [soak's detectors](soak.md#through-a-games-own-input-helper) do.
 
+### Pause and drawn-frame timing
+
+Bun and emitted-Lua clients supply `os.clock()` from the client's local
+presentation clock. A deterministic journey uses its frame clock; a
+`RealtimeClients` run uses wall seconds since start, including a stopped
+game's wall-time gap. The real input helper continues reading and typing
+through that gap, and its pause commit and resume acknowledgments still go
+through the map's normal files, edit box and synchronized messages.
+
+`advance()` can run several due callbacks before one picture appears. Unit
+and effect animation clocks advance once per picture; a model with time
+scale zero keeps both its sequence time and its global-sequence time.
+The sixth `RealtimeClients` argument is `afterDraw(timing)`, called once
+after those callbacks. `timing` reports the draw number, wall milliseconds,
+last callback frame and callback count. Capture `captureScene(client)` there
+to report the first visible resumed fighter positions and animation times.
+The fifth argument remains a callback observation and should be used for
+simulation diagnostics rather than a visible-frame comparison.
+
+The focused `bun test test/headless-pause.test.ts` checks a three-second
+pause and a resume batch through real timers, units, effects and the local
+clock. A consumer's pad check must retain the native pause capture's helper
+acknowledgments and use this draw observation with its actual map and helper;
+callback pose equality alone cannot decide visible pose equality (#86).
+
 ```ts
 const clients = installHeadless(MAP).clients(entry, [0, 1], {
   files: (slot) => customMapData(dataFolder(slot)),
@@ -507,7 +532,8 @@ saves them as the scene's `environment`.
 | A strike's model and pose on its first active frame | The same input replay and frame have a matched native comparison for that fighter/clip | Warcraft animation blending or a newly unsupported clip |
 | A spell, projectile or passive pip is present and follows the declared state | Its models/textures or UI frames render and the declared look check matches native | Unsupported emitter behavior, lighting, occlusion or shader appearance |
 | The game starts a named sound cue | The frame-stamped cue log passes the expected label/source/count assertion | Volume as heard, mixing, device output, automatic engine/model event sounds |
-| Timing, input latency, frame cost and native desync | — | Always native |
+| Pause/resume clock and first drawn fighter positions | The real helper and map run with wall-time delivery, draw observations and a matching native pause reference | A pause capture whose helper or render timing has not been reproduced |
+| General input latency, frame cost and native desync | — | Native outside a separately calibrated model |
 
 Keep native and headless frames tied to the same map inputs, camera, replay
 and match frame. A keyboard journey is not an analog pad replay. Consumers

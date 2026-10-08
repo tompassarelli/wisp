@@ -582,6 +582,12 @@ export class HeadlessClient {
   readonly natives: Record<string, unknown> = {};
   /** Frames this client has run. */
   frame = 0;
+  private wallSeconds: number | undefined;
+
+  /** The local presentation clock; deterministic journeys use their frame clock. */
+  clockSeconds(): number { return this.wallSeconds ?? this.frame / FRAMES_PER_SECOND; }
+
+  setWallTime(seconds: number): void { this.wallSeconds = seconds; }
   private nextId = 0;
   private readonly scope: ClientScope | undefined;
   private readonly filePrefix: string;
@@ -1463,19 +1469,18 @@ export class HeadlessClient {
   }
 
   /** One game frame: the engine's clocks advance, then every timer callback due by its end runs. */
-  step(): void {
+  step(draw = true): void {
     this.frame++;
     // Outside run(): the scope measures map code (wisp perf), and these clocks are Warcraft's own work, not the map's.
     this.abilities.tick(f32(1 / FRAMES_PER_SECOND));
     this.scenery.tick(f32(1 / FRAMES_PER_SECOND));
     this.textTags.tick(f32(1 / FRAMES_PER_SECOND));
+    if (draw) this.draw(f32(1 / FRAMES_PER_SECOND));
     const died: Handle[] = [];
     for (const pose of this.effects.values()) {
-      advanceAnimation(pose, pose.timeScale, f32(1 / FRAMES_PER_SECOND));
       if (pose.destroyed !== undefined && this.frame - pose.destroyed >= 5 * FRAMES_PER_SECOND) died.push(pose.handle);
     }
     for (const handle of died) this.effects.delete(handle);
-    for (const unit of this.units.values()) advanceAnimation(unit, unit.timeScale, f32(1 / FRAMES_PER_SECOND));
     for (const sound of this.sounds.values()) {
       if (!sound.playing || sound.looping) continue;
       sound.elapsed += sound.pitch * 1000 / FRAMES_PER_SECOND;
@@ -1486,6 +1491,12 @@ export class HeadlessClient {
     this.run(() => this.runDueTimers());
     for (const unit of this.removals) unit.removed = true;
     this.removals = [];
+  }
+
+  /** A drawn frame spends animation time once, even when several callbacks precede it. */
+  draw(seconds: number): void {
+    for (const pose of this.effects.values()) advanceAnimation(pose, pose.timeScale, f32(seconds));
+    for (const unit of this.units.values()) advanceAnimation(unit, unit.timeScale, f32(seconds));
   }
 
   /** Seconds into a timer's current period, at the game time natives read: its period less what remains, each rounded toward zero. */
