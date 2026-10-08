@@ -31,6 +31,7 @@ const sandbox = () => {
   for (const tool of ["pw-dump", "pw-cli"]) chmodSync(join(bin, tool), 0o755);
   const env = {
     ...process.env,
+    HOME: folder,
     PATH: `${bin}:${process.env["PATH"] ?? ""}`,
     XDG_STATE_HOME: join(folder, "state"),
     XDG_DATA_HOME: join(folder, "data"),
@@ -102,9 +103,15 @@ farmTest("[repro #62] pair agent: a step failing after both games started stops 
 }, 60_000);
 
 const poolPair = 94;
-const pool = (box: ReturnType<typeof sandbox>, extra: Record<string, string>) => Bun.spawn([process.execPath, join(root, "examples/sample/scripts/sample.ts"), "lan", "pool", "--pair", String(poolPair), "--capacity", capacity, "--desktop", "/bin/true", "--wait", "0"], {
-  env: { ...box.env, ...extra }, stdout: "ignore", stderr: "ignore",
-});
+const pool = (box: ReturnType<typeof sandbox>, extra: Record<string, string>) => {
+  const plugin = join(box.env.HOME, ".local/share/wisp-private/lan");
+  mkdirSync(plugin, { recursive: true });
+  // The pair-session stand-in never joins a game, so only the pool's plugin preflight runs.
+  writeFileSync(join(plugin, "index.ts"), "export {};\n");
+  return Bun.spawn([process.execPath, join(root, "examples/sample/scripts/sample.ts"), "lan", "pool", "--pair", String(poolPair), "--capacity", capacity, "--desktop", "/bin/true", "--wait", "0"], {
+    env: { ...box.env, ...extra }, stdout: "ignore", stderr: "ignore",
+  });
+};
 
 test("[repro #62] lan pool: SIGTERM while a pair is starting stops its session", async () => {
   const box = sandbox();
