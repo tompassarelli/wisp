@@ -6,7 +6,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
-import { Cause, Console, Effect, Exit, Schema } from "effect";
+import { Cause, Console, Effect, Exit, Result, Schema } from "effect";
 import { type Command, UsageFailure, describeCause, flagValues } from "../command";
 import { installHeadless } from "../headless";
 import { writtenPreloadFile } from "../headlessInput";
@@ -136,6 +136,10 @@ interface Pool {
   workersStarted: number;
 }
 
+/** A step of talking to a worker process through its pipes. */
+const talk = <A>(what: string, run: () => Promise<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new SoakFailure({ problem: `a worker's ${what}`, cause }) });
+
 /**
  * One worker process: it plays matches from `next` until none is left or it
  * stops; a match it stopped in comes back as a crash. Its scope kills it.
@@ -151,20 +155,25 @@ const runWorker = (worker: string, project: string, next: () => SoakMatch | unde
       const stderr = tail(child.stderr);
       for (let match = next(); match !== undefined; match = next()) {
         const sent = match;
-        child.stdin.write(`${JSON.stringify(sent)}\n`);
-        yield* Effect.promise(async () => child.stdin.flush());
-        const line = yield* Effect.promise(read);
+        // A pipe that breaks is a worker that stopped: its match comes back as a crash, like one whose output ended.
+        const answer = yield* talk(`answer ${describeMatch(sent)}`, async () => {
+          child.stdin.write(`${JSON.stringify(sent)}\n`);
+          await child.stdin.flush();
+          return read();
+        }).pipe(Effect.result);
+        const line = Result.isSuccess(answer) ? answer.success : undefined;
+        const broken = Result.isFailure(answer) ? ` (${answer.failure.message})` : "";
         const reply: SoakReply = line === undefined
           ? {
             match: sent, frames: 0, wallMs: 0, costMs: 0, worstFrameMs: 0, typingStallsMs: [], over: false, checksums: [],
-            findings: [{ kind: "crash", frame: 0, text: `the worker process stopped${child.exitCode === null ? "" : ` with exit code ${child.exitCode}`}: ${stderr().trim().split("\n").slice(-8).join("\n    ")}` }],
+            findings: [{ kind: "crash", frame: 0, text: `the worker process stopped${child.exitCode === null ? "" : ` with exit code ${child.exitCode}`}${broken}: ${stderr().trim().split("\n").slice(-8).join("\n    ")}` }],
           }
           : yield* Effect.try({ try: () => readSoakReply(line), catch: (cause) => new SoakFailure({ problem: `a worker's answer for ${describeMatch(sent)}`, cause }) });
         pool.replies.push(reply);
         yield* report(reply);
         if (line === undefined) return;
       }
-      yield* Effect.promise(async () => {
+      yield* talk("end", async () => {
         await child.stdin.end();
         await child.exited;
       });
