@@ -53,8 +53,11 @@ agent and contributor, in code, tests, fixtures, docs and history.
   wisp:docs/warsmash-notes.md, and decide numbers with native fixtures.
 - Put "Warcraft" (or Blizzard art or logos) in a product name, icon or logo.
 
-## Found something?
+## The check
 
-A committed Blizzard file or copied code: open an issue naming the path and
-the fix (delete it, regenerate it from our own source, or load it from the
-install at run time). Don't rewrite pushed history.
+wisp:scripts/cleanRoom.ts runs before every push and in CI. It refuses
+game-format files (by extension or leading bytes) and files with more than 20
+JASS declaration lines, unless wisp:clean-room-allowlist.tsv lists the path
+as `original` or `generated` with how it was made. A refusal names the file:
+delete it, regenerate it from our own source, or load it from the install.
+Don't rewrite pushed history; open an issue for a file already pushed.

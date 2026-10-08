@@ -1,6 +1,10 @@
 #!/usr/bin/env bun
-// Git's pre-push hook; the gate is wisp:scripts/prePush.ts.
+// Git's pre-push hook: the clean-room check (wisp:scripts/cleanRoom.ts) refuses
+// the push on a problem; the notice is wisp:scripts/prePush.ts.
+import { join } from "node:path";
 import { Effect } from "effect";
+import { WISP_POLICY, runCleanRoom } from "../scripts/cleanRoom.ts";
 import { prePush } from "../scripts/prePush.ts";
 
+await Effect.runPromise(runCleanRoom(join(import.meta.dir, ".."), WISP_POLICY));
 await Effect.runPromise(prePush);
