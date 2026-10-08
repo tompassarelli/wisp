@@ -5,7 +5,7 @@
 // it before anything happens: a game hosted by clicks is listed publicly.
 import { randomBytes } from "node:crypto";
 import { basename, join } from "node:path";
-import { Clock, Effect, Schedule } from "effect";
+import { Clock, Console, Effect, Schedule } from "effect";
 import { ackFile } from "../../src/runtime/gameFiles";
 import { Acknowledgement, FILE_SLOT_NUMBERS, type MalformedGameFile } from "./boundary";
 import { type Client, Clients, type DesktopFailure, waitFor } from "./clients";
@@ -13,6 +13,9 @@ import { GameFiles, dataDirectory, prepareHotFolders, readGameFile } from "./gam
 import { MenuFailure, hostLobby, joinLobby, leaveLobby, reportedMenus, startLobby } from "./menus";
 import { step } from "./timings";
 import { ClientWatch, inState, unlessLost, waitFor as waitForState } from "./watch";
+
+/** Warcraft III 3.0.1 showed its menus 86–94 s after its map scan on clone-c (War3Log, 8 Oct 2026). */
+export const MENU_SECONDS = 180;
 
 export interface FreshMatchOptions {
   readonly map: string;
@@ -49,7 +52,8 @@ export const freshMatch = ({ map, folder, filePrefix = "wisp" }: FreshMatchOptio
     if (state.kind === "lobby") return;
     yield* Effect.sleep("2 seconds");
     yield* clients.keys(client, "Escape");
-    yield* waitForState(client, inState("menus"), { what: "the menus", seconds: 20 });
+    yield* Console.log(`${client.name}: waiting for the menus (up to ${MENU_SECONDS} s)`);
+    yield* waitForState(client, inState("menus"), { what: "the menus", seconds: MENU_SECONDS });
   }).pipe(step(`${client.name} at the menus`));
 
   // The map's hot folder exists before its match does, so its first lookups for a reload are cheap.

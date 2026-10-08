@@ -11,7 +11,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Clock, Deferred, Effect, Option, Queue, Schema, type Scope } from "effect";
+import { Clock, Console, Deferred, Effect, Option, Queue, Schema, type Scope } from "effect";
 import { pollFor } from "./hostProcess";
 
 /** Where an installed menu page reports its address and the menus' own requests. */
@@ -392,6 +392,8 @@ const listedMaps = (payload: unknown): ListedMap[] => {
 
 /** How long a folder's maps may stay unlisted after its subfolders are, and how often it is listed again meanwhile. */
 const MAP_LIST_WAIT_SECONDS = 15;
+/** One map list: Warcraft III 3.0.1 reopened every map for Create Game's list, 34 s on clone-c (War3Log, 8 Oct 2026). */
+export const MAP_LIST_SECONDS = 90;
 const MAP_LIST_RETRY_MS = 250;
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -410,7 +412,8 @@ export const findMap = (menus: MenuSocket, folder: string, file: string) => Effe
   for (let listing = 0; listing < 4; listing++) {
     yield* menus.forget;
     yield* menus.send("GetMapList", request);
-    const maps = yield* menus.expect("list maps", 10, (event) => (event.messageType === "MapList" ? { done: listedMaps(event.payload) } : undefined));
+    if (listing === 0) yield* Console.log(`listing maps for ${folder}/${file} (Warcraft III reads every map first; up to ${MAP_LIST_SECONDS} s)`);
+    const maps = yield* menus.expect("list maps", MAP_LIST_SECONDS, (event) => (event.messageType === "MapList" ? { done: listedMaps(event.payload) } : undefined));
     const map = maps.find((entry) => !entry.isFolder && same(entry.filename, file) && inFolder(entry.filepath, folder));
     if (map !== undefined) return `${withSeparator(map.filepath)}${map.filename}`;
     const sub = maps.find((entry) => entry.isFolder && same(entry.filename, folder));
