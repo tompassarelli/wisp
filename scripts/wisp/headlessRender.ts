@@ -217,7 +217,10 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
     }
     return undefined;
   }));
-  if (port === undefined) return yield* new RenderFailure({ cause: "Chrome did not open its DevTools port within 10 seconds" });
+  if (port === undefined) {
+    const log = yield* Effect.promise(() => readFile(chromeLog, "utf8").catch(() => ""));
+    return yield* new RenderFailure({ cause: `Chrome did not open its DevTools port within 10 seconds: ${log}` });
+  }
   const pages = yield* Effect.tryPromise({ try: () => fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.text()), catch: renderFailure }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(ChromePages)),
     Effect.mapError(renderFailure),
