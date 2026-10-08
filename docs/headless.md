@@ -30,7 +30,7 @@ effects, and logs every native call except the local-only ones.
 | Natives | Emulation |
 | --- | --- |
 | Players | Player N is the number N. The journey's player slots are playing humans with a client each; every other slot is empty. `GetLocalPlayer` is the client's slot. |
-| Timers | 60 frames a second. A timeout runs on the nearest frame, at least one frame after it starts; periodic timers repeat. Each frame runs the due timers in creation order. |
+| Timers | 60 frames a second, with deadlines kept to 1/61,440 s. A frame runs every callback due by its end, earliest deadline first and equal deadlines in `TimerStart` order, so a period shorter than a frame fires several times in it (1/1024 s: 17 or 18). A zero period repeats every 0.0001 s. A timer started during a frame first fires in the next one. Inside a callback, timers read its deadline as the game time; a periodic timer's elapsed time restarts each period, an expired one reads its timeout and a paused one keeps its value. [Rules](warsmash-notes.md#timers-and-frame-stepping). |
 | Triggers | Sync, chat, key and frame events, registered per player or frame. A chat line matches its registered text exactly or as a substring, as registered. |
 | Sync messages | `BlzSendSyncData` reaches every client, including the sender, in send order, after the frame or event that sent it and before the next. Warcraft delivers it some frames later; a [delivery](network-model.md) gives the measured latency. |
 | Files | `Preload` writes files the test reads from `client.files`. `Preloader` reads files the host published (`publish`, `reload`), or another program wrote in a client's [CustomMapData folder](#input-from-another-program), one chunk per FileIO tooltip level, and keeps the first content it read from a path, as Warcraft does. |
@@ -272,14 +272,15 @@ non-integer literal as an exact hexadecimal float.
 
 wisp:native/toward-zero.h makes a LUA_32BITS Lua 5.3.6 round its raw float
 `+ - * /` and its decimal numerals toward zero.
-`bun node_modules/wisp/scripts/wisp/towardZeroLua.ts DIR` builds one in DIR
-with `nix` (nixpkgs' Lua source, checked against lua.org's checksum) and
-prints its path; `towardZeroLua(DIR)` does the same in a host program, and
-`luaRounding(lua)` tells which rounding a Lua has. Without nix:
-
-```sh
-make -C lua-5.3.6 generic "MYCFLAGS=-DLUA_32BITS -include /path/to/toward-zero.h"
-```
+`bun node_modules/wisp/scripts/wisp/lua32.ts toward-zero` prints its path,
+and `bun node_modules/wisp/scripts/wisp/lua32.ts` the stock Lua32's; each is
+built on first use from lua.org's checksummed source, with gcc and make (or
+`nix` when they are missing), into a per-user cache,
+`~/.cache/wisp/lua32/KEY/lua`, keyed by the source checksum and flags. A lock
+lets parallel worktrees share one build. `lua32(variant)` does the same in a
+host program, and `luaRounding(lua)` tells which rounding a Lua has. Wisp's
+`bun test` sets `LUA` and `TOWARD_ZERO_LUA` to these when they are unset
+(wisp:test/lua32.preload.ts), and the CI template does the same.
 
 Run a game's Lua replays and numeric checks in both a stock Lua32 and this
 one: results that agree rely on no raw float `+ - * /` and no inexact
@@ -340,9 +341,14 @@ only if GPU initialization fails. No Warcraft client is opened.
 The renderer uses the declared MIT `war3-model` 4.0.1 package with the HD
 sampling precision fix recorded in `vendor/README.md`,
 Copyright 2017–2023 4eb0da; its package retains the license. Wisp calls its
-public model/texture parsers and `ModelRenderer` API. Positions, model scales,
+public model/texture parsers and `ModelRenderer` API, and sets its frame,
+global-sequence clocks and node poses directly. Positions, model scales,
 animation times, rotations, camera fields and visible frame art come from the
 map's native calls. Particle and ribbon clocks advance to the captured time.
+Sequence selection, loop ends, Birth before Stand, blending and global
+sequences follow Warcraft's playback rules in wisp:src/headless/animation.ts,
+listed in [Animation playback](warsmash-notes.md#animation-playback); the
+headless runtime keeps each unit's and effect's clock, seek and blend.
 This is a scene renderer for look checks, not pixel-identical Warcraft shading.
 
 Every started sound is printed with its client, frame, source or label, volume
@@ -351,6 +357,11 @@ and pitch. `--sound-cues FILE.json` writes the complete creation/play log;
 `assertSoundCue(client.soundLog, { label: "LABEL", frame: 64, count: 1 })`
 from `wisp/src/headless/client`. Creating a sound without starting it fails a
 "plays the cue" assertion. This checks the game's calls, not audibility.
+
+A sound handle has one voice: `StartSound` on a handle that is still playing
+neither restarts it nor logs a cue; `StopSound` then `StartSound` restarts it.
+Pitch and position are stored as binary32, as Warcraft's `real` arguments are
+([rules](warsmash-notes.md#sound-start-stop-and-channel-limits)).
 
 `KillSoundWhenDone` drops an idle sound's retained state immediately. Playing
 sounds retain it until their `SetSoundDuration` milliseconds have elapsed at
@@ -409,7 +420,7 @@ write is reported by the existing call comparison.
 Run the shared cases and build their native measurement map:
 
 ```sh
-LUA=PATH_TO_LUA32 bun test test/headless-unit-states.test.ts
+bun test test/headless-unit-states.test.ts
 bun test/unit-states/build.ts BASE.w3m PRIVATE_OUT.w3x
 ```
 
@@ -428,11 +439,54 @@ bodies are (pathing off, Crow Form, Locust, paused). The rules and their
 evidence are in [Warsmash notes](warsmash-notes.md#unit-position-and-facing).
 
 ```sh
-LUA=PATH_TO_LUA32 bun test test/headless-unit-motion.test.ts
+bun test test/headless-unit-motion.test.ts
 bun test/unit-motion57/build.ts BASE.w3m PRIVATE_OUT.w3x
 ```
 
 The native map writes `unit-motion-p0.txt` and `unit-motion-p1.txt` to
+CustomMapData 0.25 game seconds after start, in the same ×128 integer form.
+
+### Unit movement: fly height and move speed
+
+`SetUnitFlyHeight` applies to any unit, with or without Crow Form: on 3.0.1 a
+ground footman set up as a fighter body (pathing off, Locust, paused) took the
+write without it. `SetUnitMoveSpeed` stores the speed as binary32. `test/unit-movement61/cases.ts` authors the cases shared by
+Bun, Lua32 and a native measurement map; the rules, and why Smashcraft relies
+on nothing else in collision, pathing or orders, are in
+[Warsmash notes](warsmash-notes.md#collision-pathing-and-orders).
+
+```sh
+bun test test/headless-unit-movement.test.ts
+bun test/unit-movement61/build.ts BASE.w3m PRIVATE_OUT.w3x
+```
+
+The native map writes `unit-movement-p0.txt` and `unit-movement-p1.txt` to
+CustomMapData at start, in the same ×128 integer form.
+
+### Effect positions and lifetime
+
+Effect coordinates, scale, matrix scale, orientation, time scale, time and
+blend time are stored as binary32 when set; reads in the same callback see
+the write. `test/effects59/cases.ts` authors seven cases shared by Bun, Lua32
+and a native measurement map. `DestroyEffect` makes the handle unreachable at
+once: setters do nothing and reads return 0. The drawn effect plays its
+model's Death sequence where it stands, at its last time scale, and is gone
+when that ends; frozen at time scale 0 it never ends, and without a Death
+sequence it is gone at once. Clients learn Death lengths from
+`effectDeaths(model)` (seconds, or `undefined` for none) in
+`runtime.clients(..., { effectDeaths })` or `LuaHeadlessMap.effectDeaths`;
+without it every destroyed effect is gone at once. `--render` reads them from
+the destroyed models with `render.readAsset` and plays the journey a second
+time to capture its scenes. Game logic never depends on them. The rules
+and their evidence are in
+[Warsmash notes](warsmash-notes.md#effects-attachment-scale-and-lifetime).
+
+```sh
+bun test test/headless-effects.test.ts
+bun test/effects59/build.ts BASE.w3m PRIVATE_OUT.w3x
+```
+
+The native map writes `effects-p0.txt` and `effects-p1.txt` to
 CustomMapData 0.25 game seconds after start, in the same ×128 integer form.
 
 The 0.405 cutoff was identified in WurstScript's Apache-2.0
@@ -451,7 +505,7 @@ level fields are declared as the script defines them.
 
 ```bash
 bun scripts/natives.ts /private/common.j /private/blizzard.j src/natives/warcraft.d.ts
-LUA=/path/to/lua32 bun test test/headless-warcraft3.test.ts
+bun test test/headless-warcraft3.test.ts
 ```
 
 Attack reset clears the selected weapon's remaining wait while retaining
@@ -469,7 +523,7 @@ settings, doodad colors and animations, and all 24 destructable creation
 variants. `SceneryFixtures` supplies map doodads, cinematic shot durations,
 terrain pathing cells and HUD scale. Queries for missing cinematic or terrain
 facts fail with the needed fixture name.
-`LUA=/path/to/lua32 bun test test/warcraft3-scenery.test.ts` exercises 92
+`bun test test/warcraft3-scenery.test.ts` exercises 92
 native calls in Bun and Lua32, with zero missing-native reports.
 
 Set `scenery` and `inventory` on `HeadlessMap` or `LuaHeadlessMap`; both are

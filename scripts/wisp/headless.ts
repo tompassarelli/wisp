@@ -50,7 +50,7 @@ export interface HeadlessRuntime {
    * every frame and forgets old ones, for long runs; `options.cost` measures
    * each client's frames.
    */
-  clients(entry: MapEntry, players?: readonly number[], options?: Pick<LockstepOptions, "delivery" | "files" | "keepCalls" | "cost">): Lockstep;
+  clients(entry: MapEntry, players?: readonly number[], options?: Pick<LockstepOptions, "delivery" | "files" | "keepCalls" | "cost" | "effectDeaths">): Lockstep;
   /**
    * The module set a reload publishes to install `entry`: `reload(modules(entry))`
    * moves the clients to another entry, such as the map loaded again from a

@@ -29,6 +29,8 @@ test("unit coordinates, height and facing are stored as binary32 like Warcraft's
   const third = 1 / 3;
   const clients = runtime.clients({ install, start: () => {
     const u = CreateUnit(Player(2), UNIT_TYPE, 0, 0, 180);
+    UnitAddAbility(u, 0x416d7266);
+    UnitRemoveAbility(u, 0x416d7266);
     SetUnitX(u, third);
     SetUnitY(u, -third);
     SetUnitFlyHeight(u, third, 0);

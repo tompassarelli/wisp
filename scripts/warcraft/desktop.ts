@@ -369,21 +369,26 @@ const windowRegion = (client: Client) =>
 
 /**
  * Replaces a field of the Battle.net sign-in window `client.window` (titled
- * `title`) with `secret` and submits it with Return. The field is clicked
- * where its empty placeholder (`placeholder`, read from the window) is: the
- * password page of 7 Oct loaded with no field focused. The value reaches
+ * `title`) with `secret` and submits it with Return. With a `placeholder`, the
+ * field is clicked where its empty placeholder (read from the window) is: the
+ * password page of 7 Oct loaded with no field focused. Without one, the value
+ * goes to the field that has focus, as nixos-config:dotfiles/bin/wc3-login-field
+ * types it: the account page focuses its field, and a pointer move on the
+ * launcher's window failed on the cloned clients of 8 Oct. The value reaches
  * xdotool on its stdin, never its arguments, and is zeroed after; nothing
  * types unless that window has focus before and after.
  */
-export const enterLoginField = (client: Client, title: string, placeholder: RegExp, secret: Uint8Array) =>
+export const enterLoginField = (client: Client, title: string, placeholder: RegExp | undefined, secret: Uint8Array) =>
   Effect.gen(function*() {
     yield* focusWindow(client, title);
     const focused = yield* activeWindow(client);
     if (focused !== client.window) return yield* new DesktopFailure({ operation: "focus sign-in", client: client.name, cause: `window ${focused} has focus, not the "${title}" window ${client.window}` });
-    const region = yield* windowRegion(client);
-    const field = (yield* frameWords(client, yield* capture(client, region), "light")).find((word) => placeholder.test(word.text));
-    if (field !== undefined) yield* pressAt(client, region.x + field.x, region.y + field.y);
-    yield* run(client.name, "select sign-in field", [client.tools.xdotool, "key", "--clearmodifiers", "ctrl+a"], client.x11);
+    if (placeholder !== undefined) {
+      const region = yield* windowRegion(client);
+      const field = (yield* frameWords(client, yield* capture(client, region), "light")).find((word) => placeholder.test(word.text));
+      if (field !== undefined) yield* pressAt(client, region.x + field.x, region.y + field.y);
+      yield* run(client.name, "select sign-in field", [client.tools.xdotool, "key", "--clearmodifiers", "ctrl+a"], client.x11);
+    }
     yield* run(client.name, "type sign-in field", [client.tools.xdotool, "type", "--clearmodifiers", "--file", "-"], client.x11, secret);
     const after = yield* activeWindow(client);
     if (after !== client.window) return yield* new DesktopFailure({ operation: "type sign-in field", client: client.name, cause: `focus moved to window ${after} while typing; not submitting` });
