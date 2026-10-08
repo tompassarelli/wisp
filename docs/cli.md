@@ -82,6 +82,7 @@ program can register it; "game" means the consuming game defines it.
 | `oracle` | Melee situations against decompiled values | (session) | game |
 | `agency` | Stretches a victim can't act in | (session) | game |
 | `interactions` | The fighters' interaction graph | (session) | game |
+| `combos` | Each fighter's true combos and openings per kill | (session) | game |
 
 ## Flags
 
@@ -245,6 +246,7 @@ Every command and verb in Wisp's sample program and Smashcraft's `bun wisp`, gro
 | `oracle` | Melee situations beside decompiled values |
 | `agency` | Stretches a victim can't act in, per starter |
 | `interactions` | Writes the interaction graph; `--check`, `--move` |
+| `combos` | Measures each fighter's true combos and openings per kill; `--fighter`, `--jobs` |
 | `inputs add FAMILY PATH`, `inputs check`, `inputs path` | Registers and resolves private build inputs |
 | `lan setup`, `lan fresh`, `lan solo`, `lan status`, `lan end` | Creates, starts, reads and ends offline matches; `solo` plays one client per game |
 | `engine actions` | Reads the LAN host turn log |
