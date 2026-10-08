@@ -11,7 +11,9 @@
 // Its join burst and game loop follow W3Champions' Flo (MPL-2.0) as
 // wc3-slop-lan describes it for 3.0.0.24268; this is Wisp's own code.
 import type { Socket, TCPSocketListener, udp } from "bun";
+import { Deferred, Effect, Exit, Fiber, Schedule, Scope, Semaphore } from "effect";
 import { decodeActions } from "./actions";
+import { LanFailure } from "./join";
 import type { MapFacts } from "./map";
 import {
   CHAT, DEFAULT_GAME_FLAGS, LEAVE_REASONS, PACKET, PRODUCT, PROTOBUF, PROTOCOL_VERSION, RACE_RANDOM_SELECTABLE, SLOT_CLOSED, SLOT_OCCUPIED, SLOT_OPEN,
@@ -105,8 +107,7 @@ export interface LanHost {
   /** Queues an action as `pid`'s for the next turn (a seat's or any player's). */
   readonly inject: (pid: number, data: Uint8Array) => void;
   /** Deliver unchanged game-time turns sooner; clients may still limit their own clocks. */
-  readonly setSpeed: (multiple: number) => void;
-  readonly stop: () => void;
+  readonly setSpeed: (multiple: number) => Effect.Effect<void, LanFailure>;
 }
 
 /** The slot table for `count` human players in the map's first user slots; other map slots closed. */
@@ -137,7 +138,11 @@ export function slotTable(map: MapFacts, count: number, randomSeed: number, join
   return { slots, randomSeed, layout: map.layout, players: map.players.length };
 }
 
-export function startHost(options: HostOptions): LanHost {
+export const startHost = (options: HostOptions) => Effect.gen(function*() {
+  const scope = yield* Effect.scope;
+  const speedLock = yield* Semaphore.make(1);
+  const lobbyScope = yield* Scope.fork(scope);
+  const lobbyEnded = yield* Deferred.make<void>();
   const now = options.now ?? (() => performance.now());
   const turnMs = options.turnMs ?? 30;
   const started = now();
@@ -145,9 +150,10 @@ export function startHost(options: HostOptions): LanHost {
   const line = (text: string) => options.log(`${seconds()} ${text}`);
   const randomSeed = (Math.random() * 0x7fffffff) | 0;
   const users = options.map.players.filter(({ controller }) => controller === 1).map(({ id }) => id);
+  if (users.length < options.clients.length + (options.computers ?? 0)) return yield* new LanFailure({ problem: `the map has ${users.length} user slots; ${options.clients.length} clients and ${options.computers ?? 0} computers need as many` });
   const players: Player[] = options.clients.map((label, index) => {
     const slot = users[index];
-    if (slot === undefined) throw new Error(`the map has ${users.length} user slots; ${options.clients.length} clients need as many`);
+    if (slot === undefined) throw new Error("validated player slot is missing");
     return { label, slot, pid: slot + 1, joinedAs: "", socket: undefined, mapOk: false, skins: false, unknown5: false, loaded: false, left: false, checksums: [] };
   });
   const byPid = (pid: number) => players.find((player) => player.pid === pid);
@@ -172,8 +178,7 @@ export function startHost(options: HostOptions): LanHost {
     // Discovery serves only the lobby. Bun 1.3.13 can spin on a socket that
     // received ECONNREFUSED from an unused announcement port.
     if (next !== "lobby") {
-      discovery?.close();
-      discovery = undefined;
+      Deferred.doneUnsafe(lobbyEnded, Effect.void);
     }
     line(`phase ${next}`);
     options.onPhase?.(next);
@@ -314,7 +319,7 @@ export function startHost(options: HostOptions): LanHost {
     }
   };
 
-  const listener: TCPSocketListener<Connection> = Bun.listen<Connection>({
+  const listener: TCPSocketListener<Connection> = yield* Effect.acquireRelease(Effect.try({ try: () => Bun.listen<Connection>({
     hostname: "127.0.0.1",
     port: options.port ?? 0,
     socket: {
@@ -340,7 +345,7 @@ export function startHost(options: HostOptions): LanHost {
         if (player !== undefined && player.socket === socket) leave(player, 0x01);
       },
     },
-  });
+  }), catch: (cause) => new LanFailure({ problem: `LAN listener: ${String(cause)}` }) }), (listener) => Effect.sync(() => listener.stop(true)));
 
   const listing = () => gameInfo({
     product: PRODUCT,
@@ -354,7 +359,7 @@ export function startHost(options: HostOptions): LanHost {
     uptimeSeconds: Math.floor((now() - started) / 1000),
     port: listener.port,
   });
-  void Bun.udpSocket({
+  discovery = yield* Effect.acquireRelease(Effect.tryPromise({ try: () => Bun.udpSocket({
     hostname: "127.0.0.1",
     socket: {
       // Announcing to a port no client holds comes back as ECONNREFUSED on the next receive.
@@ -365,10 +370,8 @@ export function startHost(options: HostOptions): LanHost {
         if (search.product === PRODUCT) socket.send(listing(), port, "127.0.0.1");
       },
     },
-  }).then((socket) => {
-    if (phase === "lobby") discovery = socket;
-    else socket.close();
-  });
+  }), catch: (cause) => new LanFailure({ problem: `LAN discovery: ${String(cause)}` }) }), (socket) => Effect.sync(() => { socket.close(); discovery = undefined; })).pipe(Scope.provide(lobbyScope));
+  yield* Effect.forkScoped(Deferred.await(lobbyEnded).pipe(Effect.andThen(Scope.close(lobbyScope, Exit.void))));
 
   const tick = () => {
     const at = now();
@@ -423,13 +426,14 @@ export function startHost(options: HostOptions): LanHost {
       if (turns % MARK_TURNS === 0) line(`mark turn ${turns} game ${(gameMs / 1000).toFixed(3)}`);
     }
   };
-  const lobbyTimer = setInterval(() => {
+  yield* Effect.forkScoped(Effect.sync(() => {
     if (phase !== "playing") tick();
-  }, 250);
-  const sendTurn = () => {
+  }).pipe(Effect.repeat(Schedule.fixed("250 millis")), Effect.delay("250 millis")));
+  const sendTurn = Effect.sync(() => {
     if (phase === "playing") tick();
-  };
-  let turnTimer = setInterval(sendTurn, turnMs);
+  });
+  const turnLoop = () => sendTurn.pipe(Effect.repeat(Schedule.fixed(turnMs / speed)), Effect.delay(turnMs / speed));
+  let turnFiber = yield* Effect.forkScoped(turnLoop());
   line(`host ${JSON.stringify(options.gameName)} map ${options.map.path} on 127.0.0.1:${listener.port}, turns of ${turnMs} ms, clients ${options.clients.join(", ")}`);
 
   return {
@@ -450,19 +454,13 @@ export function startHost(options: HostOptions): LanHost {
     inject: (pid, data) => {
       pending.push({ playerId: pid, data });
     },
-    setSpeed: (multiple) => {
-      if (!Number.isFinite(multiple) || multiple < 1 || multiple > 16) throw new Error("LAN speed must be between 1 and 16");
-      clearInterval(turnTimer);
+    setSpeed: (multiple) => Effect.gen(function*() {
+      if (!Number.isFinite(multiple) || multiple < 1 || multiple > 16) return yield* new LanFailure({ problem: "LAN speed must be between 1 and 16" });
+      yield* Fiber.interrupt(turnFiber);
       speed = multiple;
       lastTurn = now();
-      turnTimer = setInterval(sendTurn, turnMs / speed);
+      turnFiber = yield* Effect.forkIn(turnLoop(), scope);
       line(`speed ${speed}`);
-    },
-    stop: () => {
-      clearInterval(lobbyTimer);
-      clearInterval(turnTimer);
-      listener.stop(true);
-      discovery?.close();
-    },
-  };
-}
+    }).pipe(speedLock.withPermit),
+  } satisfies LanHost;
+});
