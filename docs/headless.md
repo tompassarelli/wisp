@@ -447,11 +447,9 @@ CustomMapData 0.25 game seconds after start, in the same ×128 integer form.
 
 ### Unit movement: fly height and move speed
 
-A unit accepts `SetUnitFlyHeight` only after Crow Form (`Amrf`) or Storm Crow
-Form (`Arav`) has been added to it, as a ground unit in Warcraft does; before
-that the write is ignored. Wisp has no unit movement types, so a natively
-flying type needs the same step headlessly. `SetUnitMoveSpeed` stores the
-speed as binary32. `test/unit-movement61/cases.ts` authors the cases shared by
+`SetUnitFlyHeight` applies to any unit, with or without Crow Form: on 3.0.1 a
+ground footman set up as a fighter body (pathing off, Locust, paused) took the
+write without it. `SetUnitMoveSpeed` stores the speed as binary32. `test/unit-movement61/cases.ts` authors the cases shared by
 Bun, Lua32 and a native measurement map; the rules, and why Smashcraft relies
 on nothing else in collision, pathing or orders, are in
 [Warsmash notes](warsmash-notes.md#collision-pathing-and-orders).

@@ -803,9 +803,7 @@ export class HeadlessClient {
       ShowUnit: (unit: Unit, show: boolean) => { unit.visible = show; },
       IsUnitHidden: (unit: Unit) => !unit.visible,
       GetUnitFlyHeight: (unit: Unit) => unit.z,
-      SetUnitFlyHeight: (unit: Unit, height: number) => {
-        if (this.abilities.canChangeFlyHeight(unit)) unit.z = f32(height);
-      },
+      SetUnitFlyHeight: (unit: Unit, height: number) => { unit.z = f32(height); },
       GetUnitFacing: (unit: Unit) => unit.facing,
       SetUnitFacing: (unit: Unit, facing: number) => { unit.facing = unitFacing(facing); },
       BlzSetUnitFacingEx: (unit: Unit, facing: number) => { unit.facing = unitFacing(facing); },

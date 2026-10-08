@@ -507,7 +507,7 @@ alone. Fixture: `test/unit-movement61/` (two cases, Bun and 32-bit Lua in
 
 | Behavior Smashcraft relies on | Real rule | Wisp before #61 | Verdict |
 | --- | --- | --- | --- |
-| Crow Form added and removed so `SetUnitFlyHeight` works on a ground body | A ground unit ignores fly height writes until Crow Form (`Amrf`) or Storm Crow Form (`Arav`) has been added; removing it keeps the unlock. Warsmash assigns height unconditionally, so this rule comes from established map practice and the capture below confirms it | Applied every height write | **Mismatch, fixed**: height writes apply only after either form was added. Wisp has no unit movement types, so a natively flying or hovering type also needs the form headlessly. Case `fly-height-needs-crow-form` |
+| Crow Form added and removed so `SetUnitFlyHeight` works on a ground body | Map practice says a ground unit ignores fly height writes until Crow Form (`Amrf`) or Storm Crow Form (`Arav`) has been added; Warsmash assigns height unconditionally. On 3.0.1 (8 Oct 2026, two clients) a footman set up as a fighter body (pathing off, Locust, paused) took a 300 height write without Crow Form: both bodies read 300 | Applied every height write | **Match**: every height write applies, as before #61. The native capture overturned the Crow Form gate briefly added for #61. Smashcraft still adds Crow Form, which costs nothing. Case `fly-height-needs-crow-form=38400,38400` |
 | `SetUnitMoveSpeed(u, 270)` then `GetUnitMoveSpeed` | Speed is a real; Warsmash narrows it to an integer, the real game stores it as a real clamped to the gameplay constants' range | Stored the argument unrounded, so Bun kept doubles that Lua32 rounds | **Mismatch, fixed**: stored as binary32. 270 is integral and in range under every rule, so Smashcraft's reading is unchanged; clamping and integer narrowing stay unmodeled. Case `move-speed-set-and-read` |
 | `SetUnitPathing(false)`: bodies never pushed or pushing | Turns off the unit's pathing and collision with other units; position writes do no pathability search anyway | No pathing or collision at all | **Match**; #57's `overlapping-bodies-held` reads two overlapping bodies unmoved |
 | Locust: no collision, no selection | Locust removes the unit from collision, selection, targeting and range enumeration | No collision, selection or enumeration exists | **Match** for what Smashcraft uses. Smashcraft enumerates no groups, so Locust's enumeration exclusion is not relied on |
@@ -521,10 +521,10 @@ alone. Fixture: `test/unit-movement61/` (two cases, Bun and 32-bit Lua in
 [ability add native](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4629-L4650),
 [height setter](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L2633-L2690).
 
-**Capture needed** (wisp#61's third box, batched with #56–#59): build
-`bun test/unit-movement61/build.ts BASE.w3m OUT.w3x`, play it once on 3.0.1
-with two clients, collect `unit-movement-p0.txt` and `unit-movement-p1.txt`
-from CustomMapData, and compare them with `EXPECTED` in
+**Native capture** (wisp#61's third box, 8 Oct 2026, 3.0.1.24342, two
+signed-in clients): `bun test/unit-movement61/build.ts BASE.w3m OUT.w3x`
+played in a private game wrote `fly-height-needs-crow-form=38400,38400` and
+`move-speed-set-and-read=34560` on both clients, now `EXPECTED` in
 `test/headless-unit-movement.test.ts`.
 
 ## Timers and frame stepping
