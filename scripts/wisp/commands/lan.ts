@@ -4,6 +4,7 @@
 //   pool --pairs N [--pool-profile parity|visual|hfr] [--seconds S]
 //                                      run N pairs, each in a private network namespace with only loopback
 //   fresh MAP --pair K [--turn-ms MS]  host MAP on pair K and join both clients; returns once the match plays
+//   solo MAP [--pair K...]             each client of pair K plays MAP alone on its local provider
 //   status [--pair K]                  each pair's clients and current game
 //   speed N --pair K                   deliver game turns N times sooner (1 restores real time)
 //   end --pair K                       end pair K's game
@@ -123,6 +124,8 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
     const waiting = yield* Effect.try({ try: () => pairAdmission(capacity), catch: (cause) => new LanFailure({ problem: cause instanceof Error ? cause.message : String(cause) }) });
     if (waiting !== undefined) return yield* new PairDeferred({ reason: waiting });
     rmSync(admissionFile(directory), { force: true });
+    // A failure left by an earlier session would stop this one at once.
+    rmSync(join(directory, "startup-error.json"), { force: true });
     // The session gets its own scope: stopped at once when this attempt fails, else held by the pool.
     const scope = yield* Scope.fork(yield* Effect.scope);
     return yield* Effect.gen(function*() {
@@ -231,6 +234,23 @@ const fresh: Command = (args) => Effect.gen(function*() {
   yield* Console.log(`pair ${pair}: playing ${map} after ${((Date.now() - started) / 1000).toFixed(1)} s; action log ${String(result["log"])}`);
 });
 
+const SoloResult = Schema.Struct({ clients: Schema.Array(Schema.Struct({ client: Schema.String, seconds: Schema.Finite })) });
+
+/** Every client of the named running pairs (default: every pair in the pool) plays MAP alone, the pairs at once. */
+const solo: Command = (args) => Effect.gen(function*() {
+  const [map] = args.filter((arg, index) => !arg.startsWith("--") && !args[index - 1]?.startsWith("--"));
+  if (map === undefined || !existsSync(map)) return yield* new UsageFailure({ problem: "solo takes a built map file (MAP.w3x)" });
+  const chosen = flagValues(args, "pair").map(Number);
+  if (chosen.some((pair) => !Number.isInteger(pair) || pair < 0)) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
+  const pairs = chosen.length > 0 ? chosen : (readPool()?.pairs ?? []).filter(({ agentSocket: socket }) => existsSync(socket)).map(({ id }) => id);
+  if (pairs.length === 0) return yield* new LanFailure({ problem: "no pool pair is running; start one with wisp lan pool" });
+  yield* Effect.forEach(pairs, (pair) => agent(pair, "/solo", { map: resolve(map) }).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(SoloResult)),
+    Effect.mapError((failure) => (failure instanceof LanFailure ? failure : new LanFailure({ problem: `pair ${pair}: ${failure.message}` }))),
+    Effect.flatMap(({ clients }) => Effect.forEach(clients, ({ client, seconds }) => Console.log(`${client}: playing ${map} alone after ${seconds.toFixed(1)} s`), { discard: true })),
+  ), { concurrency: "unbounded", discard: true });
+});
+
 const status: Command = (args) => Effect.gen(function*() {
   const known = readPool();
   if (known === undefined) return yield* new LanFailure({ problem: `no pool is running (${poolFile()} is missing); start one with wisp lan pool` });
@@ -276,13 +296,14 @@ const speed: Command = (args) => Effect.gen(function*() {
   yield* Console.log(`pair ${pair}: delivering turns at ${value}x; compare client frame progress to measure game speed`);
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--locate-before-peer] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | status [--pair K] | end --pair K";
+export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--locate-before-peer] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | solo MAP [--pair K...] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | status [--pair K] | end --pair K";
 
 export const lan: Command = ([sub, ...args]) => {
   switch (sub) {
     case "setup": return setup(args);
     case "pool": return pool(args);
     case "fresh": return fresh(args);
+    case "solo": return solo(args);
     case "dummy": return dummy(args);
     case "status": return status(args);
     case "speed": return speed(args);

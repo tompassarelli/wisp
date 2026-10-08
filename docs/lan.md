@@ -13,6 +13,59 @@ game. It isn't for cheating. The terms are in
 
 ## 3.0.1: the pool starts, but the game has no LAN provider
 
+## Solo games: one offline client, one local game
+
+`wisp lan solo MAP [--pair K...]` puts every client of the running pairs named
+(default: every pair in the pool) into its own single-client game of MAP, on
+the loopback provider 3.0.1 kept. Each client plays alone, so this is for
+single-client checks and engine tools, not checksums between clients. Start
+the pairs with `wisp lan pool` first; `lan solo` returns once every client's
+game UI is up and prints the seconds each took.
+
+The pair agent (wisp:scripts/wisp/lan/pairAgent.ts, `POST /solo`) copies MAP
+into each client's `Maps/Wisp/` and drives each client's menus
+(`playLocalGame`, wisp:scripts/wisp/menus.ts) as Single Player's Custom Game
+does, with no click, keyboard or memory write:
+
+1. `LoginDoorClose`. A client that never signed in sits at its login doors
+   (the "Please check your VPN" modal). There the game refuses every map,
+   stock maps included, with "The map is unavailable or corrupted". The
+   main menu sends `LoginDoorClose` the first time it shows. After it, the
+   game opens every map in the listed folders, as after a sign-in.
+2. `InitializeLocalNetProvider`, answered by `OnNetProviderChanged
+   {providerId: "LOOP"}` (9 s after the doors closed, under load).
+3. `SetLocalPlayerName {playerName}`: a client without an account plays as
+   its pool name (`lan0a`). The menus send it from their player-name prompt.
+4. `GetMapList` then `CreateLobby`, as `hostLobby` does for signed-in
+   clients, then `LobbyStart`.
+5. After `MapLoadComplete`, `LoadingScreenGameStart`: the loading screen's
+   "press any key". `IsGameUIActive {isActive: "true"}` means the game is
+   playing.
+
+Measured 8 October 2026 on 3.0.1.24342, with the machine at load 40 and
+three signed-in clients running:
+
+| Map | Clients | `lan solo` to game UI |
+| --- | --- | --- |
+| Booty Bay (stock, through the menu socket by hand) | lan0b | 13 s |
+| SmashcraftBC (177 MB) | lan1a, lan1b | 35 s, 24 s |
+| Smashcraft render40-single | lan0a, lan0b | 43 s, 48 s, then both crashed |
+
+Playing the sample map at the parity profile, the two solo clients of pair 0
+used 1.07 and 0.97 cores (measured from /proc over about 10 s). From the
+pool reporting the pair running to both game UIs up took 67 s, the first
+`lan solo` included.
+
+The first `lan solo` on a fresh pair can fail with "list maps: no answer
+within 10 s": the game was still opening every map in the folder. Running it
+again worked. Both render40-single clients crashed about 8 s into the game
+with the same read of address 0x54. Clone-a crashed hosting that map too, so
+the map is the cause, not the solo path.
+
+**One game per launch.** After `EndGame` returned both SmashcraftBC
+clients to their menus, `lan solo` with another map crashed both while
+loading (a null read). Start the pool again for the next map.
+
 ## Signed-in 3.0.1 clients cloned from Tom's install
 
 Until the offline pool can play on 3.0.1, signed-in clients run 3.0.1 from
@@ -158,6 +211,7 @@ Tom's `system.reg`, `user.reg`, `Warcraft III/.build.info` and Battle.net
 | `wisp lan pool [--pairs N \| --pair K...] [--pool-profile parity\|visual\|hfr[,...]] [--fps N] [--seconds S]` | Runs up to N pairs, each admitted by the machine-capacity helper. It stays in the foreground; Ctrl-C stops the pool. |
 | `wisp lan fresh MAP [--pair K] [--computers N] [--turn-ms MS]` | Hosts MAP on pair K, switches both clients to LAN, joins them, and returns once the match plays. It prints the game's action log. |
 | `wisp lan dummy MAP --program W3GSCLIENT [--pair K] [--count N]` | Joins side a to a lobby, then runs N dummy joins, handicap changes and leaves (default 20). The pair must have no active game. |
+| `wisp lan solo MAP [--pair K...]` | Each client of the named running pairs (default: all) plays MAP alone, as a local game on the loopback provider; returns once every client's game UI is up. Works on 3.0.1. See "Solo games". |
 | `wisp lan status [--pair K]` | Each pair's clients and processes, and its game: phase, turns, desyncs, players. |
 | `wisp lan speed N --pair K` | Diagnostic turn delivery at 1–16 times real time; 1 restores normal delivery. Measure client frame progress to establish actual game speed. |
 | `wisp lan end --pair K` | Ends pair K's game. The clients go back to their menus. |

@@ -537,3 +537,33 @@ export const leaveLobby = (menus: MenuSocket) => Effect.gen(function*() {
   yield* menus.send("LeaveGame");
   yield* menus.expect("leave the lobby", 10, (event) => (event.messageType === "MultiplayerGameLeave" ? { done: undefined } : undefined));
 });
+
+export interface LocalGameOptions {
+  /** The map's folder under Warcraft III's Maps folder, as Create Game lists it. */
+  readonly folder: string;
+  readonly file: string;
+  /** The name a client without a Battle.net account plays under. */
+  readonly playerName: string;
+}
+
+/**
+ * Plays FOLDER/FILE alone on the menus' local (loopback) provider, as Single
+ * Player's Custom Game does, on a client that never signed in; returns once
+ * the game UI is up. A client that never signed in sits at its login doors,
+ * where the game refuses every map ("unavailable or corrupted") until the
+ * menus report the doors closed, as the main menu does on its first showing.
+ */
+export const playLocalGame = (menus: MenuSocket, options: LocalGameOptions) => Effect.gen(function*() {
+  yield* menus.forget;
+  yield* menus.send("LoginDoorClose");
+  yield* menus.send("InitializeLocalNetProvider");
+  // 9 s after the doors closed on 8 Oct 2026, under load.
+  yield* menus.expect("use the local provider", 60, (event) => (event.messageType === "OnNetProviderChanged" && record(event.payload)["providerId"] === "LOOP" ? { done: undefined } : undefined));
+  yield* menus.send("SetLocalPlayerName", { playerName: options.playerName });
+  yield* hostLobby(menus, { folder: options.folder, file: options.file, gameName: "Single Player", password: "" });
+  yield* startLobby(menus);
+  yield* menus.expect("load the map", 300, (event) => (event.messageType === "MapLoadComplete" ? { done: undefined } : undefined));
+  // The loading screen's "press any key": the menus send this for the key.
+  yield* menus.send("LoadingScreenGameStart");
+  yield* menus.expect("show the game", 60, (event) => (event.messageType === "IsGameUIActive" && String(record(event.payload)["isActive"]) === "true" ? { done: undefined } : undefined));
+});

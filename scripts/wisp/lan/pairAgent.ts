@@ -4,7 +4,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Cause, Effect, Exit, FiberSet, Option, Schedule, Schema, Scope, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { spawnLogged } from "../hostProcess";
-import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports } from "../menus";
+import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports, playLocalGame } from "../menus";
 import { type LanHost, startHost } from "./host";
 import { LanFailure, enableLan, joinLanGame } from "./join";
 import { readMapFacts } from "./map";
@@ -129,6 +129,7 @@ interface Game {
 }
 
 const FreshRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, turnMs: Schema.optionalKey(Schema.Finite), computers: Schema.optionalKey(Schema.Finite) }));
+const SoloRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String }));
 const SpeedRequest = Schema.fromJsonString(Schema.Struct({ speed: Schema.Finite }));
 
 BunRuntime.runMain(Effect.scoped(agent).pipe(
