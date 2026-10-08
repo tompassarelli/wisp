@@ -59,4 +59,6 @@ Smashcraft's smashcraft:.github/workflows/farm-test.yml adds the Lua jobs.
 
 A game adds its own farm jobs (Smashcraft's `farm balance`, `farm pads`,
 `farm perf`, `farm memory`) from the same pieces in wisp:scripts/wisp/farm.ts:
-`resolveRef`, `dispatch`, `waitFor`, `withArtifact` and `deleteScratch`.
+`resolveRef` (run it inside `Effect.scoped`: closing the scope deletes the
+scratch branch, whatever ended the run), `dispatch`, `waitFor` and
+`withArtifact`.
