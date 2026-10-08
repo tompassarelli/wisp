@@ -10,7 +10,7 @@
 import { type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { availableParallelism } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { Console, Deferred, Effect, Fiber, Layer, Queue, Semaphore } from "effect";
+import { Console, Deferred, Effect, Fiber, Layer, Queue, Result, Semaphore } from "effect";
 import { type Command, type CommandFailure, UsageFailure, flagValues } from "../command";
 import { Desyncs, formatDesync } from "../desyncs";
 import { FrameCosts, formatFrameCost } from "../frameCosts";
@@ -213,21 +213,12 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
     Effect.promise(() => TypeChecker.open(root, project.typeCheck.projects)),
     (opened) => Effect.promise(() => opened.close()),
   );
-  const registry = yield* Effect.acquireRelease(
-    Effect.sync(() => new Standby([...behind, process.execPath, REGISTRY_RUN], root, Math.min(REGISTRY_STANDBY, unitProcesses), project.tests.env)),
-    (standby) => Effect.sync(() => standby.close()),
-  );
+  const registry = yield* Standby.make([...behind, process.execPath, REGISTRY_RUN], root, Math.min(REGISTRY_STANDBY, unitProcesses), project.tests.env);
   const waiting = new Map<string, Standby>();
   for (const [file, modules] of Object.entries(project.tests.warm ?? {})) {
-    waiting.set(resolve(root, file), yield* Effect.acquireRelease(
-      Effect.sync(() => new Standby([...behind, process.execPath, "test", TEST_WAIT], root, 1, { ...(project.tests.envForFiles?.([resolve(root, file)]) ?? project.tests.env), [WARM_ENV]: JSON.stringify(modules) })),
-      (standby) => Effect.sync(() => standby.close()),
-    ));
+    waiting.set(resolve(root, file), yield* Standby.make([...behind, process.execPath, "test", TEST_WAIT], root, 1, { ...(project.tests.envForFiles?.([resolve(root, file)]) ?? project.tests.env), [WARM_ENV]: JSON.stringify(modules) }));
   }
-  const journeys = project.journey === undefined ? undefined : yield* Effect.acquireRelease(
-    Effect.sync(() => new Standby([process.execPath, JOURNEY_RUN], root, 1)),
-    (standby) => Effect.sync(() => standby.close()),
-  );
+  const journeys = project.journey === undefined ? undefined : yield* Standby.make([process.execPath, JOURNEY_RUN], root, 1);
 
   const types = (changed: readonly string[], savedAt: number) => Effect.gen(function*() {
     const result = yield* Effect.promise(() => checker.check(changed));
@@ -238,12 +229,14 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
   });
 
   const wholeCheck = (savedAt: number) => Effect.gen(function*() {
-    const { exitCode, output } = yield* runProcess([...behind, ...project.typeCheck.command], root);
+    const { exitCode, output } = yield* runProcess([...behind, ...project.typeCheck.command], root).pipe(
+      Effect.catch((failure) => Effect.succeed({ exitCode: 1, output: failure.message })),
+    );
     if (exitCode === 0) return yield* Console.log(`${seconds(savedAt)}types: no errors in the project`);
     yield* Console.log(`${seconds(savedAt)}types: the project check failed\n${indent(output)}`);
   });
 
-  const runTests = (process: TestProcess, audits: ReadonlyMap<string, readonly string[]>) => Effect.gen(function*() {
+  const runTests = (process: TestProcess, audits: ReadonlyMap<string, readonly string[]>): Effect.Effect<ProcessResult> => Effect.gen(function*() {
     if (process.kind === "registry") {
       const request: RegistryRequest = { preload, modules: process.units.map((unit) => unit.path) };
       const output = yield* registry.run(request);
@@ -264,7 +257,7 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
     if (audited !== undefined && first !== undefined) durations.set(`audit ${first.path}`, elapsed);
     else for (const unit of process.units) durations.set(unit.path, (elapsed * expected(unit)) / Math.max(1, process.work));
     return fileResult(process.units.map((unit) => local(unit.path)).join(", "), output);
-  });
+  }).pipe(Effect.catch((failure) => Effect.succeed({ passed: 0, failures: [`${process.units.map((unit) => local(unit.path)).join(", ")}: ${failure.message}`] })));
 
   /** Runs tests in about `count` processes; failures print as they land. */
   const runSide = (units: readonly TestUnit[], audits: ReadonlyMap<string, readonly string[]>, count: number, savedAt: number) => Effect.gen(function*() {
@@ -301,7 +294,9 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
     if (project.journey === undefined || journeys === undefined) return undefined;
     const { module, name, clients = 2 } = project.journey;
     const request: JourneyRequest = { module: resolve(root, module), export: project.journey.export, journey: name, clients };
-    const output = yield* journeys.run(request);
+    const ran = yield* journeys.run(request).pipe(Effect.result);
+    if (Result.isFailure(ran)) return { summary: `${name} didn't finish`, report: ran.failure.message };
+    const output = ran.success;
     const outcome = output.results.find(isJourneyOutcome);
     if (outcome === undefined) return { summary: `${name} didn't finish`, report: `exited ${output.exitCode}\n${output.output}` };
     if ("stopped" in outcome) return { summary: `${name} stopped`, report: outcome.stopped };
