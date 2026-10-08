@@ -121,7 +121,7 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
   const attempt = Effect.gen(function*() {
     mkdirSync(directory, { recursive: true });
     rmSync(agentSocket(pair), { force: true });
-    const waiting = yield* Effect.try({ try: () => pairAdmission(capacity), catch: (cause) => new LanFailure({ problem: cause instanceof Error ? cause.message : String(cause) }) });
+    const waiting = yield* pairAdmission(capacity);
     if (waiting !== undefined) return yield* new PairDeferred({ reason: waiting });
     rmSync(admissionFile(directory), { force: true });
     // A failure left by an earlier session would stop this one at once.
