@@ -8,10 +8,11 @@ const root = join(import.meta.dir, "..");
 const commandsDir = join(root, "scripts/wisp/commands");
 const commandNames = async () => (await readdir(commandsDir)).filter((file) => file.endsWith(".ts")).map((file) => file.slice(0, -3));
 
-test("registered sample nouns and usage flags follow docs/cli.md", async () => {
+test("registered sample and Wisp nouns and usage flags follow docs/cli.md", async () => {
   const vocabulary = await Bun.file(join(root, "docs/cli.md")).text();
-  const source = await Bun.file(join(root, "examples/sample/scripts/sample.ts")).text();
-  expect(vocabularyProblems(source, vocabulary)).toEqual([]);
+  for (const program of ["examples/sample/scripts/sample.ts", "scripts/wisp/repo.ts"]) {
+    expect(vocabularyProblems(await Bun.file(join(root, program)).text(), vocabulary)).toEqual([]);
+  }
 });
 
 test("the vocabulary gate rejects undeclared nouns, flags and shared-meaning drift", () => {
