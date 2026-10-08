@@ -1,0 +1,226 @@
+name: Autoland
+
+# A claude/** branch (a cloud worker's) lands on main by itself: rebased onto
+# main, checked, and run through the full suites (farm-test.yml); it lands when
+# it fails no test main's farm run doesn't also fail. Otherwise the branch stays
+# and the issue its commits reference gets the conflicting files or the new
+# failures (wisp:docs/ci.md).
+on:
+  push:
+    branches: ["claude/**"]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: claude/ branch to land
+        required: true
+
+run-name: Autoland ${{ inputs.branch || github.ref_name }}
+
+permissions:
+  contents: write
+  actions: write
+  issues: write
+
+# One landing at a time; up to 100 branches wait their turn in order.
+concurrency:
+  group: autoland
+  cancel-in-progress: false
+  queue: max
+
+env:
+  BRANCH: ${{ inputs.branch || github.ref_name }}
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  rebase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      verdict: ${{ steps.rebase.outputs.verdict }}
+      sha: ${{ steps.rebase.outputs.sha }}
+      base: ${{ steps.rebase.outputs.base }}
+      scratch: ${{ steps.rebase.outputs.scratch }}
+      issues: ${{ steps.rebase.outputs.issues }}
+      detail: ${{ steps.rebase.outputs.detail }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      # verdict: test (rebased and checked), conflict, check, empty (main holds it) or gone.
+      - id: rebase
+        run: |
+          set -uo pipefail
+          out() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
+          detail() { { echo "detail<<AUTOLAND_EOF"; printf '%s\n' "$1"; echo "AUTOLAND_EOF"; } >> "$GITHUB_OUTPUT"; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898183+github-actions[bot]@users.noreply.github.com"
+          if ! git fetch -q origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"; then out verdict gone; exit 0; fi
+          base=$(git rev-parse origin/main)
+          out base "$base"
+          out issues "$(git log --format=%B "origin/main..origin/$BRANCH" | grep -ioE '(refs|fixes|closes) (wisp)?#[0-9]+' | grep -oE '[0-9]+$' | sort -un | tr '\n' ' ')"
+          if [ -z "$(git rev-list "origin/main..origin/$BRANCH")" ]; then out verdict empty; exit 0; fi
+          git checkout -q -B autoland "origin/$BRANCH"
+          if ! git rebase -q origin/main > rebase.log 2>&1; then
+            files=$(git diff --name-only --diff-filter=U)
+            git rebase --abort
+            out verdict conflict
+            detail "${files:-$(tail -20 rebase.log)}"
+            exit 0
+          fi
+          sha=$(git rev-parse HEAD)
+          scratch="farm/autoland-${sha:0:12}"
+          out sha "$sha"
+          if ! bun run check > check.log 2>&1; then
+            cat check.log
+            out verdict check
+            detail "$(tail -40 check.log)"
+            exit 0
+          fi
+          if ! git push origin "HEAD:refs/heads/$scratch" > push.log 2>&1; then
+            cat push.log
+            out verdict check
+            detail "$(grep -v '^remote:' push.log | tail -40)"
+            exit 0
+          fi
+          out scratch "$scratch"
+          out verdict test
+
+  suite:
+    needs: rebase
+    if: needs.rebase.outputs.verdict == 'test'
+    uses: ./.github/workflows/farm-test.yml
+    with:
+      ref: ${{ needs.rebase.outputs.sha }}
+
+  # Main's failures at the base commit: the summary a previous landing left for
+  # it, else a farm run of the base.
+  baseline:
+    needs: rebase
+    if: needs.rebase.outputs.verdict == 'test'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      BASE: ${{ needs.rebase.outputs.base }}
+    steps:
+      - id: cached
+        run: echo "run=$(gh api "repos/$GH_REPO/actions/artifacts?name=autoland-summary-$BASE" --jq '[.artifacts[] | select(.expired | not)][0].workflow_run.id // empty')" >> "$GITHUB_OUTPUT"
+      - if: steps.cached.outputs.run != ''
+        run: gh run download "${{ steps.cached.outputs.run }}" -n "autoland-summary-$BASE" -D baseline
+      - if: steps.cached.outputs.run == ''
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - if: steps.cached.outputs.run == ''
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - if: steps.cached.outputs.run == ''
+        run: |
+          set -uo pipefail
+          bun install --frozen-lockfile
+          bun wisp farm test --ref "$BASE" --wait | tee farm.txt
+          grep -qE '^(bun|lua32): [0-9]+ passed' farm.txt || { echo "main's farm run printed no result"; exit 1; }
+          mkdir -p baseline
+          jq -Rn '[inputs] | {failures: map(select(startswith("FAIL ")) | .[5:]), problems: map(select(startswith("PROBLEM ")) | .[8:])}' farm.txt > baseline/summary.json
+      - if: steps.cached.outputs.run == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: autoland-summary-${{ env.BASE }}
+          path: baseline/summary.json
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: autoland-baseline
+          path: baseline/summary.json
+          retention-days: 3
+
+  land:
+    needs: [rebase, suite, baseline]
+    if: ${{ !cancelled() && needs.rebase.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VERDICT: ${{ needs.rebase.outputs.verdict }}
+      SHA: ${{ needs.rebase.outputs.sha }}
+      BASE: ${{ needs.rebase.outputs.base }}
+      SCRATCH: ${{ needs.rebase.outputs.scratch }}
+      ISSUES: ${{ needs.rebase.outputs.issues }}
+      DETAIL: ${{ needs.rebase.outputs.detail }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - if: env.VERDICT == 'test'
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: farm-test-summary
+          path: candidate
+      - if: env.VERDICT == 'test'
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: autoland-baseline
+          path: baseline
+      - id: land
+        run: |
+          set -uo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898183+github-actions[bot]@users.noreply.github.com"
+          short=${SHA:0:10}
+          refuse() {
+            { echo "Autoland didn't land \`$BRANCH\`${SHA:+ ($short, rebased onto main ${BASE:0:10})}: $1"; echo; printf '%s\n' "$2" | head -60
+              echo; echo "Run: $RUN_URL. The branch stays; push a fix to it and it tries again."; } > comment.md
+            cat comment.md >> "$GITHUB_STEP_SUMMARY"
+            for issue in $ISSUES; do gh issue comment "$issue" --body-file comment.md; done
+            [ -n "$ISSUES" ] || echo "::warning::no Refs wisp#N in the commits: nothing to comment on"
+            exit 1
+          }
+          case "$VERDICT" in
+            gone) echo "$BRANCH no longer exists"; exit 0 ;;
+            empty) git push origin --delete "$BRANCH"; echo "main already holds $BRANCH: deleted it" >> "$GITHUB_STEP_SUMMARY"; exit 0 ;;
+            conflict) refuse "rebasing onto main conflicts in these files:" "$DETAIL" ;;
+            check) refuse "the checks failed:" "$(printf '```\n%s\n```' "$DETAIL")" ;;
+          esac
+          [ -f candidate/summary.json ] || refuse "the suite run ended without a result." ""
+          [ -f baseline/summary.json ] || refuse "main's baseline run ended without a result." ""
+          # A shard that failed without naming a test is new unless main's run had one in the same suite.
+          new=$(jq -rn --slurpfile c candidate/summary.json --slurpfile b baseline/summary.json '
+            def suites: map(split(" ")[0]) | unique;
+            ($c[0].failures - $b[0].failures) + [$c[0].problems[] | select((split(" ")[0]) as $s | ($b[0].problems | suites | index($s)) == null)] | .[]')
+          if [ -n "$new" ]; then
+            refuse "$(grep -c . <<< "$new") failing that main's run passes:" "$(printf '%s\n' "$new" | sed 's/^/- /')"
+          fi
+          git fetch -q origin main "$SCRATCH"
+          if [ "$(git rev-parse origin/main)" != "$BASE" ] || ! git push origin "$SHA:refs/heads/main" 2> push.log; then
+            git fetch -q origin main
+            if [ "$(git rev-parse origin/main)" != "$BASE" ]; then
+              gh workflow run autoland.yml --ref main -f branch="$BRANCH"
+              echo "main moved during the run: queued $BRANCH again" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            refuse "pushing to main failed:" "$(cat push.log)"
+          fi
+          git push origin --delete "$BRANCH"
+          # Pushes made with this token start no workflows: start main's CI (main-red follows it).
+          gh workflow run ci.yml --ref main
+          echo "Landed $BRANCH on main as $short; deleted the branch." >> "$GITHUB_STEP_SUMMARY"
+          echo "landed=true" >> "$GITHUB_OUTPUT"
+      # The landed commit is main's next base: its result saves the next landing a baseline run.
+      - if: steps.land.outputs.landed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: autoland-summary-${{ env.SHA }}
+          path: candidate/summary.json
+          retention-days: 14
+      - if: always() && env.SCRATCH != ''
+        run: git push origin --delete "$SCRATCH" || true

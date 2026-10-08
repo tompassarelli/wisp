@@ -85,7 +85,7 @@ const Repository = Schema.Struct({ nameWithOwner: Schema.String });
 export const reportRun = (runId: string) => Effect.gen(function*() {
   const run = yield* gh("run", "view", runId, "--json", "conclusion,headBranch,workflowName,databaseId").pipe(Effect.flatMap(decode(ThisRun, "gh run view")));
   if (run.conclusion !== "success" && run.conclusion !== "failure") return yield* Console.log(`run ${runId} ${run.conclusion || "unfinished"}: nothing to report`);
-  const history = yield* gh("run", "list", "--workflow", run.workflowName, "--branch", run.headBranch, "--event", "push", "--limit", "100",
+  const history = yield* gh("run", "list", "--workflow", run.workflowName, "--branch", run.headBranch, "--limit", "100",
     "--json", "databaseId,conclusion,status,headSha,url").pipe(Effect.flatMap(decode(Schema.Array(RunSchema), "gh run list")));
   // Newest first; a run that finished after this one reports instead, so a late event never reopens or closes out of order.
   const completed = history.filter((entry) => entry.conclusion === "success" || entry.conclusion === "failure");

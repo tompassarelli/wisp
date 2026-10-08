@@ -164,3 +164,40 @@ That is wisp:.githooks/pre-push running wisp:scripts/prePush.ts; enable it
 once per clone with `git config core.hooksPath .githooks` (safe-push runs it).
 A red main is not "already failing": before landing, check whether your
 change touches a listed test, and if your commit broke main, fix it first.
+
+## Autoland
+
+Cloud workers can push only to `claude/` branches. A push to `claude/NAME`
+lands it on main by itself when it passes
+(wisp:.github/workflows/autoland.yml); nobody has to fetch, rebase or test
+it locally.
+
+1. **Rebase.** The branch's commits are rebased onto main. A conflict stops
+   the run and names the conflicting files.
+2. **Checks.** `bun run check` on the rebased commit, which is then pushed
+   to a scratch `farm/autoland-SHA` branch (CI ignores `farm/**`).
+3. **Suites.** The [farm](farm.md) test workflow runs the full suite for the
+   rebased commit inside the autoland run (wisp:.github/workflows/farm-test.yml
+   is also a reusable workflow for this).
+4. **Compare.** At the same time, main's own failures at the base commit come
+   from the summary the previous landing saved for it (artifact
+   `autoland-summary-SHA`, kept 14 days), or else from
+   `bun wisp farm test --ref BASE`. A test that fails on the branch but not
+   on main is a new failure; a shard that crashed without naming a test is
+   new unless main's run also had one.
+5. **Land.** With no new failures, the rebased commits are pushed to main
+   (a plain fast-forward, so it fails if main moved) and the branch is
+   deleted. Pushes made with the workflow token start no workflows, so the
+   run dispatches main's CI for the landed commit; "main is red" follows that
+   CI run as usual. If main moved during the run, the branch is queued again.
+6. **Refuse.** On a conflict, a failed check or new failures, the branch
+   stays and every issue the commits reference (`Refs wisp#N`) gets a comment
+   naming the files or tests and linking the run. Push a fix to the same
+   branch and it tries again.
+
+Runs share one concurrency group with a queue, so branches land one at a
+time in push order and never race main. To retry a branch without a new
+commit: `gh workflow run autoland.yml -f branch=claude/NAME`. A commit that
+changes `.github/workflows/` can't land this way (the workflow token may not
+push workflow changes); the run says so on the issue, and it lands through a
+normal `safe-push`.
