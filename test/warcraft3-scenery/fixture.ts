@@ -34,10 +34,18 @@ export function sceneryFixture(this: void, declarations: NativeDeclarations, tes
   }
   call("BlzSetTerrainFogColor", 12, 13, 14);
   equal((scenery.fog.color as number[])[2], 14, "fog blue");
-  call("SetSkyModel", "Environment\\Sky\\Test\\Test.mdl");
-  equal(scenery.sky, "Environment\\Sky\\Test\\Test.mdl", "sky model");
+  call("SetTerrainFogEx", 0, 100, 200, 0.5, 0.25, 0.5, 0.75);
+  equal(scenery.fog.zEnd, 200, "linear fog end");
+  equal((scenery.fog.color as number[])[0], 0.25, "linear fog red");
+  call("ResetTerrainFog");
+  equal(scenery.fog.style, undefined, "reset fog");
+  call("SetSkyModel", "sky.mdx");
+  call("BlzShowSkyBox", false);
   call("BlzShowTerrain", false);
-  equal(scenery.terrainShown, false, "terrain hidden");
+  call("SetDayNightModels", "terrain.mdl", "unit.mdl");
+  call("SetTimeOfDay", 12);
+  const environment = scenery.environment;
+  equal(`${environment.sky} ${environment.skyVisible} ${environment.terrainVisible} ${environment.dayNight.terrain} ${environment.dayNight.unit} ${environment.timeOfDay}`, "sky.mdx false false terrain.mdl unit.mdl 12", "sky and day/night light");
   call("BlzSetMinShadowCastingPointLightCount", 6);
   equal(call("BlzGetMinShadowCastingPointLightCount"), 6, "point light shadow count");
   call("SetCameraFieldControlledByInput", "camera-field", true);

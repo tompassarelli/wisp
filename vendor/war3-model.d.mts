@@ -427,6 +427,11 @@ export declare class ModelRenderer {
     setTextureCompressedImage(path: string, format: DDS_FORMAT, imageData: ArrayBuffer, ddsInfo: DdsInfo): void;
     setGPUTextureCompressedImage(path: string, format: GPUTextureFormat, imageData: ArrayBuffer, ddsInfo: DdsInfo): void;
     setCamera(cameraPos: vec3, cameraQuat: quat): void;
+    /** Wisp: a directional key light and ambient fill, its direction in model space toward the light, and linear fog by eye depth. */
+    setWispEnvironment(environment: {
+        light?: { direction: ArrayLike<number>; key: ArrayLike<number>; ambient: ArrayLike<number> };
+        fog?: { color: ArrayLike<number>; start: number; end: number; near: number; far: number; max: number };
+    } | undefined): void;
     setLightPosition(lightPos: vec3): void;
     setLightColor(lightColor: vec3): void;
     setSequence(index: number): void;

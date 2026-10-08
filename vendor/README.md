@@ -25,6 +25,14 @@ alpha, and additive layers blend with (source alpha, one), as the MDX filter
 mode tables describe. Particle texture cells run row by row and repeat past
 the grid's last cell.
 
+Wisp adds three changes to the built file. Light records read the 1200,
+1300 and 1600 fields (shadow intensity, shadow casting, falloff), as Tom's
+`fix/mdx1800-light` branch (`ddda8d7`) reads them, so a whole day/night model
+parses. `ModelRenderer.setWispEnvironment` gives the SD and WebGL2 HD model
+shaders a directional key light, an ambient fill and linear eye-depth fog;
+without it they draw as upstream. Each layer's Unshaded and Unfogged flags,
+and additive filter modes, select per layer how that light and fog apply.
+
 Source: <https://github.com/4eb0da/war3-model>.
 License: MIT, Copyright (c) 2017-2023 4eb0da. The package retains LICENSE
 and the upstream copyright in `war3-model.LICENSE`.

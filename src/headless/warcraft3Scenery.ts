@@ -47,21 +47,33 @@ export interface SceneryContext {
 }
 interface Region { readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number }
 
+/**
+ * The sky and light a renderer draws the scene in: the last SetSkyModel,
+ * BlzShowSkyBox, BlzShowTerrain, SetDayNightModels and SetTimeOfDay. An
+ * empty model path is the map tileset's own.
+ */
+export interface Environment {
+  sky: string;
+  skyVisible: boolean;
+  terrainVisible: boolean;
+  /** The day/night models lighting terrain and units. */
+  dayNight: { terrain: string; unit: string };
+  /** Hours, 0 to 24; the headless clock does not advance it. */
+  timeOfDay: number;
+}
+
 /** Map data supplies facts which Warcraft would read from its assets. */
 export class Scenery {
   readonly doodads: DoodadState[];
   readonly destructables = new Map<Handle, DestructableState>();
   readonly fog: Record<string, unknown> = {};
+  readonly environment: Environment = { sky: "", skyVisible: true, terrainVisible: true, dayNight: { terrain: "", unit: "" }, timeOfDay: 12 };
   readonly water: Record<string, unknown> = {};
   readonly cameraInput = new Map<unknown, boolean>();
   readonly cameraSetups = new Map<Handle, number>();
   readonly cameraBlockers = new Map<Handle, boolean>();
   cameraType = 0;
   cameraAllowsHotkeyTargetLock = true;
-  /** SetSkyModel's latest model; "" clears the sky. */
-  sky: string | undefined;
-  /** BlzShowTerrain's latest flag. */
-  terrainShown = true;
   minShadowCastingPointLightCount = 0;
   cinematicEnabledDE = true;
   thematicMusicPauseOnFocusLost = false;
@@ -131,9 +143,16 @@ export class Scenery {
         this.fog.style = style; this.fog.zStart = zstart; this.fog.zEnd = zend; this.fog.density = density;
         this.fog.heightStart = heightStart; this.fog.heightEnd = heightEnd; this.fog.linearStart = linearStart; this.fog.linearEnd = linearEnd; this.fog.color = [red, green, blue];
       },
-      SetSkyModel: (model: string) => { this.sky = model; },
-      BlzShowTerrain: (show: boolean) => { this.terrainShown = show; },
       BlzSetTerrainFogColor: (red: number, green: number, blue: number) => { this.fog.color = [red, green, blue]; },
+      SetTerrainFogEx: (style: number, zstart: number, zend: number, density: number, red: number, green: number, blue: number) => {
+        this.fog.style = style; this.fog.zStart = zstart; this.fog.zEnd = zend; this.fog.density = density; this.fog.color = [red, green, blue];
+      },
+      ResetTerrainFog: () => { for (const field of Object.keys(this.fog)) delete this.fog[field]; },
+      SetSkyModel: (model: string) => { this.environment.sky = model; },
+      BlzShowSkyBox: (show: boolean) => { this.environment.skyVisible = show; },
+      BlzShowTerrain: (show: boolean) => { this.environment.terrainVisible = show; },
+      SetDayNightModels: (terrain: string, unit: string) => { this.environment.dayNight = { terrain, unit }; },
+      SetTimeOfDay: (hours: number) => { this.environment.timeOfDay = hours; },
       BlzSetMinShadowCastingPointLightCount: (count: number) => { this.minShadowCastingPointLightCount = count; },
       BlzGetMinShadowCastingPointLightCount: () => this.minShadowCastingPointLightCount,
       SetCameraFieldControlledByInput: (field: unknown, controlled: boolean) => { this.cameraInput.set(field, controlled); },
