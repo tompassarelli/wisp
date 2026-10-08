@@ -192,7 +192,9 @@ step. Model initialization leaves animation clocks and particles unchanged;
 `render.preloadModels` lists any additional models the map creates later.
 `standalone.json` records startup time and the prepared asset counts separately
 from the match's frame timing.
-The browser keeps one frame request pending while it draws the preceding scene.
+The page is cross-origin isolated (`isolated` in `standalone.json`), so its
+timers and frame timestamps are precise to 5 µs rather than 100 µs with random
+jitter. The browser keeps one frame request pending while it draws the preceding scene.
 Frame requests and scenes travel over one WebSocket (`/frames`); a fetch per
 frame spent about 10 ms in the browser's request handling under load. Each
 request advances one step; captures finish saving before the next request.
