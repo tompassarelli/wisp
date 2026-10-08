@@ -272,14 +272,15 @@ non-integer literal as an exact hexadecimal float.
 
 wisp:native/toward-zero.h makes a LUA_32BITS Lua 5.3.6 round its raw float
 `+ - * /` and its decimal numerals toward zero.
-`bun node_modules/wisp/scripts/wisp/towardZeroLua.ts DIR` builds one in DIR
-with `nix` (nixpkgs' Lua source, checked against lua.org's checksum) and
-prints its path; `towardZeroLua(DIR)` does the same in a host program, and
-`luaRounding(lua)` tells which rounding a Lua has. Without nix:
-
-```sh
-make -C lua-5.3.6 generic "MYCFLAGS=-DLUA_32BITS -include /path/to/toward-zero.h"
-```
+`bun node_modules/wisp/scripts/wisp/lua32.ts toward-zero` prints its path,
+and `bun node_modules/wisp/scripts/wisp/lua32.ts` the stock Lua32's; each is
+built on first use from lua.org's checksummed source, with gcc and make (or
+`nix` when they are missing), into a per-user cache,
+`~/.cache/wisp/lua32/KEY/lua`, keyed by the source checksum and flags. A lock
+lets parallel worktrees share one build. `lua32(variant)` does the same in a
+host program, and `luaRounding(lua)` tells which rounding a Lua has. Wisp's
+`bun test` sets `LUA` and `TOWARD_ZERO_LUA` to these when they are unset
+(wisp:test/lua32.preload.ts), and the CI template does the same.
 
 Run a game's Lua replays and numeric checks in both a stock Lua32 and this
 one: results that agree rely on no raw float `+ - * /` and no inexact
