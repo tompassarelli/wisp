@@ -435,6 +435,24 @@ bun test/unit-motion57/build.ts BASE.w3m PRIVATE_OUT.w3x
 The native map writes `unit-motion-p0.txt` and `unit-motion-p1.txt` to
 CustomMapData 0.25 game seconds after start, in the same ×128 integer form.
 
+### Effect positions and lifetime
+
+Effect coordinates, scale, matrix scale, orientation, time scale, time and
+blend time are stored as binary32 when set; reads in the same callback see
+the write. `test/effects59/cases.ts` authors six cases shared by Bun, Lua32
+and a native measurement map. `DestroyEffect` removes an effect from the
+scene at once, while the real game plays its death animation first. The rules
+and their evidence are in
+[Warsmash notes](warsmash-notes.md#effects-attachment-scale-and-lifetime).
+
+```sh
+LUA=PATH_TO_LUA32 bun test test/headless-effects.test.ts
+bun test/effects59/build.ts BASE.w3m PRIVATE_OUT.w3x
+```
+
+The native map writes `effects-p0.txt` and `effects-p1.txt` to
+CustomMapData 0.25 game seconds after start, in the same ×128 integer form.
+
 The 0.405 cutoff was identified in WurstScript's Apache-2.0
 [UnitProvider at 9913e1b](https://github.com/wurstscript/WurstScript/blob/9913e1bd300c2053637d756a11bae8c3c8ed568f/de.peeeq.wurstscript/src/main/java/de/peeeq/wurstio/jassinterpreter/providers/UnitProvider.java).
 Wisp's TypeScript implementation is independently authored; no Wurst source

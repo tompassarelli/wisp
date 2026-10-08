@@ -648,7 +648,7 @@ export class HeadlessClient {
 
   private effectAt(model: string, x: number, y: number): Handle {
     const handle = this.handle("effect");
-    this.effects.set(handle, { handle, model, created: this.frame, x, y, z: 0, alpha: 255, scale: 1, timeScale: 1, flat: false, animationBlendTime: 0, queuedAnimations: [],
+    this.effects.set(handle, { handle, model, created: this.frame, x: f32(x), y: f32(y), z: 0, alpha: 255, scale: 1, timeScale: 1, flat: false, animationBlendTime: 0, queuedAnimations: [],
       animation: undefined, subAnimations: [], animationElapsed: 0, yaw: 0, pitch: 0, roll: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1] });
     return handle;
   }
@@ -716,7 +716,7 @@ export class HeadlessClient {
     if (pose === undefined) return;
     pose.animation = animation;
     pose.animationElapsed = 0;
-    if (timeScale !== undefined) pose.timeScale = timeScale;
+    if (timeScale !== undefined) pose.timeScale = f32(timeScale);
   }
 
   private show(text: string): void {
@@ -1073,7 +1073,7 @@ export class HeadlessClient {
       BlzRemoveEffect: (effect: Handle) => { this.effects.delete(effect); },
       BlzSetSpecialEffectAnimationBlendTime: (effect: Handle, time: number) => {
         const pose = this.effects.get(effect);
-        if (pose !== undefined) pose.animationBlendTime = time;
+        if (pose !== undefined) pose.animationBlendTime = f32(time);
       },
       BlzSetSpecialEffectAnimation: (effect: Handle, animation: string) => {
         const pose = this.effects.get(effect);
@@ -1083,25 +1083,26 @@ export class HeadlessClient {
         const pose = this.effects.get(effect);
         if (pose !== undefined) pose.queuedAnimations.push(animation);
       },
+      // Effect reals are stored as binary32 (wisp:docs/warsmash-notes.md, "Effects: attachment, scale and lifetime").
       // An effect that was destroyed or never made changes nothing.
       BlzSetSpecialEffectPosition: (effect: Handle, x: number, y: number, z: number) => {
         const pose = this.effects.get(effect);
         if (pose === undefined) return;
-        pose.x = x;
-        pose.y = y;
-        pose.z = z;
+        pose.x = f32(x);
+        pose.y = f32(y);
+        pose.z = f32(z);
       },
       BlzSetSpecialEffectX: (effect: Handle, x: number) => {
         const pose = this.effects.get(effect);
-        if (pose !== undefined) pose.x = x;
+        if (pose !== undefined) pose.x = f32(x);
       },
       BlzSetSpecialEffectY: (effect: Handle, y: number) => {
         const pose = this.effects.get(effect);
-        if (pose !== undefined) pose.y = y;
+        if (pose !== undefined) pose.y = f32(y);
       },
       BlzSetSpecialEffectZ: (effect: Handle, z: number) => {
         const pose = this.effects.get(effect);
-        if (pose !== undefined) pose.z = z;
+        if (pose !== undefined) pose.z = f32(z);
       },
       BlzSetSpecialEffectAlpha: (effect: Handle, alpha: number) => {
         const pose = this.effects.get(effect);
@@ -1109,15 +1110,15 @@ export class HeadlessClient {
       },
       BlzSetSpecialEffectScale: (effect: Handle, scale: number) => {
         const pose = this.effects.get(effect);
-        if (pose !== undefined) pose.scale = scale;
+        if (pose !== undefined) pose.scale = f32(scale);
       },
       BlzSetSpecialEffectTimeScale: (effect: Handle, timeScale: number) => {
         const pose = this.effects.get(effect);
-        if (pose !== undefined) pose.timeScale = timeScale;
+        if (pose !== undefined) pose.timeScale = f32(timeScale);
       },
       BlzSetSpecialEffectTime: (effect: Handle, time: number) => {
         const pose = this.effects.get(effect);
-        if (pose !== undefined) pose.animationElapsed = time;
+        if (pose !== undefined) pose.animationElapsed = f32(time);
       },
       BlzPlaySpecialEffect: (effect: Handle, animation: string | number) => this.playEffect(effect, animation),
       BlzPlaySpecialEffectWithTimeScale: (effect: Handle, animation: string | number, timeScale: number) => this.playEffect(effect, animation, timeScale),
@@ -1138,22 +1139,22 @@ export class HeadlessClient {
       BlzSetSpecialEffectOrientation: (effect: Handle, yaw: number, pitch: number, roll: number) => {
         const pose = this.effects.get(effect);
         if (pose !== undefined) {
-          pose.yaw = yaw;
-          pose.pitch = pitch;
-          pose.roll = roll;
+          pose.yaw = f32(yaw);
+          pose.pitch = f32(pitch);
+          pose.roll = f32(roll);
         }
       },
       BlzSetSpecialEffectYaw: (effect: Handle, yaw: number) => {
         const pose = this.effects.get(effect);
-        if (pose !== undefined) pose.yaw = yaw;
+        if (pose !== undefined) pose.yaw = f32(yaw);
       },
       BlzSetSpecialEffectPitch: (effect: Handle, pitch: number) => {
         const pose = this.effects.get(effect);
-        if (pose !== undefined) pose.pitch = pitch;
+        if (pose !== undefined) pose.pitch = f32(pitch);
       },
       BlzSetSpecialEffectRoll: (effect: Handle, roll: number) => {
         const pose = this.effects.get(effect);
-        if (pose !== undefined) pose.roll = roll;
+        if (pose !== undefined) pose.roll = f32(roll);
       },
       BlzSetSpecialEffectColor: (effect: Handle, r: number, g: number, b: number) => {
         const pose = this.effects.get(effect);
@@ -1166,7 +1167,7 @@ export class HeadlessClient {
       BlzSetSpecialEffectMatrixScale: (effect: Handle, x: number, y: number, z: number) => {
         const pose = this.effects.get(effect);
         if (pose !== undefined) {
-          pose.matrixScale = [pose.matrixScale[0] * x, pose.matrixScale[1] * y, pose.matrixScale[2] * z];
+          pose.matrixScale = [f32(pose.matrixScale[0] * f32(x)), f32(pose.matrixScale[1] * f32(y)), f32(pose.matrixScale[2] * f32(z))];
           pose.flat = pose.matrixScale.includes(0);
         }
       },
