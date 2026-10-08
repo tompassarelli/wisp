@@ -496,16 +496,18 @@ CustomMapData at start, in the same ×128 integer form.
 Effect coordinates, scale, matrix scale, orientation, time scale, time and
 blend time are stored as binary32 when set; reads in the same callback see
 the write. `test/effects59/cases.ts` authors seven cases shared by Bun, Lua32
-and a native measurement map. `DestroyEffect` makes the handle unreachable at
-once: setters do nothing and reads return 0. The drawn effect plays its
-model's Death sequence where it stands, at its last time scale, and is gone
-when that ends; frozen at time scale 0 it never ends, and without a Death
-sequence it is gone at once. Clients learn Death lengths from
+and a native measurement map. `DestroyEffect` stops later setters from
+changing the effect; position reads keep returning its last position until
+removal. The drawn effect starts Death immediately, at its last time scale;
+without Death it keeps its current animation. Warcraft's default
+`EffectDeathTime` removes it five game seconds after destruction, including
+a frozen effect or one whose Death is longer than five seconds. A shorter
+Death holds its final pose until cleanup. Clients learn Death sequences from
 `effectDeaths(model)` (seconds, or `undefined` for none) in
 `runtime.clients(..., { effectDeaths })` or `LuaHeadlessMap.effectDeaths`;
-without it every destroyed effect is gone at once. `--render` reads them from
+without it a destroyed effect keeps its current animation until cleanup. `--render` reads them from
 the destroyed models with `render.readAsset` and plays the journey a second
-time to capture its scenes. Game logic never depends on them. The rules
+time to capture its scenes. The rules
 and their evidence are in
 [Warsmash notes](warsmash-notes.md#effects-attachment-scale-and-lifetime).
 

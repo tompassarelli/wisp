@@ -418,8 +418,8 @@ effects belong to wisp#58 and are not repeated here. Fixture:
 | Scale, matrix scale, yaw/pitch/roll, time scale, time and blend time values | Not registered; binary32 `real` arguments | Stored unrounded | **Mismatch, fixed**: all stored as binary32; `MatrixScale` multiplies the current matrix scale and rounds each product. None of them move the effect (case `scale-orientation-time-keep-position`) |
 | `BlzSetSpecialEffectMatrixScale` compounding | Not registered, nor is `BlzResetSpecialEffectMatrix`; no rule | Each call multiplies the current matrix scale until `BlzResetSpecialEffectMatrix` | **Match** (3.0.1, 8 Oct ruler capture: X doubled once, twice, and twice with a reset between drew the global marker at 352, 704 and 352). So `-dev backdrop on` (`showBackdrop`), which reapplies it to existing scenery, widens that scenery again |
 | Position held between frames, frozen (time scale 0) or playing | Effects are placed once; only attached effects follow a parent | Position changes only through setters | **Match**: case `held-after-quarter-second` reads both 0.25 s later unmoved |
-| `DestroyEffect` lifetime | The drawn instance stops looping, plays the model's Death sequence, then is removed; without one it is removed when its current sequence ends. Warsmash's engine-side removals (buffs, missiles) start Death at once; its `DestroyEffect` native first lets the current loop finish | Removed from the scene at once; later setters and reads on the handle do nothing | **Mismatch, fixed; now matches**: setters on the handle do nothing at once, while position reads return where the dying effect stands until it is gone (3.0.1 read (-200, 0, 0) for the frozen one; case `destroyed-frozen-reads`). The drawn effect switches to its Death sequence at once, at its last time scale, and is gone on that sequence's last millisecond; without a Death sequence it is gone at once. Lengths come from the model files the renderer loads (`effectDeaths`). Test: the Death timeline in Bun and Lua32 (gone at frame 120 for a 2 s Death). Whether 3.0.1 also finishes the current loop first is the capture's playing effect at (200, 0) |
-| `DestroyEffect` on an effect frozen at time scale 0 | An instance advances `dt × 1000 × speed` ms a frame and ends a non-looping sequence only when it reaches the sequence's last millisecond; destroying doesn't change the speed, so a frozen effect never ends and is never removed | Removed from the scene at once | **Mismatch, fixed; now matches**: the frozen effect stays drawn on Death's first frame for good (timeline frame 600). Smashcraft hides its victory pose and light before destroying them, so a frozen leftover is invisible. Capture: the frozen effect at (-200, 0) |
+| `DestroyEffect` lifetime | The drawn instance stops looping, plays the model's Death sequence, then is removed; without one it is removed when its current sequence ends. Warsmash's engine-side removals (buffs, missiles) start Death at once; its `DestroyEffect` native first lets the current loop finish | Removed from the scene at once; later setters and reads on the handle do nothing | **Mismatch, fixed against 3.0.1**: setters do nothing, while position reads return the dying effect's last position. Death starts immediately: the retained ruler capture's three destruction times agree with the reference within 61 ms, excluding the proposed 750 ms Stand-loop delay. Without Death, the current animation is retained (`no-death-frozen` draws Stand at 500 ms). The default gameplay constant `EffectDeathTime` removes the effect five game seconds after destruction, independently of its sequence length. The renderer reads Death sequences from model files (`effectDeaths`) to select Death; the cleanup clock never uses their length. Bun and Lua32 test both frozen and playing effects at frames 299 and 300 |
+| `DestroyEffect` on an effect frozen at time scale 0 | An instance advances `dt × 1000 × speed` ms a frame and ends a non-looping sequence only when it reaches the sequence's last millisecond; destroying doesn't change the speed, so a frozen effect never ends and is never removed | Removed from the scene at once | **Mismatch, fixed against 3.0.1**: Death freezes at its first frame, but the independent five-second cleanup clock still removes it. The retained second capture shows it 2.88 s after destruction; the first capture shows it gone after about 9 s. Smashcraft's victory pose and light are hidden before destruction, so their waiting poses draw nothing |
 | `AddSpecialEffectTarget` attachment | Picks the shortest attachment name containing every requested token, `origin` when empty; falls back to the unit's position | Placed at the unit's X/Y, no attachment | **Not relied on**: no Smashcraft call. On 3.0.1 the local position getters read an origin attachment at 0, 0 however its unit moves (wisp#57's dash, 90 ticks), and Wisp now places it there |
 
 Wisp still creates point effects at Z 0 because headless has no terrain; a
@@ -443,19 +443,36 @@ The rest of the capture moved to the ruler map's third column
 read from one screenshot with no mask: `death-at-0`, `-1` and `-2`
 (destroyed mid-Stand 0, 1 and 2 s after `death-reference` is told to play
 Death: Death from that moment, 750 ms later if the loop finishes first, or
-gone), `death-frozen` (destroyed at time scale 0: Death's first frame, for
-good), `no-death-frozen` (a model without Death: gone at once),
+gone), `death-frozen` (destroyed at time scale 0: Death's first frame until
+cleanup), `no-death-frozen` (a model without Death: its current frozen pose),
 `teardown-hidden` (collapsed to scale 0, then destroyed, as the victory pose
 is: nothing shown) and `matrix-scale-once`, `-twice`, `-reset`. They replace
 the Smashcraft session's teardown and backdrop checks: both depend only on
 these rules.
 
 Its first capture (8 Oct) confirmed that matrix scale multiplies (row above)
-and drew nothing for `no-death-frozen` and `teardown-hidden`, as headless
-does. Both destroyed rulers, frozen and playing, were gone when it was taken,
-about 9 s after `DestroyEffect`, while headless keeps them drawn through a 30 s Death and,
-frozen, for good. The second capture's three destroy times bound how long
-3.0.1 keeps a destroyed effect drawn.
+and drew nothing for `no-death-frozen` and `teardown-hidden`. All destroyed
+rulers were gone about 9 s after `DestroyEffect`, contradicting the earlier
+model of a 30 s Death and a permanently frozen effect. Capture 2 reads
+`death-at-0/1/2` at 96, 64 and 31 world units: Death starts immediately.
+It also reads the frozen Death at its first frame and the model without
+Death at Stand's 500 ms pose, 2.88 s after destruction. Their global markers
+share the model creation phase measured in #58; matrix-scale markers in
+capture 2 lie beyond the reader's slot, so the first capture supplies that
+rule's 352/704/352 measurements. These captures identify the independent
+effect cleanup timer, rather than the animation clock, as the lifetime rule.
+
+The follow-up capture on the same 3.0.1 Classic ruler map confirms the default
+five-second cutoff. `ruler-03` reads Death's reference needle at 151 units
+(4.52 s after destruction): `death-at-0`, `death-frozen` and
+`no-death-frozen` are still drawn. `ruler-04` reads it at 169 units (5.06 s):
+all three are gone, while rulers destroyed one and two seconds later remain.
+The 30 s Death and time scale 0 therefore share the same cleanup deadline;
+the model without Death keeps its frozen 500 ms Stand pose until that deadline.
+Evidence: `~/.local/state/smashcraft/native-corpus70-20261008/ruler59/`,
+13 PNGs with the reader's `.read.txt` files. Seven readable effect rulers
+match before the deadline; the three matrix rules retain the first capture's
+352/704/352 measurements because their later global markers are off the board.
 
 ### Effect placement and unavailable effect setters
 
@@ -648,7 +665,7 @@ that pins headless's rule in Bun and 32-bit Lua, and the native evidence.
 | Body setup: pathing off, Locust, Crow Form, pause, move speed (`SetUnitPathing`, `UnitAdd/RemoveAbility`, `PauseUnit`, `SetUnitMoveSpeed`, `GetUnitMoveSpeed`) | `platform/shell/fighterBody.ts`, `platform/objectData.ts`, `platform/shell/objectData.ts` | `test/headless-unit-movement.test.ts` (`test/unit-movement61/`) | 3.0.1, both rows match (#61) |
 | Unit object and state reads (`CreateUnit`, `RemoveUnit`, `GetUnitTypeId`, `ShowUnit`, `SetUnitScale`, `SetUnitVertexColor`, `Blz{Set,Get}UnitAttackCooldown`, `BlzSetUnitName`, `BlzSetUnitRealField`, `SetUnitInvulnerable`) | `platform/shell/{fighterBody,view,shell,matchStart,objectData}.ts`, `platform/objectData.ts` | `test/headless-unit-states.test.ts`, `test/object-data.test.ts` | Pending in #44's unit-state capture |
 | Animation selection, clock, seek and blend (`SetUnitAnimation(ByIndex)`, `SetUnitTimeScale`, `SetUnitBlendTime`, `BlzSetSpecialEffect{Animation,Time,TimeScale,AnimationBlendTime}`, `BlzPlaySpecialEffect`) | `game/render/fighterPool.ts`, `platform/shell/{view,preview,matchStart}.ts`, `game/render/placedObjectEffects.ts` | `test/animation.test.ts`, `test/runtime.test.ts` (`src/headless/animation.tests.ts`) | Pending, ruler map (#58) |
-| Effect create, place, scale, colour, orientation, destroy (`AddSpecialEffect`, `DestroyEffect`, `BlzSetSpecialEffect*`) | 38 + 26 sites under `game/render/` and `platform/shell/` | `test/headless-effects.test.ts` (`test/effects59/`) | 3.0.1, 7 rows match; Death timing pending (#59) |
+| Effect create, place, scale, colour, orientation, destroy (`AddSpecialEffect`, `DestroyEffect`, `BlzSetSpecialEffect*`) | 38 + 26 sites under `game/render/` and `platform/shell/` | `test/headless-effects.test.ts` (`test/effects59/`, `test/animation58/`) | 3.0.1, 7 script rows and 10 effect rules match; five-second cleanup bracketed at 4.52–5.06 s (#59) |
 | Sound start, stop, kill-when-done, position, volume, pitch, duration (`CreateSound(FromLabel)`, `StartSound`, `StopSound`, `KillSoundWhenDone`, `SetSound*`, `GetSoundFileDuration`) | `game/render/{combatEffects,matchPresentation,specialEffects,modelSoundPresentation,bearFeedback}.ts` | `test/headless-sounds.test.ts` (`test/sounds60/`) | 3.0.1 rows match (#60); voice cap unresolved |
 | Music (`PlayMusic`, `StopMusic`, `ClearMapMusic`, `PlayThematicMusic`, `EndThematicMusic`) | `game/render/matchPresentation.ts` | Intentional no-ops (Smashcraft's `SMASHCRAFT_NOOPS`) | Audible only; not a simulation rule |
 | Collision, pathing and engine orders | none: no `Issue*Order`, group, range or `SetUnitPosition` call | `overlapping-bodies-held` in `test/headless-unit-motion.test.ts` | Not used |

@@ -45,9 +45,9 @@ export const EXPECTED = [
   "death-at-0=125,84,500",
   "death-at-1=92,84,500",
   "death-at-2=58,84,500",
-  // Destroyed while frozen: Death's first frame, for good; a model without Death is gone at once.
+  // Destroyed while frozen: Death's first frame, or the current Stand pose without Death, until five-second cleanup.
   "death-frozen=0,84,250",
-  "no-death-frozen=gone",
+  "no-death-frozen=500,24,250",
   // Collapsed to scale 0, then destroyed, as Smashcraft's victory pose is: nothing shown.
   "teardown-hidden=gone",
   // Matrix scale multiplies: X doubled twice is 4 × 125; a reset between leaves 2 × 125. The global marker, frozen at

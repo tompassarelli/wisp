@@ -100,11 +100,9 @@ export interface EffectPose extends AnimationState {
   matrixScale: [number, number, number];
   /** A matrix scale of zero on some axis since the matrix was last reset. */
   flat: boolean;
-  /**
-   * Set by DestroyEffect when the model has a Death sequence: its length in
-   * seconds. The map can no longer reach the effect, which plays "death" at
-   * its last time scale and is gone once animationElapsed reaches its last millisecond.
-   */
+  /** The frame DestroyEffect was called; EffectDeathTime removes the model after five game seconds. */
+  destroyed?: number;
+  /** Seconds of the model's Death sequence, when it has one. */
   death?: number;
 }
 
@@ -282,7 +280,7 @@ export interface ClientOptions {
   readonly files?: ClientFiles;
   /** Frame definitions (wisp:docs/ui.md) whose trees BlzCreateFrame makes by name, as their generated FDF does in Warcraft. */
   readonly frames?: readonly FrameTemplate[];
-  /** Death sequence lengths of the models drawn; without it a destroyed effect is gone at once. */
+  /** Death sequences of the models drawn; without one, a destroyed effect keeps its animation until cleanup. */
   readonly effectDeaths?: EffectDeaths;
 }
 
@@ -778,21 +776,20 @@ export class HeadlessClient {
   /** The effect the map can still change: made and not destroyed. */
   private liveEffect(effect: Handle): EffectPose | undefined {
     const pose = this.effects.get(effect);
-    return pose?.death === undefined ? pose : undefined;
+    return pose?.destroyed === undefined ? pose : undefined;
   }
 
-  /** Warcraft plays the model's Death sequence where the effect stands, then removes it (wisp:docs/warsmash-notes.md, "Effects: attachment, scale and lifetime"). */
+  /** Warcraft starts Death when present, then removes the effect on its gameplay decay timer. */
   private destroyEffect(effect: Handle): void {
     const pose = this.liveEffect(effect);
     if (pose === undefined) return;
     const death = this.effectDeaths?.(pose.model);
-    if (death === undefined || death <= 0) {
-      this.effects.delete(effect);
-      return;
-    }
-    pose.death = death;
+    pose.destroyed = this.frame;
     pose.queuedAnimations.length = 0;
-    selectAnimation(pose, "death", []);
+    if (death !== undefined && death > 0) {
+      pose.death = death;
+      selectAnimation(pose, "death", []);
+    }
   }
 
   private playEffect(effect: Handle, animation: string | number, timeScale?: number): void {
@@ -1368,8 +1365,7 @@ export class HeadlessClient {
     const died: Handle[] = [];
     for (const pose of this.effects.values()) {
       advanceAnimation(pose, pose.timeScale, f32(1 / FRAMES_PER_SECOND));
-      // A sequence ends on its last millisecond, as Warcraft's sequence clock does.
-      if (pose.death !== undefined && pose.animationElapsed >= pose.death - f32(0.001)) died.push(pose.handle);
+      if (pose.destroyed !== undefined && this.frame - pose.destroyed >= 5 * FRAMES_PER_SECOND) died.push(pose.handle);
     }
     for (const handle of died) this.effects.delete(handle);
     for (const unit of this.units.values()) advanceAnimation(unit, unit.timeScale, f32(1 / FRAMES_PER_SECOND));
