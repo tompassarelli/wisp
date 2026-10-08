@@ -3,6 +3,7 @@
 // launch. Plain functions over a process table and log text, so tests give
 // them recorded values.
 import { join } from "node:path";
+import { Schema } from "effect";
 
 /** One host process, as /proc shows it. */
 export interface ProcessInfo {
@@ -85,23 +86,35 @@ export function windowsPath(prefix: string, path: string): string {
  */
 export const loadMapOption = (prefix: string, map: string) => `-loadfile "${windowsPath(prefix, map)}"`;
 
+/**
+ * Battle.net.config: a JSON object whose Games section holds each game's
+ * settings. Records keep every setting and their order, so the launcher's
+ * layout survives a write.
+ */
+const Settings = Schema.Record(Schema.String, Schema.Unknown);
+const LauncherSettings = Schema.fromJsonString(Settings);
+const Games = Schema.UndefinedOr(Schema.Record(Schema.String, Settings));
+
+/** The launcher's settings and their Games section, decoded once; throws when they aren't that shape. */
+function decodeSettings(config: string) {
+  const settings = Schema.decodeSync(LauncherSettings)(config);
+  return { settings, games: Schema.decodeUnknownSync(Games)(settings.Games) };
+}
+
 /** Battle.net's "Additional command line arguments" for Warcraft III: Games.w3.AdditionalLaunchArguments. */
 export function launchOptions(config: string): string | undefined {
-  const parsed: unknown = JSON.parse(config);
-  const games = typeof parsed === "object" && parsed !== null ? (parsed as { Games?: { w3?: { AdditionalLaunchArguments?: unknown } } }).Games : undefined;
-  const value = games?.w3?.AdditionalLaunchArguments;
+  const value = decodeSettings(config).games?.w3?.AdditionalLaunchArguments;
   return typeof value === "string" && value !== "" ? value : undefined;
 }
 
 /** The settings with Warcraft III's launch options set, or removed when undefined, in the launcher's own layout. */
 export function withLaunchOptions(config: string, options: string | undefined): string {
-  const parsed = JSON.parse(config) as { Games?: Record<string, Record<string, unknown>> };
-  const games = (parsed.Games ??= {});
-  const w3 = (games.w3 ??= {});
+  const { settings, games = {} } = decodeSettings(config);
+  const w3 = { ...games.w3 };
   if (options === undefined) delete w3.AdditionalLaunchArguments;
   else w3.AdditionalLaunchArguments = options;
   const newline = config.includes("\r\n") ? "\r\n" : "\n";
-  return JSON.stringify(parsed, null, 4).replaceAll("\n", newline);
+  return JSON.stringify({ ...settings, Games: { ...games, w3 } }, null, 4).replaceAll("\n", newline);
 }
 
 const SIGNED_IN = /\[BNLogin\] .*Logged into Battle\.net successfully/;
