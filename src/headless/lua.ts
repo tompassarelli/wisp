@@ -24,6 +24,7 @@ export interface LuaHeadlessMap {
   readonly natives?: (this: void, client: HeadlessClient) => NativeBehaviors;
   /** Human player slots, one client each; two by default. */
   readonly players?: readonly number[];
+  readonly playerNames?: Readonly<Record<number, string>>;
   /** Frame definitions (wisp:docs/ui.md) whose trees BlzCreateFrame makes by name, as their generated FDF does in Warcraft. */
   readonly frames?: readonly FrameTemplate[];
   /** Death sequence lengths of the effect models; without it a destroyed effect is gone at once. */
@@ -51,6 +52,7 @@ export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: s
     ...(delivery === undefined ? {} : { delivery }),
     declarations: parseNativeDeclarations(declarations),
     players: map.players ?? [0, 1],
+    ...(map.playerNames === undefined ? {} : { playerNames: map.playerNames }),
     filePrefix: map.filePrefix,
     // A reload publishes the whole bundle as one module.
     modules: bundleModules(bundle),

@@ -47,6 +47,10 @@ for a playing track, and a later start retains that mute. The events record
 map-call timing and gain; device mixer settings, fade envelopes and audible
 asset fidelity come from Warcraft reference captures.
 
+`PlayThematicMusic` starts the requested track once (`looping: false`) in
+the same music state and cue log, replacing the previous playing track.
+It retains the map's music volume and the player's music slider.
+
 ## Player music volume
 
 Warcraft's Options > Sound music slider scales the music channel; the map

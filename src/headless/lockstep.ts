@@ -21,6 +21,7 @@ export interface LockstepOptions {
   readonly declarations: NativeDeclarations;
   /** One client per human player slot. */
   readonly players: readonly number[];
+  readonly playerNames?: Readonly<Record<number, string>>;
   /** The map's configureRuntime() filePrefix, which names its reload, acknowledgement and error files. */
   readonly filePrefix: string;
   /** Each client's map entry; called in that client, so a host can load the bundle there. */
@@ -113,6 +114,7 @@ export class Lockstep {
         slot,
         filePrefix: options.filePrefix,
         humans: options.players,
+        ...(options.playerNames === undefined ? {} : { playerNames: options.playerNames }),
         declarations: options.declarations,
         localNatives,
         ...(options.intentionalNoops === undefined ? {} : { intentionalNoops: options.intentionalNoops }),

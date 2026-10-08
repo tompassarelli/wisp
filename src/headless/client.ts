@@ -306,6 +306,8 @@ export interface ClientOptions {
   readonly filePrefix: string;
   /** Player slots with a human client; the others are empty. */
   readonly humans: readonly number[];
+  /** Lobby names by player slot; unnamed slots use Warcraft's Player N label. */
+  readonly playerNames?: Readonly<Record<number, string>>;
   readonly declarations: NativeDeclarations;
   readonly localNatives: LocalNatives;
   readonly intentionalNoops?: IntentionalNoops;
@@ -816,10 +818,10 @@ export class HeadlessClient {
     sound.playing = false;
   }
 
-  private playMusic(source: string): void {
+  private playMusic(source: string, looping = true): void {
     if (this.music !== undefined) this.stopAudio(this.music);
     this.music = { kind: "music", handle: { kind: "music", id: 0 }, source, label: undefined,
-      volume: this.musicVolume, pitch: 1, x: 0, y: 0, z: 0, unit: undefined, looping: true,
+      volume: this.musicVolume, pitch: 1, x: 0, y: 0, z: 0, unit: undefined, looping,
       duration: 0, elapsed: 0, playing: true, killWhenDone: false };
     this.cue(this.music, "start");
   }
@@ -876,7 +878,7 @@ export class HeadlessClient {
     this.errors.push(`error in ${heading.slice(heading.indexOf(" in ") + 4)}: ${lines[1] ?? ""}`);
   }
 
-  private behaviors({ humans, network, screenWidth }: ClientOptions): Readonly<Record<string, NativeBehavior>> {
+  private behaviors({ humans, playerNames, network, screenWidth }: ClientOptions): Readonly<Record<string, NativeBehavior>> {
     const playing = (player: number) => humans.includes(player);
     return {
       ...this.scenery.behaviors({ handle: kind => this.handle(kind) }),
@@ -888,6 +890,7 @@ export class HeadlessClient {
       GetLocalPlayer: () => this.slot,
       Player: (n: number) => n,
       GetPlayerId: (player: number) => player,
+      GetPlayerName: (player: number) => playerNames?.[player] ?? `Player ${player + 1}`,
       GetTriggerPlayer: () => this.event.player,
       GetHandleId: (handle: unknown) => (isHandle(handle) ? handle.id : handle),
       GetPlayerController: (player: number) => (playing(player) ? "MAP_CONTROL_USER" : "MAP_CONTROL_NONE"),
@@ -1166,6 +1169,7 @@ export class HeadlessClient {
         this.cameraX = x;
         this.cameraY = y;
       },
+      GetCameraTargetPositionX: () => this.cameraX,
       SetCameraTargetController: () => { this.scenery.cameraAllowsHotkeyTargetLock = false; },
       SetCameraOrientController: () => { this.scenery.cameraAllowsHotkeyTargetLock = false; },
       SetCameraField: (field: unknown, value: number) => {
@@ -1220,6 +1224,7 @@ export class HeadlessClient {
       },
       PlayMusic: (source: string) => this.playMusic(source),
       PlayMusicEx: (source: string) => this.playMusic(source),
+      PlayThematicMusic: (source: string) => this.playMusic(source, false),
       StopMusic: () => { if (this.music !== undefined) this.stopAudio(this.music); },
       ResumeMusic: () => {
         if (this.music === undefined || this.music.playing) return;
