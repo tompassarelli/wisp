@@ -150,10 +150,17 @@ const decodeTimingResult = Schema.decodeUnknownEffect(Schema.fromJsonString(Timi
 const runTimingFiles = (resultsFile: string, files: readonly string[], args: readonly string[]) => Effect.gen(function*() {
   yield* Effect.sync(() => writeFileSync(startedFile(resultsFile), ""));
   const flags = args.filter((arg) => !pathFilters(args).includes(arg));
-  for (const file of files) {
+  for (const [index, file] of files.entries()) {
+    const reportFlags = flags.map((arg, position) => {
+      const output = arg.startsWith("--reporter-outfile=") ? arg.slice("--reporter-outfile=".length)
+        : flags[position - 1] === "--reporter-outfile" ? arg : undefined;
+      if (output === undefined) return arg;
+      const path = output.replace(/(\.[^./]+)?$/, `-timing-${index}$1`);
+      return arg.startsWith("--reporter-outfile=") ? `--reporter-outfile=${path}` : path;
+    });
     const { value: code, pressure } = yield* withPressure(run(
       process.execPath,
-      ["test", "--timeout", String(TEST_TIMEOUT_MS), "--preload", COST_PRELOAD, ...flags, "-t", TIMING_TEST_PREFIX, `./${file}`],
+      ["test", "--timeout", String(TEST_TIMEOUT_MS), "--preload", COST_PRELOAD, ...reportFlags, "-t", TIMING_TEST_PREFIX, `./${file}`],
       { [TEST_PHASE_ENV]: "timing" },
     ));
     const result: TimingResult = { file, code, ...(pressure.peak === undefined ? {} : { peak: pressure.peak }), ...(pressure.average === undefined ? {} : { average: pressure.average }) };

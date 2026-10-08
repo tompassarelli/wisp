@@ -74,6 +74,7 @@ test("[reference] a kept value's diff is its line with three lines of context, a
     " export const OFFSET = -1.5;",
   ].join("\n"));
   // `git apply` takes it as it stands.
+  mkdirSync(join(root, "build"), { recursive: true });
   const directory = mkdtempSync(join(root, "build/tune-diff-"));
   try {
     mkdirSync(join(directory, "src"));

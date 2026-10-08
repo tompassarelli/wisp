@@ -55,16 +55,19 @@ function writeBaseline(path: string, costs: Costs): void {
 
 /**
  * This machine's CPU seconds per reference-machine CPU second: the median
- * ratio over files measured at their baseline test count. A partial run with
- * too few such files compares at 1.
+ * ratio over files measured at their baseline test count. Small shards use
+ * their shorter reference rows too, rather than assuming the same machine.
  */
 export function speedFactor(measured: Costs, baseline: Costs): number {
   const ratios: number[] = [];
+  const shorter: number[] = [];
   for (const [unit, cost] of measured) {
     const base = baseline.get(unit);
-    if (base !== undefined && base.tests === cost.tests && base.cpu >= SPEED_SAMPLE_MIN_S && cost.cpu > 0) ratios.push(cost.cpu / base.cpu);
+    if (base !== undefined && base.tests === cost.tests && base.cpu >= 0.01 && cost.cpu > 0) {
+      (base.cpu >= SPEED_SAMPLE_MIN_S ? ratios : shorter).push(cost.cpu / base.cpu);
+    }
   }
-  if (ratios.length < SPEED_SAMPLES_MIN) return 1;
+  if (ratios.length < SPEED_SAMPLES_MIN) ratios.push(...shorter);
   ratios.sort((a, b) => a - b);
   const middle = Math.floor(ratios.length / 2);
   const upper = ratios[middle] ?? 1;

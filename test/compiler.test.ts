@@ -16,7 +16,7 @@ farmTest("[invariant] cached module requires keep the same bundle and source map
   writeFileSync(join(directory, "src/value.ts"), "export const value = 5;\n");
   writeFileSync(config, JSON.stringify({
     compilerOptions: {
-      target: "ESNext", module: "ESNext", moduleResolution: "Bundler", strict: true,
+      target: "ESNext", lib: ["ES2015"], module: "ESNext", moduleResolution: "Bundler", strict: true,
       types: [], skipLibCheck: true, rootDir: "src", outDir: "out", sourceMap: true,
     },
     include: ["src/**/*.ts"],
@@ -57,7 +57,7 @@ test("[invariant] each module's hot-reload chunk is its bundle code and maps its
   writeFileSync(join(directory, "src/main.ts"), "import { first, values } from \"./value\";\nexport const result = [...values, first()].join(\",\");\n");
   writeFileSync(config, JSON.stringify({
     compilerOptions: {
-      target: "ESNext", module: "ESNext", moduleResolution: "Bundler", strict: true,
+      target: "ESNext", lib: ["ES2015"], module: "ESNext", moduleResolution: "Bundler", strict: true,
       types: [], skipLibCheck: true, rootDir: "src", outDir: "out", sourceMap: true,
     },
     include: ["src/**/*.ts"],
@@ -108,7 +108,7 @@ test("[invariant] a plugin's beforeEmit and afterEmit run as in a full compile, 
   ].join("\n"));
   writeFileSync(config, JSON.stringify({
     compilerOptions: {
-      target: "ESNext", module: "ESNext", moduleResolution: "Bundler", strict: true,
+      target: "ESNext", lib: ["ES2015"], module: "ESNext", moduleResolution: "Bundler", strict: true,
       types: [], skipLibCheck: true, rootDir: "src", outDir: "out", sourceMap: true,
     },
     include: ["src/**/*.ts"],
