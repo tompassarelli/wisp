@@ -6,6 +6,12 @@
 The owning source commit is `f156013b44d3c685725dd91e0fd9f601a5c9dbb8` (branch `effects-72`, on top of
 `2d7b6490495240244808883876458a8bfb1bfad6`) in `~/code/war3-model/worktrees/effects-72`.
 
+The mixed SD/HD cleanup fix is maintained at
+`bb69638cbcf4f5c5d58f8badee6d216909813b19` in
+`~/code/war3-model/worktrees/mixed-shader-75`. SD renderers never create HD
+environment shaders, so destruction skips those absent shader objects when
+the next scene replaces an SD model on the same handle.
+
 The HD environment prefilter shader reverses 32-bit sample indices.
 The fragment shader's default medium integer precision truncates those
 indices, collapses the samples and makes `uRoughness` inactive. The renderer

@@ -104,3 +104,13 @@ diff --git a/mdx/parse.ts b/mdx/parse.ts
                  } else if (keyword === 'UVAS') {
                      break;
                  }
+diff --git a/renderer/modelRenderer.ts b/renderer/modelRenderer.ts
+index 116f22b..5f5d916 100644
+--- a/renderer/modelRenderer.ts
++++ b/renderer/modelRenderer.ts
+@@ -2374,3 +2374,3 @@ export class ModelRenderer {
+-    private destroyShaderProgramObject<A extends string, U extends string>(object: WebGLProgramObject<A, U>): void {
+-        if (object.program) {
++    private destroyShaderProgramObject<A extends string, U extends string>(object: WebGLProgramObject<A, U> | undefined): void {
++        if (object?.program) {
+             if (object.vertexShader) {

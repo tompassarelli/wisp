@@ -8824,7 +8824,7 @@ var ModelRenderer = class {
 		};
 	}
 	destroyShaderProgramObject(object) {
-		if (object.program) {
+		if (object?.program) {
 			if (object.vertexShader) {
 				this.gl.detachShader(object.program, object.vertexShader);
 				this.gl.deleteShader(object.vertexShader);
