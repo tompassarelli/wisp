@@ -4,6 +4,7 @@
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
+import { farmTest } from "../scripts/wisp/farmTest";
 import { Effect, Layer } from "effect";
 import { mapCompiler, report } from "../scripts/compiler";
 import { servePanel } from "../scripts/wisp/commands/tune";
@@ -128,7 +129,7 @@ function payload(bundled: BundledModules): string {
   return modulePayload(index, modules);
 }
 
-test("[spec docs/tune.md] a tuned value is compiled in memory, sent as a delta of its module alone and installed by two Lua32 clients on the same tick", async () => {
+farmTest("[spec docs/tune.md] a tuned value is compiled in memory, sent as a delta of its module alone and installed by two Lua32 clients on the same tick", async () => {
   mkdirSync(join(root, "build"), { recursive: true });
   const directory = mkdtempSync(join(root, "build/tune-"));
   try {

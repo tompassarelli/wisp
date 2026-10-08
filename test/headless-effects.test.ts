@@ -7,6 +7,7 @@ import { install, start } from "./effects59/main";
 import { DYING, EFFECT_NOOPS } from "./effects59/cases";
 import { EFFECT_DEATHS, deathTimeline } from "./effects59/deaths";
 import { deathSeconds } from "../scripts/wisp/models";
+import { farmTest } from "../scripts/wisp/farmTest";
 
 const runtime = installHeadless({ filePrefix: "effects", globalPrefixes: ["__effects59"], intentionalNoops: EFFECT_NOOPS });
 afterAll(runtime.restore);
@@ -102,7 +103,7 @@ test("[reference] Death length comes from the model file's first death sequence"
   expect(deathSeconds(model(`Anim "Birth" { Interval { 0, 800 }, NonLooping, }\n`))).toBeUndefined();
 });
 
-test("[native #59] the same effect cases pass in emitted 32-bit Lua", () => {
+farmTest("[native #59] the same effect cases pass in emitted 32-bit Lua", () => {
   for (const config of ["test/effects59/tsconfig.json", "test/effects59/tsconfig.headless.json"]) expect(report(mapCompiler(join(import.meta.dir, "..", config))())).toBe("");
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "../build/effects59/headless/headless.lua"), join(import.meta.dir, "../build/effects59/map.lua"), join(import.meta.dir, "../src/natives/warcraft.d.ts")], { stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });

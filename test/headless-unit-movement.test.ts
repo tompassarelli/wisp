@@ -5,6 +5,7 @@ import { installHeadless } from "../scripts/wisp/headless";
 import { runJourney } from "../src/headless/journey";
 import { install, start } from "./unit-movement61/main";
 import { UNIT_MOVEMENT_NOOPS, UNIT_TYPE } from "./unit-movement61/cases";
+import { farmTest } from "../scripts/wisp/farmTest";
 
 const runtime = installHeadless({ filePrefix: "unit-movement", globalPrefixes: ["__unitMovement"], intentionalNoops: UNIT_MOVEMENT_NOOPS });
 afterAll(runtime.restore);
@@ -32,7 +33,7 @@ test("move speed is stored as binary32 like Warcraft's Lua numbers", () => {
   clients.start();
 });
 
-test("the same unit movement cases pass in emitted 32-bit Lua", () => {
+farmTest("the same unit movement cases pass in emitted 32-bit Lua", () => {
   for (const config of ["test/unit-movement61/tsconfig.json", "test/unit-movement61/tsconfig.headless.json"]) expect(report(mapCompiler(join(import.meta.dir, "..", config))())).toBe("");
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "../build/unit-movement61/headless/headless.lua"), join(import.meta.dir, "../build/unit-movement61/map.lua"), join(import.meta.dir, "../src/natives/warcraft.d.ts")], { stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });

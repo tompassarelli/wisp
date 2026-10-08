@@ -4,8 +4,9 @@ import { expect, test } from "bun:test";
 import { SourceMapConsumer } from "source-map";
 import { transpileProject } from "typescript-to-lua";
 import { mapCompiler, report } from "../scripts/compiler";
+import { farmTest } from "../scripts/wisp/farmTest";
 
-test("[invariant] cached module requires keep the same bundle and source map as full compilation", () => {
+farmTest("[invariant] cached module requires keep the same bundle and source map as full compilation", () => {
   const build = join(import.meta.dir, "../build");
   mkdirSync(build, { recursive: true });
   const directory = mkdtempSync(join(build, "compiler-"));

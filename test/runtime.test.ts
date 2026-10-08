@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { mapCompiler, report } from "../scripts/compiler";
 import { lua32 } from "../scripts/wisp/lua32";
+import { farmTest } from "../scripts/wisp/farmTest";
 
 const root = join(import.meta.dir, "..");
 
@@ -16,7 +17,7 @@ function runtimeBundle(): string {
   return compiled;
 }
 
-test("[spec docs/hot-reload.md] configured runtime reload preserves globals and replaces handlers", () => {
+farmTest("[spec docs/hot-reload.md] configured runtime reload preserves globals and replaces handlers", () => {
   const bundle = runtimeBundle();
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "hot-reload-stub.lua"), bundle], { cwd: root, stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
@@ -29,13 +30,13 @@ test("[spec docs/hot-reload.md] configured runtime reload preserves globals and 
   expect(polling.stdout.toString()).toContain("poll rate contract passed");
 });
 
-test("[spec docs/hot-reload.md] an error report is displayed unless the map turns error text off, and is written to the error file either way", () => {
+farmTest("[spec docs/hot-reload.md] an error report is displayed unless the map turns error text off, and is written to the error file either way", () => {
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "error-text-stub.lua"), runtimeBundle()], { cwd: root, stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
   expect(run.stdout.toString()).toContain("error text contract passed");
 });
 
-test("[reference] numeric, payload and record text contracts pass in emitted Lua, rounding to nearest and toward zero", async () => {
+farmTest("[reference] numeric, payload and record text contracts pass in emitted Lua, rounding to nearest and toward zero", async () => {
   const diagnostics = mapCompiler(join(import.meta.dir, "tsconfig.lua.json"))();
   expect(report(diagnostics)).toBe("");
   const towardZero = process.env.TOWARD_ZERO_LUA ?? await Effect.runPromise(lua32("toward-zero"));

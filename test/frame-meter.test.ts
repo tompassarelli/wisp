@@ -13,6 +13,7 @@ import { writtenPreloadFile } from "../scripts/wisp/headlessInput";
 import { type PerfRun, parsePerfRun } from "../scripts/wisp/perf";
 import { type FrameWindow, frameCostFile, frameCostHeading, frameWindowLine } from "../src/runtime/frameCost";
 import { parseFrameCostCapture } from "../scripts/wisp/frameCostCapture";
+import { farmTest } from "../scripts/wisp/farmTest";
 
 const root = join(import.meta.dir, "..");
 
@@ -29,7 +30,7 @@ function play(): string[] {
 
 const after = (lines: readonly string[], prefix: string) => lines.filter((line) => line.startsWith(prefix)).map((line) => line.slice(prefix.length));
 
-test("[invariant] both clients measure the same frames: no desync, equal reports, natives and instructions", async () => {
+farmTest("[invariant] both clients measure the same frames: no desync, equal reports, natives and instructions", async () => {
   const lines = play();
   expect(after(lines, "desync: ")).toEqual(["none"]);
   expect(lines.filter((line) => line.includes(" error: "))).toEqual([]);

@@ -18,6 +18,7 @@ import { timingsLayer } from "../scripts/wisp/timings";
 import { timingTest } from "../scripts/wisp/timingTest";
 import game from "./soak/game";
 import project from "./soak/project";
+import { farmTest } from "../scripts/wisp/farmTest";
 
 const runtime = installHeadless(project.map);
 afterAll(runtime.restore);
@@ -33,7 +34,7 @@ timingTest("[spec #16] a clean match plays more than five times faster than real
   expect(match.wallMs).toBeGreaterThan(elapsed * 5);
 });
 
-test("[invariant] a clean match ends with no findings and repeats from its seed", () => {
+farmTest("[invariant] a clean match ends with no findings and repeats from its seed", () => {
   const first = play(["fuzz", "fuzz"]);
   expect(first.findings).toEqual([]);
   expect(first.over).toBe(true);
@@ -150,7 +151,7 @@ test("[spec #16] a fighter in play with nothing of it drawn with geometry is an 
   expect(bodyProblems(report(2), bodies, empty)[0]?.evidence).toBe("drawn without triangles: Clip0.mdx (2)");
 });
 
-test("[spec #16] the command plays matches in worker processes and keeps a repro file for each finding", async () => {
+farmTest("[spec #16] the command plays matches in worker processes and keeps a repro file for each finding", async () => {
   const out = mkdtempSync(join(tmpdir(), "wisp-soak-"));
   const lines: string[] = [];
   const soak = makeSoak({ project: join(import.meta.dir, "soak/project.ts"), out });

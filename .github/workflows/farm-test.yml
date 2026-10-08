@@ -94,7 +94,7 @@ jobs:
       - name: Test shard ${{ matrix.shard }}
         run: |
           set +e
-          bun test $(jq -r ".bun[${{ matrix.shard }}][] | \"./\" + ." plan.json) --reporter=junit --reporter-outfile=junit.xml
+          bun test --preload ./scripts/wisp/testCostPreload.ts $(jq -r ".bun[${{ matrix.shard }}][] | \"./\" + ." plan.json) --reporter=junit --reporter-outfile=junit.xml
           code=$?
           bun scripts/wisp/farmShards.ts junit --shard ${{ matrix.shard }} --exit-code "$code" junit.xml > result.json
           exit "$code"

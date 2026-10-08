@@ -11,6 +11,7 @@ import { TestClock } from "effect/testing";
 import { whileStopped } from "../scripts/wisp/lan/join";
 import { agentSocket, pairClients, poolFile, reportPort } from "../scripts/wisp/lan/pool";
 import { lanObservation } from "../scripts/wisp/watch";
+import { farmTest } from "../scripts/wisp/farmTest";
 
 const root = join(import.meta.dir, "..");
 const fixtures = join(import.meta.dir, "fixtures/host-tools");
@@ -86,7 +87,7 @@ test("[repro #62] pair agent: SIGTERM while its games start stops them and the a
   expect({ processes: result.processes, sessions: result.sessions }).toEqual({ processes: 0, sessions: 0 });
 }, 60_000);
 
-test("[repro #62] pair agent: a step failing after both games started stops them", async () => {
+farmTest("[repro #62] pair agent: a step failing after both games started stops them", async () => {
   const box = sandbox();
   // The first client's menu report port is taken, so the agent fails after launching both games.
   const taken = Bun.serve({ hostname: "127.0.0.1", port: reportPort(agentPair, "a"), fetch: () => new Response() });
