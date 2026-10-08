@@ -77,7 +77,7 @@ program can register it; "game" means the consuming game defines it.
 | `parity` | Bun against 32-bit Lua on the same numbers | `numeric`, `tapes` | game |
 | `integrity` | Native input-integrity sessions and their evidence | `capture`, `result`, `headless` | game |
 | `pad` | Scripted virtual-pad input through the real helper | (script) | game |
-| `farm` | Headless work on hosted CI runners | `balance`, `pads`, `perf`, `memory` | game |
+| `farm` | Headless work on hosted CI runners | `test` (Wisp); `balance`, `pads`, `perf`, `memory` (game) | Wisp |
 | `view` | What a player would see, and the model facts it reads | `scene`, `frame`, `models`, `strikes`, `reach`, `hurtboxes`, `motion` | game |
 | `oracle` | Melee situations against decompiled values | (session) | game |
 | `agency` | Stretches a victim can't act in | (session) | game |
@@ -163,7 +163,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--pool-profile NAME` | Offline pool display settings: parity, visual or hfr | `lan pool` |
 | `--fps N` | The foreground and background frame cap for native pool clients | `lan pool` |
 | `--trace SECONDS` | Trap an offline process for this many seconds | `engine locate` |
-| `--clients-file FILE` | The native clients configuration file | `integrity capture` |
+| `--clients-file FILE` | The native clients configuration file | `integrity capture`, `pad`, `fresh` |
 | `--four-fighters` | Capture the four-fighter match and rematch | `integrity capture` |
 | `--playable` | Capture a playable candidate match and rematch | `integrity capture` |
 | `--screen` | Capture native framebuffer samples on the stimulus clock | `integrity capture` |
@@ -232,6 +232,7 @@ Every command and verb in Wisp's sample program and Smashcraft's `bun wisp`, gro
 | `integrity result DIR` | Reconciles a capture folder by the session it records |
 | `integrity headless` | The same session through the real helper into headless clients |
 | `pad SCRIPT...` | Timed virtual-pad input through the real helpers |
+| `farm test` | The full Bun and 32-bit Lua suites on hosted runners, sharded by measured time |
 | `farm balance` | The balance gate's computer field on hosted runners |
 | `farm pads` | Every pad script headless on hosted runners |
 | `view scene DATA_DIR...` | What a player would see wrong in recorded scenes |

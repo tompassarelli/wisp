@@ -17,6 +17,8 @@ test("unit snapshots capture fighters' transforms, animation clocks, hiding and 
     fighter = CreateUnit(Player(2), 0x48303030, 10, 20, 180);
     SetUnitX(fighter, 30);
     SetUnitY(fighter, 40);
+    UnitAddAbility(fighter, 0x416d7266);
+    UnitRemoveAbility(fighter, 0x416d7266);
     SetUnitFlyHeight(fighter, 300, 0);
     SetUnitScale(fighter, 2, 3, 4);
     BlzSetUnitFacingEx(fighter, 90);
@@ -209,15 +211,14 @@ test("released sound records disappear, while playing and looping sounds finish 
     StartSound(loop);
     KillSoundWhenDone(loop);
   });
+  // A handle set to be killed reads as not playing (3.0.1), though its record lives until it ends.
+  const live = (handle: sound) => (sounds.get(handle) as { playing: boolean } | undefined)?.playing ?? false;
   clients.frames(29);
-  client.run(() => expect(GetSoundIsPlaying(playing)).toBe(true));
+  client.run(() => expect(GetSoundIsPlaying(playing)).toBe(false));
+  expect([live(playing), live(loop)]).toEqual([true, true]);
   clients.frames(2);
-  client.run(() => {
-    expect(GetSoundIsPlaying(playing)).toBe(false);
-    expect(GetSoundIsPlaying(loop)).toBe(true);
-    StopSound(loop, false, false);
-    expect(GetSoundIsPlaying(loop)).toBe(false);
-  });
+  expect([live(playing), live(loop)]).toEqual([false, true]);
+  client.run(() => StopSound(loop, false, false));
   expect(sounds.size).toBe(0);
   const checksum = client.checksum();
   client.soundLog.length = 0;

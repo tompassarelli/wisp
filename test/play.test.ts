@@ -327,6 +327,7 @@ function world(scenario: Scenario = {}) {
       const text = path.startsWith(`${LOGS}/`) ? logs.get(path.slice(LOGS.length + 1)) : undefined;
       return text?.slice(from);
     })),
+    modified: () => Effect.die("unused"),
     size: (path) => Effect.sync(() => {
       if (path === MAP) return mapInstalled ? 38_579_096 : undefined;
       if (path === SOURCE) return scenario.mapSource === "present" ? 38_579_096 : undefined;

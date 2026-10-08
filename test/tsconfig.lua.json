@@ -6,7 +6,7 @@
     "skipLibCheck": true, "types": ["lua-types/5.3"], "rootDir": "..",
     "outDir": "../build/lua-tests"
   },
-  "include": ["../src/runtime/*.ts", "../src/sim/*.ts", "lua/*.ts"],
+  "include": ["../src/runtime/*.ts", "../src/sim/*.ts", "../src/headless/animation*.ts", "lua/*.ts"],
   "exclude": ["../src/**/*.test.ts"],
   "tstl": {
     "luaTarget": "5.3", "luaBundle": "tests.lua", "luaBundleEntry": "lua/entry.ts",

@@ -70,6 +70,123 @@ being compared against recorded working launches.
 retains the unfinished 3.0.1 memory checks: an uninitialized process with no
 presence table is not evidence of a changed table layout.
 
+## Signed-in 3.0.1 clients cloned from Tom's install
+
+Until the offline pool starts again, signed-in clients run 3.0.1 from
+copies of Tom's working Steam/Proton prefix
+(`~/.local/share/Steam/steamapps/compatdata/3516115571`), as decided in
+[#53](https://github.com/tompassarelli/wisp/issues/53). On 8 October 2026
+both reached the main menu on 3.0.1.24342, hosted and joined a private
+passworded Smashcraft game, and `archer-neutral.pad` passed parity there.
+They run the same GE-Proton11-7 (wine-staging 11.0) and Steam Linux Runtime 4
+that failed with the `war3_loader.dll` assertion on the other test prefixes,
+so the prefix, not the Proton build, decides whether 3.0.1 starts.
+
+| Client | Prefix | Account | Menu page port |
+| --- | --- | --- | --- |
+| A | `~/.local/share/wisp/online/clone-c` | c | 47135 |
+| B | `~/.local/share/wisp/online/clone-b` | b | 47133 |
+| third client | `~/.local/share/wisp/online/clone-a` | a (Tom's) | 47137 |
+
+### Clone-a: Tom's account, only while he isn't playing
+
+Clone-a is a third test client, made the same way as the others on 8 October
+but keeping Tom's saved account-a sign-in (steps 2 and 3 below remove the
+sign-in from the other clones; clone-a skips step 2). It reached the main menu
+signed in as account a on 3.0.1.24342. Battle.net allows one session per
+account, so Tom's own game and clone-a would sign each other out.
+`launch.sh a RUN_DIR` therefore:
+
+- refuses to start (exit 3) while any process runs Proton or Wine in Tom's
+  prefix (its environment names `compatdata/3516115571`) or Tom's desktop
+  (Niri, display `:0`) shows a Wine window or one titled `Warcraft III` or
+  `Battle.net`;
+- checks the same every 2 s while clone-a runs, and when Tom's game or
+  Battle.net appears, ends clone-a's capacity session and kills any clone-a
+  process left after 6 s (exit 4). With a stand-in process carrying Tom's
+  prefix in its environment, clone-a's 22 processes were gone 3.4 s after it
+  started.
+
+Run clone-a only through `launch.sh`. In a doctor clients file, don't name it
+`a` or `b`: doctor maps those names to its own prefixes and to accounts c and
+b, and would start the wrong launcher or type the wrong account.
+
+### Making a clone
+
+With nothing running in Tom's prefix:
+
+1. `cp -a --reflink=always ~/.local/share/Steam/steamapps/compatdata/3516115571 ~/.local/share/wisp/online/clone-c`
+   (the 110 GB prefix copies in about 8 s on btrfs).
+2. Remove the copied sign-in, so the clone never signs in as Tom: in the
+   clone's `pfx/drive_c/users/steamuser/AppData`, delete
+   `Local/Battle.net/Account`, `Local/Battle.net/BrowserCaches`,
+   `Local/Battle.net/BlizzardBrowser` and the per-account
+   `Roaming/Battle.net/*.config` files other than `Battle.net.config`; in
+   `Battle.net.config` set `Client.SavedAccountNames` to `""` and
+   `Client.AutoLogin` to `"false"`; and, with no wineserver on the clone,
+   drop the `Battle.net\\UnifiedAuth`, `Battle.net\\Identity` and
+   `Battle.net\\EncryptionKey` sections from its `pfx/user.reg`.
+3. `bun wisp menus install "<clone>/pfx/drive_c/Program Files (x86)/Warcraft III/_retail_" --port PORT`
+   with the port in the table (Tom's install uses 47124).
+
+### Launching
+
+`~/.local/share/wisp/online/launch.sh a|b|c RUN_DIR` starts the clone's
+Battle.net on a private desktop, in its own `native` capacity scope. It runs
+what Steam's `Warcraft III (Battle.net)` shortcut runs, with
+`STEAM_COMPAT_DATA_PATH` pointed at the clone and no Steam shortcut added:
+
+```sh
+exec bun "$capacity" session --class native --owner "wisp-online-clone-$1" -- \
+  env -i HOME="$HOME" USER="$USER" PATH=/run/current-system/sw/bin \
+  DISPLAY="$(<"$run/display")" WAYLAND_DISPLAY="$(<"$run/wayland-display")" XDG_RUNTIME_DIR="$run/runtime" XAUTHORITY= \
+  PULSE_SERVER="unix:/run/user/$(id -u)/pulse/native" PULSE_SINK="wisp-online-clone-$1" \
+  dbus-run-session -- steam-run env \
+  STEAM_COMPAT_DATA_PATH="$clone" STEAM_COMPAT_CLIENT_INSTALL_PATH="$steam" STEAM_COMPAT_APP_ID=3775098022 \
+  SteamAppId=3775098022 SteamGameId=16213922543717842944 PROTON_LOG=1 PROTON_LOG_DIR="$clone" \
+  "$steam/steamapps/common/SteamLinuxRuntime_4/_v2-entry-point" --verb=waitforexitandrun -- \
+  "$steam/compatibilitytools.d/GE-Proton11-7-x86_64/proton" waitforexitandrun \
+  "$clone/pfx/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe"
+```
+
+Before that it creates the clone's silent PipeWire sink, `wisp-online-clone-<a|b|c>`,
+as `lan pool` does for its clients. Without one, the first client takes the
+sound device and the second starts with "Unable to initialize audio device":
+its `GetSoundFileDuration` reads 0 and a map that reads it desyncs (wisp#60).
+
+A full session, from smashcraft:ts/:
+
+1. Start two private desktops, then `launch.sh c RUN_A` and `launch.sh b RUN_B`.
+2. Sign each in at its "Log in or sign up" form with
+   nixos-config:dotfiles/bin/wc3-login-field: click the field until it has
+   focus (the first click after the window opens only activates it), type the
+   account name, press Enter, tick "Keep me logged in", type the password in
+   the focused field and press Enter. The launcher log then says "Logged into
+   Battle.net successfully". A mistyped account name opens Battle.net's
+   account-creation page, which draws black on the private desktop; close
+   that launcher and start again.
+3. Point a clients file at the clones (names `a` and `b`, each with its
+   desktop's `run`, the clone's `Documents/Warcraft III` and its port) and run
+   `bun wisp client doctor --clients-file FILE`: it presses Play and waits for
+   the main menu (83 s and 118 s on 8 October).
+4. Pass the same file to `pad` and `fresh`, which leave
+   `~/.local/state/smashcraft/clients.json` alone:
+   `bun wisp fresh MAP --no-quick --clients-file FILE` hosts the private
+   passworded game (56 s to fighter selection), and
+   `bun wisp pad SCRIPT --helper H --build typescript-integrity --out NATIVE --app-id a=steam_app_3775098022 --app-id b=steam_app_3775098022 --map MAP --clients-file FILE`
+   followed by
+   `bun wisp pad SCRIPT --headless --helper H --out HEADLESS --compare NATIVE`
+   checks parity. On 8 October `archer-neutral.pad` landed 32 of 32 edges on
+   their frames and passed: 10 native checksums replayed equal, 376 frames of
+   rows, 39 fighter lines and 11 expectations.
+
+The copied launcher logs and `smashcraft-*` receipts from Tom's install can
+stay: doctor reads only launcher logs written since the running launcher
+started, and the pad runner ignores receipts written before its session began.
+
+Tom's `system.reg`, `user.reg`, `Warcraft III/.build.info` and Battle.net
+`product.db` hashed the same before and after the session.
+
 ## Commands
 
 | Command | What it does |

@@ -83,17 +83,24 @@ interface Scenario {
   readonly scoreEscapes?: number;
   /** The client declares an account and doctor has hands to type it; "stuck" leaves the form where it is. */
   readonly signsIn?: "works" | "stuck";
+  /** The prefix was copied from another install: that install's signed-in log is there, written before this launcher started. */
+  readonly copiedLog?: boolean;
 }
+
+/** When the launcher of a copied prefix started, and when the copied install last wrote its log. */
+const LAUNCHER_STARTED = Date.parse("2026-10-08T02:19:57Z");
+const COPIED_LOG = `${LOGS}/battle.net-20261005T231502.118204.log`;
 
 function world(scenario: Scenario) {
   const events: string[] = [];
   let processes: ProcessInfo[] = [
     ...(scenario.processes === "two runtimes" ? [wineserver(43614), wineserver(51022)] : [wineserver(43614)]),
-    ...(scenario.processes === "runtime alone" ? [] : [launcherProcess(43924)]),
+    ...(scenario.processes === "runtime alone" ? [] : [scenario.copiedLog ? { ...launcherProcess(43924), started: LAUNCHER_STARTED } : launcherProcess(43924)]),
     ...(scenario.processes === "game" || scenario.processes === "game and dialog" ? [gameProcess(52713)] : []),
     ...(scenario.processes === "game and dialog" ? [errorDialog(52990)] : []),
   ];
   const files = new Map<string, string>([[`${LOGS}/battle.net-20261006T085733.941623.log`, scenario.launcherLog ?? SIGNED_IN], [WAR3LOG, scenario.war3Log ?? ""], ...(scenario.preferences === undefined ? [] : [[PREFERENCES, scenario.preferences] as [string, string]])]);
+  if (scenario.copiedLog) files.set(COPIED_LOG, PLAYED);
   if (scenario.execRequestLog) files.set(`${LOGS}/battle.net-20261006T235959.000000.log`, fixture("launcher-exec.log"));
   let state: ClientState = scenario.state ?? { kind: "menus", screen: "MAIN_MENU" };
   let source: Source = scenario.source ?? "socket";
@@ -112,7 +119,7 @@ function world(scenario: Scenario) {
     launch: (launcher) => Effect.sync(() => {
       plays++;
       events.push(`launch ${launcher.pid}`);
-      const log = [...files.keys()].findLast((path) => path.startsWith(LOGS) && files.get(path)!.includes("[BNLogin]")) ?? newestLog();
+      const log = [...files.keys()].sort().findLast((path) => path.startsWith(LOGS) && path !== COPIED_LOG && files.get(path)!.includes("[BNLogin]")) ?? newestLog();
       files.set(log, files.get(log)! + LAUNCH);
       processes = [...processes, gameProcess(70000 + plays)];
       state = scenario.afterPlay ?? { kind: "menus", screen: "MAIN_MENU" };
@@ -126,6 +133,8 @@ function world(scenario: Scenario) {
     }),
     read: (path, from = 0) => Effect.sync(() => files.get(path)?.slice(from)),
     size: (path) => Effect.sync(() => files.get(path)?.length),
+    // Every file is written during the run but the copied install's log, written the evening before.
+    modified: (path) => Effect.sync(() => (!files.has(path) ? undefined : path === COPIED_LOG ? LAUNCHER_STARTED - 3 * 3600_000 : LAUNCHER_STARTED + 1500)),
     digest: () => Effect.die("unused"),
     list: (directory) => Effect.sync(() => [...files.keys()].filter((path) => path.startsWith(`${directory}/`)).map((path) => path.slice(directory.length + 1))),
     write: (path, text) => Effect.sync(() => {
@@ -436,6 +445,14 @@ test("a launcher at its sign-in form is signed in with the client's account, the
   // The password page alone (a remembered account name) takes only the password.
   const password = await world({ processes: "launcher", launcherLog: ACCOUNT_PAGE + PASSWORD_PAGE, signsIn: "works" }).run();
   expect(password.events).toEqual(["enter password", "launch 43924"]);
+});
+
+test("a copied prefix's old signed-in log is ignored: the fresh launcher's account page is signed in", async () => {
+  const { lines, failure, events } = await world({ processes: "launcher", launcherLog: ACCOUNT_PAGE, signsIn: "works", copiedLog: true }).run();
+  expect(failure).toBeUndefined();
+  expect(events).toEqual(["enter username", "enter password", "launch 43924"]);
+  expect(lines).toContain("b: sign-in form: Battle.net shows its account page; signing in with its account");
+  expect(lines.at(-1)).toBe("b: ready: menus (MAIN_MENU), after sign-in form, no game");
 });
 
 test("a sign-in form without an account, or one that doesn't move, stops with one line", async () => {

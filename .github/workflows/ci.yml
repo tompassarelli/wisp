@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
   push:
+    # `bun wisp farm`'s scratch branches run only the workflow it dispatches.
+    branches-ignore: ["farm/**"]
 
 permissions:
   contents: read
@@ -20,18 +22,7 @@ jobs:
       - run: bun run check
       - name: Install the native archive test dependency
         run: sudo apt-get update && sudo apt-get install -y libstorm-dev
-      - name: Build Warcraft's numeric Lua runtime
-        run: |
-          mkdir -p build
-          curl -fsSL https://www.lua.org/ftp/lua-5.3.6.tar.gz -o build/lua-5.3.6.tar.gz
-          echo 'fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60  build/lua-5.3.6.tar.gz' | sha256sum --check
-          tar -xzf build/lua-5.3.6.tar.gz -C build
-          make -C build/lua-5.3.6 -j2 generic MYCFLAGS=-DLUA_32BITS
-          # The same Lua with raw float + - * rounding toward zero (native/toward-zero.h).
-          mkdir -p build/toward-zero-lua
-          tar -xzf build/lua-5.3.6.tar.gz -C build/toward-zero-lua
-          make -C build/toward-zero-lua/lua-5.3.6 -j2 generic "MYCFLAGS=-DLUA_32BITS -include $PWD/native/toward-zero.h"
-      - run: CC=gcc STORMLIB_PREFIX=/usr LUA="$PWD/build/lua-5.3.6/src/lua" TOWARD_ZERO_LUA="$PWD/build/toward-zero-lua/lua-5.3.6/src/lua" bun run test
+      - run: CC=gcc STORMLIB_PREFIX=/usr bun run test
 
   # The consumer template (wisp:docs/ci.md) on the neutral sample: its checks
   # and headless journey pass, and its desync fixture fails as expected.

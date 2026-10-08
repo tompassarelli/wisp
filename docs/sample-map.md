@@ -35,13 +35,14 @@ From the Wisp checkout, with Bun at the version in wisp:typescript-toolchain.loc
 
 ```sh
 bun install --frozen-lockfile
-LUA=/path/to/lua32 bun test examples/sample
+bun test examples/sample
 bun examples/sample/scripts/sample.ts map build --base BASE.w3m --out OUT_DIR/wisp-sample.w3x
 ```
 
 `bun examples/sample/scripts/sample.ts headless [--clients N]` plays the
 headless journey and prints each client's native calls and checksum and any
-problem. `LUA` must be Lua 5.3 built with `LUA_32BITS`. The output must be outside the
+problem. `LUA`, when set, must be Lua 5.3 built with `LUA_32BITS`; unset, the
+tests build and cache the pinned one (wisp:scripts/wisp/lua32.ts). The output must be outside the
 checkout. The build also needs `nix` on first use: it links nixpkgs `lua5_3`,
 which checks the script's syntax, into wisp:build/tools/lua and compiles the map
 packager from wisp:native/map-pack.c against nixpkgs StormLib into

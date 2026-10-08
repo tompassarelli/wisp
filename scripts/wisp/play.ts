@@ -98,6 +98,8 @@ export class PlayMachine extends Context.Service<PlayMachine, {
   /** A file's text from byte `from`; undefined while it doesn't exist. */
   readonly read: (path: string, from?: number) => Effect.Effect<string | undefined, PlayProblem>;
   readonly size: (path: string) => Effect.Effect<number | undefined, PlayProblem>;
+  /** When a file was last written, in epoch milliseconds; undefined while it doesn't exist. */
+  readonly modified: (path: string) => Effect.Effect<number | undefined, PlayProblem>;
   /** The SHA-256 of a file's bytes; undefined while it doesn't exist. */
   readonly digest: (path: string) => Effect.Effect<string | undefined, PlayProblem>;
   readonly list: (directory: string) => Effect.Effect<readonly string[], PlayProblem>;

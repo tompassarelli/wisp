@@ -27,8 +27,16 @@ synchronized Lua code remains pure TypeScript and Warcraft native calls.
 Read warcraft-modding and verification for
 changes. The operator explicitly authorized extracting the existing framework;
 the skill's earlier in-Smashcraft deferral does not apply to this extraction.
-Read effect-development when changing Effect host services. Read the installed pinned Effect source before choosing its APIs. Runtime
-imports must resolve through the installed package.
+Host tools that Bun runs (commands, runners, builds, captures, farm jobs) are
+written as Effect programs when they start processes, wait, retry, hold a
+resource or parse outside data. Load the effect-development skill before
+designing one, and follow the existing services in scripts/ (for example
+wisp:scripts/wisp/devProcesses.ts, wisp:scripts/wisp/commands/dev.ts and
+wisp:scripts/wisp/lan/pairAgent.ts). Map code compiled to Lua stays plain
+TypeScript; pure calculations stay plain functions.
+wisp:test/effect-host-tools.test.ts enforces this. Read the installed pinned
+Effect source before choosing its APIs. Runtime imports must resolve through
+the installed package.
 
 No Smashcraft source imports or filesystem dependencies. Games supply their
 configuration, assets, map declaration and acceptance journeys. Keep proprietary

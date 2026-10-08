@@ -110,17 +110,12 @@ jobs:
       - name: Build Warcraft's numeric Lua runtimes
         if: inputs.lua
         run: |
-          header="$PWD/native/toward-zero.h"
-          [ -f node_modules/wisp/native/toward-zero.h ] && header="$PWD/node_modules/wisp/native/toward-zero.h"
-          mkdir -p "$RUNNER_TEMP/lua32" "$RUNNER_TEMP/lua32-toward-zero"
-          curl -fsSL https://www.lua.org/ftp/lua-5.3.6.tar.gz -o "$RUNNER_TEMP/lua-5.3.6.tar.gz"
-          echo "fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60  $RUNNER_TEMP/lua-5.3.6.tar.gz" | sha256sum --check
-          tar -xzf "$RUNNER_TEMP/lua-5.3.6.tar.gz" -C "$RUNNER_TEMP/lua32"
-          tar -xzf "$RUNNER_TEMP/lua-5.3.6.tar.gz" -C "$RUNNER_TEMP/lua32-toward-zero"
-          make -C "$RUNNER_TEMP/lua32/lua-5.3.6" -j2 generic MYCFLAGS=-DLUA_32BITS
-          make -C "$RUNNER_TEMP/lua32-toward-zero/lua-5.3.6" -j2 generic "MYCFLAGS=-DLUA_32BITS -include $header"
-          echo "LUA=$RUNNER_TEMP/lua32/lua-5.3.6/src/lua" >> "$GITHUB_ENV"
-          echo "TOWARD_ZERO_LUA=$RUNNER_TEMP/lua32-toward-zero/lua-5.3.6/src/lua" >> "$GITHUB_ENV"
+          lua32=scripts/wisp/lua32.ts
+          [ -f node_modules/wisp/scripts/wisp/lua32.ts ] && lua32=node_modules/wisp/scripts/wisp/lua32.ts
+          stock=$(bun "$lua32" stock)
+          toward_zero=$(bun "$lua32" toward-zero)
+          echo "LUA=$stock" >> "$GITHUB_ENV"
+          echo "TOWARD_ZERO_LUA=$toward_zero" >> "$GITHUB_ENV"
       - run: mkdir -p wisp-ci
       - id: check
         name: Check

@@ -274,6 +274,9 @@ const LEAVE_SECONDS = 10;
  */
 export const SCORE_ESCAPES = 3;
 
+/** A process's start time is read to the second (/proc/stat's boot time), so a log may look up to that much older than its launcher. */
+const LOG_START_SLACK_MS = 1000;
+
 /** Brings one client to a ready state, printing each step as "NAME: ...". */
 export const doctorClient = (target: DoctorTarget, print: (line: string) => void) => Effect.gen(function*() {
   const { start } = target;
@@ -299,12 +302,23 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
   const prefixState = machine.processes.pipe(Effect.map((processes) => prefixUse(processes, prefix, server)), Effect.mapError(failed));
   const newestLog = machine.list(logs).pipe(Effect.map(newestLauncherLog), Effect.mapError(failed));
   let priorSessionLog: string | undefined;
-  const loginLog = Effect.gen(function*() {
+  /**
+   * The running launcher's log: the newest with a sign-in line, else the newest.
+   * A prefix copied from another install carries that install's logs, so only
+   * logs written since the launcher started count.
+   */
+  const loginLog = (launcher: ProcessInfo | undefined) => Effect.gen(function*() {
     const names = (yield* machine.list(logs)).filter((name) => newestLauncherLog([name]) !== undefined && (priorSessionLog === undefined || name > priorSessionLog)).sort().reverse();
+    const since = launcher?.started;
+    const current: string[] = [];
     for (const name of names) {
+      const written = since === undefined ? undefined : yield* machine.modified(join(logs, name));
+      if (since === undefined || (written !== undefined && written >= since - LOG_START_SLACK_MS)) current.push(name);
+    }
+    for (const name of current) {
       if (/\[BNLogin\]/.test((yield* machine.read(join(logs, name))) ?? "")) return name;
     }
-    return names[0];
+    return current[0];
   }).pipe(Effect.mapError(failed));
 
   /** The newest session's span in Warcraft III's own log: a lower bound on how long it has run. */
@@ -319,7 +333,7 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
   const observe = Effect.gen(function*() {
     const use = yield* prefixState;
     const errorDialog = use.processes.find(isErrorDialog);
-    const log = use.launcher === undefined ? undefined : yield* loginLog;
+    const log = use.launcher === undefined ? undefined : yield* loginLog(use.launcher);
     const launcher = log === undefined ? undefined : launcherHealth((yield* machine.read(join(logs, log)).pipe(Effect.mapError(failed))) ?? "");
     // Warcraft III rewrites the file when it exits, so only a closed game's file is settled.
     let changes: readonly DisplayChange[] | undefined;
@@ -397,7 +411,7 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
   const launchGame = Effect.gen(function*() {
     const { launcher } = yield* prefixState;
     if (launcher === undefined) return yield* stop("Battle.net isn't running in the prefix");
-    const log = yield* loginLog;
+    const log = yield* loginLog(launcher);
     if (log === undefined) return yield* stop(`Battle.net has no log in ${logs}`);
     const path = join(logs, log);
     const offset = (yield* machine.size(path).pipe(Effect.mapError(failed))) ?? 0;
@@ -418,7 +432,7 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
 
   /** The launcher's state by its log: its sign-in form's page, or signed in. */
   const launcherNow = Effect.gen(function*() {
-    const log = yield* loginLog;
+    const log = yield* loginLog((yield* prefixState).launcher);
     return log === undefined ? undefined : launcherHealth((yield* machine.read(join(logs, log)).pipe(Effect.mapError(failed))) ?? "");
   });
   const enter = (field: "username" | "password") => (hands.enterLogin === undefined ? stop("doctor has no hands to sign in") : hands.enterLogin(target, field).pipe(Effect.mapError(failed)));

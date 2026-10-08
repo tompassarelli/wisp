@@ -1,15 +1,13 @@
 // wisp:native/toward-zero.h against an exact oracle: every binary32
 // sum, difference, product and quotient the toward-zero Lua computes, and
 // every decimal numeral it reads, must be the exact result truncated toward
-// zero, computed here with integers. The Lua is
-// TOWARD_ZERO_LUA when set (CI builds it with make), else one built with nix in
-// build/toward-zero-lua (wisp:scripts/wisp/towardZeroLua.ts).
+// zero, computed here with integers. The Lua is TOWARD_ZERO_LUA when set,
+// else the cached build (wisp:scripts/wisp/lua32.ts).
 import { expect, test } from "bun:test";
-import { join } from "node:path";
 import { Effect } from "effect";
-import { luaRounding, towardZeroLua } from "../scripts/wisp/towardZeroLua";
+import { lua32, luaRounding } from "../scripts/wisp/lua32";
 
-const lua = process.env.TOWARD_ZERO_LUA ?? await Effect.runPromise(towardZeroLua(join(import.meta.dir, "../build/toward-zero-lua")));
+const lua = process.env.TOWARD_ZERO_LUA ?? await Effect.runPromise(lua32("toward-zero"));
 
 /** A finite binary32 value as sign × significand × 2^exponent, with an integer significand. */
 interface Exact {

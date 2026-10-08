@@ -129,6 +129,7 @@ const machine = (tools: PlayTools): PlayMachine["Service"] => ({
     catch: problem(`couldn't read ${path}`),
   }),
   size: (path) => Effect.try({ try: () => statSync(path, { throwIfNoEntry: false })?.size, catch: problem(`couldn't read ${path}`) }),
+  modified: (path) => Effect.try({ try: () => statSync(path, { throwIfNoEntry: false })?.mtimeMs, catch: problem(`couldn't read ${path}`) }),
   digest: (path) => Effect.try({
     try: () => (statSync(path, { throwIfNoEntry: false }) === undefined ? undefined : createHash("sha256").update(readFileSync(path)).digest("hex")),
     catch: problem(`couldn't read ${path}`),
