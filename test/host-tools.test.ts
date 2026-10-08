@@ -75,7 +75,7 @@ const capacity = join(fixtures, "capacity.ts");
 const agentPair = 93;
 const agent = (box: ReturnType<typeof sandbox>) => Bun.spawn([process.execPath, join(root, "scripts/wisp/lan/pairAgent.ts"), "--pair", String(agentPair), "--capacity", capacity], { env: box.env, stdout: "ignore", stderr: "ignore" });
 
-test("pair agent: SIGTERM while its games start stops them and the agent", async () => {
+test("[repro #62] pair agent: SIGTERM while its games start stops them and the agent", async () => {
   const box = sandbox();
   const runner = agent(box);
   // The first game's session and its stand-in game run; the second isn't launched yet.
@@ -86,7 +86,7 @@ test("pair agent: SIGTERM while its games start stops them and the agent", async
   expect({ processes: result.processes, sessions: result.sessions }).toEqual({ processes: 0, sessions: 0 });
 }, 60_000);
 
-test("pair agent: a step failing after both games started stops them", async () => {
+test("[repro #62] pair agent: a step failing after both games started stops them", async () => {
   const box = sandbox();
   // The first client's menu report port is taken, so the agent fails after launching both games.
   const taken = Bun.serve({ hostname: "127.0.0.1", port: reportPort(agentPair, "a"), fetch: () => new Response() });
@@ -104,7 +104,7 @@ const pool = (box: ReturnType<typeof sandbox>, extra: Record<string, string>) =>
   env: { ...box.env, ...extra }, stdout: "ignore", stderr: "ignore",
 });
 
-test("lan pool: SIGTERM while a pair is starting stops its session", async () => {
+test("[repro #62] lan pool: SIGTERM while a pair is starting stops its session", async () => {
   const box = sandbox();
   const runner = pool(box, { WISP_TEST_READY_MS: "60000" });
   // The session and both stand-in clients run; the pair isn't ready yet.
@@ -115,7 +115,7 @@ test("lan pool: SIGTERM while a pair is starting stops its session", async () =>
   expect({ processes: result.processes, sessions: result.sessions }).toEqual({ processes: 0, sessions: 0 });
 }, 60_000);
 
-test("lan pool: a step failing after a pair started stops its session", async () => {
+test("[repro #62] lan pool: a step failing after a pair started stops its session", async () => {
   const box = sandbox();
   const runner = pool(box, { WISP_TEST_BAD_AGENT: "1" });
   const result = await leftovers(runner, box);
@@ -123,7 +123,7 @@ test("lan pool: a step failing after a pair started stops its session", async ()
   expect({ processes: result.processes, sessions: result.sessions }).toEqual({ processes: 0, sessions: 0 });
 }, 60_000);
 
-test("watch: a pair agent that doesn't answer is a timeout, not a client that isn't playing", async () => {
+test("[repro #62] watch: a pair agent that doesn't answer is a timeout, not a client that isn't playing", async () => {
   const box = sandbox();
   const previous = process.env["XDG_STATE_HOME"];
   process.env["XDG_STATE_HOME"] = box.env.XDG_STATE_HOME;
@@ -151,7 +151,7 @@ test("watch: a pair agent that doesn't answer is a timeout, not a client that is
   expect(String(Exit.isFailure(exit) ? exit.cause : "")).toContain("didn't answer within 3 s");
 });
 
-test("join: a client whose threads don't stop within a second is let go again", async () => {
+test("[repro #62] join: a client whose threads don't stop within a second is let go again", async () => {
   const sleeper = Bun.spawn(["sleep", "600"]);
   cleanups.push(() => sleeper.kill("SIGKILL"));
   const state = () => readFileSync(`/proc/${sleeper.pid}/stat`, "latin1").split(") ")[1]?.[0];

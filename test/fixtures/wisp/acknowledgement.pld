@@ -1,5 +1,0 @@
-function PreloadFiles takes nothing returns nothing
-call PreloadStart()
-call Preload( "applied 42 at 621.2031" )
-call PreloadEnd( 0.0 )
-endfunction

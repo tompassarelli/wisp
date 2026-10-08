@@ -20,7 +20,7 @@ const isolatedGit = { GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", 
 test.each([
   ["safe-push", "push"],
   ["the dispatch", "dispatch"],
-] as const)("farm deletes its scratch branch when %s fails after the push", async (_, failing) => {
+] as const)("[repro smashcraft#240] farm deletes its scratch branch when %s fails after the push", async (_, failing) => {
   const dir = mkdtempSync(join(tmpdir(), "host-tools-farm-"));
   try {
     const git = (cwd: string, ...args: string[]) => {

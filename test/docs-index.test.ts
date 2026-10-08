@@ -8,14 +8,14 @@ const root = join(import.meta.dir, "..");
 const commandsDir = join(root, "scripts/wisp/commands");
 const commandNames = async () => (await readdir(commandsDir)).filter((file) => file.endsWith(".ts")).map((file) => file.slice(0, -3));
 
-test("registered sample and Wisp nouns and usage flags follow docs/cli.md", async () => {
+test("[spec docs/cli.md] registered sample and Wisp nouns and usage flags follow docs/cli.md", async () => {
   const vocabulary = await Bun.file(join(root, "docs/cli.md")).text();
   for (const program of ["examples/sample/scripts/sample.ts", "scripts/wisp/repo.ts"]) {
     expect(vocabularyProblems(await Bun.file(join(root, program)).text(), vocabulary)).toEqual([]);
   }
 });
 
-test("the vocabulary gate rejects undeclared nouns, flags and shared-meaning drift", () => {
+test("[spec docs/cli.md] the vocabulary gate rejects undeclared nouns, flags and shared-meaning drift", () => {
   const vocabulary = "| `client` | Clients |\n| `--profile NAME` | Map profile |\n| `--clients N` | Count |\n| `--pairs N` | Count |";
   expect(vocabularyProblems('  extra: { usage: "--secret X" },\n  client: { usage: "[--profile] --clients FILE --pairs IDS" },', vocabulary)).toEqual([
     "undeclared noun extra", "extra: undeclared flag --secret", "client: --profile selects a map build profile", "client: --clients is a count; use --clients-file for configuration", "client: --pairs is a count",
@@ -24,7 +24,7 @@ test("the vocabulary gate rejects undeclared nouns, flags and shared-meaning dri
 
 // A command isn't done until the feature index lists it: future agents and
 // map authors find Wisp's commands there, not by reading scripts/wisp/commands/.
-test("every command in scripts/wisp/commands has an entry in docs/index.md", async () => {
+test("[spec AGENTS.md] every command in scripts/wisp/commands has an entry in docs/index.md", async () => {
   const index = await Bun.file(join(root, "docs/index.md")).text();
   const commands = await commandNames();
   expect(commands.length).toBeGreaterThan(0);
@@ -34,7 +34,7 @@ test("every command in scripts/wisp/commands has an entry in docs/index.md", asy
 
 // A command with its own page (docs/NAME.md) documents every subcommand its
 // dispatch accepts there, as `wisp NAME SUB` or within `wisp NAME a|SUB|b`.
-test("every subcommand of a command with its own page appears on that page", async () => {
+test("[spec AGENTS.md] every subcommand of a command with its own page appears on that page", async () => {
   const unlisted: string[] = [];
   let checked = 0;
   for (const name of await commandNames()) {

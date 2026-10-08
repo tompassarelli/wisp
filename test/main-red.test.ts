@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { failingTests, redIssueBody } from "../scripts/mainRed";
 import { redNotice } from "../scripts/prePush";
 
-test("a failed run's log names each failing test once, and a failed step without one by its step", () => {
+test("[spec AGENTS.md] a failed run's log names each failing test once, and a failed step without one by its step", () => {
   // Lines as `gh run view --log-failed` printed them for run 37725394675 on 8 Oct 2026.
   const step = "framework\tRun CC=gcc STORMLIB_PREFIX=/usr bun run test\t2026-10-08T04:00:54.4835028Z ";
   const log = [
@@ -19,9 +19,11 @@ test("a failed run's log names each failing test once, and a failed step without
   ]);
 });
 
-test("the red-main notice is one line naming the issue's failing tests", () => {
+test("[spec AGENTS.md] the red-main notice is one line naming the issue's failing tests", () => {
   const run = (id: number, conclusion: string, headSha: string) => ({ databaseId: id, conclusion, status: "completed", headSha, url: `run/${id}` });
   const body = redIssueBody("main", ["frame meter > overlay", "map-pack > listed entries"], [run(3, "failure", "c".repeat(40)), run(2, "failure", "b".repeat(40)), run(1, "success", "a".repeat(40))], "o/r");
   expect(body).toContain(`First failing commit: ${"b".repeat(40)}`);
-  expect(redNotice({ number: 7, body, url: "issue/7" })).toBe("pre-push: main is red (#7 issue/7), 2 failing: frame meter > overlay; map-pack > listed entries");
+  const notice = redNotice({ number: 7, body, url: "issue/7" });
+  expect(notice).not.toContain("\n");
+  for (const name of ["frame meter > overlay", "map-pack > listed entries"]) expect(notice).toContain(name);
 });

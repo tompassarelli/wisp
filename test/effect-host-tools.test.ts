@@ -22,7 +22,7 @@ const notYetEffect = [
 ];
 
 // AGENTS.md: host tools that start processes or wait are Effect programs.
-test("host tools under scripts/ that start processes or wait import Effect", async () => {
+test("[spec AGENTS.md] host tools under scripts/ that start processes or wait import Effect", async () => {
   const problems: string[] = [];
   let scanned = 0;
   for (const file of new Bun.Glob("scripts/**/*.ts").scanSync(root)) {

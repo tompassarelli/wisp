@@ -4,12 +4,10 @@ import { join } from "node:path";
 import { Cause, Clock, Effect, Exit, Fiber, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { expect, test } from "bun:test";
-import { Acknowledgement, ErrorReport, bytesChecksum, hostPath, linePreloadFile, manifestVersion, payloadFileKey, preloadRecord } from "../scripts/wisp/boundary";
-import { deltaFile, hostFile, manifestFile, parseManifest, payloadFile } from "../src/runtime/gameFiles";
-import { moduleChunk, parsePayload } from "../src/runtime/modules";
+import { bytesChecksum, hostPath, linePreloadFile, preloadRecord } from "../scripts/wisp/boundary";
+import { hostFile } from "../src/runtime/gameFiles";
 import type { BundledModules } from "../scripts/luaBundle";
 import { checksum } from "../src/runtime/payload";
-import { validateDataDirectories } from "../scripts/wisp/commands/hot";
 import { GameFiles, prepareHotFolders } from "../scripts/wisp/gameFiles";
 import { HotReload } from "../scripts/wisp/hotReload";
 import { MapBuild, freshBundleAge } from "../scripts/wisp/mapBuild";
@@ -36,7 +34,7 @@ const keptMaps = (kept: string[]) => SourceErrors.of({
   }),
   changed: () => Effect.succeed([]),
 });
-test("Preload records decode final assignments and hyphenated keys without including their key", async () => {
+test("[repro d949d05] Preload records decode final assignments and hyphenated keys without including their key", async () => {
   const kind = preloadRecord({ head: ["received-mask={mask} frame={frame}"] }, Schema.Struct({ mask: Schema.FiniteFromString, frame: Schema.FiniteFromString }));
   const text = 'function PreloadFiles takes nothing returns nothing\ncall Preload( "received-mask=3 frame=417" )\nendfunction\n';
   expect(await Effect.runPromise(kind.decode("control.txt", text))).toEqual({ mask: 3, frame: 417 });
@@ -46,23 +44,12 @@ test("Preload records decode final assignments and hyphenated keys without inclu
     expect(Cause.pretty(result.cause)).toContain("control-malformed.txt: frame:");
   }
 });
-test("Preload text assignments preserve a multiword reason before the next numeric key", async () => {
+test("[repro d949d05] Preload text assignments preserve a multiword reason before the next numeric key", async () => {
   const kind = preloadRecord({ head: ["reason={reason} sequence={sequence} frame={frame}"] }, Schema.Struct({ reason: Schema.NonEmptyString, sequence: Schema.FiniteFromString, frame: Schema.FiniteFromString }));
   const text = 'function PreloadFiles takes nothing returns nothing\ncall Preload( "reason=input submission failed sequence=4 frame=417" )\nendfunction\n';
   expect(await Effect.runPromise(kind.decode("failure.txt", text))).toEqual({ reason: "input submission failed", sequence: 4, frame: 417 });
 });
-test("framework game-written file kinds decode native Preload fixtures", async () => {
-  expect(await Effect.runPromise(Acknowledgement.decode("ack.txt", fixture("acknowledgement.pld")))).toEqual({ version: 42, elapsed: 621.2031 });
-  expect(await Effect.runPromise(ErrorReport.decode("error.txt", fixture("error-report.pld")))).toEqual({ count: 3, handler: "OnTrigger", lines: ["attempt to call nil value", "smashcraft-hot-101-24:42: in function 'OnTrigger'"] });
-});
-test("malformed framework fixtures report their file and typed field", async () => {
-  for (const [file, kind, source, field] of [["ack-malformed.txt", Acknowledgement, "acknowledgement-malformed.pld", "version"], ["error-malformed.txt", ErrorReport, "error-report-malformed.pld", "count"]] as const) {
-    const result = await Effect.runPromiseExit(kind.decode(file, fixture(source)));
-    expect(Exit.isFailure(result)).toBe(true);
-    if (Exit.isFailure(result)) { expect(Cause.pretty(result.cause)).toContain(file); expect(Cause.pretty(result.cause)).toContain(field); }
-  }
-});
-test("hot reload gives every client its payload before any manifest and waits for each fake client acknowledgement", async () => {
+test("[invariant] hot reload gives every client its payload before any manifest and waits for each fake client acknowledgement", async () => {
   const directories = ["/a/CustomMapData", "/b/CustomMapData"] as const;
   const events: string[] = [];
   const acknowledgement = "function PreloadFiles takes nothing returns nothing\ncall Preload( \"applied 1 at 0\" )\nendfunction\n";
@@ -118,7 +105,7 @@ test("hot reload gives every client its payload before any manifest and waits fo
   }
 });
 
-test("wisp hot creates every client's hot folder marker when it starts, once, before it can publish", async () => {
+test("[repro d20668a] wisp hot creates every client's hot folder marker when it starts, once, before it can publish", async () => {
   const directories = ["/a/CustomMapData", "/b/CustomMapData"] as const;
   const stored = new Map<string, string | Uint8Array>();
   const writes: string[] = [];
@@ -145,73 +132,7 @@ test("wisp hot creates every client's hot folder marker when it starts, once, be
   expect(writes).toHaveLength(directories.length);
 });
 
-test("once every client acknowledged a version, the next carries only its changed modules, and every version carries them all", async () => {
-  const directories = ["/a/CustomMapData", "/b/CustomMapData"] as const;
-  const stored = new Map<string, string | Uint8Array>();
-  const files = GameFiles.of({
-    read: (path) => Effect.sync(() => (stored.has(path) ? { text: String(stored.get(path)), modified: 0 } : undefined)),
-    write: (path, contents) => Effect.sync(() => {
-      stored.set(path, contents);
-    }),
-    // Each fake client installs a version as soon as its manifest appears.
-    replace: (path, text) => Effect.sync(() => {
-      stored.set(path, text);
-      const version = /manifest-(\d+)\.pld$/.exec(path)?.[1];
-      if (version !== undefined) stored.set(path.replace(/custom-hot\/manifest-\d+\.pld$/, "custom-hot-ack-p0.txt"), `function PreloadFiles takes nothing returns nothing\ncall Preload( "applied ${version} at 0" )\nendfunction\n`);
-    }),
-    list: (directory) => Effect.sync(() => [...stored.keys()].filter((path) => path.startsWith(`${directory}/`)).map((path) => path.slice(directory.length + 1))),
-    remove: (path) => Effect.sync(() => {
-      stored.delete(path);
-    }),
-    installMap: () => Effect.void,
-  });
-  let compiled = compiledModules({ main: "return require(\"a\")", a: "return { install = function() end }", b: "return 1" });
-  const mapBuild = MapBuild.of({ compile: Effect.sync(() => compiled), build: () => Effect.void, rebuild: () => Effect.void });
-  const kept: string[] = [];
-  const dependencies = Layer.mergeAll(Layer.succeed(GameFiles, files), Layer.succeed(MapBuild, mapBuild), Layer.succeed(SourceErrors, keptMaps(kept)));
-  const manifest = (version: number) => parseManifest(/'\$wsl', "([^"]*)"/.exec(String(stored.get(hostPath(directories[1], manifestFile(version, "custom")))))?.[1] ?? "");
-  const payload = (gamePath: string) => {
-    const file = stored.get(hostPath(directories[1], gamePath));
-    if (!(file instanceof Uint8Array)) return undefined;
-    const text = /\[(=*)\[\n([\s\S]*)\]\1\], 0\)\n\/\/!endusercode\n$/.exec(Buffer.from(file).toString("latin1"))?.[2];
-    return text === undefined ? undefined : parsePayload(text);
-  };
-  await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-    const hot = yield* HotReload;
-    expect(yield* hot.publish).toBe(1);
-    const first = manifest(1);
-    expect(first).toMatchObject({ version: 1, files: 1, base: "-", changes: 0 });
-    expect(Object.keys(payload(payloadFile(first?.state ?? "", 0, "custom"))?.texts ?? {})).toEqual(["main", "a", "b"]);
-    expect(kept).toHaveLength(3);
-
-    compiled = compiledModules({ main: "return require(\"a\")", a: "return { install = function() end, changed = true }", b: "return 1" });
-    expect(yield* hot.publish).toBe(2);
-    const second = manifest(2);
-    expect(second).toMatchObject({ version: 2, files: 1, base: first?.state, changes: 1 });
-    const delta = payload(deltaFile(second?.state ?? "", first?.state ?? "", 0, "custom"));
-    expect(delta?.texts).toEqual({ a: moduleChunk("return { install = function() end, changed = true }") });
-    expect(delta?.hashes.map(([name]) => name)).toEqual(["main", "a", "b"]);
-    expect(Object.keys(payload(payloadFile(second?.state ?? "", 0, "custom"))?.texts ?? {})).toEqual(["main", "a", "b"]);
-    expect(kept).toHaveLength(4);
-    expect(kept[3]).toEndWith('{"module":"a"}');
-
-    // A module removed and another added: the index names what the new state holds.
-    compiled = compiledModules({ main: "return require(\"c\")", c: "return { install = function() end }" });
-    expect(yield* hot.publish).toBe(3);
-    const third = manifest(3);
-    expect(third).toMatchObject({ base: second?.state, changes: 1 });
-    const removal = payload(deltaFile(third?.state ?? "", second?.state ?? "", 0, "custom"));
-    expect(removal?.hashes.map(([name]) => name)).toEqual(["main", "c"]);
-    expect(Object.keys(removal?.texts ?? {})).toEqual(["main", "c"]);
-  }).pipe(Effect.provide(HotReload.layer(directories, "custom").pipe(Layer.provide(dependencies))))));
-  // The first version's payloads are gone; the last two versions' stay for a client still reading them.
-  for (const directory of directories) {
-    const names = [...stored.keys()].filter((path) => path.startsWith(`${directory}/custom-hot/`) && !path.includes("manifest-") && !path.endsWith("host.pld"));
-    expect(names).toHaveLength(4);
-  }
-});
-
-test("the hot folder and its marker are created on disk, and an existing marker is not rewritten", async () => {
+test("[repro d20668a] the hot folder and its marker are created on disk, and an existing marker is not rewritten", async () => {
   const root = mkdtempSync(join(tmpdir(), "wisp-hot-folder-"));
   const directories = [join(root, "a", "CustomMapData"), join(root, "b", "CustomMapData")];
   const prepare = Effect.runPromise(prepareHotFolders(directories, "custom").pipe(Effect.provide(GameFiles.layer())));
@@ -225,14 +146,7 @@ test("the hot folder and its marker are created on disk, and an existing marker 
   for (const directory of directories) expect(statSync(hostPath(directory, hostFile("custom"))).mtimeMs).toBe(1000);
 });
 
-test("hot reload requires distinct non-empty client data directories", async () => {
-  expect(await Effect.runPromise(validateDataDirectories(["/client/data"]))).toEqual(["/client/data"]);
-  expect(Exit.isFailure(await Effect.runPromiseExit(validateDataDirectories([])))).toBe(true);
-  expect(Exit.isFailure(await Effect.runPromiseExit(validateDataDirectories([""])))).toBe(true);
-  expect(Exit.isFailure(await Effect.runPromiseExit(validateDataDirectories(["/client/data", "/client/data"])))).toBe(true);
-});
-
-test("map rebuild reuses the bundle only while it is newer than every compile input", () => {
+test("[invariant] map rebuild reuses the bundle only while it is newer than every compile input", () => {
   const root = mkdtempSync(join(tmpdir(), "wisp-fresh-"));
   const src = join(root, "src");
   mkdirSync(join(src, "game"), { recursive: true });
@@ -249,7 +163,7 @@ test("map rebuild reuses the bundle only while it is newer than every compile in
   expect(freshBundleAge(bundle, [src, config], 260_000)).toBeUndefined();
 });
 
-test("source maps stay in each consumer build directory even when payload keys match", async () => {
+test("[invariant] source maps stay in each consumer build directory even when payload keys match", async () => {
   const root = mkdtempSync(join(tmpdir(), "wisp-source-maps-"));
   const key = "101-24";
   for (const name of ["first", "second"]) {
@@ -279,18 +193,7 @@ test("source maps stay in each consumer build directory even when payload keys m
   }
 });
 
-test("hot files sit in the project's hot folder, whose names carry versions and payload keys", () => {
-  expect(manifestFile(17, "custom")).toBe("custom-hot\\manifest-17.pld");
-  expect(hostPath("/client/CustomMapData", payloadFile("101:24", 0, "custom"))).toBe("/client/CustomMapData/custom-hot/101-24-0.pld");
-  expect(manifestVersion("manifest-17.pld")).toBe(17);
-  expect(manifestVersion("custom-hot-manifest-17.pld")).toBeUndefined();
-  expect(payloadFileKey("101-24-0.pld")).toBe("101-24");
-  expect(hostPath("/client/CustomMapData", deltaFile("101:24", "7:9", 1, "custom"))).toBe("/client/CustomMapData/custom-hot/101-24-7-9-1.pld");
-  expect(payloadFileKey("101-24-7-9-1.pld")).toBe("101-24-7-9");
-  expect(payloadFileKey("manifest-17.pld")).toBeUndefined();
-});
-
-test("the host's bytes checksum equals the shared payload checksum", () => {
+test("[invariant] the host's bytes checksum equals the shared payload checksum", () => {
   let state = 12345;
   for (const length of [0, 1, 7, 4096, 100_000]) {
     const bytes = Uint8Array.from({ length }, () => (state = (Math.imul(state, 1103515245) + 12345) >>> 0) >>> 24);

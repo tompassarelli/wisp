@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Console, Effect } from "effect";
 import { emitJson } from "../scripts/wisp/jsonResults";
 
-test("JSON failures retain a TypeScript throw site when their message names one", () => {
+test("[spec docs/cli.md] JSON failures retain a TypeScript throw site when their message names one", () => {
   const lines: string[] = [];
   const emit = (result: Readonly<Record<string, unknown>>) => Effect.runSync(emitJson("headless", result).pipe(
     Effect.provideService(Console.Console, { ...console, log: (line: string) => lines.push(line) }),
