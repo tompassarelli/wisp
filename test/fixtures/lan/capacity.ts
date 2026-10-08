@@ -10,7 +10,8 @@ if (args[0] === "probe") {
   process.exit(deferred ? 75 : 0);
 }
 if (args[0] !== "session") throw new Error("expected session");
-if (at("class") === "moderate") {
+if (at("owner")?.startsWith("wisp-lan-pair-") === true) {
+  if (at("class") !== "native") throw new Error("a pair's desktops must use a native scope");
   const command = args.slice(args.indexOf("--") + 1);
   const child = Bun.spawn([process.execPath, `${import.meta.dir}/pair.ts`, ...command.slice(2)], { stdout: "inherit", stderr: "inherit" });
   process.on("SIGTERM", () => child.kill("SIGTERM"));

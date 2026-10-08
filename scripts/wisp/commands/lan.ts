@@ -126,7 +126,8 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
     // The session gets its own scope: stopped at once when this attempt fails, else held by the pool.
     const scope = yield* Scope.fork(yield* Effect.scope);
     return yield* Effect.gen(function*() {
-      const session = yield* spawnLogged(ChildProcess.make(process.execPath, [capacity, "session", "--class", "moderate", "--owner", `wisp-lan-pair-${pair}`, "--", process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity, ...(locateBeforePeer ? ["--locate-before-peer"] : []), ...(fps === undefined ? [] : ["--fps", String(fps)])], { stdin: "ignore" }), {
+      // The desktops' Xwayland serves the games: in the batch slice a busy machine starved it and 3.0.1 games hung before their window.
+      const session = yield* spawnLogged(ChildProcess.make(process.execPath, [capacity, "session", "--class", "native", "--memory-gib", "1", "--owner", `wisp-lan-pair-${pair}`, "--", process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity, ...(locateBeforePeer ? ["--locate-before-peer"] : []), ...(fps === undefined ? [] : ["--fps", String(fps)])], { stdin: "ignore" }), {
         stdout: join(directory, "session.out"),
         stderr: join(directory, "session.err"),
       });

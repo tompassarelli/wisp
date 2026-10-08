@@ -11,76 +11,59 @@ never switches a signed-in Battle.net client, and never touches anyone else's
 game. It isn't for cheating. The terms are in
 [driving-warcraft.md](driving-warcraft.md#2-lan-hosting-offline-clients-and-wisps-host).
 
-## 3.0.1 startup failure
+## 3.0.1: the pool starts, but the game has no LAN provider
 
-On 8 October 2026, updated **3.0.1.24342** clients stopped before creating a
-Warcraft window, reporting a menu, or loading a map. Wine recorded an
-`0xc0000420` assertion in `war3_loader.dll`, followed by
-`RtlpWaitForCriticalSection` timeouts on `ntdll/loader.c: loader_section`.
-An exact fresh copy of the updated installation and the successful Steam
-launch wrapper both reproduced the failure. The runtime and `-launch`
-argument already matched the working launch. The last working offline build
-was **3.0.0.24268**.
+**3.0.1.24342 removed the LAN provider, so pool pairs can't play a LAN
+match.** In 3.0.0 the provider factory compared the requested id with `BNET`,
+`LOOP` and `TCPN`, and the LAN switch below made it build `TCPN`. In 3.0.1 it
+compares `BNET`, then `LOOP`, and every other id jumps to `mov eax,4; ret`
+(unsupported):
 
-Two separate signed-in 3.0.1 clients also failed to reach a menu, including
-one after Battle.net's Scan and Repair returned to Play. The cause has not
-been isolated to offline use. The Agent-presence experiments were invalid or
-cancelled.
+```
+81 FB 54 45 4E 42 0F 84 ..   cmp ebx,'BNET'; je
+81 FB 50 4F 4F 4C 0F 85 ..   cmp ebx,'LOOP'; jne -> mov eax,4; ...; ret
+```
 
-Module and exception logging from an authenticated launch confirmed the same
-`0xc0000420` assertion in `war3_loader.dll`, at module-relative stack addresses
-`0x52eec`, `0x765159`, and `0xcaa1e7`. Adding Steam's launch wrapper and reaper
-to that client's command reproduced the same assertion. Its capacity scope
-recorded zero memory-high and out-of-memory events. These commands launched
-Proton directly; they were not launches of a registered Steam application.
+That comes from lan1a's decrypted code, read through /proc on 8 October
+2026 after the menus rebuilt their provider. 15.4 MB of decrypted `.text`
+held no `TCPN` immediate and no 3.0.0 selector. The executable's RTTI names
+only `NetProviderBNET` and `NetProviderLOOP`. `lan fresh` stops with "the
+provider factory isn't in the decrypted code", and `KNOWN_BUILDS` stays at
+3.0.0.24268. A LAN match on 3.0.1 would need a provider written into the
+game, not a switch.
 
-The operator paused diagnosis at 02:52, then superseded that pause at 03:00
-(UTC+8) on the same day. Further offline experiments use a new private
-baseline and separate per-client reflinks under `~/.local/share/wisp/lan/`,
-with distinct inodes and no links back to the source install. The test
-prefixes hold no Battle.net program or account, and only one game file changes
-per attempt. Tom's installation stays untouched; its SDK hash is checked
-before and after. The installed Blizzard loader has not been patched, and no
-engine offset change has been applied.
+**The clients themselves start.** A pool client on 3.0.1 shows the intro
+cinematic, then the same offline sequence 3.0.0 showed (`LOGIN_DOORS`,
+`AUTHENTICATION_OVERLAY`, then the `ERROR` modal "There was an error in
+handling the request. Please check your VPN"). On 3.0.0 the pool joined LAN
+games straight from that modal. An earlier diagnosis blamed the prefix and a
+`war3_loader.dll` assertion. Neither held up:
 
-The isolated comparisons changed one startup file at a time:
-
-| Executable / loader / SDK builds | Observed startup result |
-| --- | --- |
-| 24342 / 24342 / 24268 | Same loader assertion; no menu or map acknowledgment. |
-| 24342 / 24268 / 24342 | Loader attach did not return within 86 seconds; no menu or map acknowledgment. |
-| 24268 / 24268 / 24342 | Loader assertion and an error-reporter window; no menu or map acknowledgment. |
-| 24268 / 24268 / 24268 | Same loader assertion; no menu or map acknowledgment. Other installed files still came from 24342. |
-
-At 03:24 the operator authorized one Internet-route comparison with the last
-combination, keeping its prefix and launch unchanged and using no account,
-Battle.net program, or engine controls. It failed with the same assertion
-within a minute. Offline experiments then stopped, and all three startup
-files were restored from the private 24342 baseline. The source SDK hash
-remained unchanged throughout.
-
-A subsequent authorized test ran the restored private 24342 copy on the
-main `:0` display. It produced the same loader assertion before loading
-D3D/Vulkan, with no game window or map acknowledgment. Its process was closed.
-
-The [official 3.0.1 notes](https://us.forums.blizzard.com/en/warcraft3/t/warcraft-iii-reforged-forsaken-kingdom-patch-notes/38400/4)
-include a game-start performance fix; the startup failure's cause is still
-being compared against recorded working launches.
-[Issue #49](https://github.com/tompassarelli/wisp/issues/49)
-retains the unfinished 3.0.1 memory checks: an uninitialized process with no
-presence table is not evidence of a changed table layout.
+- The game raises a breakpoint and an `0xc0000420` assertion every 10 s and
+  handles them itself (30 in 5 minutes on a client that reached the modal).
+  A `PROTON_LOG` that shows them isn't a crash.
+- The earlier bisection counted a run as a pass only when War3Log said
+  `GameMain Started` within 75 s. A fresh prefix writes nothing to War3Log
+  while it plays the intro and sits at the modal (still empty after 5
+  minutes), and some of those runs were still queued for capacity. Started
+  the same way, 16 of 16 fresh prefixes opened the game window.
+- The actual hang came from the pool's launch: its private desktops ran in a
+  `moderate` batch scope. With the machine at load 70–90 and protected CPU
+  pressure at 20–55%, both games of pair 1 sat at 0% CPU with no window for
+  10 minutes, their main thread waiting on a lock before `winex11.drv`
+  loaded. With the desktops in a `native` scope (below), the same pair
+  reached the modal 75 s after launch.
 
 ## Signed-in 3.0.1 clients cloned from Tom's install
 
-Until the offline pool starts again, signed-in clients run 3.0.1 from
+Until the offline pool can play on 3.0.1, signed-in clients run 3.0.1 from
 copies of Tom's working Steam/Proton prefix
 (`~/.local/share/Steam/steamapps/compatdata/3516115571`), as decided in
 [#53](https://github.com/tompassarelli/wisp/issues/53). On 8 October 2026
 both reached the main menu on 3.0.1.24342, hosted and joined a private
 passworded Smashcraft game, and `archer-neutral.pad` passed parity there.
-They run the same GE-Proton11-7 (wine-staging 11.0) and Steam Linux Runtime 4
-that failed with the `war3_loader.dll` assertion on the other test prefixes,
-so the prefix, not the Proton build, decides whether 3.0.1 starts.
+They run GE-Proton11-7 (wine-staging 11.0) and Steam Linux Runtime 4, as the
+pool does.
 
 | Client | Prefix | Account | Menu page port |
 | --- | --- | --- | --- |
@@ -320,7 +303,9 @@ it. The agent:
   namespaces, so `wisp lan fresh` and `status` talk to it from outside.
 
 Each pair's desktops and agent run in one `machine-capacity session --class
-moderate`. Admission uses the user's service bus and runtime directory;
+native --memory-gib 1`. A game waits on its desktop's Xwayland, and in the
+low-weight batch slice a busy machine starved the desktops until 3.0.1 games
+hung before opening a window. Admission uses the user's service bus and runtime directory;
 inside the scope the game receives its private desktop's runtime directory
 and its own session bus. Each game runs in its own `session --class native` scope: the
 high-weight slice for game clients, with no CPU quota. Each offline client
