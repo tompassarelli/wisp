@@ -527,7 +527,21 @@ saves them as the scene's `environment`.
   its lifespan; velocity follows `TextTagSpeed2Velocity` (0.071 is 128 world
   units a second). A tag draws outlined over the world, its text's
   bottom-left at its place, under the UI.
-- **Not drawn.** Terrain, shadows, point lights from models, bloom and other
+- **World bounds.** With `render.terrain` (the map's `war3map.w3e`, or only
+  its `bounds`, and `origin`, the map point the headless world's 0,0 stands
+  on), an effect whose origin lies outside the world bounds is not drawn;
+  units are not culled this way. The bounds run from the terrain's first
+  point to its last: `columns - 1` and `rows - 1` cells of 128 from its
+  origin, read from w3e versions 11 and 12 (wisp:scripts/wisp/terrain.ts).
+  Native Classic, Smashcraft 56fb5249 on a base ending at y 4,096, Stratholme
+  near view (8 Oct): the ruined cathedral at map y 5,944, 7,948 from the eye
+  and in frame, isn't drawn, nor are Tomb's Temple of Tides and waterfall
+  (y 5,344); the city gate at y 3,544 is (wisp:test/world-bounds.test.ts).
+- **Models that fail.** A model the renderer can't load or draw is left out
+  of the frame and named on stderr and in `render.json`'s `notDrawn`; the
+  rest of the frame still draws.
+- **Not drawn.** Terrain tiles, cliffs and the map's placed doodads
+  (`war3map.doo`), shadows, point lights from models, bloom and other
   post-processing.
 
 | Check | Can close headless when | Still needs native |
