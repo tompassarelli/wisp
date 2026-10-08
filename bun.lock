@@ -6,6 +6,7 @@
       "name": "wisp",
       "dependencies": {
         "@effect/platform-bun": "4.0.1",
+        "@effect/platform-node-shared": "4.0.1",
         "dds-parser": "1.0.1",
         "effect": "4.0.1",
         "gl-matrix": "3.3.0",
@@ -21,9 +22,6 @@
         "lua-types": "2.14.1",
       },
     },
-  },
-  "overrides": {
-    "@effect/platform-node-shared": "4.0.1",
   },
   "packages": {
     "@effect/platform-bun": ["@effect/platform-bun@4.0.1", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.1" }, "peerDependencies": { "effect": "^4.0.1" } }, "sha512-m+QR4bp39ZWujCuEsUhZADIYIOFZcUHHlmrixENZqZRbEYgaPLMUWiPrRJ69CM4BuuHW8oCOxfMGUU7oSw/o5g=="],
