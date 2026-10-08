@@ -598,7 +598,21 @@ saves them as the scene's `environment`.
   (y 5,344); the city gate at y 3,544 is (wisp:test/world-bounds.test.ts).
 - **Models that fail.** A model the renderer can't load or draw is left out
   of the frame and named on stderr and in `render.json`'s `notDrawn`; the
-  rest of the frame still draws.
+  rest of the frame still draws. The render command exits with a failure after
+  saving its images, scene JSON and report. Standalone play stops with the
+  same named drawing failure.
+- **Popcorn emitters.** External `.pkb`/`.pkfx` particle effects are recognized
+  in either supported graphics mode, including Definitive assets. Each saved
+  frame's scene JSON has `popcornEmitters`: model path, model handle, emitter
+  name, external `effect` path, world `position` and three-axis `scale`. These
+  use the renderer's sampled node pose, including parents, pivots, animation,
+  model rotation and scale. Emitters whose sampled visibility or alpha is zero
+  are omitted, as are models culled by the renderer. The external effect's
+  particle reach is unknown; an emitter with visible tracks is reported even
+  when its current emission rate is zero. Wisp does not simulate these effects:
+  every listed emitter produces an `undrawn Popcorn emitter` failure naming
+  the model, emitter and effect file. The failure preserves the scene JSON so
+  the missing element can be traced.
 - **Omni lights.** In Definitive every drawn model's omni lights (MDX light
   type 0, such as a light-only model a map places) light the other models:
   colour × intensity × N·L, sampled at the model's pose, full out to the

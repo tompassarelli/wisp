@@ -207,7 +207,7 @@ function modelEmitter(model: mdx.Model, emitter: mdx.ParticleEmitter): EmitterFa
   };
 }
 
-/** A Reforged popcorn effect draws from its own effect file, so its reach is unknown here. */
+/** A Popcorn effect draws from its own effect file, so its reach is unknown here. */
 function popcornEmitter(model: mdx.Model, emitter: mdx.ParticleEmitterPopcorn): EmitterFacts {
   return {
     kind: "popcorn",
