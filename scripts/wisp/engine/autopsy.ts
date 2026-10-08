@@ -10,7 +10,7 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Effect, Fiber } from "effect";
+import { Effect, Fiber, Scope } from "effect";
 import type { Client } from "../clients";
 import { describeCause } from "../command";
 import { type DesyncDump, compareDumps, findDesyncLog, formatDesyncComparison, ipseStates, pairDumps, parseDesyncLog } from "./desyncLog";
@@ -335,25 +335,25 @@ export const autopsyRoot = () => join(stateHome(), "wisp/autopsy");
 
 export const corpusRoot = () => join(stateHome(), "wisp/corpus");
 
-/** The poller in its own thread, so a session's timed work keeps its timing. */
-function startPollThread(clients: readonly EngineClient[], out: string, interval: number) {
-  const worker = new Worker(join(import.meta.dir, "pollWorker.ts"));
-  worker.postMessage({ kind: "start", clients, out, interval });
-  return {
-    stop: () => new Promise<void>((resolve) => {
-      const timeout = setTimeout(() => {
-        worker.terminate();
-        resolve();
-      }, 2_000);
-      worker.onmessage = () => {
-        clearTimeout(timeout);
-        worker.terminate();
-        resolve();
-      };
-      worker.postMessage({ kind: "stop" });
-    }),
-  };
-}
+/**
+ * The poller in its own thread, so a session's timed work keeps its timing.
+ * Closing the scope asks it to stop and flush its logs, gives it 2 s, and
+ * terminates the thread either way.
+ */
+const pollThread = (clients: readonly EngineClient[], out: string, interval: number) => Effect.acquireRelease(
+  Effect.sync(() => {
+    const worker = new Worker(join(import.meta.dir, "pollWorker.ts"));
+    worker.postMessage({ kind: "start", clients, out, interval });
+    return worker;
+  }),
+  (worker) => Effect.callback<void>((resume) => {
+    worker.onmessage = () => resume(Effect.void);
+    worker.postMessage({ kind: "stop" });
+  }).pipe(
+    Effect.timeoutOption("2 seconds"),
+    Effect.ensuring(Effect.sync(() => worker.terminate())),
+  ),
+);
 
 /**
  * Runs `run` with the desync autopsy around it: the presence poller on the
@@ -383,16 +383,16 @@ export const withAutopsy = <A, E, R>(options: AutopsyOptions, run: Effect.Effect
   const reports = new DesyncReports(clients);
   const engineClients = clients.map(({ name, documents }) => ({ name, prefix: prefixOfDocuments(documents) }));
   let pollDirectory: string | undefined;
-  let poller: { readonly stop: () => Promise<void> } | undefined;
-  if (options.poll !== false) {
+  const startPoller = (scope: Scope.Scope) => Effect.gen(function*() {
+    if (options.poll === false) return;
     const access = pollerAccess(readScope(), readableNow, engineClients);
     if (access.problem !== undefined) print(access.problem);
     if (access.readable.length > 0) {
       pollDirectory = join(session, "presence");
-      poller = startPollThread(access.readable, pollDirectory, options.interval ?? 2);
+      yield* pollThread(access.readable, pollDirectory, options.interval ?? 2).pipe(Scope.provide(scope));
       print(`desync autopsy: reading client ${access.readable.map(({ name }) => name).join(", ")}'s presence tables, read-only, into ${pollDirectory}. ${DISCLAIMER}`);
     }
-  }
+  });
   const findings: string[] = [];
   const desyncs: string[] = [];
   let pending: DesyncReport[] = [];
@@ -418,13 +418,7 @@ export const withAutopsy = <A, E, R>(options: AutopsyOptions, run: Effect.Effect
       print(`desync autopsy failed: ${describeCause(cause)}`);
     }
   });
-  const watcher = yield* Effect.forkDetach(Effect.forever(examine(false).pipe(Effect.andThen(Effect.sleep("500 millis")))));
-  const finish = Effect.gen(function*() {
-    yield* Fiber.interrupt(watcher);
-    // A desync at the very end: give its reports a moment to land.
-    yield* Effect.sleep("1 second");
-    yield* examine(true);
-    if (poller !== undefined) yield* Effect.promise(poller.stop);
+  const summary = Effect.gen(function*() {
     if (findings.length > 0) {
       print("desync autopsy summary:");
       for (const line of findings) print(`  ${line}`);
@@ -441,6 +435,17 @@ export const withAutopsy = <A, E, R>(options: AutopsyOptions, run: Effect.Effect
       });
     }
   });
-  return yield* run.pipe(Effect.ensuring(finish));
+  // The poller's own scope, not the caller's: `run` may hold resources in that.
+  return yield* Effect.acquireUseRelease(Scope.make(), (pollerScope) => Effect.gen(function*() {
+    yield* startPoller(pollerScope);
+    const watcher = yield* Effect.forkDetach(Effect.forever(examine(false).pipe(Effect.andThen(Effect.sleep("500 millis")))));
+    const finish = Effect.gen(function*() {
+      yield* Fiber.interrupt(watcher);
+      // A desync at the very end: give its reports a moment to land.
+      yield* Effect.sleep("1 second");
+      yield* examine(true);
+    });
+    return yield* run.pipe(Effect.ensuring(finish));
+  }), (pollerScope, exit) => Scope.close(pollerScope, exit).pipe(Effect.andThen(summary)));
 });
 
