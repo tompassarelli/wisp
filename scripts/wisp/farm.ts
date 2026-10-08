@@ -9,7 +9,7 @@ import { randomBytes } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect, Schema } from "effect";
+import { Effect, Schedule, Schema } from "effect";
 import { describeCause } from "./command";
 import { Summary } from "./farmShards";
 
@@ -20,7 +20,7 @@ export class FarmFailure extends Schema.TaggedError<FarmFailure>()("FarmFailure"
 }
 
 /** Runs a program to completion: its trimmed stdout, or a failure naming its stderr; interruption kills and reaps it. */
-export const run = (argv: readonly string[], inherit = false, cwd?: string) => Effect.acquireUseRelease(
+const runOnce = (argv: readonly string[], inherit: boolean, cwd: string | undefined) => Effect.acquireUseRelease(
   Effect.try({
     try: () => Bun.spawn([...argv], { ...(cwd === undefined ? {} : { cwd }), stdin: "ignore", stdout: inherit ? "inherit" : "pipe", stderr: inherit ? "inherit" : "pipe" }),
     catch: (cause) => new FarmFailure({ problem: `couldn't start ${argv[0]}: ${describeCause(cause)}` }),
@@ -41,6 +41,19 @@ export const run = (argv: readonly string[], inherit = false, cwd?: string) => E
     if (child.exitCode === null) child.kill("SIGKILL");
     await child.exited;
   }),
+);
+
+/** GitHub's refusal of a request for its primary or secondary rate limit, as gh reports it. */
+export const RATE_LIMITED = /rate limit|HTTP 429|abuse detection/i;
+
+/**
+ * Runs a program like `runOnce`. A `gh` call GitHub refuses for a rate limit
+ * waits and tries again, 30 s and then twice as long each time with jitter,
+ * for at most 20 minutes, instead of failing the caller's run.
+ */
+export const run = (argv: readonly string[], inherit = false, cwd?: string) => argv[0] !== "gh" ? runOnce(argv, inherit, cwd) : runOnce(argv, inherit, cwd).pipe(
+  Effect.tapError((failure) => RATE_LIMITED.test(failure.message) ? Effect.sync(() => console.error(`GitHub is rate-limiting requests; retrying ${argv.slice(0, 3).join(" ")} with backoff`)) : Effect.void),
+  Effect.retry({ while: (failure) => RATE_LIMITED.test(failure.message), schedule: Schedule.exponential("30 seconds").pipe(Schedule.jittered, Schedule.upTo({ duration: "20 minutes" })) }),
 );
 
 /** The checkout's GitHub repository, OWNER/NAME. */
@@ -95,16 +108,16 @@ export const runTag = () => randomBytes(4).toString("hex");
 /** Starts `workflow` on main with `inputs` (which hold `tag`) and finds the run, by the tag that ends its name. */
 export const dispatch = (repo: string, workflow: string, inputs: Readonly<Record<string, string>> & { readonly tag: string }) => Effect.gen(function*() {
   yield* run(["gh", "workflow", "run", workflow, "-R", repo, "--ref", "main", ...Object.entries(inputs).flatMap(([name, value]) => ["-f", `${name}=${value}`])]);
-  for (let tries = 0; tries < 30; tries++) {
+  for (let tries = 0; tries < 24; tries++) {
     const listed = yield* run(["gh", "run", "list", "-R", repo, "--workflow", workflow, "--event", "workflow_dispatch", "-L", "20", "--json", "databaseId,displayTitle,url"]);
     const found = (yield* decoded(Runs, listed)).find((item) => item.displayTitle.endsWith(` ${inputs.tag}`));
     if (found !== undefined) {
       console.error(`${found.displayTitle}: ${found.url}`);
       return found;
     }
-    yield* Effect.sleep("2 seconds");
+    yield* Effect.sleep("5 seconds");
   }
-  return yield* new FarmFailure({ problem: `no ${workflow} run named ${inputs.tag} appeared within a minute` });
+  return yield* new FarmFailure({ problem: `no ${workflow} run named ${inputs.tag} appeared within two minutes` });
 });
 
 /** A queued or running run of `workflow` whose name starts with `prefix`, announced, so a second caller for the same commit joins it instead of starting another. */
@@ -171,20 +184,25 @@ export function summaryLines(summary: Summary): { readonly lines: readonly strin
  */
 export const farmTest = (options: { readonly ref: string | undefined; readonly wait: boolean }) => Effect.scoped(Effect.gen(function*() {
   const repo = yield* currentRepo;
-  const { ref, scratch } = yield* resolveRef(options.ref, repo);
   const started = performance.now();
-  yield* Effect.gen(function*() {
-    const found = (yield* activeRun(repo, "farm-test.yml", `Farm test ${ref} `)) ?? (yield* dispatch(repo, "farm-test.yml", { ref, tag: runTag() }));
-    if (!options.wait && scratch === undefined) return;
-    const state = yield* waitFor(repo, found.databaseId);
-    console.error(`${((performance.now() - started) / 60000).toFixed(1)} min from dispatch to the result`);
-    const summary = yield* withArtifact(repo, found.databaseId, "farm-test-summary", (folder) => Effect.try({
-      try: () => readFileSync(join(folder, "summary.json"), "utf8"),
-      catch: (cause) => new FarmFailure({ problem: describeCause(cause) }),
-    }).pipe(Effect.flatMap((text) => decoded(Summary, text)))).pipe(Effect.mapError((failure) =>
-      new FarmFailure({ problem: `the run ended ${state.conclusion} without a summary (${failure.message}); gh run view ${found.databaseId} -R ${repo} --log-failed` })));
-    const { lines, ok } = summaryLines(summary);
-    for (const line of lines) console.log(line);
-    if (!ok) return yield* new FarmFailure({ problem: `${ref.slice(0, 12)} failed on the farm: ${found.url}` });
+  // A commit another caller is already testing joins that run: no scratch push, no dispatch.
+  const sha = yield* run(["git", "rev-parse", "--verify", `${options.ref ?? "HEAD"}^{commit}`]);
+  const joined = yield* activeRun(repo, "farm-test.yml", `Farm test ${sha} `);
+  if (joined !== undefined && !options.wait) return;
+  const { ref, found } = joined !== undefined ? { ref: sha, found: joined } : yield* Effect.gen(function*() {
+    const { ref, scratch } = yield* resolveRef(options.ref, repo);
+    const found = yield* dispatch(repo, "farm-test.yml", { ref, tag: runTag() });
+    return { ref, found: !options.wait && scratch === undefined ? undefined : found };
   });
+  if (found === undefined) return;
+  const state = yield* waitFor(repo, found.databaseId);
+  console.error(`${((performance.now() - started) / 60000).toFixed(1)} min from dispatch to the result`);
+  const summary = yield* withArtifact(repo, found.databaseId, "farm-test-summary", (folder) => Effect.try({
+    try: () => readFileSync(join(folder, "summary.json"), "utf8"),
+    catch: (cause) => new FarmFailure({ problem: describeCause(cause) }),
+  }).pipe(Effect.flatMap((text) => decoded(Summary, text)))).pipe(Effect.mapError((failure) =>
+    new FarmFailure({ problem: `the run ended ${state.conclusion} without a summary (${failure.message}); gh run view ${found.databaseId} -R ${repo} --log-failed` })));
+  const { lines, ok } = summaryLines(summary);
+  for (const line of lines) console.log(line);
+  if (!ok) return yield* new FarmFailure({ problem: `${ref.slice(0, 12)} failed on the farm: ${found.url}` });
 }));
