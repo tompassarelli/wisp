@@ -103,8 +103,9 @@ test("[repro #74] farm startup deletes stale refs and keeps recent and active-ru
     stub(bin, "gh", `
 if (args[0] === "repo") { console.log("owner/repo"); process.exit(0); }
 if (args[1] === "graphql") { console.log(${JSON.stringify(JSON.stringify([{ data: { repository: { refs: { nodes: refs.slice(0, 2) } } } }, { data: { repository: { refs: { nodes: refs.slice(2) } } } }]))}); process.exit(0); }
-if (args[1]?.includes("status=queued")) { console.log(JSON.stringify([[{head_branch:"farm/queued",head_sha:"main",display_title:"Queued"}]])); process.exit(0); }
-if (args[1]?.includes("status=in_progress")) { console.log(JSON.stringify([[{head_branch:"main",head_sha:"main",display_title:"Farm test ${"3".repeat(40)} tag"}],[{head_branch:"main",head_sha:"${"4".repeat(40)}",display_title:"Running"}]])); process.exit(0); }
+if (args.includes("--slurp") && args.includes("--jq")) { console.error("the --slurp option is not supported with --jq"); process.exit(1); }
+if (args[1]?.includes("status=queued")) { console.log(JSON.stringify([{workflow_runs:[{head_branch:"farm/queued",head_sha:"main",display_title:"Queued"}]}])); process.exit(0); }
+if (args[1]?.includes("status=in_progress")) { console.log(JSON.stringify([{workflow_runs:[{head_branch:"main",head_sha:"main",display_title:"Farm test ${"3".repeat(40)} tag"}]},{workflow_runs:[{head_branch:"main",head_sha:"${"4".repeat(40)}",display_title:"Running"}]}])); process.exit(0); }
 if (args[0] === "api" && args[2] === "DELETE") { appendFileSync(${JSON.stringify(log)}, args[3] + "\\n"); process.exit(0); }
 process.exit(1);`);
     const program = `import {Effect} from 'effect'; import {currentRepo} from './scripts/wisp/farm'; await Effect.runPromise(currentRepo);`;

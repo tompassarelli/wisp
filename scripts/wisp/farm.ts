@@ -108,7 +108,7 @@ export const decoded = <S extends Schema.Top & { readonly DecodingServices: neve
 const ScratchPages = Schema.Array(Schema.Struct({ data: Schema.Struct({ repository: Schema.Struct({ refs: Schema.Struct({
   nodes: Schema.Array(Schema.Struct({ name: Schema.String, target: Schema.Struct({ oid: Schema.String, committedDate: Schema.String }) })),
 }) }) }) }));
-const ActivePages = Schema.Array(Schema.Array(Schema.Struct({ head_branch: Schema.NullOr(Schema.String), head_sha: Schema.String, display_title: Schema.String })));
+const ActivePages = Schema.Array(Schema.Struct({ workflow_runs: Schema.Array(Schema.Struct({ head_branch: Schema.NullOr(Schema.String), head_sha: Schema.String, display_title: Schema.String })) }));
 
 /** Removes farm branches older than a day unless a live run still uses them. */
 export const sweepScratch = (repo: string) => Effect.gen(function*() {
@@ -120,8 +120,8 @@ export const sweepScratch = (repo: string) => Effect.gen(function*() {
   if (stale.length === 0) return;
   const active = [];
   for (const status of ["queued", "in_progress"]) {
-    const pages = yield* decoded(ActivePages, yield* run(["gh", "api", `repos/${repo}/actions/runs?status=${status}&per_page=100`, "--paginate", "--slurp", "--jq", ".workflow_runs | map({head_branch,head_sha,display_title})"]));
-    active.push(...pages.flat());
+    const pages = yield* decoded(ActivePages, yield* run(["gh", "api", `repos/${repo}/actions/runs?status=${status}&per_page=100`, "--paginate", "--slurp"]));
+    active.push(...pages.flatMap((page) => page.workflow_runs));
   }
   for (const ref of stale) {
     const branch = `farm/${ref.name}`;
