@@ -3,8 +3,8 @@
 `war3-model.mjs` and `war3-model.d.mts` build
 4eb0da/war3-model's npm 4.0.1 source revision
 `542d884380c358b19db1b25f2d7d1072dd8c636f` with the adjacent source patch.
-The owning source commit is `2d7b6490495240244808883876458a8bfb1bfad6`
-in `~/code/war3-model/worktrees/hd-prefilter-precision`.
+The owning source commit is `fd91b13bbfeeee30efa360496cbf2dbd03fb87ee` (branch `effects-72`, on top of
+`2d7b6490495240244808883876458a8bfb1bfad6`) in `~/code/war3-model/worktrees/effects-72`.
 
 The HD environment prefilter shader reverses 32-bit sample indices.
 The fragment shader's default medium integer precision truncates those
@@ -19,6 +19,11 @@ material layers. The renderer now identifies HD materials by their shader
 type, and draws weighted classic models through its existing WebGL software
 skin path, applying all four bone weights instead of averaging bone groups.
 This preserves the native classic texture layers without inventing PBR slots.
+
+Layers multiply their own and their geoset's animated alpha into the fragment
+alpha, and additive layers blend with (source alpha, one), as the MDX filter
+mode tables describe. Particle texture cells run row by row and repeat past
+the grid's last cell.
 
 Source: <https://github.com/4eb0da/war3-model>.
 License: MIT, Copyright (c) 2017-2023 4eb0da. The package retains LICENSE
