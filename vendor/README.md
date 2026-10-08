@@ -3,7 +3,7 @@
 `war3-model.mjs` and `war3-model.d.mts` build
 4eb0da/war3-model's npm 4.0.1 source revision
 `542d884380c358b19db1b25f2d7d1072dd8c636f` with the adjacent source patch.
-The owning source commit is `fd91b13bbfeeee30efa360496cbf2dbd03fb87ee` (branch `effects-72`, on top of
+The owning source commit is `c6db69929830a96ac009a93caf6c7dad8701f919` (branch `effects-72`, on top of
 `2d7b6490495240244808883876458a8bfb1bfad6`) in `~/code/war3-model/worktrees/effects-72`.
 
 The HD environment prefilter shader reverses 32-bit sample indices.
@@ -20,9 +20,10 @@ type, and draws weighted classic models through its existing WebGL software
 skin path, applying all four bone weights instead of averaging bone groups.
 This preserves the native classic texture layers without inventing PBR slots.
 
-Layers multiply their own and their geoset's animated alpha into the fragment
-alpha, and additive layers blend with (source alpha, one), as the MDX filter
-mode tables describe. Particle texture cells run row by row and repeat past
+Layers multiply their own and their geoset's animated alpha and the model's
+alpha (`setInstanceAlpha`, an effect's alpha) into the fragment alpha, and
+additive layers blend with (source alpha, one), as the MDX filter mode tables
+describe. `layerOpacity` and `layerBlendFactors` export those rules. Particle texture cells run row by row and repeat past
 the grid's last cell.
 
 Wisp adds three changes to the built file. Light records read the 1200,

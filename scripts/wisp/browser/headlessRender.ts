@@ -148,7 +148,7 @@ let gl: WebGL2RenderingContext;
 const models = new Map<string, Promise<model.Model>>();
 const textures = new Map<string, Promise<HTMLCanvasElement>>();
 const tinted = new Map<string, HTMLCanvasElement>();
-interface ModelInstance { renderer: ModelRenderer; model: model.Model; path: string; sequences: AnimationSequence[]; sequence: number; clock: number; alpha: number; originalAlpha: (model.AnimVector | number)[] }
+interface ModelInstance { renderer: ModelRenderer; model: model.Model; path: string; sequences: AnimationSequence[]; sequence: number; clock: number }
 const instances = new Map<number, ModelInstance>();
 const preparedModels = new Map<string, ModelInstance>();
 async function asset(path: string): Promise<ArrayBuffer> {
@@ -265,29 +265,19 @@ async function prepareInstance(pose: EffectPose) {
   return instance;
 }
 async function createInstance(path: string): Promise<ModelInstance> {
-  const original = await modelAt(path);
-  // Geometry and animation tables are read-only; opacity entries must belong to each instance.
-  const data = { ...original, GeosetAnims: original.GeosetAnims.map(animation => ({ ...animation })) };
-  for (let index = 0; index < data.Geosets.length; index++) if (!data.GeosetAnims.some((animation) => animation.GeosetId === index)) data.GeosetAnims.push({ GeosetId: index, Alpha: 1, Color: new Float32Array([1, 1, 1]), Flags: 0 });
+  const data = await modelAt(path);
   const renderer = new ModelRenderer(data); renderer.initGL(gl);
   for (const texture of data.Textures) if (texture.Image !== "") {
     const bitmap = await textureAt(texture.Image), context = bitmap.getContext("2d");
     if (context !== null) renderer.setTextureImageData(texture.Image, [context.getImageData(0, 0, bitmap.width, bitmap.height)]);
   }
   const sequences = data.Sequences.map((sequence) => ({ name: sequence.Name, start: sequence.Interval[0] ?? 0, end: sequence.Interval[1] ?? 0, looping: !sequence.NonLooping, rarity: sequence.Rarity }));
-  return { renderer, model: data, path, sequences, sequence: -2, clock: 0, alpha: 255, originalAlpha: data.GeosetAnims.map((animation) => animation.Alpha) };
+  return { renderer, model: data, path, sequences, sequence: -2, clock: 0 };
 }
 async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, light: WorldLight | undefined, fog: ReturnType<typeof sceneFog>) {
   const instance = await prepareInstance(pose);
   const { renderer, model: data } = instance;
-  if (instance.alpha !== pose.alpha) {
-    for (let index = 0; index < data.GeosetAnims.length; index++) {
-      const animation = data.GeosetAnims[index], original = instance.originalAlpha[index];
-      if (animation === undefined || original === undefined) continue;
-      animation.Alpha = typeof original === "number" ? original * pose.alpha / 255 : { ...original, Keys: original.Keys.map((key) => ({ ...key, Vector: new Float32Array(Array.from(key.Vector, (value) => value * pose.alpha / 255)) })) };
-    }
-    instance.alpha = pose.alpha;
-  }
+  renderer.setInstanceAlpha(pose.alpha / 255);
   renderer.setCamera(new Float32Array(view.eye), view.quaternion);
   const kind = pose.unit === true ? "unit" : "effect";
   const sample = animationSample(instance.sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, kind);

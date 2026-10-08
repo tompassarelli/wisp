@@ -6312,6 +6312,45 @@ var ParticlesController = class {
 	}
 };
 //#endregion
+//#region renderer/layerOpacity.ts
+var ZERO = 0, ONE = 1, SRC_COLOR = 768, SRC_ALPHA = 770, ONE_MINUS_SRC_ALPHA = 771, DST_COLOR = 774;
+/** GL blend factors [source RGB, destination RGB, source alpha, destination alpha] for a layer's filter mode; None draws without blending. */
+function layerBlendFactors(filterMode) {
+	switch (filterMode) {
+		case FilterMode.Transparent:
+		case FilterMode.Blend: return [
+			SRC_ALPHA,
+			ONE_MINUS_SRC_ALPHA,
+			ONE,
+			ONE_MINUS_SRC_ALPHA
+		];
+		case FilterMode.Additive:
+		case FilterMode.AddAlpha: return [
+			SRC_ALPHA,
+			ONE,
+			SRC_ALPHA,
+			ONE
+		];
+		case FilterMode.Modulate: return [
+			ZERO,
+			SRC_COLOR,
+			ZERO,
+			ONE
+		];
+		case FilterMode.Modulate2x: return [
+			DST_COLOR,
+			SRC_COLOR,
+			ZERO,
+			ONE
+		];
+		default: return null;
+	}
+}
+/** A layer fragment's alpha: its geoset's alpha times its own times the model's (an effect's alpha), whatever its filter mode. */
+function layerOpacity(geosetAlpha, layerAlpha, instanceAlpha) {
+	return geosetAlpha * layerAlpha * instanceAlpha;
+}
+//#endregion
 //#region renderer/shaders/webgl/ribbon.vs.glsl?raw
 var ribbon_vs_default = "attribute vec3 aVertexPosition;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\n\nvarying vec2 vTextureCoord;\n\nvoid main(void) {\n    vec4 position = vec4(aVertexPosition, 1.0);\n    gl_Position = uPMatrix * uMVMatrix * position;\n    vTextureCoord = aTextureCoord;\n}\n";
 //#endregion
@@ -7228,6 +7267,7 @@ var GPU_LAYER_PROPS = [
 ];
 var ModelRenderer = class {
 	constructor(model) {
+		this.instanceAlpha = 1;
 		this.gpuPipelines = {};
 		this.vertexBuffer = [];
 		this.normalBuffer = [];
@@ -9860,7 +9900,11 @@ var ModelRenderer = class {
 	/** A layer's opacity is its geoset's animated alpha times the layer's own animated alpha. */
 	setLayerAlpha(geoset, layer) {
 		const alpha = typeof layer.Alpha === "number" ? layer.Alpha : layer.Alpha === void 0 ? 1 : this.interp.num(layer.Alpha) ?? 1;
-		this.gl.uniform1f(this.shaderProgramLocations.layerAlphaUniform, this.rendererData.geosetAlpha[geoset] * alpha);
+		this.gl.uniform1f(this.shaderProgramLocations.layerAlphaUniform, layerOpacity(this.rendererData.geosetAlpha[geoset], alpha, this.instanceAlpha));
+	}
+	/** The whole model's opacity, as a game sets an effect's alpha. Particles and ribbons ignore it. */
+	setInstanceAlpha(alpha) {
+		this.instanceAlpha = alpha;
 	}
 	setLayerProps(layer, textureID) {
 		const texture = this.model.Textures[textureID];
@@ -9869,6 +9913,12 @@ var ModelRenderer = class {
 		else this.gl.enable(this.gl.CULL_FACE);
 		if (layer.FilterMode === FilterMode.Transparent) this.gl.uniform1f(this.shaderProgramLocations.discardAlphaLevelUniform, .75);
 		else this.gl.uniform1f(this.shaderProgramLocations.discardAlphaLevelUniform, 0);
+		const factors = layerBlendFactors(layer.FilterMode) ?? [
+			1,
+			0,
+			1,
+			0
+		];
 		if (layer.FilterMode === FilterMode.None) {
 			this.gl.disable(this.gl.BLEND);
 			this.gl.enable(this.gl.DEPTH_TEST);
@@ -9876,32 +9926,32 @@ var ModelRenderer = class {
 		} else if (layer.FilterMode === FilterMode.Transparent) {
 			this.gl.enable(this.gl.BLEND);
 			this.gl.enable(this.gl.DEPTH_TEST);
-			this.gl.blendFuncSeparate(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA, this.gl.ONE, this.gl.ONE_MINUS_SRC_ALPHA);
+			this.gl.blendFuncSeparate(...factors);
 			this.gl.depthMask(true);
 		} else if (layer.FilterMode === FilterMode.Blend) {
 			this.gl.enable(this.gl.BLEND);
 			this.gl.enable(this.gl.DEPTH_TEST);
-			this.gl.blendFuncSeparate(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA, this.gl.ONE, this.gl.ONE_MINUS_SRC_ALPHA);
+			this.gl.blendFuncSeparate(...factors);
 			this.gl.depthMask(false);
 		} else if (layer.FilterMode === FilterMode.Additive) {
 			this.gl.enable(this.gl.BLEND);
 			this.gl.enable(this.gl.DEPTH_TEST);
-			this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE);
+			this.gl.blendFuncSeparate(...factors);
 			this.gl.depthMask(false);
 		} else if (layer.FilterMode === FilterMode.AddAlpha) {
 			this.gl.enable(this.gl.BLEND);
 			this.gl.enable(this.gl.DEPTH_TEST);
-			this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE);
+			this.gl.blendFuncSeparate(...factors);
 			this.gl.depthMask(false);
 		} else if (layer.FilterMode === FilterMode.Modulate) {
 			this.gl.enable(this.gl.BLEND);
 			this.gl.enable(this.gl.DEPTH_TEST);
-			this.gl.blendFuncSeparate(this.gl.ZERO, this.gl.SRC_COLOR, this.gl.ZERO, this.gl.ONE);
+			this.gl.blendFuncSeparate(...factors);
 			this.gl.depthMask(false);
 		} else if (layer.FilterMode === FilterMode.Modulate2x) {
 			this.gl.enable(this.gl.BLEND);
 			this.gl.enable(this.gl.DEPTH_TEST);
-			this.gl.blendFuncSeparate(this.gl.DST_COLOR, this.gl.SRC_COLOR, this.gl.ZERO, this.gl.ONE);
+			this.gl.blendFuncSeparate(...factors);
 			this.gl.depthMask(false);
 		}
 		if (texture.Image) {
@@ -9933,6 +9983,12 @@ var ModelRenderer = class {
 		else this.gl.enable(this.gl.CULL_FACE);
 		if (baseLayer.FilterMode === FilterMode.Transparent) this.gl.uniform1f(this.shaderProgramLocations.discardAlphaLevelUniform, .75);
 		else this.gl.uniform1f(this.shaderProgramLocations.discardAlphaLevelUniform, 0);
+		const factors = layerBlendFactors(baseLayer.FilterMode) ?? [
+			1,
+			0,
+			1,
+			0
+		];
 		if (baseLayer.FilterMode === FilterMode.None) {
 			this.gl.disable(this.gl.BLEND);
 			this.gl.enable(this.gl.DEPTH_TEST);
@@ -9940,32 +9996,32 @@ var ModelRenderer = class {
 		} else if (baseLayer.FilterMode === FilterMode.Transparent) {
 			this.gl.enable(this.gl.BLEND);
 			this.gl.enable(this.gl.DEPTH_TEST);
-			this.gl.blendFuncSeparate(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA, this.gl.ONE, this.gl.ONE_MINUS_SRC_ALPHA);
+			this.gl.blendFuncSeparate(...factors);
 			this.gl.depthMask(true);
 		} else if (baseLayer.FilterMode === FilterMode.Blend) {
 			this.gl.enable(this.gl.BLEND);
 			this.gl.enable(this.gl.DEPTH_TEST);
-			this.gl.blendFuncSeparate(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA, this.gl.ONE, this.gl.ONE_MINUS_SRC_ALPHA);
+			this.gl.blendFuncSeparate(...factors);
 			this.gl.depthMask(false);
 		} else if (baseLayer.FilterMode === FilterMode.Additive) {
 			this.gl.enable(this.gl.BLEND);
 			this.gl.enable(this.gl.DEPTH_TEST);
-			this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE);
+			this.gl.blendFuncSeparate(...factors);
 			this.gl.depthMask(false);
 		} else if (baseLayer.FilterMode === FilterMode.AddAlpha) {
 			this.gl.enable(this.gl.BLEND);
 			this.gl.enable(this.gl.DEPTH_TEST);
-			this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE);
+			this.gl.blendFuncSeparate(...factors);
 			this.gl.depthMask(false);
 		} else if (baseLayer.FilterMode === FilterMode.Modulate) {
 			this.gl.enable(this.gl.BLEND);
 			this.gl.enable(this.gl.DEPTH_TEST);
-			this.gl.blendFuncSeparate(this.gl.ZERO, this.gl.SRC_COLOR, this.gl.ZERO, this.gl.ONE);
+			this.gl.blendFuncSeparate(...factors);
 			this.gl.depthMask(false);
 		} else if (baseLayer.FilterMode === FilterMode.Modulate2x) {
 			this.gl.enable(this.gl.BLEND);
 			this.gl.enable(this.gl.DEPTH_TEST);
-			this.gl.blendFuncSeparate(this.gl.DST_COLOR, this.gl.SRC_COLOR, this.gl.ZERO, this.gl.ONE);
+			this.gl.blendFuncSeparate(...factors);
 			this.gl.depthMask(false);
 		}
 		this.gl.activeTexture(this.gl.TEXTURE0);
@@ -9992,6 +10048,6 @@ var ModelRenderer = class {
 	}
 };
 //#endregion
-export { ModelRenderer, blpimage_exports as blp, decode as decodeBLP, generate as generateMDL, generate$1 as generateMDX, getImageData as getBLPImageData, model_exports as model, parse as parseMDL, parse$1 as parseMDX };
+export { ModelRenderer, blpimage_exports as blp, decode as decodeBLP, generate as generateMDL, generate$1 as generateMDX, getImageData as getBLPImageData, layerBlendFactors, layerOpacity, model_exports as model, parse as parseMDL, parse$1 as parseMDX };
 
 //# sourceMappingURL=war3-model.mjs.map
