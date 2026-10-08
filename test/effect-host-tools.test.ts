@@ -11,7 +11,6 @@ const browserPages = (file: string) => file.startsWith("scripts/wisp/browser/") 
 const notYetEffect = [
   "scripts/package.ts",
   "scripts/wisp/ciMapBuild.ts",
-  "scripts/wisp/engine/drive.ts",
   "scripts/wisp/engine/stopWatch.ts",
   "scripts/wisp/lan/admission.ts",
   "scripts/wisp/lan/dummy.ts",

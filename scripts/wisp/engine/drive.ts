@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { Effect, Schedule, Schema } from "effect";
 import { driverCommandFile, driverReadyFile, driverStatusFile } from "../../../src/runtime/nativeDriver";
 import { hostPath, linePreloadFile, payloadPreloadFile, preloadLines } from "../boundary";
 import { dataDirectory } from "../gameFiles";
@@ -71,14 +72,27 @@ export function publishDriverCommand(clients: readonly DriverClient[], prefix: s
   return serial;
 }
 
-export async function waitDriverCommand(clients: readonly DriverClient[], prefix: string, serial: number, timeoutMs = 10000, frame?: number): Promise<readonly DriverStatus[]> {
-  const deadline = performance.now() + timeoutMs;
-  while (true) {
-    const statuses = clients.map(client => currentStatus(client, prefix));
-    if (statuses.some(status => status?.refused)) throw new Error(`native driver refused command ${serial}: clients received different payloads`);
-    const completed = statuses.filter((status): status is DriverStatus => status !== undefined && status.serial === serial && (frame === undefined || status.frame === frame && status.paused));
-    if (completed.length === clients.length) return completed;
-    if (performance.now() >= deadline) throw new Error(`native driver command ${serial} timed out: ${JSON.stringify(statuses)}`);
-    await Bun.sleep(10);
+export class DriverFailure extends Schema.TaggedError<DriverFailure>()("DriverFailure", {
+  problem: Schema.String,
+}) {
+  override get message(): string {
+    return this.problem;
   }
 }
+
+/** Reads every client's receipt every 10 ms until all completed `serial` (paused at `frame` when given), within `timeoutMs`. */
+export const waitDriverCommand = (clients: readonly DriverClient[], prefix: string, serial: number, timeoutMs = 10000, frame?: number) => {
+  let statuses: readonly (DriverStatus | undefined)[] = [];
+  const look = Effect.suspend(() => {
+    statuses = clients.map(client => currentStatus(client, prefix));
+    if (statuses.some(status => status?.refused)) return Effect.fail(new DriverFailure({ problem: `native driver refused command ${serial}: clients received different payloads` }));
+    const completed = statuses.filter((status): status is DriverStatus => status !== undefined && status.serial === serial && (frame === undefined || status.frame === frame && status.paused));
+    return Effect.succeed(completed.length === clients.length ? completed : undefined);
+  });
+  return look.pipe(
+    Effect.repeat({ schedule: Schedule.spaced("10 millis"), until: (completed) => completed !== undefined }),
+    Effect.timeoutOrElse({ duration: timeoutMs, orElse: () => Effect.fail(new DriverFailure({ problem: `native driver command ${serial} timed out: ${JSON.stringify(statuses)}` })) }),
+    // `until` ended the repeat, so every client completed.
+    Effect.map((completed) => completed!),
+  );
+};

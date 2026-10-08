@@ -370,11 +370,11 @@ const drive = (clientsFile: string, prefix: string): Command => args => Effect.g
   const clients = yield* namedClients(clientsFile, args);
   const words = positionals(args, ["client", "frames", "timeout", "out"]);
   const [action, ...rest] = words;
-  const statuses = yield* Effect.tryPromise({
-    try: async () => {
+  const statuses = yield* Effect.try({
+    try: () => {
       if (action === "status") {
         verifyDriverClients(clients);
-        return clients.map(client => readDriverStatus(client, prefix));
+        return Effect.succeed(clients.map(client => readDriverStatus(client, prefix)));
       }
       if (action === undefined) throw new Error("drive takes SCRIPT, status, pause, resume [FRAME], or step N");
       const command = ["pause", "resume", "step", "reset", "capture"].includes(action) ? words.join(" ")
@@ -388,7 +388,7 @@ const drive = (clientsFile: string, prefix: string): Command => args => Effect.g
       return waitDriverCommand(clients, prefix, serial, Number(timeout) * 1000, frame);
     },
     catch: cause => new EngineFailure({ problem: describeCause(cause) }),
-  });
+  }).pipe(Effect.flatten, Effect.mapError(failure => failure instanceof EngineFailure ? failure : new EngineFailure({ problem: failure.message })));
   const text = JSON.stringify({ transport: "file", clients: statuses });
   const [out] = flagValues(args, "out");
   if (out !== undefined) yield* attempt(`write ${out}`, () => writeFileSync(out, `${text}\n`));
