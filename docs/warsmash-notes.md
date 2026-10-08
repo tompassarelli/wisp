@@ -335,7 +335,7 @@ Hidden effects are collapsed with scale 0 and parked below the floor
 before `DestroyEffect`, and the fighter light is switched off before it,
 because teardown can be deferred. Animation selection, seek and blending on
 effects belong to wisp#58 and are not repeated here. Fixture:
-`test/effects59/` (six cases, Bun and 32-bit Lua in
+`test/effects59/` (seven cases and a Death timeline, Bun and 32-bit Lua in
 `test/headless-effects.test.ts`, native map via its `build.ts`).
 
 | Behavior Smashcraft relies on | Warsmash rule | Wisp before #59 | Verdict |
@@ -344,9 +344,10 @@ effects belong to wisp#58 and are not repeated here. Fixture:
 | `BlzSetSpecialEffectPosition`/`X`/`Y`/`Z` and read-back | Not registered in this revision; every effect real is a binary32 `real` argument | Stored unrounded; Bun kept doubles that Lua32 rounds; read back at once | **Mismatch, fixed**: stored as binary32. Axis setters change only their axis (case `axis-setters-independent`); reads in the same callback see the write (`position-read-in-same-call`) |
 | `BlzSetSpecialEffectScale(e, 0)` and parking below the floor (`hideEffect`) | Not registered; no rule | Scale 0 kept; position kept wherever written | **Match** for the script-visible part: case `scale-zero-parked` reads the parked Z. Whether scale 0 also stops particles is visual and stays with the capture |
 | Scale, matrix scale, yaw/pitch/roll, time scale, time and blend time values | Not registered; binary32 `real` arguments | Stored unrounded | **Mismatch, fixed**: all stored as binary32; `MatrixScale` multiplies the current matrix scale and rounds each product. None of them move the effect (case `scale-orientation-time-keep-position`) |
-| `BlzSetSpecialEffectMatrixScale` compounding | Not registered; no rule | Each call multiplies the current matrix scale until `BlzResetSpecialEffectMatrix` | **Unresolved, no getter**: Smashcraft sets it once per new deck, but `-dev backdrop on` (`showBackdrop`) reapplies it to existing scenery, which compounds if the real game multiplies. The capture's backdrop toggle decides |
+| `BlzSetSpecialEffectMatrixScale` compounding | Not registered, nor is `BlzResetSpecialEffectMatrix`; no rule | Each call multiplies the current matrix scale until `BlzResetSpecialEffectMatrix` | **Unresolved, no getter and no Warsmash rule**: Smashcraft sets it once per new deck, but `-dev backdrop on` (`showBackdrop`) reapplies it to existing scenery, which compounds if the real game multiplies. The capture's backdrop toggle decides |
 | Position held between frames, frozen (time scale 0) or playing | Effects are placed once; only attached effects follow a parent | Position changes only through setters | **Match**: case `held-after-quarter-second` reads both 0.25 s later unmoved |
-| `DestroyEffect` lifetime | The handle stops looping its stand animation, finishes the current sequence, plays Death, then disappears; an attached effect detaches first | Removed from the scene at once; later setters and reads on the handle do nothing | **Mismatch, not fixed in #59**: the visible tail is drawn by the renderer, which needs each model's sequence lengths, and a frozen (time scale 0) effect's tail never ends. Script-visible state matches: Smashcraft never touches a destroyed handle. Smashcraft already hides the victory pose and light before destroying them |
+| `DestroyEffect` lifetime | The drawn instance stops looping, plays the model's Death sequence, then is removed; without one it is removed when its current sequence ends. Warsmash's engine-side removals (buffs, missiles) start Death at once; its `DestroyEffect` native first lets the current loop finish | Removed from the scene at once; later setters and reads on the handle do nothing | **Mismatch, fixed; now matches**: the handle is unreachable at once (setters do nothing, reads 0; case `destroyed-frozen-reads`). The drawn effect switches to its Death sequence at once, at its last time scale, and is gone on that sequence's last millisecond; without a Death sequence it is gone at once. Lengths come from the model files the renderer loads (`effectDeaths`). Test: the Death timeline in Bun and Lua32 (gone at frame 120 for a 2 s Death). Whether 3.0.1 also finishes the current loop first is the capture's playing effect at (200, 0) |
+| `DestroyEffect` on an effect frozen at time scale 0 | An instance advances `dt × 1000 × speed` ms a frame and ends a non-looping sequence only when it reaches the sequence's last millisecond; destroying doesn't change the speed, so a frozen effect never ends and is never removed | Removed from the scene at once | **Mismatch, fixed; now matches**: the frozen effect stays drawn on Death's first frame for good (timeline frame 600). Smashcraft hides its victory pose and light before destroying them, so a frozen leftover is invisible. Capture: the frozen effect at (-200, 0) |
 | `AddSpecialEffectTarget` attachment | Picks the shortest attachment name containing every requested token, `origin` when empty; falls back to the unit's position | Placed at the unit's X/Y, no attachment | **Not relied on**: no Smashcraft call |
 
 Wisp still creates point effects at Z 0 because headless has no terrain; a
@@ -355,15 +356,19 @@ ground height natively.
 [Effect natives](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4415-L4439),
 [destroy](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4573-L4580),
 [point and attachment placement](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/War3MapViewer.java#L2104-L2203),
-[effect lifetime](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/rendersim/RenderSpellEffect.java).
+[effect lifetime](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/rendersim/RenderSpellEffect.java),
+[sequence end and speed](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/mdx/MdxComplexInstance.java#L580-L637).
 
 **Capture needed** (wisp#59's third box, batched with #56–#58): build
 `bun test/effects59/build.ts BASE.w3m OUT.w3x`, play it once on 3.0.1 with
 two clients, collect `effects-p0.txt` and `effects-p1.txt`, and compare them
 with `EXPECTED` in `test/headless-effects.test.ts` (`created-at-point`'s Z is
 the base map's ground height at (100.25, -50.5), not 0, on a non-flat map).
-In the same Smashcraft session: end one match and record whether any effect
-stays visible after teardown, and toggle `-dev backdrop off` then `on` and
+While the map runs, watch FaerieFireTarget at (-200, 0), destroyed frozen at
+time scale 0 (expected: stays, frozen), and at (200, 0), destroyed while
+playing (expected: Death plays about 2 s, then gone; note whether its stand
+loop finishes first). In the same Smashcraft session: end one match and
+record whether any effect stays visible after teardown, and toggle `-dev backdrop off` then `on` and
 compare the deck and scenery widths before and after.
 
 ### Effect placement and unavailable effect setters

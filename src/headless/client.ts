@@ -100,10 +100,19 @@ export interface EffectPose extends AnimationState {
   matrixScale: [number, number, number];
   /** A matrix scale of zero on some axis since the matrix was last reset. */
   flat: boolean;
+  /**
+   * Set by DestroyEffect when the model has a Death sequence: its length in
+   * seconds. The map can no longer reach the effect, which plays "death" at
+   * its last time scale and is gone once animationElapsed reaches its last millisecond.
+   */
+  death?: number;
 }
 
 const copyBlend = (blend: AnimationBlend | undefined): AnimationBlend | undefined =>
   blend === undefined ? undefined : { from: { ...blend.from, subAnimations: [...blend.from.subAnimations] }, remaining: blend.remaining };
+
+/** Seconds of a model's Death sequence at time scale 1; undefined when it has none. */
+export type EffectDeaths = (this: void, model: string) => number | undefined;
 
 export interface CameraPose {
   readonly x: number;
@@ -280,6 +289,8 @@ export interface ClientOptions {
   readonly files?: ClientFiles;
   /** Frame definitions (wisp:docs/ui.md) whose trees BlzCreateFrame makes by name, as their generated FDF does in Warcraft. */
   readonly frames?: readonly FrameTemplate[];
+  /** Death sequence lengths of the models drawn; without it a destroyed effect is gone at once. */
+  readonly effectDeaths?: EffectDeaths;
 }
 
 export const FRAMES_PER_SECOND = 60;
@@ -498,7 +509,9 @@ export class HeadlessClient {
   private readonly heldKeys = new Set<number>();
   private readonly memo = new Map<string, Frame>();
   private allPlayers: Handle | undefined;
+  /** Effects shown, in creation order, including destroyed ones still playing Death. */
   private readonly effects = new Map<Handle, EffectPose>();
+  private readonly effectDeaths: EffectDeaths | undefined;
   private readonly units = new Map<Handle, Unit>();
   private readonly unitStates: UnitStateFixtures;
   private readonly sounds = new Map<Handle, SoundState>();
@@ -525,6 +538,7 @@ export class HeadlessClient {
       writeLife: (unit, life) => this.setLife(unit as Unit, life),
     }, options.inventory);
     this.unitStates = options.unitStates ?? {};
+    this.effectDeaths = options.effectDeaths;
     this.slot = options.slot;
     this.scope = options.scope;
     this.filePrefix = options.filePrefix;
@@ -707,8 +721,28 @@ export class HeadlessClient {
     return describeValue(field);
   }
 
-  private playEffect(effect: Handle, animation: string | number, timeScale?: number): void {
+  /** The effect the map can still change: made and not destroyed. */
+  private liveEffect(effect: Handle): EffectPose | undefined {
     const pose = this.effects.get(effect);
+    return pose?.death === undefined ? pose : undefined;
+  }
+
+  /** Warcraft plays the model's Death sequence where the effect stands, then removes it (wisp:docs/warsmash-notes.md, "Effects: attachment, scale and lifetime"). */
+  private destroyEffect(effect: Handle): void {
+    const pose = this.liveEffect(effect);
+    if (pose === undefined) return;
+    const death = this.effectDeaths?.(pose.model);
+    if (death === undefined || death <= 0) {
+      this.effects.delete(effect);
+      return;
+    }
+    pose.death = death;
+    pose.queuedAnimations.length = 0;
+    selectAnimation(pose, "death", []);
+  }
+
+  private playEffect(effect: Handle, animation: string | number, timeScale?: number): void {
+    const pose = this.liveEffect(effect);
     if (pose === undefined) return;
     selectAnimation(pose, animation);
     if (timeScale !== undefined) pose.timeScale = f32(timeScale);
@@ -1065,77 +1099,75 @@ export class HeadlessClient {
         const unit = target as Partial<Unit>;
         return this.effectAt(model, unit.x ?? 0, unit.y ?? 0);
       },
-      DestroyEffect: (effect: Handle) => {
-        this.effects.delete(effect);
-      },
-      BlzRemoveEffect: (effect: Handle) => { this.effects.delete(effect); },
+      DestroyEffect: (effect: Handle) => this.destroyEffect(effect),
+      BlzRemoveEffect: (effect: Handle) => { if (this.liveEffect(effect) !== undefined) this.effects.delete(effect); },
       BlzSetSpecialEffectAnimationBlendTime: (effect: Handle, time: number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) pose.animationBlendTime = f32(time);
       },
       BlzSetSpecialEffectAnimation: (effect: Handle, animation: string) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) { pose.queuedAnimations.length = 0; this.playEffect(effect, animation); }
       },
       BlzQueueSpecialEffectAnimation: (effect: Handle, animation: string) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) pose.queuedAnimations.push(animation);
       },
       // Effect reals are stored as binary32 (wisp:docs/warsmash-notes.md, "Effects: attachment, scale and lifetime").
       // An effect that was destroyed or never made changes nothing.
       BlzSetSpecialEffectPosition: (effect: Handle, x: number, y: number, z: number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose === undefined) return;
         pose.x = f32(x);
         pose.y = f32(y);
         pose.z = f32(z);
       },
       BlzSetSpecialEffectX: (effect: Handle, x: number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) pose.x = f32(x);
       },
       BlzSetSpecialEffectY: (effect: Handle, y: number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) pose.y = f32(y);
       },
       BlzSetSpecialEffectZ: (effect: Handle, z: number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) pose.z = f32(z);
       },
       BlzSetSpecialEffectAlpha: (effect: Handle, alpha: number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) pose.alpha = alpha;
       },
       BlzSetSpecialEffectScale: (effect: Handle, scale: number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) pose.scale = f32(scale);
       },
       BlzSetSpecialEffectTimeScale: (effect: Handle, timeScale: number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) pose.timeScale = f32(timeScale);
       },
       BlzSetSpecialEffectTime: (effect: Handle, time: number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) seekAnimation(pose, f32(time));
       },
       BlzPlaySpecialEffect: (effect: Handle, animation: string | number) => this.playEffect(effect, animation),
       BlzPlaySpecialEffectWithTimeScale: (effect: Handle, animation: string | number, timeScale: number) => this.playEffect(effect, animation, timeScale),
       BlzSpecialEffectClearSubAnimations: (effect: Handle) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) pose.subAnimations.length = 0;
       },
       BlzSpecialEffectAddSubAnimation: (effect: Handle, animation: string | number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined && !pose.subAnimations.includes(animation)) pose.subAnimations.push(animation);
       },
       BlzSpecialEffectRemoveSubAnimation: (effect: Handle, animation: string | number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose === undefined) return;
         const index = pose.subAnimations.indexOf(animation);
         if (index >= 0) pose.subAnimations.splice(index, 1);
       },
       BlzSetSpecialEffectOrientation: (effect: Handle, yaw: number, pitch: number, roll: number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) {
           pose.yaw = f32(yaw);
           pose.pitch = f32(pitch);
@@ -1143,34 +1175,34 @@ export class HeadlessClient {
         }
       },
       BlzSetSpecialEffectYaw: (effect: Handle, yaw: number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) pose.yaw = f32(yaw);
       },
       BlzSetSpecialEffectPitch: (effect: Handle, pitch: number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) pose.pitch = f32(pitch);
       },
       BlzSetSpecialEffectRoll: (effect: Handle, roll: number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) pose.roll = f32(roll);
       },
       BlzSetSpecialEffectColor: (effect: Handle, r: number, g: number, b: number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) pose.color = [r, g, b];
       },
       BlzSetSpecialEffectColorByPlayer: (effect: Handle, player: number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) pose.teamColor = player;
       },
       BlzSetSpecialEffectMatrixScale: (effect: Handle, x: number, y: number, z: number) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) {
           pose.matrixScale = [f32(pose.matrixScale[0] * f32(x)), f32(pose.matrixScale[1] * f32(y)), f32(pose.matrixScale[2] * f32(z))];
           pose.flat = pose.matrixScale.includes(0);
         }
       },
       BlzResetSpecialEffectMatrix: (effect: Handle) => {
-        const pose = this.effects.get(effect);
+        const pose = this.liveEffect(effect);
         if (pose !== undefined) {
           pose.flat = false;
           pose.matrixScale = [1, 1, 1];
@@ -1179,9 +1211,9 @@ export class HeadlessClient {
           pose.roll = 0;
         }
       },
-      BlzGetLocalSpecialEffectX: (effect: Handle) => this.effects.get(effect)?.x ?? 0,
-      BlzGetLocalSpecialEffectY: (effect: Handle) => this.effects.get(effect)?.y ?? 0,
-      BlzGetLocalSpecialEffectZ: (effect: Handle) => this.effects.get(effect)?.z ?? 0,
+      BlzGetLocalSpecialEffectX: (effect: Handle) => this.liveEffect(effect)?.x ?? 0,
+      BlzGetLocalSpecialEffectY: (effect: Handle) => this.liveEffect(effect)?.y ?? 0,
+      BlzGetLocalSpecialEffectZ: (effect: Handle) => this.liveEffect(effect)?.z ?? 0,
       I2S: (n: number) => describeNumber(n),
       R2S: (n: number) => n.toFixed(3),
       R2I: (n: number) => (n < 0 ? Math.ceil(n) : Math.floor(n)),
@@ -1268,7 +1300,13 @@ export class HeadlessClient {
       this.frame++;
       this.abilities.tick(f32(1 / FRAMES_PER_SECOND));
       this.scenery.tick(f32(1 / FRAMES_PER_SECOND));
-      for (const pose of this.effects.values()) advanceAnimation(pose, pose.timeScale, 1 / FRAMES_PER_SECOND);
+      const died: Handle[] = [];
+      for (const pose of this.effects.values()) {
+        advanceAnimation(pose, pose.timeScale, 1 / FRAMES_PER_SECOND);
+        // A sequence ends on its last millisecond, as Warcraft's sequence clock does.
+        if (pose.death !== undefined && pose.animationElapsed >= pose.death - f32(0.001)) died.push(pose.handle);
+      }
+      for (const handle of died) this.effects.delete(handle);
       for (const unit of this.units.values()) advanceAnimation(unit, unit.timeScale, 1 / FRAMES_PER_SECOND);
       for (const sound of this.sounds.values()) {
         if (!sound.playing || sound.looping) continue;

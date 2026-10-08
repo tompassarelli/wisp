@@ -1,7 +1,7 @@
 // Headless runs in 32-bit Lua (wisp:docs/headless.md): each simulated client
 // loads the map's compiled bundle into its own environment, whose globals are
 // that client's natives over Lua's own, so clients share no state.
-import type { ClientScope, LocalNatives, MapEntry, IntentionalNoops, HeadlessClient, NativeBehaviors, UnitStateFixtures } from "./client";
+import type { ClientScope, EffectDeaths, LocalNatives, MapEntry, IntentionalNoops, HeadlessClient, NativeBehaviors, UnitStateFixtures } from "./client";
 import type { FrameTemplate } from "./frames";
 import type { SyncDelivery } from "./lockstep";
 import { parseNativeDeclarations } from "./declarations";
@@ -26,6 +26,8 @@ export interface LuaHeadlessMap {
   readonly players?: readonly number[];
   /** Frame definitions (wisp:docs/ui.md) whose trees BlzCreateFrame makes by name, as their generated FDF does in Warcraft. */
   readonly frames?: readonly FrameTemplate[];
+  /** Death sequence lengths of the effect models; without it a destroyed effect is gone at once. */
+  readonly effectDeaths?: EffectDeaths;
 }
 
 /** A file's bytes, for a host program running in Lua. */
@@ -59,6 +61,7 @@ export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: s
     ...(map.unitStates === undefined ? {} : { unitStates: map.unitStates }),
     ...(map.scenery === undefined ? {} : { scenery: map.scenery }),
     ...(map.inventory === undefined ? {} : { inventory: map.inventory }),
+    ...(map.effectDeaths === undefined ? {} : { effectDeaths: map.effectDeaths }),
     natives: (client) => {
       const environment = client.natives;
       setmetatable(environment, { __index: _G });
