@@ -96,6 +96,8 @@ export class PlayMachine extends Context.Service<PlayMachine, {
   readonly openSteam: (url: string) => Effect.Effect<void, PlayProblem>;
   /** Starts a program that outlives play; its output goes to `log`, appended, or nowhere. Returns its pid. */
   readonly start: (command: readonly string[], log?: string) => Effect.Effect<number, PlayProblem>;
+  /** Runs a program as the user service `unit`, which outlives every caller until stopped (wisp:docs/doctor.md, "Clients as services"); its output goes to `log`, appended. */
+  readonly startService: (unit: string, command: readonly string[], log?: string) => Effect.Effect<void, PlayProblem>;
   /** A file's text from byte `from`; undefined while it doesn't exist. */
   readonly read: (path: string, from?: number) => Effect.Effect<string | undefined, PlayProblem>;
   readonly size: (path: string) => Effect.Effect<number | undefined, PlayProblem>;

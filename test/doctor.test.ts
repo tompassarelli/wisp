@@ -125,11 +125,11 @@ function world(scenario: Scenario) {
       state = scenario.afterPlay ?? { kind: "menus", screen: "MAIN_MENU" };
       source = "socket";
     }),
-    start: (command) => Effect.sync(() => {
-      events.push(`start ${command.at(-1)}`);
+    start: () => Effect.die("doctor starts a client's command as a service"),
+    startService: (unit, command) => Effect.sync(() => {
+      events.push(`start ${command.at(-1)} as ${unit}`);
       processes = [...processes, wineserver(60001), launcherProcess(60002)];
       files.set(`${LOGS}/battle.net-20261006T220000.000000.log`, scenario.restartedLog ?? SIGNED_IN);
-      return 60000;
     }),
     read: (path, from = 0) => Effect.sync(() => files.get(path)?.slice(from)),
     size: (path) => Effect.sync(() => files.get(path)?.length),
@@ -278,13 +278,13 @@ test("[spec #22] stuck loading: 120 s on the loading screen ends the game and la
 test("[spec #22] two runtimes on one prefix: ends every program, starts Battle.net alone with its command, launches", async () => {
   const { failure, events } = await world({ processes: "two runtimes" }).run();
   expect(failure).toBeUndefined();
-  expect(events).toEqual(["SIGTERM 43614 51022 43924", "start " + START.at(-1), "launch 60002"]);
+  expect(events).toEqual(["SIGTERM 43614 51022 43924", "start " + START.at(-1) + " as wisp-client-b.service", "launch 60002"]);
 });
 
 test("[spec #22] a launcher whose connection is failing is restarted before launching; a rejected login stops with one line", async () => {
   const lost = await world({ processes: "launcher", launcherLog: LOST, restartedLog: RECONNECTED }).run();
   expect(lost.failure).toBeUndefined();
-  expect(lost.events).toEqual(["SIGTERM 43614 43924", "start " + START.at(-1), "launch 60002"]);
+  expect(lost.events).toEqual(["SIGTERM 43614 43924", "start " + START.at(-1) + " as wisp-client-b.service", "launch 60002"]);
   const rejected = await world({ processes: "launcher", launcherLog: REJECTED }).run();
   expect(rejected.events).toEqual([]);
   expect(rejected.failure?.split("\n")).toHaveLength(1);

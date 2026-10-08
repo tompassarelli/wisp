@@ -17,6 +17,7 @@ import {
 import { type DisplayChange, type DisplaySettings, displayChanges, preferencesPath, withDisplaySettings } from "../warcraft/preferences";
 import { sessionLines, war3LogPath } from "../warcraft/war3Log";
 import type { Client } from "./clients";
+import { clientUnit } from "./clientServices";
 import { type AutopsyOptions, withAutopsy } from "./engine/autopsy";
 import { pollFor } from "./hostProcess";
 import { PlayMachine, type PlayProblem } from "./play";
@@ -390,7 +391,10 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
     const how = start.kind === "steam" ? `the Steam shortcut "${start.name}" (steam ${shortcutUrl(start.appId)})` : `its launch command (${start.command.join(" ")})`;
     yield* say(`starting Battle.net with ${start.kind === "steam" ? `the Steam shortcut "${start.name}"` : "its launch command"}`);
     if (start.kind === "steam") yield* machine.openSteam(shortcutUrl(start.appId)).pipe(Effect.mapError(failed));
-    else yield* say(`launch command running (pid ${yield* machine.start(start.command, start.log).pipe(Effect.mapError(failed))})`);
+    else {
+      yield* machine.startService(clientUnit(name), start.command, start.log).pipe(Effect.mapError(failed));
+      yield* say(`launch command running as the service ${clientUnit(name)}`);
+    }
     const launched = yield* poll(DOCTOR_TIMEOUTS.launcherStart, Effect.gen(function*() {
       const use = yield* prefixState;
       if (use.runtimes.length > 1) return yield* stop(`starting Battle.net left ${use.runtimes.length} Wine runtimes on the prefix (wineserver pids ${pids(use.runtimes)})`);

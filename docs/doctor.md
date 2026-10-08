@@ -142,6 +142,49 @@ Its next start shows the sign-in form, which the next doctor run fills: on
 7 Oct client B went from signed out to signed in that way. Use it to test a
 sign-in, or before handing a client's prefix to another account.
 
+## Clients as services
+
+A client started from a terminal or an agent's task is that process's child
+and ends with it: an agent's turn ending, or its two-hour background limit,
+took signed-in clients down mid-check on 8 October 2026. So a signed-in
+client and its private desktop run as systemd user services, which belong to
+the user's service manager and run until stopped:
+
+```text
+wisp client start [CLIENT...] --clients-file FILE
+wisp client status [CLIENT...] --clients-file FILE
+wisp client stop [CLIENT...] --clients-file FILE
+```
+
+- **start** gives each named client (all when none; never `offline: true`
+  ones) whose `run` folder has no live desktop a new private desktop as the
+  service `wisp-desktop-CLIENT`, and writes its run folder into the clients
+  file. Then doctor brings each to a ready state, starting a closed client's
+  Battle.net as the service `wisp-client-CLIENT`; start returns once each
+  game reached its menu (or is already in a lobby or match) and prints
+  status. A client already running, under any owner, is kept.
+- **status** prints, per client, its desktop and its Battle.net with the
+  service that runs each (and since when), or the process each would end
+  with when it isn't a service, and its game's state from `client watch`.
+- **stop** stops each named client's Battle.net service, then its desktop
+  service, whatever the services are called. A client some other process
+  started is left running and named.
+
+Doctor itself starts every launch command (`start.kind: "command"`) as
+`wisp-client-CLIENT`, so a client doctor restarts mid-run outlives that run
+too. Each service runs its program inside the machine-capacity helper's
+`session` (the desktop as `native` with `--memory-gib 1.5`, the client as
+its launch command declares), so admission works as before: the helper reaches
+the user's service manager from a service, which it can't from inside
+`run-bounded`'s namespaces. Desktop output goes to
+`~/.local/state/wisp/desktops/CLIENT.log`; a client's to its declared log.
+`systemctl --user status wisp-client-CLIENT` shows the same.
+
+On 8 October 2026 `client start clone-d` started clone-d's desktop in 1 s,
+its Battle.net signed in by itself, and its game reached the main menu 3.5
+minutes after the command started; the starting command had exited and the
+client kept running.
+
 ## Declare it
 
 The game adds the command with `makeDoctor`

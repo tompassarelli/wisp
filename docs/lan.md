@@ -161,7 +161,10 @@ account, so Tom's own game and clone-a would sign each other out.
   prefix in its environment, clone-a's 22 processes were gone 3.4 s after it
   started.
 
-Run clone-a only through `launch.sh`. In a doctor clients file, don't name it
+Run clone-a only through `launch.sh`, which `bun wisp client start clone-a
+--clients-file FILE` runs as a service (below). Its yield watch runs inside
+that service: with the service path, a stand-in process carrying Tom's prefix
+stopped clone-a within 10 s (wisp:docs/doctor.md, "Clients as services"). In a doctor clients file, don't name it
 `a` or `b`: doctor maps those names to its own prefixes and to accounts c and
 b, and would start the wrong launcher or type the wrong account.
 
@@ -187,8 +190,14 @@ with absolute paths in place of `~`.
 
 The lanes' clients files are kept in `~/.local/state/wisp/online/`:
 `ad-clients.json` (clone-a + clone-d) and `bc-clients.json` (A and B, named
-`a` and `b`). Each private desktop gets a new run folder, so update a client's
-`run` after starting its desktop. On 8 October clone-d kept its login: after
+`a` and `b`). A lane owner starts its clients with `bun wisp client start
+--clients-file FILE`: each client without a live desktop gets one as the user
+service `wisp-desktop-CLIENT`, its new run folder is written into the file,
+and doctor starts Battle.net as `wisp-client-CLIENT` and waits for the menu.
+The services outlive the owner's turn and any task time limit;
+`client status` shows them and `client stop` ends them
+(wisp:docs/doctor.md, "Clients as services"). Don't start a clone with
+`launch.sh` from an agent's shell or background task: it ends with that task. On 8 October clone-d kept its login: after
 Battle.net was closed and `launch.sh d` started again, it signed in by itself
 in 16 s, and `bun wisp client doctor --clients-file
 ~/.local/state/wisp/online/ad-clients.json clone-d` pressed Play and reached
@@ -216,7 +225,8 @@ With nothing running in Tom's prefix:
 ### Launching
 
 `~/.local/share/wisp/online/launch.sh a|b|c|d RUN_DIR` starts the clone's
-Battle.net on a private desktop, in its own `native` capacity scope. It runs
+Battle.net on a private desktop, in its own `native` capacity scope. Doctor
+and `client start` run it as the user service `wisp-client-clone-X`. It runs
 what Steam's `Warcraft III (Battle.net)` shortcut runs, with
 `STEAM_COMPAT_DATA_PATH` pointed at the clone and no Steam shortcut added:
 
@@ -240,8 +250,10 @@ its `GetSoundFileDuration` reads 0 and a map that reads it desyncs (wisp#60).
 
 A full session, from smashcraft:ts/:
 
-1. Start two private desktops, then `launch.sh c RUN_A` and `launch.sh b RUN_B`.
-2. Sign each in at its "Log in or sign up" form with
+1. Point a clients file at the clones (names `a` and `b`, the clone's
+   `Documents/Warcraft III` and its port) and run `bun wisp client start
+   --clients-file FILE`: it starts their desktops and Battle.net as services.
+2. A clone without a saved login stops start at its sign-in form. Sign each in at its "Log in or sign up" form with
    nixos-config:dotfiles/bin/wc3-login-field: click the field until it has
    focus (the first click after the window opens only activates it), type the
    account name, press Enter, tick "Keep me logged in", type the password in
@@ -249,10 +261,8 @@ A full session, from smashcraft:ts/:
    Battle.net successfully". A mistyped account name opens Battle.net's
    account-creation page, which draws black on the private desktop; close
    that launcher and start again.
-3. Point a clients file at the clones (names `a` and `b`, each with its
-   desktop's `run`, the clone's `Documents/Warcraft III` and its port) and run
-   `bun wisp client doctor --clients-file FILE`: it presses Play and waits for
-   the main menu (83 s and 118 s on 8 October).
+3. Run `bun wisp client start --clients-file FILE` again: doctor presses Play
+   and it waits for the main menu (83 s and 118 s on 8 October).
 4. Pass the same file to `pad` and `fresh`, which leave
    `~/.local/state/smashcraft/clients.json` alone:
    `bun wisp fresh MAP --no-quick --clients-file FILE` hosts the private
