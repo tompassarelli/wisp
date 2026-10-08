@@ -8,7 +8,8 @@ import { type Command, UsageFailure, describeCause, flagValues } from "../comman
 import { type HeadlessProject, installHeadless, loadMapEntry, playHeadless } from "../headless";
 import { emitJson } from "../jsonResults";
 import { predictionLines } from "../perf";
-import { captureScene, type Graphics, loadEffectDeaths, renderScenes, type RenderScene } from "../headlessRender";
+import { type Graphics, type Lever, parseGraphics, parseLevers } from "../graphicsProfiles";
+import { captureScene, loadEffectDeaths, renderScenes, type RenderScene } from "../headlessRender";
 import { runJourney } from "../../../src/headless/journey";
 import type { Journey } from "../../../src/headless/journey";
 import { step } from "../timings";
@@ -41,13 +42,13 @@ const JourneyFile = Schema.Struct({
 export function headlessArguments(args: readonly string[]) {
   const named: string[] = [], frames: number[] = [];
   let render: string | undefined, journey: string | undefined, sounds: string | undefined;
-  let runs = 1, stepFrames: number | undefined, musicVolume: number | undefined, graphics: Graphics = "classic";
+  let runs = 1, stepFrames: number | undefined, musicVolume: number | undefined, graphics: Graphics = "classic", look: Lever[] = [];
   for (let index = 0; index < args.length; index++) {
     const arg = args[index] ?? "";
     if (arg === "--frames") {
       while (index + 1 < args.length && /^\d+(,\d+)*$/.test(args[index + 1] ?? "")) frames.push(...(args[++index] ?? "").split(",").map(Number));
       if (frames.length === 0) throw new Error("--frames needs one or more frame numbers");
-    } else if (["--render", "--journey", "--sound-cues", "--music-volume", "--clients", "--runs", "--step", "--graphics"].includes(arg)) {
+    } else if (["--render", "--journey", "--sound-cues", "--music-volume", "--clients", "--runs", "--step", "--graphics", "--look"].includes(arg)) {
       const value = args[++index];
       if (value === undefined || value.startsWith("--")) throw new Error(`${arg} needs a value`);
       if (arg === "--render") render = value;
@@ -57,10 +58,8 @@ export function headlessArguments(args: readonly string[]) {
         musicVolume = Number(value);
         if (!(musicVolume >= 0 && musicVolume <= 1)) throw new Error("--music-volume needs a number from 0 to 1");
       }
-      if (arg === "--graphics") {
-        if (value !== "classic" && value !== "reforged" && value !== "definitive") throw new Error("--graphics is classic, definitive or reforged");
-        graphics = value;
-      }
+      if (arg === "--graphics") graphics = parseGraphics(value);
+      if (arg === "--look") look = parseLevers(value);
       if (arg === "--runs" || arg === "--step") {
         const number = Number(value);
         if (!Number.isSafeInteger(number) || number < 1) throw new Error(`${arg} needs a positive integer`);
@@ -74,8 +73,8 @@ export function headlessArguments(args: readonly string[]) {
   if ((render === undefined) !== (frames.length === 0)) throw new Error("--render DIR and --frames N... are used together");
   if (journey !== undefined && named.length > 0) throw new Error("--journey FILE takes the place of a named journey");
   if (runs > 1 && render !== undefined) throw new Error("--render captures one run; use --runs for checks without rendering");
-  if (graphics !== "classic" && render === undefined) throw new Error("--graphics chooses the art --render draws");
-  return { named, frames: [...new Set(frames)].sort((a, b) => a - b), render, journey, sounds, runs, stepFrames, musicVolume, graphics };
+  if ((graphics !== "classic" || look.length > 0) && render === undefined) throw new Error("--graphics and --look choose what --render draws");
+  return { named, frames: [...new Set(frames)].sort((a, b) => a - b), render, journey, sounds, runs, stepFrames, musicVolume, graphics, look };
 }
 
 /**
@@ -182,7 +181,7 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
     }
     if (options.sounds !== undefined) yield* Effect.tryPromise({ try: () => Bun.write(options.sounds ?? "", JSON.stringify(report.sounds, null, 2) + "\n"), catch: (cause) => new HeadlessFailure({ journey: name, problems: 1, cause }) });
     if (options.render !== undefined && project.render !== undefined) {
-      const rendered = yield* renderScenes(project.render, scenes, options.render, options.graphics).pipe(Effect.mapError((cause) => new HeadlessFailure({ journey: name, problems: 1, cause })));
+      const rendered = yield* renderScenes(project.render, scenes, options.render, options.graphics, options.look).pipe(Effect.mapError((cause) => new HeadlessFailure({ journey: name, problems: 1, cause })));
       if (json) yield* emitJson("headless", { type: "render", directory: options.render, images: rendered });
       else yield* Console.log(`${rendered.length} frames rendered to ${options.render}`);
     }

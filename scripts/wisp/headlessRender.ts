@@ -8,15 +8,16 @@ import type { EffectDeaths, EffectPose, HeadlessClient } from "../../src/headles
 import type { Environment } from "../../src/headless/warcraft3Scenery";
 import { pollFor, spawnLogged } from "./hostProcess";
 import { deathSeconds } from "./models";
-import type { Graphics, RenderAssetResolution, ResolvedRenderAsset } from "./renderAssets";
+import type { RenderAssetResolution, ResolvedRenderAsset } from "./renderAssets";
 import { decodeTerrain, shiftedBounds, worldBounds, type WorldBounds } from "./terrain";
 
-export type { Graphics } from "./renderAssets";
+import { GRAPHICS, type Graphics, type Lever, PROFILES, unsupportedLevers } from "./graphicsProfiles";
+export type { Graphics } from "./graphicsProfiles";
 
 export interface HeadlessRenderProject {
   /**
    * The map's imported assets and Warcraft assets, kept outside the repository.
-   * In Reforged graphics a path takes its `_hd.w3mod` version where one exists.
+   * In Definitive graphics a path takes its `_de.w3mod` version where one exists.
    */
   readonly readAsset: (path: string, graphics?: Graphics) => Promise<Uint8Array | undefined>;
   /** Layer-aware reads record each attempted location and the selected import or stock file. */
@@ -176,27 +177,33 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
   );
   const assets = new Map<string, Promise<Uint8Array | undefined>>();
   const resolutions = new Map<string, RenderAssetResolution>();
-  // A stock Reforged asset is extracted and converted on first read; the page asks for dozens at once and one can wait past Bun's 10 s default.
+  const read = (path: string, mode: Graphics) => {
+    let pending = assets.get(`${mode}:${path}`);
+    if (pending === undefined) assets.set(`${mode}:${path}`, pending = (async () => {
+      if (project.resolveAsset !== undefined) {
+        const { bytes, ...resolution } = await project.resolveAsset(path, mode);
+        if (mode === graphics) resolutions.set(path, resolution);
+        return bytes;
+      }
+      const bytes = await project.readAsset(path, mode);
+      const location = { source: "project", layer: "base", path } as const;
+      if (mode === graphics) resolutions.set(path, { requested: path, graphics, attempts: [location], selected: bytes === undefined ? undefined : location });
+      return bytes;
+    })());
+    return pending;
+  };
+  // A stock Definitive asset is extracted and converted on first read; the page asks for dozens at once and one can wait past Bun's 10 s default.
   const server = yield* Effect.acquireRelease(Effect.sync(() => Bun.serve({ hostname: "127.0.0.1", port: 0, idleTimeout: 255, async fetch(request) {
     const url = new URL(request.url);
     if (url.pathname === "/") return new Response('<!doctype html><html><body style="margin:0;background:#101522"><script type="module" src="/renderer.js"></script></body></html>', { headers: { "content-type": "text/html" } });
     if (url.pathname === "/renderer.js") return new Response(bundle, { headers: { "content-type": "text/javascript" } });
     if (url.pathname !== "/asset") return new Response("not found", { status: 404 });
     const path = url.searchParams.get("path") ?? "";
-    let pending = assets.get(path);
-    if (pending === undefined) assets.set(path, pending = (async () => {
-      if (project.resolveAsset !== undefined) {
-        const { bytes, ...resolution } = await project.resolveAsset(path, graphics);
-        resolutions.set(path, resolution);
-        return bytes;
-      }
-      const bytes = await project.readAsset(path, graphics);
-      const location = { source: "project", layer: "base", path } as const;
-      resolutions.set(path, { requested: path, graphics, attempts: [location], selected: bytes === undefined ? undefined : location });
-      return bytes;
-    })());
-    const data = await pending;
-    return data === undefined ? new Response(`missing map asset: ${path}`, { status: 404 }) : new Response(new Uint8Array(data));
+    const data = await read(path, graphics);
+    if (data !== undefined) return new Response(new Uint8Array(data));
+    // A file that only another mode has draws nothing in this one, as Warcraft draws nothing for it.
+    for (const other of GRAPHICS) if (other !== graphics && (await read(path, other)) !== undefined) return new Response(`absent in ${graphics}: ${path}`, { status: 410 });
+    return new Response(`missing map asset: ${path}`, { status: 404 });
   }})), (open) => Effect.promise(() => open.stop(true)));
   const chromeLog = join(directory, "chrome.log");
   const chrome = yield* spawnLogged(ChildProcess.make(project.chrome ?? process.env.CHROME ?? "google-chrome-stable", ["--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--disable-sync", "--remote-debugging-port=0", `--user-data-dir=${directory}`, "--use-gl=angle", `--use-angle=${fallback ? "swiftshader" : "gl"}`, ...(fallback ? ["--enable-unsafe-swiftshader"] : []), `http://127.0.0.1:${server.port}/`]), { stdout: join(directory, "chrome.out"), stderr: chromeLog }).pipe(Effect.mapError(renderFailure));
@@ -226,7 +233,7 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
   const evaluate = (expression: string) => Effect.tryPromise({ try: () => devtools.evaluate(expression), catch: renderFailure });
   const loaded = yield* pollFor(10, "50 millis", evaluate("typeof window.renderScene === 'function'").pipe(Effect.map((ready) => (ready ? true : undefined))));
   if (loaded === undefined) return yield* new RenderFailure({ cause: "The model renderer did not load within 10 seconds" });
-  const gpu = yield* evaluate(`window.prepareRenderer(${project.width ?? 1280},${project.height ?? 720})`);
+  const gpu = yield* evaluate(`window.prepareRenderer(${project.width ?? 1280},${project.height ?? 720},${JSON.stringify(graphics)})`);
   return { devtools, gpu, resolutions };
 });
 
@@ -240,7 +247,9 @@ const openAnyBrowser = (project: HeadlessRenderProject, bundle: string, graphics
 });
 
 /** Draws captured scenes with the map's models, textures, camera and UI. */
-export const renderScenes = (project: HeadlessRenderProject, scenes: readonly RenderScene[], directory: string, graphics: Graphics = "classic") => Effect.scoped(Effect.gen(function*() {
+export const renderScenes = (project: HeadlessRenderProject, scenes: readonly RenderScene[], directory: string, graphics: Graphics = "classic", look: readonly Lever[] = []) => Effect.scoped(Effect.gen(function*() {
+  const unsupported = unsupportedLevers(graphics, look);
+  if (unsupported.length > 0) return yield* new RenderFailure({ cause: `the look check asks for ${unsupported.join(", ")}, which Wisp does not draw in ${graphics} (wisp:docs/headless.md, "Graphics profiles")` });
   const bundle = yield* Effect.tryPromise({ try: async () => {
     const result = await Bun.build({ entrypoints: [join(import.meta.dir, "browser/headlessRender.ts")], target: "browser", minify: true });
     if (!result.success || result.outputs[0] === undefined) throw new Error(result.logs.join("\n"));
@@ -249,16 +258,16 @@ export const renderScenes = (project: HeadlessRenderProject, scenes: readonly Re
   const browser = yield* openAnyBrowser(project, bundle, graphics);
   return yield* Effect.tryPromise({ try: async () => {
     await mkdir(directory, { recursive: true });
-    const images: { frame: number; client: number; image: string; models: number; textures: number; notDrawn: string[] }[] = [];
+    const images: { frame: number; client: number; image: string; models: number; textures: number; notDrawn: string[]; pointLights: number; absent: readonly string[] }[] = [];
     for (const scene of scenes) {
-      const result = await browser.devtools.evaluate(`window.renderScene(${JSON.stringify(sceneWithUnits(project, scene))})`) as { png: string; models: number; textures: number; notDrawn: string[] };
+      const result = await browser.devtools.evaluate(`window.renderScene(${JSON.stringify(sceneWithUnits(project, scene))})`) as { png: string; models: number; textures: number; notDrawn: string[]; pointLights: number; absent: string[] };
       for (const failure of result.notDrawn) console.error(`p${scene.client} frame ${scene.frame}: not drawn: ${failure}`);
       const image = `p${scene.client}-frame-${scene.frame}.png`;
       await Bun.write(join(directory, image), Buffer.from(result.png.split(",")[1] ?? "", "base64"));
       await Bun.write(join(directory, `p${scene.client}-frame-${scene.frame}.json`), JSON.stringify(scene));
-      images.push({ frame: scene.frame, client: scene.client, image, models: result.models, textures: result.textures, notDrawn: result.notDrawn });
+      images.push({ frame: scene.frame, client: scene.client, image, models: result.models, textures: result.textures, notDrawn: result.notDrawn, pointLights: result.pointLights, absent: result.absent });
     }
-    await Bun.write(join(directory, "render.json"), JSON.stringify({ renderer: "war3-model 4.0.1 + HD sampling precision", graphics, gpu: browser.gpu, assets: [...browser.resolutions.values()], images }, null, 2) + "\n");
+    await Bun.write(join(directory, "render.json"), JSON.stringify({ renderer: "war3-model 4.0.1 + HD sampling precision", graphics, levers: PROFILES[graphics], look, gpu: browser.gpu, assets: [...browser.resolutions.values()], images }, null, 2) + "\n");
     return images;
   }, catch: (cause) => new RenderFailure({ cause }) });
 })).pipe(Effect.provide(BunServices.layer), Effect.timeout("2 minutes"));

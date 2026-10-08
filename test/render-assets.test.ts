@@ -11,7 +11,7 @@ const readers = (map: Readonly<Record<string, string>>, stock: Readonly<Record<s
 
 test("[spec #84] Definitive selects its map import while Classic keeps its own body", async () => {
   const imports = readers({ "Unit.mdx": "classic", "_de.w3mod/Unit.mdx": "definitive", "_hd.w3mod/Unit.mdx": "reforged" });
-  for (const graphics of ["classic", "definitive", "reforged"] as const) {
+  for (const graphics of ["classic", "definitive"] as const) {
     const result = await Effect.runPromise(resolveRenderAsset(imports, "Unit.mdl", graphics));
     expect(new TextDecoder().decode(result.bytes)).toBe(graphics);
     expect(result.selected?.source).toBe("map");

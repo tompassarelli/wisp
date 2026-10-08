@@ -163,7 +163,8 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--journey FILE` | Read the headless journey's events from JSON | `headless` |
 | `--step N` | Advance at most N simulation frames at a time | `headless` |
 | `--runs N` | Fresh scripted starts compared with the first run | `headless` |
-| `--graphics classic\|definitive\|reforged` | Select the player's art for `--render`; the map's asset reader receives the choice | `headless` |
+| `--graphics classic\|definitive` | Draw `--render` frames in Classic or Definitive Edition: its models, textures, day/night lights and the levers its profile draws ([Graphics profiles](headless.md#graphics-profiles)); the map's `readAsset` receives the choice | `headless` |
+| `--look LEVER,...` | The levers the frames' look check asks for; the render fails naming each one the graphics profile does not draw | `headless` |
 | `--sound-cues FILE` | Write the headless sound/music event log, including stops, loops and volume | `headless` |
 | `--music-volume 0..1` | The player's Options > Sound music slider (default 1): scales music cues' `effectiveVolume`; sound effects are unchanged | `headless` |
 | `--samples` | Also print each frame's sample | `perf` |

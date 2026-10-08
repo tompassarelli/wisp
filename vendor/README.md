@@ -39,6 +39,11 @@ Each geoset's animated colour tints its layers in both shaders, in the
 order the file stores it: native Classic draws a map's charcoal deck
 body (stored 0.20, 0.24, 0.28 over Dalaran_BlackMarble) at rgb 11,8,11,
 and the tint read as red, green, blue gives 10,7,9.
+`setWispEnvironment`'s `points` adds up to eight omni lights in world space
+to both shaders (SD vertex shaders pass the model-space position on, and the
+draw's model and normal matrices carry it and the normal to world space):
+each adds colour × intensity × N·L, full to its attenuation start and fading
+linearly to zero at its end, into the SD lit term and the HD diffuse term.
 
 Source: <https://github.com/4eb0da/war3-model>.
 License: MIT, Copyright (c) 2017-2023 4eb0da. The package retains LICENSE

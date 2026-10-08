@@ -170,14 +170,18 @@ for (const layer of [canvas, overlay, output]) {
 canvas.style.display = overlay.style.display = "none";
 document.body.append(display);
 let gl: WebGL2RenderingContext;
+let graphics = "classic";
 const models = new Map<string, Promise<model.Model>>();
 const textures = new Map<string, Promise<HTMLCanvasElement>>();
 const tinted = new Map<string, HTMLCanvasElement>();
 interface ModelInstance { renderer: ModelRenderer; model: model.Model; path: string; sequences: AnimationSequence[]; sequence: number; clock: number }
 const instances = new Map<number, ModelInstance>();
 const preparedModels = new Map<string, ModelInstance>();
+/** A file only another graphics mode has: Warcraft draws nothing for it in this one. */
+class AbsentAsset extends Error {}
 async function asset(path: string): Promise<ArrayBuffer> {
   const response = await fetch(`/asset?path=${encodeURIComponent(path)}`);
+  if (response.status === 410) throw new AbsentAsset(`absent in ${graphics}: ${path}`);
   if (!response.ok) throw new Error(`missing map asset: ${path}`);
   return response.arrayBuffer();
 }
@@ -299,7 +303,7 @@ async function createInstance(path: string): Promise<ModelInstance> {
   const sequences = data.Sequences.map((sequence) => ({ name: sequence.Name, start: sequence.Interval[0] ?? 0, end: sequence.Interval[1] ?? 0, looping: !sequence.NonLooping, rarity: sequence.Rarity }));
   return { renderer, model: data, path, sequences, sequence: -2, clock: 0 };
 }
-async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, light: WorldLight | undefined, fog: ReturnType<typeof sceneFog>) {
+async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, light: WorldLight | undefined, fog: ReturnType<typeof sceneFog>, points: readonly PointLight[]) {
   const instance = await prepareInstance(pose);
   const { renderer, model: data } = instance;
   renderer.setInstanceAlpha(pose.alpha / 255);
@@ -323,10 +327,68 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
   renderer.setTeamColor(new Float32Array((teams[pose.teamColor] ?? [160, 160, 160]).map((v) => v / 255)));
   renderer.setLightPosition([1000, -1000, 3000]); renderer.setLightColor([1, 1, 1]);
   const placed = transform(pose);
-  renderer.setWispEnvironment({ ...(light === undefined ? {} : { light: { direction: modelDirection(placed, light.toward), key: light.key, ambient: light.ambient, linear: light.linear } }), ...(fog === undefined ? {} : { fog }) });
+  renderer.setWispEnvironment({ ...(light === undefined ? {} : { light: { direction: modelDirection(placed, light.toward), key: light.key, ambient: light.ambient, linear: light.linear } }), ...(fog === undefined ? {} : { fog }), ...(points.length === 0 ? {} : { points: { model: placed, normal: normalMatrix(placed), lights: nearest(points, placed) } }) });
   // An HD model's first initGL draws its BRDF table at that table's size and leaves the viewport there.
   gl.viewport(0, 0, canvas.width, canvas.height);
   renderer.render(multiply(view.view, placed), view.projection, {});
+}
+/** A model's omni light in world space: colour times intensity, red first, full to `start` and zero from `end`. */
+interface PointLight { readonly position: readonly number[]; readonly color: readonly number[]; readonly start: number; readonly end: number }
+const MAX_POINT_LIGHTS = 8;
+const lightModels = new Map<string, Promise<model.Model | undefined>>();
+/**
+ * The omni lights of every drawn model at its pose's time: the light node's
+ * pivot placed by the model's transform, its colour, intensity and
+ * attenuation sampled on the pose's sequence. Node animation of the light is
+ * not followed. Lights are read whole: the drawing parser drops them.
+ */
+async function pointLights(poses: readonly EffectPose[]): Promise<PointLight[]> {
+  const lights: PointLight[] = [];
+  for (const pose of poses) {
+    let loading = lightModels.get(pose.model);
+    if (loading === undefined) lightModels.set(pose.model, loading = asset(pose.model).then((bytes) => {
+      if (new TextDecoder().decode(bytes.slice(0, 4)) !== "MDLX") return parseMDL(new TextDecoder().decode(bytes));
+      // Camera chunks don't parse in every model; only the lights are needed here.
+      const kept = parsableModel(new Uint8Array(bytes), true);
+      return kept.lights > 0 ? parseMDX(kept.bytes.slice().buffer) : undefined;
+    }));
+    const data = await loading;
+    if (data === undefined || data.Lights.length === 0) continue;
+    const instance = instances.get(pose.handle.id);
+    const kind = pose.unit === true ? "unit" : "effect";
+    const { frame } = animationSample(instance?.sequences ?? [], { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, kind);
+    const placed = transform(pose), scale = Math.cbrt(Math.abs(determinant(placed)));
+    for (const light of data.Lights) {
+      if (light.LightType !== 0 || (sample(light.Visibility, frame, [1])[0] ?? 1) <= 0) continue;
+      const [blue = 1, green = 1, red = 1] = sample(light.Color, frame, [1, 1, 1]), intensity = sample(light.Intensity, frame, [1])[0] ?? 1;
+      if (intensity <= 0) continue;
+      const pivot = Array.from(data.PivotPoints[light.ObjectId] ?? [0, 0, 0]);
+      const position = [0, 1, 2].map((row) => (placed[row] ?? 0) * (pivot[0] ?? 0) + (placed[4 + row] ?? 0) * (pivot[1] ?? 0) + (placed[8 + row] ?? 0) * (pivot[2] ?? 0) + (placed[12 + row] ?? 0));
+      lights.push({ position, color: [red * intensity, green * intensity, blue * intensity], start: (sample(light.AttenuationStart, frame, [0])[0] ?? 0) * scale, end: (sample(light.AttenuationEnd, frame, [0])[0] ?? 0) * scale });
+    }
+  }
+  return lights;
+}
+function determinant(m: Matrix): number {
+  const a = (row: number, column: number) => m[column * 4 + row] ?? 0;
+  return a(0, 0) * (a(1, 1) * a(2, 2) - a(1, 2) * a(2, 1)) - a(0, 1) * (a(1, 0) * a(2, 2) - a(1, 2) * a(2, 0)) + a(0, 2) * (a(1, 0) * a(2, 1) - a(1, 1) * a(2, 0));
+}
+/** The inverse transpose of a transform's 3×3 part, column-major: it carries model-space normals to world space. */
+function normalMatrix(m: Matrix): Float32Array {
+  const a = (row: number, column: number) => m[column * 4 + row] ?? 0;
+  const det = determinant(m) || 1, out = new Float32Array(9);
+  for (let row = 0; row < 3; row++) for (let column = 0; column < 3; column++) {
+    const r1 = (row + 1) % 3, r2 = (row + 2) % 3, c1 = (column + 1) % 3, c2 = (column + 2) % 3;
+    // Cofactor (row, column) over the determinant is the inverse transpose's entry (row, column).
+    out[column * 3 + row] = (a(r1, c1) * a(r2, c2) - a(r1, c2) * a(r2, c1)) / det;
+  }
+  return out;
+}
+/** The lights that reach nearest a draw's origin, at most the shader's count. */
+function nearest(points: readonly PointLight[], placed: Matrix): PointLight[] {
+  const origin = [placed[12] ?? 0, placed[13] ?? 0, placed[14] ?? 0];
+  const gap = (light: PointLight) => Math.hypot(...light.position.map((value, i) => value - (origin[i] ?? 0))) - light.end;
+  return [...points].sort((a, b) => gap(a) - gap(b)).slice(0, MAX_POINT_LIGHTS);
 }
 const skies = new Map<string, Promise<ModelInstance>>();
 /** The sky model around the eye, behind everything else, unlit, fogged only when the fog draws over the sky. */
@@ -456,12 +518,13 @@ async function uiTexture(path: string, color: number): Promise<HTMLCanvasElement
 
 declare global {
   interface Window {
-    prepareRenderer: (width: number, height: number) => string;
+    prepareRenderer: (width: number, height: number, graphics?: string) => string;
     prepareScene: (scene: RenderScene, models?: readonly string[], progress?: (completed: number, total: number) => void) => Promise<{ models: number; instances: number; textures: number }>;
-    renderScene: (scene: RenderScene, options?: { capture?: boolean }) => Promise<{ png: string; models: number; textures: number; notDrawn: string[] }>;
+    renderScene: (scene: RenderScene, options?: { capture?: boolean }) => Promise<{ png: string; models: number; textures: number; notDrawn: string[]; pointLights: number; absent: string[] }>;
   }
 }
-window.prepareRenderer = (width, height) => {
+window.prepareRenderer = (width, height, mode = "classic") => {
+  graphics = mode;
   canvas.width = output.width = overlay.width = width; canvas.height = output.height = overlay.height = height;
   const context = canvas.getContext("webgl2", { antialias: true, alpha: false });
   if (context === null) throw new Error("Chrome could not create a WebGL2 context");
@@ -483,16 +546,20 @@ window.prepareScene = async (scene, extraModels = [], progress) => {
 window.renderScene = async (scene, options) => {
   gl.viewport(0, 0, canvas.width, canvas.height); gl.depthMask(true); gl.clearColor(0.04, 0.06, 0.09, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
   const view = camera(scene, canvas.width / canvas.height);
-  const visible: EffectPose[] = [], notDrawn: string[] = [];
+  const visible: EffectPose[] = [], notDrawn: string[] = [], absent = new Set<string>();
   for (const pose of drawnPoses(scene.effects, view.eye, view.far, scene.world)) {
     // A model the renderer can't load or draw is left out and named, so the rest of the frame still draws.
-    try { await prepareInstance(pose); visible.push(pose); } catch (cause) { notDrawn.push(`${pose.model}: ${String(cause)}`); }
+    try { await prepareInstance(pose); visible.push(pose); } catch (cause) {
+      if (cause instanceof AbsentAsset) absent.add(pose.model); else notDrawn.push(`${pose.model}: ${String(cause)}`);
+    }
   }
   await drawSky(scene, view);
   const light = scene.environment === undefined ? undefined : await dayNightLight(scene.environment.dayNight.unit, scene.environment.timeOfDay);
   const fog = sceneFog(scene, view, false);
+  // Classic draws no model omni light; Definitive draws them all.
+  const points = graphics === "classic" ? [] : await pointLights(visible);
   for (const pose of orderDrawnModels(visible, (pose) => instances.get(pose.handle.id)?.model.Materials ?? [])) {
-    try { await drawEffect(pose, view, light, fog); } catch (cause) { notDrawn.push(`${pose.model}: ${String(cause)}`); }
+    try { await drawEffect(pose, view, light, fog, points); } catch (cause) { notDrawn.push(`${pose.model}: ${String(cause)}`); }
   }
   if (scene.filter !== undefined) await drawFilter(scene.filter);
   const live = options?.capture === false;
@@ -526,5 +593,5 @@ window.renderScene = async (scene, options) => {
     }
   }
   context.globalAlpha = 1;
-  return { png: options?.capture === false ? "" : output.toDataURL("image/png"), models: visible.length, textures: textures.size, notDrawn: [...new Set(notDrawn)] };
+  return { png: options?.capture === false ? "" : output.toDataURL("image/png"), models: visible.length, textures: textures.size, notDrawn: [...new Set(notDrawn)], pointLights: points.length, absent: [...absent].sort() };
 };

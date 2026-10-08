@@ -1,6 +1,8 @@
 import { Effect, Schema } from "effect";
 
-export type Graphics = "classic" | "reforged" | "definitive";
+import type { Graphics } from "./graphicsProfiles";
+
+export type { Graphics } from "./graphicsProfiles";
 export type AssetLayer = "base" | "_hd.w3mod" | "_de.w3mod";
 export interface AssetLocation {
   readonly source: "map" | "stock" | "project";
@@ -33,8 +35,7 @@ export const resolveRenderAsset = (readers: RenderAssetReaders, requested: strin
   }
   const explicit = /^(_(?:de|hd)\.w3mod)\/(.*)$/i.exec(path);
   const layers: readonly AssetLayer[] = explicit !== null ? [explicit[1]?.toLowerCase() as AssetLayer]
-    : graphics === "definitive" ? ["_de.w3mod", "_hd.w3mod", "base"]
-    : graphics === "reforged" ? ["_hd.w3mod", "base"] : ["base"];
+    : graphics === "definitive" ? ["_de.w3mod", "_hd.w3mod", "base"] : ["base"];
   const attempts: AssetLocation[] = [];
   for (const source of ["map", "stock"] as const) {
     for (const layer of layers) {

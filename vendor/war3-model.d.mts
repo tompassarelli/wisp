@@ -438,6 +438,8 @@ export declare class ModelRenderer {
     setWispEnvironment(environment: {
         light?: { direction: ArrayLike<number>; key: ArrayLike<number>; ambient: ArrayLike<number>; linear?: boolean };
         fog?: { color: ArrayLike<number>; start: number; end: number; near: number; far: number; max: number };
+        /** Up to eight omni lights in world space (colour times intensity, full to start, zero from end), with the draw's model and normal matrices. */
+        points?: { model: ArrayLike<number>; normal: ArrayLike<number>; lights: readonly { position: ArrayLike<number>; color: ArrayLike<number>; start: number; end: number }[] };
     } | undefined): void;
     setLightPosition(lightPos: vec3): void;
     setLightColor(lightColor: vec3): void;
