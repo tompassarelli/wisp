@@ -6,7 +6,7 @@
 // setmetatable, string.byte) are emulated; a hot reload's `load` returns the
 // entry it was published for. Plain functions, so tests use them without Effect.
 import { readFileSync } from "node:fs";
-import type { FrameDefinition } from "./frames";
+import type { FrameTemplate } from "../../src/headless/frames";
 import type { UnitStateFixtures } from "../../src/headless/client";
 import type { SceneryFixtures } from "../../src/headless/warcraft3Scenery";
 import type { Warcraft3InventoryFixtures } from "../../src/headless/warcraft3Inventory";
@@ -35,8 +35,11 @@ export interface HeadlessMap {
   readonly intentionalNoops?: IntentionalNoops;
   /** Natives the default stubs can't answer for this game. */
   readonly natives?: (client: HeadlessClient) => NativeBehaviors;
-  /** Frame definitions (wisp:docs/ui.md) whose trees BlzCreateFrame makes by name, as their generated FDF does in Warcraft. */
-  readonly frames?: readonly FrameDefinition[];
+  /**
+   * Frame trees BlzCreateFrame makes by name: frame definitions (wisp:docs/ui.md), as their generated FDF does in
+   * Warcraft, or templates such as a TEXT frame's font that the map's own FDF declares.
+   */
+  readonly frames?: readonly FrameTemplate[];
 }
 
 export interface HeadlessRuntime {
