@@ -8,8 +8,7 @@
 //   POST /end             end the current game
 //   POST /solo {map}      each client plays MAP alone, as a local game on its loopback provider
 // Each game writes its action log (host.ts) and packet record under the
-// pair's state folder, and runs inside the desync autopsy
-// (wisp:docs/autopsy.md): its findings go to the game's autopsy.log.
+// pair's state folder.
 //
 // The whole agent is one Effect program under BunRuntime.runMain
 // (wisp:docs/host-tools.md): the game launchers, menu listeners, socket server
@@ -21,8 +20,7 @@ import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Cause, Effect, Exit, FiberSet, Option, Schedule, Schema, Scope, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { withAutopsy } from "../engine/autopsy";
-import { findGameProcesses, readExecutable } from "../engine/memory";
+import { findGameProcesses, readExecutable } from "./memory";
 import { spawnLogged } from "../hostProcess";
 import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports, playLocalGame } from "../menus";
 import { type LanHost, startHost } from "./host";
@@ -30,8 +28,6 @@ import { LanFailure, enableLan, joinLanGame } from "./join";
 import { readMapFacts } from "./map";
 import { PAIR_SIDES, poolProfile, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
 import { admissionFile, nativeCommand } from "./admission";
-import { makeEngine } from "../commands/engine";
-import { startPairClients, waitForFirstClient } from "./startup";
 
 const argument = (name: string) => {
   const at = process.argv.indexOf(`--${name}`);
@@ -41,7 +37,6 @@ const pair = Number(argument("pair") ?? "0");
 const fpsText = argument("fps");
 const profile = poolProfile(argument("pool-profile") ?? "parity", fpsText === undefined ? undefined : Number(fpsText));
 const packager = argument("packager") ?? join(process.env["XDG_CACHE_HOME"] ?? join(process.env["HOME"] ?? "", ".cache"), "wisp/lan/map-pack");
-const locateBeforePeer = process.argv.includes("--locate-before-peer");
 const directory = pairDirectory(pair);
 const agentLog = join(directory, "agent.log");
 const say = (text: string) => appendFileSync(agentLog, `${new Date().toISOString()} ${text}\n`);
@@ -144,7 +139,7 @@ interface Game {
   readonly log: string;
   readonly host: LanHost;
   readonly map: string;
-  /** Holds the game's host and its desync autopsy; closing it ends the game. */
+  /** Holds the game's host; closing it ends the game. */
   readonly scope: Scope.Closeable;
 }
 
@@ -160,20 +155,7 @@ const agent = Effect.gen(function*() {
 
   // A refused second client ends the first too: a pool only keeps whole pairs.
   const games: { readonly isRunning: Effect.Effect<boolean, unknown> }[] = [];
-  yield* startPairClients(clients, (client) => launch(capacity, client).pipe(Effect.map((handle) => { games.push(handle); })), locateBeforePeer ? (client) => Effect.gen(function*() {
-    const first = games[0];
-    if (first === undefined) return yield* new LanFailure({ problem: "the first client's native launcher is missing" });
-    yield* waitForFirstClient(Effect.sync(() => findGameProcesses(prefixOf(client.name)).length > 0), first.isRunning.pipe(Effect.map((running) => !running), Effect.orElseSucceed(() => true)));
-    const file = join(directory, "locate-client.json");
-    writeFileSync(file, JSON.stringify({ clients: [{ name: client.name, documents: documentsOf(client.name) }] }));
-    say(`${client.name}: locating engine offsets before starting its peer`);
-    yield* makeEngine(file)(["locate", "--client", client.name]);
-    say(`${client.name}: engine locate passed; starting its peer`);
-  }) : undefined).pipe(
-    Effect.tapError((cause) => Effect.sync(() => {
-      if (locateBeforePeer) writeFileSync(join(directory, "startup-error.json"), JSON.stringify({ error: cause instanceof Error ? cause.message : String(cause) }));
-    })),
-  );
+  yield* Effect.forEach(clients, (client) => launch(capacity, client).pipe(Effect.map((handle) => { games.push(handle); })), { discard: true });
 
   // The game may open its window larger than its settings ask, past the edge
   // of its desktop; each client's window is set to the profile's size at the
@@ -222,7 +204,7 @@ const agent = Effect.gen(function*() {
     const ending = game;
     if (ending === undefined) return Effect.void;
     game = undefined;
-    // Closing its scope stops the host, then interrupts the autopsy, which runs its last look at the reports and its summary.
+    // Closing its scope stops the host.
     return Scope.close(ending.scope, Exit.void).pipe(Effect.andThen(Effect.sync(() => say(`ended ${ending.id}`))));
   });
 
@@ -245,16 +227,6 @@ const agent = Effect.gen(function*() {
     const started = Date.now();
     writeFileSync(log, `# wisp lan host: pair ${pair}, map ${inGame}, clients ${clients.map(({ name }) => name).join(" ")}; seconds since ${new Date(started).toISOString()} (${started})\n`);
     const scope = yield* Scope.fork(agentScope);
-    const autopsyLog = join(folder, "autopsy.log");
-    yield* Effect.forkIn(withAutopsy({
-      clientsFile: poolClientsFile(),
-      names: clients.map(({ name }) => name),
-      root: join(folder, "autopsy"),
-      print: (line) => {
-        appendFileSync(autopsyLog, `${line}\n`);
-        say(line);
-      },
-    }, Effect.never), scope);
     const host = yield* startHost({
       map,
       gameName: `wisp-${pair}-${id.slice(11, 19)}`,

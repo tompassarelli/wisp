@@ -252,10 +252,7 @@ client's launcher container, never a click in its window.
   something, `run` once more. A failure doctor can't explain stands. A run
   that can't repeat, such as a capture into its own folder, passes
   `retry: false`: its clients are healed for the next run and its failure
-  stands. Pass `autopsy: { clientsFile }` too, and the session runs inside the
-  [desync autopsy](autopsy.md) (wisp:docs/autopsy.md): it names the first
-  divergent birth of any desync the clients report. `wisp client doctor` itself
-  always runs inside it.
+  stands.
 - **`wisp accept`:** pass `clientsDoctor(...)` as the live driver's
   `prepare` (wisp:scripts/wisp/acceptLive.ts).
 - **`wisp play`:** checks its prefix with doctor before step 1 and once after

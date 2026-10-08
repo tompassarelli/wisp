@@ -2,7 +2,7 @@ import { copyFileSync, mkdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Effect } from "effect";
-import { readExecutable } from "../engine/memory";
+import { readExecutable } from "./memory";
 import { connectMenus, menuAddress } from "../menus";
 import { checkDummy } from "./dummy";
 import { enableLan, joinLanGame } from "./join";

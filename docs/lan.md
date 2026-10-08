@@ -108,22 +108,6 @@ the map is the cause, not the solo path.
 clients to their menus, `lan solo` with another map crashed both while
 loading (a null read). Start the pool again for the next map.
 
-**Engine tools.** A solo client is offline (loopback-only namespace, no
-`-uid`, no Battle.net), so traps are allowed on it. On 3.0.1 the pool's
-`--locate-before-peer` stops with "no pointer in .data leads to a presence
-table" because no map runs yet. `engine locate` on a solo client in a map
-found the same 3.0.1.24342 presence table (RVA 0x2fe9b68) that
-wisp:scripts/wisp/engine/offsets.json holds from signed-in client B.
-
-On 8 October, `engine trace --client lan0a --lua --seconds 5 --limit 20`
-stopped 20 births on a solo client playing the sample map, each with its Lua
-stack (`Location <- hot-…:49 <- xpcall <- …`). The births came from a
-`RemoveLocation(Location(0, 0))` sent into `move` with `wisp hot --data
-<lan0a CustomMapData>`: hot reload works on a solo client too. Finding the
-Lua VM took about 150 s of the run, before the image-pointer scan that
-landed beside this. After that hot reload the client held two
-Lua VMs, so `trace --lua` takes the one with the most global functions.
-
 ## Signed-in 3.0.1 clients cloned from Tom's install
 
 Until the offline pool can play on 3.0.1, signed-in clients run 3.0.1 from
@@ -293,15 +277,13 @@ Tom's `system.reg`, `user.reg`, `Warcraft III/.build.info` and Battle.net
 | `wisp lan status [--pair K]` | Each pair's clients and processes, and its game: phase, turns, desyncs, players. |
 | `wisp lan speed N --pair K` | Diagnostic turn delivery at 1–16 times real time; 1 restores normal delivery. Measure client frame progress to establish actual game speed. |
 | `wisp lan end --pair K` | Ends pair K's game. The clients go back to their menus. |
-| `wisp engine actions --client lan0a,lan0b [--map MAP] [--follow]` | Prints the pair's action log, and follows it with `--follow`. With `--map`, it starts the match first ([engine.md](engine.md#actions)). |
-| `wisp engine diff ACTIONS.log POLL.log` | Places every birth from `wisp engine poll` in the turn it happened in, with the actions just delivered. |
 
 Pool clients are named `lan<K>a` and `lan<K>b`. The pool writes three files
 under `$XDG_STATE_HOME/wisp/lan/` (default `~/.local/state/wisp/lan/`):
 
 - `pool.json`: its pairs, their agent sockets and desktops;
-- `clients.json`: every pool client in the clients-file schema that `wisp engine`
-  and the autopsy read (`WISP_CLIENTS=~/.local/state/wisp/lan/clients.json`);
+- `clients.json`: every pool client in the clients-file schema
+  (`WISP_CLIENTS=~/.local/state/wisp/lan/clients.json`);
 - `pair-K/clients.json`: one pair's clients, named `a` and `b`, for tools
   written against two clients A and B.
 
@@ -381,14 +363,6 @@ The source install must have been started once through Battle.net. Setup
 reads it and never changes it.
 
 ## Running a pool
-
-`pool --locate-before-peer` starts client a, runs the read-only `engine locate`
-on it, and starts client b only after that succeeds. It uses the first client's
-private Documents folder and waits up to 60 seconds for its actual Warcraft
-process, stopping if its native launcher exits. The default startup is unchanged. Locate
-output is in `pair-K/desktop-a.out`. If no initialized presence table is found
-at startup, the pair stops with the locate error; the flag never loads a map
-to make a table appear. New-build offsets are printed, not automatically saved.
 
 Each client has its own private desktop (the private-desktop-development
 launcher), so each display has exactly one game window, as on clients A and
@@ -648,14 +622,6 @@ that names its start time, then one line per event, in seconds since then:
   logs align between actions.
 - **Event lines** cover joins, map checks, phases, loads, leaves (with their
   reason), chat, and every desync, with each client's checksum.
-
-`wisp engine diff ACTIONS.log POLL.log` reads both headers' start times. It
-prints each birth from a `wisp engine poll` log with the turn it fell in, and
-the last turn of actions within the second before it:
-
-```
-256.614 birth 4281 CAgentBaseAbs owner CPlayerChatMatchEventData in turn 4470; 2 turns after turn 4468: lan0b chat trigger=10a3:10a3 text="-dev quick"; ...
-```
 
 Tests replay a recorded exchange of two offline clients through the host
 (wisp:test/fixtures/lan/offline-pair.packets, wisp:test/lan.test.ts).

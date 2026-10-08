@@ -5,7 +5,7 @@
 Wisp exists to verify Warcraft III maps without waiting on Warcraft III.
 Every check that still needs a native client is a gap to close: move it
 headless (simulation, cost model, rendered frames, cue logs), or drive the
-offline client from inside under wisp:docs/engine.md's guardrails, never
+offline client from inside (wisp:docs/driving-warcraft.md), never
 through the OS keyboard or chat. Judge each step by checks per hour per
 machine and by setup failures, and prefer the frontier move over another
 workaround around the client.

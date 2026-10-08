@@ -2,7 +2,7 @@
 // mappings, its image base and its memory through /proc/PID/mem, plus the
 // game executable's headers, function table (.pdata) and file version read
 // from disk. Nothing here writes to the process or attaches a debugger: a gdb
-// attach makes a signed-in client exit (wisp:docs/engine.md).
+// attach makes a signed-in client exit.
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
 

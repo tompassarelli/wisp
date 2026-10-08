@@ -84,13 +84,6 @@ runMainCli("bun examples/sample/scripts/sample.ts", {
     usage: "install|remove RETAIL_DIR | listen | host --folder F --map FILE --name NAME [--password P] [--start] | join --name NAME --password P | start | leave   [--port N]",
     load: async () => (await import("wisp/scripts/wisp/commands/menus")).makeMenus(),
   },
-  engine: {
-    usage: "desync|poll|diff|trace|locate|actions ...   (WISP_CLIENTS=clients.json; a LAN pool's is ~/.local/state/wisp/lan/clients.json)",
-    load: async () => {
-      const { makeEngine } = await import("wisp/scripts/wisp/commands/engine");
-      return makeEngine(clientsFile);
-    },
-  },
   lan: {
     usage: "setup --from INSTALL [--pairs N] | pool [--pairs N] [--pool-profile parity|visual] [--fps N] | fresh MAP [--pair K] | status | end --pair K",
     load: async () => (await import("wisp/scripts/wisp/commands/lan")).lan,

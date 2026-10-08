@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Exit, Scope } from "effect";
-import { isActionLog, parseActionLog } from "../scripts/wisp/engine/actionLog";
+import { isActionLog, parseActionLog } from "../scripts/wisp/lan/actionLog";
 import { startHost } from "../scripts/wisp/lan/host";
 import type { MapFacts } from "../scripts/wisp/lan/map";
 import { interfaces } from "../scripts/wisp/lan/offline";
@@ -40,7 +40,7 @@ describe("provider switch", () => {
     expect(stoppedPc("running\n")).toBeUndefined();
   });
 
-  test("[spec docs/engine.md] only loopback counts as offline", () => {
+  test("[spec docs/lan.md] only loopback counts as offline", () => {
     const netDev = "Inter-|   Receive\n face |bytes\n    lo: 1 2 3\n";
     expect(interfaces(netDev)).toEqual(["lo"]);
     expect(interfaces(`${netDev}  eth0: 4 5 6\n`)).toEqual(["lo", "eth0"]);

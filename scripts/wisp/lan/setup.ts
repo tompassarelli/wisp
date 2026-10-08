@@ -11,7 +11,7 @@ import { Effect } from "effect";
 import { ChildProcess } from "effect/process";
 import { collect } from "../hostProcess";
 import { installMenuPage } from "../menus";
-import { readExecutable } from "../engine/memory";
+import { readExecutable } from "./memory";
 import { LanFailure } from "./join";
 import { clientRoot, installOf, prefixOf, retailOf } from "./pool";
 

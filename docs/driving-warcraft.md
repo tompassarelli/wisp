@@ -292,7 +292,7 @@ loopback.
 **What it replaces.** Bot and parity sessions run on as many pairs as the
 machine admits, in parallel, instead of on the two signed-in clients. The
 host logs every turn's actions and compares every client's checksum each turn
-(`wisp engine actions`, [engine.md](engine.md#actions)). Owner playtests and
+(wisp:docs/lan.md). Owner playtests and
 anything Battle.net itself must show keep the menu socket.
 
 **Limits:**
@@ -365,8 +365,6 @@ Wisp's menu page reports it instead.
 - That account risk is of a different kind from a UI file.
 - Wisp takes it only where no account exists: the offline pool clients of
   [section 2](#2-lan-hosting-offline-clients-and-wisps-host).
-- Reading a signed-in client's memory, without writing, is
-  `wisp engine`'s passive tier ([engine.md](engine.md#guardrails)).
 
 ## Ranked recommendation
 

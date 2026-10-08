@@ -10,7 +10,6 @@ const browserPages = (file: string) => file.startsWith("scripts/wisp/browser/") 
 // Written before the rule. This list only shrinks: convert a file, then remove it.
 const notYetEffect = [
   "scripts/package.ts",
-  "scripts/wisp/engine/stopWatch.ts",
   "scripts/wisp/lan/map.ts",
   "scripts/wisp/panelServer.ts",
   "scripts/wisp/restorePreferences.ts",

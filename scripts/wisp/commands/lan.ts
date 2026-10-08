@@ -82,7 +82,6 @@ class PairDeferred extends Schema.TaggedError<PairDeferred>()("PairDeferred", {
   reason: Schema.String,
 }) {}
 
-const StartupError = Schema.fromJsonString(Schema.Struct({ error: Schema.String }));
 const AdmissionRefusal = Schema.fromJsonString(Schema.Struct({ reason: Schema.String }));
 const AgentFile = Schema.fromJsonString(Schema.Struct({ runs: Schema.optionalKey(Schema.Struct({ a: Schema.optionalKey(Schema.String), b: Schema.optionalKey(Schema.String) })) }));
 const AgentProcess = Schema.fromJsonString(Schema.Struct({ pid: Schema.Int, runs: Schema.Struct({ a: Schema.String }) }));
@@ -115,7 +114,7 @@ const READY = "10 minutes";
  * clients run. A session that fails or is deferred is stopped before this
  * returns; a deferred one is tried again every 45 s for `waitSeconds`.
  */
-const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, fps?: number, locateBeforePeer = false) => {
+const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, fps?: number) => {
   const directory = pairDirectory(pair);
   const deadline = Date.now() + waitSeconds * 1000;
   const attempt = Effect.gen(function*() {
@@ -124,18 +123,15 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
     const waiting = yield* pairAdmission(capacity);
     if (waiting !== undefined) return yield* new PairDeferred({ reason: waiting });
     rmSync(admissionFile(directory), { force: true });
-    // A failure left by an earlier session would stop this one at once.
-    rmSync(join(directory, "startup-error.json"), { force: true });
     // The session gets its own scope: stopped at once when this attempt fails, else held by the pool.
     const scope = yield* Scope.fork(yield* Effect.scope);
     return yield* Effect.gen(function*() {
       // The desktops' Xwayland serves the games: in the batch slice a busy machine starved it and 3.0.1 games hung before their window.
-      const session = yield* spawnLogged(ChildProcess.make(process.execPath, [capacity, "session", "--class", "native", "--memory-gib", "1", "--owner", `wisp-lan-pair-${pair}`, "--", process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity, ...(locateBeforePeer ? ["--locate-before-peer"] : []), ...(fps === undefined ? [] : ["--fps", String(fps)])], { stdin: "ignore" }), {
+      const session = yield* spawnLogged(ChildProcess.make(process.execPath, [capacity, "session", "--class", "native", "--memory-gib", "1", "--owner", `wisp-lan-pair-${pair}`, "--", process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity, ...(fps === undefined ? [] : ["--fps", String(fps)])], { stdin: "ignore" }), {
         stdout: join(directory, "session.out"),
         stderr: join(directory, "session.err"),
       });
       const step = Effect.gen(function*() {
-        if (existsSync(join(directory, "startup-error.json"))) return yield* new LanFailure({ problem: (yield* readJson(join(directory, "startup-error.json"), StartupError)).error });
         if (existsSync(admissionFile(directory))) return yield* new PairDeferred({ reason: (yield* readJson(admissionFile(directory), AdmissionRefusal)).reason });
         if (!(yield* session.handle.isRunning.pipe(Effect.orElseSucceed(() => false)))) {
           const code = yield* session.handle.exitCode.pipe(Effect.map(Number), Effect.orElseSucceed(() => -1));
@@ -199,7 +195,7 @@ const pool: Command = (args) => Effect.gen(function*() {
   if (order.some((pair) => !Number.isInteger(pair) || pair < 0)) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
   for (const [admitted, pair] of order.entries()) {
     const profile = profileOf(pair);
-    const started = yield* startPair(pair, profile, launcher, capacity, waitSeconds, fps, args.includes("--locate-before-peer")).pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed(failure)));
+    const started = yield* startPair(pair, profile, launcher, capacity, waitSeconds, fps).pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed(failure)));
     if (started instanceof LanFailure) {
       // The pool is as big as the machine admits: keep the pairs that started.
       yield* Console.log(`${started.problem}; the pool stays at ${admitted} pair${admitted === 1 ? "" : "s"}; waiting: ${order.slice(admitted).join(", ")}`);
@@ -302,7 +298,7 @@ const speed: Command = (args) => Effect.gen(function*() {
   yield* Console.log(`pair ${pair}: delivering turns at ${value}x; compare client frame progress to measure game speed`);
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--locate-before-peer] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | solo MAP [--pair K...] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | status [--pair K] | end --pair K";
+export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | solo MAP [--pair K...] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | status [--pair K] | end --pair K";
 
 export const lan: Command = ([sub, ...args]) => {
   switch (sub) {

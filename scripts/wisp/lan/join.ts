@@ -5,7 +5,7 @@
 // every join.
 import { readFileSync } from "node:fs";
 import { Effect, Schedule, Schema } from "effect";
-import { findImageBase, parseMaps, procMemory, readExecutable } from "../engine/memory";
+import { findImageBase, parseMaps, procMemory, readExecutable } from "./memory";
 import type { MenuSocket } from "../menus";
 import { isolatedNetworkProblem } from "./offline";
 import { type CodeSpan, KNOWN_BUILDS, LOOP, TCPN, processMemory, providerName, scanCode, stoppedPc, threadStates } from "./provider";

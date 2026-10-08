@@ -1,6 +1,6 @@
 import { ReplayParser, type Action, type BasicReplayInformation, type GameDataBlock } from "w3gjs";
 import { decodeActionRecords, type ActionRecord } from "./lan/actions";
-import { parseActionLog } from "./engine/actionLog";
+import { parseActionLog } from "./lan/actionLog";
 
 export interface ReplayCommand {
   readonly turn: number;

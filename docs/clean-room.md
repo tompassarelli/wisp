@@ -44,9 +44,8 @@ agent and contributor, in code, tests, fixtures, docs and history.
   or the source files.
 - Commit game strings, tooltips or other in-game text beyond a short quote
   that identifies something.
-- Commit decrypted dumps, disassembly or decompiler output. The engine
-  debugger (wisp:docs/engine.md) reads a running client to debug our own
-  maps; what it learns stays as offsets and facts, never as runtime code.
+- Commit decrypted dumps, disassembly or decompiler output.
+- Keep tooling that reads Warcraft's binary in this repo; the engine debugger lives outside it ([wisp#76](https://github.com/tompassarelli/wisp/issues/76)). The LAN pool's provider switch (wisp:scripts/wisp/lan/) is the one exception left.
 - Emulate a Battle.net sign-in, patch out or work around copy protection, or
   ship a client that does.
 - Read Warsmash source to write Wisp code. Use only the facts in
