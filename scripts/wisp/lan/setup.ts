@@ -6,7 +6,10 @@
 // only loopback, like everything else a pool client runs.
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect } from "effect";
+import { ChildProcess } from "effect/process";
+import { collect } from "../hostProcess";
 import { installMenuPage } from "../menus";
 import { readExecutable } from "../engine/memory";
 import { LanFailure } from "./join";
@@ -14,14 +17,14 @@ import { clientRoot, installOf, prefixOf, retailOf } from "./pool";
 
 const STEAM = () => join(process.env["HOME"] ?? "", ".local/share/Steam");
 
-const run = (what: string, command: readonly string[], env: Record<string, string> = {}) => Effect.tryPromise({
-  try: async () => {
-    const child = Bun.spawn([...command], { env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe" });
-    const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
-    if (code !== 0) throw new Error(`exited with ${code}: ${stderr.trim().split("\n").slice(-3).join(" | ")}`);
-  },
-  catch: (cause) => new LanFailure({ problem: `${what}: ${cause instanceof Error ? cause.message : String(cause)}` }),
-});
+/** Runs a step to completion; an interrupt stops its whole process group (Proton, Wine, cp) and waits for it. */
+const run = (what: string, command: readonly string[], env: Record<string, string> = {}) =>
+  collect(ChildProcess.make(command[0]!, command.slice(1), { env, extendEnv: true, stdin: "ignore" })).pipe(
+    Effect.provide(BunServices.layer),
+    Effect.mapError((cause) => new LanFailure({ problem: `${what}: ${cause.message}` })),
+    Effect.flatMap(({ exitCode, stderr }) => (exitCode === 0 ? Effect.void
+      : Effect.fail(new LanFailure({ problem: `${what}: exited with ${exitCode}: ${stderr.trim().split("\n").slice(-3).join(" | ")}` })))),
+  );
 
 /** Creates pool client `name` from the Warcraft III install folder `from` (the one holding _retail_). */
 export const setupClient = (name: string, from: string, port: number, log: (line: string) => void) => Effect.gen(function*() {
