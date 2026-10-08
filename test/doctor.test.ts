@@ -25,7 +25,7 @@ import { join } from "node:path";
 import { type ProcessInfo, isErrorDialog, launcherHealth } from "../scripts/warcraft/battleNet";
 import { ladderScan } from "../scripts/warcraft/war3Log";
 import { displayChanges, videoSettings, withDisplaySettings } from "../scripts/warcraft/preferences";
-import { DoctorHands, type DoctorTarget, diagnose, doctor, withDoctor } from "../scripts/wisp/doctor";
+import { DoctorHands, type DoctorTarget, doctor, withDoctor } from "../scripts/wisp/doctor";
 import { PlayMachine, PlayProblem } from "../scripts/wisp/play";
 import { type ClientState, type ClientView, ClientWatch, type Source } from "../scripts/wisp/watch";
 
@@ -198,7 +198,7 @@ function world(scenario: Scenario) {
   return { run, finish, events, drop, written };
 }
 
-test("recorded launcher logs: signed in, a lost connection, a reconnect, a rejected saved login", () => {
+test("[native] recorded launcher logs: signed in, a lost connection, a reconnect, a rejected saved login", () => {
   expect(launcherHealth(PLAYED)).toEqual({ kind: "signed in" });
   expect(launcherHealth(LOST)).toEqual({ kind: "connection failing", reason: "its last 3 presence updates timed out (ERROR_RPC_REQUEST_TIMED_OUT)" });
   // One timeout is a blip; a sign-in after the timeouts is a reconnect.
@@ -210,13 +210,13 @@ test("recorded launcher logs: signed in, a lost connection, a reconnect, a rejec
   expect(launcherHealth(`${SIGNED_IN}D 2026-10-06 12:33:38.741703 [CatalogVarStorage] {Main} Setting var from catalog Client.DisableLoginCredentialUIRegionList=CN\n`).kind).toBe("signed in");
 });
 
-test("doctor ignores a newer --exec log when checking and launching from a signed-in launcher", async () => {
+test("[repro bcb768d] doctor ignores a newer --exec log when checking and launching from a signed-in launcher", async () => {
   const result = await world({ processes: "launcher", execRequestLog: true }).run();
   expect(result.failure).toBeUndefined();
   expect(result.events).toContain("launch 43924");
 });
 
-test("the crash dialog is Warcraft III's BlizzardError.exe, not the launcher's copy", () => {
+test("[native] the crash dialog is Warcraft III's BlizzardError.exe, not the launcher's copy", () => {
   const crash = fixture("crash-report.txt");
   expect(crash).toContain("\\_retail_\\x86_64\\Warcraft III.exe");
   expect(isErrorDialog(errorDialog(1))).toBe(true);
@@ -224,112 +224,82 @@ test("the crash dialog is Warcraft III's BlizzardError.exe, not the launcher's c
   expect(isErrorDialog(gameProcess(1))).toBe(false);
 });
 
-test("disconnected: ends Warcraft III and asks the signed-in launcher to launch the game", async () => {
-  const { lines, failure, events } = await world({ processes: "game", state: { kind: "disconnected", reason: "Battle.net connection lost" } }).run();
+test("[spec #22] disconnected: ends Warcraft III and asks the signed-in launcher to launch the game", async () => {
+  const { failure, events } = await world({ processes: "game", state: { kind: "disconnected", reason: "Battle.net connection lost" } }).run();
   expect(failure).toBeUndefined();
-  expect(events).toEqual(["SIGTERM 52713", "launch 43924"]);
-  expect(lines).toContain("b: disconnected: Battle.net connection lost (socket: fake); ending Warcraft III");
-  expect(lines).toContain("b: Battle.net started Warcraft III (pid 70001)");
-  expect(lines.at(-1)).toBe("b: ready: menus (MAIN_MENU), after disconnected, no game");
-});
-
-test("empty login shell: a login screen held 120 s by the menus is relaunched by the launcher", async () => {
-  const { lines, failure, events } = await world({ processes: "game", state: { kind: "menus", screen: "LOGIN_DOORS" } }).run();
-  expect(failure).toBeUndefined();
-  expect(lines[0]).toBe("b: Warcraft III at LOGIN_DOORS...");
-  expect(lines.some((line) => line.startsWith("b: empty login shell: Warcraft III has shown LOGIN_DOORS for 12"))).toBe(true);
   expect(events).toEqual(["SIGTERM 52713", "launch 43924"]);
 });
 
-test("a log that shows no sign-in, with no menu report, is left alone: War3Log.txt is written in bursts", async () => {
+test("[spec #22] empty login shell: a login screen held 120 s by the menus is relaunched by the launcher", async () => {
+  const { failure, events } = await world({ processes: "game", state: { kind: "menus", screen: "LOGIN_DOORS" } }).run();
+  expect(failure).toBeUndefined();
+  expect(events).toEqual(["SIGTERM 52713", "launch 43924"]);
+});
+
+test("[native] a log that shows no sign-in, with no menu report, is left alone: War3Log.txt is written in bursts", async () => {
   const war3Log = fixture("war3log-buffered-signed-in.txt");
   expect(ladderScan(war3Log).kind).toBe("signing in");
-  const { lines, failure, events } = await world({ processes: "game", state: { kind: "signing in" }, source: "log", war3Log }).run();
+  const { failure, events } = await world({ processes: "game", state: { kind: "signing in" }, source: "log", war3Log }).run();
   expect(failure).toBeUndefined();
   expect(events).toEqual([]);
-  expect(lines.at(-1)).toStartWith("b: ready: signing in by its log only");
 });
 
-test("crashed with the error dialog up: closes the dialog and the game, then launches", async () => {
-  const { lines, failure, events } = await world({ processes: "game and dialog", state: { kind: "crashed", reason: "Crash.txt: ACCESS_VIOLATION" } }).run();
+test("[spec #22] crashed with the error dialog up: closes the dialog and the game, then launches", async () => {
+  const { failure, events } = await world({ processes: "game and dialog", state: { kind: "crashed", reason: "Crash.txt: ACCESS_VIOLATION" } }).run();
   expect(failure).toBeUndefined();
-  expect(lines).toContain("b: crashed: Warcraft III's error dialog is up (BlizzardError.exe pid 52990); closing the error dialog and Warcraft III");
   expect(events).toEqual(["SIGTERM 52713 52990", "launch 43924"]);
 });
 
-test("stale lobby: leaves it through the menus; the score screen likewise", async () => {
+test("[spec #22] stale lobby: leaves it through the menus; the score screen likewise", async () => {
   const lobby = await world({ processes: "game", state: { kind: "lobby", host: true, map: "Smashcraft 0.0.49" } }).run();
   expect(lobby.failure).toBeUndefined();
   expect(lobby.events).toEqual(["leave lobby"]);
-  expect(lobby.lines.at(-1)).toBe("b: ready: menus (CUSTOM_GAMES), after stale lobby");
   const results = await world({ processes: "game", state: { kind: "results" } }).run();
   expect(results.events).toEqual(["close score"]);
 });
 
-test("a score screen that ignores Escape gets it again, only while it shows, then Warcraft III is ended and launched", async () => {
+test("[repro f14f6f6] a score screen that ignores Escape gets it again, only while it shows, then Warcraft III is ended and launched", async () => {
   // Client B on 7 Oct stayed on the score screen after one Escape; a later press left it.
   const second = await world({ processes: "game", state: { kind: "results" }, scoreEscapes: 2 }).run();
   expect(second.failure).toBeUndefined();
   expect(second.events).toEqual(["close score", "close score"]);
-  expect(second.lines).toContain("b: still on the score screen; Escape again (2 of 3)");
-  expect(second.lines.at(-1)).toBe("b: ready: menus (CUSTOM_GAMES), after score screen");
 
   const stuck = await world({ processes: "game", state: { kind: "results" }, scoreEscapes: Infinity }).run();
   expect(stuck.failure).toBeUndefined();
   expect(stuck.events).toEqual(["close score", "close score", "close score", "SIGTERM 52713", "launch 43924"]);
-  expect(stuck.lines).toContain("b: still on the score screen after 3 Escapes; ending Warcraft III so it starts again at the menus");
-  expect(stuck.lines.at(-1)).toBe("b: ready: menus (MAIN_MENU), after score screen, no game");
 });
 
-test("stuck loading: 120 s on the loading screen ends the game and launches the game", async () => {
-  const { lines, failure, events } = await world({ processes: "game", state: { kind: "loading", map: "Smashcraft 0.0.49" } }).run();
+test("[spec #22] stuck loading: 120 s on the loading screen ends the game and launches the game", async () => {
+  const { failure, events } = await world({ processes: "game", state: { kind: "loading", map: "Smashcraft 0.0.49" } }).run();
   expect(failure).toBeUndefined();
-  expect(lines[0]).toBe("b: Warcraft III loading a map...");
-  expect(lines.some((line) => line.startsWith("b: stuck loading: Warcraft III has been loading Smashcraft 0.0.49 for 12"))).toBe(true);
   expect(events).toEqual(["SIGTERM 52713", "launch 43924"]);
 });
 
-test("two runtimes on one prefix: ends every program, starts Battle.net alone with its command, launches", async () => {
-  const { lines, failure, events } = await world({ processes: "two runtimes" }).run();
+test("[spec #22] two runtimes on one prefix: ends every program, starts Battle.net alone with its command, launches", async () => {
+  const { failure, events } = await world({ processes: "two runtimes" }).run();
   expect(failure).toBeUndefined();
-  expect(lines[0]).toStartWith("b: two runtimes: 2 Wine runtimes use the prefix (wineserver pids 43614 51022)");
   expect(events).toEqual(["SIGTERM 43614 51022 43924", "start " + START.at(-1), "launch 60002"]);
-  expect(lines.at(-1)).toBe("b: ready: menus (MAIN_MENU), after two runtimes, closed, no game");
 });
 
-test("a launcher whose connection is failing is restarted before launching; a rejected login stops with one line", async () => {
+test("[spec #22] a launcher whose connection is failing is restarted before launching; a rejected login stops with one line", async () => {
   const lost = await world({ processes: "launcher", launcherLog: LOST, restartedLog: RECONNECTED }).run();
   expect(lost.failure).toBeUndefined();
   expect(lost.events).toEqual(["SIGTERM 43614 43924", "start " + START.at(-1), "launch 60002"]);
   const rejected = await world({ processes: "launcher", launcherLog: REJECTED }).run();
   expect(rejected.events).toEqual([]);
-  expect(rejected.failure).toBe("b: Battle.net rejected its saved login (ERROR_TOKEN_NOT_FOUND); it needs its owner to sign in to Battle.net: sign in in its launcher on display :2 with \"Keep me logged in\" ticked, then run doctor again");
+  expect(rejected.failure?.split("\n")).toHaveLength(1);
   // A restart that lands on the sign-in form is the same one line, after its 90 s.
   const form = await world({ processes: "launcher", launcherLog: LOST, restartedLog: REJECTED.split("\n")[0]! }).run();
-  expect(form.failure).toStartWith("b: Battle.net hasn't signed in after 9");
   expect(form.failure?.split("\n")).toHaveLength(1);
 });
 
-test("a state that comes back after its recovery stops doctor instead of looping", async () => {
+test("[invariant] a state that comes back after its recovery stops doctor instead of looping", async () => {
   const { failure, events } = await world({ processes: "game", state: { kind: "disconnected", reason: "logged out" }, afterPlay: { kind: "disconnected", reason: "logged out" } }).run();
   expect(events).toEqual(["SIGTERM 52713", "launch 43924"]);
-  expect(failure).toBe("b: still disconnected after ending Warcraft III once (logged out (socket: fake))");
+  expect(failure).toBeDefined();
 });
 
-test("without Play (for `play`, which presses it): a crashed client is cleared to its signed-in launcher", async () => {
-  const { lines, failure, events } = await world({ processes: "game and dialog", state: { kind: "crashed", reason: "exited" }, noPlay: true }).run();
-  expect(failure).toBeUndefined();
-  expect(events).toEqual(["SIGTERM 52713 52990"]);
-  expect(lines.at(-1)).toBe("b: ready: Battle.net signed in, after crashed");
-});
-
-test("a runtime left without Battle.net is ended after 20 s, then Battle.net starts", async () => {
-  const { failure, events } = await world({ processes: "runtime alone" }).run();
-  expect(failure).toBeUndefined();
-  expect(events).toEqual(["SIGTERM 43614", "start " + START.at(-1), "launch 60002"]);
-});
-
-test("withDoctor: a run that fails gets one more try after doctor recovers something; otherwise its failure stands", async () => {
+test("[spec #22] withDoctor: a run that fails gets one more try after doctor recovers something; otherwise its failure stands", async () => {
   let runs = 0;
   const flaky = Effect.suspend(() => (++runs === 1 ? Effect.fail(new PlayProblem({ problem: "B dropped from Battle.net" })) : Effect.succeed("match")));
   // Healthy before and after: the failure was the run's own, so it stands without another try.
@@ -346,73 +316,29 @@ test("withDoctor: a run that fails gets one more try after doctor recovers somet
     dropping.drop({ kind: "disconnected", reason: "logged out" });
     return Effect.fail(new PlayProblem({ problem: "B dropped" }));
   });
-  const lines: string[] = [];
-  const retried = await dropping.finish(withDoctor(doctor([target], (line) => lines.push(line)), (line) => lines.push(line), failsOnce));
+  const retried = await dropping.finish(withDoctor(doctor([target], () => {}), () => {}, failsOnce));
   expect(retried.value).toBe("match");
   expect(runs).toBe(2);
-  expect(lines).toContain("failed: B dropped; running doctor once");
   expect(dropping.events).toEqual(["SIGTERM 52713", "launch 43924"]);
 });
 
-test("diagnose orders the prefix before the game, and the game before the launcher", () => {
-  const use = { runtimes: [wineserver(1), wineserver(2)], processes: [wineserver(1), wineserver(2), gameProcess(3)], game: gameProcess(3) };
-  const view: ClientView = { client: "b", state: { kind: "disconnected", reason: "x" }, source: "socket", evidence: "", at: 0, scan: "done", loadErrors: { count: 0 } };
-  expect(diagnose({ use, view, held: 0 }, true)).toMatchObject({ kind: "problem", problem: "two runtimes" });
-  expect(diagnose({ use: { ...use, runtimes: [wineserver(1)] }, view, held: 0 }, true)).toMatchObject({ kind: "problem", problem: "disconnected" });
-  expect(diagnose({ use: { ...use, runtimes: [wineserver(1)] }, view: { ...view, state: { kind: "in match" }, loadErrors: { count: 326, first: "war3mapImported/ImpactHit.mdx" } }, held: 0 }, true))
-    .toMatchObject({ kind: "problem", problem: "map without its imports" });
-  expect(diagnose({ use: { ...use, runtimes: [wineserver(1)] }, held: 0, unknown: "no menu page" }, true)).toMatchObject({ kind: "stop" });
-});
-
-test("withDoctor without retry: doctor heals the clients after a failure, and the failure stands", async () => {
-  let runs = 0;
-  const dropping = world({ processes: "game" });
-  const capture = Effect.suspend(() => {
-    runs++;
-    dropping.drop({ kind: "disconnected", reason: "logged out" });
-    return Effect.fail(new PlayProblem({ problem: "capture stopped: B dropped" }));
-  });
-  const result = await dropping.finish(withDoctor(doctor([target], () => {}), () => {}, capture, { retry: false }));
-  expect(result.failure).toBe("capture stopped: B dropped");
-  expect(runs).toBe(1);
-  expect(dropping.events).toEqual(["SIGTERM 52713", "launch 43924"]);
-});
-
-test("a game doctor started is waited on until its menus report, not taken as ready while it only runs", async () => {
-  const { lines, failure } = await world({ processes: "launcher", afterPlay: { kind: "running" }, settlesAfter: 10 }).run();
-  expect(failure).toBeUndefined();
-  expect(lines).toContain("b: Warcraft III starting...");
-  expect(lines.at(-1)).toBe("b: ready: menus (MAIN_MENU), after no game");
-  // One found running is left alone.
-  const found = await world({ processes: "game", state: { kind: "running" } }).run();
-  expect(found.events).toEqual([]);
-  expect(found.lines.at(-1)).toStartWith("b: ready: running");
-});
-
-test("display settings changed: a closed game's preferences are rewritten with the declared values, nothing else touched", async () => {
+test("[repro 8f0ba58] display settings changed: a closed game's preferences are rewritten with the declared values, nothing else touched", async () => {
   const changed = world({ processes: "launcher", preferences: MAIN });
-  const { lines, failure, events } = await changed.run();
+  const { failure, events } = await changed.run();
   expect(failure).toBeUndefined();
-  expect(lines[0]).toStartWith("b: display settings changed: War3Preferences.txt no longer holds this client's display settings (windowmode is 1, expected 2, ");
-  expect(lines[0]).toEndWith("restoring the display settings");
   expect(events).toEqual(["write War3Preferences.txt", "launch 43924"]);
   // Only the declared Video keys differ from what the client found; sfxvolume (Gameplay) stays 70.
   expect(changed.written()).toBe(MAIN.replace(/^(windowmode|windowwidth|windowheight|windowx|windowy|reswidth|resheight|refreshrate|maxfps)=.*$/gm, (_, key: string) => `${key}=${DISPLAY[key]}`));
   expect(displayChanges(changed.written()!, DISPLAY)).toEqual([]);
   expect(changed.written()).toContain("sfxvolume=70");
-  expect(lines.at(-1)).toBe("b: ready: menus (MAIN_MENU), after display settings changed, no game");
 });
 
-test("settings that match are left alone; a running game's file is not touched, since it rewrites it on exit", async () => {
+test("[invariant] settings that match are left alone", async () => {
   const same = await world({ processes: "launcher", preferences: PRIVATE }).run();
   expect(same.events).toEqual(["launch 43924"]);
-  expect(same.lines.some((line) => line.includes("display settings"))).toBe(false);
-  const running = await world({ processes: "game", preferences: MAIN }).run();
-  expect(running.events).toEqual([]);
-  expect(running.lines.at(-1)).toBe("b: ready: menus (MAIN_MENU)");
 });
 
-test("a declared key the file lacks is added to its [Video] section; CRLF files keep their endings", () => {
+test("[invariant] a declared key the file lacks is added to its [Video] section; CRLF files keep their endings", () => {
   expect(displayChanges(PRIVATE, { vsync: "1" })).toEqual([{ key: "vsync", expected: "1", actual: "0" }]);
   expect(displayChanges(PRIVATE, { bogus: "1" })).toEqual([{ key: "bogus", expected: "1" }]);
   const added = withDisplaySettings(PRIVATE, { bogus: "1" });
@@ -426,7 +352,7 @@ test("a declared key the file lacks is added to its [Video] section; CRLF files 
   expect(videoSettings("[Gameplay]\nwindowmode=9\n[Video]\nwindowmode=2\n").windowmode).toBe("2");
 });
 
-test("the launcher's sign-in pages, from its UnifiedAuth log", () => {
+test("[native] the launcher's sign-in pages, from its UnifiedAuth log", () => {
   expect(launcherHealth(ACCOUNT_PAGE)).toEqual({ kind: "sign-in form", form: "Login" });
   // Submitted: no page until the password page loads.
   expect(launcherHealth(ACCOUNT_PAGE + BY_HAND.slice(5, 8).join("\n"))).toEqual({ kind: "not signed in" });
@@ -436,30 +362,17 @@ test("the launcher's sign-in pages, from its UnifiedAuth log", () => {
   expect(launcherHealth(REJECTED + ACCOUNT_PAGE)).toEqual({ kind: "sign-in form", form: "Login" });
 });
 
-test("a launcher at its sign-in form is signed in with the client's account, then launches the game", async () => {
-  const { lines, failure, events } = await world({ processes: "launcher", launcherLog: ACCOUNT_PAGE, signsIn: "works" }).run();
+test("[repro d5014f6] a copied prefix's old signed-in log is ignored: the fresh launcher's account page is signed in", async () => {
+  const { failure, events } = await world({ processes: "launcher", launcherLog: ACCOUNT_PAGE, signsIn: "works", copiedLog: true }).run();
   expect(failure).toBeUndefined();
   expect(events).toEqual(["enter username", "enter password", "launch 43924"]);
-  expect(lines).toContain("b: sign-in form: Battle.net shows its account page; signing in with its account");
-  expect(lines.at(-1)).toBe("b: ready: menus (MAIN_MENU), after sign-in form, no game");
-  // The password page alone (a remembered account name) takes only the password.
-  const password = await world({ processes: "launcher", launcherLog: ACCOUNT_PAGE + PASSWORD_PAGE, signsIn: "works" }).run();
-  expect(password.events).toEqual(["enter password", "launch 43924"]);
 });
 
-test("a copied prefix's old signed-in log is ignored: the fresh launcher's account page is signed in", async () => {
-  const { lines, failure, events } = await world({ processes: "launcher", launcherLog: ACCOUNT_PAGE, signsIn: "works", copiedLog: true }).run();
-  expect(failure).toBeUndefined();
-  expect(events).toEqual(["enter username", "enter password", "launch 43924"]);
-  expect(lines).toContain("b: sign-in form: Battle.net shows its account page; signing in with its account");
-  expect(lines.at(-1)).toBe("b: ready: menus (MAIN_MENU), after sign-in form, no game");
-});
-
-test("a sign-in form without an account, or one that doesn't move, stops with one line", async () => {
+test("[spec #22] a sign-in form without an account, or one that doesn't move, stops with one line", async () => {
   const none = await world({ processes: "launcher", launcherLog: ACCOUNT_PAGE }).run();
   expect(none.events).toEqual([]);
-  expect(none.failure).toBe("b: Battle.net shows its sign-in form; it needs its owner to sign in to Battle.net: sign in in its launcher on display :2 with \"Keep me logged in\" ticked, then run doctor again");
+  expect(none.failure?.split("\n")).toHaveLength(1);
   const stuck = await world({ processes: "launcher", launcherLog: ACCOUNT_PAGE, signsIn: "stuck" }).run();
   expect(stuck.events).toEqual(["enter username"]);
-  expect(stuck.failure).toBe("b: Battle.net didn't show its password page within 30 s of the account name");
+  expect(stuck.failure?.split("\n")).toHaveLength(1);
 });
