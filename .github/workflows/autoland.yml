@@ -14,16 +14,17 @@ on:
         description: claude/ branch to land
         required: true
 
-run-name: Autoland ${{ inputs.branch || github.ref_name }}
+run-name: Autoland ${{ inputs.branch || format('{0} (push)', github.ref_name) }}
 
 permissions:
   contents: write
   actions: write
   issues: write
 
-# One landing at a time; up to 100 branches wait their turn in order.
+# One landing at a time; up to 100 branches wait their turn in order. A push
+# only queues the branch, so it never waits here itself.
 concurrency:
-  group: autoland
+  group: ${{ github.event_name == 'push' && format('autoland-push-{0}', github.ref) || 'autoland' }}
   cancel-in-progress: false
   queue: max
 
@@ -33,7 +34,16 @@ env:
   GH_REPO: ${{ github.repository }}
 
 jobs:
+  # A push runs the branch's copy of this file; the landing runs main's.
+  queue:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: gh workflow run autoland.yml --ref main -f branch="$BRANCH"
+
   rebase:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -200,21 +210,31 @@ jobs:
           if [ -n "$new" ]; then
             refuse "$(grep -c . <<< "$new") failing that main's run passes:" "$(printf '%s\n' "$new" | sed 's/^/- /')"
           fi
-          git fetch -q origin main "$SCRATCH"
-          if [ "$(git rev-parse origin/main)" != "$BASE" ] || ! git push origin "$SHA:refs/heads/main" 2> push.log; then
+          # Main moves while the suites run: replay the tested commits onto it, as a
+          # local landing would; a conflict sends the branch through again.
+          git fetch -q origin "$SCRATCH"
+          landed=$SHA
+          pushed=
+          for attempt in 1 2 3; do
             git fetch -q origin main
-            if [ "$(git rev-parse origin/main)" != "$BASE" ]; then
-              gh workflow run autoland.yml --ref main -f branch="$BRANCH"
-              echo "main moved during the run: queued $BRANCH again" >> "$GITHUB_STEP_SUMMARY"
-              exit 0
+            if ! git merge-base --is-ancestor origin/main "$landed"; then
+              git checkout -q -B land "$landed"
+              if ! git rebase -q origin/main; then
+                git rebase --abort
+                gh workflow run autoland.yml --ref main -f branch="$BRANCH"
+                echo "main moved and $BRANCH now conflicts with it: queued it again" >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
+              landed=$(git rev-parse HEAD)
             fi
-            refuse "pushing to main failed:" "$(cat push.log)"
-          fi
+            if git push origin "$landed:refs/heads/main" 2> push.log; then pushed=1; break; fi
+          done
+          [ -n "$pushed" ] || refuse "pushing to main failed:" "$(cat push.log)"
           git push origin --delete "$BRANCH"
           # Pushes made with this token start no workflows: start main's CI (main-red follows it).
           gh workflow run ci.yml --ref main
-          echo "Landed $BRANCH on main as $short; deleted the branch." >> "$GITHUB_STEP_SUMMARY"
-          echo "landed=true" >> "$GITHUB_OUTPUT"
+          echo "Landed $BRANCH on main as ${landed:0:10}; deleted the branch." >> "$GITHUB_STEP_SUMMARY"
+          if [ "$landed" = "$SHA" ]; then echo "landed=true" >> "$GITHUB_OUTPUT"; fi
       # The landed commit is main's next base: its result saves the next landing a baseline run.
       - if: steps.land.outputs.landed == 'true'
         uses: actions/upload-artifact@v4

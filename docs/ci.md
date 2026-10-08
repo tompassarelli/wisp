@@ -186,16 +186,20 @@ it locally.
    on main is a new failure; a shard that crashed without naming a test is
    new unless main's run also had one.
 5. **Land.** With no new failures, the rebased commits are pushed to main
-   (a plain fast-forward, so it fails if main moved) and the branch is
+   (a plain fast-forward) and the branch is
    deleted. Pushes made with the workflow token start no workflows, so the
    run dispatches main's CI for the landed commit; "main is red" follows that
-   CI run as usual. If main moved during the run, the branch is queued again.
+   CI run as usual. If main moved during the run, the tested commits are
+   replayed onto it, as a local landing would; only a conflict sends the
+   branch through again.
 6. **Refuse.** On a conflict, a failed check or new failures, the branch
    stays and every issue the commits reference (`Refs wisp#N`) gets a comment
    naming the files or tests and linking the run. Push a fix to the same
    branch and it tries again.
 
-Runs share one concurrency group with a queue, so branches land one at a
+The push itself only queues a run of main's copy of the workflow, so a
+branch made from an older main still lands with the current rules. Runs
+share one concurrency group with a queue, so branches land one at a
 time in push order and never race main. To retry a branch without a new
 commit: `gh workflow run autoland.yml -f branch=claude/NAME`. A commit that
 changes `.github/workflows/` can't land this way (the workflow token may not
