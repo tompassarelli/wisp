@@ -63,7 +63,7 @@ const LOWEST: Readonly<Record<string, number>> = {
 const PARITY: Profile = { name: "parity", width: 800, height: 600, maxFps: 60, video: LOWEST, graphicsMode: "classic", sound: false, music: false };
 const VISUAL: Profile = { name: "visual", width: 1280, height: 720, maxFps: 60, video: { ...LOWEST, lightingquality: 2, texquality: 1 }, graphicsMode: "reforged", sound: true, music: true };
 const CAPTURE_VIDEO = { ...LOWEST, lightingquality: 2, texquality: 1, shadowquality: 2, pointlightshadowquality: 2, waterquality: 2, assao: 1 };
-const captureProfile = (graphicsMode: Profile["graphicsMode"]): Profile => ({ ...VISUAL, name: `capture-${graphicsMode}`, video: CAPTURE_VIDEO, graphicsMode, sound: false, music: false });
+const captureProfile = (graphicsMode: Profile["graphicsMode"]): Profile => ({ ...VISUAL, name: `capture-${graphicsMode}`, video: CAPTURE_VIDEO, graphicsMode, sound: true, music: false });
 const CAPTURE_PROFILES = {
   "capture-classic": captureProfile("classic"),
   "capture-reforged": captureProfile("reforged"),
