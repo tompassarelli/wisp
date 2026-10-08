@@ -9,12 +9,19 @@ const readers = (map: Readonly<Record<string, string>>, stock: Readonly<Record<s
   stock: async (path: string, layer: AssetLayer) => stock[`${layer}/${path}`] === undefined ? undefined : encoded(stock[`${layer}/${path}`]),
 });
 
-test("[spec #84] Definitive selects its map import while Classic keeps its own body", async () => {
-  const imports = readers({ "Unit.mdx": "classic", "_de.w3mod/Unit.mdx": "definitive", "_hd.w3mod/Unit.mdx": "reforged" });
-  for (const graphics of ["classic", "definitive"] as const) {
-    const result = await Effect.runPromise(resolveRenderAsset(imports, "Unit.mdl", graphics));
+test("[native] #84 Definitive draws either lone Cairne alias and Classic ignores the DE alias", async () => {
+  // Warcraft 3.0.1: https://github.com/tompassarelli/smashcraft/issues/334#issuecomment-6069629530
+  const body = "units/orc/HeroTaurenChieftain/HeroTaurenChieftain.mdx";
+  for (const [graphics, alias, expected] of [
+    ["definitive", "_de.w3mod", "_de.w3mod"],
+    ["definitive", "_hd.w3mod", "_hd.w3mod"],
+    ["classic", "_de.w3mod", "base"],
+  ] as const) {
+    const imports = readers({ [body]: "classic", [`${alias}/${body}`]: "definitive" });
+    const result = await Effect.runPromise(resolveRenderAsset(imports, body.replace(/\.mdx$/, ".mdl").replaceAll("/", "\\"), graphics));
     expect(new TextDecoder().decode(result.bytes)).toBe(graphics);
-    expect(result.selected?.source).toBe("map");
+    expect(result.selected).toEqual({ source: "map", layer: expected, path: expected === "base" ? body : `${expected}/${body}` });
+    expect(result.attempts.at(-1)).toEqual(result.selected);
   }
   expect(headlessArguments(["--render", "/private/render", "--frames", "1", "--graphics", "definitive"]).graphics).toBe("definitive");
 });
