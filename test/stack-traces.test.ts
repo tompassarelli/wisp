@@ -1,8 +1,9 @@
-import { expect, test } from "bun:test";
+import { expect } from "bun:test";
 import { join } from "node:path";
 import { mapCompiler, report } from "../scripts/compiler";
+import { farmTest } from "../scripts/wisp/farmTest";
 
-test("[spec docs/stack-traces.md] Warcraft errors retain TypeScript frames and Lua return/unwind semantics without debug", () => {
+farmTest("[spec docs/stack-traces.md] Warcraft errors retain TypeScript frames and Lua return/unwind semantics without debug", () => {
   const diagnostics = mapCompiler(join(import.meta.dir, "tsconfig.stack.json"))();
   expect(report(diagnostics)).toBe("");
   const run = Bun.spawnSync([
@@ -18,7 +19,7 @@ test("[spec docs/stack-traces.md] Warcraft errors retain TypeScript frames and L
   expect(output).toContain("stack and unwind contract passed");
 });
 
-test("[spec docs/stack-traces.md] an uninstrumented bundle reports each thrown value's TypeScript throw site without debug", () => {
+farmTest("[spec docs/stack-traces.md] an uninstrumented bundle reports each thrown value's TypeScript throw site without debug", () => {
   const diagnostics = mapCompiler(join(import.meta.dir, "tsconfig.throw.json"))();
   expect(report(diagnostics)).toBe("");
   const run = Bun.spawnSync([
