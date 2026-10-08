@@ -601,6 +601,17 @@ saves them as the scene's `environment`.
   rest of the frame still draws. The render command exits with a failure after
   saving its images, scene JSON and report. Standalone play stops with the
   same named drawing failure.
+- **Placed doodads.** Give `render.doodads` the map's `doo` bytes and `models`,
+  keyed by four-character object or skin ID. Each value is a model path or
+  an array indexed by the placement's variation. Resolve these paths from
+  the map's object data and the user's installed data tables. Version 8/11
+  placements draw in Classic and Definitive with their stored height,
+  rotation, three-axis scale and visibility; `render.terrain.origin` shifts
+  their X/Y coordinates. They use the same world-bounds and far cull as
+  effects. Skin IDs are present by default; set `skinIds: false` for the
+  older layout without skin fields. Missing model entries and unsupported
+  terrain-modifying placements fail by name. Format fields follow the
+  [doodad specification](https://github.com/ChiefOfGxBxL/WC3MapSpecification/blob/master/Doodads/8_11.md).
 - **Popcorn emitters.** External `.pkb`/`.pkfx` particle effects are recognized
   in either supported graphics mode, including Definitive assets. Each saved
   frame's scene JSON has `popcornEmitters`: model path, model handle, emitter
@@ -619,8 +630,8 @@ saves them as the scene's `environment`.
   attenuation start and fading linearly to zero at the attenuation end
   (scaled with the model), up to eight per draw, nearest first. Node
   animation of a light is not followed. Classic draws none.
-- **Not drawn.** Terrain tiles, cliffs and the map's placed doodads
-  (`war3map.doo`), water, shadows, point-light shadows, a height fog's
+- **Not drawn.** Terrain tiles, cliffs and terrain-modifying special doodads,
+  water, shadows, point-light shadows, a height fog's
   falloff, bloom and ambient occlusion. A look check that asks for one fails
   ([Graphics profiles](#graphics-profiles)).
 

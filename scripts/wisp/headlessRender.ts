@@ -10,6 +10,8 @@ import { pollFor, spawnLogged } from "./hostProcess";
 import { deathSeconds } from "./models";
 import type { RenderAssetResolution, ResolvedRenderAsset } from "./renderAssets";
 import { decodeTerrain, shiftedBounds, worldBounds, type WorldBounds } from "./terrain";
+import { decodeDoodads, type PlacedDoodad } from "./doodads";
+import { freshAnimation } from "../../src/headless/animation";
 
 import { GRAPHICS, type Graphics, type Lever, PROFILES, unsupportedLevers } from "./graphicsProfiles";
 export type { Graphics } from "./graphicsProfiles";
@@ -34,6 +36,8 @@ export interface HeadlessRenderProject {
    * world bounds (wisp:docs/headless.md, "Lighting, fog and sky", world bounds).
    */
   readonly terrain?: { readonly w3e?: Uint8Array; readonly bounds?: WorldBounds; readonly origin?: readonly [number, number] };
+  /** Placed doodads and their object-data model variations, resolved from the map and install. */
+  readonly doodads?: { readonly doo: Uint8Array; readonly models: Readonly<Record<string, string | readonly string[]>>; readonly skinIds?: boolean };
 }
 
 export interface RenderScene {
@@ -125,6 +129,27 @@ export async function loadEffectDeaths(project: HeadlessRenderProject, models: I
 }
 
 const terrainBounds = new WeakMap<Uint8Array, WorldBounds>();
+const doodadPlacements = new WeakMap<Uint8Array, Map<boolean, readonly PlacedDoodad[]>>();
+function projectDoodads(project: HeadlessRenderProject, frame: number): DrawnPose[] {
+  const options = project.doodads;
+  if (options === undefined) return [];
+  const skinIds = options.skinIds ?? true;
+  let formats = doodadPlacements.get(options.doo);
+  if (formats === undefined) doodadPlacements.set(options.doo, formats = new Map());
+  let placements = formats.get(skinIds);
+  if (placements === undefined) formats.set(skinIds, placements = decodeDoodads(options.doo, skinIds));
+  const [originX, originY] = project.terrain?.origin ?? [0, 0];
+  return placements.flatMap((placed, index) => {
+    if (!placed.visible) return [];
+    const variants = options.models[placed.skin] ?? options.models[placed.type];
+    const model = typeof variants === "string" ? variants : variants?.[placed.variation];
+    if (model === undefined) throw new Error(`no render.doodads.models entry for ${placed.skin} variation ${placed.variation}`);
+    return [{ ...freshAnimation(), animation: placed.life === 0 ? "death" : "stand", animationElapsed: frame / 60, animationClock: frame / 60,
+      handle: { kind: "effect" as const, id: -1 - index }, model, created: 0, x: placed.x - originX, y: placed.y - originY, z: placed.z,
+      alpha: 255, scale: 1, timeScale: 1, queuedAnimations: [], yaw: placed.angle, pitch: 0, roll: 0, color: [255, 255, 255] as [number, number, number],
+      teamColor: 0, matrixScale: [...placed.scale] as [number, number, number], flat: placed.scale.some((value) => value === 0) }];
+  });
+}
 function projectWorld(project: HeadlessRenderProject): WorldBounds | undefined {
   const terrain = project.terrain, w3e = terrain?.w3e;
   let bounds = terrain?.bounds ?? (w3e === undefined ? undefined : terrainBounds.get(w3e));
@@ -143,7 +168,7 @@ export function sceneWithUnits(project: HeadlessRenderProject, scene: RenderScen
       animationClock: unit.animationClock, animationBlendTime: unit.animationBlendTime, animationBlend: unit.animationBlend,
       unit: true, queuedAnimations: [], yaw: unit.facing * Math.PI / 180, pitch: 0, roll: 0, color: unit.color, teamColor: unit.teamColor, matrixScale: unit.scale, flat: unit.scale.some((value) => value === 0) };
   });
-  return { ...scene, effects: [...scene.effects, ...units], ...(world === undefined ? {} : { world }) };
+  return { ...scene, effects: [...scene.effects, ...units, ...projectDoodads(project, scene.frame)], ...(world === undefined ? {} : { world }) };
 }
 
 export class RenderFailure extends Schema.TaggedError<RenderFailure>()("RenderFailure", {
