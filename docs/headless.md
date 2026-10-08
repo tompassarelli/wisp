@@ -369,8 +369,12 @@ Frame numbers are headless client frames after that frame's journey events.
 `--journey FILE.json` replaces the named journey with `{ frames, events }`;
 key events may include `down: true` and a later `down: false` to hold a key.
 
-The map supplies `HeadlessProject.render.readAsset(path)`, returning the actual
-imported or stock asset bytes, or `undefined` when absent. Keep these assets and
+The map supplies `HeadlessProject.render.readAsset(path, graphics)`, returning the actual
+imported or stock asset bytes, or `undefined` when absent. `--graphics reforged`
+(default `classic`) passes `"reforged"`: the map then returns a path's
+`_hd.w3mod` import or the game's HD file where one exists, as Reforged loads
+them, and the renderer draws HD materials with their PBR shader. `render.json`
+records the choice. Keep these assets and
 the output outside public repositories. MDX and MDL models, BLP1, TGA and PNG
 textures are supported; a resolver can return decoded PNG bytes for a stock
 BLP path backed by DDS or BLP2. Missing visible assets fail the render. The

@@ -300,6 +300,8 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
   renderer.setLightPosition([1000, -1000, 3000]); renderer.setLightColor([1, 1, 1]);
   const placed = transform(pose);
   renderer.setWispEnvironment({ ...(light === undefined ? {} : { light: { direction: modelDirection(placed, light.toward), key: light.key, ambient: light.ambient } }), ...(fog === undefined ? {} : { fog }) });
+  // An HD model's first initGL draws its BRDF table at that table's size and leaves the viewport there.
+  gl.viewport(0, 0, canvas.width, canvas.height);
   renderer.render(multiply(view.view, placed), view.projection, {});
 }
 const skies = new Map<string, Promise<ModelInstance>>();
@@ -317,6 +319,7 @@ async function drawSky(scene: RenderScene, view: ReturnType<typeof camera>) {
   renderer.update(0);
   const fog = sceneFog(scene, view, true);
   renderer.setWispEnvironment(fog === undefined ? undefined : { fog });
+  gl.viewport(0, 0, canvas.width, canvas.height);
   renderer.render(multiply(view.view, placed), view.skyProjection, {});
   // The sky's layers leave depth writes off, and a masked depth clear clears nothing.
   gl.depthMask(true); gl.clear(gl.DEPTH_BUFFER_BIT);

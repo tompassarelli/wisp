@@ -9,9 +9,15 @@ import type { Environment } from "../../src/headless/warcraft3Scenery";
 import { pollFor, spawnLogged } from "./hostProcess";
 import { deathSeconds } from "./models";
 
+/** Which art Warcraft draws: Classic (SD) or Reforged (HD) models, textures and day/night lights. */
+export type Graphics = "classic" | "reforged";
+
 export interface HeadlessRenderProject {
-  /** The map's imported assets and Warcraft assets, kept outside the repository. */
-  readonly readAsset: (path: string) => Promise<Uint8Array | undefined>;
+  /**
+   * The map's imported assets and Warcraft assets, kept outside the repository.
+   * In Reforged graphics a path takes its `_hd.w3mod` version where one exists.
+   */
+  readonly readAsset: (path: string, graphics?: Graphics) => Promise<Uint8Array | undefined>;
   /** Unit object type IDs to model paths; effect models already name their paths. */
   readonly unitModels?: Readonly<Record<number, string>>;
   readonly width?: number;
@@ -75,10 +81,10 @@ export const captureScene = (client: HeadlessClient, options: { readonly visible
 });
 
 /** The Death sequence lengths of `models`, read from the map's assets, for clients whose destroyed effects are drawn. */
-export async function loadEffectDeaths(project: HeadlessRenderProject, models: Iterable<string>): Promise<EffectDeaths> {
+export async function loadEffectDeaths(project: HeadlessRenderProject, models: Iterable<string>, graphics: Graphics = "classic"): Promise<EffectDeaths> {
   const deaths = new Map<string, number | undefined>();
   for (const model of models) {
-    const bytes = await project.readAsset(model);
+    const bytes = await project.readAsset(model, graphics);
     deaths.set(model, bytes === undefined ? undefined : deathSeconds(bytes));
   }
   return (model) => deaths.get(model);
@@ -141,7 +147,7 @@ const ChromePages = Schema.fromJsonString(Schema.Array(Schema.Struct({ type: Sch
 const renderFailure = (cause: unknown) => (cause instanceof RenderFailure ? cause : new RenderFailure({ cause }));
 
 /** A headless Chrome with the renderer page loaded; Chrome, its server, socket and profile live until the scope closes. */
-const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: boolean) => Effect.gen(function*() {
+const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: boolean, graphics: Graphics) => Effect.gen(function*() {
   const directory = yield* Effect.acquireRelease(
     Effect.tryPromise({ try: () => mkdtemp(join(tmpdir(), "wisp-render-")), catch: renderFailure }),
     (path) => Effect.promise(() => rm(path, { recursive: true, force: true })),
@@ -154,7 +160,7 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
     if (url.pathname !== "/asset") return new Response("not found", { status: 404 });
     const path = url.searchParams.get("path") ?? "";
     let pending = assets.get(path);
-    if (pending === undefined) assets.set(path, pending = project.readAsset(path));
+    if (pending === undefined) assets.set(path, pending = project.readAsset(path, graphics));
     const data = await pending;
     return data === undefined ? new Response(`missing map asset: ${path}`, { status: 404 }) : new Response(new Uint8Array(data));
   }})), (open) => Effect.promise(() => open.stop(true)));
@@ -191,22 +197,22 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
 });
 
 /** Chrome on the GPU, or on SwiftShader once that fails; a failed attempt's resources are released before the next. */
-const openAnyBrowser = (project: HeadlessRenderProject, bundle: string) => Effect.gen(function*() {
+const openAnyBrowser = (project: HeadlessRenderProject, bundle: string, graphics: Graphics) => Effect.gen(function*() {
   const attempt = (fallback: boolean) => Effect.gen(function*() {
     const scope = yield* Scope.fork(yield* Effect.scope);
-    return yield* openBrowser(project, bundle, fallback).pipe(Scope.provide(scope), Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))));
+    return yield* openBrowser(project, bundle, fallback, graphics).pipe(Scope.provide(scope), Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))));
   });
   return yield* attempt(false).pipe(Effect.catch(() => attempt(true)));
 });
 
 /** Draws captured scenes with the map's models, textures, camera and UI. */
-export const renderScenes = (project: HeadlessRenderProject, scenes: readonly RenderScene[], directory: string) => Effect.scoped(Effect.gen(function*() {
+export const renderScenes = (project: HeadlessRenderProject, scenes: readonly RenderScene[], directory: string, graphics: Graphics = "classic") => Effect.scoped(Effect.gen(function*() {
   const bundle = yield* Effect.tryPromise({ try: async () => {
     const result = await Bun.build({ entrypoints: [join(import.meta.dir, "browser/headlessRender.ts")], target: "browser", minify: true });
     if (!result.success || result.outputs[0] === undefined) throw new Error(result.logs.join("\n"));
     return result.outputs[0].text();
   }, catch: (cause) => new RenderFailure({ cause }) });
-  const browser = yield* openAnyBrowser(project, bundle);
+  const browser = yield* openAnyBrowser(project, bundle, graphics);
   return yield* Effect.tryPromise({ try: async () => {
     await mkdir(directory, { recursive: true });
     const images: { frame: number; client: number; image: string; models: number; textures: number }[] = [];
@@ -217,7 +223,7 @@ export const renderScenes = (project: HeadlessRenderProject, scenes: readonly Re
       await Bun.write(join(directory, `p${scene.client}-frame-${scene.frame}.json`), JSON.stringify(scene));
       images.push({ frame: scene.frame, client: scene.client, image, models: result.models, textures: result.textures });
     }
-    await Bun.write(join(directory, "render.json"), JSON.stringify({ renderer: "war3-model 4.0.1 + HD sampling precision", gpu: browser.gpu, images }, null, 2) + "\n");
+    await Bun.write(join(directory, "render.json"), JSON.stringify({ renderer: "war3-model 4.0.1 + HD sampling precision", graphics, gpu: browser.gpu, images }, null, 2) + "\n");
     return images;
   }, catch: (cause) => new RenderFailure({ cause }) });
 })).pipe(Effect.provide(BunServices.layer), Effect.timeout("2 minutes"));
