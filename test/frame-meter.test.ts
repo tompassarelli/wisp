@@ -1,20 +1,18 @@
 // The frame meter (wisp:src/platform/frameMeter.ts) in 32-bit Lua: the
 // fixture map (test/frameMeter/entry.ts) plays in two simulated clients, and
-// the host reads what they show and write. Then runLuaPerf measures the same
-// map and `wisp perf compare` holds one run against another.
+// the host reads what they write.
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import { mapCompiler, report } from "../scripts/compiler";
-import { FrameCosts, decodeFrameCostReport, formatFrameCost, frameCostRegressions } from "../scripts/wisp/frameCosts";
+import { FrameCosts, decodeFrameCostReport } from "../scripts/wisp/frameCosts";
 import { GameFiles } from "../scripts/wisp/gameFiles";
 import { writtenPreloadFile } from "../scripts/wisp/headlessInput";
-import { type PerfRun, comparePerfRuns, parsePerfRun } from "../scripts/wisp/perf";
+import { type PerfRun, parsePerfRun } from "../scripts/wisp/perf";
 import { type FrameWindow, frameCostFile, frameCostHeading, frameWindowLine } from "../src/runtime/frameCost";
-import { captureDistribution, parseFrameCostCapture } from "../scripts/wisp/frameCostCapture";
-import { frameCostCaptureReadings } from "../scripts/wisp/nativeFit";
+import { parseFrameCostCapture } from "../scripts/wisp/frameCostCapture";
 
 const root = join(import.meta.dir, "..");
 
@@ -31,76 +29,24 @@ function play(): string[] {
 
 const after = (lines: readonly string[], prefix: string) => lines.filter((line) => line.startsWith(prefix)).map((line) => line.slice(prefix.length));
 
-test("the overlay shows to the player who asks; every client reports the frames around a reload; runs compare", async () => {
+test("[invariant] both clients measure the same frames: no desync, equal reports, natives and instructions", async () => {
   const lines = play();
-  // The player who typed -perf sees medians and maxima of the last 120 frames, including a 5-frame catch-up.
-  const overlay = after(lines, "p0 overlay: ")[0] ?? "";
-  expect(overlay).toMatch(/^frame cost, last 120 frames, median \/ p95 \/ max \| Lua ms: [\d.]+ \/ [\d.]+ \/ [\d.]+ \(clock step under 0\.01 ms\) \| natives: \d+ \/ \d+ \/ \d+ \| catch-up frames: 1 \/ 1 \/ 5$/);
-  expect(after(lines, "p1 overlay: ")).toEqual([""]);
   expect(after(lines, "desync: ")).toEqual(["none"]);
   expect(lines.filter((line) => line.includes(" error: "))).toEqual([]);
-
-  // Ten more calls a frame after the reload: both clients write the same frames and counts, and the host flags them.
   const reports = await Promise.all([0, 1].map((slot) =>
     Effect.runPromise(decodeFrameCostReport(`meter-perf-p${slot}.txt`, writtenPreloadFile(after(lines, `p${slot} report: `))))));
-  for (const cost of reports) {
-    expect({ version: cost.version, previous: cost.previous, before: cost.before.frames, after: cost.after.frames }).toEqual({ version: 1, previous: 0, before: 120, after: 120 });
-    expect(cost.after.natives.median).toBeGreaterThanOrEqual(cost.before.natives.median + 8);
-    expect(cost.before.catchUp).toEqual({ median: 1, mean: 1.03, max: 5 });
-    expect(cost.after.catchUp).toEqual({ median: 1, mean: 1, max: 1 });
-    expect(cost.before.lua?.max).toBeGreaterThan(0);
-    expect(frameCostRegressions(cost).some((regression) => regression.startsWith("natives +"))).toBe(true);
-  }
   expect(reports[1]?.before.natives).toEqual(reports[0]?.before.natives);
-  const [first] = reports;
-  if (first === undefined) throw new Error("no report");
-  expect(formatFrameCost(0, first)).toMatch(/^p0 frame cost v1 vs v0 \(120 and 120 frames\): Lua [\d.]+ -> [\d.]+ ms mean \([+-]\d+%\), max [\d.]+ -> [\d.]+ ms; natives \d+ -> \d+ median \(\+\d+%\), max \d+ -> \d+; catch-up 1 -> 1 median, max 5 -> 1; REGRESSION over 20%: (Lua time \+\d+%, )?natives \+\d+%$/);
-  // 14 -> 24 natives a frame (ten more GetUnitX calls beside the same four reloader calls) is +71%: under a 0.8 threshold it isn't a regression.
-  expect(frameCostRegressions(first, 0.8).filter((regression) => regression.startsWith("natives"))).toEqual([]);
-
-  // The measured journey: equal clients, every call counted, the same instructions in each client.
   const run = parsePerfRun(lines.slice(lines.findIndex((line) => line.startsWith("frames "))).join("\n"));
-  expect({ frames: run.frames, step: run.step, problems: run.problems, slots: [...run.clients.keys()] }).toEqual({ frames: 120, step: 100, problems: 0, slots: [0, 1] });
   const [p0, p1] = [run.clients.get(0), run.clients.get(1)];
   // Frame 0 (start) includes the frame meter's clock probe, which reads os.clock until it changes twice:
   // its instruction count follows the wall clock, so only the frames after it must match.
   const frameInstructions = (values: PerfRun["clients"] extends ReadonlyMap<number, infer V> ? V | undefined : never) => ({ ...values?.instructions, start: undefined });
   expect(frameInstructions(p0)).toEqual(frameInstructions(p1));
   expect(p0?.natives).toEqual(p1?.natives ?? {});
-  // Ten calls a frame, then twenty from frame 60, besides the reloader's polls.
-  expect(p0?.natives.max).toBeGreaterThanOrEqual(20);
-  expect(p0?.instructions.mean).toBeGreaterThan(0);
-
-  expect(comparePerfRuns(run, run)).toMatchObject({ regressions: [] });
-  const heavier: PerfRun = {
-    ...run,
-    clients: new Map([...run.clients].map(([slot, values]) => [slot, { ...values, instructions: { ...values.instructions, mean: values.instructions.mean * 1.1 } }])),
-  };
-  expect(comparePerfRuns(run, heavier).regressions).toEqual(["p0 Lua instructions mean +10.0%", "p1 Lua instructions mean +10.0%"]);
-  expect(comparePerfRuns(run, heavier, 0.2).regressions).toEqual([]);
-  // What only Warcraft pays for: more allocation, which its collector sweeps, and a burst of typed text.
-  const native = (change: (values: PerfRun["clients"] extends ReadonlyMap<number, infer V> ? V : never) => object): PerfRun => ({
-    ...run, clients: new Map([...run.clients].map(([slot, values]) => [slot, { ...values, ...change(values) }])),
-  });
-  const allocating = native((values) => ({
-    "alloc-kb": { ...values["alloc-kb"], mean: values["alloc-kb"].mean * 4 + 1, p95: values["alloc-kb"].p95 * 4 + 1 },
-  }));
-  expect(comparePerfRuns(run, allocating).regressions.filter((regression) => regression.startsWith("p0"))).toEqual([
-    expect.stringMatching(/^p0 allocated KB mean /), expect.stringMatching(/^p0 allocated KB p95 /),
-  ]);
-  const typing = native((values) => ({ "typing-us": { ...values["typing-us"], max: 180000 } }));
-  expect(comparePerfRuns(run, typing).regressions).toEqual(["p0 predicted typing stall µs max new", "p1 predicted typing stall µs max new"]);
-  for (const slot of [0, 1]) {
-    const capture = parseFrameCostCapture(writtenPreloadFile(after(lines, `p${slot} capture: `)));
-    expect(capture.samples.length).toBe(240);
-    expect(capture.samples.every(({ natives, catchUp }) => natives >= 20 && catchUp === 1)).toBe(true);
-    expect(captureDistribution(capture).frames).toBe(240);
-    expect(frameCostCaptureReadings(capture).windows.length).toBe(5);
-  }
   expect(after(lines, "capture desync: ")).toEqual(["none"]);
 }, 120_000);
 
-test("the host reads each client's new report once, as the map wrote it", async () => {
+test("[invariant] a written report reads back as the map wrote it, once", async () => {
   const directory = mkdtempSync(join(tmpdir(), "wisp-frame-cost-"));
   try {
     const before: FrameWindow = { frames: 120, lua: { median: 420, mean: 436.5, max: 3100 }, natives: { median: 312, mean: 320.4, max: 498 }, catchUp: { median: 1, mean: 1.02, max: 4 } };

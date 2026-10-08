@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { decodeActionRecords, decodeActions } from "../scripts/wisp/lan/actions";
 import { compareReplayHost, type NativeReplay } from "../scripts/wisp/replayImport";
 
-test("unknown and clipped actions retain the entire remaining payload at its byte offset", () => {
+test("[invariant] unknown and clipped actions retain the entire remaining payload at its byte offset", () => {
   const bytes = Buffer.from([0x02, 0xfe, 0x77, 0x00, 0x7f]);
   const records = decodeActionRecords(bytes);
   expect(records).toEqual([
@@ -14,7 +14,7 @@ test("unknown and clipped actions retain the entire remaining payload at its byt
   expect(decodeActions(bytes)).toEqual(records.map(({ raw, offset, ...action }) => action));
 });
 
-test("host comparison names missing, reordered, and changed payloads", () => {
+test("[invariant] host comparison names missing, reordered, and changed payloads", () => {
   const raw = Buffer.from("7753435f47500049350000000000", "hex");
   const replay: NativeReplay = {
     format: "wisp-w3g-actions-1", engine: { gameIdentifier: "PX3W", version: 10200, buildNo: 7000, replayLengthMS: 30 },

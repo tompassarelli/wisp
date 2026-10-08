@@ -29,7 +29,7 @@ export function run(): string {
 }
 `;
 
-test("captured for-let bindings match Bun through mutation, continue, break and all loop phases", async () => {
+test("[reference] captured for-let bindings match Bun through mutation, continue, break and all loop phases", async () => {
   const root = join(import.meta.dir, "..");
   mkdirSync(join(root, "build"), { recursive: true });
   const directory = mkdtempSync(join(root, "build/loop-capture-"));
