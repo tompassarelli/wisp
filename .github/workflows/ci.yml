@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
   push:
+    # `bun wisp farm`'s scratch branches run only the workflow it dispatches.
+    branches-ignore: ["farm/**"]
 
 permissions:
   contents: read
