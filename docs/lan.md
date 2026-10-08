@@ -71,6 +71,7 @@ pool does.
 | A | `~/.local/share/wisp/online/clone-c` | c | 47135 |
 | B | `~/.local/share/wisp/online/clone-b` | b | 47133 |
 | third client | `~/.local/share/wisp/online/clone-a` | a (Tom's) | 47137 |
+| fourth client | `~/.local/share/wisp/online/clone-d` | d (BattleTag tompaslab2) | 47139 |
 
 ### Clone-a: Tom's account, only while he isn't playing
 
@@ -95,6 +96,26 @@ Run clone-a only through `launch.sh`. In a doctor clients file, don't name it
 `a` or `b`: doctor maps those names to its own prefixes and to accounts c and
 b, and would start the wrong launcher or type the wrong account.
 
+### Clone-d: account d, paired with clone-a
+
+Clone-d is a fourth client, made on 8 October with all three steps below, for
+Tom's test account d (BattleTag tompaslab2, `d` in
+nixos-config:secrets/bnet.yaml). It runs as a plain clone like clone-b and
+clone-c: `launch.sh d RUN_DIR`, no yielding to Tom. Sign it in once with
+`wc3-login-field RUN d username|password` as in step 2 of a full session.
+Clone-a and clone-d make the second two-client lane. Its clients file names
+them `clone-a` and `clone-d`, so doctor starts each through `launch.sh`
+(smashcraft:ts/scripts/wisp/doctor.ts) and types no account:
+
+```json
+{ "clients": [
+  { "name": "clone-a", "run": "RUN_A", "documents": "~/.local/share/wisp/online/clone-a/pfx/drive_c/users/steamuser/Documents/Warcraft III", "menuReportPort": 47137 },
+  { "name": "clone-d", "run": "RUN_D", "documents": "~/.local/share/wisp/online/clone-d/pfx/drive_c/users/steamuser/Documents/Warcraft III", "menuReportPort": 47139 }
+] }
+```
+
+with absolute paths in place of `~`.
+
 ### Making a clone
 
 With nothing running in Tom's prefix:
@@ -115,7 +136,7 @@ With nothing running in Tom's prefix:
 
 ### Launching
 
-`~/.local/share/wisp/online/launch.sh a|b|c RUN_DIR` starts the clone's
+`~/.local/share/wisp/online/launch.sh a|b|c|d RUN_DIR` starts the clone's
 Battle.net on a private desktop, in its own `native` capacity scope. It runs
 what Steam's `Warcraft III (Battle.net)` shortcut runs, with
 `STEAM_COMPAT_DATA_PATH` pointed at the clone and no Steam shortcut added:
@@ -133,7 +154,7 @@ exec bun "$capacity" session --class native --owner "wisp-online-clone-$1" -- \
   "$clone/pfx/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe"
 ```
 
-Before that it creates the clone's silent PipeWire sink, `wisp-online-clone-<a|b|c>`,
+Before that it creates the clone's silent PipeWire sink, `wisp-online-clone-<a|b|c|d>`,
 as `lan pool` does for its clients. Without one, the first client takes the
 sound device and the second starts with "Unable to initialize audio device":
 its `GetSoundFileDuration` reads 0 and a map that reads it desyncs (wisp#60).
