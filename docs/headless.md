@@ -547,13 +547,19 @@ destroyed 3, 2 and 1 s earlier tell how long a destroyed effect stays drawn.
 left of the first ruler tells which way up), reads every ruler from its
 drawn origin as `needle X,needle Y,global marker X` in world units, or
 `gone`, and compares it with `test/animation58/expected.ts`, within each
-ruler's timing allowance where a clock ran before it froze. Reading from the
+ruler's timing allowance where a clock ran before it froze. Effect global
+markers share a renderer starting phase; the reader measures it from the
+effect frozen in its creating call (`global-frozen`) and compares all effect
+clock deltas modulo their length. Unit clocks start at zero. Raw marker
+positions and the measured starting phase stay in the output. Reading from the
 drawn origin keeps a model drawn away from its unit's position readable. It
 also prints the overshoot a 1002 ms loop lost in 4.5 s against a reference
 clock, when the capture was taken, how much later each destroyed ruler's
 Death started than the reference's (or that it was gone), and any ruler
 drawn more than 3 units from its slot. `render.ts` draws the headless view
 of the same moment; its reading matched all 30 rows on 8 October 2026.
+The retained native capture 2 confirms all 20 animation rows after the
+same-callback selection/seek fix; effect lifetime and scale belong to #59.
 
 The 0.405 cutoff was identified in WurstScript's Apache-2.0
 [UnitProvider at 9913e1b](https://github.com/wurstscript/WurstScript/blob/9913e1bd300c2053637d756a11bae8c3c8ed568f/de.peeeq.wurstscript/src/main/java/de/peeeq/wurstio/jassinterpreter/providers/UnitProvider.java).

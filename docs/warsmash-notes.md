@@ -527,16 +527,16 @@ run in Bun (`test/animation.test.ts`) and 32-bit Lua (`test/runtime.test.ts`).
 | Selecting by name | A name's leading words that are animation tags give one primary tag and a set of secondary tags; the first other word ends it (`Stand - 2` is stand). The sequence needs the primary tag and exactly that secondary set; failing that, the set sharing most requested tags; failing that, the primary tag's sequence with fewest tags (stand when the name has none). Effect sub-animations add tags | First sequence whose name contained every word, so `stand` could pick `Stand Hit` | **Mismatch, fixed** |
 | Equal variants | Drawn at random, weighted by rarity, on each client | First variant | **Unmatchable**: native picks differ per client. Wisp takes the first of the most common. Pool clip models have one sequence |
 | Selecting by index | An index outside the model selects no sequence; tracks take their defaults (identity pose) | Clamped to the last or first sequence | **Mismatch, fixed to 3.0.1, which differs from Warsmash**: an index the model lacks shows Stand (8 Oct capture: index 99 drew Stand's frame 0), as an unknown name does |
-| Clock start on selection | Interval start; selecting again restarts | Restart | **Match** |
+| Clock start on selection | Interval start; selecting again restarts | Restart immediately | **Mismatch, fixed to 3.0.1**: effects restart on the next drawn frame. A seek in the selection's callback is replaced by that restart; a seek after a drawn frame persists. Units restart immediately |
 | Time scale | Animation time advances by elapsed seconds × 1000 × scale; 0 freezes the clock, global sequences and blend | Clock matched; blend and global clock not modeled | **Match for the clock; the rest fixed** (rows below) |
 | Time scale across a selection | `SetUnitAnimation(ByIndex)` resets the speed to 1 | Keeps the set time scale | **Warsmash differs; no change**: Smashcraft sets the time scale after every selection, so both give the same result. The capture checks persistence |
-| Seek (`BlzSetSpecialEffectTime`) | No such native; the internal frame seek moves the sample time and spends no blend time | Set the elapsed time | **Match to the internal rule**; native seek units stay unresolved |
+| Seek (`BlzSetSpecialEffectTime`) | No such native; the internal frame seek moves the sample time and spends no blend time | Set the elapsed time | **Match to 3.0.1**: seconds from interval start, with no blend time spent. Capture 2 drew both pooled clips at 400 ms. A pending selection replaces a same-callback seek (row above) |
 | Sampled frame | Whole milliseconds; fractions kept in the clock | Fractional frame | **Mismatch, fixed**: the clocks are held as binary32, so Bun and 32-bit Lua floor the same frame |
 | End of a looping sequence | On reaching interval end − 1 ms, restart at the start, dropping the overshoot | Wrapped modulo the interval length | **Match to 3.0.1, which differs from Warsmash**: wrapped by the interval length, keeping the overshoot, for play and seeks alike (8 Oct capture: 4.5 s of a 1002 ms loop drew 492; dropping the overshoot at 60 frames a second would give 433) |
 | End of a non-looping sequence | Hold at interval end − 1 ms | Held at the interval end | **Match to 3.0.1, which differs from Warsmash**: held on the interval end itself (8 Oct capture: the needle's last-millisecond jump showed) |
 | Effect with no selection | Plays Birth once, then Stand, which always loops; a unit shows Stand | Stand from creation | **Mismatch, fixed** |
 | Blend (`SetUnitBlendTime`, `BlzSetSpecialEffectAnimationBlendTime`) | On a selection with blend time > 0, after the instance has animated at least 1 ms, and with no blend running: save each node's local translation, rotation and scale. Each step spends the same animation time from the blend; the shown pose is new × (1 − r) + saved × r, rotation by shortest-arc slerp, r = remaining ÷ blend time. A selection during a blend leaves it running | Not modeled; `SetUnitBlendTime` was a consumer no-op | **Mismatch, fixed** in runtime and renderer. Wisp's unit blend time starts at 0 until set (Warcraft reads `uble`); effects start at 0. Smashcraft's pool sets 0, so its fighters are unchanged |
-| Global sequences | Whole milliseconds of animation time since creation, modulo the length (0 for length 0); kept across selections; seeks do not move it | Advanced to the seek time only for models with emitters, else 0 | **Mismatch, fixed** |
+| Global sequences | Whole milliseconds of animation time since creation, modulo the length (0 for length 0); kept across selections; seeks do not move it | Advanced to the seek time only for models with emitters, else 0 | **Mismatch, fixed; 3.0.1 confirms clock deltas**. Effects in the same creating frame share a renderer starting phase; units start at zero. The ruler compares effect globals relative to `global-frozen`, which measures that phase without advancing. Wisp uses a zero phase for deterministic headless sampling |
 | Shown sequence | The selected index | war3-model's `setFrame` re-picked the first sequence whose interval held the frame | **Mismatch, fixed**: the renderer sets the frame on the selected sequence |
 | Queued animations | Played in order when a non-looping sequence ends | Recorded, never played | **Not used** by Smashcraft |
 
@@ -553,10 +553,10 @@ sequence switch happens on either effect. Every rule above gives frame 80835
 before and after this change, and a re-render with the fixes still shows the
 upright headless pose.
 Their global-sequence tracks move only the whirlwind and glow helpers (about
-18% of vertex bone references), held at time 0 by both Warsmash's rule and Wisp. The
+18% of vertex bone references), held at their starting phase while frozen. The
 Blademaster is not among 3.0.1's reanimated models. What remains is the
-native seek itself: whether a frozen effect hidden and shown again re-poses on
-`BlzSetSpecialEffectTime`, and in what units.
+native pose outside the ruler: capture 2 confirms that a frozen effect hidden
+and shown again re-poses on `BlzSetSpecialEffectTime` in seconds.
 
 **Capture** (wisp#58's third box): the ruler map
 ([headless: animation and effect lifetime](headless.md#animation-and-effect-lifetime-read-from-a-screenshot))
@@ -587,8 +587,15 @@ to 0.4 s draws frame start + 400 natively too: frame 262 is not this seek.
 Its other rows were set up during the map's first second, when 3.0.1 ran
 the timers of 0.25 to 1 s in one frame before effects began to animate, and
 effects frozen in their creating call drew Birth's first frame. The ruler
-map now starts every case 3 s in; its second capture decides the rest,
-including whether a selection made while freezing an effect is kept.
+map now starts every case 3 s in. Capture 2 confirms all 20 animation rulers:
+selection and seek in one callback draw the selected sequence at zero;
+later seeks draw their requested frame. All effect global markers share a
+945-unit starting phase, read from `global-frozen`; subtracting it modulo
+1000 gives the same frozen-clock and advancing-clock deltas as headless.
+Unit global markers start at zero. The reader retains raw rows and prints
+the measured phase before comparing, with the original timing allowances.
+Evidence: `~/.local/state/wisp/parity-captures-20261008/ruler58-v2-a-20261008.png`
+and `~/.local/state/wisp/ruler58-v2-20261008/out/animation-p0.txt`.
 
 ### Collision, pathing and orders
 
