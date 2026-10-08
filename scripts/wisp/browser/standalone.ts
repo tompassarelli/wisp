@@ -78,7 +78,7 @@ function sound(cue: SoundCue): void {
   pendingAudio.add(task); void task.finally(() => pendingAudio.delete(task));
 }
 const milliseconds: number[] = [], intervals: number[] = [], presentations: number[] = [], requests: number[] = [], renders: number[] = [];
-const timings: { step: number; frame: number; rafTimestampMs: number; callbackMs: number; deadlineMs: number; requestedMs: number; readyMs: number; drawnMs: number }[] = [];
+const timings: { step: number; frame: number; rafTimestampMs: number; callbackMs: number; deadlineMs: number; requestedMs: number; respondedMs: number; readyMs: number; drawnMs: number; serverMs: number }[] = [];
 let previous = 0, previousPresented = 0;
 const percentile = (values: readonly number[], percent: number) => [...values].sort((a, b) => a - b)[Math.max(0, Math.ceil(values.length * percent) - 1)] ?? 0;
 async function post(path: string, body: unknown): Promise<Response> {
@@ -100,8 +100,10 @@ async function run(): Promise<void> {
   let nextFrame = start;
   const loadFrame = async () => {
     const requestedMs = performance.now();
-    const frame = await post("/frame", config.scripted ? { buttons: [], axisX: 0, axisY: 0 } : input()).then(response => response.json()) as StandaloneFrame;
-    return { frame, requestedMs, readyMs: performance.now() };
+    const response = await post("/frame", config.scripted ? { buttons: [], axisX: 0, axisY: 0 } : input());
+    const respondedMs = performance.now();
+    const frame = await response.json() as StandaloneFrame;
+    return { frame, requestedMs, respondedMs, readyMs: performance.now() };
   };
   let pending = loadFrame();
   let waiting: { deadlineMs: number; resolve(timestamp: number): void } | undefined;
@@ -124,7 +126,7 @@ async function run(): Promise<void> {
     if (previous !== 0) intervals.push(began - previous);
     if (previousPresented !== 0) presentations.push(presented - previousPresented);
     previous = began; previousPresented = presented;
-    const { frame, requestedMs, readyMs } = await pending;
+    const { frame, requestedMs, respondedMs, readyMs } = await pending;
     frame.sounds.forEach(sound);
     if (!frame.done && !frame.capture) pending = loadFrame();
     const drawStart = performance.now();
@@ -138,7 +140,7 @@ async function run(): Promise<void> {
     }
     requests.push(readyMs - requestedMs);
     renders.push(drawnMs - drawStart);
-    if (config.samples) timings.push({ step: frame.step, frame: frame.frame, rafTimestampMs: presented, callbackMs: began, deadlineMs, requestedMs, readyMs, drawnMs });
+    if (config.samples) timings.push({ step: frame.step, frame: frame.frame, rafTimestampMs: presented, callbackMs: began, deadlineMs, requestedMs, respondedMs, readyMs, drawnMs, serverMs: frame.serverMs });
     milliseconds.push(performance.now() - began);
     if (frame.done) {
       await Promise.all(pendingAudio);
