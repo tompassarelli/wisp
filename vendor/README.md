@@ -27,3 +27,14 @@ Rebuild with Bun: `bun run build-lib`, then copy `dist/es/war3-model.mjs`
 and `dist/war3-model.d.ts` (renamed to `war3-model.d.mts`) into this directory.
 The built files ship inside Wisp because Bun cannot resolve a nested local
 tarball dependency relative to an installed Wisp tarball.
+
+# Lua 5.3.6 source
+
+`lua-5.3.6.tar.gz` is lua.org's release tarball,
+<https://www.lua.org/ftp/lua-5.3.6.tar.gz>, byte for byte (SHA-256
+`fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60`).
+wisp:scripts/wisp/lua32.ts checks that checksum and builds the 32-bit Luas
+tests run in from it, so a build needs no network: cloud sessions can't reach
+lua.org.
+
+License: MIT, Copyright (C) 1994-2020 Lua.org, PUC-Rio, in `lua.LICENSE`.
