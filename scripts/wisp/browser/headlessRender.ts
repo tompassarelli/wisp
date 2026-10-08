@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 import { ModelRenderer, decodeBLP, getBLPImageData, parseMDL, parseMDX, type model } from "../../../vendor/war3-model.mjs";
 import { type AnimationSequence, animationSample, blendWeight, globalSequenceFrame, type SequenceSample } from "../../../src/headless/animation";
-import type { DrawnPose as EffectPose, RenderScene } from "../headlessRender";
+import type { DrawnPose as EffectPose, PopcornEmitterPose, RenderedFrame, RenderScene } from "../headlessRender";
 import { parsableModel } from "../models";
 import { orderDrawnModels } from "../drawOrder";
 import { drawnPoses } from "../culling";
@@ -232,8 +232,8 @@ function textureAt(path: string): Promise<HTMLCanvasElement> {
 const teams = [[255, 3, 3], [0, 66, 255], [28, 230, 185], [84, 0, 129], [255, 252, 1], [254, 138, 14], [32, 192, 0], [229, 91, 176], [149, 150, 151], [126, 191, 241], [16, 98, 70], [78, 42, 4]];
 /** The parts of war3-model's renderer that sampling and blending reach into. */
 interface Sampler {
-  rendererData: { frame: number; animation: number; animationInfo: { Interval: ArrayLike<number> }; globalSequencesFrames: number[]; rootNode: unknown };
-  interp: { vec3(out: Float32Array, vector: unknown): Float32Array | null; quat(out: Float32Array, vector: unknown): Float32Array | null };
+  rendererData: { frame: number; animation: number; animationInfo: { Interval: ArrayLike<number> }; globalSequencesFrames: number[]; rootNode: unknown; nodes: { matrix: Matrix }[] };
+  interp: { vec3(out: Float32Array, vector: unknown): Float32Array | null; quat(out: Float32Array, vector: unknown): Float32Array | null; animVectorVal(vector: unknown, fallback: number): number };
   updateNode(node: { node: { Translation?: unknown; Rotation?: unknown; Scaling?: unknown } }): void;
 }
 // No interval holds any key, so every non-global track takes its default value.
@@ -303,7 +303,7 @@ async function createInstance(path: string): Promise<ModelInstance> {
   const sequences = data.Sequences.map((sequence) => ({ name: sequence.Name, start: sequence.Interval[0] ?? 0, end: sequence.Interval[1] ?? 0, looping: !sequence.NonLooping, rarity: sequence.Rarity }));
   return { renderer, model: data, path, sequences, sequence: -2, clock: 0 };
 }
-async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, light: WorldLight | undefined, fog: ReturnType<typeof sceneFog>, points: readonly PointLight[]) {
+async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, light: WorldLight | undefined, fog: ReturnType<typeof sceneFog>, points: readonly PointLight[], popcornEmitters: PopcornEmitterPose[]) {
   const instance = await prepareInstance(pose);
   const { renderer, model: data } = instance;
   renderer.setInstanceAlpha(pose.alpha / 255);
@@ -328,6 +328,15 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
   renderer.setTeamColor(new Float32Array((teams[pose.teamColor] ?? [160, 160, 160]).map((v) => v / 255)));
   renderer.setLightPosition([1000, -1000, 3000]); renderer.setLightColor([1, 1, 1]);
   const placed = transform(pose);
+  for (const emitter of data.ParticleEmitterPopcorns ?? []) {
+    if (sampler.interp.animVectorVal(emitter.Visibility, 1) <= 0 || sampler.interp.animVectorVal(emitter.Alpha, 1) <= 0) continue;
+    const node = sampler.rendererData.nodes[emitter.ObjectId];
+    if (node === undefined) throw new Error(`missing node for Popcorn emitter "${emitter.Name}"`);
+    const world = multiply(placed, node.matrix), pivot = emitter.PivotPoint ?? data.PivotPoints[emitter.ObjectId];
+    const position = [0, 1, 2].map((row) => (world[12 + row] ?? 0) + [0, 1, 2].reduce((sum, axis) => sum + (world[axis * 4 + row] ?? 0) * (pivot?.[axis] ?? 0), 0)) as [number, number, number];
+    const scale = [0, 1, 2].map((axis) => Math.hypot(world[axis * 4] ?? 0, world[axis * 4 + 1] ?? 0, world[axis * 4 + 2] ?? 0)) as [number, number, number];
+    popcornEmitters.push({ model: pose.model, handle: pose.handle.id, emitter: emitter.Name, effect: emitter.Path ?? "", position, scale });
+  }
   renderer.setWispEnvironment({ ...(light === undefined ? {} : { light: { direction: modelDirection(placed, light.toward), key: light.key, ambient: light.ambient, linear: light.linear } }), ...(fog === undefined ? {} : { fog }), ...(points.length === 0 ? {} : { points: { model: placed, normal: normalMatrix(placed), lights: nearest(points, placed) } }) });
   // An HD model's first initGL draws its BRDF table at that table's size and leaves the viewport there.
   gl.viewport(0, 0, canvas.width, canvas.height);
@@ -521,7 +530,7 @@ declare global {
   interface Window {
     prepareRenderer: (width: number, height: number, graphics?: string) => string;
     prepareScene: (scene: RenderScene, models?: readonly string[], progress?: (completed: number, total: number) => void) => Promise<{ models: number; instances: number; textures: number }>;
-    renderScene: (scene: RenderScene, options?: { capture?: boolean }) => Promise<{ png: string; models: number; textures: number; notDrawn: string[]; pointLights: number; absent: string[] }>;
+    renderScene: (scene: RenderScene, options?: { capture?: boolean }) => Promise<RenderedFrame>;
   }
 }
 window.prepareRenderer = (width, height, mode = "classic") => {
@@ -547,7 +556,7 @@ window.prepareScene = async (scene, extraModels = [], progress) => {
 window.renderScene = async (scene, options) => {
   gl.viewport(0, 0, canvas.width, canvas.height); gl.depthMask(true); gl.clearColor(0.04, 0.06, 0.09, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
   const view = camera(scene, canvas.width / canvas.height);
-  const visible: EffectPose[] = [], notDrawn: string[] = [], absent = new Set<string>();
+  const visible: EffectPose[] = [], notDrawn: string[] = [], absent = new Set<string>(), popcornEmitters: PopcornEmitterPose[] = [];
   for (const pose of drawnPoses(scene.effects, view.eye, view.far, scene.world)) {
     // A model the renderer can't load or draw is left out and named, so the rest of the frame still draws.
     try { await prepareInstance(pose); visible.push(pose); } catch (cause) {
@@ -560,8 +569,9 @@ window.renderScene = async (scene, options) => {
   // Classic draws no model omni light; Definitive draws them all.
   const points = graphics === "classic" ? [] : await pointLights(visible);
   for (const pose of orderDrawnModels(visible, (pose) => instances.get(pose.handle.id)?.model.Materials ?? [])) {
-    try { await drawEffect(pose, view, light, fog, points); } catch (cause) { notDrawn.push(`${pose.model}: ${String(cause)}`); }
+    try { await drawEffect(pose, view, light, fog, points, popcornEmitters); } catch (cause) { notDrawn.push(`${pose.model}: ${String(cause)}`); }
   }
+  for (const emitter of popcornEmitters) notDrawn.push(`${emitter.model}: undrawn Popcorn emitter "${emitter.emitter}" (${emitter.effect || "no effect path"})`);
   if (scene.filter !== undefined) await drawFilter(scene.filter);
   const live = options?.capture === false;
   const shown = live ? "block" : "none";
@@ -594,5 +604,5 @@ window.renderScene = async (scene, options) => {
     }
   }
   context.globalAlpha = 1;
-  return { png: options?.capture === false ? "" : output.toDataURL("image/png"), models: visible.length, textures: textures.size, notDrawn: [...new Set(notDrawn)], pointLights: points.length, absent: [...absent].sort() };
+  return { png: options?.capture === false ? "" : output.toDataURL("image/png"), models: visible.length, textures: textures.size, notDrawn: [...new Set(notDrawn)], pointLights: points.length, absent: [...absent].sort(), popcornEmitters };
 };

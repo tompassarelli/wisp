@@ -89,6 +89,26 @@ function sceneEnvironment(client: HeadlessClient): SceneEnvironment {
 /** A pose the renderer draws: an effect, or a unit drawn like one, which starts on Stand rather than Birth. */
 export type DrawnPose = EffectPose & { readonly unit?: true };
 
+/** A visible external particle effect at the model node's sampled world transform. */
+export interface PopcornEmitterPose {
+  readonly model: string;
+  readonly handle: number;
+  readonly emitter: string;
+  readonly effect: string;
+  readonly position: readonly [number, number, number];
+  readonly scale: readonly [number, number, number];
+}
+
+export interface RenderedFrame {
+  readonly png: string;
+  readonly models: number;
+  readonly textures: number;
+  readonly notDrawn: string[];
+  readonly pointLights: number;
+  readonly absent: string[];
+  readonly popcornEmitters: PopcornEmitterPose[];
+}
+
 export const captureScene = (client: HeadlessClient, options: { readonly visibleOnly?: boolean } = {}): RenderScene => ({
   frame: client.frame, client: client.slot, effects: client.effectPoses({ visibleOnly: options.visibleOnly ?? false }), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot({ visibleOnly: options.visibleOnly ?? false }), filter: client.cineFilterPose(), textTags: client.textTags.poses(),
   environment: sceneEnvironment(client),
@@ -263,14 +283,16 @@ export const renderScenes = (project: HeadlessRenderProject, scenes: readonly Re
     await mkdir(directory, { recursive: true });
     const images: { frame: number; client: number; image: string; models: number; textures: number; notDrawn: string[]; pointLights: number; absent: readonly string[] }[] = [];
     for (const scene of scenes) {
-      const result = await browser.devtools.evaluate(`window.renderScene(${JSON.stringify(sceneWithUnits(project, scene))})`) as { png: string; models: number; textures: number; notDrawn: string[]; pointLights: number; absent: string[] };
+      const result = await browser.devtools.evaluate(`window.renderScene(${JSON.stringify(sceneWithUnits(project, scene))})`) as RenderedFrame;
       for (const failure of result.notDrawn) console.error(`p${scene.client} frame ${scene.frame}: not drawn: ${failure}`);
       const image = `p${scene.client}-frame-${scene.frame}.png`;
       await Bun.write(join(directory, image), Buffer.from(result.png.split(",")[1] ?? "", "base64"));
-      await Bun.write(join(directory, `p${scene.client}-frame-${scene.frame}.json`), JSON.stringify(scene));
+      await Bun.write(join(directory, `p${scene.client}-frame-${scene.frame}.json`), JSON.stringify({ ...scene, popcornEmitters: result.popcornEmitters }));
       images.push({ frame: scene.frame, client: scene.client, image, models: result.models, textures: result.textures, notDrawn: result.notDrawn, pointLights: result.pointLights, absent: result.absent });
     }
     await Bun.write(join(directory, "render.json"), JSON.stringify({ renderer: "war3-model 4.0.1 + HD sampling precision", graphics, levers: PROFILES[graphics], look, gpu: browser.gpu, assets: [...browser.resolutions.values()], images }, null, 2) + "\n");
+    const failures = images.flatMap((image) => image.notDrawn.map((failure) => `p${image.client} frame ${image.frame}: ${failure}`));
+    if (failures.length > 0) throw new Error(failures.join("\n"));
     return images;
   }, catch: (cause) => new RenderFailure({ cause }) });
 })).pipe(Effect.provide(BunServices.layer), Effect.timeout("2 minutes"));

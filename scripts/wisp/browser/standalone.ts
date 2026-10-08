@@ -143,6 +143,7 @@ async function run(): Promise<void> {
     if (!frame.done && !frame.capture) pending = loadFrame();
     const drawStart = performance.now();
     const rendered = await window.renderScene(frame.scene, { capture: frame.capture });
+    if (rendered.notDrawn.length > 0) throw new Error(`frame ${frame.frame}: ${rendered.notDrawn.join("; ")}`);
     const drawnMs = performance.now();
     if (frame.capture) {
       const blob = await fetch(rendered.png).then((response) => response.blob());
