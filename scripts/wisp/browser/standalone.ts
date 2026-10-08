@@ -77,9 +77,9 @@ function sound(cue: SoundCue): void {
   }).catch((cause: unknown) => { missing.add(cause instanceof Error ? cause.message : String(cause)); });
   pendingAudio.add(task); void task.finally(() => pendingAudio.delete(task));
 }
-const milliseconds: number[] = [], intervals: number[] = [], requests: number[] = [], renders: number[] = [];
+const milliseconds: number[] = [], intervals: number[] = [], presentations: number[] = [], requests: number[] = [], renders: number[] = [];
 const timings: { step: number; frame: number; rafTimestampMs: number; callbackMs: number; deadlineMs: number; requestedMs: number; readyMs: number; drawnMs: number }[] = [];
-let previous = 0;
+let previous = 0, previousPresented = 0;
 const percentile = (values: readonly number[], percent: number) => [...values].sort((a, b) => a - b)[Math.max(0, Math.ceil(values.length * percent) - 1)] ?? 0;
 async function post(path: string, body: unknown): Promise<Response> {
   const response = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -122,7 +122,8 @@ async function run(): Promise<void> {
     nextFrame = Math.max(nextFrame + 1000 / 60, presented);
     const began = performance.now();
     if (previous !== 0) intervals.push(began - previous);
-    previous = began;
+    if (previousPresented !== 0) presentations.push(presented - previousPresented);
+    previous = began; previousPresented = presented;
     const { frame, requestedMs, readyMs } = await pending;
     frame.sounds.forEach(sound);
     if (!frame.done && !frame.capture) pending = loadFrame();
@@ -142,7 +143,7 @@ async function run(): Promise<void> {
     if (frame.done) {
       await Promise.all(pendingAudio);
       const elapsedMs = performance.now() - start;
-      await post("/complete", { gpu, startupMs, prepared: { ...prepared, step: preparation.step }, frames: milliseconds.length, elapsedMs, fps: milliseconds.length * 1000 / elapsedMs, frameMs: { p50: percentile(milliseconds, 0.5), p95: percentile(milliseconds, 0.95), p99: percentile(milliseconds, 0.99) }, intervalMs: { p50: percentile(intervals, 0.5), p95: percentile(intervals, 0.95), p99: percentile(intervals, 0.99) }, requestMs: { p50: percentile(requests, 0.5), p95: percentile(requests, 0.95) }, renderMs: { p50: percentile(renders, 0.5), p95: percentile(renders, 0.95) }, ...(config.samples ? { frameSamplesMs: milliseconds, intervalSamplesMs: intervals, requestSamplesMs: requests, renderSamplesMs: renders, frameTimings: timings } : {}), audioEvents, audioReadyEvents, audioPlayed, audioDecodedAssets, missingSounds: [...missing] });
+      await post("/complete", { gpu, startupMs, prepared: { ...prepared, step: preparation.step }, frames: milliseconds.length, elapsedMs, fps: milliseconds.length * 1000 / elapsedMs, frameMs: { p50: percentile(milliseconds, 0.5), p95: percentile(milliseconds, 0.95), p99: percentile(milliseconds, 0.99) }, intervalMs: { p50: percentile(intervals, 0.5), p95: percentile(intervals, 0.95), p99: percentile(intervals, 0.99) }, presentedMs: { p50: percentile(presentations, 0.5), p95: percentile(presentations, 0.95), p99: percentile(presentations, 0.99) }, requestMs: { p50: percentile(requests, 0.5), p95: percentile(requests, 0.95) }, renderMs: { p50: percentile(renders, 0.5), p95: percentile(renders, 0.95) }, ...(config.samples ? { frameSamplesMs: milliseconds, intervalSamplesMs: intervals, requestSamplesMs: requests, renderSamplesMs: renders, frameTimings: timings } : {}), audioEvents, audioReadyEvents, audioPlayed, audioDecodedAssets, missingSounds: [...missing] });
       return;
     }
   }
