@@ -17,7 +17,7 @@ export type { Graphics } from "./graphicsProfiles";
 export interface HeadlessRenderProject {
   /**
    * The map's imported assets and Warcraft assets, kept outside the repository.
-   * In Definitive graphics a path takes its `_de.w3mod` version where one exists.
+   * Definitive accepts `_de.w3mod` and `_hd.w3mod` imports before base files.
    */
   readonly readAsset: (path: string, graphics?: Graphics) => Promise<Uint8Array | undefined>;
   /** Layer-aware reads record each attempted location and the selected import or stock file. */

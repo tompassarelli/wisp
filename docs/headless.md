@@ -455,6 +455,12 @@ tries only base files. `war3mapImported` paths stay within the map. A reader
 returns `undefined` for a missing layer so the next one can supply the asset.
 The selected source, layer and path and every attempted location appear in
 `render.json`; byte-only readers record the supplied project path.
+The [Warcraft 3.0.1 one-alias reference](https://github.com/tompassarelli/smashcraft/issues/334#issuecomment-6069629530)
+draws Definitive Cairne with either a lone `_de.w3mod` import or a lone
+`_hd.w3mod` import; Classic ignores the `_de.w3mod` import and draws the base
+body. One Definitive body import is sufficient. That reference does not
+establish precedence when both aliases are present; the resolver's DE-first
+order preserves its existing choice, and both raw layers remain supported.
 The renderer draws HD materials with their PBR shader ([Graphics
 profiles](#graphics-profiles)). A path that only the other mode has (a
 Definitive-only prop in a Classic frame) draws nothing, as Warcraft draws
