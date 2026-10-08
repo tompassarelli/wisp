@@ -69,8 +69,9 @@ export function timerRules(this: void, done: (this: void, lines: readonly string
   TimerStart(expired, 0.5, false, () => {});
   TimerStart(paused, 10.0, false, () => lines.push("unexpected-paused-callback"));
 
-  // A timer started inside a callback first fires in a later frame, after
-  // every callback still due in this one.
+  // A zero-timeout one-shot started inside a callback is timed from that
+  // callback's deadline and waits 1/1024 s: it fires after one more 1/1024 s
+  // callback, in the same frame.
   const deferred = CreateTimer();
   let fastAtStart = 0;
   TimerStart(CreateTimer(), 0.2421875, false, () => {

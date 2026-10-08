@@ -7,6 +7,7 @@
 // in Bun and, compiled with TypeScriptToLua, in 32-bit Lua; each host puts the
 // natives where its map code finds them.
 import { errorFile, FILE_IO_ABILITY } from "../runtime/gameFiles";
+import { addFloat32TowardZero, divideFloat32, roundToFloat32, subtractFloat32TowardZero } from "../sim/binary32";
 import { f32 } from "../sim/f32";
 import { floorMod } from "../sim/intMath";
 import { advanceAnimation, type AnimationBlend, type AnimationState, freshAnimation, seekAnimation, selectAnimation } from "./animation";
@@ -203,23 +204,15 @@ interface Unit extends Handle, UnitPose {
 
 type Callback = (this: void) => void;
 
-/** A game time: whole frames, then 1/1024ths of a frame (1/61,440 s), which hold 1/60 s and 1/1024 s exactly. */
-interface Instant {
-  frame: number;
-  sub: number;
-}
-
 interface Timer extends Handle {
   callback: Callback | undefined;
   periodic: boolean;
   /** The timeout as started, which a read after expiry returns. */
   timeout: number;
-  period: Instant;
-  /** When the current period began and when it ends. */
-  start: Instant;
-  due: Instant;
-  /** The frame TimerStart ran in: the timer first fires in a later frame. */
-  armedFrame: number;
+  /** The timeout or period after the minimums, in binary32 seconds. */
+  period: number;
+  /** The game time the current period ends, in binary32 seconds. */
+  due: number;
   /** Equal deadlines run in TimerStart order; a periodic timer keeps its place. */
   order: number;
   running: boolean;
@@ -294,24 +287,22 @@ export interface ClientOptions {
 }
 
 export const FRAMES_PER_SECOND = 60;
-/** Timer resolution inside a frame (wisp:docs/warsmash-notes.md#timers-and-frame-stepping). */
-export const TIMER_STEPS_PER_FRAME = 1024;
-/** The shortest repeating period, 0.0001 s at 61,440 steps a second: a zero period still fires about 10,000 times a game second. */
-const MIN_PERIOD_STEPS = 6;
-
-const instant = (seconds: number): Instant => {
-  const scaled = Math.max(0, seconds) * FRAMES_PER_SECOND;
-  const frame = Math.floor(scaled);
-  const sub = Math.round((scaled - frame) * TIMER_STEPS_PER_FRAME);
-  return sub >= TIMER_STEPS_PER_FRAME ? { frame: frame + 1, sub: sub - TIMER_STEPS_PER_FRAME } : { frame, sub };
+/** The shortest repeating period: a zero period fires about 10,000 times a game second (wisp:docs/warsmash-notes.md#timers-and-frame-stepping). */
+const MIN_PERIOD = f32(0.0001);
+/** The shortest one-shot timeout, 1/1024 s. */
+const MIN_ONE_SHOT = 0.0009765625;
+/** A frame's end in binary32 game seconds. */
+const frameEnd = (frame: number): number => divideFloat32(frame, FRAMES_PER_SECOND);
+/**
+ * A deadline `length` after `at`, the sum rounded toward zero as Warcraft's
+ * timer clock adds. Where `length` is under the clock's resolution (a
+ * 0.0001 s period past 1,024 s) it is one resolution later, so a repeat
+ * can't stall the frame; Warcraft's behavior there is unmeasured.
+ */
+const after = (at: number, length: number): number => {
+  const due = addFloat32TowardZero(at, length);
+  return due > at ? due : addFloat32TowardZero(at, at * 1.1920928955078125e-7);
 };
-const later = (at: Instant, by: Instant): Instant => {
-  const sub = at.sub + by.sub;
-  return sub >= TIMER_STEPS_PER_FRAME ? { frame: at.frame + by.frame + 1, sub: sub - TIMER_STEPS_PER_FRAME } : { frame: at.frame + by.frame, sub };
-};
-const before = (a: Instant, b: Instant): boolean => a.frame < b.frame || (a.frame === b.frame && a.sub < b.sub);
-const secondsBetween = (from: Instant, to: Instant): number =>
-  (to.frame - from.frame) / FRAMES_PER_SECOND + (to.sub - from.sub) / (FRAMES_PER_SECOND * TIMER_STEPS_PER_FRAME);
 
 const CAMERA_FIELDS = ["CAMERA_FIELD_TARGET_DISTANCE", "CAMERA_FIELD_FARZ", "CAMERA_FIELD_ANGLE_OF_ATTACK", "CAMERA_FIELD_FIELD_OF_VIEW", "CAMERA_FIELD_ROLL", "CAMERA_FIELD_ROTATION", "CAMERA_FIELD_ZOFFSET", "CAMERA_FIELD_NEARZ", "CAMERA_FIELD_LOCAL_PITCH", "CAMERA_FIELD_LOCAL_YAW", "CAMERA_FIELD_LOCAL_ROLL", "CAMERA_FIELD_DEPTH_OF_FIELD_DISTANCE", "CAMERA_FIELD_DEPTH_OF_FIELD_SCALE", "CAMERA_FIELD_ZABSOLUTE"];
 const PLAYER_COLORS = ["RED", "BLUE", "CYAN", "PURPLE", "YELLOW", "ORANGE", "GREEN", "PINK", "LIGHT_GRAY", "LIGHT_BLUE", "AQUA", "BROWN", "MAROON", "NAVY", "TURQUOISE", "VIOLET", "WHEAT", "PEACH", "MINT", "LAVENDER", "COAL", "SNOW", "EMERALD", "PEANUT", "BLACK"].map(name => "PLAYER_COLOR_" + name);
@@ -503,8 +494,8 @@ export class HeadlessClient {
   private readonly filePrefix: string;
   private readonly timers: Timer[] = [];
   private timerOrder = 0;
-  /** Game time as natives read it: a timer callback's own deadline, otherwise the end of the latest frame. */
-  private now: Instant = { frame: 0, sub: 0 };
+  /** Game time as natives read it, in binary32 seconds: a timer callback's own deadline, otherwise the end of the latest frame. */
+  private now = 0;
   private readonly registrations: Registration[] = [];
   private readonly heldKeys = new Set<number>();
   private readonly memo = new Map<string, Frame>();
@@ -970,23 +961,20 @@ export class HeadlessClient {
         return this.handle("event");
       },
       CreateTimer: (): Timer => {
-        const zero = { frame: 0, sub: 0 };
-        const timer: Timer = { ...this.handle("timer"), callback: undefined, periodic: false, timeout: 0, period: zero, start: zero, due: zero,
-          armedFrame: 0, order: 0, running: false, expired: false, paused: undefined };
+        const timer: Timer = { ...this.handle("timer"), callback: undefined, periodic: false, timeout: 0, period: 0, due: 0,
+          order: 0, running: false, expired: false, paused: undefined };
         this.timers.push(timer);
         return timer;
       },
       TimerStart: (timer: Timer, timeout: number, periodic: boolean, callback: Callback) => {
-        const length = instant(timeout);
-        if (periodic && length.frame === 0 && length.sub < MIN_PERIOD_STEPS) length.sub = MIN_PERIOD_STEPS;
+        const seconds = roundToFloat32(timeout);
+        const shortest = periodic ? MIN_PERIOD : MIN_ONE_SHOT;
         timer.callback = callback;
         timer.periodic = periodic;
-        timer.timeout = timeout;
-        timer.period = length;
-        // A start takes effect at the end of the current frame, even from inside a callback.
-        timer.start = { frame: this.frame, sub: 0 };
-        timer.due = later(timer.start, length);
-        timer.armedFrame = this.frame;
+        timer.timeout = seconds;
+        timer.period = seconds >= shortest ? seconds : shortest;
+        // From the game time natives read: inside a callback, its deadline.
+        timer.due = after(this.now, timer.period);
         timer.order = ++this.timerOrder;
         timer.running = true;
         timer.expired = false;
@@ -1332,35 +1320,35 @@ export class HeadlessClient {
     });
   }
 
-  /** Seconds into a timer's current period, at the game time natives read. */
+  /** Seconds into a timer's current period, at the game time natives read: its period less what remains, each rounded toward zero. */
   private timerElapsed(timer: Timer): number {
     if (timer.paused !== undefined) return timer.paused;
     if (timer.expired) return timer.timeout;
     if (!timer.running) return 0;
-    const elapsed = secondsBetween(timer.start, this.now);
-    return elapsed < 0 ? 0 : Math.min(elapsed, secondsBetween({ frame: 0, sub: 0 }, timer.period));
+    const remaining = timer.due > this.now ? subtractFloat32TowardZero(timer.due, this.now) : 0;
+    return remaining < timer.period ? subtractFloat32TowardZero(timer.period, remaining) : 0;
   }
 
   /**
    * Every callback due by the end of this frame, earliest deadline first and
    * equal deadlines in TimerStart order; a period shorter than a frame
-   * catches up within it. Each callback reads its own deadline as the time.
+   * catches up within it, and a timer started in a callback fires in this
+   * frame when it falls due in it. Each callback reads its own deadline as
+   * the time (wisp:docs/warsmash-notes.md#timers-and-frame-stepping).
    */
   private runDueTimers(): void {
-    const end = { frame: this.frame, sub: 0 };
+    const end = frameEnd(this.frame);
     this.now = end;
     for (;;) {
       let next: Timer | undefined;
       for (const timer of this.timers) {
-        if (!timer.running || timer.callback === undefined || timer.armedFrame >= this.frame || before(end, timer.due)) continue;
-        if (next === undefined || before(timer.due, next.due) || (timer.due.frame === next.due.frame && timer.due.sub === next.due.sub && timer.order < next.order)) next = timer;
+        if (!timer.running || timer.callback === undefined || timer.due > end) continue;
+        if (next === undefined || timer.due < next.due || (timer.due === next.due && timer.order < next.order)) next = timer;
       }
       if (next === undefined || next.callback === undefined) break;
       this.now = next.due;
-      if (next.periodic) {
-        next.start = next.due;
-        next.due = later(next.due, next.period);
-      } else {
+      if (next.periodic) next.due = after(next.due, next.period);
+      else {
         next.running = false;
         next.expired = true;
       }
