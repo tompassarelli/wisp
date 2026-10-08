@@ -58,7 +58,9 @@ export const run = (argv: readonly string[], inherit = false, cwd?: string) => a
 );
 
 /** The checkout's GitHub repository, OWNER/NAME. */
-export const currentRepo = run(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]);
+export const currentRepo = run(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]).pipe(
+  Effect.tap((repo) => sweepScratch(repo)),
+);
 
 /**
  * The commit to run, and the scratch branch it was pushed to when main doesn't
@@ -102,6 +104,31 @@ export type RunState = typeof RunState.Type;
 /** gh's JSON output decoded by `schema`. */
 export const decoded = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, text: string) =>
   Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(text).pipe(Effect.mapError((cause) => new FarmFailure({ problem: `unexpected gh output: ${describeCause(cause)}` })));
+
+const ScratchPages = Schema.Array(Schema.Struct({ data: Schema.Struct({ repository: Schema.Struct({ refs: Schema.Struct({
+  nodes: Schema.Array(Schema.Struct({ name: Schema.String, target: Schema.Struct({ oid: Schema.String, committedDate: Schema.String }) })),
+}) }) }) }));
+const ActivePages = Schema.Array(Schema.Array(Schema.Struct({ head_branch: Schema.NullOr(Schema.String), head_sha: Schema.String, display_title: Schema.String })));
+
+/** Removes farm branches older than a day unless a live run still uses them. */
+export const sweepScratch = (repo: string) => Effect.gen(function*() {
+  const [owner, name] = repo.split("/");
+  const query = `query($owner:String!,$name:String!,$endCursor:String){repository(owner:$owner,name:$name){refs(refPrefix:"refs/heads/farm/",first:100,after:$endCursor){nodes{name target{oid ... on Commit{committedDate}}}pageInfo{hasNextPage endCursor}}}}`;
+  const pages = yield* decoded(ScratchPages, yield* run(["gh", "api", "graphql", "--paginate", "--slurp", "-f", `query=${query}`, "-f", `owner=${owner}`, "-f", `name=${name}`]));
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  const stale = pages.flatMap((page) => page.data.repository.refs.nodes).filter((ref) => Date.parse(ref.target.committedDate) < cutoff);
+  if (stale.length === 0) return;
+  const active = [];
+  for (const status of ["queued", "in_progress"]) {
+    const pages = yield* decoded(ActivePages, yield* run(["gh", "api", `repos/${repo}/actions/runs?status=${status}&per_page=100`, "--paginate", "--slurp", "--jq", ".workflow_runs | map({head_branch,head_sha,display_title})"]));
+    active.push(...pages.flat());
+  }
+  for (const ref of stale) {
+    const branch = `farm/${ref.name}`;
+    if (active.some((run) => run.head_branch === branch || run.head_sha === ref.target.oid || run.display_title.split(/\s+/).includes(ref.target.oid) || run.display_title.split(/\s+/).includes(branch))) continue;
+    yield* deleteScratch(repo, branch);
+  }
+});
 
 /** A fresh tag that names a dispatched run, so the command finds its own. */
 export const runTag = () => randomBytes(4).toString("hex");

@@ -44,6 +44,7 @@ test.each([
     stub(bin, "gh", `
 const ref = (prefix) => args.find((arg) => arg.startsWith(prefix))?.slice(prefix.length);
 if (args[0] === "repo") { console.log("owner/repo"); process.exit(0); }
+if (args[0] === "api" && args[1] === "graphql") { console.log(JSON.stringify([{data:{repository:{refs:{nodes:[]}}}}])); process.exit(0); }
 if (args[0] === "run" && args[1] === "list") { console.log("[]"); process.exit(0); }
 if (args[0] === "api" && args[2] === "POST") {
   ${originGit(`"update-ref", ref("ref="), ref("sha=")`)};
@@ -80,6 +81,38 @@ if (${JSON.stringify(failing)} === "push") { console.error("stand-in failure"); 
       `delete ${scratch}`,
     ]);
     expect(git(dir, "--git-dir", origin, "for-each-ref", "refs/heads/farm")).toBe("");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 20_000);
+
+test("[repro #74] farm startup deletes stale refs and keeps recent and active-run refs", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "host-tools-farm-sweep-"));
+  const old = "2020-01-01T00:00:00Z";
+  const refs = [
+    { name: "stale", target: { oid: "1".repeat(40), committedDate: old } },
+    { name: "queued", target: { oid: "2".repeat(40), committedDate: old } },
+    { name: "running", target: { oid: "3".repeat(40), committedDate: old } },
+    { name: "head", target: { oid: "4".repeat(40), committedDate: old } },
+    { name: "recent", target: { oid: "5".repeat(40), committedDate: "2099-01-01T00:00:00Z" } },
+  ];
+  try {
+    const bin = join(dir, "bin");
+    mkdirSync(bin);
+    const log = join(dir, "calls.log");
+    stub(bin, "gh", `
+if (args[0] === "repo") { console.log("owner/repo"); process.exit(0); }
+if (args[1] === "graphql") { console.log(${JSON.stringify(JSON.stringify([{ data: { repository: { refs: { nodes: refs.slice(0, 2) } } } }, { data: { repository: { refs: { nodes: refs.slice(2) } } } }]))}); process.exit(0); }
+if (args[1]?.includes("status=queued")) { console.log(JSON.stringify([[{head_branch:"farm/queued",head_sha:"main",display_title:"Queued"}]])); process.exit(0); }
+if (args[1]?.includes("status=in_progress")) { console.log(JSON.stringify([[{head_branch:"main",head_sha:"main",display_title:"Farm test ${"3".repeat(40)} tag"}],[{head_branch:"main",head_sha:"${"4".repeat(40)}",display_title:"Running"}]])); process.exit(0); }
+if (args[0] === "api" && args[2] === "DELETE") { appendFileSync(${JSON.stringify(log)}, args[3] + "\\n"); process.exit(0); }
+process.exit(1);`);
+    const program = `import {Effect} from 'effect'; import {currentRepo} from './scripts/wisp/farm'; await Effect.runPromise(currentRepo);`;
+    const child = Bun.spawn([process.execPath, "--eval", program], { cwd: resolve(import.meta.dir, ".."), env: { ...process.env, PATH: `${bin}:${process.env["PATH"] ?? ""}` }, stdout: "pipe", stderr: "pipe" });
+    const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+    expect(stderr).toBe("");
+    expect(code).toBe(0);
+    expect(readFileSync(log, "utf8").trim().split("\n")).toEqual(["repos/owner/repo/git/refs/heads/farm/stale"]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
