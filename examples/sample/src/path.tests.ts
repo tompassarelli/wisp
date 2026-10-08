@@ -1,7 +1,7 @@
 import { assertEquals, test } from "wisp/src/runtime/testing";
 import { pathPoint } from "./path";
 
-test("path: units walk a square lap around the center, player 1 half a lap ahead", () => {
+test("[spec docs/sample-map.md] path: units walk a square lap around the center, player 1 half a lap ahead", () => {
   const expected: readonly (readonly [tick: number, player: number, x: number, y: number])[] = [
     [0, 0, -512, -512],
     [16, 0, 0, -512],

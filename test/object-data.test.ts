@@ -34,7 +34,7 @@ function decode(bytes: Uint8Array, leveled: boolean) {
   return objects;
 }
 
-test("the authored unit and both ability levels preserve requested binary types, columns and values", () => {
+test("[reference] the authored unit and both ability levels preserve requested binary types, columns and values", () => {
   const [unitFile, abilityFile] = sampleObjectData();
   const unit = decode(unitFile?.contents ?? new Uint8Array(), false)[0];
   expect(unit).toMatchObject({ base: "hfoo", id: "u001" });
@@ -51,7 +51,7 @@ test("the authored unit and both ability levels preserve requested binary types,
   }
 });
 
-test("duplicate IDs and malformed rawcodes fail before packaging", () => {
+test("[spec docs/object-data.md] duplicate IDs and malformed rawcodes fail before packaging", () => {
   const unit = new UnitObject(0x75303031, "hfoo").name("Walker").build();
   expect(() => encodeObjectData([unit, unit], false)).toThrow("duplicate new object ID");
   expect(() => abilityData([FILE_IO_OBJECT])).toThrow("duplicate new object ID");
@@ -61,7 +61,7 @@ test("duplicate IDs and malformed rawcodes fail before packaging", () => {
   expect(() => new AbilityObject(0x41303031, "AHbz").levels(2).tooltip(3, "bad")).toThrow("exceeds");
 });
 
-test("typed setters reject wrong value types", () => {
+test("[spec docs/object-data.md] typed setters reject wrong value types", () => {
   const run = Bun.spawnSync(["bun", "node_modules/typescript-native/bin/tsc", "--project", "test/tsconfig.object-types.json"], { cwd: join(import.meta.dir, "..") });
   expect({ code: run.exitCode, output: run.stdout.toString() + run.stderr.toString() }).toEqual({ code: 0, output: "" });
 });

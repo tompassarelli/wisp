@@ -7,7 +7,7 @@ const cue = (source: string | undefined, label: string | undefined): SoundCue =>
   volume: 127, pitch: 1, x: 0, y: 0, z: 0,
 });
 
-test("stock SLK labels and direct paths resolve installed encodings with one read per sound", async () => {
+test("[spec docs/play.md] stock SLK labels and direct paths resolve installed encodings with one read per sound", async () => {
   const bytes = new Uint8Array([1, 2, 3]);
   const table = new TextEncoder().encode([
     "ID;PWXL;N;E", 'C;X1;Y1;K"SoundName"', 'C;X2;K"DirectoryBase"', 'C;X3;K"FileNames"',

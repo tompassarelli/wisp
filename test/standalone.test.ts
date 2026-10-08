@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { installHeadless } from "../scripts/wisp/headless";
 import { openStandalone, type StandaloneGame, type StandaloneOptions } from "../scripts/wisp/standalone";
 
-test("standalone records scripted checksums and skips live or explicitly disabled checksums", async () => {
+test("[spec docs/play.md] standalone records scripted checksums and skips live or explicitly disabled checksums", async () => {
   const directory = await mkdtemp(join(tmpdir(), "wisp-checksums-"));
   try {
     const script = join(directory, "input.pad");

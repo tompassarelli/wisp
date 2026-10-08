@@ -26,7 +26,7 @@ const expectations: SceneExpectations = {
   framesPerSecond: 60,
 };
 
-test("the emitted scene recorder reports each model's effects, and the host names what a player would see wrong", async () => {
+test("[spec docs/player-view.md] the emitted scene recorder reports each model's effects, and the host names what a player would see wrong", async () => {
   expect(report(mapCompiler(join(import.meta.dir, "tsconfig.scene.json"))())).toBe("");
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "scene-stub.lua"), join(root, "build/scene-tests/map.lua")], { cwd: root, stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
@@ -59,7 +59,7 @@ test("the emitted scene recorder reports each model's effects, and the host name
   ]);
 });
 
-test("a stage drawn with an empty model is a missing stage", () => {
+test("[spec docs/player-view.md] a stage drawn with an empty model is a missing stage", () => {
   const scene: SceneReport = { serial: 1, frame: 30, effects: 4, models: [
     { model: "", live: 3, inView: 3, drawn: 3, created: 0, age: 30, longest: 30, destroyed: 0 },
     { model: "Units/Hippogryph.mdx", live: 1, inView: 1, drawn: 1, created: 0, age: 30, longest: 30, destroyed: 0 },
@@ -74,7 +74,7 @@ test("a stage drawn with an empty model is a missing stage", () => {
   expect(sceneProblems(drawn, expectations)).toEqual([]);
 });
 
-test("a frame probe counts rows of the declared colours by pixel measurement", () => {
+test("[invariant] a frame probe counts rows of the declared colours by pixel measurement", () => {
   const width = 100;
   const height = 50;
   const rgb = new Uint8Array(width * height * 3).fill(200);
@@ -94,7 +94,7 @@ test("a frame probe counts rows of the declared colours by pixel measurement", (
   expect(frameProblems(measureFrame(frame, features))).toEqual([{ seen: "no stage", evidence: "deck rows: 5 rows, needs 6" }]);
 });
 
-test("the player-view check reads each client's settled scene report and keeps its captured frame", async () => {
+test("[spec docs/player-view.md] the player-view check reads each client's settled scene report and keeps its captured frame", async () => {
   const documents = mkdtempSync(join(tmpdir(), "wisp-player-view-"));
   try {
     mkdirSync(join(documents, "CustomMapData"));

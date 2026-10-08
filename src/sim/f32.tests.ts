@@ -9,7 +9,7 @@ import { f32 } from "./f32";
 const same = (actual: number, expected: number) =>
   assertEquals(actual === expected && 1 / actual === 1 / expected, true, `${actual} vs ${expected}`);
 
-test("f32 arithmetic rounds the exact result to nearest", () => {
+test("[reference] f32 arithmetic rounds the exact result to nearest", () => {
   // Smashcraft 0.0.48's Rifleman aerial jump speed: Warcraft's raw product was 23.12399673461914, an ulp toward zero.
   const speed = 24.599998474121094;
   const factor = 0.9399999976158142;
@@ -36,7 +36,7 @@ test("f32 arithmetic rounds the exact result to nearest", () => {
   }
 });
 
-test("f32 arithmetic keeps zero signs and small integers", () => {
+test("[reference] f32 arithmetic keeps zero signs and small integers", () => {
   const zero = 0.0;
   const negative = -5000.5;
   same(f32(zero * negative), -0.0);
@@ -47,7 +47,7 @@ test("f32 arithmetic keeps zero signs and small integers", () => {
   same(f32(40 - 2), 38);
 });
 
-test("f32 differences within a factor of two and products with ±1 are exact", () => {
+test("[reference] f32 differences within a factor of two and products with ±1 are exact", () => {
   const position = 230.71875;
   const near = 160.3000030517578;
   same(f32(position - near), 70.41874694824219);
@@ -59,7 +59,7 @@ test("f32 differences within a factor of two and products with ±1 are exact", (
   same(f32(-1 * -offset), 3.0999999046325684);
 });
 
-test("f32 quotients round the exact quotient to nearest", () => {
+test("[reference] f32 quotients round the exact quotient to nearest", () => {
   // Smashcraft's camera zoom on 7 October 2026: Warcraft's raw quotient was 765.6729125976562, an ulp above the nearest.
   const height = 379.64483642578125;
   const span = 0.4958316385746002;
@@ -72,7 +72,7 @@ test("f32 quotients round the exact quotient to nearest", () => {
   same(f32(height / -2.0), -189.82241821289062);
 });
 
-test("f32 quotients keep zero signs and exact integer quotients", () => {
+test("[reference] f32 quotients keep zero signs and exact integer quotients", () => {
   const zero = 0.0;
   const negative = -5000.5;
   same(f32(zero / negative), -0.0);
@@ -81,7 +81,7 @@ test("f32 quotients keep zero signs and exact integer quotients", () => {
   same(f32(7 / 84), 0.0833333358168602);
 });
 
-test("f32 literals are the binary32 nearest their decimal", () => {
+test("[reference] f32 literals are the binary32 nearest their decimal", () => {
   // Warcraft read the numeral 0.016666667 as 0.01666666567325592, the binary32 below the nearest.
   same(f32(0.016666667), 0.01666666753590107);
   same(f32(-0.1), -0.10000000149011612);
