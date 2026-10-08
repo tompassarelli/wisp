@@ -16,6 +16,11 @@ failed. Without `--ref` it runs the checkout's HEAD.
 
 ## How it works
 
+At startup, every farm command sweeps origin's `farm/*` branches whose head
+commit is older than 24 hours. Queued and in-progress runs keep their branches,
+including commits named in a workflow's run title when it dispatches on main.
+This clears branches left by a killed command or a manual push.
+
 1. **The commit.** A commit main already holds runs as is. Otherwise it must
    be the checkout's HEAD: the command pushes it with safe-push to a scratch
    branch `farm/COMMIT` (CI ignores `farm/**`), waits for the run whatever
