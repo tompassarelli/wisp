@@ -18,11 +18,14 @@ export interface HeadlessRenderProject {
 export interface RenderScene {
   readonly frame: number;
   readonly client: number;
-  readonly effects: readonly EffectPose[];
+  readonly effects: readonly DrawnPose[];
   readonly units: ReturnType<HeadlessClient["unitPoses"]>;
   readonly camera: ReturnType<HeadlessClient["cameraPose"]>;
   readonly ui: ReturnType<HeadlessClient["frames"]["snapshot"]>;
 }
+
+/** A pose the renderer draws: an effect, or a unit drawn like one, which starts on Stand rather than Birth. */
+export type DrawnPose = EffectPose & { readonly unit?: true };
 
 export const captureScene = (client: HeadlessClient, options: { readonly visibleUiOnly?: boolean } = {}): RenderScene => ({
   frame: client.frame, client: client.slot, effects: client.effectPoses(), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot({ visibleOnly: options.visibleUiOnly ?? false }),
@@ -30,11 +33,13 @@ export const captureScene = (client: HeadlessClient, options: { readonly visible
 
 /** Both the still renderer and the player draw unit objects with the same model poses. */
 export function sceneWithUnits(project: HeadlessRenderProject, scene: RenderScene): RenderScene {
-  const units: EffectPose[] = scene.units.filter((unit) => unit.visible && unit.alpha > 0).map((unit) => {
+  const units: DrawnPose[] = scene.units.filter((unit) => unit.visible && unit.alpha > 0).map((unit) => {
     const model = project.unitModels?.[unit.typeId];
     if (model === undefined) throw new Error(`no render.unitModels entry for visible unit type ${unit.typeId}`);
     return { handle: unit.handle, model, created: 0, x: unit.x, y: unit.y, z: unit.z, alpha: unit.alpha, scale: 1, timeScale: unit.timeScale,
-      animation: unit.animation, subAnimations: [], animationElapsed: unit.animationElapsed, animationBlendTime: 0, queuedAnimations: [], yaw: unit.facing * Math.PI / 180, pitch: 0, roll: 0, color: unit.color, teamColor: unit.teamColor, matrixScale: unit.scale, flat: unit.scale.some((value) => value === 0) };
+      animation: unit.animation, subAnimations: unit.subAnimations, animationElapsed: unit.animationElapsed, animationSought: unit.animationSought,
+      animationTicks: unit.animationTicks, animationClock: unit.animationClock, animationBlendTime: unit.animationBlendTime, animationBlend: unit.animationBlend,
+      unit: true, queuedAnimations: [], yaw: unit.facing * Math.PI / 180, pitch: 0, roll: 0, color: unit.color, teamColor: unit.teamColor, matrixScale: unit.scale, flat: unit.scale.some((value) => value === 0) };
   });
   return { ...scene, effects: [...scene.effects, ...units] };
 }

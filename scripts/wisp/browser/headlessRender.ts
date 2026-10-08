@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 import { ModelRenderer, decodeBLP, getBLPImageData, parseMDL, parseMDX, type model } from "../../../vendor/war3-model.mjs";
-import type { EffectPose } from "../../../src/headless/client";
-import type { RenderScene } from "../headlessRender";
+import { type AnimationSequence, animationSample, blendWeight, globalSequenceFrame, type SequenceSample } from "../../../src/headless/animation";
+import type { DrawnPose as EffectPose, RenderScene } from "../headlessRender";
 import { parsableModel } from "../models";
 
 type Matrix = Float32Array;
@@ -68,7 +68,7 @@ let gl: WebGL2RenderingContext;
 const models = new Map<string, Promise<model.Model>>();
 const textures = new Map<string, Promise<HTMLCanvasElement>>();
 const tinted = new Map<string, HTMLCanvasElement>();
-interface ModelInstance { renderer: ModelRenderer; model: model.Model; path: string; clock: number; alpha: number; originalAlpha: (model.AnimVector | number)[] }
+interface ModelInstance { renderer: ModelRenderer; model: model.Model; path: string; sequences: AnimationSequence[]; sequence: number; clock: number; alpha: number; originalAlpha: (model.AnimVector | number)[] }
 const instances = new Map<number, ModelInstance>();
 const preparedModels = new Map<string, ModelInstance>();
 async function asset(path: string): Promise<ArrayBuffer> {
@@ -121,12 +121,57 @@ function textureAt(path: string): Promise<HTMLCanvasElement> {
   return result;
 }
 const teams = [[255, 3, 3], [0, 66, 255], [28, 230, 185], [84, 0, 129], [255, 252, 1], [254, 138, 14], [32, 192, 0], [229, 91, 176], [149, 150, 151], [126, 191, 241], [16, 98, 70], [78, 42, 4]];
-function sequenceIndex(data: model.Model, pose: EffectPose): number {
-  if (typeof pose.animation === "number") return Math.max(0, Math.min(data.Sequences.length - 1, pose.animation));
-  const main = typeof pose.animation === "string" ? pose.animation.replace(/^ANIM_TYPE_/, "").toLowerCase() : "stand";
-  const wanted = [main, ...pose.subAnimations.map((part) => String(part).replace(/^SUBANIM_TYPE_/, "").toLowerCase())];
-  const index = data.Sequences.findIndex((sequence) => wanted.every((part) => sequence.Name.toLowerCase().includes(part)));
-  return Math.max(0, index);
+/** The parts of war3-model's renderer that sampling and blending reach into. */
+interface Sampler {
+  rendererData: { frame: number; animation: number; animationInfo: { Interval: ArrayLike<number> }; globalSequencesFrames: number[]; rootNode: unknown };
+  interp: { vec3(out: Float32Array, vector: unknown): Float32Array | null; quat(out: Float32Array, vector: unknown): Float32Array | null };
+  updateNode(node: { node: { Translation?: unknown; Rotation?: unknown; Scaling?: unknown } }): void;
+}
+// No interval holds any key, so every non-global track takes its default value.
+const NO_SEQUENCE = { Interval: [0xffffffff, 0xffffffff] };
+function show(sampler: Sampler, data: model.Model, sample: SequenceSample): void {
+  sampler.rendererData.animation = sample.sequence;
+  sampler.rendererData.animationInfo = data.Sequences[sample.sequence] ?? NO_SEQUENCE;
+  sampler.rendererData.frame = sample.frame;
+}
+function slerp(a: Float32Array, b: Float32Array, t: number): Float32Array {
+  let dot = (a[0] ?? 0) * (b[0] ?? 0) + (a[1] ?? 0) * (b[1] ?? 0) + (a[2] ?? 0) * (b[2] ?? 0) + (a[3] ?? 1) * (b[3] ?? 1), sign = 1;
+  if (dot < 0) { dot = -dot; sign = -1; }
+  let left = 1 - t, right = t;
+  if (1 - dot > 0.000001) { const angle = Math.acos(dot), sine = Math.sin(angle); left = Math.sin((1 - t) * angle) / sine; right = Math.sin(t * angle) / sine; }
+  return new Float32Array([0, 1, 2, 3].map((i) => left * (a[i] ?? 0) + right * sign * (b[i] ?? 0)));
+}
+/** Poses every node, mixing each local transform toward the saved pose by `weight`, as a blend between sequences does. */
+function poseNodes(sampler: Sampler, data: model.Model, saved: SequenceSample | undefined, weight: number): void {
+  if (saved === undefined || weight <= 0) { sampler.updateNode(sampler.rendererData.rootNode as Parameters<Sampler["updateNode"]>[0]); return; }
+  const { interp } = sampler, vec3 = interp.vec3.bind(interp), quat = interp.quat.bind(interp), updateNode = sampler.updateNode.bind(sampler);
+  const current = { animation: sampler.rendererData.animation, animationInfo: sampler.rendererData.animationInfo, frame: sampler.rendererData.frame };
+  let node: Parameters<Sampler["updateNode"]>[0]["node"] | undefined;
+  const savedValue = <T>(read: () => T): T => {
+    show(sampler, data, saved);
+    try { return read(); } finally { Object.assign(sampler.rendererData, current); }
+  };
+  interp.vec3 = (out, vector) => {
+    const now = vec3(new Float32Array(3), vector);
+    if (node === undefined || (vector !== node.Translation && vector !== node.Scaling)) return now === null ? null : new Float32Array(now);
+    const before = savedValue(() => vec3(new Float32Array(3), vector));
+    if (now === null && before === null) return null;
+    const fallback = vector === node.Scaling ? 1 : 0;
+    for (let i = 0; i < 3; i++) out[i] = (1 - weight) * (now?.[i] ?? fallback) + weight * (before?.[i] ?? fallback);
+    return out;
+  };
+  interp.quat = (out, vector) => {
+    const now = quat(new Float32Array(4), vector);
+    if (node === undefined || vector !== node.Rotation) return now === null ? null : new Float32Array(now);
+    const before = savedValue(() => quat(new Float32Array(4), vector));
+    if (now === null && before === null) return null;
+    const identity = new Float32Array([0, 0, 0, 1]);
+    out.set(slerp(now === null ? identity : new Float32Array(now), before === null ? identity : new Float32Array(before), weight));
+    return out;
+  };
+  sampler.updateNode = (next) => { node = next.node; updateNode(next); };
+  try { updateNode(sampler.rendererData.rootNode as Parameters<Sampler["updateNode"]>[0]); }
+  finally { interp.vec3 = vec3; interp.quat = quat; sampler.updateNode = updateNode; node = undefined; }
 }
 async function prepareInstance(pose: EffectPose) {
   let instance = instances.get(pose.handle.id);
@@ -149,7 +194,8 @@ async function createInstance(path: string): Promise<ModelInstance> {
     const bitmap = await textureAt(texture.Image), context = bitmap.getContext("2d");
     if (context !== null) renderer.setTextureImageData(texture.Image, [context.getImageData(0, 0, bitmap.width, bitmap.height)]);
   }
-  return { renderer, model: data, path, clock: 0, alpha: 255, originalAlpha: data.GeosetAnims.map((animation) => animation.Alpha) };
+  const sequences = data.Sequences.map((sequence) => ({ name: sequence.Name, start: sequence.Interval[0] ?? 0, end: sequence.Interval[1] ?? 0, looping: !sequence.NonLooping, rarity: sequence.Rarity }));
+  return { renderer, model: data, path, sequences, sequence: -2, clock: 0, alpha: 255, originalAlpha: data.GeosetAnims.map((animation) => animation.Alpha) };
 }
 async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>) {
   const instance = await prepareInstance(pose);
@@ -163,15 +209,22 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>) {
     instance.alpha = pose.alpha;
   }
   renderer.setCamera(new Float32Array(view.eye), view.quaternion);
-  const sequence = sequenceIndex(data, pose), info = data.Sequences[sequence];
-  if (info === undefined) throw new Error(`model has no animation: ${pose.model}`);
-  const start = info.Interval[0] ?? 0, end = info.Interval[1] ?? start, duration = Math.max(1, end - start);
-  if (renderer.getSequence() !== sequence || pose.animationElapsed * 1000 < instance.clock) { renderer.setSequence(sequence); instance.clock = 0; }
-  const elapsed = pose.animationElapsed * 1000;
-  if (data.ParticleEmitters2.length > 0 || data.RibbonEmitters.length > 0) {
+  const kind = pose.unit === true ? "unit" : "effect";
+  const sample = animationSample(instance.sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed, sought: pose.animationSought, ticks: pose.animationTicks }, kind);
+  const sampler = renderer as unknown as Sampler, elapsed = pose.animationElapsed * 1000;
+  if (instance.sequence !== sample.sequence || elapsed < instance.clock) {
+    if (sample.sequence >= 0) renderer.setSequence(sample.sequence);
+    instance.sequence = sample.sequence; instance.clock = 0;
+  }
+  if (sample.sequence >= 0 && (data.ParticleEmitters2.length > 0 || data.RibbonEmitters.length > 0)) {
     while (instance.clock < elapsed) { const delta = Math.min(1000 / 60, elapsed - instance.clock); renderer.update(delta); instance.clock += delta; }
   }
-  renderer.setFrame(start + (info.NonLooping ? Math.min(duration, elapsed) : elapsed % duration)); renderer.update(0);
+  show(sampler, data, sample);
+  data.GlobalSequences.forEach((length, index) => { sampler.rendererData.globalSequencesFrames[index] = globalSequenceFrame(pose.animationClock, length); });
+  const blend = pose.animationBlend, weight = blendWeight(pose);
+  const saved = blend === undefined ? undefined : animationSample(instance.sequences, blend.from, kind);
+  renderer.update(0);
+  if (saved !== undefined && weight > 0) poseNodes(sampler, data, saved, weight);
   renderer.setTeamColor(new Float32Array((teams[pose.teamColor] ?? [160, 160, 160]).map((v) => v / 255)));
   renderer.setLightPosition([1000, -1000, 3000]); renderer.setLightColor([1, 1, 1]);
   renderer.render(multiply(view.view, transform(pose)), view.projection, {});
