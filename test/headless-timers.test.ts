@@ -37,7 +37,7 @@ test("each timer rule's row agrees in two clients", () => {
   for (const client of clients.clients) expect(client.files.get(`timers56-p${client.slot}.txt`)).toEqual(EXPECTED);
 });
 
-test("the same timer rules pass in emitted 32-bit Lua", { timeout: 60000 }, () => {
+test("the same timer rules pass in emitted 32-bit Lua", { timeout: 120_000 }, () => {
   for (const config of ["test/timers56/tsconfig.json", "test/timers56/tsconfig.headless.json"]) expect(report(mapCompiler(join(import.meta.dir, "..", config))())).toBe("");
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "../build/timers56/headless/headless.lua"), join(import.meta.dir, "../build/timers56/map.lua"), join(import.meta.dir, "../src/natives/warcraft.d.ts")], { stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });

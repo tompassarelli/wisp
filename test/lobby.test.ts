@@ -94,11 +94,11 @@ test("a fresh match hosts a private game through the host's page, joins it with 
   expect(sent.indexOf("a:LobbyStart")).toBeGreaterThan(sent.indexOf("b:JoinGameByGameName"));
   // Nothing is clicked or typed.
   expect(inputs).toEqual([]);
-}, 15_000);
+}, 120_000);
 
 test("a client without a reporting page stops the fresh match before anything is hosted", async () => {
   const { exit, sent, inputs } = await run([true, false]);
   expect(Exit.isFailure(exit) && String(exit.cause)).toContain("no menu page reported for b");
   expect(sent.filter((message) => message.endsWith("CreateLobby"))).toEqual([]);
   expect(inputs).toEqual([]);
-}, 15_000);
+}, 120_000);

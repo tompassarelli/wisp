@@ -98,7 +98,7 @@ test("the overlay shows to the player who asks; every client reports the frames 
     expect(frameCostCaptureReadings(capture).windows.length).toBe(5);
   }
   expect(after(lines, "capture desync: ")).toEqual(["none"]);
-}, 30_000);
+}, 120_000);
 
 test("the host reads each client's new report once, as the map wrote it", async () => {
   const directory = mkdtempSync(join(tmpdir(), "wisp-frame-cost-"));

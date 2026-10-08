@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "bun:test";
 import { Effect, Exit } from "effect";
+import { timingTest } from "../scripts/wisp/timingTest";
 import { type MenuAddress, connectMenus, hostLobby, installMenuPage, joinLobby, keptAddress, leaveLobby, listenForMenus, menuAddress, menuPage, removeMenuPage, startLobby } from "../scripts/wisp/menus";
 
 const GUID = "6f1c2a90-guid";
@@ -101,7 +102,7 @@ function fakeGame(hosting: "immediate" | "old-setup" | "refused" = "immediate", 
   return { received, address: { port: server.port!, guid: GUID } satisfies MenuAddress, stop: () => server.stop(true) };
 }
 
-test("a folder whose maps the game hasn't read yet is listed again until they appear", async () => {
+const hostLate = async () => {
   const game = fakeGame("immediate", 2);
   try {
     const started = performance.now();
@@ -109,11 +110,19 @@ test("a folder whose maps the game hasn't read yet is listed again until they ap
       const menus = yield* connectMenus(game.address);
       return yield* hostLobby(menus, { folder: "00-Wisp", file: "Wisp Sample.w3x", gameName: "late", password: "pw" });
     })));
-    expect(result).toBe(`${MAPS}00-Wisp/Wisp Sample.w3x`);
-    expect(game.received.filter(({ message }) => message === "GetMapList").length).toBe(4);
-    // Listed again every 250 ms: two unread listings cost half a second, not two.
-    expect(performance.now() - started).toBeLessThan(1500);
+    return { result, listings: game.received.filter(({ message }) => message === "GetMapList").length, elapsed: performance.now() - started };
   } finally { game.stop(); }
+};
+
+test("a folder whose maps the game hasn't read yet is listed again until they appear", async () => {
+  expect(await hostLate()).toMatchObject({ result: `${MAPS}00-Wisp/Wisp Sample.w3x`, listings: 4 });
+});
+
+timingTest("a folder whose maps the game hasn't read yet is listed again every 250 ms", async () => {
+  // Two unread listings cost half a second, not two.
+  const { elapsed } = await hostLate();
+  console.info(`two unread listings and the read one: ${elapsed.toFixed(0)} ms`);
+  expect(elapsed).toBeLessThan(1500);
 });
 
 const games: { stop: () => void }[] = [];

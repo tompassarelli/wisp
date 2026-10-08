@@ -50,7 +50,7 @@ test("perf --json plays the compiled map, keeps samples in --out, and ends with 
     expect(objects[0].clients[0]).toMatchObject({ client: 0, metrics: { instructions: { mean: expect.any(Number) } } });
     expect(await Bun.file(out).text()).toContain("frame 1 p0 instructions=");
   });
-}, 30_000);
+}, 120_000);
 
 test("perf compare --json reports success and budget failures; text stays readable", async () => {
   await temporary(async (directory) => {

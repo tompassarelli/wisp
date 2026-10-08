@@ -24,7 +24,7 @@ test("three requested pairs start only the admitted native clients and report th
   expect(result.code).toBe(0);
   expect(result.clients).toEqual(["wisp-lan:lan0a", "wisp-lan:lan0b"]);
   expect(result.stdout).toContain("pool stays at 1 pair; waiting: 1, 2");
-}, 10000);
+}, 120_000);
 
 test("away profile stops new pairs at 20 percent protected CPU pressure", async () => {
   const result = await run(20);

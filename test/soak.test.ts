@@ -15,6 +15,7 @@ import { RealtimeClients } from "../scripts/wisp/headlessInput";
 import { type SoakMatch, SoakMonitor, fuzzedInputs, helperRecorder, planSoak, playSoakMatch, readSoakRepro, soakRepro } from "../scripts/wisp/soak";
 import { MEASURED_BATTLE_NET, syncDelivery } from "../src/headless/syncChannel";
 import { timingsLayer } from "../scripts/wisp/timings";
+import { timingTest } from "../scripts/wisp/timingTest";
 import game from "./soak/game";
 import project from "./soak/project";
 
@@ -24,14 +25,19 @@ afterAll(runtime.restore);
 const match = (policies: readonly string[], seed = 7): SoakMatch => ({ index: 0, seed, fighters: ["a", "b"], stage: "flat", policies, frames: 600 });
 const play = (policies: readonly string[], setup = project) => playSoakMatch(runtime, game, setup, match(policies));
 
-test("a clean match ends with no findings, faster than real time, and repeats from its seed", () => {
+timingTest("a clean match plays more than five times faster than real time", () => {
   const started = performance.now();
-  const first = play(["fuzz", "fuzz"]);
+  const match = play(["fuzz", "fuzz"]);
   const elapsed = performance.now() - started;
+  console.info(`soak match: ${match.wallMs.toFixed(0)} ms of play in ${elapsed.toFixed(0)} ms`);
+  expect(match.wallMs).toBeGreaterThan(elapsed * 5);
+});
+
+test("a clean match ends with no findings and repeats from its seed", () => {
+  const first = play(["fuzz", "fuzz"]);
   expect(first.findings).toEqual([]);
   expect(first.over).toBe(true);
   expect(first.inputs.edges.length).toBeGreaterThan(20);
-  expect(first.wallMs).toBeGreaterThan(elapsed * 5);
   const second = play(["fuzz", "fuzz"]);
   expect(second.checksums).toEqual(first.checksums);
   expect(second.inputs).toEqual(first.inputs);
