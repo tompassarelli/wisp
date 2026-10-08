@@ -449,6 +449,10 @@ saves them as the scene's `environment`.
   Exponential styles are drawn as linear.
 - **Sky.** The sky model around the eye, behind everything else, unlit, and
   fogged only when the fog draws over the sky. `BlzShowSkyBox(false)` hides it.
+- **Far cull.** A model whose origin lies farther from the eye than the
+  camera's `FARZ` is not drawn, even where part of it reaches nearer. At
+  Smashcraft's `FARZ` 8000, native captures show neither Nordrassil's World
+  Tree (origin 8054 from the eye) nor the Frozen Throne landmark (8049-9300).
 - **Not drawn.** Terrain, shadows, point lights from models, bloom and other
   post-processing.
 
