@@ -1,16 +1,17 @@
-/** A failed first-client check must finish before the peer can be launched. */
-export async function startPairClients<T>(clients: readonly T[], start: (client: T) => Promise<void>, locateFirst?: (client: T) => Promise<void>): Promise<void> {
-  for (const [index, client] of clients.entries()) {
-    await start(client);
-    if (index === 0 && locateFirst !== undefined) await locateFirst(client);
-  }
-}
+import { Effect, Schedule } from "effect";
+import { LanFailure } from "./join";
 
-export async function waitForFirstClient(ready: () => boolean, stopped: () => boolean, pause: () => Promise<void>): Promise<void> {
-  for (let attempt = 0; attempt < 240; attempt++) {
-    if (stopped()) throw new Error("the first client's native launcher stopped before Warcraft started");
-    if (ready()) return;
-    await pause();
-  }
-  throw new Error("the first Warcraft process did not start within 60 s");
-}
+/** Starts each client in order; a failed first-client check must finish before the peer can be launched. */
+export const startPairClients = <T, E, R>(clients: readonly T[], start: (client: T) => Effect.Effect<void, E, R>, locateFirst?: (client: T) => Effect.Effect<void, E, R>) =>
+  Effect.forEach(clients, (client, index) => index === 0 && locateFirst !== undefined ? Effect.andThen(start(client), locateFirst(client)) : start(client), { discard: true });
+
+/** Polls every 250 ms until the first Warcraft process runs; fails when its launcher stops or after 60 s. */
+export const waitForFirstClient = <E, R>(ready: Effect.Effect<boolean, E, R>, stopped: Effect.Effect<boolean, E, R>) =>
+  Effect.gen(function*() {
+    if (yield* stopped) return yield* new LanFailure({ problem: "the first client's native launcher stopped before Warcraft started" });
+    return yield* ready;
+  }).pipe(
+    Effect.repeat({ schedule: Schedule.spaced("250 millis"), until: (started) => started }),
+    Effect.timeoutOrElse({ duration: "60 seconds", orElse: () => Effect.fail(new LanFailure({ problem: "the first Warcraft process did not start within 60 s" })) }),
+    Effect.asVoid,
+  );

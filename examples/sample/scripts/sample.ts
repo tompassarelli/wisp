@@ -3,7 +3,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
-import { runCli } from "wisp/scripts/wisp/cli";
+import { runMainCli } from "wisp/scripts/wisp/cli";
 import { Clients } from "wisp/scripts/wisp/clients";
 import { type Command, UsageFailure, flagValues } from "wisp/scripts/wisp/command";
 import { makeClient } from "wisp/scripts/wisp/commands/client";
@@ -75,7 +75,7 @@ const fresh: Command = ([map, ...flags]) => Effect.gen(function*() {
   );
 });
 
-process.exit(await runCli("bun examples/sample/scripts/sample.ts", {
+runMainCli("bun examples/sample/scripts/sample.ts", {
   map: { usage: "build --base BASE.w3m --out OUT.w3x [--container MAP.w3x] | rebuild MAP.w3x", load: async () => ([verb, ...args]) => verb === "build" ? build(args) : verb === "rebuild" ? rebuild(args) : Effect.fail(new UsageFailure({ problem: "map takes build or rebuild" })) },
   hot: { usage: "--data DIR [--data DIR ...] [--watch]", load: async () => makeHot({ project, sourceDirectory, sourceMapDirectory, filePrefix }) },
   fresh: { usage: "MAP.w3x [--rebuild] [--map-folder Maps/00-Wisp]   (WISP_CLIENTS=clients.json)", load: async () => fresh },
@@ -105,4 +105,4 @@ process.exit(await runCli("bun examples/sample/scripts/sample.ts", {
       });
     },
   },
-}, process.argv.slice(2)));
+}, process.argv.slice(2));

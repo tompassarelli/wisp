@@ -30,9 +30,8 @@ the skill's earlier in-Smashcraft deferral does not apply to this extraction.
 Host tools that Bun runs (commands, runners, builds, captures, farm jobs) are
 written as Effect programs when they start processes, wait, retry, hold a
 resource or parse outside data. Load the effect-development skill before
-designing one, and follow the existing services in scripts/ (for example
-wisp:scripts/wisp/devProcesses.ts, wisp:scripts/wisp/commands/dev.ts and
-wisp:scripts/wisp/lan/pairAgent.ts). Map code compiled to Lua stays plain
+designing one, and follow the pattern and examples in
+[Host tools](docs/host-tools.md) (wisp:docs/host-tools.md). Map code compiled to Lua stays plain
 TypeScript; pure calculations stay plain functions.
 wisp:test/effect-host-tools.test.ts enforces this. Read the installed pinned
 Effect source before choosing its APIs. Runtime imports must resolve through

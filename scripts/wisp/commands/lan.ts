@@ -11,7 +11,10 @@
 // signed-in Battle.net clients, never anyone else's game, not for cheating.
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { Console, Effect } from "effect";
+import * as BunServices from "@effect/platform-bun/BunServices";
+import { Console, Effect, Exit, Schedule, Schema, Scope } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { spawnLogged } from "../hostProcess";
 import { type Command, UsageFailure, flagValues } from "../command";
 import { LanFailure } from "../lan/join";
 import {
@@ -55,73 +58,107 @@ const setup: Command = (args) => Effect.gen(function*() {
   }
 });
 
+/** A helper's path printed by `agents path SKILL`, with `script` beside it. */
+const skillScript = (skill: string, script: string) =>
+  ChildProcessSpawner.ChildProcessSpawner.use((spawner) => spawner.string(ChildProcess.make("agents", ["path", skill], { stderr: "ignore" }))).pipe(
+    Effect.map((path) => join(dirname(path.trim()), script)),
+    Effect.mapError((failure) => new LanFailure({ problem: `agents path ${skill}: ${failure.message}` })),
+  );
+
 const desktopLauncher = (args: readonly string[]) => {
   const [given] = flagValues(args, "desktop");
-  if (given !== undefined) return given;
-  const skill = Bun.spawnSync(["agents", "path", "private-desktop-development"], { stdout: "pipe", stderr: "ignore" }).stdout.toString().trim();
-  return join(dirname(skill), "scripts/private-desktop.sh");
+  return given !== undefined ? Effect.succeed(given) : skillScript("private-desktop-development", "scripts/private-desktop.sh");
 };
 
 /** The machine-capacity helper's script (the machine-capacity skill), or --capacity. */
 const capacityHelper = (args: readonly string[]) => {
   const [given] = flagValues(args, "capacity");
-  if (given !== undefined) return given;
-  const skill = Bun.spawnSync(["agents", "path", "machine-capacity"], { stdout: "pipe", stderr: "ignore" }).stdout.toString().trim();
-  return join(dirname(skill), "scripts/machine-capacity.mjs");
+  return given !== undefined ? Effect.succeed(given) : skillScript("machine-capacity", "scripts/machine-capacity.mjs");
 };
 
-const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, fps?: number, locateBeforePeer = false) => Effect.tryPromise({
-  try: async () => {
-    const definition = PROFILES[profile];
-    if (definition === undefined) throw new Error(`unknown profile ${profile}`);
-    const deadline = Date.now() + waitSeconds * 1000;
-    mkdirSync(pairDirectory(pair), { recursive: true });
+/** The capacity helper defers a pair: worth trying again later. */
+class PairDeferred extends Schema.TaggedError<PairDeferred>()("PairDeferred", {
+  reason: Schema.String,
+}) {}
+
+const StartupError = Schema.fromJsonString(Schema.Struct({ error: Schema.String }));
+const AdmissionRefusal = Schema.fromJsonString(Schema.Struct({ reason: Schema.String }));
+const AgentFile = Schema.fromJsonString(Schema.Struct({ runs: Schema.optionalKey(Schema.Struct({ a: Schema.optionalKey(Schema.String), b: Schema.optionalKey(Schema.String) })) }));
+const AgentProcess = Schema.fromJsonString(Schema.Struct({ pid: Schema.Int, runs: Schema.Struct({ a: Schema.String }) }));
+const AgentStatus = Schema.Struct({ clients: Schema.Array(Schema.Struct({ name: Schema.String, pid: Schema.optional(Schema.Int) })) });
+
+/** Decodes a pair's JSON file. */
+const readJson = <A>(file: string, schema: Schema.Decoder<A>) => Effect.try({
+  try: () => readFileSync(file, "utf8"),
+  catch: (cause) => new LanFailure({ problem: `read ${file}: ${cause instanceof Error ? cause.message : String(cause)}` }),
+}).pipe(
+  Effect.flatMap(Schema.decodeUnknownEffect(schema)),
+  Effect.mapError((failure) => (failure instanceof LanFailure ? failure : new LanFailure({ problem: `${file}: ${failure.message}` }))),
+);
+
+/** Both clients' pids from the pair agent, once it answers. */
+const clientsReady = (pair: number) => Effect.tryPromise({
+  try: () => fetch("http://pair/status", { unix: agentSocket(pair) }).then((response) => response.json()),
+  catch: () => undefined,
+}).pipe(
+  Effect.flatMap(Schema.decodeUnknownEffect(AgentStatus)),
+  Effect.map((status) => status.clients.length === 2 && status.clients.every(({ pid }) => pid !== undefined)),
+  Effect.orElseSucceed(() => false),
+);
+
+/** How long a started pair session may take until both its clients run. */
+const READY = "10 minutes";
+
+/**
+ * Starts pair `pair`'s session in the caller's scope and waits until both its
+ * clients run. A session that fails or is deferred is stopped before this
+ * returns; a deferred one is tried again every 45 s for `waitSeconds`.
+ */
+const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, fps?: number, locateBeforePeer = false) => {
+  const directory = pairDirectory(pair);
+  const deadline = Date.now() + waitSeconds * 1000;
+  const attempt = Effect.gen(function*() {
+    mkdirSync(directory, { recursive: true });
     rmSync(agentSocket(pair), { force: true });
-    while (true) {
-      const waiting = pairAdmission(capacity);
-      if (waiting !== undefined) {
-        if (Date.now() >= deadline) throw new Error(waiting);
-        console.log(`pair ${pair}: waiting (${waiting}); trying again in 45 s`);
-        await Bun.sleep(45_000);
-        continue;
-      }
-      rmSync(admissionFile(pairDirectory(pair)), { force: true });
-      const scope = [process.execPath, capacity, "session", "--class", "moderate", "--owner", `wisp-lan-pair-${pair}`, "--"];
-      const child = Bun.spawn([...scope, process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity, ...(locateBeforePeer ? ["--locate-before-peer"] : []), ...(fps === undefined ? [] : ["--fps", String(fps)])], {
-        stdout: Bun.file(join(pairDirectory(pair), "session.out")),
-        stderr: Bun.file(join(pairDirectory(pair), "session.err")),
+    const waiting = yield* Effect.try({ try: () => pairAdmission(capacity), catch: (cause) => new LanFailure({ problem: cause instanceof Error ? cause.message : String(cause) }) });
+    if (waiting !== undefined) return yield* new PairDeferred({ reason: waiting });
+    rmSync(admissionFile(directory), { force: true });
+    // The session gets its own scope: stopped at once when this attempt fails, else held by the pool.
+    const scope = yield* Scope.fork(yield* Effect.scope);
+    return yield* Effect.gen(function*() {
+      const session = yield* spawnLogged(ChildProcess.make(process.execPath, [capacity, "session", "--class", "moderate", "--owner", `wisp-lan-pair-${pair}`, "--", process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity, ...(locateBeforePeer ? ["--locate-before-peer"] : []), ...(fps === undefined ? [] : ["--fps", String(fps)])], { stdin: "ignore" }), {
+        stdout: join(directory, "session.out"),
+        stderr: join(directory, "session.err"),
       });
-      let refused: string | undefined;
-      for (;;) {
-        const exited = await Promise.race([child.exited, Bun.sleep(1000).then(() => undefined)]);
-        if (existsSync(join(pairDirectory(pair), "startup-error.json"))) {
-          const failure = (JSON.parse(readFileSync(join(pairDirectory(pair), "startup-error.json"), "utf8")) as { error: string }).error;
-          child.kill("SIGTERM");
-          await child.exited;
-          throw new Error(failure);
+      const step = Effect.gen(function*() {
+        if (existsSync(join(directory, "startup-error.json"))) return yield* new LanFailure({ problem: (yield* readJson(join(directory, "startup-error.json"), StartupError)).error });
+        if (existsSync(admissionFile(directory))) return yield* new PairDeferred({ reason: (yield* readJson(admissionFile(directory), AdmissionRefusal)).reason });
+        if (!(yield* session.handle.isRunning.pipe(Effect.orElseSucceed(() => false)))) {
+          const code = yield* session.handle.exitCode.pipe(Effect.map(Number), Effect.orElseSucceed(() => -1));
+          yield* session.written.pipe(Effect.timeoutOption("1 second"));
+          if (code !== 75) return yield* new LanFailure({ problem: `its session exited with ${code}; see ${directory}/session.err and desktop-*.err` });
+          // Exit 75 is a deferral only when the helper says DEFER; it also exits 75 when it can't reach systemd --user (a user namespace, as run-bounded makes).
+          const said = readFileSync(join(directory, "session.err"), "utf8");
+          const reason = /"decision":"DEFER","reason":"([A-Z_]+)".*?"cpuSomeAvg10":([\d.]+)/.exec(said);
+          if (reason === null) return yield* new LanFailure({ problem: `the capacity helper refused: ${said.trim().split("\n").slice(-2).join(" | ")}` });
+          return yield* new PairDeferred({ reason: `${reason[1]}, CPU pressure ${reason[2]}%` });
         }
-        if (existsSync(admissionFile(pairDirectory(pair)))) {
-          refused = (JSON.parse(readFileSync(admissionFile(pairDirectory(pair)), "utf8")) as { reason: string }).reason;
-          child.kill("SIGTERM");
-          await child.exited;
-          break;
-        }
-        if (exited !== undefined) break;
-        const status = await fetch("http://pair/status", { unix: agentSocket(pair) }).then((response) => response.json() as Promise<{ clients: { pid?: number }[] }>).catch(() => undefined);
-        if (status !== undefined && status.clients.length === 2 && status.clients.every(({ pid }) => pid !== undefined)) return child;
-      }
-      if (refused === undefined && child.exitCode !== 75) throw new Error(`its session exited with ${child.exitCode}; see ${pairDirectory(pair)}/session.err and desktop-*.err`);
-      // Exit 75 is a deferral only when the helper says DEFER; it also exits 75 when it can't reach systemd --user (a user namespace, as run-bounded makes).
-      const said = readFileSync(join(pairDirectory(pair), "session.err"), "utf8");
-      const reason = /"decision":"DEFER","reason":"([A-Z_]+)".*?"cpuSomeAvg10":([\d.]+)/.exec(said);
-      if (reason === null && refused === undefined) throw new Error(`the capacity helper refused: ${said.trim().split("\n").slice(-2).join(" | ")}`);
-      if (Date.now() >= deadline) throw new Error(`the capacity helper kept deferring it for ${waitSeconds} s (${refused ?? reason?.[1]})`);
-      console.log(`pair ${pair}: the capacity helper defers it (${refused ?? reason?.[1]}, CPU pressure ${reason?.[2] ?? "?"}%); trying again in 45 s`);
-      await Bun.sleep(45_000);
-    }
-  },
-  catch: (cause) => new LanFailure({ problem: `pair ${pair}: ${cause instanceof Error ? cause.message : String(cause)}` }),
-});
+        return yield* clientsReady(pair);
+      });
+      yield* step.pipe(
+        Effect.repeat({ schedule: Schedule.spaced("1 second"), until: (ready) => ready }),
+        Effect.timeoutOrElse({ duration: READY, orElse: () => Effect.fail(new LanFailure({ problem: `its clients weren't both running within ${READY}; see ${directory}` })) }),
+      );
+      return session.handle;
+    }).pipe(Scope.provide(scope), Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))));
+  });
+  return attempt.pipe(
+    Effect.tapError((failure) => failure._tag === "PairDeferred" && Date.now() < deadline ? Console.log(`pair ${pair}: the capacity helper defers it (${failure.reason}); trying again in 45 s`) : Effect.void),
+    Effect.retry({ schedule: Schedule.spaced("45 seconds"), while: (failure) => failure._tag === "PairDeferred" && Date.now() < deadline }),
+    Effect.catchTag("PairDeferred", (failure) => Effect.fail(new LanFailure({ problem: `the capacity helper kept deferring it for ${waitSeconds} s (${failure.reason})` }))),
+    Effect.mapError((failure) => new LanFailure({ problem: `pair ${pair}: ${failure.message}` })),
+  );
+};
 
 /**
  * Several pools run at once (one per agent, each on its own pairs), so a pool
@@ -148,20 +185,9 @@ const pool: Command = (args) => Effect.gen(function*() {
   const profiles = profileText.split(",");
   if (profiles.some((name) => PROFILES[name] === undefined)) return yield* new UsageFailure({ problem: `--pool-profile takes ${Object.keys(PROFILES).join(" or ")}, or one per pair separated by commas` });
   const profileOf = (pair: number) => profiles[pair] ?? profiles.at(-1) ?? "parity";
-  const launcher = desktopLauncher(args);
-  const capacity = capacityHelper(args);
-  const children: Bun.Subprocess[] = [];
-  const stop = () => {
-    for (const child of children) child.kill("SIGTERM");
-  };
-  process.once("SIGINT", () => {
-    stop();
-    process.exit(130);
-  });
-  process.once("SIGTERM", () => {
-    stop();
-    process.exit(143);
-  });
+  const launcher = yield* desktopLauncher(args);
+  const capacity = yield* capacityHelper(args);
+  const sessions: { readonly exitCode: Effect.Effect<unknown, unknown> }[] = [];
   const entries: PoolPair[] = [];
   // --pair K... picks which pairs and in what order the helper admits them; else 0..N-1.
   const chosen = flagValues(args, "pair").map(Number);
@@ -176,12 +202,11 @@ const pool: Command = (args) => Effect.gen(function*() {
       if (admitted === 0) return yield* started;
       break;
     }
-    const child = started;
-    children.push(child);
+    sessions.push(started);
     const agentFile = join(pairDirectory(pair), "agent.json");
-    const runs = existsSync(agentFile) ? (JSON.parse(readFileSync(agentFile, "utf8")) as { runs?: Partial<Record<"a" | "b", string>> }).runs ?? {} : {};
-    const status = yield* agent(pair, "/status").pipe(Effect.orElseSucceed(() => ({}) as Record<string, unknown>));
-    const pids = new Map(((status["clients"] ?? []) as { name: string; pid?: number }[]).map(({ name, pid }) => [name, pid]));
+    const runs = existsSync(agentFile) ? (yield* readJson(agentFile, AgentFile)).runs ?? {} : {};
+    const status = yield* agent(pair, "/status").pipe(Effect.flatMap(Schema.decodeUnknownEffect(AgentStatus)), Effect.orElseSucceed(() => ({ clients: [] })));
+    const pids = new Map(status.clients.map(({ name, pid }) => [name, pid]));
     const clientsPath = join(pairDirectory(pair), "clients.json");
     writeJson(clientsPath, { clients: pairClients(pair, runs).map((client) => ({ ...client, name: client.name.endsWith("a") ? "a" : "b", poolName: client.name, pid: pids.get(client.name) })) });
     entries.push({ id: pair, clients: clientsPath, agentSocket: agentSocket(pair), runs, appIds: { a: `steam_app_${3516115600 + pair * 2}`, b: `steam_app_${3516115601 + pair * 2}` } });
@@ -189,12 +214,10 @@ const pool: Command = (args) => Effect.gen(function*() {
     yield* Console.log(`pair ${pair}: ${clientName(pair, "a")} and ${clientName(pair, "b")} running (${profile}${fps === undefined ? "" : `, ${fps} fps`}); desktops ${runs.a ?? "?"} and ${runs.b ?? "?"}`);
   }
   yield* Console.log(`pool: ${poolFile()}; clients: ${poolClientsFile()}. Ctrl-C stops it.`);
-  yield* Effect.tryPromise({
-    try: () => (seconds > 0 ? Promise.race([Promise.all(children.map((child) => child.exited)), Bun.sleep(seconds * 1000)]) : Promise.all(children.map((child) => child.exited))),
-    catch: () => new LanFailure({ problem: "the pool stopped" }),
-  });
-  stop();
-});
+  // Closing the pool's scope (its end, a failure, Ctrl-C or SIGTERM) stops every session it started.
+  const ended = Effect.forEach(sessions, (session) => Effect.ignore(session.exitCode), { concurrency: "unbounded", discard: true });
+  yield* seconds > 0 ? Effect.timeoutOption(ended, `${seconds} seconds`) : ended;
+}).pipe(Effect.scoped, Effect.provide(BunServices.layer));
 
 const fresh: Command = (args) => Effect.gen(function*() {
   const [map] = [...flagValues(args, "map"), ...args.filter((arg, index) => !arg.startsWith("--") && !args[index - 1]?.startsWith("--"))];
@@ -234,16 +257,13 @@ const dummy: Command = (args) => Effect.gen(function*() {
   const clients = status["clients"] as { name: string; pid?: number }[];
   const native = clients.find(({ name }) => name === clientName(pair, "a"));
   if (native?.pid === undefined) return yield* new UsageFailure({ problem: `pair ${pair}'s first client is not running` });
-  const state = JSON.parse(readFileSync(join(pairDirectory(pair), "agent.json"), "utf8")) as { pid: number; runs: { a: string } };
-  const exit = yield* Effect.tryPromise({
-    try: async () => {
-      const child = Bun.spawn(["nsenter", "--target", String(state.pid), "--user", "--net", "--preserve-credentials", process.execPath, join(import.meta.dir, "../lan/dummySession.ts"), String(pair), resolve(map), resolve(program), String(count), String(native.pid)], {
-        env: { ...process.env, XDG_RUNTIME_DIR: join(state.runs.a, "runtime") }, stdout: "inherit", stderr: "inherit",
-      });
-      return child.exited;
-    },
-    catch: (cause) => new LanFailure({ problem: String(cause) }),
-  });
+  const state = yield* readJson(join(pairDirectory(pair), "agent.json"), AgentProcess);
+  const exit = yield* Effect.scoped(Effect.flatMap(
+    ChildProcess.make("nsenter", ["--target", String(state.pid), "--user", "--net", "--preserve-credentials", process.execPath, join(import.meta.dir, "../lan/dummySession.ts"), String(pair), resolve(map), resolve(program), String(count), String(native.pid)], {
+      env: { XDG_RUNTIME_DIR: join(state.runs.a, "runtime") }, extendEnv: true, stdin: "ignore", stdout: "inherit", stderr: "inherit",
+    }),
+    (child) => child.exitCode,
+  )).pipe(Effect.provide(BunServices.layer), Effect.mapError((failure) => new LanFailure({ problem: failure.message })));
   if (exit !== 0) return yield* new LanFailure({ problem: `dummy lobby check exited ${exit}` });
 });
 

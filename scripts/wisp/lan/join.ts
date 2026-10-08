@@ -4,7 +4,7 @@
 // rebuilt again (leaving a LAN lobby or game does that), so it runs before
 // every join.
 import { readFileSync } from "node:fs";
-import { Effect, Schema } from "effect";
+import { Effect, Schedule, Schema } from "effect";
 import { findImageBase, parseMaps, procMemory, readExecutable } from "../engine/memory";
 import type { MenuSocket } from "../menus";
 import { isolatedNetworkProblem } from "./offline";
@@ -42,18 +42,22 @@ export function codeSpans(pid: number, exePath: string): CodeSpan[] {
   }
 }
 
-/** Stops every thread of `pid` (SIGSTOP) and waits until each is stopped. */
-const stopProcess = (pid: number) => Effect.tryPromise({
-  try: async () => {
-    process.kill(pid, "SIGSTOP");
-    for (let tries = 0; tries < 1000; tries++) {
-      if ([...threadStates(pid).values()].every((state) => state === "T" || state === "t")) return;
-      await Bun.sleep(1);
-    }
-    throw new Error("its threads didn't stop within a second");
-  },
-  catch: (cause) => new LanFailure({ problem: `stop pid ${pid}: ${cause instanceof Error ? cause.message : String(cause)}` }),
-});
+const allStopped = (pid: number) => [...threadStates(pid).values()].every((state) => state === "T" || state === "t");
+
+/**
+ * Runs `use` with every thread of `pid` stopped: SIGSTOP is the acquire step
+ * and SIGCONT its release, so the game is let go even when its threads don't
+ * all stop within a second and `use` never runs. `stopped` reads whether they have.
+ */
+export const whileStopped = <A, E, R>(pid: number, use: Effect.Effect<A, E, R>, stopped: (pid: number) => boolean = allStopped) => Effect.acquireUseRelease(
+  Effect.sync(() => process.kill(pid, "SIGSTOP")),
+  () => attempt(`stop pid ${pid}`, () => stopped(pid)).pipe(
+    Effect.repeat({ schedule: Schedule.spaced("1 millis"), until: (done) => done }),
+    Effect.timeoutOrElse({ duration: "1 second", orElse: () => fail(`stop pid ${pid}: its threads didn't stop within a second`) }),
+    Effect.andThen(use),
+  ),
+  () => Effect.sync(() => process.kill(pid, "SIGCONT")),
+);
 
 const threadPcs = (pid: number) => [...threadStates(pid).keys()].map((tid) => {
   try {
@@ -70,9 +74,9 @@ export interface Switch {
 }
 
 /** Writes `to` over `from` at `address` with the game stopped and no thread on the instruction. */
-const patchStopped = (pid: number, address: number, from: Buffer, to: Buffer) => Effect.acquireUseRelease(
-  stopProcess(pid),
-  () => attempt(`patch 0x${address.toString(16)}`, () => {
+const patchStopped = (pid: number, address: number, from: Buffer, to: Buffer) => whileStopped(
+  pid,
+  attempt(`patch 0x${address.toString(16)}`, () => {
     if (threadPcs(pid).some((pc) => pc !== undefined && pc >= address - 6 && pc < address + 4)) throw new Error("a thread is on the selector");
     const memory = processMemory(pid);
     try {
@@ -86,7 +90,6 @@ const patchStopped = (pid: number, address: number, from: Buffer, to: Buffer) =>
       memory.close();
     }
   }),
-  () => Effect.sync(() => process.kill(pid, "SIGCONT")),
 );
 
 /**
@@ -137,20 +140,18 @@ const listedGames = (payload: unknown): ListedGame[] => {
   return Array.isArray(games) ? games.filter((game): game is ListedGame => typeof game === "object" && game !== null && typeof (game as ListedGame).name === "string") : [];
 };
 
-/** Lists LAN games until `gameName` appears, then joins it. */
+/** Lists LAN games every second until `gameName` appears, then joins it. */
 export const joinLanGame = (menus: MenuSocket, gameName: string, seconds = 30) => Effect.gen(function*() {
   yield* menus.forget;
   yield* menus.send("SendGameListing");
-  const deadline = Date.now() + seconds * 1000;
-  while (Date.now() < deadline) {
+  const listed = Effect.gen(function*() {
     yield* menus.send("GetGameList");
     const games = yield* menus.expect("list LAN games", 3, (event) => (event.messageType === "GameList" ? { done: listedGames(event.payload) } : undefined)).pipe(Effect.orElseSucceed((): ListedGame[] => []));
-    const game = games.find(({ name }) => name === gameName);
-    if (game !== undefined) {
-      yield* menus.send("JoinGame", { gameId: game.id, password: "", mapFile: game.mapFile });
-      return;
-    }
-    yield* Effect.sleep("1 second");
-  }
-  return yield* fail(`no LAN game named ${gameName} listed within ${seconds} s`);
+    return games.find(({ name }) => name === gameName);
+  });
+  const game = yield* listed.pipe(
+    Effect.repeat({ schedule: Schedule.spaced("1 second"), until: (found) => found !== undefined }),
+    Effect.timeoutOrElse({ duration: `${seconds} seconds`, orElse: () => fail(`no LAN game named ${gameName} listed within ${seconds} s`) }),
+  );
+  if (game !== undefined) yield* menus.send("JoinGame", { gameId: game.id, password: "", mapFile: game.mapFile });
 }).pipe(Effect.mapError((failure) => (failure instanceof LanFailure ? failure : new LanFailure({ problem: failure.message }))));

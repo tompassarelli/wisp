@@ -5,7 +5,7 @@
 // reads the screen. How each state is decided: wisp:docs/watch.md.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { Clock, Context, Effect, Layer, Schema } from "effect";
+import { Clock, Context, Effect, Layer, Schedule, Schema } from "effect";
 import { ackFile } from "../../src/runtime/gameFiles";
 import { type PrefixUse, type ProcessInfo, prefixUse } from "../warcraft/battleNet";
 import { listProcesses } from "../warcraft/processes";
@@ -113,16 +113,21 @@ export const describeView = (view: ClientView) => {
 export const waitFor = (client: Client, predicate: (view: ClientView) => boolean, options: WaitOptions = {}) => Effect.gen(function*() {
   const watch = yield* ClientWatch;
   const { what = "a state", seconds = 60, failOn = FAIL_ON } = options;
-  const deadline = (yield* Clock.currentTimeMillis) + seconds * 1000;
-  while (true) {
-    const view = yield* watch.view(client);
-    if (predicate(view)) return view;
-    if (failOn.includes(view.state.kind)) return yield* new WatchFailure({ client: client.name, operation: `wait for ${what}`, problem: describeView(view) });
-    if ((yield* Clock.currentTimeMillis) > deadline) {
-      return yield* new WatchFailure({ client: client.name, operation: `wait for ${what}`, problem: `not within ${seconds} s; last ${describeView(view)}` });
-    }
-    yield* Effect.sleep(POLL);
-  }
+  let last: ClientView | undefined;
+  const look = watch.view(client).pipe(Effect.flatMap((view) => {
+    last = view;
+    if (predicate(view)) return Effect.succeed(true);
+    if (failOn.includes(view.state.kind)) return Effect.fail(new WatchFailure({ client: client.name, operation: `wait for ${what}`, problem: describeView(view) }));
+    return Effect.succeed(false);
+  }));
+  const waited = look.pipe(Effect.repeat({ schedule: Schedule.spaced(POLL), until: (done) => done }));
+  if (Number.isFinite(seconds)) {
+    yield* waited.pipe(Effect.timeoutOrElse({
+      duration: `${seconds} seconds`,
+      orElse: () => Effect.fail(new WatchFailure({ client: client.name, operation: `wait for ${what}`, problem: `not within ${seconds} s; last ${last === undefined ? "no view" : describeView(last)}` })),
+    }));
+  } else yield* waited;
+  return last!;
 });
 
 /**
@@ -347,33 +352,31 @@ const LanStatus = Schema.Struct({
 
 /**
  * The pair agent's status. A loaded machine (many pairs, high CPU pressure)
- * can delay the agent's answer past a second; a missing answer reads as "not
- * playing" and refuses chat, so each try waits 3 s and a failed try is retried once.
+ * can delay the agent's answer past a second, so each try waits 3 s and a
+ * failed try is retried once; a pair that still doesn't answer fails the view
+ * rather than reading as "not playing", which would refuse chat.
  */
-const pairStatus = async (socket: string): Promise<unknown> => {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      const response = await fetch("http://pair/status", { unix: socket, signal: AbortSignal.timeout(3000) });
-      return await response.json();
-    } catch (cause) {
-      if (attempt >= 2) throw cause;
-    }
-  }
-};
+const pairStatus = (client: string, socket: string) => Effect.tryPromise({
+  try: (signal) => fetch("http://pair/status", { unix: socket, signal }).then((response) => response.json()),
+  catch: (cause) => new WatchFailure({ client, operation: "read the pair agent's status", problem: cause instanceof Error ? cause.message : String(cause) }),
+}).pipe(
+  Effect.timeoutOrElse({ duration: "3 seconds", orElse: () => Effect.fail(new WatchFailure({ client, operation: "read the pair agent's status", problem: `${socket} didn't answer within 3 s` })) }),
+  Effect.retry({ times: 1 }),
+  Effect.flatMap(Schema.decodeUnknownEffect(LanStatus)),
+  Effect.mapError((failure) => (failure instanceof WatchFailure ? failure : new WatchFailure({ client, operation: "read the pair agent's status", problem: failure.message }))),
+);
 
-/** The host socket is outside the pool's isolated network; its menus' TCP sockets are inside. */
-const lanObservation = (documents: string) => Effect.tryPromise({
-  try: async () => {
-    const pair = readPool()?.pairs.find((pair) => pairClients(pair.id, pair.runs).some((client) => client.documents === documents));
-    if (pair === undefined) return undefined;
-    const status = Schema.decodeUnknownSync(LanStatus)(await pairStatus(pair.agentSocket));
-    const client = status.clients.find((client) => client.documents === documents);
-    const player = status.game?.players.find((player) => player.label === client?.name);
-    return client?.pid === undefined || status.game === undefined || player === undefined ? undefined
-      : { pid: client.pid, map: status.game.map, phase: status.game.phase, connected: player.connected, loaded: player.loaded, left: player.left };
-  },
-  catch: () => undefined,
-}).pipe(Effect.orElseSucceed(() => undefined));
+/** What the offline host says of a pool client; none for a client outside the pool. The host socket is outside the pool's isolated network; its menus' TCP sockets are inside. */
+export const lanObservation = (client: Pick<Client, "name" | "documents">) => Effect.gen(function*() {
+  const { documents } = client;
+  const pair = readPool()?.pairs.find((pair) => pairClients(pair.id, pair.runs).some((client) => client.documents === documents));
+  if (pair === undefined) return undefined;
+  const status = yield* pairStatus(client.name, pair.agentSocket);
+  const known = status.clients.find((client) => client.documents === documents);
+  const player = status.game?.players.find((player) => player.label === known?.name);
+  return known?.pid === undefined || status.game === undefined || player === undefined ? undefined
+    : { pid: known.pid, map: status.game.map, phase: status.game.phase, connected: player.connected, loaded: player.loaded, left: player.left };
+});
 const modified = (path: string) => statSync(path, { throwIfNoEntry: false })?.mtimeMs;
 
 export interface WatchOptions {
@@ -470,7 +473,7 @@ const liveWatch = (options: WatchOptions) => Effect.gen(function*() {
       tracker.log = stamp === undefined ? undefined : readText(path);
     }
     const { log } = tracker;
-    const lan = yield* lanObservation(client.documents);
+    const lan = yield* lanObservation(client);
     const sources: Sources = {
       now: yield* Clock.currentTimeMillis,
       prefix: prefixUse(processes, prefix, ""),
