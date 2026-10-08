@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -115,7 +115,7 @@ test("the poller runs only where the machine lets it read the clients, and other
   expect(line.includes("\n")).toBe(false);
 });
 
-test("a session wrapped in the autopsy prints the finding for a desync written while it runs, then its summary", async () => {
+test("a session wrapped in the autopsy prints the finding for a desync written while it runs, then its summary, and its recording names it", async () => {
   const root = mkdtempSync(join(tmpdir(), "autopsy-"));
   const docsA = join(root, "a", "Documents", "Warcraft III");
   const docsB = join(root, "b", "Documents", "Warcraft III");
@@ -131,11 +131,14 @@ test("a session wrapped in the autopsy prints the finding for a desync written w
       const written = Date.now() - 2_000;
       documents(root, "a", "a_Desync.log", written);
       documents(root, "b", "b_Desync.log", written);
+      mkdirSync(join(docsA, "CustomMapData"));
+      writeFileSync(join(docsA, "CustomMapData", "smashcraft-replay-1.txt"), "replay");
     });
     yield* Effect.sleep("1200 millis");
     return "ran";
   });
-  const value = await Effect.runPromise(withAutopsy({ clientsFile, print: (line) => printed.push(line), root: join(root, "sessions"), poll: false }, session));
+  const corpus = join(root, "corpus");
+  const value = await Effect.runPromise(withAutopsy({ clientsFile, print: (line) => printed.push(line), root: join(root, "sessions"), poll: false, corpus: { root: corpus } }, session));
   expect(value).toBe("ran");
   const found = printed.filter((line) => line.includes("first divergent birth #6279"));
   // Once when found during the run, once in the summary.
@@ -144,4 +147,57 @@ test("a session wrapped in the autopsy prints the finding for a desync written w
     "  first divergent birth #6279 (class unknown: no poll log of that birth) at turn 921 on client a",
   ]);
   expect(printed).toContain("desync autopsy summary:");
+  const [stamp] = readdirSync(corpus);
+  const recorded = JSON.parse(readFileSync(join(corpus, stamp ?? "", "session.json"), "utf8"));
+  expect(recorded.desyncs).toEqual(["first divergent birth #6279 (class unknown: no poll log of that birth) at turn 921 on client a"]);
+  expect(recorded.autopsy).toBe(join(root, "sessions", stamp ?? ""));
+}, 120_000);
+
+/** A clients file of two clients whose Documents folders are in `root`; client b has no CustomMapData yet. */
+function corpusClients(root: string) {
+  const docsA = join(root, "a", "Documents", "Warcraft III");
+  const docsB = join(root, "b", "Documents", "Warcraft III");
+  const data = join(docsA, "CustomMapData");
+  mkdirSync(join(data, "x-hot"), { recursive: true });
+  mkdirSync(docsB, { recursive: true });
+  writeFileSync(join(data, "smashcraft-settings.txt"), "kept");
+  writeFileSync(join(data, "x-hot", "manifest.txt"), "1");
+  const clientsFile = join(root, "clients.json");
+  writeFileSync(clientsFile, JSON.stringify({ clients: [{ name: "a", documents: docsA }, { name: "b", documents: docsB }] }));
+  return { clientsFile, data };
+}
+
+const git = (...args: string[]) => Bun.spawnSync(["git", ...args], { cwd: process.cwd() }).stdout.toString();
+
+test("a wrapped session records the map files its clients wrote, and the source and command that recorded them", async () => {
+  const root = mkdtempSync(join(tmpdir(), "corpus-"));
+  const { clientsFile, data } = corpusClients(root);
+  const corpus = join(root, "corpus");
+  const printed: string[] = [];
+  const session = Effect.sync(() => {
+    writeFileSync(join(data, "smashcraft-replay-1.txt"), "frames");
+    writeFileSync(join(data, "x-hot", "payload-2.lua"), "return 2");
+  });
+  await Effect.runPromise(withAutopsy({ clientsFile, print: (line) => printed.push(line), root: join(root, "sessions"), poll: false, corpus: { root: corpus } }, session));
+  const [stamp] = readdirSync(corpus);
+  const out = join(corpus, stamp ?? "");
+  expect(readdirSync(out).sort()).toEqual(["a", "session.json"]);
+  expect(readdirSync(join(out, "a"))).toEqual(["smashcraft-replay-1.txt"]);
+  expect(readFileSync(join(out, "a", "smashcraft-replay-1.txt"), "utf8")).toBe("frames");
+  const recorded = JSON.parse(readFileSync(join(out, "session.json"), "utf8"));
+  expect(recorded).toMatchObject({ argv: process.argv.slice(1), cwd: process.cwd(), clients: ["a"], desyncs: [] });
+  expect(recorded.git).toEqual({ commit: git("rev-parse", "HEAD").trim(), dirty: git("status", "--porcelain").trim() !== "" });
+  expect(recorded.autopsy).toBeUndefined();
+  expect(Date.parse(recorded.started)).toBeLessThanOrEqual(Date.parse(recorded.ended));
+  expect(printed).toContain(`corpus: recorded 1 file from client a into ${out}`);
+}, 120_000);
+
+test("a wrapped session whose clients write no map file records nothing", async () => {
+  const root = mkdtempSync(join(tmpdir(), "corpus-"));
+  const { clientsFile } = corpusClients(root);
+  const corpus = join(root, "corpus");
+  const printed: string[] = [];
+  await Effect.runPromise(withAutopsy({ clientsFile, print: (line) => printed.push(line), root: join(root, "sessions"), poll: false, corpus: { root: corpus } }, Effect.void));
+  expect(existsSync(corpus)).toBe(false);
+  expect(printed.filter((line) => line.startsWith("corpus:"))).toEqual([]);
 }, 120_000);

@@ -15,6 +15,7 @@ import type { Client } from "../clients";
 import { describeCause } from "../command";
 import { type DesyncDump, compareDumps, findDesyncLog, formatDesyncComparison, ipseStates, pairDumps, parseDesyncLog } from "./desyncLog";
 import { type EngineClient, attachClient } from "./attach";
+import { type Listings, listCorpus, recordCorpus } from "./corpus";
 import { PTRACE_SCOPE, findGameProcesses, prefixOfDocuments } from "./memory";
 import { type LoggedEvent, diffPresenceLogs, parsePresenceLog } from "./presenceLog";
 
@@ -322,11 +323,17 @@ export interface AutopsyOptions {
   readonly stack?: StackSource;
   /** false: Desync.log autopsy only, no poller. */
   readonly poll?: boolean;
+  /** Where the clients' map files are recorded (wisp:docs/autopsy.md#corpus); corpusRoot() by default; false records nothing. */
+  readonly corpus?: false | { readonly root?: string };
 }
 
 const stamp = () => new Date().toISOString().replace(/[:.]/g, "-");
 
-export const autopsyRoot = () => join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local/state"), "wisp/autopsy");
+const stateHome = () => process.env.XDG_STATE_HOME ?? join(homedir(), ".local/state");
+
+export const autopsyRoot = () => join(stateHome(), "wisp/autopsy");
+
+export const corpusRoot = () => join(stateHome(), "wisp/corpus");
 
 /** The poller in its own thread, so a session's timed work keeps its timing. */
 function startPollThread(clients: readonly EngineClient[], out: string, interval: number) {
@@ -353,7 +360,9 @@ function startPollThread(clients: readonly EngineClient[], out: string, interval
  * clients file's clients while the machine allows reading them (one line
  * naming the sysctl when it doesn't), a watch on their Errors folders, and an
  * autopsy of every desync the session sees, printed when found and again in
- * the session summary. A failure of the autopsy itself never fails `run`.
+ * the session summary. At the end it records the files the clients' maps
+ * wrote during the session into the corpus (wisp:scripts/wisp/engine/corpus.ts).
+ * A failure of the autopsy or the recorder never fails `run`.
  */
 export const withAutopsy = <A, E, R>(options: AutopsyOptions, run: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => Effect.gen(function*() {
   const print = options.print ?? console.log;
@@ -361,7 +370,16 @@ export const withAutopsy = <A, E, R>(options: AutopsyOptions, run: Effect.Effect
   const names = options.names ?? [];
   const clients = names.length === 0 ? all : all.filter((client) => names.includes(client.name));
   if (clients.length === 0) return yield* run;
-  const session = join(options.root ?? autopsyRoot(), stamp());
+  const started = new Date();
+  const at = stamp();
+  const session = join(options.root ?? autopsyRoot(), at);
+  let corpus: Listings | undefined;
+  if (options.corpus !== false) {
+    corpus = yield* listCorpus(clients).pipe(Effect.catch((failure) => Effect.sync(() => {
+      print(`corpus: not recording this session: ${failure.message}`);
+      return undefined;
+    })));
+  }
   const reports = new DesyncReports(clients);
   const engineClients = clients.map(({ name, documents }) => ({ name, prefix: prefixOfDocuments(documents) }));
   let pollDirectory: string | undefined;
@@ -376,6 +394,7 @@ export const withAutopsy = <A, E, R>(options: AutopsyOptions, run: Effect.Effect
     }
   }
   const findings: string[] = [];
+  const desyncs: string[] = [];
   let pending: DesyncReport[] = [];
   const examine = (final: boolean) => Effect.sync(() => {
     try {
@@ -390,9 +409,10 @@ export const withAutopsy = <A, E, R>(options: AutopsyOptions, run: Effect.Effect
           continue;
         }
         const ordered = clients.flatMap((client) => group.filter((report) => report.client === client.name));
-        const result = runAutopsy({ reports: ordered, pollDirectory, out: join(session, `desync-${findings.length + 1}`), stack: options.stack });
+        const result = runAutopsy({ reports: ordered, pollDirectory, out: join(session, `desync-${desyncs.length + 1}`), stack: options.stack });
         for (const line of result.lines) print(`desync autopsy: ${line}`);
         findings.push(...result.lines);
+        if (result.lines[0] !== undefined) desyncs.push(result.lines[0]);
       }
     } catch (cause) {
       print(`desync autopsy failed: ${describeCause(cause)}`);
@@ -408,6 +428,17 @@ export const withAutopsy = <A, E, R>(options: AutopsyOptions, run: Effect.Effect
     if (findings.length > 0) {
       print("desync autopsy summary:");
       for (const line of findings) print(`  ${line}`);
+    }
+    if (corpus !== undefined && options.corpus !== false) {
+      yield* recordCorpus({
+        clients,
+        before: corpus,
+        out: join(options.corpus?.root ?? corpusRoot(), at),
+        started: started.toISOString(),
+        desyncs,
+        autopsy: desyncs.length > 0 ? session : undefined,
+        print,
+      });
     }
   });
   return yield* run.pipe(Effect.ensuring(finish));

@@ -101,6 +101,39 @@ Each session gets `$XDG_STATE_HOME/wisp/autopsy/<UTC time>/`, which holds:
   - `<client>/`: that client's `Desync.txt`, `*_Desync.log`, `War3Log.txt` and
     `presence.log`.
 
+## Corpus
+
+Every session inside `withAutopsy` also keeps what its clients' maps wrote,
+with no extra step, so a game can later replay each native recording headless
+on the source that recorded it. Smashcraft's match replays
+(`smashcraft-replay-N.txt` and its parts `smashcraft-replay-N-K.txt`),
+moments and input traces land here.
+
+- At the start the session lists each followed client's
+  `<documents>/CustomMapData` top-level files with their size and
+  modification time. A missing folder counts as empty.
+- At the end, after the last desync check, it copies every top-level file that
+  is new or whose size or time changed into
+  `$XDG_STATE_HOME/wisp/corpus/<UTC time>/<client>/` (default
+  `~/.local/state/wisp/corpus/`), using the autopsy session's time. Folders are
+  skipped, such as `<prefix>-hot` hot-reload payloads, which the host writes. A
+  file over 16 MiB is skipped with one printed line.
+- It writes `session.json` beside them:
+  - `argv` and `cwd`: the runner and its arguments;
+  - `started` and `ended`: ISO times;
+  - `clients`: the clients it recorded files from;
+  - `git`: `commit` (`git rev-parse HEAD` of `cwd`) and `dirty` (whether
+    `git status --porcelain` lists anything), left out outside a git checkout;
+  - `desyncs`: each desync's finding line, empty when none;
+  - `autopsy`: the autopsy session folder, only when it found a desync.
+- It prints `corpus: recorded N files from client a, b into DIR`. When no map
+  file changed it writes nothing.
+
+It only reads the clients' files, which is allowed on signed-in clients. A
+failure prints one line and never fails the session. Runners turn it off with
+`corpus: false` in `AutopsyOptions` or send it elsewhere with
+`corpus: { root }`. The recorder is wisp:scripts/wisp/engine/corpus.ts.
+
 ## The presence poller
 
 The class of a birth comes only from a poll that was running before the
@@ -125,4 +158,8 @@ converted from the #158 poller's recording). The tests check:
 - a `rand` desync;
 - report discovery and pairing;
 - the one-line sysctl refusal;
-- a wrapped session that finds a desync written while it runs.
+- a wrapped session that finds a desync written while it runs, and whose
+  recording names it;
+- a wrapped session records exactly the new map file and its `session.json`,
+  skipping unchanged files and the hot-reload folder;
+- a session whose clients write nothing records nothing.

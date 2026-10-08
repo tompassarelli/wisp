@@ -74,7 +74,7 @@ program can register it; "game" means the consuming game defines it.
 | `perf` | Predicted frame cost | (run name), `compare`, `native`, `fit`, `budget`, `profile`, `census` | Wisp |
 | `repro` | A saved moment of play or native replay actions | (file), `import` | Wisp |
 | `replay` | A full-match replay | (file) | game |
-| `parity` | Bun against 32-bit Lua on the same numbers | `numeric`, `tapes` | game |
+| `parity` | Bun against 32-bit Lua on the same numbers | `numeric`, `tapes`, `corpus` | game |
 | `integrity` | Native input-integrity sessions and their evidence | `capture`, `result`, `headless` | game |
 | `pad` | Scripted virtual-pad input through the real helper | (script) | game |
 | `farm` | Headless work on hosted CI runners | `test` (Wisp); `balance`, `pads`, `perf`, `memory` (game) | Wisp |
@@ -228,6 +228,7 @@ Every command and verb in Wisp's sample program and Smashcraft's `bun wisp`, gro
 | `replay FILE` | Replays a full match in Bun and 32-bit Lua |
 | `parity numeric` | Numeric corpus in Bun and both 32-bit Luas |
 | `parity tapes` | Replay tapes across Bun and both 32-bit Luas |
+| `parity corpus` | Replays every native recording in the corpus headless in Bun and 32-bit Lua and names each one's first divergent frame and field |
 | `integrity capture` | Native input-integrity session (two fighters, `--four-fighters`, or `--playable`) |
 | `integrity result DIR` | Reconciles a capture folder by the session it records |
 | `integrity headless` | The same session through the real helper into headless clients |
