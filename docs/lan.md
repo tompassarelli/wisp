@@ -23,11 +23,11 @@ end-to-end command times including loading and JSON output were 1.180 s and
 or the duration of Smashcraft's full parity batch. No frames are drawn and
 no wall-clock waits or engine memory writes are used.
 
-`wisp lan` runs Warcraft III 3.0 clients that never sign in to Battle.net, in
-pairs that play LAN matches hosted by Wisp itself. The host relays every turn,
-so it logs every player's actions and compares every client's state checksum
-each turn. Each pair is isolated in a network namespace with nothing but
-loopback.
+`wisp lan` runs Warcraft III clients that never sign in to Battle.net. On
+3.0.0, pairs played LAN matches hosted by Wisp itself: the host relayed every
+turn, logged every player's actions and compared client checksums. On
+3.0.1, only solo games work; pair checks use the signed-in clients below.
+Each offline pair is isolated in a network namespace with only loopback.
 
 **Development and testing on your own offline clients and maps only.** Wisp
 never switches a signed-in Battle.net client, and never touches anyone else's
@@ -504,6 +504,46 @@ bisect-588610b7, measured over 10 s from /proc):
 | CPU | 0.74 core | 0.52 core |
 | Resident memory | 1.37 GB | 0.80 GB |
 | GPU memory (VRAM + GTT, from DRM fdinfo) | 666 + 75 MiB | 666 + 75 MiB |
+
+The two game processes therefore used **1.26 cores per pair** at the parity
+profile's 60 fps cap. On 8 October, parity solo games used 1.07 and 0.97
+cores, **2.04 cores for the two games** (see "Solo games"). These samples
+measure game processes, not the desktop, Wine server or launcher. The
+7 October 22:39 pool sample in [#37](https://github.com/tompassarelli/wisp/issues/37)
+separately measured about 0.88 core per game, 0.38 per browser renderer and
+0.34 per Wine server under heavy contention; it did not separate profiles.
+
+### Browser cost and measurements still needed
+
+Offline pool launch runs `Warcraft III.exe` directly, without the Battle.net
+launcher. That does not provide a two-client replacement on 3.0.1: the game
+has no LAN provider. Current pair checks use signed-in Battle.net clones.
+No browser-removal experiment has been run on those live sessions, so there
+is no measured claim that their browser can or cannot be removed.
+
+A read-only `/proc` sample on 9 October 2026 took 10.020 s, with 100 clock
+ticks per second. The three existing signed-in clones each had five
+`BlizzardBrowser.exe` processes, including two with `--type=renderer`:
+
+| Client | Game CPU (cores) | Browser renderers | Renderer CPU (cores) | Other browser CPU (cores) | Wine server CPU (cores) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| clone-b | 0.331 | 2 | 0.358 | 0.359 | 0.148 |
+| clone-c | 0.805 | 2 | 0.344 | 0.355 | 0.140 |
+| clone-d | 0.309 | 2 | 0.358 | 0.383 | 0.135 |
+
+Across those sessions the six browser renderers used 1.061 cores; all
+15 browser processes used 2.159 cores. Their game states and preferences
+were left as found, so this is launcher overhead during existing sessions,
+not a controlled pool-profile or fps comparison. There were no live offline
+pool game processes in this sample.
+
+[#37](https://github.com/tompassarelli/wisp/issues/37) still needs per-client
+and per-pair measurements at each requested profile's cap, with and without
+the browser; the two-pair browser-count run; and an actual Warcraft pool run
+requesting more pairs than capacity admits. The deterministic admission
+integration already requested three pairs, admitted one through two native
+game wrappers, and reported the other two waiting (`64181ab`, docs
+`61d9ef8`). That result does not replace the actual-client run.
 
 **Rendering is on the GPU.** Pool clients render through DXVK (`d3d11=n`,
 `dxgi=n` in Proton's `WINEDLLOVERRIDES`) on RADV. The Vulkan loader maps every
