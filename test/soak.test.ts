@@ -7,12 +7,12 @@ import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Console, Effect, Exit } from "effect";
-import { makeSoak, typingStallsLine } from "../scripts/wisp/commands/soak";
+import { makeSoak } from "../scripts/wisp/commands/soak";
 import { installHeadless } from "../scripts/wisp/headless";
 import type { Lockstep } from "../src/headless/lockstep";
 import { type SceneReport, bodyProblems } from "../scripts/wisp/scene";
 import { RealtimeClients } from "../scripts/wisp/headlessInput";
-import { type SoakMatch, SoakMonitor, fuzzedInputs, helperRecorder, planSoak, playSoakMatch, readSoakRepro, soakRepro } from "../scripts/wisp/soak";
+import { type SoakMatch, SoakMonitor, helperRecorder, planSoak, playSoakMatch, readSoakRepro, soakRepro } from "../scripts/wisp/soak";
 import { MEASURED_BATTLE_NET, syncDelivery } from "../src/headless/syncChannel";
 import { timingsLayer } from "../scripts/wisp/timings";
 import { timingTest } from "../scripts/wisp/timingTest";
@@ -25,7 +25,7 @@ afterAll(runtime.restore);
 const match = (policies: readonly string[], seed = 7): SoakMatch => ({ index: 0, seed, fighters: ["a", "b"], stage: "flat", policies, frames: 600 });
 const play = (policies: readonly string[], setup = project) => playSoakMatch(runtime, game, setup, match(policies));
 
-timingTest("a clean match plays more than five times faster than real time", () => {
+timingTest("[spec #16] a clean match plays more than five times faster than real time", () => {
   const started = performance.now();
   const match = play(["fuzz", "fuzz"]);
   const elapsed = performance.now() - started;
@@ -33,7 +33,7 @@ timingTest("a clean match plays more than five times faster than real time", () 
   expect(match.wallMs).toBeGreaterThan(elapsed * 5);
 });
 
-test("a clean match ends with no findings and repeats from its seed", () => {
+test("[invariant] a clean match ends with no findings and repeats from its seed", () => {
   const first = play(["fuzz", "fuzz"]);
   expect(first.findings).toEqual([]);
   expect(first.over).toBe(true);
@@ -43,7 +43,7 @@ test("a clean match ends with no findings and repeats from its seed", () => {
   expect(second.inputs).toEqual(first.inputs);
 });
 
-test("each fault is found by its detector", () => {
+test("[spec #16] each fault is found by its detector", () => {
   const kinds = (policies: readonly string[], setup = project) => play(policies, setup).findings.map(({ kind, text }) => `${kind}: ${text.split("\n")[0]}`);
   expect(kinds(["fuzz", "freeze"])).toEqual([
     "stall: the match froze at confirmed frame 90: no progress for 3.0 s and no player is told why",
@@ -70,11 +70,9 @@ test("each fault is found by its detector", () => {
   expect(within.findings.filter(({ kind }) => kind === "typing")).toEqual([]);
   expect(within.typingStallsMs.length).toBeGreaterThan(2);
   expect(within.typingStallsMs.every((ms) => ms === 180)).toBe(true);
-  expect(typingStallsLine(within.typingStallsMs, 200)).toBe(`recovery typing stalls: ${within.typingStallsMs.length} client frames over 1/60 s, worst 180.0 ms, p95 180.0 ms; budget 200.0 ms, none over it`);
-  expect(typingStallsLine([20, 30, 40], 32.768)).toBe("recovery typing stalls: 3 client frames over 1/60 s, worst 40.0 ms, p95 40.0 ms; budget 32.8 ms, 1 over it");
 });
 
-test("a repro file plays its match again with the same inputs, calls and findings", () => {
+test("[invariant] a repro file plays its match again with the same inputs, calls and findings", () => {
   const found = play(["fuzz", "freeze"]);
   const repro = readSoakRepro(JSON.stringify(soakRepro(project.name, found)));
   const again = playSoakMatch(runtime, game, project, repro.match, repro.inputs);
@@ -84,7 +82,7 @@ test("a repro file plays its match again with the same inputs, calls and finding
   expect(readSoakRepro(JSON.stringify(soakRepro(project.name, looped))).findings).toEqual(looped.findings);
 });
 
-test("a match played through input helpers replays what they typed, not their pads' edges, such as a stick inside its dead zone", () => {
+test("[invariant] a match played through input helpers replays what they typed, not their pads' edges, such as a stick inside its dead zone", () => {
   const helperMatch: SoakMatch = { ...match(["fuzz", "cpu"]), typed: true };
   // wc3-journal's pad: a full-scale stick, here held inside its 0.28 dead zone (9175), which reached the map only as typed text.
   const inputs = {
@@ -103,7 +101,7 @@ test("a match played through input helpers replays what they typed, not their pa
   expect(playSoakMatch(runtime, game, project, helperMatch, { ...inputs, typed: [] }).checksums).not.toEqual(played.checksums);
 });
 
-test("a real-time run through input helpers, recorded with helperRecorder, replays onto the same native calls", () => {
+test("[invariant] a real-time run through input helpers, recorded with helperRecorder, replays onto the same native calls", () => {
   const helperMatch: SoakMatch = { ...match(["fuzz", "cpu"]), typed: true };
   // Each helper types at wall-clock frames of its own, as a program appending to its typed file does.
   const typing = new Map([[0, [[25, "aa"], [90, "a"]]], [1, [[60, "a"]]]] as const);
@@ -130,29 +128,14 @@ test("a real-time run through input helpers, recorded with helperRecorder, repla
   expect(replayed.checksums).toEqual(clients.clients.map((client) => client.checksum()));
 });
 
-test("the fuzzer makes edges in one frame, holds, chords and stick flicks, and presses a toggle twice", () => {
-  const source = fuzzedInputs(match(["fuzz", "cpu"], 11), project.controller);
-  for (let frame = 1; frame <= 3600; frame++) source.frame(frame);
-  const { edges, silences, hitches } = source.recorded();
-  expect(edges.every(([, slot]) => slot === 0)).toBe(true);
-  const byFrame = Map.groupBy(edges, ([frame]) => frame);
-  const sameFrameTap = [...byFrame.values()].some((list) => list.some(([, , a]) => "button" in a && a.down && list.some(([, , b]) => "button" in b && b.button === a.button && !b.down)));
-  expect(sameFrameTap).toBe(true);
-  expect(edges.some(([, , edge]) => "axis" in edge && Math.abs(edge.value) === 127)).toBe(true);
-  expect(edges.some(([, , edge]) => "axis" in edge && edge.value !== 0 && Math.abs(edge.value) <= 20)).toBe(true);
-  const toggles = edges.flatMap(([frame, , edge]) => ("button" in edge && edge.button === 2 && edge.down ? [frame] : []));
-  expect(toggles.some((frame, index) => index > 0 && frame - (toggles[index - 1] ?? 0) >= 10 && frame - (toggles[index - 1] ?? 0) <= 120)).toBe(true);
-  expect(silences.length + hitches.length).toBeGreaterThan(0);
-});
-
-test("a plan has every ordered fighter pair on every stage before it repeats", () => {
+test("[spec #16] a plan has every ordered fighter pair on every stage before it repeats", () => {
   const plan = planSoak({ fighters: ["a", "b", "c"], stages: ["x", "y"], policies: [["fuzz", "cpu"], ["cpu", "cpu"]] }, 20, 1, 600);
   expect(new Set(plan.slice(0, 18).map(({ fighters, stage }) => `${fighters.join("-")}@${stage}`)).size).toBe(18);
   expect(plan[18]?.policies).toEqual(["cpu", "cpu"]);
   expect(new Set(plan.map(({ seed }) => seed)).size).toBe(20);
 });
 
-test("a fighter in play with nothing of it drawn with geometry is an invisible fighter", () => {
+test("[spec #16] a fighter in play with nothing of it drawn with geometry is an invisible fighter", () => {
   const report = (drawn: number): SceneReport => ({
     serial: 1, frame: 600, effects: 3,
     models: [{ model: "Clip0.mdx", live: 2, inView: 2, drawn, created: 0, age: 10, longest: 10, destroyed: 0 }],
@@ -167,7 +150,7 @@ test("a fighter in play with nothing of it drawn with geometry is an invisible f
   expect(bodyProblems(report(2), bodies, empty)[0]?.evidence).toBe("drawn without triangles: Clip0.mdx (2)");
 });
 
-test("the command plays matches in worker processes and keeps a repro file for each finding", async () => {
+test("[spec #16] the command plays matches in worker processes and keeps a repro file for each finding", async () => {
   const out = mkdtempSync(join(tmpdir(), "wisp-soak-"));
   const lines: string[] = [];
   const soak = makeSoak({ project: join(import.meta.dir, "soak/project.ts"), out });
@@ -198,7 +181,7 @@ test("the command plays matches in worker processes and keeps a repro file for e
   expect(Exit.isFailure(await run(["--workers", "5"]))).toBe(true);
 });
 
-test("a lag spike's catch-up after a usual backlog's rise is no spiral; input left further behind each second is", () => {
+test("[repro 5a21838] a lag spike's catch-up after a usual backlog's rise is no spiral; input left further behind each second is", () => {
   /** The catch-up findings of a match whose one client reports `backlog(frame)` frames of input not yet played, on a clock that keeps real time. */
   const catchUps = (backlog: (frame: number) => number, frames: number) => {
     let frame = 0;

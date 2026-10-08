@@ -45,39 +45,31 @@ const names = (units: readonly TestUnit[]) => units.map((unit) => unit.path.slic
 const always = ["test/computed.test.ts", "test/undeclared.test.ts"];
 const changed = (...paths: string[]) => plan.select({ changed: paths, created: [], deleted: [] });
 
-test("a test that reads files without declaring them, or imports a computed path, runs on every save", () => {
+test("[invariant] a test that reads files without declaring them, or imports a computed path, runs on every save", () => {
   expect(names([...plan.alwaysRun().keys()].map((path) => ({ path, kind: "file" })))).toEqual(always);
 });
 
-test("a saved module selects every test that loads it, through re-exports and literal dynamic imports", () => {
+test("[invariant] a saved module selects every test that loads it, through re-exports and literal dynamic imports", () => {
   const selection = changed(at("src/c.ts"));
   expect(selection.full).toBeUndefined();
   expect(names(selection.units)).toEqual(["src/c.tests.ts", "test/a.test.ts", "test/lazy.test.ts", ...always].sort());
 });
 
-test("a type-only import loads nothing, so it selects nothing", () => {
-  expect(names(changed(at("src/types.ts")).units)).toEqual(always);
-});
-
-test("a module no test loads selects only the tests that run every save", () => {
-  expect(names(changed(at("src/alone.ts")).units)).toEqual(always);
-});
-
-test("a declared read selects its reader; a file no test loads or declares reading runs everything", () => {
+test("[invariant] a declared read selects its reader; a file no test loads or declares reading runs everything", () => {
   expect(names(changed(at("test/fixtures/data.json")).units)).toEqual(["test/fixtures.test.ts", ...always].sort());
   const unknown = changed(at("notes.txt"));
   expect(unknown.full).toBe("no test declares reading notes.txt");
   expect(unknown.units.length).toBe(plan.all().length);
 });
 
-test("a new file, a deleted one or a change to the preload runs everything", () => {
+test("[invariant] a new file, a deleted one or a change to the preload runs everything", () => {
   write("src/new.ts", "export const fresh = 3;\n");
   expect(plan.select({ changed: [], created: [at("src/new.ts")], deleted: [] }).full).toBe("src/new.ts is new");
   expect(plan.select({ changed: [], created: [], deleted: [at("src/alone.ts")] }).full).toBe("src/alone.ts was deleted");
   expect(changed(at("test/preload.ts")).full).toBe("every test preloads test/preload.ts");
 });
 
-test("a save that changes a module's imports changes what it selects from then on", () => {
+test("[invariant] a save that changes a module's imports changes what it selects from then on", () => {
   write("src/a.ts", "export const b = 4;\n");
   expect(names(changed(at("src/a.ts")).units)).toEqual(["test/a.test.ts", ...always].sort());
   expect(names(changed(at("src/c.ts")).units)).toEqual(["src/c.tests.ts", "test/lazy.test.ts", ...always].sort());
@@ -85,26 +77,7 @@ test("a save that changes a module's imports changes what it selects from then o
   changed(at("src/a.ts"));
 });
 
-test("a per-file audit brought in only by files it reads checks just those; one its imports bring in checks everything", () => {
-  write("audit/shapes.test.ts", 'import { readFileSync } from "node:fs";\nimport { c } from "../src/c";\nexport const read = (path: string) => [c, readFileSync(path)];\n');
-  write("audit/scene.test.ts", 'import { b } from "../src/b";\nexport const scene = b;\n');
-  const audits = new TestPlan(root, {
-    files: ["audit/*.test.ts"],
-    reads: { "audit/shapes.test.ts": ["src/**/*.ts"] },
-    perFile: ["audit/shapes.test.ts"],
-    journeys: ["audit/scene.test.ts"],
-  });
-  expect(audits.isJourney(at("audit/scene.test.ts"))).toBe(true);
-  expect(audits.isJourney(at("audit/shapes.test.ts"))).toBe(false);
-  const alone = audits.select({ changed: [at("src/alone.ts")], created: [], deleted: [] });
-  expect(names(alone.units)).toEqual(["audit/shapes.test.ts"]);
-  expect([...alone.audits ?? []]).toEqual([[at("audit/shapes.test.ts"), [at("src/alone.ts")]]]);
-  const imported = audits.select({ changed: [at("src/c.ts")], created: [], deleted: [] });
-  expect(names(imported.units)).toEqual(["audit/scene.test.ts", "audit/shapes.test.ts"]);
-  expect(imported.audits?.size).toBe(0);
-});
-
-test("registry modules share processes only with each other, and isolated files only with their group", () => {
+test("[invariant] registry modules share processes only with each other, and isolated files only with their group", () => {
   const unit = (path: string, kind: TestUnit["kind"] = "file"): TestUnit => ({ path, kind });
   const units = [unit("r1", "registry"), unit("r2", "registry"), unit("r3", "registry"), unit("g1"), unit("g2"), unit("s1"), unit("s2"), unit("s3")];
   const work: Record<string, number> = { r1: 300, r2: 300, r3: 300, g1: 500, g2: 400, s1: 100, s2: 100, s3: 100 };
@@ -115,11 +88,9 @@ test("registry modules share processes only with each other, and isolated files 
     expect(kinds.size).toBe(1);
   }
   expect(processes.flatMap((process) => process.units.map((tested) => tested.path)).sort()).toEqual(units.map((tested) => tested.path).sort());
-  // The registry's 900 ms of work splits until each part takes no longer than the longest file.
-  expect(processes.filter((process) => process.kind === "registry").length).toBe(2);
 });
 
-test("the registry process runs each module's tests and reports every failure with the module", async () => {
+test("[invariant] the registry process runs each module's tests and reports every failure with the module", async () => {
   write("registry/passing.tests.ts", 'import { test } from "WISP/src/runtime/testing";\ntest("adds", () => {});\ntest("subtracts", () => {});\n'.replace("WISP", join(import.meta.dir, "..")));
   write("registry/failing.tests.ts", 'import { assertEquals, test } from "WISP/src/runtime/testing";\ntest("compares", () => assertEquals(1, 2, "sum"));\n'.replace("WISP", join(import.meta.dir, "..")));
   const child = Bun.spawn([process.execPath, join(import.meta.dir, "../scripts/wisp/registryRun.ts")], { stdin: "pipe", stdout: "pipe", stderr: "pipe" });

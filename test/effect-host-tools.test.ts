@@ -8,7 +8,7 @@ const importsEffect = /(?:from|import)\s*\(?\s*["'](?:effect|@effect\/[^"'/]+)(?
 // Pages served to a browser run there, not under Bun.
 const browserPages = (file: string) => file.startsWith("scripts/wisp/browser/") || file === "scripts/wisp/reproViewerPage.ts" || file === "scripts/wisp/tunePage.ts";
 // AGENTS.md: host tools that start processes or wait are Effect programs.
-test("host tools under scripts/ that start processes or wait import Effect", async () => {
+test("[spec AGENTS.md] host tools under scripts/ that start processes or wait import Effect", async () => {
   const problems: string[] = [];
   let scanned = 0;
   for (const file of new Bun.Glob("scripts/**/*.ts").scanSync(root)) {
