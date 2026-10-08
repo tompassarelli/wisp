@@ -19,8 +19,10 @@ permissions:
   contents: read
   issues: write
 
+# One queue per branch: GitHub keeps one pending run per group and cancels the
+# older, so a dispatched report would otherwise be lost to main's next event.
 concurrency:
-  group: main-red
+  group: main-red-${{ github.event.workflow_run.head_branch || inputs.run }}
   cancel-in-progress: false
 
 jobs:
