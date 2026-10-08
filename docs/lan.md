@@ -303,16 +303,40 @@ need real clients.
 
 Results go to `pair-K/dummy/<time>/`: packet and action logs, one log per
 dummy, and `result.json` with each join time, CPU sample and resident memory.
-Keep that folder private. These lobby checks can replace the second native
-client for join/leave, profile/map-message handling and handicap slot updates.
-They cannot replace `lan fresh`, native input checks or parity runs. The
+The result also records the native build, setup milliseconds and a `passed`
+or `failed` status. A failure preserves completed runs, the first failed step
+and its error, including a refusal before the first W3GS packet. Keep that
+folder private. On a client with a working LAN provider, these lobby checks
+can replace the second native client for join/leave, profile/map-message
+handling and handicap slot updates. The
 pool still starts pairs; an executor may stop its unused side b to measure
 the one-client footprint.
 
 On 7 October 2026, the isolated protocol run completed 20 joins, handicap
 changes and leaves with zero errors against Wisp's host. Median join time was
-12.4 ms and resident memory was 5.5–5.9 MiB. The current native compatibility
-measurement is tracked in [#46](https://github.com/tompassarelli/wisp/issues/46).
+12.4 ms and resident memory was 5.5–5.9 MiB. A corrected CPU sample used
+3.685 ms of CPU over 285.64 ms (0.0129 core), with 5.61 MiB resident memory.
+The two-native baseline below used 1.26 cores and 2.17 GB resident memory;
+the second client alone used 0.52 core and 0.80 GB. These are separate lobby
+and match samples, not a measured one-native replacement speedup.
+
+**3.0.1.24342 cannot join this host.** The first unsupported step is choosing
+the native LAN provider, before a `ReqJoin` (W3GS packet `0x1e`) can be sent.
+The 8 October native investigation rebuilt lan1a's provider and found only
+`BNET` and `LOOP`; a different provider id returns unsupported result 4.
+`TCPN` is absent. The private LAN plugin refuses this build before changing
+the client. Consequently there are zero native-plus-dummy lobby joins on
+this build, and no supported native setup time or resource comparison.
+Changing the dummy's packet version cannot supply a missing native transport.
+This is the measured incompatibility result for
+[#46](https://github.com/tompassarelli/wisp/issues/46).
+
+Wisp's host protocol checks can use simulated W3GS players for the two sides:
+join/leave, map/profile replies and handicap changes already completed the
+20-round check without Wine. Gameplay pairs run through Wisp's headless
+clients; a W3GS dummy does not execute their map. Native reference captures
+that need a real peer still use signed-in clients. Adding a native `TCPN`
+provider or emulating Battle.net is outside this tool's scope.
 
 ## Guardrails
 
