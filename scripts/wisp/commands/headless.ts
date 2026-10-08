@@ -109,7 +109,7 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
     }).pipe(step(`${name} in ${count} clients`));
     const render = project.render;
     if (options.render !== undefined && render !== undefined && destroyedModels.size > 0) {
-      // Destroyed effects stay drawn while their Death sequence plays; its length is in the model, read asynchronously, so the deterministic journey is played again to draw it.
+      // Death sequences come from model files read asynchronously, so the deterministic journey is played again to draw them during effect cleanup.
       const effectDeaths = yield* Effect.tryPromise({ try: () => loadEffectDeaths(render, destroyedModels), catch: (cause) => new HeadlessFailure({ journey: name, problems: 1, cause }) });
       scenes = yield* Effect.try({
         try: () => {
