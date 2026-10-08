@@ -66,7 +66,7 @@ export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: s
       const environment = client.natives;
       setmetatable(environment, { __index: _G });
       // TypeScriptToLua's globalThis is _G; a hot reload loads its bundle here too.
-      return { _G: environment, load: (text: string, name?: string) => load(text, name, "t", environment), ...map.natives?.(client) };
+      return { _G: environment, os: { clock: () => client.clockSeconds() }, load: (text: string, name?: string) => load(text, name, "t", environment), ...map.natives?.(client) };
     },
     entry: (client) => {
       const [chunk, problem] = load(bundle, "=map", "t", client.natives);

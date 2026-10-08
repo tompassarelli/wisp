@@ -187,14 +187,14 @@ export class Lockstep {
     this.flush();
   }
 
-  frames(count: number): void {
+  frames(count: number, options: { readonly draw?: boolean } = {}): void {
     for (let frame = 0; frame < count; frame++) {
       this.frame++;
       for (let index = 0; index < this.clients.length; index++) this.costs[index] = 0;
       this.arrive();
       for (let index = 0; index < this.clients.length; index++) {
         const started = this.options.cost?.();
-        this.clients[index]?.step();
+        this.clients[index]?.step(options.draw ?? true);
         this.charge(index, started);
       }
       this.flush();
