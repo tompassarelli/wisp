@@ -484,7 +484,9 @@ saves them as the scene's `environment`.
   materials take the same key and ambient in their PBR shader, without the
   upstream tone mapping. Layers flagged Unshaded take no light. Each
   geoset's animated colour tints its texels first, lit or Unshaded, as
-  native Classic does whatever the geoset animation's flags say. Lights are
+  native Classic does whatever the geoset animation's flags say. Unit vertex
+  colour and effect colour multiply that tint and team colour; white leaves
+  the model unchanged. Particles and ribbons retain their emitter colours. Lights are
   parsed from the whole file, including the 1200, 1300 and 1600 light fields.
   Definitive's day/night lights carry no ambient (intensity 0 or below); under
   one the fill is the stock `ReplaceableTextures\EnvironmentMap`'s mean linear

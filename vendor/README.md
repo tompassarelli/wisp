@@ -44,6 +44,8 @@ to both shaders (SD vertex shaders pass the model-space position on, and the
 draw's model and normal matrices carry it and the normal to world space):
 each adds colour × intensity × N·L, full to its attenuation start and fading
 linearly to zero at its end, into the SD lit term and the HD diffuse term.
+`setInstanceColor` multiplies unit/effect RGB into that geoset tint before
+light and fog. Its default is white; particles and ribbons retain emitter colours.
 
 Source: <https://github.com/4eb0da/war3-model>.
 License: MIT, Copyright (c) 2017-2023 4eb0da. The package retains LICENSE

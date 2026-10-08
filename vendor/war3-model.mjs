@@ -7276,6 +7276,7 @@ var GPU_LAYER_PROPS = [
 var ModelRenderer = class {
 	constructor(model) {
 		this.instanceAlpha = 1;
+		this.instanceColor = new Float32Array([1, 1, 1]);
 		this.gpuPipelines = {};
 		this.vertexBuffer = [];
 		this.normalBuffer = [];
@@ -9928,11 +9929,18 @@ var ModelRenderer = class {
 		const alpha = typeof layer.Alpha === "number" ? layer.Alpha : layer.Alpha === void 0 ? 1 : this.interp.num(layer.Alpha) ?? 1;
 		this.gl.uniform1f(this.shaderProgramLocations.layerAlphaUniform, layerOpacity(this.rendererData.geosetAlpha[geoset], alpha, this.instanceAlpha));
 		const wisp = this.shaderProgramLocations.wisp;
-		if (wisp !== void 0) this.gl.uniform3fv(wisp.uWispGeosetColor, this.findColor(geoset));
+		if (wisp !== void 0) {
+			const color = this.findColor(geoset);
+			this.gl.uniform3f(wisp.uWispGeosetColor, color[0] * this.instanceColor[0], color[1] * this.instanceColor[1], color[2] * this.instanceColor[2]);
+		}
 	}
 	/** The whole model's opacity, as a game sets an effect's alpha. Particles and ribbons ignore it. */
 	setInstanceAlpha(alpha) {
 		this.instanceAlpha = alpha;
+	}
+	/** The whole model's vertex RGB tint. Particles and ribbons keep their emitter colours. */
+	setInstanceColor(color) {
+		this.instanceColor.set(color);
 	}
 	setLayerProps(layer, textureID) {
 		const texture = this.model.Textures[textureID];

@@ -500,6 +500,7 @@ export declare class ModelRenderer {
     private setLayerAlpha;
     /** The whole model's opacity, as a game sets an effect's alpha. Particles and ribbons ignore it. */
     setInstanceAlpha(alpha: number): void;
+    setInstanceColor(color: Float32Array): void;
     private setLayerProps;
     private setLayerPropsHD;
 }
