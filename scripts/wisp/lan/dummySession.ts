@@ -1,10 +1,11 @@
 import { copyFileSync, mkdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Effect } from "effect";
 import { readExecutable } from "../engine/memory";
 import { connectMenus, menuAddress } from "../menus";
 import { checkDummy } from "./dummy";
-import { LanFailure, enableLan, joinLanGame } from "./join";
+import { enableLan, joinLanGame } from "./join";
 import { readMapFacts } from "./map";
 import { isolatedNetworkProblem } from "./offline";
 import { clientName, documentsOf, exeOf, pairDirectory, reportPort } from "./pool";
@@ -27,16 +28,13 @@ const map = readMapFacts(mapFile, packager, inGame);
 const output = join(pairDirectory(pair), "dummy", new Date().toISOString().replace(/[:.]/g, "-"));
 const version = readExecutable(exeOf(name)).version;
 console.log(`dummy lobby: Warcraft ${version}; evidence ${output}`);
-await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+BunRuntime.runMain(Effect.scoped(Effect.gen(function*() {
   const menus = yield* connectMenus(yield* menuAddress(reportPort(pair, "a"), 10));
-  const result = yield* Effect.tryPromise({
-    try: () => checkDummy({ program, map, count: Number(countText), output, nativeVersion: version, announcePorts: [16000],
-      joinNative: async (_host, gameName) => Effect.runPromise(Effect.gen(function*() {
-        yield* enableLan(nativePid, exeOf(name), version, menus, console.log);
-        yield* joinLanGame(menus, gameName);
-      })),
+  const result = yield* checkDummy({ program, map, count: Number(countText), output, nativeVersion: version, announcePorts: [16000],
+    joinNative: (_host, gameName) => Effect.gen(function*() {
+      yield* enableLan(nativePid, exeOf(name), version, menus, console.log);
+      yield* joinLanGame(menus, gameName);
     }),
-    catch: (cause) => new LanFailure({ problem: cause instanceof Error ? cause.message : String(cause) }),
   });
   console.log(JSON.stringify({ ...result, version, output }));
 })));

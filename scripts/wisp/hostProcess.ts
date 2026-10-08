@@ -4,7 +4,7 @@
 // tied to the current Scope, and closing the scope (success, failure,
 // interrupt, or SIGINT/SIGTERM through BunRuntime.runMain) sends the group
 // SIGTERM and waits for it to exit.
-import { Duration, Effect, Fiber, FileSystem, Option, Schedule, Stream } from "effect";
+import { Duration, Effect, Exit, Fiber, FileSystem, Option, Schedule, Scope, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 export interface LogFiles {
@@ -20,10 +20,13 @@ export interface LogFiles {
  */
 export const spawnLogged = (command: ChildProcess.Command, files: LogFiles) => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
-  const handle = yield* command;
+  const childScope = yield* Scope.fork(yield* Effect.scope);
+  const handle = yield* command.pipe(Scope.provide(childScope));
   const stdout = yield* Effect.forkScoped(Stream.run(handle.stdout, fs.sink(files.stdout)));
   const stderr = yield* Effect.forkScoped(Stream.run(handle.stderr, fs.sink(files.stderr)));
   const written = Effect.all([Fiber.await(stdout), Fiber.await(stderr)], { discard: true });
+  // Keep both readers alive while the child reports its shutdown and exits.
+  yield* Effect.addFinalizer(() => Scope.close(childScope, Exit.void).pipe(Effect.andThen(written)));
   return { handle, written };
 });
 

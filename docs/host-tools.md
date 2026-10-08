@@ -52,6 +52,12 @@ over it in one module, with one comment saying why.
 - wisp:scripts/wisp/lan/join.ts (`whileStopped`): SIGSTOP is the acquire step
   and SIGCONT the release, so a client is let go even when waiting for it to
   stop fails.
+- wisp:scripts/wisp/lan/host.ts (`startHost`): the caller's scope holds the
+  TCP listener and turn fibers; a child scope closes UDP discovery when the
+  lobby ends. `Schedule.fixed` keeps the turn cadence when work takes time.
+- wisp:scripts/wisp/lan/dummy.ts (`checkDummy`): the native join runs in the
+  same fiber as the check. Each dummy is a scoped Bun subprocess because its
+  CPU report needs Bun's `resourceUsage`; cleanup stops and reaps it.
 
 wisp:test/host-tools.test.ts runs the launchers with stand-in processes and a
 stand-in capacity helper (wisp:test/fixtures/host-tools/). After SIGTERM, or a
