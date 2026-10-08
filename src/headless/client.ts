@@ -1311,7 +1311,7 @@ export class HeadlessClient {
     for (const unit of this.units.values()) poses.push({ handle: unit.handle, typeId: unit.typeId, owner: unit.owner,
       x: unit.x, y: unit.y, z: unit.z, facing: unit.facing, scale: [...unit.scale], alpha: unit.alpha, color: [...unit.color],
       teamColor: unit.teamColor, timeScale: unit.timeScale, visible: unit.visible, animation: unit.animation, subAnimations: [...unit.subAnimations],
-      animationElapsed: unit.animationElapsed, animationSought: unit.animationSought, animationTicks: unit.animationTicks, animationClock: unit.animationClock,
+      animationElapsed: unit.animationElapsed, animationClock: unit.animationClock,
       animationBlendTime: unit.animationBlendTime, animationBlend: copyBlend(unit.animationBlend) });
     return poses;
   }
@@ -1358,12 +1358,12 @@ export class HeadlessClient {
     this.scenery.tick(f32(1 / FRAMES_PER_SECOND));
     const died: Handle[] = [];
     for (const pose of this.effects.values()) {
-      advanceAnimation(pose, pose.timeScale, 1 / FRAMES_PER_SECOND);
+      advanceAnimation(pose, pose.timeScale, f32(1 / FRAMES_PER_SECOND));
       // A sequence ends on its last millisecond, as Warcraft's sequence clock does.
       if (pose.death !== undefined && pose.animationElapsed >= pose.death - f32(0.001)) died.push(pose.handle);
     }
     for (const handle of died) this.effects.delete(handle);
-    for (const unit of this.units.values()) advanceAnimation(unit, unit.timeScale, 1 / FRAMES_PER_SECOND);
+    for (const unit of this.units.values()) advanceAnimation(unit, unit.timeScale, f32(1 / FRAMES_PER_SECOND));
     for (const sound of this.sounds.values()) {
       if (!sound.playing || sound.looping) continue;
       sound.elapsed += sound.pitch * 1000 / FRAMES_PER_SECOND;

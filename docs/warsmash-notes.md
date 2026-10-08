@@ -386,7 +386,7 @@ effects belong to wisp#58 and are not repeated here. Fixture:
 | `BlzSetSpecialEffectPosition`/`X`/`Y`/`Z` and read-back | Not registered in this revision; every effect real is a binary32 `real` argument | Stored unrounded; Bun kept doubles that Lua32 rounds; read back at once | **Mismatch, fixed**: stored as binary32. Axis setters change only their axis (case `axis-setters-independent`); reads in the same callback see the write (`position-read-in-same-call`) |
 | `BlzSetSpecialEffectScale(e, 0)` and parking below the floor (`hideEffect`) | Not registered; no rule | Scale 0 kept; position kept wherever written | **Match** for the script-visible part: case `scale-zero-parked` reads the parked Z. Whether scale 0 also stops particles is visual and stays with the capture |
 | Scale, matrix scale, yaw/pitch/roll, time scale, time and blend time values | Not registered; binary32 `real` arguments | Stored unrounded | **Mismatch, fixed**: all stored as binary32; `MatrixScale` multiplies the current matrix scale and rounds each product. None of them move the effect (case `scale-orientation-time-keep-position`) |
-| `BlzSetSpecialEffectMatrixScale` compounding | Not registered, nor is `BlzResetSpecialEffectMatrix`; no rule | Each call multiplies the current matrix scale until `BlzResetSpecialEffectMatrix` | **Unresolved, no getter and no Warsmash rule**: Smashcraft sets it once per new deck, but `-dev backdrop on` (`showBackdrop`) reapplies it to existing scenery, which compounds if the real game multiplies. The capture's backdrop toggle decides |
+| `BlzSetSpecialEffectMatrixScale` compounding | Not registered, nor is `BlzResetSpecialEffectMatrix`; no rule | Each call multiplies the current matrix scale until `BlzResetSpecialEffectMatrix` | **Match** (3.0.1, 8 Oct ruler capture: X doubled once, twice, and twice with a reset between drew the global marker at 352, 704 and 352). So `-dev backdrop on` (`showBackdrop`), which reapplies it to existing scenery, widens that scenery again |
 | Position held between frames, frozen (time scale 0) or playing | Effects are placed once; only attached effects follow a parent | Position changes only through setters | **Match**: case `held-after-quarter-second` reads both 0.25 s later unmoved |
 | `DestroyEffect` lifetime | The drawn instance stops looping, plays the model's Death sequence, then is removed; without one it is removed when its current sequence ends. Warsmash's engine-side removals (buffs, missiles) start Death at once; its `DestroyEffect` native first lets the current loop finish | Removed from the scene at once; later setters and reads on the handle do nothing | **Mismatch, fixed; now matches**: setters on the handle do nothing at once, while position reads return where the dying effect stands until it is gone (3.0.1 read (-200, 0, 0) for the frozen one; case `destroyed-frozen-reads`). The drawn effect switches to its Death sequence at once, at its last time scale, and is gone on that sequence's last millisecond; without a Death sequence it is gone at once. Lengths come from the model files the renderer loads (`effectDeaths`). Test: the Death timeline in Bun and Lua32 (gone at frame 120 for a 2 s Death). Whether 3.0.1 also finishes the current loop first is the capture's playing effect at (200, 0) |
 | `DestroyEffect` on an effect frozen at time scale 0 | An instance advances `dt × 1000 × speed` ms a frame and ends a non-looping sequence only when it reaches the sequence's last millisecond; destroying doesn't change the speed, so a frozen effect never ends and is never removed | Removed from the scene at once | **Mismatch, fixed; now matches**: the frozen effect stays drawn on Death's first frame for good (timeline frame 600). Smashcraft hides its victory pose and light before destroying them, so a frozen leftover is invisible. Capture: the frozen effect at (-200, 0) |
@@ -410,16 +410,22 @@ FaerieFireTarget effects were not visible: the base map's black mask covers
 
 The rest of the capture moved to the ruler map's third column
 ([headless: animation and effect lifetime](headless.md#animation-and-effect-lifetime-read-from-a-screenshot)),
-read from one screenshot with no mask: `death-frozen` (destroyed at time
-scale 0: Death's first frame, for good), `no-death-frozen` (a model without
-Death: gone at once), `death-playing` beside `death-reference` (destroyed
-mid-Stand: Death from that moment, or 750 ms later if the loop finishes
-first), `teardown-hidden` (collapsed to scale 0, then destroyed, as the
-victory pose is: nothing shown) and `matrix-scale-once`, `-twice`, `-reset`
-(whether a second `BlzSetSpecialEffectMatrixScale` multiplies, which decides
-whether `-dev backdrop on` widens existing scenery). They replace the
-Smashcraft session's teardown and backdrop checks: both depend only on these
-rules.
+read from one screenshot with no mask: `death-at-0`, `-1` and `-2`
+(destroyed mid-Stand 0, 1 and 2 s after `death-reference` is told to play
+Death: Death from that moment, 750 ms later if the loop finishes first, or
+gone), `death-frozen` (destroyed at time scale 0: Death's first frame, for
+good), `no-death-frozen` (a model without Death: gone at once),
+`teardown-hidden` (collapsed to scale 0, then destroyed, as the victory pose
+is: nothing shown) and `matrix-scale-once`, `-twice`, `-reset`. They replace
+the Smashcraft session's teardown and backdrop checks: both depend only on
+these rules.
+
+Its first capture (8 Oct) confirmed that matrix scale multiplies (row above)
+and drew nothing for `no-death-frozen` and `teardown-hidden`, as headless
+does. Both destroyed rulers, frozen and playing, were gone when it was taken,
+about 9 s after `DestroyEffect`, while headless keeps them drawn through a 30 s Death and,
+frozen, for good. The second capture's three destroy times bound how long
+3.0.1 keeps a destroyed effect drawn.
 
 ### Effect placement and unavailable effect setters
 
@@ -490,14 +496,14 @@ run in Bun (`test/animation.test.ts`) and 32-bit Lua (`test/runtime.test.ts`).
 | --- | --- | --- | --- |
 | Selecting by name | A name's leading words that are animation tags give one primary tag and a set of secondary tags; the first other word ends it (`Stand - 2` is stand). The sequence needs the primary tag and exactly that secondary set; failing that, the set sharing most requested tags; failing that, the primary tag's sequence with fewest tags (stand when the name has none). Effect sub-animations add tags | First sequence whose name contained every word, so `stand` could pick `Stand Hit` | **Mismatch, fixed** |
 | Equal variants | Drawn at random, weighted by rarity, on each client | First variant | **Unmatchable**: native picks differ per client. Wisp takes the first of the most common. Pool clip models have one sequence |
-| Selecting by index | An index outside the model selects no sequence; tracks take their defaults (identity pose) | Clamped to the last or first sequence | **Mismatch, fixed** |
+| Selecting by index | An index outside the model selects no sequence; tracks take their defaults (identity pose) | Clamped to the last or first sequence | **Mismatch, fixed to 3.0.1, which differs from Warsmash**: an index the model lacks shows Stand (8 Oct capture: index 99 drew Stand's frame 0), as an unknown name does |
 | Clock start on selection | Interval start; selecting again restarts | Restart | **Match** |
 | Time scale | Animation time advances by elapsed seconds × 1000 × scale; 0 freezes the clock, global sequences and blend | Clock matched; blend and global clock not modeled | **Match for the clock; the rest fixed** (rows below) |
 | Time scale across a selection | `SetUnitAnimation(ByIndex)` resets the speed to 1 | Keeps the set time scale | **Warsmash differs; no change**: Smashcraft sets the time scale after every selection, so both give the same result. The capture checks persistence |
 | Seek (`BlzSetSpecialEffectTime`) | No such native; the internal frame seek moves the sample time and spends no blend time | Set the elapsed time | **Match to the internal rule**; native seek units stay unresolved |
-| Sampled frame | Whole milliseconds; fractions kept in the clock | Fractional frame | **Mismatch, fixed** |
-| End of a looping sequence | On reaching interval end − 1 ms, restart at the start, dropping the overshoot | Wrapped modulo the interval length | **Mismatch, fixed**: the renderer replays the 60 Hz steps since the last selection or seek. A seek at or past the end shows the start |
-| End of a non-looping sequence | Hold at interval end − 1 ms | Held at the interval end | **Mismatch, fixed** |
+| Sampled frame | Whole milliseconds; fractions kept in the clock | Fractional frame | **Mismatch, fixed**: the clocks are held as binary32, so Bun and 32-bit Lua floor the same frame |
+| End of a looping sequence | On reaching interval end − 1 ms, restart at the start, dropping the overshoot | Wrapped modulo the interval length | **Match to 3.0.1, which differs from Warsmash**: wrapped by the interval length, keeping the overshoot, for play and seeks alike (8 Oct capture: 4.5 s of a 1002 ms loop drew 492; dropping the overshoot at 60 frames a second would give 433) |
+| End of a non-looping sequence | Hold at interval end − 1 ms | Held at the interval end | **Match to 3.0.1, which differs from Warsmash**: held on the interval end itself (8 Oct capture: the needle's last-millisecond jump showed) |
 | Effect with no selection | Plays Birth once, then Stand, which always loops; a unit shows Stand | Stand from creation | **Mismatch, fixed** |
 | Blend (`SetUnitBlendTime`, `BlzSetSpecialEffectAnimationBlendTime`) | On a selection with blend time > 0, after the instance has animated at least 1 ms, and with no blend running: save each node's local translation, rotation and scale. Each step spends the same animation time from the blend; the shown pose is new × (1 − r) + saved × r, rotation by shortest-arc slerp, r = remaining ÷ blend time. A selection during a blend leaves it running | Not modeled; `SetUnitBlendTime` was a consumer no-op | **Mismatch, fixed** in runtime and renderer. Wisp's unit blend time starts at 0 until set (Warcraft reads `uble`); effects start at 0. Smashcraft's pool sets 0, so its fighters are unchanged |
 | Global sequences | Whole milliseconds of animation time since creation, modulo the length (0 for length 0); kept across selections; seeks do not move it | Advanced to the seek time only for models with emitters, else 0 | **Mismatch, fixed** |
@@ -535,12 +541,24 @@ sets up all six items in one private 3.0.1 game, read from one screenshot:
 4. Blends: `blend-150` and `blend-0` 50 ms after a switch, and switches made
    at time scale 0 (`blend-switch-frozen`, `timescale-then-select`), which
    also decide whether a selection resets the speed to 1.
-5. `global-frozen`, `global-kept` (across a selection and a seek), and
-   `index-out-of-range`.
+5. `global-frozen`, `global-kept` (across a selection and a seek),
+   `index-out-of-range`, and a selection and seek made in the call that
+   freezes an effect (`select-freeze-seek`) or after it
+   (`freeze-then-select-seek`).
 6. Frame 262's calls on a ruler clip with Blademaster clip 48's interval and
    key times: collapsed and parked, then shown and sought to 0.4 s, without
    and with a second seek 50 ms later (`clip-shown`, `clip-second-seek`).
    The needle reads the seek in milliseconds from the interval start.
+
+The first capture (8 Oct, 3.0.1.24342, signed-in pair, Classic) decided the
+loop end, the non-looping hold and the bad index (rows above), and drew
+`clip-shown` and `clip-second-seek` at 399, so a frozen clip shown and sought
+to 0.4 s draws frame start + 400 natively too: frame 262 is not this seek.
+Its other rows were set up during the map's first second, when 3.0.1 ran
+the timers of 0.25 to 1 s in one frame before effects began to animate, and
+effects frozen in their creating call drew Birth's first frame. The ruler
+map now starts every case 3 s in; its second capture decides the rest,
+including whether a selection made while freezing an effect is kept.
 
 ### Collision, pathing and orders
 

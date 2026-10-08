@@ -518,12 +518,13 @@ Warcraft has no getter for an animation's frame, so `test/animation58/`
 draws each case as a ruler seen from straight above: a flat, team-colored
 model whose red needle stands at the sampled frame along X (a unit a
 millisecond) in a lane along Y that names the sequence, with a second red
-marker at the global sequence's frame and two yellow marks at the ruler's
-0 and 1000, all on a dark board. Its 26 rulers are wisp#58's animation
-playback cases (columns one and two) and wisp#59's Death, teardown and matrix
-scale cases (column three); each case freezes its clock when it is measured,
-so the capture can be taken at any moment from 6 to 30 game seconds after
-start. The models are MDL text compiled to MDX with war3-model
+marker at the global sequence's frame, a larger still red square as the
+origin both are read from, and two yellow marks at the ruler's 0 and 1000,
+all on a dark board. Its 30 rulers are wisp#58's animation playback cases
+(columns one and two) and wisp#59's Death, teardown and matrix scale cases
+(column three). Every case starts 3 game seconds after the map, clear of
+the first second, when 3.0.1 runs several timers in one frame before effects
+animate. The models are MDL text compiled to MDX with war3-model
 (`models.ts`), as Smashcraft's stage models are.
 
 ```sh
@@ -533,16 +534,21 @@ bun test/animation58/read.ts SCREENSHOT.png
 bun test/animation58/render.ts PRIVATE_DIR
 ```
 
-The native map writes `animation-p0.txt` and `animation-p1.txt` (`ready=26`)
-6 game seconds after start. `read.ts` finds the marks (any scale, rotation or
-mirroring: one extra mark left of the first ruler tells which way up), reads
-every ruler as `needle X,needle Y,global marker X` in world units, or `gone`,
-and compares it with `test/animation58/expected.ts`, within each ruler's
-timing allowance where a clock ran before it froze. It also prints the
-overshoot a 1002 ms loop lost in 4.5 s, against a reference clock, and how
-much later a destroyed effect's Death started than one told to play Death at
-the same moment. `render.ts` draws the headless view of the same moment;
-its reading matched all 26 rows on 8 October 2026.
+11 game seconds after start the native map writes `animation-p0.txt` and
+`animation-p1.txt`: `ready=30`, then where each ruler unit stands
+(`NAME-at=X×128,Y×128`). Take the capture within a few seconds of it: rulers
+destroyed 3, 2 and 1 s earlier tell how long a destroyed effect stays drawn.
+`read.ts` finds the marks (any scale, rotation or mirroring: one extra mark
+left of the first ruler tells which way up), reads every ruler from its
+drawn origin as `needle X,needle Y,global marker X` in world units, or
+`gone`, and compares it with `test/animation58/expected.ts`, within each
+ruler's timing allowance where a clock ran before it froze. Reading from the
+drawn origin keeps a model drawn away from its unit's position readable. It
+also prints the overshoot a 1002 ms loop lost in 4.5 s against a reference
+clock, when the capture was taken, how much later each destroyed ruler's
+Death started than the reference's (or that it was gone), and any ruler
+drawn more than 3 units from its slot. `render.ts` draws the headless view
+of the same moment; its reading matched all 30 rows on 8 October 2026.
 
 The 0.405 cutoff was identified in WurstScript's Apache-2.0
 [UnitProvider at 9913e1b](https://github.com/wurstscript/WurstScript/blob/9913e1bd300c2053637d756a11bae8c3c8ed568f/de.peeeq.wurstscript/src/main/java/de/peeeq/wurstio/jassinterpreter/providers/UnitProvider.java).

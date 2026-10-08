@@ -1,6 +1,6 @@
 import { type AnimationSequence, type SavedAnimation, type SequenceSample, animationSample, blendWeight, globalSequenceFrame } from "../../src/headless/animation";
 import type { EffectPose, UnitPose } from "../../src/headless/client";
-import { CLIP, CLIP_SEQUENCES, GLOBAL_LENGTH, RULER, RULER_SEQUENCES, RULER_UNIT, type RulerSequence, SLOTS, needleDx } from "./layout";
+import { CLIP, CLIP_SEQUENCES, CLOCK_DX, GLOBAL_LENGTH, ORIGIN_DY, RULER, RULER_SEQUENCES, RULER_UNIT, type RulerSequence, SLOTS, needleDx } from "./layout";
 
 const table = (sequences: readonly RulerSequence[]): AnimationSequence[] =>
   sequences.map(({ name, start, end, looping }) => ({ name, start, end, looping, rarity: 0 }));
@@ -15,15 +15,17 @@ function needle(sequences: readonly RulerSequence[], sample: SequenceSample): [n
 }
 
 const saved = (pose: EffectPose | UnitPose): SavedAnimation => ({
-  animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed, sought: pose.animationSought, ticks: pose.animationTicks,
+  animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed,
 });
 
 const round = (value: number) => Math.floor(value + 0.5);
 
 /**
- * One case's row: the needle's X and Y offsets and the global marker's X
- * offset, in world units from the ruler's origin, with the model stretched by
- * `scale` along X and Y.
+ * One case's row, as a screenshot measures it from the drawn origin square
+ * with the model stretched by `scale` along X and Y: the needle's X and Y
+ * offsets, and the global marker's X less its offset at frame 0, in world
+ * units. Unstretched, these are the needle's offsets and half the global
+ * frame.
  */
 function row(name: string, pose: EffectPose | UnitPose, kind: "effect" | "unit", clip: boolean, scale: readonly [number, number]): string {
   const sequences = clip ? CLIP_SEQUENCES : RULER_SEQUENCES;
@@ -36,8 +38,8 @@ function row(name: string, pose: EffectPose | UnitPose, kind: "effect" | "unit",
     dx = (1 - weight) * dx + weight * fromDx;
     dy = (1 - weight) * dy + weight * fromDy;
   }
-  const gx = globalSequenceFrame(pose.animationClock, GLOBAL_LENGTH) / 2;
-  return `${name}=${round(dx * scale[0])},${round(dy * scale[1])},${round(gx * scale[0])}`;
+  const gx = CLOCK_DX + globalSequenceFrame(pose.animationClock, GLOBAL_LENGTH) / 2;
+  return `${name}=${round(dx * scale[0])},${round((dy - ORIGIN_DY) * scale[1] + ORIGIN_DY)},${round(gx * scale[0] - CLOCK_DX)}`;
 }
 
 /** What the headless rules show on every ruler, found by its model and origin, in SLOTS order. */

@@ -3,7 +3,7 @@
 // is a flat, unshaded, unfogged, team-colored square, so a top-down
 // screenshot shows each part as one solid patch of its player color.
 import { generateMDX, parseMDL } from "../../vendor/war3-model.mjs";
-import { BOARD, CLIP, CLIP_SEQUENCES, CLOCK_DY, GLOBAL_LENGTH, MARK, RULER, RULER_SEQUENCES, type RulerSequence } from "./layout";
+import { BOARD, BOARD_EXTENT, CLIP, CLIP_SEQUENCES, CLOCK_DX, CLOCK_DY, GLOBAL_LENGTH, MARK, ORIGIN_DY, ORIGIN_HALF, RULER, RULER_SEQUENCES, type RulerSequence } from "./layout";
 
 type Vector3 = readonly [number, number, number];
 
@@ -43,21 +43,21 @@ interface ModelText {
   readonly name: string;
   readonly quads: readonly Quad[];
   readonly sequences: readonly RulerSequence[];
-  /** Bone 0's translation keys as frame, X and Y; bone 1 follows the global sequence when there is one. */
+  /** Bone 0's translation keys as frame, X and Y; bone 1 follows the global sequence when there is one, and bone 2 stays still. */
   readonly needle: readonly (readonly [frame: number, dx: number, dy: number])[];
   readonly globalLength?: number;
 }
 
 function mdl(model: ModelText): string {
   const points = model.quads.flatMap(({ low, high, z }) => [[low[0], low[1], z], [high[0], high[1], z]]);
-  const xs = [...points.map(([x]) => x ?? 0), ...model.needle.map(([, dx]) => dx), ...(model.globalLength === undefined ? [] : [model.globalLength / 2])];
+  const xs = [...points.map(([x]) => x ?? 0), ...model.needle.map(([, dx]) => dx), ...(model.globalLength === undefined ? [] : [CLOCK_DX + model.globalLength / 2])];
   const ys = [...points.map(([, y]) => y ?? 0), ...model.needle.map(([, , dy]) => dy)];
   const [lowX, lowY, highX, highY] = [Math.min(...xs) - 10, Math.min(...ys) - 10, Math.max(...xs) + 10, Math.max(...ys) + 10];
   const low = [lowX, lowY, 0];
   const high = [highX, highY, 10];
   const radius = Math.ceil(Math.hypot(Math.max(-lowX, highX), Math.max(-lowY, highY), 10));
   const extent = `MinimumExtent ${vector(low)}, MaximumExtent ${vector(high)}, BoundsRadius ${radius},`;
-  const bones = model.globalLength === undefined ? 1 : 2;
+  const bones = model.globalLength === undefined ? 1 : 3;
   const needle = model.needle.length === 0 ? "" : `Translation ${model.needle.length} {
         Linear,
         ${model.needle.map(([frame, dx, dy]) => `${frame}: ${vector([dx, dy, 0])},`).join("\n        ")}
@@ -65,6 +65,7 @@ function mdl(model: ModelText): string {
   const clock = model.globalLength === undefined ? "" : `Bone "Clock" { ObjectId 1, GeosetId Multiple, GeosetAnimId None,
     Translation 2 { Linear, GlobalSeqId 0, 0: { 0, 0, 0 }, ${model.globalLength}: ${vector([model.globalLength / 2, 0, 0])}, }
 }
+Bone "Origin" { ObjectId 2, GeosetId Multiple, GeosetAnimId None, }
 `;
   return `Version { FormatVersion 800, }
 Model "${model.name}" { NumGeosets ${model.quads.length}, NumBones ${bones}, BlendTime 150, ${extent} }
@@ -89,7 +90,8 @@ function needleKeys(sequences: readonly RulerSequence[]): [number, number, numbe
 }
 
 function ruler(name: string, sequences: readonly RulerSequence[]): string {
-  return mdl({ name, quads: [square(0, 0, 0, 5, 6), square(1, 0, CLOCK_DY, 5, 6)], sequences, needle: needleKeys(sequences), globalLength: GLOBAL_LENGTH });
+  const quads = [square(0, 0, 0, 5, 6), square(1, CLOCK_DX, CLOCK_DY, 5, 6), square(2, 0, ORIGIN_DY, ORIGIN_HALF, 6)];
+  return mdl({ name, quads, sequences, needle: needleKeys(sequences), globalLength: GLOBAL_LENGTH });
 }
 
 const STILL: readonly RulerSequence[] = [{ name: "Stand", start: 0, end: 1000, looping: true, lane: 0, keys: [] }];
@@ -100,7 +102,7 @@ export const FIXTURE_MDL: Readonly<Record<string, string>> = {
   [CLIP]: ruler("Wisp58Clip", CLIP_SEQUENCES),
   [MARK]: mdl({ name: "Wisp58Mark", quads: [square(0, 0, 0, 6, 4)], sequences: STILL, needle: [] }),
   // Under every ruler of both columns, so the screenshot reads them against one dark color.
-  [BOARD]: mdl({ name: "Wisp58Board", quads: [{ bone: 0, low: [-1780, -530], high: [1740, 610], z: 1 }], sequences: STILL, needle: [] }),
+  [BOARD]: mdl({ name: "Wisp58Board", quads: [{ bone: 0, ...BOARD_EXTENT, z: 1 }], sequences: STILL, needle: [] }),
 };
 
 /** The compiled models, by their path in the map. */

@@ -2,6 +2,7 @@
 // headless runtime, which keeps each clock, and the renderer, which samples
 // the model. The rules and their evidence are listed in
 // wisp:docs/warsmash-notes.md, "Animation playback".
+import { f32 } from "../sim/f32";
 import { floorMod } from "../sim/intMath";
 
 /** A model sequence: its MDX interval in milliseconds. */
@@ -18,8 +19,6 @@ export interface SavedAnimation {
   readonly animation: string | number | undefined;
   readonly subAnimations: readonly (string | number)[];
   readonly elapsed: number;
-  readonly sought: number;
-  readonly ticks: number;
 }
 
 export interface AnimationBlend {
@@ -34,10 +33,6 @@ export interface AnimationState {
   subAnimations: (string | number)[];
   /** Seconds into the current animation: the last seek plus the time advanced since. */
   animationElapsed: number;
-  /** Where the last selection (0) or seek put the clock. */
-  animationSought: number;
-  /** Frames that moved the clock since the last selection or seek. */
-  animationTicks: number;
   /** Animation time since creation, which drives the model's global sequences; selections and seeks keep it. */
   animationClock: number;
   animationBlendTime: number;
@@ -45,8 +40,7 @@ export interface AnimationState {
 }
 
 export function freshAnimation(): AnimationState {
-  return { animation: undefined, subAnimations: [], animationElapsed: 0, animationSought: 0, animationTicks: 0,
-    animationClock: 0, animationBlendTime: 0, animationBlend: undefined };
+  return { animation: undefined, subAnimations: [], animationElapsed: 0, animationClock: 0, animationBlendTime: 0, animationBlend: undefined };
 }
 
 /**
@@ -57,34 +51,32 @@ export function freshAnimation(): AnimationState {
 export function selectAnimation(state: AnimationState, animation: string | number, subAnimations?: readonly (string | number)[]): void {
   if (state.animationBlendTime > 0 && state.animation !== undefined && state.animationBlend === undefined && state.animationClock * 1000 >= 1) {
     state.animationBlend = {
-      from: { animation: state.animation, subAnimations: [...state.subAnimations], elapsed: state.animationElapsed, sought: state.animationSought, ticks: state.animationTicks },
-      remaining: state.animationBlendTime * 1000,
+      from: { animation: state.animation, subAnimations: [...state.subAnimations], elapsed: state.animationElapsed },
+      remaining: f32(state.animationBlendTime * 1000),
     };
   }
   state.animation = animation;
   if (subAnimations !== undefined) state.subAnimations = [...subAnimations];
   state.animationElapsed = 0;
-  state.animationSought = 0;
-  state.animationTicks = 0;
 }
 
 /** A seek moves the sample time without spending blend time. */
 export function seekAnimation(state: AnimationState, seconds: number): void {
   state.animationElapsed = seconds;
-  state.animationSought = seconds;
-  state.animationTicks = 0;
 }
 
-/** One frame: the clock, the global clock and the blend all move by elapsed × time scale. */
+/**
+ * One frame: the clock, the global clock and the blend all move by elapsed ×
+ * time scale, held as binary32 so Bun and 32-bit Lua floor the same frames.
+ */
 export function advanceAnimation(state: AnimationState, timeScale: number, frameSeconds: number): void {
-  const step = timeScale * frameSeconds;
+  const step = f32(timeScale * frameSeconds);
   if (step === 0) return;
-  state.animationElapsed += step;
-  state.animationClock += step;
-  state.animationTicks++;
+  state.animationElapsed = f32(state.animationElapsed + step);
+  state.animationClock = f32(state.animationClock + step);
   const blend = state.animationBlend;
   if (blend === undefined) return;
-  blend.remaining -= step * 1000;
+  blend.remaining = f32(blend.remaining - f32(step * 1000));
   if (blend.remaining <= 0) state.animationBlend = undefined;
 }
 
@@ -200,23 +192,14 @@ export function selectSequence(sequences: readonly AnimationSequence[], animatio
 }
 
 /**
- * The integer MDX frame a sequence shows. The clock starts where the last
- * selection or seek put it and moves by an even step on each of `ticks`
- * frames. Reaching the interval end minus 1 ms, a looping sequence restarts
- * at its start, dropping the overshoot; any other holds there.
+ * The integer MDX frame a sequence shows `ms` milliseconds after it was
+ * selected or sought. A looping sequence wraps by its length, keeping the
+ * overshoot; any other holds on its interval end.
  */
-export function sequenceFrame(sequence: AnimationSequence, soughtMs: number, advancedMs: number, ticks: number, looping = sequence.looping): number {
-  const start = sequence.start;
-  const last = Math.max(start, sequence.end - 1);
-  let position = start + soughtMs;
-  if (position >= last) position = looping ? start : last;
-  if (ticks <= 0 || advancedMs <= 0) return Math.floor(position);
-  if (!looping) return Math.floor(Math.min(last, position + advancedMs));
-  const step = advancedMs / ticks;
-  const first = Math.max(1, Math.ceil((last - position) / step));
-  if (ticks < first) return Math.floor(position + ticks * step);
-  const period = Math.max(1, Math.ceil((last - start) / step));
-  return Math.floor(start + floorMod(ticks - first, period) * step);
+export function sequenceFrame(sequence: AnimationSequence, ms: number, looping = sequence.looping): number {
+  const length = sequence.end - sequence.start;
+  if (length <= 0) return sequence.start;
+  return sequence.start + Math.floor(looping ? floorMod(ms, length) : Math.min(ms, length));
 }
 
 export interface SequenceSample {
@@ -226,19 +209,17 @@ export interface SequenceSample {
 }
 
 /**
- * The sequence and frame an animation state shows. A name that selects
- * nothing keeps Stand. A unit never told what to play shows Stand; an
- * effect shows Birth once, then Stand looping.
+ * The sequence and frame an animation state shows. A name or index that
+ * selects nothing shows Stand. A unit never told what to play shows Stand;
+ * an effect shows Birth once, then Stand looping.
  */
 export function animationSample(sequences: readonly AnimationSequence[], animation: SavedAnimation, kind: "effect" | "unit"): SequenceSample {
-  const soughtMs = animation.sought * 1000;
-  const advancedMs = (animation.elapsed - animation.sought) * 1000;
-  const ticks = animation.ticks;
+  const ms = f32(animation.elapsed * 1000);
   if (animation.animation !== undefined) {
     let index = selectSequence(sequences, animation.animation, animation.subAnimations);
-    if (index < 0 && typeof animation.animation === "string") index = selectSequence(sequences, "stand");
+    if (index < 0) index = selectSequence(sequences, "stand");
     const sequence = sequences[index];
-    return sequence === undefined ? { sequence: -1, frame: 0 } : { sequence: index, frame: sequenceFrame(sequence, soughtMs, advancedMs, ticks) };
+    return sequence === undefined ? { sequence: -1, frame: 0 } : { sequence: index, frame: sequenceFrame(sequence, ms) };
   }
   let standIndex = selectSequence(sequences, "stand");
   if (standIndex < 0 && sequences.length > 0) standIndex = 0;
@@ -246,20 +227,16 @@ export function animationSample(sequences: readonly AnimationSequence[], animati
   const birthIndex = kind === "effect" ? selectSequence(sequences, "birth") : -1;
   const birth = sequences[birthIndex];
   if (birth !== undefined && animationTags(birth.name).primary.includes("birth")) {
-    const last = Math.max(birth.start, birth.end - 1);
-    const position = birth.start + soughtMs;
-    const step = ticks > 0 ? advancedMs / ticks : 0;
-    const birthTicks = position >= last ? 0 : step > 0 ? Math.max(1, Math.ceil((last - position) / step)) : ticks + 1;
-    if (stand === undefined || ticks < birthTicks) return { sequence: birthIndex, frame: sequenceFrame(birth, soughtMs, advancedMs, ticks, false) };
-    const after = ticks - birthTicks;
-    return { sequence: standIndex, frame: sequenceFrame(stand, 0, after * step, after, true) };
+    const length = birth.end - birth.start;
+    if (stand === undefined || ms < length) return { sequence: birthIndex, frame: sequenceFrame(birth, ms, false) };
+    return { sequence: standIndex, frame: sequenceFrame(stand, ms - length, true) };
   }
   if (stand === undefined) return { sequence: -1, frame: 0 };
-  return { sequence: standIndex, frame: sequenceFrame(stand, soughtMs, advancedMs, ticks, kind === "effect" ? true : stand.looping) };
+  return { sequence: standIndex, frame: sequenceFrame(stand, ms, kind === "effect" ? true : stand.looping) };
 }
 
 /** A global sequence's frame: integer animation time since creation, wrapped by its length. */
 export function globalSequenceFrame(clockSeconds: number, length: number): number {
   if (length <= 0) return 0;
-  return floorMod(Math.floor(clockSeconds * 1000), length);
+  return floorMod(Math.floor(f32(clockSeconds * 1000)), length);
 }

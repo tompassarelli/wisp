@@ -48,8 +48,8 @@ export function sceneWithUnits(project: HeadlessRenderProject, scene: RenderScen
     const model = project.unitModels?.[unit.typeId];
     if (model === undefined) throw new Error(`no render.unitModels entry for visible unit type ${unit.typeId}`);
     return { handle: unit.handle, model, created: 0, x: unit.x, y: unit.y, z: unit.z, alpha: unit.alpha, scale: 1, timeScale: unit.timeScale,
-      animation: unit.animation, subAnimations: unit.subAnimations, animationElapsed: unit.animationElapsed, animationSought: unit.animationSought,
-      animationTicks: unit.animationTicks, animationClock: unit.animationClock, animationBlendTime: unit.animationBlendTime, animationBlend: unit.animationBlend,
+      animation: unit.animation, subAnimations: unit.subAnimations, animationElapsed: unit.animationElapsed,
+      animationClock: unit.animationClock, animationBlendTime: unit.animationBlendTime, animationBlend: unit.animationBlend,
       unit: true, queuedAnimations: [], yaw: unit.facing * Math.PI / 180, pitch: 0, roll: 0, color: unit.color, teamColor: unit.teamColor, matrixScale: unit.scale, flat: unit.scale.some((value) => value === 0) };
   });
   return { ...scene, effects: [...scene.effects, ...units] };
