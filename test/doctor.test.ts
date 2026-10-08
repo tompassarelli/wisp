@@ -126,6 +126,7 @@ function world(scenario: Scenario) {
       source = "socket";
     }),
     start: () => Effect.die("doctor starts a client's command as a service"),
+    startLock: () => Effect.succeed(Effect.void),
     startService: (unit, command) => Effect.sync(() => {
       events.push(`start ${command.at(-1)} as ${unit}`);
       processes = [...processes, wineserver(60001), launcherProcess(60002)];

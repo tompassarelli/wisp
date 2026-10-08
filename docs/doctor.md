@@ -206,6 +206,16 @@ its Battle.net signed in by itself, and its game reached the main menu 3.5
 minutes after the command started; the starting command had exited and the
 client kept running.
 
+### One start at a time
+
+Clients start one at a time, and the lock enforces it: before doctor (and so
+`client start`) starts a client's Battle.net or game, it takes the machine's
+start lock, `~/.local/state/wisp/online/client-start.lock`, and holds it until
+that client reaches its menus or doctor stops, or 300 s pass. A second start
+waits, printing who holds the lock; a client already running is unaffected.
+On 8 October clone-a crashed 1.8 s after clone-d's game started beside it
+(wisp:scripts/wisp/startLock.ts, wisp:test/startLock.test.ts).
+
 ## Declare it
 
 The game adds the command with `makeDoctor`
