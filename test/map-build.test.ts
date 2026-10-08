@@ -3,10 +3,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit } from "effect";
 import { expect, test } from "bun:test";
-import { packageEntries, runProcess, stageMap, verifyToolchain, withFileIo, writeHeader } from "../scripts/wisp/mapBuild";
+import { baseMapEntryNames, packageEntries, runProcess, stageMap, verifyToolchain, withFileIo, writeHeader } from "../scripts/wisp/mapBuild";
 import { abilityData, encodeObjectData } from "../scripts/objectData";
 
 const project = join(import.meta.dir, "..");
+
+test("[repro #85] custom minimap imports replace the base texture instead of verifying both versions", () => {
+  expect(baseMapEntryNames("war3mapMap.blp\nwar3map.w3i\nwar3map.mmp\n", [
+    { entry: "war3mapmap.blp", source: "lineup.blp" },
+    { entry: "war3map.w3i", source: "generated-info" },
+  ])).toEqual(["war3map.mmp"]);
+});
 
 test("[spec AGENTS.md] the installed TypeScript toolchain matches typescript-toolchain.lock", async () => {
   await Effect.runPromise(verifyToolchain(join(project, "typescript-toolchain.lock"), project));
