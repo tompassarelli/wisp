@@ -2,6 +2,16 @@
 
 ## Direction
 
+Wisp exists to verify Warcraft III maps without waiting on Warcraft III.
+Every check that still needs a native client is a gap to close: move it
+headless (simulation, cost model, rendered frames, cue logs), or drive the
+offline client from inside (wisp:docs/driving-warcraft.md), never
+through the OS keyboard or chat. Judge each step by checks per hour per
+machine and by setup failures, and prefer the frontier move over another
+workaround around the client.
+A native check of a TypeScript-only change hot-reloads into the running
+match (`wisp hot --watch`, wisp:docs/hot-reload.md) instead of rebuilding.
+
 Before implementing a feature here or in a consuming map, consult the
 [feature index](docs/index.md) (wisp:docs/index.md) for existing capabilities
 and opt-in setup, especially TypeScript stack traces. A feature isn't done

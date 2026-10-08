@@ -66,6 +66,12 @@ export const clientsDoctor = (declaration: DoctorDeclaration, names: readonly st
     return yield* doctor(yield* doctorTargets(declaration, names), print);
   }).pipe(Effect.provide(doctorLayer(declaration, tools)));
 
+/** `doctor [CLIENT...]`, watching the clients through `watch` (`wisp client watch`'s ClientWatch layer) */
+export const makeDoctor = (declaration: DoctorDeclaration, watch: Layer.Layer<ClientWatch, CommandFailure>, tools: Partial<PlayTools> = {}): Command => (names) =>
+  names.some((name) => name.startsWith("-"))
+    ? Effect.fail(new UsageFailure({ problem: "doctor takes client names only" }))
+    : clientsDoctor(declaration, names, (line) => console.log(line), tools).pipe(Effect.provide(watch), Effect.asVoid);
+
 /** `sign-out CLIENT...`: signs the named clients out of Battle.net (wisp:docs/doctor.md, "Sign out"); `doctor` signs them in again. */
 export const makeSignOut = (declaration: DoctorDeclaration, tools: Partial<PlayTools> = {}): Command => (names) =>
   names.length === 0 || names.some((name) => name.startsWith("-"))

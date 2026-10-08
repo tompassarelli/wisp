@@ -613,6 +613,18 @@ export const doctor = (targets: readonly DoctorTarget[], print: (line: string) =
 /** True when doctor recovered something, so a run that failed may now pass. */
 export const recoveredAny = (results: readonly DoctorResult[]) => results.some((result) => result.recovered.length > 0);
 
+/**
+ * Runs `run` on healthy clients: `check` (a doctor run, such as
+ * `doctor(targets, print)` with its services) first, and once more after a
+ * failure; when that recovered something and `retry` allows (the default),
+ * `run` tries again, up to `attempts` runs in all (2 by default). A failure doctor can't explain stands, and so does
+ * any failure of a run that can't repeat (a capture into its own folder): its
+ * clients are healed for the next run. `check` runs apart from `run`, so a
+ * watch it holds (a menu report port) is free again while `run` runs.
+ */
+export const withDoctor = <A, E, R, E2, R2>(check: Effect.Effect<readonly DoctorResult[], E2, R2>, print: (line: string) => void, run: Effect.Effect<A, E, R>, { retry = true, attempts = 2 }: { readonly retry?: boolean; readonly attempts?: number } = {}) =>
+  healedRun(check, print, run, retry, attempts);
+
 const healedRun = <A, E, R, E2, R2>(check: Effect.Effect<readonly DoctorResult[], E2, R2>, print: (line: string) => void, run: Effect.Effect<A, E, R>, retry: boolean, attempts: number) => Effect.gen(function*() {
   yield* check;
   for (let attempt = 1; ; attempt++) {

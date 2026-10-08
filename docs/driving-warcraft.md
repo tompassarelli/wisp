@@ -289,6 +289,12 @@ facts only). Wisp copies no file from any of them.
 code switch is made only after a check that the client can reach nothing but
 loopback.
 
+**What it replaces.** Bot and parity sessions run on as many pairs as the
+machine admits, in parallel, instead of on the two signed-in clients. The
+host logs every turn's actions and compares every client's checksum each turn
+(wisp:docs/lan.md). Owner playtests and
+anything Battle.net itself must show keep the menu socket.
+
 **Limits:**
 
 - Builds checked: 3.0.0.24268.

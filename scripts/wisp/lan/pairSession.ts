@@ -32,7 +32,6 @@ const profile = poolProfile(profileName, fpsText === undefined ? undefined : Num
 if (launcher === undefined) throw new Error("pairSession takes --pair K --pool-profile parity|visual --launcher PRIVATE_DESKTOP_SH");
 const directory = pairDirectory(pair);
 mkdirSync(directory, { recursive: true });
-rmSync(join(directory, "startup-error.json"), { force: true });
 const size = desktopSize(profile);
 
 const session = Effect.gen(function*() {
@@ -52,7 +51,7 @@ const session = Effect.gen(function*() {
   if (!existsSync(join(runB, "active"))) return yield* new LanFailure({ problem: `client b's desktop isn't active: ${runB}` });
   yield* Effect.tryPromise({ try: () => Bun.write(join(directory, "desktop-b.run"), runB), catch: (cause) => new LanFailure({ problem: String(cause) }) });
   const desktopA = yield* spawnLogged(ChildProcess.make(launcher, ["start", "--resolution", size, "--", "bwrap", "--dev-bind", "/", "/", "--unshare-net", "--die-with-parent", "--",
-    process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", profileName, "--run-b", runB, "--session-pid", String(process.pid), "--capacity", capacity, ...(process.argv.includes("--locate-before-peer") ? ["--locate-before-peer"] : []), ...(fpsText === undefined ? [] : ["--fps", fpsText])], {
+    process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", profileName, "--run-b", runB, "--session-pid", String(process.pid), "--capacity", capacity, ...(fpsText === undefined ? [] : ["--fps", fpsText])], {
     stdin: "ignore", forceKillAfter: "15 seconds",
   }), { stdout: join(directory, "desktop-a.out"), stderr: join(directory, "desktop-a.err") });
   yield* Effect.raceFirst(desktopA.handle.exitCode, desktopB.exitCode);

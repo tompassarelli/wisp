@@ -240,6 +240,8 @@ Pool clients are named `lan<K>a` and `lan<K>b`. The pool writes three files
 under `$XDG_STATE_HOME/wisp/lan/` (default `~/.local/state/wisp/lan/`):
 
 - `pool.json`: its pairs, their agent sockets and desktops;
+- `clients.json`: every pool client in the clients-file schema
+  (`WISP_CLIENTS=~/.local/state/wisp/lan/clients.json`);
 - `pair-K/clients.json`: one pair's clients, named `a` and `b`, for tools
   written against two clients A and B.
 
@@ -534,10 +536,6 @@ that names its start time, then one line per event, in seconds since then:
   logs align between actions.
 - **Event lines** cover joins, map checks, phases, loads, leaves (with their
   reason), chat, and every desync, with each client's checksum.
-
-```
-256.614 birth 4281 CAgentBaseAbs owner CPlayerChatMatchEventData in turn 4470; 2 turns after turn 4468: lan0b chat trigger=10a3:10a3 text="-dev quick"; ...
-```
 
 Tests replay a recorded exchange of two offline clients through the host
 (wisp:test/fixtures/lan/offline-pair.packets, wisp:test/lan.test.ts).

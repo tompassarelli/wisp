@@ -7,6 +7,14 @@ const waits = /Bun\.spawn|spawnSync|setTimeout|Bun\.sleep|fetch\(|new Promise/;
 const importsEffect = /(?:from|import)\s*\(?\s*["'](?:effect|@effect\/[^"'/]+)(?:\/[^"']*)?["']/;
 // Pages served to a browser run there, not under Bun.
 const browserPages = (file: string) => file.startsWith("scripts/wisp/browser/") || file === "scripts/wisp/reproViewerPage.ts" || file === "scripts/wisp/tunePage.ts";
+// Written before the rule. This list only shrinks: convert a file, then remove it.
+const notYetEffect = [
+  "scripts/package.ts",
+  "scripts/wisp/lan/map.ts",
+  "scripts/wisp/panelServer.ts",
+  "scripts/wisp/restorePreferences.ts",
+];
+
 // AGENTS.md: host tools that start processes or wait are Effect programs.
 test("[spec AGENTS.md] host tools under scripts/ that start processes or wait import Effect", async () => {
   const problems: string[] = [];
