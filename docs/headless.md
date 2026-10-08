@@ -307,7 +307,7 @@ headless: {
 },
 ```
 
-`headless [JOURNEY] [--clients N] [--cost]` plays the named journey, or the first, in
+`headless [JOURNEY] [--clients N] [--step N] [--runs N] [--cost]` plays the named journey, or the first, in
 N clients (2 by default, at most 4, the slots Wisp's per-player files cover)
 and prints each client's calls and checksum, the first desync, a reload not
 running, each client's error report file and thrown stack, and each client's
@@ -317,6 +317,48 @@ perf)`), it then plays the journey in 32-bit Lua and prints each client's
 predicted native cost per frame ([frame cost](frame-cost.md#predicted-native-cost)).
 The entry module loads when the command runs, so the
 project's host type check never reads map code.
+
+### Scripted driver and fast-forward
+
+Under [M1](https://github.com/tompassarelli/wisp/issues/75), the supported
+replacement for #38's offline native driver and #39's native fast-forward is
+`headless`. Journey key events go straight into the running map's registered
+callbacks; chat events invoke its registered map handler directly. Neither
+uses an OS keyboard, a chat window, a lobby, or a Warcraft process.
+`--journey FILE.json` accepts a game's scripted journey, including held-key
+events with `down: true` and `down: false`.
+
+`--step N` advances at most N simulation frames per call, preserving every
+input and observation frame. Without it, the driver advances straight to the
+next event. Both modes run without waiting for wall time or drawing frames.
+For interactive stepping, `Lockstep.start()`, `key()`, and `frames(N)` give
+the same control: between calls the simulation is paused. `RealtimeClients`
+is the separate real-time adapter for a live input helper.
+
+`--runs N` creates fresh clients for each start, compares their call counts
+and checksums with the first run, and stops at the first failed run. JSON
+mode emits one result per run plus a `benchmark` record with `runs`,
+`requestedRuns`, total `frames`, failed-run count, `elapsedMs`, `cpuMs`, and
+`speedMultiple` (simulated seconds divided by wall seconds). CPU is for the
+whole Wisp process, including all simulated clients; it is not native-client
+CPU. Rendering captures use one run.
+
+The sample map supplies a runnable command from the Wisp checkout:
+
+```sh
+bun examples/sample/scripts/sample.ts headless ping-reload --step 1 --runs 50 --json
+bun examples/sample/scripts/sample.ts headless ping-reload --runs 20 --json
+```
+
+Compare the result clients' checksums between those commands to check stepped
+and normal execution. These are Wisp determinism and setup measurements.
+Warcraft now supplies fidelity reference captures, replayed through the
+consumer's `parity corpus`; [timer rules](warsmash-notes.md#timers-and-frame-stepping)
+and [network timing](network-model.md) describe the current references.
+This driver does not measure Warcraft's engine loop or native LAN protocol.
+The legacy `engine drive` vocabulary entry describes an opted-in native map
+bridge, not this command. Native process writes or traps remain restricted
+to verifiably offline loopback clients; M1 checks do not require them.
 
 ### Rendered frames and sound cues
 

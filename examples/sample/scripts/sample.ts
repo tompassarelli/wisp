@@ -89,7 +89,7 @@ runMainCli("bun examples/sample/scripts/sample.ts", {
     load: async () => (await import("wisp/scripts/wisp/commands/lan")).lan,
   },
   headless: {
-    usage: "[ping-reload] [--clients N]",
+    usage: "[ping-reload] [--clients N] [--step N] [--runs N] [--json]",
     load: async () => {
       const { makeHeadless } = await import("wisp/scripts/wisp/commands/headless");
       return makeHeadless(async () => {

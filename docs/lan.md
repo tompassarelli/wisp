@@ -1,5 +1,28 @@
 # Offline LAN clients
 
+For M1 checks, use the [Wisp scripted driver](headless.md#scripted-driver-and-fast-forward)
+instead of starting Warcraft. #38 and #39's native setup/fast-forward goals
+were replaced by this path when [#75](https://github.com/tompassarelli/wisp/issues/75)
+removed Warcraft as a test dependency. Native clients supply fidelity captures.
+
+Measured 8 October 2026 with the sample map's 120-frame `ping-reload` journey,
+two Wisp clients, under the existing shared-machine load:
+
+| Path | Starts | Setup failures / divergence | Wall time | Speed | CPU |
+| --- | ---: | --- | ---: | ---: | ---: |
+| Native baseline from #38 | one new game per check | not measured here | 42–64 s to start; about 24 s/check | real time | not measured here |
+| Wisp `headless ping-reload --step 1 --runs 50 --json` | 50 | 0 / 0 | 1.145 s total; 22.9 ms/start and check | 87.3x | 1.536 s total process CPU |
+| Wisp `headless ping-reload --runs 20 --json` | 20 | 0 / 0 | 0.561 s total; 28.1 ms/start and check | 71.3x | 0.720 s total process CPU |
+
+All 70 runs and both clients had checksum `-123668497`, including stepped
+versus normal execution. The measured throughput is about 157,000 and 128,000
+sample checks/hour, calculated from each batch, versus 150/hour at the native
+24-second check baseline. The process loaded the map once before each batch;
+end-to-end command times including loading and JSON output were 1.180 s and
+0.595 s. These are sample-map Wisp measurements, not a native LAN measurement
+or the duration of Smashcraft's full parity batch. No frames are drawn and
+no wall-clock waits or engine memory writes are used.
+
 `wisp lan` runs Warcraft III 3.0 clients that never sign in to Battle.net, in
 pairs that play LAN matches hosted by Wisp itself. The host relays every turn,
 so it logs every player's actions and compares every client's state checksum
