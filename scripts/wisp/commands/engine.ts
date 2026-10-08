@@ -32,6 +32,7 @@ import { stopWatch } from "../engine/stopWatch";
 import { type Frame, parsePerfData, sampleFrames } from "../engine/perfData";
 import { toTypeScript } from "../../sourceMaps";
 import { watchedClients } from "../clientWatchCommand";
+import { captureProcess } from "../mapBuild";
 import { publishDriverCommand, readDriverStatus, verifyDriverClients, waitDriverCommand } from "../engine/drive";
 
 export class EngineFailure extends Schema.TaggedError<EngineFailure>()("EngineFailure", {
@@ -56,6 +57,10 @@ const namedClients = (clientsFile: string, args: readonly string[]) => Effect.ge
     return { name, prefix: prefixOfDocuments(documents), documents };
   });
 });
+
+/** The map's source maps turn Lua chunk lines in `text` into TypeScript lines. */
+const mapToTypeScript = (text: string, sourceMaps: string) =>
+  Effect.tryPromise({ try: () => toTypeScript(text, sourceMaps), catch: (cause) => new EngineFailure({ problem: `read source maps in ${sourceMaps}: ${describeCause(cause)}` }) });
 
 const attachAll = (clients: readonly EngineClient[], access: EngineAccess) => Effect.forEach(clients, (client) =>
   attempt(`attach ${client.name}`, () => attachClient(client, access)).pipe(Effect.flatMap((result) => typeof result === "string" ? Effect.fail(new EngineFailure({ problem: result })) : Effect.succeed(result))));
@@ -111,7 +116,7 @@ const diff: Command = (args) => Effect.gen(function*() {
   const logs = texts.map(parsePresenceLog);
   const report = diffPresenceLogs([paths[0] ?? "", paths[1] ?? ""], logs[0] ?? [], logs[1] ?? [], { skew, limit });
   // Code callbacks carry the chunk and line their Lua function was defined at; the map's source maps turn them into TypeScript lines.
-  yield* Console.log(sourceMaps === undefined ? report : yield* Effect.promise(() => toTypeScript(report, sourceMaps)));
+  yield* Console.log(sourceMaps === undefined ? report : yield* mapToTypeScript(report, sourceMaps));
 });
 
 const poll = (clientsFile: string): Command => (args) => Effect.gen(function*() {
@@ -135,9 +140,11 @@ const perfProgram = (args: readonly string[]) => Effect.gen(function*() {
   if (given !== undefined) return given;
   const found = Bun.which("perf");
   if (found !== null) return found;
-  const built = Bun.spawnSync(["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#perf"], { stdout: "pipe", stderr: "pipe" });
-  if (built.exitCode !== 0) return yield* new EngineFailure({ problem: `no perf on PATH and nix couldn't build nixpkgs#perf: ${built.stderr.toString().trim()}; pass --perf BIN` });
-  return join(built.stdout.toString().trim().split("\n")[0] ?? "", "bin/perf");
+  const built = yield* captureProcess("build nixpkgs#perf", "nixpkgs#perf", ["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#perf"]).pipe(
+    Effect.mapError((failure) => new EngineFailure({ problem: `no perf on PATH and nix couldn't build nixpkgs#perf: ${failure.message}; pass --perf BIN` })),
+  );
+  if (built.exitCode !== 0) return yield* new EngineFailure({ problem: `no perf on PATH and nix couldn't build nixpkgs#perf: ${built.stderr.trim()}; pass --perf BIN` });
+  return join(built.stdout.trim().split("\n")[0] ?? "", "bin/perf");
 });
 
 const perfAllowed = Effect.suspend(() => {
@@ -145,16 +152,16 @@ const perfAllowed = Effect.suspend(() => {
   return level <= 2 ? Effect.void : Effect.fail(new EngineFailure({ problem: `perf can't watch another process at kernel.perf_event_paranoid=${level}; with the owner's agreement: sudo sysctl kernel.perf_event_paranoid=2 (restore: sudo sysctl kernel.perf_event_paranoid=${level})` }));
 });
 
-/** Records every write to `address` in `pid` for `seconds` with the user stack, by a hardware breakpoint. */
-const recordWrites = (perf: string, pid: number, address: number, seconds: number, file: string) => Effect.tryPromise({
-  try: async () => {
-    const child = Bun.spawn([perf, "record", "-q", "-e", `mem:0x${address.toString(16)}/4:w`, "-p", String(pid), "--call-graph", "dwarf,4096", "-o", file, "--", "sleep", String(seconds)], { stdout: "pipe", stderr: "pipe" });
-    const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
-    if (code !== 0 || !existsSync(file)) throw new Error(`perf record exited with ${code}: ${stderr.trim()}`);
-    return parsePerfData(readFileSync(file));
-  },
-  catch: (cause) => new EngineFailure({ problem: `watch pid ${pid}: ${describeCause(cause)}` }),
-});
+/**
+ * Records every write to `address` in `pid` for `seconds` with the user stack,
+ * by a hardware breakpoint. Interrupting the step kills perf, which removes the
+ * breakpoint from the Warcraft process.
+ */
+const recordWrites = (perf: string, pid: number, address: number, seconds: number, file: string) => Effect.gen(function*() {
+  const { exitCode, stderr } = yield* captureProcess(`watch pid ${pid}`, file, [perf, "record", "-q", "-e", `mem:0x${address.toString(16)}/4:w`, "-p", String(pid), "--call-graph", "dwarf,4096", "-o", file, "--", "sleep", String(seconds)], { stdout: "ignore" });
+  if (exitCode !== 0 || !existsSync(file)) return yield* new EngineFailure({ problem: `watch pid ${pid}: perf record exited with ${exitCode}: ${stderr.trim()}` });
+  return yield* attempt(`watch pid ${pid}`, () => parsePerfData(readFileSync(file)));
+}).pipe(Effect.mapError((failure) => failure instanceof EngineFailure ? failure : new EngineFailure({ problem: `watch pid ${pid}: ${failure.message}` })));
 
 const codeEnd = (exe: GameExecutable) => {
   const text = exe.header.sections.find(({ name }) => name === ".text");
@@ -227,7 +234,7 @@ const watchLua = (client: AttachedClient, offsets: EngineOffsets, seconds: numbe
     return `birth ${birth} ${what}: ${frames.length === 0 ? "(not from Lua)" : frames.map(frameText).join(" <- ")}`;
   });
   const text = lines.join("\n");
-  const mapped = sourceMaps === undefined ? text : yield* Effect.promise(() => toTypeScript(text, sourceMaps));
+  const mapped = sourceMaps === undefined ? text : yield* mapToTypeScript(text, sourceMaps);
   const file = join(out, `${client.name}.lua-stacks.txt`);
   yield* attempt(`write ${file}`, () => writeFileSync(file, `# wisp engine trace --lua: client ${client.name} pid ${client.pid} build ${client.exe.version}\n${mapped}\n`));
   yield* Console.log(`${client.name}: ${hits} births stopped -> ${file}`);
@@ -370,25 +377,27 @@ const drive = (clientsFile: string, prefix: string): Command => args => Effect.g
   const clients = yield* namedClients(clientsFile, args);
   const words = positionals(args, ["client", "frames", "timeout", "out"]);
   const [action, ...rest] = words;
-  const statuses = yield* Effect.try({
-    try: () => {
-      if (action === "status") {
+  const refuse = (problem: string) => Effect.fail(new EngineFailure({ problem }));
+  const controls = ["pause", "resume", "step", "reset", "capture"];
+  const driverStep = <A>(run: () => A) => Effect.try({ try: run, catch: cause => new EngineFailure({ problem: describeCause(cause) }) });
+  const statuses = yield* Effect.gen(function*() {
+    if (action === "status") {
+      return yield* driverStep(() => {
         verifyDriverClients(clients);
-        return Effect.succeed(clients.map(client => readDriverStatus(client, prefix)));
-      }
-      if (action === undefined) throw new Error("drive takes SCRIPT, status, pause, resume [FRAME], or step N");
-      const command = ["pause", "resume", "step", "reset", "capture"].includes(action) ? words.join(" ")
-        : rest.length === 0 ? readFileSync(action, "utf8") : (() => { throw new Error("drive takes one script file"); })();
-      const [frames] = flagValues(args, "frames");
-      const [timeout = "30"] = flagValues(args, "timeout");
-      const frame = frames === undefined ? undefined : Number(frames);
-      if (frame !== undefined && (!Number.isInteger(frame) || frame < 0)) throw new Error("--frames takes a nonnegative integer");
-      if (!Number.isFinite(Number(timeout)) || Number(timeout) <= 0) throw new Error("--timeout takes positive seconds");
-      const serial = publishDriverCommand(clients, prefix, command);
-      return waitDriverCommand(clients, prefix, serial, Number(timeout) * 1000, frame);
-    },
-    catch: cause => new EngineFailure({ problem: describeCause(cause) }),
-  }).pipe(Effect.flatten, Effect.mapError(failure => failure instanceof EngineFailure ? failure : new EngineFailure({ problem: failure.message })));
+        return clients.map(client => readDriverStatus(client, prefix));
+      });
+    }
+    if (action === undefined) return yield* refuse("drive takes SCRIPT, status, pause, resume [FRAME], or step N");
+    if (!controls.includes(action) && rest.length > 0) return yield* refuse("drive takes one script file");
+    const command = controls.includes(action) ? words.join(" ") : yield* driverStep(() => readFileSync(action, "utf8"));
+    const [frames] = flagValues(args, "frames");
+    const [timeout = "30"] = flagValues(args, "timeout");
+    const frame = frames === undefined ? undefined : Number(frames);
+    if (frame !== undefined && (!Number.isInteger(frame) || frame < 0)) return yield* refuse("--frames takes a nonnegative integer");
+    if (!Number.isFinite(Number(timeout)) || Number(timeout) <= 0) return yield* refuse("--timeout takes positive seconds");
+    const serial = yield* driverStep(() => publishDriverCommand(clients, prefix, command));
+    return yield* waitDriverCommand(clients, prefix, serial, Number(timeout) * 1000, frame).pipe(Effect.mapError(failure => new EngineFailure({ problem: failure.problem })));
+  });
   const text = JSON.stringify({ transport: "file", clients: statuses });
   const [out] = flagValues(args, "out");
   if (out !== undefined) yield* attempt(`write ${out}`, () => writeFileSync(out, `${text}\n`));
