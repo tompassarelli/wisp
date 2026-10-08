@@ -222,9 +222,19 @@ run with one `gh run view` (two API calls). It polls 10 s after the dispatch,
 then waits 1.5 times longer after each poll that shows no change, up to 60 s,
 and goes back to 10 s whenever a job starts or finishes. A run's jobs move a
 few dozen times in all, so most polls come at the cap: twenty workers waiting
-there use 40 API calls a minute (2,400 an hour, inside the 5,000 limit). `farm test` for a commit that
-already has a queued or running farm test joins that run instead of starting
-another.
+there use 40 API calls a minute (2,400 an hour, inside the 5,000 limit).
+`farm test` for a commit that already has a queued or running farm test joins
+that run before pushing anything: no scratch branch and no dispatch.
+
+GitHub also refuses bursts (its secondary limits: many requests at once, or
+many dispatches and pushes a minute), with "HTTP 403: API rate limit
+exceeded" even while `gh api rate_limit` shows the hourly budget untouched;
+that endpoint doesn't reflect what the requests themselves report. Every
+`gh` call the farm makes (`run` in wisp:scripts/wisp/farm.ts) retries such a
+refusal after 30 s, then twice as long each time with jitter, for at most 20
+minutes, and says so on stderr. To read the real budget, look at a real
+request's headers:
+`curl -sI -H "Authorization: token $(gh auth token)" https://api.github.com/repos/OWNER/REPO | grep -i x-ratelimit`.
 
 To see where runs wait, compare each run's `created_at` with its first job's
 `started_at` (`gh api repos/OWNER/REPO/actions/runs/ID/jobs`); a queued job
