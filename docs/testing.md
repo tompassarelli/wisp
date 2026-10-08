@@ -80,7 +80,8 @@ file. Time outside tests (loading, `beforeAll`) is charged to the file too.
 - A new file, or a file whose test count changed, passes under the ceiling
   and rewrites its row: commit the row with the tests.
   `TEST_COST_UPDATE=1 bun run test` rewrites every row, after a cut.
-- CPU cost failures count at any CPU pressure; waiting for a CPU adds wall time, not CPU time.
+- A cost verdict reached above 30% CPU pressure is inconclusive (exit 75).
+  A preload-only run has no way to report that exit, so it fails rather than passing a budget miss.
 - CI shards set `WISP_TEST_COST_SHARD=1` to compare their selected files with the same baseline and print the same totals.
 - Every run prints the five heaviest tests and the suite's CPU, test count
   and CPU per test against the baseline:
