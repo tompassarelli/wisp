@@ -388,6 +388,33 @@ async function drawFilter(filter: FilterPose): Promise<void> {
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   gl.bindVertexArray(null); gl.disable(gl.BLEND); gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
 }
+const fonts = new Map<string, Promise<string>>();
+/** A CSS family for a map or stock font file, loaded through the asset server; sans-serif for a font name or a file that won't load. */
+function fontFamily(file: string): Promise<string> {
+  if (!/\.(ttf|otf)$/i.test(file)) return Promise.resolve("sans-serif");
+  let family = fonts.get(file);
+  if (family === undefined) {
+    const name = `wisp-font-${fonts.size}`;
+    family = asset(file).then(async (bytes) => { const face = new FontFace(name, bytes); await face.load(); document.fonts.add(face); return `"${name}", sans-serif`; }).catch(() => "sans-serif");
+    fonts.set(file, family);
+  }
+  return family;
+}
+/** Warcraft text: colour codes stripped, |n and newlines broken into lines, the block placed by its anchor and justification. */
+function drawText(context: CanvasRenderingContext2D, raw: string, family: string, size: number, color: string, outline: boolean, x: number, horizontal: "left" | "center" | "right", y: number, vertical: "top" | "middle" | "bottom") {
+  const lines = raw.replace(/\|c[0-9a-f]{8}|\|r/gi, "").replaceAll("|n", "\n").split("\n"), leading = size * 1.2;
+  const top = vertical === "top" ? y : vertical === "middle" ? y - lines.length * leading / 2 : y - lines.length * leading;
+  context.font = `${size}px ${family}`; context.textAlign = horizontal; context.textBaseline = "top";
+  // A colour code colours the whole text: Smashcraft's damage digits are one coloured run.
+  const coded = /\|c([0-9a-f]{2})([0-9a-f]{6})/i.exec(raw);
+  context.lineWidth = Math.max(1, size / 12); context.strokeStyle = "rgba(0,0,0,0.9)"; context.lineJoin = "round";
+  context.fillStyle = coded === null ? color : `#${coded[2]}${coded[1]}`;
+  lines.forEach((line, index) => {
+    if (outline) context.strokeText(line, x, top + index * leading);
+    context.fillText(line, x, top + index * leading);
+  });
+  context.textAlign = "left";
+}
 function cssColor(color: number, alpha = 255): string { return `rgba(${(color >>> 16) & 255},${(color >>> 8) & 255},${color & 255},${((color >>> 24) / 255) * alpha / 255})`; }
 async function uiTexture(path: string, color: number): Promise<HTMLCanvasElement> {
   const original = await textureAt(path);
@@ -447,6 +474,15 @@ window.renderScene = async (scene, options) => {
   const context = (live ? overlay : output).getContext("2d"); if (context === null) throw new Error("no output canvas");
   if (live) context.clearRect(0, 0, overlay.width, overlay.height);
   else context.drawImage(canvas, 0, 0);
+  const clip = multiply(view.projection, view.view);
+  for (const tag of scene.textTags ?? []) {
+    const at = [0, 1, 2, 3].map((row) => (clip[row] ?? 0) * tag.x + (clip[4 + row] ?? 0) * tag.y + (clip[8 + row] ?? 0) * tag.z + (clip[12 + row] ?? 0));
+    const w = at[3] ?? 0;
+    if (w <= 0 || tag.color[3] <= 0) continue;
+    const [red, green, blue, alpha] = tag.color;
+    drawText(context, tag.text, "sans-serif", tag.height * output.height / 0.6, `rgba(${red},${green},${blue},${alpha / 255})`, true,
+      ((at[0] ?? 0) / w + 1) / 2 * output.width, "left", (1 - (at[1] ?? 0) / w) / 2 * output.height, "bottom");
+  }
   const scaleX = output.height / 0.6, scaleY = output.height / 0.6;
   for (const frame of [...scene.ui].sort((a, b) => a.level - b.level)) {
     if (!frame.visible || frame.alpha <= 0 || frame.rectangle === undefined) continue;
@@ -454,9 +490,12 @@ window.renderScene = async (scene, options) => {
     context.globalAlpha = frame.alpha / 255;
     if (frame.texture !== "" && width > 0 && height > 0) { context.globalAlpha *= (frame.color >>> 24) / 255; context.drawImage(await uiTexture(frame.texture, frame.color), x, y, width, height); context.globalAlpha = frame.alpha / 255; }
     if (frame.text !== "") {
-      const text = frame.text.replace(/\|c[0-9a-f]{8}|\|r/gi, "").replaceAll("|n", "\n");
-      context.fillStyle = cssColor(frame.textColor); context.font = `${Math.max(10, Math.min(22, height || 15))}px sans-serif`; context.textBaseline = "top";
-      text.split("\n").forEach((line, index) => context.fillText(line, x, y + index * 16));
+      // A font height is in UI units, 0.6 to the screen's height; BlzFrameSetScale multiplies it.
+      const size = (frame.font.height > 0 ? frame.font.height * scaleY : Math.max(10, Math.min(22, height || 15))) * frame.scale;
+      const alignment = frame.alignment ?? { vertical: "top", horizontal: "left" };
+      drawText(context, frame.text, await fontFamily(frame.font.file), size, cssColor(frame.textColor), (frame.font.flags & 1) !== 0,
+        alignment.horizontal === "left" ? x : alignment.horizontal === "center" ? x + width / 2 : x + width, alignment.horizontal,
+        alignment.vertical === "top" ? y : alignment.vertical === "middle" ? y + height / 2 : y + height, alignment.vertical);
     }
   }
   context.globalAlpha = 1;

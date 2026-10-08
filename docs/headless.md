@@ -469,6 +469,22 @@ saves them as the scene's `environment`.
   tracks the native one frame for frame, the flash on at KO, its peak at
   KO+1 and off at KO+37; at grey 185 native lifts the scene 1.42 times and
   headless 1.41.
+- **HUD text.** A text frame draws at its font height (`BlzFrameSetFont`, or
+  the `font` a frame template declares) in UI units, 0.6 to the screen's
+  height, times `BlzFrameSetScale`, placed by `BlzFrameSetTextAlignment` (or
+  the template's `justify`) inside its rectangle, outlined when the font
+  flags hold 1 (`OUTLINE`). A map declares a TEXT template from its own FDF in
+  its headless `frames`, such as Smashcraft's `SmashcraftDamage` (`MasterFont`,
+  0.036, `OUTLINE`). A `.ttf` or `.otf` file loads through the asset server;
+  a font name such as `MasterFont` draws sans-serif. A frame with no font
+  keeps the old 10-22 px, top-left text.
+- **Text tags.** `CreateTextTag` and its setters (text and height, position or
+  unit, colour, velocity, visibility, permanence, suspension, age, lifespan
+  and fadepoint) are simulated; `captureScene` saves the shown ones as
+  `textTags`. A tag that isn't permanent fades from its fadepoint and ends at
+  its lifespan; velocity follows `TextTagSpeed2Velocity` (0.071 is 128 world
+  units a second). A tag draws outlined over the world, its text's
+  bottom-left at its place, under the UI.
 - **Not drawn.** Terrain, shadows, point lights from models, bloom and other
   post-processing.
 

@@ -36,6 +36,8 @@ export interface RenderScene {
   readonly environment: SceneEnvironment;
   /** The cinematic filter drawn over the world and under the UI. */
   readonly filter?: ReturnType<HeadlessClient["cineFilterPose"]>;
+  /** Floating text tags, drawn over the world at their place and under the UI. */
+  readonly textTags?: ReturnType<HeadlessClient["textTags"]["poses"]>;
 }
 
 /** The sky, day/night light and terrain fog the map last set (wisp:docs/headless.md, "Lighting, fog and sky"). */
@@ -76,7 +78,7 @@ function sceneEnvironment(client: HeadlessClient): SceneEnvironment {
 export type DrawnPose = EffectPose & { readonly unit?: true };
 
 export const captureScene = (client: HeadlessClient, options: { readonly visibleOnly?: boolean } = {}): RenderScene => ({
-  frame: client.frame, client: client.slot, effects: client.effectPoses({ visibleOnly: options.visibleOnly ?? false }), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot({ visibleOnly: options.visibleOnly ?? false }), filter: client.cineFilterPose(),
+  frame: client.frame, client: client.slot, effects: client.effectPoses({ visibleOnly: options.visibleOnly ?? false }), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot({ visibleOnly: options.visibleOnly ?? false }), filter: client.cineFilterPose(), textTags: client.textTags.poses(),
   environment: sceneEnvironment(client),
 });
 

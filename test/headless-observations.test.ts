@@ -8,6 +8,9 @@ const runtime = installHeadless({ filePrefix: "observations", globalPrefixes: ["
     key: "pip", type: "BACKDROP", width: 0.0625, height: 0.0625, texture: "pip.blp",
     points: [{ point: "TOPLEFT", x: 0.0625, y: -0.03125 }],
   }],
+}, {
+  name: "Damage", type: "TEXT", width: 0, height: 0, text: "0.0%", font: { file: "MasterFont", size: 0.036, flags: 1 },
+  justify: { horizontal: "LEFT", vertical: "MIDDLE" }, children: [],
 }] });
 afterAll(runtime.restore);
 
@@ -283,4 +286,54 @@ test("[spec #40] the cinematic filter shows from DisplayCineFilter(true) until f
   expect(client.cineFilterPose()?.color).toEqual([255, 255, 255, 255]);
   client.run(() => DisplayCineFilter(false));
   expect(client.cineFilterPose()).toBeUndefined();
+});
+
+test("[spec #40] a text frame's snapshot carries its template font, justification and BlzFrameSetScale", () => {
+  let damage: framehandle;
+  let label: framehandle;
+  const clients = runtime.clients({ start: () => {
+    damage = BlzCreateFrame("Damage", undefined, 0, 0);
+    label = BlzCreateFrameByType("TEXT", "Label", undefined, "", 0);
+    BlzFrameSetFont(label, "Fonts\\FRIZQT__.TTF", 0.0072, 1);
+    BlzFrameSetTextAlignment(label, TEXT_JUSTIFY_BOTTOM, TEXT_JUSTIFY_RIGHT);
+    BlzFrameSetScale(label, 0.6);
+  }, install: () => {} }, [0]);
+  clients.start();
+  const client = clients.client(0);
+  const [shown, labelled] = client.frames.snapshot();
+  // Smashcraft's SmashcraftDamage FDF: FrameFont "MasterFont", 0.036, "OUTLINE", FontJustificationH JUSTIFYLEFT, V JUSTIFYMIDDLE.
+  expect(shown).toMatchObject({ text: "0.0%", font: { file: "MasterFont", height: 0.036, flags: 1 }, alignment: { vertical: "middle", horizontal: "left" }, scale: 1 });
+  expect(labelled).toMatchObject({ font: { file: "Fonts\\FRIZQT__.TTF", height: 0.0072, flags: 1 }, alignment: { vertical: "bottom", horizontal: "right" }, scale: 0.6 });
+  client.run(() => BlzFrameSetTextAlignment(damage, TEXT_JUSTIFY_MIDDLE, TEXT_JUSTIFY_RIGHT));
+  expect(client.frames.snapshot()[0]?.alignment).toEqual({ vertical: "middle", horizontal: "right" });
+  expect(client.frames.snapshot()[1]?.alignment).toEqual(labelled?.alignment);
+});
+
+test("[spec #40] a text tag shows where it was placed, drifts by its velocity, and one that isn't permanent fades out at its lifespan", () => {
+  let tag: texttag;
+  const clients = runtime.clients({ start: () => {
+    tag = CreateTextTag();
+    SetTextTagText(tag, "CHARGING", 0.019);
+    SetTextTagColor(tag, 255, 210, 50, 255);
+    SetTextTagPos(tag, 100, 200, 145);
+  }, install: () => {} }, [0]);
+  clients.start();
+  const client = clients.client(0);
+  expect(client.textTags.poses()).toMatchObject([{ text: "CHARGING", height: 0.019, x: 100, y: 200, z: 145, color: [255, 210, 50, 255] }]);
+  client.run(() => SetTextTagVisibility(tag, false));
+  expect(client.textTags.poses()).toEqual([]);
+  client.run(() => {
+    SetTextTagVisibility(tag, true);
+    // TextTagSpeed2Velocity(64): 64 world units a second, straight up the screen.
+    SetTextTagVelocity(tag, 0, 64 * 0.071 / 128);
+    SetTextTagPermanent(tag, false);
+    SetTextTagLifespan(tag, 2);
+    SetTextTagFadepoint(tag, 1);
+  });
+  clients.frames(90);
+  const [fading] = client.textTags.poses();
+  expect(fading?.y).toBeCloseTo(296, 0);
+  expect(fading?.color[3]).toBeCloseTo(128, -1);
+  clients.frames(30);
+  expect(client.textTags.poses()).toEqual([]);
 });

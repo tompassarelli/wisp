@@ -23,6 +23,8 @@ export interface Frame extends Handle {
   font: { readonly file: string; readonly height: number; readonly flags: number };
   /** BlzFrameSetTextAlignment's vertical and horizontal textaligntype values. */
   alignment: { readonly vertical: unknown; readonly horizontal: unknown } | undefined;
+  /** BlzFrameSetScale's factor: it multiplies the frame's text height. */
+  scale: number;
   width: number;
   height: number;
   /** Absolute points, by framepointtype value. */
@@ -60,6 +62,10 @@ export interface FrameTemplateNode {
   readonly height?: number;
   readonly text?: string;
   readonly texture?: string;
+  /** TEXT: FDF FrameFont, its height in UI units; flags 1 is OUTLINE. */
+  readonly font?: TemplateFont;
+  /** TEXT: FontJustificationH and V; a generated FDF writes CENTER and MIDDLE without one. */
+  readonly justify?: TemplateJustify;
   readonly points?: readonly { readonly point: string; readonly relative?: string; readonly relativePoint?: string; readonly x: number; readonly y: number }[];
   readonly children?: readonly FrameTemplateNode[];
 }
@@ -68,9 +74,38 @@ export interface FrameTemplate {
   readonly name: string;
   readonly type?: string;
   readonly texture?: string;
+  /** A TEXT template's FDF Text, FrameFont and FontJustification, as on a node. */
+  readonly text?: string;
+  readonly font?: TemplateFont;
+  readonly justify?: TemplateJustify;
   readonly width: number;
   readonly height: number;
   readonly children: readonly FrameTemplateNode[];
+}
+
+export interface TemplateFont { readonly file: string; readonly size: number; readonly flags?: number }
+export interface TemplateJustify { readonly horizontal: "LEFT" | "CENTER" | "RIGHT"; readonly vertical: "TOP" | "MIDDLE" | "BOTTOM" }
+export interface FrameFont { readonly file: string; readonly height: number; readonly flags: number }
+export interface TextAlignment { readonly vertical: "top" | "middle" | "bottom"; readonly horizontal: "left" | "center" | "right" }
+
+/** A textaligntype as the map passes it, by name or ConvertTextAlignType value (TOP 0 to RIGHT 5). */
+function textJustify(value: unknown): string {
+  if (typeof value === "number") return ["top", "middle", "bottom", "left", "center", "right"][value] ?? "";
+  return typeof value === "string" ? (value.startsWith("TEXT_JUSTIFY_") ? value.slice("TEXT_JUSTIFY_".length) : value).toLowerCase() : "";
+}
+/** BlzFrameSetTextAlignment's values as the renderer draws them; undefined until set. */
+export function textAlignment(alignment: Frame["alignment"]): TextAlignment | undefined {
+  if (alignment === undefined) return undefined;
+  const vertical = textJustify(alignment.vertical), horizontal = textJustify(alignment.horizontal);
+  return { vertical: vertical === "middle" || vertical === "bottom" ? vertical : "top", horizontal: horizontal === "center" || horizontal === "right" ? horizontal : "left" };
+}
+
+/** A TEXT frame's declared font and justification, as its FDF loads in Warcraft. */
+function styleText(frame: Frame, declared: { readonly font?: TemplateFont; readonly justify?: TemplateJustify }): void {
+  if (declared.font === undefined) return;
+  frame.font = { file: declared.font.file, height: declared.font.size, flags: declared.font.flags ?? 0 };
+  const justify = declared.justify ?? { horizontal: "CENTER", vertical: "MIDDLE" };
+  frame.alignment = { vertical: justify.vertical, horizontal: justify.horizontal };
 }
 
 /** A SetPoint: this frame's point sits at the relative frame's point, offset. */
@@ -105,6 +140,9 @@ export interface FrameSnapshot {
   /** Includes the visibility of every ancestor. */
   readonly visible: boolean;
   readonly level: number;
+  readonly font: FrameFont;
+  readonly alignment: TextAlignment | undefined;
+  readonly scale: number;
 }
 
 export class Frames {
@@ -123,7 +161,7 @@ export class Frames {
       ...handle, type, name, context, parent, text: "", visible: true, enabled: true, level: 0, textLimit: DEFAULT_TEXT_LIMIT,
       width: 0, height: 0, points: new Map(), anchors: [], destroyed: false,
       texture: "", color: 0xffffffff, textColor: 0xffffffff, alpha: 255,
-      font: { file: "", height: 0, flags: 0 }, alignment: undefined,
+      font: { file: "", height: 0, flags: 0 }, alignment: undefined, scale: 1,
     };
     this.all.push(frame);
     return frame;
@@ -142,6 +180,8 @@ export class Frames {
     root.width = definition.width;
     root.height = definition.height;
     root.texture = definition.texture ?? "";
+    if (definition.text !== undefined) root.text = definition.text;
+    styleText(root, definition);
     const byKey = new Map<string, Frame>([["root", root]]);
     const placed: (readonly [FrameTemplateNode, Frame])[] = [];
     const make = (nodes: readonly FrameTemplateNode[], owner: Frame) => {
@@ -150,6 +190,7 @@ export class Frames {
         frame.width = node.width ?? 0;
         frame.height = node.height ?? 0;
         if (node.type === "TEXT" && node.text !== undefined) frame.text = node.text;
+        if (node.type === "TEXT") styleText(frame, node);
         frame.texture = node.texture ?? "";
         byKey.set(node.key, frame);
         placed.push([node, frame]);
@@ -219,7 +260,8 @@ export class Frames {
       if (options.visibleOnly && (!visible || frame.alpha <= 0)) continue;
       snapshots.push({ handle: { kind: frame.kind, id: frame.id }, name: frame.name, type: frame.type,
         parentId: frame.parent?.id, rectangle: this.rectangle(frame), text: frame.text, texture: frame.texture,
-        color: frame.color, textColor: frame.textColor, alpha: frame.alpha, visible, level: frame.level });
+        color: frame.color, textColor: frame.textColor, alpha: frame.alpha, visible, level: frame.level,
+        font: frame.font, alignment: textAlignment(frame.alignment), scale: frame.scale });
     }
     return snapshots;
   }

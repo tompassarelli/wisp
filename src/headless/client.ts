@@ -16,6 +16,7 @@ import { FRAME_POINTS, type Frame, Frames } from "./frames";
 import { Warcraft3Abilities } from "./warcraft3Abilities";
 import { WARCRAFT3_ENUM_VALUES } from "./warcraft3Natives";
 import { Scenery, type SceneryFixtures } from "./warcraft3Scenery";
+import { TextTags } from "./textTags";
 import { Warcraft3Inventory, type Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 
 export type Handle = { readonly kind: string; readonly id: number };
@@ -547,6 +548,8 @@ export class HeadlessClient {
   readonly scenery: Scenery;
   readonly inventory: Warcraft3Inventory;
   readonly abilities = new Warcraft3Abilities();
+  /** The floating text tags this client shows. */
+  readonly textTags = new TextTags();
   readonly textAreaAutoScroll = new Map<Handle, boolean>();
   readonly heldMouseButtons = new Set<unknown>();
   mouseScreenX = 0;
@@ -871,6 +874,10 @@ export class HeadlessClient {
     const playing = (player: number) => humans.includes(player);
     return {
       ...this.scenery.behaviors({ handle: kind => this.handle(kind) }),
+      ...this.textTags.behaviors({
+        handle: kind => this.handle(kind),
+        unitPosition: (unit) => { const live = unit as Unit | undefined; return live === undefined || live.removed ? undefined : { x: live.x, y: live.y, z: live.z }; },
+      }),
       ...this.inventory.behaviors(),
       GetLocalPlayer: () => this.slot,
       Player: (n: number) => n,
@@ -999,6 +1006,9 @@ export class HeadlessClient {
       },
       BlzFrameSetTextAlignment: (frame: unknown, vertical: unknown, horizontal: unknown) => {
         if (isFrame(frame)) frame.alignment = { vertical, horizontal };
+      },
+      BlzFrameSetScale: (frame: unknown, scale: number) => {
+        if (isFrame(frame)) frame.scale = scale;
       },
       BlzFrameSetVisible: (frame: unknown, visible: boolean) => {
         if (isFrame(frame)) frame.visible = visible;
@@ -1458,6 +1468,7 @@ export class HeadlessClient {
     // Outside run(): the scope measures map code (wisp perf), and these clocks are Warcraft's own work, not the map's.
     this.abilities.tick(f32(1 / FRAMES_PER_SECOND));
     this.scenery.tick(f32(1 / FRAMES_PER_SECOND));
+    this.textTags.tick(f32(1 / FRAMES_PER_SECOND));
     const died: Handle[] = [];
     for (const pose of this.effects.values()) {
       advanceAnimation(pose, pose.timeScale, f32(1 / FRAMES_PER_SECOND));
