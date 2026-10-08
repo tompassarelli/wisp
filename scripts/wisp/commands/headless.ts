@@ -8,7 +8,8 @@ import { type Command, UsageFailure, describeCause, flagValues } from "../comman
 import { type HeadlessProject, installHeadless, loadMapEntry, playHeadless } from "../headless";
 import { emitJson } from "../jsonResults";
 import { predictionLines } from "../perf";
-import { captureScene, renderScenes, type RenderScene } from "../headlessRender";
+import { captureScene, loadEffectDeaths, renderScenes, type RenderScene } from "../headlessRender";
+import { runJourney } from "../../../src/headless/journey";
 import type { Journey } from "../../../src/headless/journey";
 import { step } from "../timings";
 import { type PerfProject, measureRun } from "./perf";
@@ -91,12 +92,14 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
       try: () => loadMapEntry(project.entry),
       catch: (cause) => new HeadlessFailure({ journey: "loading the map entry", problems: 1, cause }),
     }).pipe(step("load map"));
-    const scenes: RenderScene[] = [];
+    let scenes: RenderScene[] = [];
+    const players = Array.from({ length: count }, (_, slot) => slot);
+    const destroyedModels = new Set<string>();
     const report = yield* Effect.try({
       try: () => {
         const runtime = installHeadless(project.map);
         try {
-          const clients = runtime.clients(entry, Array.from({ length: count }, (_, slot) => slot), json ? { keepCalls: 1 } : undefined);
+          const clients = runtime.clients(entry, players, { ...(json ? { keepCalls: 1 } : {}), effectDeaths: (model) => { destroyedModels.add(model); return undefined; } });
           return playHeadless(clients, journey, project.map.filePrefix, project.scene, { observationFrames: options.frames, observe: (running) => { for (const client of running.clients) scenes.push(captureScene(client)); } });
         } finally {
           runtime.restore();
@@ -104,6 +107,24 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
       },
       catch: (cause) => new HeadlessFailure({ journey: name, problems: 1, cause }),
     }).pipe(step(`${name} in ${count} clients`));
+    const render = project.render;
+    if (options.render !== undefined && render !== undefined && destroyedModels.size > 0) {
+      // Destroyed effects stay drawn while their Death sequence plays; its length is in the model, read asynchronously, so the deterministic journey is played again to draw it.
+      const effectDeaths = yield* Effect.tryPromise({ try: () => loadEffectDeaths(render, destroyedModels), catch: (cause) => new HeadlessFailure({ journey: name, problems: 1, cause }) });
+      scenes = yield* Effect.try({
+        try: () => {
+          const runtime = installHeadless(project.map);
+          const drawn: RenderScene[] = [];
+          try {
+            runJourney(runtime.clients(entry, players, { keepCalls: 1, effectDeaths }), journey, { observationFrames: options.frames, observe: (running) => { for (const client of running.clients) drawn.push(captureScene(client)); } });
+          } finally {
+            runtime.restore();
+          }
+          return drawn;
+        },
+        catch: (cause) => new HeadlessFailure({ journey: name, problems: 1, cause }),
+      }).pipe(step(`${name} again with death sequences`));
+    }
     if (json) {
       results++;
       yield* emitJson("headless", { type: "result", journey: name, ok: report.problems === 0, frames: report.frames, clients: report.clients });

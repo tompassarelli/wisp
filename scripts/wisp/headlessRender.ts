@@ -2,7 +2,8 @@ import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Schema } from "effect";
-import type { EffectPose, HeadlessClient } from "../../src/headless/client";
+import type { EffectDeaths, EffectPose, HeadlessClient } from "../../src/headless/client";
+import { deathSeconds } from "./models";
 
 export interface HeadlessRenderProject {
   /** The map's imported assets and Warcraft assets, kept outside the repository. */
@@ -30,6 +31,16 @@ export type DrawnPose = EffectPose & { readonly unit?: true };
 export const captureScene = (client: HeadlessClient, options: { readonly visibleUiOnly?: boolean } = {}): RenderScene => ({
   frame: client.frame, client: client.slot, effects: client.effectPoses(), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot({ visibleOnly: options.visibleUiOnly ?? false }),
 });
+
+/** The Death sequence lengths of `models`, read from the map's assets, for clients whose destroyed effects are drawn. */
+export async function loadEffectDeaths(project: HeadlessRenderProject, models: Iterable<string>): Promise<EffectDeaths> {
+  const deaths = new Map<string, number | undefined>();
+  for (const model of models) {
+    const bytes = await project.readAsset(model);
+    deaths.set(model, bytes === undefined ? undefined : deathSeconds(bytes));
+  }
+  return (model) => deaths.get(model);
+}
 
 /** Both the still renderer and the player draw unit objects with the same model poses. */
 export function sceneWithUnits(project: HeadlessRenderProject, scene: RenderScene): RenderScene {

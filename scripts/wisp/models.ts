@@ -4,7 +4,8 @@
 // scale or time scale, so an emitter that runs while an effect is shown also
 // runs while the game hides the effect that way. Plain functions over bytes;
 // the game reads its imported files and the game's archives itself.
-import { type model as mdx, parseMDX } from "../../vendor/war3-model.mjs";
+import { type model as mdx, parseMDL, parseMDX } from "../../vendor/war3-model.mjs";
+import { selectSequence } from "../../src/headless/animation";
 
 export type Vector3 = readonly [x: number, y: number, z: number];
 
@@ -292,4 +293,16 @@ export function modelReach(facts: ModelFacts): { readonly boxes: readonly Box[];
     boxes: [...(facts.bounds === undefined ? [] : [facts.bounds]), ...shown.flatMap(({ reach }) => reach ?? [])],
     unknown: shown.filter(({ reach }) => reach === undefined).map(({ name }) => name),
   };
+}
+
+/**
+ * Seconds of the Death sequence a destroyed effect plays, from an MDX or MDL
+ * file; undefined without one. It measures the sequence the renderer
+ * selects for "death".
+ */
+export function deathSeconds(file: Uint8Array): number | undefined {
+  const model = new TextDecoder().decode(file.subarray(0, 4)) === "MDLX" ? parseMDX(parsableModel(file).bytes.slice().buffer) : parseMDL(new TextDecoder().decode(file));
+  const sequences = model.Sequences.map((sequence) => ({ name: sequence.Name, start: sequence.Interval[0] ?? 0, end: sequence.Interval[1] ?? 0, looping: !sequence.NonLooping, rarity: sequence.Rarity }));
+  const death = sequences[selectSequence(sequences, "death")];
+  return death === undefined || death.end <= death.start ? undefined : (death.end - death.start) / 1000;
 }

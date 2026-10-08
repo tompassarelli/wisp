@@ -9,7 +9,7 @@ import type { FrameTemplate } from "./frames";
 import { type Hash, type ModuleSet, ModulePublisher, type VersionFiles } from "../runtime/modules";
 import { type ClientFiles, type ClientScope, HeadlessClient, type LocalNatives, type MapEntry, type NativeBehaviors, type SyncMessage, WISP_LOCAL_NATIVES, describeCall, sameCall } from "./client";
 import type { NativeDeclarations } from "./declarations";
-import type { UnitStateFixtures } from "./client";
+import type { EffectDeaths, UnitStateFixtures } from "./client";
 import type { IntentionalNoops } from "./client";
 import type { SceneryFixtures } from "./warcraft3Scenery";
 import type { Warcraft3InventoryFixtures } from "./warcraft3Inventory";
@@ -43,6 +43,8 @@ export interface LockstepOptions {
    * each log, for the context of a later desync, so a long run keeps its memory.
    */
   readonly keepCalls?: number;
+  /** Death sequence lengths of the effect models, for drawing destroyed effects; without it they are gone at once. */
+  readonly effectDeaths?: EffectDeaths;
   /**
    * A clock, such as process CPU milliseconds: with it, `costs` holds what
    * each client's last frame took, its arriving messages and its callbacks.
@@ -122,6 +124,7 @@ export class Lockstep {
         ...(options.unitStates === undefined ? {} : { unitStates: options.unitStates }),
         ...(options.scenery === undefined ? {} : { scenery: options.scenery }),
         ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
+        ...(options.effectDeaths === undefined ? {} : { effectDeaths: options.effectDeaths }),
       }));
     }
     this.clients = clients;

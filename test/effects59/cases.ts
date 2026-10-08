@@ -2,6 +2,8 @@ import { f32 } from "../../src/sim/f32";
 
 /** A stock model every Warcraft install has; headless never loads it. */
 const MODEL = "Abilities\\Spells\\Other\\Silence\\SilenceTarget.mdx";
+/** A stock model with Stand and a two-second Death sequence. */
+export const DYING = "Abilities\\Spells\\NightElf\\FaerieFire\\FaerieFireTarget.mdx";
 
 export const EFFECT_NOOPS = {};
 
@@ -50,6 +52,13 @@ export function effectCases(this: void, done: (this: void, rows: readonly string
   BlzSetSpecialEffectTime(e, 0.5);
   rows.push(row("scale-orientation-time-keep-position", at(e)));
   DestroyEffect(e);
+
+  // Destroyed where the capture can watch: frozen at (-200, 0), playing at (200, 0).
+  e = AddSpecialEffect(DYING, -200, 0);
+  BlzSetSpecialEffectTimeScale(e, 0);
+  DestroyEffect(e);
+  rows.push(row("destroyed-frozen-reads", at(e)));
+  DestroyEffect(AddSpecialEffect(DYING, 200, 0));
 
   const frozen = AddSpecialEffect(MODEL, 0, 0);
   const playing = AddSpecialEffect(MODEL, 0, 0);
