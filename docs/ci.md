@@ -47,7 +47,7 @@ the template and the installed package can't drift apart.
 | `working-directory` | `.` | The folder holding the game's package.json. |
 | `install` | `bun install --frozen-lockfile` | Install command. |
 | `check` | `bun run check` | Type and [number-rule](../plugins/number-rules.ts) check. Empty skips. |
-| `test` | `bun test` | Unit tests; `LUA` and `TOWARD_ZERO_LUA` name the built Lua32s, for the emitted-Lua and numeric tests. Empty skips. |
+| `test` | `bun test` | Unit tests; `LUA` and `TOWARD_ZERO_LUA` name the pinned Lua32s, for the emitted-Lua and numeric tests. Empty skips. |
 | `headless` | empty | The game's [headless](headless.md) journey command. |
 | `soak` | empty | The game's [soak](soak.md) command; keep it bounded with `--minutes`. |
 | `lua` | `true` | Build Lua 5.3.6 with `LUA_32BITS` (checksum-pinned source) and its toward-zero twin ([raw float rounding](headless.md#raw-float-rounding)) with wisp:scripts/wisp/lua32.ts, the builder every test run uses. |

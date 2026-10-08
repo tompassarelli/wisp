@@ -201,7 +201,8 @@ with the map it measures. The program gets the run's name, the frames to
 play and `samples` as its next arguments.
 
 - `perf [RUN] [--frames N] [--samples] [--out FILE]` compiles the run's map
-  and the program, runs it with the 32-bit Lua that `LUA` names, prints the
+  and the program, runs it in the 32-bit Lua that `LUA` names (else the cached pinned one,
+  [lua32](headless.md#raw-float-rounding)), prints the
   run and each client's predicted native cost per frame, and writes the run
   to FILE; for the run above:
 
