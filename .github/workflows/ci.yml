@@ -5,6 +5,8 @@ on:
   push:
     # `bun wisp farm`'s scratch branches run only the workflow it dispatches.
     branches-ignore: ["farm/**"]
+  # Autoland's pushes to main start no workflows, so it dispatches this one.
+  workflow_dispatch:
 
 permissions:
   contents: read

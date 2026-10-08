@@ -12,6 +12,15 @@ on:
       tag:
         description: Names the run so `bun wisp farm test` can find the one it dispatched
         default: ""
+  # Autoland (autoland.yml) runs the suites for a rebased branch inside its own run.
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+      tag:
+        type: string
+        default: ""
 
 run-name: Farm test ${{ inputs.ref }} ${{ inputs.tag }}
 
