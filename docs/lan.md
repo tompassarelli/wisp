@@ -85,9 +85,10 @@ used 1.07 and 0.97 cores (measured from /proc over about 10 s). From the
 pool reporting the pair running to both game UIs up took 67 s, the first
 `lan solo` included.
 
-The first `lan solo` on a fresh pair can fail with "list maps: no answer
-within 10 s": the game was still opening every map in the folder. Running it
-again worked. Both render40-single clients crashed about 8 s into the game
+The first `lan solo` on a fresh pair could fail with "list maps: no answer
+within 10 s": the game was still opening every map in the folder (34 s on
+clone-c, 8 Oct). A map list now waits up to 90 s and says so, and a return
+to the menus up to 180 s. Both render40-single clients crashed about 8 s into the game
 with the same read of address 0x54. Clone-a crashed hosting that map too, so
 the map is the cause, not the solo path.
 
