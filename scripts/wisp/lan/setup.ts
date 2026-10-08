@@ -4,14 +4,13 @@
 // write: no space until a file changes), and Wisp's menu page reporting to
 // the client's own port. Prefix creation runs in a network namespace with
 // only loopback, like everything else a pool client runs.
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect } from "effect";
 import { ChildProcess } from "effect/process";
 import { collect } from "../hostProcess";
 import { installMenuPage } from "../menus";
-import { readExecutable } from "./memory";
 import { LanFailure } from "./join";
 import { clientRoot, installOf, prefixOf, retailOf } from "./pool";
 
@@ -45,13 +44,17 @@ export const setupClient = (name: string, from: string, port: number, log: (line
     yield* run(`copy the install into ${name}`, ["cp", "-a", "--reflink=always", from, installOf(name)]);
     log(`${name}: install reflinked from ${from}`);
   } else {
-    const versions = yield* Effect.try({
-      try: () => ({ source: readExecutable(join(from, "_retail_/x86_64/Warcraft III.exe")).version, installed: readExecutable(join(retailOf(name), "x86_64/Warcraft III.exe")).version }),
-      catch: (cause) => new LanFailure({ problem: `${name}: read install versions: ${String(cause)}` }),
+    // cp -a keeps the executable's size and modification time, so a different one means a different build.
+    const stamps = yield* Effect.try({
+      try: () => [join(from, "_retail_/x86_64/Warcraft III.exe"), join(retailOf(name), "x86_64/Warcraft III.exe")].map((exe) => {
+        const { size, mtimeMs } = statSync(exe);
+        return `${size} bytes, modified ${new Date(mtimeMs).toISOString()}`;
+      }),
+      catch: (cause) => new LanFailure({ problem: `${name}: read the install executables: ${String(cause)}` }),
     });
-    if (versions.source !== versions.installed) {
+    if (stamps[0] !== stamps[1]) {
       yield* run(`refresh the install in ${name}`, ["cp", "-a", "--reflink=always", `${from}/.`, installOf(name)]);
-      log(`${name}: install refreshed from ${versions.installed} to ${versions.source}`);
+      log(`${name}: install refreshed (executable was ${stamps[1]}, now ${stamps[0]})`);
     }
   }
   yield* installMenuPage(retailOf(name), port).pipe(Effect.mapError((failure) => new LanFailure({ problem: failure.message })));

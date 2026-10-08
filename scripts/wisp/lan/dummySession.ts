@@ -2,10 +2,10 @@ import { copyFileSync, mkdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Effect } from "effect";
-import { readExecutable } from "./memory";
 import { connectMenus, menuAddress } from "../menus";
 import { checkDummy } from "./dummy";
-import { enableLan, joinLanGame } from "./join";
+import { joinLanGame } from "./join";
+import { loadLanPlugin } from "./plugin";
 import { readMapFacts } from "./map";
 import { isolatedNetworkProblem } from "./offline";
 import { clientName, documentsOf, exeOf, pairDirectory, reportPort } from "./pool";
@@ -26,13 +26,14 @@ if (target !== mapFile) copyFileSync(mapFile, target);
 const packager = join(process.env["XDG_CACHE_HOME"] ?? join(process.env["HOME"] ?? "", ".cache"), "wisp/lan/map-pack");
 const map = readMapFacts(mapFile, packager, inGame);
 const output = join(pairDirectory(pair), "dummy", new Date().toISOString().replace(/[:.]/g, "-"));
-const version = readExecutable(exeOf(name)).version;
-console.log(`dummy lobby: Warcraft ${version}; evidence ${output}`);
 BunRuntime.runMain(Effect.scoped(Effect.gen(function*() {
+  const lan = yield* loadLanPlugin;
+  const version = lan.version(exeOf(name));
+  console.log(`dummy lobby: Warcraft ${version}; evidence ${output}`);
   const menus = yield* connectMenus(yield* menuAddress(reportPort(pair, "a"), 10));
   const result = yield* checkDummy({ program, map, count: Number(countText), output, nativeVersion: version, announcePorts: [16000],
     joinNative: (_host, gameName) => Effect.gen(function*() {
-      yield* enableLan(nativePid, exeOf(name), version, menus, console.log);
+      yield* lan.enableLan(nativePid, exeOf(name), menus, console.log);
       yield* joinLanGame(menus, gameName);
     }),
   });

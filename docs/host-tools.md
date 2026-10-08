@@ -49,9 +49,6 @@ over it in one module, with one comment saying why.
 - wisp:scripts/wisp/watch.ts (`lanObservation`, `waitFor`): a 3 s timeout
   with one retry, reported as a `WatchFailure`, and a `Schedule.spaced` poll
   under a deadline.
-- wisp:scripts/wisp/lan/join.ts (`whileStopped`): SIGSTOP is the acquire step
-  and SIGCONT the release, so a client is let go even when waiting for it to
-  stop fails.
 - wisp:scripts/wisp/lan/host.ts (`startHost`): the caller's scope holds the
   TCP listener and turn fibers; a child scope closes UDP discovery when the
   lobby ends. `Schedule.fixed` keeps the turn cadence when work takes time.

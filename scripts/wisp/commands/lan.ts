@@ -18,6 +18,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { spawnLogged } from "../hostProcess";
 import { type Command, UsageFailure, flagValues } from "../command";
 import { LanFailure } from "../lan/join";
+import { lanPluginProblem } from "../lan/plugin";
 import {
   PAIR_SIDES, PROFILES, type PoolPair, agentSocket, clientName, desktopSize, pairClients, pairDirectory, poolClientsFile, poolFile, readPool, reportPort, writeJson,
 } from "../lan/pool";
@@ -174,6 +175,8 @@ const registerPairs = (mine: readonly PoolPair[], profile: string, fps: number |
 });
 
 const pool: Command = (args) => Effect.gen(function*() {
+  const missing = lanPluginProblem();
+  if (missing !== undefined) return yield* new LanFailure({ problem: `${missing}. Install the plugin there, then run wisp lan pool again` });
   const pairs = yield* number(args, "pairs", 1);
   const seconds = yield* number(args, "seconds", 0);
   const waitSeconds = yield* number(args, "wait", 1800);

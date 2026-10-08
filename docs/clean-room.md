@@ -18,6 +18,8 @@ agent and contributor, in code, tests, fixtures, docs and history.
 
 ## Do
 
+- Load code that reads or patches the running game as a private local plugin: the LAN switch loads from `~/.local/share/wisp-private/lan/` through wisp:scripts/wisp/lan/plugin.ts, and nothing else imports it.
+
 - Load models, textures, sounds and data tables from the user's install when
   Wisp runs, through the install-asset loader. Cache extracted files only in
   private local storage outside every repository.
@@ -45,7 +47,7 @@ agent and contributor, in code, tests, fixtures, docs and history.
 - Commit game strings, tooltips or other in-game text beyond a short quote
   that identifies something.
 - Commit decrypted dumps, disassembly or decompiler output.
-- Keep tooling that reads Warcraft's binary in this repo; the engine debugger lives outside it ([wisp#76](https://github.com/tompassarelli/wisp/issues/76)). The LAN pool's provider switch (wisp:scripts/wisp/lan/) is the one exception left.
+- Keep tooling that reads Warcraft's binary or a running game's memory in this repo; the engine debugger lives outside it ([wisp#76](https://github.com/tompassarelli/wisp/issues/76)).
 - Emulate a Battle.net sign-in, patch out or work around copy protection, or
   ship a client that does.
 - Read Warsmash source to write Wisp code. Use only the facts in

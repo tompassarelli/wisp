@@ -6,40 +6,12 @@ import { isActionLog, parseActionLog } from "../scripts/wisp/lan/actionLog";
 import { startHost } from "../scripts/wisp/lan/host";
 import type { MapFacts } from "../scripts/wisp/lan/map";
 import { interfaces } from "../scripts/wisp/lan/offline";
-import { FACTORY, LOOP, SELECTOR_OPERAND, TCPN, findAll, providerName, scanCode, selectorOperands, stoppedPc } from "../scripts/wisp/lan/provider";
 import {
   PACKET, Reader, Writer, decodeIncomingAction, encodePacket, decodeOutgoingAction, decodeSlotTable, decodeStatString, encodeGameSettings, encodeSlotTable,
   encodeStatString, incomingAction, outgoingAction, splitPackets,
 } from "../scripts/wisp/lan/w3gs";
 
-// The selector as 3.0.0.24268's running code has it, with the call targets
-// and lea offset made up (wc3-slop-lan docs/porting.md §2.1).
-const SELECTOR_BYTES = [0x48, 0x83, 0xec, 0x58, 0xe8, 1, 2, 3, 4, 0xb9, 0x50, 0x4f, 0x4f, 0x4c, 0xe8, 5, 6, 7, 8, 0xe8, 9, 9, 9, 9, 0x48, 0x8d, 0x0d, 1, 1, 1, 1, 0x48, 0xc7, 0x44, 0x24, 0x28, 4, 0, 0, 0];
-const FACTORY_BYTES = [0x81, 0xfb, 0x54, 0x45, 0x4e, 0x42, 0x74, 0x3a, 0x81, 0xfb, 0x50, 0x4f, 0x4f, 0x4c, 0x74, 0x1f, 0x81, 0xfb, 0x4e, 0x50, 0x43, 0x54, 0x0f, 0x85, 0x9b, 0, 0, 0];
-
-describe("provider switch", () => {
-  test("[native] finds the one selector and reads what it selects", () => {
-    const code = Uint8Array.from([0x90, 0x90, ...SELECTOR_BYTES, 0xcc]);
-    expect(selectorOperands(code)).toEqual([{ at: 2 + SELECTOR_OPERAND, operand: LOOP }]);
-    code.set(TCPN, 2 + SELECTOR_OPERAND);
-    expect(selectorOperands(code).map(({ operand }) => providerName(operand))).toEqual(["TCPN"]);
-    code[2 + SELECTOR_OPERAND] = 0x41;
-    expect(selectorOperands(code)).toEqual([]);
-  });
-
-  test("[native] scans spans at their addresses, with the factory as evidence of TCPN support", () => {
-    const found = scanCode([{ start: 0x1000, bytes: Buffer.from(SELECTOR_BYTES) }, { start: 0x9000, bytes: Buffer.from(FACTORY_BYTES) }]);
-    expect(found.selectors.map(({ address }) => address)).toEqual([0x1000 + SELECTOR_OPERAND]);
-    expect(found.factories).toEqual([0x9000]);
-    expect(findAll(Uint8Array.from(FACTORY_BYTES), FACTORY)).toEqual([0]);
-  });
-
-  test("[reference] a stopped thread's pc comes from /proc/PID/task/TID/syscall (proc(5))", () => {
-    expect(stoppedPc("-1 0x7ffd0000 0x6ffff080bcaa\n")).toBe(0x6ffff080bcaa);
-    expect(stoppedPc("202 0x1 0x2 0x0 0x0 0x0 0x0 0x7ffd0000 0x7f00001234\n")).toBe(0x7f00001234);
-    expect(stoppedPc("running\n")).toBeUndefined();
-  });
-
+describe("offline check", () => {
   test("[spec docs/lan.md] only loopback counts as offline", () => {
     const netDev = "Inter-|   Receive\n face |bytes\n    lo: 1 2 3\n";
     expect(interfaces(netDev)).toEqual(["lo"]);

@@ -20,11 +20,12 @@ import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Cause, Effect, Exit, FiberSet, Option, Schedule, Schema, Scope, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { findGameProcesses, readExecutable } from "./memory";
+import { findGameProcesses } from "./processes";
 import { spawnLogged } from "../hostProcess";
 import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports, playLocalGame } from "../menus";
 import { type LanHost, startHost } from "./host";
-import { LanFailure, enableLan, joinLanGame } from "./join";
+import { LanFailure, joinLanGame } from "./join";
+import { loadLanPlugin } from "./plugin";
 import { readMapFacts } from "./map";
 import { PAIR_SIDES, poolProfile, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
 import { admissionFile, nativeCommand } from "./admission";
@@ -246,7 +247,7 @@ const agent = Effect.gen(function*() {
       const pid = gamePid(client.name);
       if (pid === undefined) return yield* new LanFailure({ problem: `${client.name} isn't running` });
       const menus = yield* menusOf(client.name);
-      yield* enableLan(pid, exeOf(client.name), readExecutable(exeOf(client.name)).version, menus, say);
+      yield* (yield* loadLanPlugin).enableLan(pid, exeOf(client.name), menus, say);
       yield* joinLanGame(menus, `wisp-${pair}-${id.slice(11, 19)}`);
       yield* until(() => host.status().players.some(({ label, connected }) => label === client.name && connected), "20 seconds");
     }

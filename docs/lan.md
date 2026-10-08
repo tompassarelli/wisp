@@ -14,23 +14,10 @@ game. It isn't for cheating. The terms are in
 ## 3.0.1: the pool starts, but the game has no LAN provider
 
 **3.0.1.24342 removed the LAN provider, so pool pairs can't play a LAN
-match.** In 3.0.0 the provider factory compared the requested id with `BNET`,
-`LOOP` and `TCPN`, and the LAN switch below made it build `TCPN`. In 3.0.1 it
-compares `BNET`, then `LOOP`, and every other id jumps to `mov eax,4; ret`
-(unsupported):
-
-```
-81 FB 54 45 4E 42 0F 84 ..   cmp ebx,'BNET'; je
-81 FB 50 4F 4F 4C 0F 85 ..   cmp ebx,'LOOP'; jne -> mov eax,4; ...; ret
-```
-
-That comes from lan1a's decrypted code, read through /proc on 8 October
-2026 after the menus rebuilt their provider. 15.4 MB of decrypted `.text`
-held no `TCPN` immediate and no 3.0.0 selector. The executable's RTTI names
-only `NetProviderBNET` and `NetProviderLOOP`. `lan fresh` stops with "the
-provider factory isn't in the decrypted code", and `KNOWN_BUILDS` stays at
-3.0.0.24268. A LAN match on 3.0.1 would need a provider written into the
-game, not a switch. Single-client games still work: see "Solo games" below.
+match.** Its code has no LAN provider left for the switch (below) to select;
+the switch refuses it, and the checked build stays 3.0.0.24268. A LAN match on
+3.0.1 would need a provider written into the game, not a switch.
+Single-client games still work: see "Solo games" below.
 
 **The clients themselves start.** A pool client on 3.0.1 shows the intro
 cinematic, then the same offline sequence 3.0.0 showed (`LOGIN_DOORS`,
@@ -334,16 +321,14 @@ measurement is tracked in [#46](https://github.com/tompassarelli/wisp/issues/46)
   saved account to sign in with. A client with any other network is refused.
 - **Declared clients only.** `wisp lan` works on the clients it created. `wisp
   engine actions` accepts only a pair from the pool's clients file.
-- **Checked code only.** The switch refuses builds it hasn't been checked on
-  (`KNOWN_BUILDS` in wisp:scripts/wisp/lan/provider.ts: 3.0.0.24268). It also
-  refuses when the selector pattern doesn't match exactly one place, or when
-  the bytes there aren't `LOOP`. It logs each write's bytes before and after,
-  and puts `LOOP` back within a fraction of a second.
+- **Checked builds only.** The switch (Wisp's private LAN plugin) refuses
+  builds it hasn't been checked on (3.0.0.24268), logs each change, and puts
+  the client back within a fraction of a second.
 
 ## Setting up
 
 Running `setup` again refreshes an existing client's install when its Warcraft
-executable version differs from `--from`, then reinstalls that client's menu
+executable differs (size or modification time) from `--from`, then reinstalls that client's menu
 page. Stop the pool first, and use an install whose update has finished.
 
 `wisp lan setup --from "<a prefix>/drive_c/Program Files (x86)/Warcraft III" --pairs N`
@@ -522,44 +507,14 @@ only). Wisp's code is its own; no file of either is copied.
 
 ### The switch to LAN
 
-Patch 3.0.0 left the LAN provider in the game, but the menus only ever ask
-for the loopback one. The handler behind the menus' `InitializeLocalNetProvider`
-has one `mov ecx,'LOOP'`:
-
-```
-48 83 EC 58 E8 ?? ?? ?? ?? B9 50 4F 4F 4C E8 ...   (sub rsp,0x58; call; mov ecx,'LOOP'; call ...)
-```
-
-The provider factory it calls still makes `TCPN`. Wisp makes the switch the
-way W3Champions' launcher (its `native_tcpn` helper) and wc3-slop-lan's
-activator do (provider.ts, join.ts):
-
-1. Read the decrypted code. `.text` is encrypted on disk, and the game
-   decrypts a page when it runs it. A page the game hasn't run lately can be
-   encrypted again. Wisp scans the image's readable code mappings through
-   /proc/PID/mem for the selector and the factory. When either is missing,
-   one `InitializeLocalNetProvider` runs (and so decrypts) both.
-2. Stop the game (SIGSTOP; every thread stopped, none of them on the
-   instruction), write `TCPN` over the operand, read it back, and continue.
-3. Ask the menus for `InitializeLocalNetProvider`. The game builds a TCPN
-   provider and opens its LAN socket on UDP 16000 and up.
-4. Stop the game again, write `LOOP` back, read it back, and continue. The
-   patch lasted 59 ms on 7 October.
-
-Under Wine the image's code is a shared mapping of a memfd
-(`/memfd:wine-mapping`). The kernel refuses a forced /proc/PID/mem write to a
-shared mapping (EIO), so the write goes to the memfd itself. It uses the
-game's own descriptor for it (`/proc/PID/fd/N`, matched by inode), at the
-mapping's file offset.
-
-Left in place, the patch makes `war3_loader.dll` close the game within a
-minute (wc3-slop-lan). Restored, the client keeps its TCPN provider until the
-next rebuild: leaving a LAN game rebuilds it, so the agent switches again
-before every join.
-
-Memory access needs no `ptrace_scope` change. Steam's runtime starts each
-game in a user namespace this user owns, and Yama allows a tracer that holds
-`CAP_SYS_PTRACE` in the target's namespace.
+Patch 3.0.0 left the LAN provider in the game, but the menus only ever ask for
+the loopback one. Before each join, the agent briefly switches the client to
+the LAN provider and puts it back within a fraction of a second. That code reads
+and patches the running game, so it isn't in this repository
+(wisp:docs/clean-room.md): Wisp loads it from Wisp's private LAN plugin at
+`~/.local/share/wisp-private/lan/` (wisp:scripts/wisp/lan/plugin.ts) when
+the owner has it. Without the plugin, `wisp lan pool` stops and says the plugin
+is missing.
 
 ## The action log
 
