@@ -307,6 +307,7 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
   const instance = await prepareInstance(pose);
   const { renderer, model: data } = instance;
   renderer.setInstanceAlpha(pose.alpha / 255);
+  renderer.setInstanceColor(new Float32Array(pose.color.map((value) => value / 255)));
   renderer.setCamera(new Float32Array(view.eye), view.quaternion);
   const kind = pose.unit === true ? "unit" : "effect";
   const sample = animationSample(instance.sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, kind);
