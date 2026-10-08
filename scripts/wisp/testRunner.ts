@@ -221,10 +221,13 @@ const quiet = readPressure.pipe(
   Effect.flatMap((reading) => (Option.isSome(reading) ? Effect.succeed(reading.value) : readPressure)),
 );
 
-type Verdict = "passed" | "failed" | "inconclusive";
+export type Verdict = "passed" | "failed" | "inconclusive";
 
-/** Timing files run until each passes, fails on a quiet machine, or runs out of attempts. */
-const timingTests = (files: readonly string[], args: readonly string[], print: (line: string) => void) => Effect.gen(function*() {
+/**
+ * Timing files run until each passes, fails on a quiet machine, or runs out of attempts.
+ * A project whose own runner runs the correctness tests calls this for the timing phase.
+ */
+export const timingTests = (files: readonly string[], args: readonly string[], print: (line: string) => void) => Effect.gen(function*() {
   const verdicts = new Map<string, Verdict>();
   let pending = [...files];
   for (let attempt = 1; attempt <= TIMING_ATTEMPTS && pending.length > 0; attempt++) {
