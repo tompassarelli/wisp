@@ -2,7 +2,8 @@
 // files and the screenshot reader. Every case is a ruler: a model whose
 // needle shows, seen from above, which sequence it samples (the needle's
 // lane, Y) and at which frame (its offset, X); a second marker shows the
-// global sequence's frame. Model units are world units at scale 1. The first
+// global sequence's frame, and a still square is the origin both are read
+// from. Model units are world units at scale 1. The first
 // two columns are wisp#58's animation playback cases, the third wisp#59's
 // effect lifetime and matrix scale cases.
 
@@ -55,9 +56,18 @@ export const CLIP_SEQUENCES: readonly RulerSequence[] = [
 
 /** The global sequence's length; its marker moves half a unit per millisecond. */
 export const GLOBAL_LENGTH = 2000;
-/** Where the global marker and the calibration marks sit below a ruler's origin. */
-export const CLOCK_DY = -20;
-export const MARK_DY = -40;
+/** Where the global marker sits at frame 0, from a ruler's origin. */
+export const CLOCK_DX = 40;
+export const CLOCK_DY = -15;
+/**
+ * A larger, still square below the origin. A screenshot reads every needle
+ * and global marker from it, so a model drawn away from its unit's position
+ * still reads true.
+ */
+export const ORIGIN_DY = -35;
+export const ORIGIN_HALF = 10;
+/** Where the calibration marks sit below a ruler's origin. */
+export const MARK_DY = -60;
 /** A ruler's length: its end mark's X offset. */
 export const RULER_LENGTH = 1000;
 
@@ -88,24 +98,28 @@ export interface Slot {
   readonly issue: 58 | 59;
 }
 
-const COLUMNS = [-1700, -550, 600];
-const ROWS = 9;
+const COLUMNS = [-1750, -550, 650];
+const ROWS = 10;
 const ROW_TOP = 500;
-const ROW_PITCH = 120;
+const ROW_PITCH = 160;
 const UNTIMED = 2000;
 /** One ruler per case, in reading order: each column top to bottom. */
 const NAMES: readonly (readonly [name: string, timing: number, issue: 58 | 59])[] = [
   ["unit-stand", 0, 58], ["unit-stand-hit", 0, 58], ["birth-during", 35, 58], ["birth-after", 35, 58], ["global-frozen", 0, 58],
-  ["global-kept", 35, 58], ["index-out-of-range", 0, 58], ["clip-shown", 0, 58], ["clip-second-seek", 0, 58],
-  ["loop-played", 35, 58], ["loop-reference", 35, 58], ["nonloop-held", 35, 58], ["loop-seek-past-end", 0, 58], ["nonloop-seek-past-end", 0, 58],
+  ["global-kept", 35, 58], ["index-out-of-range", 0, 58], ["clip-shown", 0, 58], ["clip-second-seek", 0, 58], ["select-freeze-seek", 35, 58],
+  ["freeze-then-select-seek", 35, 58], ["loop-played", 35, 58], ["loop-reference", 35, 58], ["nonloop-held", 35, 58],
+  ["loop-seek-past-end", 35, 58], ["nonloop-seek-past-end", 35, 58],
   ["blend-150", 50, 58], ["blend-0", 35, 58], ["blend-switch-frozen", 35, 58], ["timescale-then-select", 35, 58],
-  ["death-frozen", 0, 59], ["no-death-frozen", 0, 59], ["death-playing", UNTIMED, 59], ["death-reference", UNTIMED, 59],
-  ["teardown-hidden", 0, 59], ["matrix-scale-once", 0, 59], ["matrix-scale-twice", 0, 59], ["matrix-scale-reset", 0, 59],
+  ["death-reference", UNTIMED, 59], ["death-at-0", UNTIMED, 59], ["death-at-1", UNTIMED, 59], ["death-at-2", UNTIMED, 59],
+  ["death-frozen", 35, 59], ["no-death-frozen", 0, 59], ["teardown-hidden", 0, 59],
+  ["matrix-scale-once", 70, 59], ["matrix-scale-twice", 70, 59], ["matrix-scale-reset", 70, 59],
 ];
 export const SLOTS: readonly Slot[] = NAMES.map(([name, timing, issue], index) => {
   const column = floorDiv(index, ROWS);
   return { name, x: COLUMNS[column] ?? 0, y: ROW_TOP - ROW_PITCH * floorMod(index, ROWS), timing, issue };
 });
+/** Every ruler's extent, for the board under them: the end marks, the Attack needle's jump and the top lane. */
+export const BOARD_EXTENT = { low: [(COLUMNS[0] ?? 0) - 80, ROW_TOP - ROW_PITCH * (ROWS - 1) + MARK_DY - 20], high: [(COLUMNS[2] ?? 0) + 1180, ROW_TOP + 110] } as const;
 
 /**
  * A mark left of the first ruler's zero mark. The rulers' marks look the same
@@ -118,9 +132,21 @@ export function slotNamed(name: string): Slot {
   throw new Error(`no ruler named ${name}`);
 }
 
-/** The top-down camera every client uses; the reader needs only the marks, not these numbers. */
-export const CAMERA = { x: 0, y: 40, distance: 2700, fieldOfView: 70 };
-/** Game seconds after which every case is frozen and the scene can be captured. */
-export const READY_SECONDS = 6;
-/** The headless frame the rows are read on, a second after READY_SECONDS. */
-export const CAPTURE_FRAME = (READY_SECONDS + 1) * 60;
+/**
+ * The top-down camera every client uses; the reader needs only the marks, not
+ * these numbers. 3.0.1 draws this view from Y = 640 at the top of a 1920×1080
+ * screen to Y = -1543 at the bottom, the headless renderer from 1083 to -1043.
+ */
+export const CAMERA = { x: 0, y: 20, distance: 2700, fieldOfView: 70 };
+/**
+ * Every case starts this many game seconds after the map does. 3.0.1 ran the
+ * timers of the first second in one frame, before effects began to animate,
+ * so a case set up at start was measured at the wrong moment.
+ */
+export const START_SECONDS = 3;
+/** Seconds after the start: rulers destroyed at DEATH_SECONDS + 0, 1 and 2, beside one told to play Death at DEATH_SECONDS. */
+export const DEATH_SECONDS = 5.25;
+/** Seconds after the start when every case is set, the map writes its rows and the scene can be captured. */
+export const READY_SECONDS = 8;
+/** The headless frame the rows are read on, a second after the map is ready. */
+export const CAPTURE_FRAME = (START_SECONDS + READY_SECONDS + 1) * 60;

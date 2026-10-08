@@ -1,13 +1,14 @@
 // Reads a capture of the #58 animation fixture into the rows of expected.ts:
 // `bun test/animation58/read.ts SCREENSHOT.png`. The yellow marks under each
 // ruler give its zero and its 1000-unit end, so the reading holds for any
-// camera scale, rotation or mirroring; the red patches are the needles and
-// the global markers.
+// camera scale, rotation or mirroring; the red patches are the needles, the
+// global markers and each ruler's larger origin square, which the other two
+// are measured from.
 import { inflateSync } from "node:zlib";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Console, Effect, Schema } from "effect";
 import { EXPECTED } from "./expected";
-import { CLOCK_DY, MARK_DY, ORIENTATION_MARK, RULER_LENGTH, SLOTS, type Slot } from "./layout";
+import { CLOCK_DX, CLOCK_DY, DEATH_SECONDS, MARK_DY, ORIENTATION_MARK, ORIGIN_DY, READY_SECONDS, RULER_LENGTH, SLOTS, type Slot } from "./layout";
 
 class ReadFailure extends Schema.TaggedError<ReadFailure>()("ReadFailure", { problem: Schema.String }) {
   override get message(): string { return this.problem; }
@@ -175,11 +176,18 @@ export function calibrate(yellow: readonly Blob[]): { affine: Affine; matched: n
   return { affine: pairs.length >= 6 ? fit(pairs) : affine, matched: pairs.length };
 }
 
-export interface Reading { readonly slot: Slot; readonly dx: number; readonly dy: number; readonly gx: number }
+export interface Reading {
+  readonly slot: Slot;
+  readonly dx: number;
+  readonly dy: number;
+  readonly gx: number;
+  /** Where the origin square was drawn, from where the ruler's slot puts it. */
+  readonly offset: readonly [number, number];
+}
 
 /**
- * Each ruler's needle and global marker in world units from its origin,
- * measured along the line through its own two marks.
+ * Each ruler's needle and global marker in world units from its drawn origin
+ * square, measured along the line through its own two marks.
  */
 export function readRulers(image: Image): { readings: (Reading | string)[]; matched: number } {
   const yellow = blobs(image, isYellow);
@@ -194,23 +202,29 @@ export function readRulers(image: Image): { readings: (Reading | string)[]; matc
     // Along the ruler from its marks; across it, the global fit's world Y direction.
     const u = [(end.x - zero.x) / RULER_LENGTH, (end.y - zero.y) / RULER_LENGTH];
     const v = [affine[1], affine[4]];
-    const local = (blob: Blob): [number, number] => {
+    const local = (blob: Blob): [number, number, number] => {
       const px = blob.x - zero.x, py = blob.y - zero.y;
       const det = (u[0] ?? 0) * (v[1] ?? 0) - (u[1] ?? 0) * (v[0] ?? 0);
-      return [(px * (v[1] ?? 0) - py * (v[0] ?? 0)) / det, ((u[0] ?? 0) * py - (u[1] ?? 0) * px) / det + MARK_DY];
+      return [(px * (v[1] ?? 0) - py * (v[0] ?? 0)) / det, ((u[0] ?? 0) * py - (u[1] ?? 0) * px) / det + MARK_DY, blob.size];
     };
+    // The next column starts 1200 along and the next row 160 across; the row below's top lane sits 76 under this origin.
+    const own = red.map(local).filter(([x, y]) => x >= -60 && x <= RULER_LENGTH + 150 && y >= -70 && y <= 98);
+    if (own.length === 0) return `${slot.name}=gone`;
+    let origin: [number, number, number] | undefined;
+    for (const blob of own) {
+      if (Math.hypot(blob[0], blob[1] - ORIGIN_DY) <= 45 && (origin === undefined || blob[2] > origin[2])) origin = blob;
+    }
+    if (origin === undefined) return `${slot.name}=no origin`;
     let needle: [number, number, number] | undefined;
     let clock: [number, number, number] | undefined;
-    for (const blob of red) {
-      const [dx, dy] = local(blob);
-      // The highest lane ends at 89, the next ruler's global marker starts 95 above; the next column starts 1145 along.
-      if (dx < -40 || dx > RULER_LENGTH + 120 || dy < CLOCK_DY - 12 || dy > 92) continue;
-      if (dy < CLOCK_DY / 2) { if (clock === undefined || blob.size > clock[2]) clock = [dx, dy, blob.size]; }
-      else if (needle === undefined || blob.size > needle[2]) needle = [dx, dy, blob.size];
+    for (const blob of own) {
+      if (blob === origin) continue;
+      const found: [number, number, number] = [blob[0] - origin[0], blob[1] - origin[1] + ORIGIN_DY, blob[2]];
+      if (Math.abs(found[1] - CLOCK_DY) <= 7 && found[0] >= CLOCK_DX - 15) { if (clock === undefined || found[2] > clock[2]) clock = found; }
+      else if (found[1] > CLOCK_DY + 7 && (needle === undefined || found[2] > needle[2])) needle = found;
     }
-    if (needle === undefined && clock === undefined) return `${slot.name}=gone`;
     if (needle === undefined || clock === undefined) return `${slot.name}=${needle === undefined ? "no needle" : "no global marker"}`;
-    return { slot, dx: needle[0], dy: needle[1], gx: clock[0] };
+    return { slot, dx: needle[0], dy: needle[1], gx: clock[0] - CLOCK_DX, offset: [origin[0], origin[1] - ORIGIN_DY] };
   });
   return { readings, matched };
 }
@@ -242,10 +256,34 @@ function overshoot(readings: readonly (Reading | string)[]): number | undefined 
   return lost < -501 ? lost + 1002 : lost;
 }
 
-/** How much later in ms the destroyed ruler's Death started than the one told to play Death at the same moment (30 ms a unit). */
-function deathLag(readings: readonly (Reading | string)[]): number | undefined {
-  const destroyed = reading(readings, "death-playing"), reference = reading(readings, "death-reference");
-  return destroyed === undefined || reference === undefined ? undefined : (reference.dx - destroyed.dx) * 30;
+/** Death needles move a unit every 30 ms. */
+const DEATH_MS = 30;
+
+/** When the capture was taken, in seconds after the map wrote its rows: read from the ruler playing Death since DEATH_SECONDS. */
+function captureMoment(readings: readonly (Reading | string)[]): number | undefined {
+  const reference = reading(readings, "death-reference");
+  return reference === undefined ? undefined : DEATH_SECONDS + reference.dx * DEATH_MS / 1000 - READY_SECONDS;
+}
+
+/**
+ * For each ruler destroyed `after` seconds past DEATH_SECONDS: how much later
+ * in ms its Death started than the reference's, or that it was gone and how
+ * long after its destruction the capture was taken.
+ */
+function deathLags(readings: readonly (Reading | string)[]): string[] {
+  const reference = reading(readings, "death-reference");
+  return ([["death-at-0", 0], ["death-at-1", 1], ["death-at-2", 2]] as const).map(([name, after]) => {
+    const dying = reading(readings, name);
+    if (dying !== undefined && reference !== undefined) return `${name}-lag=${Math.round((reference.dx - dying.dx) * DEATH_MS - after * 1000)} ms (headless 0; finishing the Stand loop first gives 750)`;
+    const since = reference === undefined ? undefined : reference.dx * DEATH_MS / 1000 - after;
+    return `${name}-lag=${dying === undefined ? "gone" : "unread"}${since === undefined ? "" : `, ${since.toFixed(2)} s after DestroyEffect`}`;
+  });
+}
+
+/** Rulers whose origin square was drawn more than 3 units from its slot, as `name dx,dy`. */
+function offsets(readings: readonly (Reading | string)[]): string {
+  const moved = readings.filter((candidate): candidate is Reading => typeof candidate !== "string" && Math.hypot(...candidate.offset) > 3);
+  return moved.length === 0 ? "none" : moved.map((moved) => `${moved.slot.name} ${Math.round(moved.offset[0])},${Math.round(moved.offset[1])}`).join("; ");
 }
 
 const program = (path: string | undefined) => Effect.gen(function*() {
@@ -262,9 +300,11 @@ const program = (path: string | undefined) => Effect.gen(function*() {
     yield* Console.log(`${row}  ${matches ? "matches" : `differs from ${expected}`}`);
   }
   const lost = overshoot(readings);
-  yield* Console.log(`loop-overshoot-lost=${lost === undefined ? "unread" : Math.round(lost)} ms (headless 59 at 60 frames a second; wrapping by the length loses 0)`);
-  const lag = deathLag(readings);
-  yield* Console.log(`death-start-lag=${lag === undefined ? "unread" : Math.round(lag)} ms (headless 0; finishing the Stand loop first gives 750)`);
+  yield* Console.log(`loop-overshoot-lost=${lost === undefined ? "unread" : Math.round(lost)} ms (wrapping by the length loses 0, dropping each lap's overshoot at 60 frames a second 59)`);
+  const moment = captureMoment(readings);
+  yield* Console.log(`capture-moment=${moment === undefined ? "unread" : `${moment.toFixed(2)} s after ready`}`);
+  for (const line of deathLags(readings)) yield* Console.log(line);
+  yield* Console.log(`drawn-away=${offsets(readings)}`);
   yield* Console.log(`${matching} of ${SLOTS.length} rulers match the headless rows`);
 });
 

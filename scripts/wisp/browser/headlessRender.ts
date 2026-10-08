@@ -210,7 +210,7 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>) {
   }
   renderer.setCamera(new Float32Array(view.eye), view.quaternion);
   const kind = pose.unit === true ? "unit" : "effect";
-  const sample = animationSample(instance.sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed, sought: pose.animationSought, ticks: pose.animationTicks }, kind);
+  const sample = animationSample(instance.sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, kind);
   const sampler = renderer as unknown as Sampler, elapsed = pose.animationElapsed * 1000;
   if (instance.sequence !== sample.sequence || elapsed < instance.clock) {
     if (sample.sequence >= 0) renderer.setSequence(sample.sequence);
