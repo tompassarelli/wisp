@@ -30,11 +30,16 @@ test("standalone records scripted checksums and skips live or explicitly disable
         expect(prepared.step).toBe(0);
         expect(prepared.scene.frame).toBe(clients.client(0).frame);
         expect(checksumCalls).toBe(0);
+        const socket = new WebSocket(`${player.url.replace("http", "ws")}frames`);
+        await new Promise((resolve) => socket.addEventListener("open", resolve, { once: true }));
         for (let frame = 0; frame < 3; frame++) {
-          const response = await fetch(`${player.url}frame`, { method: "POST", body: JSON.stringify({ buttons: [], axisX: 0, axisY: 0 }) });
-          expect(response.ok).toBe(true);
-          expect((await response.json()).checksum).toBe(expected === 0 ? undefined : "fixture");
+          const reply = new Promise<string>((resolve) => socket.addEventListener("message", (event) => resolve(String(event.data)), { once: true }));
+          socket.send(JSON.stringify({ buttons: [], axisX: 0, axisY: 0 }));
+          const packet = JSON.parse(await reply);
+          expect(packet.error).toBeUndefined();
+          expect(packet.checksum).toBe(expected === 0 ? undefined : "fixture");
         }
+        socket.close();
         await fetch(`${player.url}complete`, { method: "POST", body: "{}" });
         await player.completed;
         expect(checksumCalls).toBe(expected);
