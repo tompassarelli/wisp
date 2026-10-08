@@ -15,3 +15,9 @@ to `makeClient(clientsFile, watchOptions, doctorCommand, signOutCommand)`; see
 declared account. `wisp client sign-out CLIENT...` signs clients out (the
 fourth argument, from `makeSignOut`); the next doctor run signs them in again.
 The sample map has no account recovery declaration.
+
+`wisp client start [CLIENT...]` starts each client's private desktop and
+Battle.net as user services that outlive the command and its caller, runs
+doctor and returns at the menu; `wisp client status [CLIENT...]` names the
+service behind each, and `wisp client stop [CLIENT...]` stops them. See
+[clients as services](doctor.md#clients-as-services).

@@ -308,6 +308,7 @@ function world(scenario: Scenario = {}) {
       events.push(`steam ${url}`);
       if (scenario.steamStarts !== false) later(1, startLauncher);
     }),
+    startService: () => Effect.die("play starts no services"),
     start: (command, log) => Effect.sync(() => {
       const pid = nextPid++;
       events.push(`start ${command.join(" ")} > ${log}`);

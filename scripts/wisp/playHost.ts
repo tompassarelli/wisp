@@ -15,6 +15,7 @@ import { parseWords, separateInk } from "../warcraft/desktop";
 import { describeCause } from "./command";
 import { decodePpm } from "./frameProbe";
 import { type Collected, collect } from "./hostProcess";
+import { startService } from "./clientServices";
 import { reportedMenus } from "./menus";
 import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow } from "./play";
 
@@ -118,6 +119,7 @@ const machine = (run: Runner, tools: PlayTools): PlayMachine["Service"] => ({
   launch: (launcher) => launchInContainer(run, tools, launcher),
   openSteam: (url) => startDetached([tools.steam, url]).pipe(Effect.asVoid),
   start: startDetached,
+  startService: (unit, command, log) => startService(unit, command, log).pipe(Effect.mapError((failure) => new PlayProblem({ problem: failure.problem }))),
   read: (path, from = 0) => Effect.try({
     try: () => {
       let descriptor: number;
