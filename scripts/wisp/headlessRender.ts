@@ -1,8 +1,11 @@
 import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect, Schema } from "effect";
+import * as BunServices from "@effect/platform-bun/BunServices";
+import { Effect, Exit, Schema, Scope } from "effect";
+import { ChildProcess } from "effect/process";
 import type { EffectDeaths, EffectPose, HeadlessClient } from "../../src/headless/client";
+import { pollFor, spawnLogged } from "./hostProcess";
 import { deathSeconds } from "./models";
 
 export interface HeadlessRenderProject {
@@ -94,10 +97,18 @@ class DevTools {
   }
 }
 
-async function openBrowser(project: HeadlessRenderProject, bundle: string, fallback: boolean) {
-  const directory = await mkdtemp(join(tmpdir(), "wisp-render-"));
+const ChromePages = Schema.fromJsonString(Schema.Array(Schema.Struct({ type: Schema.String, webSocketDebuggerUrl: Schema.optional(Schema.String) })));
+
+const renderFailure = (cause: unknown) => (cause instanceof RenderFailure ? cause : new RenderFailure({ cause }));
+
+/** A headless Chrome with the renderer page loaded; Chrome, its server, socket and profile live until the scope closes. */
+const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: boolean) => Effect.gen(function*() {
+  const directory = yield* Effect.acquireRelease(
+    Effect.tryPromise({ try: () => mkdtemp(join(tmpdir(), "wisp-render-")), catch: renderFailure }),
+    (path) => Effect.promise(() => rm(path, { recursive: true, force: true })),
+  );
   const assets = new Map<string, Promise<Uint8Array | undefined>>();
-  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
+  const server = yield* Effect.acquireRelease(Effect.sync(() => Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
     const url = new URL(request.url);
     if (url.pathname === "/") return new Response('<!doctype html><html><body style="margin:0;background:#101522"><script type="module" src="/renderer.js"></script></body></html>', { headers: { "content-type": "text/html" } });
     if (url.pathname === "/renderer.js") return new Response(bundle, { headers: { "content-type": "text/javascript" } });
@@ -107,41 +118,47 @@ async function openBrowser(project: HeadlessRenderProject, bundle: string, fallb
     if (pending === undefined) assets.set(path, pending = project.readAsset(path));
     const data = await pending;
     return data === undefined ? new Response(`missing map asset: ${path}`, { status: 404 }) : new Response(new Uint8Array(data));
-  }});
-  const chrome = Bun.spawn([project.chrome ?? process.env.CHROME ?? "google-chrome-stable", "--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--disable-sync", "--remote-debugging-port=0", `--user-data-dir=${directory}`, "--use-gl=angle", `--use-angle=${fallback ? "swiftshader" : "gl"}`, ...(fallback ? ["--enable-unsafe-swiftshader"] : []), `http://127.0.0.1:${server.port}/`], { stdout: "ignore", stderr: Bun.file(join(directory, "chrome.log")) });
-  let devtools: DevTools | undefined;
-  const close = async () => {
-    devtools?.socket.close();
-    chrome.kill();
-    await chrome.exited;
-    await server.stop(true);
-    await rm(directory, { recursive: true, force: true });
-  };
-  try {
-    let port: string | undefined;
-    for (let attempt = 0; attempt < 200; attempt++) {
-      const active = await readFile(join(directory, "DevToolsActivePort"), "utf8").catch(() => "");
-      port = active.split("\n")[0];
-      if (port) break;
-      if (chrome.exitCode !== null) throw new Error(`Chrome exited: ${await readFile(join(directory, "chrome.log"), "utf8")}`);
-      await Bun.sleep(50);
+  }})), (open) => Effect.promise(() => open.stop(true)));
+  const chromeLog = join(directory, "chrome.log");
+  const chrome = yield* spawnLogged(ChildProcess.make(project.chrome ?? process.env.CHROME ?? "google-chrome-stable", ["--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--disable-sync", "--remote-debugging-port=0", `--user-data-dir=${directory}`, "--use-gl=angle", `--use-angle=${fallback ? "swiftshader" : "gl"}`, ...(fallback ? ["--enable-unsafe-swiftshader"] : []), `http://127.0.0.1:${server.port}/`]), { stdout: join(directory, "chrome.out"), stderr: chromeLog }).pipe(Effect.mapError(renderFailure));
+  const port = yield* pollFor(10, "50 millis", Effect.gen(function*() {
+    const active = yield* Effect.promise(() => readFile(join(directory, "DevToolsActivePort"), "utf8").catch(() => ""));
+    const port = active.split("\n")[0];
+    if (port) return port;
+    if (!(yield* chrome.handle.isRunning.pipe(Effect.mapError(renderFailure)))) {
+      yield* chrome.written;
+      return yield* new RenderFailure({ cause: `Chrome exited: ${yield* Effect.promise(() => readFile(chromeLog, "utf8").catch(() => ""))}` });
     }
-    if (!port) throw new Error("Chrome did not open its DevTools port within 10 seconds");
-    const pages = await fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.json()) as { type: string; webSocketDebuggerUrl: string }[];
-    const page = pages.find((candidate) => candidate.type === "page");
-    if (page === undefined) throw new Error("Chrome has no render page");
-    const socket = new WebSocket(page.webSocketDebuggerUrl);
-    await new Promise<void>((resolve, reject) => { socket.addEventListener("open", () => resolve(), { once: true }); socket.addEventListener("error", reject, { once: true }); });
-    devtools = new DevTools(socket);
-    for (let attempt = 0; attempt < 200; attempt++) {
-      if (await devtools.evaluate("typeof window.renderScene === 'function'")) break;
-      if (attempt === 199) throw new Error("The model renderer did not load within 10 seconds");
-      await Bun.sleep(50);
-    }
-    const gpu = await devtools.evaluate(`window.prepareRenderer(${project.width ?? 1280},${project.height ?? 720})`);
-    return { devtools, gpu, close };
-  } catch (cause) { await close(); throw cause; }
-}
+    return undefined;
+  }));
+  if (port === undefined) return yield* new RenderFailure({ cause: "Chrome did not open its DevTools port within 10 seconds" });
+  const pages = yield* Effect.tryPromise({ try: () => fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.text()), catch: renderFailure }).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(ChromePages)),
+    Effect.mapError(renderFailure),
+  );
+  const url = pages.find((candidate) => candidate.type === "page")?.webSocketDebuggerUrl;
+  if (url === undefined) return yield* new RenderFailure({ cause: "Chrome has no render page" });
+  const socket = yield* Effect.acquireRelease(Effect.callback<WebSocket, RenderFailure>((resume) => {
+    const opening = new WebSocket(url);
+    opening.addEventListener("open", () => resume(Effect.succeed(opening)), { once: true });
+    opening.addEventListener("error", (cause) => resume(Effect.fail(new RenderFailure({ cause }))), { once: true });
+  }), (open) => Effect.sync(() => open.close()));
+  const devtools = new DevTools(socket);
+  const evaluate = (expression: string) => Effect.tryPromise({ try: () => devtools.evaluate(expression), catch: renderFailure });
+  const loaded = yield* pollFor(10, "50 millis", evaluate("typeof window.renderScene === 'function'").pipe(Effect.map((ready) => (ready ? true : undefined))));
+  if (loaded === undefined) return yield* new RenderFailure({ cause: "The model renderer did not load within 10 seconds" });
+  const gpu = yield* evaluate(`window.prepareRenderer(${project.width ?? 1280},${project.height ?? 720})`);
+  return { devtools, gpu };
+});
+
+/** Chrome on the GPU, or on SwiftShader once that fails; a failed attempt's resources are released before the next. */
+const openAnyBrowser = (project: HeadlessRenderProject, bundle: string) => Effect.gen(function*() {
+  const attempt = (fallback: boolean) => Effect.gen(function*() {
+    const scope = yield* Scope.fork(yield* Effect.scope);
+    return yield* openBrowser(project, bundle, fallback).pipe(Scope.provide(scope), Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))));
+  });
+  return yield* attempt(false).pipe(Effect.catch(() => attempt(true)));
+});
 
 /** Draws captured scenes with the map's models, textures, camera and UI. */
 export const renderScenes = (project: HeadlessRenderProject, scenes: readonly RenderScene[], directory: string) => Effect.scoped(Effect.gen(function*() {
@@ -150,7 +167,7 @@ export const renderScenes = (project: HeadlessRenderProject, scenes: readonly Re
     if (!result.success || result.outputs[0] === undefined) throw new Error(result.logs.join("\n"));
     return result.outputs[0].text();
   }, catch: (cause) => new RenderFailure({ cause }) });
-  const browser = yield* Effect.acquireRelease(Effect.tryPromise({ try: () => openBrowser(project, bundle, false).catch(() => openBrowser(project, bundle, true)), catch: (cause) => new RenderFailure({ cause }) }), (resource) => Effect.promise(resource.close));
+  const browser = yield* openAnyBrowser(project, bundle);
   return yield* Effect.tryPromise({ try: async () => {
     await mkdir(directory, { recursive: true });
     const images: { frame: number; client: number; image: string; models: number; textures: number }[] = [];
@@ -164,4 +181,4 @@ export const renderScenes = (project: HeadlessRenderProject, scenes: readonly Re
     await Bun.write(join(directory, "render.json"), JSON.stringify({ renderer: "war3-model 4.0.1 + HD sampling precision", gpu: browser.gpu, images }, null, 2) + "\n");
     return images;
   }, catch: (cause) => new RenderFailure({ cause }) });
-})).pipe(Effect.timeout("2 minutes"));
+})).pipe(Effect.provide(BunServices.layer), Effect.timeout("2 minutes"));
