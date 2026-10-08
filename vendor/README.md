@@ -3,7 +3,7 @@
 `war3-model.mjs` and `war3-model.d.mts` build
 4eb0da/war3-model's npm 4.0.1 source revision
 `542d884380c358b19db1b25f2d7d1072dd8c636f` with the adjacent source patch.
-The owning source commit is `c6db69929830a96ac009a93caf6c7dad8701f919` (branch `effects-72`, on top of
+The owning source commit is `f156013b44d3c685725dd91e0fd9f601a5c9dbb8` (branch `effects-72`, on top of
 `2d7b6490495240244808883876458a8bfb1bfad6`) in `~/code/war3-model/worktrees/effects-72`.
 
 The HD environment prefilter shader reverses 32-bit sample indices.
@@ -24,7 +24,8 @@ Layers multiply their own and their geoset's animated alpha and the model's
 alpha (`setInstanceAlpha`, an effect's alpha) into the fragment alpha, and
 additive layers blend with (source alpha, one), as the MDX filter mode tables
 describe. `layerOpacity` and `layerBlendFactors` export those rules. Particle texture cells run row by row and repeat past
-the grid's last cell.
+the grid's last cell. A squirt emitter fires only on a time step that reaches
+its key, never on a zero-length pose refresh.
 
 Wisp adds four changes to the built file. Light records read the 1200,
 1300 and 1600 fields (shadow intensity, shadow casting, falloff), as Tom's
