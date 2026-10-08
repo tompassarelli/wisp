@@ -16,7 +16,7 @@ describe("operations match the binary64 oracle on random binary32 operands", () 
     const sign = random() < 0.5 ? -1 : 1;
     return Math.fround(sign * (1 + random()) * 2 ** Math.floor(random() * 80 - 40));
   };
-  test("5,000 operand pairs", () => {
+  test("[reference] 5,000 operand pairs", () => {
     for (let i = 0; i < 5000; i++) {
       const a = operand();
       const b = operand();
@@ -56,7 +56,7 @@ describe("operations match the binary64 oracle on random binary32 operands", () 
     }
     return best;
   };
-  test("5,000 fused multiply-adds, half of them cancelling the product to a few bits", () => {
+  test("[reference] 5,000 fused multiply-adds, half of them cancelling the product to a few bits", () => {
     for (let i = 0; i < 5000; i++) {
       const a = operand();
       const b = operand();
@@ -68,12 +68,12 @@ describe("operations match the binary64 oracle on random binary32 operands", () 
 
 // Host only: the midpoint between the largest binary32 value and 2^128 is a
 // binary64 input that Warcraft numbers can't hold.
-test("roundToFloat32: the overflow midpoint rounds to infinity", () => {
+test("[reference] roundToFloat32: the overflow midpoint rounds to infinity", () => {
   same(roundToFloat32(16777215.5 * 2 ** 104), Infinity);
   same(roundToFloat32(-16777215.5 * 2 ** 104), -Infinity);
 });
 
-test("square root matches the binary64 oracle on 5,000 positive binary32 bit patterns", () => {
+test("[reference] square root matches the binary64 oracle on 5,000 positive binary32 bit patterns", () => {
   const view = new DataView(new ArrayBuffer(4));
   let state = 0x2545f491;
   for (let i = 0; i < 5000; i++) {
@@ -85,7 +85,7 @@ test("square root matches the binary64 oracle on 5,000 positive binary32 bit pat
   }
 });
 
-test("f32 repeated operands retain every result bit across operations and collisions", () => {
+test("[reference] f32 repeated operands retain every result bit across operations and collisions", () => {
   const operands = [0, -0, Math.fround(0.1), Math.fround(-0.2), Math.fround(32.1), Math.fround(-32.2), 32768, -32768, 65536, Math.fround(2 ** -149)];
   for (let repeat = 0; repeat < 3; repeat++) {
     for (const a of operands) {

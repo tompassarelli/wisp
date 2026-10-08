@@ -8,7 +8,7 @@ import "../src/path.tests";
 
 for (const { name, run } of registeredTests) test(name, run);
 
-test("the registered tests pass in 32-bit Lua", () => {
+test("[reference] the registered tests pass in 32-bit Lua", () => {
   expect(report(mapCompiler(join(import.meta.dir, "../tsconfig.tests.json"))())).toBe("");
   const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "../build/tests/tests.lua")], { stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });

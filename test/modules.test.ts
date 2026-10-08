@@ -41,7 +41,7 @@ export function start(): void {
 }
 `;
 
-test("full and incremental module reloads end in the same modules, state and native calls in two Lua32 clients; damaged and broken versions are refused everywhere", () => {
+test("[invariant] full and incremental module reloads end in the same modules, state and native calls in two Lua32 clients; damaged and broken versions are refused everywhere", () => {
   mkdirSync(join(root, "build"), { recursive: true });
   const directory = mkdtempSync(join(root, "build/modules-"));
   try {

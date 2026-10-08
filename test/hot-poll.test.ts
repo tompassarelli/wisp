@@ -37,7 +37,7 @@ function lookupsDuring(clients: Lockstep, frames: number): number[] {
   return missed(clients).map((count, index) => count - (before[index] ?? 0));
 }
 
-test("clients no host has prepared look up at most twice a second, which a whole-folder lookup keeps under 0.07 s per second", () => {
+test("[spec docs/hot-reload.md] clients no host has prepared look up at most twice a second, which a whole-folder lookup keeps under 0.07 s per second", () => {
   const clients = runtime.clients(reloader);
   clients.start({ hostFolder: false });
   // Start looks for the first manifest and the marker, once.
@@ -52,7 +52,7 @@ test("clients no host has prepared look up at most twice a second, which a whole
   expect(clients.firstDivergence()).toBeUndefined();
 });
 
-test("the host's marker switches clients to a lookup every poll, and the next reload is then found on the first poll", () => {
+test("[spec docs/hot-reload.md] the host's marker switches clients to a lookup every poll, and the next reload is then found on the first poll", () => {
   const clients = runtime.clients(reloader);
   clients.start({ hostFolder: false });
   clients.frames(100);
@@ -67,7 +67,7 @@ test("the host's marker switches clients to a lookup every poll, and the next re
   expect(clients.firstDivergence()).toBeUndefined();
 });
 
-test("a reload published to clients that have seen no host is found within a second", () => {
+test("[spec docs/hot-reload.md] a reload published to clients that have seen no host is found within a second", () => {
   const clients = runtime.clients(reloader);
   clients.start({ hostFolder: false });
   clients.frames(100);
@@ -78,7 +78,7 @@ test("a reload published to clients that have seen no host is found within a sec
   expect(clients.firstDivergence()).toBeUndefined();
 });
 
-test("clients started after a host prepared the hot folder look up at every poll from the start", () => {
+test("[spec docs/hot-reload.md] clients started after a host prepared the hot folder look up at every poll from the start", () => {
   const clients = runtime.clients(reloader);
   clients.start();
   for (const lookups of lookupsDuring(clients, FRAMES_PER_SECOND)) expect(lookups).toBe(POLLS_PER_SECOND);

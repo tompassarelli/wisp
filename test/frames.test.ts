@@ -3,7 +3,7 @@ import { FrameDefinitionError, frameDefinitionProblems, generateFrames, type Fra
 import { FRAME_POINTS, Frames } from "../src/headless/frames";
 import { opponentSettings } from "./fixtures/frames/opponentSettings";
 
-test("the opponent-settings panel generates FDF, TOC and native bindings", () => {
+test("[native] the opponent-settings panel generates FDF, TOC and native bindings", () => {
   const generated = generateFrames(opponentSettings);
   expect(generated.tocEntry).toBe("war3mapImported\\OpponentSettings.toc");
   expect(generated.toc).toBe("war3mapImported\\OpponentSettings.fdf\r\n\r\n");
@@ -29,7 +29,7 @@ test("the opponent-settings panel generates FDF, TOC and native bindings", () =>
   expect(generated.bindings).toContain("  readonly difficultyValue: framehandle;");
 });
 
-test("invalid names, references and frame types are reported together at build time", () => {
+test("[spec #28] invalid names, references and frame types are reported together at build time", () => {
   const broken = {
     name: "Bad Panel",
     type: "FRAME",
@@ -63,7 +63,7 @@ test("invalid names, references and frame types are reported together at build t
   expect(() => generateFrames(broken)).toThrow(FrameDefinitionError);
 });
 
-test("a definition may inherit its own frames and declared templates", () => {
+test("[spec docs/ui.md] a definition may inherit its own frames and declared templates", () => {
   const definition: FrameDefinition = {
     name: "Pair", type: "FRAME", width: 0.2, height: 0.1, templates: ["SmashcraftDamage"],
     children: [
@@ -74,7 +74,7 @@ test("a definition may inherit its own frames and declared templates", () => {
   expect(generateFrames(definition).fdf).toContain('SetPoint LEFT, "PairLeft", RIGHT, 0.01, 0,');
 });
 
-test("a headless client makes a defined tree by name: named children under the root, placed by their anchors", () => {
+test("[provisional] a headless client makes a defined tree by name: named children under the root, placed by their anchors", () => {
   const frames = new Frames(new Map(FRAME_POINTS.map(([name, fromLeft, fromTop]) => [name, [fromLeft, fromTop] as const])));
   frames.define([opponentSettings]);
   let id = 0;

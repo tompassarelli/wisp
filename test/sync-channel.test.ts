@@ -14,14 +14,14 @@ function modelAges(samples: number): number[] {
 
 const at = (sorted: readonly number[], p: number) => sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))] ?? Number.NaN;
 
-test("the measured latency gives r7 and r8's unsaturated own-echo ages within 15 ms", () => {
+test("[native] the measured latency gives r7 and r8's unsaturated own-echo ages within 15 ms", () => {
   // 765 own echoes from both clients, 1.5-9.5 s into the first match of Smashcraft #26 r7 and r8.
   const measured = [[0.1, 86], [0.25, 95], [0.5, 115], [0.75, 137], [0.9, 194], [0.95, 212]] as const;
   const ages = modelAges(10000);
   for (const [p, ms] of measured) expect(Math.abs(at(ages, p) - ms)).toBeLessThanOrEqual(15);
 });
 
-test("delivery is seeded, later than the send, and keeps each sender's order", () => {
+test("[invariant] delivery is seeded, later than the send, and keeps each sender's order", () => {
   const arrivals = (seed: number) => {
     const delivery = syncDelivery(MEASURED_BATTLE_NET, seed);
     const frames: number[][] = [[], []];

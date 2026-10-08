@@ -6,7 +6,7 @@ import { join } from "node:path";
 const sample = join(import.meta.dir, "..");
 const run = (program: string) => Bun.spawnSync(["bun", program, "headless"], { cwd: join(sample, "../.."), stdout: "pipe", stderr: "pipe" });
 
-test("the sample's journey passes and the desync fixture's fails", () => {
+test("[invariant] the sample's journey passes and the desync fixture's fails", () => {
   expect(run(join(sample, "scripts/sample.ts")).exitCode).toBe(0);
   const broken = run(join(sample, "test/fixtures/desync-sample.ts"));
   expect(broken.exitCode).toBe(1);

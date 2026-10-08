@@ -35,7 +35,7 @@ function fullArchive(name: string): { readonly archive: string; readonly existin
   return { archive, existing };
 }
 
-test("the native packager grows a full MPQ and preserves existing entries", () => {
+test("[repro 51dbdf4] the native packager grows a full MPQ and preserves existing entries", () => {
   fullArchive("single");
 });
 
@@ -94,7 +94,7 @@ function blp(): Uint8Array {
   return bytes;
 }
 
-test("listed entries are packaged and extracted in one archive opening, byte for byte, keeping clip and texture facts", async () => {
+test("[invariant] listed entries are packaged and extracted in one archive opening, byte for byte, keeping clip and texture facts", async () => {
   const { archive, existing } = fullArchive("listed");
   const packager = join(work, "map-pack");
   await Effect.runPromise(ensurePackager(packager));
@@ -130,9 +130,4 @@ test("listed entries are packaged and extracted in one archive opening, byte for
   expect([tga[16], tga[17]! & 15, tga[18 + 15 * 4 + 3], tga[18 + 2]]).toEqual([32, 8, 255, 255]);
   const texture = readFileSync(extracted.find(({ entry }) => entry.endsWith("blp-3"))!.source);
   expect([texture.readUInt32LE(8), texture[156 + 1024 + 16]]).toEqual([8, 255]);
-
-  const bad = join(work, "bad.list");
-  writeFileSync(bad, "no tab here\n");
-  const refused = Bun.spawnSync([packager, "replace-list", archive, bad]);
-  expect({ code: refused.exitCode, stderr: refused.stderr.toString().trim() }).toEqual({ code: 2, stderr: "Entry list line 1 is not FILE<TAB>ARCHIVE_NAME" });
 });

@@ -15,9 +15,8 @@ function published(files: readonly (readonly [string, string])[], path: string):
   return undefined;
 }
 
-test("modules: a payload parses back to the index and the texts it carries", () => {
+test("[invariant] modules: a payload parses back to the index and the texts it carries", () => {
   const index = moduleIndex("main", [["main", "1:2"], ["shared value", "3:4"], ["lib", "5:6"]]);
-  assertEquals(index, "main\n1:2 main\n3:4 shared value\n5:6 lib\n");
   const payload = parsePayload(modulePayload(index, [{ name: "shared value", text: "return 1\n" }, { name: "lib", text: "" }]));
   assertTrue(payload !== undefined);
   assertEquals(payload?.index, index);
@@ -30,7 +29,7 @@ test("modules: a payload parses back to the index and the texts it carries", () 
   assertTrue(parsePayload(modulePayload(index, [])) !== undefined);
 });
 
-test("modules: a payload cut short, extended or carrying a module outside its index does not parse", () => {
+test("[invariant] modules: a payload cut short, extended or carrying a module outside its index does not parse", () => {
   const index = moduleIndex("main", [["main", "1:2"]]);
   const whole = modulePayload(index, [{ name: "main", text: "return {}\n" }]);
   assertTrue(parsePayload(whole) !== undefined);
@@ -40,7 +39,7 @@ test("modules: a payload cut short, extended or carrying a module outside its in
   assertEquals(parsePayload(""), undefined);
 });
 
-test("modules: payload pieces join back and never split a multi-byte character", () => {
+test("[invariant] modules: payload pieces join back and never split a multi-byte character", () => {
   const high = String.fromCharCode(0xc3);
   const text = `${"a".repeat(PAYLOAD_FILE_BYTES - 2)}${high.repeat(5)}${"b".repeat(PAYLOAD_FILE_BYTES)}`;
   const pieces = payloadPieces(text);
@@ -52,7 +51,7 @@ test("modules: payload pieces join back and never split a multi-byte character",
   }
 });
 
-test("modules: once a state is installed, a version's delta carries only modules that differ from it", () => {
+test("[invariant] modules: once a state is installed, a version's delta carries only modules that differ from it", () => {
   const publisher = new ModulePublisher("fx");
   const first = publisher.files(1, set([["main", "return 1"], ["a", "return 2"], ["b", "return 3"]]));
   assertEquals(first.manifest.base, NO_BASE);

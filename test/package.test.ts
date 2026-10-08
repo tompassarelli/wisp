@@ -5,7 +5,7 @@ import { transpileProject } from "typescript-to-lua";
 import { report } from "../scripts/compiler";
 import { producePackage } from "../scripts/package";
 
-test("installed package resolves bare imports and preserves Lua32 numeric/reload behavior", async () => {
+test("[invariant] installed package resolves bare imports and preserves Lua32 numeric/reload behavior", async () => {
   const root = join(import.meta.dir, "..");
   await mkdir(join(root, "build"), { recursive: true });
   const fixture = await mkdtemp(join(root, "build/package-consumer-"));
