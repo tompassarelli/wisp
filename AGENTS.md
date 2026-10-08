@@ -41,5 +41,10 @@ No Smashcraft source imports or filesystem dependencies. Games supply their
 configuration, assets, map declaration and acceptance journeys. Keep proprietary
 assets and binaries outside this repository. No releases are authorized.
 
+Main stays green. Each CI run on main opens, updates or closes the one
+"main is red" issue, which lists the failing tests and the first failing
+commit, and every push prints that list (wisp:docs/ci.md, "Main stays green").
+A red main is not "already failing": if your commit broke it, fix it first.
+
 Use owned lanes, named staging and safe-push. Preserve current immutable pins.
 Native client control belongs to the accountable parent run for this extraction.

@@ -1,0 +1,6 @@
+#!/usr/bin/env bun
+// Git's pre-push hook; the gate is wisp:scripts/prePush.ts.
+import { Effect } from "effect";
+import { prePush } from "../scripts/prePush.ts";
+
+await Effect.runPromise(prePush);

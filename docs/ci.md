@@ -133,3 +133,34 @@ output as `wisp-ci-sample` and `wisp-ci-sample-failing-fixture`.
 wisp:examples/sample/test/failing-fixture.test.ts checks the same verdict
 locally. Wisp has no self-hosted runner, so its CI never sets
 `private-map-build`.
+
+The `framework` job runs Wisp's own check and full Bun suite. It installs
+Ubuntu's `libstorm-dev` and sets `STORMLIB_PREFIX=/usr` and `CC=gcc`, so the
+map packager (wisp:scripts/wisp/mapBuild.ts) and its tests
+(wisp:test/map-pack.test.ts) build against that StormLib instead of nixpkgs';
+without those two variables they use `nix`.
+
+## Main stays green
+
+Each finished CI run on `main` opens, updates or closes one issue titled
+"main is red" (wisp:.github/workflows/main-red.yml, which runs
+wisp:scripts/mainRed.ts). A failed run lists each failing test (Bun's
+`(fail)` lines; a failed step with none, such as the type check, by its step
+name), the first failing commit since the last green run and the compare link
+from that green commit. A later failed run rewrites the list; a green run
+closes the issue. A run that finishes after a newer one reports nothing, so
+events arriving out of order never reopen or close it.
+
+Dispatching the workflow with a CI run ID reports any branch's run the same
+way, as "BRANCH is red", which is how to try it on a scratch branch.
+
+Every push prints the open issue's failing tests in one line and never blocks:
+
+```text
+pre-push: main is red (#71 https://github.com/tompassarelli/wisp/issues/71), 2 failing: perf --json plays …; the overlay shows …
+```
+
+That is wisp:.githooks/pre-push running wisp:scripts/prePush.ts; enable it
+once per clone with `git config core.hooksPath .githooks` (safe-push runs it).
+A red main is not "already failing": before landing, check whether your
+change touches a listed test, and if your commit broke main, fix it first.

@@ -1,0 +1,39 @@
+name: Main is red
+
+# Each finished CI run on main opens, updates or closes the one "main is red"
+# issue (wisp:scripts/mainRed.ts). Dispatch with a run ID to report
+# any branch's run, as "BRANCH is red".
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run:
+        description: CI run ID to report
+        required: true
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
+concurrency:
+  group: main-red
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun scripts/mainRed.ts "${{ inputs.run || github.event.workflow_run.id }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
