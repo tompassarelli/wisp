@@ -41,18 +41,22 @@ const JourneyFile = Schema.Struct({
 export function headlessArguments(args: readonly string[]) {
   const named: string[] = [], frames: number[] = [];
   let render: string | undefined, journey: string | undefined, sounds: string | undefined;
-  let runs = 1, stepFrames: number | undefined;
+  let runs = 1, stepFrames: number | undefined, musicVolume: number | undefined;
   for (let index = 0; index < args.length; index++) {
     const arg = args[index] ?? "";
     if (arg === "--frames") {
       while (index + 1 < args.length && /^\d+(,\d+)*$/.test(args[index + 1] ?? "")) frames.push(...(args[++index] ?? "").split(",").map(Number));
       if (frames.length === 0) throw new Error("--frames needs one or more frame numbers");
-    } else if (["--render", "--journey", "--sound-cues", "--clients", "--runs", "--step"].includes(arg)) {
+    } else if (["--render", "--journey", "--sound-cues", "--music-volume", "--clients", "--runs", "--step"].includes(arg)) {
       const value = args[++index];
       if (value === undefined || value.startsWith("--")) throw new Error(`${arg} needs a value`);
       if (arg === "--render") render = value;
       if (arg === "--journey") journey = value;
       if (arg === "--sound-cues") sounds = value;
+      if (arg === "--music-volume") {
+        musicVolume = Number(value);
+        if (!(musicVolume >= 0 && musicVolume <= 1)) throw new Error("--music-volume needs a number from 0 to 1");
+      }
       if (arg === "--runs" || arg === "--step") {
         const number = Number(value);
         if (!Number.isSafeInteger(number) || number < 1) throw new Error(`${arg} needs a positive integer`);
@@ -66,7 +70,7 @@ export function headlessArguments(args: readonly string[]) {
   if ((render === undefined) !== (frames.length === 0)) throw new Error("--render DIR and --frames N... are used together");
   if (journey !== undefined && named.length > 0) throw new Error("--journey FILE takes the place of a named journey");
   if (runs > 1 && render !== undefined) throw new Error("--render captures one run; use --runs for checks without rendering");
-  return { named, frames: [...new Set(frames)].sort((a, b) => a - b), render, journey, sounds, runs, stepFrames };
+  return { named, frames: [...new Set(frames)].sort((a, b) => a - b), render, journey, sounds, runs, stepFrames, musicVolume };
 }
 
 /**
@@ -112,7 +116,7 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
         try {
           let first: string | undefined;
           for (let run = 0; run < options.runs; run++) {
-            const clients = runtime.clients(entry, players, { keepCalls: 64, effectDeaths: (model) => { destroyedModels.add(model); return undefined; } });
+            const clients = runtime.clients(entry, players, { keepCalls: 64, ...(options.musicVolume === undefined ? {} : { musicSlider: options.musicVolume }), effectDeaths: (model) => { destroyedModels.add(model); return undefined; } });
             let sample = playHeadless(clients, journey, project.map.filePrefix, project.scene, { ...(options.stepFrames === undefined ? {} : { stepFrames: options.stepFrames }), observationFrames: options.frames, observe: (running) => { for (const client of running.clients) scenes.push(captureScene(client)); } });
             const fingerprint = JSON.stringify(sample.clients.map(({ slot, calls, checksum }) => ({ slot, calls, checksum })));
             if (first !== undefined && first !== fingerprint) {

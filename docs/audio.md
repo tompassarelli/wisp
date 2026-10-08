@@ -47,6 +47,16 @@ for a playing track, and a later start retains that mute. The events record
 map-call timing and gain; device mixer settings, fade envelopes and audible
 asset fidelity come from Warcraft reference captures.
 
+## Player music volume
+
+Warcraft's Options > Sound music slider scales the music channel; the map
+cannot read it. `headless --music-volume V` (0 to 1, default 1) sets that
+slider for every client: each `music` row's `effectiveVolume` is the map's
+gain divided by 127, times V, and `sound` rows are unchanged. A track that
+should follow the player's setting reads 1 at `--music-volume 1` and 0 at
+`--music-volume 0`. In code, pass `musicSlider` to `runtime.clients` or the
+`Lockstep` options.
+
 ## Game acceptance
 
 From Smashcraft's `ts/`, after updating its Wisp pin:
