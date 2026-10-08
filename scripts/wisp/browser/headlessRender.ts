@@ -3,6 +3,7 @@ import { ModelRenderer, decodeBLP, getBLPImageData, parseMDL, parseMDX, type mod
 import { type AnimationSequence, animationSample, blendWeight, globalSequenceFrame, type SequenceSample } from "../../../src/headless/animation";
 import type { DrawnPose as EffectPose, RenderScene } from "../headlessRender";
 import { parsableModel } from "../models";
+import { orderDrawnModels } from "../drawOrder";
 
 type Matrix = Float32Array;
 const identity = (): Matrix => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -274,7 +275,8 @@ window.renderScene = async (scene, options) => {
   gl.viewport(0, 0, canvas.width, canvas.height); gl.depthMask(true); gl.clearColor(0.04, 0.06, 0.09, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
   const view = camera(scene, canvas.width / canvas.height);
   const visible = scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat);
-  for (const pose of visible) await drawEffect(pose, view);
+  await Promise.all(visible.map(prepareInstance));
+  for (const pose of orderDrawnModels(visible, (pose) => instances.get(pose.handle.id)?.model.Materials ?? [])) await drawEffect(pose, view);
   const live = options?.capture === false;
   const shown = live ? "block" : "none";
   if (canvas.style.display !== shown) { canvas.style.display = overlay.style.display = shown; output.style.display = live ? "none" : "block"; }

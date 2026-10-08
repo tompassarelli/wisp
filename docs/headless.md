@@ -635,6 +635,51 @@ the `string` and `sparse-integer` rows from both clients, excluding the local
 `player=` row. This measurement uses the native Lua table traversal; the
 Bun headless runtime's JavaScript object order cannot decide this check.
 
+## Effect visibility comparison (#72)
+
+Smashcraft's `f9d0fbf3` Classic batch on 8 October 2026 has 14 graded
+cases and 42 held screenshots. The same revision's `82-effects.pad` was
+replayed through the native driver to obtain 42 headless scenes. Both images
+are 1920 × 1080. Counts below use the native rubric: changed RGB pixels in
+the rectangle `(0.44, 0.36, 0.58, 0.72)`, with a channel difference greater
+than 20, relative to that case's +20 screenshot. Consequently +20 is zero
+by definition. A case passes when either +2 or +8 reaches 1,000 pixels.
+The native batch passes 12 cases and fails both electric cases.
+
+| Case | Native +2/+8/+20 | Original headless +2/+8/+20 | Agreement |
+| --- | --- | --- | --- |
+| Electric hit | 889/256/0 | 5634/538/0 | Fail |
+| Slash spark | 4034/0/0 | 4386/0/0 | Pass |
+| Ice spark | 19072/0/0 | 31517/0/0 | Pass |
+| Shield hit | 2950/0/0 | 3682/0/0 | Pass |
+| Electric shield | 424/0/0 | 3982/0/0 | Fail |
+| Shield break | 11686/0/0 | 12325/0/0 | Pass |
+| Floor tech | 1518/1789/0 | 121/166/0 | Fail |
+| Wall tech | 1365/1660/0 | 1806/2128/0 | Pass |
+| Ceiling tech | 1365/1656/0 | 1868/2202/0 | Pass |
+| Ledge catch | 1811/1430/0 | 2362/2904/0 | Pass |
+| Ledge dust | 6313/61246/0 | 0/0/0 | Fail |
+| Double jump | 3604/0/0 | 4274/5285/0 | Pass |
+| Wall jump | 2292/0/0 | 2735/3141/0 | Pass |
+| Landing | 7841/8799/0 | 14125/13189/0 | Pass |
+
+Floor tech was overpainted by the opaque platform: pooled cues were drawn
+first because they were created first. Drawing opaque models before blended
+models increases its counts to 1970/2260/0 and agreement to 11/14. The
+native-pinned regression is `test/draw-order.test.ts`.
+
+The electric models use additive mesh layers. The renderer uses source RGB
+as the blend factor and ignores mesh alpha, so multiplying fragment alpha
+alone does not correct their false passes. Ledge dust has no mesh and a
+continuous particle emitter; its particles are missing. Its native captures
+hold animation time at zero speed while particles continue, whereas headless
+advances particles only by animation time. Independent particle time and
+additive opacity remain to be matched before #72 can close. Layer/geoset
+opacity alone was tried on all 42 frames and left agreement at 10/14.
+
+Only measured numbers and authored code are kept here. Screenshots, stock
+models and textures stay in private local storage under the clean-room rules.
+
 ## Boundaries
 
 The runtime emulates natives; it is not Warcraft. It has no engine frame
