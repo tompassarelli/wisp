@@ -318,6 +318,54 @@ compare them with `EXPECTED` in `test/headless-unit-motion.test.ts`. In the
 same session, record one Smashcraft dash at native speed and compare the body's
 drawn position with its set position on the same frame.
 
+### Effects: attachment, scale and lifetime
+
+Owner: wisp#59. Smashcraft **main** at db050997 (`ts/src/`, excluding tests)
+calls `AddSpecialEffect` (55 sites), `DestroyEffect` (32) and these setters:
+`Scale` (40), `TimeScale` (35), `Time` (32), `Position` (29), `Alpha` (27),
+`Animation` (23), `Color` (18), `Yaw` (17), `AnimationBlendTime` (14),
+`Pitch` (9), `Roll` (5), `MatrixScale` (5), `ColorByPlayer` (4), `Z` (2),
+`X`/`Y` (1 each), and `BlzPlaySpecialEffect` (2). It calls no
+`AddSpecialEffectTarget`, `AddSpecialEffectLoc`, `BlzRemoveEffect`,
+`BlzResetSpecialEffectMatrix` or orientation getter; attachment points are
+not used, because every effect is placed by hand each frame. It reads effect
+positions back only through Wisp's scene report (`BlzGetLocalSpecialEffectX/Y/Z`).
+Hidden effects are collapsed with scale 0 and parked below the floor
+(`game/render/effects.ts`, `hideEffect`); the victory pose is scaled to 0
+before `DestroyEffect`, and the fighter light is switched off before it,
+because teardown can be deferred. Animation selection, seek and blending on
+effects belong to wisp#58 and are not repeated here. Fixture:
+`test/effects59/` (six cases, Bun and 32-bit Lua in
+`test/headless-effects.test.ts`, native map via its `build.ts`).
+
+| Behavior Smashcraft relies on | Warsmash rule | Wisp before #59 | Verdict |
+| --- | --- | --- | --- |
+| `AddSpecialEffect` start point | X and Y narrowed to binary32; Z is the higher of walkable surface and ground height; yaw 0 | X and Y stored unrounded; Z 0 (headless has flat ground at 0); yaw 0 | **Mismatch, fixed**: X and Y stored as binary32. Z and yaw **match** on headless's flat ground; case `created-at-point` |
+| `BlzSetSpecialEffectPosition`/`X`/`Y`/`Z` and read-back | Not registered in this revision; every effect real is a binary32 `real` argument | Stored unrounded; Bun kept doubles that Lua32 rounds; read back at once | **Mismatch, fixed**: stored as binary32. Axis setters change only their axis (case `axis-setters-independent`); reads in the same callback see the write (`position-read-in-same-call`) |
+| `BlzSetSpecialEffectScale(e, 0)` and parking below the floor (`hideEffect`) | Not registered; no rule | Scale 0 kept; position kept wherever written | **Match** for the script-visible part: case `scale-zero-parked` reads the parked Z. Whether scale 0 also stops particles is visual and stays with the capture |
+| Scale, matrix scale, yaw/pitch/roll, time scale, time and blend time values | Not registered; binary32 `real` arguments | Stored unrounded | **Mismatch, fixed**: all stored as binary32; `MatrixScale` multiplies the current matrix scale and rounds each product. None of them move the effect (case `scale-orientation-time-keep-position`) |
+| `BlzSetSpecialEffectMatrixScale` compounding | Not registered; no rule | Each call multiplies the current matrix scale until `BlzResetSpecialEffectMatrix` | **Unresolved, no getter**: Smashcraft sets it once per new deck, but `-dev backdrop on` (`showBackdrop`) reapplies it to existing scenery, which compounds if the real game multiplies. The capture's backdrop toggle decides |
+| Position held between frames, frozen (time scale 0) or playing | Effects are placed once; only attached effects follow a parent | Position changes only through setters | **Match**: case `held-after-quarter-second` reads both 0.25 s later unmoved |
+| `DestroyEffect` lifetime | The handle stops looping its stand animation, finishes the current sequence, plays Death, then disappears; an attached effect detaches first | Removed from the scene at once; later setters and reads on the handle do nothing | **Mismatch, not fixed in #59**: the visible tail is drawn by the renderer, which needs each model's sequence lengths, and a frozen (time scale 0) effect's tail never ends. Script-visible state matches: Smashcraft never touches a destroyed handle. Smashcraft already hides the victory pose and light before destroying them |
+| `AddSpecialEffectTarget` attachment | Picks the shortest attachment name containing every requested token, `origin` when empty; falls back to the unit's position | Placed at the unit's X/Y, no attachment | **Not relied on**: no Smashcraft call |
+
+Wisp still creates point effects at Z 0 because headless has no terrain; a
+map that reads a fresh effect's Z on a non-flat map would see the real
+ground height natively.
+[Effect natives](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4415-L4439),
+[destroy](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L4573-L4580),
+[point and attachment placement](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/War3MapViewer.java#L2104-L2203),
+[effect lifetime](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/rendersim/RenderSpellEffect.java).
+
+**Capture needed** (wisp#59's third box, batched with #56–#58): build
+`bun test/effects59/build.ts BASE.w3m OUT.w3x`, play it once on 3.0.1 with
+two clients, collect `effects-p0.txt` and `effects-p1.txt`, and compare them
+with `EXPECTED` in `test/headless-effects.test.ts` (`created-at-point`'s Z is
+the base map's ground height at (100.25, -50.5), not 0, on a non-flat map).
+In the same Smashcraft session: end one match and record whether any effect
+stays visible after teardown, and toggle `-dev backdrop off` then `on` and
+compare the deck and scenery widths before and after.
+
 ### Effect placement and unavailable effect setters
 
 A point effect starts at its requested XY and at the higher of walkable
