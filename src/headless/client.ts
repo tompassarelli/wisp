@@ -119,12 +119,15 @@ export interface CameraPose {
 }
 
 export interface SoundCue {
-  readonly event: "create" | "start";
+  readonly event: "create" | "start" | "stop" | "volume";
+  readonly kind: "sound" | "music";
   readonly frame: number;
   readonly handle: Handle;
   readonly source: string | undefined;
   readonly label: string | undefined;
   readonly volume: number;
+  readonly effectiveVolume: number;
+  readonly looping: boolean;
   readonly pitch: number;
   readonly x: number;
   readonly y: number;
@@ -132,6 +135,7 @@ export interface SoundCue {
 }
 
 interface SoundState {
+  readonly kind: "sound" | "music";
   readonly handle: Handle;
   readonly source: string | undefined;
   label: string | undefined;
@@ -561,6 +565,8 @@ export class HeadlessClient {
   private readonly unitStates: UnitStateFixtures;
   private readonly sounds = new Map<Handle, SoundState>();
   readonly soundLog: SoundCue[] = [];
+  private music: SoundState | undefined;
+  private musicVolume = 127;
   private cameraX = 0;
   private cameraY = 0;
   private readonly cameraFields: Record<string, number> = {};
@@ -745,16 +751,31 @@ export class HeadlessClient {
 
   private sound(source: string | undefined, label: string | undefined, looping: boolean): Handle {
     const handle = this.handle("sound");
-    const sound: SoundState = { handle, source, label, volume: 127, pitch: 1, x: 0, y: 0, z: 0, unit: undefined,
+    const sound: SoundState = { kind: "sound", handle, source, label, volume: 127, pitch: 1, x: 0, y: 0, z: 0, unit: undefined,
       looping, duration: 0, elapsed: 0, playing: false, killWhenDone: false };
     this.sounds.set(handle, sound);
     this.cue(sound, "create");
     return handle;
   }
 
-  private cue(sound: SoundState, event: "create" | "start"): void {
-    this.soundLog.push({ event, frame: this.frame, handle: sound.handle, source: sound.source, label: sound.label,
-      volume: sound.volume, pitch: sound.pitch, x: sound.unit?.x ?? sound.x, y: sound.unit?.y ?? sound.y, z: sound.z });
+  private cue(sound: SoundState, event: SoundCue["event"]): void {
+    this.soundLog.push({ event, kind: sound.kind, frame: this.frame, handle: sound.handle, source: sound.source, label: sound.label,
+      volume: sound.volume, effectiveVolume: sound.volume / 127, looping: sound.looping,
+      pitch: sound.pitch, x: sound.unit?.x ?? sound.x, y: sound.unit?.y ?? sound.y, z: sound.z });
+  }
+
+  private stopAudio(sound: SoundState): void {
+    if (!sound.playing) return;
+    this.cue(sound, "stop");
+    sound.playing = false;
+  }
+
+  private playMusic(source: string): void {
+    if (this.music !== undefined) this.stopAudio(this.music);
+    this.music = { kind: "music", handle: { kind: "music", id: 0 }, source, label: undefined,
+      volume: this.musicVolume, pitch: 1, x: 0, y: 0, z: 0, unit: undefined, looping: true,
+      duration: 0, elapsed: 0, playing: true, killWhenDone: false };
+    this.cue(this.music, "start");
   }
 
   private startSound(handle: Handle): void {
@@ -1120,7 +1141,7 @@ export class HeadlessClient {
       StopSound: (handle: Handle, killWhenDone: boolean) => {
         const sound = this.sounds.get(handle);
         if (sound === undefined) return;
-        sound.playing = false;
+        this.stopAudio(sound);
         if (killWhenDone || sound.killWhenDone) this.sounds.delete(handle);
       },
       SetSoundParamsFromLabel: (handle: Handle, label: string) => {
@@ -1129,7 +1150,25 @@ export class HeadlessClient {
       },
       SetSoundVolume: (handle: Handle, volume: number) => {
         const sound = this.sounds.get(handle);
-        if (sound !== undefined) sound.volume = volume;
+        if (sound !== undefined) {
+          sound.volume = Math.max(0, Math.min(127, volume));
+          if (sound.playing) this.cue(sound, "volume");
+        }
+      },
+      PlayMusic: (source: string) => this.playMusic(source),
+      PlayMusicEx: (source: string) => this.playMusic(source),
+      StopMusic: () => { if (this.music !== undefined) this.stopAudio(this.music); },
+      ResumeMusic: () => {
+        if (this.music === undefined || this.music.playing) return;
+        this.music.playing = true;
+        this.cue(this.music, "start");
+      },
+      SetMusicVolume: (volume: number) => {
+        this.musicVolume = Math.max(0, Math.min(127, volume));
+        if (this.music !== undefined) {
+          this.music.volume = this.musicVolume;
+          if (this.music.playing) this.cue(this.music, "volume");
+        }
       },
       SetSoundPitch: (handle: Handle, pitch: number) => {
         const sound = this.sounds.get(handle);
@@ -1373,7 +1412,7 @@ export class HeadlessClient {
       if (!sound.playing || sound.looping) continue;
       sound.elapsed += sound.pitch * 1000 / FRAMES_PER_SECOND;
       if (sound.elapsed < sound.duration) continue;
-      sound.playing = false;
+      this.stopAudio(sound);
       if (sound.killWhenDone) this.sounds.delete(sound.handle);
     }
     this.run(() => this.runDueTimers());

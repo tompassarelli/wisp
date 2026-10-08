@@ -9,9 +9,45 @@ import { runJourney } from "../src/headless/journey";
 import { install, start } from "./sounds60/main";
 import { SOUND_NATIVES, SOUND_PATH } from "./sounds60/cases";
 import { farmTest } from "../scripts/wisp/farmTest";
+import * as audio80 from "./audio80/main";
 
 const runtime = installHeadless({ filePrefix: "sounds60", globalPrefixes: ["__sounds60"], natives: SOUND_NATIVES });
 afterAll(runtime.restore);
+
+const AUDIO80 = [
+  "0 sound create Imported\\Hit.ogg loop=true volume=127",
+  "0 sound start Imported\\Hit.ogg loop=true volume=127",
+  "0 music start Imported\\Stage.ogg loop=true volume=127",
+  "6 sound volume Imported\\Hit.ogg loop=true volume=64",
+  "6 music volume Imported\\Stage.ogg loop=true volume=64",
+  "12 sound volume Imported\\Hit.ogg loop=true volume=0",
+  "12 music volume Imported\\Stage.ogg loop=true volume=0",
+  "18 sound stop Imported\\Hit.ogg loop=true volume=0",
+  "18 music stop Imported\\Stage.ogg loop=true volume=0",
+  "24 music start Imported\\Stage.ogg loop=true volume=0",
+  "30 music volume Imported\\Stage.ogg loop=true volume=127",
+  "36 music stop Imported\\Stage.ogg loop=true volume=127",
+  "36 music start Imported\\NextStage.ogg loop=true volume=127",
+  "42 music stop Imported\\NextStage.ogg loop=true volume=127",
+];
+
+test("[spec #80] map sound and stage music record loop, stop and mute in event order", () => {
+  const clients = runtime.clients(audio80);
+  const result = runJourney(clients, { frames: 48, events: [] });
+  expect(result.divergence).toBeUndefined();
+  for (const client of clients.clients) {
+    expect(client.missingNatives).toEqual([]);
+    expect(client.soundLog.map(cue => `${cue.frame} ${cue.kind} ${cue.event} ${cue.source} loop=${cue.looping} volume=${cue.volume}`)).toEqual(AUDIO80);
+    expect(client.soundLog.map(cue => cue.effectiveVolume)).toEqual([1, 1, 1, 64 / 127, 64 / 127, 0, 0, 0, 0, 0, 1, 1, 1, 1]);
+  }
+});
+
+farmTest("[spec #80] emitted Lua32 map records the same sound and stage music events", { timeout: 120_000 }, () => {
+  for (const config of ["test/audio80/tsconfig.json", "test/audio80/tsconfig.headless.json"]) expect(report(mapCompiler(join(import.meta.dir, "..", config))())).toBe("");
+  const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "../build/audio80/headless/headless.lua"), join(import.meta.dir, "../build/audio80/map.lua"), join(import.meta.dir, "../src/natives/warcraft.d.ts")], { stdout: "pipe", stderr: "pipe" });
+  expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
+  expect(run.stdout.toString().trimEnd().split("\n")).toEqual([0, 1].flatMap(slot => AUDIO80.map(row => `p${slot} ${row}`)));
+});
 
 export const EXPECTED = [
   "pitch-two-at-0.25=true",

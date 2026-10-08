@@ -400,9 +400,12 @@ listed in [Animation playback](warsmash-notes.md#animation-playback); the
 headless runtime keeps each unit's and effect's clock, seek and blend.
 This is a scene renderer for look checks, not pixel-identical Warcraft shading.
 
-Every started sound is printed with its client, frame, source or label, volume
-and pitch. `--sound-cues FILE.json` writes the complete creation/play log;
-`--json` emits each playback as a `type: "sound"` row. A map test can call
+Every sound/music start, stop and playing-volume change is printed with its
+client, frame, source or label, loop flag, volume and effective volume.
+`--sound-cues FILE.json` writes the complete event log;
+`--json` emits each playback change as a `type: "sound"` row. See
+[Audio events](audio.md) for event meanings, music mute and the exact
+`bun wisp headless audio-acceptance` and game acceptance commands. A map test can call
 `assertSoundCue(client.soundLog, { label: "LABEL", frame: 64, count: 1 })`
 from `wisp/src/headless/client`. Creating a sound without starting it fails a
 "plays the cue" assertion. This checks the game's calls, not audibility.
@@ -417,8 +420,9 @@ sounds retain it until their `SetSoundDuration` milliseconds have elapsed at
 the current pitch; a loop waits for `StopSound`. Stopping with `killWhenDone`
 also releases the state. Duration starts at zero when no duration was supplied,
 because the cue-only emulator does not decode sound assets. This models release
-of declared playback and preserves the creation/start log; native audio timing
-and fades still require the game.
+of declared playback and preserves the event log. Music playback, stop,
+loop mode and map gain (including zero) are recorded from the actual calls;
+audible mixing and fade envelopes use Warcraft references.
 
 | Check | Can close headless when | Still needs native |
 | --- | --- | --- |
