@@ -200,7 +200,7 @@ declare global {
 }
 window.prepareRenderer = (width, height) => {
   canvas.width = output.width = overlay.width = width; canvas.height = output.height = overlay.height = height;
-  const context = canvas.getContext("webgl2", { preserveDrawingBuffer: true, antialias: true, alpha: false });
+  const context = canvas.getContext("webgl2", { antialias: true, alpha: false });
   if (context === null) throw new Error("Chrome could not create a WebGL2 context");
   gl = context;
   gl.depthFunc(gl.LEQUAL);
@@ -223,8 +223,8 @@ window.renderScene = async (scene, options) => {
   const visible = scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat);
   for (const pose of visible) await drawEffect(pose, view);
   const live = options?.capture === false;
-  canvas.style.display = overlay.style.display = live ? "block" : "none";
-  output.style.display = live ? "none" : "block";
+  const shown = live ? "block" : "none";
+  if (canvas.style.display !== shown) { canvas.style.display = overlay.style.display = shown; output.style.display = live ? "none" : "block"; }
   const context = (live ? overlay : output).getContext("2d"); if (context === null) throw new Error("no output canvas");
   if (live) context.clearRect(0, 0, overlay.width, overlay.height);
   else context.drawImage(canvas, 0, 0);
