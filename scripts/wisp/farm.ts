@@ -46,7 +46,11 @@ export const run = (argv: readonly string[], inherit = false, cwd?: string) => E
 /** The checkout's GitHub repository, OWNER/NAME. */
 export const currentRepo = run(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]);
 
-/** The commit to run, and the scratch branch it was pushed to when main doesn't hold it. */
+/**
+ * The commit to run, and the scratch branch it was pushed to when main doesn't
+ * hold it. The branch belongs to the caller's scope: closing it, after the run
+ * or on any failure or interrupt from its creation on, deletes the branch.
+ */
 export const resolveRef = (given: string | undefined, repo: string) => Effect.gen(function*() {
   // actions/checkout needs a full commit id; a branch or short id resolves here.
   const sha = yield* run(["git", "rev-parse", "--verify", `${given ?? "HEAD"}^{commit}`]);
@@ -60,15 +64,18 @@ export const resolveRef = (given: string | undefined, repo: string) => Effect.ge
   // scans only the lane's own commits; from the root, which holds .gitleaksignore.
   const base = yield* run(["git", "merge-base", sha, "FETCH_HEAD"]);
   yield* run(["gh", "api", "-X", "DELETE", `repos/${repo}/git/refs/heads/${scratch}`]).pipe(Effect.ignore);
-  yield* run(["gh", "api", "-X", "POST", `repos/${repo}/git/refs`, "-f", `ref=refs/heads/${scratch}`, "-f", `sha=${base}`]);
+  yield* Effect.acquireRelease(
+    run(["gh", "api", "-X", "POST", `repos/${repo}/git/refs`, "-f", `ref=refs/heads/${scratch}`, "-f", `sha=${base}`]),
+    () => deleteScratch(repo, scratch),
+  );
   yield* run(["git", "fetch", "--quiet", "origin", `+refs/heads/${scratch}:refs/remotes/origin/${scratch}`]);
   yield* run(["safe-push", "--to", scratch], true, yield* run(["git", "rev-parse", "--show-toplevel"]));
   return { ref: sha, scratch };
 });
 
-/** Deletes a scratch branch resolveRef pushed, reporting rather than failing when it can't. */
-export const deleteScratch = (repo: string, scratch: string | undefined) => scratch === undefined ? Effect.void
-  : run(["gh", "api", "-X", "DELETE", `repos/${repo}/git/refs/heads/${scratch}`]).pipe(Effect.catch((failure) => Effect.sync(() => console.error(`couldn't delete ${scratch}: ${failure.message}`))));
+/** Deletes a scratch branch, reporting rather than failing when it can't. */
+const deleteScratch = (repo: string, scratch: string) =>
+  run(["gh", "api", "-X", "DELETE", `repos/${repo}/git/refs/heads/${scratch}`]).pipe(Effect.catch((failure) => Effect.sync(() => console.error(`couldn't delete ${scratch}: ${failure.message}`))));
 
 const Runs = Schema.Array(Schema.Struct({ databaseId: Schema.Number, displayTitle: Schema.String, url: Schema.String }));
 export const RunState = Schema.Struct({
@@ -137,7 +144,7 @@ export function summaryLines(summary: Summary): { readonly lines: readonly strin
  * suites on the runners, through its .github/workflows/farm-test.yml, sharded
  * by measured time; prints pass and fail counts and each failing test.
  */
-export const farmTest = (options: { readonly ref: string | undefined; readonly wait: boolean }) => Effect.gen(function*() {
+export const farmTest = (options: { readonly ref: string | undefined; readonly wait: boolean }) => Effect.scoped(Effect.gen(function*() {
   const repo = yield* currentRepo;
   const { ref, scratch } = yield* resolveRef(options.ref, repo);
   const started = performance.now();
@@ -154,5 +161,5 @@ export const farmTest = (options: { readonly ref: string | undefined; readonly w
     const { lines, ok } = summaryLines(summary);
     for (const line of lines) console.log(line);
     if (!ok) return yield* new FarmFailure({ problem: `${ref.slice(0, 12)} failed on the farm: ${found.url}` });
-  }).pipe(Effect.ensuring(deleteScratch(repo, scratch)));
-});
+  });
+}));
