@@ -49,7 +49,7 @@ were removed only for deleted files; remaining file costs await the full audit.
 All 284 source declarations were classified keep, fold or delete. Deleted:
 the lobby, accept and LAN dummy tests, which replaced Wisp's own service
 layers or functions, and the Effect host-boundary source lint, which now runs
-in `bun run check` (wisp:scripts/effectBoundaries.ts). Every `[repro]` test
+in `effect-kit check` (wisp:effect-kit.json). Every `[repro]` test
 either folded into the scenario or property that owns its rule (watch, menus,
 pause, map staging, render assets, soak catch-up, doodads) or, where it was
 that rule's only test, kept its input under the rule's kind

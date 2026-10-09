@@ -63,6 +63,7 @@ export const acquireStartLock = ({ path, holder, seconds = START_LOCK_SECONDS, n
     catch: (cause) => new PlayProblem({ problem: `write ${path}.holder: ${String(cause)}` }),
   }).pipe(Effect.tapError(() => Effect.sync(() => child.kill())));
   if (waited > 1) print("start lock taken");
+  // @effect-diagnostics-next-line returnEffectInGen:off -- the caller runs this release action later, so it is returned, not run
   return Effect.sync(() => {
     if (child.exitCode !== null) print(`start lock had already been released after its ${seconds} s timeout`);
     else child.kill();

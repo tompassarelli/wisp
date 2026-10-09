@@ -17,7 +17,7 @@ export const pairAdmission = (capacity: string) => Effect.gen(function*() {
   const probe = yield* collect(ChildProcess.make(process.execPath, [capacity, "probe", "--class", "native", "--memory-gib", "3"], { stdin: "ignore" })).pipe(
     Effect.mapError((cause) => new LanFailure({ problem: `the capacity helper did not run: ${cause.message}` })),
   );
-  const status = yield* Schema.decodeUnknownEffect(ProbeReply)(new TextDecoder().decode(probe.stdout)).pipe(
+  const status = yield* Schema.decodeEffect(ProbeReply)(new TextDecoder().decode(probe.stdout)).pipe(
     Effect.mapError((cause) => new LanFailure({ problem: `the capacity helper's probe reply: ${cause.message}` })),
   );
   const pressure = status.protectedCpuSomeAvg10;

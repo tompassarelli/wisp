@@ -89,7 +89,7 @@ const git = (root: string, args: readonly string[]) => captureProcess(`git ${arg
 
 export const cleanRoom = (root: string, policy: Policy) => Effect.gen(function*() {
   const listed = yield* git(root, ["ls-files", "-z"]);
-  if (listed.exitCode !== 0) return yield* Effect.fail(new CleanRoomError({ message: `clean room: git ls-files failed: ${listed.stderr.trim()}` }));
+  if (listed.exitCode !== 0) return yield* new CleanRoomError({ message: `clean room: git ls-files failed: ${listed.stderr.trim()}` });
   const paths = listed.stdout.split("\0").filter((path) => path !== "");
   const files = yield* Effect.forEach(paths, (path) => Effect.promise(async () => {
     const file = Bun.file(join(root, path));
@@ -102,7 +102,7 @@ export const cleanRoom = (root: string, policy: Policy) => Effect.gen(function*(
   for (const batch of batches) {
 
     const grep = yield* git(root, ["grep", "--cached", "-z", "-c", "-I", "-E", JASS_DECLARATION, "--", ...batch.map((path) => `:(literal)${path}`)]);
-    if (grep.exitCode > 1) return yield* Effect.fail(new CleanRoomError({ message: `clean room: git grep failed: ${grep.stderr.trim()}` }));
+    if (grep.exitCode > 1) return yield* new CleanRoomError({ message: `clean room: git grep failed: ${grep.stderr.trim()}` });
     for (const line of grep.stdout.split("\n").filter((line) => line !== "")) {
       const [path = "", count = "0"] = line.split("\0");
       jassLines.set(path, Number(count));

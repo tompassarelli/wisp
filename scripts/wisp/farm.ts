@@ -93,7 +93,7 @@ export const resolveRef = (given: string | undefined, repo: string) => Effect.ge
 const deleteScratch = (repo: string, scratch: string) =>
   run(["gh", "api", "-X", "DELETE", `repos/${repo}/git/refs/heads/${scratch}`]).pipe(Effect.catch((failure) => Effect.sync(() => console.error(`couldn't delete ${scratch}: ${failure.message}`))));
 
-const Runs = Schema.Array(Schema.Struct({ databaseId: Schema.Number, displayTitle: Schema.String, url: Schema.String }));
+const Runs = Schema.Array(Schema.Struct({ databaseId: Schema.Finite, displayTitle: Schema.String, url: Schema.String }));
 export const RunState = Schema.Struct({
   status: Schema.String,
   conclusion: Schema.String,
@@ -103,7 +103,7 @@ export type RunState = typeof RunState.Type;
 
 
 export const decoded = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, text: string) =>
-  Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(text).pipe(Effect.mapError((cause) => new FarmFailure({ problem: `unexpected gh output: ${describeCause(cause)}` })));
+  Schema.decodeEffect(Schema.fromJsonString(schema))(text).pipe(Effect.mapError((cause) => new FarmFailure({ problem: `unexpected gh output: ${describeCause(cause)}` })));
 
 const ScratchPages = Schema.Array(Schema.Struct({ data: Schema.Struct({ repository: Schema.Struct({ refs: Schema.Struct({
   nodes: Schema.Array(Schema.Struct({ name: Schema.String, target: Schema.Struct({ oid: Schema.String, committedDate: Schema.String }) })),

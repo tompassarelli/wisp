@@ -24,22 +24,22 @@ export class FarmShardFailure extends Schema.TaggedError<FarmShardFailure>()("Fa
 
 const Suite = Schema.Literals(["bun", "lua"]);
 export type Suite = typeof Suite.Type;
-const Seconds = Schema.Record(Schema.String, Schema.Number);
+const Seconds = Schema.Record(Schema.String, Schema.Finite);
 
 
 export const Timings = Schema.Struct({ bun: Seconds, lua: Seconds });
 export type Timings = typeof Timings.Type;
 
 
-export const Plan = Schema.Struct({ bun: Schema.Array(Schema.Array(Schema.String)), lua: Schema.Number, luaTests: Schema.Record(Schema.String, Schema.Number) });
+export const Plan = Schema.Struct({ bun: Schema.Array(Schema.Array(Schema.String)), lua: Schema.Finite, luaTests: Schema.Record(Schema.String, Schema.Finite) });
 export type Plan = typeof Plan.Type;
 
-export const TestResult = Schema.Struct({ name: Schema.String, unit: Schema.String, seconds: Schema.Number, status: Schema.Literals(["pass", "fail", "skip"]) });
+export const TestResult = Schema.Struct({ name: Schema.String, unit: Schema.String, seconds: Schema.Finite, status: Schema.Literals(["pass", "fail", "skip"]) });
 export type TestResult = typeof TestResult.Type;
-export const ShardResult = Schema.Struct({ suite: Suite, shard: Schema.Number, exitCode: Schema.Number, tests: Schema.Array(TestResult) });
+export const ShardResult = Schema.Struct({ suite: Suite, shard: Schema.Finite, exitCode: Schema.Finite, tests: Schema.Array(TestResult) });
 export type ShardResult = typeof ShardResult.Type;
 
-const Count = Schema.Struct({ passed: Schema.Number, failed: Schema.Number, skipped: Schema.Number, shards: Schema.Number, slowestShardSeconds: Schema.Number });
+const Count = Schema.Struct({ passed: Schema.Finite, failed: Schema.Finite, skipped: Schema.Finite, shards: Schema.Finite, slowestShardSeconds: Schema.Finite });
 
 export const Summary = Schema.Struct({ bun: Count, lua: Count, failures: Schema.Array(Schema.String), problems: Schema.Array(Schema.String) });
 export type Summary = typeof Summary.Type;
@@ -150,7 +150,7 @@ export function merge(planned: Plan, results: readonly ShardResult[], previous: 
 const readJson = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, path: string) => Effect.try({
   try: () => readFileSync(path, "utf8"),
   catch: (cause) => new FarmShardFailure({ problem: `couldn't read ${path}: ${describeCause(cause)}` }),
-}).pipe(Effect.flatMap((text) => Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(text)),
+}).pipe(Effect.flatMap((text) => Schema.decodeEffect(Schema.fromJsonString(schema))(text)),
   Effect.mapError((cause) => cause instanceof FarmShardFailure ? cause : new FarmShardFailure({ problem: `${path}: ${describeCause(cause)}` })));
 
 const readText = (path: string) => Effect.try({

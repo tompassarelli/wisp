@@ -326,6 +326,7 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
 
   const allJourneys = (selection: Selection, savedAt: number, before: Effect.Effect<void>) => Effect.gen(function*() {
     const units = selection.units.filter((unit) => plan.isJourney(unit.path));
+    // @effect-diagnostics-next-line effectSucceedWithVoid:off -- an undefined result, which Effect.void's void type cannot satisfy
     const tests = units.length === 0 ? Effect.succeed(undefined) : runSide(units, new Map(), units.length, savedAt);
     yield* before;
     const [own, ran] = yield* Effect.all([ownJourney, tests], { concurrency: "unbounded" });

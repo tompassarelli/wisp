@@ -1,0 +1,22 @@
+{
+  "package": ".",
+  "vendor": "repos/effect",
+  "tsconfig": "tsconfig.json",
+  "typecheck": [
+    "bun",
+    "run",
+    "check"
+  ],
+  "hostTools": {
+    "include": [
+      "scripts/**/*.ts"
+    ],
+    "exclude": [
+      "**/*.test.ts",
+      "**/*.tests.ts",
+      "scripts/wisp/browser/**",
+      "scripts/wisp/reproViewerPage.ts",
+      "scripts/wisp/tunePage.ts"
+    ]
+  }
+}

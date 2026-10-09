@@ -104,7 +104,7 @@ export function preloadRecord<S extends Schema.Top & { readonly DecodingServices
         Object.assign(fields, found);
       }
       if (rest !== undefined) fields[rest] = lines.slice(head.length, tailStart);
-      return yield* Schema.decodeUnknownEffect(schema)(fields).pipe(Effect.mapError((error) => {
+      return yield* Schema.decodeEffect(schema)(fields).pipe(Effect.mapError((error) => {
         const issue = SchemaIssue.makeFormatterStandardSchemaV1()(error.issue).issues[0];
         return malformed(issue?.path === undefined || issue.path.length === 0 ? "record" : issue.path.join("."), issue?.message ?? error.message);
       }));
