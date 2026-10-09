@@ -15,6 +15,8 @@ export interface PerfValues {
   readonly p95: number;
   readonly mean: number;
   readonly max: number;
+
+  readonly top: number;
 }
 
 export interface PerfRun {
@@ -30,7 +32,7 @@ export interface PerfRun {
 
 const HEADING = /^frames (\d+) step (\d+) problems (\d+)$/;
 const COLLECTOR = /^collector us=(\d+) kb=(\d+)$/;
-const VALUES = /^p(\d+) ([a-z-]+) start=([\d.]+) total=([\d.]+) median=([\d.]+) p95=([\d.]+) mean=([\d.]+) max=([\d.]+)$/;
+const VALUES = /^p(\d+) ([a-z-]+) start=([\d.]+) total=([\d.]+) median=([\d.]+) p95=([\d.]+) mean=([\d.]+) max=([\d.]+)(?: top=([\d.]+))?$/;
 
 const isMetric = (name: string): name is PerfMetric => (PERF_METRICS as readonly string[]).includes(name);
 
@@ -49,10 +51,10 @@ export function parsePerfRun(text: string): PerfRun {
       continue;
     }
     const match = VALUES.exec(line);
-    const [, slot, metric = "", start, total, median, p95, mean, max] = match ?? [];
+    const [, slot, metric = "", start, total, median, p95, mean, max, top] = match ?? [];
     if (match === null || !isMetric(metric)) throw new Error(`not a frame-cost line: ${JSON.stringify(line)}`);
     const values = clients.get(Number(slot)) ?? {};
-    values[metric] = { start: Number(start), total: Number(total), median: Number(median), p95: Number(p95), mean: Number(mean), max: Number(max) };
+    values[metric] = { start: Number(start), total: Number(total), median: Number(median), p95: Number(p95), mean: Number(mean), max: Number(max), top: Number(top ?? max) };
     clients.set(Number(slot), values);
   }
   const complete = new Map<number, Record<PerfMetric, PerfValues>>();
@@ -80,12 +82,12 @@ const LABELS: Record<PerfMetric, string> = {
 
 
 
-const GATED: Partial<Record<PerfMetric, readonly ("median" | "p95" | "mean" | "max")[]>> = {
-  instructions: ["mean", "max"],
+const GATED: Partial<Record<PerfMetric, readonly ("median" | "p95" | "mean" | "top")[]>> = {
+  instructions: ["mean", "top"],
   natives: ["mean"],
   "alloc-kb": ["mean", "p95"],
   "native-us": ["median", "p95"],
-  "typing-us": ["max"],
+  "typing-us": ["top"],
 };
 
 const change = (before: number, after: number) => (before === 0 ? (after === 0 ? "+0%" : "new") : `${after >= before ? "+" : ""}${((after / before - 1) * 100).toFixed(1)}%`);
@@ -116,7 +118,7 @@ export function comparePerfRuns(a: PerfRun, b: PerfRun, threshold = DEFAULT_PERF
     for (const metric of PERF_METRICS) {
       const from = before[metric];
       const to = after[metric];
-      lines.push(`p${slot} ${LABELS[metric]}: mean ${number(from.mean)} -> ${number(to.mean)} (${change(from.mean, to.mean)}), median ${number(from.median)} -> ${number(to.median)}, p95 ${number(from.p95)} -> ${number(to.p95)} (${change(from.p95, to.p95)}), max ${number(from.max)} -> ${number(to.max)} (${change(from.max, to.max)}), start ${number(from.start)} -> ${number(to.start)}`);
+      lines.push(`p${slot} ${LABELS[metric]}: mean ${number(from.mean)} -> ${number(to.mean)} (${change(from.mean, to.mean)}), median ${number(from.median)} -> ${number(to.median)}, p95 ${number(from.p95)} -> ${number(to.p95)} (${change(from.p95, to.p95)}), max ${number(from.max)} -> ${number(to.max)} (${change(from.max, to.max)}), top 1% mean ${number(from.top)} -> ${number(to.top)} (${change(from.top, to.top)}), start ${number(from.start)} -> ${number(to.start)}`);
       for (const value of GATED[metric] ?? []) {
         if (to[value] > from[value] * (1 + threshold)) regressions.push(`p${slot} ${LABELS[metric]} ${value} ${change(from[value], to[value])}`);
       }

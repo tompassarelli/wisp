@@ -173,8 +173,8 @@ one after it, such as a match's first:
   edit-box stall apart.
 
 It prints a heading and, per client and value, the start (before the first
-frame), the total, and the median, 95th percentile, mean and maximum per
-frame, here one client of Smashcraft's native bot session's four-fighter
+frame), the total, and the median, 95th percentile, mean, maximum and top 1%
+mean (the mean of the worst 1% of frames, at least one) per frame, here one client of Smashcraft's native bot session's four-fighter
 match (`bun wisp perf bot-four`, 1800 frames), counted from its first frame:
 
 ```text
@@ -212,10 +212,12 @@ play and `samples` as its next arguments.
 
 - `perf compare A B [--threshold SHARE]` compares two runs per client and
   fails when, beyond the threshold (5% by default), B's instructions rise at
-  their mean or maximum, its native calls at their mean, its allocation at
+  their mean or top 1% mean, its native calls at their mean, its allocation at
   its mean or 95th percentile, its predicted native time at its median or
-  95th percentile, or its worst typing stall; or when B's run found a
-  problem. Each of these is made from counts, so the same code compares
+  95th percentile, or its typing stall at its top 1% mean; or when B's run
+  found a problem. No gate reads a single worst frame: which frame is worst
+  moves whenever a bot's choices change (smashcraft#394). A run written
+  before `top=` existed compares its maximum in its place. Each of these is made from counts, so the same code compares
   alike on any machine; Lua time is printed, not held to it.
 
 Add `--json` to `perf`, `perf compare`, `perf native`, or `perf fit` for

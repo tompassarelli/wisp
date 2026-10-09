@@ -10,7 +10,7 @@ import { mapCompiler, report } from "../scripts/compiler";
 import { FrameCosts, decodeFrameCostReport } from "../scripts/wisp/frameCosts";
 import { GameFiles } from "../scripts/wisp/gameFiles";
 import { writtenPreloadFile } from "../scripts/wisp/headlessInput";
-import { type PerfRun, parsePerfRun } from "../scripts/wisp/perf";
+import { PERF_METRICS, type PerfRun, comparePerfRuns, parsePerfRun } from "../scripts/wisp/perf";
 import { type FrameWindow, frameCostFile, frameCostHeading, frameWindowLine } from "../src/runtime/frameCost";
 import { parseFrameCostCapture } from "../scripts/wisp/frameCostCapture";
 import { farmTest } from "../scripts/wisp/farmTest";
@@ -62,4 +62,16 @@ test("[invariant] a written report reads back as the map wrote it, once", async 
   } finally {
     rmSync(directory, { recursive: true });
   }
+});
+
+test("[spec smashcraft#394] perf compare holds instructions at their top 1% mean: one frame's spike moves no verdict, a rise across the worst frames fails", () => {
+  const run = (max: number, top: number) => parsePerfRun([
+    "frames 1800 step 100 problems 0",
+    ...PERF_METRICS.map((metric) => metric === "instructions"
+      ? `p0 instructions start=0 total=900000 median=400 p95=700 mean=500 max=${max} top=${top}`
+      : `p0 ${metric} start=0 total=0 median=0 p95=0 mean=0 max=0 top=0`),
+  ].join("\n"));
+  const before = run(1000, 900);
+  expect(comparePerfRuns(before, run(2000, 910)).regressions).toEqual([]);
+  expect(comparePerfRuns(before, run(1000, 1000)).regressions).toEqual(["p0 Lua instructions top +11.1%"]);
 });
