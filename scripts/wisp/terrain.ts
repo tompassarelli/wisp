@@ -19,6 +19,8 @@ export interface TerrainPoint {
   readonly variation: number;
   /** Cliff level, 0 to 15. */
   readonly layer: number;
+  readonly cliff: number;
+  readonly cliffVariation: number;
   /** Ramp, blight, water and boundary flags. */
   readonly flags: number;
 }
@@ -77,7 +79,7 @@ export function decodeTerrain(bytes: Uint8Array): Terrain {
     const flags = (version === 12 ? tile >> 6 : tile >> 4) | ((water & 0xc000) >> 10);
     const variation = bytes[at + size - 2] ?? 0, cliff = bytes[at + size - 1] ?? 0;
     const layer = cliff & 0x0f;
-    points.push({ height: (raw - 0x2000) / 4 + (layer - 2) * CELL, ground: groundBits, variation, layer, flags });
+    points.push({ height: (raw - 0x2000) / 4 + (layer - 2) * CELL, ground: groundBits, variation: variation & 31, layer, flags, cliff: cliff >> 4, cliffVariation: variation >> 5 });
   }
   return { version, tileset, groundTiles, cliffTiles, columns, rows, originX, originY, points };
 }

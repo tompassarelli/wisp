@@ -6,6 +6,7 @@ import { parsableModel } from "../models";
 import { orderDrawnModels } from "../drawOrder";
 import { drawnPoses } from "../culling";
 import { advanceEmitters, type EmitterRenderer } from "./emitters";
+import { drawTerrain } from "./terrain";
 
 type Matrix = Float32Array;
 const identity = (): Matrix => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -569,6 +570,10 @@ window.renderScene = async (scene, options) => {
     }
   }
   await drawSky(scene, view);
+  if (scene.environment.terrainVisible && scene.terrain !== undefined) {
+    try { await drawTerrain(gl, scene.terrain, view.view, view.projection, textureAt, asset); }
+    catch (cause) { notDrawn.push(`terrain: ${String(cause)}`); }
+  }
   const light = scene.environment === undefined ? undefined : await dayNightLight(scene.environment.dayNight.unit, scene.environment.timeOfDay);
   const fog = sceneFog(scene, view, false);
   // Classic draws no model omni light; Definitive draws them all.
