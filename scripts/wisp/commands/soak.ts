@@ -7,6 +7,7 @@ import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { Cause, Console, Effect, Exit, Result, Schema } from "effect";
+import { ResourceAccounting } from "../../platform/services";
 import { type Command, UsageFailure, describeCause, flagValues } from "../command";
 import { installHeadless } from "../headless";
 import { writtenPreloadFile } from "../headlessInput";
@@ -55,21 +56,9 @@ interface RunOptions {
 const VALUED = ["matches", "seed", "workers", "minutes", "fighter", "stage", "policy", "out", "repro"];
 
 
-function scopeCpus(): number {
-  let cpus = availableParallelism();
-  try {
-    const path = /^0::(.*)$/m.exec(readFileSync("/proc/self/cgroup", "utf8"))?.[1];
-    for (let group = path; group !== undefined && group !== ""; group = group.slice(0, Math.max(0, group.lastIndexOf("/")))) {
-      const [quota = "max", period = "100000"] = readFileSync(join("/sys/fs/cgroup", group, "cpu.max"), "utf8").trim().split(" ");
-      if (quota !== "max") cpus = Math.min(cpus, Number(quota) / Number(period));
-    }
-  } catch {
+const scopeCpus = (limit: number | undefined) => Math.max(1, Math.floor(Math.min(availableParallelism(), limit ?? Infinity)));
 
-  }
-  return Math.max(1, Math.floor(cpus));
-}
-
-function parseRun(args: readonly string[], project: SoakProject): RunOptions | string {
+function parseRun(args: readonly string[], project: SoakProject, cpuLimit: number | undefined): RunOptions | string {
   args = args.filter(arg => arg !== "--no-shrink");
   for (let index = 0; index < args.length; index++) {
     const arg = args[index] ?? "";
@@ -85,7 +74,7 @@ function parseRun(args: readonly string[], project: SoakProject): RunOptions | s
   const matches = whole("matches", project.matches, 1, MAX_SOAK_MATCHES);
   const seed = whole("seed", 1, 1, 2147483646);
   const minutes = whole("minutes", DEFAULT_SOAK_MINUTES, 1, MAX_SOAK_MINUTES);
-  const workers = whole("workers", Math.min(MAX_SOAK_WORKERS, scopeCpus()), 1, MAX_SOAK_WORKERS);
+  const workers = whole("workers", Math.min(MAX_SOAK_WORKERS, scopeCpus(cpuLimit)), 1, MAX_SOAK_WORKERS);
   for (const value of [matches, seed, minutes, workers]) if (typeof value === "string") return value;
   const named = (flag: string, known: readonly string[]) => flagValues(args, flag).find((name) => !known.includes(name));
   const fighters = flagValues(args, "fighter");
@@ -272,7 +261,7 @@ export const makeSoak = (options: SoakCommandOptions): Command => (allArgs) => E
       return yield* replay(options, repro, json ? jsonReply : undefined).pipe(Effect.tapError(() => Effect.sync(() => { reported = failures > 0; })));
     }
     const project = yield* loadProject(options.project);
-    const run = parseRun(args, project);
+    const run = parseRun(args, project, (yield* ResourceAccounting).cpuLimit());
     if (typeof run === "string") return yield* new UsageFailure({ problem: run });
     const keep = (match: SoakMatch) =>
       run.fighters.every((fighter) => match.fighters.includes(fighter))

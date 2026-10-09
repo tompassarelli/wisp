@@ -11,6 +11,7 @@ import { type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { availableParallelism } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { Console, Deferred, Effect, Fiber, Layer, Queue, Result, Schema, Semaphore } from "effect";
+import { ResourceAccounting } from "../../platform/services";
 import { type Command, type CommandFailure, UsageFailure, describeCause, flagValues } from "../command";
 import { Desyncs, formatDesync } from "../desyncs";
 import { FrameCosts, formatFrameCost } from "../frameCosts";
@@ -65,26 +66,7 @@ const EDITOR_FILE = /^(?:\..*|.*~|.*\.sw[a-p]|4913)$/;
 const OUTPUT_LINES = 40;
 
 
-function readIfPresent(path: string): string | undefined {
-  try {
-    return readFileSync(path, "utf8");
-  } catch {
-    return undefined;
-  }
-}
-
-
-function cpuBudget(): number {
-  let budget = availableParallelism();
-  const own = readIfPresent("/proc/self/cgroup")?.split("\n").find((line) => line.startsWith("0::"))?.slice(3);
-  if (own !== undefined) {
-    for (let directory = join("/sys/fs/cgroup", own); directory.startsWith("/sys/fs/cgroup/"); directory = dirname(directory)) {
-      const [quota, period] = readIfPresent(join(directory, "cpu.max"))?.trim().split(" ") ?? [];
-      if (quota !== undefined && quota !== "max") budget = Math.min(budget, Number(quota) / Number(period));
-    }
-  }
-  return Math.max(1, Math.floor(budget));
-}
+const cpuBudget = (limit: number | undefined) => Math.max(1, Math.floor(Math.min(availableParallelism(), limit ?? Infinity)));
 
 const seconds = (since: number) => `${((Date.now() - since) / 1000).toFixed(3).padStart(8)} s  `;
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
@@ -214,7 +196,7 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
   const preload = (project.tests.preload ?? []).map((path) => resolve(root, path));
   const durations = new Map<string, number>();
   const expected = (unit: TestUnit) => durations.get(unit.path) ?? UNKNOWN_MS[unit.kind];
-  const cpus = cpuBudget();
+  const cpus = cpuBudget((yield* ResourceAccounting).cpuLimit());
 
   const behind = Bun.which("nice") === null ? [] : ["nice", "-n", "10"];
 

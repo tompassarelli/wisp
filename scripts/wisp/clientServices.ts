@@ -3,12 +3,12 @@
 
 
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
+import { BackgroundServices, CapacityAdmission, type PlatformError, ProcessTable, type ServiceOwner } from "../platform/services";
 import type { ProcessInfo } from "../warcraft/battleNet";
-import { listProcesses } from "../warcraft/processes";
 
 export class ServiceProblem extends Schema.TaggedError<ServiceProblem>()("ServiceProblem", {
   problem: Schema.String,
@@ -29,41 +29,16 @@ export const desktopLog = (name: string) => join(process.env["XDG_STATE_HOME"] ?
 
 export const DESKTOP_RESOLUTION = "1920x1080";
 
-const run = (command: readonly string[]) => Effect.try({
-  try: () => {
-    const done = Bun.spawnSync([...command], { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
-    return { code: done.exitCode, out: done.stdout.toString().trim(), err: done.stderr.toString().trim() };
-  },
-  catch: (cause) => new ServiceProblem({ problem: `${command.slice(0, 2).join(" ")}: ${String(cause)}` }),
-});
+const problem = (failure: PlatformError) => new ServiceProblem({ problem: failure._tag === "PlatformFailure" ? failure.problem : failure.message });
 
 
+export const startService = (unit: string, command: readonly string[], log?: string) =>
+  BackgroundServices.use((services) => services.start(unit, command, log)).pipe(Effect.mapError(problem));
 
 
+export const serviceState = (unit: string) => BackgroundServices.use((services) => services.state(unit)).pipe(Effect.mapError(problem));
 
-
-export const startService = (unit: string, command: readonly string[], log?: string) => Effect.gen(function*() {
-  yield* run(["systemctl", "--user", "stop", unit]);
-  if (log !== undefined) yield* Effect.try({ try: () => mkdirSync(dirname(log), { recursive: true }), catch: (cause) => new ServiceProblem({ problem: `create ${dirname(log)}: ${String(cause)}` }) });
-  const started = yield* run([
-    "systemd-run", "--user", "--quiet", "--collect", `--unit=${unit}`, "--setenv=PATH",
-    ...(log === undefined ? [] : [`--property=StandardOutput=append:${log}`, `--property=StandardError=append:${log}`]),
-    "--", ...command,
-  ]);
-  if (started.code !== 0) return yield* new ServiceProblem({ problem: `systemd-run ${unit}: ${started.err || `exit ${started.code}`}` });
-});
-
-
-export const serviceState = (unit: string) => run(["systemctl", "--user", "show", unit, "--property=ActiveState", "--property=ActiveEnterTimestamp", "--property=MainPID"]).pipe(
-  Effect.map(({ out }) => {
-    const field = (key: string) => new RegExp(`^${key}=(.*)$`, "m").exec(out)?.[1] ?? "";
-    return { active: field("ActiveState") || "inactive", since: field("ActiveEnterTimestamp"), pid: Number(field("MainPID")) };
-  }),
-);
-
-export const stopService = (unit: string) => run(["systemctl", "--user", "stop", unit]).pipe(
-  Effect.flatMap((done) => (done.code === 0 ? Effect.void : Effect.fail(new ServiceProblem({ problem: `systemctl --user stop ${unit}: ${done.err || `exit ${done.code}`}` })))),
-);
+export const stopService = (unit: string) => BackgroundServices.use((services) => services.stop(unit)).pipe(Effect.mapError(problem));
 
 const readText = (path: string) => {
   try {
@@ -74,42 +49,10 @@ const readText = (path: string) => {
 };
 
 
-const cgroupOf = (pid: number) => /^0::(.*)$/m.exec(readText(`/proc/${pid}/cgroup`) ?? "")?.[1];
-const parentOf = (pid: number) => {
-  const stat = readText(`/proc/${pid}/stat`);
-  return stat === undefined ? undefined : Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
-};
-const commandOf = (pid: number) => (readText(`/proc/${pid}/cmdline`) ?? "").split("\0").filter((arg) => arg !== "").join(" ");
+export type Owner = ServiceOwner;
 
 
-export type Owner = { readonly unit: string } | { readonly pid: number; readonly command: string };
-
-
-
-
-
-
-
-
-
-export const ownerOf = (pid: number): Owner | undefined => {
-  const home = `/user@${process.getuid?.() ?? 0}.service/`;
-  const leafOf = (cgroup: string) => cgroup.slice(cgroup.lastIndexOf("/") + 1);
-  const cgroup = cgroupOf(pid);
-  if (cgroup === undefined) return undefined;
-  if (cgroup.includes(home) && leafOf(cgroup).endsWith(".service")) return { unit: leafOf(cgroup) };
-  if (leafOf(cgroup).startsWith("agent-capacity-")) {
-    const members = (readText(`/sys/fs/cgroup${cgroup}/cgroup.procs`) ?? "").split("\n").filter((line) => line !== "").map(Number);
-    for (const member of members) {
-      const parent = parentOf(member);
-      const parentCgroup = parent === undefined ? undefined : cgroupOf(parent);
-      if (parent === undefined || parentCgroup === undefined || parentCgroup === cgroup || leafOf(parentCgroup) === "init.scope") continue;
-      if (parentCgroup.includes(home) && leafOf(parentCgroup).endsWith(".service")) return { unit: leafOf(parentCgroup) };
-      return { pid: parent, command: commandOf(parent) };
-    }
-  }
-  return { pid, command: commandOf(pid) };
-};
+export const ownerOf = (pid: number) => BackgroundServices.use((services) => services.owner(pid)).pipe(Effect.mapError(problem));
 
 export const describeOwner = (owner: Owner | undefined) =>
   owner === undefined ? "gone" : "unit" in owner ? `service ${owner.unit}` : `not a service: started by pid ${owner.pid} (${owner.command.slice(0, 80)}), so it ends with that process`;
@@ -118,24 +61,27 @@ export const describeOwner = (owner: Owner | undefined) =>
 export const liveDesktop = (run: string) => existsSync(join(run, "runtime/wayland-0")) && existsSync(join(run, "display"));
 
 
-export const desktopPid = (run: string) => {
+export const desktopPid = (run: string) => Effect.gen(function*() {
   const pid = Number(readText(join(run, "launcher-pid"))?.trim());
-  return Number.isInteger(pid) && pid > 0 && existsSync(`/proc/${pid}`) ? pid : undefined;
-};
+  return Number.isInteger(pid) && pid > 0 && (yield* ProcessTable.use((table) => table.alive(pid)).pipe(Effect.mapError(problem))) ? pid : undefined;
+});
 
 
-export const prefixProcesses = (prefix: string): readonly ProcessInfo[] =>
-  listProcesses().filter((process) => process.prefix === prefix).sort((a, b) => Number(/battle\.net/i.test(b.args.join(" "))) - Number(/battle\.net/i.test(a.args.join(" "))));
+export const prefixProcesses = (prefix: string) => ProcessTable.use((table) => table.list).pipe(
+  Effect.mapError(problem),
+  Effect.map((processes): readonly ProcessInfo[] => processes.filter((process) => process.prefix === prefix).sort((a, b) => Number(/battle\.net/i.test(b.args.join(" "))) - Number(/battle\.net/i.test(a.args.join(" "))))),
+);
 
 
 
 
 
 
-export const desktopCommand = (capacity: string, desktop: string, name: string) => [
-  process.execPath, capacity, "session", "--class", "native", "--memory-gib", "1.5", "--owner", `wisp-desktop-${name}`, "--",
-  "bash", desktop, "start", "--resolution", DESKTOP_RESOLUTION,
-];
+export const desktopCommand = (capacity: string, desktop: string, name: string) =>
+  CapacityAdmission.use((admission) => admission.session(capacity, `wisp-desktop-${name}`, 1.5)).pipe(
+    Effect.mapError(problem),
+    Effect.map((session) => [...session, "bash", desktop, "start", "--resolution", DESKTOP_RESOLUTION]),
+  );
 
 
 export const startDesktop = (name: string, command: readonly string[], seconds = 60) => Effect.gen(function*() {
@@ -165,6 +111,15 @@ export const writeRun = (clientsFile: string, name: string, runDir: string) => E
     writeFileSync(clientsFile, `${JSON.stringify(file, null, 2)}\n`);
   },
   catch: (cause) => new ServiceProblem({ problem: `update ${clientsFile}: ${String(cause)}` }),
+});
+
+
+const run = (command: readonly string[]) => Effect.try({
+  try: () => {
+    const done = Bun.spawnSync([...command], { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+    return { code: done.exitCode, out: done.stdout.toString().trim(), err: done.stderr.toString().trim() };
+  },
+  catch: (cause) => new ServiceProblem({ problem: `${command.slice(0, 2).join(" ")}: ${String(cause)}` }),
 });
 
 

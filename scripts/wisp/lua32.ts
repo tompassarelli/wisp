@@ -98,12 +98,14 @@ export const lua32 = (variant: Lua32Variant) => Effect.gen(function*() {
   const { flags, header } = flagsFor(variant);
   const key = sha256(`${LUA_SOURCE_SHA256}\0generic\0${flags}\0${header}`).slice(0, 16);
   const directory = join(root, key);
-  const lua = join(directory, "lua");
-  if (existsSync(lua)) return lua;
+  const installed = () => [join(directory, "lua"), join(directory, "lua.exe")].find((path) => existsSync(path));
+  const cached = installed();
+  if (cached !== undefined) return cached;
   yield* trySync("create Lua cache", root, () => mkdirSync(root, { recursive: true }));
   return yield* Effect.scoped(Effect.gen(function*() {
     yield* buildLock(`${directory}.lock`);
-    if (existsSync(lua)) return lua;
+    const raced = installed();
+    if (raced !== undefined) return raced;
     const source = yield* luaSource;
     const build = `${directory}.build`;
     yield* trySync("prepare build", build, () => {
@@ -114,17 +116,18 @@ export const lua32 = (variant: Lua32Variant) => Effect.gen(function*() {
     const src = join(build, "lua-5.3.6/src");
     if (header !== "") yield* trySync("write header", src, () => writeFileSync(join(src, "toward-zero.h"), header));
     yield* runProcess(`compile Lua32 ${variant}`, src, makeCommand(["-C", src, `-j${availableParallelism()}`, "generic", `MYCFLAGS=${flags}`]));
-    const rounding = yield* luaRounding(join(src, "lua"));
+    const executable = existsSync(join(src, "lua.exe")) ? "lua.exe" : "lua";
+    const rounding = yield* luaRounding(join(src, executable));
     const expected = variant === "stock" ? "nearest" : "toward-zero";
     if (rounding !== expected) return yield* fail("check rounding", src, `it rounds ${rounding}, not ${expected}`);
     yield* trySync("install Lua32", directory, () => {
       mkdirSync(`${build}/out`);
-      copyFileSync(join(src, "lua"), `${build}/out/lua`);
+      copyFileSync(join(src, executable), `${build}/out/${executable}`);
       rmSync(directory, { recursive: true, force: true });
       renameSync(`${build}/out`, directory);
       rmSync(build, { recursive: true, force: true });
     });
-    return lua;
+    return join(directory, executable);
   }));
 }).pipe(step(`Lua32 ${variant}`));
 

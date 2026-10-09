@@ -6,7 +6,8 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Console, Effect, Exit } from "effect";
+import { Console, Effect, Exit, Layer } from "effect";
+import { platformLayer } from "../scripts/platform/layer";
 import { makeSoak } from "../scripts/wisp/commands/soak";
 import { installHeadless } from "../scripts/wisp/headless";
 import { type SceneReport, bodyProblems } from "../scripts/wisp/scene";
@@ -181,7 +182,7 @@ farmTest("[spec #16] the command plays matches in worker processes and keeps a r
   const out = mkdtempSync(join(tmpdir(), "wisp-soak-"));
   const lines: string[] = [];
   const soak = makeSoak({ project: join(import.meta.dir, "soak/project.ts"), out });
-  const run = (args: readonly string[]) => Effect.runPromiseExit(soak(args).pipe(Effect.provide(timingsLayer(() => undefined)), Effect.provideService(Console.Console, {
+  const run = (args: readonly string[]) => Effect.runPromiseExit(soak(args).pipe(Effect.provide(Layer.merge(timingsLayer(() => undefined), platformLayer())), Effect.provideService(Console.Console, {
     ...console, log: (...text: unknown[]) => lines.push(text.join(" ")),
   })));
   const exit = await run(["--matches", "6", "--workers", "2", "--policy", "freeze", "--out", out]);

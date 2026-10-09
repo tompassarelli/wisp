@@ -8,6 +8,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
 import { LanFailure } from "./join";
+import { DESKTOP_TOOLS } from "../../platform/linux/tools";
 
 export const stateRoot = () => join(process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local/state"), "wisp/lan");
 export const dataRoot = () => join(process.env["XDG_DATA_HOME"] ?? join(homedir(), ".local/share"), "wisp/lan");
@@ -202,7 +203,7 @@ export function writeJson(path: string, value: unknown): void {
 }
 
 export function writePoolClients(path: string, clients: readonly PoolClient[]): void {
-  writeJson(path, { tools: { grim: "grim", xdotool: "xdotool", wlrctl: "wlrctl", tesseract: "tesseract" }, clients });
+  writeJson(path, { tools: DESKTOP_TOOLS, clients });
 }
 
 const PoolFileJson = Schema.fromJsonString(Schema.Struct({

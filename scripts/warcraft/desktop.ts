@@ -2,15 +2,14 @@
 
 
 
-import { join } from "node:path";
-import { Clock, Effect, Exit, Schema } from "effect";
+import { Clock, Effect, Schema } from "effect";
 import { describeCause } from "../wisp/command";
 import { type Frame, decodePpm } from "../wisp/frameProbe";
-import { captureProcess } from "../wisp/mapBuild";
+import { InputInjection, ScreenCapture } from "../platform/services";
 import { step } from "../wisp/timings";
 import { ClientWatch, describeView, typesIntoMatch } from "../wisp/watch";
 import { CLIENT_PROFILE_NAMES } from "../wisp/lan/pool";
-import { inputBatches, sendsChat, type InputAction } from "./inputBatch";
+import { sendsChat, type InputAction } from "./inputBatch";
 export type { InputAction } from "./inputBatch";
 export { sendsChat } from "./inputBatch";
 
@@ -60,7 +59,7 @@ function fail(operation: string, client: string) {
   return (cause: unknown) => new DesktopFailure({ operation, client, cause });
 }
 
-function run(client: string, operation: string, command: readonly string[], env: Record<string, string>, stdin?: Uint8Array) {
+export function runTool(client: string, operation: string, command: readonly string[], env: Record<string, string>, stdin?: Uint8Array) {
   const effect = Effect.acquireUseRelease(
     Effect.try({
       try: () => Bun.spawn([...command], { env: { ...Bun.env, ...env }, stdin: stdin ?? "ignore", stdout: "pipe", stderr: "pipe" }),
@@ -100,33 +99,19 @@ export const readClientsFile = (path: string) =>
   });
 
 
-export const desktopSession = (entry: ClientEntry) =>
-  Effect.gen(function*() {
-    const read = (file: string) =>
-      Effect.tryPromise({ try: async () => (await Bun.file(join(entry.run, file)).text()).trim(), catch: fail(`read desktop ${file}`, entry.name) });
-    const x11 = { DISPLAY: yield* read("display"), XAUTHORITY: yield* read("xauthority") };
-    const wayland = { XDG_RUNTIME_DIR: join(entry.run, "runtime"), WAYLAND_DISPLAY: yield* read("wayland-display") };
-    return { x11, wayland };
-  });
+export const windowsOf = (config: ClientsConfig, entry: ClientEntry, title: string) => InputInjection.use((input) => input.windows(config, entry, title, false));
 
-
-export const findWindows = (tools: Tools, name: string, x11: Record<string, string>, title: string) =>
-  run(name, `find ${title} window`, [tools.xdotool, "search", "--name", `^${title.replace(/[.\\^$|?*+()[\]{}]/g, "\\$&")}$`], x11).pipe(
-    Effect.map((bytes) => text(bytes).split("\n").filter((line) => line !== "")),
-
-    Effect.catchTag("DesktopFailure", () => Effect.succeed([] as string[])),
-  );
+export const displayOf = (entry: ClientEntry) => InputInjection.use((input) => input.display(entry));
 
 export const loadClients = (path: string) =>
   Effect.gen(function*() {
     const config = yield* readClientsFile(path);
+    const input = yield* InputInjection;
     return yield* Effect.forEach(config.clients, (entry) =>
       Effect.gen(function*() {
-        const { name, documents, menuReportPort } = entry;
-        const { x11, wayland } = yield* desktopSession(entry);
-        const windows = text(yield* run(name, "find Warcraft window", [config.tools.xdotool, "search", "--name", "^Warcraft III$"], x11)).split("\n").filter((line) => line !== "");
-        if (windows.length !== 1) return yield* new DesktopFailure({ operation: "find Warcraft window", client: name, cause: `${windows.length} windows` });
-        return { name, documents, ...(menuReportPort === undefined ? {} : { menuReportPort }), tools: config.tools, x11, wayland, window: windows[0]! } satisfies Client;
+        const windows = yield* input.windows(config, entry, "Warcraft III", true);
+        if (windows.length !== 1) return yield* new DesktopFailure({ operation: "find Warcraft window", client: entry.name, cause: `${windows.length} windows` });
+        return windows[0]!;
       }));
   });
 
@@ -145,9 +130,9 @@ export interface TimedFrame {
 
 export const captureTimed = (client: Client, nowNs: () => number, region?: Region) =>
   Effect.gen(function*() {
-    const geometry = region === undefined ? [] : ["-g", `${region.x},${region.y} ${region.width}x${region.height}`];
+    const screen = yield* ScreenCapture;
     const beforeNs = nowNs();
-    const ppm = yield* run(client.name, "capture frame", [client.tools.grim, "-t", "ppm", ...geometry, "-"], client.wayland).pipe(
+    const ppm = yield* screen.frame(client, region).pipe(
       Effect.timeoutOrElse({ duration: "8 seconds", orElse: () => Effect.fail(new DesktopFailure({ operation: "capture frame", client: client.name, cause: "framebuffer read exceeded 8 seconds; capture process stopped" })) }),
     );
     const afterNs = nowNs();
@@ -181,7 +166,7 @@ export function separateInk(frame: Frame, ink: Ink): Uint8Array {
 export const read = (client: Client, region?: Region, ink: Ink = "light") =>
   Effect.gen(function*() {
     const frame = yield* capture(client, region);
-    const page = yield* run(client.name, "read text", [client.tools.tesseract, "stdin", "stdout", "--psm", region === undefined ? "11" : "6"], {}, separateInk(frame, ink));
+    const page = yield* runTool(client.name, "read text", [client.tools.tesseract, "stdin", "stdout", "--psm", region === undefined ? "11" : "6"], {}, separateInk(frame, ink));
     return text(page);
   });
 
@@ -211,19 +196,10 @@ export const words = (client: Client, ink: Ink = "light") =>
 
 
 export const frameWords = (client: Client, frame: Frame, ink: Ink) =>
-  run(client.name, "read words", [client.tools.tesseract, "stdin", "stdout", "--psm", "11", "tsv"], {}, separateInk(frame, ink)).pipe(Effect.map((bytes) => parseWords(text(bytes))));
+  runTool(client.name, "read words", [client.tools.tesseract, "stdin", "stdout", "--psm", "11", "tsv"], {}, separateInk(frame, ink)).pipe(Effect.map((bytes) => parseWords(text(bytes))));
 
 
-export const focus = (client: Client) =>
-  Effect.gen(function*() {
-    yield* run(client.name, "focus Warcraft", [client.tools.wlrctl, "toplevel", "focus", "title:Warcraft III"], client.wayland);
-    yield* run(client.name, "activate Warcraft window", [client.tools.xdotool, "windowactivate", "--sync", client.window], client.x11);
-  });
-
-
-
-
-
+export const focus = (client: Client) => InputInjection.use((input) => input.focus(client, "Warcraft III", true));
 
 
 export const requireMatch = (client: Client, input: string) =>
@@ -246,11 +222,7 @@ export const keys = (client: Client, ...names: string[]) =>
   Effect.gen(function*() {
     if (sendsChat(names)) yield* requireMatch(client, names.join(" "));
     yield* focus(client);
-    if (sendsChat(names)) {
-      for (const planned of inputBatches([{ kind: "keys", keys: names }], { x: 0, y: 0 })) {
-        yield* run(client.name, `press ${names.join(" ")}`, [client.tools.xdotool, ...planned.args], client.x11);
-      }
-    } else yield* run(client.name, `press ${names.join(" ")}`, [client.tools.xdotool, "key", "--clearmodifiers", ...names], client.x11);
+    yield* InputInjection.use((input) => input.keys(client, names));
   });
 
 
@@ -258,32 +230,11 @@ export const typeText = (client: Client, value: string, delayMillis?: number) =>
   Effect.gen(function*() {
     yield* requireMatch(client, "typed text");
     yield* focus(client);
-    const delay = delayMillis === undefined ? [] : ["--delay", String(delayMillis)];
-    yield* run(client.name, "type text", [client.tools.xdotool, "type", "--clearmodifiers", ...delay, "--", value], client.x11);
+    yield* InputInjection.use((input) => input.typeText(client, value, delayMillis));
   });
 
 
-export const windowPid = (client: Client) =>
-  Effect.gen(function*() {
-    const pid = Number(text(yield* run(client.name, "read window process", [client.tools.xdotool, "getwindowpid", client.window], client.x11)).trim());
-    if (!Number.isInteger(pid) || pid <= 0) return yield* new DesktopFailure({ operation: "read window process", client: client.name, cause: `no process for window ${client.window}` });
-    return pid;
-  });
-
-function pointerPosition(output: string) {
-  const fields = Object.fromEntries(output.split("\n").filter((line) => line.includes("=")).map((line) => line.split("=", 2) as [string, string]));
-  return { x: Number(fields.X), y: Number(fields.Y) };
-}
-
-function pointer(client: Client) {
-  return run(client.name, "read pointer", [client.tools.xdotool, "getmouselocation", "--shell"], client.x11).pipe(
-    Effect.map((bytes) => pointerPosition(text(bytes))),
-  );
-}
-
-
-
-
+export const windowPid = (client: Client) => InputInjection.use((input) => input.windowPid(client));
 
 
 export const click = (client: Client, x: number, y: number) =>
@@ -293,52 +244,17 @@ export const click = (client: Client, x: number, y: number) =>
   });
 
 
-export const focusWindow = (client: Client, title: string) =>
-  Effect.gen(function*() {
-    yield* run(client.name, `focus ${title}`, [client.tools.wlrctl, "toplevel", "focus", `title:${title}`], client.wayland).pipe(Effect.ignore);
-    yield* run(client.name, `activate ${title} window`, [client.tools.xdotool, "windowactivate", "--sync", client.window], client.x11);
-  });
+export const focusWindow = (client: Client, title: string) => InputInjection.use((input) => input.focus(client, title, false));
 
 
-export const pressAt = (client: Client, x: number, y: number) =>
-  Effect.gen(function*() {
-    const from = yield* pointer(client);
-    yield* run(client.name, "move pointer", [client.tools.xdotool, "mousemove_relative", "--", String(x - from.x), String(y - from.y)], client.x11);
-    const at = yield* pointer(client);
-    if (at.x !== x || at.y !== y) return yield* new DesktopFailure({ operation: "move pointer", client: client.name, cause: `pointer at ${at.x},${at.y}, wanted ${x},${y}` });
-    yield* Effect.sleep("120 millis");
-    yield* run(client.name, "press button", [client.tools.xdotool, "mousedown", "1"], client.x11);
-    yield* Effect.sleep("60 millis");
-    yield* run(client.name, "release button", [client.tools.xdotool, "mouseup", "1"], client.x11);
-  });
+export const pressAt = (client: Client, x: number, y: number) => InputInjection.use((input) => input.pressAt(client, x, y));
 
 
 export const batch = Effect.fnUntraced(function*(client: Client, actions: readonly InputAction[]) {
   if (actions.length === 0) return;
   if (actions.some((action) => action.kind === "text" || (action.kind === "keys" && sendsChat(action.keys)))) yield* requireMatch(client, "typed text or Return");
   yield* focus(client);
-  const moved = actions.some((action) => action.kind === "click");
-  const from = moved ? yield* pointer(client) : { x: 0, y: 0 };
-  const plan = inputBatches(actions, from);
-  const environment = Object.fromEntries(Object.entries(Bun.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
-  const runBatch = (args: readonly string[]) => captureProcess("run input batch", client.name, [client.tools.xdotool, ...args], {
-    env: { ...environment, ...client.x11 },
-  }).pipe(
-    Effect.mapError((cause) => new DesktopFailure({ operation: "run input batch", client: client.name, cause })),
-    Effect.flatMap(({ exitCode, stdout, stderr }) => exitCode === 0 ? Effect.succeed(stdout) : Effect.fail(new DesktopFailure({ operation: "run input batch", client: client.name, cause: stderr }))),
-  );
-  yield* Effect.acquireUseRelease(Effect.void, () => Effect.forEach(plan, (command) => Effect.gen(function*() {
-    const output = yield* runBatch(command.args);
-    if (command.pointer !== undefined) {
-      const at = pointerPosition(output);
-      if (at.x !== command.pointer.x || at.y !== command.pointer.y) return yield* new DesktopFailure({ operation: "move input batch pointer", client: client.name, cause: `pointer at ${at.x},${at.y}, wanted ${command.pointer.x},${command.pointer.y}` });
-    }
-  }), { discard: true }), (_, exit) => {
-    if (Exit.isSuccess(exit)) return Effect.void;
-    const keys = actions.flatMap((action) => action.kind === "keys" ? action.keys : []);
-    if (!moved && keys.length === 0) return Effect.void;
-    return runBatch([...(moved ? ["mouseup", "1"] : []), ...(keys.length > 0 ? ["keyup", ...keys] : [])]).pipe(Effect.asVoid);
-  }).pipe(step(`${client.name}: input batch (${actions.length} actions)`));
+  yield* InputInjection.use((input) => input.batch(client, actions));
 });
 
 
@@ -358,40 +274,20 @@ export const waitForText = (client: Client, what: string, pattern: RegExp, regio
   waitFor(client, what, seconds, read(client, region, ink).pipe(Effect.map((seen) => (pattern.test(seen.replace(/\s+/g, " ")) ? seen : undefined))));
 
 
-const activeWindow = (client: Client) =>
-  run(client.name, "read active window", [client.tools.xdotool, "getactivewindow"], client.x11).pipe(Effect.map((bytes) => text(bytes).trim()));
-
-
-const windowRegion = (client: Client) =>
-  run(client.name, "read window geometry", [client.tools.xdotool, "getwindowgeometry", "--shell", client.window], client.x11).pipe(Effect.map((bytes): Region => {
-    const fields = Object.fromEntries(text(bytes).split("\n").filter((line) => line.includes("=")).map((line) => line.split("=", 2) as [string, string]));
-    return { x: Number(fields.X), y: Number(fields.Y), width: Number(fields.WIDTH), height: Number(fields.HEIGHT) };
-  }));
-
-
-
-
-
-
-
-
-
-
-
-
 export const enterLoginField = (client: Client, title: string, placeholder: RegExp | undefined, secret: Uint8Array) =>
   Effect.gen(function*() {
+    const input = yield* InputInjection;
     yield* focusWindow(client, title);
-    const focused = yield* activeWindow(client);
+    const focused = yield* input.activeWindow(client);
     if (focused !== client.window) return yield* new DesktopFailure({ operation: "focus sign-in", client: client.name, cause: `window ${focused} has focus, not the "${title}" window ${client.window}` });
     if (placeholder !== undefined) {
-      const region = yield* windowRegion(client);
+      const region = yield* input.windowRegion(client);
       const field = (yield* frameWords(client, yield* capture(client, region), "light")).find((word) => placeholder.test(word.text));
       if (field !== undefined) yield* pressAt(client, region.x + field.x, region.y + field.y);
-      yield* run(client.name, "select sign-in field", [client.tools.xdotool, "key", "--clearmodifiers", "ctrl+a"], client.x11);
+      yield* input.pressKeys(client, ["ctrl+a"], "select sign-in field");
     }
-    yield* run(client.name, "type sign-in field", [client.tools.xdotool, "type", "--clearmodifiers", "--file", "-"], client.x11, secret);
-    const after = yield* activeWindow(client);
+    yield* input.typeSecret(client, secret);
+    const after = yield* input.activeWindow(client);
     if (after !== client.window) return yield* new DesktopFailure({ operation: "type sign-in field", client: client.name, cause: `focus moved to window ${after} while typing; not submitting` });
-    yield* run(client.name, "submit sign-in field", [client.tools.xdotool, "key", "--clearmodifiers", "Return"], client.x11);
+    yield* input.pressKeys(client, ["Return"], "submit sign-in field");
   }).pipe(Effect.ensuring(Effect.sync(() => secret.fill(0))));

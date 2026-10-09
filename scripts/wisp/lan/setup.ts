@@ -9,15 +9,15 @@ import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect } from "effect";
 import { ChildProcess } from "effect/process";
+import { GameLauncher } from "../../platform/services";
 import { collect } from "../hostProcess";
 import { installMenuPage } from "../menus";
 import { LanFailure } from "./join";
 import { clientRoot, installOf, prefixOf, retailOf } from "./pool";
 
-const STEAM = () => join(process.env["HOME"] ?? "", ".local/share/Steam");
 
 
-const run = (what: string, command: readonly string[], env: Record<string, string> = {}) =>
+const run = (what: string, command: readonly string[], env: Readonly<Record<string, string>> = {}) =>
   collect(ChildProcess.make(command[0]!, command.slice(1), { env, extendEnv: true, stdin: "ignore" })).pipe(
     Effect.provide(BunServices.layer),
     Effect.mapError((cause) => new LanFailure({ problem: `${what}: ${cause.message}` })),
@@ -32,12 +32,11 @@ export const setupClient = (name: string, from: string, port: number, log: (line
   if (!existsSync(join(prefixOf(name), "user.reg"))) {
     mkdirSync(root, { recursive: true });
     const appId = "3516115599";
-    yield* run(`create ${name}'s prefix`, [
-      "bwrap", "--dev-bind", "/", "/", "--unshare-net", "--die-with-parent", "--",
-      "steam-run", "env", join(STEAM(), "steamapps/common/SteamLinuxRuntime_4/_v2-entry-point"), "--verb=waitforexitandrun", "--",
-      join(STEAM(), "compatibilitytools.d/GE-Proton11-7-x86_64/proton"), "waitforexitandrun", "C:\\windows\\system32\\reg.exe",
-      "add", "HKCU\\Software\\Blizzard Entertainment\\Warcraft III", "/v", "Allow Local Files", "/t", "REG_DWORD", "/d", "1", "/f",
-    ], { STEAM_COMPAT_DATA_PATH: root, STEAM_COMPAT_CLIENT_INSTALL_PATH: STEAM(), STEAM_COMPAT_APP_ID: appId, SteamAppId: appId });
+    const registry = yield* GameLauncher.use((launcher) => launcher.inPrefix({
+      root, appId, isolateNetwork: true, exe: "C:\\windows\\system32\\reg.exe",
+      args: ["add", "HKCU\\Software\\Blizzard Entertainment\\Warcraft III", "/v", "Allow Local Files", "/t", "REG_DWORD", "/d", "1", "/f"],
+    })).pipe(Effect.mapError((failure) => new LanFailure({ problem: failure.message })));
+    yield* run(`create ${name}'s prefix`, registry.command, registry.env);
     log(`${name}: prefix created with Allow Local Files`);
   }
   if (!existsSync(installOf(name))) {

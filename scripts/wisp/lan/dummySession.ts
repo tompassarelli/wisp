@@ -2,7 +2,8 @@ import { copyFileSync, mkdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
+import { platformLayer } from "../../platform/layer";
 import { connectMenus, menuAddress } from "../menus";
 import { checkDummy } from "./dummy";
 import { joinLanGame } from "./join";
@@ -39,4 +40,4 @@ BunRuntime.runMain(Effect.scoped(Effect.gen(function*() {
     }),
   });
   console.log(JSON.stringify({ ...result, version, output }));
-})).pipe(Effect.provide(BunServices.layer)));
+})).pipe(Effect.provide(Layer.merge(BunServices.layer, platformLayer()))));

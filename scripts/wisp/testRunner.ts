@@ -19,8 +19,10 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { Cause, Effect, Exit, Fiber, Option, Ref, Schedule, Schema } from "effect";
+import { Cause, Effect, Exit, Fiber, Layer, Option, Ref, Schedule, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { platformLayer } from "../platform/layer";
+import { type CpuPressure, ResourceAccounting } from "../platform/services";
 import { TEST_COST_OUT_ENV, addCost, report, type Costs } from "./testCost";
 import { TEST_PHASE_ENV, TIMING_TEST_PREFIX } from "./timingTest";
 
@@ -56,32 +58,16 @@ export class TestRunFailure extends Schema.TaggedError<TestRunFailure>()("TestRu
   }
 }
 
-export interface CpuPressure {
-
-  readonly avg10: number;
-
-  readonly totalUs: number;
-}
-
-
-export function parseCpuPressure(text: string): CpuPressure | undefined {
-  const some = /^some avg10=([\d.]+) avg60=[\d.]+ avg300=[\d.]+ total=(\d+)$/m.exec(text);
-  return some === null ? undefined : { avg10: Number(some[1]), totalUs: Number(some[2]) };
-}
 
 interface Reading extends CpuPressure {
   readonly atMs: number;
 }
 
 
-const readPressure = Effect.sync((): Reading | undefined => {
-  try {
-    const pressure = parseCpuPressure(readFileSync("/proc/pressure/cpu", "utf8"));
-    return pressure === undefined ? undefined : { ...pressure, atMs: performance.now() };
-  } catch {
-    return undefined;
-  }
-});
+const readPressure = ResourceAccounting.use((accounting) => Effect.sync((): Reading | undefined => {
+  const pressure = accounting.cpuPressure();
+  return pressure === undefined ? undefined : { ...pressure, atMs: performance.now() };
+}));
 
 export interface PressureDuring {
 
@@ -180,13 +166,7 @@ const capacityHelper = Effect.gen(function*() {
 });
 
 
-const insideLease = Effect.sync(() => {
-  try {
-    return readFileSync("/proc/self/cgroup", "utf8").includes("agent-capacity");
-  } catch {
-    return false;
-  }
-});
+const insideLease = ResourceAccounting.use((accounting) => Effect.sync(accounting.insideCapacityLease));
 
 
 const timingPhase = (files: readonly string[], args: readonly string[], print: (line: string) => void) => Effect.acquireUseRelease(
@@ -326,7 +306,7 @@ export const runTests = (args: readonly string[], print: (line: string) => void 
 
 if (import.meta.main) {
   const argv = Bun.argv.slice(2);
-  const program: Effect.Effect<number, TestRunFailure, ChildProcessSpawner.ChildProcessSpawner> = argv[0] === "--timing-run"
+  const program: Effect.Effect<number, TestRunFailure, ChildProcessSpawner.ChildProcessSpawner | ResourceAccounting> = argv[0] === "--timing-run"
     ? Effect.suspend(() => {
       const separator = argv.indexOf("--");
       const [, resultsFile = "", ...files] = separator < 0 ? argv : argv.slice(0, separator);
@@ -335,7 +315,7 @@ if (import.meta.main) {
     : runTests(argv);
   BunRuntime.runMain(program.pipe(
     Effect.tapCause((cause) => (Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.sync(() => console.error(Cause.pretty(cause))))),
-    Effect.provide(BunServices.layer),
+    Effect.provide(Layer.merge(BunServices.layer, platformLayer())),
   ), {
     disableErrorReporting: true,
     teardown: (exit) => process.exit(Exit.isSuccess(exit) ? Number(exit.value) : Cause.hasInterruptsOnly(exit.cause) ? 130 : 1),

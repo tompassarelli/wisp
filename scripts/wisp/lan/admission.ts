@@ -1,7 +1,6 @@
 import { join } from "node:path";
 import { Effect, Schema } from "effect";
-import { ChildProcess } from "effect/process";
-import { collect } from "../hostProcess";
+import { CapacityAdmission } from "../../platform/services";
 import { LanFailure } from "./join";
 
 export const admissionFile = (directory: string) => join(directory, "admission.json");
@@ -14,10 +13,10 @@ const ProbeReply = Schema.fromJsonString(Schema.Struct({
 
 
 export const pairAdmission = (capacity: string) => Effect.gen(function*() {
-  const probe = yield* collect(ChildProcess.make(process.execPath, [capacity, "probe", "--class", "native", "--memory-gib", "3"], { stdin: "ignore" })).pipe(
-    Effect.mapError((cause) => new LanFailure({ problem: `the capacity helper did not run: ${cause.message}` })),
+  const probe = yield* CapacityAdmission.use((admission) => admission.probe(capacity, 3)).pipe(
+    Effect.mapError((cause) => new LanFailure({ problem: `the capacity helper did not run: ${cause._tag === "PlatformFailure" ? cause.problem : cause.message}` })),
   );
-  const status = yield* Schema.decodeEffect(ProbeReply)(new TextDecoder().decode(probe.stdout)).pipe(
+  const status = yield* Schema.decodeEffect(ProbeReply)(probe.stdout).pipe(
     Effect.mapError((cause) => new LanFailure({ problem: `the capacity helper's probe reply: ${cause.message}` })),
   );
   const pressure = status.protectedCpuSomeAvg10;
@@ -28,6 +27,5 @@ export const pairAdmission = (capacity: string) => Effect.gen(function*() {
   return undefined;
 });
 
-export const nativeCommand = (capacity: string, name: string, runtime: string) => [
-  process.execPath, capacity, "session", "--class", "native", "--memory-gib", "1.5", "--owner", `wisp-lan:${name}`, "--", "env", `XDG_RUNTIME_DIR=${runtime}`,
-];
+export const nativeCommand = (capacity: string, name: string, runtime: string) =>
+  CapacityAdmission.use((admission) => admission.session(capacity, `wisp-lan:${name}`, 1.5)).pipe(Effect.map((session) => [...session, "env", `XDG_RUNTIME_DIR=${runtime}`]));

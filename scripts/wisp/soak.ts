@@ -6,8 +6,9 @@
 
 
 
-import { dlopen } from "bun:ffi";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
+import { runPlatformSync } from "../platform/layer";
+import { ResourceAccounting } from "../platform/services";
 import type { ClientFiles, HeadlessClient, MapEntry } from "../../src/headless/client";
 import type { Lockstep } from "../../src/headless/lockstep";
 import { sceneFile } from "../../src/runtime/scene";
@@ -493,21 +494,9 @@ export interface SoakResult {
 
 
 
-export const cpuMillis: () => number = (() => {
-  if (process.platform !== "linux") {
-    return () => {
-      const { user, system } = process.cpuUsage();
-      return (user + system) / 1000;
-    };
-  }
-  const libc = dlopen("libc.so.6", { clock_gettime: { args: ["i32", "ptr"], returns: "i32" } });
-  const time = new BigInt64Array(2);
-  const CLOCK_THREAD_CPUTIME_ID = 3;
-  return () => {
-    libc.symbols.clock_gettime(CLOCK_THREAD_CPUTIME_ID, time);
-    return Number(time[0] ?? 0n) * 1000 + Number(time[1] ?? 0n) / 1e6;
-  };
-})();
+let threadClock: (() => number) | undefined;
+
+export const cpuMillis = (): number => (threadClock ??= runPlatformSync(ResourceAccounting.use((accounting) => Effect.succeed(accounting.threadCpuMillis))))();
 
 
 const shape = (text: string) => text.replace(/\d+(\.\d+)?/g, "#");

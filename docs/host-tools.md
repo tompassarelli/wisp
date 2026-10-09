@@ -41,6 +41,10 @@ If `ChildProcess` can't do something a tool needs, such as starting a process
 inside a network namespace or on a private desktop, write the smallest wrapper
 over it in one module, with one comment saying why.
 
+Platform-specific calls (`/proc`, cgroups, Wine, `nsenter`, desktop tools,
+systemd, PipeWire) go through the services in [Platforms](platforms.md), never
+inline in a host tool.
+
 ## Examples
 
 - wisp:scripts/wisp/lan/pairAgent.ts: a whole agent as one `runMain`

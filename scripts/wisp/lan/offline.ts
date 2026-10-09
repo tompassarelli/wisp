@@ -1,23 +1,12 @@
+import { Effect } from "effect";
+import { runPlatformSync } from "../../platform/layer";
+import { ProcessTable } from "../../platform/services";
 
 
-
-
-import { readFileSync } from "node:fs";
-
-
-export function interfaces(netDev: string): string[] {
-  return netDev.split("\n").slice(2).map((line) => line.split(":")[0]?.trim() ?? "").filter((name) => name !== "");
-}
-
-
-export function isolatedNetworkProblem(pid: number): string | undefined {
-  let netDev: string;
-  try {
-    netDev = readFileSync(`/proc/${pid}/net/dev`, "latin1");
-  } catch (cause) {
-    return `can't read pid ${pid}'s network namespace (${cause instanceof Error ? cause.message : String(cause)})`;
-  }
-  const others = interfaces(netDev).filter((name) => name !== "lo");
-  if (others.length > 0) return `pid ${pid} has network interfaces besides loopback: ${others.join(", ")}`;
-  return undefined;
-}
+export const isolatedNetworkProblem = (pid: number): string | undefined => runPlatformSync(ProcessTable.use((table) => table.networkInterfaces(pid)).pipe(
+  Effect.map((names) => {
+    const others = names.filter((name) => name !== "lo");
+    return others.length > 0 ? `pid ${pid} has network interfaces besides loopback: ${others.join(", ")}` : undefined;
+  }),
+  Effect.catch((failure) => Effect.succeed(failure._tag === "PlatformFailure" ? `can't read ${failure.capability} (${failure.problem})` : failure.message)),
+));

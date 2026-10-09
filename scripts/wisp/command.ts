@@ -2,6 +2,7 @@
 
 import type { Effect } from "effect";
 import { Schema } from "effect";
+import type { Platform } from "../platform/services";
 
 
 export class UsageFailure extends Schema.TaggedError<UsageFailure>()("UsageFailure", {
@@ -18,7 +19,7 @@ export interface CommandFailure {
   readonly message: string;
 }
 
-export type Command = (args: readonly string[]) => Effect.Effect<void, CommandFailure>;
+export type Command = (args: readonly string[]) => Effect.Effect<void, CommandFailure, Platform>;
 
 
 export function describeCause(cause: unknown): string {

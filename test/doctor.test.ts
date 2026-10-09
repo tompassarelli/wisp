@@ -7,6 +7,7 @@ import { ladderScan } from "../scripts/warcraft/war3Log";
 import { displayChanges, videoSettings, withDisplaySettings } from "../scripts/warcraft/preferences";
 import { diagnose, type Observation } from "../scripts/wisp/doctor";
 import { type ClientState, type ClientView, type Source } from "../scripts/wisp/watch";
+import { platformLayer } from "../scripts/platform/layer";
 import { doctorTargets } from "../scripts/wisp/clientDoctorCommand";
 import { pairClients, writePoolClients } from "../scripts/wisp/lan/pool";
 
@@ -40,7 +41,7 @@ test("[boundary] produced pool declarations round-trip through doctor targets", 
     for (const entries of [clients, clients.map((client) => ({ ...client, name: client.name.endsWith("a") ? "a" : "b", poolName: client.name }))]) {
       const clientsFile = join(directory, "clients.json");
       writePoolClients(clientsFile, entries);
-      const targets = await Effect.runPromise(doctorTargets({ clientsFile, start: {} }, [entries[0]!.name]));
+      const targets = await Effect.runPromise(doctorTargets({ clientsFile, start: {} }, [entries[0]!.name]).pipe(Effect.provide(platformLayer())));
       expect(targets.map(({ client, display, start }) => ({ name: client.name, display, start }))).toEqual([{ name: entries[0]!.name, display: ":7", start: { kind: "offline-pool" } }]);
     }
   } finally {

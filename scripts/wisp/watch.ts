@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { Clock, Context, Effect, Layer, Schedule, Schema } from "effect";
 import { ackFile } from "../../src/runtime/gameFiles";
 import { type PrefixUse, type ProcessInfo, prefixUse } from "../warcraft/battleNet";
-import { listProcesses } from "../warcraft/processes";
+import { ProcessTable } from "../platform/services";
 import { type LadderScan, SCAN_QUIET_MS, importFailures, ladderScan, logTime, sessionMarks, sessionStart, sessionText, war3LogPath } from "../warcraft/war3Log";
 import type { Client } from "./clients";
 import { dataDirectory } from "./gameFiles";
@@ -395,6 +395,7 @@ const SLOTS = 24;
 
 const liveWatch = (options: WatchOptions) => Effect.gen(function*() {
   const scope = yield* Effect.scope;
+  const table = yield* ProcessTable;
   const trackers = new Map<string, { socket: SocketState; tried: boolean; view?: ClientView; log?: string | undefined; logKey?: string; crashes: Map<string, CrashReport | undefined> }>();
 
 
@@ -465,10 +466,9 @@ const liveWatch = (options: WatchOptions) => Effect.gen(function*() {
     if (recent !== undefined && newest !== undefined && newest.at >= (tracker.socket.last?.at ?? 0)) {
       tracker.socket = recent.reduce<SocketState>((socket, heard) => socketEvent(socket, { messageType: heard.messageType, payload: heard }, heard.at), tracker.socket);
     }
-    const processes: readonly ProcessInfo[] = yield* Effect.try({
-      try: listProcesses,
-      catch: (cause) => new WatchFailure({ client: client.name, operation: "read the process table", problem: String(cause) }),
-    });
+    const processes: readonly ProcessInfo[] = yield* table.list.pipe(
+      Effect.mapError((cause) => new WatchFailure({ client: client.name, operation: "read the process table", problem: cause.message })),
+    );
 
     const path = war3LogPath(client.documents);
     const stamp = statSync(path, { throwIfNoEntry: false });
