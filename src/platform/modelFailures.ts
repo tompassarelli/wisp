@@ -35,12 +35,12 @@ export function pollModelFailures(): void {
   failures.ticks = 0;
   let path = readChunk(modelFailureFile(failures.token, failures.next, runtimeConfiguration().filePrefix));
   while (path !== undefined) {
-    failures.paths[path.replace(/\\/g, "/").toLowerCase()] = true;
+    failures.paths[path.split("\\").join("/").toLowerCase()] = true;
     failures.next++;
     path = readChunk(modelFailureFile(failures.token, failures.next, runtimeConfiguration().filePrefix));
   }
 }
 
 export function modelFailed(path: string): boolean {
-  return state()?.paths[path.replace(/\\/g, "/").toLowerCase()] === true;
+  return state()?.paths[path.split("\\").join("/").toLowerCase()] === true;
 }
