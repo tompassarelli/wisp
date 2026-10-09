@@ -437,7 +437,7 @@ export declare class ModelRenderer {
     /** Wisp: a directional key light and ambient fill, its direction in model space toward the light, and linear fog by eye depth. */
     setWispEnvironment(environment: {
         light?: { direction: ArrayLike<number>; key: ArrayLike<number>; ambient: ArrayLike<number>; linear?: boolean };
-        fog?: { color: ArrayLike<number>; start: number; end: number; near: number; far: number; max: number };
+        fog?: { color: ArrayLike<number>; start: number; end: number; near: number; far: number; max: number; height?: { bottom: number; top: number; start: number; end: number; model?: Float32Array } };
         /** Up to eight omni lights in world space (colour times intensity, full to start, zero from end), with the draw's model and normal matrices. */
         points?: { model: ArrayLike<number>; normal: ArrayLike<number>; lights: readonly { position: ArrayLike<number>; color: ArrayLike<number>; start: number; end: number; shadowSlot?: number }[] };
         /** The sun's depth map (unit 7): model space to its clip space, depth bias and one texel in map coordinates; it darkens only the key light. */

@@ -3,7 +3,7 @@ import { cliffGround, cliffShape } from "../scripts/wisp/terrainCliffs";
 import { terrainCells } from "../scripts/wisp/terrainMesh";
 import type { Terrain, TerrainPoint } from "../scripts/wisp/terrain";
 
-const point = (layer = 2): TerrainPoint => ({ layer, height: (layer - 2) * 128, ground: 0, variation: 0, cliff: 0, cliffVariation: 0, flags: 2 });
+const point = (layer = 2): TerrainPoint => ({ layer, height: (layer - 2) * 128, ground: 0, variation: 0, cliff: 0, cliffVariation: 0, flags: 2, water: 0 });
 
 test("[reference] installed cliff model high corners stay at NW, SW, SE, NE", () => {
   // 3.0.0.24268 stock BAAA, ABAA, AABA, AAAB place z=128 at

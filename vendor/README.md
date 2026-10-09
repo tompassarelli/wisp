@@ -54,6 +54,11 @@ linearly to zero at its end, into the SD lit term and the HD diffuse term.
 Wisp's sun and omni-light depth maps (texture units 7 and 8, unbound when
 absent): the sun's darkens only the key light, a casting omni light's only
 that light (wisp:docs/headless.md, "Lighting, fog and sky").
+`setWispEnvironment`'s `fog.height` (bottom, top, depth start and end, and
+the draw's model matrix) adds Definitive's height-fog falloff in both
+shaders: the fragment's world Z sets a height share and its eye depth a reach
+share, and their product joins the linear fog (wisp:docs/headless.md,
+"Lighting, fog and sky").
 `setInstanceColor` multiplies unit/effect RGB into that geoset tint before
 light and fog. Its default is white; particles and ribbons retain emitter colours.
 

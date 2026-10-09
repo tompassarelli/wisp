@@ -21,8 +21,10 @@ export interface TerrainPoint {
   readonly layer: number;
   readonly cliff: number;
   readonly cliffVariation: number;
-  /** Ramp, blight, water and boundary flags. */
+  /** Ramp (1), blight (2), water (4) and boundary (8) flags. */
   readonly flags: number;
+  /** The stored water level in world units, before the tileset's water height offset. */
+  readonly water: number;
 }
 
 export interface Terrain {
@@ -49,6 +51,7 @@ export const CELL = 128;
  * Decodes war3map.w3e versions 11 (7-byte points) and 12 (8-byte points,
  * a 16-bit ground and flags word). Heights store 0x2000 as ground zero and
  * four steps per world unit; a cliff layer adds 128 per level above 2.
+ * The water level is the low 14 bits of the second word, on the same scale.
  */
 export function decodeTerrain(bytes: Uint8Array): Terrain {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -79,7 +82,7 @@ export function decodeTerrain(bytes: Uint8Array): Terrain {
     const flags = (version === 12 ? tile >> 6 : tile >> 4) | ((water & 0xc000) >> 10);
     const variation = bytes[at + size - 2] ?? 0, cliff = bytes[at + size - 1] ?? 0;
     const layer = cliff & 0x0f;
-    points.push({ height: (raw - 0x2000) / 4 + (layer - 2) * CELL, ground: groundBits, variation: variation & 31, layer, flags, cliff: cliff >> 4, cliffVariation: variation >> 5 });
+    points.push({ height: (raw - 0x2000) / 4 + (layer - 2) * CELL, ground: groundBits, variation: variation & 31, layer, flags, cliff: cliff >> 4, cliffVariation: variation >> 5, water: ((water & 0x3fff) - 0x2000) / 4 });
   }
   return { version, tileset, groundTiles, cliffTiles, columns, rows, originX, originY, points };
 }

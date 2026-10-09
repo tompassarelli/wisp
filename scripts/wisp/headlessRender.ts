@@ -74,6 +74,9 @@ export interface SceneFog {
   readonly density: number;
   /** Red, green and blue, 0 to 1. */
   readonly color: readonly [number, number, number];
+  /** A height fog's bottom and top in world Z, between which Definitive's falloff runs. */
+  readonly heightStart?: number | undefined;
+  readonly heightEnd?: number | undefined;
   /** The linear range a height fog keeps, which Classic draws. */
   readonly linearStart?: number | undefined;
   readonly linearEnd?: number | undefined;
@@ -88,7 +91,7 @@ function sceneEnvironment(client: HeadlessClient): SceneEnvironment {
   const style = number(fog.style), zStart = number(fog.zStart), zEnd = number(fog.zEnd);
   const drawn = style === undefined || zStart === undefined || zEnd === undefined || color === undefined ? undefined : {
     style, zStart, zEnd, density: number(fog.density) ?? 0, color,
-    linearStart: number(fog.linearStart), linearEnd: number(fog.linearEnd), maxLinearDensity: number(fog.maxLinearDensity),
+    heightStart: number(fog.heightStart), heightEnd: number(fog.heightEnd), linearStart: number(fog.linearStart), linearEnd: number(fog.linearEnd), maxLinearDensity: number(fog.maxLinearDensity),
     drawOverSky: typeof fog.drawOverSky === "boolean" ? fog.drawOverSky : undefined,
   };
   return { ...environment, dayNight: { ...environment.dayNight }, ...(drawn === undefined ? {} : { fog: drawn }), shadowCastingPointLights: client.scenery.minShadowCastingPointLightCount };
@@ -119,6 +122,9 @@ export interface RenderedFrame {
   readonly shadows: { readonly sun: boolean; readonly pointCasters: number };
   /** Which of Definitive's post-processing passes the map's settings turned on. */
   readonly post: { readonly ambientOcclusion: boolean; readonly bloom: boolean };
+  /** Whether the terrain's water drew, and whether Definitive's height-fog falloff applied. */
+  readonly water: boolean;
+  readonly heightFog: boolean;
 }
 
 export const captureScene = (client: HeadlessClient, options: { readonly visibleOnly?: boolean } = {}): RenderScene => ({
@@ -338,14 +344,15 @@ export const renderScenes = (project: HeadlessRenderProject, scenes: readonly Re
   const browser = yield* openAnyBrowser(project, bundle, graphics);
   return yield* Effect.tryPromise({ try: async () => {
     await mkdir(directory, { recursive: true });
-    const images: { frame: number; client: number; image: string; models: number; textures: number; notDrawn: string[]; pointLights: number; absent: readonly string[]; shadows: RenderedFrame["shadows"]; post: RenderedFrame["post"] }[] = [];
+    const images: { frame: number; client: number; image: string; models: number; textures: number; notDrawn: string[]; pointLights: number; absent: readonly string[]; shadows: RenderedFrame["shadows"]; post: RenderedFrame["post"]; water: boolean; heightFog: boolean; milliseconds: number }[] = [];
     for (const scene of scenes) {
+      const started = performance.now();
       const result = await browser.devtools.evaluate(`window.renderScene(${JSON.stringify(sceneWithUnits(project, scene))})`) as RenderedFrame;
       for (const failure of result.notDrawn) console.error(`p${scene.client} frame ${scene.frame}: not drawn: ${failure}`);
       const image = `p${scene.client}-frame-${scene.frame}.png`;
       await Bun.write(join(directory, image), Buffer.from(result.png.split(",")[1] ?? "", "base64"));
       await Bun.write(join(directory, `p${scene.client}-frame-${scene.frame}.json`), JSON.stringify({ ...scene, popcornEmitters: result.popcornEmitters }));
-      images.push({ frame: scene.frame, client: scene.client, image, models: result.models, textures: result.textures, notDrawn: result.notDrawn, pointLights: result.pointLights, absent: result.absent, shadows: result.shadows, post: result.post });
+      images.push({ frame: scene.frame, client: scene.client, image, models: result.models, textures: result.textures, notDrawn: result.notDrawn, pointLights: result.pointLights, absent: result.absent, shadows: result.shadows, post: result.post, water: result.water, heightFog: result.heightFog, milliseconds: Math.round(performance.now() - started) });
     }
     await Bun.write(join(directory, "render.json"), JSON.stringify({ renderer: "war3-model 4.0.1 + HD sampling precision", graphics, levers: PROFILES[graphics], look, gpu: browser.gpu, assets: [...browser.resolutions.values()], images }, null, 2) + "\n");
     const failures = images.flatMap((image) => image.notDrawn.map((failure) => `p${image.client} frame ${image.frame}: ${failure}`));

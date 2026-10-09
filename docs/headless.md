@@ -563,9 +563,19 @@ saves them as the scene's `environment`.
   day/night models, models draw unlit, as before.
 - **Fog.** Linear fog by eye depth from `zStart` to `zEnd` in the fog colour.
   A height fog (style 3) draws its linear range, `linearStart` to
-  `linearEnd`, capped at its maximum linear density; the height falloff is
-  not drawn. Additive layers fade to black, and Unfogged layers skip fog.
-  Exponential styles are drawn as linear.
+  `linearEnd`, capped at its maximum linear density. Additive layers fade to
+  black, and Unfogged layers skip fog. Exponential styles are drawn as linear.
+- **Height-fog falloff.** Definitive adds a height fog's falloff to models
+  and terrain water: a fragment's height share is 1 at or below
+  `heightStart`, 0 at or above `heightEnd` and linear between (world Z), and
+  its reach share runs linearly from 0 at eye depth `zStart` to 1 at `zEnd`.
+  Their product joins the linear part as `1 - (1 - linear) × (1 - height ×
+  reach)`. `density` is not drawn, and the falloff never draws over the sky.
+  Classic draws only the linear range. Wisp's model, unmeasured: the native
+  Definitive Tomb of Sargeras frames on smashcraft#298 (fog on, 9 Oct) leave
+  near props below the deck unfogged, as this does, and the fog-off frame
+  that would separate the fog from the sky is still to come.
+  `render.json` records `heightFog` per frame.
 - **Sky.** The sky model around the eye, behind everything else, unlit, and
   fogged only when the fog draws over the sky. `BlzShowSkyBox(false)` hides it.
 - **Far cull.** A model whose origin lies farther from the eye than the
@@ -680,6 +690,23 @@ saves them as the scene's `environment`.
   Ground variation, corner-mask and cliff filename facts come from the
   [HiveWE format documentation](https://github.com/stijnherfst/HiveWE/wiki/war3map.w3e-Terrain)
   (16 September 2025 revision); Wisp copies no implementation code from it.
+- **Water.** Terrain water draws with `render.terrain.w3e`, over everything
+  already drawn and hidden with the terrain (`BlzShowTerrain(false)`). A cell
+  draws when any corner has the water flag (4); each corner's surface stands
+  at its stored water level (low 14 bits of the second word, 0x2000 as zero,
+  four steps a unit) plus the tileset's `height` in cells from
+  `TerrainArt\\Water.slk` (row `{tileset}Sha`, from the install; Definitive
+  reads `_de.w3mod`'s copy with its own colours). Its colour and alpha by depth
+  over ground run from `Smin` to `Smax` up to 64 units deep, then `Dmin` to
+  `Dmax` at 128 (thresholds unmeasured), and dry corners are clear. Its
+  texture is `{texFile}NN`, frame `floor(match frame × texRate / 60) mod
+  numTex`, so a frame always draws the same one, repeating every `cells`
+  cells. Fog and Definitive's height falloff apply. Not drawn: shorelines,
+  lighting, `SetWaterBaseColor`, per-tileset texture folders and
+  Definitive's normal-mapped reflection (`Water_Normal`, `water_ibl`).
+  `render.json` records `water` per frame, and `milliseconds` each frame took.
+  No native terrain-water reference exists yet; Smashcraft hides terrain and
+  draws its sea as a model.
 - **Sun shadows.** In both modes the day/night key light casts shadows: every
   drawn model's depth from the sun, an orthographic 4096² map over the
   camera's view out to 2.5 target distances and reaching 6,000 units toward
@@ -706,8 +733,7 @@ saves them as the scene's `environment`.
   `BaseIntensity` and `BaseSaturation`. Classic draws neither. `render.json`
   records `post.ambientOcclusion` and `post.bloom` per frame. The map supplies
   its file through `readAsset("war3mapPostProcessing.txt")`.
-- **Not drawn.** water and a height fog's
-  falloff. A look check that asks for one fails
+- **Not drawn.** Terrain lighting; `--look terrain` fails
   ([Graphics profiles](#graphics-profiles)).
 
 | Check | Can close headless when | Still needs native |
@@ -737,7 +763,7 @@ whether Warcraft draws it and Wisp does not (unsupported):
 | --- | --- | --- |
 | `day-night-light` | drawn | drawn (no-ambient light: environment-map fill) |
 | `fog` (linear range, density cap, over sky) | drawn | drawn |
-| `height-fog-falloff` | absent | unsupported |
+| `height-fog-falloff` | absent | drawn (height × reach share) |
 | `sky` | drawn | drawn |
 | `cinematic-filter` | drawn | drawn |
 | `point-lights` (model omni lights) | absent | drawn |
@@ -746,7 +772,7 @@ whether Warcraft draws it and Wisp does not (unsupported):
 | `bloom` | absent | drawn (map's `[Bloom]`) |
 | `ambient-occlusion` | absent | drawn (map's `[ASSAO]`) |
 | `shadows` | drawn (sun shadow map) | drawn (sun shadow map) |
-| `water` | unsupported | unsupported |
+| `water` | drawn (terrain water, Water.slk) | drawn (`_de` Water.slk, no reflection) |
 | `terrain` | unsupported | unsupported |
 
 `--look LEVER,...` names the levers a frame's look check asks for. A render
@@ -766,15 +792,15 @@ listed first, then absent ones, then unsupported ones in bold:
 | Stage | Classic | Definitive |
 | --- | --- | --- |
 | 0 Sky Deck | light, fog, sky, shadows; AO absent | light, fog, sky, AO, shadows |
-| 2 Frozen Throne | light, fog (height fog's linear range, cap, over sky), sky, shadows; falloff, bloom absent | light, fog, sky, bloom, shadows; **height-fog falloff** |
-| 3 Durotar | light, fog, sky, shadows; falloff, bloom absent | light, fog, sky, bloom, shadows; **height-fog falloff** |
+| 2 Frozen Throne | light, fog (height fog's linear range, cap, over sky), sky, shadows; falloff, bloom absent | light, fog, sky, bloom, shadows, height-fog falloff |
+| 3 Durotar | light, fog, sky, shadows; falloff, bloom absent | light, fog, sky, bloom, shadows, height-fog falloff |
 | 4 Naxxramas | light, fog, sky, shadows; omni light, point-light shadow absent; NaxxDeco0 absent | light, fog, sky, omni light, point-light shadow, NaxxDeco0, shadows |
 | 6 Stratholme | light, fog, sky, shadows; omni lights absent; 2 models naming the missing `TerrainArt\Misc\misc_CharredEarth.blp` not drawn | light, fog, sky, omni lights, point-light shadow, shadows; the same 2 models not drawn |
-| 7 Tomb of Sargeras | light, fog, sky, ordinary waterfall, shadows; falloff absent (HD water skipped: terrain hidden) | light, fog, sky, `_de` WaterfallNoMist, shadows; **height-fog falloff** |
-| 10 Nordrassil | light, fog, sky, shadows; bloom, falloff absent | light, fog, sky, bloom, shadows; **height-fog falloff** |
-| 11 Gryphon Aerie | light, fog (GA-4 linear range, over sky), sky, shadows; falloff absent | light, fog, sky, shadows; **height-fog falloff** |
+| 7 Tomb of Sargeras | light, fog, sky, ordinary waterfall, shadows; falloff absent (HD water skipped: terrain hidden) | light, fog, sky, `_de` WaterfallNoMist, shadows, height-fog falloff |
+| 10 Nordrassil | light, fog, sky, shadows; bloom, falloff absent | light, fog, sky, bloom, shadows, height-fog falloff |
+| 11 Gryphon Aerie | light, fog (GA-4 linear range, over sky), sky, shadows; falloff absent | light, fog, sky, shadows, height-fog falloff |
 | 12 Blackrock | light, fog, sky, shadows; omni lights, bloom, AO absent | light, fog, sky, omni lights, point-light shadow, bloom, AO, shadows |
-| 13 Ahn'Qiraj | light, fog, sky, shadows; falloff absent | light, fog, sky, shadows; **height-fog falloff** |
+| 13 Ahn'Qiraj | light, fog, sky, shadows; falloff absent | light, fog, sky, shadows, height-fog falloff |
 | 14 Hellfire | light, fog, sky, shadows; omni lights, bloom absent | light, fog, sky, omni lights, point-light shadow, bloom, shadows |
 
 #### Measured against Warcraft

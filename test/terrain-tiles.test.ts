@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type { TerrainPoint } from "../scripts/wisp/terrain";
 import { terrainTileLayers, terrainTileUV, terrainBlightPath } from "../scripts/wisp/terrainTiles";
 
-const point = (ground: number, blight = false): TerrainPoint => ({ ground, flags: blight ? 2 : 0, variation: 1, height: 0, layer: 2, cliff: 15, cliffVariation: 0 });
+const point = (ground: number, blight = false): TerrainPoint => ({ ground, flags: blight ? 2 : 0, variation: 1, height: 0, layer: 2, cliff: 15, cliffVariation: 0, water: 0 });
 
 test("[reference] terrain atlas variation 1 is east of 0 and blight replaces corners above ground", () => {
   // HiveWE's W3E format page, Ground Textures and Blight (16 September 2025).

@@ -7,6 +7,7 @@ import { orderDrawnModels } from "../drawOrder";
 import { drawnPoses } from "../culling";
 import { advanceEmitters, type EmitterRenderer } from "./emitters";
 import { drawTerrain } from "./terrain";
+import { drawWater } from "./water";
 import { depthTarget, type DepthTarget, invert, parsePostProcessing, POINT_FACE, pointFaces, postProcessor, type PostSettings, postSettings, resolve, sceneTarget, type SceneTarget, SUN_MAP, sunView } from "./passes";
 import { terrainRows } from "../terrainMesh";
 import { doodadSkinRows, terrainDoodadPoses } from "../terrainDoodads";
@@ -169,13 +170,18 @@ function modelDirection(matrix: Matrix, toward: readonly number[]): number[] {
   const out = [0, 1, 2].map((k) => cofactor(0, k) * x + cofactor(1, k) * y + cofactor(2, k) * z);
   return Math.hypot(...out) > 0 ? normalize(out) : [0, 0, 1];
 }
-/** Terrain fog as eye-depth linear fog: a height fog (style 3) draws its linear range, up to its maximum density. */
+/**
+ * Terrain fog as eye-depth linear fog: a height fog (style 3) draws its linear range, up to its maximum density.
+ * Definitive adds the height fog's falloff: full below `heightStart`, none above `heightEnd`, reaching full over `zStart` to `zEnd` of eye depth.
+ */
 function sceneFog(scene: RenderScene, view: ReturnType<typeof camera>, sky: boolean) {
   const fog = scene.environment?.fog;
   if (fog === undefined || (sky && fog.drawOverSky !== true)) return undefined;
   const height = fog.style === 3;
   const start = height ? fog.linearStart ?? fog.zStart : fog.zStart, end = height ? fog.linearEnd ?? fog.zEnd : fog.zEnd;
-  return { color: fog.color, start, end, near: view.near, far: sky ? SKY_FAR : view.far, max: fog.maxLinearDensity ?? 1 };
+  const falloff = height && graphics === "definitive" && fog.heightStart !== undefined && fog.heightEnd !== undefined && !sky
+    ? { bottom: fog.heightStart, top: fog.heightEnd, start: fog.zStart, end: fog.zEnd } : undefined;
+  return { color: fog.color, start, end, near: view.near, far: sky ? SKY_FAR : view.far, max: fog.maxLinearDensity ?? 1, ...(falloff === undefined ? {} : { height: falloff }) };
 }
 
 const canvas = document.createElement("canvas");
@@ -431,7 +437,7 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
   }
   const sun = shadows.sun, pointShadow = shadows.points;
   renderer.setWispEnvironment({
-    ...(light === undefined ? {} : { light: { direction: modelDirection(placed, light.toward), key: light.key, ambient: light.ambient, linear: light.linear } }), ...(fog === undefined ? {} : { fog }),
+    ...(light === undefined ? {} : { light: { direction: modelDirection(placed, light.toward), key: light.key, ambient: light.ambient, linear: light.linear } }), ...(fog === undefined ? {} : { fog: fog.height === undefined ? fog : { ...fog, height: { ...fog.height, model: placed } } }),
     ...(points.length === 0 ? {} : { points: { model: placed, normal: normalMatrix(placed), lights: nearest(points, placed) } }),
     ...(sun === undefined ? {} : { shadow: { map: sun.map, matrix: multiply(sun.viewProjection, placed), bias: sun.bias, texel: sun.texel } }),
     ...(pointShadow === undefined ? {} : { pointShadow: { map: pointShadow.map, matrices: pointShadow.matrices, near: POINT_NEAR_PLANE, far: pointShadow.far, texel: 1 / POINT_FACE } }),
@@ -770,6 +776,12 @@ window.renderScene = async (scene, options) => {
     try { await drawEffect(pose, view, light, fog, points, popcornEmitters, shadows); } catch (cause) { notDrawn.push(`${pose.model}: ${String(cause)}`); }
   }
   for (const light of points) delete light.shadowSlot;
+  // Terrain water blends over what is under it, and hides with the terrain.
+  let water = false;
+  if (scene.environment.terrainVisible && scene.terrain !== undefined) {
+    try { bindScene(); water = await drawWater(gl, scene.terrain, scene.frame, view.view, view.projection, fog, textureAt, asset); }
+    catch (cause) { notDrawn.push(`water: ${String(cause)}`); }
+  }
   for (const emitter of popcornEmitters) notDrawn.push(`${emitter.model}: undrawn Popcorn emitter "${emitter.emitter}" (${emitter.effect || "no effect path"})`);
   resolve(gl, sceneBuffer);
   const post = graphics === "definitive" ? await postProcessing() : {};
@@ -812,5 +824,5 @@ window.renderScene = async (scene, options) => {
     }
   }
   context.globalAlpha = 1;
-  return { png: options?.capture === false ? "" : output.toDataURL("image/png"), models: visible.length, textures: textures.size, notDrawn: [...new Set(notDrawn)], pointLights: points.length, absent: [...absent].sort(), popcornEmitters, shadows: { sun: shadows.sun !== undefined, pointCasters: casters.length }, post: { ambientOcclusion: post.occlusion !== undefined, bloom: post.bloom !== undefined } };
+  return { png: options?.capture === false ? "" : output.toDataURL("image/png"), models: visible.length, textures: textures.size, notDrawn: [...new Set(notDrawn)], pointLights: points.length, absent: [...absent].sort(), popcornEmitters, shadows: { sun: shadows.sun !== undefined, pointCasters: casters.length }, post: { ambientOcclusion: post.occlusion !== undefined, bloom: post.bloom !== undefined }, water, heightFog: fog?.height !== undefined };
 };
