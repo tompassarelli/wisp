@@ -197,7 +197,9 @@ let graphics = "classic";
 const models = new Map<string, Promise<model.Model>>();
 const textures = new Map<string, Promise<HTMLCanvasElement>>();
 const tinted = new Map<string, HTMLCanvasElement>();
-interface ModelInstance { renderer: ModelRenderer; model: model.Model; path: string; sequences: AnimationSequence[]; sequence: number; clock: number }
+/** `posed` is the scene draw whose pose the renderer holds. */
+interface ModelInstance { renderer: ModelRenderer; model: model.Model; path: string; sequences: AnimationSequence[]; sequence: number; clock: number; posed: number }
+let sceneDraw = 0;
 const instances = new Map<number, ModelInstance>();
 const preparedModels = new Map<string, ModelInstance>();
 /** A file only another graphics mode has: Warcraft draws nothing for it in this one. */
@@ -306,11 +308,33 @@ function poseNodes(sampler: Sampler, data: model.Model, saved: SequenceSample | 
   try { updateNode(sampler.rendererData.rootNode as Parameters<Sampler["updateNode"]>[0]); }
   finally { interp.vec3 = vec3; interp.quat = quat; sampler.updateNode = updateNode; node = undefined; }
 }
+/**
+ * Unused instances of models without particles or ribbons, by path. Such an
+ * instance keeps no state between draws, so a new effect takes one instead of
+ * building a renderer and uploading its textures again.
+ */
+const spare = new Map<string, ModelInstance[]>();
+const stateless = (instance: ModelInstance) => instance.model.ParticleEmitters2.length === 0 && instance.model.RibbonEmitters.length === 0;
+function release(instance: ModelInstance): void {
+  if (!stateless(instance)) { instance.renderer.destroy(); return; }
+  instance.sequence = -2; instance.clock = 0; instance.posed = -1;
+  let free = spare.get(instance.path);
+  if (free === undefined) spare.set(instance.path, free = []);
+  free.push(instance);
+}
+/** Hands the instances of stateless effects that left the scene to new effects. */
+function releaseAbsent(effects: readonly { readonly handle: { readonly id: number } }[]): void {
+  const present = new Set(effects.map((effect) => effect.handle.id));
+  for (const [handle, instance] of instances) {
+    if (present.has(handle) || !stateless(instance)) continue;
+    instances.delete(handle); release(instance);
+  }
+}
 async function prepareInstance(pose: EffectPose) {
   let instance = instances.get(pose.handle.id);
   if (instance === undefined || instance.path !== pose.model) {
-    instance?.renderer.destroy();
-    instance = preparedModels.get(pose.model);
+    if (instance !== undefined) { instances.delete(pose.handle.id); release(instance); }
+    instance = spare.get(pose.model)?.pop() ?? preparedModels.get(pose.model);
     if (instance === undefined) instance = await createInstance(pose.model);
     else preparedModels.delete(pose.model);
     instances.set(pose.handle.id, instance);
@@ -341,7 +365,9 @@ function liveInstance(pose: EffectPose): ModelInstance | undefined {
   const entry: { readonly path: string; failure?: unknown } = { path: pose.model };
   loading.set(pose.handle.id, entry);
   prepareInstance(pose).then(() => { if (loading.get(pose.handle.id) === entry) loading.delete(pose.handle.id); }, (cause: unknown) => { entry.failure = cause; });
-  return undefined;
+  // A spare instance is taken at once and draws this frame.
+  const taken = instances.get(pose.handle.id);
+  return taken?.path === pose.model ? taken : undefined;
 }
 async function createInstance(path: string): Promise<ModelInstance> {
   const data = await modelAt(path);
@@ -353,7 +379,7 @@ async function createInstance(path: string): Promise<ModelInstance> {
     if (image !== undefined) renderer.setTextureImageData(texture.Image, [image]);
   });
   const sequences = data.Sequences.map((sequence) => ({ name: sequence.Name, start: sequence.Interval[0] ?? 0, end: sequence.Interval[1] ?? 0, looping: !sequence.NonLooping, rarity: sequence.Rarity }));
-  return { renderer, model: data, path, sequences, sequence: -2, clock: 0 };
+  return { renderer, model: data, path, sequences, sequence: -2, clock: 0, posed: -1 };
 }
 /** A depth-only pass's view and projection, from world space. */
 interface DepthPass { readonly view: Matrix; readonly projection: Matrix }
@@ -365,22 +391,27 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
   renderer.setInstanceAlpha(pose.alpha / 255);
   renderer.setInstanceColor(new Float32Array(pose.color.map((value) => value / 255)));
   renderer.setCamera(new Float32Array(view.eye), view.quaternion);
-  const kind = pose.unit === true ? "unit" : "effect";
-  const sample = animationSample(instance.sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, kind);
-  const sampler = renderer as unknown as Sampler, elapsed = pose.animationElapsed * 1000;
-  if (instance.sequence !== sample.sequence || elapsed < instance.clock) {
-    if (sample.sequence >= 0) renderer.setSequence(sample.sequence);
-    instance.sequence = sample.sequence; instance.clock = 0;
+  const sampler = renderer as unknown as Sampler;
+  // A depth pass poses the model for the frame; the passes after it draw that same pose.
+  if (instance.posed !== sceneDraw) {
+    instance.posed = sceneDraw;
+    const kind = pose.unit === true ? "unit" : "effect";
+    const sample = animationSample(instance.sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, kind);
+    const elapsed = pose.animationElapsed * 1000;
+    if (instance.sequence !== sample.sequence || elapsed < instance.clock) {
+      if (sample.sequence >= 0) renderer.setSequence(sample.sequence);
+      instance.sequence = sample.sequence; instance.clock = 0;
+    }
+    if (sample.sequence >= 0 && (data.ParticleEmitters2.length > 0 || data.RibbonEmitters.length > 0)) {
+      instance.clock = advanceEmitters(renderer as unknown as EmitterRenderer, data.Sequences, instance.sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, kind, instance.clock, elapsed);
+    }
+    show(sampler, data, sample);
+    data.GlobalSequences.forEach((length, index) => { sampler.rendererData.globalSequencesFrames[index] = globalSequenceFrame(pose.animationClock, length); });
+    const blend = pose.animationBlend, weight = blendWeight(pose);
+    const saved = blend === undefined ? undefined : animationSample(instance.sequences, blend.from, kind);
+    renderer.update(0);
+    if (saved !== undefined && weight > 0) poseNodes(sampler, data, saved, weight);
   }
-  if (sample.sequence >= 0 && (data.ParticleEmitters2.length > 0 || data.RibbonEmitters.length > 0)) {
-    instance.clock = advanceEmitters(renderer as unknown as EmitterRenderer, data.Sequences, instance.sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, kind, instance.clock, elapsed);
-  }
-  show(sampler, data, sample);
-  data.GlobalSequences.forEach((length, index) => { sampler.rendererData.globalSequencesFrames[index] = globalSequenceFrame(pose.animationClock, length); });
-  const blend = pose.animationBlend, weight = blendWeight(pose);
-  const saved = blend === undefined ? undefined : animationSample(instance.sequences, blend.from, kind);
-  renderer.update(0);
-  if (saved !== undefined && weight > 0) poseNodes(sampler, data, saved, weight);
   renderer.setTeamColor(new Float32Array((teams[pose.teamColor] ?? [160, 160, 160]).map((v) => v / 255)));
   renderer.setLightPosition([1000, -1000, 3000]); renderer.setLightColor([1, 1, 1]);
   const placed = transform(pose);
@@ -525,14 +556,17 @@ function filterTexture(path: string, wrap: boolean): Promise<WebGLTexture> {
       for (const axis of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D, axis, wrap ? gl.REPEAT : gl.CLAMP_TO_EDGE);
       return texture;
     });
-    filterTextures.set(key, result);
+    filterTextures.set(key, result = tracked(result));
   }
   return result;
 }
 /** The cinematic filter over the drawn world: its texture times its colour, combined with the scene by its blend mode. */
-async function drawFilter(filter: FilterPose): Promise<void> {
+async function drawFilter(filter: FilterPose, live: boolean): Promise<void> {
   const quad = filterProgram();
-  const texture = filter.texture === "" ? undefined : await filterTexture(filter.texture, /WRAP/.test(String(filter.texMapFlags)));
+  const load = filter.texture === "" ? undefined : filterTexture(filter.texture, /WRAP/.test(String(filter.texMapFlags)));
+  // A live frame draws no filter until its texture has loaded.
+  const texture = load === undefined ? undefined : live ? loaded(load) : await load;
+  if (load !== undefined && texture === undefined) return;
   gl.disable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.CULL_FACE);
   gl.useProgram(quad.program); gl.bindVertexArray(quad.vao);
   gl.uniform4f(quad.color, ...filter.color.map((value) => Math.max(0, Math.min(255, value)) / 255) as [number, number, number, number]);
@@ -558,7 +592,7 @@ function fontFamily(file: string): Promise<string> {
   let family = fonts.get(file);
   if (family === undefined) {
     const name = `wisp-font-${fonts.size}`;
-    family = asset(file).then(async (bytes) => { const face = new FontFace(name, bytes); await face.load(); document.fonts.add(face); return `"${name}", sans-serif`; }).catch(() => "sans-serif");
+    family = tracked(asset(file).then(async (bytes) => { const face = new FontFace(name, bytes); await face.load(); document.fonts.add(face); return `"${name}", sans-serif`; }).catch(() => "sans-serif"));
     fonts.set(file, family);
   }
   return family;
@@ -579,6 +613,28 @@ function drawText(context: CanvasRenderingContext2D, raw: string, family: string
   context.textAlign = "left";
 }
 function cssColor(color: number, alpha = 255): string { return `rgba(${(color >>> 16) & 255},${(color >>> 8) & 255},${color & 255},${((color >>> 24) / 255) * alpha / 255})`; }
+const settled = new WeakMap<Promise<unknown>, { value?: unknown; failure?: unknown }>();
+/** Records a load's outcome as it settles, for `loaded`. */
+function tracked<T>(load: Promise<T>): Promise<T> {
+  if (settled.has(load)) return load;
+  const entry: { value?: unknown; failure?: unknown } = {};
+  settled.set(load, entry);
+  load.then((value) => { entry.value = value; }, (cause: unknown) => { entry.failure = cause ?? new Error("load failed"); });
+  return load;
+}
+/** A load's value once it has settled, or undefined while it runs, so a live frame draws without it rather than wait. */
+function loaded<T>(load: Promise<T>): T | undefined {
+  const state = settled.get(tracked(load));
+  if (state?.failure !== undefined) throw state.failure;
+  return state?.value as T | undefined;
+}
+const uiLoads = new Map<string, Promise<HTMLCanvasElement>>();
+function uiTextureLoad(path: string, color: number): Promise<HTMLCanvasElement> {
+  const key = `${path}:${color}`;
+  let load = uiLoads.get(key);
+  if (load === undefined) uiLoads.set(key, load = tracked(uiTexture(path, color)));
+  return load;
+}
 async function uiTexture(path: string, color: number): Promise<HTMLCanvasElement> {
   const original = await textureAt(path);
   if ((color & 0xffffff) === 0xffffff) return original;
@@ -655,7 +711,8 @@ window.prepareScene = async (scene, extraModels = [], progress) => {
   const advanced = () => progress?.(++completed, total);
   for (const pose of poses) { await prepareInstance(pose); advanced(); }
   for (const path of extraModels) { preparedModels.set(path, await createInstance(path)); advanced(); }
-  for (const frame of frames) { await uiTexture(frame.texture, frame.color); advanced(); }
+  for (const frame of frames) { await uiTextureLoad(frame.texture, frame.color); advanced(); }
+  for (const file of new Set(scene.ui.filter((frame) => frame.visible && frame.text !== "").map((frame) => frame.font.file))) await fontFamily(file);
   return { models: models.size, instances: instances.size + preparedModels.size, textures: textures.size };
 };
 window.renderScene = async (scene, options) => {
@@ -664,6 +721,8 @@ window.renderScene = async (scene, options) => {
   const visible: EffectPose[] = [], notDrawn: string[] = [], absent = new Set<string>(), popcornEmitters: PopcornEmitterPose[] = [];
   let poses: readonly EffectPose[] = scene.effects;
   try { poses = await scenePoses(scene); } catch (cause) { notDrawn.push(`terrain doodads: ${String(cause)}`); }
+  releaseAbsent(poses);
+  sceneDraw++;
   for (const pose of drawnPoses(poses, view.eye, view.far, scene.world)) {
     // A model the renderer can't load or draw is left out and named, so the rest of the frame still draws.
     try {
@@ -717,7 +776,7 @@ window.renderScene = async (scene, options) => {
   const projection = view.projection;
   compose(post, invert(projection), [(projection[0] ?? 1) * canvas.width / 2, (projection[5] ?? 1) * canvas.height / 2]);
   gl.viewport(0, 0, canvas.width, canvas.height);
-  if (scene.filter !== undefined) await drawFilter(scene.filter);
+  if (scene.filter !== undefined) await drawFilter(scene.filter, options?.capture === false);
   const live = options?.capture === false;
   const shown = live ? "block" : "none";
   if (canvas.style.display !== shown) { canvas.style.display = overlay.style.display = shown; output.style.display = live ? "none" : "block"; }
@@ -738,12 +797,16 @@ window.renderScene = async (scene, options) => {
     if (!frame.visible || frame.alpha <= 0 || frame.rectangle === undefined) continue;
     const [left, top, right, bottom] = frame.rectangle, x = output.width / 2 + (left - 0.4) * scaleX, y = (0.6 - top) * scaleY, width = (right - left) * scaleX, height = (top - bottom) * scaleY;
     context.globalAlpha = frame.alpha / 255;
-    if (frame.texture !== "" && width > 0 && height > 0) { context.globalAlpha *= (frame.color >>> 24) / 255; context.drawImage(await uiTexture(frame.texture, frame.color), x, y, width, height); context.globalAlpha = frame.alpha / 255; }
+    if (frame.texture !== "" && width > 0 && height > 0) {
+      // A live frame leaves out a texture still loading: its download can queue behind newly shown models for seconds.
+      const image = live ? loaded(uiTextureLoad(frame.texture, frame.color)) : await uiTextureLoad(frame.texture, frame.color);
+      context.globalAlpha *= (frame.color >>> 24) / 255; if (image !== undefined) context.drawImage(image, x, y, width, height); context.globalAlpha = frame.alpha / 255;
+    }
     if (frame.text !== "") {
       // A font height is in UI units, 0.6 to the screen's height; BlzFrameSetScale multiplies it.
       const size = (frame.font.height > 0 ? frame.font.height * scaleY : Math.max(10, Math.min(22, height || 15))) * frame.scale;
       const alignment = frame.alignment ?? { vertical: "top", horizontal: "left" };
-      drawText(context, frame.text, await fontFamily(frame.font.file), size, cssColor(frame.textColor), (frame.font.flags & 1) !== 0,
+      drawText(context, frame.text, live ? loaded(fontFamily(frame.font.file)) ?? "sans-serif" : await fontFamily(frame.font.file), size, cssColor(frame.textColor), (frame.font.flags & 1) !== 0,
         alignment.horizontal === "left" ? x : alignment.horizontal === "center" ? x + width / 2 : x + width, alignment.horizontal,
         alignment.vertical === "top" ? y : alignment.vertical === "middle" ? y + height / 2 : y + height, alignment.vertical);
     }
