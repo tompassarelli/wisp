@@ -10,15 +10,10 @@ test/ci-map-build.test.ts	3	0.032
 test/cli.test.ts	2	0.035
 test/compiler.test.ts	2	2.063
 test/desktop-capture.test.ts	3	0.083
-test/desktop-chat.test.ts	1	0.010
 test/desktop-login-field.test.ts	1	0.071
 test/desyncs.test.ts	1	0.005
-test/dev.test.ts	7	0.051
-test/docs-index.test.ts	4	0.012
 test/doctor.test.ts	20	0.220
-test/effect-host-tools.test.ts	1	0.015
 test/engine.test.ts	7	0.101
-test/farm-scratch.test.ts	2	0.925
 test/frame-cost-capture.test.ts	3	0.063
 test/frame-meter.test.ts	1	0.009
 test/frames.test.ts	4	0.008
@@ -44,7 +39,6 @@ test/lan-admission.test.ts	1	0.426
 test/lan-profile.test.ts	2	0.016
 test/lan.test.ts	11	0.080
 test/lobby.test.ts	1	0.486
-test/main-red.test.ts	2	0.010
 test/map-build.test.ts	7	0.066
 test/map-library.test.ts	1	0.006
 test/map-pack.test.ts	2	0.229
@@ -66,7 +60,6 @@ test/standalone-sound.test.ts	1	0.009
 test/standalone.test.ts	1	0.133
 test/sync-channel.test.ts	2	0.029
 test/toward-zero.test.ts	2	0.148
-test/traps.test.ts	1	1.002
 test/tune.test.ts	3	0.071
 test/unit-models.test.ts	3	0.004
 test/visibility.test.ts	3	0.027

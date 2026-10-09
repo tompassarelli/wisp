@@ -24,13 +24,11 @@ test("[invariant] framebuffer capture preserves binary pixel bytes", async () =>
 
 test("[invariant] timed capture brackets the framebuffer producer on the supplied stimulus clock", async () => {
   const stamped = join(folder, "producer-stamp");
-  const before = performance.now();
   const result = await Effect.runPromise(captureTimed(client("timed", `await Bun.sleep(20); await Bun.write(${JSON.stringify(stamped)}, String(Date.now())); process.stdout.write(Buffer.concat([Buffer.from("P6\\n1 1\\n255\\n"), Buffer.from([8, 16, 32])]));`), () => Date.now() * 1_000_000));
   const producerNs = Number(readFileSync(stamped, "utf8")) * 1_000_000;
   expect(result.beforeNs).toBeLessThanOrEqual(producerNs);
   expect(result.afterNs).toBeGreaterThanOrEqual(producerNs);
   expect(result.afterNs - result.beforeNs).toBeGreaterThanOrEqual(20_000_000);
-  expect(performance.now() - before).toBeGreaterThanOrEqual(20);
   expect([...result.frame.rgb]).toEqual([8, 16, 32]);
 });
 

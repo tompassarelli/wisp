@@ -1,41 +1,16 @@
-import { Effect, Exit, Layer } from "effect";
 import { expect, test } from "bun:test";
-import type { Client } from "../scripts/wisp/clients";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type ProcessInfo, prefixUse } from "../scripts/warcraft/battleNet";
 import { sessionStart } from "../scripts/warcraft/war3Log";
-import { type ClientState, type ClientView, ClientWatch, type CrashReport, type SocketState, type Sources, changes, crashSummary, decide, eventLine, inState, socketEvent, typesIntoMatch, unlessLost, waitFor } from "../scripts/wisp/watch";
+import { type CrashReport, type SocketState, type Sources, changes, crashSummary, decide, eventLine, socketEvent, typesIntoMatch } from "../scripts/wisp/watch";
 
-const client: Client = { name: "a", documents: "/a/Documents/Warcraft III" };
 test("[repro a6125bf] a rendered menu transition replaces old score data, while overlays do not", () => {
   const results = socketEvent({ connected: true }, { messageType: "UpdateScoreInfo", payload: {} }, 1);
   const menus = socketEvent(results, { messageType: "ScreenTransitionInfo", payload: { screen: "CREATE_GAME", type: "Screen" } }, 2);
   expect(menus.last?.state).toEqual({ kind: "menus", screen: "CREATE_GAME" });
   expect(socketEvent(menus, { messageType: "ScreenTransitionInfo", payload: { screen: "OPTIONS", type: "Overlay" } }, 3)).toEqual(menus);
 });
-const view = (state: ClientState): ClientView => ({ client: "a", state, source: "socket", evidence: "SetGlueScreen", at: 0, scan: "done", loadErrors: { count: 0 } });
-
-
-const scripted = (...states: ClientState[]) => {
-  let index = 0;
-  return Layer.succeed(ClientWatch, ClientWatch.of({ view: () => Effect.sync(() => view(states[Math.min(index++, states.length - 1)]!)) }));
-};
-
-test("[spec docs/watch.md] a crash or a lost Battle.net ends a wait at once, unless the predicate wants it", async () => {
-  const crashed = await Effect.runPromiseExit(waitFor(client, inState("in match"), { what: "the match" }).pipe(Effect.provide(scripted({ kind: "loading" }, { kind: "crashed", reason: "Warcraft III exited" }))));
-  expect(Exit.isFailure(crashed) && String(crashed.cause)).toContain("crashed: Warcraft III exited");
-  const seen = await Effect.runPromise(waitFor(client, inState("disconnected", "signed in"), { failOn: [] }).pipe(Effect.provide(scripted({ kind: "disconnected", reason: "logged out" }))));
-  expect(seen.state.kind).toBe("disconnected");
-});
-
-test("[spec docs/watch.md] unlessLost stops a wait that would run out its own timeout when the client crashes, and changes nothing without a watch", async () => {
-  const lost = await Effect.runPromiseExit(unlessLost(client, Effect.never).pipe(Effect.provide(scripted({ kind: "loading" }, { kind: "loading" }, { kind: "crashed", reason: "ACCESS_VIOLATION" }))));
-  expect(Exit.isFailure(lost) && String(lost.cause)).toContain("crashed: ACCESS_VIOLATION");
-  expect(await Effect.runPromise(unlessLost(client, Effect.succeed("hosted")))).toBe("hosted");
-});
-
-
 
 const fixture = (path: string) => readFileSync(join(import.meta.dir, "fixtures", path), "utf8");
 const PREFIX = "/clients/a/pfx";

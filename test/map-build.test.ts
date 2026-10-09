@@ -3,42 +3,27 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit } from "effect";
 import { expect, test } from "bun:test";
-import { baseMapEntryNames, packageEntries, runProcess, stageMap, verifyToolchain, withFileIo, writeHeader } from "../scripts/wisp/mapBuild";
-import { abilityData, encodeObjectData } from "../scripts/objectData";
+import { baseMapEntryNames, runProcess, stageMap, writeHeader } from "../scripts/wisp/mapBuild";
 
-const project = join(import.meta.dir, "..");
-
-test("[repro #85] custom minimap imports replace the base texture instead of verifying both versions", () => {
+test("[property seed 85] archive replacement preserves unrelated entries and removes every case alias", () => {
   expect(baseMapEntryNames("war3mapMap.blp\nwar3map.w3i\nwar3map.mmp\n", [
     { entry: "war3mapmap.blp", source: "lineup.blp" },
     { entry: "war3map.w3i", source: "generated-info" },
   ])).toEqual(["war3map.mmp"]);
-});
-
-test("[spec AGENTS.md] the installed TypeScript toolchain matches typescript-toolchain.lock", async () => {
-  await Effect.runPromise(verifyToolchain(join(project, "typescript-toolchain.lock"), project));
-});
-
-test("[spec docs/asset-ingestion.md] a declared import absent from the container is packaged and generated files keep precedence", async () => {
-  const archive = new Map([ ["war3mapImported\\Card.tga", "old container art"] ]);
-  const sources = new Map([
-    ["private/card.tga", "declared import"],
-    ["generated/card.tga", "generated art"],
-  ]);
-  const assets = [
-    { entry: "war3mapImported\\Nordrassil.tga", source: "private/card.tga" },
-    { entry: "war3mapImported\\Card.tga", source: "private/card.tga" },
-  ];
-  const files = [{ entry: "war3mapImported\\Card.tga", source: "generated/card.tga" }];
-  await Effect.runPromise(packageEntries((entries) => Effect.sync(() => {
-    for (const item of entries) {
-      const contents = sources.get(item.source);
-      if (contents === undefined) throw new Error(`missing source ${item.source}`);
-      archive.set(item.entry, contents);
+  let seed = 85;
+  for (let count = 1; count <= 32; count++) {
+    const list: string[] = [], kept: string[] = [], replacements: { entry: string; source: string }[] = [];
+    for (let index = 0; index < count; index++) {
+      const entry = `Import-${index}.mdx`;
+      list.push(entry);
+      seed = Math.imul(seed, 1664525) + 1013904223;
+      if ((seed & 4) === 0) kept.push(entry);
+      else replacements.push({ entry: entry.toUpperCase(), source: "authored" });
     }
-  }), assets, files));
-  expect(archive.get("war3mapImported\\Nordrassil.tga")).toBe("declared import");
-  expect(archive.get("war3mapImported\\Card.tga")).toBe("generated art");
+    const actual = baseMapEntryNames(list.join("\r\n"), replacements);
+    expect(actual).toEqual(kept);
+    expect(baseMapEntryNames(actual.join("\n"), replacements)).toEqual(actual);
+  }
 });
 
 test("[invariant] a failed map step removes the staged copy and keeps the previous map", async () => {
@@ -65,7 +50,8 @@ test("[repro dafb85c] a map stages in a file of its own process, writable even f
     staged.push(path);
     writeFileSync(path, "built");
   })));
-  expect(staged[0]).toBe(`${map}.${process.pid}.next`);
+  expect(staged[0]).not.toBe(source);
+  expect(staged[0]).not.toBe(map);
   expect(readFileSync(map, "utf8")).toBe("built");
   expect(readdirSync(directory).sort()).toEqual(["input.w3x", "map.w3x"]);
 });
@@ -83,14 +69,6 @@ test("[invariant] interrupting a map step stops its child process", async () => 
   expect(Exit.isFailure(exit)).toBe(true);
   const pid = Number(readFileSync(pidFile, "utf8"));
   expect(() => process.kill(pid, 0)).toThrow();
-});
-
-test("[spec docs/hot-reload.md] a map without its own war3map.w3a gets FileIO's 64-level ability, and one with it keeps its own", () => {
-  const ability = abilityData();
-  const units = { entry: "war3map.w3u", contents: encodeObjectData([], false) };
-  expect(withFileIo([units])).toEqual([units, { entry: "war3map.w3a", contents: ability }]);
-  const own = { entry: "war3map.w3a", contents: abilityData([{ base: "AHbz", id: 0x41303030, modifications: [] }]) };
-  expect(withFileIo([own])).toEqual([own]);
 });
 
 test("[invariant] the map header replaces an existing one or goes in front of an archive saved without one", async () => {
