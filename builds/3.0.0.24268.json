@@ -4,7 +4,7 @@
     "lanPool": {"status":"supported","issue":"wisp#37"},
     "privateLanSwitch": {"status":"supported","issue":"wisp#37"},
     "engineDebugger": {"status":"supported","issue":"wisp#76"},
-    "padDriver": {"status":"supported","issue":"wisp#38"},
+    "padDriver": {"status":"unchecked","issue":"wisp#38"},
     "menuDriving": {"status":"supported","issue":"smashcraft#119"},
     "frameNumberRead": {"status":"unchecked","issue":"wisp#38"},
     "classic": {"status":"supported","issue":"wisp#37"},
