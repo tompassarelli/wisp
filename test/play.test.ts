@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { capacityDeferral, launchCommand } from "../scripts/wisp/playHost";
 import { launchOptions, launchOutcome, loadMapOption, newestLauncherLog, shortcutUrl, windowsPath, withLaunchOptions } from "../scripts/warcraft/battleNet";
 
 const PREFIX = "/observed/compatdata/pfx";
@@ -31,4 +32,22 @@ test("[native] Warcraft III's launch options live in Battle.net's settings as Ga
   expect(loadMapOption(PREFIX, MAP)).toBe(LOAD_MAP);
   expect(windowsPath(PREFIX, `${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III/Maps`)).toBe("C:\\users\\steamuser\\Documents\\Warcraft III\\Maps");
   expect(() => windowsPath(PREFIX, "/home/u/elsewhere.w3x")).toThrow();
+});
+
+test("[spec docs/play.md] the launch request runs inside a native machine-capacity session that restores the launcher's container environment", () => {
+  const launcherEnv = { PATH: "/proton/files/bin/:/usr/bin:/bin", XDG_RUNTIME_DIR: "/run/user/1000", DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/pressure-vessel/bus", WINEPREFIX: PREFIX };
+  const { command, env } = launchCommand({
+    bun: "/bin/bun", capacity: "/skills/machine-capacity/scripts/machine-capacity.mjs", client: "clone-d", env: "/bin/env", nsenter: "/bin/nsenter", wine: "/proton/files/bin/wine",
+    launcher: { pid: 2218551, cwd: "/proton/files/bin", env: launcherEnv },
+    host: { PATH: "/run/current-system/sw/bin", XDG_RUNTIME_DIR: "/run/user/1000", DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1000/bus" },
+  });
+  expect(command).toEqual([
+    "/bin/bun", "/skills/machine-capacity/scripts/machine-capacity.mjs", "session", "--class", "native", "--owner", "wisp-game-clone-d", "--",
+    "/bin/env", "PATH=/proton/files/bin/:/usr/bin:/bin", "XDG_RUNTIME_DIR=/run/user/1000", "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/pressure-vessel/bus",
+    "/bin/nsenter", "-t", "2218551", "-U", "-m", "--preserve-credentials", "--wd=/proton/files/bin", "--",
+    "/proton/files/bin/wine", "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe", "--exec=launch W3",
+  ]);
+  expect(env).toEqual({ ...launcherEnv, PATH: "/run/current-system/sw/bin", DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1000/bus" });
+  expect(capacityDeferral('{"decision":"DEFER","reason":"DEFER_GPU_BUSY","profile":"attended","class":"native"}\n')).toBe("DEFER_GPU_BUSY");
+  expect(capacityDeferral("machine-capacity: missing --owner\n")).toBeUndefined();
 });

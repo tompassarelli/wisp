@@ -445,7 +445,7 @@ const doctorRun = (target: DoctorTarget, print: (line: string) => void, holdStar
     const path = join(logs, log);
     const offset = (yield* machine.size(path).pipe(Effect.mapError(failed))) ?? 0;
     yield* takeStartLock;
-    yield* machine.launch(launcher).pipe(Effect.mapError(failed));
+    yield* machine.launch(launcher, name).pipe(Effect.mapError(failed));
     const written = machine.read(path, offset).pipe(Effect.map((text) => text ?? ""), Effect.mapError(failed));
     const taken = yield* poll(DOCTOR_TIMEOUTS.request, written.pipe(Effect.map((text) => (launchRequested(text) || launchOutcome(text) !== undefined ? true : undefined))));
     if (taken === undefined) return yield* stop(`Battle.net didn't launch Warcraft III within ${DOCTOR_TIMEOUTS.request} s of being asked (its log: ${path}); check that it is signed in to an account that owns the game`);
