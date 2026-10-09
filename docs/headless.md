@@ -640,7 +640,26 @@ saves them as the scene's `environment`.
   attenuation start and fading linearly to zero at the attenuation end
   (scaled with the model), up to eight per draw, nearest first. Node
   animation of a light is not followed. Classic draws none.
-- **Not drawn.** Terrain tiles, cliffs and terrain-modifying special doodads,
+- **Terrain.** Supply `render.terrain.w3e` to draw the map's ground grid in
+  Classic and Definitive. W3E corner heights and the map origin position the
+  triangles; the last row and column stop at the map's world bounds. The
+  camera projection clips these triangles, including ground outside camera
+  bounds. `BlzShowTerrain(false)` hides them. The shared standalone renderer
+  uses the same path. Ground IDs resolve through the user's
+  `TerrainArt\\Terrain.slk`; its `dir` and `file` select tile textures using
+  `render.readAsset`/`resolveAsset`. Mixed cells draw the lowest ID's full tile
+  then higher IDs' corner masks. Cliff cells select installed models and
+  textures through `TerrainArt\\CliffTypes.slk`, deforming their vertices by
+  the corner heights. Nothing from the install is included in Wisp.
+
+  This terrain path is initial drawing support, pending the visible-terrain
+  native reference in [#82](https://github.com/tompassarelli/wisp/issues/82).
+  `--look terrain` still fails. Ramp model joins, blight, cliff-adjacent
+  ground substitution, special doodads and terrain lighting are unfinished.
+  Ground variation, corner-mask and cliff filename facts come from the
+  [HiveWE format documentation](https://github.com/stijnherfst/HiveWE/wiki/war3map.w3e-Terrain)
+  (16 September 2025 revision); Wisp copies no implementation code from it.
+- **Not drawn.** Terrain-modifying special doodads,
   water, shadows, point-light shadows, a height fog's
   falloff, bloom and ambient occlusion. A look check that asks for one fails
   ([Graphics profiles](#graphics-profiles)).

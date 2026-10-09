@@ -16,6 +16,11 @@ the headless runtime follows, checked in Bun and Lua32 by `test/timers56/`,
 and its [sound start, stop and channel rules](warsmash-notes.md#sound-start-stop-and-channel-limits),
 checked the same way by `test/sounds60/`.
 
+With `render.terrain.w3e`, [terrain drawing](headless.md#lighting-fog-and-sky)
+loads installed ground textures and cliff models for the headless renderer
+and standalone player in Classic and Definitive. The terrain look check
+still needs #82's native reference.
+
 Start here when changing Wisp or building a map with it. The same pages ship
 in the installed package under your project's `node_modules/wisp/docs/`.
 Wisp supplies reusable services; the consuming game selects its commands,

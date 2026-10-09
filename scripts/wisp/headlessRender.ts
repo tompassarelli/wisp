@@ -9,7 +9,7 @@ import type { Environment } from "../../src/headless/warcraft3Scenery";
 import { pollFor, spawnLogged } from "./hostProcess";
 import { deathSeconds } from "./models";
 import type { AssetLocation, RenderAssetResolution, ResolvedRenderAsset } from "./renderAssets";
-import { decodeTerrain, shiftedBounds, worldBounds, type WorldBounds } from "./terrain";
+import { decodeTerrain, shiftedBounds, worldBounds, type Terrain, type WorldBounds } from "./terrain";
 import { decodeDoodads, type PlacedDoodad } from "./doodads";
 import { freshAnimation } from "../../src/headless/animation";
 
@@ -54,6 +54,7 @@ export interface RenderScene {
   readonly textTags?: ReturnType<HeadlessClient["textTags"]["poses"]>;
   /** The world bounds in headless coordinates, when the project gives its terrain. */
   readonly world?: WorldBounds;
+  readonly terrain?: Terrain;
 }
 
 /** The sky, day/night light and terrain fog the map last set (wisp:docs/headless.md, "Lighting, fog and sky"). */
@@ -129,6 +130,7 @@ export async function loadEffectDeaths(project: HeadlessRenderProject, models: I
 }
 
 const terrainBounds = new WeakMap<Uint8Array, WorldBounds>();
+const decodedTerrains = new WeakMap<Uint8Array, Terrain>();
 const doodadPlacements = new WeakMap<Uint8Array, Map<boolean, readonly PlacedDoodad[]>>();
 function projectDoodads(project: HeadlessRenderProject, frame: number): DrawnPose[] {
   const options = project.doodads;
@@ -160,6 +162,16 @@ function projectWorld(project: HeadlessRenderProject): WorldBounds | undefined {
 /** Both the still renderer and the player draw unit objects with the same model poses, in the project's world bounds. */
 export function sceneWithUnits(project: HeadlessRenderProject, scene: RenderScene): RenderScene {
   const world = projectWorld(project);
+  const bytes = project.terrain?.w3e;
+  let terrain = bytes === undefined ? scene.terrain : decodedTerrains.get(bytes);
+  if (terrain === undefined && bytes !== undefined) {
+    terrain = decodeTerrain(bytes);
+    decodedTerrains.set(bytes, terrain);
+  }
+  if (bytes !== undefined && terrain !== undefined) {
+    const [x, y] = project.terrain?.origin ?? [0, 0];
+    terrain = { ...terrain, originX: terrain.originX - x, originY: terrain.originY - y };
+  }
   const units: DrawnPose[] = scene.units.filter((unit) => unit.visible && unit.alpha > 0).map((unit) => {
     const model = project.unitModels?.[unit.typeId];
     if (model === undefined) throw new Error(`no render.unitModels entry for visible unit type ${unit.typeId}`);
@@ -168,7 +180,7 @@ export function sceneWithUnits(project: HeadlessRenderProject, scene: RenderScen
       animationClock: unit.animationClock, animationBlendTime: unit.animationBlendTime, animationBlend: unit.animationBlend,
       unit: true, queuedAnimations: [], yaw: unit.facing * Math.PI / 180, pitch: 0, roll: 0, color: unit.color, teamColor: unit.teamColor, matrixScale: unit.scale, flat: unit.scale.some((value) => value === 0) };
   });
-  return { ...scene, effects: [...scene.effects, ...units, ...projectDoodads(project, scene.frame)], ...(world === undefined ? {} : { world }) };
+  return { ...scene, effects: [...scene.effects, ...units, ...projectDoodads(project, scene.frame)], ...(world === undefined ? {} : { world }), ...(terrain === undefined ? {} : { terrain }) };
 }
 
 export class RenderFailure extends Schema.TaggedError<RenderFailure>()("RenderFailure", {
