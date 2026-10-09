@@ -1,5 +1,5 @@
-// Produces the installed library: TypeScript source for host tools and the
-// matching Lua modules required by TypeScriptToLua's package resolver.
+
+
 import { copyFile, mkdir, mkdtemp, readdir, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { transpileProject } from "typescript-to-lua";
@@ -29,13 +29,13 @@ async function copyTree(source: string, destination: string): Promise<void> {
   }
 }
 
-/**
- * Moves the generated declarations under `source` to the same paths under
- * `destination`. A declaration's relative import then finds the sibling
- * declaration, not the TypeScript source shipped beside the Lua: a consumer
- * program that held the source would take it for its own and TypeScriptToLua
- * would leave its Lua out of the bundle.
- */
+// Declarations must resolve sibling declarations; TSTL omits shipped Lua when it treats the sibling TypeScript source as a consumer file.
+
+
+
+
+
+
 async function moveDeclarations(source: string, destination: string): Promise<void> {
   for (const entry of await readdir(source, { withFileTypes: true })) {
     const from = join(source, entry.name);
@@ -48,10 +48,10 @@ async function moveDeclarations(source: string, destination: string): Promise<vo
   }
 }
 
-/**
- * Writes the editor plugin as CommonJS: tsserver runs in the editor's Node and
- * `require`s a plugin, expecting the module itself to be its factory.
- */
+// tsserver requires a CommonJS module whose export is the plugin factory.
+
+
+
 const editorPluginProgram = (output: string) => attempt(async () => {
   const result = await Bun.build({
     entrypoints: [join(root, "plugins/number-rules-service.ts")],
@@ -66,7 +66,7 @@ const editorPluginProgram = (output: string) => attempt(async () => {
 
 export const writeEditorPlugin = (output: string): Promise<void> => Effect.runPromise(editorPluginProgram(output));
 
-/** Writes a standard package tarball to the caller's exact output path. */
+
 export const packageProgram = (output: string) => Effect.scoped(Effect.gen(function*() {
   const target = resolve(output);
   yield* attempt(() => mkdir(join(root, "build"), { recursive: true }));

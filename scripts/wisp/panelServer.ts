@@ -4,7 +4,7 @@ class PanelFailure extends Schema.TaggedError<PanelFailure>()("PanelFailure", { 
   override get message() { return String(this.cause); }
 }
 
-/** Shared loopback server for the tuning and repro panels. */
+
 export function panelServer(port: number, fetch: (request: Request) => Response | Promise<Response>) {
   return Effect.acquireRelease(Effect.try({ try: () => Bun.serve({ hostname: "127.0.0.1", port, fetch(request) {
     const url = new URL(request.url);

@@ -1,8 +1,8 @@
-// `bun restorePreferences.ts PID DOCUMENTS`: waits for Warcraft III's process
-// PID to exit, then puts back the preferences file `play` saved before the game
-// started, so the game's exit-time rewrite of its display settings doesn't
-// outlive the session (wisp:docs/display-settings.md). `play` starts it
-// detached.
+
+
+
+
+
 import { alive, preferencesBackupPath, preferencesPath, restorePreferences } from "../warcraft/preferences";
 
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";

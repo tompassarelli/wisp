@@ -1,19 +1,19 @@
-// One pool pair's agent (wisp:docs/lan.md). `wisp lan pool` runs it inside
-// the pair's private network namespace, on the pair's private desktop:
-//   bun pairAgent.ts --pair K --pool-profile parity|visual
-// It launches the pair's two offline clients and answers on a Unix socket
-// (pool.ts agentSocket), which reaches across network namespaces:
-//   GET  /status          the clients and the current game
-//   POST /fresh {map}     host MAP as a LAN game and join both clients; answers once the match plays
-//   POST /end             end the current game
-//   POST /solo {map}      each client plays MAP alone, as a local game on its loopback provider
-// Each game writes its action log (host.ts) and packet record under the
-// pair's state folder.
-//
-// The whole agent is one Effect program under BunRuntime.runMain
-// (wisp:docs/host-tools.md): the game launchers, menu listeners, socket server
-// and each game's host live in its scope, so SIGTERM, a failed step or the
-// pair session ending stops every game before the agent exits.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
@@ -47,7 +47,7 @@ const runtime = join(steam, "steamapps/common/SteamLinuxRuntime_4/_v2-entry-poin
 
 const runB = argument("run-b");
 const runs: Record<string, string | undefined> = { a: process.env["PRIVATE_DESKTOP_RUN"], b: runB };
-/** Client b's display: its own private desktop, from that desktop's run folder. */
+
 const displayOf = (run: string | undefined): Record<string, string> => {
   if (run === undefined) return {};
   const read = (file: string) => (existsSync(join(run, file)) ? readFileSync(join(run, file), "utf8").trim() : "");
@@ -56,17 +56,17 @@ const displayOf = (run: string | undefined): Record<string, string> => {
 const clients = PAIR_SIDES.map((side) => ({ side, name: clientName(pair, side), port: reportPort(pair, side), windowX: 0, env: side === "b" ? displayOf(runB) : {} }));
 type PoolClient = (typeof clients)[number];
 
-/** A short helper run's stdout; empty when it fails or takes over 5 s. */
+
 const output = (command: string, args: readonly string[], env: Record<string, string | undefined>) =>
   ChildProcessSpawner.ChildProcessSpawner.use((spawner) => spawner.string(ChildProcess.make(command, args, { env, extendEnv: true, stderr: "ignore" }))).pipe(
     Effect.timeout("5 seconds"),
     Effect.orElseSucceed(() => ""),
   );
 
-// Each client plays into its own silent sink on the user's PipeWire, so a pool
-// never sounds on the owner's speakers and a check records exactly one
-// client's audio. The desktop's runtime folder is private, so the user's own
-// one is named. Without PipeWire the clients run without sound, as before.
+
+
+
+
 const userRuntime = `/run/user/${process.getuid?.() ?? 1000}`;
 const pulse = join(userRuntime, "pulse/native");
 const audioEnv = (name: string) => Effect.gen(function*() {
@@ -88,7 +88,7 @@ const audioEnv = (name: string) => Effect.gen(function*() {
   return { PULSE_SERVER: `unix:${pulse}`, PULSE_SINK: sink };
 });
 
-/** Polls `check` every 250 ms until it holds, for at most `limit`; says whether it held. */
+
 const until = (check: () => boolean, limit: `${number} seconds`) =>
   Effect.sync(check).pipe(
     Effect.repeat({ schedule: Schedule.spaced("250 millis"), until: (held) => held }),
@@ -96,7 +96,7 @@ const until = (check: () => boolean, limit: `${number} seconds`) =>
     Effect.map(Option.isSome),
   );
 
-/** Launches one client's game in its own native capacity scope, held by the agent's scope. */
+
 const launch = (capacity: string, client: PoolClient) => Effect.gen(function*() {
   // A second runtime on a live prefix joins its wineserver and dies: a game left from before must be stopped first.
   const left = findGameProcesses(prefixOf(client.name));
@@ -108,9 +108,9 @@ const launch = (capacity: string, client: PoolClient) => Effect.gen(function*() 
   mkdirSync(documentsOf(client.name), { recursive: true });
   writeFileSync(join(documentsOf(client.name), "War3Preferences.txt"), preferences(profile, client.windowX));
   const appId = String(3516115600 + pair * 2 + PAIR_SIDES.indexOf(client.side));
-  // Each game in its own machine-capacity native scope: the high-weight
-  // slice for game clients, no CPU quota.
-  // Admission uses the user's service bus; restore the private runtime only inside the game scope.
+
+
+
   const gameRuntime = client.env["XDG_RUNTIME_DIR"] ?? process.env["XDG_RUNTIME_DIR"] ?? userRuntime;
   const [command = process.execPath, ...native] = nativeCommand(capacity, client.name, gameRuntime);
   const env = { ...client.env, ...(yield* audioEnv(client.name)), XDG_RUNTIME_DIR: userRuntime, DBUS_SESSION_BUS_ADDRESS: `unix:path=${userRuntime}/bus`, STEAM_COMPAT_DATA_PATH: clientRoot(client.name), STEAM_COMPAT_CLIENT_INSTALL_PATH: steam, STEAM_COMPAT_APP_ID: appId, SteamAppId: appId, SteamGameId: appId };
@@ -140,7 +140,7 @@ interface Game {
   readonly log: string;
   readonly host: LanHost;
   readonly map: string;
-  /** Holds the game's host; closing it ends the game. */
+
   readonly scope: Scope.Closeable;
 }
 
@@ -154,15 +154,15 @@ const agent = Effect.gen(function*() {
   mkdirSync(directory, { recursive: true });
   const agentScope = yield* Effect.scope;
 
-  // A refused second client ends the first too: a pool only keeps whole pairs.
+
   const games: { readonly isRunning: Effect.Effect<boolean, unknown> }[] = [];
   yield* Effect.forEach(clients, (client) => launch(capacity, client).pipe(Effect.map((handle) => { games.push(handle); })), { discard: true });
 
-  // The game may open its window larger than its settings ask, past the edge
-  // of its desktop; each client's window is set to the profile's size at the
-  // top left of its own desktop. (On one shared desktop, labwc stacked both
-  // windows in one place, and Xwayland throttled the covered game until it fell
-  // behind the lockstep: hence a desktop per client.)
+
+
+
+
+
   const xdotool = process.env["WISP_XDOTOOL"] ?? Bun.which("xdotool") ?? (yield* output("nix", ["build", "--no-link", "--print-out-paths", "nixpkgs#xdotool"], {}).pipe(
     Effect.map((built) => (built.trim() === "" ? undefined : join(built.trim().split("\n")[0] ?? "", "bin/xdotool"))),
   ));
@@ -171,7 +171,7 @@ const agent = Effect.gen(function*() {
     const x11 = (env: Record<string, string>, ...args: string[]) => output(xdotool, args, env);
     const placeWindows = Effect.forEach(clients, (client) => Effect.gen(function*() {
       for (const window of (yield* x11(client.env, "search", "--name", "^Warcraft III$")).split("\n").filter((id) => id !== "")) {
-        // labwc may report the window with or without its 2 px border; matching only one re-placed the game every 3 s.
+
         const geometry = yield* x11(client.env, "getwindowgeometry", window);
         if (geometry.includes(`Position: ${client.windowX},0 `) && [0, 4].some((border) => geometry.includes(`Geometry: ${profile.width + border}x${profile.height + border}`))) continue;
         yield* x11(client.env, "windowsize", window, String(profile.width), String(profile.height), "windowmove", window, String(client.windowX), "0");
@@ -181,8 +181,8 @@ const agent = Effect.gen(function*() {
     yield* Effect.forkScoped(Effect.repeat(placeWindows, Schedule.spaced("3 seconds")));
   }
 
-  // The agent holds each client's report port inside the pair's namespace, where
-  // `wisp menus listen` can't reach; it keeps the requests each client's menus send instead.
+
+
   const reports = new Map<string, MenuReports>();
   for (const client of clients) {
     const sentLog = join(directory, `${client.name}-menus.log`);
@@ -194,7 +194,7 @@ const agent = Effect.gen(function*() {
   const menusOf = (name: string): Effect.Effect<MenuSocket, LanFailure | MenuFailure, Scope.Scope> => Effect.gen(function*() {
     const report = reports.get(name);
     if (report === undefined) return yield* new LanFailure({ problem: `no listener for ${name}` });
-    // The newest announcement: a client that restarted has a new port and guid.
+
     yield* report.waitForAddress(120);
     const latest = yield* report.address;
     if (latest === undefined) return yield* new LanFailure({ problem: `${name}'s menus never reported` });
@@ -206,11 +206,11 @@ const agent = Effect.gen(function*() {
     const ending = game;
     if (ending === undefined) return Effect.void;
     game = undefined;
-    // Closing its scope stops the host.
+
     return Scope.close(ending.scope, Exit.void).pipe(Effect.andThen(Effect.sync(() => say(`ended ${ending.id}`))));
   });
 
-  /** Hosts `mapFile` and joins both clients; succeeds when the match plays. */
+
   const fresh = (mapFile: string, turnMs: number | undefined, computers: number | undefined) => Effect.scoped(Effect.gen(function*() {
     yield* endGame;
     const id = new Date().toISOString().replace(/[:.]/g, "-");
@@ -238,7 +238,7 @@ const agent = Effect.gen(function*() {
       ...(computers === undefined ? {} : { computers }),
       log: (line) => appendFileSync(log, `${line}\n`),
       onPacket: (direction, label, bytes) => {
-        // Empty turns are most of the traffic and carry nothing.
+
         if (bytes[1] === 0x0c && bytes.length <= 6) return;
         appendFileSync(packets, `${((Date.now() - started) / 1000).toFixed(3)} ${direction} ${label} ${Buffer.from(bytes).toString("hex")}\n`);
       },
@@ -261,12 +261,12 @@ const agent = Effect.gen(function*() {
     return yield* new LanFailure({ problem: `the match didn't start: ${JSON.stringify(host.status())}` });
   }));
 
-  /**
-   * Each client hosts MAP on the menus' own local provider (loopback, the one
-   * 3.0.1 kept) and starts it alone, as Single Player's Custom Game does;
-   * succeeds once every client's game UI is up. No LAN switch and no Wisp
-   * host: nothing is written into the game (wisp:docs/lan.md, "Solo games").
-   */
+
+
+
+
+
+
   const solo = (mapFile: string) => Effect.scoped(Effect.gen(function*() {
     yield* endGame;
     const started = Date.now();
@@ -340,7 +340,7 @@ const agent = Effect.gen(function*() {
   writeFileSync(join(directory, "agent.json"), `${JSON.stringify({ pid: process.pid, socket: agentSocket(pair), profile: profile.name, fps: profile.maxFps, runs })}\n`);
   say(`agent on ${agentSocket(pair)}`);
 
-  // The pair's session gone (its desktops stopped) means the pair is over.
+
   const sessionPid = Number(argument("session-pid") ?? "0");
   if (sessionPid <= 0) return yield* Effect.never;
   const alive = () => {

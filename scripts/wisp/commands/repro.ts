@@ -1,7 +1,7 @@
-// `wisp repro FILE [--test NAME]`: replays a moment a map saved
-// (wisp:docs/repro.md) in two simulated clients of the game's map. Each must
-// land on the checksum the game recorded; with --test, it then writes a test
-// that replays the moment.
+
+
+
+
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { Console, Effect, Schema } from "effect";
@@ -19,23 +19,23 @@ import { importNativeReplay, compareReplayHost, type NativeReplay } from "../rep
 import { writtenPreloadFile } from "../headlessInput";
 import { reproLines } from "../../../src/runtime/repro";
 
-/** What a game declares for `wisp repro`. */
+
 export interface ReproProject {
   readonly viewerSources?: ReproViewerSources;
-  /** Large verified journeys can compare selected frames without scanning every frame before opening. */
+
   readonly viewerScanDivergence?: boolean;
   readonly map: HeadlessMap;
-  /**
-   * The module exporting `replayRepro`, a ReproReplay (wisp:src/runtime/repro.ts):
-   * it restores the state the game saved and runs the saved frames. Loaded
-   * when the command runs; it runs in each simulated client.
-   */
+
+
+
+
+
   readonly replay: string;
-  /** The directory where `--test NAME` writes NAME.tests.ts, a test registered with wisp:src/runtime/testing.ts. */
+
   readonly tests: string;
-  /** Convert only established game inputs; every other record stays in the raw import. */
+
   readonly importReplay?: (replay: NativeReplay) => { readonly repro: Repro; readonly simulatedActionOffsets: readonly number[] };
-  /** Soak JSON repros replay this module; their generated tests use Bun's headless runtime. */
+
   readonly soak?: { readonly project: string; readonly tests: string };
 }
 
@@ -48,12 +48,12 @@ export class ReproFailure extends Schema.TaggedError<ReproFailure>()("ReproFailu
   }
 }
 
-/** The simulated clients a repro replays in. */
+
 const CLIENTS = [0, 1];
 
 const ReproFile = preloadRecord({ rest: "lines" }, Schema.Struct({ lines: Schema.Array(Schema.String) }));
 
-/** A repro file as the game writes it, Preload lines: the repro and the lines. */
+
 export const readRepro = (file: string) => Effect.gen(function*() {
   const text = yield* Effect.try({ try: () => readFileSync(file, "utf8"), catch: (cause) => new ReproFailure({ file, problem: describeCause(cause) }) });
   const { lines } = yield* ReproFile.decode(file, text).pipe(Effect.mapError((error) => new ReproFailure({ file, problem: error.message })));
@@ -61,7 +61,7 @@ export const readRepro = (file: string) => Effect.gen(function*() {
   return typeof repro === "string" ? yield* new ReproFailure({ file, problem: repro }) : { repro, lines };
 });
 
-/** The module's replayRepro; throws when it exports none. */
+
 export async function loadReplay(path: string): Promise<ReproReplay> {
   const module: unknown = await import(path);
   if (typeof module !== "object" || module === null || !("replayRepro" in module) || typeof module.replayRepro !== "function") throw new Error(`${path} exports no replayRepro()`);
@@ -69,7 +69,7 @@ export async function loadReplay(path: string): Promise<ReproReplay> {
   return (repro) => replayRepro(repro);
 }
 
-/** Inspection is opt-in: existing replay modules need not export it. */
+
 export async function loadInspector(path: string): Promise<ReproInspector> {
   const module: unknown = await import(path);
   if (typeof module !== "object" || module === null || !("inspectRepro" in module) || typeof module.inspectRepro !== "function") throw new Error(`${path} exports no inspectRepro()`);
@@ -77,7 +77,7 @@ export async function loadInspector(path: string): Promise<ReproInspector> {
   return (repro, frame) => inspectRepro(repro, frame);
 }
 
-/** Each simulated client's replay of the repro, in its own scope of the map's natives and globals. */
+
 export function replayInClients(map: HeadlessMap, replay: ReproReplay, repro: Repro): ReproResult[] {
   return inClients(map, () => replay(repro));
 }
@@ -106,7 +106,7 @@ export function inspectClientStates(map: HeadlessMap, inspect: ReproInspector, r
 function inClients<Result>(map: HeadlessMap, run: () => Result): Result[] {
   const runtime = installHeadless(map);
   try {
-    // The replay restores the saved state itself, so the clients never start the map.
+
     const clients = runtime.clients({ start: () => undefined, install: () => undefined }, CLIENTS);
     return clients.clients.map((client) => {
       let result: Result | undefined;
@@ -121,7 +121,7 @@ function inClients<Result>(map: HeadlessMap, run: () => Result): Result[] {
   }
 }
 
-/** The report's lines, and whether every client landed on the recorded checksum without a problem. */
+
 export function reproReport(file: string, repro: Repro, results: readonly ReproResult[]): { readonly lines: string[]; readonly landed: boolean } {
   const lines = [`${basename(file)}: build ${repro.build}, frame ${repro.frame}, checksum ${repro.checksum}`];
   let landed = true;
@@ -136,10 +136,10 @@ export function reproReport(file: string, repro: Repro, results: readonly ReproR
   return { lines, landed };
 }
 
-/** Test names become file names and test titles. */
+
 const isTestName = (name: string) => /^[a-z0-9][a-z0-9-]*$/.test(name);
 
-/** NAME.tests.ts: a registered test that replays the repro's lines and requires the recorded checksum. */
+
 export function reproTestSource(name: string, file: string, repro: Repro, replayImport: string, lines: readonly string[]): string {
   return [
     `// \`wisp repro ${basename(file)} --test ${name}\` wrote this: the moment build`,
@@ -157,13 +157,13 @@ export function reproTestSource(name: string, file: string, repro: Repro, replay
   ].join("\n");
 }
 
-/** The import specifier of `module` from a file in `directory`, without its extension. */
+
 function importFrom(directory: string, module: string): string {
   const path = relative(directory, module).replace(/\.ts$/, "");
   return path.startsWith(".") ? path : `./${path}`;
 }
 
-/** `repro FILE [--test NAME]`; loads the game's modules only when it runs. */
+
 export const makeRepro = (load: () => Promise<ReproProject>): Command => (args) => Effect.gen(function*() {
   if (args[0] === "import") {
     const values = flagValues(args, "out");
