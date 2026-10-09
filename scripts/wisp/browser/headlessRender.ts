@@ -8,6 +8,22 @@ import { drawnPoses } from "../culling";
 import { advanceEmitters, type EmitterRenderer } from "./emitters";
 import { drawTerrain } from "./terrain";
 import { depthTarget, type DepthTarget, invert, parsePostProcessing, POINT_FACE, pointFaces, postProcessor, type PostSettings, postSettings, resolve, sceneTarget, type SceneTarget, SUN_MAP, sunView } from "./passes";
+import { terrainRows } from "../terrainMesh";
+import { doodadSkinRows, terrainDoodadPoses } from "../terrainDoodads";
+
+let installedDoodads: Promise<ReadonlyMap<string, Readonly<Record<string, string>>>> | undefined;
+async function scenePoses(scene: RenderScene): Promise<readonly EffectPose[]> {
+  if (scene.terrainDoodads === undefined || scene.terrain === undefined) return scene.effects;
+  installedDoodads ??= (async () => {
+    const rows = new Map(terrainRows(new Uint8Array(await asset("Doodads\\Doodads.slk"))));
+    try {
+      for (const [id, skin] of doodadSkinRows(new Uint8Array(await asset("Doodads\\DoodadSkins.txt")))) rows.set(id, { ...rows.get(id), ...skin });
+    } catch (cause) { if (!(cause instanceof AbsentAsset)) throw cause; }
+    return rows;
+  })();
+  const special = terrainDoodadPoses(scene.terrainDoodads.placements, scene.terrain, await installedDoodads, scene.frame, scene.terrainDoodads.models);
+  return [...scene.effects, ...special];
+}
 
 type Matrix = Float32Array;
 const identity = (): Matrix => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -632,7 +648,7 @@ window.prepareRenderer = (width, height, mode = "classic") => {
 };
 window.prepareScene = async (scene, extraModels = [], progress) => {
   const view = camera(scene, canvas.width / canvas.height);
-  const poses = drawnPoses(scene.effects, view.eye, view.far, scene.world);
+  const poses = drawnPoses(await scenePoses(scene), view.eye, view.far, scene.world);
   const frames = scene.ui.filter(frame => frame.visible && frame.alpha > 0 && frame.texture !== "");
   const total = poses.length + extraModels.length + frames.length;
   let completed = 0;
@@ -646,7 +662,9 @@ window.renderScene = async (scene, options) => {
   bindScene(); gl.depthMask(true); gl.clearColor(0.04, 0.06, 0.09, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
   const view = camera(scene, canvas.width / canvas.height);
   const visible: EffectPose[] = [], notDrawn: string[] = [], absent = new Set<string>(), popcornEmitters: PopcornEmitterPose[] = [];
-  for (const pose of drawnPoses(scene.effects, view.eye, view.far, scene.world)) {
+  let poses: readonly EffectPose[] = scene.effects;
+  try { poses = await scenePoses(scene); } catch (cause) { notDrawn.push(`terrain doodads: ${String(cause)}`); }
+  for (const pose of drawnPoses(poses, view.eye, view.far, scene.world)) {
     // A model the renderer can't load or draw is left out and named, so the rest of the frame still draws.
     try {
       if (options?.capture !== false) await prepareInstance(pose);

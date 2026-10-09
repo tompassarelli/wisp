@@ -10,7 +10,7 @@ import { pollFor, spawnLogged } from "./hostProcess";
 import { deathSeconds } from "./models";
 import type { AssetLocation, RenderAssetResolution, ResolvedRenderAsset } from "./renderAssets";
 import { decodeTerrain, shiftedBounds, worldBounds, type Terrain, type WorldBounds } from "./terrain";
-import { decodeDoodads, type PlacedDoodad } from "./doodads";
+import { decodeDoodadFile, type TerrainDoodad } from "./doodads";
 import { freshAnimation } from "../../src/headless/animation";
 
 import { GRAPHICS, type Graphics, type Lever, PROFILES, unsupportedLevers } from "./graphicsProfiles";
@@ -55,6 +55,7 @@ export interface RenderScene {
   /** The world bounds in headless coordinates, when the project gives its terrain. */
   readonly world?: WorldBounds;
   readonly terrain?: Terrain;
+  readonly terrainDoodads?: { readonly placements: readonly TerrainDoodad[]; readonly models: Readonly<Record<string, string | readonly string[]>> };
 }
 
 /** The sky, day/night light and terrain fog the map last set (wisp:docs/headless.md, "Lighting, fog and sky"). */
@@ -137,15 +138,21 @@ export async function loadEffectDeaths(project: HeadlessRenderProject, models: I
 
 const terrainBounds = new WeakMap<Uint8Array, WorldBounds>();
 const decodedTerrains = new WeakMap<Uint8Array, Terrain>();
-const doodadPlacements = new WeakMap<Uint8Array, Map<boolean, readonly PlacedDoodad[]>>();
-function projectDoodads(project: HeadlessRenderProject, frame: number): DrawnPose[] {
+const doodadPlacements = new WeakMap<Uint8Array, Map<boolean, ReturnType<typeof decodeDoodadFile>>>();
+function projectPlacements(project: HeadlessRenderProject): ReturnType<typeof decodeDoodadFile> | undefined {
   const options = project.doodads;
-  if (options === undefined) return [];
+  if (options === undefined) return undefined;
   const skinIds = options.skinIds ?? true;
   let formats = doodadPlacements.get(options.doo);
   if (formats === undefined) doodadPlacements.set(options.doo, formats = new Map());
   let placements = formats.get(skinIds);
-  if (placements === undefined) formats.set(skinIds, placements = decodeDoodads(options.doo, skinIds));
+  if (placements === undefined) formats.set(skinIds, placements = decodeDoodadFile(options.doo, skinIds));
+  return placements;
+}
+function projectDoodads(project: HeadlessRenderProject, frame: number): DrawnPose[] {
+  const options = project.doodads;
+  if (options === undefined) return [];
+  const placements = projectPlacements(project)?.placed ?? [];
   const [originX, originY] = project.terrain?.origin ?? [0, 0];
   return placements.flatMap((placed, index) => {
     if (!placed.visible) return [];
@@ -186,7 +193,10 @@ export function sceneWithUnits(project: HeadlessRenderProject, scene: RenderScen
       animationClock: unit.animationClock, animationBlendTime: unit.animationBlendTime, animationBlend: unit.animationBlend,
       unit: true, queuedAnimations: [], yaw: unit.facing * Math.PI / 180, pitch: 0, roll: 0, color: unit.color, teamColor: unit.teamColor, matrixScale: unit.scale, flat: unit.scale.some((value) => value === 0) };
   });
-  return { ...scene, effects: [...scene.effects, ...units, ...projectDoodads(project, scene.frame)], ...(world === undefined ? {} : { world }), ...(terrain === undefined ? {} : { terrain }) };
+  const special = projectPlacements(project)?.terrain ?? [];
+  if (special.length > 0 && terrain === undefined) throw new Error("terrain doodads require render.terrain.w3e");
+  return { ...scene, effects: [...scene.effects, ...units, ...projectDoodads(project, scene.frame)], ...(world === undefined ? {} : { world }), ...(terrain === undefined ? {} : { terrain }),
+    ...(special.length === 0 ? {} : { terrainDoodads: { placements: special, models: project.doodads?.models ?? {} } }) };
 }
 
 export class RenderFailure extends Schema.TaggedError<RenderFailure>()("RenderFailure", {

@@ -11,8 +11,15 @@ export interface PlacedDoodad {
   readonly life: number;
 }
 
-/** Reads ordinary placements in war3map.doo v8/11. Skin IDs were added without a version bump. */
-export function decodeDoodads(bytes: Uint8Array, skinIds = true): PlacedDoodad[] {
+export interface TerrainDoodad {
+  readonly type: string;
+  readonly variation: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+/** Skin IDs were added without a version bump; terrain placements use integer grid cells. */
+export function decodeDoodadFile(bytes: Uint8Array, skinIds = true): { placed: PlacedDoodad[]; terrain: TerrainDoodad[] } {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let at = 0;
   const id = () => { const value = String.fromCharCode(...bytes.subarray(at, at + 4)); at += 4; return value; };
@@ -37,8 +44,14 @@ export function decodeDoodads(bytes: Uint8Array, skinIds = true): PlacedDoodad[]
     int();
     placements.push({ type, skin, variation, x, y, z, angle, scale, visible: (flags & 3) !== 0, life });
   }
-  int();
+  const terrainVersion = int();
+  if (terrainVersion !== 0) throw new Error(`war3map.doo terrain version ${terrainVersion} is not 0`);
   const special = count();
-  if (special !== 0) throw new Error(`war3map.doo has ${special} terrain-modifying doodads, which Wisp does not draw`);
-  return placements;
+  const terrain: TerrainDoodad[] = [];
+  for (let index = 0; index < special; index++) terrain.push({ type: id(), variation: int(), x: int(), y: int() });
+  return { placed: placements, terrain };
+}
+
+export function decodeDoodads(bytes: Uint8Array, skinIds = true): PlacedDoodad[] {
+  return decodeDoodadFile(bytes, skinIds).placed;
 }
