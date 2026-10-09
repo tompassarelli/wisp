@@ -1,5 +1,9 @@
 # Clients that heal themselves: `wisp client doctor`
 
+Doctor detects the installed game build and prints its [build profile](builds.md)
+before recovery. An unknown build gets a private discovery draft; commands stop
+with the missing capability until its behavior has been checked.
+
 A signed-in Warcraft III client breaks in a handful of known ways: it drops
 from Battle.net, its login closes to an empty Options/Exit Game shell, it
 crashes with its error dialog up, it sits in a lobby or on a loading screen

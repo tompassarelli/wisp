@@ -230,6 +230,7 @@ const agent = Effect.gen(function*() {
     writeFileSync(log, `# wisp lan host: pair ${pair}, map ${inGame}, clients ${clients.map(({ name }) => name).join(" ")}; seconds since ${new Date(started).toISOString()} (${started})\n`);
     const scope = yield* Scope.fork(agentScope);
     const host = yield* startHost({
+      buildId: (yield* loadLanPlugin).version(exeOf(clients[0]!.name)),
       map,
       gameName: `wisp-${pair}-${id.slice(11, 19)}`,
       clients: clients.map(({ name }) => name),

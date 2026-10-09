@@ -21,7 +21,7 @@ export function xoroUpdate(start: number, bytes: Uint8Array): number {
 
 export const SCRIPT_ENTRIES = ["war3map.j", "scripts\\war3map.j", "war3map.lua", "scripts\\war3map.lua"] as const;
 /**
- * Files folded in after the script, each as its own checksum. 3.0.0.24268 also
+ * Files folded in after the script, each as its own checksum. The checked rollback build also
  * folds in war3map.w3l (Reforged's lighting) after war3map.w3q
  * (wc3-slop-lan docs/protocol.md, "The map check").
  */

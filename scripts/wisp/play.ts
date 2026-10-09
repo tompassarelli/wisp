@@ -532,7 +532,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       yield* until(5, hasText("Quit Mission"), () => "End Game didn't show Quit Mission");
       yield* key("q");
       yield* until(15, clientState.pipe(Effect.map((state) => state?.kind === "results" ? true : undefined)), () => "Quit Mission didn't reach the results screen");
-      // Warcraft III 3.0.0.24268 ignores the menus' ScoreScreenClose; Escape leaves the score screen.
+      // The checked rollback build ignores the menus' ScoreScreenClose; Escape leaves the score screen.
       yield* key("Escape");
       yield* until(10, clientState.pipe(Effect.map((state) => state?.kind === "menus" ? true : undefined)), () => "Results didn't return to the menus");
     }
@@ -669,7 +669,7 @@ const pressInGame = (game: { readonly window: number; readonly xWindow: XWindow 
 
 /**
  * Leaves the score screen of the game running in the declaration's prefix
- * with Escape in its window: Warcraft III 3.0.0.24268 ignores the menus'
+ * with Escape in its window: The checked rollback build ignores the menus'
  * ScoreScreenClose. The window is found as play finds it: the compositor's
  * window of the Steam shortcut titled Warcraft III, and the game's X window.
  */
