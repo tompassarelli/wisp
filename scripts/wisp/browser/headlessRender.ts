@@ -11,6 +11,7 @@ import { drawWater } from "./water";
 import { depthTarget, type DepthTarget, invert, parsePostProcessing, POINT_FACE, pointFaces, postProcessor, type PostSettings, postSettings, resolve, sceneTarget, type SceneTarget, SUN_MAP, sunView } from "./passes";
 import { terrainRows } from "../terrainMesh";
 import { doodadSkinRows, terrainDoodadPoses } from "../terrainDoodads";
+import { ddsTexture } from "./ddsTexture";
 
 let installedDoodads: Promise<ReadonlyMap<string, Readonly<Record<string, string>>>> | undefined;
 async function scenePoses(scene: RenderScene): Promise<readonly EffectPose[]> {
@@ -252,7 +253,8 @@ function textureAt(path: string, body?: string): Promise<HTMLCanvasElement> {
       if (magic[0] === 137 || magic[0] === 255) {
         const image = await createImageBitmap(new Blob([bytes])); texture.width = image.width; texture.height = image.height; context.drawImage(image, 0, 0); image.close();
       } else {
-        const decoded = magic[0] === 66 && magic[1] === 76 ? getBLPImageData(decodeBLP(bytes), 0) : tga(bytes);
+        const decoded = magic[0] === 66 && magic[1] === 76 ? getBLPImageData(decodeBLP(bytes), 0)
+          : magic[0] === 68 && magic[1] === 68 && magic[2] === 83 && magic[3] === 32 ? ddsTexture(bytes) : tga(bytes);
         texture.width = decoded.width; texture.height = decoded.height;
         context.putImageData(new ImageData(new Uint8ClampedArray(decoded.data), decoded.width, decoded.height), 0, 0);
       }
