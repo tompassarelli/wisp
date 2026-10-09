@@ -619,9 +619,19 @@ saves them as the scene's `environment`.
   rotation, three-axis scale and visibility; `render.terrain.origin` shifts
   their X/Y coordinates. They use the same world-bounds and far cull as
   effects. Skin IDs are present by default; set `skinIds: false` for the
-  older layout without skin fields. Missing model entries and unsupported
-  terrain-modifying placements fail by name. Format fields follow the
+  older layout without skin fields. Missing model entries fail by name. Format fields follow the
   [doodad specification](https://github.com/ChiefOfGxBxL/WC3MapSpecification/blob/master/Doodads/8_11.md).
+- **Special terrain doodads.** The trailing `war3map.doo` records draw their
+  installed models in Classic and Definitive when `render.terrain.w3e` is
+  supplied. Their integer X/Y cells start at the terrain's south-west corner;
+  the supporting point supplies height. Model fields come from the user's
+  `Doodads\\Doodads.slk` and `Doodads\\DoodadSkins.txt`, with explicit
+  `render.doodads.models` entries overriding paths. Stored variations select
+  model suffixes, and installed fixed rotation and scale position the model.
+  The shared effect world-bounds and far cull apply after shifting the origin.
+  The record layout follows the [current HiveWE format documentation](https://github.com/stijnherfst/HiveWE/wiki/war3map.doo-Doodads).
+  Terrain replacement under their footprint and matching native height and
+  rotation references are still pending in #82.
 - **Popcorn emitters.** External `.pkb`/`.pkfx` particle effects are recognized
   in either supported graphics mode, including Definitive assets. Each saved
   frame's scene JSON has `popcornEmitters`: model path, model handle, emitter
@@ -663,7 +673,7 @@ saves them as the scene's `environment`.
 
   This terrain path is initial drawing support, pending the visible-terrain
   native reference in [#82](https://github.com/tompassarelli/wisp/issues/82).
-  `--look terrain` still fails. Ramp model joins, special doodads and
+  `--look terrain` still fails. Ramp model joins, special doodad terrain replacement and
   terrain lighting are unfinished.
   Ground variation, corner-mask and cliff filename facts come from the
   [HiveWE format documentation](https://github.com/stijnherfst/HiveWE/wiki/war3map.w3e-Terrain)
@@ -694,7 +704,7 @@ saves them as the scene's `environment`.
   `BaseIntensity` and `BaseSaturation`. Classic draws neither. `render.json`
   records `post.ambientOcclusion` and `post.bloom` per frame. The map supplies
   its file through `readAsset("war3mapPostProcessing.txt")`.
-- **Not drawn.** Terrain-modifying special doodads, water and a height fog's
+- **Not drawn.** water and a height fog's
   falloff. A look check that asks for one fails
   ([Graphics profiles](#graphics-profiles)).
 
