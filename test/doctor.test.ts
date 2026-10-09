@@ -28,8 +28,30 @@ import { displayChanges, videoSettings, withDisplaySettings } from "../scripts/w
 import { DoctorHands, type DoctorTarget, doctor, withDoctor } from "../scripts/wisp/doctor";
 import { PlayMachine, PlayProblem } from "../scripts/wisp/play";
 import { type ClientState, type ClientView, ClientWatch, type Source } from "../scripts/wisp/watch";
+import { doctorTargets } from "../scripts/wisp/clientDoctorCommand";
+import { pairClients, writePoolClients } from "../scripts/wisp/lan/pool";
 
 const fixture = (name: string) => readFileSync(join(import.meta.dir, "fixtures/doctor", name), "utf8");
+
+test("[repro #100] doctor reads produced pool clients files as offline targets without a launcher", async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const directory = mkdtempSync(join(tmpdir(), "doctor-pool-"));
+  try {
+    writeFileSync(join(directory, "display"), ":7");
+    writeFileSync(join(directory, "xauthority"), "/private/xauthority");
+    writeFileSync(join(directory, "wayland-display"), "wayland-0");
+    const clients = pairClients(0, { a: directory, b: directory });
+    for (const entries of [clients, clients.map((client) => ({ ...client, name: client.name.endsWith("a") ? "a" : "b", poolName: client.name }))]) {
+      const clientsFile = join(directory, "clients.json");
+      writePoolClients(clientsFile, entries);
+      const targets = await Effect.runPromise(doctorTargets({ clientsFile, start: {} }, [entries[0]!.name]));
+      expect(targets.map(({ client, display, start }) => ({ name: client.name, display, start }))).toEqual([{ name: entries[0]!.name, display: ":7", start: { kind: "offline-pool" } }]);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 const PLAYED = fixture("launcher-played.log");
 const LOST = fixture("launcher-connection-lost.log");
 const RECONNECTED = fixture("launcher-reconnected.log");

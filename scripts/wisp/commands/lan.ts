@@ -20,7 +20,7 @@ import { type Command, UsageFailure, flagValues } from "../command";
 import { LanFailure } from "../lan/join";
 import { lanPluginProblem } from "../lan/plugin";
 import {
-  PAIR_SIDES, PROFILES, type PoolPair, agentSocket, clientName, desktopSize, pairClients, pairDirectory, poolClientsFile, poolFile, readPool, reportPort, writeJson,
+  PAIR_SIDES, PROFILES, type PoolPair, agentSocket, clientName, desktopSize, pairClients, pairDirectory, poolClientsFile, poolFile, readPool, reportPort, writeJson, writePoolClients,
 } from "../lan/pool";
 import { setupClient } from "../lan/setup";
 import { admissionFile, pairAdmission } from "../lan/admission";
@@ -171,7 +171,7 @@ const registerPairs = (mine: readonly PoolPair[], profile: string, fps: number |
   const others = ((yield* readPool)?.pairs ?? []).filter(({ id, agentSocket: socket }) => !ids.has(id) && existsSync(socket));
   const pairs = [...others, ...mine].sort((left, right) => left.id - right.id);
   writeJson(poolFile(), { profile, ...(fps === undefined ? {} : { fps }), pairs });
-  writeJson(poolClientsFile(), { clients: pairs.flatMap(({ id, runs }) => pairClients(id, runs)) });
+  writePoolClients(poolClientsFile(), pairs.flatMap(({ id, runs }) => pairClients(id, runs)));
 });
 
 const pool: Command = (args) => Effect.gen(function*() {
@@ -217,7 +217,7 @@ const pool: Command = (args) => Effect.gen(function*() {
     const status = yield* agent(pair, "/status").pipe(Effect.flatMap(Schema.decodeUnknownEffect(AgentStatus)), Effect.orElseSucceed(() => ({ clients: [] })));
     const pids = new Map(status.clients.map(({ name, pid }) => [name, pid]));
     const clientsPath = join(pairDirectory(pair), "clients.json");
-    writeJson(clientsPath, { clients: pairClients(pair, runs).map((client) => ({ ...client, name: client.name.endsWith("a") ? "a" : "b", poolName: client.name, pid: pids.get(client.name) })) });
+    writePoolClients(clientsPath, pairClients(pair, runs).map((client) => ({ ...client, name: client.name.endsWith("a") ? "a" : "b", poolName: client.name, pid: pids.get(client.name) })));
     entries.push({ id: pair, clients: clientsPath, agentSocket: agentSocket(pair), runs, appIds: { a: `steam_app_${3516115600 + pair * 2}`, b: `steam_app_${3516115601 + pair * 2}` } });
     yield* registerPairs(entries.map((entry) => ({ ...entry, profile: profileOf(entry.id) })), profileText, fps);
     yield* Console.log(`pair ${pair}: ${clientName(pair, "a")} and ${clientName(pair, "b")} running (${profile}${fps === undefined ? "" : `, ${fps} fps`}); desktops ${runs.a ?? "?"} and ${runs.b ?? "?"}`);
