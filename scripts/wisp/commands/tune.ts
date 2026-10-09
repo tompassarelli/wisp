@@ -44,9 +44,7 @@ export const servePanel = (port: number) => Effect.gen(function*() {
       Effect.flatMap((body) => Schema.decodeUnknownEffect(schema)(body)),
       Effect.mapError((cause) => new UsageFailure({ problem: cause.message })),
     );
-  const server = yield* Effect.acquireRelease(
-    Effect.try({
-      try: () => panelServer(port, (request) => {
+  const server = yield* panelServer(port, (request) => {
           const url = new URL(request.url);
           if (request.method === "GET" && url.pathname === "/") return new Response(TUNE_PAGE, { headers: { "content-type": "text/html; charset=utf-8" } });
           if (request.method === "GET" && url.pathname === "/tunables") return run(tune.state);
@@ -61,11 +59,7 @@ export const servePanel = (port: number) => Effect.gen(function*() {
             default:
               return json({ error: "not found" }, 404);
           }
-        }),
-      catch: (cause) => new UsageFailure({ problem: `can't serve the panel on 127.0.0.1:${port}: ${String(cause)}` }),
-    }),
-    (server) => Effect.promise(() => server.stop(true)),
-  );
+        }).pipe(Effect.mapError(cause => new UsageFailure({ problem: `can't serve the panel on 127.0.0.1:${port}: ${String(cause)}` })));
   return `http://127.0.0.1:${server.port}/`;
 });
 

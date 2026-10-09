@@ -223,7 +223,7 @@ const agent = Effect.gen(function*() {
       if (existsSync(target)) rmSync(target);
       copyFileSync(mapFile, target);
     }
-    const map = readMapFacts(mapFile, packager, inGame);
+    const map = yield* readMapFacts(mapFile, packager, inGame);
     const log = join(folder, "actions.log");
     const packets = join(folder, "packets.log");
     const started = Date.now();
@@ -284,7 +284,7 @@ const agent = Effect.gen(function*() {
     }), { concurrency: "unbounded" });
   }));
 
-  const run = yield* FiberSet.makeRuntimePromise<never>();
+  const run = yield* FiberSet.makeRuntimePromise<ChildProcessSpawner.ChildProcessSpawner>();
   const decode = <A>(schema: Schema.Decoder<A>, request: Request) =>
     Effect.tryPromise({ try: () => request.text(), catch: (cause) => new LanFailure({ problem: String(cause) }) }).pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(schema)),

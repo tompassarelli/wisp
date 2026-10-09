@@ -243,7 +243,10 @@ export const makeRepro = (load: () => Promise<ReproProject>): Command => (args) 
   if (view) {
     const inspector = yield* Effect.tryPromise({ try: () => loadInspector(project.replay), catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) });
     return yield* Effect.scoped(Effect.gen(function*() {
-      const server = yield* Effect.acquireRelease(Effect.try({ try: () => serveReproViewer(createReproViewer(project.map, inspector, repro, project.viewerSources, project.viewerScanDivergence)), catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) }), server => Effect.promise(() => server.stop(true)));
+      const server = yield* Effect.try({ try: () => createReproViewer(project.map, inspector, repro, project.viewerSources, project.viewerScanDivergence), catch: cause => new ReproFailure({ file, problem: describeCause(cause) }) }).pipe(
+        Effect.flatMap(viewer => serveReproViewer(viewer)),
+        Effect.mapError(cause => new ReproFailure({ file, problem: describeCause(cause) })),
+      );
       const address = `http://127.0.0.1:${server.port}/`;
       yield* Console.log(`saved match: ${address}`);
       yield* Effect.try({ try: () => { Bun.spawn(["xdg-open", address], { stdout: "ignore", stderr: "ignore" }); }, catch: cause => new ReproFailure({ file, problem: `opening the page: ${describeCause(cause)}` }) });

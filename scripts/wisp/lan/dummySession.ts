@@ -1,5 +1,6 @@
 import { copyFileSync, mkdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import * as BunServices from "@effect/platform-bun/BunServices";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Effect } from "effect";
 import { connectMenus, menuAddress } from "../menus";
@@ -24,9 +25,9 @@ const target = join(documentsOf(name), "Maps/Wisp", basename(mapFile));
 mkdirSync(dirname(target), { recursive: true });
 if (target !== mapFile) copyFileSync(mapFile, target);
 const packager = join(process.env["XDG_CACHE_HOME"] ?? join(process.env["HOME"] ?? "", ".cache"), "wisp/lan/map-pack");
-const map = readMapFacts(mapFile, packager, inGame);
 const output = join(pairDirectory(pair), "dummy", new Date().toISOString().replace(/[:.]/g, "-"));
 BunRuntime.runMain(Effect.scoped(Effect.gen(function*() {
+  const map = yield* readMapFacts(mapFile, packager, inGame);
   const lan = yield* loadLanPlugin;
   const version = lan.version(exeOf(name));
   console.log(`dummy lobby: Warcraft ${version}; evidence ${output}`);
@@ -38,4 +39,4 @@ BunRuntime.runMain(Effect.scoped(Effect.gen(function*() {
     }),
   });
   console.log(JSON.stringify({ ...result, version, output }));
-})));
+})).pipe(Effect.provide(BunServices.layer)));
