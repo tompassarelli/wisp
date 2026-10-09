@@ -457,6 +457,9 @@ For model textures, `body` is the selected model's `AssetLocation`; pass it to
 `resolveRenderAsset(readers, path, graphics, body)`. Texture rows record
 `requested`, `bodyAlias`, `selectedPath` (null if absent), and
 `suffixConversion`; stock TIF/BLP/TGA reads in HD/DE use DDS. All of a model's
+nonreplaceable DDS textures decode their top image directly (DXT1, DXT3,
+DXT5 and ATI2), including DDS bytes supplied under a model's TIF path.
+PNG conversion by the project's asset reader is optional. All of a model's
 nonreplaceable textures are requested before a missing texture refuses the
 model. Explicit HD DDS imports match the
 [native reference](https://github.com/tompassarelli/smashcraft/issues/334#issuecomment-6071233652).
