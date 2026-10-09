@@ -42,7 +42,10 @@ export const resolveRenderAsset = (readers: RenderAssetReaders, requested: strin
   const attempts: AssetLocation[] = [];
   const metadata = body === undefined ? {} : { bodyAlias: body.layer, suffixConversion: /\.(tif|blp|tga)$/i.test(path) && body.layer !== "base" ? `${path.match(/\.[^.]+$/)?.[0]} → .dds` : "none" };
   for (const source of ["map", "stock"] as const) {
-    const inherited: readonly AssetLayer[] = body === undefined || explicit !== null ? layers : source === "map" && body.layer !== "base" ? [body.layer, "base"] : [body.layer];
+    const inherited: readonly AssetLayer[] = body === undefined || explicit !== null ? layers
+      : source === "map" && body.layer !== "base" ? [body.layer, "base"]
+      : source === "stock" && body.source === "stock" ? layers.slice(layers.indexOf(body.layer))
+      : [body.layer];
     for (const layer of inherited) {
       const originalPath = explicit?.[2] ?? path;
       const assetPath = source === "stock" && body !== undefined && layer !== "base" ? originalPath.replace(/\.(tif|blp|tga)$/i, ".dds") : originalPath;
