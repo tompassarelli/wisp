@@ -10001,7 +10001,10 @@ var ModelRenderer = class {
 			0
 		];
 		if (layer.FilterMode === FilterMode.None) {
-			this.gl.disable(this.gl.BLEND);
+			if (this.instanceAlpha < 1) {
+				this.gl.enable(this.gl.BLEND);
+				this.gl.blendFuncSeparate(...layerBlendFactors(FilterMode.Blend));
+			} else this.gl.disable(this.gl.BLEND);
 			this.gl.enable(this.gl.DEPTH_TEST);
 			this.gl.depthMask(true);
 		} else if (layer.FilterMode === FilterMode.Transparent) {
@@ -10071,7 +10074,10 @@ var ModelRenderer = class {
 			0
 		];
 		if (baseLayer.FilterMode === FilterMode.None) {
-			this.gl.disable(this.gl.BLEND);
+			if (this.instanceAlpha < 1) {
+				this.gl.enable(this.gl.BLEND);
+				this.gl.blendFuncSeparate(...layerBlendFactors(FilterMode.Blend));
+			} else this.gl.disable(this.gl.BLEND);
 			this.gl.enable(this.gl.DEPTH_TEST);
 			this.gl.depthMask(true);
 		} else if (baseLayer.FilterMode === FilterMode.Transparent) {
