@@ -1,7 +1,7 @@
-// The map compiler rejects code that would compile but compute differently in
-// Warcraft (#35). Each fixture marks the lines that must be rejected; every
-// other line must compile. Emitting despite errors lets the type errors of one
-// fixture and the plugin's rejections of another surface together.
+
+
+
+
 import { expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";

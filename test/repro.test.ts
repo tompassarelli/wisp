@@ -1,6 +1,6 @@
-// `wisp repro`: a moment a map saved replays in two simulated clients, which
-// must land on the recorded checksum.
-// The record text and repro contracts also run in 32-bit Lua (runtime.test.ts).
+
+
+
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -13,7 +13,7 @@ import { registeredTests } from "../src/runtime/testing";
 import { replayRepro } from "./fixtures/repro/replay";
 
 
-// Taken out of the shared registry, which other files of this process count.
+
 const registered = registeredTests.length;
 await import("../src/runtime/recordText.tests");
 const contracts = registeredTests.splice(registered);
@@ -24,7 +24,7 @@ describe("record text and repro contracts", () => {
 const MAP = { filePrefix: "fixture", globalPrefixes: ["__fixture"] };
 const directory = join(import.meta.dir, "../build/repro-tests");
 
-/** A repro file as Warcraft writes it: total 5, then three frames adding 1, 2 and 3. */
+
 function writeReproFile(checksum: string): string {
   const state = tokenLines(recordTokens({ total: 5 }) ?? [], REPRO_LINE_WIDTH);
   const lines = reproLines({ build: "fixture-dev", frame: 3, checksum }, [...state, "add 1", "add 2", "add 3"]);

@@ -1,9 +1,9 @@
-// A tuned value in 32-bit Lua's headless runtime: two simulated clients of a
-// compiled fixture map install its untuned modules, then the version `wisp
-// tune` compiled with one value replaced. That version must be a delta of the
-// tuned module alone, install in both clients on the same tick, and change
-// the step both clients take from then on, alike. Fails with the first broken
-// contract. Usage: lua tune.lua MAP_LUA WARCRAFT_D_TS UNTUNED TUNED, each version a full payload.
+
+
+
+
+
+
 import { luaLockstep } from "../../src/headless/lua";
 import { type ModuleSet, parsePayload } from "../../src/runtime/modules";
 
@@ -28,7 +28,7 @@ function check(condition: boolean, message: string): void {
   if (!condition) throw message;
 }
 
-/** What the fixture keeps in a client's globals. */
+
 interface Fixture {
   readonly ticks: number;
   readonly steps: number[];

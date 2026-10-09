@@ -1,4 +1,4 @@
-// Native names added in Warcraft 3.0 and 3.0.1; signatures come from the checked patch build installed locally.
+
 export const WARCRAFT3_NATIVES = [
   "ConvertFogStyle",
   "ConvertEquipmentType",

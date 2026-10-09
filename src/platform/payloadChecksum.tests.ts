@@ -3,7 +3,7 @@ import { checksum } from "../runtime/payload";
 import { assertEquals, test } from "../runtime/testing";
 import { stringChecksum } from "./payloadChecksum";
 
-// Every client verifies a reload with stringChecksum against the host's checksum().
+
 test("[invariant] payload: a Lua string's checksum equals checksum() of its bytes", () => {
   for (const length of [0, 1, 7, 8, 9, 15, 16, 17, 4096, 4099]) {
     const bytes = Array.from({ length }, (_, i) => floorMod(i * 167 + 255, 256));

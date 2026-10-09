@@ -1,6 +1,6 @@
-// The fixture map's frames measured in 32-bit Lua through the installed
-// package: its emitted headless runtime resolves module by module.
-// Usage: lua perf.lua MAP_LUA WARCRAFT_D_TS
+
+
+
 import { runLuaPerf } from "wisp/src/headless/luaPerf";
 
 declare const arg: Readonly<Record<number, string | undefined>>;

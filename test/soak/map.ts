@@ -1,7 +1,7 @@
-// A map for the soak's tests: a counter every frame until 300, and the faults
-// a soak must find, each switched on by a policy: the counter stops, one
-// client makes a call the other doesn't, a frame throws, frames cost more.
-// It counts each player's typed A, as a game counts what its input helper types.
+
+
+
+
 import { configureRuntime } from "../../src/runtime/config";
 import { installDispatch, on, trampoline } from "../../src/platform/dispatch";
 
@@ -11,9 +11,9 @@ interface SoakTestState {
   desync: boolean;
   throwing: boolean;
   heavyMs: number;
-  /** Controller edges each slot's input reached the map with. */
+
   readonly edges: number[];
-  /** Presses of A each player typed. */
+
   readonly keys: number[];
 }
 
@@ -37,7 +37,7 @@ function tick(): void {
   if (s.throwing && s.tick === 150) throw new Error("tick 150 failed");
   const until = performance.now() + s.heavyMs;
   while (performance.now() < until) {
-    // A frame that costs heavyMs.
+
   }
 }
 

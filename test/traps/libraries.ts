@@ -1,7 +1,7 @@
-/// <reference path="../../src/natives/warcraft.d.ts" />
-// Synchronized reals (those inside f32()) avoid the platform's math library,
-// which differs by an ulp between Bun and Warcraft; a headless replay can't
-// repeat Warcraft's own math or random numbers anywhere.
+
+
+
+
 import { f32 } from "../../src/sim/f32";
 
 function Sin(value: number): number {

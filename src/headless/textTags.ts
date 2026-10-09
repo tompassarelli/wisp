@@ -1,5 +1,5 @@
-// Floating text tags (CreateTextTag and its setters): what each says, where it
-// is and how it moves, ages and fades. Runtime-neutral, like client.ts.
+
+
 import { f32 } from "../sim/f32";
 import type { Handle } from "./client";
 
@@ -9,7 +9,7 @@ const WORLD_UNITS_PER_VELOCITY = 128 / f32(0.071);
 interface TextTag {
   readonly handle: Handle;
   text: string;
-  /** SetTextTagText's height, in UI units like a frame font's. */
+
   height: number;
   x: number;
   y: number;
@@ -25,7 +25,7 @@ interface TextTag {
   fadepoint: number;
 }
 
-/** A text tag as a renderer draws it: its colour's alpha already faded by age. */
+
 export interface TextTagPose {
   readonly handle: Handle;
   readonly text: string;
@@ -38,7 +38,7 @@ export interface TextTagPose {
 
 export interface TextTagContext {
   handle(this: void, kind: string): Handle;
-  /** A live unit's position, for SetTextTagPosUnit. */
+
   unitPosition(this: void, unit: unknown): { readonly x: number; readonly y: number; readonly z: number } | undefined;
 }
 
@@ -84,7 +84,7 @@ export class TextTags {
     };
   }
 
-  /** One game frame: unsuspended tags move by their velocity and age; a tag that isn't permanent ends at its lifespan. */
+
   tick(seconds: number): void {
     for (const found of this.tags.values()) {
       if (found.suspended) continue;
@@ -95,7 +95,7 @@ export class TextTags {
     }
   }
 
-  /** The tags a player sees now, in creation order. */
+
   poses(): TextTagPose[] {
     const poses: TextTagPose[] = [];
     for (const found of this.tags.values()) {

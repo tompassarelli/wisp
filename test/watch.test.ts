@@ -16,7 +16,7 @@ test("[repro a6125bf] a rendered menu transition replaces old score data, while 
 });
 const view = (state: ClientState): ClientView => ({ client: "a", state, source: "socket", evidence: "SetGlueScreen", at: 0, scan: "done", loadErrors: { count: 0 } });
 
-/** A watch that reports each state once, then repeats the last. */
+
 const scripted = (...states: ClientState[]) => {
   let index = 0;
   return Layer.succeed(ClientWatch, ClientWatch.of({ view: () => Effect.sync(() => view(states[Math.min(index++, states.length - 1)]!)) }));
@@ -35,14 +35,14 @@ test("[spec docs/watch.md] unlessLost stops a wait that would run out its own ti
   expect(await Effect.runPromise(unlessLost(client, Effect.succeed("hosted")))).toBe("hosted");
 });
 
-// ----- Deciding states from recorded sources (test/fixtures/watch/README.md) -----
+
 
 const fixture = (path: string) => readFileSync(join(import.meta.dir, "fixtures", path), "utf8");
 const PREFIX = "/clients/a/pfx";
 const process = (pid: number, exe: string): ProcessInfo => ({ pid, name: exe.split("\\").at(-1)!, args: [exe], prefix: PREFIX });
 const GAME = process(52713, "C:\\Program Files (x86)\\Warcraft III\\_retail_\\x86_64\\Warcraft III.exe");
 const LAUNCHER = process(43924, "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe");
-/** 6 Oct 2026 at a local time. */
+
 const on6Oct = (time: string) => {
   const [hours, minutes, seconds = "0"] = time.split(":");
   return new Date(2026, 9, 6, Number(hours), Number(minutes), Number(seconds)).getTime();
@@ -88,7 +88,7 @@ const crash: CrashReport = {
   summary: crashSummary(fixture(`watch/errors/${crashFolder}/Crash.txt`)),
   written: on6Oct("20:30:35"),
 };
-/** Folds a socket trace (JSON lines with `at` in ms from `start`) into the socket's state. */
+
 const trace = (lines: string, start: number, upTo = Number.POSITIVE_INFINITY): SocketState =>
   lines.trim().split("\n").map((line) => JSON.parse(line) as { at: number; messageType: string; payload: unknown })
     .filter(({ at }) => at <= upTo)
@@ -108,25 +108,25 @@ test("[native] the bad -loadfile run: signed in, ladder scan done, its map's imp
 
 test("[native] the crashed play --menus run: its crash report names the session in its log", () => {
   const log = fixture("war3log/menus-listing-during-scan.txt");
-  // Gone, the game's crash stands; still running a minute after the report, a new launch is assumed.
+
   const gone = decide("a", sources(on6Oct("20:31"), [LAUNCHER], { log, crashes: [crash] }));
   expect(gone.state).toEqual({ kind: "crashed", reason: "ACCESS_VIOLATION (Failed to read address 0x0000000000000500 at instruction 0x00006FFFEEC73856)" });
   expect(gone.evidence).toBe(`Errors/${crashFolder}/Crash.txt`);
   expect(decide("a", sources(on6Oct("20:30:40"), [LAUNCHER, GAME], { log, crashes: [crash] })).state.kind).toBe("crashed");
   expect(decide("a", sources(on6Oct("20:40"), [LAUNCHER, GAME], { log, crashes: [crash] })).state.kind).not.toBe("crashed");
-  // Another session's report doesn't count.
+
   expect(decide("a", sources(on6Oct("20:36"), [LAUNCHER], { log: fixture("war3log/loadfile-scan-mid-load.txt"), crashes: [crash] })).state.kind).toBe("launcher");
 });
 
 test("[native] the login shell: a log without a sign-in says nothing", () => {
-  // Client B's log stopped 3 s after its start while B played all evening: the log is written in bursts.
+
   const log = fixture("watch/login-shell-no-sign-in.txt");
   const silent = decide("b", sources(on6Oct("21:00"), [LAUNCHER, GAME], { log }));
   expect(silent.state).toEqual({ kind: "running" });
   expect(silent.source).toBe("process");
 });
 
-// The menu-socket trace is constructed, not recorded (fixtures/watch/README.md).
+
 test("[provisional] the menus' login screen is signing in before a sign-in and a lost connection after one", () => {
   const log = fixture("watch/login-shell-no-sign-in.txt");
   const loginScreen = (state: SocketState) => socketEvent(state, { messageType: "SetGlueScreen", payload: { screen: "LOGIN_DOORS" } }, on6Oct("21:00"));
@@ -152,7 +152,7 @@ test("[provisional] a hosted match from the menus' socket: screens, lobby host, 
   expect(at(80100).state).toEqual({ kind: "menus", screen: "CUSTOM_LOBBIES" });
   expect(at(90000).state).toEqual({ kind: "disconnected", reason: "Battle.net signed this client out" });
   expect(at(6100).source).toBe("socket");
-  // A DISABLED_SCREEN that doesn't follow loading is no match.
+
   expect(socketEvent({ connected: true }, { messageType: "SetGlueScreen", payload: { screen: "DISABLED_SCREEN" } }, 0)).toEqual({ connected: true });
 });
 
@@ -160,12 +160,12 @@ test("[spec docs/watch.md] chat goes only into a match its menu page reports, ne
   const log = fixture("war3log/menus-after-scan.txt");
   const start = on6Oct("16:30");
   const at = (offset: number) => decide("a", sources(start + offset, [LAUNCHER, GAME], { log, socket: trace(fixture("watch/host-match.jsonl"), start, offset) }));
-  // The channel and Custom Games, the lobby, loading and the score screen: Return would reach Battle.net's channel or a lobby's chat.
+
   for (const offset of [0, 4000, 6100, 9000, 76100, 80100]) expect(typesIntoMatch(at(offset))).toBe(false);
   expect(typesIntoMatch(at(16000))).toBe(true);
-  // The socket last said loading; a newer receipt is the match.
+
   expect(typesIntoMatch(decide("a", sources(start + 12_000, [LAUNCHER, GAME], { log, socket: trace(fixture("watch/host-match.jsonl"), start, 9000), receipt: start + 11_000 })))).toBe(true);
-  // Without the page, a receipt says "in match" even when it is an earlier match's and the client sits in a channel.
+
   const receiptOnly = decide("a", sources(start, [LAUNCHER, GAME], { log, receipt: start - 1000 }));
   expect(receiptOnly.state).toEqual({ kind: "in match" });
   expect(typesIntoMatch(receiptOnly)).toBe(false);
@@ -174,6 +174,6 @@ test("[spec docs/watch.md] chat goes only into a match its menu page reports, ne
 test("[native] processes alone: closed, launcher, and a clean exit's log as the last session's", () => {
   expect(decide("a", sources(on6Oct("17:00"), [])).state).toEqual({ kind: "closed" });
   expect(decide("a", sources(on6Oct("17:00"), [LAUNCHER])).state).toEqual({ kind: "launcher" });
-  // Warcraft III started again; the log still holds the last session, which ended.
+
   expect(decide("a", sources(on6Oct("17:00"), [LAUNCHER, GAME], { log: fixture("watch/menus-closed.txt") })).state).toEqual({ kind: "running" });
 });

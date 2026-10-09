@@ -4,7 +4,7 @@ import { parseModelMDX } from "../scripts/wisp/models";
 import { FIXTURE_MDL } from "./animation58/models";
 import { RULER } from "./animation58/layout";
 
-/** Encode the measured 1800 SKIN layout independently: count elements, each little-endian UINT16. */
+
 function rawSkin(modelBytes: ArrayBuffer): ArrayBuffer {
   const input = new Uint8Array(modelBytes), view = new DataView(modelBytes), chunks = [input.slice(0, 4)];
   for (let offset = 4; offset < input.length;) {

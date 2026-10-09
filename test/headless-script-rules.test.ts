@@ -9,12 +9,12 @@ import { farmTest } from "../scripts/wisp/farmTest";
 const runtime = installHeadless({ filePrefix: "script-rules", globalPrefixes: ["__scriptRules"] });
 afterAll(runtime.restore);
 
-/**
- * The rows Warcraft 3.0.1 wrote on both clients of one private online game
- * (wisp#50, 8 Oct 2026; ~/.local/state/wisp/script-rules50-20261008/out/).
- * The rules behind them: wisp:docs/warsmash-notes.md, "Script rules outside
- * the six families".
- */
+// Native expectations follow wisp:docs/warsmash-notes.md, Script rules outside the six families.
+
+
+
+
+
 export const EXPECTED = [
   "r2s=1.000,0.100,-1.500,123456.789,0.000",
   "r2s-ties=0.063,0.313,-0.063,0.188",

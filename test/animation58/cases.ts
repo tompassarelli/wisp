@@ -1,9 +1,9 @@
 import { f32 } from "../../src/sim/f32";
 import { BOARD, CAMERA, CLIP, DEATH_SECONDS, MARK, MARK_DY, ORIENTATION_MARK, READY_SECONDS, RULER, RULER_LENGTH, RULER_UNIT, SLOTS, START_SECONDS, slotNamed } from "./layout";
 
-/** Locust: no selection, no collision. */
+
 const LOCUST = 0x416c6f63;
-/** Below the board and outside the headless view. */
+
 const PRELOAD_Y = -1300;
 
 export const ANIMATION_NOOPS = {
@@ -15,7 +15,7 @@ export const ANIMATION_NOOPS = {
   PauseUnit: "the fixture's units mirror Smashcraft's paused bodies; headless runs no unit AI",
 };
 
-/** Straight down on the rulers, world X to the right and Y up, with the console hidden. */
+
 function view(this: void): void {
   const { x, y } = CAMERA;
   SetCameraBounds(x, y, x, y, x, y, x, y);
@@ -42,13 +42,13 @@ function colored(this: void, model: string, x: number, y: number, player: number
   return created;
 }
 
-/** A ruler effect, red, at its case's origin. */
+
 function rulerEffect(this: void, name: string): effect {
   const slot = slotNamed(name);
   return colored(RULER, slot.x, slot.y, 0);
 }
 
-/** A ruler unit, red, set up as Smashcraft's bodies are, with its blend time set before anything plays. */
+
 function rulerUnit(this: void, name: string, blendTime: number): unit {
   const slot = slotNamed(name);
   const created = CreateUnit(Player(0), RULER_UNIT, slot.x, slot.y, 0);
@@ -61,7 +61,7 @@ function rulerUnit(this: void, name: string, blendTime: number): unit {
   return created;
 }
 
-/** A clip set up as Smashcraft's fighter pool sets up each clip: frozen on Stand, collapsed and parked below the floor. */
+
 function poolClip(this: void, name: string): effect {
   const slot = slotNamed(name);
   const clip = colored(CLIP, slot.x, slot.y, 0);
@@ -73,7 +73,7 @@ function poolClip(this: void, name: string): effect {
   return clip;
 }
 
-/** The pool showing a clip at 0.4 s: placed, turned, scaled, then sought. */
+
 function showClip(this: void, clip: effect, name: string): void {
   const slot = slotNamed(name);
   BlzSetSpecialEffectPosition(clip, slot.x, slot.y, 0);
@@ -82,7 +82,7 @@ function showClip(this: void, clip: effect, name: string): void {
   BlzSetSpecialEffectTime(clip, f32(0.4));
 }
 
-/** Loads each ruler model before the cases start, drawing nothing. */
+
 function preload(this: void): void {
   for (const model of [RULER, CLIP]) BlzSetSpecialEffectScale(AddSpecialEffect(model, 0, PRELOAD_Y), 0);
   const body = CreateUnit(Player(0), RULER_UNIT, 0, PRELOAD_Y, 0);
@@ -91,18 +91,18 @@ function preload(this: void): void {
   SetUnitScale(body, 0, 0, 0);
 }
 
-/** Where every ruler unit stands, `NAME-at=X×128,Y×128`: whether a unit drawn away from its slot also reads there. */
+
 function unitPositions(this: void, units: readonly (readonly [string, unit])[]): string[] {
   return units.map(([name, body]) => `${name}-at=${Math.floor(GetUnitX(body) * 128)},${Math.floor(GetUnitY(body) * 128)}`);
 }
 
-/**
- * Sets up every case of wisp:docs/warsmash-notes.md's "Animation playback"
- * capture list and the effect lifetime and matrix scale cases of "Effects:
- * attachment, scale and lifetime" START_SECONDS after the map starts, freezes
- * each at its moment and, READY_SECONDS later, reports that the scene can be
- * captured. Times below are seconds after the start.
- */
+
+
+
+
+
+
+
 export function animationCases(this: void, done: (this: void, rows: readonly string[]) => void): void {
   FogEnable(false);
   FogMaskEnable(false);
@@ -121,7 +121,7 @@ export function animationCases(this: void, done: (this: void, rows: readonly str
 }
 
 function cases(this: void, done: (this: void, rows: readonly string[]) => void): void {
-  // 1. Selection by name on a model listing Stand Hit before Stand.
+
   const stand = rulerUnit("unit-stand", 0);
   SetUnitAnimation(stand, "stand");
   SetUnitTimeScale(stand, 0);
@@ -129,7 +129,7 @@ function cases(this: void, done: (this: void, rows: readonly string[]) => void):
   SetUnitAnimation(standHit, "stand hit");
   SetUnitTimeScale(standHit, 0);
 
-  // 2. Loop ends and holds: played for 4.5 s beside a five-second reference clock; and frozen at 0.5 s, then sought past the end.
+
   const loop = rulerEffect("loop-played");
   BlzSetSpecialEffectAnimation(loop, "walk");
   const reference = rulerEffect("loop-reference");
@@ -146,13 +146,13 @@ function cases(this: void, done: (this: void, rows: readonly string[]) => void):
     at(1, () => BlzSetSpecialEffectTime(sought, 1.5));
   }
 
-  // 3. An effect never told what to play: during Birth and after it.
+
   const birthDuring = rulerEffect("birth-during");
   at(0.25, () => BlzSetSpecialEffectTimeScale(birthDuring, 0));
   const birthAfter = rulerEffect("birth-after");
   at(1, () => BlzSetSpecialEffectTimeScale(birthAfter, 0));
 
-  // 4. Blends: 0.15 s and 0 caught 50 ms after a switch; a switch made at time scale 0, with and without a blend.
+
   const blended = rulerUnit("blend-150", f32(0.15));
   const unblended = rulerUnit("blend-0", 0);
   const switchFrozen = rulerUnit("blend-switch-frozen", f32(0.15));
@@ -170,13 +170,13 @@ function cases(this: void, done: (this: void, rows: readonly string[]) => void):
     SetUnitTimeScale(blended, 0);
     SetUnitTimeScale(unblended, 0);
   });
-  // A selection that set the speed back to 1 would have run these since 0.5 s.
+
   at(1, () => {
     SetUnitTimeScale(switchFrozen, 0);
     SetUnitTimeScale(frozenSelect, 0);
   });
 
-  // 5. Global sequences: frozen in the creating call, and kept across a selection and a seek; an index the model lacks.
+
   const globalFrozen = rulerEffect("global-frozen");
   BlzSetSpecialEffectAnimation(globalFrozen, "stand");
   BlzSetSpecialEffectTimeScale(globalFrozen, 0);
@@ -190,7 +190,7 @@ function cases(this: void, done: (this: void, rows: readonly string[]) => void):
   const outOfRange = rulerUnit("index-out-of-range", 0);
   SetUnitTimeScale(outOfRange, 0);
   SetUnitAnimationByIndex(outOfRange, 99);
-  // A selection and seek on a playing effect in the call that freezes it, and on one frozen earlier.
+
   const selectFreeze = rulerEffect("select-freeze-seek");
   at(1, () => {
     BlzSetSpecialEffectAnimation(selectFreeze, "walk");
@@ -204,7 +204,7 @@ function cases(this: void, done: (this: void, rows: readonly string[]) => void):
     BlzSetSpecialEffectTime(freezeFirst, 0.25);
   });
 
-  // 6. Blademaster frame 262's calls on a ruler clip: hidden, then shown at 0.4 s, with and without a second seek.
+
   const shown = poolClip("clip-shown");
   const reseek = poolClip("clip-second-seek");
   at(1, () => {
@@ -213,9 +213,9 @@ function cases(this: void, done: (this: void, rows: readonly string[]) => void):
   });
   at(f32(1.05), () => BlzSetSpecialEffectTime(reseek, f32(0.4)));
 
-  // wisp#59. Rulers playing Stand, 250 ms into a lap, destroyed at DEATH_SECONDS + 0, 1 and 2, beside one told to play
-  // Death at DEATH_SECONDS; and, at DEATH_SECONDS, one frozen since 0.5 s (Death's first frame, for good), a frozen clip
-  // without Death (gone at once) and one collapsed first, as Smashcraft's victory pose is (nothing shown).
+
+
+
   const deathReference = rulerEffect("death-reference");
   BlzSetSpecialEffectAnimation(deathReference, "stand");
   at(DEATH_SECONDS, () => BlzSetSpecialEffectAnimation(deathReference, "death"));
@@ -237,8 +237,8 @@ function cases(this: void, done: (this: void, rows: readonly string[]) => void):
     BlzSetSpecialEffectScale(teardown, 0);
     DestroyEffect(teardown);
   });
-  // Matrix scale on a ruler frozen at 0.1 s and sought to 125 ms, X doubled once, twice, and twice with a reset between:
-  // whether Smashcraft's `-dev backdrop on`, which scales existing scenery again, compounds.
+
+
   for (const [name, reset, calls] of [["matrix-scale-once", false, 1], ["matrix-scale-twice", false, 2], ["matrix-scale-reset", true, 2]] as const) {
     const scaled = rulerEffect(name);
     BlzSetSpecialEffectAnimation(scaled, "stand");

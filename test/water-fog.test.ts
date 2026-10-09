@@ -11,9 +11,9 @@ import { terrainRows } from "../scripts/wisp/terrainMesh";
 import { waterColor, waterMesh, waterTable, waterTexture } from "../scripts/wisp/water";
 import { decodePng } from "./animation58/read";
 
-// Authored files only (wisp:docs/clean-room.md): a one-cell W3E version 11, a
-// Water.slk with the install's column names, and solid-colour TGA textures.
-/** Two by two points at ground 0; `water` sets every corner's water flag and a stored level of 0x2000. */
+
+
+
 function terrainBytes(water: boolean): Uint8Array {
   const bytes = new Uint8Array(41 + 4 * 7), view = new DataView(bytes.buffer);
   bytes.set(new TextEncoder().encode("W3E!")); view.setInt32(4, 11, true); bytes[8] = 76;
@@ -26,7 +26,7 @@ function terrainBytes(water: boolean): Uint8Array {
   }
   return bytes;
 }
-/** Tileset L's water row: 0.25 cells (32 units) above the stored level, clear at the shore to opaque blue at 64 deep, two frames at 15 a second. */
+
 const WATER_SLK = new TextEncoder().encode([
   "ID;PWXL;N;E",
   ...["waterID", "height", "texFile", "numTex", "texRate", "cells", "Smin_A", "Smin_R", "Smin_G", "Smin_B", "Smax_A", "Smax_R", "Smax_G", "Smax_B", "Dmin_A", "Dmin_R", "Dmin_G", "Dmin_B", "Dmax_A", "Dmax_R", "Dmax_G", "Dmax_B"]
@@ -56,7 +56,7 @@ test("[wisp#79] terrain water takes the tileset's Water.slk colours by depth ove
   expect(waterColor(table, -1)[3]).toBe(0);
   expect(waterColor(table, 32)).toEqual([0, 0, 127.5, 127.5]);
   expect(waterColor(table, 64)).toEqual([0, 0, 255, 255]);
-  // 15 frames a second at 60 match frames a second: a new texture every 4 frames, wrapping after the last.
+
   expect([0, 3, 4, 7, 8].map((frame) => waterTexture(table, frame))).toEqual(["Water\\Frame00.blp", "Water\\Frame00.blp", "Water\\Frame01.blp", "Water\\Frame01.blp", "Water\\Frame00.blp"]);
   const mesh = waterMesh(decodeTerrain(terrainBytes(true)), table);
   expect(mesh.length).toBe(6 * 9);
@@ -78,11 +78,11 @@ farmTest("[wisp#79] water draws over its ground in its depth colour, animates by
       const images = await Effect.runPromise(renderScenes(project, scenes, out, graphics, ["water"]));
       expect(images.map((image) => image.notDrawn)).toEqual([[], [], [], []]);
       expect(images.map((image) => image.water)).toEqual([true, true, true, false]);
-      // 32 deep: half-way to opaque blue, white frame then black frame, over red ground.
+
       near(await centre(out, "p0-frame-0.png"), [128, 0, 64]);
       expect(await centre(out, "p1-frame-0.png")).toEqual(await centre(out, "p0-frame-0.png"));
       near(await centre(out, "p0-frame-4.png"), [128, 0, 0]);
-      // Water hides with the terrain.
+
       expect(await centre(out, "p0-frame-5.png")).toEqual([10, 15, 23]);
     }
   } finally { await rm(directory, { recursive: true, force: true }); }
@@ -108,8 +108,8 @@ PivotPoints 1 { { 0, 0, 0 }, }`);
 farmTest("[wisp#79] Definitive's height fog fades in below its top and over its depth range; Classic draws only the linear range", async () => {
   const white = tga(255, 255, 255);
   const square: DrawnPose = { ...freshAnimation(), handle: { kind: "effect", id: 1 }, model: "square.mdl", created: 0, x: 0, y: 0, z: 0, alpha: 255, scale: 1, timeScale: 1, queuedAnimations: [], yaw: 0, pitch: 0, roll: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1], flat: false };
-  // Eye 100 above the square: half-way through the 0-200 depth range, half-way down from the top at 100 to the bottom at -100: a quarter fog of blue.
-  // The linear range starts beyond the square, so without the falloff it is unfogged.
+
+
   const fog = { style: 3, zStart: 0, zEnd: 200, density: 0.25, color: [0, 0, 1] as [number, number, number], heightStart: -100, heightEnd: 100, linearStart: 1000, linearEnd: 2000, maxLinearDensity: 1 };
   const base: RenderScene = { frame: 0, client: 0, effects: [square], units: [], ui: [], camera: { x: 0, y: 0, fields: { CAMERA_FIELD_ROTATION: 90, CAMERA_FIELD_ANGLE_OF_ATTACK: 270, CAMERA_FIELD_TARGET_DISTANCE: 100 } },
     environment: { ...environment, terrainVisible: false, fog } };

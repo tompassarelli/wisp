@@ -1,9 +1,9 @@
-// The frame meter of the fixture map (entry.ts) in two simulated clients in
-// 32-bit Lua: one player shows the overlay, the other doesn't see it; a hot
-// reload during heavier frames makes every client write its report. Prints
-// what the host reads: the overlay's text, each client's report, then the
-// journey measured by runLuaPerf.
-// Usage: lua meter.lua MAP_LUA WARCRAFT_D_TS
+
+
+
+
+
+
 import { luaLockstep, readFile } from "../../src/headless/lua";
 import { runLuaPerf } from "../../src/headless/luaPerf";
 import { frameCostFile } from "../../src/runtime/frameCost";

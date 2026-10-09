@@ -1,13 +1,13 @@
-// A checksum confirms every client read the same hot-reload bundle before
-// anything runs. Shared by the host tool, which reads file bytes, and the map,
-// which reads a Lua string.
+
+
+
 import { floorMod } from "../sim/intMath";
 
-/**
- * Two polynomial lanes over `byteAt(0)` to `byteAt(length - 1)`. Each modulus
- * is the largest prime keeping lane * 263 + 256 + 1 below 2^31, so 32-bit Lua
- * integers never wrap.
- */
+// Each modulus keeps lane * 263 + 256 + 1 below 2^31 so Lua32 integers never wrap.
+
+
+
+
 export function checksum(length: number, byteAt: (index: number) => number): string {
   let first = 0;
   let second = 0;

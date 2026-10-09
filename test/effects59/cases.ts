@@ -1,8 +1,8 @@
 import { f32 } from "../../src/sim/f32";
 
-/** A stock model every Warcraft install has; headless never loads it. */
+
 const MODEL = "Abilities\\Spells\\Other\\Silence\\SilenceTarget.mdx";
-/** A stock model with Stand and a two-second Death sequence. */
+
 export const DYING = "Abilities\\Spells\\NightElf\\FaerieFire\\FaerieFireTarget.mdx";
 
 export const EFFECT_NOOPS = {};
@@ -15,9 +15,9 @@ function at(this: void, model: effect): number[] {
   return [BlzGetLocalSpecialEffectX(model), BlzGetLocalSpecialEffectY(model), BlzGetLocalSpecialEffectZ(model)];
 }
 
-/**
- * Each recorded integer is the observed native value times 128. The held case reads 0.25 seconds after its writes.
- */
+// Native observations are scaled by 128; held rows read 0.25 seconds after writes.
+
+
 export function effectCases(this: void, done: (this: void, rows: readonly string[]) => void): void {
   const rows: string[] = [];
   let e = AddSpecialEffect(MODEL, 100.25, -50.5);
@@ -36,7 +36,7 @@ export function effectCases(this: void, done: (this: void, rows: readonly string
   rows.push(row("axis-setters-independent", at(e)));
   DestroyEffect(e);
 
-  // Smashcraft's hideEffect: collapse, then park far below the floor.
+
   e = AddSpecialEffect(MODEL, 0, 0);
   BlzSetSpecialEffectScale(e, 0);
   BlzSetSpecialEffectPosition(e, 64, 32, -4196);
@@ -53,7 +53,7 @@ export function effectCases(this: void, done: (this: void, rows: readonly string
   rows.push(row("scale-orientation-time-keep-position", at(e)));
   DestroyEffect(e);
 
-  // Destroyed where the capture can watch: frozen at (-200, 0), playing at (200, 0).
+
   e = AddSpecialEffect(DYING, -200, 0);
   BlzSetSpecialEffectTimeScale(e, 0);
   DestroyEffect(e);

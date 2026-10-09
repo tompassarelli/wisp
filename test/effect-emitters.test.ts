@@ -30,7 +30,7 @@ const emitter = (name: string, id: number, rate: string, squirt: boolean) => `Pa
   LifeSpan 1,
 }`;
 
-/** Frost Nova's emitters in miniature: a 50-particle squirt keyed at frame 33 beside 50/s and 60/s streams. */
+
 const nova = parseMDL(`Version { FormatVersion 800, }
 Model "Nova" { NumGeosets 0, BlendTime 150, }
 Sequences 1 { Anim "Birth" { Interval { 0, 1500 }, NonLooping, } }
@@ -41,7 +41,7 @@ ${emitter("Sixty", 2, "static EmissionRate 60", false)}
 PivotPoints 3 { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 }, }`);
 const sequences = nova.Sequences.map((sequence) => ({ name: sequence.Name, start: sequence.Interval[0] ?? 0, end: sequence.Interval[1] ?? 0, looping: !sequence.NonLooping, rarity: sequence.Rarity }));
 
-/** Particles per emitter as drawEffect leaves them: emitters stepped to one frame behind, then the pose refreshed at `ms`. */
+
 function particlesAt(ms: number): Record<string, number> {
   const renderer = new ModelRenderer(nova);
   renderer.setSequence(0);
@@ -54,7 +54,7 @@ function particlesAt(ms: number): Record<string, number> {
 }
 
 test("[native #40] emitters run one frame behind: two frames in, no squirt ring and no 50/s particle, one 60/s particle", () => {
-  // Smashcraft 82-effects case 5, frame 182: native Frost Nova shows its spikes but not the squirt ring keyed at 33 ms.
+
   expect(particlesAt(1000 / 30)).toEqual({ Ring: 0, Fifty: 0, Sixty: 1 });
   expect(particlesAt(60)).toEqual({ Ring: 50, Fifty: 2, Sixty: 2 });
 });

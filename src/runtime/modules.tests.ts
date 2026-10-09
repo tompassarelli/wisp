@@ -9,7 +9,7 @@ const set = (codes: readonly (readonly [string, string])[]): ModuleSet => ({
 
 const names = (pairs: readonly (readonly [string, string])[]) => pairs.map(([name]) => name).join(",");
 
-/** The payload of a version's files whose path is `path`. */
+
 function published(files: readonly (readonly [string, string])[], path: string): string | undefined {
   for (const [name, text] of files) if (name === path) return text;
   return undefined;
@@ -72,10 +72,10 @@ test("[invariant] modules: once a state is installed, a version's delta carries 
   assertEquals(delta?.texts.main, undefined);
   const full = parsePayload(published(second.payloads, payloadFile(second.manifest.state, 0, "fx")) ?? "");
   assertEquals(full?.texts.main, moduleChunk("return 1"));
-  // A state's hash does not depend on the base its delta came from.
+
   assertEquals(new ModulePublisher("fx").files(7, changed).manifest.state, second.manifest.state);
 
-  // A module renamed and another removed: the delta's index names only what the new state holds.
+
   const third = publisher.files(3, set([["main", "return 1"], ["renamed", "return 20"]]));
   const renamed = parsePayload(published(third.payloads, deltaFile(third.manifest.state, first.manifest.state, 0, "fx")) ?? "");
   assertEquals(names(renamed?.hashes ?? []), "main,renamed");

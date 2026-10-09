@@ -4,8 +4,8 @@ import { exactDifference, exactProduct, exactQuotient, exactSum } from "./f32";
 
 const same = (actual: number, expected: number) => expect(Object.is(actual, expected) || (actual !== actual && expected !== expected)).toBe(true);
 
-// Independent oracle: for binary32 operands, binary64 +, -, * and / followed by
-// one rounding to binary32 is correctly rounded (53 >= 2 * 24 + 2).
+// Binary64 then binary32 rounding is an independent oracle for one operation: 53 >= 2 * 24 + 2.
+
 describe("operations match the binary64 oracle on random binary32 operands", () => {
   let state = 0x2545f491;
   const random = () => {
@@ -28,9 +28,9 @@ describe("operations match the binary64 oracle on random binary32 operands", () 
     }
   });
 
-  // Exact oracle: these operands are integers times 2^-100, so a * b + c is an
-  // integer times 2^-200; the nearest binary32 value is one of the binary64
-  // estimate's neighbours.
+  // Integer operands scaled by 2^-100 make a * b + c an exact integer times 2^-200.
+
+
   const view = new DataView(new ArrayBuffer(4));
   const step = (value: number, by: number) => {
     view.setFloat32(0, value);
@@ -66,8 +66,8 @@ describe("operations match the binary64 oracle on random binary32 operands", () 
   });
 });
 
-// Host only: the midpoint between the largest binary32 value and 2^128 is a
-// binary64 input that Warcraft numbers can't hold.
+// Warcraft cannot hold the binary64 midpoint between the largest binary32 value and 2^128.
+
 test("[reference] roundToFloat32: the overflow midpoint rounds to infinity", () => {
   same(roundToFloat32(16777215.5 * 2 ** 104), Infinity);
   same(roundToFloat32(-16777215.5 * 2 ** 104), -Infinity);
@@ -93,8 +93,8 @@ test("[reference] f32 repeated operands retain every result bit across operation
         same(exactSum(a, b), Math.fround(a + b));
         same(exactDifference(a, b), Math.fround(a - b));
         same(exactProduct(a, b), Math.fround(a * b));
-        // The original helper returns positive zero for these deep negative
-        // underflows. Operand reuse must preserve those existing result bits.
+
+
         const originalUnderflow = a === Math.fround(2 ** -149) && (b === Math.fround(-32.2) || b === -32768);
         same(exactQuotient(a, b), originalUnderflow ? 0 : Math.fround(a / b));
       }

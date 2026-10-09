@@ -1,11 +1,11 @@
-// The frames of one simulated client (wisp:docs/headless.md): what each shows,
-// where it is, and which one takes a click or the keyboard. Positions are
-// Warcraft's UI coordinates, set with BlzFrameSetAbsPoint and BlzFrameSetSize.
-// Runtime-neutral, like client.ts.
+
+
+
+
 import type { Handle } from "./client";
 
 export interface Frame extends Handle {
-  /** BlzCreateFrameByType's type, such as "EDITBOX"; a template's name for BlzCreateFrame; "" for frames the game made. */
+
   readonly type: string;
   readonly name: string;
   readonly context: number;
@@ -19,26 +19,26 @@ export interface Frame extends Handle {
   enabled: boolean;
   level: number;
   textLimit: number;
-  /** BlzFrameSetFont's file, height and flags; "" until set. */
+
   font: { readonly file: string; readonly height: number; readonly flags: number };
-  /** BlzFrameSetTextAlignment's vertical and horizontal textaligntype values. */
+
   alignment: { readonly vertical: unknown; readonly horizontal: unknown } | undefined;
-  /** BlzFrameSetScale's factor: it multiplies the frame's text height. */
+
   scale: number;
   width: number;
   height: number;
-  /** Absolute points, by framepointtype value. */
+
   readonly points: Map<unknown, { readonly x: number; readonly y: number }>;
-  /** Points relative to another frame, as a generated FDF's SetPoint lines place them. */
+
   readonly anchors: Anchor[];
   destroyed: boolean;
 }
 
-/**
- * The framepointtype constants in ConvertFramePointType order, each with its
- * place on the frame: its share of the width from the left and of the height
- * from the top.
- */
+
+
+
+
+
 export const FRAME_POINTS: readonly (readonly [name: string, fromLeft: number, fromTop: number])[] = [
   ["FRAMEPOINT_TOPLEFT", 0, 0],
   ["FRAMEPOINT_TOP", 0.5, 0],
@@ -51,10 +51,10 @@ export const FRAME_POINTS: readonly (readonly [name: string, fromLeft: number, f
   ["FRAMEPOINT_BOTTOMRIGHT", 1, 1],
 ];
 
-/**
- * The part of a frame definition (wisp:scripts/wisp/frames.ts, wisp:docs/ui.md)
- * a headless client needs to make its tree; every FrameDefinition is one.
- */
+
+
+
+
 export interface FrameTemplateNode {
   readonly key: string;
   readonly type: string;
@@ -62,9 +62,9 @@ export interface FrameTemplateNode {
   readonly height?: number;
   readonly text?: string;
   readonly texture?: string;
-  /** TEXT: FDF FrameFont, its height in UI units; flags 1 is OUTLINE. */
+
   readonly font?: TemplateFont;
-  /** TEXT: FontJustificationH and V; a generated FDF writes CENTER and MIDDLE without one. */
+
   readonly justify?: TemplateJustify;
   readonly points?: readonly { readonly point: string; readonly relative?: string; readonly relativePoint?: string; readonly x: number; readonly y: number }[];
   readonly children?: readonly FrameTemplateNode[];
@@ -74,7 +74,7 @@ export interface FrameTemplate {
   readonly name: string;
   readonly type?: string;
   readonly texture?: string;
-  /** A TEXT template's FDF Text, FrameFont and FontJustification, as on a node. */
+
   readonly text?: string;
   readonly font?: TemplateFont;
   readonly justify?: TemplateJustify;
@@ -88,19 +88,19 @@ export interface TemplateJustify { readonly horizontal: "LEFT" | "CENTER" | "RIG
 export interface FrameFont { readonly file: string; readonly height: number; readonly flags: number }
 export interface TextAlignment { readonly vertical: "top" | "middle" | "bottom"; readonly horizontal: "left" | "center" | "right" }
 
-/** A textaligntype as the map passes it, by name or ConvertTextAlignType value (TOP 0 to RIGHT 5). */
+
 function textJustify(value: unknown): string {
   if (typeof value === "number") return ["top", "middle", "bottom", "left", "center", "right"][value] ?? "";
   return typeof value === "string" ? (value.startsWith("TEXT_JUSTIFY_") ? value.slice("TEXT_JUSTIFY_".length) : value).toLowerCase() : "";
 }
-/** BlzFrameSetTextAlignment's values as the renderer draws them; undefined until set. */
+
 export function textAlignment(alignment: Frame["alignment"]): TextAlignment | undefined {
   if (alignment === undefined) return undefined;
   const vertical = textJustify(alignment.vertical), horizontal = textJustify(alignment.horizontal);
   return { vertical: vertical === "middle" || vertical === "bottom" ? vertical : "top", horizontal: horizontal === "center" || horizontal === "right" ? horizontal : "left" };
 }
 
-/** A TEXT frame's declared font and justification, as its FDF loads in Warcraft. */
+
 function styleText(frame: Frame, declared: { readonly font?: TemplateFont; readonly justify?: TemplateJustify }): void {
   if (declared.font === undefined) return;
   frame.font = { file: declared.font.file, height: declared.font.size, flags: declared.font.flags ?? 0 };
@@ -108,7 +108,7 @@ function styleText(frame: Frame, declared: { readonly font?: TemplateFont; reado
   frame.alignment = { vertical: justify.vertical, horizontal: justify.horizontal };
 }
 
-/** A SetPoint: this frame's point sits at the relative frame's point, offset. */
+
 export interface Anchor {
   readonly point: string;
   readonly relative: Frame;
@@ -117,13 +117,13 @@ export interface Anchor {
   readonly y: number;
 }
 
-/** Each point's place on a frame by its FDF name, such as TOPLEFT. */
+
 const NAMED_POINTS = new Map(FRAME_POINTS.map(([name, fromLeft, fromTop]) => [name.slice("FRAMEPOINT_".length), [fromLeft, fromTop] as const]));
 
-/** BlzFrameGetTextSizeLimit of an edit box the map made and gave no limit (3.0.1, wisp#50); a negative limit cuts no text. */
+// New edit boxes have the engine text limit; negative limits truncate nothing (wisp:docs/warsmash-notes.md).
 const DEFAULT_TEXT_LIMIT = -256;
 
-/** A frame's rectangle: left, top, right, bottom. */
+
 export type Rectangle = readonly [number, number, number, number];
 
 export interface FrameSnapshot {
@@ -137,7 +137,7 @@ export interface FrameSnapshot {
   readonly color: number;
   readonly textColor: number;
   readonly alpha: number;
-  /** Includes the visibility of every ancestor. */
+
   readonly visible: boolean;
   readonly level: number;
   readonly font: FrameFont;
@@ -150,10 +150,10 @@ export class Frames {
   private focused: Frame | undefined;
   private readonly templates = new Map<string, FrameTemplate>();
 
-  /**
-   * `points`: each framepointtype constant's value as the map's code sees it,
-   * with its place on the frame.
-   */
+
+
+
+
   constructor(private readonly points: ReadonlyMap<unknown, readonly [number, number]>) {}
 
   add(handle: Handle, type: string, name: string, parent: Frame | undefined, context: number): Frame {
@@ -167,12 +167,12 @@ export class Frames {
     return frame;
   }
 
-  /** Frame trees BlzCreateFrame makes by name, as the FDF wisp:scripts/wisp/frames.ts generates for them loads in Warcraft. */
+
   define(definitions: readonly FrameTemplate[]): void {
     for (const definition of definitions) this.templates.set(definition.name, definition);
   }
 
-  /** BlzCreateFrame: a defined tree's root with every descendant, sized, placed and named as its FDF does; otherwise one frame. */
+
   create(handle: (this: void) => Handle, name: string, parent: Frame | undefined, context: number): Frame {
     const definition = this.templates.get(name);
     const root = this.add(handle(), definition?.type ?? name, name, parent, context);
@@ -208,7 +208,7 @@ export class Frames {
     return root;
   }
 
-  /** A frame the map made by name, if one is alive. */
+
   named(name: string, context: number): Frame | undefined {
     for (const frame of this.all) if (!frame.destroyed && frame.name === name && frame.context === context) return frame;
     return undefined;
@@ -219,14 +219,14 @@ export class Frames {
     return undefined;
   }
 
-  /** The live frames the map made under a parent, in creation order. Warcraft's own children of its origin frames are not modeled. */
+
   children(parent: Frame): Frame[] {
     const found: Frame[] = [];
     for (const frame of this.all) if (frame.parent === parent && !frame.destroyed) found.push(frame);
     return found;
   }
 
-  /** BlzDestroyFrame: the frame and its descendants. */
+
   destroy(frame: Frame): void {
     frame.destroyed = true;
     if (this.focused === frame) this.focused = undefined;
@@ -238,20 +238,20 @@ export class Frames {
     else if (this.focused === frame) this.focused = undefined;
   }
 
-  /** Whether a player sees the frame: it and every parent are visible. */
+
   shown(frame: Frame): boolean {
     for (let at: Frame | undefined = frame; at !== undefined; at = at.parent) if (at.destroyed || !at.visible) return false;
     return true;
   }
 
-  /** The text of every frame a player sees, in creation order. */
+
   shownText(): string[] {
     const texts: string[] = [];
     for (const frame of this.all) if (frame.text !== "" && this.shown(frame)) texts.push(frame.text);
     return texts;
   }
 
-  /** Visual properties copied in creation order, including passive frames. */
+
   snapshot(options: { readonly visibleOnly?: boolean } = {}): FrameSnapshot[] {
     const snapshots: FrameSnapshot[] = [];
     for (const frame of this.all) {
@@ -266,7 +266,7 @@ export class Frames {
     return snapshots;
   }
 
-  /** Where the frame is, from an absolute point and its size, or two opposite corners; undefined without one. */
+
   private rectangle(frame: Frame, visited: Set<Frame> = new Set()): Rectangle | undefined {
     if (visited.has(frame)) return undefined;
     const ancestors = new Set(visited);
@@ -295,7 +295,7 @@ export class Frames {
         corners[2] = left + frame.width;
         corners[3] = top - frame.height;
       } else {
-        // A second point stretches the frame to it.
+
         if (share[0] === 0) corners[0] = at.x;
         if (share[0] === 1) corners[2] = at.x;
         if (share[1] === 0) corners[1] = at.y;
@@ -306,11 +306,11 @@ export class Frames {
     return found === 0 ? undefined : corners;
   }
 
-  /**
-   * The frame a click at (x, y) reaches: among shown, enabled frames that
-   * `takes`, the highest level whose rectangle holds the point, the latest
-   * created on a tie.
-   */
+
+
+
+
+
   at(x: number, y: number, takes: (frame: Frame) => boolean): Frame | undefined {
     let found: Frame | undefined;
     for (const frame of this.all) {
@@ -324,11 +324,11 @@ export class Frames {
     return found;
   }
 
-  /**
-   * Text the keyboard types reaches the focused edit box while a player sees
-   * it, up to its character limit, as Warcraft drops the rest. False when no
-   * edit box has the keyboard.
-   */
+
+
+
+
+
   type(text: string): boolean {
     const box = this.focused;
     if (box === undefined || box.type !== "EDITBOX" || !box.enabled || !this.shown(box)) return false;

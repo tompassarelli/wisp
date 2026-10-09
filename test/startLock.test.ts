@@ -1,5 +1,5 @@
-// The machine's client start-up lock (wisp:scripts/wisp/startLock.ts) with
-// real flock(1) on a temporary lock file; no Warcraft.
+
+
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";

@@ -1,4 +1,4 @@
-// The saved login a sign-out removes from a prefix's user.reg (values made up, in Wine's format).
+
 import { expect, test } from "bun:test";
 import { hasSavedLogin, withoutSavedLogin } from "../scripts/warcraft/battleNet";
 

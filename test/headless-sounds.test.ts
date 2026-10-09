@@ -1,5 +1,5 @@
-// wisp#60: the sound rules of wisp:docs/warsmash-notes.md#sound-start-stop-and-channel-limits,
-// one row each, in Bun and in the same fixture compiled to 32-bit Lua.
+
+
 import { afterAll, expect, test } from "bun:test";
 import { join } from "node:path";
 import { mapCompiler, report } from "../scripts/compiler";

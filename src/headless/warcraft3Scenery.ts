@@ -47,22 +47,22 @@ export interface SceneryContext {
 }
 interface Region { readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number }
 
-/**
- * The sky and light a renderer draws the scene in: the last SetSkyModel,
- * BlzShowSkyBox, BlzShowTerrain, SetDayNightModels and SetTimeOfDay. An
- * empty model path is the map tileset's own.
- */
+
+
+
+
+
 export interface Environment {
   sky: string;
   skyVisible: boolean;
   terrainVisible: boolean;
-  /** The day/night models lighting terrain and units. */
+
   dayNight: { terrain: string; unit: string };
-  /** Hours, 0 to 24; the headless clock does not advance it. */
+
   timeOfDay: number;
 }
 
-/** Map data supplies facts which Warcraft would read from its assets. */
+
 export class Scenery {
   readonly doodads: DoodadState[];
   readonly destructables = new Map<Handle, DestructableState>();

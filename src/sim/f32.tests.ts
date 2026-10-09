@@ -1,16 +1,16 @@
-// f32 arithmetic as Lua runs it: the compiler sends f32(a + b), f32(a - b),
-// f32(a * b) and f32(a / b) through f32's exact path (wisp:src/sim/f32.ts),
-// and prints literals as exact hexadecimal floats, which must give the host's
-// Math.fround result whatever Warcraft's raw operators and numerals do.
+
+
+
+
 import { assertEquals, test } from "../runtime/testing";
 import { f32 } from "./f32";
 
-// Same value, including the sign of zero.
+
 const same = (actual: number, expected: number) =>
   assertEquals(actual === expected && 1 / actual === 1 / expected, true, `${actual} vs ${expected}`);
 
 test("[reference] f32 arithmetic rounds the exact result to nearest", () => {
-  // Smashcraft 0.0.48's Rifleman aerial jump speed: Warcraft's raw product was 23.12399673461914, an ulp toward zero.
+  // Warcraft's raw product can land an ulp toward zero (wisp:docs/headless.md#raw-float-rounding).
   const speed = 24.599998474121094;
   const factor = 0.9399999976158142;
   same(f32(speed * factor), 23.123998641967773);
@@ -24,8 +24,8 @@ test("[reference] f32 arithmetic rounds the exact result to nearest", () => {
   same(f32((16777215 + 2)), 16777216);
   same(f32(-1 - 16777216), -16777216);
   same(f32(1.5 * 4096.5), 6144.75);
-  // Repeated operations share operands, while these offsets collide in the
-  // helper's lookup. Only exact operands and the operation may reuse a result.
+
+
   for (let i = 0; i < 3; i++) {
     same(f32(tenth + fifth), 0.30000001192092896);
     same(f32(32.099998474121094 + fifth), 32.29999923706055);
@@ -47,8 +47,8 @@ test("[reference] f32 arithmetic keeps zero signs and small integers", () => {
   same(f32(40 - 2), 38);
 });
 
-// IEEE round to nearest, ties to even (the host's binary64 sum rounded to
-// binary32 is exact for one operation), at each rounding branch of f32's sums.
+// One binary64 operation then binary32 rounding is a nearest-even oracle.
+
 const SUMS: readonly (readonly [name: string, a: number, b: number, operation: "+" | "-", expected: number])[] = [
   ["a tie keeps the even unit", 8192.0, 0.00048828125, "+", 8192.0],
   ["a tie rounds an odd unit up", 8192.0009765625, 0.00048828125, "+", 8192.001953125],
@@ -89,7 +89,7 @@ test("[reference] f32 differences within a factor of two and products with ±1 a
 });
 
 test("[reference] f32 quotients round the exact quotient to nearest", () => {
-  // Smashcraft's camera zoom on 7 October 2026: Warcraft's raw quotient was 765.6729125976562, an ulp above the nearest.
+  // Warcraft's raw quotient can land an ulp above nearest (wisp:docs/headless.md#raw-float-rounding).
   const height = 379.64483642578125;
   const span = 0.4958316385746002;
   same(f32(height / span), 765.6728515625);

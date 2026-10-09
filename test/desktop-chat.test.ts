@@ -6,7 +6,7 @@ import { afterAll, expect, test } from "bun:test";
 import { type Client, batch, keys, typeText } from "../scripts/warcraft/desktop";
 import { type ClientState, type ClientView, ClientWatch } from "../scripts/wisp/watch";
 
-// xdotool and wlrctl stand-ins that record what they were asked to send.
+
 const folder = mkdtempSync(join(tmpdir(), "wisp-desktop-chat-"));
 const sent = join(folder, "sent");
 const tool = join(folder, "tool");
@@ -42,7 +42,7 @@ test("[repro 533f017] Return and typed text outside a match are refused before a
     ["a lobby", watched({ kind: "lobby", host: true })],
     ["loading", watched({ kind: "loading" })],
     ["the score screen", watched({ kind: "results" })],
-    // A receipt without the page can be an earlier match's.
+
     ["a match without its menu page", watched({ kind: "in match" }, false)],
   ];
   for (const [where, watch] of outside) {

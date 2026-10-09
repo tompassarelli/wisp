@@ -1,7 +1,7 @@
 export const UNIT_TYPE = 0x68666f6f;
 /** Crow Form, added and removed so a ground unit's flying height can change. */
 const CROW_FORM = 0x416d7266;
-/** Locust: no selection, no collision. */
+
 const LOCUST = 0x416c6f63;
 
 export const UNIT_MOVEMENT_NOOPS = {
@@ -9,7 +9,7 @@ export const UNIT_MOVEMENT_NOOPS = {
   PauseUnit: "the fixture's bodies mirror Smashcraft's paused bodies; headless runs no unit AI",
 };
 
-/** A ground footman set up as Smashcraft's fighter bodies are, with or without the Crow Form step. */
+
 function body(crowForm: boolean): unit {
   const created = CreateUnit(Player(2), UNIT_TYPE, 0, 0, 180);
   SetUnitPathing(created, false);

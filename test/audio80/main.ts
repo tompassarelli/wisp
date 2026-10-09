@@ -1,6 +1,6 @@
 export function install(this: void): void {}
 
-/** The map calls used by wisp#80's acceptance check, in Bun and Lua32. */
+
 export function start(this: void): void {
   const cue = CreateSound("Imported\\Hit.ogg", true, false, false, 0, 0, "");
   SetSoundDuration(cue, 50);

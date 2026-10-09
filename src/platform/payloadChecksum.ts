@@ -1,12 +1,12 @@
-// The payload checksum of a Lua string, as checksum() in
-// wisp:src/runtime/payload.ts computes it over the same bytes. Reading
-// eight bytes per string.byte call halves its cost in Warcraft's Lua, where a
-// bundle of about a megabyte is checked before every reload.
+
+
+
+
 import { floorMod } from "../sim/intMath";
 
 const FIRST = 8165329;
 const SECOND = 8165323;
-// Lua's string.byte, typed for the two ways this module calls it.
+
 declare namespace string {
   function byte(text: string, position: number): number;
   function byte(text: string, first: number, last: number): LuaMultiReturn<[number, number, number, number, number, number, number, number]>;

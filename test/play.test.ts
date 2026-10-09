@@ -1,8 +1,8 @@
-// `play` against a simulated desktop: Steam, the Battle.net launcher and its
-// log, the process table, niri's windows and Warcraft's menus are fakes with
-// the recorded shapes (the 6 Oct primary-display session: a 2880x1920 output
-// at scale 2, Steam shortcut 3775098022, Battle.net 2.53 log lines). Each step
-// has its success and its plain failure message.
+
+
+
+
+
 import { Cause, Clock, Effect, Exit, Layer, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { expect, test } from "bun:test";
@@ -40,7 +40,7 @@ const DOCUMENTS = `${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III`;
 const PREFERENCES = `${DOCUMENTS}/War3Preferences.txt`;
 const BACKUP = `${DOCUMENTS}/War3Preferences-before-play.txt`;
 const WAR3LOG = `${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III/Logs/War3Log.txt`;
-/** Battle.net's settings, in its own layout: four-space indents, CRLF lines, string values. */
+
 const SETTINGS = JSON.stringify({ Client: { AutoLogin: "true" }, Games: { w3: { LastPlayed: "1791240000", ServerUid: "w3" } } }, null, 4).replaceAll("\n", "\r\n");
 const LOAD_MAP = `-loadfile "C:\\users\\steamuser\\Documents\\Warcraft III\\Maps\\00-Smashcraft\\Smashcraft 0.0.47.w3x"`;
 const OUTPUT = { name: "eDP-1", width: 1440, height: 960 };
@@ -64,7 +64,7 @@ const gameProcess = (pid: number): ProcessInfo =>
   ({ pid, name: "Warcraft III.ex", args: ["C:\\Program Files (x86)\\Warcraft III\\_retail_\\x86_64\\Warcraft III.exe -launch -uid w3"], prefix: PREFIX, display: ":0" });
 const reaper = (pid: number): ProcessInfo => ({ pid, name: "reaper", args: ["/steam/reaper", "SteamLaunch", "AppId=3775098022", "--", "/steam/_v2-entry-point"] });
 
-/** Words of one screen line, centred around `x`. */
+
 function words(id: string, x: number, y: number, text: string): Word[] {
   const parts = text.split(" ");
   return parts.map((part, index) => ({ text: part, x: x + (index - (parts.length - 1) / 2) * 140, y, line: id }));
@@ -72,51 +72,51 @@ function words(id: string, x: number, y: number, text: string): Word[] {
 
 interface Scenario {
   readonly execRequestLog?: boolean;
-  /** War3Preferences.txt as the desktop finds it, and a backup an earlier play left. */
+
   readonly preferences?: string;
   readonly backup?: string;
-  /** The owner's display settings the declaration names. */
+
   readonly displaySettings?: Readonly<Record<string, string>>;
-  /** Recommended values the declaration names, written only where the file has none. */
+
   readonly recommendedSettings?: Readonly<Record<string, string>>;
   readonly runtimes?: "none" | "launcher" | "two" | "other display" | "lingering" | "lingering exits";
   readonly signsIn?: boolean;
   readonly steamStarts?: boolean;
-  /** What each launch request logs. */
+
   readonly launches?: readonly ("running" | "failed" | "ignored")[];
-  /** False: the game's menu page doesn't report. */
+
   readonly page?: boolean;
   readonly mapInstalled?: boolean;
-  /** The installed map is an older build than the declared one. */
+
   readonly mapStale?: boolean;
-  /** The copy lands damaged. */
+
   readonly copyDamaged?: boolean;
-  /** Whether the declaration names the map's build, and whether that file is there. */
+
   readonly mapSource?: "present" | "missing";
   readonly helper?: "ready" | "exits" | "earlier" | "this game's" | "service" | "service fails";
   readonly fullscreens?: boolean;
   readonly gameRunning?: boolean;
-  /** The running game is in a match whose menus answer keys: Escape and F10 open Game Menu, e End Game, q the score screen, and only Escape leaves it. */
+
   readonly warmMatch?: boolean;
   readonly matchFails?: boolean;
-  /** False: another window takes focus back once the helper runs. */
+
   readonly gameKeepsFocus?: boolean;
-  /** Warcraft III's launch options in Battle.net's settings before the run. */
+
   readonly launchOptions?: string;
-  /** Seconds the game window takes to follow a fullscreen request. */
+
   readonly gameFullscreenAfter?: number;
-  /** False: Warcraft III's log never shows its login doors closing. */
+
   readonly gameSignsIn?: boolean;
   readonly socketSignedIn?: boolean;
-  /** "none": no ladder scan follows the sign-in. */
+
   readonly ladderScan?: "scans" | "none";
-  /** An already running game's log after its scan: nothing more (idle in its menus), or an earlier game. */
+
   readonly runningLog?: "idle" | "played" | "played unscanned";
-  /** The hosted map's imported models fail to load, as in the 6 Oct -loadfile runs. */
+
   readonly importFailures?: "loading" | "match";
 }
 
-/** War3Log's lines as Warcraft III writes them, CRLF ended, timed from 20:34:53 plus the simulated clock. */
+
 const war3Line = (ms: number, text: string) => {
   const at = new Date(Date.UTC(2026, 9, 6, 20, 34, 53) + ms);
   const two = (value: number) => String(value).padStart(2, "0");
@@ -124,22 +124,22 @@ const war3Line = (ms: number, text: string) => {
 };
 const ladder = (season: number, maps: readonly string[]) =>
   maps.flatMap((map) => ["map", "mod"].map((kind) => `Opening ${kind} - C:/users/steamuser/Documents/Warcraft III/Maps/Download/Season${season}/${map}.w3x`));
-/** The 6 Oct post-login ladder scan's batches (abridged). */
+
 const SEASON1 = ladder(1, ["(2)NorthernIsles_S2", "(4)LostTemple_S2", "(2)ConcealedHill_S2"]);
 const SEASON9 = ladder(9, ["(2)EchoIsles_S2_v2.2", "(4)TwistedMeadows_S2_v1.1", "(2)Hammerfall_S3"]);
 
 interface Button {
   readonly phrase: string;
-  /** Text the reader separates as white; all else is light. */
+
   readonly white?: boolean;
   readonly x: number;
   readonly y: number;
-  /** The words the reader makes of it, when recorded; otherwise the phrase's words around x. */
+
   readonly read?: readonly Word[];
   readonly press: () => void;
 }
 
-/** A desktop and machine that behave like the recorded ones. */
+
 function world(scenario: Scenario = {}) {
   let processes: ProcessInfo[] = [];
   const logs = new Map<string, string>();
@@ -155,13 +155,13 @@ function world(scenario: Scenario = {}) {
   const prefFiles = new Map<string, string>([...(scenario.preferences === undefined ? [] : [[PREFERENCES, scenario.preferences] as [string, string]]), ...(scenario.backup === undefined ? [] : [[BACKUP, scenario.backup] as [string, string]])]);
   let mapDigest = scenario.mapStale === true ? "old build" : "this build";
   let config = withLaunchOptions(SETTINGS, scenario.launchOptions);
-  /** What Battle.net read from its settings when it started. */
+
   let launcherOptions = launchOptions(config);
   let helperLog = "";
   let helperStarted = false;
   let nextPid = 3000;
   const launchesLeft = [...(scenario.launches ?? ["running"])];
-  /** Warcraft III's log: an earlier session's, which a new launch replaces. */
+
   let war3Log = [
     war3Line(-600_000, "GameMain Started"), war3Line(-586_000, "[CLoginCallbacks] LoginDoorClose called"),
     ...[...SEASON1, ...SEASON9].map((text) => war3Line(-577_000, text)), war3Line(-500_000, "GameMain Ended"),
@@ -186,9 +186,9 @@ function world(scenario: Scenario = {}) {
     if (scenario.signsIn !== false) later(2, () => logs.set(log, logs.get(log)! + SIGNED_IN));
   };
   const newestLog = () => newestLauncherLog([...logs.keys()])!;
-  /** A new session's log, as on 6 Oct: the login doors close 14 s after start, the ladder scan 9 s later. */
+
   const signIn = () => {
-    // The launch's own log replaces the earlier one a moment after the process starts.
+
     later(1, () => {
       war3Log = "";
       logged("GameMain Started", "Opening mod - War3.w3mod", ...SEASON1, ...SEASON9);
@@ -215,7 +215,7 @@ function world(scenario: Scenario = {}) {
       break;
     case "two":
       startLauncher();
-      // A second Steam runtime's wineserver: its own namespace, the same prefix directory.
+
       processes.push({ pid: 200, name: "wineserver", args: ["/steam/GE-Proton11-7/files/bin/wineserver"], cwd: `/tmp/.wine-1000/${SERVER}` });
       break;
     case "other display":
@@ -245,7 +245,7 @@ function world(scenario: Scenario = {}) {
     }
   };
 
-  /** The game's menu page: it lists the map, hosts it and starts it, as the game's menus answer. */
+
   let hosted: { readonly privateGame: unknown; readonly password: unknown } | undefined;
   const heard: MenuEvent[] = [];
   const tell = (messageType: string, payload: unknown) => heard.push({ messageType, payload });
@@ -371,7 +371,7 @@ function world(scenario: Scenario = {}) {
         const now = windows.get(id)!;
         windows.set(id, now.width === OUTPUT.width ? { ...now, width: 1424, height: 920 } : { ...now, width: OUTPUT.width, height: OUTPUT.height });
       };
-      // Run 10, 6 Oct: the game loading its map took more than 5 s to follow.
+
       if (window.title === "Warcraft III" && scenario.gameFullscreenAfter !== undefined) later(scenario.gameFullscreenAfter, flip);
       else flip();
     }),
@@ -389,7 +389,7 @@ function world(scenario: Scenario = {}) {
         if (menu === "in match" && key === "F10") menu = "game menu";
         else if (menu === "game menu" && key === "e") menu = "end game";
         else if (menu === "end game" && key === "q") menu = "results";
-        // Warcraft III 3.0.0.24268: the menus' ScoreScreenClose is ignored; Escape leaves the score screen.
+        // ScoreScreenClose is ignored on the score screen; Escape leaves it.
         else if (menu === "results" && key === "Escape") menu = "main";
       }
     }),
@@ -453,7 +453,7 @@ function world(scenario: Scenario = {}) {
     const failure = Option.isSome(error) ? error.value.message : undefined;
     return { lines, failure, events, prefFiles, presses: () => presses, windows, hosted: () => hosted, options: () => launchOptions(config) };
   };
-  /** Doctor's hand for a score screen, as `wisp play` gives it: Escape in the game's window. */
+
   const leaveScore = async () => {
     const exit = await Effect.runPromiseExit(leaveScoreScreen(declaration).pipe(Effect.provide(Layer.merge(Layer.succeed(PlayMachine, machine), Layer.succeed(PlayDesktop, desktop)))));
     return { failure: Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause))?.message : undefined, events, menu: () => menu, focused: () => focused };
@@ -471,7 +471,7 @@ test("[native] recorded Battle.net and Steam facts: the shortcut's game id, sign
 });
 
 test("[native] Warcraft III's launch options live in Battle.net's settings as Games.w3.AdditionalLaunchArguments, in its own layout", () => {
-  // As an older Battle.net install recorded StarCraft II's: Games.s2.AdditionalLaunchArguments "-Displaymode 1".
+
   expect(launchOptions(JSON.stringify({ Games: { s2: { AdditionalLaunchArguments: "-Displaymode 1" } } }))).toBeUndefined();
   expect(launchOptions(SETTINGS)).toBeUndefined();
   const set = withLaunchOptions(SETTINGS, LOAD_MAP);
@@ -488,21 +488,21 @@ test("[native] Warcraft III's launch options live in Battle.net's settings as Ga
 test("[repro dfbbb3f] from a cold desktop: Battle.net, its launch of Warcraft III, the map hosted once Warcraft III has read its ladder maps, the helper, the match, the game fullscreen", async () => {
   const result = await world().run();
   expect(result.failure).toBeUndefined();
-  // The earlier session's log, which says its scan was over, doesn't count: nothing is hosted
-  // before this launch's scan. Battle.net's launch options stay untouched and no key reaches the game.
+
+
   const scanned = result.events.indexOf("ladder maps read");
   expect(scanned).toBeGreaterThan(result.events.indexOf("launch"));
   expect(result.events.findIndex((event) => event.startsWith("page"))).toBeGreaterThan(scanned);
-  // The menu page hosts a private game, never a listed one, and starts it.
+
   expect(result.events.filter((event) => event.startsWith("page"))).toEqual(["page GetMapList", "page CreateLobby", "page LobbyStart"]);
   expect(result.hosted()?.privateGame).toBe(true);
   expect(result.events.filter((event) => event.startsWith("launch options") || event.startsWith("press"))).toEqual([]);
-  // The launcher's window is neither clicked, read nor resized: Battle.net launches the game on request.
+
   expect(result.events.filter((event) => event.includes("Battle.net"))).toEqual([]);
 });
 
 test("[repro dfbbb3f] an earlier run's startup map argument is cleared from a warm launcher, which restarts once", async () => {
-  // Earlier Wisp runs could keep -loadfile for this map; Battle.net reads it at its start, so it restarts once.
+
   const kept = await world({ runtimes: "launcher", launchOptions: LOAD_MAP }).run();
   expect(kept.failure).toBeUndefined();
   expect(kept.events.filter((event) => event.startsWith("SIG") || event.startsWith("steam") || event.startsWith("launch options"))).toEqual([
@@ -539,7 +539,7 @@ test("[repro dfbbb3f] play stops when Warcraft III's log shows the map's importe
   expect(loading.events.at(-1)).toBe("cleanup");
   const match = await world({ importFailures: "match" }).run();
   expect(match.failure).toStartWith("6/7 Match stopped: Warcraft III couldn't create 1 of the map's imported models");
-  // Failures an earlier map logged in a running game's session are not this map's.
+
   const earlier = await world({ runtimes: "launcher", gameRunning: true }).run();
   expect(earlier.failure).toBeUndefined();
 });
@@ -552,11 +552,11 @@ test("[repro 12ad25a] without a reporting menu page play stops before hosting: a
 });
 
 test("[repro 8959d51] a missing or stale map is replaced from its declared build before the launch", async () => {
-  // Run 4, 6 Oct: the map's folder had been emptied; play installs the declared build and goes on.
+
   const copied = await world({ mapInstalled: false, mapSource: "present" }).run();
   expect(copied.failure).toBeUndefined();
   expect(copied.events.indexOf(`copy ${SOURCE} -> ${MAP}`)).toBeLessThan(copied.events.indexOf("launch"));
-  // Run 11, 6 Oct: an installed map that differs from the declared build is replaced before Play, then verified.
+
   const stale = await world({ mapStale: true, mapSource: "present" }).run();
   expect(stale.failure).toBeUndefined();
   expect(stale.events.indexOf(`copy ${SOURCE} -> ${MAP}`)).toBeLessThan(stale.events.indexOf("launch"));
@@ -574,7 +574,7 @@ test("[repro 8f0ba58] play saves War3Preferences.txt before Warcraft III starts 
 });
 
 test("[repro e54345e] declared display settings replace a test run's before the game starts, so the helper puts the owner's back", async () => {
-  // 7 Oct: the owner's file held a test desktop's windowed 1920x1080 settings, and play saved and restored them.
+
   const result = await world({ preferences: "[Video]\nmaxfps=61\nwindowmode=2\nwindowwidth=1920\n", displaySettings: { windowmode: "1", windowwidth: "2876" } }).run();
   expect(result.failure).toBeUndefined();
   const owner = "[Video]\nmaxfps=61\nwindowmode=1\nwindowwidth=2876\n";

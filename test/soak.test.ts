@@ -1,7 +1,7 @@
-// The soak (wisp:docs/soak.md) on a test map whose policies switch faults on:
-// a clean match finds nothing and repeats from its seed, each fault is found
-// by its detector, a repro file plays the match again, and the command runs
-// matches in worker processes and writes a repro file per finding.
+
+
+
+
 import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -63,17 +63,17 @@ test("[spec #16] each fault is found by its detector", () => {
   const error = kinds(["fuzz", "throw"]);
   expect(error.length).toBe(2);
   expect(error[0]).toContain("tick 150 failed");
-  // The game's own detector, reported once per client though it finds the loop on every frame after.
+
   expect(kinds(["fuzz", "loop"])).toEqual(["game: loop: tick 200 repeats tick 150", "game: loop: tick 200 repeats tick 150"]);
   const heavy = kinds(["fuzz", "heavy"], { ...project, limits: { costScale: 100, warmUpFrames: 0 } });
   expect(heavy.some((finding) => finding.startsWith("catch-up: the game fell"))).toBe(true);
   expect(heavy.some((finding) => finding.startsWith("cost: "))).toBe(true);
-  // Warcraft's edit-box stall (nativeCost.ts): 600 characters typed at once stop the game 180 ms, a typing finding.
+  // The typing cost uses 600 characters stalling 180 ms (wisp:docs/frame-cost.md#predicted-native-cost).
   const typing = kinds(["fuzz", "typing"], { ...project, limits: { warmUpFrames: 0 } });
   expect(typing).toEqual([
     expect.stringMatching(/^typing: p1's frame \d+ has a recovery typing stall of 180\.0 ms, over the 16\.7 ms budget of what its input helper may type at once$/),
   ]);
-  // Within the budget the game declares, such as its helper's, a typing stall is no finding, but it is counted.
+
   const within = play(["fuzz", "typing"], { ...project, limits: { warmUpFrames: 0, typingMs: 200 } });
   expect(within.findings.filter(({ kind }) => kind === "typing")).toEqual([]);
   expect(within.typingStallsMs.length).toBeGreaterThan(2);
@@ -92,7 +92,7 @@ test("[invariant] a repro file plays its match again with the same inputs, calls
 
 test("[invariant] a match played through input helpers replays what they typed, not their pads' edges, such as a stick inside its dead zone", () => {
   const helperMatch: SoakMatch = { ...match(["fuzz", "cpu"]), typed: true };
-  // wc3-journal's pad: a full-scale stick, here held inside its 0.28 dead zone (9175), which reached the map only as typed text.
+
   const inputs = {
     edges: [[11, 0, { axis: 1, value: -9083 }], [12, 0, { axis: 1, value: 7396 }], [13, 0, { axis: 0, value: 752 }]] as const,
     silences: [], hitches: [], slow: [],
@@ -104,14 +104,14 @@ test("[invariant] a match played through input helpers replays what they typed, 
   const replayed = playSoakMatch(runtime, game, project, readSoakRepro(JSON.stringify(soakRepro(project.name, played))).match, played.inputs);
   expect(replayed.checksums).toEqual(played.checksums);
   expect(replayed.findings).toEqual([]);
-  // The pads' edges never reach the game; the typed A's do, in both clients.
+
   expect(playSoakMatch(runtime, game, project, helperMatch, { ...inputs, edges: [] }).checksums).toEqual(played.checksums);
   expect(playSoakMatch(runtime, game, project, helperMatch, { ...inputs, typed: [] }).checksums).not.toEqual(played.checksums);
 });
 
 test("[invariant] a real-time run through input helpers, recorded with helperRecorder, replays onto the same native calls", () => {
   const helperMatch: SoakMatch = { ...match(["fuzz", "cpu"]), typed: true };
-  // Each helper types at wall-clock frames of its own, as a program appending to its typed file does.
+
   const typing = new Map([[0, [[25, "aa"], [90, "a"]]], [1, [[60, "a"]]]] as const);
   let now = 0;
   let monitor: SoakMonitor | undefined;
@@ -129,7 +129,7 @@ test("[invariant] a real-time run through input helpers, recorded with helperRec
     realtime.advance();
   }
   const inputs = recorder.recorded({ edges: [], silences: [], hitches: [], slow: [] });
-  // Typed by wall-clock frame 25, it reaches the client before frame 25 runs.
+
   expect(inputs.typed).toEqual([[25, 0, "aa"], [60, 1, "a"], [90, 0, "a"]]);
   const replayed = playSoakMatch(runtime, game, project, helperMatch, inputs);
   expect(replayed.findings).toEqual([]);
@@ -169,7 +169,7 @@ farmTest("[spec #16] the command plays matches in worker processes and keeps a r
   expect(Exit.isFailure(exit)).toBe(true);
   const files = readdirSync(out).sort();
   expect(files.filter((file) => file.endsWith(".json"))).toEqual(Array.from({ length: 6 }, (_, index) => [`match-${index}.json`, `match-${index}.original.json`]).flat());
-  // The game's repro of the moment of each match's first finding, as its repro key saves one.
+
   expect(files).toContain("match-0-p1.txt");
   expect(readFileSync(join(out, "match-0-p1.txt"), "utf8")).toContain("wisp-repro 1");
   expect(lines.join("\n")).toContain("6 matches, ");
@@ -190,7 +190,7 @@ farmTest("[spec #16] the command plays matches in worker processes and keeps a r
 });
 
 test("[repro 5a21838] a lag spike's catch-up after a usual backlog's rise is no spiral; input left further behind each second is", () => {
-  /** The catch-up findings of a match whose one client reports `backlog(frame)` frames of input not yet played, on a clock that keeps real time. */
+
   const catchUps = (backlog: (frame: number) => number, frames: number) => {
     let frame = 0;
     const client = { slot: 0, errors: [], thrown: [], files: new Map(), run: (body: () => void) => body() };
@@ -199,8 +199,8 @@ test("[repro 5a21838] a lag spike's catch-up after a usual backlog's rise is no 
     for (frame = 1; frame <= frames; frame++) monitor.afterFrame((frame * 1000) / 60, new Set());
     return monitor.findings.filter(({ kind }) => kind === "catch-up").map(({ text }) => text);
   };
-  // Smashcraft's soak, match 96 (6 October): a usual backlog of 11, 17 and 23 frames a second apart, then a
-  // 1.5 s spike that leaves 105 frames, played within 42 frames.
+
+
   const spike = (frame: number) => (frame < 120 ? 11 : frame < 180 ? 17 : frame < 235 ? 23 : frame < 280 ? 105 - (frame - 235) * 2 : 20);
   expect(catchUps(spike, 600)).toEqual([]);
   const spiral = (frame: number) => 50 + Math.floor(frame / 10);

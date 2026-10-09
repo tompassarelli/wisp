@@ -33,6 +33,6 @@ farmTest("[spec docs/stack-traces.md] an uninstrumented bundle reports each thro
     "error 2 in rethrown", "throw/entry.ts:7: Error: rethrown failure",
     "error 3 in fault", [""],
   ]);
-  // A runtime fault keeps its Lua position after a caught throw.
+
   expect(faultMessage).toMatch(/^\S*map\.lua:\d+: attempt to call a nil value \(global 'MissingNative'\)$/);
 });

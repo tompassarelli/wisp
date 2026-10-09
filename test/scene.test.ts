@@ -37,15 +37,15 @@ test("[spec docs/player-view.md] the emitted scene recorder reports each model's
     effects: 7,
     models: [
       { model: "", live: 1, inView: 1, drawn: 1, created: 0, age: 101, longest: 101, destroyed: 0 },
-      // Four uses of 10, 10, 10 and 8 frames, each parked before the next.
+
       { model: "Abilities/Puff.mdx", live: 1, inView: 0, drawn: 0, created: 29, age: undefined, longest: 10, destroyed: 0 },
-      // Moved in view without parking: one stay from frame 30 to 68.
+
       { model: "Abilities/Smoke.mdx", live: 1, inView: 0, drawn: 0, created: 29, age: undefined, longest: 38, destroyed: 0 },
       { model: "Abilities/Spark.mdx", live: 1, inView: 0, drawn: 0, created: 0, age: undefined, longest: 9, destroyed: 0 },
       { model: "Abilities/Trap.mdx", live: 1, inView: 1, drawn: 0, created: 0, age: 101, longest: 101, destroyed: 0 },
       { model: "Flat.mdx", live: 1, inView: 1, drawn: 0, created: 0, age: 101, longest: 101, destroyed: 0 },
       { model: "Gone.mdx", live: 0, inView: 0, drawn: 0, created: undefined, age: undefined, longest: 90, destroyed: 1 },
-      // Units: one hidden from 20 to 30, one faded out, one removed at 90.
+
       { model: "Units/Hero.mdx", live: 2, inView: 2, drawn: 1, created: 0, age: 101, longest: 101, destroyed: 0 },
       { model: "war3mapImported/Deck.mdx", live: 1, inView: 1, drawn: 1, created: 0, age: 101, longest: 101, destroyed: 0 },
     ],
@@ -78,7 +78,7 @@ test("[invariant] a frame probe counts rows of the declared colours by pixel mea
   const width = 100;
   const height = 50;
   const rgb = new Uint8Array(width * height * 3).fill(200);
-  // Rows 30-34 hold a 60-pixel deck with a one-pixel antialiased gap; row 40 holds only 10 deck pixels.
+
   for (let y = 30; y < 35; y++) for (let x = 20; x < 80; x++) if (x !== 50) rgb.set([50, 60, 70], (y * width + x) * 3);
   for (let x = 0; x < 10; x++) rgb.set([50, 60, 70], (40 * width + x) * 3);
   const frame: Frame = { width, height, rgb };

@@ -26,7 +26,7 @@ farmTest("[invariant] installed package resolves bare imports and preserves Lua3
     const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "hot-reload-stub.lua"), bundle], { cwd: root, stdout: "pipe", stderr: "pipe" });
     expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
     expect(run.stdout.toString()).toContain("reload contract passed");
-    // The headless runtime's emitted modules require each other; each resolves to the package's own Lua.
+
     expect(report(transpileProject(join(fixture, "tsconfig.perf.json")).diagnostics)).toBe("");
     const perf = Bun.spawnSync([process.env.LUA ?? "lua", join(fixture, "output/perf.lua"), bundle, join(fixture, "node_modules/wisp/src/natives/warcraft.d.ts")], { cwd: fixture, stdout: "pipe", stderr: "pipe" });
     expect({ code: perf.exitCode, stderr: perf.stderr.toString() }).toEqual({ code: 0, stderr: "" });

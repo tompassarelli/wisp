@@ -1,12 +1,12 @@
-// Runtime errors from engine callbacks. Each is written to a file where
-// `wisp hot` maps its Lua positions back to TypeScript lines, and shown in game
-// unless the map's runtime configuration sets errorsOnScreen to false.
-// A broken per-frame handler fails every frame, so a message is written only
-// when it differs from the previous one.
+
+
+
+
+
 import { errorFile, errorHeading } from "../runtime/gameFiles";
 import { runtimeConfiguration } from "../runtime/config";
 
-/** Preload lines longer than this are cut so the file stays readable. */
+
 const MAX_LINE = 240;
 
 interface ErrorState {
@@ -25,12 +25,12 @@ interface ShadowStack extends StackFrames {
 
 declare global {
   var __wispStack: ShadowStack | undefined;
-  /** The latest value a compiled `throw` raised, and that statement's TypeScript file and line. */
+
   var __wispThrown: unknown;
   var __wispThrowSite: string | undefined;
 }
 
-/** The callback boundary restores this depth after Lua unwinds a failed call. */
+
 export function stackDepth(): number {
   return globalThis.__wispStack?.depth ?? 0;
 }
@@ -46,7 +46,7 @@ export function restoreStack(depth: number): void {
 function describe(error: unknown): string {
   if (typeof error === "string") return error;
   if (typeof error === "object" && error !== null && "message" in error) {
-    // Not tostring: TypeScriptToLua's Error.__tostring needs the debug library.
+    // TypeScriptToLua Error.__tostring requires Lua's unavailable debug library.
     const name = "name" in error ? String(error.name) : "Error";
     return `${name}: ${String(error.message)}`;
   }
@@ -68,7 +68,7 @@ export function traceback(error?: unknown): string {
   return typeof debug === "object" ? debug.traceback(undefined, 3) : "";
 }
 
-/** Without a stack, a thrown value's report starts with its throw site, as a runtime fault's starts with its Lua position. */
+
 function throwSite(error: unknown, stack: string): string | undefined {
   return stack === "" && error === globalThis.__wispThrown ? globalThis.__wispThrowSite : undefined;
 }

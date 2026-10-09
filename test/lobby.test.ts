@@ -7,7 +7,7 @@ import { ClientWatch, type ClientView } from "../scripts/wisp/watch";
 
 const started = 'function PreloadFiles takes nothing returns nothing\n\tcall PreloadStart()\n\tcall Preload( "applied 0 at 0" )\nendfunction\n';
 
-/** A fake menu page for one client: it announces its socket on the report port and answers as the game's menus do. */
+
 const fakePage = (name: string, sent: string[], game: { host?: { password: unknown; privateGame: unknown }; startedAt?: number }) => {
   const reservation = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
   const menuReportPort = reservation.port!;
@@ -28,7 +28,7 @@ const fakePage = (name: string, sent: string[], game: { host?: { password: unkno
         }
         if (message === "SendGameLobbySetup") tell("GameLobbySetup", { isHost: true });
         if (message === "JoinGameByGameName") {
-          // A guest without the host's password is asked for it and stays out.
+
           if (game.host === undefined || payload?.["gamePass"] !== game.host.password) tell("RequestForPassword", {});
           else tell("GameLobbySetup", { isHost: false });
         }
@@ -65,7 +65,7 @@ const run = async (pages: readonly [boolean, boolean]) => {
     batch: (client) => Effect.sync(() => { inputs.push(`${client.name}:batch`); }),
   });
   const files = GameFiles.of({
-    // The client in slot N acknowledges the match start as slot N.
+
     read: (path): Effect.Effect<StoredFile | undefined> => Effect.sync(() => {
       const writer = clients.findIndex(({ documents }, slot) => path === `${dataDirectory(documents)}/sample-hot-ack-p${slot}.txt`);
       return writer < 0 || game.startedAt === undefined ? undefined : { text: started, modified: game.startedAt };

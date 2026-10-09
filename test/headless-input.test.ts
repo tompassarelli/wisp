@@ -1,6 +1,6 @@
-// Input from outside a headless client: text a player's keyboard types, clicks
-// on the frames they see, a CustomMapData folder another program reads and
-// writes, and clients run in real time for a program that types into them.
+
+
+
 import { afterAll, expect, test } from "bun:test";
 import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -36,7 +36,7 @@ const seen = (text: string) => {
   globalThis.__fixtureSeen = `${globalThis.__fixtureSeen ?? ""}${text} `;
 };
 
-/** A map with an edit box that player 0's client focuses, and a trigger noting every W key player 1 presses. */
+
 const editBoxMap = {
   start: () => {
     configureRuntime({ filePrefix: "fixture", readyPrefix: "FX_HRR", globalPrefix: "__fixture" });

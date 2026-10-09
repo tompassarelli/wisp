@@ -1,6 +1,6 @@
-// A seeded random generator for host simulations that must repeat exactly
-// from their seed, such as sync delivery and the soak's input fuzzer. Plain
-// TypeScript, so Lua programs such as a game's perf runs can use it.
+
+
+
 import { floorDiv, floorMod } from "../sim/intMath";
 
 /** Park-Miller minimal standard generator in Schrage's form: every product stays below 2^31. */
@@ -11,7 +11,7 @@ export class Random {
     this.state = floorMod(Math.abs(Math.trunc(seed)), 2147483646) + 1;
   }
 
-  /** Uniform in (0, 1). */
+
   next(): number {
     const high = floorDiv(this.state, 44488);
     const next = 48271 * (this.state - high * 44488) - 3399 * high;
@@ -19,17 +19,17 @@ export class Random {
     return this.state / 2147483647;
   }
 
-  /** A whole number from `low` to `high`, both included. */
+
   between(low: number, high: number): number {
     return low + Math.min(high - low, Math.floor(this.next() * (high - low + 1)));
   }
 
-  /** True with probability `p`. */
+
   chance(p: number): boolean {
     return this.next() < p;
   }
 
-  /** One of `items`, which is not empty. */
+
   pick<T>(items: readonly T[]): T {
     const item = items[this.between(0, items.length - 1)];
     if (item === undefined) throw new Error("pick from no items");

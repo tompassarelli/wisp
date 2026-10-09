@@ -1,5 +1,5 @@
-// A map with the frame meter: each 60 Hz frame calls GetUnitX `__fixtureWork`
-// times and advances its simulation one frame, or `__fixtureCatchUp` frames once.
+
+
 import { configureRuntime } from "../../src/runtime/config";
 import { installDispatch, on, trampoline } from "../../src/platform/dispatch";
 import { installFrameMeter, startFrameMeter, startFrameCostCapture } from "../../src/platform/frameMeter";

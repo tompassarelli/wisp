@@ -12,7 +12,7 @@ const entry = {
     configureRuntime({ filePrefix: "fixture", globalPrefix: "__fixture", readyPrefix: "FX_HRR" });
     installDispatch();
     installNativeDriver(text => {
-      // Creating the same handle in this handler catches delivery on different turns.
+
       CreateTimer();
       publishNativeDriverStatus(Number(text), "123:456", true);
     });

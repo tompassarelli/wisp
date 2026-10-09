@@ -1,17 +1,17 @@
-// The natives a headless client stubs, read from the generated declarations
-// (wisp:src/natives/warcraft.d.ts): each function with its return type, and
-// each constant and global variable with its type. Plain string operations, so
-// Bun and 32-bit Lua read the same file alike.
+
+
+
+
 
 export interface NativeDeclarations {
-  /** Each function with its return type and how many parameters it declares. */
+
   readonly functions: readonly (readonly [name: string, returns: string, parameters: number])[];
   readonly constants: readonly (readonly [name: string, type: string])[];
-  /** Global variables, such as `bj_mapInitialPlayableArea`; an array type ends with `[]`. */
+
   readonly variables: readonly (readonly [name: string, type: string])[];
 }
 
-/** `declare KEYWORD NAME...`: the name, up to the first character that can't be in one. */
+
 function declaredName(line: string, keyword: string): string | undefined {
   const start = keyword.length;
   let end = start;
@@ -23,7 +23,7 @@ function declaredName(line: string, keyword: string): string | undefined {
   return end > start ? line.slice(start, end) : undefined;
 }
 
-/** The type after the last `: ` and before the closing `;`. */
+
 function declaredType(line: string): string | undefined {
   if (!line.endsWith(";")) return undefined;
   for (let colon = line.length - 2; colon > 0; colon--) {
@@ -32,7 +32,7 @@ function declaredType(line: string): string | undefined {
   return undefined;
 }
 
-/** How many parameters a `declare function NAME(...)` line declares: the commas outside any nested parentheses, plus one. */
+
 function declaredParameters(line: string, from: number): number {
   let depth = 0;
   let count = 0;

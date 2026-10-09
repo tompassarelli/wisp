@@ -1,7 +1,7 @@
-// A stand-in for the machine-capacity helper in host-tools tests: `probe`
-// admits, and `session ... -- COMMAND` records a session and runs a stand-in
-// for COMMAND in its own process group, stopped as a group when the helper is
-// told to stop (as the real helper stops its systemd scope).
+
+
+
+
 import { spawn } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

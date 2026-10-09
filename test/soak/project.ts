@@ -1,4 +1,4 @@
-// The soak's tests' declaration of the test map.
+
 import { join } from "node:path";
 import { defineSoak } from "../../scripts/wisp/soak";
 

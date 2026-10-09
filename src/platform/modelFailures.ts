@@ -14,7 +14,7 @@ function state(): ModelFailures | undefined {
   return globals[`${runtimeConfiguration().globalPrefix}ModelFailures`];
 }
 
-/** Requests a new local report stream before any map models are created. */
+
 export function startModelFailures(): void {
   const config = runtimeConfiguration();
   const globals = globalThis as Record<`${string}ModelFailures`, ModelFailures | undefined>;

@@ -14,12 +14,12 @@ function fixture(): unit {
   return created;
 }
 
-/**
- * Each recorded integer is the observed native value times 128, wrapped to 32 bits as Warcraft's Lua
- * integers wrap, so a unit type ID times 128 reads the same in Bun. The twelve original cases and the
- * cutoff, corpse-write and exact facing cases run at once; the removal timing cases read a unit
- * removed by a timer at 0.25 s, then later; `done` gets every row 1.3125 game seconds after start.
- */
+// Native observations are scaled by 128 and wrapped to Lua32 integers; unit type IDs must wrap identically.
+
+
+
+
+
 export function unitStateCases(this: void, done: (this: void, rows: readonly string[]) => void): void {
   const rows: string[] = [];
   const record = (name: string, values: readonly number[]) => {
@@ -107,8 +107,8 @@ export function unitStateCases(this: void, done: (this: void, rows: readonly str
   }
   record("death-cutoff", cutoff);
 
-  // The smallest life a living unit survives, bisecting M × 2^-25 between 0.405 plus one ulp, which
-  // dies on 3.0.1, and 0.40625, which lives.
+
+
   let dies = 13589546;
   let lives = 13631488;
   while (lives - dies > 1) {
@@ -121,7 +121,7 @@ export function unitStateCases(this: void, done: (this: void, rows: readonly str
   }
   rows.push(`death-cutoff-first-alive=${exact(lives * 0.0000000298023223876953125)}`);
 
-  // Values a life or mana kept as a fraction of its maximum would read back changed.
+
   const lifeReads: string[] = [];
   for (const life of [7.5, f32(6.7), 13.5]) {
     u = fixture();
@@ -165,7 +165,7 @@ export function unitStateCases(this: void, done: (this: void, rows: readonly str
   RemoveUnit(u);
 
   // Equal deadlines run in TimerStart order in one frame: the second callback reads after the removal.
-  // Full life, because a living footman regenerates on 3.0.1 (37.5 read 37.55 at 0.25 s).
+
   const removed = fixture();
   const read = (name: string) => record(name, [GetUnitTypeId(removed), GetWidgetLife(removed)]);
   TimerStart(CreateTimer(), 0.25, false, () => RemoveUnit(removed));

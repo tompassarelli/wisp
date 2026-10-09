@@ -1,6 +1,6 @@
-// The smallest definition of one real panel: Smashcraft's opponent settings
-// (CPU opponent and difficulty steppers, preview, Done), its layout copied as
-// offsets from the panel's top-left corner.
+
+
+
 import type { FrameDefinition, FrameNode } from "../../../scripts/wisp/frames";
 
 const FONT = "Fonts\\FRIZQT__.TTF";

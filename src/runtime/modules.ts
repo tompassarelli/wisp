@@ -1,53 +1,53 @@
-// Hot reload by module (wisp:docs/hot-reload.md). A reload installs a module
-// set: the map's code as modules, each a Lua chunk a client loads once and
-// links again on every later reload. A version's payload starts with its
-// index, every module's name and hash, whose checksum names the version's
-// state; then it carries module texts: all of them in the full payload, and in
-// a delta only those a base state lacks. A client running the base reads the
-// delta and takes every other module from its installed table, so it never
-// reads, checks or compiles an unchanged module again; any other client reads
-// the full payload.
-//
-// Shared by the host, which writes the files, the headless runtime and the
-// map, which reads them. Texts are byte strings, one character per byte, as
-// Lua's strings are.
+
+
+
+
+
+
+
+
+
+
+
+
+
 import { NO_BASE, PAYLOAD_FILE_BYTES, deltaFile, payloadFile, type Manifest } from "./gameFiles";
 import { checksum } from "./payload";
 
 export interface HotModule {
-  /** The name the bundle's require uses. */
+
   readonly name: string;
-  /** Its chunk: MODULE_HEAD, the module's code, MODULE_TAIL. */
+
   readonly text: string;
 }
 
-/** The map's code as modules, and the one whose exports have install(). */
+
 export interface ModuleSet {
   readonly entry: string;
   readonly modules: readonly HotModule[];
 }
 
-/**
- * Around a module's code, as TypeScriptToLua's bundle has it, the chunk takes
- * the require to link against and returns the module's function. The head is
- * one line, as the bundle's table entry head is, so the code keeps its lines.
- */
+// A module chunk's head stays one line so source-map line positions match the bundle.
+
+
+
+
 export const MODULE_HEAD = "local require = ... return function(...) \n";
 export const MODULE_TAIL = " end\n";
 export const moduleChunk = (code: string) => `${MODULE_HEAD}${code}${MODULE_TAIL}`;
 
-/** The one module of a whole bundle, for a compile with no per-module output. */
+
 export const BUNDLE_MODULE = "bundle";
 export const bundleModules = (bundle: string): ModuleSet => ({ entry: BUNDLE_MODULE, modules: [{ name: BUNDLE_MODULE, text: moduleChunk(bundle) }] });
 
-/** The checksum of a byte string. */
+
 export type Hash = (this: void, text: string) => string;
 export const textChecksum: Hash = (text) => checksum(text.length, (index) => text.charCodeAt(index));
 
-/** What a module's hash covers: its name too, so equal code under two names keeps two source maps. */
+
 export const moduleHashText = (name: string, text: string) => `${name}\n${text}`;
 
-/** The entry's name, then a line per module: its hash and name. Its checksum is the state's. */
+
 export function moduleIndex(entry: string, hashes: readonly (readonly [name: string, hash: string])[]): string {
   const lines = [entry];
   for (const [name, hash] of hashes) lines.push(`${hash} ${name}`);
@@ -68,19 +68,19 @@ export function modulePayload(index: string, carried: readonly HotModule[]): str
 export interface Payload {
   readonly index: string;
   readonly entry: string;
-  /** Every module of the state, in index order: name and hash. */
+
   readonly hashes: readonly (readonly [string, string])[];
-  /** Name to text of each module the payload carries. */
+
   readonly texts: Readonly<Record<string, string | undefined>>;
 }
 
-/** Splits `line` at its first space: the field, and the name after it. */
+
 function field(line: string): [string, string] | undefined {
   const space = line.indexOf(" ");
   return space <= 0 || space === line.length - 1 ? undefined : [line.slice(0, space), line.slice(space + 1)];
 }
 
-/** A payload's index and texts; undefined when it is cut short, too long or malformed. */
+
 export function parsePayload(text: string): Payload | undefined {
   const indexEnd = text.indexOf("\n\n");
   if (indexEnd < 0) return undefined;
@@ -133,36 +133,36 @@ export function payloadPieces(text: string): string[] {
   return pieces;
 }
 
-/** A published state: its hash and each module's. */
+
 export interface ModuleState {
   readonly state: string;
   readonly hashes: Readonly<Record<string, string | undefined>>;
 }
 
-/** What the host writes for a version, payload files first; the manifest names them. */
+
 export interface VersionFiles {
   readonly manifest: Manifest;
-  /** Game paths and texts. */
+
   readonly payloads: readonly (readonly [string, string])[];
   readonly published: ModuleState;
-  /** The modules a client running the base reads, and their bytes; every module and the full payload's bytes without a base. */
+
   readonly changed: readonly string[];
   readonly changedBytes: number;
   readonly fullBytes: number;
 }
 
-/**
- * Builds each version's files. A module's hash is computed again only when its
- * text changed; a version offers a delta from the newest state every client
- * installed, which `installed` names.
- */
+
+
+
+
+
 export class ModulePublisher {
   private known: Record<string, { readonly text: string; readonly hash: string } | undefined> = {};
   private base: ModuleState | undefined;
 
   constructor(private readonly prefix: string, private readonly hash: Hash = textChecksum) {}
 
-  /** Every client installed `state`: later versions carry only what differs from it. */
+
   installed(state: ModuleState): void {
     this.base = state;
   }

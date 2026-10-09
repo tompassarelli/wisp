@@ -8,7 +8,7 @@ import { farmTest } from "../scripts/wisp/farmTest";
 const root = join(import.meta.dir, "..");
 
 let compiled: string | undefined;
-/** The fixture bundle's path, compiled once for the tests that drive it in Lua. */
+
 function runtimeBundle(): string {
   if (compiled === undefined) {
     expect(report(mapCompiler(join(import.meta.dir, "tsconfig.runtime.json"))())).toBe("");

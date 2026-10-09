@@ -1,5 +1,5 @@
-// The compiler, the check command and the editor report the same number-rule
-// errors at the same positions (wisp#7).
+
+
 import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
@@ -37,12 +37,12 @@ farmTest("[spec #7] the check command reports the compiler's number-rule errors,
   }
 }, 120_000);
 
-/** Sends tsserver requests in order and returns the response body of each one that answers. */
+
 async function tsserver(cwd: string, probe: string, requests: readonly { readonly command: string; readonly arguments: object }[]) {
   const server = Bun.spawn([process.execPath, join(root, "node_modules/typescript/lib/tsserver.js"), "--disableAutomaticTypingAcquisition", "--pluginProbeLocations", probe], {
     cwd, stdin: "pipe", stdout: "pipe", stderr: "pipe",
   });
-  // `open` sends no response.
+
   const awaited = requests.flatMap((request, index) => (request.command === "open" ? [] : [index + 1]));
   const responses = new Map<number, unknown>();
   requests.forEach((request, index) => server.stdin.write(`${JSON.stringify({ seq: index + 1, type: "request", ...request })}\n`));

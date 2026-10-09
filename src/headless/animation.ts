@@ -1,11 +1,11 @@
-// Warcraft's animation playback rules for units and effects, shared by the
-// headless runtime, which keeps each clock, and the renderer, which samples
-// the model. The rules and their evidence are listed in
-// wisp:docs/warsmash-notes.md, "Animation playback".
+
+
+
+
 import { f32 } from "../sim/f32";
 import { floorMod } from "../sim/intMath";
 
-/** A model sequence: its MDX interval in milliseconds. */
+
 export interface AnimationSequence {
   readonly name: string;
   readonly start: number;
@@ -14,7 +14,7 @@ export interface AnimationSequence {
   readonly rarity: number;
 }
 
-/** The clock and selection pose of the sequence that was playing when a blend began. */
+
 export interface SavedAnimation {
   readonly animation: string | number | undefined;
   readonly subAnimations: readonly (string | number)[];
@@ -23,17 +23,17 @@ export interface SavedAnimation {
 
 export interface AnimationBlend {
   readonly from: SavedAnimation;
-  /** Milliseconds of animation time left before the new pose shows alone. */
+
   remaining: number;
 }
 
-/** What a unit or effect remembers about its animation. Times are in seconds. */
+
 export interface AnimationState {
   animation: string | number | undefined;
   subAnimations: (string | number)[];
-  /** Seconds into the current animation: the last seek plus the time advanced since. */
+
   animationElapsed: number;
-  /** Animation time since creation, which drives the model's global sequences; selections and seeks keep it. */
+
   animationClock: number;
   animationBlendTime: number;
   animationBlend: AnimationBlend | undefined;
@@ -45,11 +45,11 @@ export function freshAnimation(): AnimationState {
   return { animation: undefined, subAnimations: [], animationElapsed: 0, animationClock: 0, animationBlendTime: 0, animationBlend: undefined };
 }
 
-/**
- * Selecting a sequence restarts its clock. With a blend time, a unit that has
- * already animated keeps its old pose and fades it out; a selection during a
- * blend leaves that blend running.
- */
+
+
+
+
+
 export function selectAnimation(state: AnimationState, animation: string | number, subAnimations?: readonly (string | number)[], restartOnNextFrame = false): void {
   if (state.animationBlendTime > 0 && state.animation !== undefined && state.animationBlend === undefined && state.animationClock * 1000 >= 1) {
     state.animationBlend = {
@@ -63,15 +63,15 @@ export function selectAnimation(state: AnimationState, animation: string | numbe
   state.animationRestartPending = restartOnNextFrame;
 }
 
-/** A seek moves the sample time without spending blend time. */
+
 export function seekAnimation(state: AnimationState, seconds: number): void {
   state.animationElapsed = seconds;
 }
 
-/**
- * One frame: the clock, the global clock and the blend all move by elapsed ×
- * time scale, held as binary32 so Bun and 32-bit Lua floor the same frames.
- */
+// Advance clocks in binary32 so Bun and Lua floor the same animation frames.
+
+
+
 export function advanceAnimation(state: AnimationState, timeScale: number, frameSeconds: number): void {
   if (state.animationRestartPending) {
     state.animationElapsed = 0;
@@ -87,7 +87,7 @@ export function advanceAnimation(state: AnimationState, timeScale: number, frame
   if (blend.remaining <= 0) state.animationBlend = undefined;
 }
 
-/** How much of the saved pose still shows, from 1 at the switch to 0. */
+
 export function blendWeight(state: AnimationState): number {
   const blend = state.animationBlend;
   if (blend === undefined || state.animationBlendTime <= 0) return 0;
@@ -103,7 +103,7 @@ const SECONDARY_TAGS = ["alternate", "alternateex", "berserk", "bone", "chain", 
 
 export interface AnimationTags {
   readonly primary: readonly string[];
-  /** Sorted, without repeats. */
+
   readonly secondary: readonly string[];
 }
 
@@ -129,10 +129,10 @@ function words(name: string): string[] {
   return out;
 }
 
-/**
- * A name's leading words that are animation tags: "Stand Hit - 2" is stand
- * with hit. The first word that is no tag ends the list.
- */
+
+
+
+
 export function animationTags(name: string, extra: readonly (string | number)[] = []): AnimationTags {
   const primary: string[] = [];
   const secondary: string[] = [];
@@ -156,14 +156,14 @@ function sameTags(a: readonly string[], b: readonly string[]): boolean {
   return true;
 }
 
-/**
- * The sequence a name selects, or -1 for none: the primary tag with exactly
- * the requested secondary tags; failing that, the secondary set sharing most
- * requested tags (the fewest tags on a tie); failing that, the plainest
- * sequence of the primary tag (stand when the name has none). Warcraft draws
- * among equal variants at random, weighted by rarity; Wisp takes the first of
- * the most common.
- */
+
+
+
+
+
+
+
+
 export function selectSequence(sequences: readonly AnimationSequence[], animation: string | number, subAnimations: readonly (string | number)[] = []): number {
   if (typeof animation === "number") return animation >= 0 && animation < sequences.length ? animation : -1;
   const wanted = animationTags(animation, subAnimations);
@@ -198,11 +198,11 @@ export function selectSequence(sequences: readonly AnimationSequence[], animatio
   return found;
 }
 
-/**
- * The integer MDX frame a sequence shows `ms` milliseconds after it was
- * selected or sought. A looping sequence wraps by its length, keeping the
- * overshoot; any other holds on its interval end.
- */
+// Looping MDX sequences keep overshoot; non-looping sequences hold the interval end.
+
+
+
+
 export function sequenceFrame(sequence: AnimationSequence, ms: number, looping = sequence.looping): number {
   const length = sequence.end - sequence.start;
   if (length <= 0) return sequence.start;
@@ -210,16 +210,16 @@ export function sequenceFrame(sequence: AnimationSequence, ms: number, looping =
 }
 
 export interface SequenceSample {
-  /** -1 for no sequence: every track takes its default value. */
+
   readonly sequence: number;
   readonly frame: number;
 }
 
-/**
- * The sequence and frame an animation state shows. A name or index that
- * selects nothing shows Stand. A unit never told what to play shows Stand;
- * an effect shows Birth once, then Stand looping.
- */
+
+
+
+
+
 export function animationSample(sequences: readonly AnimationSequence[], animation: SavedAnimation, kind: "effect" | "unit"): SequenceSample {
   const ms = f32(animation.elapsed * 1000);
   if (animation.animation !== undefined) {
@@ -242,7 +242,7 @@ export function animationSample(sequences: readonly AnimationSequence[], animati
   return { sequence: standIndex, frame: sequenceFrame(stand, ms, kind === "effect" ? true : stand.looping) };
 }
 
-/** A global sequence's frame: integer animation time since creation, wrapped by its length. */
+
 export function globalSequenceFrame(clockSeconds: number, length: number): number {
   if (length <= 0) return 0;
   return floorMod(Math.floor(f32(clockSeconds * 1000)), length);

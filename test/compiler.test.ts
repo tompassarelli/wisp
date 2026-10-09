@@ -29,13 +29,13 @@ farmTest("[invariant] cached module requires keep the same bundle and source map
     writeFileSync(entry, `import { value } from "./value";\nexport const result = value + ${offset};\n`);
     expect(report(compile())).toBe("");
     const incremental = output();
-    // An unchanged compile must also reuse the original dependency paths.
+
     expect(report(compile())).toBe("");
     expect(output()).toEqual(incremental);
     expect(report(transpileProject(config).diagnostics)).toBe("");
     expect(output()).toEqual(incremental);
   }
-  // A module added, then removed: unchanged modules keep their resolved requires only while the program's files stay.
+
   for (const main of ["import { value } from \"./value\";\nimport { extra } from \"./extra\";\nexport const result = value + extra;\n", "import { value } from \"./value\";\nexport const result = value;\n"]) {
     if (main.includes("extra")) writeFileSync(join(directory, "src/extra.ts"), "import { value } from \"./value\";\nexport const extra = value * 2;\n");
     else rmSync(join(directory, "src/extra.ts"));
@@ -81,7 +81,7 @@ test("[invariant] each module's hot-reload chunk is its bundle code and maps its
     const entry = `["${module.name}"] = function(...) \n${module.code} end,\n`;
     const at = bundle.indexOf(entry);
     expect(at).toBeGreaterThan(0);
-    // The chunk's head and the entry's head are each one line, so the code starts on the same line of each.
+
     const firstLine = bundle.slice(0, at).split("\n").length;
     const lines = entry.split("\n").length - 1;
     const own = await mappings(module.sourceMap(), 1, lines + 1, 0);

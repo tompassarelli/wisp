@@ -1,11 +1,11 @@
-// The scene recorder, for development and diagnostic builds: it reports which
-// special effects, and optionally which units, the map draws, so a host check can fail on a missing stage,
-// an effect with no model or one that stays in view too long. At start it
-// wraps the effect natives in the Lua globals once, so the game's own code is
-// unchanged and a build that never starts it carries none of this. Local to
-// this client: it records into Lua tables, reads effect positions with the
-// local getters and writes a file, and nothing synchronized reads any of it.
-// A reload keeps the wrappers and the records.
+
+
+
+
+
+
+
+
 import { runtimeConfiguration } from "../runtime/config";
 import { type SceneModel, reportedModel, sceneFile, sceneHeading, sceneModelLine } from "../runtime/scene";
 import { on, trampoline } from "./dispatch";
@@ -14,19 +14,19 @@ const REPORT_SECONDS = 0.5;
 const REPORT = "scene.report";
 
 export interface SceneOptions {
-  /** The game's frame counter. It should stand still while nothing plays, such as during a pause. */
+
   readonly frame: (this: void) => number;
-  /**
-   * Whether a point is where the game parks hidden effects, which no camera
-   * sees. Warcraft keeps a model's particle emitters running at any alpha,
-   * scale or time scale, so only an effect parked there is out of view.
-   */
+  // Particle emitters keep running at any alpha, scale or time scale; hidden effects must be parked off camera.
+
+
+
+
   readonly parked: (this: void, x: number, y: number, z: number) => boolean;
-  /**
-   * The model a unit type draws, for a game that draws some of what a player
-   * sees with units. Given, units count in the report with effects: a unit is
-   * in view while shown. Units of a type it names no model for are not recorded.
-   */
+
+
+
+
+
   readonly unitModel?: ((this: void, unitType: number) => string | undefined) | undefined;
 }
 
@@ -35,9 +35,9 @@ interface Recorded {
   readonly created: number;
   alpha: number;
   scale: number;
-  /** A matrix scale of zero on some axis since the matrix was last reset. */
+
   flat: boolean;
-  /** The frame it was first seen in view without a break; undefined while parked. */
+
   since: number | undefined;
   drawn: boolean;
 }
@@ -49,12 +49,12 @@ interface RecordedUnit extends Recorded {
 interface SceneState {
   readonly effects: Map<effect, Recorded>;
   readonly units: Map<unit, RecordedUnit>;
-  /** Per model, the longest one finished a stay in view. */
+
   readonly longest: Map<string, number>;
-  /** Per model, how many were destroyed in view. */
+
   readonly destroyed: Map<string, number>;
   readonly options: SceneOptions;
-  /** Added to the game's frame so this clock keeps rising when the game's restarts, as at a rematch. */
+
   offset: number;
   last: number;
   serial: number;
@@ -81,12 +81,12 @@ function leftView(state: SceneState, effect: Recorded, frame: number): void {
   effect.since = undefined;
 }
 
-/**
- * An effect placed in view starts a stay, unless one is running; placed
- * where the game parks hidden effects, it ends it. A game that reuses an
- * effect for a new event parks it before placing it again, so each use is
- * a stay of its own.
- */
+
+
+
+
+
+
 function placed(state: SceneState, effect: Recorded, x: number, y: number, z: number): void {
   if (state.options.parked(x, y, z)) leftView(state, effect, now(state));
   else effect.since ??= now(state);
@@ -126,7 +126,7 @@ function wrapNatives(state: SceneState): void {
     }
     destroy(handle);
   };
-  // The game poses its effects every frame through these, so they only store a value.
+
   natives.BlzSetSpecialEffectAlpha = (handle: effect, alpha: number) => {
     const effect = state.effects.get(handle);
     if (effect !== undefined) effect.alpha = alpha;
@@ -147,7 +147,7 @@ function wrapNatives(state: SceneState): void {
     if (effect !== undefined) effect.flat = false;
     resetMatrix(handle);
   };
-  // Stays start and end when the game moves an effect, not only when a report reads positions.
+
   natives.BlzSetSpecialEffectPosition = (handle: effect, x: number, y: number, z: number) => {
     setPosition(handle, x, y, z);
     const effect = state.effects.get(handle);
@@ -172,7 +172,7 @@ function wrapNatives(state: SceneState): void {
   if (unitModel !== undefined) wrapUnitNatives(state, unitModel);
 }
 
-/** A unit is in view from creation while shown; hiding or removing it ends its stay. */
+
 function wrapUnitNatives(state: SceneState, unitModel: (this: void, unitType: number) => string | undefined): void {
   const create = CreateUnit;
   const remove = RemoveUnit;
@@ -220,7 +220,7 @@ function wrapUnitNatives(state: SceneState, unitModel: (this: void, unitType: nu
   };
 }
 
-/** Where each effect stands now: in view since when, and whether its model is drawn. */
+
 function observe(state: SceneState, frame: number): void {
   const { parked } = state.options;
   for (const [handle, effect] of state.effects) {
@@ -240,7 +240,7 @@ interface Summary {
   since: number | undefined;
 }
 
-/** Every model's line, in path order. */
+
 function sceneModels(state: SceneState, frame: number): SceneModel[] {
   const summaries = new Map<string, Summary>();
   for (const effect of [...state.effects.values(), ...state.units.values()]) {
@@ -282,16 +282,16 @@ function writeReport(): void {
   PreloadGenEnd(sceneFile(GetPlayerId(GetLocalPlayer()), runtimeConfiguration().filePrefix));
 }
 
-/** Registers the report's handler; a reloaded bundle calls this again. */
+
 export function installSceneReport(): void {
   on(REPORT, writeReport);
 }
 
-/**
- * Starts recording and, every half second of game time, observing and
- * reporting. Call once, after configureRuntime and before the map creates an
- * effect.
- */
+
+
+
+
+
 export function startSceneReport(options: SceneOptions): void {
   const globals = globalThis as Record<`${string}SceneReport`, SceneState | undefined>;
   const key = `${runtimeConfiguration().globalPrefix}SceneReport` as const;

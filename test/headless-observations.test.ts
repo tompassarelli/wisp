@@ -34,7 +34,7 @@ test("unit snapshots capture fighters' transforms, animation clocks, hiding and 
   clients.frames(30);
   const client = clients.client(0);
   const first = client.unitPoses()[0];
-  // Facing reads as 3.0.1 keeps it: 90 and 270 come back one ulp below (test/headless-unit-motion.test.ts).
+  // Facing reads 90 and 270 one ulp below their writes (wisp:docs/warsmash-notes.md).
   expect(first).toMatchObject({ typeId: 0x48303030, owner: 2, x: 30, y: 40, z: 300, facing: 89.99999237060547, scale: [2, 3, 4],
     alpha: 140, color: [128, 64, 32], teamColor: 1, animation: 7, timeScale: 2, visible: true });
   expect(first?.animationElapsed).toBeCloseTo(1);
@@ -215,7 +215,7 @@ test("released sound records disappear, while playing and looping sounds finish 
     StartSound(loop);
     KillSoundWhenDone(loop);
   });
-  // A handle set to be killed reads as not playing (3.0.1), though its record lives until it ends.
+
   const live = (handle: sound) => (sounds.get(handle) as { playing: boolean } | undefined)?.playing ?? false;
   clients.frames(29);
   client.run(() => expect(GetSoundIsPlaying(playing)).toBe(false));
@@ -301,7 +301,7 @@ test("[spec #40] a text frame's snapshot carries its template font, justificatio
   clients.start();
   const client = clients.client(0);
   const [shown, labelled] = client.frames.snapshot();
-  // Smashcraft's SmashcraftDamage FDF: FrameFont "MasterFont", 0.036, "OUTLINE", FontJustificationH JUSTIFYLEFT, V JUSTIFYMIDDLE.
+
   expect(shown).toMatchObject({ text: "0.0%", font: { file: "MasterFont", height: 0.036, flags: 1 }, alignment: { vertical: "middle", horizontal: "left" }, scale: 1 });
   expect(labelled).toMatchObject({ font: { file: "Fonts\\FRIZQT__.TTF", height: 0.0072, flags: 1 }, alignment: { vertical: "bottom", horizontal: "right" }, scale: 0.6 });
   client.run(() => BlzFrameSetTextAlignment(damage, TEXT_JUSTIFY_MIDDLE, TEXT_JUSTIFY_RIGHT));
@@ -324,7 +324,7 @@ test("[spec #40] a text tag shows where it was placed, drifts by its velocity, a
   expect(client.textTags.poses()).toEqual([]);
   client.run(() => {
     SetTextTagVisibility(tag, true);
-    // TextTagSpeed2Velocity(64): 64 world units a second, straight up the screen.
+
     SetTextTagVelocity(tag, 0, 64 * 0.071 / 128);
     SetTextTagPermanent(tag, false);
     SetTextTagLifespan(tag, 2);

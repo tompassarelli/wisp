@@ -1,4 +1,4 @@
-// Map code runs in Warcraft's Lua: no host APIs and nothing nondeterministic.
+
 import { readFileSync } from "node:fs"; // rejected
 
 export const file = Bun.file("x"); // rejected
