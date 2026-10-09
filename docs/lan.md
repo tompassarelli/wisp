@@ -260,6 +260,10 @@ exec bun "$capacity" session --class native --owner "wisp-online-clone-$1" -- \
   "$clone/pfx/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe"
 ```
 
+Never set `PROTON_LOG` on the clones: it grew ~280 GB per clone and saturated
+disk IO. The nixos-config watchdog `proton-log-watchdog` strips it from
+`launch.sh` and truncates clone `steam-*.log` files over 1 GiB.
+
 Before that it creates the clone's silent PipeWire sink, `wisp-online-clone-<a|b|c|d>`,
 as `lan pool` does for its clients. Without one, the first client takes the
 sound device and the second starts with "Unable to initialize audio device":
