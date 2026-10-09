@@ -8,7 +8,7 @@ declare const os: { clock(): number };
 const runtime = installHeadless({ filePrefix: "pause86", globalPrefixes: [] });
 afterAll(runtime.restore);
 
-test("[native #86] a committed map pause keeps fighter animation frozen while callbacks and the local wall clock continue", () => {
+test("[native #86] a committed map pause keeps fighter animation frozen while callbacks and the local wall clock continue, and the presentation clock includes the pause", () => {
 
 
   const frameOneNs = 205729362458791;
@@ -43,42 +43,41 @@ test("[native #86] a committed map pause keeps fighter animation frozen while ca
   expect(pictures.at(-1)?.scene.units).toEqual(frozen.units);
   expect(pictures.at(-1)?.timing.callbackFrame).toBe(callbacks);
   expect(client.errors).toEqual([]);
-});
-
-test("[repro #86] the presentation clock includes a three-second pause while frozen animation and callback clocks hold", () => {
-  let fighter: unit;
-  let effect: effect;
-  const clients = runtime.clients({ start: () => {
-    fighter = CreateUnit(Player(0), 0x48303030, 10, 20, 0);
-    effect = AddSpecialEffect("original-fixture.mdx", 10, 20);
-  }, install: () => {} }, [0]);
-  let now = 0;
-  const draws: DrawTiming[] = [];
-  const realtime = new RealtimeClients(clients, new Map(), () => now, undefined, timing => draws.push(timing));
-  realtime.start();
-  const client = clients.client(0);
-  now = 50;
-  realtime.advance();
-  client.run(() => {
-    SetUnitTimeScale(fighter, 0);
-    BlzSetSpecialEffectTimeScale(effect, 0);
-  });
-  const held = captureScene(client);
-  realtime.hold(0);
-  now = 3050;
-  realtime.advance();
-  client.run(() => expect(os.clock()).toBe(3.05));
-  expect(client.frame).toBe(3);
-  expect(captureScene(client)).toEqual(held);
-  realtime.release(0);
-  now = 3067;
-  realtime.advance();
-  expect(draws).toEqual([
-    { draw: 1, wallTimeMs: 50, callbackFrame: 3, callbacks: 3 },
-    { draw: 2, wallTimeMs: 3067, callbackFrame: 4, callbacks: 1 },
-  ]);
-  expect(client.unitPoses()).toEqual(held.units);
-  expect(client.effectPoses()).toEqual(held.effects);
+  {
+    let fighter: unit;
+    let effect: effect;
+    const clients = runtime.clients({ start: () => {
+      fighter = CreateUnit(Player(0), 0x48303030, 10, 20, 0);
+      effect = AddSpecialEffect("original-fixture.mdx", 10, 20);
+    }, install: () => {} }, [0]);
+    let now = 0;
+    const draws: DrawTiming[] = [];
+    const realtime = new RealtimeClients(clients, new Map(), () => now, undefined, timing => draws.push(timing));
+    realtime.start();
+    const client = clients.client(0);
+    now = 50;
+    realtime.advance();
+    client.run(() => {
+      SetUnitTimeScale(fighter, 0);
+      BlzSetSpecialEffectTimeScale(effect, 0);
+    });
+    const held = captureScene(client);
+    realtime.hold(0);
+    now = 3050;
+    realtime.advance();
+    client.run(() => expect(os.clock()).toBe(3.05));
+    expect(client.frame).toBe(3);
+    expect(captureScene(client)).toEqual(held);
+    realtime.release(0);
+    now = 3067;
+    realtime.advance();
+    expect(draws).toEqual([
+      { draw: 1, wallTimeMs: 50, callbackFrame: 3, callbacks: 3 },
+      { draw: 2, wallTimeMs: 3067, callbackFrame: 4, callbacks: 1 },
+    ]);
+    expect(client.unitPoses()).toEqual(held.units);
+    expect(client.effectPoses()).toEqual(held.effects);
+  }
 });
 
 test("[spec #206] several resume callbacks before one draw retain the paused fighter pose until the next real draw", () => {

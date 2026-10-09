@@ -38,7 +38,7 @@ function rawSkin(modelBytes: ArrayBuffer): ArrayBuffer {
   return output.buffer;
 }
 
-test("[repro #84] raw version-1800 skin keeps four bone IDs and weights instead of interleaving zero bytes", () => {
+test("[reference MDX 1800 layout] raw skin keeps four bone IDs and weights instead of interleaving zero bytes", () => {
   const model = parseMDL(FIXTURE_MDL[RULER] ?? "");
   model.Version = 1100;
   const expected = [0, 1, 0, 0, 128, 127, 0, 0];

@@ -7,7 +7,7 @@ import { Effect } from "effect";
 import { ChildProcess } from "effect/process";
 import { pollFor, spawnLogged } from "../scripts/wisp/hostProcess";
 
-test("[repro #62] a scoped child records its shutdown output before its readers stop", async () => {
+test("[boundary] a scoped child records its shutdown output before its readers stop", async () => {
   const folder = mkdtempSync(join(tmpdir(), "wisp-shutdown-output-"));
   const stdout = join(folder, "stdout");
   try {

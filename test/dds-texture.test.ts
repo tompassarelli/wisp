@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { ddsTexture } from "../scripts/wisp/browser/ddsTexture";
 
-test("[repro #82] DDS returned for a stage's TIF texture decodes its top image", () => {
+test("[reference DDS DXT1 layout] a DDS returned for a stage's TIF texture decodes its top image", () => {
   const bytes = new ArrayBuffer(136), header = new DataView(bytes);
   header.setUint32(0, 0x20534444, true);
   header.setUint32(4, 124, true);

@@ -51,7 +51,7 @@ function tga(rgb: readonly number[]): Uint8Array {
  bytes.set([rgb[2] ?? 0, rgb[1] ?? 0, rgb[0] ?? 0, 255], 18); return bytes;
 }
 
-farmTest("[repro #84] alpha 140 blends an opaque Classic and Definitive model over the background", async () => {
+farmTest("[invariant] alpha 140 blends an opaque Classic and Definitive model over the background", async () => {
  const directory = await mkdtemp(join(tmpdir(), "wisp-instance-alpha-"));
  try {
   for (const hd of [false, true]) {

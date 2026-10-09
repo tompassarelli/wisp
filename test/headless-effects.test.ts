@@ -36,7 +36,7 @@ test("[native #59] seven effect cases agree in two clients", () => {
   for (const client of clients.clients) expect(client.files.get(`effects-p${client.slot}.txt`)).toEqual(EXPECTED);
 });
 
-test("[reference] effect reals are stored as binary32 like Warcraft's Lua numbers", () => {
+test("[reference] effect positions, scale, orientation, clock and matrix scale are stored as binary32 like Warcraft's Lua numbers", () => {
   const third = 1 / 3;
   const clients = runtime.clients({ install, start: () => {
     const e = AddSpecialEffect("x.mdx", third, -third);
@@ -49,26 +49,25 @@ test("[reference] effect reals are stored as binary32 like Warcraft's Lua number
   clients.start();
   const [pose] = clients.clients[0]?.effectPoses() ?? [];
   expect(pose?.z).toBe(1);
-});
-
-test("[reference] effect scale, orientation, clock and matrix scale are stored as binary32", () => {
-  const third = 1 / 3;
-  const clients = runtime.clients({ install, start: () => {
-    const e = AddSpecialEffect("x.mdx", 0, 0);
-    BlzSetSpecialEffectScale(e, third);
-    BlzSetSpecialEffectTimeScale(e, third);
-    BlzSetSpecialEffectTime(e, third);
-    BlzSetSpecialEffectYaw(e, third);
-    BlzSetSpecialEffectPitch(e, third);
-    BlzSetSpecialEffectRoll(e, third);
-    BlzSetSpecialEffectMatrixScale(e, third, third, 3);
-    BlzSetSpecialEffectMatrixScale(e, 3, 1, third);
-  } });
-  clients.start();
-  const [pose] = clients.clients[0]?.effectPoses() ?? [];
-  const f = Math.fround(third);
-  expect(pose && [pose.scale, pose.timeScale, pose.animationElapsed, pose.yaw, pose.pitch, pose.roll]).toEqual([f, f, f, f, f, f]);
-  expect(pose?.matrixScale).toEqual([Math.fround(f * 3), f, Math.fround(3 * f)]);
+  {
+    const third = 1 / 3;
+    const clients = runtime.clients({ install, start: () => {
+      const e = AddSpecialEffect("x.mdx", 0, 0);
+      BlzSetSpecialEffectScale(e, third);
+      BlzSetSpecialEffectTimeScale(e, third);
+      BlzSetSpecialEffectTime(e, third);
+      BlzSetSpecialEffectYaw(e, third);
+      BlzSetSpecialEffectPitch(e, third);
+      BlzSetSpecialEffectRoll(e, third);
+      BlzSetSpecialEffectMatrixScale(e, third, third, 3);
+      BlzSetSpecialEffectMatrixScale(e, 3, 1, third);
+    } });
+    clients.start();
+    const [pose] = clients.clients[0]?.effectPoses() ?? [];
+    const f = Math.fround(third);
+    expect(pose && [pose.scale, pose.timeScale, pose.animationElapsed, pose.yaw, pose.pitch, pose.roll]).toEqual([f, f, f, f, f, f]);
+    expect(pose?.matrixScale).toEqual([Math.fround(f * 3), f, Math.fround(3 * f)]);
+  }
 });
 
 test("[native #59] playing and frozen destroyed effects clear after five game seconds", () => {

@@ -26,7 +26,7 @@ test("[property seed 85] archive replacement preserves unrelated entries and rem
   }
 });
 
-test("[invariant] a failed map step removes the staged copy and keeps the previous map", async () => {
+test("[invariant] a map stages in a file of its own, writable even from a read-only source; a failed step removes the staged copy and keeps the previous map", async () => {
   const directory = mkdtempSync(join(tmpdir(), "wisp-stage-"));
   const map = join(directory, "map.w3x");
   writeFileSync(map, "previous");
@@ -37,23 +37,22 @@ test("[invariant] a failed map step removes the staged copy and keeps the previo
   expect(Exit.isFailure(exit)).toBe(true);
   expect(readFileSync(map, "utf8")).toBe("previous");
   expect(readdirSync(directory)).toEqual(["map.w3x"]);
-});
-
-test("[repro dafb85c] a map stages in a file of its own process, writable even from a read-only source", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "wisp-stage-"));
-  const source = join(directory, "input.w3x");
-  writeFileSync(source, "input");
-  chmodSync(source, 0o444);
-  const map = join(directory, "map.w3x");
-  const staged: string[] = [];
-  await Effect.runPromise(stageMap(source, map, (path) => Effect.sync(() => {
-    staged.push(path);
-    writeFileSync(path, "built");
-  })));
-  expect(staged[0]).not.toBe(source);
-  expect(staged[0]).not.toBe(map);
-  expect(readFileSync(map, "utf8")).toBe("built");
-  expect(readdirSync(directory).sort()).toEqual(["input.w3x", "map.w3x"]);
+  {
+    const directory = mkdtempSync(join(tmpdir(), "wisp-stage-"));
+    const source = join(directory, "input.w3x");
+    writeFileSync(source, "input");
+    chmodSync(source, 0o444);
+    const map = join(directory, "map.w3x");
+    const staged: string[] = [];
+    await Effect.runPromise(stageMap(source, map, (path) => Effect.sync(() => {
+      staged.push(path);
+      writeFileSync(path, "built");
+    })));
+    expect(staged[0]).not.toBe(source);
+    expect(staged[0]).not.toBe(map);
+    expect(readFileSync(map, "utf8")).toBe("built");
+    expect(readdirSync(directory).sort()).toEqual(["input.w3x", "map.w3x"]);
+  }
 });
 
 test("[invariant] interrupting a map step stops its child process", async () => {

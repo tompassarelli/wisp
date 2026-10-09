@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { GameFiles } from "../scripts/wisp/gameFiles";
 
-test("[repro bcb768d] installing a test map preserves other tests and the owner's playable map", async () => {
+test("[boundary] installing a test map preserves other tests and the owner's playable map", async () => {
   const root = mkdtempSync(join(tmpdir(), "wisp-map-library-"));
   try {
     const folder = join(root, "Maps/00-Game");

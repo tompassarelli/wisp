@@ -4,7 +4,7 @@ import { installHeadless } from "../scripts/wisp/headless";
 const runtime = installHeadless({ filePrefix: "results87", globalPrefixes: [], playerNames: { 0: "Medivh", 1: "Jaina" } });
 afterAll(runtime.restore);
 
-test("[repro #87] results read configured names, changed camera target and nonlooping thematic music", () => {
+test("[spec #87] results read configured names, changed camera target and nonlooping thematic music", () => {
   const clients = runtime.clients({ install: () => {}, start: () => {
     SetCameraPosition(120, 240);
     DisplayTextToForce(GetPlayersAll(), `${GetPlayerName(Player(0))}/${GetPlayerName(Player(1))}:${GetCameraTargetPositionX()}`);

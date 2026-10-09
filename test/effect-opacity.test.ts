@@ -10,23 +10,18 @@ function blended(filterMode: model.FilterMode, color: number, alpha: number, bac
   return color * factor(factors[0]) + backdrop * factor(factors[1]);
 }
 
-test("[native #72] an additive layer adds its colour times its alpha, so a faded additive cue adds nothing", () => {
-
+test("[native #72] an additive layer adds its colour times its alpha, a layer's alpha is its geoset's animated alpha times its own, and an effect's alpha fades it once", () => {
   expect(blended(model.FilterMode.Additive, 0.8, 0, 0.3)).toBe(0.3);
   expect(blended(model.FilterMode.Additive, 0.8, 0.5, 0.3)).toBeCloseTo(0.7);
   expect(blended(model.FilterMode.AddAlpha, 0.8, 0.5, 0.3)).toBeCloseTo(0.7);
+  {
+    expect(layerOpacity(0.5, 0.4, 1)).toBeCloseTo(0.2);
+    expect(layerOpacity(0, 1, 1)).toBe(0);
+  }
+  {
+    const alpha = layerOpacity(1, 1, 40 / 255);
+    expect(alpha).toBeCloseTo(40 / 255);
+    expect(blended(model.FilterMode.Additive, 1, alpha, 0)).toBeCloseTo(40 / 255);
+  }
 });
 
-test("[native #72] a layer's alpha is its geoset's animated alpha times its own", () => {
-
-  expect(layerOpacity(0.5, 0.4, 1)).toBeCloseTo(0.2);
-  expect(layerOpacity(0, 1, 1)).toBe(0);
-});
-
-test("[native #72] an effect's alpha fades an additive layer once, not squared", () => {
-
-
-  const alpha = layerOpacity(1, 1, 40 / 255);
-  expect(alpha).toBeCloseTo(40 / 255);
-  expect(blended(model.FilterMode.Additive, 1, alpha, 0)).toBeCloseTo(40 / 255);
-});

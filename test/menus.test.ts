@@ -90,27 +90,12 @@ function fakeGame(hosting: "immediate" | "old-setup" | "refused" = "immediate", 
   return { received, address: { port: server.port!, guid: GUID } satisfies MenuAddress, stop: () => server.stop(true) };
 }
 
-const hostLate = async () => {
-  const game = fakeGame("immediate", 2);
-  try {
-    const result = await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-      const menus = yield* connectMenus(game.address);
-      return yield* hostLobby(menus, { folder: "00-Wisp", file: "Wisp Sample.w3x", gameName: "late", password: "pw" });
-    })));
-    return { result, listings: game.received.filter(({ message }) => message === "GetMapList").length };
-  } finally { game.stop(); }
-};
-
-test("[repro 6b5519e] a folder whose maps the game hasn't read yet is listed again until they appear", async () => {
-  expect(await hostLate()).toMatchObject({ result: `${MAPS}00-Wisp/Wisp Sample.w3x`, listings: 4 });
-});
-
 const games: { stop: () => void }[] = [];
 afterEach(() => {
   for (const game of games.splice(0)) game.stop();
 });
-const started = (hosting?: Parameters<typeof fakeGame>[0]) => {
-  const game = fakeGame(hosting);
+const started = (hosting?: Parameters<typeof fakeGame>[0], unreadListings?: number) => {
+  const game = fakeGame(hosting, unreadListings);
   games.push(game);
   return game;
 };
@@ -137,8 +122,8 @@ test("[invariant] the listener hears only a page the game served", async () => {
   expect(Exit.isSuccess(exit) ? exit.value : failure(exit)).toEqual({ statuses: [403, 403, 400, 204], address: { port: 38487, guid: GUID } });
 });
 
-test("[repro dabf45f] a hosted lobby is started only once it settles", async () => {
-  const game = started();
+test("[scenario] hosting lists a folder again until the game has read its maps, and starts the lobby only once it settles", async () => {
+  const game = started("immediate", 2);
   let settled = 0;
   const exit = await run(Effect.gen(function*() {
     const menus = yield* connectMenus(game.address);
@@ -150,6 +135,7 @@ test("[repro dabf45f] a hosted lobby is started only once it settles", async () 
     return map;
   }));
   expect(Exit.isSuccess(exit) ? exit.value : failure(exit)).toBe(`${MAPS}00-Wisp/Wisp Sample.w3x`);
+  expect(game.received.filter(({ message }) => message === "GetMapList").length).toBe(4);
   // LobbyStart immediately after hosting can crash Warcraft while loading.
   expect(settled).toBeGreaterThanOrEqual(290);
 });
@@ -174,7 +160,7 @@ test("[invariant] the page is installed only where Warcraft's own page isn't, an
   }
 });
 
-test("[repro a6125bf] the page keeps the newest screens it heard and announces them, so a later listener knows where the menus are", () => {
+test("[invariant] the page keeps the newest screens it heard and announces them, so a later listener knows where the menus are", () => {
   const script = /<script>\n([\s\S]*?)<\/script>/.exec(menuPage(47123))?.[1] ?? "";
   const posts: { url: string; body: unknown }[] = [];
   let listener: ((event: { data: string }) => void) | undefined;

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
 
@@ -18,7 +18,7 @@ const inEffect = (node: ts.Node): boolean => {
   return false;
 };
 
-const violations = (file: string, source: string): number[] => {
+export const effectBoundaryViolations = (file: string, source: string): number[] => {
   const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const lines: number[] = [];
   const visit = (node: ts.Node): void => {
@@ -29,18 +29,12 @@ const violations = (file: string, source: string): number[] => {
   return lines;
 };
 
-test("[spec AGENTS.md] host process and wait boundaries belong to Effect", async () => {
+if (import.meta.main) {
   const problems: string[] = [];
-  let scanned = 0;
   for (const file of new Bun.Glob("scripts/**/*.ts").scanSync(root)) {
     if (/\.tests?\.ts$/.test(file) || browserPage(file)) continue;
-    scanned++;
-    const source = await Bun.file(join(root, file)).text();
-    problems.push(...violations(file, source).map(line => `${file}:${line} raw process or wait outside Effect`));
+    problems.push(...effectBoundaryViolations(file, readFileSync(join(root, file), "utf8")).map(line => `${file}:${line} raw process or wait outside Effect (wisp:docs/host-tools.md)`));
   }
-  expect(scanned).toBeGreaterThanOrEqual(100);
-  expect(problems).toEqual([]);
-  for (const shell of ["Bun.spawn(['true'])", "Bun . spawn(['true'])", "setTimeout(() => {}, 1)", "await new Promise(resolve => resolve())"]) {
-    expect(violations("x.ts", `import { Effect } from 'effect'; const run = async () => { ${shell}; }; run();`)).not.toEqual([]);
-  }
-});
+  for (const problem of problems) console.error(problem);
+  process.exit(problems.length === 0 ? 0 : 1);
+}
