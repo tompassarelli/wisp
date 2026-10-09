@@ -5,6 +5,10 @@
 import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
+import { Effect } from "effect";
+import { ChildProcess } from "effect/process";
+import { collect } from "../hostProcess";
+import { LanFailure } from "./join";
 import { decodeMapInfo } from "../../mapInfo";
 import { crc32 } from "./w3gs";
 
@@ -97,20 +101,19 @@ export function mapFactsFrom(file: Uint8Array, path: string, entry: (name: strin
 }
 
 /** Reads a map file's facts, extracting its entries with Wisp's map packager (wisp:native/map-pack.c). */
-export function readMapFacts(mapFile: string, packager: string, path = pathInGame(mapFile)): MapFacts {
-  const scratch = mkdtempSync(join(tmpdir(), "wisp-lan-map."));
-  try {
-    const cache = new Map<string, Uint8Array | undefined>();
-    const entry = (name: string) => {
-      if (cache.has(name)) return cache.get(name);
-      const out = join(scratch, `${cache.size}`);
-      const run = Bun.spawnSync([packager, "extract", mapFile, out, name], { stdout: "ignore", stderr: "ignore" });
-      const bytes = run.exitCode === 0 && statSync(out, { throwIfNoEntry: false }) !== undefined ? new Uint8Array(readFileSync(out)) : undefined;
-      cache.set(name, bytes);
-      return bytes;
-    };
-    return mapFactsFrom(new Uint8Array(readFileSync(mapFile)), path, entry);
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
+const read = <A>(run: () => A) => Effect.try({ try: run, catch: cause => new LanFailure({ problem: String(cause) }) });
+
+export const readMapFacts = (mapFile: string, packager: string, path = pathInGame(mapFile)) => Effect.scoped(Effect.gen(function*() {
+  const scratch = yield* Effect.acquireRelease(
+    read(() => mkdtempSync(join(tmpdir(), "wisp-lan-map."))),
+    directory => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+  );
+  const entries = new Map<string, Uint8Array | undefined>();
+  for (const name of [...SCRIPT_ENTRIES, "war3map.w3i", ...CHECKED_ENTRIES]) {
+    const out = join(scratch, `${entries.size}`);
+    const run = yield* collect(ChildProcess.make(packager, ["extract", mapFile, out, name], { stdout: "ignore", stderr: "ignore" })).pipe(Effect.mapError(cause => new LanFailure({ problem: String(cause) })));
+    const bytes = yield* read(() => run.exitCode === 0 && statSync(out, { throwIfNoEntry: false }) !== undefined ? new Uint8Array(readFileSync(out)) : undefined);
+    entries.set(name, bytes);
   }
-}
+  return yield* read(() => mapFactsFrom(new Uint8Array(readFileSync(mapFile)), path, name => entries.get(name)));
+})).pipe(Effect.mapError(cause => new LanFailure({ problem: String(cause) })));
