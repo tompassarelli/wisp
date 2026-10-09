@@ -50,6 +50,7 @@ export interface LockstepOptions {
   readonly effectDeaths?: EffectDeaths;
 
   readonly musicSlider?: number;
+  readonly effectStepMs?: number;
 
 
 
@@ -133,6 +134,7 @@ export class Lockstep {
         ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
         ...(options.effectDeaths === undefined ? {} : { effectDeaths: options.effectDeaths }),
         ...(options.musicSlider === undefined ? {} : { musicSlider: options.musicSlider }),
+        ...(options.effectStepMs === undefined ? {} : { effectStepMs: options.effectStepMs }),
       }));
     }
     this.clients = clients;
