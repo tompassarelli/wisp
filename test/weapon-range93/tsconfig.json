@@ -1,0 +1,9 @@
+{
+  "extends": "../../examples/sample/tsconfig.map.json",
+  "compilerOptions": { "rootDir": "../..", "outDir": "../../build/weapon-range93" },
+  "include": ["main.ts", "../../src/natives/warcraft.d.ts"],
+  "tstl": {
+    "luaBundle": "map.lua", "luaBundleEntry": "main.ts",
+    "luaPlugins": [{ "name": "../../plugins/warcraft-numbers.ts" }]
+  }
+}
