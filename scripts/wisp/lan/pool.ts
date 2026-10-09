@@ -58,7 +58,9 @@ const LOWEST: Readonly<Record<string, number>> = {
  * window, every quality setting lowest, classic models, sound off. `checks`:
  * parity with sound, for checks that record a client's audio. `visual`: a
  * window big enough to judge what players see, Reforged models. All run at
- * 60 frames a second, focused or not (wisp:docs/lan.md, "Profiles").
+ * 60 frames a second, focused or not (wisp:docs/lan.md, "Profiles"). Pool
+ * clients never sign in and draw Classic whatever `hd` says (wisp#79), so the
+ * pool's profiles are all Classic; Reforged and Definitive need a signed-in client.
  */
 const PARITY: Profile = { name: "parity", width: 800, height: 600, maxFps: 60, video: LOWEST, graphicsMode: "classic", sound: false, music: false };
 const VISUAL: Profile = { name: "visual", width: 1280, height: 720, maxFps: 60, video: { ...LOWEST, lightingquality: 2, texquality: 1 }, graphicsMode: "reforged", sound: true, music: true };
@@ -74,8 +76,8 @@ export const PROFILES: Readonly<Record<string, Profile>> = {
   checks: { name: "checks", width: 800, height: 600, maxFps: 60, video: LOWEST, graphicsMode: "classic", sound: true, music: false },
   /** parity at 144 frames a second, focused or not, to compare the game's clocks against a 60 fps cap. */
   hfr: { name: "hfr", width: 800, height: 600, maxFps: 144, video: LOWEST, graphicsMode: "classic", sound: false, music: false },
-  visual: VISUAL,
-  ...CAPTURE_PROFILES,
+  visual: { ...VISUAL, graphicsMode: "classic" },
+  "capture-classic": CAPTURE_PROFILES["capture-classic"],
 };
 
 /** Hold every graphics choice fixed while measuring a different frame cap. */

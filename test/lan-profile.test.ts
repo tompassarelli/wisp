@@ -1,16 +1,17 @@
 import { expect, test } from "bun:test";
-import { clientSettings, measurementRefusal, poolProfile, preferences, PROFILES } from "../scripts/wisp/lan/pool";
+import { CLIENT_PROFILES, clientSettings, measurementRefusal, poolProfile, preferences, PROFILES } from "../scripts/wisp/lan/pool";
 import { profileSettings } from "../scripts/wisp/clientDoctorCommand";
 import { preferenceChanges, withPreferences } from "../scripts/warcraft/preferences";
 
-test("[reference] 3.0.1 profiles select the installed graphics modes without the video keys the 3.0 patch notes retired", () => {
-  for (const [name, hd, assao] of [["parity", 0, 0], ["checks", 0, 0], ["hfr", 0, 0], ["visual", 1, 0], ["capture-classic", 0, 1], ["capture-reforged", 1, 1], ["capture-definitive", 2, 1]] as const) {
+test("[reference] pool profiles are Classic only (unsigned clients draw Classic at any hd); signed-in profiles select their graphics mode; no video keys the 3.0 patch notes retired", () => {
+  for (const [name, hd, assao] of [["parity", 0, 0], ["checks", 0, 0], ["hfr", 0, 0], ["visual", 0, 0], ["capture-classic", 0, 1]] as const) {
     const text = preferences(poolProfile(name), 0);
     expect(text).toContain(`assao=${assao}\n`);
     expect(text).toContain(`hd=${hd}\n`);
     for (const key of ["bloom", "portraitBloom", "particles", "spellfilter"]) expect(text).not.toContain(`${key}=`);
   }
-  expect(preferences({ ...poolProfile("visual"), graphicsMode: "definitive" }, 0)).toContain("hd=2\n");
+  for (const [name, hd] of [["visual", 1], ["capture-reforged", 1], ["capture-definitive", 2]] as const) expect(preferences(CLIENT_PROFILES[name], 0)).toContain(`hd=${hd}\n`);
+  expect(() => poolProfile("capture-definitive")).toThrow();
 });
 
 test("[invariant] a signed-in client naming no profile gets minimal, its own display settings over it; perf measurements refuse anything but player", () => {
