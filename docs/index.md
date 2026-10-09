@@ -4,6 +4,10 @@
 ground tiles into W3E grid points. `bun examples/terrain.ts` writes a synthetic
 line and rectangle; the existing terrain reader and renderer consume its bytes.
 
+[Build profiles](builds.md) retain each checked game build's capabilities,
+protocol and menu differences. `wisp client doctor` detects and prints its
+profile; a build-dependent command names a missing capability before running.
+
 [Warcraft verification prior art](prior-art.md) compares reusable runtimes,
 clients, renderers, hosts, replay parsers and engine access before extending
 Wisp's native checks.

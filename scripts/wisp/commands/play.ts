@@ -37,7 +37,7 @@ export const makePlay = <R>(declaration: PlayDeclaration<R>, layer: Layer.Layer<
   const hands = DoctorHands.of({
     launches: false,
     leaveLobby: () => leaveBy(menuReportPort, "a lobby", leaveLobby),
-    // Warcraft III 3.0.0.24268 ignores the menus' ScoreScreenClose; Escape in its window leaves the score screen.
+    // The checked rollback build ignores the menus' ScoreScreenClose; Escape in its window leaves the score screen.
     closeScore: () => leaveScoreScreen(declaration).pipe(Effect.provide(playHostLayer(declaration.display, tools))),
   });
   // A watch beside play's own menu steps shares the report port through its kept address (wisp:docs/watch.md).

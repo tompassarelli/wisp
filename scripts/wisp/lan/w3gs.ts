@@ -2,7 +2,7 @@
 // (wisp:docs/lan.md). Every packet is F7, a type byte, a u16 total length and
 // a little-endian payload. Layouts follow W3Champions' Flo (MPL-2.0,
 // github.com/BogdanW3/W3C-Flo crates/w3gs) and wc3-slop-lan's notes for
-// 3.0.0.24268; this is Wisp's own encoding of them.
+// the checked rollback build; this is Wisp's own encoding of them.
 
 export const PACKET = {
   PingFromHost: 0x01,
@@ -360,9 +360,8 @@ export function encodeGameSettings(settings: GameSettings): Uint8Array {
 
 // Discovery (UDP)
 
-/** What a 3.0.0.24268 client puts in its SearchGame. */
+/** Product identifier used by the checked build's SearchGame. */
 export const PRODUCT = "PX3W";
-export const PROTOCOL_VERSION = 10200;
 
 export interface GameInfo {
   readonly product: string;

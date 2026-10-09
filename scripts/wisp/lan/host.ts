@@ -9,14 +9,15 @@
 // its turn the moment it happens.
 //
 // Its join burst and game loop follow W3Champions' Flo (MPL-2.0) as
-// wc3-slop-lan describes it for 3.0.0.24268; this is Wisp's own code.
+// wc3-slop-lan describes it for the checked rollback build; this is Wisp's own code.
 import type { Socket, TCPSocketListener, udp } from "bun";
 import { Deferred, Effect, Exit, Fiber, Schedule, Scope, Semaphore } from "effect";
 import { decodeActions } from "./actions";
 import { LanFailure } from "./join";
 import type { MapFacts } from "./map";
+import { DEFAULT_BUILD, requireCapability } from "../builds";
 import {
-  CHAT, DEFAULT_GAME_FLAGS, LEAVE_REASONS, PACKET, PRODUCT, PROTOBUF, PROTOCOL_VERSION, RACE_RANDOM_SELECTABLE, SLOT_CLOSED, SLOT_OCCUPIED, SLOT_OPEN,
+  CHAT, DEFAULT_GAME_FLAGS, LEAVE_REASONS, PACKET, PRODUCT, PROTOBUF, RACE_RANDOM_SELECTABLE, SLOT_CLOSED, SLOT_OCCUPIED, SLOT_OPEN,
   type Chat, type PlayerAction, type Slot, type SlotTable,
   chatFromHost, countDownEnd, countDownStart, decodeChat, decodeKeepAlive, decodeLeaveReq, decodeMapSize, decodeOutgoingAction, decodeReqJoin, decodeSearchGame,
   gameInfo, incomingAction, leaveAck, mapCheck, pingFromHost, playerInfo, playerLeft, playerLoaded, playerProfile, playerSkins, protobufType, rejectJoin, slotInfo, slotInfoJoin, splitPackets,
@@ -41,6 +42,7 @@ const RACE_BITS: Readonly<Record<number, number>> = { 1: 0x01, 2: 0x02, 3: 0x08,
 export type Phase = "lobby" | "countdown" | "loading" | "playing" | "over";
 
 export interface HostOptions {
+  readonly buildId?: string;
   readonly map: MapFacts;
   readonly gameName: string;
   /** Names for the joining clients in join order: client a, client b. */
@@ -139,6 +141,9 @@ export function slotTable(map: MapFacts, count: number, randomSeed: number, join
 }
 
 export const startHost = (options: HostOptions) => Effect.gen(function*() {
+  const profile = yield* requireCapability(options.buildId ?? process.env["WISP_GAME_BUILD"] ?? DEFAULT_BUILD, "lanPool").pipe(Effect.mapError((cause) => new LanFailure({ problem: cause.message })));
+  const protocolVersion = profile.protocolVersion;
+  if (protocolVersion === null) return yield* new LanFailure({ problem: `LAN protocol missing for ${profile.id} (wisp#100)` });
   const scope = yield* Effect.scope;
   const speedLock = yield* Semaphore.make(1);
   const lobbyScope = yield* Scope.fork(scope);
@@ -349,7 +354,7 @@ export const startHost = (options: HostOptions) => Effect.gen(function*() {
 
   const listing = () => gameInfo({
     product: PRODUCT,
-    version: PROTOCOL_VERSION,
+    version: protocolVersion,
     hostCounter: 1,
     entryKey: 0,
     name: options.gameName,

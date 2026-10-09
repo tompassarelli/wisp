@@ -9,6 +9,7 @@
 // declared account; without one, doctor stops with one plain line. A state
 // doctor has no recovery for is reported, not guessed at.
 import { join } from "node:path";
+import { reportBuild } from "./buildHost";
 import { Clock, Context, Effect, Schema } from "effect";
 import {
   type LauncherHealth, type PrefixUse, type ProcessInfo, hasSavedLogin, isErrorDialog, launchOutcome, launchRequested, launcherHealth, launcherLogDirectory, newestLauncherLog,
@@ -277,7 +278,7 @@ const POLL = "1 second";
 const LEAVE_SECONDS = 10;
 /**
  * Escape presses on a score screen before doctor ends Warcraft III and has it
- * launched again: on 7 Oct client B (3.0.0.24268) stayed on the score screen
+ * launched again: on 7 Oct client B (the checked rollback build) stayed on the score screen
  * after one Escape in three doctor runs, and left it on a later press.
  */
 export const SCORE_ESCAPES = 3;
@@ -295,6 +296,7 @@ export const doctorClient = (target: DoctorTarget, print: (line: string) => void
 };
 
 const doctorRun = (target: DoctorTarget, print: (line: string) => void, holdStart: (release: Effect.Effect<void>) => void) => Effect.gen(function*() {
+  yield* reportBuild(target, print).pipe(Effect.mapError((cause) => new DoctorStop({ problem: cause.message })));
   const { start } = target;
   if (start.kind === "offline-pool") {
     const view = yield* ClientWatch.use((watch) => watch.view(target.client)).pipe(Effect.mapError((cause) => new DoctorStop({ problem: cause.message })));

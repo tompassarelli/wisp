@@ -13,6 +13,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Clock, Console, Deferred, Effect, Option, Queue, Schema, type Scope } from "effect";
 import { pollFor } from "./hostProcess";
+import { DEFAULT_BUILD, profileFor, requireCapability } from "./builds";
+import { loadLanPlugin, lanPluginProblem } from "./lan/plugin";
 
 /** Where an installed menu page reports its address and the menus' own requests. */
 export const DEFAULT_MENU_REPORT_PORT = 47123;
@@ -28,6 +30,7 @@ export class MenuFailure extends Schema.TaggedError<MenuFailure>()("MenuFailure"
 
 /** The menus' socket address. The GUID lets anything local drive the menus; it is never printed. */
 export interface MenuAddress {
+  readonly buildId?: string;
   readonly port: number;
   readonly guid: string;
   /** The newest state messages the page heard from the game, oldest first, so a later listener knows the current screen. */
@@ -301,6 +304,7 @@ export const listenForMenus = (reportPort = DEFAULT_MENU_REPORT_PORT, onSent: (s
 export type Outcome<A> = { readonly done: A } | { readonly failed: string } | undefined;
 
 export interface MenuSocket {
+  readonly buildId?: string;
   /** Sends a request the way the menu page does. */
   readonly send: (message: string, payload?: Readonly<Record<string, unknown>>) => Effect.Effect<void, MenuFailure>;
   /** Waits for the first event `decide` settles, ignoring the rest. */
@@ -313,6 +317,8 @@ const CLOSED: MenuEvent = { messageType: "", payload: undefined };
 
 /** Connects to the menus' socket until the scope closes. */
 export const connectMenus = (address: MenuAddress): Effect.Effect<MenuSocket, MenuFailure, Scope.Scope> => Effect.gen(function*() {
+  const buildId = address.buildId ?? process.env["WISP_GAME_BUILD"] ?? (lanPluginProblem() === undefined ? (yield* loadLanPlugin.pipe(Effect.mapError((cause) => new MenuFailure({ operation: "detect menu build", problem: cause.message })))).versionForPort?.(address.port) : undefined);
+  if (buildId !== undefined) yield* requireCapability(buildId, "menuDriving").pipe(Effect.mapError((cause) => new MenuFailure({ operation: "drive menus", problem: cause.message })));
   const events = yield* Queue.unbounded<MenuEvent>();
   const socket = yield* Effect.acquireRelease(
     Effect.callback<WebSocket, MenuFailure>((resume) => {
@@ -350,7 +356,7 @@ export const connectMenus = (address: MenuAddress): Effect.Effect<MenuSocket, Me
       orElse: () => Effect.fail(new MenuFailure({ operation: what, problem: `no answer within ${seconds} s` })),
     }));
   };
-  return { send, expect, forget: Queue.clear(events).pipe(Effect.asVoid) };
+  return { ...(buildId === undefined ? {} : { buildId }), send, expect, forget: Queue.clear(events).pipe(Effect.asVoid) };
 });
 
 /**
@@ -492,12 +498,12 @@ export const hostLobby = (menus: MenuSocket, options: HostOptions) => Effect.gen
 
 /**
  * How long LobbyStart waits after the game confirms hosting. Warcraft III
- * 3.0.0.24268 crashed while loading (a read of 0x500) in 6 of 6 starts sent as
+ * The checked rollback build crashed while loading (a read of 0x500) in 6 of 6 starts sent as
  * soon as the lobby was confirmed and in 0 of 11 sent about 2 s later
  * (Smashcraft #119, 7 Oct 2026). No menu event is known to end that window,
  * so this is a measured pause.
  */
-export const LOBBY_SETTLE_MS = 2500;
+export const LOBBY_SETTLE_MS = profileFor(DEFAULT_BUILD)!.menus.lobbySettleMs;
 const hostedAt = new WeakMap<MenuSocket, number>();
 
 /** Joins a lobby by its exact (case-sensitive) name and password; returns once this client is in it. */
@@ -518,7 +524,8 @@ export const joinLobby = (menus: MenuSocket, gameName: string, password: string,
  * Starts the hosted lobby, at least `settleMs` after this socket hosted it
  * (`LOBBY_SETTLE_MS`); returns once the game shows its loading screen.
  */
-export const startLobby = (menus: MenuSocket, settleMs = LOBBY_SETTLE_MS) => Effect.gen(function*() {
+export const startLobby = (menus: MenuSocket, settleMs = profileFor(menus.buildId ?? DEFAULT_BUILD)?.menus.lobbySettleMs ?? LOBBY_SETTLE_MS) => Effect.gen(function*() {
+  if (menus.buildId !== undefined) yield* requireCapability(menus.buildId, "menuDriving").pipe(Effect.mapError((cause) => new MenuFailure({ operation: "start lobby", problem: cause.message })));
   const hosted = hostedAt.get(menus);
   if (hosted !== undefined) {
     const wait = hosted + settleMs - (yield* Clock.currentTimeMillis);

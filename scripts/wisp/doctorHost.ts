@@ -11,9 +11,10 @@ import { DoctorHands, type DoctorTarget } from "./doctor";
 import { collect } from "./hostProcess";
 import { leaveLobby, reportedMenus } from "./menus";
 import { PlayProblem } from "./play";
+import { detectBuild, executableIn } from "./buildHost";
+import { requireCapability } from "./builds";
 
 /** The Back button of a lobby, on the 2560x1440 client frame. */
-const BACK = { x: 155, y: 1389 };
 
 /**
  * The empty fields' placeholders doctor clicks on Battle.net's sign-in pages
@@ -44,14 +45,21 @@ export const privateDoctorHands = (clientsFile: string) => Layer.effect(DoctorHa
     const menus = yield* reportedMenus(target.client.menuReportPort).pipe(Effect.catchTag("MenuFailure", () => Effect.void));
     if (menus !== undefined) return yield* leaveLobby(menus);
     const game = yield* windowOf(target, "Warcraft III");
-    yield* desktop.click(game, BACK.x, BACK.y);
+    const profile = yield* requireCapability(yield* detectBuild(executableIn(target.prefix)), "menuDriving");
+    yield* desktop.click(game, profile.menus.lobbyBack.x, profile.menus.lobbyBack.y);
   })).pipe(Effect.mapError((cause) => (cause instanceof PlayProblem ? cause : problem(cause))));
 
-  // Warcraft III 3.0.0.24268 ignores the menus' ScoreScreenClose and moved the score screen's Back to its top left; Escape leaves it (client B, 7 Oct 2026).
-  const closeScoreOf = (target: DoctorTarget) => Effect.gen(function*() {
+  // The checked rollback build ignores the menus' ScoreScreenClose and moved the score screen's Back to its top left; Escape leaves it (client B, 7 Oct 2026).
+  const closeScoreOf = (target: DoctorTarget) => Effect.scoped(Effect.gen(function*() {
     const game = yield* windowOf(target, "Warcraft III");
-    yield* desktop.keys(game, "Escape");
-  }).pipe(Effect.mapError((cause) => (cause instanceof PlayProblem ? cause : problem(cause))));
+    const profile = yield* requireCapability(yield* detectBuild(executableIn(target.prefix)), "menuDriving");
+    if (profile.menus.scoreClose === "Escape") yield* desktop.keys(game, "Escape");
+    else {
+      const menus = yield* reportedMenus(target.client.menuReportPort);
+      if (menus === undefined) return yield* new PlayProblem({ problem: "the score screen's menu page isn't reporting" });
+      yield* menus.send(profile.menus.scoreClose);
+    }
+  })).pipe(Effect.mapError((cause) => (cause instanceof PlayProblem ? cause : problem(cause))));
 
   /**
    * One account field into the launcher's sign-in window: the account's

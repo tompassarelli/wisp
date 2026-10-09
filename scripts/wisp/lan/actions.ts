@@ -2,7 +2,7 @@
 // (wisp:docs/lan.md, "The action log"). A block is the bytes one
 // OutgoingAction carried: one or more game actions back to back, each an id
 // byte and its fields. Layouts follow W3Champions' Flo (crates/w3gs
-// src/actions.rs, MPL-2.0) and wc3-slop-lan's notes for 3.0.0.24268, where
+// src/actions.rs, MPL-2.0) and wc3-slop-lan's notes for the checked rollback build, where
 // BlzSendSyncData is action 0x77. An id this decoder doesn't know ends the
 // block's decoding; its remaining bytes are printed as hex.
 import { Reader } from "./w3gs";

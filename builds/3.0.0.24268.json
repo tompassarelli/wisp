@@ -1,0 +1,23 @@
+{
+  "id": "3.0.0.24268", "version": "3.0.0", "build": 24268,
+  "capabilities": {
+    "lanPool": {"status":"supported","issue":"wisp#37"},
+    "privateLanSwitch": {"status":"supported","issue":"wisp#37"},
+    "engineDebugger": {"status":"supported","issue":"wisp#76"},
+    "padDriver": {"status":"supported","issue":"wisp#38"},
+    "menuDriving": {"status":"supported","issue":"smashcraft#119"},
+    "frameNumberRead": {"status":"unchecked","issue":"wisp#38"},
+    "classic": {"status":"supported","issue":"wisp#37"},
+    "definitive": {"status":"supported","issue":"wisp#84"}
+  },
+  "protocolVersion": 10200,
+  "natives": {"naming":"3.0 equipment natives use unprefixed names","added":[]},
+  "menus": {"lobbySettleMs":2500,"scoreClose":"Escape","lobbyBack":{"x":155,"y":1389}},
+  "quirks": [
+    {"description":"LAN requires the private offline provider switch.","issue":"wisp#37"},
+    {"description":"Starting immediately after lobby confirmation crashed 6 of 6 attempts; waiting about two seconds crashed 0 of 11.","issue":"smashcraft#119"},
+    {"description":"ScoreScreenClose is ignored; Escape returns to menus.","issue":"smashcraft#119"},
+    {"description":"A -loadfile launch can race the post-login map scan and lose imported assets.","issue":"wisp#73"},
+    {"description":"Terrain groundtile supplies the default ground and blight texture.","issue":"wisp#82"}
+  ]
+}

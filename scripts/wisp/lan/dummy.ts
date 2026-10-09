@@ -39,6 +39,7 @@ export const checkDummy = <E, R>(options: DummyOptions<E, R>) => Effect.suspend(
     yield* Effect.try({ try: () => writeFileSync(packets, ""), catch: failure });
     const gameName = `wisp-dummy-${Date.now()}`;
     const host = yield* startHost({
+      ...(options.nativeVersion === undefined ? {} : { buildId: options.nativeVersion }),
       map: options.map, clients: ["native", "dummy"], gameName, autoStart: false,
       ...(options.announcePorts === undefined ? {} : { announcePorts: options.announcePorts }),
       log: (line) => { lines.push(line); appendFileSync(join(options.output, "actions.log"), `${line}\n`); },
