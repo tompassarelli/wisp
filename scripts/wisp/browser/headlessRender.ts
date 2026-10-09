@@ -451,7 +451,7 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
   }
   const sun = shadows.sun, pointShadow = shadows.points;
   renderer.setWispEnvironment({
-    ...(light === undefined ? {} : { light: { direction: modelDirection(placed, light.toward), key: light.key, ambient: light.ambient, linear: light.linear } }), ...(fog === undefined ? {} : { fog: fog.height === undefined ? fog : { ...fog, height: { ...fog.height, model: placed } } }),
+    ...(light === undefined ? {} : { light: { direction: modelDirection(placed, light.toward), key: light.key, ambient: light.ambient, linear: light.linear, overbright: graphics === "definitive" } }), ...(fog === undefined ? {} : { fog: fog.height === undefined ? fog : { ...fog, height: { ...fog.height, model: placed } } }),
     ...(points.length === 0 ? {} : { points: { model: placed, normal: normalMatrix(placed), lights: nearest(points, placed) } }),
     ...(sun === undefined ? {} : { shadow: { map: sun.map, matrix: multiply(sun.viewProjection, placed), bias: sun.bias, texel: sun.texel } }),
     ...(pointShadow === undefined ? {} : { pointShadow: { map: pointShadow.map, matrices: pointShadow.matrices, near: POINT_NEAR_PLANE, far: pointShadow.far, texel: 1 / POINT_FACE } }),

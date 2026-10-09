@@ -571,6 +571,13 @@ saves them as the scene's `environment`.
   one the fill is the stock `ReplaceableTextures\EnvironmentMap`'s mean linear
   radiance (rows weighted by solid angle), and Classic materials then light
   in linear colour, texture × clamp(ambient + key × max(N·L, 0))^(1/2.2).
+  Definitive does not clamp that light at 1: Classic materials take
+  texture × max(ambient + key × max(N·L, 0), 0), so a stage light whose
+  ambient or key passes 1 brightens a fighter past its texture colour. Native
+  Definitive fighters rose from L* 25.2 under stock light to 54.5 under
+  Naxxramas' ambient 0.7 × intensity 2 (wisp#79, clone-d, 9 Oct), where
+  Classic's clamp holds them near their texture; clamped, Wisp drew 35.0, and
+  unclamped 43.0 (wisp:test/light-range.test.ts).
   The headless clock does not advance the time of day. Before the map sets
   day/night models, models draw unlit, as before.
 - **Fog.** Linear fog by eye depth from `zStart` to `zEnd` in the fog colour.
