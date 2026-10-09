@@ -7,7 +7,7 @@ export const SILENCE_MS = 3000;
 const START_LEAD_MS = 400;
 const PINGS = 8;
 const PING_SPACING_MS = 25;
-const SLACK_MS = 8;
+const SLACK_MS = 4;
 const RESEND_MS = FRAME_MS / 2;
 
 export class NetFailure extends Schema.TaggedError<NetFailure>()("NetFailure", { problem: Schema.String }) {
@@ -110,7 +110,7 @@ export function percentile(sorted: readonly number[], p: number): number {
   return sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)] ?? 0;
 }
 
-/** Turns travel one way plus 8 ms for the sender's frame and timer jitter; a frame that waits longer stalls both sides briefly, and `paceShift` drops what a slow frame leaves behind. */
+/** Turns travel one way plus 4 ms for the sender's frame and timer jitter; a frame that waits longer stalls both sides briefly, and `paceShift` drops what a slow frame leaves behind. */
 export function turnDelay(rttMs: number): number {
   return Math.max(1, Math.ceil((rttMs / 2 + SLACK_MS) / FRAME_MS - 1e-9));
 }
