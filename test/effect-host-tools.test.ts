@@ -14,6 +14,7 @@ const nameOf = (node: ts.Node): string | undefined => {
 const called = (node: ts.CallExpression | ts.NewExpression) => ts.isPropertyAccessExpression(node.expression) ? node.expression.name.text : node.expression.getText();
 
 function violations(source: string): string[] {
+  if (!/Bun\s*\.\s*(?:spawn|spawnSync|sleep)\b|setTimeout\s*\(|new\s+Promise\b/.test(source)) return [];
   const tree = ts.createSourceFile("host.ts", source, ts.ScriptTarget.Latest, true);
   const edges = new Map<string, Set<string>>();
   const effectOwned = new Set<string>();
@@ -38,7 +39,7 @@ function violations(source: string): string[] {
         targets.add(name);
         edges.set(owner, targets);
       }
-      const operation = node.expression.getText();
+      const operation = ts.isPropertyAccessExpression(node.expression) ? `${node.expression.expression.getText()}.${node.expression.name.text}` : node.expression.getText();
       if (/^Bun\.(spawn|spawnSync|sleep)$|^setTimeout$/.test(operation) || (ts.isNewExpression(node) && operation === "Promise")) raw.push({ operation, owner, insideEffect });
     }
     ts.forEachChild(node, child => walk(child, owner, insideEffect, effectArgument));
@@ -65,7 +66,7 @@ test("[spec AGENTS.md] host process and wait boundaries belong to Effect", async
   }
   expect(scanned).toBeGreaterThanOrEqual(100);
   expect(problems).toEqual([]);
-  for (const shell of ["Bun.spawn(['true'])", "setTimeout(() => {}, 1)", "await new Promise(resolve => resolve())"]) {
+  for (const shell of ["Bun.spawn(['true'])", "Bun . spawn(['true'])", "setTimeout(() => {}, 1)", "await new Promise(resolve => resolve())"]) {
     expect(violations(`import { Effect } from 'effect'; ${shell}`)).not.toEqual([]);
     expect(violations(`import { Effect } from 'effect'; const run = async () => { ${shell}; }; run();`)).not.toEqual([]);
     expect(violations(`import { Effect } from 'effect'; Effect.succeed((async () => { ${shell}; })());`)).not.toEqual([]);
