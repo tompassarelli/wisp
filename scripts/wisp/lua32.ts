@@ -17,7 +17,7 @@ import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync,
 import { availableParallelism, homedir } from "node:os";
 import { join } from "node:path";
 import { Console, Effect, Schedule, Schema } from "effect";
-import { MapBuildFailure, runProcess } from "./mapBuild";
+import { MapBuildFailure, captureProcess, runProcess } from "./mapBuild";
 import { step } from "./timings";
 
 export const TOWARD_ZERO_HEADER = join(import.meta.dir, "../../native/toward-zero.h");
@@ -31,13 +31,13 @@ const ROUNDING_PROBE = "local a, b = 3.0, 1e-30 io.write(string.format('%a', a -
 const TOWARD_ZERO_RESULT = "0x1.7ffffep+1";
 
 
-export function luaRounding(lua: string): "toward-zero" | "nearest" | string {
-  const integers = Bun.spawnSync([lua, "-e", "io.write(math.maxinteger)"], { stdout: "pipe", stderr: "pipe" });
-  if (integers.exitCode !== 0) return `${lua} doesn't run: ${integers.stderr.toString().trim()}`;
-  if (integers.stdout.toString() !== "2147483647") return `${lua} is not a 32-bit Lua (LUA_32BITS)`;
-  const probe = Bun.spawnSync([lua, "-e", ROUNDING_PROBE], { stdout: "pipe", stderr: "pipe" }).stdout.toString();
+export const luaRounding = (lua: string) => Effect.gen(function*() {
+  const integers = yield* captureProcess("probe Lua32", lua, [lua, "-e", "io.write(math.maxinteger)"]);
+  if (integers.exitCode !== 0) return `${lua} doesn't run: ${integers.stderr.trim()}`;
+  if (integers.stdout !== "2147483647") return `${lua} is not a 32-bit Lua (LUA_32BITS)`;
+  const probe = (yield* captureProcess("probe Lua32 rounding", lua, [lua, "-e", ROUNDING_PROBE])).stdout;
   return probe === TOWARD_ZERO_RESULT ? "toward-zero" : "nearest";
-}
+});
 
 export type Lua32Variant = "stock" | "toward-zero";
 
@@ -114,7 +114,7 @@ export const lua32 = (variant: Lua32Variant) => Effect.gen(function*() {
     const src = join(build, "lua-5.3.6/src");
     if (header !== "") yield* trySync("write header", src, () => writeFileSync(join(src, "toward-zero.h"), header));
     yield* runProcess(`compile Lua32 ${variant}`, src, makeCommand(["-C", src, `-j${availableParallelism()}`, "generic", `MYCFLAGS=${flags}`]));
-    const rounding = luaRounding(join(src, "lua"));
+    const rounding = yield* luaRounding(join(src, "lua"));
     const expected = variant === "stock" ? "nearest" : "toward-zero";
     if (rounding !== expected) return yield* fail("check rounding", src, `it rounds ${rounding}, not ${expected}`);
     yield* trySync("install Lua32", directory, () => {

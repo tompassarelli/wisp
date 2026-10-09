@@ -110,7 +110,7 @@ function operands(): [number, number][] {
 const same = (actual: number, expected: number) => Object.is(actual, expected) || (Number.isNaN(actual) && Number.isNaN(expected));
 
 test("[reference] the toward-zero Lua's + - * / are the exact results truncated toward zero", async () => {
-  expect(luaRounding(lua)).toBe("toward-zero");
+  expect(await Effect.runPromise(luaRounding(lua))).toBe("toward-zero");
   const pairs = operands();
   const program = [
     "for line in io.lines() do",

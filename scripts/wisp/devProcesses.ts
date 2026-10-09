@@ -29,8 +29,8 @@ type Child = Subprocess<"pipe", "pipe", "pipe">;
 
 const ResultLine = Schema.fromJsonString(Schema.Unknown);
 
-const spawn = (command: readonly string[], cwd: string, env: Readonly<Record<string, string | undefined>>): Child =>
-  Bun.spawn([...command], { cwd, env: { ...process.env, ...env }, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+const spawn = (command: readonly string[], cwd: string, env: Readonly<Record<string, string | undefined>>): Effect.Effect<Child> =>
+  Effect.sync((): Child => Bun.spawn([...command], { cwd, env: { ...process.env, ...env }, stdin: "pipe", stdout: "pipe", stderr: "pipe" }));
 
 
 const collect = (command: readonly string[], child: Child, input?: string) => Effect.gen(function*() {
@@ -63,7 +63,7 @@ const reap = (child: Child) => Effect.promise(async () => {
 
 export const runProcess = (command: readonly string[], cwd: string, env: Readonly<Record<string, string | undefined>> = {}) =>
   Effect.acquireUseRelease(
-    Effect.sync(() => spawn(command, cwd, env)),
+    spawn(command, cwd, env),
     (child) => collect(command, child),
     reap,
   );
@@ -75,7 +75,7 @@ export class Standby {
 
 
   static make(command: readonly string[], cwd: string, count: number, env: Readonly<Record<string, string | undefined>> = {}): Effect.Effect<Standby, never, Scope.Scope> {
-    return Effect.acquireRelease(Effect.sync(() => new Standby(command, cwd, count, env)), (standby) => standby.close);
+    return Effect.acquireRelease(Effect.sync(() => new Standby(command, cwd, count, env)).pipe(Effect.tap((standby) => standby.refill)), (standby) => standby.close);
   }
 
   private constructor(
@@ -83,9 +83,7 @@ export class Standby {
     private readonly cwd: string,
     private readonly count: number,
     private readonly env: Readonly<Record<string, string | undefined>>,
-  ) {
-    this.refill();
-  }
+  ) {}
 
 
 
@@ -94,9 +92,12 @@ export class Standby {
 
   run(request: unknown): Effect.Effect<ProcessOutput, DevProcessFailure> {
     return Effect.acquireUseRelease(
-      Effect.sync(() => this.ready.shift() ?? spawn(this.command, this.cwd, this.env)),
+      Effect.suspend(() => {
+        const ready = this.ready.shift();
+        return ready === undefined ? spawn(this.command, this.cwd, this.env) : Effect.succeed(ready);
+      }),
       (child) => collect(this.command, child, `${JSON.stringify(request)}\n`),
-      (child) => reap(child).pipe(Effect.ensuring(Effect.sync(() => this.refill()))),
+      (child) => reap(child).pipe(Effect.ensuring(this.refill)),
     );
   }
 
@@ -106,7 +107,10 @@ export class Standby {
     return Effect.forEach(this.ready.splice(0), reap, { concurrency: "unbounded", discard: true });
   });
 
-  private refill(): void {
-    while (!this.closed && this.ready.length < this.count) this.ready.push(spawn(this.command, this.cwd, this.env));
-  }
+  private readonly refill: Effect.Effect<void> = Effect.suspend(() => this.closed || this.ready.length >= this.count
+    ? Effect.void
+    : spawn(this.command, this.cwd, this.env).pipe(Effect.flatMap((child) => {
+      this.ready.push(child);
+      return this.refill;
+    })));
 }
