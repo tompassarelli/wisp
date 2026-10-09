@@ -201,6 +201,10 @@ export function writeJson(path: string, value: unknown): void {
   renameSync(`${path}.next`, path);
 }
 
+export function writePoolClients(path: string, clients: readonly PoolClient[]): void {
+  writeJson(path, { tools: { grim: "grim", xdotool: "xdotool", wlrctl: "wlrctl", tesseract: "tesseract" }, clients });
+}
+
 const PoolFileJson = Schema.fromJsonString(Schema.Struct({
   profile: Schema.String,
   fps: Schema.optionalKey(Schema.Number),
