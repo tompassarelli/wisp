@@ -117,9 +117,9 @@ frontier, and its last four checksums. A lost packet is repaired by the next
 one, a frame later; there is no retransmission timer.
 
 **Delay.** The host measures the round trip with eight pings and picks
-d = ceil((round trip / 2 + 8 ms) / 16.7 ms), at least 1: the one-way time plus
+d = ceil((round trip / 2 + 4 ms) / 16.7 ms), at least 1: the one-way time plus
 room for the sender's frame and timer jitter. On one host that is 1 frame; at
-60 ms round trip 3, at 120 ms 5. Both sides start their clients, then the host
+60 ms round trip 3, at 120 ms 4. Both sides start their clients, then the host
 names a start time that the joiner shifts by half the round trip.
 
 **Pacing.** Frames run on a 60 Hz schedule. A side more than three frames behind
