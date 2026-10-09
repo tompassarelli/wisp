@@ -542,17 +542,53 @@ measure game processes, not the desktop, Wine server or launcher. The
 separately measured about 0.88 core per game, 0.38 per browser renderer and
 0.34 per Wine server under heavy contention; it did not separate profiles.
 
-### Browser cost and measurements still needed
+### Pool cost per profile and the browser
 
 Offline pool launch on 3.0.0.24268 runs `Warcraft III.exe` directly, without
-the Battle.net launcher, and supplies the default two-client path. The
-earlier 3.0.1.24342 build had no LAN provider. No browser-removal experiment
-has been run on the signed-in sessions, so there
-is no measured claim that their browser can or cannot be removed.
+the Battle.net launcher. The game still starts its own `BlizzardBrowser.exe`
+(CEF), because its menus are web pages: the pool drives the game through
+Wisp's menu page, which that browser renders.
 
-A read-only `/proc` sample on 9 October 2026 took 10.020 s, with 100 clock
-ticks per second. The three existing signed-in clones each had five
-`BlizzardBrowser.exe` processes, including two with `--type=renderer`:
+**Measured 9 October 2026** (3.0.0.24268, editor-free sample map started by
+`lan fresh`, every pair playing at speed 1 with 0 desyncs). Each 10 s sample
+read `/proc` utime + stime of every process whose `WINEPREFIX` is the
+client's, inside an exclusive machine-capacity lease; signed-in clone-c,
+owned by another worker, was also running. Cores, per client a / b:
+
+| Profile | fps cap | Game | Browser processes (renderers) | Browser | Client total with browser | Client total without browser | Pair with | Pair without |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `parity` | 60 | 1.19 / 1.33 | 5 / 5 (2 / 2) | 0.16 / 0.14 | 1.59 / 1.72 | 1.43 / 1.59 | 3.31 | 3.02 |
+| `checks` | 60 | 1.24 / 1.29 | 5 / 5 (2 / 2) | 0.14 / 0.15 | 1.63 / 1.69 | 1.48 / 1.54 | 3.31 | 3.02 |
+| `visual` | 60 | 0.68 / 0.56 | 8 / 8 (4 / 4) | 0.20 / 0.20 | 1.22 / 1.08 | 1.02 / 0.88 | 2.30 | 1.90 |
+| `hfr` | 144 | 0.65 / 0.81 | 8 / 8 (4 / 4) | 0.47 / 1.34 | 1.51 / 2.77 | 1.04 / 1.43 | 4.28 | 2.47 |
+| `capture-classic` | 60 | 1.00 / 1.01 | 4 / 4 (2 / 2) | 0.22 / 0.21 | 1.49 / 1.50 | 1.27 / 1.29 | 3.00 | 2.56 |
+
+"Without browser" is the same sample less the client's browser processes;
+the rest is the game, its Wine server (0.11–0.31) and other Wine processes
+(0.13–0.31). System CPU pressure (some avg10) was 22–24% for `parity` and
+`checks`, 36% for `visual` and `hfr` and 35% for `capture-classic`, so compare
+profiles within one row's conditions. `hfr`'s browser cost rises with its
+144 fps cap: 0.47 and 1.34 cores, against 0.14–0.22 at 60 fps.
+
+**Pool clients cannot run with 0 browser processes.** In the two-pair
+`parity`/`checks` run, all four clients at the menu and in the match had
+5 `BlizzardBrowser.exe` processes each, 2 of them renderers: 8 renderers,
+20 browser processes. Killing all 10 browser processes of pair 1 mid-match
+left the match playing (0 desyncs), but each game restarted its browser
+within 10 s, again 5 processes with 2 renderers. The menu page that
+`lan fresh` and the return to menus drive runs in that browser, so
+the pool keeps it; its cost at 60 fps is 0.14–0.22 core per client, 0.29–0.43
+per pair.
+
+**Admission with real clients.** `wisp lan pool --pairs 4 --wait 60 --pool-profile
+parity,checks,visual,hfr` with clone-c's two native leases already held
+started pairs 0 and 1, then the helper deferred pair 2's second game
+(`DEFER_NATIVE_CPUS`, 22 of 20 native CPUs in the attended profile; once
+protected CPU pressure was 23.75%). After 60 s the pool printed "the pool
+stays at 2 pairs; waiting: 2, 3" and kept both admitted pairs running.
+
+Earlier read-only samples of signed-in clones (9 October, 10.020 s, no pool
+clients) found 5 browser processes per clone, 2 of them renderers:
 
 | Client | Game CPU (cores) | Browser renderers | Renderer CPU (cores) | Other browser CPU (cores) | Wine server CPU (cores) |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -560,19 +596,8 @@ ticks per second. The three existing signed-in clones each had five
 | clone-c | 0.805 | 2 | 0.344 | 0.355 | 0.140 |
 | clone-d | 0.309 | 2 | 0.358 | 0.383 | 0.135 |
 
-Across those sessions the six browser renderers used 1.061 cores; all
-15 browser processes used 2.159 cores. Their game states and preferences
-were left as found, so this is launcher overhead during existing sessions,
-not a controlled pool-profile or fps comparison. There were no live offline
-pool game processes in this sample.
-
-[#37](https://github.com/tompassarelli/wisp/issues/37) still needs per-client
-and per-pair measurements at each requested profile's cap, with and without
-the browser; the two-pair browser-count run; and an actual Warcraft pool run
-requesting more pairs than capacity admits. The deterministic admission
-integration already requested three pairs, admitted one through two native
-game wrappers, and reported the other two waiting (`64181ab`, docs
-`61d9ef8`). That result does not replace the actual-client run.
+A signed-in clone's Battle.net browser costs 0.70–0.74 core, about four times
+a pool client's at 60 fps.
 
 **Rendering is on the GPU.** Pool clients render through DXVK (`d3d11=n`,
 `dxgi=n` in Proton's `WINEDLLOVERRIDES`) on RADV. The Vulkan loader maps every
