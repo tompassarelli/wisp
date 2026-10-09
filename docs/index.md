@@ -5,11 +5,11 @@ failed model paths to existing client visuals during hot and dev watches.
 
 [Shadow Strike field example](shadow-strike.md) names the raw fields, types,
 units and level/column indexing used by two synthetic configurations. Field
-identities come from privately read metadata; initial damage, periodic damage
-and timing are **unmeasured**, with zero retained native observations and no
-headless/native agreement yet (#94). The source-owned capture and headless
-journey are ready for the offline client's next batch; stock spell execution
-still needs a measured implementation.
+identities come from privately read metadata. Four retained Classic reports
+on build 3.0.0.24268 measure initial damage 40, periodic damage 10 and sampled
+tick spacing of 1/2 seconds for `acas=1/2`. Stock `shadowstrike` execution
+is unsupported headlessly: 0/2 configurations and 0/9 damage rows per client
+agree (#94); damage and timing come from the native observations.
 
 [Scripted terrain](terrain.md): `terrainLine` and `terrainRectFill` paint named
 ground tiles into W3E grid points. `bun examples/terrain.ts` writes a synthetic
