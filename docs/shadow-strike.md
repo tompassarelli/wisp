@@ -26,16 +26,16 @@ stored as binary32, distinct from binary type 1 `real`.
 | Levels | `alev` | int (0) | Count | 0; 0 |
 | Mana cost | `amcs` | int (0) | Mana points | 1; 0 |
 | Targets allowed | `atar` | target-list string (3) | `ground,enemy,organic` | 1; 0 |
-| Casting time | `acas` | unreal (2) | Seconds; its effect on tick spacing is **unknown** here | 1; 0 |
-| Duration, normal | `adur` | unreal (2) | Seconds; end-point tick inclusion **unknown** | 1; 0 |
+| Casting time | `acas` | unreal (2) | Seconds; observed periodic spacing is 1 or 2 seconds for the two values below | 1; 0 |
+| Duration, normal | `adur` | unreal (2) | Seconds; no sixth-second tick was observed with duration 6 | 1; 0 |
 | Duration, hero | `ahdu` | unreal (2) | Seconds; hero target behavior **unmeasured** | 1; 0 |
 | Cooldown | `acdn` | unreal (2) | Seconds | 1; 0 |
 | Cast range | `aran` | unreal (2) | World distance units | 1; 0 |
-| Decaying damage (Data A) | `Esh1` | unreal (2) | Damage points suggested by interface; per-hit/per-second interpretation **unknown** | 1; 1 |
+| Decaying damage (Data A) | `Esh1` | unreal (2) | Observed 10 life per periodic hit with value 10 and Data B/C/D zero | 1; 1 |
 | Movement speed factor (Data B) | `Esh2` | unreal (2) | Dimensionless; reduction formula **unknown** | 1; 2 |
 | Attack speed factor (Data C) | `Esh3` | unreal (2) | Dimensionless; reduction formula **unknown** | 1; 3 |
 | Decay power (Data D) | `Esh4` | unreal (2) | Units, formula and timing **unknown** | 1; 4 |
-| Initial damage (Data E) | `Esh5` | unreal (2) | Damage points suggested by interface; mitigation **unmeasured** | 1; 5 |
+| Initial damage (Data E) | `Esh5` | unreal (2) | Observed 40 initial life damage with value 40; mitigation **unmeasured** | 1; 5 |
 
 The custom subject copies `hfoo`. Its authored unit fields are Name `unam`
 (string 3), Hit points `uhpm` (int 0, life points), Movement speed `umvs`
@@ -63,15 +63,45 @@ Initial impact and subsequent tick times are bracketed by the previous and
 current sample; they are not exact event times. Negative damage exposes
 unexpected regeneration. The order's acceptance and final life are retained.
 
-**Measured behavior: none yet.** Retained native observations: **0**;
-native/headless agreement count: **0**, with no comparison attempted.
-The stock spell order has no headless implementation as of base commit
-`73b5d221c5114c9f64a03e5c67cf91739d3667c1`; ability field readback cannot
-stand in for initial or periodic damage. No damage formula or periodic
-scheduler is inferred from metadata. This example and its build have not
-been run during the active quiet period.
+## Measured Classic behavior, 9 October 2026
 
-## Capture after the quiet period
+Warcraft **3.0.0.24268**, Classic LAN pair 0, ran fixture source
+`97e8c312f06ccd5c7e8063b0fcc1cf9110787cf7` from the private map
+`~/.local/state/wisp/shadow-strike94/shadow-strike94.w3x`. The native game
+was `2026-10-09T04-43-45-222Z`. All four reports were written at
+04:44:13 UTC and retained under
+`~/.local/state/wisp/shadow-strike94/native-classic-20261009/`, beside
+the installed build record, client health and LAN status. Both clients
+accepted both orders and produced identical rows: nine damage changes per
+client, four complete reports, zero desyncs, 878/877 checksums and no new
+crash reports. The clients were returned to their menus after capture.
+
+| Configuration | Initial hit | Periodic hit samples | Periodic damage | Final life at sample 256 |
+| --- | --- | --- | --- | --- |
+| `cast-field-1`, `acas=1` | 40 at sample 17, impact in (500, 531.25] ms | 49, 81, 113, 145, 177 | Five hits of 10, total 50 | 910 |
+| `cast-field-2`, `acas=2` | 40 at sample 17, impact in (500, 531.25] ms | 81, 145 | Two hits of 10, total 20 | 940 |
+
+Every impact lies in `((sample - 1) / 32, sample / 32]` game seconds.
+The rows' integer elapsed milliseconds are 531/1531/2531/3531/4531/5531
+for the first configuration and 531/2531/4531 for the second. The first
+periodic hit was observed 32 or 64 samples after initial impact; subsequent
+hits have the same spacing. Thus the sampled damage spacing follows
+`acas=1` or `acas=2` in these two configurations. This does not establish
+exact cast-start or impact times. No tick at six seconds after impact was
+observed in either configuration. Data B/C/D, hero targets, other durations
+and damage mitigation remain unmeasured.
+
+The 540-frame 32-bit Lua headless journey at the fixture source reports
+`order-accepted=false`, unchanged life 1000 and no damage rows, then fails
+with `Shadow Strike journey needs modeled stock spell behavior; see #94`.
+**Unsupported:** `IssueTargetOrder` stock `shadowstrike` execution, initial
+damage, periodic damage and scheduling. Agreement is **0/2 configurations**,
+**0/9 native damage rows per client**; placeholder unchanged life is not
+agreement. Ability field readback cannot stand in for these behaviors.
+The native reference is now available, but the headless damage/timing part
+of #94 remains unfinished.
+
+## Reproduce the reference
 
 From the exact fixture commit, using the owner's private base map:
 
