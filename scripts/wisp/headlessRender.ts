@@ -8,7 +8,7 @@ import type { EffectDeaths, EffectPose, HeadlessClient } from "../../src/headles
 import type { Environment } from "../../src/headless/warcraft3Scenery";
 import { pollFor, spawnLogged } from "./hostProcess";
 import { deathSeconds } from "./models";
-import type { RenderAssetResolution, ResolvedRenderAsset } from "./renderAssets";
+import type { AssetLocation, RenderAssetResolution, ResolvedRenderAsset } from "./renderAssets";
 import { decodeTerrain, shiftedBounds, worldBounds, type WorldBounds } from "./terrain";
 import { decodeDoodads, type PlacedDoodad } from "./doodads";
 import { freshAnimation } from "../../src/headless/animation";
@@ -23,7 +23,7 @@ export interface HeadlessRenderProject {
    */
   readonly readAsset: (path: string, graphics?: Graphics) => Promise<Uint8Array | undefined>;
   /** Layer-aware reads record each attempted location and the selected import or stock file. */
-  readonly resolveAsset?: (path: string, graphics: Graphics) => Promise<ResolvedRenderAsset>;
+  readonly resolveAsset?: (path: string, graphics: Graphics, body?: AssetLocation) => Promise<ResolvedRenderAsset>;
   /** Unit object type IDs to model paths; effect models already name their paths. */
   readonly unitModels?: Readonly<Record<number, string>>;
   readonly width?: number;
@@ -222,12 +222,13 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
   );
   const assets = new Map<string, Promise<Uint8Array | undefined>>();
   const resolutions = new Map<string, RenderAssetResolution>();
-  const read = (path: string, mode: Graphics) => {
-    let pending = assets.get(`${mode}:${path}`);
-    if (pending === undefined) assets.set(`${mode}:${path}`, pending = (async () => {
+  const read = (path: string, mode: Graphics, body?: AssetLocation) => {
+    const cacheKey = `${mode}:${body?.layer ?? ""}:${path}`;
+    let pending = assets.get(cacheKey);
+    if (pending === undefined) assets.set(cacheKey, pending = (async () => {
       if (project.resolveAsset !== undefined) {
-        const { bytes, ...resolution } = await project.resolveAsset(path, mode);
-        if (mode === graphics) resolutions.set(path, resolution);
+        const { bytes, ...resolution } = await project.resolveAsset(path, mode, body);
+        if (mode === graphics) resolutions.set(`${body?.layer ?? ""}:${path}`, resolution);
         return bytes;
       }
       const bytes = await project.readAsset(path, mode);
@@ -244,10 +245,13 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
     if (url.pathname === "/renderer.js") return new Response(bundle, { headers: { "content-type": "text/javascript" } });
     if (url.pathname !== "/asset") return new Response("not found", { status: 404 });
     const path = url.searchParams.get("path") ?? "";
-    const data = await read(path, graphics);
+    const bodyPath = url.searchParams.get("body");
+    if (bodyPath !== null) await read(bodyPath, graphics);
+    const body = bodyPath === null ? undefined : resolutions.get(`:${bodyPath}`)?.selected;
+    const data = await read(path, graphics, body);
     if (data !== undefined) return new Response(new Uint8Array(data));
     // A file that only another mode has draws nothing in this one, as Warcraft draws nothing for it.
-    for (const other of GRAPHICS) if (other !== graphics && (await read(path, other)) !== undefined) return new Response(`absent in ${graphics}: ${path}`, { status: 410 });
+    for (const other of GRAPHICS) if (bodyPath === null && other !== graphics && (await read(path, other)) !== undefined) return new Response(`absent in ${graphics}: ${path}`, { status: 410 });
     return new Response(`missing map asset: ${path}`, { status: 404 });
   }})), (open) => Effect.promise(() => open.stop(true)));
   const chromeLog = join(directory, "chrome.log");

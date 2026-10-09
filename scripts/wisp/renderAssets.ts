@@ -12,6 +12,9 @@ export interface AssetLocation {
 export interface RenderAssetResolution {
   readonly requested: string;
   readonly graphics: Graphics;
+  readonly bodyAlias?: AssetLayer;
+  readonly suffixConversion?: string;
+  readonly selectedPath?: string | null;
   readonly attempts: readonly AssetLocation[];
   readonly selected: AssetLocation | undefined;
 }
@@ -28,7 +31,7 @@ export class RenderAssetFailure extends Schema.TaggedError<RenderAssetFailure>()
 }
 
 /** Map imports override installation files; a missing layer falls through. */
-export const resolveRenderAsset = (readers: RenderAssetReaders, requested: string, graphics: Graphics = "classic") => Effect.gen(function*() {
+export const resolveRenderAsset = (readers: RenderAssetReaders, requested: string, graphics: Graphics = "classic", body?: AssetLocation) => Effect.gen(function*() {
   const path = requested.replaceAll("\\", "/").replace(/\.mdl$/i, ".mdx");
   if (path.startsWith("/") || path.split("/").some((part) => part === "..") || path.includes(":")) {
     return yield* new RenderAssetFailure({ cause: `invalid map asset path: ${requested}` });
@@ -37,18 +40,21 @@ export const resolveRenderAsset = (readers: RenderAssetReaders, requested: strin
   const layers: readonly AssetLayer[] = explicit !== null ? [explicit[1]?.toLowerCase() as AssetLayer]
     : graphics === "definitive" ? ["_de.w3mod", "_hd.w3mod", "base"] : ["base"];
   const attempts: AssetLocation[] = [];
+  const metadata = body === undefined ? {} : { bodyAlias: body.layer, suffixConversion: /\.(tif|blp|tga)$/i.test(path) && body.layer !== "base" ? `${path.match(/\.[^.]+$/)?.[0]} → .dds` : "none" };
   for (const source of ["map", "stock"] as const) {
-    for (const layer of layers) {
-      const assetPath = explicit?.[2] ?? path;
+    const inherited: readonly AssetLayer[] = body === undefined || explicit !== null ? layers : source === "map" && body.layer !== "base" ? [body.layer, "base"] : [body.layer];
+    for (const layer of inherited) {
+      const originalPath = explicit?.[2] ?? path;
+      const assetPath = source === "stock" && body !== undefined && layer !== "base" ? originalPath.replace(/\.(tif|blp|tga)$/i, ".dds") : originalPath;
       const location: AssetLocation = { source, layer, path: source === "map" && layer !== "base" ? `${layer}/${assetPath}` : assetPath };
       attempts.push(location);
       const bytes = yield* Effect.tryPromise({
         try: () => source === "map" ? readers.map(location.path) : readers.stock(assetPath, layer),
         catch: (cause) => new RenderAssetFailure({ cause }),
       });
-      if (bytes !== undefined) return { requested, graphics, attempts, selected: location, bytes } satisfies ResolvedRenderAsset;
+      if (bytes !== undefined) return { requested, graphics, ...metadata, ...(body === undefined ? {} : { selectedPath: source === "stock" && layer !== "base" ? `${layer}/${assetPath}` : location.path, suffixConversion: source === "stock" ? metadata.suffixConversion : "none" }), attempts, selected: location, bytes } satisfies ResolvedRenderAsset;
     }
     if (path.toLowerCase().startsWith("war3mapimported/")) break;
   }
-  return { requested, graphics, attempts, selected: undefined, bytes: undefined } satisfies ResolvedRenderAsset;
+  return { requested, graphics, ...metadata, ...(body === undefined ? {} : { selectedPath: null }), attempts, selected: undefined, bytes: undefined } satisfies ResolvedRenderAsset;
 });
