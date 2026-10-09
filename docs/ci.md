@@ -211,6 +211,16 @@ changes `.github/workflows/` can't land this way (the workflow token may not
 push workflow changes); the run says so on the issue, and it lands through a
 normal `safe-push`.
 
+## Effect upgrades
+
+Every push runs `effect-kit check` (north:agent-machinery/scripts/effect-kit.mjs):
+it fails when repos/effect differs from the locked `effect` version, on any
+Effect language-service diagnostic, or on a raw process, wait, promise or
+fetch outside Effect under `scripts/`. On Mondays `effect-upgrade.yml` bumps
+`effect` and `@effect/*` to the latest stable, syncs repos/effect, and runs the
+check: a clean upgrade goes to a `claude/` branch for Autoland; findings go to
+the open "Weekly Effect upgrade" issue with the branch to fix.
+
 ## Runner capacity and waiting
 
 The account runs at most 20 jobs at once across all of its repositories
