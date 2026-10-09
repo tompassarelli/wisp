@@ -3,6 +3,7 @@ import { parseMDX } from "../../../vendor/war3-model.mjs";
 import { CELL, type Terrain } from "../terrain";
 import { terrainCells, terrainRows, type TerrainCell } from "../terrainMesh";
 import { terrainTileLayers, terrainTileUV, terrainBlightPath } from "../terrainTiles";
+import { cliffGround, cliffShape } from "../terrainCliffs";
 
 type TextureReader = (path: string) => Promise<HTMLCanvasElement>;
 type AssetReader = (path: string) => Promise<ArrayBuffer>;
@@ -44,6 +45,7 @@ function ground(cell: TerrainCell, uv: readonly [number, number, number, number]
 async function prepare(gl: WebGL2RenderingContext, terrain: Terrain, readTexture: TextureReader, readAsset: AssetReader): Promise<Prepared> {
   const groundRows = terrainRows(new Uint8Array(await readAsset("TerrainArt\\Terrain.slk")));
   const cliffRows = terrain.cliffTiles.length === 0 ? new Map<string, Readonly<Record<string, string>>>() : terrainRows(new Uint8Array(await readAsset("TerrainArt\\CliffTypes.slk")));
+  terrain = cliffGround(terrain, cliffRows);
   const blightPath = terrain.points.some(point => (point.flags & 2) !== 0)
     ? terrainBlightPath(new Uint8Array(await readAsset("UI\\WorldEditData.txt")), terrain.tileset) : undefined;
   const meshes = new Map<string, { texture: HTMLCanvasElement; vertices: number[]; order: number }>();
@@ -61,13 +63,13 @@ async function prepare(gl: WebGL2RenderingContext, terrain: Terrain, readTexture
   };
   for (const cell of terrainCells(terrain)) {
     const levels = cell.corners.map(point => point.layer), low = Math.min(...levels);
-    if (Math.max(...levels) !== low && !cell.corners.some(point => (point.flags & 1) !== 0)) {
+    const shape = cliffShape(cell);
+    if (shape !== undefined) {
       const cliff = cell.corners.find(point => point.cliff !== 15)?.cliff ?? 0;
       const id = terrain.cliffTiles[cliff], row = id === undefined ? undefined : cliffRows.get(id);
       if (row === undefined) throw new Error(`no installed CliffTypes.slk row for ${id ?? cliff}`);
       const prefix = row.cliffmodeldir;
       if (prefix === undefined || prefix === "_") throw new Error(`no cliff model directory for ${id}`);
-      const shape = [2, 3, 1, 0].map(index => String.fromCharCode(65 + (levels[index] ?? low) - low)).join("");
       const variation = cell.corners[0].cliffVariation;
       const path = `Doodads\\Terrain\\${prefix}\\${prefix}${shape}${variation}.mdx`;
       const model = parseMDX(await readAsset(path));

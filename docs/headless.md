@@ -656,12 +656,15 @@ saves them as the scene's `environment`.
   `UI\\WorldEditData.txt`, through the same asset callbacks.
   Cliff cells select installed models and
   textures through `TerrainArt\\CliffTypes.slk`, deforming their vertices by
-  the corner heights. Nothing from the install is included in Wisp.
+  the corner heights. Stock model letters follow north-west, south-west,
+  south-east, north-east; checked against the four single-high-corner meshes
+  in 3.0.0.24268. CliffTypes' `groundtile` replaces ground and blight in a
+  cliff's surrounding point neighborhood. Nothing from the install is included in Wisp.
 
   This terrain path is initial drawing support, pending the visible-terrain
   native reference in [#82](https://github.com/tompassarelli/wisp/issues/82).
-  `--look terrain` still fails. Ramp model joins, cliff-adjacent
-  ground substitution, special doodads and terrain lighting are unfinished.
+  `--look terrain` still fails. Ramp model joins, special doodads and
+  terrain lighting are unfinished.
   Ground variation, corner-mask and cliff filename facts come from the
   [HiveWE format documentation](https://github.com/stijnherfst/HiveWE/wiki/war3map.w3e-Terrain)
   (16 September 2025 revision); Wisp copies no implementation code from it.
