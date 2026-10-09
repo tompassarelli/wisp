@@ -447,20 +447,30 @@ key events may include `down: true` and a later `down: false` to hold a key.
 The map supplies `HeadlessProject.render.readAsset(path, graphics)`, returning the actual
 imported or stock asset bytes, or `undefined` when absent. `--graphics definitive`
 selects Definitive Edition; the default is `classic`. Layer-aware projects
-also supply `resolveAsset(path, graphics)`, returning `resolveRenderAsset` from
+also supply `resolveAsset(path, graphics, body)`, returning `resolveRenderAsset` from
 `scripts/wisp/renderAssets.ts` through their Effect runtime. Its two readers
 read map imports and stock files separately. Definitive tries `_de.w3mod`,
 `_hd.w3mod`, then base imports, followed by the same stock layers. Classic
 tries only base files. `war3mapImported` paths stay within the map. A reader
 returns `undefined` for a missing layer so the next one can supply the asset.
+For model textures, `body` is the selected model's `AssetLocation`; pass it to
+`resolveRenderAsset(readers, path, graphics, body)`. Texture rows record
+`requested`, `bodyAlias`, `selectedPath` (null if absent), and
+`suffixConversion`; stock TIF/BLP/TGA reads in HD/DE use DDS. All of a model's
+nonreplaceable textures are requested before a missing texture refuses the
+model. Explicit HD DDS imports match the
+[native reference](https://github.com/tompassarelli/smashcraft/issues/334#issuecomment-6071233652).
+Texture lookup inherits the selected body alias for stock reads; map imports
+in that alias or base still override stock. The old imported HD candidate
+cannot borrow DE textures. The earlier pilot used `presentation="native"`
+(script stamp `2889775-3234403`), selecting stock units despite carrying HD
+imports; its stock DE body resolves DE textures.
 The selected source, layer and path and every attempted location appear in
 `render.json`; byte-only readers record the supplied project path.
-The [Warcraft 3.0.1 one-alias reference](https://github.com/tompassarelli/smashcraft/issues/334#issuecomment-6069629530)
-draws Definitive Cairne with either a lone `_de.w3mod` import or a lone
-`_hd.w3mod` import; Classic ignores the `_de.w3mod` import and draws the base
-body. One Definitive body import is sufficient. That reference does not
-establish precedence when both aliases are present; the resolver's DE-first
-order preserves its existing choice, and both raw layers remain supported.
+The [earlier one-alias captures](https://github.com/tompassarelli/smashcraft/issues/334#issuecomment-6069629530)
+showed Cairne in Definitive, but their script selected stock units; archive
+alias presence alone did not establish imported-body selection. Both raw map
+aliases remain supported; DE-first precedence preserves the existing choice.
 The renderer draws HD materials with their PBR shader ([Graphics
 profiles](#graphics-profiles)). A path that only the other mode has (a
 Definitive-only prop in a Classic frame) draws nothing, as Warcraft draws

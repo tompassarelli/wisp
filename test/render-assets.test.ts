@@ -47,3 +47,34 @@ test("[invariant] an explicit layer path is read once and asset paths cannot esc
     await expect(Effect.runPromise(resolveRenderAsset(readers({}), path))).rejects.toThrow("invalid map asset path");
   }
 });
+
+test("[native] #91 explicit Cairne DDS imports resolve in the HD body alias and report all five rows", async () => {
+  // Native B: smashcraft#334 comment 6071233652, texture-fixed-family imports.
+  const hashes = ["e21b4dc2716ec2d55d5b2e463a717d18cf1cfe291c307ff9fdb7ea59518561b9", "52a752a5c355a36010bdcec3fe749caee4234e9b1bcbe9e5e71f4a6b164848f4", "cfa7424fbbbe3c3420d6ec782aadce62190eab36e103201325cafb7bf07c8a0f", "50947f5bc5912c7e60aae029b69913179db6cca478bceaacd24dd41a8ac07fc3", "8555afc6182719e3e6100e441adb73c4cae7cb45f852114b44895a2fc1a8c70b"];
+  const body = { source: "map", layer: "_hd.w3mod", path: "_hd.w3mod/war3mapImported/Cairne.mdx" } as const;
+  for (const hash of hashes) {
+    const texture = `war3mapImported/DefinitiveTexture-${hash}.dds`;
+    const selectedPath = `_hd.w3mod/${texture}`;
+    const explicit = await Effect.runPromise(resolveRenderAsset(readers({ [selectedPath]: "explicit" }), texture, "definitive", body));
+    expect(explicit).toMatchObject({ requested: texture, bodyAlias: body.layer, selectedPath, suffixConversion: "none", selected: { source: "map", layer: body.layer, path: selectedPath } });
+    expect(new TextDecoder().decode(explicit.bytes)).toBe("explicit");
+  }
+});
+
+test("[native] #91 old imported HD body refuses missing HD stock; good pilot selected stock DE body resolves", async () => {
+  // Pilot script stamp 2889775-3234403: presentation=native, usesPool=false; it drew stock units.
+  // Bad candidate imported HD body rendered solid team colour on native B.
+  const texture = "Units/Orc/HeroTaurenChieftain/Tauren_Chieftain_Diffuse.tif";
+  const dds = texture.replace(/\.tif$/, ".dds");
+  const assets = readers({}, { [`_de.w3mod/${dds}`]: "native stock" });
+  for (const [name, source, layer, expected] of [
+    ["old candidate", "map", "_hd.w3mod", undefined],
+    ["good pilot stock body", "stock", "_de.w3mod", "stock"],
+  ] as const) {
+    const result = await Effect.runPromise(resolveRenderAsset(assets, texture, "definitive", { source, layer, path: "Cairne.mdx" }));
+    expect(result.selected?.source, name).toBe(expected);
+    expect(result.bodyAlias, name).toBe(layer);
+    expect(result.selectedPath, name).toBe(expected === undefined ? null : `_de.w3mod/${dds}`);
+    expect(result.suffixConversion, name).toBe(".tif → .dds");
+  }
+});

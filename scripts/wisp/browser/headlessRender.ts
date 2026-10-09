@@ -179,8 +179,8 @@ const instances = new Map<number, ModelInstance>();
 const preparedModels = new Map<string, ModelInstance>();
 /** A file only another graphics mode has: Warcraft draws nothing for it in this one. */
 class AbsentAsset extends Error {}
-async function asset(path: string): Promise<ArrayBuffer> {
-  const response = await fetch(`/asset?path=${encodeURIComponent(path)}`);
+async function asset(path: string, body?: string): Promise<ArrayBuffer> {
+  const response = await fetch(`/asset?path=${encodeURIComponent(path)}${body === undefined ? "" : `&body=${encodeURIComponent(body)}`}`);
   if (response.status === 410) throw new AbsentAsset(`absent in ${graphics}: ${path}`);
   if (!response.ok) throw new Error(`missing map asset: ${path}`);
   return response.arrayBuffer();
@@ -210,10 +210,11 @@ function tga(bytes: ArrayBuffer): ImageData {
   }
   return out;
 }
-function textureAt(path: string): Promise<HTMLCanvasElement> {
-  let result = textures.get(path);
+function textureAt(path: string, body?: string): Promise<HTMLCanvasElement> {
+  const cacheKey = `${body ?? ""}:${path}`;
+  let result = textures.get(cacheKey);
   if (result === undefined) {
-    result = asset(path).then(async (bytes) => {
+    result = asset(path, body).then(async (bytes) => {
       const texture = document.createElement("canvas"), context = texture.getContext("2d");
       if (context === null) throw new Error("no 2D texture context");
       const magic = new Uint8Array(bytes, 0, Math.min(4, bytes.byteLength));
@@ -225,7 +226,7 @@ function textureAt(path: string): Promise<HTMLCanvasElement> {
         context.putImageData(new ImageData(new Uint8ClampedArray(decoded.data), decoded.width, decoded.height), 0, 0);
       }
       return texture;
-    }); textures.set(path, result);
+    }); textures.set(cacheKey, result);
   }
   return result;
 }
@@ -296,10 +297,12 @@ async function prepareInstance(pose: EffectPose) {
 async function createInstance(path: string): Promise<ModelInstance> {
   const data = await modelAt(path);
   const renderer = new ModelRenderer(data); renderer.initGL(gl);
-  for (const texture of data.Textures) if (texture.Image !== "") {
-    const bitmap = await textureAt(texture.Image), context = bitmap.getContext("2d");
+  const loaded = await Promise.allSettled(data.Textures.filter((texture) => texture.Image !== "").map(async (texture) => {
+    const bitmap = await textureAt(texture.Image, path), context = bitmap.getContext("2d");
     if (context !== null) renderer.setTextureImageData(texture.Image, [context.getImageData(0, 0, bitmap.width, bitmap.height)]);
-  }
+  }));
+  const failure = loaded.find((result) => result.status === "rejected");
+  if (failure?.status === "rejected") { renderer.destroy(); throw failure.reason; }
   const sequences = data.Sequences.map((sequence) => ({ name: sequence.Name, start: sequence.Interval[0] ?? 0, end: sequence.Interval[1] ?? 0, looping: !sequence.NonLooping, rarity: sequence.Rarity }));
   return { renderer, model: data, path, sequences, sequence: -2, clock: 0 };
 }
