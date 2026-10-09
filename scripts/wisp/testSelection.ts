@@ -1,56 +1,56 @@
-// Which tests a save can change the result of (wisp:docs/dev.md). A test is
-// a Bun test file or a module that registers tests with
-// wisp:src/runtime/testing.ts; it is affected when the saved module is one it
-// loads, directly or through others, or a file it declares it reads. When the
-// graph can't decide, every test runs: a file was created or deleted, a saved
-// file isn't a module and no test declares reading it, or the save changes a
-// module every test preloads. A test that loads a computed `import()`, or
-// reads files itself without declaring which, runs on every save. A per-file
-// audit that only files it reads brought in learns which files those are.
+
+
+
+
+
+
+
+
+
 import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { ImportGraph, isModulePath } from "./importGraph";
 
-/** What a project declares about its tests; paths and globs are relative to its root. */
+
 export interface TestDeclaration {
-  /** Bun test files. */
+
   readonly files: readonly string[];
-  /** Modules that register tests with wisp/src/runtime/testing; each runs as its own test. */
+
   readonly registry?: string;
-  /** Bun test files that only run the registry's modules; the dev loop runs those modules instead. */
+
   readonly registryRunners?: readonly string[];
-  /** Modules loaded before every test, as bunfig.toml's test preload. */
+
   readonly preload?: readonly string[];
-  /** Project files a test reads at run time, beyond the modules it loads. */
+
   readonly reads?: Readonly<Record<string, readonly string[]>>;
-  /**
-   * Groups of Bun test files whose global stubs would clash with other
-   * files': a group's files share a process only with each other. Files in
-   * no group may share one.
-   */
+
+
+
+
+
   readonly isolated?: readonly (readonly string[])[];
-  /** Bun test files that play headless journeys; `wisp dev` reports them with its own journey. */
+
   readonly journeys?: readonly string[];
-  /**
-   * Bun test files that audit each file they read on their own. When only
-   * files they read brought them in, they run with those files in
-   * WISP_DEV_FILES (savedFiles(), wisp:scripts/wisp/devResult.ts).
-   */
+
+
+
+
+
   readonly perFile?: readonly string[];
-  /**
-   * Bun test files, each with installed modules `wisp dev` loads into a
-   * process that waits for it before a save, such as a parser an audit
-   * imports. Each runs in a process of its own.
-   */
+
+
+
+
+
   readonly warm?: Readonly<Record<string, readonly string[]>>;
-  /** Environment for test processes, such as engine settings for short-lived workers. */
+
   readonly env?: Readonly<Record<string, string>>;
-  /** Overrides env for a file-test process; paths are absolute. */
+
   readonly envForFiles?: (files: readonly string[]) => Readonly<Record<string, string>>;
 }
 
 export interface TestUnit {
-  /** Absolute path of the test file or registry module. */
+
   readonly path: string;
   readonly kind: "file" | "registry";
 }
@@ -63,13 +63,13 @@ export interface Changes {
 
 export interface Selection {
   readonly units: readonly TestUnit[];
-  /** Why every test runs; undefined when the graph chose them. */
+
   readonly full?: string;
-  /** Per-file audits that only files they read brought in, each with those files. */
+
   readonly audits?: ReadonlyMap<string, readonly string[]>;
 }
 
-/** A Bun test file that reads files itself: it names one of these. */
+
 const READS_FILES = /\b(?:readFileSync|readFile|readdirSync|readdir|Bun\.file|Bun\.Glob|sys\.readFile|createReadStream)\b/;
 
 const scan = (root: string, pattern: string) => [...new Bun.Glob(pattern).scanSync({ cwd: root, onlyFiles: true })]
@@ -81,7 +81,7 @@ export class TestPlan {
   private units: readonly TestUnit[] = [];
   private preloads = new Set<string>();
   private readonly reads: readonly { readonly unit: string; readonly globs: readonly Bun.Glob[] }[];
-  /** Tests that run on every save, with why. */
+
   private everySave = new Map<string, string>();
   private readonly groups: ReadonlyMap<string, string>;
   private readonly journeys: ReadonlySet<string>;
@@ -98,27 +98,27 @@ export class TestPlan {
     this.rescan();
   }
 
-  /** Whether a test plays headless journeys. */
+
   isJourney(path: string): boolean {
     return this.journeys.has(path);
   }
 
-  /** Which Bun test files may share a process: those with the same group. */
+
   group(path: string): string {
     return this.groups.get(path) ?? "shared";
   }
 
-  /** Every test, as the full suite runs them. */
+
   all(): readonly TestUnit[] {
     return this.units;
   }
 
-  /** Tests that run on every save, each with why. */
+
   alwaysRun(): ReadonlyMap<string, string> {
     return this.everySave;
   }
 
-  /** Finds the tests and scans what they load again. */
+
   rescan(): void {
     const runners = new Set((this.declaration.registryRunners ?? []).map((path) => resolve(this.root, path)));
     const files = this.declaration.files.flatMap((pattern) => scan(this.root, pattern)).filter((path) => !runners.has(path));
@@ -134,7 +134,7 @@ export class TestPlan {
     this.classify();
   }
 
-  /** The tests `changes` can affect. */
+
   select(changes: Changes): Selection {
     const created = changes.created[0];
     if (created !== undefined) return this.everything(`${this.local(created)} is new`);
@@ -164,7 +164,7 @@ export class TestPlan {
     return { units: this.units.filter((unit) => selected.has(unit.path)), audits };
   }
 
-  /** Every test, found again, with why every test runs. */
+
   everything(reason: string): Selection {
     this.rescan();
     return { units: this.units, full: reason };
@@ -195,11 +195,11 @@ export class TestPlan {
   }
 }
 
-/** One test process: registry modules, or Bun test files that may share a process. */
+
 export interface TestProcess {
   readonly kind: TestUnit["kind"];
   readonly units: readonly TestUnit[];
-  /** Expected milliseconds of its tests. */
+
   readonly work: number;
 }
 
@@ -210,7 +210,7 @@ interface Packing {
   work: number;
 }
 
-/** Packs `units`, longest first, each into the least loaded of at most `count` processes it may share. */
+
 function packSide(units: readonly TestUnit[], expected: (unit: TestUnit) => number, key: (unit: TestUnit) => string, count: number): Packing[] {
   const processes: Packing[] = [];
   for (const unit of [...units].sort((left, right) => expected(right) - expected(left))) {
@@ -225,13 +225,13 @@ function packSide(units: readonly TestUnit[], expected: (unit: TestUnit) => numb
   return processes;
 }
 
-/**
- * Splits the tests into about `count` processes. Registry modules share a
- * process only with each other, and get as many as finish no later than the
- * longest file or an even share of all the work; a Bun test file shares one
- * only with files of its isolation group, or with files in none. Each process
- * runs its tests in the full suite's order.
- */
+
+
+
+
+
+
+
 export function packTests(units: readonly TestUnit[], expected: (unit: TestUnit) => number, group: (path: string) => string, count: number): TestProcess[] {
   const registry = units.filter((unit) => unit.kind === "registry");
   const files = units.filter((unit) => unit.kind === "file");

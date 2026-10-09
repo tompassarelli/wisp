@@ -1,12 +1,12 @@
-// Preloaded into every test process `bun run test` starts
-// (wisp:scripts/wisp/testRunner.ts, wisp:docs/testing.md "Test cost"). It
-// charges each test's CPU to its file: the process's own user plus system
-// time, plus the children it waited for (Lua32 runs, compilers), so a busy
-// machine slows a test without adding to it. Time outside tests (loading,
-// beforeAll, afterAll) is charged to the file that ran it. A test over the
-// ceiling fails with a line naming its file, unless it is a farmTest
-// (wisp:scripts/wisp/farmTest.ts). Without the runner's output file it only
-// holds the ceiling, as in each farm shard (`bun test --preload`).
+
+
+
+
+
+
+
+
+
 import { afterAll, afterEach, beforeEach } from "bun:test";
 import { appendFileSync, readFileSync } from "node:fs";
 import { relative } from "node:path";
@@ -18,7 +18,7 @@ const out = process.env[TEST_COST_OUT_ENV] ?? "";
 /** Linux's USER_HZ: /proc reports child CPU in these ticks. */
 const TICKS_PER_SECOND = 100;
 
-/** CPU seconds of this process and of the children it has waited for. */
+
 const seconds = (): number => {
   const { user, system } = process.cpuUsage();
   let children = 0;
