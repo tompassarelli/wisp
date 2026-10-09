@@ -486,22 +486,29 @@ client's War3Preferences `[Video]`, `[Misc]` and `[Sound]` at launch:
   and no sound. It has an 800×600 window, every quality setting at its
   lowest, classic models and textures (`hd=0`), and sound off.
 - `checks` is parity with sound effects (music off), for checks that record a client's audio.
-- `visual` is 1280×720, with Reforged models and more lighting and texture
-  detail.
+- `visual` is 1280×720, with more lighting and texture detail, in Classic.
 - `hfr` is parity at 144 frames a second, for comparing the game's clocks
   against the 60 fps cap.
-- `capture-classic`, `capture-reforged` and `capture-definitive` use a
-  1280×720 window at 60 fps with high lighting, shadows, point-light shadows
-  and water, medium textures, and ambient occlusion enabled. Sound effects are
-  on and music is off, so the same profile can record effect audio.
-  Each profile names its graphics mode; pool metadata records the selected
+- `capture-classic` uses a 1280×720 window at 60 fps with high lighting,
+  shadows, point-light shadows and water, medium textures, and ambient
+  occlusion enabled. Sound effects are on and music is off, so the same
+  profile can record effect audio. Pool metadata records the selected
   profile. Retain that metadata and the saved preferences with captures.
+
+**The pool draws only Classic.** Its clients never sign in, and an unsigned
+client draws Classic models whatever `[Misc] hd` says. On 9 October 2026
+(3.0.0.24268) a Rifleman stand frame on lan0a at `hd=0` and at `hd=2` differed
+in 5 of 16,800 pixels, and still did with `settingsversion=3` and
+`mostRecentlySeenGraphicsMode=2` added; the same map on signed-in clone-c at
+`hd=2` drew the Definitive Rifleman and Illidan (2,277 of 16,800 pixels
+differ). Reforged and Definitive checks run on signed-in clones b, c and d
+with the `capture-reforged` or `capture-definitive` clients file profile
+([doctor.md](doctor.md#graphics-profiles)), set before launch.
 
 Warcraft **3.0.1.24342**'s installed `webui/GlueManager.js` maps
 `PREF_GENERAL_HD` to SD=0, HD=1 and DE=2; the saved preferences store that
-choice as `[Misc] hd`. The profiles choose Classic (`hd=0`) for parity,
-checks and hfr, and Reforged (`hd=1`) for visual. `graphicsMode: "definitive"`
-selects Definitive Edition (`hd=2`). Audio checks therefore use Classic
+choice as `[Misc] hd`. The pool profiles all write Classic (`hd=0`); a signed-in client's `visual`
+writes Reforged (`hd=1`) and `capture-definitive` writes Definitive Edition (`hd=2`). Audio checks therefore use Classic
 sounds; Definitive Edition also uses Classic sounds. The capture profiles set Ambient Occlusion on (`assao=1`); the other profiles set it off (`assao=0`). All omit
 `bloom`, `portraitBloom`, `particles` and `spellfilter`. Smashcraft play explicitly chooses Reforged (`hd=1`) and Ambient Occlusion off too.
 
