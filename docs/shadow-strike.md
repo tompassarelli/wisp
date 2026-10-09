@@ -91,15 +91,38 @@ exact cast-start or impact times. No tick at six seconds after impact was
 observed in either configuration. Data B/C/D, hero targets, other durations
 and damage mitigation remain unmeasured.
 
-The 540-frame 32-bit Lua headless journey at the fixture source reports
-`order-accepted=false`, unchanged life 1000 and no damage rows, then fails
-with `Shadow Strike journey needs modeled stock spell behavior; see #94`.
-**Unsupported:** `IssueTargetOrder` stock `shadowstrike` execution, initial
-damage, periodic damage and scheduling. Agreement is **0/2 configurations**,
-**0/9 native damage rows per client**; placeholder unchanged life is not
-agreement. Ability field readback cannot stand in for these behaviors.
-The native reference is now available, but the headless damage/timing part
-of #94 remains unfinished.
+The same 540-frame journey now executes `shadowstrike` in Bun and 32-bit
+Lua. Agreement is **2/2 configurations**, **9/9 native damage rows per
+client**, including the sample, elapsed milliseconds, damage and remaining
+life. Both simulated clients accept both orders, finish at life 910/940,
+and agree without missing natives or a desync. The authored native fixture
+remains unchanged.
+
+## Headless spell model
+
+Maps declare `abilityObjects` alongside `unitStates` in their headless setup.
+Each ability supplies its base ID and zero-indexed `realLevelFields`; this
+example declares `AEsh`, `acas`, `adur`, `ahdu`, `aran` and `Esh1`–`Esh5`.
+`UnitAddAbility` loads those fields into the unit's ability handle. The
+existing real-level getters and setters read and change the same fields,
+and `SetUnitAbilityLevel` chooses the level used by the order.
+
+`IssueTargetOrder(caster, "shadowstrike", target)` schedules an initial hit
+on a live enemy within the declared range, then periodic hits at `acas`
+seconds from impact while elapsed time is strictly less than `adur`.
+Damage deadlines and map timers run in time order, so a life sampler sees
+only damage that has already happened. Removed or dead targets take no
+later hits. The measured setup has zero slow and decay fields; nonzero
+`Esh2`–`Esh4` and other spell orders remain explicitly unsupported.
+
+The declared `impactDelay` is **0.515625 seconds**, inside the measured
+initial-impact bracket. It represents the combined delay from order to
+impact for these stationary subjects 256 units apart. This is calibration
+to the retained observation: the capture does not identify a separate cast
+point or projectile speed. Other distances, hero durations, mitigation,
+cooldowns and movement during casting are outside this measured example.
+The model derives hits from the current ability fields and target state;
+it does not replay the expected observation rows.
 
 ## Reproduce the reference
 
@@ -127,9 +150,8 @@ LUA32 build/shadow-strike94/headless/headless.lua \
   build/shadow-strike94/map.lua src/natives/warcraft.d.ts
 ```
 
-`LUA32` denotes the repository's pinned 32-bit interpreter. This journey
-currently reports missing stock-spell behavior, rather than fabricating
-damage. After implementing the narrow behavior from native observations,
-compare every damage256/life256 row and its sampling bracket for both configs
-and both clients. Publish matched/total rows, first mismatch if any, exact
-game build and fixture commit here; keep raw private inputs outside Git.
+`LUA32` denotes the repository's pinned 32-bit interpreter. The journey
+compares every output row with the retained numerical native observations
+and exits nonzero on the first mismatching configuration. The same native
+rows are pinned by `test/headless-shadow-strike.test.ts`; the emitted Lua
+version runs on the farm. Keep raw private inputs outside Git.

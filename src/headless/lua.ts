@@ -11,9 +11,11 @@ import { bundleModules } from "../runtime/modules";
 import { stringChecksum } from "../platform/payloadChecksum";
 import type { SceneryFixtures } from "./warcraft3Scenery";
 import type { Warcraft3InventoryFixtures } from "./warcraft3Inventory";
+import type { AbilityObjectFixtures } from "./warcraft3Abilities";
 
 /** What a game declares about its map for a headless run. */
 export interface LuaHeadlessMap {
+  readonly abilityObjects?: AbilityObjectFixtures;
   readonly unitStates?: UnitStateFixtures;
   readonly scenery?: SceneryFixtures;
   readonly inventory?: Warcraft3InventoryFixtures;
@@ -61,6 +63,7 @@ export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: s
     ...(map.intentionalNoops === undefined ? {} : { intentionalNoops: map.intentionalNoops }),
     ...(map.frames === undefined ? {} : { frames: map.frames }),
     ...(map.unitStates === undefined ? {} : { unitStates: map.unitStates }),
+    ...(map.abilityObjects === undefined ? {} : { abilityObjects: map.abilityObjects }),
     ...(map.scenery === undefined ? {} : { scenery: map.scenery }),
     ...(map.inventory === undefined ? {} : { inventory: map.inventory }),
     ...(map.effectDeaths === undefined ? {} : { effectDeaths: map.effectDeaths }),

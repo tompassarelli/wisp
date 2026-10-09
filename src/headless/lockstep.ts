@@ -13,8 +13,10 @@ import type { EffectDeaths, UnitStateFixtures } from "./client";
 import type { IntentionalNoops } from "./client";
 import type { SceneryFixtures } from "./warcraft3Scenery";
 import type { Warcraft3InventoryFixtures } from "./warcraft3Inventory";
+import type { AbilityObjectFixtures } from "./warcraft3Abilities";
 
 export interface LockstepOptions {
+  readonly abilityObjects?: AbilityObjectFixtures;
   readonly unitStates?: UnitStateFixtures;
   readonly scenery?: SceneryFixtures;
   readonly inventory?: Warcraft3InventoryFixtures;
@@ -126,6 +128,7 @@ export class Lockstep {
         ...(files === undefined ? {} : { files }),
         ...(options.frames === undefined ? {} : { frames: options.frames }),
         ...(options.unitStates === undefined ? {} : { unitStates: options.unitStates }),
+        ...(options.abilityObjects === undefined ? {} : { abilityObjects: options.abilityObjects }),
         ...(options.scenery === undefined ? {} : { scenery: options.scenery }),
         ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
         ...(options.effectDeaths === undefined ? {} : { effectDeaths: options.effectDeaths }),
