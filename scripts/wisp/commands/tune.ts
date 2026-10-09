@@ -1,6 +1,6 @@
-// `wisp tune`: serves a panel on this computer that changes the game's
-// declared values in a running match (wisp:docs/tune.md). Each change is a
-// hot reload, installed in every client on the same frame or in none.
+
+
+
 import { Console, Effect, Layer, Schema } from "effect";
 import { type Command, UsageFailure, flagValues } from "../command";
 import { GameFiles } from "../gameFiles";
@@ -14,7 +14,7 @@ import { panelServer } from "../panelServer";
 import { type HotProject, validateDataDirectories, waitForProcessStop } from "./hot";
 
 export interface TuneProject extends HotProject {
-  /** The directory each tunable's file is relative to. */
+
   readonly root: string;
   readonly tunables: readonly Tunable[];
 }
@@ -26,11 +26,11 @@ const NameRequest = Schema.Struct({ name: Schema.String });
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
 
-/**
- * Serves the panel on 127.0.0.1 until the scope closes; returns its address.
- * Requests must name this address as their host and post JSON, so another
- * site open in the browser can't change values or write the source.
- */
+
+
+
+
+
 export const servePanel = (port: number) => Effect.gen(function*() {
   const tune = yield* Tune;
   const context = yield* Effect.context<never>();
@@ -63,13 +63,13 @@ export const servePanel = (port: number) => Effect.gen(function*() {
   return `http://127.0.0.1:${server.port}/`;
 });
 
-/** `tune --data DIR [--data DIR ...] [--port N]`. */
+
 export const makeTune = ({ project, sourceDirectory, sourceMapDirectory, filePrefix = "wisp", root, tunables }: TuneProject): Command => (args) => Effect.gen(function*() {
   const directories = yield* validateDataDirectories(flagValues(args, "data"));
   const [portText = String(DEFAULT_TUNE_PORT)] = flagValues(args, "port");
   const port = Number(portText);
   if (!Number.isInteger(port) || port < 0 || port > 65535) return yield* new UsageFailure({ problem: `--port takes a port number, not ${portText}` });
-  // The source files with the values the match runs; every compile reads these instead of the files.
+
   const replacements = new Map<string, string>();
   const services = Tune.layer(root, tunables, replacements).pipe(
     Layer.provideMerge(HotReload.layer(directories, filePrefix)),
@@ -78,7 +78,7 @@ export const makeTune = ({ project, sourceDirectory, sourceMapDirectory, filePre
     Layer.provideMerge(GameFiles.layer()),
   );
   yield* Effect.scoped(Effect.gen(function*() {
-    // The first compile loads and checks the whole map, seconds a first change would otherwise wait.
+
     yield* (yield* MapBuild).compile.pipe(step("compile the map"));
     const address = yield* servePanel(port);
     yield* Console.log(`tuning ${tunables.length} value(s) of ${sourceDirectory} in ${directories.length} client(s): ${address}`);
