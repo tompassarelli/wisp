@@ -1,4 +1,4 @@
-
+/// <reference path="../../src/natives/warcraft.d.ts" />
 
 
 
