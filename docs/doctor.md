@@ -251,7 +251,8 @@ Each client's prefix is the folder its `documents` lives in
 (`<prefix>/drive_c/users/steamuser/Documents/Warcraft III`) and its display
 is its desktop run folder's. Doctor launches Warcraft III as `play` does
 ([play.md](play.md), step 3): Battle.net's `--exec="launch W3"` inside the
-client's launcher container, never a click in its window.
+client's launcher container, inside a native `machine-capacity session`
+owned by `wisp-game-<client>`, never a click in its window.
 
 ## Doctor in other commands
 

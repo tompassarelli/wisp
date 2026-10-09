@@ -91,7 +91,7 @@ export class PlayMachine extends Context.Service<PlayMachine, {
 
 
 
-  readonly launch: (launcher: ProcessInfo) => Effect.Effect<void, PlayProblem>;
+  readonly launch: (launcher: ProcessInfo, client: string) => Effect.Effect<void, PlayProblem>;
 
   readonly openSteam: (url: string) => Effect.Effect<void, PlayProblem>;
 
@@ -404,7 +404,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     if (log === undefined) return yield* fail(`Battle.net has no log in ${logs}`);
     const path = join(logs, log);
     const offset = (yield* machine.size(path)) ?? 0;
-    yield* machine.launch(launcher);
+    yield* machine.launch(launcher, "play");
     const since = machine.read(path, offset).pipe(Effect.map((text) => text ?? ""));
     const requested = yield* poll(PLAY_TIMEOUTS.request, since.pipe(Effect.map((text) => (launchRequested(text) || launchOutcome(text) !== undefined ? true : undefined))));
     if (requested === undefined) {

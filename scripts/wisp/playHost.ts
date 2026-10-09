@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { Effect, Layer, type PlatformError, Schema, Stream } from "effect";
+import { Console, Effect, Layer, type PlatformError, Schedule, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { serverDirectoryName } from "../warcraft/battleNet";
 import { listProcesses } from "../warcraft/processes";
@@ -15,7 +15,7 @@ import { parseWords, separateInk } from "../warcraft/desktop";
 import { describeCause } from "./command";
 import { decodePpm } from "./frameProbe";
 import { type Collected, collect } from "./hostProcess";
-import { startService } from "./clientServices";
+import { skillScript, startService } from "./clientServices";
 import { reportedMenus } from "./menus";
 import { acquireStartLock, startLockPath } from "./startLock";
 import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow } from "./play";
@@ -29,6 +29,8 @@ export interface PlayTools {
   readonly steam: string;
 
   readonly nsenter: string;
+
+  readonly capacity?: string;
 }
 
 export const PLAY_TOOLS: PlayTools = { grim: "grim", xdotool: "xdotool", tesseract: "tesseract", niri: "niri", steam: "steam", nsenter: "nsenter" };
@@ -77,26 +79,73 @@ const startDetached = (command: readonly string[], log?: string) => Effect.tryPr
 
 
 
-const launchInContainer = (run: Runner, tools: PlayTools, launcher: { readonly pid: number }) => Effect.gen(function*() {
+export interface LaunchRequest {
+  readonly bun: string;
+  readonly capacity: string;
+  readonly client: string;
+  readonly env: string;
+  readonly nsenter: string;
+  readonly wine: string;
+  readonly launcher: { readonly pid: number; readonly cwd: string; readonly env: Readonly<Record<string, string>> };
+  readonly host: Readonly<Record<string, string | undefined>>;
+}
+
+const HOST_KEYS = ["PATH", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"] as const;
+
+
+export const launchCommand = (request: LaunchRequest) => {
+  const { launcher } = request;
+  const restore = HOST_KEYS.flatMap((key) => (launcher.env[key] === undefined ? ["-u", key] : [`${key}=${launcher.env[key]}`]));
+  const host = Object.fromEntries(HOST_KEYS.flatMap((key) => (request.host[key] === undefined ? [] : [[key, request.host[key]!] as const])));
+  return {
+    command: [request.bun, request.capacity, "session", "--class", "native", "--owner", `wisp-game-${request.client}`, "--",
+      request.env, ...restore, request.nsenter, "-t", String(launcher.pid), "-U", "-m", "--preserve-credentials", `--wd=${launcher.cwd}`, "--",
+      request.wine, "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe", "--exec=launch W3"],
+    env: { ...launcher.env, ...host },
+  };
+};
+
+
+export const capacityDeferral = (stderr: string) => /"decision":"DEFER","reason":"([A-Z_]+)"/.exec(stderr)?.[1];
+
+class LaunchDeferred extends Schema.TaggedError<LaunchDeferred>()("LaunchDeferred", { reason: Schema.String }) {}
+
+const LAUNCH_WAIT_SECONDS = 1800;
+
+
+const launchInContainer = (run: Runner, tools: PlayTools, launcher: { readonly pid: number }, client: string) => Effect.gen(function*() {
   const failed = problem("couldn't ask Battle.net to launch Warcraft III");
-  const { env, wine, nsenter, cwd } = yield* Effect.try({
-    try: () => {
+  const capacity = tools.capacity ?? (yield* skillScript("machine-capacity", "scripts/machine-capacity.mjs").pipe(Effect.mapError((cause) => failed(cause.problem))));
+  const request = yield* Effect.try({
+    try: (): LaunchRequest => {
       const base = `/proc/${launcher.pid}`;
       const env = Object.fromEntries(readFileSync(`${base}/environ`, "utf8").split("\0").filter((entry) => entry.includes("="))
         .map((entry) => [entry.slice(0, entry.indexOf("=")), entry.slice(entry.indexOf("=") + 1)] as const)
         .filter(([name]) => name !== "WINESERVERSOCKET" && name !== "WINELOADERNOEXEC"));
       const wine = resolve(dirname(readlinkSync(`${base}/exe`)), "../../../bin/wine");
-      return { env, wine, nsenter: hostNsenter(tools.nsenter), cwd: readlinkSync(`${base}/cwd`) };
+      return {
+        bun: process.execPath, capacity, client, env: hostNsenter("env"), nsenter: hostNsenter(tools.nsenter), wine,
+        launcher: { pid: launcher.pid, cwd: readlinkSync(`${base}/cwd`), env }, host: process.env,
+      };
     },
     catch: failed,
   });
-  const child = ChildProcess.make(nsenter, ["-t", String(launcher.pid), "-U", "-m", "--preserve-credentials", `--wd=${cwd}`, "--",
-    wine, "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe", "--exec=launch W3"], { env, stdin: "ignore", stdout: "ignore" });
-  const { exitCode, stderr } = yield* run(child).pipe(
-    Effect.mapError(failed),
-    Effect.timeoutOrElse({ duration: "30 seconds", orElse: () => Effect.fail(failed("didn't exit within 30 s")) }),
+  const { command, env } = launchCommand(request);
+  const deadline = Date.now() + LAUNCH_WAIT_SECONDS * 1000;
+  const attempt = Effect.gen(function*() {
+    const { exitCode, stderr } = yield* run(ChildProcess.make(command[0]!, command.slice(1), { env, stdin: "ignore", stdout: "ignore" })).pipe(
+      Effect.mapError(failed),
+      Effect.timeoutOrElse({ duration: "30 seconds", orElse: () => Effect.fail(failed("didn't exit within 30 s")) }),
+    );
+    const deferred = exitCode === 75 ? capacityDeferral(stderr) : undefined;
+    if (deferred !== undefined) return yield* new LaunchDeferred({ reason: deferred });
+    if (exitCode !== 0) return yield* failed(`exited ${exitCode}: ${stderr.trim().split("\n").slice(-3).join(" ")}`);
+  });
+  yield* attempt.pipe(
+    Effect.tapError((failure) => failure._tag === "LaunchDeferred" && Date.now() < deadline ? Console.log(`${client}: waiting: the capacity helper defers launching Warcraft III (${failure.reason}); trying again in 45 s`) : Effect.void),
+    Effect.retry({ schedule: Schedule.spaced("45 seconds"), while: (failure) => failure._tag === "LaunchDeferred" && Date.now() < deadline }),
+    Effect.catchTag("LaunchDeferred", (failure) => Effect.fail(failed(`the capacity helper kept deferring it for ${LAUNCH_WAIT_SECONDS} s (${failure.reason})`))),
   );
-  if (exitCode !== 0) return yield* failed(`exited ${exitCode}: ${stderr.trim().split("\n").slice(-3).join(" ")}`);
 });
 
 const machine = (run: Runner, tools: PlayTools): PlayMachine["Service"] => ({
@@ -117,7 +166,7 @@ const machine = (run: Runner, tools: PlayTools): PlayMachine["Service"] => ({
       }
     }
   }),
-  launch: (launcher) => launchInContainer(run, tools, launcher),
+  launch: (launcher, client) => launchInContainer(run, tools, launcher, client),
   openSteam: (url) => startDetached([tools.steam, url]).pipe(Effect.asVoid),
   start: startDetached,
   startService: (unit, command, log) => startService(unit, command, log).pipe(Effect.mapError((failure) => new PlayProblem({ problem: failure.problem }))),
