@@ -4,6 +4,7 @@
 
 
 import { Effect, Layer } from "effect";
+import type { Platform } from "../platform/services";
 import * as desktop from "../warcraft/desktop";
 import { type Command, type CommandFailure, UsageFailure } from "./command";
 import { type ClientProfile, clientSettings } from "./lan/pool";
@@ -40,11 +41,11 @@ export const doctorTargets = (declaration: DoctorDeclaration, names: readonly st
     const start = entry.offline === true ? { kind: "offline-pool" } as const : declaration.start[entry.name];
     if (start === undefined) return yield* new DoctorStop({ problem: `${entry.name}: the game declares no way to start its Battle.net` });
     if (!entry.documents.endsWith(DOCUMENTS)) return yield* new DoctorStop({ problem: `${entry.name}: its documents folder isn't a Wine prefix's ${DOCUMENTS}: ${entry.documents}` });
-    const { x11 } = yield* desktop.desktopSession(entry).pipe(Effect.mapError((cause) => new DoctorStop({ problem: cause.message })));
+    const display = yield* desktop.displayOf(entry).pipe(Effect.mapError((cause) => new DoctorStop({ problem: cause.message })));
     return {
       client: { name: entry.name, documents: entry.documents, ...(entry.menuReportPort === undefined ? {} : { menuReportPort: entry.menuReportPort }) },
       prefix: entry.documents.slice(0, -DOCUMENTS.length),
-      display: x11.DISPLAY,
+      display,
       start,
 
       ...(entry.offline === true ? {} : { settings: profileSettings(entry) }),
@@ -54,7 +55,7 @@ export const doctorTargets = (declaration: DoctorDeclaration, names: readonly st
 });
 
 
-export const doctorLayer = (declaration: DoctorDeclaration, tools: Partial<PlayTools> = {}): Layer.Layer<PlayMachine | DoctorHands, CommandFailure> =>
+export const doctorLayer = (declaration: DoctorDeclaration, tools: Partial<PlayTools> = {}): Layer.Layer<PlayMachine | DoctorHands, CommandFailure, Platform> =>
   Layer.merge(playMachineLayer(tools), privateDoctorHands(declaration.clientsFile));
 
 
@@ -67,7 +68,7 @@ export const clientsDoctor = (declaration: DoctorDeclaration, names: readonly st
   }).pipe(Effect.provide(doctorLayer(declaration, tools)));
 
 
-export const makeDoctor = (declaration: DoctorDeclaration, watch: Layer.Layer<ClientWatch, CommandFailure>, tools: Partial<PlayTools> = {}): Command => (names) =>
+export const makeDoctor = (declaration: DoctorDeclaration, watch: Layer.Layer<ClientWatch, CommandFailure, Platform>, tools: Partial<PlayTools> = {}): Command => (names) =>
   names.some((name) => name.startsWith("-"))
     ? Effect.fail(new UsageFailure({ problem: "doctor takes client names only" }))
     : clientsDoctor(declaration, names, (line) => console.log(line), tools).pipe(Effect.provide(watch), Effect.asVoid);

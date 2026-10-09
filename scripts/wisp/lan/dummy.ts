@@ -1,6 +1,7 @@
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Cause, Effect, Schedule } from "effect";
+import { ProcessTable } from "../../platform/services";
 import { startHost, type LanHost } from "./host";
 import { LanFailure } from "./join";
 import type { MapFacts } from "./map";
@@ -20,10 +21,6 @@ const until = (ready: () => boolean, description: string) => Effect.sync(ready).
   Effect.repeat({ schedule: Schedule.spaced("10 millis"), until: (held) => held }),
   Effect.timeoutOrElse({ duration: "10 seconds", orElse: () => Effect.fail(new LanFailure({ problem: `timed out waiting for ${description}` })) }),
 );
-const residentKiB = (pid: number) => {
-  const status = readFileSync(`/proc/${pid}/status`, "utf8");
-  return Number(/^VmRSS:\s+(\d+)/m.exec(status)?.[1] ?? 0);
-};
 
 
 export const checkDummy = <E, R>(options: DummyOptions<E, R>) => Effect.suspend(() => {
@@ -76,7 +73,7 @@ export const checkDummy = <E, R>(options: DummyOptions<E, R>) => Effect.suspend(
         step = `dummy ${index + 1} handicap change`;
         yield* until(() => host.slots().slots.some((slot) => slot.playerId === dummyPid && slot.handicap === 90), "handicap 90");
         yield* Effect.sleep("250 millis");
-        const rssKiB = yield* Effect.try({ try: () => residentKiB(child.pid), catch: failure });
+        const rssKiB = yield* ProcessTable.use((table) => table.residentKiB(child.pid)).pipe(Effect.mapError(failure));
         host.say(1, dummyPid, ".leave");
         step = `dummy ${index + 1} leave`;
         yield* until(() => host.status().players[1]?.connected === false, "the dummy to leave");

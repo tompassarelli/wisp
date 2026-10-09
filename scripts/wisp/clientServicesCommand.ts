@@ -2,6 +2,7 @@
 
 
 import { Console, Effect } from "effect";
+import type { Platform } from "../platform/services";
 import * as desktop from "../warcraft/desktop";
 import type { Command } from "./command";
 import { UsageFailure } from "./command";
@@ -28,13 +29,13 @@ const statusLines = (clientsFile: string, names: readonly string[], watch: Watch
   const clients = yield* chosenClients(clientsFile, names);
   const watcher = yield* ClientWatch;
   for (const entry of clients) {
-    const pid = desktopPid(entry.run);
-    const desktopOwner = pid === undefined ? undefined : ownerOf(pid);
+    const pid = yield* desktopPid(entry.run);
+    const desktopOwner = pid === undefined ? undefined : yield* ownerOf(pid);
     const desktopText = !liveDesktop(entry.run) ? `no live desktop at ${entry.run}` : `${entry.run}, ${describeOwner(desktopOwner)}${desktopOwner !== undefined && "unit" in desktopOwner ? ` (${yield* unitLine(desktopOwner.unit)})` : ""}`;
     yield* Console.log(`${entry.name}: desktop: ${desktopText}`);
     const prefix = entry.documents.endsWith(DOCUMENTS) ? entry.documents.slice(0, -DOCUMENTS.length) : undefined;
-    const [first] = prefix === undefined ? [] : prefixProcesses(prefix);
-    const owner = first === undefined ? undefined : ownerOf(first.pid);
+    const [first] = prefix === undefined ? [] : yield* prefixProcesses(prefix);
+    const owner = first === undefined ? undefined : yield* ownerOf(first.pid);
     const battleNet = first === undefined ? "not running" : `${describeOwner(owner)}${owner !== undefined && "unit" in owner ? ` (${yield* unitLine(owner.unit)})` : ""}`;
     const client = { name: entry.name, documents: entry.documents, ...(entry.menuReportPort === undefined ? {} : { menuReportPort: entry.menuReportPort }) };
     const view = yield* watcher.view(client).pipe(Effect.map(describeView), Effect.catch((failure) => Effect.succeed(`unknown: ${failure.message}`)));
@@ -48,7 +49,7 @@ export const serviceStatus = (clientsFile: string, names: readonly string[], wat
 const desktopService = (name: string) => Effect.gen(function*() {
   const capacity = yield* skillScript("machine-capacity", "scripts/machine-capacity.mjs");
   const launcher = yield* skillScript("private-desktop-development", "scripts/private-desktop.sh");
-  return yield* startDesktop(name, desktopCommand(capacity, launcher, name));
+  return yield* startDesktop(name, yield* desktopCommand(capacity, launcher, name));
 });
 
 
@@ -56,7 +57,7 @@ const desktopService = (name: string) => Effect.gen(function*() {
 
 
 
-export const reviveDesktops = <E = never>(clientsFile: string, names: readonly string[], start: (name: string) => Effect.Effect<string, ServiceProblem | E> = desktopService) => Effect.gen(function*() {
+export const reviveDesktops = <E = never>(clientsFile: string, names: readonly string[], start: (name: string) => Effect.Effect<string, ServiceProblem | E, Platform> = desktopService) => Effect.gen(function*() {
   const missing = (yield* chosenClients(clientsFile, names)).filter((entry) => !liveDesktop(entry.run));
   for (const entry of missing) {
     yield* Console.log(`${entry.name}: no live desktop at ${entry.run}; starting its private desktop as the service ${desktopUnit(entry.name)}`);
@@ -96,10 +97,10 @@ export const serviceStop = (clientsFile: string, names: readonly string[]) => Ef
   const clients = yield* chosenClients(clientsFile, names);
   for (const entry of clients) {
     const prefix = entry.documents.endsWith(DOCUMENTS) ? entry.documents.slice(0, -DOCUMENTS.length) : undefined;
-    const [first] = prefix === undefined ? [] : prefixProcesses(prefix);
-    const owner = first === undefined ? undefined : ownerOf(first.pid);
-    const pid = desktopPid(entry.run);
-    const desktopOwner = pid === undefined ? undefined : ownerOf(pid);
+    const [first] = prefix === undefined ? [] : yield* prefixProcesses(prefix);
+    const owner = first === undefined ? undefined : yield* ownerOf(first.pid);
+    const pid = yield* desktopPid(entry.run);
+    const desktopOwner = pid === undefined ? undefined : yield* ownerOf(pid);
     const units = [...new Set([
       ...(owner !== undefined && "unit" in owner ? [owner.unit] : []), clientUnit(entry.name),
       ...(desktopOwner !== undefined && "unit" in desktopOwner ? [desktopOwner.unit] : []), desktopUnit(entry.name),

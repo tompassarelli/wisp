@@ -6,6 +6,7 @@
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Layer } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import type { Platform } from "../platform/services";
 import * as desktop from "../warcraft/desktop";
 import { DoctorHands, type DoctorTarget } from "./doctor";
 import { collect } from "./hostProcess";
@@ -29,15 +30,15 @@ const problem = (cause: { readonly message: string }) => new PlayProblem({ probl
 export const privateDoctorHands = (clientsFile: string) => Layer.effect(DoctorHands, Effect.gen(function*() {
   const config = yield* desktop.readClientsFile(clientsFile).pipe(Effect.mapError(problem));
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const platform = yield* Effect.context<Platform>();
 
 
   const windowOf = (target: DoctorTarget, title: string) => Effect.gen(function*() {
     const entry = config.clients.find((client) => client.name === target.client.name);
     if (entry === undefined) return yield* new PlayProblem({ problem: `${target.client.name} isn't in ${clientsFile}` });
-    const { x11, wayland } = yield* desktop.desktopSession(entry);
-    const [window] = yield* desktop.findWindows(config.tools, entry.name, x11, title);
-    if (window === undefined) return yield* new PlayProblem({ problem: `no "${title}" window on ${entry.name}'s display ${x11.DISPLAY}` });
-    return { name: entry.name, documents: entry.documents, tools: config.tools, x11, wayland, window } satisfies desktop.Client;
+    const [window] = yield* desktop.windowsOf(config, entry, title);
+    if (window === undefined) return yield* new PlayProblem({ problem: `no "${title}" window on ${entry.name}'s display ${yield* desktop.displayOf(entry)}` });
+    return window;
   }).pipe(Effect.mapError((cause) => (cause instanceof PlayProblem ? cause : problem(cause))));
 
 
@@ -91,14 +92,13 @@ export const privateDoctorHands = (clientsFile: string) => Layer.effect(DoctorHa
   const windowsTitled = (target: DoctorTarget, title: string) => Effect.gen(function*() {
     const entry = config.clients.find((client) => client.name === target.client.name);
     if (entry === undefined) return [];
-    const { x11 } = yield* desktop.desktopSession(entry).pipe(Effect.mapError(problem));
-    return yield* desktop.findWindows(config.tools, entry.name, x11, title);
+    return yield* desktop.windowsOf(config, entry, title).pipe(Effect.mapError(problem));
   });
 
   return DoctorHands.of({
     launches: true,
-    leaveLobby: leaveLobbyOf,
-    closeScore: closeScoreOf,
-    enterLogin: enterLoginOf,
+    leaveLobby: (target) => leaveLobbyOf(target).pipe(Effect.provideContext(platform)),
+    closeScore: (target) => closeScoreOf(target).pipe(Effect.provideContext(platform)),
+    enterLogin: (target, field) => enterLoginOf(target, field).pipe(Effect.provideContext(platform)),
   });
 })).pipe(Layer.provide(BunServices.layer));

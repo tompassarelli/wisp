@@ -1,0 +1,41 @@
+name: Windows
+
+# The platform-neutral core on Windows with no Linux layer (wisp:docs/platforms.md).
+# A separate workflow from CI, so a Windows failure doesn't open "main is red".
+on:
+  pull_request:
+  push:
+    branches-ignore: ["farm/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - name: Lua32 runner
+        run: |
+          echo "LUA=$(bun scripts/wisp/lua32.ts stock)" >> "$GITHUB_ENV"
+          echo "TOWARD_ZERO_LUA=$(bun scripts/wisp/lua32.ts toward-zero)" >> "$GITHUB_ENV"
+      - name: wisp test
+        run: bun run test examples/sample
+      - name: wisp headless
+        run: bun examples/sample/scripts/sample.ts headless
+      - name: Map build and the platform boundary
+        run: bun test test/map-build.test.ts test/platform-boundary.test.ts

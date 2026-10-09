@@ -1,6 +1,7 @@
 
 
 import { Context, Effect, Layer } from "effect";
+import type { Platform } from "../platform/services";
 import * as desktop from "../warcraft/desktop";
 import type { Frame } from "./frameProbe";
 export { DesktopFailure, type Ink, type Region, type Word, type InputAction, waitFor } from "../warcraft/desktop";
@@ -33,6 +34,7 @@ export const waitForText = (client: Client, what: string, pattern: RegExp, regio
   });
 
 const connect = (path: string) => Effect.gen(function*() {
+  const platform = yield* Effect.context<Platform>();
   const [first, ...others] = yield* desktop.loadClients(path);
   if (first === undefined) return yield* new desktop.DesktopFailure({ operation: "decode clients file", client: path, cause: "no clients" });
   const sessions = new Map([first, ...others].map((session) => [session.name, session]));
@@ -42,14 +44,15 @@ const connect = (path: string) => Effect.gen(function*() {
       ? Effect.fail(new desktop.DesktopFailure({ operation: "find client", client: client.name, cause: "not in the clients file" }))
       : Effect.succeed(found);
   };
+  const on = <A, E>(effect: Effect.Effect<A, E, Platform>) => effect.pipe(Effect.provideContext(platform));
   return Clients.of({
     all: [first, ...others],
-    read: (client, region, ink = "light") => Effect.flatMap(session(client), (value) => desktop.read(value, region, ink)),
-    capture: (client) => Effect.flatMap(session(client), (value) => desktop.capture(value)),
-    words: (client, ink = "light") => Effect.flatMap(session(client), (value) => desktop.words(value, ink)),
-    click: (client, x, y) => Effect.flatMap(session(client), (value) => desktop.click(value, x, y)),
-    keys: (client, ...names) => Effect.flatMap(session(client), (value) => desktop.keys(value, ...names)),
-    typeText: (client, value) => Effect.flatMap(session(client), (target) => desktop.typeText(target, value)),
-    batch: (client, actions) => Effect.flatMap(session(client), (target) => desktop.batch(target, actions)),
+    read: (client, region, ink = "light") => Effect.flatMap(session(client), (value) => on(desktop.read(value, region, ink))),
+    capture: (client) => Effect.flatMap(session(client), (value) => on(desktop.capture(value))),
+    words: (client, ink = "light") => Effect.flatMap(session(client), (value) => on(desktop.words(value, ink))),
+    click: (client, x, y) => Effect.flatMap(session(client), (value) => on(desktop.click(value, x, y))),
+    keys: (client, ...names) => Effect.flatMap(session(client), (value) => on(desktop.keys(value, ...names))),
+    typeText: (client, value) => Effect.flatMap(session(client), (target) => on(desktop.typeText(target, value))),
+    batch: (client, actions) => Effect.flatMap(session(client), (target) => on(desktop.batch(target, actions))),
   });
 });

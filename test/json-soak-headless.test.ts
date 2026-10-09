@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Console, Effect, Exit } from "effect";
+import { Console, Effect, Exit, Layer } from "effect";
+import { platformLayer } from "../scripts/platform/layer";
 import type { Command } from "../scripts/wisp/command";
 import { makeHeadless } from "../scripts/wisp/commands/headless";
 import { makeSoak } from "../scripts/wisp/commands/soak";
@@ -11,7 +12,7 @@ import { timingsLayer } from "../scripts/wisp/timings";
 async function capture(command: Command, args: readonly string[]) {
   const lines: string[] = [];
   const exit = await Effect.runPromiseExit(command([...args, "--json"]).pipe(
-    Effect.provide(timingsLayer(() => undefined)),
+    Effect.provide(Layer.merge(timingsLayer(() => undefined), platformLayer())),
     Effect.provideService(Console.Console, { ...console, log: (...text: unknown[]) => lines.push(text.join(" ")) }),
   ));
   const records = lines.map((line) => JSON.parse(line));

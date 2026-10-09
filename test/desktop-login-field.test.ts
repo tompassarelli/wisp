@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit } from "effect";
 import { afterAll, expect, test } from "bun:test";
+import { linuxDesktopLayer } from "../scripts/platform/linux/desktop";
 import { type Client, enterLoginField } from "../scripts/warcraft/desktop";
 
 const folder = mkdtempSync(join(tmpdir(), "wisp-login-field-"));
@@ -20,7 +21,7 @@ const client: Client = { name: "a", documents: "/not/a/prefix", tools: { grim: t
 test("[reference] the account name is typed into the focused field as wc3-login-field types it: no pointer, then Return", async () => {
   writeFileSync(sent, "");
   const secret = new TextEncoder().encode("someone@example.com");
-  const exit = await Effect.runPromiseExit(enterLoginField(client, "Battle.net", undefined, secret));
+  const exit = await Effect.runPromiseExit(enterLoginField(client, "Battle.net", undefined, secret).pipe(Effect.provide(linuxDesktopLayer)));
   expect(Exit.isSuccess(exit)).toBe(true);
   const lines = readFileSync(sent, "utf8").trim().split("\n");
   expect(lines.filter((line) => /mousemove|mousedown|getmouselocation|ctrl\+a/.test(line))).toEqual([]);

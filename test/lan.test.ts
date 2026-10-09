@@ -5,7 +5,7 @@ import { Effect, Exit, Scope } from "effect";
 import { isActionLog, parseActionLog } from "../scripts/wisp/lan/actionLog";
 import { startHost } from "../scripts/wisp/lan/host";
 import type { MapFacts } from "../scripts/wisp/lan/map";
-import { interfaces } from "../scripts/wisp/lan/offline";
+import { interfaces } from "../scripts/platform/linux/procfs";
 import {
   PACKET, Reader, Writer, decodeIncomingAction, encodePacket, decodeOutgoingAction, decodeSlotTable, decodeStatString, encodeGameSettings, encodeSlotTable,
   encodeStatString, incomingAction, outgoingAction, splitPackets,

@@ -15,6 +15,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Console, Effect, Exit, Schedule, Schema, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { Namespaces } from "../../platform/services";
 import { spawnLogged } from "../hostProcess";
 import { type Command, UsageFailure, flagValues } from "../command";
 import { LanFailure } from "../lan/join";
@@ -284,8 +285,9 @@ const dummy: Command = (args) => Effect.gen(function*() {
   const native = clients.find(({ name }) => name === clientName(pair, "a"));
   if (native?.pid === undefined) return yield* new UsageFailure({ problem: `pair ${pair}'s first client is not running` });
   const state = yield* readJson(join(pairDirectory(pair), "agent.json"), AgentProcess);
+  const [command = "", ...entered] = yield* Namespaces.use((namespaces) => namespaces.enter(state.pid, ["user", "net"], [process.execPath, join(import.meta.dir, "../lan/dummySession.ts"), String(pair), resolve(map), resolve(program), String(count), String(native.pid)]));
   const exit = yield* Effect.scoped(Effect.flatMap(
-    ChildProcess.make("nsenter", ["--target", String(state.pid), "--user", "--net", "--preserve-credentials", process.execPath, join(import.meta.dir, "../lan/dummySession.ts"), String(pair), resolve(map), resolve(program), String(count), String(native.pid)], {
+    ChildProcess.make(command, entered, {
       env: { XDG_RUNTIME_DIR: join(state.runs.a, "runtime") }, extendEnv: true, stdin: "ignore", stdout: "inherit", stderr: "inherit",
     }),
     (child) => child.exitCode,

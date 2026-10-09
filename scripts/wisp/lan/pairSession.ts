@@ -12,7 +12,9 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { Deferred, Effect, Exit, Fiber, FileSystem, Scope, Stream } from "effect";
+import { Deferred, Effect, Exit, Fiber, FileSystem, Layer, Scope, Stream } from "effect";
+import { platformLayer } from "../../platform/layer";
+import { Namespaces } from "../../platform/services";
 import { ChildProcess } from "effect/process";
 import { spawnLogged } from "../hostProcess";
 import { LanFailure } from "./join";
@@ -50,11 +52,12 @@ const session = Effect.gen(function*() {
   const runB = yield* Deferred.await(ready).pipe(Effect.timeoutOrElse({ duration: "120 seconds", orElse: () => Effect.fail(new LanFailure({ problem: "client b's desktop didn't report its Run line within 120 seconds" })) }));
   if (!existsSync(join(runB, "active"))) return yield* new LanFailure({ problem: `client b's desktop isn't active: ${runB}` });
   yield* Effect.tryPromise({ try: () => Bun.write(join(directory, "desktop-b.run"), runB), catch: (cause) => new LanFailure({ problem: String(cause) }) });
-  const desktopA = yield* spawnLogged(ChildProcess.make(launcher, ["start", "--resolution", size, "--", "bwrap", "--dev-bind", "/", "/", "--unshare-net", "--die-with-parent", "--",
-    process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", profileName, "--run-b", runB, "--session-pid", String(process.pid), "--capacity", capacity, ...(fpsText === undefined ? [] : ["--fps", fpsText])], {
+  const agent = yield* Namespaces.use((namespaces) => namespaces.offline([
+    process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", profileName, "--run-b", runB, "--session-pid", String(process.pid), "--capacity", capacity, ...(fpsText === undefined ? [] : ["--fps", fpsText])]));
+  const desktopA = yield* spawnLogged(ChildProcess.make(launcher, ["start", "--resolution", size, "--", ...agent], {
     stdin: "ignore", forceKillAfter: "15 seconds",
   }), { stdout: join(directory, "desktop-a.out"), stderr: join(directory, "desktop-a.err") });
   yield* Effect.raceFirst(desktopA.handle.exitCode, desktopB.exitCode);
 });
 
-BunRuntime.runMain(Effect.scoped(session).pipe(Effect.provide(BunServices.layer)));
+BunRuntime.runMain(Effect.scoped(session).pipe(Effect.provide(Layer.merge(BunServices.layer, platformLayer()))));

@@ -18,9 +18,10 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSy
 import { basename, join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { Cause, Effect, Exit, FiberSet, Option, Schedule, Schema, Scope, Stream } from "effect";
+import { Cause, Effect, Exit, FiberSet, Layer, Option, Schedule, Schema, Scope } from "effect";
+import { platformLayer, runPlatformSync } from "../../platform/layer";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { findGameProcesses } from "./processes";
+import { AudioIsolation, GameLauncher, InputInjection, ProcessTable } from "../../platform/services";
 import { spawnLogged } from "../hostProcess";
 import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports, playLocalGame } from "../menus";
 import { type LanHost, startHost } from "./host";
@@ -41,56 +42,24 @@ const packager = argument("packager") ?? join(process.env["XDG_CACHE_HOME"] ?? j
 const directory = pairDirectory(pair);
 const agentLog = join(directory, "agent.log");
 const say = (text: string) => appendFileSync(agentLog, `${new Date().toISOString()} ${text}\n`);
-const steam = join(process.env["HOME"] ?? "", ".local/share/Steam");
-const proton = join(steam, "compatibilitytools.d/GE-Proton11-7-x86_64/proton");
-const runtime = join(steam, "steamapps/common/SteamLinuxRuntime_4/_v2-entry-point");
 
 const runB = argument("run-b");
 const runs: Record<string, string | undefined> = { a: process.env["PRIVATE_DESKTOP_RUN"], b: runB };
 
 const displayOf = (run: string | undefined): Record<string, string> => {
   if (run === undefined) return {};
-  const read = (file: string) => (existsSync(join(run, file)) ? readFileSync(join(run, file), "utf8").trim() : "");
-  return { DISPLAY: read("display"), WAYLAND_DISPLAY: read("wayland-display"), XAUTHORITY: read("xauthority"), XDG_RUNTIME_DIR: join(run, "runtime"), PRIVATE_DESKTOP_RUN: run };
+  return { ...runPlatformSync(InputInjection.use((input) => Effect.succeed(input.sessionEnvironment(run)))), PRIVATE_DESKTOP_RUN: run };
 };
 const clients = PAIR_SIDES.map((side) => ({ side, name: clientName(pair, side), port: reportPort(pair, side), windowX: 0, env: side === "b" ? displayOf(runB) : {} }));
 type PoolClient = (typeof clients)[number];
 
 
-const output = (command: string, args: readonly string[], env: Record<string, string | undefined>) =>
-  ChildProcessSpawner.ChildProcessSpawner.use((spawner) => spawner.string(ChildProcess.make(command, args, { env, extendEnv: true, stderr: "ignore" }))).pipe(
-    Effect.timeout("5 seconds"),
-    Effect.orElseSucceed(() => ""),
-  );
 
 
 
 
-
-const userRuntime = `/run/user/${process.getuid?.() ?? 1000}`;
-const pulse = join(userRuntime, "pulse/native");
-const audioEnv = (name: string) => Effect.gen(function*() {
-  if (!existsSync(pulse)) return {};
-  const sink = audioSinkOf(name);
-  const pw = { XDG_RUNTIME_DIR: userRuntime };
-  const nodes = yield* output("pw-dump", [], pw);
-  if (!nodes.includes(`"node.name": "${sink}"`)) {
-    const made = yield* Effect.scoped(Effect.gen(function*() {
-      const child = yield* ChildProcess.make("pw-cli", ["create-node", "adapter", `{ factory.name=support.null-audio-sink node.name=${sink} node.description="Wisp ${name}" media.class=Audio/Sink object.linger=true audio.position=[ FL FR ] priority.session=0 priority.driver=0 }`], { env: pw, extendEnv: true, stdout: "ignore" });
-      const [said, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(child.stderr)), child.exitCode], { concurrency: 2 });
-      return { said, code };
-    })).pipe(Effect.timeout("5 seconds"), Effect.orElseSucceed(() => ({ said: "pw-cli failed", code: 1 })));
-    if (made.code !== 0) {
-      say(`no sink for ${name} (${made.said.trim()}): it runs without sound`);
-      return {};
-    }
-  }
-  return { PULSE_SERVER: `unix:${pulse}`, PULSE_SINK: sink };
-});
-
-
-const until = (check: () => boolean, limit: `${number} seconds`) =>
-  Effect.sync(check).pipe(
+const until = <E, R>(check: Effect.Effect<boolean, E, R>, limit: `${number} seconds`) =>
+  check.pipe(
     Effect.repeat({ schedule: Schedule.spaced("250 millis"), until: (held) => held }),
     Effect.timeoutOption(limit),
     Effect.map(Option.isSome),
@@ -99,11 +68,12 @@ const until = (check: () => boolean, limit: `${number} seconds`) =>
 
 const launch = (capacity: string, client: PoolClient) => Effect.gen(function*() {
   // A second runtime on a live prefix joins its wineserver and dies: a game left from before must be stopped first.
-  const left = findGameProcesses(prefixOf(client.name));
+  const table = yield* ProcessTable;
+  const left = yield* table.games(prefixOf(client.name));
   if (left.length > 0) {
     say(`${client.name} still runs (pid ${left.map(({ pid }) => pid).join(", ")}); stopping it first`);
     for (const { pid } of left) process.kill(pid, "SIGTERM");
-    yield* until(() => findGameProcesses(prefixOf(client.name)).length === 0, "5 seconds");
+    yield* until(table.games(prefixOf(client.name)).pipe(Effect.map((games) => games.length === 0)), "5 seconds");
   }
   mkdirSync(documentsOf(client.name), { recursive: true });
   writeFileSync(join(documentsOf(client.name), "War3Preferences.txt"), preferences(profile, client.windowX));
@@ -111,11 +81,14 @@ const launch = (capacity: string, client: PoolClient) => Effect.gen(function*() 
 
 
 
-  const gameRuntime = client.env["XDG_RUNTIME_DIR"] ?? process.env["XDG_RUNTIME_DIR"] ?? userRuntime;
-  const [command = process.execPath, ...native] = nativeCommand(capacity, client.name, gameRuntime);
-  const env = { ...client.env, ...(yield* audioEnv(client.name)), XDG_RUNTIME_DIR: userRuntime, DBUS_SESSION_BUS_ADDRESS: `unix:path=${userRuntime}/bus`, STEAM_COMPAT_DATA_PATH: clientRoot(client.name), STEAM_COMPAT_CLIENT_INSTALL_PATH: steam, STEAM_COMPAT_APP_ID: appId, SteamAppId: appId, SteamGameId: appId };
+  const launched = yield* GameLauncher.use((launcher) => launcher.inPrefix({ root: clientRoot(client.name), exe: exeOf(client.name), args: ["-launch", "-windowmode", "windowed", "-nowfpause"], appId, sessionBus: true }));
+  const gameRuntime = client.env["XDG_RUNTIME_DIR"] ?? process.env["XDG_RUNTIME_DIR"] ?? launched.env["XDG_RUNTIME_DIR"] ?? "";
+  const [command = process.execPath, ...native] = yield* nativeCommand(capacity, client.name, gameRuntime);
+  const sound = yield* AudioIsolation.use((audio) => audio.sink(client.name, audioSinkOf(client.name)));
+  if (sound.problem !== undefined) say(sound.problem);
+  const env = { ...client.env, ...sound.env, ...launched.env, SteamGameId: appId };
   const errFile = join(directory, `${client.name}.err`);
-  const game = yield* spawnLogged(ChildProcess.make(command, [...native, "dbus-run-session", "--", "steam-run", "env", runtime, "--verb=waitforexitandrun", "--", proton, "waitforexitandrun", exeOf(client.name), "-launch", "-windowmode", "windowed", "-nowfpause"], {
+  const game = yield* spawnLogged(ChildProcess.make(command, [...native, ...launched.command], {
     env, extendEnv: true, stdin: "ignore", forceKillAfter: "15 seconds",
   }), { stdout: join(directory, `${client.name}.out`), stderr: errFile });
   const early = yield* game.handle.exitCode.pipe(Effect.map(Number), Effect.orElseSucceed(() => -1), Effect.timeoutOption("5 seconds"));
@@ -133,7 +106,6 @@ const launch = (capacity: string, client: PoolClient) => Effect.gen(function*() 
   return game.handle;
 });
 
-const gamePid = (name: string) => findGameProcesses(prefixOf(name))[0]?.pid;
 
 interface Game {
   readonly id: string;
@@ -153,6 +125,8 @@ const agent = Effect.gen(function*() {
   if (capacity === undefined) return yield* new LanFailure({ problem: "pairAgent requires --capacity MACHINE_CAPACITY_HELPER" });
   mkdirSync(directory, { recursive: true });
   const agentScope = yield* Effect.scope;
+  const table = yield* ProcessTable;
+  const gamePid = (name: string) => table.games(prefixOf(name)).pipe(Effect.map((games) => games[0]?.pid), Effect.orElseSucceed(() => undefined));
 
 
   const games: { readonly isRunning: Effect.Effect<boolean, unknown> }[] = [];
@@ -163,20 +137,12 @@ const agent = Effect.gen(function*() {
 
 
 
-  const xdotool = process.env["WISP_XDOTOOL"] ?? Bun.which("xdotool") ?? (yield* output("nix", ["build", "--no-link", "--print-out-paths", "nixpkgs#xdotool"], {}).pipe(
-    Effect.map((built) => (built.trim() === "" ? undefined : join(built.trim().split("\n")[0] ?? "", "bin/xdotool"))),
-  ));
-  if (xdotool === undefined) say("no xdotool: game windows keep the size and place the desktop gives them");
+  const placer = yield* (yield* InputInjection).placer;
+  if (Option.isNone(placer)) say("no window placement: game windows keep the size and place the desktop gives them");
   else {
-    const x11 = (env: Record<string, string>, ...args: string[]) => output(xdotool, args, env);
     const placeWindows = Effect.forEach(clients, (client) => Effect.gen(function*() {
-      for (const window of (yield* x11(client.env, "search", "--name", "^Warcraft III$")).split("\n").filter((id) => id !== "")) {
-
-        const geometry = yield* x11(client.env, "getwindowgeometry", window);
-        if (geometry.includes(`Position: ${client.windowX},0 `) && [0, 4].some((border) => geometry.includes(`Geometry: ${profile.width + border}x${profile.height + border}`))) continue;
-        yield* x11(client.env, "windowsize", window, String(profile.width), String(profile.height), "windowmove", window, String(client.windowX), "0");
-        say(`placed ${client.name}'s window at ${client.windowX},0, ${profile.width}x${profile.height}`);
-      }
+      const placed = yield* placer.value(client.env, "Warcraft III", { x: client.windowX, y: 0, width: profile.width, height: profile.height });
+      for (let window = 0; window < placed; window++) say(`placed ${client.name}'s window at ${client.windowX},0, ${profile.width}x${profile.height}`);
     }), { discard: true });
     yield* Effect.forkScoped(Effect.repeat(placeWindows, Schedule.spaced("3 seconds")));
   }
@@ -246,12 +212,12 @@ const agent = Effect.gen(function*() {
     game = { id, log, host, map: mapFile, scope };
     say(`game ${id}: hosting ${inGame} on port ${host.port}`);
     for (const client of clients) {
-      const pid = gamePid(client.name);
+      const pid = yield* gamePid(client.name);
       if (pid === undefined) return yield* new LanFailure({ problem: `${client.name} isn't running` });
       const menus = yield* menusOf(client.name);
       yield* (yield* loadLanPlugin).enableLan(pid, exeOf(client.name), menus, say);
       yield* joinLanGame(menus, `wisp-${pair}-${id.slice(11, 19)}`);
-      yield* until(() => host.status().players.some(({ label, connected }) => label === client.name && connected), "20 seconds");
+      yield* until(Effect.sync(() => host.status().players.some(({ label, connected }) => label === client.name && connected)), "20 seconds");
     }
     const playing = yield* Effect.sync(() => host.status().phase).pipe(
       Effect.repeat({ schedule: Schedule.spaced("250 millis"), until: (phase) => phase === "playing" || phase === "over" }),
@@ -275,7 +241,7 @@ const agent = Effect.gen(function*() {
       mkdirSync(join(target, ".."), { recursive: true });
       if (existsSync(target)) rmSync(target);
       copyFileSync(mapFile, target);
-      if (gamePid(client.name) === undefined) return yield* new LanFailure({ problem: `${client.name} isn't running` });
+      if ((yield* gamePid(client.name)) === undefined) return yield* new LanFailure({ problem: `${client.name} isn't running` });
       const menus = yield* menusOf(client.name);
       yield* playLocalGame(menus, { folder: "Wisp", file: basename(mapFile), playerName: client.name });
       const seconds = (Date.now() - started) / 1000;
@@ -297,7 +263,7 @@ const agent = Effect.gen(function*() {
         pair,
         profile: profile.name,
         fps: profile.maxFps,
-        clients: clients.map(({ name }) => ({ name, pid: gamePid(name), documents: documentsOf(name) })),
+        clients: yield* Effect.forEach(clients, ({ name }) => gamePid(name).pipe(Effect.map((pid) => ({ name, pid, documents: documentsOf(name) })))),
         game: game === undefined ? undefined : { id: game.id, log: game.log, map: game.map, ...game.host.status() },
       });
     }
@@ -357,5 +323,5 @@ const agent = Effect.gen(function*() {
 
 BunRuntime.runMain(Effect.scoped(agent).pipe(
   Effect.tapCause((cause) => (Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.sync(() => console.error(Cause.pretty(cause))))),
-  Effect.provide(BunServices.layer),
+  Effect.provide(Layer.merge(BunServices.layer, platformLayer())),
 ), { disableErrorReporting: true });
