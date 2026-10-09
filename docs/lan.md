@@ -254,7 +254,7 @@ exec bun "$capacity" session --class native --owner "wisp-online-clone-$1" -- \
   PULSE_SERVER="unix:/run/user/$(id -u)/pulse/native" PULSE_SINK="wisp-online-clone-$1" \
   dbus-run-session -- steam-run env \
   STEAM_COMPAT_DATA_PATH="$clone" STEAM_COMPAT_CLIENT_INSTALL_PATH="$steam" STEAM_COMPAT_APP_ID=3775098022 \
-  SteamAppId=3775098022 SteamGameId=16213922543717842944 PROTON_LOG=1 PROTON_LOG_DIR="$clone" \
+  SteamAppId=3775098022 SteamGameId=16213922543717842944 \
   "$steam/steamapps/common/SteamLinuxRuntime_4/_v2-entry-point" --verb=waitforexitandrun -- \
   "$steam/compatibilitytools.d/GE-Proton11-7-x86_64/proton" waitforexitandrun \
   "$clone/pfx/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe"
