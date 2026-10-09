@@ -42,6 +42,7 @@ export interface HeadlessRenderProject {
 
 export interface RenderScene {
   readonly frame: number;
+  readonly matchFrame?: number;
   readonly client: number;
   readonly effects: readonly DrawnPose[];
   readonly units: ReturnType<HeadlessClient["unitPoses"]>;
@@ -127,8 +128,8 @@ export interface RenderedFrame {
   readonly heightFog: boolean;
 }
 
-export const captureScene = (client: HeadlessClient, options: { readonly visibleOnly?: boolean } = {}): RenderScene => ({
-  frame: client.frame, client: client.slot, effects: client.effectPoses({ visibleOnly: options.visibleOnly ?? false }), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot({ visibleOnly: options.visibleOnly ?? false }), filter: client.cineFilterPose(), textTags: client.textTags.poses(),
+export const captureScene = (client: HeadlessClient, options: { readonly visibleOnly?: boolean; readonly matchFrame?: number } = {}): RenderScene => ({
+  frame: client.frame, ...(options.matchFrame === undefined ? {} : { matchFrame: options.matchFrame }), client: client.slot, effects: client.effectPoses({ visibleOnly: options.visibleOnly ?? false }), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot({ visibleOnly: options.visibleOnly ?? false }), filter: client.cineFilterPose(), textTags: client.textTags.poses(),
   environment: sceneEnvironment(client),
 });
 
@@ -344,18 +345,19 @@ export const renderScenes = (project: HeadlessRenderProject, scenes: readonly Re
   const browser = yield* openAnyBrowser(project, bundle, graphics);
   return yield* Effect.tryPromise({ try: async () => {
     await mkdir(directory, { recursive: true });
-    const images: { frame: number; client: number; image: string; models: number; textures: number; notDrawn: string[]; pointLights: number; absent: readonly string[]; shadows: RenderedFrame["shadows"]; post: RenderedFrame["post"]; water: boolean; heightFog: boolean; milliseconds: number }[] = [];
+    const images: { frame: number; matchFrame?: number; client: number; image: string; models: number; textures: number; notDrawn: string[]; pointLights: number; absent: readonly string[]; shadows: RenderedFrame["shadows"]; post: RenderedFrame["post"]; water: boolean; heightFog: boolean; milliseconds: number }[] = [];
     for (const scene of scenes) {
       const started = performance.now();
       const result = await browser.devtools.evaluate(`window.renderScene(${JSON.stringify(sceneWithUnits(project, scene))})`) as RenderedFrame;
-      for (const failure of result.notDrawn) console.error(`p${scene.client} frame ${scene.frame}: not drawn: ${failure}`);
-      const image = `p${scene.client}-frame-${scene.frame}.png`;
+      const name = scene.matchFrame === undefined ? `p${scene.client}-frame-${scene.frame}` : `p${scene.client}-match-${scene.matchFrame}`;
+      for (const failure of result.notDrawn) console.error(`${name}: not drawn: ${failure}`);
+      const image = `${name}.png`;
       await Bun.write(join(directory, image), Buffer.from(result.png.split(",")[1] ?? "", "base64"));
-      await Bun.write(join(directory, `p${scene.client}-frame-${scene.frame}.json`), JSON.stringify({ ...scene, popcornEmitters: result.popcornEmitters }));
-      images.push({ frame: scene.frame, client: scene.client, image, models: result.models, textures: result.textures, notDrawn: result.notDrawn, pointLights: result.pointLights, absent: result.absent, shadows: result.shadows, post: result.post, water: result.water, heightFog: result.heightFog, milliseconds: Math.round(performance.now() - started) });
+      await Bun.write(join(directory, `${name}.json`), JSON.stringify({ ...scene, popcornEmitters: result.popcornEmitters }));
+      images.push({ frame: scene.frame, ...(scene.matchFrame === undefined ? {} : { matchFrame: scene.matchFrame }), client: scene.client, image, models: result.models, textures: result.textures, notDrawn: result.notDrawn, pointLights: result.pointLights, absent: result.absent, shadows: result.shadows, post: result.post, water: result.water, heightFog: result.heightFog, milliseconds: Math.round(performance.now() - started) });
     }
     await Bun.write(join(directory, "render.json"), JSON.stringify({ renderer: "war3-model 4.0.1 + HD sampling precision", graphics, levers: PROFILES[graphics], look, gpu: browser.gpu, assets: [...browser.resolutions.values()], images }, null, 2) + "\n");
-    const failures = images.flatMap((image) => image.notDrawn.map((failure) => `p${image.client} frame ${image.frame}: ${failure}`));
+    const failures = images.flatMap((image) => image.notDrawn.map((failure) => `p${image.client} ${image.matchFrame === undefined ? "frame" : "match frame"} ${image.matchFrame ?? image.frame}: ${failure}`));
     if (failures.length > 0) throw new Error(failures.join("\n"));
     return images;
   }, catch: (cause) => new RenderFailure({ cause }) });

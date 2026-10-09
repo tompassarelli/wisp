@@ -7,7 +7,7 @@
 
 
 import { runtimeConfiguration } from "../runtime/config";
-import { type SceneModel, reportedModel, sceneFile, sceneHeading, sceneModelLine } from "../runtime/scene";
+import { type SceneModel, reportedModel, sceneFile, sceneHeading, sceneModelLine, sceneReportGlobal } from "../runtime/scene";
 import { on, trampoline } from "./dispatch";
 
 const REPORT_SECONDS = 0.5;
@@ -62,7 +62,7 @@ interface SceneState {
 
 function scene(): SceneState {
   const globals = globalThis as Record<`${string}SceneReport`, SceneState | undefined>;
-  const state = globals[`${runtimeConfiguration().globalPrefix}SceneReport`];
+  const state = globals[sceneReportGlobal(runtimeConfiguration().globalPrefix)];
   if (state === undefined) throw new Error("scene report used before startSceneReport");
   return state;
 }
@@ -294,7 +294,7 @@ export function installSceneReport(): void {
 
 export function startSceneReport(options: SceneOptions): void {
   const globals = globalThis as Record<`${string}SceneReport`, SceneState | undefined>;
-  const key = `${runtimeConfiguration().globalPrefix}SceneReport` as const;
+  const key = sceneReportGlobal(runtimeConfiguration().globalPrefix);
   if (globals[key] !== undefined) return;
   const state: SceneState = { effects: new Map(), units: new Map(), longest: new Map(), destroyed: new Map(), options, offset: 0, last: options.frame(), serial: 0 };
   globals[key] = state;

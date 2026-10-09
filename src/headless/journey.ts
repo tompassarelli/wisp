@@ -45,26 +45,34 @@ export interface JourneyOptions {
   readonly observationFrames?: readonly number[];
 
   readonly observe?: (this: void, clients: Lockstep, frame: number) => void;
+
+  readonly observationClock?: (this: void, clients: Lockstep) => number | undefined;
 }
 
 
 export function runJourney(clients: Lockstep, journey: Journey, options: JourneyOptions = {}): JourneyResult {
-  const stepFrames = options.stepFrames ?? journey.frames + 1;
+  const clock = options.observationClock;
+  const stepFrames = clock === undefined ? options.stepFrames ?? journey.frames + 1 : 1;
   if (!Number.isInteger(stepFrames) || stepFrames < 1) throw new Error("stepFrames must be a positive integer");
   clients.start();
   const frames = [...new Set(options.observationFrames ?? [])].sort((a, b) => a - b);
-  for (const frame of frames) if (!Number.isInteger(frame) || frame < 0 || frame > journey.frames) throw new Error(`observation frame ${frame} is outside the journey`);
+  for (const frame of frames) if (!Number.isInteger(frame) || frame < 0 || (clock === undefined && frame > journey.frames)) throw new Error(`observation frame ${frame} is outside the journey`);
   let observation = 0;
+  const now = () => clock === undefined ? clients.frame : clock(clients);
   const capture = () => {
-    if (frames[observation] !== clients.frame) return;
-    options.observe?.(clients, clients.frame);
+    const frame = now();
+    if (frame === undefined || frames[observation] !== frame) return;
+    options.observe?.(clients, frame);
     observation++;
   };
   const advance = (target: number) => {
     const stepTo = (frame: number) => {
-      while (clients.frame < frame) clients.frames(Math.min(stepFrames, frame - clients.frame));
+      while (clients.frame < frame) {
+        clients.frames(Math.min(stepFrames, frame - clients.frame));
+        if (clock !== undefined && clients.frame < frame) capture();
+      }
     };
-    while ((frames[observation] ?? target) < target) {
+    while (clock === undefined && (frames[observation] ?? target) < target) {
       const frame = frames[observation];
       if (frame === undefined) break;
       stepTo(frame);
