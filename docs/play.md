@@ -191,16 +191,22 @@ The window loads the visible scene's models and textures before its first input
 step. Hidden pooled effects and UI load when shown, so an unused stage's assets
 cannot block startup. A live frame draws the models that have loaded and loads a
 newly shown model between frames, so a first appearance never stalls the window;
-captures wait for every model. Instances share each texture's decoded pixels. Model initialization leaves animation clocks and particles unchanged;
+captures wait for every model. Instances share each texture's decoded pixels,
+and every renderer shares one compiled shader program per shader pair. A model
+without particles or ribbons keeps nothing between frames, so when its effect
+leaves the scene its instance waits for the next effect with that model instead
+of being rebuilt. Each frame poses a model once, for its shadow pass and its
+draw, and poses only the bones and emitters that place something. Model initialization leaves animation clocks and particles unchanged;
 `render.preloadModels` lists any additional models the map creates later.
 `standalone.json` records startup time and the prepared asset counts separately
 from the match's frame timing.
 The page is cross-origin isolated (`isolated` in `standalone.json`), so its
 timers and frame timestamps are precise to 5 µs rather than 100 µs with random
-jitter. The browser keeps three frame requests ahead of the scene it draws, so
-the map's step runs while the browser draws and a slow step doesn't miss a
-display frame; each request carries the input sampled when it was sent, three
-frames before its scene is shown.
+jitter. In live play the browser keeps one frame request ahead of the scene it
+draws: at each display frame it reads the input, sends it, and draws the scene
+stepped from the previous frame's input while the map steps, so each scene shows
+input read one display frame earlier. A script has no live input, so its run
+keeps three requests ahead and a slow step doesn't miss a display frame.
 Frame requests and scenes travel over one WebSocket (`/frames`); a fetch per
 frame spent about 10 ms in the browser's request handling under load. Each
 request advances one step, in request order, and the page requests no step past `frames`.

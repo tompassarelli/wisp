@@ -57,6 +57,13 @@ that light (wisp:docs/headless.md, "Lighting, fog and sky").
 `setInstanceColor` multiplies unit/effect RGB into that geoset tint before
 light and fog. Its default is white; particles and ribbons retain emitter colours.
 
+Three more built-file changes keep a live frame inside 16.7 ms (wisp#48).
+Model, particle and ribbon renderers share one linked program per WebGL
+context and shader pair and never delete it; compiling and linking stalled
+every new effect instance, and every draw sets the uniforms it reads. An
+update poses only the nodes that place vertices (geoset groups and skin bones)
+or emitters, and their ancestors. Node matrices upload in one call.
+
 Source: <https://github.com/4eb0da/war3-model>.
 License: MIT, Copyright (c) 2017-2023 4eb0da. The package retains LICENSE
 and the upstream copyright in `war3-model.LICENSE`.

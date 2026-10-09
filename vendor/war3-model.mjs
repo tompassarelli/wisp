@@ -174,6 +174,35 @@ function getShader(gl, source, type) {
 	}
 	return shader;
 }
+/**
+ * Wisp: one linked program per context and shader pair, shared by every
+ * renderer that draws with it; renderers never delete it. Compiling and
+ * linking stalled each new effect instance for milliseconds. Every draw sets
+ * the uniforms it reads.
+ */
+var wispPrograms = /* @__PURE__ */ new WeakMap();
+function wispSharedProgram(gl, vertexSource, fragmentSource) {
+	let programs = wispPrograms.get(gl);
+	if (!programs) wispPrograms.set(gl, programs = /* @__PURE__ */ new Map());
+	const key = vertexSource + "\0" + fragmentSource;
+	let program = programs.get(key);
+	if (!program) {
+		program = gl.createProgram();
+		gl.attachShader(program, getShader(gl, vertexSource, gl.VERTEX_SHADER));
+		gl.attachShader(program, getShader(gl, fragmentSource, gl.FRAGMENT_SHADER));
+		gl.linkProgram(program);
+		if (!gl.getProgramParameter(program, gl.LINK_STATUS)) alert("Could not initialise shaders");
+		programs.set(key, program);
+	}
+	return program;
+}
+var wispVertexUniforms = /* @__PURE__ */ new WeakMap();
+/** Wisp: the context's vertex uniform limit, read once rather than once per renderer. */
+function wispMaxVertexUniforms(gl) {
+	let count = wispVertexUniforms.get(gl);
+	if (count === void 0) wispVertexUniforms.set(gl, count = gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS));
+	return count;
+}
 function isWebGL2(gl) {
 	return gl instanceof WebGL2RenderingContext;
 }
@@ -5619,7 +5648,6 @@ var ParticlesController = class {
 				this.gl.deleteShader(this.fragmentShader);
 				this.fragmentShader = null;
 			}
-			this.gl.deleteProgram(this.shaderProgram);
 			this.shaderProgram = null;
 		}
 		this.particleStorage = [];
@@ -5831,13 +5859,7 @@ var ParticlesController = class {
 		});
 	}
 	initShaders() {
-		const vertex = this.vertexShader = getShader(this.gl, particles_vs_default, this.gl.VERTEX_SHADER);
-		const fragment = this.fragmentShader = getShader(this.gl, particles_fs_default, this.gl.FRAGMENT_SHADER);
-		const shaderProgram = this.shaderProgram = this.gl.createProgram();
-		this.gl.attachShader(shaderProgram, vertex);
-		this.gl.attachShader(shaderProgram, fragment);
-		this.gl.linkProgram(shaderProgram);
-		if (!this.gl.getProgramParameter(shaderProgram, this.gl.LINK_STATUS)) alert("Could not initialise shaders");
+		const shaderProgram = this.shaderProgram = wispSharedProgram(this.gl, particles_vs_default, particles_fs_default);
 		this.gl.useProgram(shaderProgram);
 		this.shaderProgramLocations.vertexPositionAttribute = this.gl.getAttribLocation(shaderProgram, "aVertexPosition");
 		this.shaderProgramLocations.textureCoordAttribute = this.gl.getAttribLocation(shaderProgram, "aTextureCoord");
@@ -6417,7 +6439,6 @@ var RibbonsController = class {
 				this.gl.deleteShader(this.fragmentShader);
 				this.fragmentShader = null;
 			}
-			this.gl.deleteProgram(this.shaderProgram);
 			this.shaderProgram = null;
 		}
 		if (this.gpuVSUniformsBuffer) {
@@ -6735,13 +6756,7 @@ var RibbonsController = class {
 		}
 	}
 	initShaders() {
-		const vertex = this.vertexShader = getShader(this.gl, ribbon_vs_default, this.gl.VERTEX_SHADER);
-		const fragment = this.fragmentShader = getShader(this.gl, ribbon_fs_default, this.gl.FRAGMENT_SHADER);
-		const shaderProgram = this.shaderProgram = this.gl.createProgram();
-		this.gl.attachShader(shaderProgram, vertex);
-		this.gl.attachShader(shaderProgram, fragment);
-		this.gl.linkProgram(shaderProgram);
-		if (!this.gl.getProgramParameter(shaderProgram, this.gl.LINK_STATUS)) alert("Could not initialise shaders");
+		const shaderProgram = this.shaderProgram = wispSharedProgram(this.gl, ribbon_vs_default, ribbon_fs_default);
 		this.gl.useProgram(shaderProgram);
 		this.shaderProgramLocations.vertexPositionAttribute = this.gl.getAttribLocation(shaderProgram, "aVertexPosition");
 		this.shaderProgramLocations.textureCoordAttribute = this.gl.getAttribLocation(shaderProgram, "aTextureCoord");
@@ -7390,6 +7405,20 @@ var ModelRenderer = class {
 		};
 		for (const node of model.Nodes) if (node) if (!node.Parent && node.Parent !== 0) this.rendererData.rootNode.childs.push(this.rendererData.nodes[node.ObjectId]);
 		else this.rendererData.nodes[node.Parent].childs.push(this.rendererData.nodes[node.ObjectId]);
+		// Wisp: an update poses only the nodes that place vertices or emitters, and their ancestors; no draw reads the others.
+		const wispPlaced = /* @__PURE__ */ new Set();
+		for (const geoset of model.Geosets) {
+			for (const group of geoset.Groups ?? []) for (const id of group) wispPlaced.add(id);
+			const skin = geoset.SkinWeights;
+			if (skin?.length > 0) for (let i = 0; i < skin.length; i += 8) for (let j = 0; j < 4; ++j) wispPlaced.add(skin[i + j]);
+		}
+		for (const emitter of [...model.ParticleEmitters ?? [], ...model.ParticleEmitters2 ?? [], ...model.RibbonEmitters ?? [], ...model.ParticleEmitterPopcorns ?? []]) wispPlaced.add(emitter.ObjectId);
+		for (const id of wispPlaced) for (let node = this.rendererData.nodes[id]; node && !node.wispPosed;) {
+			node.wispPosed = true;
+			const parent = node.node.Parent;
+			node = parent || parent === 0 ? this.rendererData.nodes[parent] : void 0;
+		}
+		this.wispNodeMatrices = new Float32Array(MAX_NODES * 16);
 		if (model.GlobalSequences) for (let i = 0; i < model.GlobalSequences.length; ++i) this.rendererData.globalSequencesFrames[i] = 0;
 		for (let i = 0; i < model.GeosetAnims.length; ++i) this.rendererData.geosetAnims[model.GeosetAnims[i].GeosetId] = model.GeosetAnims[i];
 		for (let i = 0; i < model.Materials.length; ++i) {
@@ -7472,8 +7501,7 @@ var ModelRenderer = class {
 					this.gl.deleteShader(this.fragmentShader);
 					this.fragmentShader = null;
 				}
-				this.gl.deleteProgram(this.shaderProgram);
-				this.shaderProgram = null;
+					this.shaderProgram = null;
 			}
 			this.destroyShaderProgramObject(this.envToCubemap);
 			this.destroyShaderProgramObject(this.envSphere);
@@ -7495,7 +7523,7 @@ var ModelRenderer = class {
 	}
 	initGL(glContext) {
 		this.gl = glContext;
-		this.softwareSkinning = !this.isHD && this.hasWeightedSkin || this.gl.getParameter(this.gl.MAX_VERTEX_UNIFORM_VECTORS) < 4 * (MAX_NODES + 2);
+		this.softwareSkinning = !this.isHD && this.hasWeightedSkin || wispMaxVertexUniforms(this.gl) < 4 * (MAX_NODES + 2);
 		this.anisotropicExt = this.gl.getExtension("EXT_texture_filter_anisotropic") || this.gl.getExtension("MOZ_EXT_texture_filter_anisotropic") || this.gl.getExtension("WEBKIT_EXT_texture_filter_anisotropic");
 		this.colorBufferFloatExt = this.gl.getExtension("EXT_color_buffer_float");
 		this.initRequiredEnvMaps();
@@ -8018,7 +8046,10 @@ var ModelRenderer = class {
 			this.gl.enableVertexAttribArray(this.shaderProgramLocations.tangentAttribute);
 		} else if (!this.softwareSkinning) this.gl.enableVertexAttribArray(this.shaderProgramLocations.groupAttribute);
 		if (!this.softwareSkinning) {
-			for (let j = 0; j < MAX_NODES; ++j) if (this.rendererData.nodes[j]) this.gl.uniformMatrix4fv(this.shaderProgramLocations.nodesMatricesAttributes[j], false, this.rendererData.nodes[j].matrix);
+			// Wisp: one upload for every node matrix instead of one call per node.
+			const matrices = this.wispNodeMatrices, count = Math.min(MAX_NODES, this.rendererData.nodes.length);
+			for (let j = 0; j < count; ++j) if (this.rendererData.nodes[j]) matrices.set(this.rendererData.nodes[j].matrix, j * 16);
+			if (count > 0) this.gl.uniformMatrix4fv(this.shaderProgramLocations.nodesMatricesAttributes[0], false, matrices.subarray(0, count * 16));
 		}
 		for (let i = 0; i < this.model.Geosets.length; ++i) {
 			const geoset = this.model.Geosets[i];
@@ -8863,13 +8894,7 @@ var ModelRenderer = class {
 		let fragmentShaderSource;
 		if (this.isHD) fragmentShaderSource = isWebGL2(this.gl) ? fragmentShaderHDNew : hdOld_fs_default;
 		else fragmentShaderSource = sd_fs_default;
-		const vertex = this.vertexShader = getShader(this.gl, vertexShaderSource, this.gl.VERTEX_SHADER);
-		const fragment = this.fragmentShader = getShader(this.gl, fragmentShaderSource, this.gl.FRAGMENT_SHADER);
-		const shaderProgram = this.shaderProgram = this.gl.createProgram();
-		this.gl.attachShader(shaderProgram, vertex);
-		this.gl.attachShader(shaderProgram, fragment);
-		this.gl.linkProgram(shaderProgram);
-		if (!this.gl.getProgramParameter(shaderProgram, this.gl.LINK_STATUS)) alert("Could not initialise shaders");
+		const shaderProgram = this.shaderProgram = wispSharedProgram(this.gl, vertexShaderSource, fragmentShaderSource);
 		this.gl.useProgram(shaderProgram);
 		this.shaderProgramLocations.vertexPositionAttribute = this.gl.getAttribLocation(shaderProgram, "aVertexPosition");
 		this.shaderProgramLocations.normalsAttribute = this.gl.getAttribLocation(shaderProgram, "aNormal");
@@ -9911,7 +9936,7 @@ var ModelRenderer = class {
 			mat4fromRotationOrigin(tempLockMat, tempLockQuat, tempTransformedPivotPoint);
 			mul(node.matrix, tempLockMat, node.matrix);
 		}
-		for (const child of node.childs) this.updateNode(child);
+		for (const child of node.childs) if (child.wispPosed) this.updateNode(child);
 	}
 	/** Wisp: a geoset's animated colour in the order the file stores it, white without a geoset animation. Native Classic draws the stored order as red, green, blue, whatever the animation's flags say. */
 	findColor(geosetId) {

@@ -52,8 +52,13 @@ export interface StandaloneFrame {
   readonly serverMs: number;
 }
 
-/** Frames the page requests before drawing them: enough to absorb a slow map step, each one a frame of input delay. */
-const FRAMES_AHEAD = 3;
+/**
+ * Frames the page requests before drawing them. Live play keeps one, so a frame
+ * shows the input read one display frame earlier; each further frame would add
+ * a frame of input delay. A script has no live input, so it requests three and
+ * a slow map step doesn't miss a display frame.
+ */
+const framesAhead = (scripted: boolean) => (scripted ? 3 : 1);
 
 const Input = Schema.Struct({ buttons: Schema.Array(Schema.String), axisX: Schema.Finite, axisY: Schema.Finite });
 const Sound = Schema.Struct({
@@ -117,7 +122,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
       "cross-origin-opener-policy": "same-origin", "cross-origin-embedder-policy": "require-corp",
     } });
     if (url.pathname === "/player.js") return new Response(javascript, { headers: { "content-type": "text/javascript" } });
-    if (url.pathname === "/config") return Response.json({ title: game.title, width: game.render.width ?? 1280, height: game.render.height ?? 720, scripted: options.script !== undefined, samples: options.out !== undefined, gamepadIndex: options.gamepadIndex, frames: options.frames, ahead: FRAMES_AHEAD });
+    if (url.pathname === "/config") return Response.json({ title: game.title, width: game.render.width ?? 1280, height: game.render.height ?? 720, scripted: options.script !== undefined, samples: options.out !== undefined, gamepadIndex: options.gamepadIndex, frames: options.frames, ahead: framesAhead(options.script !== undefined) });
     if (url.pathname === "/prepare") return Response.json({ scene: sceneWithUnits(game.render, captureScene(session.client)), models: game.render.preloadModels ?? [], step: steps });
     if (url.pathname === "/asset") {
       const path = url.searchParams.get("path") ?? "";
@@ -159,7 +164,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
   // Frames travel over one WebSocket: a fetch per frame cost about 10 ms of browser request handling under load.
   const server = yield* Effect.acquireRelease(Effect.sync(() => Bun.serve({ hostname: "127.0.0.1", port: 0, websocket: {
     message(socket, message) {
-      // Requests arrive several frames ahead; each waits for the previous step so steps stay in request order.
+      // Requests may arrive several frames ahead; each waits for the previous step so steps stay in request order.
       steps$ = steps$.then(async () => {
         socket.send(JSON.stringify(await run(step(String(message)).pipe(thrownAsFailure, Effect.catch((failure) => Effect.succeed({ error: problemOf(failure) }))))));
       }).catch(() => undefined);
