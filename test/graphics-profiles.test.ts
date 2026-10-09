@@ -7,8 +7,8 @@ import { parsePostProcessing, postSettings, sunView } from "../scripts/wisp/brow
 const project = { readAsset: async () => undefined };
 
 test("[wisp#79] a look check asking for a lever Wisp does not draw in its graphics mode fails with that lever's name, before drawing", async () => {
-  const failure = await Effect.runPromise(Effect.flip(renderScenes(project, [], "/nonexistent", "definitive", ["point-lights", "shadows", "point-light-shadows", "bloom", "ambient-occlusion", "water"])));
-  expect(String(failure.cause)).toContain("the look check asks for water, which Wisp does not draw in definitive");
+  const failure = await Effect.runPromise(Effect.flip(renderScenes(project, [], "/nonexistent", "definitive", ["point-lights", "shadows", "point-light-shadows", "bloom", "ambient-occlusion", "water", "height-fog-falloff", "terrain"])));
+  expect(String(failure.cause)).toContain("the look check asks for terrain, which Wisp does not draw in definitive");
   const classic = await Effect.runPromise(Effect.flip(renderScenes(project, [], "/nonexistent", "classic", ["shadows", "terrain"])));
   expect(String(classic.cause)).toContain("the look check asks for terrain, which Wisp does not draw in classic");
 });
