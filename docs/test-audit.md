@@ -41,7 +41,7 @@ desktop executable experiment timed out because its synthetic Windows process
 name was rejected by the Nix multicall executable; that experiment is absent
 from this change. These samples are not a whole-suite before/after comparison.
 
-The 4 CPU second ceiling and 25% file-cost gate remain unchanged. Baseline rows
+The per-test ceiling (then 4 CPU seconds) and 25% file-cost gate remained unchanged. Baseline rows
 were removed only for deleted files; remaining file costs await the full audit.
 
 ## Second piece: the remaining audit
