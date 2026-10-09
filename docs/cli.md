@@ -78,6 +78,7 @@ program can register it; "game" means the consuming game defines it.
 | `integrity` | Native input-integrity sessions and their evidence | `capture`, `result`, `headless` | game |
 | `pad` | Scripted virtual-pad input through the real helper | (script) | game |
 | `judge` | Retained captures against a measurement rubric | (capture folder) | game |
+| `anim` | Fighter animation quality: the measured scorecard and its judged side-by-side | `score`, `judge` | game |
 | `farm` | Headless work on hosted CI runners | `test` (Wisp); `balance`, `pads`, `perf`, `memory` (game) | Wisp |
 | `view` | What a player would see, and the model facts it reads | `scene`, `frame`, `models`, `strikes`, `reach`, `hurtboxes`, `motion` | game |
 | `oracle` | Melee situations against decompiled values | (session) | game |
