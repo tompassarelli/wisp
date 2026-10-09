@@ -110,8 +110,8 @@ export class MapBuild extends Context.Service<MapBuild, {
     return Layer.effect(MapBuild, Effect.gen(function*() {
       const sourceErrors = yield* SourceErrors;
       // The compiler API takes about 0.6 s to load, so it loads on the first compile.
-      let compiler: Promise<{ readonly run: ReturnType<CompilerModule["mapCompiler"]>; readonly report: CompilerModule["report"] }> | undefined;
-      const warmCompiler = () => (compiler ??= import("../compiler").then(({ mapCompiler, report }) => ({ run: mapCompiler(configPath, sources), report })));
+      let compiler: Promise<{ readonly run: ReturnType<CompilerModule["mapCompiler"]>; readonly report: CompilerModule["report"]; readonly reportHandleWarnings: CompilerModule["reportHandleWarnings"] }> | undefined;
+      const warmCompiler = () => (compiler ??= import("../compiler").then(({ mapCompiler, report, reportHandleWarnings }) => ({ run: mapCompiler(configPath, sources), report, reportHandleWarnings })));
       /** The compiled bundle on disk, its source map kept under its key. */
       const compiled = Effect.gen(function*() {
         const bytes = yield* tryMapPromise("read map bundle", bundlePath, () => Bun.file(bundlePath).bytes());
@@ -123,10 +123,11 @@ export class MapBuild extends Context.Service<MapBuild, {
       /** A map command times the compiler's loading and phases as steps; `hot` keeps its reload timeline short. */
       const runCompiler = (measured: boolean) => Effect.gen(function*() {
         const load = tryMapPromise("load the map compiler", configPath, warmCompiler);
-        const { run, report } = yield* measured ? load.pipe(step("load compiler")) : load;
+        const { run, report, reportHandleWarnings } = yield* measured ? load.pipe(step("load compiler")) : load;
         const context = yield* Effect.context<never>();
         const phase: Phase = (name, work) => Effect.runSyncWith(context)(Effect.sync(work).pipe(step(name)));
         const diagnostics = yield* tryMapSync("compile map", configPath, () => measured ? run(phase) : run());
+        if (run.warnings().length > 0) yield* Console.warn(reportHandleWarnings(run.warnings()));
         if (diagnostics.length > 0) return yield* new CompileFailure({ diagnostics: report(diagnostics) });
         return run;
       });
@@ -155,6 +156,7 @@ export class MapBuild extends Context.Service<MapBuild, {
       const currentBundle = Effect.gen(function*() {
         const age = yield* tryMapSync("check compiled bundle", bundlePath, () => freshBundleAge(bundlePath, compileInputs, Date.now()));
         if (age === undefined) return yield* compileBundle(true);
+        yield* runCompiler(false);
         return yield* compiled.pipe(step(`script reused (compiled ${age.toFixed(0)} s ago)`));
       });
       return MapBuild.of({
