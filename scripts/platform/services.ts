@@ -59,8 +59,6 @@ export class ResourceAccounting extends Context.Service<ResourceAccounting, {
 
   readonly cpuLimit: () => number | undefined;
   readonly insideCapacityLease: () => boolean;
-
-  readonly childCpuSeconds: () => number | undefined;
   readonly threadCpuMillis: () => number;
 }>()("wisp/platform/ResourceAccounting") {}
 

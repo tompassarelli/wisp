@@ -74,7 +74,7 @@ test("[invariant] each capability without an implementation fails with a named n
 
 test("[invariant] accounting reads without an implementation report nothing instead of failing", () => {
   const accounting = Effect.runSync(ResourceAccounting.use(Effect.succeed).pipe(Effect.provide(windows)));
-  expect([accounting.cpuPressure(), accounting.cpuLimit(), accounting.insideCapacityLease(), accounting.childCpuSeconds()]).toEqual([undefined, undefined, false, undefined]);
+  expect([accounting.cpuPressure(), accounting.cpuLimit(), accounting.insideCapacityLease()]).toEqual([undefined, undefined, false]);
   expect(accounting.threadCpuMillis()).toBeGreaterThan(0);
 });
 

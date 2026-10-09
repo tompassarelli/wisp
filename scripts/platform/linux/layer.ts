@@ -80,7 +80,6 @@ const synchronous = Layer.mergeAll(
       cpuPressure: procfs.cpuPressure,
       cpuLimit: procfs.cpuLimit,
       insideCapacityLease: procfs.insideCapacityLease,
-      childCpuSeconds: procfs.childCpuSeconds,
       threadCpuMillis: () => (clock ??= procfs.threadClock())(),
     });
   }),

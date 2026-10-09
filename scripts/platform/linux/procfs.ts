@@ -151,13 +151,6 @@ export function cpuLimit(): number | undefined {
 
 export const insideCapacityLease = () => readText("/proc/self/cgroup")?.includes("agent-capacity") ?? false;
 
-export const childCpuSeconds = () => {
-  const fields = statFields(readText("/proc/self/stat"));
-  // cutime and cstime are stat fields 16 and 17, counted from 1 before the command name.
-  const ticks = Number(fields?.[13]) + Number(fields?.[14]);
-  return Number.isFinite(ticks) ? ticks / TICKS_PER_SECOND : undefined;
-};
-
 export const threadClock = (): (() => number) => {
   const libc = dlopen("libc.so.6", { clock_gettime: { args: ["i32", "ptr"], returns: "i32" } });
   const time = new BigInt64Array(2);

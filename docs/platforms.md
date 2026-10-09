@@ -18,7 +18,7 @@ reads `/proc`, cgroup files or runs `nsenter`, `wine`, `grim`, `xdotool`,
 | Service | What it does | Linux layer |
 | --- | --- | --- |
 | `ProcessTable` | process discovery: the process table, a prefix's game processes, a launcher's working directory and environment, whether a pid lives, its resident memory and network interfaces | `/proc` (linux/procfs.ts) |
-| `ResourceAccounting` | process and resource accounting: CPU pressure, the CPU limit, whether this run holds a capacity lease, child and thread CPU time | `/proc/pressure`, cgroup `cpu.max`, `/proc/self/stat`, `clock_gettime` from libc |
+| `ResourceAccounting` | process and resource accounting: CPU pressure, the CPU limit, whether this run holds a capacity lease, thread CPU time | `/proc/pressure`, cgroup `cpu.max`, `clock_gettime` from libc |
 | `ScreenCapture` | screen capture of a client's desktop | `grim` (linux/desktop.ts) |
 | `InputInjection` | input injection: finding, focusing and placing windows, keys, text, pointer presses and input batches | `xdotool` and `wlrctl` on a private X11/Wayland desktop |
 | `GameLauncher` | game launch in a prefix | Proton under `steam-run`, optionally offline (`bwrap`) and with its own session bus |
@@ -32,19 +32,17 @@ Layers are composed at the application boundary. `cliProgram`
 (wisp:scripts/wisp/cli.ts) provides `platformLayer()`
 (wisp:scripts/platform/layer.ts) to every command, so a `Command` may require
 any platform service. Standalone programs (`pairAgent`, `pairSession`,
-`dummySession`, the test runner) provide it in their `runMain`, and the two
-synchronous boundaries that can't (the test-cost preload and the LAN plugin's
-`isolatedNetworkProblem`) read it once with `runPlatformSync`.
+`dummySession`, the test runner) provide it in their `runMain`, and the
+synchronous boundaries that can't (soak's thread clock and the LAN plugin's
+`isolatedNetworkProblem`) read it with `runPlatformSync`.
 
 `platformLayer` picks the Linux layer on Linux and `unsupportedLayer` anywhere
 else. There, a capability with no implementation fails with
 `PlatformUnsupported`, printed as `<capability> is not supported on this
 platform (<platform>)`, instead of crashing; desktop calls carry it inside
 their `DesktopFailure`. Accounting reads that have a portable meaning report
-nothing instead: no CPU pressure, no CPU limit, no lease, no child CPU, and
-thread CPU from `process.cpuUsage()`. On those platforms the
-[test cost](testing.md#test-cost) ceiling counts only the test process's own
-CPU, not its Lua32 and compiler children.
+nothing instead: no CPU pressure, no CPU limit, no lease, and thread CPU from
+`process.cpuUsage()`.
 
 wisp:test/platform-boundary.test.ts holds the boundary: it fails on any new
 direct use outside wisp:scripts/platform/linux/, checks that it catches a
@@ -86,7 +84,7 @@ Before #108, by file (all now inside wisp:scripts/platform/linux/):
 | --- | --- | --- |
 | `/proc` process table, cmdline, environ, stat, cwd, exe | scripts/warcraft/processes.ts, scripts/wisp/lan/processes.ts, scripts/wisp/playHost.ts, scripts/wisp/clientServices.ts | linux/procfs.ts |
 | `/proc/<pid>/status`, `/proc/<pid>/net/dev` | scripts/wisp/lan/dummy.ts, scripts/wisp/lan/offline.ts | linux/procfs.ts |
-| `/proc/pressure/cpu`, `/proc/self/stat` | scripts/wisp/testRunner.ts, scripts/wisp/testCostPreload.ts | linux/procfs.ts |
+| `/proc/pressure/cpu` (and `/proc/self/stat`, which the test-cost preload stopped reading in 0d3dd85) | scripts/wisp/testRunner.ts, scripts/wisp/testCostPreload.ts | linux/procfs.ts |
 | cgroups (`/proc/<pid>/cgroup`, `/sys/fs/cgroup/.../cpu.max`, `cgroup.procs`) | scripts/wisp/clientServices.ts, scripts/wisp/commands/dev.ts, scripts/wisp/commands/soak.ts, scripts/wisp/testRunner.ts | linux/procfs.ts |
 | libc `clock_gettime` thread clock and the only `process.platform` branch | scripts/wisp/soak.ts | linux/procfs.ts, layer.ts |
 | Wine (`wine`, `wineserver`, `WINEPREFIX`) | scripts/wisp/playHost.ts, scripts/warcraft/processes.ts | linux/play.ts, linux/procfs.ts |
