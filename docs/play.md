@@ -189,16 +189,21 @@ Live frames copy only visible effects and UI, including each frame's parent visi
 requested captures retain the full scene snapshot.
 The window loads the visible scene's models and textures before its first input
 step. Hidden pooled effects and UI load when shown, so an unused stage's assets
-cannot block startup. Model initialization leaves animation clocks and particles unchanged;
+cannot block startup. A live frame draws the models that have loaded and loads a
+newly shown model between frames, so a first appearance never stalls the window;
+captures wait for every model. Instances share each texture's decoded pixels. Model initialization leaves animation clocks and particles unchanged;
 `render.preloadModels` lists any additional models the map creates later.
 `standalone.json` records startup time and the prepared asset counts separately
 from the match's frame timing.
 The page is cross-origin isolated (`isolated` in `standalone.json`), so its
 timers and frame timestamps are precise to 5 µs rather than 100 µs with random
-jitter. The browser keeps one frame request pending while it draws the preceding scene.
+jitter. The browser keeps three frame requests ahead of the scene it draws, so
+the map's step runs while the browser draws and a slow step doesn't miss a
+display frame; each request carries the input sampled when it was sent, three
+frames before its scene is shown.
 Frame requests and scenes travel over one WebSocket (`/frames`); a fetch per
 frame spent about 10 ms in the browser's request handling under load. Each
-request advances one step; captures finish saving before the next request.
+request advances one step, in request order, and the page requests no step past `frames`.
 It keeps animation callbacks registered throughout drawing and waits for a fresh
 callback to deliver each scene. Idle callbacks do not count as delivered frames.
 Sound labels resolve through the installed sound tables. Sound downloads run
