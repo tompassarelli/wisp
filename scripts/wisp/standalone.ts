@@ -48,16 +48,16 @@ export interface StandaloneFrame {
   readonly checksum?: string;
   readonly capture: boolean;
   readonly done: boolean;
-  /** The server's step and scene copy for this frame, in milliseconds. */
+
   readonly serverMs: number;
 }
 
-/**
- * Frames the page requests before drawing them. Live play keeps one, so a frame
- * shows the input read one display frame earlier; each further frame would add
- * a frame of input delay. A script has no live input, so it requests three and
- * a slow map step doesn't miss a display frame.
- */
+
+
+
+
+
+
 const framesAhead = (scripted: boolean) => (scripted ? 3 : 1);
 
 const Input = Schema.Struct({ buttons: Schema.Array(Schema.String), axisX: Schema.Finite, axisY: Schema.Finite });
@@ -73,17 +73,17 @@ const Completion = Schema.fromJsonString(Schema.StructWithRest(Schema.Struct({ e
 
 const attempt = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: (cause) => new RenderFailure({ cause }) });
 const failed = (problem: string) => new RenderFailure({ cause: new Error(problem) });
-/** What the page is told when a request fails: the failure's own text. */
+
 const problemOf = (failure: RenderFailure) => (failure.cause instanceof Error ? failure.cause.message : String(failure.cause));
 const decode = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, input: unknown) =>
   Schema.decodeUnknownEffect(schema)(input).pipe(Effect.mapError((cause) => failed(cause.message)));
-/** Game and scene code may throw; the page still gets the thrown text as its reply. */
+
 const thrownAsFailure = Effect.catchDefect((cause) => Effect.fail(new RenderFailure({ cause })));
 
-/**
- * One fixed simulation step per presented frame; wall-clock delays never change game arithmetic.
- * The map session and its server last until the scope closes; `completed` waits for the page's result.
- */
+
+
+
+
 export const openStandalone = (game: StandaloneGame, options: StandaloneOptions = {}) => Effect.gen(function*() {
   const script = options.script === undefined ? undefined : yield* attempt(() => Bun.file(options.script!).text());
   const session = yield* Effect.acquireRelease(attempt(() => game.create(script === undefined ? undefined : { script })), (opened) => Effect.sync(() => opened.close()));
@@ -118,7 +118,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
     const url = new URL(request.url);
     if (url.pathname === "/") return new Response(`<!doctype html><html><head><title>${game.title.replaceAll("<", "&lt;")}</title><style>html,body{margin:0;width:100%;height:100%;background:#101522;overflow:hidden}body{display:flex;align-items:center;justify-content:center}canvas{max-width:100%;max-height:100%;object-fit:contain}#status{position:fixed;bottom:12px;left:16px;color:white;font:14px sans-serif;background:#101522bb;padding:6px 10px;border-radius:5px}</style></head><body><script type="module" src="/player.js"></script></body></html>`, { headers: {
       "content-type": "text/html",
-      // Cross-origin isolation gives the page 5 µs timers instead of 100 µs with random jitter, so frame timing reads on-time 60 Hz frames as 16.67 ms.
+
       "cross-origin-opener-policy": "same-origin", "cross-origin-embedder-policy": "require-corp",
     } });
     if (url.pathname === "/player.js") return new Response(javascript, { headers: { "content-type": "text/javascript" } });
@@ -161,10 +161,10 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
   }).pipe(thrownAsFailure, Effect.catch((failure) => Effect.succeed(new Response(problemOf(failure), { status: 500 }))));
   const run = yield* FiberSet.makeRuntimePromise<never>();
   let steps$ = Promise.resolve();
-  // Frames travel over one WebSocket: a fetch per frame cost about 10 ms of browser request handling under load.
+
   const server = yield* Effect.acquireRelease(Effect.sync(() => Bun.serve({ hostname: "127.0.0.1", port: 0, websocket: {
     message(socket, message) {
-      // Requests may arrive several frames ahead; each waits for the previous step so steps stay in request order.
+
       steps$ = steps$.then(async () => {
         socket.send(JSON.stringify(await run(step(String(message)).pipe(thrownAsFailure, Effect.catch((failure) => Effect.succeed({ error: problemOf(failure) }))))));
       }).catch(() => undefined);
@@ -173,7 +173,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
   return { url: `http://127.0.0.1:${server.port}/`, completed: Deferred.await(completion) };
 });
 
-/** Opens an owned browser window and keeps its map session alive until the window closes. */
+
 export const runStandalone = (game: StandaloneGame, options: StandaloneOptions = {}) => Effect.scoped(Effect.gen(function*() {
   const player = yield* openStandalone(game, options);
   const directory = yield* Effect.acquireRelease(attempt(() => mkdtemp(join(tmpdir(), "wisp-player-"))), (path) => Effect.promise(() => rm(path, { recursive: true, force: true })));

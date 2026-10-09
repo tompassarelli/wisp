@@ -17,6 +17,7 @@ export interface BuildDiscoveryTarget {
   readonly menuReportPort?: number;
 }
 
+
 export const reportBuild = (target: { readonly prefix: string; readonly client: { readonly name: string; readonly menuReportPort?: number } }, print: (line: string) => void) => Effect.gen(function*() {
   const exe = executableIn(target.prefix);
   if (!existsSync(exe)) return;

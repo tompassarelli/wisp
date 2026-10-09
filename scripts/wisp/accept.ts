@@ -1,10 +1,10 @@
-// Native acceptance as one batched run: a game declares the checks only
-// Warcraft III itself can answer, next to the issue each closes, and
-// `wisp accept` runs every selected check in as few fresh matches as their
-// maps allow, saves each check's evidence and gives it a verdict: pass, fail
-// or needs-look. Declarations are plain data; the driver (AcceptDriver) is the
-// only part that touches clients, so a run can be planned, printed and tested
-// without Warcraft.
+
+
+
+
+
+
+
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Clock, Context, Duration, Effect, Schedule, Schema } from "effect";
@@ -14,67 +14,67 @@ import { preloadLines } from "./boundary";
 import { describeCause } from "./command";
 import { encodePpm, type Frame } from "./frameProbe";
 
-/** Something done to a client before the captures; `client` defaults to the first (the host). */
+
 export type Step =
-  /** A chat message or chat command: Return, the text, Return. */
+
   | { readonly chat: string; readonly client?: string }
   | { readonly keys: readonly string[]; readonly client?: string }
   | { readonly waitMs: number }
-  /** Waits until a receipt line written since the check began matches. */
+
   | { readonly receipt: string; readonly client?: string; readonly seconds?: number };
 
-/** What a check keeps as evidence; `client` defaults to the first. Receipts and War3Log lines are always kept. */
+
 export type Capture =
-  /** `count` frames `everyMs` apart (default one), cropped to `region`, saved as PPM. */
+
   | { readonly kind: "frames"; readonly name: string; readonly client?: string; readonly region?: Region; readonly count?: number; readonly everyMs?: number }
-  /**
-   * Text read from `region` (an overlay, a label). With `pattern`, the reading
-   * is its first group, as a number when it reads as one; no match is no reading.
-   */
+
+
+
+
   | { readonly kind: "reading"; readonly name: string; readonly client?: string; readonly region?: Region; readonly ink?: Ink; readonly pattern?: string }
-  /** One frame, saved, measured by the suite's `measures[measure]`: a reading named `name`. */
+
   | { readonly kind: "measure"; readonly name: string; readonly client?: string; readonly region?: Region; readonly measure: string };
 
-/** Bounds on a count of matching lines; with neither, at least one. */
+
 interface Count {
   readonly min?: number;
   readonly max?: number;
 }
 
-/**
- * A pass rule. `client` omitted means every client must satisfy it. With
- * `orLook`, a rule that doesn't hold makes the check needs-look instead of
- * fail: for readings of the screen, which can miss.
- */
+
+
+
+
+
 export type Rule = (
-  /** Receipt lines the game wrote during the check that match `pattern`. */
+
   | { readonly kind: "receipt"; readonly pattern: string; readonly client?: string } & Count
-  /** War3Log lines that match `pattern`, written during the check or, with `since: "session"`, since the session's match began. */
+
   | { readonly kind: "log"; readonly pattern: string; readonly client?: string; readonly since?: "check" | "session" } & Count
-  /** A reading or measure: a number within `min`..`max`, or text matching `pattern`. */
+
   | { readonly kind: "reading"; readonly name: string; readonly min?: number; readonly max?: number; readonly pattern?: string }
 ) & { readonly orLook?: boolean };
 
 export interface NativeCheck {
   readonly id: string;
-  /** The issue and box the check answers, as the report prints it: "smashcraft#82 box 2". */
+
   readonly closes: string;
-  /** One of the suite's map profiles: the map, build and match setup the session starts. */
+
   readonly map: string;
-  /** Checks of one map share a fresh match unless they name different sessions. */
+
   readonly session?: string;
   readonly setup?: readonly Step[];
   readonly capture?: readonly Capture[];
   readonly pass?: readonly Rule[];
-  /** What the owner looks for in the captures. A check with it is needs-look once its rules hold. */
+
   readonly look?: string;
 }
 
 export interface AcceptSuite {
-  /** Map profiles by name, each with what it starts, for the plan. The driver knows how to start each. */
+
   readonly maps: Readonly<Record<string, { readonly describe: string }>>;
   readonly checks: readonly NativeCheck[];
-  /** Frame measurements `measure` captures name, such as the row a stage edge sits on. */
+
   readonly measures?: Readonly<Record<string, (frame: Frame) => number | undefined>>;
 }
 
@@ -87,35 +87,35 @@ export class AcceptFailure extends Schema.TaggedError<AcceptFailure>()("AcceptFa
   }
 }
 
-/** A file the map writes into a client's CustomMapData. */
+
 export interface ReceiptFile {
   readonly name: string;
   readonly text: string;
-  /** Milliseconds since the epoch, on the Effect Clock's scale. */
+
   readonly modified: number;
 }
 
-/** The clients an accept run drives. A test supplies a fake; wisp:scripts/wisp/acceptLive.ts the signed-in clients. */
+
 export class AcceptDriver extends Context.Service<AcceptDriver, {
-  /** Client names, the host first. */
+
   readonly clients: readonly [string, ...string[]];
-  /** Every client healthy enough to start a session (doctor). */
+
   readonly prepare: Effect.Effect<void, AcceptFailure>;
-  /** A fresh match of `map` in every client, ready for checks. */
+
   readonly start: (map: string, session: string) => Effect.Effect<void, AcceptFailure>;
   readonly chat: (client: string, text: string) => Effect.Effect<void, AcceptFailure>;
   readonly keys: (client: string, keys: readonly string[]) => Effect.Effect<void, AcceptFailure>;
   readonly capture: (client: string) => Effect.Effect<Frame, AcceptFailure>;
   readonly read: (client: string, region: Region | undefined, ink: Ink) => Effect.Effect<string, AcceptFailure>;
-  /** The map's receipt files as they stand. */
+
   readonly receipts: (client: string) => Effect.Effect<readonly ReceiptFile[], AcceptFailure>;
-  /** Warcraft III's War3Log.txt as it stands; empty while it doesn't exist. */
+
   readonly log: (client: string) => Effect.Effect<string, AcceptFailure>;
-  /** One line on what the client is doing, for the report. */
+
   readonly state: (client: string) => Effect.Effect<string, AcceptFailure>;
 }>()("wisp/AcceptDriver") {}
 
-// ---- Plan -----------------------------------------------------------------
+
 
 export interface PlannedSession {
   readonly map: string;
@@ -125,7 +125,7 @@ export interface PlannedSession {
 
 const DEFAULT_SESSION = "shared";
 
-/** Selected checks: every check, or those `only` names (an id, or a prefix ending in `*`). */
+
 export function selectChecks(suite: AcceptSuite, only: readonly string[]): { readonly checks: readonly NativeCheck[]; readonly unknown: readonly string[] } {
   if (only.length === 0) return { checks: suite.checks, unknown: [] };
   const matches = (pattern: string, id: string) => (pattern.endsWith("*") ? id.startsWith(pattern.slice(0, -1)) : id === pattern);
@@ -135,11 +135,11 @@ export function selectChecks(suite: AcceptSuite, only: readonly string[]): { rea
   };
 }
 
-/**
- * Sessions for `checks`: one per map and named session, maps in the order
- * their first check is declared, so a map's sessions run back to back and
- * each check keeps its declared order within its session.
- */
+
+
+
+
+
 export function planSessions(checks: readonly NativeCheck[]): PlannedSession[] {
   const maps = new Map<string, Map<string, NativeCheck[]>>();
   for (const check of checks) {
@@ -151,7 +151,7 @@ export function planSessions(checks: readonly NativeCheck[]): PlannedSession[] {
   return [...maps].flatMap(([map, sessions]) => [...sessions].map(([session, grouped]) => ({ map, session, checks: grouped })));
 }
 
-/** Problems a suite's declarations have: duplicate ids, unknown maps or measures, rules naming no capture, bad patterns. */
+
 export function suiteProblems(suite: AcceptSuite, clients?: readonly string[]): string[] {
   const problems: string[] = [];
   const seen = new Set<string>();
@@ -216,7 +216,7 @@ export function describeRule(rule: Rule): string {
   return `reading ${rule.name} ${bounds}${look}`;
 }
 
-/** The plan as text: each session, its checks, and what each does, captures and requires. */
+
 export function describePlan(suite: AcceptSuite, sessions: readonly PlannedSession[], host: string): string[] {
   const total = sessions.reduce((sum, { checks }) => sum + checks.length, 0);
   const lines = [`${total} check${total === 1 ? "" : "s"} in ${sessions.length} session${sessions.length === 1 ? "" : "s"}`];
@@ -233,7 +233,7 @@ export function describePlan(suite: AcceptSuite, sessions: readonly PlannedSessi
   return lines;
 }
 
-// ---- Run ------------------------------------------------------------------
+
 
 export type Verdict = "pass" | "fail" | "needs-look";
 
@@ -250,7 +250,7 @@ export interface CheckResult {
   readonly map: string;
   readonly session: string;
   readonly verdict: Verdict;
-  /** Why: the first rule that failed, the error, or what to look at. */
+
   readonly reason: string;
   readonly evidence: string;
   readonly rules: readonly RuleResult[];
@@ -268,7 +268,7 @@ export interface AcceptReport {
 const DEFAULT_RECEIPT_SECONDS = 10;
 const RECEIPT_POLL = Duration.millis(100);
 
-/** A client's receipts and War3Log at a moment: what a check compares against. */
+
 interface Mark {
   readonly receipts: ReadonlyMap<string, number>;
   readonly logSession: string | undefined;
@@ -276,16 +276,16 @@ interface Mark {
 }
 
 interface Observed {
-  /** New receipt lines per client. */
+
   readonly receipts: Map<string, string[]>;
-  /** New War3Log lines per client, since the check and since the session. */
+
   readonly log: Map<string, string[]>;
   readonly sessionLog: Map<string, string[]>;
 }
 
 const fileFailure = (operation: string) => (cause: unknown) => new AcceptFailure({ operation, problem: describeCause(cause) });
 
-/** A private directory (owner only), created with its parents. */
+
 export const privateDirectory = (path: string) => Effect.try({
   try: () => {
     mkdirSync(path, { recursive: true, mode: 0o700 });
@@ -297,7 +297,7 @@ export const privateDirectory = (path: string) => Effect.try({
 
 const save = (path: string, contents: string | Uint8Array) => Effect.try({ try: () => writeFileSync(path, contents, { mode: 0o600 }), catch: fileFailure(`write ${path}`) });
 
-/** Part of a frame. */
+
 export function cropFrame(frame: Frame, region: Region | undefined): Frame {
   if (region === undefined) return frame;
   const left = Math.max(0, Math.min(frame.width, Math.floor(region.x)));
@@ -312,14 +312,14 @@ export function cropFrame(frame: Frame, region: Region | undefined): Frame {
   return { width, height, rgb };
 }
 
-/** The lines a receipt file holds: a Preload file's stored lines, else its text lines. */
+
 export const receiptLines = (text: string) => preloadLines(text) ?? text.split(/\r?\n/).filter((line) => line.trim() !== "");
 
 const fileName = (value: string) => value.replace(/[^A-Za-z0-9._-]+/g, "_");
 
 const countHolds = (count: number, { min, max }: Count) => count >= (min ?? (max === undefined ? 1 : 0)) && (max === undefined || count <= max);
 
-/** Runs `sessions` with the driver, saving evidence under `directory`; every check gets a result, even when its session can't start. */
+
 export const runAccept = (suite: AcceptSuite, sessions: readonly PlannedSession[], directory: string, print: (line: string) => Effect.Effect<void> = () => Effect.void) =>
   Effect.gen(function*() {
     const driver = yield* AcceptDriver;
@@ -335,12 +335,12 @@ export const runAccept = (suite: AcceptSuite, sessions: readonly PlannedSession[
     });
     const marks = (clients: readonly string[]) => Effect.forEach(clients, (client) => Effect.map(mark(client), (value) => [client, value] as const)).pipe(Effect.map((entries) => new Map(entries)));
 
-    /** Receipt lines in files written since `since`. */
+
     const newReceipts = (client: string, since: Mark) => Effect.map(driver.receipts(client), (files) =>
       files.filter(({ name, modified }) => modified > (since.receipts.get(name) ?? -Infinity)).flatMap(({ text }) => receiptLines(text)));
     const newLog = (client: string, since: Mark) => Effect.map(driver.log(client), (log) => {
       const lines = logLines(log).map(({ text }) => text);
-      // A new Warcraft III session rewrote the log: every line is new.
+
       return sessionStart(log) === since.logSession ? lines.slice(since.logLines) : lines;
     });
 
@@ -431,7 +431,7 @@ export const runAccept = (suite: AcceptSuite, sessions: readonly PlannedSession[
 
     for (const [index, session] of sessions.entries()) {
       yield* print(`session ${index + 1}/${sessions.length}: ${session.map} (${session.session}), ${session.checks.length} check${session.checks.length === 1 ? "" : "s"}`);
-      // The log mark comes before the match starts, so "since session" covers the map's load.
+
       const begun = yield* Effect.gen(function*() {
         yield* driver.prepare;
         const sessionMarks = yield* marks(driver.clients);
@@ -488,16 +488,16 @@ export function summaryLine(results: readonly CheckResult[]): string {
   return `${results.length} checks: ${count("pass")} pass, ${count("fail")} fail, ${count("needs-look")} needs-look`;
 }
 
-// ---- Shards ---------------------------------------------------------------
 
-/** A session's rough cost: its fresh match dominates, then each check. */
+
+
 const sessionWeight = (session: PlannedSession) => 4 + session.checks.length;
 
-/**
- * `sessions` split over `count` shards (such as offline pool pairs), heaviest
- * first onto the lightest shard, so the shards finish close together. Each
- * shard keeps the plan's session order. Empty shards are dropped.
- */
+
+
+
+
+
 export function shardSessions(sessions: readonly PlannedSession[], count: number): PlannedSession[][] {
   const shards = Array.from({ length: Math.max(1, count) }, () => ({ weight: 0, indexes: [] as number[] }));
   const order = sessions.map((session, index) => ({ index, weight: sessionWeight(session) })).sort((left, right) => right.weight - left.weight || left.index - right.index);
@@ -509,10 +509,10 @@ export function shardSessions(sessions: readonly PlannedSession[], count: number
   return shards.filter(({ indexes }) => indexes.length > 0).map(({ indexes }) => indexes.sort((left, right) => left - right).map((index) => sessions[index]!));
 }
 
-/**
- * One report from the shards' reports: each shard's results, in the plan's
- * check order. A check whose shard wrote no result fails with `missing(id)`.
- */
+
+
+
+
 export function mergeReports(directory: string, checks: readonly NativeCheck[], reports: readonly AcceptReport[], started: number, finished: number, missing: (check: NativeCheck) => CheckResult): AcceptReport {
   const byId = new Map(reports.flatMap(({ results }) => results.map((result) => [result.id, result] as const)));
   return { directory, started, finished, results: checks.map((check) => byId.get(check.id) ?? missing(check)) };

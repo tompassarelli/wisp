@@ -1,8 +1,8 @@
-// `wisp perf`: plays one of the game's runs with its map's compiled bundle in
-// 32-bit Lua and measures every frame (wisp:docs/frame-cost.md#headless);
-// `wisp perf compare A B` compares two such runs and fails when B is worse;
-// `wisp perf native` and `wisp perf fit` hold predictions to native overlay
-// readings (wisp:docs/frame-cost.md#checking-against-warcraft).
+
+
+
+
+
 import { join } from "node:path";
 import { Cause, Clock, Console, Effect, Exit, Option, Schema } from "effect";
 import { mapCompiler, report } from "../../compiler";
@@ -14,27 +14,27 @@ import { emitJson } from "../jsonResults";
 import { type NativeCase, checkNative, fitNativeCost, nativeCheckLines, parseNativeReadings, parsePerfSamples } from "../nativeFit";
 import { type NativeCostModel, WARCRAFT_COST } from "../../../src/headless/nativeCost";
 
-/** A tsconfig and the Lua bundle it writes. */
+
 export interface LuaBuild {
   readonly config: string;
   readonly bundle: string;
 }
 
 export interface PerfProject {
-  /** The map whose frames are measured, as the development build compiles it. */
+
   readonly map: LuaBuild;
-  /**
-   * The Lua program that plays and measures: it calls runLuaPerf or
-   * runLuaPerfWith with the map's bundle and declarations, its first two
-   * arguments; then the run's name, the frames to play and "samples" when
-   * every frame should print.
-   */
+
+
+
+
+
+
   readonly program: LuaBuild;
-  /** warcraft.d.ts; the package's by default. */
+
   readonly declarations?: string;
-  /** The run `perf` plays without a name; "journey" by default. */
+
   readonly defaultRun?: string;
-  /** Other runs the program plays, by name, each with the map it measures. */
+
   readonly runs?: Readonly<Record<string, LuaBuild>>;
 }
 
@@ -87,13 +87,13 @@ const compare = (output: PerfOutput): Command => (args) => Effect.gen(function*(
   if (!output.json) yield* Console.log(`B is no worse than A beyond ${threshold * 100}%`);
 });
 
-/** Frames a named run plays unless --frames says otherwise. */
+
 const DEFAULT_FRAMES = 1800;
 
-/** The runs a project's perf program plays, by name, each with its map. */
+
 const projectRuns = (project: PerfProject): Readonly<Record<string, LuaBuild>> => ({ [project.defaultRun ?? "journey"]: project.map, ...project.runs });
 
-/** Compiles the run's map and the perf program, plays the run in 32-bit Lua, and returns what it printed and its frames read back. */
+
 export const measureRun = (project: PerfProject, name: string, frames: number, samples: boolean) => Effect.gen(function*() {
   const map = projectRuns(project)[name];
   if (map === undefined) return yield* new PerfFailure({ problem: `no perf run named ${name}` });
@@ -117,7 +117,7 @@ const readText = (path: string) => Effect.tryPromise({
   catch: (cause) => new PerfFailure({ problem: `${path}: ${describeCause(cause)}` }),
 });
 
-/** One case: a headless run's samples (`perf --samples` output) and the overlay readings of the native run it stands for. */
+
 const readCase = (samplesText: string, readingsPath: string, slot: number) => Effect.gen(function*() {
   const frames = parsePerfSamples(samplesText).get(slot);
   if (frames === undefined || frames.length === 0) return yield* new PerfFailure({ problem: `the samples have no frames of p${slot}: run perf with --samples` });
@@ -129,11 +129,11 @@ const readCase = (samplesText: string, readingsPath: string, slot: number) => Ef
 const modelLine = (model: NativeCostModel) =>
   `model: Lua factor ${model.luaFactor.toFixed(2)} x ${model.hostUsPerThousandInstructions.toFixed(1)} µs per 1000 instructions, native call ${model.nativeCallUs} µs, collector ${model.collectorUsPerKb} µs per KB, typing ${model.typingUsPerCharacterSquared} µs per character squared`;
 
-/**
- * `perf native READINGS [RUN] [--samples FILE] [--slot N]`: the run's
- * predicted overlay against a native session's readings of the same build;
- * fails unless median and p95 are within 20%. Without --samples it plays RUN.
- */
+
+
+
+
+
 const native = (project: PerfProject, output: PerfOutput): Command => (args) => Effect.gen(function*() {
   const [samples] = flagValues(args, "samples");
   const [slotText = "0"] = flagValues(args, "slot");
@@ -151,11 +151,11 @@ const native = (project: PerfProject, output: PerfOutput): Command => (args) => 
   }
 });
 
-/**
- * `perf fit SAMPLES=READINGS ... [--slot N]`: the native call and collector
- * costs fitted to every case, each case's error under them, and with two or
- * more cases each one's error under a fit to the others (held out).
- */
+
+
+
+
+
 const fit = (output: PerfOutput): Command => (args) => Effect.gen(function*() {
   const [slotText = "0"] = flagValues(args, "slot");
   const pairs = args.filter((arg, index) => !arg.startsWith("--") && args[index - 1] !== "--slot");
@@ -183,7 +183,7 @@ const fit = (output: PerfOutput): Command => (args) => Effect.gen(function*() {
 });
 
 
-/** `perf [RUN] [--frames N] [--samples] [--out FILE]` and `perf compare A B [--threshold SHARE]`. */
+
 const perf = (project: PerfProject, output: PerfOutput): Command => (args) => Effect.gen(function*() {
   if (args[0] === "compare") return yield* compare(output)(args.slice(1));
   if (args[0] === "native") return yield* native(project, output)(args.slice(1));
@@ -210,7 +210,7 @@ const perf = (project: PerfProject, output: PerfOutput): Command => (args) => Ef
   }
 });
 
-/** JSON Lines contain measurements, a failure when present, and one final summary. */
+
 export const makePerf = (project: PerfProject): Command => (args) => Effect.gen(function*() {
   const json = args.includes("--json");
   const clean = args.filter((arg) => arg !== "--json");

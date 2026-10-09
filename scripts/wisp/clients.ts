@@ -1,18 +1,18 @@
-// Clients: the signed-in Warcraft clients on their private desktops. Session
-// values and the concrete desktop driver come from the supplied clients file.
+
+
 import { Context, Effect, Layer } from "effect";
 import * as desktop from "../warcraft/desktop";
 import type { Frame } from "./frameProbe";
 export { DesktopFailure, type Ink, type Region, type Word, type InputAction, waitFor } from "../warcraft/desktop";
 
-/** The client identity used by journeys and fake service implementations. */
+
 export type Client = Pick<desktop.Client, "name" | "documents" | "menuReportPort">;
 
 export class Clients extends Context.Service<Clients, {
-  /** Every client, the host first. */
+
   readonly all: readonly [Client, ...Client[]];
   readonly read: (client: Client, region?: desktop.Region, ink?: desktop.Ink) => Effect.Effect<string, desktop.DesktopFailure>;
-  /** The whole client frame, captured off-screen from its private desktop. */
+
   readonly capture: (client: Client) => Effect.Effect<Frame, desktop.DesktopFailure>;
   readonly words: (client: Client, ink?: desktop.Ink) => Effect.Effect<readonly desktop.Word[], desktop.DesktopFailure>;
   readonly click: (client: Client, x: number, y: number) => Effect.Effect<void, desktop.DesktopFailure>;
@@ -23,7 +23,7 @@ export class Clients extends Context.Service<Clients, {
   static readonly layer = (path: string) => Layer.effect(Clients, connect(path));
 }
 
-/** Waits until a region shows text matching `pattern`. */
+
 export const waitForText = (client: Client, what: string, pattern: RegExp, region?: desktop.Region, ink: desktop.Ink = "light", seconds = 20) =>
   Effect.gen(function*() {
     const clients = yield* Clients;

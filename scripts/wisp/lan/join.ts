@@ -1,6 +1,6 @@
-// Putting one offline client into a LAN game (wisp:docs/lan.md): after the
-// private LAN plugin (plugin.ts) has switched its provider, list LAN games
-// through its menus and join the one named.
+
+
+
 import { Effect, Schedule, Schema } from "effect";
 import type { MenuSocket } from "../menus";
 
@@ -25,7 +25,7 @@ const listedGames = (payload: unknown): ListedGame[] => {
   return Array.isArray(games) ? games.filter((game): game is ListedGame => typeof game === "object" && game !== null && typeof (game as ListedGame).name === "string") : [];
 };
 
-/** Lists LAN games every second until `gameName` appears, then joins it. */
+
 export const joinLanGame = (menus: MenuSocket, gameName: string, seconds = 30) => Effect.gen(function*() {
   yield* menus.forget;
   yield* menus.send("SendGameListing");

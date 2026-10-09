@@ -1,5 +1,5 @@
-// Object data (format 2): war3map.w3u, war3map.w3a and the other custom-object
-// files, plus the FileIO ability that hot reload and runtime file reads need.
+
+
 import { CHUNKS_PER_FILE, FILE_IO_ABILITY } from "../src/runtime/gameFiles";
 
 export type ObjectValue =
@@ -9,19 +9,19 @@ export type ObjectValue =
   | { readonly kind: "string"; readonly value: string };
 
 export interface Modification {
-  /** Four-character field ID, such as `unam` or `atp1`. */
+
   readonly field: string;
   readonly value: ObjectValue;
-  /** Ability, buff and upgrade data is per level; unit, item and doodad data has none. */
+
   readonly level?: number;
-  /** One-based ability Data A/B/... column; zero for ordinary fields. */
+
   readonly dataColumn?: number;
 }
 
 export interface ObjectDefinition {
-  /** Four-character ID of the stock object it copies. */
+
   readonly base: string;
-  /** The new object's ID as the integer map code uses, for example 0x2477736c for '$wsl'. */
+
   readonly id: number;
   readonly modifications: readonly Modification[];
 }
@@ -43,7 +43,7 @@ function integer(value: number, label: string, minimum = -0x80000000): void {
   if (!Number.isInteger(value) || value < minimum || value > 0x7fffffff) throw new Error(`invalid ${label}: ${value}`);
 }
 
-/** One object-data file; `levels` selects the per-level layout of war3map.w3a, .w3q and .w3b. */
+
 export function encodeObjectData(definitions: readonly ObjectDefinition[], levels: boolean): Uint8Array {
   const ids = new Set<number>();
   for (const definition of definitions) {
@@ -73,7 +73,7 @@ export function encodeObjectData(definitions: readonly ObjectDefinition[], level
     text(value);
   };
   int32(2);
-  int32(0); // No changed stock objects.
+  int32(0);
   int32(definitions.length);
   for (const definition of definitions) {
     id(definition.base);
@@ -101,10 +101,10 @@ export function encodeObjectData(definitions: readonly ObjectDefinition[], level
   return Uint8Array.from(bytes);
 }
 
-/**
- * FileIO's channel ability ('$wsl'): the map reads host-written files through
- * its tooltips, one per level. Hot reload needs it in every map.
- */
+
+
+
+
 export const FILE_IO_OBJECT: ObjectDefinition = {
   base: "ANcl",
   id: FILE_IO_ABILITY,
@@ -114,7 +114,7 @@ export const FILE_IO_OBJECT: ObjectDefinition = {
   ],
 };
 
-/** war3map.w3a holding the FileIO ability and the map's own abilities. */
+
 export function abilityData(definitions: readonly ObjectDefinition[] = []): Uint8Array {
   return encodeObjectData([FILE_IO_OBJECT, ...definitions], true);
 }
@@ -134,7 +134,7 @@ class ObjectBuilder {
   }
 }
 
-/** Typed unit fields; the same numeric id is imported by map code. */
+
 export class UnitObject extends ObjectBuilder {
   name(value: string): this { return this.set("unam", { kind: "string", value }); }
   tooltip(value: string): this { return this.set("utip", { kind: "string", value }); }
@@ -148,7 +148,7 @@ export class UnitObject extends ObjectBuilder {
 
 export type AbilityTarget = "air" | "ground" | "enemy" | "friend" | "self" | "neutral" | "organic" | "mechanical" | "structure" | "hero" | "nonhero" | "vulnerable" | "invulnerable";
 
-/** General ability fields plus Blizzard's damage and wave data columns. */
+
 export class AbilityObject extends ObjectBuilder {
   private count = 1;
   name(value: string): this { return this.set("anam", { kind: "string", value }); }

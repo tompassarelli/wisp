@@ -1,12 +1,12 @@
-// Warcraft III's menus without clicks (wisp:docs/driving-warcraft.md). The
-// game serves its menus as a web page at
-// http://127.0.0.1:PORT/webui/index.html?guid=GUID and talks to that page over
-// ws://127.0.0.1:PORT/webui-socket/GUID; any local socket with that address may
-// send what the page sends, and hears what the game tells the page. PORT
-// changes with every launch and GUID is known only to the page, so Wisp
-// installs a page of its own in the game's _retail_/webui folder (read only
-// while the registry value "Allow Local Files" is 1). It loads the game's own
-// menus and tells Wisp its address.
+
+
+
+
+
+
+
+
+
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,7 +16,7 @@ import { pollFor } from "./hostProcess";
 import { DEFAULT_BUILD, profileFor, requireCapability } from "./builds";
 import { loadLanPlugin, lanPluginProblem } from "./lan/plugin";
 
-/** Where an installed menu page reports its address and the menus' own requests. */
+
 export const DEFAULT_MENU_REPORT_PORT = 47123;
 
 export class MenuFailure extends Schema.TaggedError<MenuFailure>()("MenuFailure", {
@@ -28,16 +28,16 @@ export class MenuFailure extends Schema.TaggedError<MenuFailure>()("MenuFailure"
   }
 }
 
-/** The menus' socket address. The GUID lets anything local drive the menus; it is never printed. */
+
 export interface MenuAddress {
   readonly buildId?: string;
   readonly port: number;
   readonly guid: string;
-  /** The newest state messages the page heard from the game, oldest first, so a later listener knows the current screen. */
+
   readonly recent?: readonly HeardMessage[];
 }
 
-/** A state message the page heard: its name, its screen or host flag, and when (ms since the epoch). */
+
 export interface HeardMessage {
   readonly messageType: string;
   readonly at: number;
@@ -46,33 +46,33 @@ export interface HeardMessage {
   readonly isHost?: boolean;
 }
 
-/** A message the menus sent the game: its name, and its payload for lobby and map messages. */
+
 export interface SentMessage {
   readonly message: string;
   readonly payload?: unknown;
 }
 
-/** A message from the game, as every connected socket receives it. */
+
 export interface MenuEvent {
   readonly messageType: string;
   readonly payload: unknown;
 }
 
 const PAGE_MARK = `<meta name="wisp" content="menu page" />`;
-/** Requests whose payloads the page reports: what a lobby step sends. */
+
 const REPORTED_PAYLOADS = "Lobby|Slot|Computer|Team|Race|Color|Handicap|Map|Start|Join|ScreenTransitionInfo";
-/** Messages from the game that say where the client is; the page keeps the newest few and announces them. */
+
 const PAGE_STATES = "SetGlueScreen|GameLobbySetup|UpdateScoreInfo|LoggedOut";
 const RECENT_KEPT = 4;
-/** How often the page announces its address: a listener that starts waits at most this long for it. */
+
 const ANNOUNCE_MS = 500;
 
-/**
- * The menu page: the game's own menus (GlueManager.js draws them into #root
- * and #portal), plus a script that posts the page's port and GUID to
- * 127.0.0.1:reportPort every 2 s and, while something listens there, the name
- * of each request the menus send.
- */
+
+
+
+
+
+
 export function menuPage(reportPort: number): string {
   return `<!DOCTYPE html>
 <html>
@@ -159,7 +159,7 @@ export function menuPage(reportPort: number): string {
 
 const pagePath = (retail: string) => join(retail, "webui", "index.html");
 
-/** Writes the menu page into the game's `_retail_` folder; refuses to replace a page Wisp didn't write. */
+
 export const installMenuPage = (retail: string, reportPort = DEFAULT_MENU_REPORT_PORT) => Effect.gen(function*() {
   const path = pagePath(retail);
   if (!existsSync(join(retail, "x86_64"))) return yield* new MenuFailure({ operation: "install the menu page", problem: `${retail} is not Warcraft III's _retail_ folder (it has no x86_64)` });
@@ -176,7 +176,7 @@ export const installMenuPage = (retail: string, reportPort = DEFAULT_MENU_REPORT
   return path;
 });
 
-/** Removes Wisp's menu page, and its folder when nothing else is in it. */
+
 export const removeMenuPage = (retail: string) => Effect.try({
   try: () => {
     const path = pagePath(retail);
@@ -192,13 +192,13 @@ export const removeMenuPage = (retail: string) => Effect.try({
 const Heard = Schema.Struct({ messageType: Schema.String, at: Schema.Finite, screen: Schema.optionalKey(Schema.String), type: Schema.optionalKey(Schema.String), isHost: Schema.optionalKey(Schema.Boolean) });
 const Announcement = Schema.Struct({ port: Schema.Int, guid: Schema.String, recent: Schema.optionalKey(Schema.Array(Heard)) });
 
-/**
- * One program at a time can listen on a report port. The listener keeps the
- * newest announced address in a file only this user can read, so another
- * Wisp program (`wisp client watch` beside `play` or `fresh`) finds the menus too.
- */
+
+
+
+
+
 export const menuAddressFile = (reportPort: number) => join(process.env["XDG_RUNTIME_DIR"] ?? tmpdir(), `wisp-menus-${reportPort}.json`);
-/** Several announcements long: an address file older than this has no listener behind it. */
+
 const ADDRESS_FRESH_MS = 6000;
 const KeptAddress = Schema.Struct({ port: Schema.Int, guid: Schema.String, recent: Schema.optionalKey(Schema.Array(Heard)), at: Schema.Finite });
 
@@ -208,11 +208,11 @@ const keepAddress = (reportPort: number, address: MenuAddress) => {
     writeFileSync(`${path}.new`, JSON.stringify({ ...address, at: Date.now() }), { mode: 0o600 });
     renameSync(`${path}.new`, path);
   } catch {
-    // Without the file, only this listener knows the address.
+
   }
 };
 
-/** The address another listener on the port keeps, while it is fresh. */
+
 export const keptAddress = (reportPort: number, now = Date.now()): MenuAddress | undefined => {
   const kept = Schema.decodeUnknownOption(KeptAddress)(parseJson(existsSync(menuAddressFile(reportPort)) ? readFileSync(menuAddressFile(reportPort), "utf8") : ""));
   if (Option.isNone(kept) || now - kept.value.at > ADDRESS_FRESH_MS) return undefined;
@@ -234,21 +234,21 @@ const parseJson = (text: string): unknown => {
 };
 
 export interface MenuReports {
-  /** The port this listens on. */
+
   readonly port: number;
-  /** The newest address a page announced. */
+
   readonly address: Effect.Effect<MenuAddress | undefined>;
-  /** Waits for a page's first announcement. */
+
   readonly waitForAddress: (seconds: number) => Effect.Effect<MenuAddress, MenuFailure>;
-  /** The requests the menus sent while this listened, oldest first (the newest 200). */
+
   readonly sent: Effect.Effect<readonly SentMessage[]>;
 }
 
-/**
- * Listens on 127.0.0.1:reportPort for an installed menu page until the scope
- * closes. Only a page served by the game (an http://127.0.0.1:PORT origin)
- * is heard, so another site open in a browser can't redirect Wisp.
- */
+
+
+
+
+
 export const listenForMenus = (reportPort = DEFAULT_MENU_REPORT_PORT, onSent: (sent: SentMessage) => void = () => {}): Effect.Effect<MenuReports, MenuFailure, Scope.Scope> => Effect.gen(function*() {
   let latest: MenuAddress | undefined;
   const sent: SentMessage[] = [];
@@ -300,22 +300,22 @@ export const listenForMenus = (reportPort = DEFAULT_MENU_REPORT_PORT, onSent: (s
   };
 });
 
-/** What a waited-for event decides: done with a value, failed with a reason, or not yet (undefined). */
+
 export type Outcome<A> = { readonly done: A } | { readonly failed: string } | undefined;
 
 export interface MenuSocket {
   readonly buildId?: string;
-  /** Sends a request the way the menu page does. */
+
   readonly send: (message: string, payload?: Readonly<Record<string, unknown>>) => Effect.Effect<void, MenuFailure>;
-  /** Waits for the first event `decide` settles, ignoring the rest. */
+
   readonly expect: <A>(what: string, seconds: number, decide: (event: MenuEvent) => Outcome<A>) => Effect.Effect<A, MenuFailure>;
-  /** Forgets the events received so far, so a later `expect` sees only answers to what follows. */
+
   readonly forget: Effect.Effect<void>;
 }
 
 const CLOSED: MenuEvent = { messageType: "", payload: undefined };
 
-/** Connects to the menus' socket until the scope closes. */
+
 export const connectMenus = (address: MenuAddress): Effect.Effect<MenuSocket, MenuFailure, Scope.Scope> => Effect.gen(function*() {
   const buildId = address.buildId ?? process.env["WISP_GAME_BUILD"] ?? (lanPluginProblem() === undefined ? (yield* loadLanPlugin.pipe(Effect.mapError((cause) => new MenuFailure({ operation: "detect menu build", problem: cause.message })))).versionForPort?.(address.port) : undefined);
   if (buildId !== undefined) yield* requireCapability(buildId, "menuDriving").pipe(Effect.mapError((cause) => new MenuFailure({ operation: "drive menus", problem: cause.message })));
@@ -359,10 +359,10 @@ export const connectMenus = (address: MenuAddress): Effect.Effect<MenuSocket, Me
   return { ...(buildId === undefined ? {} : { buildId }), send, expect, forget: Queue.clear(events).pipe(Effect.asVoid) };
 });
 
-/**
- * The menus' address: from the page's announcements, or, while another Wisp
- * program listens on the report port, from the address it keeps.
- */
+
+
+
+
 export const menuAddress = (reportPort: number, seconds: number): Effect.Effect<MenuAddress, MenuFailure, Scope.Scope> =>
   listenForMenus(reportPort).pipe(
     Effect.flatMap((reports) => reports.waitForAddress(seconds)),
@@ -371,7 +371,7 @@ export const menuAddress = (reportPort: number, seconds: number): Effect.Effect<
     )),
   );
 
-/** Finds this client's installed page. No page means the caller may use its ordinary menu controls. */
+
 export const reportedMenus = (reportPort: number | undefined): Effect.Effect<MenuSocket | undefined, MenuFailure, Scope.Scope> => Effect.gen(function*() {
   if (reportPort === undefined) return undefined;
   const address = yield* menuAddress(reportPort, 3).pipe(Effect.catchTag("MenuFailure", () => Effect.void));
@@ -396,9 +396,9 @@ const listedMaps = (payload: unknown): ListedMap[] => {
   }));
 };
 
-/** How long a folder's maps may stay unlisted after its subfolders are, and how often it is listed again meanwhile. */
+
 const MAP_LIST_WAIT_SECONDS = 15;
-/** One map list: Warcraft III 3.0.1 reopened every map for Create Game's list, 34 s on clone-c (War3Log, 8 Oct 2026). */
+
 export const MAP_LIST_SECONDS = 90;
 const MAP_LIST_RETRY_MS = 250;
 
@@ -407,10 +407,10 @@ const separator = (path: string) => (path.includes("\\") && !path.includes("/") 
 const withSeparator = (path: string) => (/[\\/]$/.test(path) ? path : `${path}${separator(path)}`);
 const inFolder = (path: string, folder: string) => path.replaceAll("\\", "/").replace(/\/$/, "").toLowerCase().endsWith(`/${folder.replaceAll("\\", "/").toLowerCase()}`);
 
-/**
- * The menus' path of FOLDER/FILE: the map list is walked as Create Game walks
- * it, because the game refuses a CreateLobby for a map it has not just listed.
- */
+
+
+
+
 export const findMap = (menus: MenuSocket, folder: string, file: string) => Effect.gen(function*() {
   const asked = new Set<string>();
   let request: Readonly<Record<string, unknown>> = { useLastMap: true };
@@ -423,10 +423,10 @@ export const findMap = (menus: MenuSocket, folder: string, file: string) => Effe
     const map = maps.find((entry) => !entry.isFolder && same(entry.filename, file) && inFolder(entry.filepath, folder));
     if (map !== undefined) return `${withSeparator(map.filepath)}${map.filename}`;
     const sub = maps.find((entry) => entry.isFolder && same(entry.filename, folder));
-    // Folders are listed with their parent's absolute path; asking for one takes that path, its name and a separator.
+
     const inMaps = maps.map((entry) => /^(.*[\\/]Maps[\\/])/i.exec(entry.filepath)?.[1]).find((root) => root !== undefined);
     const next = sub !== undefined ? `${withSeparator(sub.filepath)}${sub.filename}${separator(sub.filepath)}` : inMaps !== undefined ? `${inMaps}${folder.replace(/[\\/]/g, separator(inMaps))}${separator(inMaps)}` : undefined;
-    // A game that has just started lists a folder's subfolders before it has read its maps.
+
     if (maps.length > 0 && maps.every((entry) => entry.isFolder) && inFolder(maps[0]!.filepath, folder) && waited < MAP_LIST_WAIT_SECONDS * 1000) {
       waited += MAP_LIST_RETRY_MS;
       listing--;
@@ -444,13 +444,13 @@ export const findMap = (menus: MenuSocket, folder: string, file: string) => Effe
 });
 
 export interface HostOptions {
-  /** The map's folder under Warcraft III's Maps folder, as Create Game lists it. */
+
   readonly folder: string;
   readonly file: string;
   readonly gameName: string;
-  /** A passworded game is private: it is joined by name and never listed. Empty draws a random one: Wisp never lists a game publicly. */
+
   readonly password: string;
-  /** 0 slowest to 2 fast (Warcraft's default); 3 is not offered by the menus. */
+
   readonly gameSpeed?: 0 | 1 | 2;
 }
 
@@ -461,7 +461,7 @@ const lobbyHost = (event: MenuEvent): Outcome<"host" | "refresh"> => {
   return undefined;
 };
 
-/** Creates a lobby of the map, as Create Game does; returns once the game reports this client hosting it. */
+
 export const hostLobby = (menus: MenuSocket, options: HostOptions) => Effect.gen(function*() {
   const filename = yield* findMap(menus, options.folder, options.file);
   const password = options.password === "" ? randomBytes(6).toString("hex") : options.password;
@@ -485,7 +485,7 @@ export const hostLobby = (menus: MenuSocket, options: HostOptions) => Effect.gen
   const what = `host "${options.gameName}"`;
   yield* Effect.gen(function*() {
     while ((yield* menus.expect(what, 20, lobbyHost)) === "refresh") {
-      // Lobby entry can announce the previous setup first. The menus request the new setup on entry too.
+
       yield* menus.send("SendGameLobbySetup");
     }
   }).pipe(Effect.timeoutOrElse({
@@ -496,17 +496,17 @@ export const hostLobby = (menus: MenuSocket, options: HostOptions) => Effect.gen
   return filename;
 });
 
-/**
- * How long LobbyStart waits after the game confirms hosting. Warcraft III
- * The checked rollback build crashed while loading (a read of 0x500) in 6 of 6 starts sent as
- * soon as the lobby was confirmed and in 0 of 11 sent about 2 s later
- * (Smashcraft #119, 7 Oct 2026). No menu event is known to end that window,
- * so this is a measured pause.
- */
+
+
+
+
+
+
+
 export const LOBBY_SETTLE_MS = profileFor(DEFAULT_BUILD)!.menus.lobbySettleMs;
 const hostedAt = new WeakMap<MenuSocket, number>();
 
-/** Joins a lobby by its exact (case-sensitive) name and password; returns once this client is in it. */
+
 export const joinLobby = (menus: MenuSocket, gameName: string, password: string, seconds = 20) => Effect.gen(function*() {
   const what = `join "${gameName}"`;
   const joined = (event: MenuEvent) => event.messageType === "GameLobbySetup" || (event.messageType === "SetGlueScreen" && record(event.payload)["screen"] === "GAME_LOBBY");
@@ -515,15 +515,15 @@ export const joinLobby = (menus: MenuSocket, gameName: string, password: string,
   yield* menus.send("JoinGameByGameName", { gameName, gamePass: password, checkForGamePass: true });
   const first = yield* menus.expect(what, seconds, (event) => (joined(event) ? { done: "joined" as const } : event.messageType === "RequestForPassword" ? { done: "password" as const } : undefined));
   if (first === "joined") return;
-  // The game asks for the password the way it prompts a player; the answer carries it again.
+
   yield* menus.send("JoinGameByGameName", { gameName, gamePass: password });
   yield* menus.expect(what, seconds, (event) => (joined(event) ? { done: undefined } : event.messageType === "RequestForPassword" ? { failed: "the game asked for the password again: it is wrong" } : undefined));
 });
 
-/**
- * Starts the hosted lobby, at least `settleMs` after this socket hosted it
- * (`LOBBY_SETTLE_MS`); returns once the game shows its loading screen.
- */
+
+
+
+
 export const startLobby = (menus: MenuSocket, settleMs = profileFor(menus.buildId ?? DEFAULT_BUILD)?.menus.lobbySettleMs ?? LOBBY_SETTLE_MS) => Effect.gen(function*() {
   if (menus.buildId !== undefined) yield* requireCapability(menus.buildId, "menuDriving").pipe(Effect.mapError((cause) => new MenuFailure({ operation: "start lobby", problem: cause.message })));
   const hosted = hostedAt.get(menus);
@@ -536,7 +536,7 @@ export const startLobby = (menus: MenuSocket, settleMs = profileFor(menus.buildI
   yield* menus.expect("start the game", 30, (event) => (event.messageType === "SetGlueScreen" && record(event.payload)["screen"] === "LOADING_SCREEN" ? { done: undefined } : undefined));
 });
 
-/** Leaves the current lobby. */
+
 export const leaveLobby = (menus: MenuSocket) => Effect.gen(function*() {
   yield* menus.forget;
   yield* menus.send("LeaveGame");
@@ -544,31 +544,31 @@ export const leaveLobby = (menus: MenuSocket) => Effect.gen(function*() {
 });
 
 export interface LocalGameOptions {
-  /** The map's folder under Warcraft III's Maps folder, as Create Game lists it. */
+
   readonly folder: string;
   readonly file: string;
-  /** The name a client without a Battle.net account plays under. */
+
   readonly playerName: string;
 }
 
-/**
- * Plays FOLDER/FILE alone on the menus' local (loopback) provider, as Single
- * Player's Custom Game does, on a client that never signed in; returns once
- * the game UI is up. A client that never signed in sits at its login doors,
- * where the game refuses every map ("unavailable or corrupted") until the
- * menus report the doors closed, as the main menu does on its first showing.
- */
+
+
+
+
+
+
+
 export const playLocalGame = (menus: MenuSocket, options: LocalGameOptions) => Effect.gen(function*() {
   yield* menus.forget;
   yield* menus.send("LoginDoorClose");
   yield* menus.send("InitializeLocalNetProvider");
-  // 9 s after the doors closed on 8 Oct 2026, under load.
+
   yield* menus.expect("use the local provider", 60, (event) => (event.messageType === "OnNetProviderChanged" && record(event.payload)["providerId"] === "LOOP" ? { done: undefined } : undefined));
   yield* menus.send("SetLocalPlayerName", { playerName: options.playerName });
   yield* hostLobby(menus, { folder: options.folder, file: options.file, gameName: "Single Player", password: "" });
   yield* startLobby(menus);
   yield* menus.expect("load the map", 300, (event) => (event.messageType === "MapLoadComplete" ? { done: undefined } : undefined));
-  // The loading screen's "press any key": the menus send this for the key.
+
   yield* menus.send("LoadingScreenGameStart");
   yield* menus.expect("show the game", 60, (event) => (event.messageType === "IsGameUIActive" && String(record(event.payload)["isActive"]) === "true" ? { done: undefined } : undefined));
 });

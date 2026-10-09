@@ -46,7 +46,7 @@ function soundRows(bytes: Uint8Array): Map<string, string[]> {
   return sounds;
 }
 
-/** Resolves stock labels through installed SLKs; the caller supplies map and stock assets. */
+
 export function createSoundResolver(readAsset: SoundAssetReader): (cue: SoundCue) => Promise<SoundAsset | undefined> {
   let labels: Promise<Map<string, string[]>> | undefined;
   const assets = new Map<string, Promise<SoundAsset | undefined>>();
@@ -76,7 +76,7 @@ export function createSoundResolver(readAsset: SoundAssetReader): (cue: SoundCue
       labels ??= loadLabels();
       paths = (await labels).get(cue.label.toLowerCase()) ?? [];
     }
-    // A sound handle keeps its selected variation between creation and playback.
+
     const first = Math.abs(cue.handle.id) % paths.length;
     for (let offset = 0; offset < paths.length; offset++) {
       const path = paths[(first + offset) % paths.length];

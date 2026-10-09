@@ -1,4 +1,4 @@
-// Which captured poses Warcraft draws (wisp:docs/headless.md, "Lighting, fog and sky": far cull and world bounds).
+
 import type { WorldBounds } from "./terrain";
 
 interface Placed {
@@ -11,12 +11,12 @@ interface Placed {
   readonly unit?: true;
 }
 
-/**
- * The poses drawn: seen (alpha and scale above 0, not flattened), origin
- * within the far plane from the eye, and, for an effect, origin inside the
- * world bounds. A part reaching nearer or inside doesn't keep a model whose
- * origin lies out.
- */
+
+
+
+
+
+
 export function drawnPoses<T extends Placed>(poses: readonly T[], eye: readonly number[], far: number, world?: WorldBounds): T[] {
   const [ex = 0, ey = 0, ez = 0] = eye;
   const outside = (pose: T) => world !== undefined && pose.unit !== true && (pose.x < world.minX || pose.x > world.maxX || pose.y < world.minY || pose.y > world.maxY);

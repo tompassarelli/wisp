@@ -1,9 +1,9 @@
-// Tune: changes a running match's declared values (wisp:docs/tune.md). A
-// tunable is a number literal in the map's source. Applying a value compiles
-// the map with that literal replaced in memory and publishes the result as a
-// hot reload, so every client installs it on the same frame or none does.
-// Keep writes the value into the source; Reset puts back the value the
-// session started with, in the match and in the source.
+
+
+
+
+
+
 import { readFileSync, writeFileSync } from "node:fs";
 import { normalize, resolve } from "node:path";
 import ts from "typescript";
@@ -12,26 +12,26 @@ import { describeCause } from "./command";
 import { HotReload, type HotReloadFailure } from "./hotReload";
 import { step } from "./timings";
 
-/** A value the panel changes. */
+
 export interface Tunable {
-  /** The panel's label, unique; requests name it. */
+
   readonly name: string;
-  /** The panel's heading for it. */
+
   readonly group?: string;
-  /** The file that declares it, relative to the project root. */
+
   readonly file: string;
-  /**
-   * From a top-level variable to the value: the variable's name, then a
-   * property name for each object literal around the value. The value is a
-   * number literal, negative or not, or the one argument of a call such as
-   * `f32(...)` or a unit conversion.
-   */
+
+
+
+
+
+
   readonly path: readonly string[];
-  /** `f32`: a binary32 real, written as its exact decimal. `int`: a 32-bit integer. */
+
   readonly kind: "f32" | "int";
   readonly min: number;
   readonly max: number;
-  /** The panel's slider step. */
+
   readonly step: number;
 }
 
@@ -43,7 +43,7 @@ export class TuneFailure extends Schema.TaggedError<TuneFailure>()("TuneFailure"
   }
 }
 
-/** A tunable's literal in its file's text: the characters it spans and the number they write. */
+
 export interface Literal {
   readonly start: number;
   readonly end: number;
@@ -60,7 +60,7 @@ function propertyName(name: ts.PropertyName): string | undefined {
   return ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name) ? name.text : undefined;
 }
 
-/** The literal `path` names in `text`, or why there is none. */
+
 export function findLiteral(text: string, path: readonly string[]): Literal | string {
   const source = ts.createSourceFile("tunable.ts", text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
   const [variable, ...keys] = path;
@@ -92,20 +92,20 @@ export function findLiteral(text: string, path: readonly string[]): Literal | st
   return { start, end, text: text.slice(start, end), value: (negative ? -1 : 1) * Number(literal.text) };
 }
 
-/** The value the map runs for a literal's number: binary32 rounds it. */
+
 export const runValue = (kind: Tunable["kind"], value: number) => (kind === "f32" ? Math.fround(value) : value);
 
-/**
- * Source text for `value`. A real is its binary32 value's exact decimal, which
- * the number rules accept, and keeps a decimal point so Lua reads a float.
- */
+
+
+
+
 export function literalText(kind: Tunable["kind"], value: number): string {
   if (kind === "int") return String(value);
   const text = String(Math.fround(value));
   return /[.eE]/.test(text) ? text : `${text}.0`;
 }
 
-/** The value the map would run for `value`, or why it can't. */
+
 export function checkValue(tunable: Tunable, value: number): number | string {
   if (!Number.isFinite(value)) return `${tunable.name}: ${value} is not a number`;
   if (value < tunable.min || value > tunable.max) return `${tunable.name}: ${value} is outside ${tunable.min} to ${tunable.max}`;
@@ -113,7 +113,7 @@ export function checkValue(tunable: Tunable, value: number): number | string {
   return runValue(tunable.kind, value);
 }
 
-/** `text` with each span replaced; spans don't overlap. */
+
 export function replaceSpans(text: string, spans: readonly { readonly start: number; readonly end: number; readonly text: string }[]): string {
   let result = text;
   for (const span of [...spans].sort((a, b) => b.start - a.start)) result = result.slice(0, span.start) + span.text + result.slice(span.end);
@@ -122,10 +122,10 @@ export function replaceSpans(text: string, spans: readonly { readonly start: num
 
 const CONTEXT_LINES = 3;
 
-/**
- * A unified diff of two texts with the same lines but some changed, as
- * replacing literals makes: what `git diff` shows for the change.
- */
+
+
+
+
 export function lineDiff(file: string, before: string, after: string): string {
   const old = before.split("\n");
   const changed = after.split("\n");
@@ -159,7 +159,7 @@ export function lineDiff(file: string, before: string, after: string): string {
   return lines.join("\n");
 }
 
-/** A tunable as the panel shows it. */
+
 export interface TunableState {
   readonly name: string;
   readonly group: string;
@@ -167,15 +167,15 @@ export interface TunableState {
   readonly min: number;
   readonly max: number;
   readonly step: number;
-  /** What the match runs since this session's last change. */
+
   readonly value: number;
-  /** The source's value when the session started. */
+
   readonly original: number;
-  /** The source's value now; undefined when the file no longer has the literal. */
+
   readonly source: number | undefined;
 }
 
-/** A change applied to the match: the version that carries it and the time from the request to every client running it. */
+
 export interface Applied {
   readonly version: number | undefined;
   readonly milliseconds: number;
@@ -183,18 +183,18 @@ export interface Applied {
 
 export class Tune extends Context.Service<Tune, {
   readonly state: Effect.Effect<readonly TunableState[], TuneFailure>;
-  /** Runs `value` in every client of the match; the source is unchanged. */
+
   readonly apply: (name: string, value: number) => Effect.Effect<Applied, TuneFailure | HotReloadFailure>;
-  /** Writes the running value into the source; returns the diff, empty when the source already has it. */
+
   readonly keep: (name: string) => Effect.Effect<string, TuneFailure>;
-  /** Puts back the session's starting value in the source and the match; returns the source's diff. */
+
   readonly reset: (name: string) => Effect.Effect<{ readonly diff: string; readonly applied: Applied }, TuneFailure | HotReloadFailure>;
 }>()("wisp/Tune") {
-  /**
-   * Tunes the files under `root`. `replacements` is the texts MapBuild
-   * compiles instead of the files (MapBuild.layer's sources): the files with
-   * every running value that differs from theirs.
-   */
+
+
+
+
+
   static readonly layer = (root: string, tunables: readonly Tunable[], replacements: Map<string, string>) => Layer.effect(Tune, Effect.gen(function*() {
     const reload = yield* HotReload;
     const read = (path: string) => Effect.try({ try: () => readFileSync(path, "utf8"), catch: (cause) => new TuneFailure({ problem: `can't read ${path}: ${describeCause(cause)}` }) });
@@ -226,7 +226,7 @@ export class Tune extends Context.Service<Tune, {
       return found === undefined ? Effect.fail(new TuneFailure({ problem: `no tunable named ${name}` })) : Effect.succeed(found);
     };
 
-    /** Each file's text with the running values it lacks. */
+
     const replace = Effect.gen(function*() {
       for (const path of files) {
         const text = yield* read(path);
@@ -241,7 +241,7 @@ export class Tune extends Context.Service<Tune, {
       }
     });
 
-    /** Runs the entry's new value in every client; the previous one stays when that fails. */
+
     const run = (target: Entry, value: number) => Effect.gen(function*() {
       const started = yield* Clock.currentTimeMillis;
       if (value === target.value) return { version: undefined, milliseconds: 0 } satisfies Applied;
@@ -256,7 +256,7 @@ export class Tune extends Context.Service<Tune, {
       return { version, milliseconds: (yield* Clock.currentTimeMillis) - started } satisfies Applied;
     });
 
-    /** Rewrites the entry's literal in its file as `text`; returns the diff. */
+
     const rewrite = (target: Entry, text: (literal: Literal) => string | undefined) => Effect.gen(function*() {
       const before = yield* read(target.path);
       const literal = yield* locate(target, before);
@@ -270,7 +270,7 @@ export class Tune extends Context.Service<Tune, {
       return diff;
     });
 
-    // One change at a time: each publish compiles the values the previous one left.
+
     const lock = yield* Semaphore.make(1);
     const serial = <A, E>(effect: Effect.Effect<A, E>) => Semaphore.withPermit(lock, effect);
 

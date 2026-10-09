@@ -1,8 +1,8 @@
-// A map's terrain (war3map.w3e) as the renderer reads it: its grid, tile
-// types and per-point height, and the world bounds it spans
-// (wisp:docs/headless.md, "Lighting, fog and sky", world bounds).
 
-/** The world's edges in world units, as `GetWorldBounds` gives them. */
+
+
+
+
 export interface WorldBounds {
   readonly minX: number;
   readonly maxX: number;
@@ -11,48 +11,48 @@ export interface WorldBounds {
 }
 
 export interface TerrainPoint {
-  /** Ground height in world units. */
+
   readonly height: number;
-  /** Index into `groundTiles`. */
+
   readonly ground: number;
-  /** The tile's texture variation. */
+
   readonly variation: number;
-  /** Cliff level, 0 to 15. */
+
   readonly layer: number;
   readonly cliff: number;
   readonly cliffVariation: number;
-  /** Ramp (1), blight (2), water (4) and boundary (8) flags. */
+
   readonly flags: number;
-  /** The stored water level in world units, before the tileset's water height offset. */
+
   readonly water: number;
 }
 
 export interface Terrain {
   readonly version: number;
-  /** The tileset letter, such as `L` for Lordaeron Summer. */
+
   readonly tileset: string;
-  /** Ground tile IDs, such as `Ldrt`, in the order points index them. */
+
   readonly groundTiles: readonly string[];
   readonly cliffTiles: readonly string[];
-  /** Points across and down: one more than the cells. */
+
   readonly columns: number;
   readonly rows: number;
-  /** The world position of the first point (the south-west corner). */
+
   readonly originX: number;
   readonly originY: number;
-  /** Row by row from the south, west to east. */
+
   readonly points: readonly TerrainPoint[];
 }
 
-/** World units per terrain cell. */
+
 export const CELL = 128;
 
-/**
- * Decodes war3map.w3e versions 11 (7-byte points) and 12 (8-byte points,
- * a 16-bit ground and flags word). Heights store 0x2000 as ground zero and
- * four steps per world unit; a cliff layer adds 128 per level above 2.
- * The water level is the low 14 bits of the second word, on the same scale.
- */
+// war3map.w3e v11/v12 points are 7/8 bytes; heights use zero 0x2000, four steps/unit, cliff steps 128 above layer 2, and 14-bit water levels.
+
+
+
+
+
 export function decodeTerrain(bytes: Uint8Array): Terrain {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const text = (at: number, length: number) => String.fromCharCode(...bytes.subarray(at, at + length));
@@ -87,12 +87,12 @@ export function decodeTerrain(bytes: Uint8Array): Terrain {
   return { version, tileset, groundTiles, cliffTiles, columns, rows, originX, originY, points };
 }
 
-/** The world bounds the terrain spans: from its first point to its last, inclusive. */
+
 export function worldBounds(terrain: Pick<Terrain, "columns" | "rows" | "originX" | "originY">): WorldBounds {
   return { minX: terrain.originX, maxX: terrain.originX + (terrain.columns - 1) * CELL, minY: terrain.originY, maxY: terrain.originY + (terrain.rows - 1) * CELL };
 }
 
-/** Bounds moved by `-origin`: the world bounds in a headless world whose 0,0 lies at `origin` on the map. */
+
 export function shiftedBounds(bounds: WorldBounds, origin: readonly [number, number] = [0, 0]): WorldBounds {
   const [x, y] = origin;
   return { minX: bounds.minX - x, maxX: bounds.maxX - x, minY: bounds.minY - y, maxY: bounds.maxY - y };

@@ -1,22 +1,22 @@
-// Scene checks: what a player sees, read from the scene report each client's
-// map writes (wisp:src/platform/scene.ts) against the game's declared
-// expectations. A check fails on a missing stage, an effect created with no
-// model, an effect in view that the game declares no kind for, or one in view
-// longer than its kind's lifetime, and says what a player would see wrong.
-// With the game's model facts and cameras it also fails on what a player
-// could see that the game considers hidden or gone (visibility.ts), and,
-// given what must be on screen, a fighter in play drawn with nothing.
-// Plain functions, so a game's tests can check a report without Effect;
-// playerView.ts reads the files.
+
+
+
+
+
+
+
+
+
+
 import { type SceneModel, reportedModel } from "../../src/runtime/scene";
 import type { ModelFacts } from "./models";
 import { type VisibilityExpectations, visibilityProblems } from "./visibility";
 
 export interface SceneReport {
   readonly serial: number;
-  /** The game frame the report describes. */
+
   readonly frame: number;
-  /** Effects that exist, shown or hidden. */
+
   readonly effects: number;
   readonly models: readonly SceneModel[];
 }
@@ -27,12 +27,12 @@ const MODEL_LINE = new RegExp(`^model ${NUMBER} ${NUMBER} ${NUMBER} (?:${NUMBER}
 const optional = (text: string | undefined) => (text === undefined ? undefined : Number(text));
 
 export interface MalformedSceneLine {
-  /** One-based, as the file's Preload lines count. */
+
   readonly line: number;
   readonly problem: string;
 }
 
-/** The report the recorder's Preload lines hold, or the first line that isn't one. */
+
 export function readSceneLines(lines: readonly string[]): SceneReport | MalformedSceneLine {
   const [heading = "", ...rest] = lines;
   const head = HEADING.exec(heading);
@@ -55,36 +55,36 @@ export function readSceneLines(lines: readonly string[]): SceneReport | Malforme
   return { serial: Number(head[1]), frame: Number(head[2]), effects: Number(head[3]), models };
 }
 
-/** A kind of effect the game draws. */
+
 export interface SceneKind {
-  /** What a player would call it, such as "stage deck" or "hit spark". */
+
   readonly name: string;
-  /** Every model path the game creates it with, as the game names them. */
+
   readonly models: readonly string[];
-  /** The most frames one may stay in view without a break; absent for what may stay all match, such as the stage. */
+
   readonly lifetime?: number;
 }
 
 export interface SceneExpectations {
   readonly kinds: readonly SceneKind[];
-  /** The kind the stage is drawn with, and how many of its pieces must be drawn. */
+
   readonly stage: { readonly kind: string; readonly pieces: number };
-  /** The game's frames per second, to say lifetimes in seconds. */
+
   readonly framesPerSecond: number;
-  /** What the game's models draw and where its cameras look, to find what a player sees of hidden effects. */
+
   readonly visibility?: VisibilityExpectations;
 }
 
 export interface SceneProblem {
-  /** What a player sees wrong. */
+
   readonly seen: string;
-  /** What in the report shows it. */
+
   readonly evidence: string;
 }
 
 const names = (kinds: readonly SceneKind[]) => [...new Set(kinds.map(({ name }) => name))].join(", ");
 
-/** Everything a player would see wrong in this report. */
+
 export function sceneProblems(report: SceneReport, expected: SceneExpectations): readonly SceneProblem[] {
   const declared = new Map<string, SceneKind[]>();
   for (const kind of expected.kinds) {
@@ -119,7 +119,7 @@ export function sceneProblems(report: SceneReport, expected: SceneExpectations):
       }
       continue;
     }
-    // Kinds sharing a model share their longest lifetime; one without a lifetime may stay all match.
+
     const lifetime = kinds.some(({ lifetime }) => lifetime === undefined) ? undefined : Math.max(...kinds.map(({ lifetime }) => lifetime ?? 0));
     if (lifetime !== undefined && line.longest > lifetime) {
       problems.push({
@@ -135,30 +135,30 @@ export function sceneProblems(report: SceneReport, expected: SceneExpectations):
 const stageModelsOf = (expected: SceneExpectations) =>
   new Set((expected.kinds.find(({ name }) => name === expected.stage.kind)?.models ?? []).map(reportedModel).filter((model) => model !== ""));
 
-/** Stage pieces drawn in view; a piece with no model draws nothing. */
+
 const stagePieces = (report: SceneReport, models: ReadonlySet<string>) =>
   report.models.filter(({ model }) => models.has(model)).reduce((sum, { drawn }) => sum + drawn, 0);
 
-/** One line on what the report shows, for a passing check's log. */
+
 export function describeScene(report: SceneReport, expected: SceneExpectations): string {
   const pieces = stagePieces(report, stageModelsOf(expected));
   const inView = report.models.reduce((sum, { inView }) => sum + inView, 0);
   return `frame ${report.frame}: ${pieces} ${expected.stage.kind} piece${pieces === 1 ? "" : "s"} drawn; ${inView} of ${report.effects} effects in view across ${report.models.length} models`;
 }
 
-/** Something a player must see now, such as a fighter in play, and every model the game may draw it with. */
+
 export interface SceneBody {
-  /** What a player would call it, such as "Illidan (Player 2)". */
+
   readonly name: string;
   readonly models: readonly string[];
 }
 
-/**
- * Each body the report shows nothing of: no effect of its models is drawn
- * with geometry. A model counts as geometry when its facts have triangles,
- * or when it has no facts to judge it by. Bodies drawn with the same models
- * share their effects, so two of one fighter need two drawn.
- */
+
+
+
+
+
+
 export function bodyProblems(report: SceneReport, bodies: readonly SceneBody[], facts: Readonly<Record<string, ModelFacts>> = {}): readonly SceneProblem[] {
   const triangles = new Map(Object.entries(facts).map(([model, entry]) => [reportedModel(model).toLowerCase(), entry.triangles]));
   const groups = new Map<string, { readonly models: ReadonlySet<string>; readonly names: string[] }>();

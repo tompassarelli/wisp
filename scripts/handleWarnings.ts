@@ -18,7 +18,7 @@ interface Allocation {
   cleanupAt: number;
 }
 
-/** Only a declaration-file global is a native; a map's same-named helper isn't. */
+
 export function handleWarnings(program: ts.Program): readonly ts.Diagnostic[] {
   const checker = program.getTypeChecker();
   const warnings: ts.Diagnostic[] = [];

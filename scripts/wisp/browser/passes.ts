@@ -1,9 +1,9 @@
-/// <reference lib="dom" />
-/**
- * Wisp's own shadow, ambient-occlusion and bloom passes for the headless
- * renderer (wisp:docs/headless.md, "Shadows, ambient occlusion and bloom").
- * Column-major matrices, as WebGL takes them.
- */
+
+
+
+
+
+
 type Matrix = Float32Array;
 
 export function multiply(a: Matrix, b: Matrix): Matrix {
@@ -19,7 +19,7 @@ const normalize = (v: readonly number[]): number[] => { const length = Math.hypo
 const cross = (a: readonly number[], b: readonly number[]): number[] => [(a[1] ?? 0) * (b[2] ?? 0) - (a[2] ?? 0) * (b[1] ?? 0), (a[2] ?? 0) * (b[0] ?? 0) - (a[0] ?? 0) * (b[2] ?? 0), (a[0] ?? 0) * (b[1] ?? 0) - (a[1] ?? 0) * (b[0] ?? 0)];
 const dot = (a: readonly number[], b: readonly number[]) => a.reduce((sum, value, i) => sum + value * (b[i] ?? 0), 0);
 
-/** A rotation whose view looks down `-z`, `z` given in world space; no translation. */
+
 function basis(z: readonly number[]): Matrix {
   const forward = normalize(z), up = Math.abs(forward[2] ?? 0) > 0.99 ? [0, 1, 0] : [0, 0, 1];
   const x = normalize(cross(up, forward)), y = cross(forward, x), out = new Float32Array(16);
@@ -39,17 +39,17 @@ function perspective(tangent: number, near: number, far: number): Matrix {
   return out;
 }
 
-/** What the sun's shadow fit needs of the camera: the eye, its axes (right, up, backward) and the visible depth. */
+
 export interface ShadowCamera { eye: readonly number[]; right: readonly number[]; up: readonly number[]; back: readonly number[]; tangent: number; aspect: number; near: number; reach: number }
 
 export const SUN_MAP = 4096;
-/** How far beyond the camera's slice toward the sun a caster still throws its shadow. */
+
 const CASTER_REACH = 6000;
 
-/**
- * The sun's orthographic view over the camera's visible slice, from its near
- * plane to `reach`, extended toward the sun so casters above the slice are kept.
- */
+
+
+
+
 export function sunView(camera: ShadowCamera, toward: readonly number[]) {
   const rotation = basis(toward), corners: number[][] = [];
   for (const depth of [camera.near, camera.reach]) for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
@@ -61,17 +61,17 @@ export function sunView(camera: ShadowCamera, toward: readonly number[]) {
   const near = -((max[2] ?? 0) + CASTER_REACH), far = -(min[2] ?? 0);
   const projection = orthographic(min[0] ?? 0, max[0] ?? 0, min[1] ?? 0, max[1] ?? 0, near, far);
   const texelWorld = Math.max((max[0] ?? 0) - (min[0] ?? 0), (max[1] ?? 0) - (min[1] ?? 0)) / SUN_MAP;
-  // Two texels of world depth, so a lit surface never shadows itself.
+
   return { view: rotation, projection, viewProjection: multiply(projection, rotation), bias: Math.max(2, 2.5 * texelWorld) / (far - near), texel: 1 / SUN_MAP };
 }
 
 export const POINT_FACE = 1024;
 export const POINT_NEAR = 5;
 const FACES: readonly (readonly number[])[] = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
-/** The six 90° faces of an omni light's cube: each face's rotation, and its projection from light-relative world space. */
+
 export function pointFaces(far: number) {
   const projection = perspective(1, POINT_NEAR, far);
-  // Each face looks along its axis: its view's backward axis is the opposite one.
+
   return FACES.map((axis) => { const view = basis(axis.map((value) => -value)); return { view, projection, viewProjection: multiply(projection, view) }; });
 }
 
@@ -90,7 +90,7 @@ export function depthTarget(gl: WebGL2RenderingContext, width: number, height: n
   return { texture, framebuffer, width, height };
 }
 
-/** The scene's multisampled target and the single-sample colour and depth it resolves to. */
+
 export interface SceneTarget { framebuffer: WebGLFramebuffer; resolved: WebGLFramebuffer; color: WebGLTexture; depth: WebGLTexture; width: number; height: number }
 function colorTexture(gl: WebGL2RenderingContext, width: number, height: number): WebGLTexture {
   const texture = gl.createTexture();
@@ -123,7 +123,7 @@ export function resolve(gl: WebGL2RenderingContext, target: SceneTarget): void {
   gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
 }
 
-/** `war3mapPostProcessing.txt` over the install's `PostProcessingConfig.txt`: section, then key, as numbers. */
+
 export type PostProcessing = Readonly<Record<string, Readonly<Record<string, number>>>>;
 export function parsePostProcessing(...texts: readonly string[]): PostProcessing {
   const out: Record<string, Record<string, number>> = {};
@@ -158,12 +158,12 @@ function pass(gl: WebGL2RenderingContext, fragment: string): Pass {
   return { program, uniform: (name) => { if (!locations.has(name)) locations.set(name, gl.getUniformLocation(program, name)); return locations.get(name) ?? null; } };
 }
 
-/**
- * Screen-space ambient occlusion from the resolved depth, in the terms of the
- * map's `[ASSAO]` section: Radius (world units), ShadowMultiplier,
- * ShadowPower, ShadowClamp, HorizonAngleThreshold and the FadeOutFrom/To eye
- * depths. Normals come from the depth's nearer neighbours.
- */
+
+
+
+
+
+
 const AO_FS = `#version 300 es
 precision highp float;
 in vec2 uv; out vec4 fragment;
@@ -193,7 +193,7 @@ void main() {
   float obscurance = sum / float(COUNT) * strength * clamp(-p.z * fadeMul + fadeAdd, 0.0, 1.0);
   fragment = vec4(vec3(pow(clamp(1.0 - min(obscurance, clampTo), 0.0, 1.0), power)), 1.0);
 }`;
-/** A depth-aware 5 × 5 blur of the occlusion, one of BlurPassCount passes. */
+
 const AO_BLUR_FS = `#version 300 es
 precision highp float;
 in vec2 uv; out vec4 fragment;
@@ -207,13 +207,13 @@ void main() {
   }
   fragment = vec4(vec3(sum / weights), 1.0);
 }`;
-/** Bloom's bright pass: the part of each colour above BloomThreshold, rescaled to the full range. */
+
 const BRIGHT_FS = `#version 300 es
 precision highp float;
 in vec2 uv; out vec4 fragment;
 uniform sampler2D scene; uniform float threshold;
 void main() { fragment = vec4(clamp((texture(scene, uv).rgb - threshold) / (1.0 - threshold), 0.0, 1.0), 1.0); }`;
-/** One direction of a Gaussian blur of BlurSampleCount taps whose deviation is BlurAmount texels. */
+
 const BLUR_FS = `#version 300 es
 precision highp float;
 in vec2 uv; out vec4 fragment;
@@ -227,7 +227,7 @@ void main() {
   }
   fragment = vec4(sum / weights, 1.0);
 }`;
-/** The scene times its occlusion, then bloom over it by the map's intensities and saturations. */
+
 const COMPOSE_FS = `#version 300 es
 precision highp float;
 in vec2 uv; out vec4 fragment;
@@ -246,7 +246,7 @@ void main() {
 }`;
 
 export interface PostSettings { readonly occlusion?: { radius: number; strength: number; power: number; clampTo: number; horizon: number; fadeFrom: number; fadeTo: number; passes: number }; readonly bloom?: { threshold: number; intensity: number; saturation: number; baseIntensity: number; baseSaturation: number; blur: number; taps: number } }
-/** The levers a map's post-processing turns on; the defaults stand in for keys neither file sets. */
+
 export function postSettings(config: PostProcessing): PostSettings {
   const ao = config.ASSAO ?? {}, bloom = config.Bloom ?? {};
   return {
@@ -264,7 +264,7 @@ function image(gl: WebGL2RenderingContext, width: number, height: number): Image
   return { texture, framebuffer, width, height };
 }
 
-/** The post-processing chain over a resolved scene, drawn into the default framebuffer. */
+
 export function postProcessor(gl: WebGL2RenderingContext, target: SceneTarget) {
   const vao = gl.createVertexArray(), buffer = gl.createBuffer();
   gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -289,11 +289,11 @@ export function postProcessor(gl: WebGL2RenderingContext, target: SceneTarget) {
     let occlusion: Image | undefined;
     if (settings.occlusion !== undefined) {
       const ao = settings.occlusion, span = ao.fadeTo - ao.fadeFrom;
-      // Occlusion fades by eye depth from FadeOutFrom to FadeOutTo; equal depths fade nothing.
+
       const fadeMul = span === 0 ? 0 : -1 / span, fadeAdd = span === 0 ? 1 : ao.fadeFrom / span + 1;
       draw(full[0], passes.ao, [["depthMap", target.depth]], (at) => {
         gl.uniformMatrix4fv(at("inverseProjection"), false, inverseProjection); gl.uniform2f(at("texel"), ...texel); gl.uniform2f(at("focal"), focal[0], focal[1]);
-        // ShadowMultiplier scales obscurance by 4.3 / 15, as ASSAO's published constants do.
+
         gl.uniform1f(at("radius"), ao.radius);
         gl.uniform1f(at("strength"), ao.strength * 4.3 / 15); gl.uniform1f(at("power"), ao.power); gl.uniform1f(at("clampTo"), ao.clampTo);
         gl.uniform1f(at("horizon"), Math.min(ao.horizon, 0.99)); gl.uniform1f(at("fadeMul"), fadeMul); gl.uniform1f(at("fadeAdd"), fadeAdd);
@@ -309,7 +309,7 @@ export function postProcessor(gl: WebGL2RenderingContext, target: SceneTarget) {
     if (settings.bloom !== undefined) {
       const bloom = settings.bloom;
       draw(half[0], passes.bright, [["scene", target.color]], (at) => gl.uniform1f(at("threshold"), Math.min(bloom.threshold, 0.999)));
-      // BlurAmount is in half-resolution texels of a 1080-line screen.
+
       const scale = target.height / 1080;
       draw(half[1], passes.blur, [["image", half[0].texture]], (at) => { gl.uniform2f(at("step"), scale / halfWidth, 0); gl.uniform1f(at("deviation"), bloom.blur); gl.uniform1i(at("taps"), bloom.taps); });
       draw(half[0], passes.blur, [["image", half[1].texture]], (at) => { gl.uniform2f(at("step"), 0, scale / halfHeight); gl.uniform1f(at("deviation"), bloom.blur); gl.uniform1i(at("taps"), bloom.taps); });
@@ -325,7 +325,7 @@ export function postProcessor(gl: WebGL2RenderingContext, target: SceneTarget) {
   };
 }
 
-/** Matrix inverse, column-major. */
+
 export function invert(m: Matrix): Matrix {
   const out = new Float32Array(16), a = Array.from(m);
   const [a00 = 0, a01 = 0, a02 = 0, a03 = 0, a10 = 0, a11 = 0, a12 = 0, a13 = 0, a20 = 0, a21 = 0, a22 = 0, a23 = 0, a30 = 0, a31 = 0, a32 = 0, a33 = 0] = a;

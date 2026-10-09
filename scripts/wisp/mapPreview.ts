@@ -4,7 +4,7 @@ import type { Frame } from "./frameProbe";
 
 export const MINIMAP_ENTRIES = ["war3mapMap.blp", "war3mapMap.tga"] as const;
 
-/** Warcraft 3.0.1 lobby capture on Smashcraft d8fe5996: Preview.tga is ignored. */
+
 export function selectMapPreview(info: Pick<MapInfo, "flags">, entries: ReadonlySet<string>) {
   if ((info.flags & 1) !== 0) throw new Error("hide-minimap preview flag needs a Warcraft 3.0.1 reference capture");
   if (MINIMAP_ENTRIES.every((name) => entries.has(name.toLowerCase()))) throw new Error("map has both minimap encodings; texture precedence needs a Warcraft 3.0.1 reference capture");

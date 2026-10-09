@@ -1,4 +1,4 @@
-/// <reference lib="dom" />
+
 import { parseMDX } from "../../../vendor/war3-model.mjs";
 import { CELL, type Terrain } from "../terrain";
 import { terrainCells, terrainRows, type TerrainCell } from "../terrainMesh";
@@ -118,7 +118,7 @@ async function prepare(gl: WebGL2RenderingContext, terrain: Terrain, readTexture
   return { program: program(gl), vao, batches };
 }
 
-/** Ground and cliff triangles share the models' view, projection and depth buffer. */
+
 export async function drawTerrain(gl: WebGL2RenderingContext, terrain: Terrain, view: Float32Array, projection: Float32Array, readTexture: TextureReader, readAsset: AssetReader): Promise<void> {
   const key = JSON.stringify(terrain);
   let loading = prepared.get(key);

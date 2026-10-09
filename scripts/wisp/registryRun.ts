@@ -1,8 +1,8 @@
-// A dev-loop test process (wisp:docs/dev.md): it waits for one line on stdin
-// naming the preloaded modules and the registry modules to run, loads them in
-// that order, runs each module's registered tests as the registry's runner
-// does, and prints one JSON line per module. Started before a save, so the
-// project's own code loads only after it.
+
+
+
+
+
 import { AssertionFailure, registeredTests } from "../../src/runtime/testing";
 import { printResult } from "./devResult";
 

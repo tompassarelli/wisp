@@ -1,36 +1,36 @@
-// What `wisp play` decides by on the host: which Wine runtimes use a prefix,
-// where its Battle.net log is, and what that log says about sign-in and a
-// launch. Plain functions over a process table and log text, so tests give
-// them recorded values.
+
+
+
+
 import { join } from "node:path";
 import { Schema } from "effect";
 
-/** One host process, as /proc shows it. */
+
 export interface ProcessInfo {
-  /** User and system CPU consumed, in milliseconds, from /proc/PID/stat. */
+
   readonly cpuMs?: number;
   readonly pid: number;
-  /** The kernel's short name (/proc/PID/comm). */
+
   readonly name: string;
   readonly args: readonly string[];
-  /** Its WINEPREFIX, without a trailing slash. */
+
   readonly prefix?: string;
   readonly display?: string;
-  /** Its working directory; a wineserver's is its prefix's server directory. */
+
   readonly cwd?: string;
-  /** When it started, in epoch milliseconds, to the second; read for Wine's processes only. */
+
   readonly started?: number;
 }
 
-/** The processes of one Wine prefix. */
+
 export interface PrefixUse {
-  /** Its wineservers. Separate Steam runtime containers can each start one; only one may own the prefix. */
+
   readonly runtimes: readonly ProcessInfo[];
-  /** Every process of the prefix, the wineservers included. */
+
   readonly processes: readonly ProcessInfo[];
-  /** The Battle.net launcher's main process. */
+
   readonly launcher?: ProcessInfo;
-  /** Warcraft III's game process. */
+
   readonly game?: ProcessInfo;
 }
 
@@ -40,11 +40,11 @@ const isRuntime = (process: ProcessInfo) => process.name === "wineserver" || /\/
 const isLauncher = (process: ProcessInfo) => /\\Battle\.net\\Battle\.net\.exe(?:\s|"|$)/i.test(commandLine(process)) && !/--type=/.test(commandLine(process));
 const isGame = (process: ProcessInfo) => /\\Warcraft III\.exe(?:\s|"|$)/i.test(commandLine(process));
 
-/**
- * Wine names a prefix's server directory after the prefix directory's device
- * and inode; a wineserver started from another mount namespace keeps that
- * name, so it identifies the prefix when the environment doesn't.
- */
+
+
+
+
+
 export const serverDirectoryName = (device: bigint, inode: bigint) => `server-${device.toString(16)}-${inode.toString(16)}`;
 
 export function prefixUse(processes: readonly ProcessInfo[], prefix: string, serverDirectory: string): PrefixUse {
@@ -57,59 +57,59 @@ export function prefixUse(processes: readonly ProcessInfo[], prefix: string, ser
   return { runtimes: inPrefix.filter(isRuntime), processes: inPrefix, ...(launcher === undefined ? {} : { launcher }), ...(game === undefined ? {} : { game }) };
 }
 
-/** The Steam URL that starts a non-Steam shortcut: its 32-bit app id above the shortcut flag 0x02000000. */
+
 export const shortcutUrl = (appId: number) => `steam://rungameid/${((BigInt(appId) << 32n) | 0x02000000n).toString()}`;
 
-/** The window class Steam gives a shortcut's windows. */
+
 export const shortcutAppId = (appId: number) => `steam_app_${appId}`;
 
-/** Where the launcher writes one log per start, named by its start time. */
+
 export const launcherLogDirectory = (prefix: string) => join(prefix, "drive_c/users/steamuser/AppData/Local/Battle.net/Logs");
 
-/** The newest launcher log among a directory's file names; their timestamps sort as text. */
+
 export const newestLauncherLog = (names: readonly string[]) =>
   names.filter((name) => /^battle\.net-\d{8}T[\d.]+\.log$/.test(name)).sort().at(-1);
 
 export const documentsFolder = (prefix: string) => join(prefix, "drive_c/users/steamuser/Documents/Warcraft III");
 
-/** The launcher's settings, Warcraft III's launch options among them; it writes them back when it exits. */
+
 export const launcherConfig = (prefix: string) => join(prefix, "drive_c/users/steamuser/AppData/Roaming/Battle.net/Battle.net.config");
 
-/** A file under the prefix's drive_c, as Windows programs in the prefix name it. */
+
 export function windowsPath(prefix: string, path: string): string {
   const drive = join(prefix, "drive_c");
   if (!path.startsWith(`${drive}/`)) throw new Error(`${path} is not under ${drive}`);
   return `C:\\${path.slice(drive.length + 1).replaceAll("/", "\\")}`;
 }
 
-/**
- * Warcraft III's launch option that loads a map straight into a game, as the
- * World Editor's Test Map does; Play passes the launch options after its own.
- */
+
+
+
+
 export const loadMapOption = (prefix: string, map: string) => `-loadfile "${windowsPath(prefix, map)}"`;
 
-/**
- * Battle.net.config: a JSON object whose Games section holds each game's
- * settings. Records keep every setting and their order, so the launcher's
- * layout survives a write.
- */
+
+
+
+
+
 const Settings = Schema.Record(Schema.String, Schema.Unknown);
 const LauncherSettings = Schema.fromJsonString(Settings);
 const Games = Schema.UndefinedOr(Schema.Record(Schema.String, Settings));
 
-/** The launcher's settings and their Games section, decoded once; throws when they aren't that shape. */
+
 function decodeSettings(config: string) {
   const settings = Schema.decodeSync(LauncherSettings)(config);
   return { settings, games: Schema.decodeUnknownSync(Games)(settings.Games) };
 }
 
-/** Battle.net's "Additional command line arguments" for Warcraft III: Games.w3.AdditionalLaunchArguments. */
+
 export function launchOptions(config: string): string | undefined {
   const value = decodeSettings(config).games?.w3?.AdditionalLaunchArguments;
   return typeof value === "string" && value !== "" ? value : undefined;
 }
 
-/** The settings with Warcraft III's launch options set, or removed when undefined, in the launcher's own layout. */
+
 export function withLaunchOptions(config: string, options: string | undefined): string {
   const { settings, games = {} } = decodeSettings(config);
   const w3 = { ...games.w3 };
@@ -122,16 +122,16 @@ export function withLaunchOptions(config: string, options: string | undefined): 
 const SIGNED_IN = /\[BNLogin\] .*Logged into Battle\.net successfully/;
 export const signedIn = (log: string) => SIGNED_IN.test(log);
 
-/** The launcher took a Play of Warcraft III: it asks its agent to launch the game. */
+
 export const launchRequested = (log: string) => /\[GameLaunchController\] .*LaunchBinary: uid=w3\b/.test(log);
 
 export type LaunchOutcome = { readonly kind: "running" } | { readonly kind: "failed"; readonly reason: string };
 
-/**
- * What the launcher logged about Warcraft III's launch in `log`, the text it
- * wrote after Play. A launcher whose runtime started beside another runtime on
- * the same prefix logs "Could not launch"; an expired pending launch follows.
- */
+
+
+
+
+
 export function launchOutcome(log: string): LaunchOutcome | undefined {
   for (const line of log.split("\n")) {
     if (/\[InstallManager\] .*Game is running: w3\b/.test(line)) return { kind: "running" };
@@ -141,37 +141,37 @@ export function launchOutcome(log: string): LaunchOutcome | undefined {
   return undefined;
 }
 
-/**
- * Warcraft III's crash reporter, which holds the error dialog up after a
- * crash: _retail_\x86_64\BlizzardError.exe (the launcher's own copies live
- * under Battle.net\, and are another program's).
- */
+
+
+
+
+
 export const isErrorDialog = (process: ProcessInfo) => /\\Warcraft III\\_retail_\\x86_64\\BlizzardError\.exe(?:\s|"|$)/i.test(commandLine(process));
 
 export type LauncherHealth =
-  /** Signed in, with nothing failing since. */
+
   | { readonly kind: "signed in" }
-  /** No sign-in in this launcher's log yet: it is starting, or showing its sign-in form. */
+
   | { readonly kind: "not signed in" }
-  /** Battle.net rejected the saved login: the account's credentials must be entered again. */
+
   | { readonly kind: "sign-in needed"; readonly reason: string }
-  /** Not signed in, with its sign-in form loaded: the account page (Login) or the password page (LoginCredential). */
+
   | { readonly kind: "sign-in form"; readonly form: LoginForm }
-  /** Signed in, but its connection to Battle.net fails: a restarted launcher reconnects. */
+
   | { readonly kind: "connection failing"; readonly reason: string };
 
 const LOGIN_REJECTED = /ERROR_TOKEN_NOT_FOUND/;
 
-/** The launcher's sign-in pages: the account name (Login), then the password (LoginCredential). */
+
 export type LoginForm = "Login" | "LoginCredential";
 
-/**
- * The sign-in page the launcher shows at the end of `lines`, by its UnifiedAuth
- * log (client A, 6 Oct): "finished loading. statusCode=200 state=Login" is the
- * account page, "state=LoginCredential" the password page; a submitted page
- * ("status changed: RequestingToken") or one closed ("browser state changed:
- * None") shows none until the next one loads.
- */
+
+
+
+
+
+
+
 export function loginForm(lines: readonly string[]): LoginForm | undefined {
   let form: LoginForm | undefined;
   for (const line of lines) {
@@ -183,16 +183,16 @@ export function loginForm(lines: readonly string[]): LoginForm | undefined {
 }
 const SSO_FAILED = /GenerateAuth.*(?:fail|error)|SSO token generation error/i;
 const RPC_TIMEOUT = /ERROR_RPC_REQUEST_TIMED_OUT/;
-/** Presence updates fail every 46 s while the connection is gone (3 Oct, client B); two in a row, with nothing logged in between that worked, is not a blip. */
+
 const RPC_TIMEOUTS_FAILING = 2;
 
-/**
- * What a launcher's log (its newest battle.net-*.log) says about its sign-in
- * and its connection (smashcraft:docs/warcraft-authentication.md). After its
- * last sign-in: a rejected saved login needs the owner; a failed Warcraft III
- * sign-in token, or presence updates timing out to the log's end, is a
- * connection the launcher lost, which a restart of the launcher reconnects.
- */
+
+
+
+
+
+
+
 export function launcherHealth(log: string): LauncherHealth {
   const lines = log.split("\n");
   const last = lines.findLastIndex((line) => SIGNED_IN.test(line));
@@ -217,12 +217,12 @@ export function launcherHealth(log: string): LauncherHealth {
 
 const SAVED_LOGIN_KEY = "[Software\\\\Blizzard Entertainment\\\\Battle.net\\\\UnifiedAuth]";
 
-/**
- * A prefix's user.reg without the launcher's saved login: the values of its
- * UnifiedAuth key, the token it signs in with at start (client B, 7 Oct). The
- * key itself and every other line stay. Wine reads the file when its runtime
- * starts, so it is rewritten only while none runs on the prefix.
- */
+
+
+
+
+
+
 export function withoutSavedLogin(userReg: string): string {
   const lines = userReg.split("\n");
   const kept: string[] = [];
@@ -237,5 +237,5 @@ export function withoutSavedLogin(userReg: string): string {
   return kept.join("\n");
 }
 
-/** Whether a prefix's user.reg holds a saved login. */
+
 export const hasSavedLogin = (userReg: string) => withoutSavedLogin(userReg) !== userReg;

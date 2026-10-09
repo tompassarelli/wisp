@@ -1,11 +1,11 @@
-// A map compiler that stays warm between compiles. TypeScript's builder
-// program works out which files an edit affects (the edited files, and their
-// dependents when an exported declaration changed); only those are type-checked
-// and transformed to Lua again. Every other module's Lua comes from the previous
-// compile, and the bundle is rebuilt from all modules in program order, so the
-// output equals a full compile's. The bundle reuses each unchanged module's
-// resolved requires, text and source-map mappings (wisp:scripts/luaBundle.ts),
-// and keeps each module's code and map for hot reloads by module.
+
+
+
+
+
+
+
+
 import { statSync } from "node:fs";
 import { normalize, resolve } from "node:path";
 import ts from "typescript";
@@ -25,10 +25,10 @@ import { type BundledModules, LuaBundler } from "./luaBundle";
 import { handleWarnings } from "./handleWarnings";
 export { reportHandleWarnings } from "./handleWarnings";
 
-/** Runs one named phase of a compile and returns its result; a caller times the phase by supplying one. */
+
 export type Phase = <A>(name: string, run: () => A) => A;
 
-/** With COMPILER_TIMINGS set, an unsupplied hook prints each phase's duration. */
+
 const defaultPhase: Phase = (name, run) => {
   if (process.env.COMPILER_TIMINGS === undefined) return run();
   const started = performance.now();
@@ -44,7 +44,7 @@ interface CachedModule {
   readonly sourceMapChildren: readonly { readonly node: SourceNode; readonly children: SourceNode[] }[];
 }
 
-/** TSTL 1.37.1 rewrites requires by replacing a source-map node's children. */
+
 function cacheModule(file: ProcessedFile): CachedModule {
   const sourceMapChildren: { readonly node: SourceNode; readonly children: SourceNode[] }[] = [];
   function visit(node: SourceNode): void {
@@ -59,30 +59,30 @@ interface Resolution {
   readonly source: string;
   readonly node: ProcessedFile["sourceMapNode"];
   readonly code: string;
-  /** Lua files outside the program it pulled in, resolved. */
+
   readonly dependencies: readonly ProcessedFile[];
 }
 
 class IncrementalTranspiler extends Transpiler {
-  /** Preserve each module as first printed; emission copies code and restores tree rewrites. */
+
   private readonly modules = new Map<string, CachedModule>();
   private readonly bundler = new LuaBundler();
-  /** Each module's resolved requires, while its transpiled code and tree are unchanged. */
+
   private readonly resolutions = new Map<string, Resolution>();
   private readonly resolvedTrees = new Set<CachedModule>();
   private resolvedProgramFiles = "";
 
-  /** The modules of the last bundle; undefined when TypeScriptToLua built it. */
+
   get bundled(): BundledModules | undefined {
     return this.bundler.bundled;
   }
 
-  /** TSTL 1.37.1's emit plan for a bundle, built by the caching bundler when it can. */
+
   protected override getEmitPlan(program: ts.Program, diagnostics: ts.Diagnostic[], files: ProcessedFile[], plugins: Plugin[]): { emitPlan: EmitFile[] } {
     const options: CompilerOptions = program.getCompilerOptions();
     if (!isBundleEnabled(options)) return super.getEmitPlan(program, diagnostics, files, plugins);
-    // An unchanged module's resolved code is reused only for the caching bundler, which never walks its tree
-    // again; TypeScriptToLua's own bundle reads every module's tree.
+
+
     const cached = !options.sourceMapTraceback;
     const withLualib = (resolved: ProcessedFile[]) => {
       if (!resolved.some((file) => file.fileName === "lualib_bundle")) return resolved;
@@ -107,7 +107,7 @@ class IncrementalTranspiler extends Transpiler {
         return { emitPlan: [built[1]] };
       }
     }
-    // TypeScriptToLua builds the bundle from every module's tree, so each needs its requires resolved.
+
     const full = fullResolution();
     if (!cached) diagnostics.push(...full.diagnostics);
     const [bundleDiagnostics, bundle] = getBundleResult(program, full.resolved);
@@ -115,13 +115,13 @@ class IncrementalTranspiler extends Transpiler {
     return { emitPlan: [bundle] };
   }
 
-  /**
-   * Resolves the requires of each module that changed since the last compile,
-   * as resolveDependencies would resolve them all: each module, then the Lua
-   * files outside the program it first pulls in. An unchanged module takes the
-   * code it resolved to before. A change to the program's files resolves every
-   * module again.
-   */
+
+
+
+
+
+
+
   private resolveChanged(program: ts.Program, files: ProcessedFile[], plugins: Plugin[]): { resolved: ProcessedFile[]; diagnostics: ts.Diagnostic[] } {
     const programFiles = program.getSourceFiles().map((file) => file.fileName).join("\n");
     if (programFiles !== this.resolvedProgramFiles) {
@@ -159,7 +159,7 @@ class IncrementalTranspiler extends Transpiler {
     return { resolved, diagnostics };
   }
 
-  /** With `write` false nothing is written; the modules stay in memory for a hot reload. */
+
   compile(program: ts.Program, affected: readonly ts.SourceFile[], phase: Phase, write: boolean): readonly ts.Diagnostic[] {
     const writeFile: ts.WriteFileCallback = write ? this.emitHost.writeFile : () => {};
     const transpiled = phase("transpile", () => {
@@ -184,8 +184,8 @@ class IncrementalTranspiler extends Transpiler {
       try {
         plan = this.getEmitPlan(program, planDiagnostics, ordered, transpiled.plugins);
       } finally {
-        // Bundling is synchronous and has finished reading these trees. Restore
-        // the original requires before the next emission reuses unchanged modules.
+
+
         for (const module of this.resolvedTrees) {
           for (const { node, children } of module.sourceMapChildren) node.children = children;
         }
@@ -194,7 +194,7 @@ class IncrementalTranspiler extends Transpiler {
       const { emitPlan } = plan;
       if (planDiagnostics.length > 0) return planDiagnostics;
       const options: CompilerOptions = program.getCompilerOptions();
-      // As TSTL 1.37.1's emit: plugins may rewrite the plan before it is written and see it after.
+
       const emitDiagnostics: ts.Diagnostic[] = [];
       for (const plugin of transpiled.plugins) emitDiagnostics.push(...(plugin.beforeEmit?.(program, options, this.emitHost, emitPlan) ?? []));
       const { sourceMap: writeSourceMap = false, emitBOM = false } = options;
@@ -213,10 +213,10 @@ interface CachedSource {
   readonly file: ts.SourceFile;
 }
 
-/**
- * A compiler host that parses a file again only when its size or modification
- * time changed, or the text replacing it did.
- */
+
+
+
+
 function cachingHost(options: ts.CompilerOptions, cache: Map<string, CachedSource>, replaced: ReadonlyMap<string, string>): ts.CompilerHost {
   const host = ts.createIncrementalCompilerHost(options);
   const parse = host.getSourceFile.bind(host);
@@ -239,21 +239,21 @@ function cachingHost(options: ts.CompilerOptions, cache: Map<string, CachedSourc
 
 export interface MapCompiler {
   (phase?: Phase): readonly ts.Diagnostic[];
-  /** The modules of the last successful compile's bundle; undefined when TypeScriptToLua built it. */
+
   readonly modules: () => BundledModules | undefined;
   readonly warnings: () => readonly ts.Diagnostic[];
 }
 
 const noReplacements = (): ReadonlyMap<string, string> => new Map();
 
-/**
- * `sources` returns, before each compile, texts that replace files' contents,
- * by absolute path, such as `wisp tune`'s values. A compile that replaces a
- * file writes nothing, so the bundle on disk is always compiled from the files.
- */
+
+
+
+
+
 export function mapCompiler(configPath: string, sources: () => ReadonlyMap<string, string> = noReplacements): MapCompiler {
-  // An absolute config path keeps every source file name absolute, which the
-  // map plugin needs to recognize f32, floorDiv and floorMod by their file.
+
+
   const absolute = resolve(configPath);
   const transpiler = new IncrementalTranspiler();
   const parsed = new Map<string, CachedSource>();
@@ -261,7 +261,7 @@ export function mapCompiler(configPath: string, sources: () => ReadonlyMap<strin
   let signaturesPrimed = false;
   let warnings: readonly ts.Diagnostic[] = [];
   const compile = (phase: Phase = defaultPhase): readonly ts.Diagnostic[] => {
-    // Parsed every time so added and removed files are picked up.
+
     const config = phase("read config", () => parseConfigFileWithSystem(absolute));
     if (config.errors.length > 0) return config.errors;
     config.options.declaration = true;
@@ -277,7 +277,7 @@ export function mapCompiler(configPath: string, sources: () => ReadonlyMap<strin
       const affected: ts.SourceFile[] = [];
       const diagnostics: ts.Diagnostic[] = [];
       for (let next = current.getSemanticDiagnosticsOfNextAffectedFile(); next !== undefined; next = current.getSemanticDiagnosticsOfNextAffectedFile()) {
-        // A whole-program result (after an options change) means every file is affected.
+
         const files = "fileName" in next.affected ? [next.affected] : next.affected.getSourceFiles();
         for (const file of files) {
           if (file.isDeclarationFile) continue;
@@ -296,10 +296,10 @@ export function mapCompiler(configPath: string, sources: () => ReadonlyMap<strin
       });
     }
     if (diagnostics.length > 0) return diagnostics;
-    // Both TSTL and TypeScript's emit gate request whole-program declaration
-    // diagnostics. Route those through the builder's dependency-aware cache.
-    // Its per-file requests still use the program's checker; re-entry also
-    // handles an option change that makes the whole program affected.
+
+
+
+
     const declarationDiagnostics = program.getDeclarationDiagnostics;
     const incrementalDeclarations = current.getDeclarationDiagnostics;
     let checkingDeclarations = false;

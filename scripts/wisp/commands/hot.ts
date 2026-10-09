@@ -1,7 +1,7 @@
-// `wisp hot`: publishes the map bundle to running clients and reports how
-// long the change took to run in every client. With --watch it publishes every
-// saved change and prints in-game errors with TypeScript lines and the
-// engine values that diverged in a Warcraft desync.
+
+
+
+
 import { type FSWatcher, watch } from "node:fs";
 import { Console, Effect, Layer, Queue, Schema } from "effect";
 import { type Command, type CommandFailure, UsageFailure, flagValues } from "../command";
@@ -19,7 +19,7 @@ export interface HotProject {
   readonly sourceDirectory: string;
   readonly sourceMapDirectory: string;
   readonly filePrefix?: string;
-  /** How much worse a reloaded version's frames may be before `--watch` flags it: 0.2 for 20%. */
+
   readonly frameCostThreshold?: number;
 }
 
@@ -45,7 +45,7 @@ export const makeHot = ({ project, sourceDirectory, sourceMapDirectory, filePref
     const desyncs = yield* Desyncs;
     const frameCosts = yield* FrameCosts;
     const loadFailures = modelFailureBridge(yield* GameFiles, filePrefix);
-    // Reports from before Wisp started are old news.
+
     yield* sourceErrors.changed(directories);
     yield* frameCosts.changed(directories);
     if (!args.includes("--watch")) {
@@ -71,7 +71,7 @@ export const makeHot = ({ project, sourceDirectory, sourceMapDirectory, filePref
 
 const report = <A>(effect: Effect.Effect<A, CommandFailure>) => effect.pipe(Effect.asVoid, Effect.catch((failure) => Console.error(failure.message)));
 
-/** One run at a time; requests during a run start one more afterwards. */
+
 function coalesced<A, E>(effect: Effect.Effect<A, E>): Effect.Effect<void, E> {
   let running = false;
   let again = false;
@@ -92,7 +92,7 @@ function coalesced<A, E>(effect: Effect.Effect<A, E>): Effect.Effect<void, E> {
   });
 }
 
-/** Ends when the process is asked to stop. */
+
 export const waitForProcessStop: Effect.Effect<void> = Effect.callback<void>((resume) => {
   const stop = () => resume(Effect.void);
   process.once("SIGINT", stop);
@@ -103,11 +103,11 @@ export const waitForProcessStop: Effect.Effect<void> = Effect.callback<void>((re
   });
 });
 
-/**
- * Runs `onChange` after each change under the supplied source directory and `onPoll` every 50 ms,
- * printing their failures, until `stop`. Everything it started ends with it. Each change is a
- * root `reload` step timed from its detection, so its end is the time since the save.
- */
+
+
+
+
+
 export const runHotWatch = (
   sourceDirectory: string,
   onChange: Effect.Effect<void, CommandFailure>,
@@ -151,7 +151,7 @@ export const runHotWatch = (
       const sourceWorker = Effect.forever(Effect.gen(function*() {
         yield* Queue.take(sourceEvents);
         yield* Effect.gen(function*() {
-          // An editor's save can be several events; they make one change.
+
           yield* Effect.sleep("10 millis");
           sourcePending = false;
           yield* report(onChange);

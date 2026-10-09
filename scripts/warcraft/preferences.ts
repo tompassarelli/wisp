@@ -1,28 +1,28 @@
-// Warcraft III's display settings, kept in the [Video] section of
-// Documents/Warcraft III/War3Preferences.txt. The game rewrites the file when
-// it exits, with whatever window mode, window size, render resolution, frame
-// rate cap and refresh rate it ran with. Clients on private desktops share a
-// Wine prefix with a run on the owner's display, so a run there leaves the
-// private desktop's settings changed (6 Oct: 3:2 render into a 2160x1440
-// area). `doctor` restores declared settings; `play` puts the file back when
-// its game exits (wisp:docs/display-settings.md).
+
+
+
+
+
+
+
+
 import { rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 
-/** A client's expected [Video] settings, by key, as the file spells them. */
+
 export type DisplaySettings = Readonly<Record<string, string>>;
 
 export const preferencesPath = (documents: string) => join(documents, "War3Preferences.txt");
-/** Where `play` keeps the file it replaced until its game exits. */
+
 export const preferencesBackupPath = (documents: string) => join(documents, "War3Preferences-before-play.txt");
 
 const SECTION = /^\s*\[([^\]]*)\]\s*$/;
 const ENTRY = /^([^=;/\s][^=]*)=(.*?)\r?$/;
 
-/** Settings by section, then key, as the file spells them: a client's [Video], [Misc] and [Sound] (pool.ts `clientSettings`). */
+
 export type PreferenceSettings = Readonly<Record<string, DisplaySettings>>;
 
-/** A section's entries, by key ([Video] by default). */
+
 export function videoSettings(text: string, sectionName = "Video"): Record<string, string> {
   const settings: Record<string, string> = {};
   let inVideo = false;
@@ -41,32 +41,32 @@ export function videoSettings(text: string, sectionName = "Video"): Record<strin
 export interface DisplayChange {
   readonly key: string;
   readonly expected: string;
-  /** Absent when the file has no such entry. */
+
   readonly actual?: string;
 }
 
-/** The expected settings the file's [Video] section (or `sectionName`) doesn't hold; another section's keys read `Section.key`. */
+
 export function displayChanges(text: string, expected: DisplaySettings, sectionName = "Video"): DisplayChange[] {
   const actual = videoSettings(text, sectionName);
   const named = (key: string) => (sectionName === "Video" ? key : `${sectionName}.${key}`);
   return Object.entries(expected).flatMap(([key, value]) => (actual[key] === value ? [] : [{ key: named(key), expected: value, ...(actual[key] === undefined ? {} : { actual: actual[key] }) }]));
 }
 
-/** The expected settings of every section that the file doesn't hold. */
+
 export const preferenceChanges = (text: string, expected: PreferenceSettings): DisplayChange[] =>
   Object.entries(expected).flatMap(([section, settings]) => displayChanges(text, settings, section));
 
-/** The file with every section's expected settings written in; every other line is kept as it is. */
+
 export const withPreferences = (text: string, expected: PreferenceSettings): string =>
   Object.entries(expected).reduce((written, [section, settings]) => withDisplaySettings(written, settings, section), text);
 
-/** The recommended settings the file's [Video] section has no entry for: a value already there, the owner's choice, is never replaced. */
+
 export function absentSettings(text: string, recommended: DisplaySettings): DisplaySettings {
   const actual = videoSettings(text);
   return Object.fromEntries(Object.entries(recommended).filter(([key]) => actual[key] === undefined));
 }
 
-/** The file with the expected settings written into its [Video] section; every other line is kept as it is. */
+
 export function withDisplaySettings(text: string, expected: DisplaySettings, sectionName = "Video"): string {
   const lines = text.split("\n");
   const left = new Map(Object.entries(expected));
@@ -99,7 +99,7 @@ export function withDisplaySettings(text: string, expected: DisplaySettings, sec
   return `${out.join("\n")}${tail}[${sectionName}]${cr}\n${missing.join("\n")}\n`;
 }
 
-/** Puts `backup` over `preferences` whole (through a temporary file) and removes the backup. Returns false when there is no backup. */
+
 export async function restorePreferences(backup: string, preferences: string): Promise<boolean> {
   const file = Bun.file(backup);
   if (!(await file.exists())) return false;
@@ -110,7 +110,7 @@ export async function restorePreferences(backup: string, preferences: string): P
   return true;
 }
 
-/** True while a process with this id exists. */
+
 export const alive = (pid: number) => {
   try {
     process.kill(pid, 0);
@@ -120,7 +120,7 @@ export const alive = (pid: number) => {
   }
 };
 
-/** Warcraft 3.0.1's installed Graphics page maps SD/HD/DE to [Misc] hd=0/1/2. */
+
 export function withGraphicsMode(text: string, mode: "classic" | "reforged" | "definitive"): string {
   return withDisplaySettings(text, { hd: String({ classic: 0, reforged: 1, definitive: 2 }[mode]) }, "Misc");
 }

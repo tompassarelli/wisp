@@ -1,15 +1,15 @@
-// MapBuild: compiling the map bundle, the TypeScript-only map build and the
-// script-only rebuild (#35, #36). Every step that writes a map works on a
-// staged copy that replaces the old map only when every step passed; child
-// processes stop when their step is interrupted.
-//
-// A map with a private container packages into a copy of it. Without one the
-// build packages into a copy of the base. The packager grows full hash tables
-// when adding imports, so the source archive's capacity is not an import limit.
-// The copy's script, object data, description and header are replaced with
-// TypeScript-generated ones; every other base map file and every declared
-// import must equal its source. Imports the build does not declare stay
-// unverified.
+
+
+
+
+
+
+
+
+
+
+
+
 import { chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { Console, Context, Effect, Layer, Schema } from "effect";
@@ -47,7 +47,7 @@ export class MapBuildFailure extends Schema.TaggedError<MapBuildFailure>()("MapB
   }
 }
 
-/** The map code doesn't compile; `diagnostics` is the compiler's report. */
+
 export class CompileFailure extends Schema.TaggedError<CompileFailure>()("CompileFailure", {
   diagnostics: Schema.String,
 }) {
@@ -68,18 +68,18 @@ export interface GeneratedFile {
 
 export interface BuildOptions {
   readonly base: string;
-  /** The packaged map that carries the imports; the base map when absent. */
+
   readonly container?: string;
   readonly name: string;
   readonly out: string;
   readonly packager?: string;
   readonly declaration: MapDeclaration;
-  /** Generated object-data files; without a war3map.w3a the build adds one holding only FileIO's ability. */
+
   readonly objectData?: readonly GeneratedFile[];
   readonly imports?: readonly ArchiveEntry[];
-  /** Opt-in validation of map-declared Classic and Definitive models and scales. */
+
   readonly unitModels?: UnitModels;
-  /** User-owned installed models available locally, not imports to package. */
+
   readonly localModels?: readonly ModelSource[];
 }
 
@@ -87,32 +87,32 @@ export type BuildFailure = MapBuildFailure | CompileFailure | SourceMapFailure;
 type CompilerModule = typeof import("../compiler");
 
 export class MapBuild extends Context.Service<MapBuild, {
-  /**
-   * Compiles the map with a compiler kept warm between calls and returns its
-   * modules, as a hot reload sends them; it doesn't read the bundle it wrote.
-   */
+
+
+
+
   readonly compile: Effect.Effect<BundledModules, BuildFailure>;
-  /**
-   * A map whose project code is only the TypeScript bundle, started from
-   * the supplied entry module. Like `rebuild`, it reuses the compiled bundle
-   * while that is newer than everything the compile reads.
-   */
+
+
+
+
+
   readonly build: (options: BuildOptions) => Effect.Effect<void, BuildFailure>;
-  /** Replaces only war3map.lua of a map built by `build`. */
+
   readonly rebuild: (map: string, packager?: string) => Effect.Effect<void, BuildFailure>;
 }>()("wisp/MapBuild") {
-  /**
-   * `sources` replaces files' texts in every compile, by absolute path, as
-   * `wisp tune` does (wisp:scripts/compiler.ts); such a compile writes no bundle.
-   */
+
+
+
+
   static layer(project: BuildProject, sources?: () => ReadonlyMap<string, string>) {
     const { configPath, bundlePath, compileInputs } = project;
     return Layer.effect(MapBuild, Effect.gen(function*() {
       const sourceErrors = yield* SourceErrors;
-      // The compiler API takes about 0.6 s to load, so it loads on the first compile.
+
       let compiler: Promise<{ readonly run: ReturnType<CompilerModule["mapCompiler"]>; readonly report: CompilerModule["report"]; readonly reportHandleWarnings: CompilerModule["reportHandleWarnings"] }> | undefined;
       const warmCompiler = () => (compiler ??= import("../compiler").then(({ mapCompiler, report, reportHandleWarnings }) => ({ run: mapCompiler(configPath, sources), report, reportHandleWarnings })));
-      /** The compiled bundle on disk, its source map kept under its key. */
+
       const compiled = Effect.gen(function*() {
         const bytes = yield* tryMapPromise("read map bundle", bundlePath, () => Bun.file(bundlePath).bytes());
         const bundleChecksum = bytesChecksum(bytes);
@@ -120,7 +120,7 @@ export class MapBuild extends Context.Service<MapBuild, {
         yield* sourceErrors.retain(bundlePath, key);
         return { text: new TextDecoder().decode(bytes), key, bytes, checksum: bundleChecksum } satisfies CompiledBundle;
       });
-      /** A map command times the compiler's loading and phases as steps; `hot` keeps its reload timeline short. */
+
       const runCompiler = (measured: boolean) => Effect.gen(function*() {
         const load = tryMapPromise("load the map compiler", configPath, warmCompiler);
         const { run, report, reportHandleWarnings } = yield* measured ? load.pipe(step("load compiler")) : load;
@@ -132,11 +132,11 @@ export class MapBuild extends Context.Service<MapBuild, {
         return run;
       });
       const compileBundle = (measured: boolean) => runCompiler(measured).pipe(Effect.andThen(compiled), step("compile"));
-      /** TypeScriptToLua built the bundle, so it reloads as one module. */
+
       const wholeBundle = Effect.gen(function*() {
         const code = yield* tryMapPromise("read map bundle", bundlePath, () => Bun.file(bundlePath).text());
         const map = yield* tryMapPromise("read map bundle source map", `${bundlePath}.map`, () => Bun.file(`${bundlePath}.map`).text());
-        // MODULE_HEAD puts one line before the bundle's first.
+
         const sourceMap = () => map.replace(/"mappings":"/, "\"mappings\":\";");
         return { entry: BUNDLE_MODULE, modules: [{ name: BUNDLE_MODULE, code, sourceMap }] } satisfies BundledModules;
       });
@@ -144,7 +144,7 @@ export class MapBuild extends Context.Service<MapBuild, {
         Effect.flatMap((run) => {
           const modules = run.modules();
           if (modules !== undefined) return Effect.succeed(modules);
-          // The bundle on disk lacks the replaced texts.
+
           if (sources !== undefined && sources().size > 0) {
             return Effect.fail(new MapBuildFailure({ operation: "compile replaced sources", path: configPath, cause: "TypeScriptToLua builds this bundle itself (sourceMapTraceback)" }));
           }
@@ -152,7 +152,7 @@ export class MapBuild extends Context.Service<MapBuild, {
         }),
         step("compile"),
       );
-      // `hot` compiles every save into the same bundle, so a map command usually finds it current.
+
       const currentBundle = Effect.gen(function*() {
         const age = yield* tryMapSync("check compiled bundle", bundlePath, () => freshBundleAge(bundlePath, compileInputs, Date.now()));
         if (age === undefined) return yield* compileBundle(true);
@@ -168,18 +168,18 @@ export class MapBuild extends Context.Service<MapBuild, {
   }
 }
 
-/** The newest modification time under `path`: a file's own, or a directory's newest file's. */
+
 function newestModification(path: string): number {
   const stats = statSync(path);
   if (!stats.isDirectory()) return stats.mtimeMs;
   return readdirSync(path).reduce((newest, name) => Math.max(newest, newestModification(join(path, name))), 0);
 }
 
-/**
- * Seconds since `bundle` was compiled when it and its source map exist and
- * it is newer than every file under `inputs`; undefined when it must be
- * compiled again.
- */
+
+
+
+
+
 export function freshBundleAge(bundle: string, inputs: readonly string[], now: number): number | undefined {
   if (!existsSync(bundle) || !existsSync(`${bundle}.map`)) return undefined;
   const compiledAt = statSync(bundle).mtimeMs;
@@ -202,7 +202,7 @@ const rebuildMap = (map: string, compile: Effect.Effect<CompiledBundle, BuildFai
   yield* Console.log(`rebuilt ${map}`);
 }));
 
-/** The base map's other files (terrain, doodads, strings ...), which the container must carry unchanged. */
+
 export const baseMapEntryNames = (list: string, replacements: readonly ArchiveEntry[]) => {
   const replaced = new Set(replacements.map(({ entry }) => entry.toLowerCase()));
   return list.split(/\r?\n/).filter((entry) => entry.length > 0 && !replaced.has(entry.toLowerCase()));
@@ -218,11 +218,11 @@ const baseMapFiles = (packager: string, base: string, replacements: readonly Arc
   return entries;
 });
 
-/**
- * Puts the 512-byte map header in front of the archive: over the existing
- * one, or before an archive saved without one, since MPQ readers find the
- * archive at any 512-byte boundary.
- */
+
+
+
+
+
 export const writeHeader = (map: string, header: Uint8Array) => tryMapSync("write map header", map, () => {
   const file = openSync(map, "r+");
   let magic = "";
@@ -310,22 +310,22 @@ const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compil
   yield* Console.log(`built ${out}`);
 }));
 
-// ---------------------------------------------------------------- operations
 
-/** Hot reload reads files through FileIO's ability; object data without a war3map.w3a gets one holding only that ability. */
+
+
 export function withFileIo(objectData: readonly GeneratedFile[] = []): readonly GeneratedFile[] {
   return objectData.some(({ entry }) => entry === "war3map.w3a") ? objectData : [...objectData, { entry: "war3map.w3a", contents: abilityData() }];
 }
 
 const PACKAGER_SOURCE = join(import.meta.dir, "../../native/map-pack.c");
 
-/**
- * The map packager at `path`; when it is missing or was compiled from other
- * source (its `.source-sha256` stamp), compiles wisp:native/map-pack.c there
- * against nixpkgs StormLib, or the StormLib installed under `STORMLIB_PREFIX`
- * with the compiler `CC` when they are set (CI runners have no nix). Each
- * compile writes its own file and renames it in.
- */
+
+
+
+
+
+
+
 export const ensurePackager = (path: string) => Effect.suspend(() => {
   const source = new Bun.CryptoHasher("sha256").update(readFileSync(PACKAGER_SOURCE)).digest("hex");
   const stamp = `${path}.source-sha256`;
@@ -350,7 +350,7 @@ const compilePackager = (path: string, source: string, stamp: string) => Effect.
   });
 }).pipe(step("compile map packager"));
 
-/** The Lua 5.3 compiler's package at `directory`; when it is missing, links nixpkgs' lua5_3 there, which keeps it from garbage collection so later builds need no nix. */
+
 export const ensureLua = (directory: string) => Effect.suspend(() => existsSync(join(directory, "bin/luac")) ? Effect.void : Effect.gen(function*() {
   yield* tryMapSync("create Lua directory", directory, () => mkdirSync(dirname(directory), { recursive: true }));
   yield* runProcess("link Lua compiler", directory, ["nix", "build", "--out-link", directory, "nixpkgs#lua5_3"]);
@@ -362,7 +362,7 @@ const tryMapPromise = <A>(operation: string, path: string, run: () => PromiseLik
 const tryMapSync = <A>(operation: string, path: string, run: () => A) =>
   Effect.try({ try: run, catch: (cause) => new MapBuildFailure({ operation, path, cause }) });
 
-/** Captures a child's result; interruption kills and reaps the owned child. */
+
 export const captureProcess = (
   operation: string,
   path: string,
@@ -387,7 +387,7 @@ export const captureProcess = (
     }),
   );
 
-/** Runs a command to completion; interrupting the step kills and reaps it. */
+
 export const runProcess = (operation: string, path: string, command: readonly string[]) =>
   captureProcess(operation, path, command, { stdout: "ignore" }).pipe(Effect.flatMap(({ exitCode, stderr }) =>
     exitCode === 0
@@ -404,17 +404,17 @@ const entryList = (entries: readonly ArchiveEntry[]) => entries.map(({ entry, so
 const writeEntryList = (path: string, entries: readonly ArchiveEntry[]) =>
   tryMapSync("write entry list", path, () => writeFileSync(path, entryList(entries)));
 
-/**
- * The supplied map packager: extracts or replaces one archive entry,
- * war3map.lua by default, or every entry of a list in one archive opening.
- * Each entry is stored zlib-compressed, byte for byte: nothing is re-encoded.
- */
+
+
+
+
+
 function mapPack(packager: string) {
   return {
-    /** Later entries win, as separate replaces would. */
+
     replaceAll: (archive: string, entries: readonly ArchiveEntry[], list: string) =>
       writeEntryList(list, entries).pipe(Effect.andThen(runProcess(`replace ${entries.length} entries`, archive, [packager, "replace-list", archive, list]))),
-    /** Writes each entry to its `source`. */
+
     extractAll: (archive: string, entries: readonly ArchiveEntry[], list: string) =>
       writeEntryList(list, entries).pipe(Effect.andThen(runProcess(`extract ${entries.length} entries`, archive, [packager, "extract-list", archive, list]))),
     extract: (archive: string, file: string, entry = "war3map.lua") =>
@@ -424,20 +424,20 @@ function mapPack(packager: string) {
   };
 }
 
-/** A temporary directory under `parent`, removed with its scope. */
+
 const workDirectory = (parent: string) =>
   Effect.acquireRelease(
     tryMapSync("create work directory", parent, () => mkdtempSync(join(parent, "ts-map."))),
     (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
   );
 
-/**
- * Copies `source` to a staged copy of this process's own, lets `edit`
- * change and verify the copy, then renames it over `destination`. A failed
- * or interrupted edit removes the copy and leaves `destination` as it was;
- * concurrent builds of one destination never share a staged file. The copy is
- * writable even when `source` is a read-only stored input.
- */
+
+
+
+
+
+
+
 export const stageMap = <E>(source: string, destination: string, edit: (staged: string) => Effect.Effect<void, E>) =>
   Effect.acquireUseRelease(
     tryMapSync("stage map", destination, () => {
@@ -452,18 +452,18 @@ export const stageMap = <E>(source: string, destination: string, edit: (staged: 
 
 export interface ArchiveEntry {
   readonly entry: string;
-  /** The file whose bytes the archive entry must equal. */
+
   readonly source: string;
 }
 
-/** Add base assets and declared imports before generated files, so generated entries win collisions. */
+
 export const packageEntries = (
   replaceAll: (entries: readonly ArchiveEntry[]) => Effect.Effect<void, BuildFailure>,
   assets: readonly ArchiveEntry[],
   files: readonly ArchiveEntry[],
 ) => replaceAll([...assets, ...files]);
 
-/** Extracts every entry in one archive opening, then compares each with its source file, four at a time. */
+
 const verifyArchive = (packager: string, archive: string, entries: readonly ArchiveEntry[], scratch: string) => Effect.gen(function*() {
   const extracted = entries.map(({ entry }, index): ArchiveEntry => ({ entry, source: join(scratch, `verify-${index}`) }));
   yield* mapPack(packager).extractAll(archive, extracted, join(scratch, "verify-entries"));
@@ -478,7 +478,7 @@ const verifyArchive = (packager: string, archive: string, entries: readonly Arch
 const decode = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, path: string, value: unknown) =>
   Schema.decodeUnknownEffect(schema)(value).pipe(Effect.mapError((cause) => new MapBuildFailure({ operation: "decode", path, cause })));
 
-/** A JSON file decoded with `schema`. */
+
 const readJson = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, path: string) =>
   tryMapPromise("read JSON", path, () => Bun.file(path).json()).pipe(Effect.flatMap((json) => decode(schema, path, json)));
 
@@ -498,10 +498,10 @@ const ProjectPackage = Schema.Struct({
 });
 const InstalledPackage = Schema.Struct({ version: Schema.String });
 
-/**
- * Checks Bun and the declared and installed TypeScript packages against
- * the project's toolchain lock before compiling or packaging the map.
- */
+
+
+
+
 export const verifyToolchain = (lockPath: string, packageDirectory: string) => Effect.gen(function*() {
   const text = yield* tryMapPromise("read toolchain lock", lockPath, () => Bun.file(lockPath).text());
   const lock = yield* decode(ToolchainLock, lockPath, yield* tryMapSync("parse toolchain lock", lockPath, () => Bun.TOML.parse(text)));

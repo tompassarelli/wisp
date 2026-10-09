@@ -1,19 +1,19 @@
-// `wisp menus ...`: drives Warcraft III's menus without clicks through Wisp's
-// menu page (wisp:docs/driving-warcraft.md).
-//   install RETAIL_DIR [--port N]   writes the menu page into the game's _retail_ folder
-//   remove RETAIL_DIR               removes it
-//   listen [--port N]               prints the menus' port and each request the menus send
-//   host --folder F --map FILE --name NAME [--password P] [--start] [--port N]
-//   join --name NAME --password P [--port N]
-//   start [--port N]                starts the hosted lobby
-//   leave [--port N]
+
+
+
+
+
+
+
+
+
 import { Console, Effect } from "effect";
 import { type Command, UsageFailure, flagValues } from "../command";
 import { DEFAULT_MENU_REPORT_PORT, type MenuSocket, connectMenus, hostLobby, installMenuPage, joinLobby, leaveLobby, listenForMenus, removeMenuPage, startLobby } from "../menus";
 import { step } from "../timings";
 import { waitForProcessStop } from "./hot";
 
-/** How long a command waits for the page's next report; it reports every 2 s. */
+
 const ANNOUNCE_SECONDS = 5;
 
 const flag = (args: readonly string[], name: string) => flagValues(args, name)[0];
@@ -25,7 +25,7 @@ const reportPort = (args: readonly string[]) => Effect.gen(function*() {
   return port;
 });
 
-/** Runs `use` on the menus' socket, found through the page's next report. */
+
 const withMenus = <A, E>(args: readonly string[], use: (menus: MenuSocket) => Effect.Effect<A, E>) => Effect.scoped(Effect.gen(function*() {
   const reports = yield* listenForMenus(yield* reportPort(args));
   const address = yield* reports.waitForAddress(ANNOUNCE_SECONDS).pipe(step("menus found"));

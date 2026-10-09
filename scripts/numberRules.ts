@@ -1,10 +1,10 @@
-// Reports Warcraft's number rules (wisp:plugins/number-rules.ts) for map
-// tsconfigs, as `bun run check` does for the TypeScript 7 checker, which runs
-// no plugins. TypeScript 7's API parses and resolves; the rules read its trees.
-// A file's findings depend only on its text, so they are cached per file in
-// build/number-rules.json; where each finding's identifier is declared, and
-// the type of each array whose length is read, are resolved again on every run.
-// Usage: bun node_modules/wisp/scripts/numberRules.ts MAP_TSCONFIG...
+
+
+
+
+
+
+
 import { mkdir, rename } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { API, type Checker, SymbolFlags, type Symbol as TsSymbol, type Type, TypeFlags } from "typescript-native/unstable/async";
@@ -30,7 +30,7 @@ interface Cache {
 
 const hash = (text: string) => Bun.hash(text).toString(36);
 
-/** Rule and parser changes invalidate every cached file. */
+
 async function cacheVersion(): Promise<string> {
   const rules = await Bun.file(resolve(import.meta.dir, "../plugins/number-rules.ts")).text();
   const parser: { readonly version: string } = await Bun.file(Bun.fileURLToPath(import.meta.resolve("typescript-native/package.json"))).json();
@@ -46,7 +46,7 @@ async function readCache(path: string, version: string): Promise<Cache["files"]>
   }
 }
 
-/** isHoleyArray (wisp:plugins/number-rules.ts) through TypeScript 7's checker. */
+
 async function isHoleyArray(checker: Checker, type: Type): Promise<boolean> {
   const mayBeUndefined = async (element: Type): Promise<boolean> => {
     if ((element.flags & (TypeFlags.Undefined | TypeFlags.Void)) !== 0) return true;
@@ -63,7 +63,7 @@ async function isHoleyArray(checker: Checker, type: Type): Promise<boolean> {
   return false;
 }
 
-/** 1-based line and UTF-16 column, as tsc reports them. */
+
 function position(text: string, offset: number): string {
   let line = 1;
   let lineStart = 0;
@@ -74,7 +74,7 @@ function position(text: string, offset: number): string {
   return `${line},${offset - lineStart + 1}`;
 }
 
-/** One line per finding, as tsc prints its own errors: `file(line,column): error TS9300: message`. */
+
 export async function numberRuleReport(
   configs: readonly string[],
   { cwd = process.cwd(), cachePath = resolve(cwd, "build/number-rules.json") }: { readonly cwd?: string; readonly cachePath?: string } = {},
@@ -93,7 +93,7 @@ export async function numberRuleReport(
       const { program, checker } = project;
       const names = await program.getSourceFileNames();
       const metadata = await Promise.all(names.map((name) => program.getSourceFileMetadata(name)));
-      // The compiler checks every file it compiles except declarations and installed libraries.
+
       const candidates = names.filter((_, index) => !metadata[index]?.isDefaultLibrary && !metadata[index]?.isFromExternalLibrary);
       const libraries = new Map<syntax.Path, Promise<boolean>>();
       const isDefaultLibrary = (path: syntax.Path) => {

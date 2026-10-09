@@ -1,8 +1,8 @@
-// Signed-in clients and their private desktops as systemd user services
-// (wisp:docs/doctor.md, "Clients as services"): `wisp client start|stop|status`.
-// A service belongs to the user's service manager, not to the command, agent
-// or terminal that started it, so a client keeps running after its starter
-// exits and stops only when asked.
+
+
+
+
+
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -18,15 +18,15 @@ export class ServiceProblem extends Schema.TaggedError<ServiceProblem>()("Servic
   }
 }
 
-/** The service that runs a client's private desktop. */
+
 export const desktopUnit = (name: string) => `wisp-desktop-${name}.service`;
-/** The service that runs a client's Battle.net launch command. */
+
 export const clientUnit = (name: string) => `wisp-client-${name}.service`;
 
-/** Each desktop service's output, where `start` reads the desktop's run folder from. */
+
 export const desktopLog = (name: string) => join(process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local/state"), "wisp/desktops", `${name}.log`);
 
-/** The desktop size the clone and private clients were set up for (wisp:docs/lan.md). */
+
 export const DESKTOP_RESOLUTION = "1920x1080";
 
 const run = (command: readonly string[]) => Effect.try({
@@ -37,11 +37,11 @@ const run = (command: readonly string[]) => Effect.try({
   catch: (cause) => new ServiceProblem({ problem: `${command.slice(0, 2).join(" ")}: ${String(cause)}` }),
 });
 
-/**
- * Runs `command` as the user service `unit`, its output appended to `log`,
- * with this process's PATH. A unit of that name still loaded (a launcher
- * whose game exited, a wrapper still waiting) is stopped first.
- */
+
+
+
+
+
 export const startService = (unit: string, command: readonly string[], log?: string) => Effect.gen(function*() {
   yield* run(["systemctl", "--user", "stop", unit]);
   if (log !== undefined) yield* Effect.try({ try: () => mkdirSync(dirname(log), { recursive: true }), catch: (cause) => new ServiceProblem({ problem: `create ${dirname(log)}: ${String(cause)}` }) });
@@ -53,7 +53,7 @@ export const startService = (unit: string, command: readonly string[], log?: str
   if (started.code !== 0) return yield* new ServiceProblem({ problem: `systemd-run ${unit}: ${started.err || `exit ${started.code}`}` });
 });
 
-/** `systemctl --user show`'s ActiveState and the time it entered it. */
+
 export const serviceState = (unit: string) => run(["systemctl", "--user", "show", unit, "--property=ActiveState", "--property=ActiveEnterTimestamp", "--property=MainPID"]).pipe(
   Effect.map(({ out }) => {
     const field = (key: string) => new RegExp(`^${key}=(.*)$`, "m").exec(out)?.[1] ?? "";
@@ -73,7 +73,7 @@ const readText = (path: string) => {
   }
 };
 
-/** The cgroup a process runs in, under the user's service manager. */
+
 const cgroupOf = (pid: number) => /^0::(.*)$/m.exec(readText(`/proc/${pid}/cgroup`) ?? "")?.[1];
 const parentOf = (pid: number) => {
   const stat = readText(`/proc/${pid}/stat`);
@@ -81,17 +81,17 @@ const parentOf = (pid: number) => {
 };
 const commandOf = (pid: number) => (readText(`/proc/${pid}/cmdline`) ?? "").split("\0").filter((arg) => arg !== "").join(" ");
 
-/** What keeps a process alive: the user service it runs under, or else the process that started it. */
+
 export type Owner = { readonly unit: string } | { readonly pid: number; readonly command: string };
 
-/**
- * The owner of `pid`. A capacity scope (machine-capacity) holds its programs
- * in a cgroup of their own; the scope's wrapper, the parent of its first
- * process, runs in the cgroup of whatever started it: a service, or a
- * terminal's or agent's scope. Programs the service manager adopted (a
- * daemonized wineserver) don't name the wrapper, so every process of the
- * scope is asked.
- */
+
+
+
+
+
+
+
+
 export const ownerOf = (pid: number): Owner | undefined => {
   const home = `/user@${process.getuid?.() ?? 0}.service/`;
   const leafOf = (cgroup: string) => cgroup.slice(cgroup.lastIndexOf("/") + 1);
@@ -114,30 +114,30 @@ export const ownerOf = (pid: number): Owner | undefined => {
 export const describeOwner = (owner: Owner | undefined) =>
   owner === undefined ? "gone" : "unit" in owner ? `service ${owner.unit}` : `not a service: started by pid ${owner.pid} (${owner.command.slice(0, 80)}), so it ends with that process`;
 
-/** Whether a private desktop run folder is live: its compositor's socket and display are there. */
+
 export const liveDesktop = (run: string) => existsSync(join(run, "runtime/wayland-0")) && existsSync(join(run, "display"));
 
-/** The private desktop launcher's own pid, from its run folder. */
+
 export const desktopPid = (run: string) => {
   const pid = Number(readText(join(run, "launcher-pid"))?.trim());
   return Number.isInteger(pid) && pid > 0 && existsSync(`/proc/${pid}`) ? pid : undefined;
 };
 
-/** The Wine processes of a prefix (its `pfx` folder), Battle.net's first. */
+
 export const prefixProcesses = (prefix: string): readonly ProcessInfo[] =>
   listProcesses().filter((process) => process.prefix === prefix).sort((a, b) => Number(/battle\.net/i.test(b.args.join(" "))) - Number(/battle\.net/i.test(a.args.join(" "))));
 
-/**
- * The private desktop service's command: the desktop launcher in a native
- * capacity scope (the high-weight slice the clients run in), as small as a
- * compositor needs.
- */
+
+
+
+
+
 export const desktopCommand = (capacity: string, desktop: string, name: string) => [
   process.execPath, capacity, "session", "--class", "native", "--memory-gib", "1.5", "--owner", `wisp-desktop-${name}`, "--",
   "bash", desktop, "start", "--resolution", DESKTOP_RESOLUTION,
 ];
 
-/** Starts `name`'s desktop service and returns its run folder once the desktop is live (the launcher prints "Run: DIR"). */
+
 export const startDesktop = (name: string, command: readonly string[], seconds = 60) => Effect.gen(function*() {
   const log = desktopLog(name);
   const offset = readText(log)?.length ?? 0;
@@ -155,7 +155,7 @@ export const startDesktop = (name: string, command: readonly string[], seconds =
   return yield* new ServiceProblem({ problem: `${name}: no live desktop within ${seconds} s (${log})` });
 });
 
-/** Points `name`'s `run` in the clients file at `runDir`, keeping every other field. */
+
 export const writeRun = (clientsFile: string, name: string, runDir: string) => Effect.try({
   try: () => {
     const file = JSON.parse(readFileSync(clientsFile, "utf8")) as { clients: { name: string; run: string }[] };
@@ -167,7 +167,7 @@ export const writeRun = (clientsFile: string, name: string, runDir: string) => E
   catch: (cause) => new ServiceProblem({ problem: `update ${clientsFile}: ${String(cause)}` }),
 });
 
-/** A helper beside a skill (`agents path SKILL`): the capacity helper and the private desktop launcher. */
+
 export const skillScript = (skill: string, script: string) => run(["agents", "path", skill]).pipe(
   Effect.flatMap((done) => (done.code === 0 && done.out !== "" ? Effect.succeed(join(dirname(done.out), script)) : Effect.fail(new ServiceProblem({ problem: `agents path ${skill}: ${done.err || `exit ${done.code}`}` })))),
 );

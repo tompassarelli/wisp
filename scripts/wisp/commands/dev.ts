@@ -1,12 +1,12 @@
-// `wisp dev`: one long-running command that answers every save
-// (wisp:docs/dev.md). It keeps a TypeScript 7 checker, the project's test
-// graph and processes for tests and a headless journey warm, and on each save
-// reports three signals: the saved files' type errors, the unit tests the
-// save can affect, and the journeys (the project's own in simulated clients
-// and the affected journey tests); then the project's whole type check.
-// With --data it also hot-reloads the map into running clients, as `hot
-// --watch` does. Each result prints with its time since the save; a new save
-// stops the previous one's work, except a hot reload, which finishes.
+
+
+
+
+
+
+
+
+
 import { type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { availableParallelism } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
@@ -29,42 +29,42 @@ import { step } from "../timings";
 import { TypeChecker, formatTypeError } from "../typeCheck";
 import { type HotProject, validateDataDirectories, waitForProcessStop } from "./hot";
 
-/** What a project declares for its dev loop; relative paths are under `root`. */
+
 export interface DevProject {
-  /** The project directory, where its tests and check command run. */
+
   readonly root: string;
-  /** Directories whose saves start a run; the root's own tsconfig, package and lock files rerun everything. */
+
   readonly sources: readonly string[];
   readonly typeCheck: {
-    /** tsconfig files whose programs check each saved file at once. */
+
     readonly projects: readonly string[];
-    /** The project's whole type check, run after each save. */
+
     readonly command: readonly string[];
   };
   readonly tests: TestDeclaration;
-  /** The headless journey played after each save: a module exporting the game's HeadlessProject, the export and the journey's name. */
+
   readonly journey?: { readonly module: string; readonly export: string; readonly name: string; readonly clients?: number };
-  /** With --data, each save also hot-reloads this map into those clients. */
+
   readonly hot?: HotProject;
 }
 
 const REGISTRY_RUN = join(import.meta.dir, "../registryRun.ts");
 const JOURNEY_RUN = join(import.meta.dir, "../journeyRun.ts");
 const TEST_WAIT = join(import.meta.dir, "../testWait.ts");
-/** Registry processes kept waiting for a save. */
+
 const REGISTRY_STANDBY = 6;
-/** CPUs from which the journey, the tests and the whole type check run at once rather than one after another. */
+
 const CONCURRENT_CPUS = 12;
-/** A test not seen before is expected to take this long. */
+
 const UNKNOWN_MS = { file: 300, registry: 40 };
-/** Files that rerun everything when they change at the root. */
+
 const PROJECT_FILE = /^(?:tsconfig[^/]*\.json|package\.json|bunfig\.toml|[^/]*\.lock)$/;
-/** Editors' swap, backup and probe files. */
+
 const EDITOR_FILE = /^(?:\..*|.*~|.*\.sw[a-p]|4913)$/;
-/** Lines of a failing test process's output that print. */
+
 const OUTPUT_LINES = 40;
 
-/** A file's text, or undefined when it can't be read. */
+
 function readIfPresent(path: string): string | undefined {
   try {
     return readFileSync(path, "utf8");
@@ -73,7 +73,7 @@ function readIfPresent(path: string): string | undefined {
   }
 }
 
-/** CPUs this process may keep busy: the machine's, or fewer under a Linux cgroup CPU quota. */
+
 function cpuBudget(): number {
   let budget = availableParallelism();
   const own = readIfPresent("/proc/self/cgroup")?.split("\n").find((line) => line.startsWith("0::"))?.slice(3);
@@ -90,7 +90,7 @@ const seconds = (since: number) => `${((Date.now() - since) / 1000).toFixed(3).p
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 const indent = (text: string) => text.split("\n").map((line) => `           ${line}`).join("\n");
 
-/** Every file under the sources and the root's project files, by content, so a save that changes nothing runs nothing. */
+
 class SavedFiles {
   private readonly hashes = new Map<string, number | bigint>();
 
@@ -101,7 +101,7 @@ class SavedFiles {
     for (const path of new Bun.Glob("*").scanSync({ cwd: root, onlyFiles: true })) if (PROJECT_FILE.test(path)) this.read(join(root, path));
   }
 
-  /** Whether the dev loop follows `path`. */
+
   follows(path: string): boolean {
     const local = relative(this.root, path);
     if (local.startsWith("..") || EDITOR_FILE.test(basename(path)) || local.split(sep).includes("node_modules")) return false;
@@ -112,7 +112,7 @@ class SavedFiles {
     return dirname(relative(this.root, path)) === ".";
   }
 
-  /** What changed among `paths` since they were last seen. */
+
   changes(paths: Iterable<string>): Changes {
     const changed: string[] = [];
     const created: string[] = [];
@@ -148,11 +148,11 @@ class SavedFiles {
 
 interface ProcessResult {
   readonly passed: number;
-  /** Failures to print, each a test and why. */
+
   readonly failures: readonly string[];
 }
 
-/** A Bun test process's count and, when it failed, its output. */
+
 function fileResult(paths: string, { exitCode, output }: ProcessOutput): ProcessResult {
   const passed = Number(/^\s*(\d+) pass$/m.exec(output)?.[1] ?? 0);
   if (exitCode === 0) return { passed, failures: [] };
@@ -164,7 +164,7 @@ function fileResult(paths: string, { exitCode, output }: ProcessOutput): Process
 const isRegistryResult = (value: unknown): value is RegistryResult =>
   typeof value === "object" && value !== null && "module" in value && "passed" in value && "failures" in value;
 
-/** A registry process's failures; a module it never reported failed to run. */
+
 function registryResult(modules: readonly TestUnit[], { exitCode, results, output }: ProcessOutput, local: (path: string) => string): ProcessResult {
   const reported = new Map(results.filter(isRegistryResult).map((result) => [result.module, result]));
   let passed = 0;
@@ -184,7 +184,7 @@ function registryResult(modules: readonly TestUnit[], { exitCode, results, outpu
 const isJourneyOutcome = (value: unknown): value is JourneyOutcome =>
   typeof value === "object" && value !== null && ("stopped" in value || ("lines" in value && "problems" in value));
 
-/** The TypeScript checker that answers each save failed to start or to check. */
+
 export class TypeCheckFailure extends Schema.TaggedError<TypeCheckFailure>()("TypeCheckFailure", {
   operation: Schema.String,
   problem: Schema.String,
@@ -197,11 +197,11 @@ export class TypeCheckFailure extends Schema.TaggedError<TypeCheckFailure>()("Ty
 const typeChecking = <A>(operation: string, run: () => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => new TypeCheckFailure({ operation, problem: describeCause(cause) }) });
 
-/** The hot reload's part of the loop, when --data names clients. */
+
 interface HotSide {
-  /** Hot-reloads the saved code; a request during a reload makes one more afterwards. */
+
   readonly request: (savedAt: number) => Effect.Effect<void>;
-  /** Prints new in-game error reports and desyncs. */
+
   readonly poll: Effect.Effect<void>;
   readonly sourceDirectory: string;
 }
@@ -215,12 +215,12 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
   const durations = new Map<string, number>();
   const expected = (unit: TestUnit) => durations.get(unit.path) ?? UNKNOWN_MS[unit.kind];
   const cpus = cpuBudget();
-  // Tests and the whole check yield the CPUs to the journey and the saved files' check when they compete.
+
   const behind = Bun.which("nice") === null ? [] : ["nice", "-n", "10"];
-  // A test process keeps about two CPUs busy beside the journey and the saved
-  // files' check. Under a quota, work beyond it stalls every process, so the
-  // signals run in deadline order (the saved files' check and the unit tests,
-  // then the journeys, then the whole check) and test processes take turns.
+
+
+
+
   const unitProcesses = cpus < CONCURRENT_CPUS ? Math.max(1, cpus - 2) : Math.floor(cpus / 2) - 1;
   const turns = cpus < CONCURRENT_CPUS ? Semaphore.makeUnsafe(Math.max(1, cpus - 1)) : undefined;
   const checker = yield* Effect.acquireRelease(
@@ -260,7 +260,7 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
       return registryResult(process.units, output, local);
     }
     const started = Date.now();
-    // A per-file audit runs alone, so its saved files are its own.
+
     const audited = process.units.length === 1 ? audits.get(process.units[0]?.path ?? "") : undefined;
     const savedFiles = audited === undefined ? {} : { [SAVED_FILES_ENV]: JSON.stringify(audited) };
     const first = process.units[0];
@@ -269,15 +269,15 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
       ? yield* runProcess([...behind, globalThis.process.execPath, "test", ...process.units.map((unit) => unit.path)], root, { ...(project.tests.envForFiles?.(process.units.map((unit) => unit.path)) ?? project.tests.env), ...savedFiles })
       : yield* standby.run({ file: first?.path ?? "", env: savedFiles } satisfies WaitingTestRequest);
     const elapsed = Date.now() - started;
-    // An audit of saved files is timed apart from a whole one; a shared process's time is split by what each file was expected to take.
+
     if (audited !== undefined && first !== undefined) durations.set(`audit ${first.path}`, elapsed);
     else for (const unit of process.units) durations.set(unit.path, (elapsed * expected(unit)) / Math.max(1, process.work));
     return fileResult(process.units.map((unit) => local(unit.path)).join(", "), output);
   }).pipe(Effect.catch((failure) => Effect.succeed({ passed: 0, failures: [`${process.units.map((unit) => local(unit.path)).join(", ")}: ${failure.message}`] })));
 
-  /** Runs tests in about `count` processes; failures print as they land. */
+
   const runSide = (units: readonly TestUnit[], audits: ReadonlyMap<string, readonly string[]>, count: number, savedAt: number) => Effect.gen(function*() {
-    // An audit's saved files and a waiting process are one file's own.
+
     const alone = (path: string) => audits.has(path) || waiting.has(path);
     const expectedHere = (unit: TestUnit) => (audits.has(unit.path) ? durations.get(`audit ${unit.path}`) ?? UNKNOWN_MS.file : expected(unit));
     const processes = packTests(units, expectedHere, (path) => (alone(path) ? `alone ${path}` : plan.group(path)), count)
@@ -305,7 +305,7 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
     yield* Console.log(`${seconds(savedAt)}unit tests: ${counts(passed, failed)} (${scope(units, selection)}${audits})`);
   });
 
-  /** The project's own journey: what to print in the journeys line, and its report when it found problems. */
+
   const ownJourney = Effect.gen(function*() {
     if (project.journey === undefined || journeys === undefined) return undefined;
     const { module, name, clients = 2 } = project.journey;
@@ -320,10 +320,10 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
     return { summary: `${name}: ${plural(outcome.problems, "problem")}`, report: outcome.lines.join("\n") };
   });
 
-  /**
-   * The journey tests a save affects, each in its own process, beside the
-   * project's own journey: one line when both end. Both start after `before`.
-   */
+
+
+
+
   const allJourneys = (selection: Selection, savedAt: number, before: Effect.Effect<void>) => Effect.gen(function*() {
     const units = selection.units.filter((unit) => plan.isJourney(unit.path));
     const tests = units.length === 0 ? Effect.succeed(undefined) : runSide(units, new Map(), units.length, savedAt);
@@ -337,12 +337,12 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
     yield* Console.log(`${seconds(savedAt)}journeys: ${parts.join("; ")}${own?.report === undefined ? "" : `\n${indent(own.report)}`}`);
   });
 
-  /** Everything one save runs; `changes` is undefined for the first run, which runs every test. */
+
   const run = (changes: Changes | undefined, savedAt: number) => Effect.gen(function*() {
     const saved = changes === undefined ? [] : [...changes.changed, ...changes.created, ...changes.deleted];
     const projectFiles = saved.filter((path) => files.isProjectFile(path));
     if (changes !== undefined && (projectFiles.length > 0 || changes.created.length > 0 || changes.deleted.length > 0)) {
-      // A checker that can't reopen keeps answering from the old program; the next project change tries again.
+
       yield* typeChecking("reopen the projects", () => checker.reopen()).pipe(Effect.catch((failure) => Console.log(failure.message)));
     }
     const selection: Selection = changes === undefined
@@ -355,21 +355,21 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
       yield* Console.log("packages changed: restart wisp dev to load them");
     }
     const changedModules = changes?.changed.filter((path) => !files.isProjectFile(path)) ?? [];
-    // As `hot --watch` does, the first run publishes the map too.
+
     if (hot !== undefined && (changes === undefined || saved.some((path) => path.startsWith(`${hot.sourceDirectory}${sep}`)))) yield* Effect.forkScoped(hot.request(savedAt));
     const savedTypes = changedModules.length === 0 ? Effect.void : types(changedModules, savedAt);
-    // Under a quota the journeys wait for the unit tests, so those have the CPUs.
+
     const unitsDone = Deferred.makeUnsafe<void>();
     const units = unitTests(selection, savedAt).pipe(Effect.ensuring(Effect.sync(() => Deferred.doneUnsafe(unitsDone, Effect.void))));
     const answers = Effect.all([savedTypes, units, allJourneys(selection, savedAt, turns === undefined ? Effect.void : Deferred.await(unitsDone))], { concurrency: "unbounded", discard: true });
-    // Under a quota the whole check waits for the answers above.
+
     if (turns !== undefined) yield* Effect.andThen(answers, wholeCheck(savedAt));
     else yield* Effect.all([answers, wholeCheck(savedAt)], { concurrency: "unbounded", discard: true });
   });
 
   for (const [path, why] of plan.alwaysRun()) yield* Console.log(`runs on every save: ${local(path)}: ${why}`);
 
-  // Saves arrive as file events; a batch of events 10 ms apart is one save.
+
   const events = yield* Effect.acquireRelease(Queue.unbounded<string>(), (queue) => Queue.shutdown(queue));
   const firstEvent = { at: 0 };
   for (const directory of [...project.sources.map((source) => join(root, source)), root]) {
@@ -394,7 +394,7 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
   yield* Console.log(`watching ${project.sources.join(", ")} in ${root}`);
   const worker = Effect.forever(Effect.gen(function*() {
     const paths = new Set([yield* Queue.take(events)]);
-    // An editor's save can be several events; they make one change.
+
     yield* Effect.sleep("10 millis");
     for (const path of yield* Queue.clear(events)) paths.add(path);
     const savedAt = firstEvent.at;
@@ -408,7 +408,7 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
   yield* waitForProcessStop;
 }));
 
-/** `dev [--data DIR ...]`: the dev loop, hot-reloading into those clients when --data names them. */
+
 export const makeDev = (project: DevProject): Command => (args) => Effect.gen(function*() {
   const data = flagValues(args, "data");
   if (data.length === 0) return yield* loop(project, undefined);
@@ -428,7 +428,7 @@ export const makeDev = (project: DevProject): Command => (args) => Effect.gen(fu
     const desyncs = yield* Desyncs;
     const frameCosts = yield* FrameCosts;
     const loadFailures = modelFailureBridge(yield* GameFiles, hotProject.filePrefix);
-    // Reports from before the loop started are old news.
+
     yield* sourceErrors.changed(directories);
     yield* frameCosts.changed(directories);
     const report = (effect: Effect.Effect<unknown, CommandFailure>) => effect.pipe(Effect.asVoid, Effect.catch((failure) => Console.log(failure.message)));

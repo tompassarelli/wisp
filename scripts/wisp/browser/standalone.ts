@@ -1,4 +1,4 @@
-/// <reference lib="dom" />
+
 import "./headlessRender";
 import type { SoundCue } from "../../../src/headless/client";
 import type { StandaloneFrame, StandaloneInput } from "../standalone";
@@ -22,7 +22,7 @@ function input(): StandaloneInput {
     axisX = pad.axes[0] ?? 0; axisY = -(pad.axes[1] ?? 0);
   }
   const help = pad ? `${pad.id} · A attack · X special · B/Y jump · triggers shield` : "Arrows / WASD move · J attack · K special · Space jump · L grab · Shift shield · Enter pause";
-  // Rewriting identical text still relayouts and repaints the whole page every frame.
+
   if (status.textContent !== help) status.textContent = help;
   return { buttons: [...buttons], axisX, axisY };
 }
@@ -36,7 +36,7 @@ let audioPlayed = 0, audioEvents = 0, audioReadyEvents = 0, audioDecodedAssets =
 let soundRequests = 0;
 const soundQueue: (() => void)[] = [];
 async function soundBytes(cue: SoundCue): Promise<{ path: string; bytes: ArrayBuffer }> {
-  // Leave HTTP connections available for frame delivery while sound assets load.
+
   if (soundRequests === 4) await new Promise<void>((resolve) => soundQueue.push(resolve));
   else soundRequests++;
   try {
@@ -117,7 +117,7 @@ async function run(): Promise<void> {
     if ("error" in frame) throw new Error(frame.error);
     return { frame, requestedMs, respondedMs, readyMs: performance.now() };
   };
-  // Frames are requested ahead of drawing so the map's step overlaps the browser's draw and a slow step is absorbed.
+
   const queue: ReturnType<typeof loadFrame>[] = [];
   let requested = 0;
   const request = () => {

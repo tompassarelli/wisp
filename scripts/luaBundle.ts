@@ -1,9 +1,9 @@
-// The Lua bundle with its source map, rebuilt from cached modules. It equals
-// TypeScriptToLua 1.37.1's getBundleResult: the same code, and the source map
-// that source-map 0.7.6 serializes. Each module's walk (its text and mappings)
-// and its encoded mappings are kept between compiles; only edited modules are
-// walked again, and only the deltas that cross a module boundary are encoded
-// again. Anything this module does not reproduce is left to TypeScriptToLua.
+
+
+
+
+
+
 import type ts from "typescript";
 import { getBundleResult, sourceMapTracebackBundlePlaceholder } from "typescript-to-lua/dist/transpilation/bundle";
 import { getEmitPathRelativeToOutDir } from "typescript-to-lua/dist/transpilation/transpiler";
@@ -11,7 +11,7 @@ import type { EmitFile, ProcessedFile } from "typescript-to-lua/dist/transpilati
 import { escapeString } from "typescript-to-lua/dist/LuaPrinter";
 import { formatPathToLuaPath, trimExtension } from "typescript-to-lua/dist/utils";
 
-/** The fields of a source-map SourceNode the bundle reads. */
+
 interface Node {
   readonly children: readonly (Node | string)[];
   readonly line: number | null;
@@ -21,23 +21,23 @@ interface Node {
   readonly sourceContents: Record<string, unknown>;
 }
 
-/** One module's mappings, lines counted from the line its table entry starts on. */
+
 interface Walk {
   readonly text: string;
   readonly newlines: number;
-  /** Per serialized mapping: line, column, local source (-1 unmapped), original line, original column, local name (-1 none). */
+
   readonly mappings: Int32Array;
   readonly sources: readonly string[];
   readonly names: readonly string[];
 }
 
-/** A module's mappings encoded for given global source and name indices. */
+
 interface Encoded {
   readonly sourceIndices: readonly number[];
   readonly nameIndices: readonly number[];
-  /** The first mapping's column; its other fields are encoded against the previous module. */
+
   readonly head: string;
-  /** Up to the first named mapping when that is not the first mapping, whose name is encoded against the previous module. */
+
   readonly middle: string;
   readonly crossName: boolean;
   readonly tail: string;
@@ -58,24 +58,24 @@ interface Cached {
   module?: BundledModule;
 }
 
-/** A module of a bundle, as a hot reload sends it (wisp:src/runtime/modules.ts). */
+
 export interface BundledModule {
-  /** The name the bundle's require uses. */
+
   readonly name: string;
-  /** Its code: the body of its function in the bundle's module table. */
+
   readonly code: string;
-  /** The source map of its hot-reload chunk, MODULE_HEAD + code + MODULE_TAIL, as JSON. */
+
   readonly sourceMap: () => string;
 }
 
 export interface BundledModules {
   readonly entry: string;
-  /** In bundle order. */
+
   readonly modules: readonly BundledModule[];
 }
 
 const FIELDS = 6;
-// A module's entry in the bundle's module table, around its code.
+
 const entryHead = (path: string) => `[${path}] = function(...) \n`;
 const ENTRY_TAIL = " end,\n";
 const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -99,12 +99,12 @@ const vlq = (value: number) => (value >= -SMALL && value <= SMALL ? SMALL_VLQ[va
 const isNode = (chunk: unknown): chunk is Node =>
   typeof chunk === "object" && chunk !== null && Array.isArray((chunk as { children?: unknown }).children);
 
-/**
- * Walks a module's table entry as SourceNode.toStringWithSourceMap does. The
- * entry starts on a new line with no active mapping, so its mappings depend
- * on nothing before it. Undefined when the generator would reject a mapping or
- * the tree holds source contents.
- */
+
+
+
+
+
+
 function walkModule(head: string, content: Node | string, tail: string): Walk | undefined {
   const parts: string[] = [];
   const mappings: number[] = [];
@@ -202,7 +202,7 @@ function walkModule(head: string, content: Node | string, tail: string): Walk | 
   };
 }
 
-/** Drops a mapping equal to the one before it on its line, as the generator's serializer does. */
+
 function dedupe(mappings: readonly number[]): Int32Array {
   const kept: number[] = [];
   for (let index = 0; index < mappings.length; index += FIELDS) {
@@ -217,11 +217,11 @@ function dedupe(mappings: readonly number[]): Int32Array {
   return Int32Array.from(kept);
 }
 
-/**
- * Encodes a module's mappings after its first one. Their deltas stay inside
- * the module, except the first named mapping's name when the first mapping has
- * none; that one is encoded at assembly against the previous module.
- */
+
+
+
+
+
 function encodeModule(walk: Walk, sourceIndices: readonly number[], nameIndices: readonly number[]): Encoded {
   const m = walk.mappings;
   let previousLine = m[0]!;
@@ -277,11 +277,11 @@ function encodeModule(walk: Walk, sourceIndices: readonly number[], nameIndices:
   return { sourceIndices, nameIndices, head: vlq(m[1]!), middle, crossName, tail, lastMapped, lastNamed, firstNamed };
 }
 
-/**
- * The source map of a module's hot-reload chunk. The chunk's head is one line,
- * as the table entry's head is, and neither is mapped, so the walk's lines and
- * columns are the chunk's.
- */
+
+
+
+
+
 function chunkSourceMap(walk: Walk): string {
   const m = walk.mappings;
   let mappings = "";
@@ -316,18 +316,18 @@ function chunkSourceMap(walk: Walk): string {
 const sameIndices = (left: readonly number[], right: readonly number[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
-/** Builds bundles from processed modules, reusing what each module produced last time. */
+
 export class LuaBundler {
   private readonly modules = new Map<string, Cached>();
-  /** The modules of the last bundle built here; undefined when TypeScriptToLua built it. */
+
   bundled: BundledModules | undefined;
 
-  /** The bundle for these resolved modules, or undefined when TypeScriptToLua must build it. */
+
   bundle(program: ts.Program, files: readonly ProcessedFile[]): [ts.Diagnostic[], EmitFile] | undefined {
     this.bundled = undefined;
     const options = program.getCompilerOptions();
     if (options.sourceMapTraceback) return undefined;
-    // The rest of the bundle around an empty module table: the require shim, entry call and diagnostics.
+
     const [diagnostics, empty] = getBundleResult(program, []);
     const table = "____modules = {\n";
     const tableAt = empty.code.indexOf(`${table}}\n`);
@@ -389,7 +389,7 @@ export class LuaBundler {
           previousName = name;
         }
         mappings += encoded.middle;
-        // The module's last mapped and named mappings carry the state to the next module.
+
         const { lastMapped, lastNamed, firstNamed } = encoded;
         if (encoded.crossName) {
           const name = nameIndices[m[firstNamed + 5]!]!;

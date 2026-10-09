@@ -1,7 +1,7 @@
-// The LAN switch (putting an offline client on the LAN provider before it
-// joins) reads and patches the running game's memory, so it isn't kept in
-// this repository (wisp:docs/clean-room.md). When the owner has it, it lives
-// at LAN_PLUGIN; this is the only file that loads it.
+
+
+
+
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Schedule } from "effect";
@@ -13,14 +13,14 @@ import { requireCapability } from "../builds";
 export const LAN_PLUGIN = join(process.env["HOME"] ?? "", ".local/share/wisp-private/lan/index.ts");
 
 export interface LanPlugin {
-  /** The game executable's file version. */
+
   readonly version: (exePath: string) => string;
   readonly versionForPort?: (port: number) => string | undefined;
-  /** Puts client `pid` on the LAN provider until its next provider rebuild. */
+
   readonly enableLan: (pid: number, exePath: string, menus: MenuSocket, log: (line: string) => void) => Effect.Effect<void, LanFailure>;
 }
 
-/** What's missing for joining LAN games, or undefined when the plugin is installed. */
+
 export const lanPluginProblem = (path = LAN_PLUGIN) => (existsSync(path) ? undefined
   : `joining LAN games needs Wisp's private LAN plugin at ${path}, and it isn't installed on this machine`);
 

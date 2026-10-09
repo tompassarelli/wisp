@@ -25,7 +25,7 @@ const residentKiB = (pid: number) => {
   return Number(/^VmRSS:\s+(\d+)/m.exec(status)?.[1] ?? 0);
 };
 
-/** Runs the unmodified GoWarcraft3 command, never a map simulation. */
+
 export const checkDummy = <E, R>(options: DummyOptions<E, R>) => Effect.suspend(() => {
   const started = performance.now();
   let step = "host startup";
@@ -56,7 +56,7 @@ export const checkDummy = <E, R>(options: DummyOptions<E, R>) => Effect.suspend(
         const before = lines.length;
         const started = performance.now();
         step = `dummy ${index + 1} startup`;
-        // Bun exposes resourceUsage; Effect's ChildProcess doesn't expose the CPU figures this check records.
+
         const run = yield* Effect.acquireRelease(Effect.try({ try: () => {
           const child = Bun.spawn([options.program, "-v", "10200", "-dial=false", "-n", `dummy${index + 1}`, "127.0.0.1", String(host.port)], { stdin: "pipe", stdout: "pipe", stderr: "pipe" });
           return { child, stdout: new Response(child.stdout).text(), stderr: new Response(child.stderr).text() };

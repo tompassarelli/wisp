@@ -1,19 +1,19 @@
-// Declarative Warcraft frames: a typed definition of one frame tree generates
-// a static FDF file, the TOC that loads it, and a map-side TypeScript module
-// that creates the tree with Warcraft's own natives (BlzLoadTOCFile,
-// BlzCreateFrame by name, BlzGetFrameByName for children). See wisp:docs/ui.md.
+
+
+
+
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ArchiveEntry } from "./mapBuild";
 
-/** Frame types the generator writes; each is a native FDF frame type. */
+
 export const FRAME_TYPES = ["FRAME", "BACKDROP", "TEXT", "GLUETEXTBUTTON"] as const;
 export type FrameType = (typeof FRAME_TYPES)[number];
 
 export const FRAME_POINTS = ["TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT"] as const;
 export type FramePoint = (typeof FRAME_POINTS)[number];
 
-/** Warcraft templates whose defining FDF is included before a generated tree. */
+
 export const WARCRAFT_TEMPLATES = ["ScriptDialogButton", "EscMenuBackdrop"] as const;
 const WARCRAFT_TEMPLATE_FDFS = new Map<string, string>([
   ["ScriptDialogButton", "UI\\FrameDef\\UI\\ScriptDialog.fdf"],
@@ -22,7 +22,7 @@ const WARCRAFT_TEMPLATE_FDFS = new Map<string, string>([
 
 export interface FrameAnchor {
   readonly point: FramePoint;
-  /** Key of another frame in this definition, or "root"; the parent when absent. */
+
   readonly relative?: string;
   readonly relativePoint?: FramePoint;
   readonly x: number;
@@ -30,49 +30,49 @@ export interface FrameAnchor {
 }
 
 export interface FrameNode {
-  /** The binding's field name; the frame's FDF name is the definition name plus this key, capitalized. */
+
   readonly key: string;
   readonly type: FrameType;
-  /** A template from this definition's frame names, `templates`, or WARCRAFT_TEMPLATES; inherited with its children. */
+
   readonly inherits?: string;
   readonly width?: number;
   readonly height?: number;
   readonly points?: readonly FrameAnchor[];
-  /** TEXT: static text written into the FDF. GLUETEXTBUTTON: the label the generated create function sets. */
+
   readonly text?: string;
-  /** TEXT only; required for text to render. */
+
   readonly font?: { readonly file: string; readonly size: number };
   readonly justify?: { readonly horizontal: "LEFT" | "CENTER" | "RIGHT"; readonly vertical: "TOP" | "MIDDLE" | "BOTTOM" };
-  /** BACKDROP only: a texture stretched over the whole frame. */
+
   readonly texture?: string;
-  /** False disables the frame after creation, so art and labels never take a click from the buttons under them. */
+
   readonly enabled?: false;
   readonly children?: readonly FrameNode[];
 }
 
 export interface FrameDefinition {
-  /** The root frame's FDF name and the prefix of every child's name; also names the generated files. */
+
   readonly name: string;
   readonly type: FrameType;
   readonly width: number;
   readonly height: number;
-  /** Where the generated create function places the root on the screen (BlzFrameSetAbsPoint). */
+
   readonly at?: { readonly point: FramePoint; readonly x: number; readonly y: number };
   readonly texture?: string;
-  /** Frame level the create function applies to the root, above other menus. */
+
   readonly level?: number;
-  /** Other loaded templates this definition may inherit, such as ones from another TOC the map loads first. */
+
   readonly templates?: readonly string[];
   readonly children: readonly FrameNode[];
 }
 
 export interface GeneratedFrames {
-  /** Archive path of the FDF file, in war3mapImported\. */
+
   readonly fdfEntry: string;
   readonly tocEntry: string;
   readonly fdf: string;
   readonly toc: string;
-  /** Map-side TypeScript: the typed handles and their create function. */
+
   readonly bindings: string;
 }
 
@@ -88,7 +88,7 @@ const RESERVED_KEYS = new Set(["root", "toc"]);
 const capitalize = (key: string) => key.charAt(0).toUpperCase() + key.slice(1);
 const flatten = (nodes: readonly FrameNode[]): FrameNode[] => nodes.flatMap((node) => [node, ...flatten(node.children ?? [])]);
 
-/** Every problem in a definition, in source order; empty when it generates. */
+
 export function frameDefinitionProblems(definition: FrameDefinition): string[] {
   const problems: string[] = [];
   if (!IDENTIFIER.test(definition.name)) problems.push(`definition name "${definition.name}" is not an identifier`);
@@ -134,7 +134,7 @@ export function frameDefinitionProblems(definition: FrameDefinition): string[] {
   return problems;
 }
 
-/** FDF numbers in fixed notation: Warcraft's parser reads no exponents. */
+
 const fdfNumber = (value: number) => {
   if (!Number.isFinite(value)) throw new FrameDefinitionError([`number ${value} is not finite`]);
   const fixed = value.toFixed(6).replace(/\.?0+$/, "");
@@ -164,7 +164,7 @@ function fdfFrame(definition: FrameDefinition, node: FrameNode, name: string, pa
   return lines;
 }
 
-/** A map-side number as the binary32 value Warcraft holds, which the number rules require of a literal. */
+
 const scriptNumber = (value: number) => {
   if (!Number.isFinite(value)) throw new FrameDefinitionError([`number ${value} is not finite`]);
   return String(Math.fround(value));
@@ -185,7 +185,7 @@ function bindingsSource(definition: FrameDefinition, tocEntry: string): string {
     "",
     `/** Loads the TOC, then creates the ${definition.name} tree; context tells copies apart. */`,
     `export function create${definition.name}(parent: framehandle, context: number): ${type} | undefined {`,
-    // Module state would be shared by a headless run's clients; loading a TOC again is harmless.
+
     `  if (!BlzLoadTOCFile(${definition.name.toUpperCase()}_TOC)) return undefined;`,
     `  const root = BlzCreateFrame(${escaped(definition.name)}, parent, 0, context);`,
   ];
@@ -202,7 +202,7 @@ function bindingsSource(definition: FrameDefinition, tocEntry: string): string {
   return lines.join("\n");
 }
 
-/** The FDF, TOC and bindings for one definition; throws FrameDefinitionError listing every problem. */
+
 export function generateFrames(definition: FrameDefinition): GeneratedFrames {
   const problems = frameDefinitionProblems(definition);
   if (problems.length > 0) throw new FrameDefinitionError(problems);
@@ -215,14 +215,14 @@ export function generateFrames(definition: FrameDefinition): GeneratedFrames {
     return source === undefined ? [] : [source];
   }))];
   const includes = sources.length === 0 ? [] : [...sources.map((source) => `IncludeFile "${source}",`), ""];
-  // A TOC lists one FDF per line and needs a line break after the last.
+
   return { fdfEntry, tocEntry, fdf: `${[...includes, ...rootLines].join("\n")}\n`, toc: `${fdfEntry}\r\n\r\n`, bindings: bindingsSource(definition, tocEntry) };
 }
 
-/**
- * Writes a definition's FDF and TOC into `importDir` and its bindings to
- * `bindingsFile`, and returns the archive entries a MapBuild's `imports` takes.
- */
+
+
+
+
 export function writeFrames(definition: FrameDefinition, importDir: string, bindingsFile: string): ArchiveEntry[] {
   const generated = generateFrames(definition);
   mkdirSync(importDir, { recursive: true });

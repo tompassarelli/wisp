@@ -1,10 +1,10 @@
-// The map description (war3map.w3i), the map file header and the Lua config()
-// that declares the same players, all derived from the supplied map
-// declaration. The base map's terrain, camera and environment settings pass
-// through unchanged.
+
+
+
+
 import { longBrackets } from "./lua";
 
-/** Every slot is a human-race user; every force is allied with allied victory and shared vision. */
+
 export interface MapDeclaration {
   readonly author: string;
   readonly description: string;
@@ -22,7 +22,7 @@ interface PlayerRecord {
   readonly name: string;
   readonly x: number;
   readonly y: number;
-  /** Ally low, ally high, enemy low and enemy high start-location priority masks. */
+
   readonly priorities: readonly [number, number, number, number];
 }
 
@@ -33,20 +33,20 @@ interface ForceRecord {
 }
 
 export interface MapInfo {
-  /** Format, save count, editor and game versions. */
+
   readonly versions: Uint8Array;
   readonly name: string;
   readonly author: string;
   readonly description: string;
   readonly suggestedPlayers: string;
-  /** Camera bounds and margins, then playable width and height. */
+
   readonly bounds: Uint8Array;
   readonly flags: number;
-  /** Tileset through water settings, kept verbatim from the base map. */
+
   readonly environment: Uint8Array;
   readonly players: readonly PlayerRecord[];
   readonly forces: readonly ForceRecord[];
-  /** Upgrade, tech and random unit and item tables. */
+
   readonly tables: Uint8Array;
 }
 
@@ -59,22 +59,22 @@ const ALLIED_VICTORY = 0x2;
 const SHARED_VISION = 0x4;
 
 type Field = "byte" | "int" | "string";
-/** Format 39's fields from the tileset through the water settings. */
+
 const ENVIRONMENT: readonly [Field, number][] = [
-  ["byte", 1], // Tileset.
-  ["int", 2], // Loading screen background and crest.
-  ["string", 4], // Loading screen model, text, title and subtitle.
-  ["int", 1], // Game data set.
-  ["string", 4], // Prologue path, text, title and subtitle.
-  ["int", 7], // Fog type, start, end, density and color; terrain fog style and sky.
-  ["int", 4], // Terrain fog linear start, end, maximum opacity and height.
-  ["int", 1], // Global weather.
-  ["string", 1], // Sound environment.
-  ["byte", 1], // Light environment tileset.
-  ["int", 1], // Water color.
-  ["int", 3], // Script language, graphics modes and game data version.
-  ["int", 3], // Forced default, maximum and minimum camera zoom.
-  ["int", 10], // Water opacity, reflection, emission, edges, waves and colors.
+  ["byte", 1],
+  ["int", 2],
+  ["string", 4],
+  ["int", 1],
+  ["string", 4],
+  ["int", 7],
+  ["int", 4],
+  ["int", 1],
+  ["string", 1],
+  ["byte", 1],
+  ["int", 1],
+  ["int", 3],
+  ["int", 3],
+  ["int", 10],
 ];
 
 interface Cursor {
@@ -193,11 +193,11 @@ export function encodeMapInfo(info: MapInfo): Uint8Array {
   ]);
 }
 
-/**
- * The base map's description with the declared name, players and forces. A
- * declared slot that the base map already has keeps its start location, race
- * skin and priorities declared by the map configuration.
- */
+
+
+
+
+
 export function declareMap(base: MapInfo, name: string, map: MapDeclaration): MapInfo {
   return {
     ...base,
@@ -228,7 +228,7 @@ export function declareMap(base: MapInfo, name: string, map: MapDeclaration): Ma
   };
 }
 
-/** The 512-byte header in front of the archive, which map lists read. */
+
 export function mapHeader(info: MapInfo): Uint8Array {
   const header = new Uint8Array(512);
   const fields = concat([new TextEncoder().encode("HM3W"), int32Bytes(0), stringBytes(info.name), int32Bytes(info.flags), int32Bytes(info.players.length)]);
@@ -247,11 +247,11 @@ function luaReal(value: number): string {
   return Number.isInteger(value) ? value.toFixed(1) : String(value);
 }
 
-/**
- * `function mapConfig()`: the Lua config generated for this
- * description (InitCustomPlayerSlots, InitCustomTeams and
- * InitAllyPriorities).
- */
+
+
+
+
+
 export function mapConfig(info: MapInfo): string {
   if (info.players.some((player) => player.controller !== USER || player.race !== HUMAN)) {
     throw new Error("map config supports only human-race user slots");

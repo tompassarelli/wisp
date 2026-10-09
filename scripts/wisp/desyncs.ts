@@ -1,7 +1,7 @@
-// Desyncs: Warcraft's own desync reports, compared across the clients. When the
-// game detects a desync, each client writes Errors/<UTC time> <id>/Desync.txt
-// beside its CustomMapData: the turn and every engine subsystem's checksum. The
-// values that differ between the clients name the subsystem that diverged.
+
+
+
+
 import { dirname, join } from "node:path";
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect";
 import { MalformedGameFile } from "./boundary";
@@ -9,7 +9,7 @@ import { GameFiles, type GameFileFailure } from "./gameFiles";
 
 export interface DesyncSummary {
   readonly turn: number;
-  /** Engine values in report order, such as `tempest checksum` or `next birth tag`. */
+
   readonly values: readonly (readonly [name: string, value: string])[];
 }
 
@@ -17,7 +17,7 @@ const ASSERTION_START = "<Exception.Assertion:>";
 const ASSERTION_END = "<:Exception.Assertion>";
 const Turn = Schema.FiniteFromString.check(Schema.isInt(), Schema.isBetween({ minimum: 0, maximum: 0xffffffff }));
 
-/** A Desync.txt's turn and engine values; undefined while the game is still writing them. */
+
 export const decodeDesyncSummary = (file: string, text: string): Effect.Effect<DesyncSummary | undefined, MalformedGameFile> =>
   Effect.gen(function*() {
     const lines = text.split(/\r?\n/);
@@ -41,11 +41,11 @@ export const decodeDesyncSummary = (file: string, text: string): Effect.Effect<D
 
 export interface DesyncDifference {
   readonly name: string;
-  /** One value per summary, in the summaries' order. */
+
   readonly values: readonly string[];
 }
 
-/** Every engine value that is not the same in all summaries. */
+
 export function divergedValues(summaries: readonly DesyncSummary[]): readonly DesyncDifference[] {
   const tables = summaries.map(({ values }) => new Map(values));
   const names = [...new Set(summaries.flatMap(({ values }) => values.map(([name]) => name)))];
@@ -56,19 +56,19 @@ export function divergedValues(summaries: readonly DesyncSummary[]): readonly De
 }
 
 export interface DesyncReport {
-  /** Clients, by their --data position, whose reports are compared. */
+
   readonly clients: readonly number[];
-  /** Each compared client's desync turn. */
+
   readonly turns: readonly number[];
   readonly differences: readonly DesyncDifference[];
-  /** Clients that wrote no report within PARTNER_WAIT_MILLIS of the first. */
+
   readonly missing: readonly number[];
   readonly paths: readonly string[];
-  /** Milliseconds from the last compared report's write until this comparison. */
+
   readonly latency: number;
 }
 
-/** Every client writes its report within milliseconds of the others; one that hasn't after this, won't. */
+
 export const PARTNER_WAIT_MILLIS = 1000;
 
 const FileFailureCode = Schema.Struct({ code: Schema.String });
@@ -80,7 +80,7 @@ function missingDirectory(failure: GameFileFailure): boolean {
 interface Pending { readonly client: number; readonly path: string; readonly summary: DesyncSummary; readonly modified: number }
 
 export class Desyncs extends Context.Service<Desyncs, {
-  /** A desync every client has reported since the previous look; undefined until there is one. */
+
   readonly changed: Effect.Effect<DesyncReport | undefined, GameFileFailure | MalformedGameFile>;
 }>()("wisp/Desyncs") {
   static readonly layer = (dataDirectories: readonly string[]) => Layer.effect(Desyncs, Effect.gen(function*() {
@@ -88,10 +88,10 @@ export class Desyncs extends Context.Service<Desyncs, {
     const directories = dataDirectories.map((directory) => join(dirname(directory), "Errors"));
     const reports = (directory: string) => files.list(directory).pipe(
       Effect.catchTag("GameFileFailure", (failure) => missingDirectory(failure) ? Effect.succeed([]) : Effect.fail(failure)),
-      // Folder names start with their UTC time, so name order is write order.
+
       Effect.map((entries) => [...entries].sort()),
     );
-    // Reports that predate this session are old news, including when no Errors folder exists yet.
+
     const seen = yield* Effect.forEach(directories, (directory) => reports(directory).pipe(Effect.map((entries) => new Set(entries))));
     const pending = new Map<number, Pending>();
     let firstPending = 0;
@@ -100,11 +100,11 @@ export class Desyncs extends Context.Service<Desyncs, {
         if (pending.has(client)) continue;
         for (const name of yield* reports(directory)) {
           if (seen[client]?.has(name)) continue;
-          // Crash reports share the folder and have no Desync.txt.
+
           const path = join(directory, name, "Desync.txt");
           const stored = yield* files.read(path);
           if (stored === undefined) continue;
-          // A malformed report fails once, not on every look.
+
           const summary = yield* decodeDesyncSummary(path, stored.text).pipe(Effect.tapError(() => Effect.sync(() => seen[client]?.add(name))));
           if (summary === undefined) continue;
           seen[client]?.add(name);

@@ -5,7 +5,7 @@ import { parseActionLog } from "./lan/actionLog";
 export interface ReplayCommand {
   readonly turn: number;
   readonly timeMs: number;
-  /** Offset in the decompressed game-data stream, not the compressed .w3g. */
+
   readonly offset: number;
   readonly playerId: number;
   readonly raw: string;
@@ -24,8 +24,8 @@ export interface NativeReplay {
   readonly records: readonly { readonly offset: number; readonly id: number; readonly raw: string }[];
 }
 
-// w3gjs 4.3.0's private fields are ordinary properties. This narrow adapter
-// retains bytes at its existing block boundaries before its melee decoder drops them.
+
+
 interface RawGameParser {
   parser: { offset: number; buffer: Buffer };
   actionParser: { parse: (bytes: Buffer, post202?: boolean) => Action[] };
@@ -53,7 +53,7 @@ export async function importNativeReplay(bytes: Buffer): Promise<NativeReplay> {
   };
   parser.on("gamedatablock", (block: GameDataBlock) => {
     if (block.id !== 0x1f && block.id !== 0x1e) return;
-    // A zero-duration continuation belongs to the same host turn.
+
     if (block.timeIncrement > 0) turn++;
     timeMs += block.timeIncrement;
     block.commandBlocks.forEach((command, index) => {
@@ -67,7 +67,7 @@ export async function importNativeReplay(bytes: Buffer): Promise<NativeReplay> {
   return { format: "wisp-w3g-actions-1", engine: info.subheader, players: info.metadata.playerRecords, slots: info.metadata.slotRecords, map: info.metadata.map, turns: turn + 1, timeMs, commands, records };
 }
 
-/** Compare every retained action with the same host's decoded action log. */
+
 export function compareReplayHost(replay: NativeReplay, hostText: string) {
   const host = parseActionLog(hostText).actions;
   const actions = replay.commands.flatMap(command => command.actions.map(action => ({ ...action, turn: command.turn, pid: command.playerId })));

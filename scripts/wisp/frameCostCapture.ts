@@ -1,5 +1,5 @@
-// Native meter samples, kept in order so host tools can compute full-run
-// percentiles and the same 120-frame windows that perf native compares.
+
+
 import { MAX_FRAME_COST_CAPTURE } from "../../src/runtime/frameCostCapture";
 import { preloadLines } from "./boundary";
 
@@ -25,7 +25,7 @@ export interface CaptureDistribution {
   readonly max: number;
 }
 
-/** Rejects incomplete captures, missing clocks and captures that crossed a code reload. */
+
 export function parseFrameCostCapture(text: string): FrameCostCapture {
   const lines = preloadLines(text);
   if (lines === undefined) throw new Error("frame capture is not a complete Preload file");
@@ -46,7 +46,7 @@ export function parseFrameCostCapture(text: string): FrameCostCapture {
   return { run, version, clockStepUs, elapsedMs, samples };
 }
 
-/** Percentiles of every recorded callback, in microseconds; p95/p99 use nearest rank. */
+
 export function captureDistribution(capture: FrameCostCapture): CaptureDistribution {
   const sorted = capture.samples.map(({ luaUs }) => luaUs).sort((a, b) => a - b);
   if (sorted.length === 0) throw new Error("frame capture has no samples");

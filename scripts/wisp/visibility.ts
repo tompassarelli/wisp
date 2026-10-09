@@ -1,37 +1,37 @@
-// Render visibility: what a player can see that the game considers hidden or
-// gone, without pixels. It reads the scene report (scene.ts) with the facts of
-// every model the game draws (models.ts) and the cameras the game shows a
-// match through. Warcraft keeps a model's emitters running at any alpha, scale
-// or time scale and plays a destroyed effect's death animation where it
-// stands, so a hidden effect is out of sight only where no camera can see
-// anything it draws. Plain functions, like scene.ts.
+
+
+
+
+
+
+
 import { reportedModel } from "../../src/runtime/scene";
 import { type Box, type ModelFacts, type Vector3, drawsNothing, hiddenEmitters, modelReach } from "./models";
 import type { SceneKind, SceneProblem, SceneReport } from "./scene";
 
-/** A Warcraft camera as the game sets its fields, in world units and degrees. Roll is zero. */
+
 export interface CameraView {
-  /** The point it looks at: its target position, with the z offset above the ground there. */
+
   readonly target: Vector3;
   readonly distance: number;
-  /** CAMERA_FIELD_ANGLE_OF_ATTACK: 270 looks straight down, 360 level. */
+
   readonly angleOfAttack: number;
-  /** CAMERA_FIELD_ROTATION: 90 looks along +y. */
+
   readonly rotation: number;
-  /** CAMERA_FIELD_FIELD_OF_VIEW, across the frame's width. */
+
   readonly fieldOfView: number;
-  /** The frame's width over its height. */
+
   readonly aspect: number;
-  /** CAMERA_FIELD_FARZ: nothing farther is drawn. */
+
   readonly farZ: number;
 }
 
 export interface VisibilityExpectations {
-  /** What each model draws, keyed by its path as the game names it. Every model a kind names needs an entry. */
+
   readonly models: Readonly<Record<string, ModelFacts>>;
-  /** Every camera a player may see a match through, in the coordinates of `parking`. */
+
   readonly cameras: readonly CameraView[];
-  /** Where the game parks the effects it hides. */
+
   readonly parking: readonly Vector3[];
 }
 
@@ -40,13 +40,13 @@ const radians = (degrees: number) => (degrees * Math.PI) / 180;
 const dot = (a: Vector, b: Vector) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a: Vector, b: Vector): Vector => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
-/** A camera's axes and the planes bounding its frame, which every box checked against it shares. */
+
 interface CameraFrame {
   readonly eye: Vector;
   readonly right: Vector;
   readonly up: Vector;
   readonly forward: Vector;
-  /** Each plane bounding the frame, as a distance that is negative outside it. */
+
   readonly planes: readonly ((corner: Vector) => number)[];
 }
 
@@ -77,10 +77,10 @@ function cameraFrame(camera: CameraView): CameraFrame {
   return frame;
 }
 
-/**
- * Whether any of `box` can be inside the camera's frame. Conservative: a box
- * outside the frame only past a corner of it still counts as seen.
- */
+
+
+
+
 export function boxSeen(box: Box, camera: CameraView): boolean {
   const { eye, right, up, forward, planes } = cameraFrame(camera);
   const corners: Vector[] = [];
@@ -108,7 +108,7 @@ interface Sighting {
   readonly box: Box;
 }
 
-/** Per declaration: its facts by model, and where each parked model is first seen from, which no report changes. */
+
 const prepared = new WeakMap<VisibilityExpectations, { readonly facts: ReadonlyMap<string, ModelFacts>; readonly sightings: Map<string, Sighting | undefined> }>();
 
 function preparedFor(expected: VisibilityExpectations) {
@@ -120,7 +120,7 @@ function preparedFor(expected: VisibilityExpectations) {
   return entry;
 }
 
-/** The first parking place and camera from which a parked model's mesh or particles can be seen, if any. */
+
 function sighting(expected: VisibilityExpectations, model: string, boxes: readonly Box[]): Sighting | undefined {
   const { sightings } = preparedFor(expected);
   if (sightings.has(model)) return sightings.get(model);
@@ -139,17 +139,17 @@ function sighting(expected: VisibilityExpectations, model: string, boxes: readon
   return found;
 }
 
-/**
- * Everything a player could see that the game considers hidden or gone, and
- * every model the game names that draws nothing:
- * - a model a kind names that is empty, has no facts, or has no triangles,
- *   particles or light;
- * - effects in view but hidden by alpha, scale or a flat matrix whose model
- *   keeps emitting particles;
- * - parked effects whose mesh or particles reach into a camera's frame from a
- *   parking place;
- * - effects destroyed in view whose death animation emits particles.
- */
+
+
+
+
+
+
+
+
+
+
+
 export function visibilityProblems(report: SceneReport, kinds: readonly SceneKind[], expected: VisibilityExpectations): readonly SceneProblem[] {
   const { facts } = preparedFor(expected);
   const named = new Map<string, { readonly model: string; readonly names: string[] }>();

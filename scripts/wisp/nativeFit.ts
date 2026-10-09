@@ -1,24 +1,24 @@
-// Headless prediction against the frame meter's native overlay
-// (wisp:docs/frame-cost.md#checking-against-warcraft): a headless run's
-// per-frame samples (`perf --samples`) become the windows the overlay shows,
-// 120 frames read every 30, each frame's time a whole number of the native
-// clock's steps, and the windows' medians, 95th percentiles and maxima are
-// compared with the overlay's. `fitNativeCost` chooses the native call and
-// collector costs that bring the predictions closest to readings.
+
+
+
+
+
+
+
 import { type FrameWork, type NativeCostModel, nativeFrameCost } from "../../src/headless/nativeCost";
 import { type FrameCostCapture, parseFrameCostCapture } from "./frameCostCapture";
 
-/** A share of native the prediction may miss by: the cost box's 20%. */
+
 export const NATIVE_TOLERANCE = 0.2;
 
-/** The overlay's window and how often it is read (wisp:docs/frame-cost.md#the-overlay). */
+
 const WINDOW_FRAMES = 120;
 const WINDOW_STRIDE = 30;
 
-/** Warcraft's clock step in its frame-cost reports (clock=976.56), when the readings name none. */
+
 export const NATIVE_CLOCK_STEP_MS = 0.97656;
 
-/** One overlay reading: a window's median, 95th percentile and maximum Lua time per frame, in ms. */
+
 export interface OverlayWindow {
   readonly median: number;
   readonly p95?: number;
@@ -27,11 +27,11 @@ export interface OverlayWindow {
 
 export interface NativeReadings {
   readonly windows: readonly OverlayWindow[];
-  /** The native clock's step, in ms. */
+
   readonly clockStepMs: number;
 }
 
-/** The windows' medians: of their medians, of their 95th percentiles (when shown) and of their maxima, in ms. */
+
 export interface WindowSummary {
   readonly median: number;
   readonly p95?: number;
@@ -42,11 +42,11 @@ export interface WindowSummary {
 const record = (value: unknown): Record<string, unknown> => (typeof value === "object" && value !== null ? value as Record<string, unknown> : {});
 const finite = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : undefined);
 
-/**
- * Overlay readings from JSON: `{windows: [{median, p95?, max}], clockStepMs?}`,
- * or a bot session's result (`frame_cost_overlay.windows[].lua_ms`), as a
- * game's session tooling writes it.
- */
+
+
+
+
+
 export function parseNativeReadings(text: string): NativeReadings {
   if (text.trimStart().startsWith("function PreloadFiles")) return frameCostCaptureReadings(parseFrameCostCapture(text));
   const root = record(JSON.parse(text));
@@ -66,7 +66,7 @@ export function parseNativeReadings(text: string): NativeReadings {
 
 const SAMPLE = /^frame (\d+) p(\d+) instructions=(\d+) lua-us=\d+ natives=(\d+) alloc-bytes=(\d+) typed=(\d+)$/;
 
-/** Each client's frames from `perf --samples` output, in order, by player slot. */
+
 export function parsePerfSamples(text: string): Map<number, FrameWork[]> {
   const bySlot = new Map<number, FrameWork[]>();
   for (const line of text.split(/\r?\n/)) {
@@ -81,19 +81,19 @@ export function parsePerfSamples(text: string): Map<number, FrameWork[]> {
 }
 
 const sorted = (values: readonly number[]) => [...values].sort((a, b) => a - b);
-/** The middle value, the mean of the two middle ones for an even count, as the overlay computes it. */
+
 const median = (values: readonly number[]) => {
   const order = sorted(values);
   const middle = Math.floor(order.length / 2);
   return order.length % 2 === 1 ? order[middle]! : (order[middle - 1]! + order[middle]!) / 2;
 };
-/** Nearest rank, as the overlay computes it. */
+
 const rank = (values: readonly number[], share: number) => {
   const order = sorted(values);
   return order[Math.max(0, Math.min(order.length - 1, Math.ceil(share * order.length) - 1))]!;
 };
 
-/** Windows of actually measured callback costs, without prediction or clock-step resampling. */
+
 export function frameCostCaptureReadings(capture: FrameCostCapture): NativeReadings {
   const times = capture.samples.map(({ luaUs }) => luaUs / 1000);
   const windows: OverlayWindow[] = [];
@@ -105,12 +105,12 @@ export function frameCostCaptureReadings(capture: FrameCostCapture): NativeReadi
   return { windows, clockStepMs: capture.clockStepUs / 1000 };
 }
 
-/**
- * Per-frame times as the native overlay shows them: each frame a whole number
- * of clock steps, a time between two steps landing on either as often as its
- * place between them (a fixed seed, so a prediction repeats), then 120-frame
- * windows every 30 frames, summarized as the overlay is.
- */
+
+
+
+
+
+
 export function overlayWindows(frameUs: readonly number[], clockStepMs: number): OverlayWindow[] {
   const step = clockStepMs * 1000;
   let seed = 12345;
@@ -134,7 +134,7 @@ export function summarizeWindows(windows: readonly OverlayWindow[]): WindowSumma
   };
 }
 
-/** What the model predicts the overlay shows for these frames. */
+
 export const predictedOverlay = (model: NativeCostModel, frames: readonly FrameWork[], clockStepMs: number) =>
   summarizeWindows(overlayWindows(frames.map((work) => nativeFrameCost(model, work).callbacksUs), clockStepMs));
 
@@ -148,9 +148,9 @@ export interface NativeCheck {
   readonly name: string;
   readonly native: WindowSummary;
   readonly predicted: WindowSummary;
-  /** predicted / native - 1, per value the readings hold. */
+
   readonly errors: { readonly median: number; readonly p95?: number; readonly max: number };
-  /** Median and 95th percentile within NATIVE_TOLERANCE; a run whose readings lack p95 can't pass. */
+
   readonly passed: boolean;
 }
 
@@ -167,7 +167,7 @@ export function checkNative(model: NativeCostModel, item: NativeCase): NativeChe
 const percent = (share: number) => `${share >= 0 ? "+" : ""}${(share * 100).toFixed(0)}%`;
 const ms = (value: number) => value.toFixed(2);
 
-/** One line per check, in the words a developer reads. */
+
 export function nativeCheckLines(check: NativeCheck): string[] {
   const { native, predicted, errors } = check;
   return [
@@ -179,10 +179,10 @@ export function nativeCheckLines(check: NativeCheck): string[] {
   ];
 }
 
-/** The overlay's maxima are single frames, a collection or a hitch: they count a quarter as much as the median and p95 when fitting. */
+
 const MAX_WEIGHT = 0.25;
 
-/** How far a model's predictions are from the cases' readings: squared log ratios, weighted. */
+
 function misfit(model: NativeCostModel, cases: readonly NativeCase[]): number {
   let total = 0;
   for (const item of cases) {
@@ -195,11 +195,11 @@ function misfit(model: NativeCostModel, cases: readonly NativeCase[]): number {
   return total;
 }
 
-/**
- * The native call and collector costs, to a quarter µs up to 6 and 12 µs,
- * that bring `base`'s predictions closest to the cases' readings; the Lua
- * speed factor, host rate and typing cost stay `base`'s, each measured apart.
- */
+
+
+
+
+
 export function fitNativeCost(base: NativeCostModel, cases: readonly NativeCase[]): NativeCostModel {
   let best = { model: base, misfit: Number.POSITIVE_INFINITY };
   const tryCosts = (call: number, collector: number) => {
@@ -208,7 +208,7 @@ export function fitNativeCost(base: NativeCostModel, cases: readonly NativeCase[
     const value = misfit(model, cases);
     if (value < best.misfit) best = { model, misfit: value };
   };
-  // Whole microseconds first, then quarters around the best of them.
+
   for (let call = 0; call <= 6; call++) for (let collector = 0; collector <= 12; collector++) tryCosts(call, collector);
   const { nativeCallUs, collectorUsPerKb } = best.model;
   for (let call = -4; call <= 4; call++) for (let collector = -4; collector <= 4; collector++) tryCosts(nativeCallUs + call / 4, collectorUsPerKb + collector / 4);

@@ -1,11 +1,11 @@
-/// <reference lib="dom" />
+
 import type { Terrain } from "../terrain";
 import { terrainRows } from "../terrainMesh";
 import { waterMesh, waterTable, waterTexture, type WaterTable } from "../water";
 
 type TextureReader = (path: string) => Promise<HTMLCanvasElement>;
 type AssetReader = (path: string) => Promise<ArrayBuffer>;
-/** The scene fog the models draw with, and Definitive's height falloff when it has one. */
+
 export interface WaterFog {
   readonly color: readonly number[];
   readonly start: number;
@@ -85,7 +85,7 @@ function frameTexture(gl: WebGL2RenderingContext, path: string, readTexture: Tex
   return loading;
 }
 
-/** The terrain's water, blended over everything already drawn, testing but not writing depth. Returns whether any water drew. */
+
 export async function drawWater(gl: WebGL2RenderingContext, terrain: Terrain, frame: number, view: Float32Array, projection: Float32Array, fog: WaterFog | undefined, readTexture: TextureReader, readAsset: AssetReader): Promise<boolean> {
   const key = JSON.stringify(terrain);
   let loading = prepared.get(key);

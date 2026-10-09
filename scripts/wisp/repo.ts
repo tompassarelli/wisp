@@ -1,5 +1,5 @@
-// Wisp's own commands, for work on this repository.
-// Usage (from the Wisp checkout): bun wisp COMMAND [ARGUMENTS]
+
+
 import { runCli } from "./cli";
 
 process.exit(await runCli("bun wisp", {

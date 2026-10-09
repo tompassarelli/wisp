@@ -2,12 +2,12 @@ import type { ReproInspection } from "../../src/runtime/repro";
 
 export interface ReproFieldDiff {
   readonly path: string;
-  /** Null means the canonical field is absent at this frame. */
+
   readonly before: string | null;
   readonly after: string | null;
 }
 
-/** Stable lexical field-path order; values remain the consumer's exact canonical text. */
+
 export function diffReproStates(before: ReproInspection, after: ReproInspection): ReproFieldDiff[] {
   const left = new Map(before.fields.map(field => [field.path, field.value]));
   const right = new Map(after.fields.map(field => [field.path, field.value]));

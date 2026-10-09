@@ -6,7 +6,7 @@ export interface TerrainTileLayer {
   readonly variation: number;
 }
 
-/** Blight replaces its corner's ground and sorts after every ground ID. */
+
 export function terrainTileLayers(corners: readonly [TerrainPoint, TerrainPoint, TerrainPoint, TerrainPoint]): TerrainTileLayer[] {
   const tiles = corners.map(point => (point.flags & 2) !== 0 ? "blight" as const : point.ground);
   return [...new Set(tiles)].sort((a, b) => a === "blight" ? 1 : b === "blight" ? -1 : a - b).map((tile, index) => ({
@@ -15,7 +15,7 @@ export function terrainTileLayers(corners: readonly [TerrainPoint, TerrainPoint,
   }));
 }
 
-/** Atlas edges are inset half a pixel so linear sampling cannot borrow the next tile. */
+
 export function terrainTileUV(width: number, height: number, mask: number, variation: number): readonly [number, number, number, number] {
   const columns = width > height ? 8 : 4;
   const full = mask === 15, variant = variation & 15;
@@ -24,7 +24,7 @@ export function terrainTileUV(width: number, height: number, mask: number, varia
   return [column / columns + 0.5 / width, row / 4 + 0.5 / height, (column + 1) / columns - 0.5 / width, (row + 1) / 4 - 0.5 / height];
 }
 
-/** Tileset paths come from the player's table, including custom installed tilesets. */
+
 export function terrainBlightPath(bytes: Uint8Array, tileset: string): string {
   let section = "";
   for (const raw of new TextDecoder().decode(bytes).split(/\r?\n/)) {

@@ -1,6 +1,6 @@
-// The tuning panel `wisp tune` serves: one row per tunable, grouped, with a
-// slider and a field that apply on release, and Keep and Reset. It loads
-// nothing from the network.
+
+
+
 export const TUNE_PAGE = `<!doctype html>
 <html lang="en">
 <head>

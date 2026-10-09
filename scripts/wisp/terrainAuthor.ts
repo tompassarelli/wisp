@@ -22,7 +22,7 @@ function painter(bytes: Uint8Array, tile: string, endpoints: readonly TerrainGri
   } };
 }
 
-/** Paints an inclusive one-point-wide integer line; ties step along both axes. */
+
 export function terrainLine(bytes: Uint8Array, tile: string, from: TerrainGridPoint, to: TerrainGridPoint): Uint8Array {
   const { output, paint } = painter(bytes, tile, [from, to]);
   let [x, y] = from;
@@ -39,7 +39,7 @@ export function terrainLine(bytes: Uint8Array, tile: string, from: TerrainGridPo
   return output;
 }
 
-/** Paints every grid point inside the inclusive rectangle; either corner order works. */
+
 export function terrainRectFill(bytes: Uint8Array, tile: string, first: TerrainGridPoint, second: TerrainGridPoint): Uint8Array {
   const { output, paint } = painter(bytes, tile, [first, second]);
   for (let y = Math.min(first[1], second[1]); y <= Math.max(first[1], second[1]); y++) {

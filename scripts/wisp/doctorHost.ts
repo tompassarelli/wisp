@@ -1,8 +1,8 @@
-// What `doctor` does inside clients on private desktops (the clients file's
-// run folders): leaving a lobby through the menus' socket, or its Back button
-// without a menu page, the score screen with Escape, and the launcher's sign-in
-// form with the client's account. Doctor launches Warcraft III itself, through
-// the launcher's own --exec (wisp:scripts/wisp/doctor.ts).
+
+
+
+
+
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Layer } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -14,23 +14,23 @@ import { PlayProblem } from "./play";
 import { detectBuild, executableIn } from "./buildHost";
 import { requireCapability } from "./builds";
 
-/** The Back button of a lobby, on the 2560x1440 client frame. */
 
-/**
- * The empty fields' placeholders doctor clicks on Battle.net's sign-in pages
- * (password page, 7 Oct). The account page focuses its own field, so its name
- * is typed where the focus is, as wc3-login-field types it (desktop.enterLoginField).
- */
+
+
+
+
+
+
 const PLACEHOLDERS = { username: undefined, password: /^Password$/ } as const;
 
 const problem = (cause: { readonly message: string }) => new PlayProblem({ problem: cause.message });
 
-/** DoctorHands for the clients of a clients file, each on its own private desktop. */
+
 export const privateDoctorHands = (clientsFile: string) => Layer.effect(DoctorHands, Effect.gen(function*() {
   const config = yield* desktop.readClientsFile(clientsFile).pipe(Effect.mapError(problem));
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
-  /** The client's desktop, addressed at its window titled `title`. */
+
   const windowOf = (target: DoctorTarget, title: string) => Effect.gen(function*() {
     const entry = config.clients.find((client) => client.name === target.client.name);
     if (entry === undefined) return yield* new PlayProblem({ problem: `${target.client.name} isn't in ${clientsFile}` });
@@ -40,7 +40,7 @@ export const privateDoctorHands = (clientsFile: string) => Layer.effect(DoctorHa
     return { name: entry.name, documents: entry.documents, tools: config.tools, x11, wayland, window } satisfies desktop.Client;
   }).pipe(Effect.mapError((cause) => (cause instanceof PlayProblem ? cause : problem(cause))));
 
-  /** A lobby through the menus' socket when the client's page reports, else its Back button. */
+
   const leaveLobbyOf = (target: DoctorTarget) => Effect.scoped(Effect.gen(function*() {
     const menus = yield* reportedMenus(target.client.menuReportPort).pipe(Effect.catchTag("MenuFailure", () => Effect.void));
     if (menus !== undefined) return yield* leaveLobby(menus);
@@ -49,7 +49,7 @@ export const privateDoctorHands = (clientsFile: string) => Layer.effect(DoctorHa
     yield* desktop.click(game, profile.menus.lobbyBack.x, profile.menus.lobbyBack.y);
   })).pipe(Effect.mapError((cause) => (cause instanceof PlayProblem ? cause : problem(cause))));
 
-  // The checked rollback build ignores the menus' ScoreScreenClose and moved the score screen's Back to its top left; Escape leaves it (client B, 7 Oct 2026).
+
   const closeScoreOf = (target: DoctorTarget) => Effect.scoped(Effect.gen(function*() {
     const game = yield* windowOf(target, "Warcraft III");
     const profile = yield* requireCapability(yield* detectBuild(executableIn(target.prefix)), "menuDriving");
@@ -61,11 +61,11 @@ export const privateDoctorHands = (clientsFile: string) => Layer.effect(DoctorHa
     }
   })).pipe(Effect.mapError((cause) => (cause instanceof PlayProblem ? cause : problem(cause))));
 
-  /**
-   * One account field into the launcher's sign-in window: the account's
-   * command prints it, its bytes go straight to xdotool's stdin, and a failure
-   * names the command's exit, never its output.
-   */
+
+
+
+
+
   const enterLoginOf = (target: DoctorTarget, field: "username" | "password") => Effect.gen(function*() {
     const command = target.account?.[field];
     if (command === undefined) return yield* new PlayProblem({ problem: "it declares no account to sign in with" });

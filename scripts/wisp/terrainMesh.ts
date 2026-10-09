@@ -3,11 +3,11 @@ import { CELL, type Terrain, type TerrainPoint } from "./terrain";
 export interface TerrainCell {
   readonly x: number;
   readonly y: number;
-  /** South-west, south-east, north-west, north-east. */
+
   readonly corners: readonly [TerrainPoint, TerrainPoint, TerrainPoint, TerrainPoint];
 }
 
-/** Cells stop at the last row/column of points, including terrain outside camera bounds. */
+
 export function terrainCells(terrain: Terrain): TerrainCell[] {
   const cells: TerrainCell[] = [];
   for (let row = 0; row < terrain.rows - 1; row++) for (let column = 0; column < terrain.columns - 1; column++) {

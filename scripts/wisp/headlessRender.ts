@@ -17,26 +17,26 @@ import { GRAPHICS, type Graphics, type Lever, PROFILES, unsupportedLevers } from
 export type { Graphics } from "./graphicsProfiles";
 
 export interface HeadlessRenderProject {
-  /**
-   * The map's imported assets and Warcraft assets, kept outside the repository.
-   * Definitive accepts `_de.w3mod` and `_hd.w3mod` imports before base files.
-   */
+
+
+
+
   readonly readAsset: (path: string, graphics?: Graphics) => Promise<Uint8Array | undefined>;
-  /** Layer-aware reads record each attempted location and the selected import or stock file. */
+
   readonly resolveAsset?: (path: string, graphics: Graphics, body?: AssetLocation) => Promise<ResolvedRenderAsset>;
-  /** Unit object type IDs to model paths; effect models already name their paths. */
+
   readonly unitModels?: Readonly<Record<number, string>>;
   readonly width?: number;
   readonly height?: number;
   readonly chrome?: string;
   readonly preloadModels?: readonly string[];
-  /**
-   * The map's terrain: its war3map.w3e, or only its world bounds, and the map
-   * point the headless world's 0,0 stands on. No effect draws outside the
-   * world bounds (wisp:docs/headless.md, "Lighting, fog and sky", world bounds).
-   */
+
+
+
+
+
   readonly terrain?: { readonly w3e?: Uint8Array; readonly bounds?: WorldBounds; readonly origin?: readonly [number, number] };
-  /** Placed doodads and their object-data model variations, resolved from the map and install. */
+
   readonly doodads?: { readonly doo: Uint8Array; readonly models: Readonly<Record<string, string | readonly string[]>>; readonly skinIds?: boolean };
 }
 
@@ -48,36 +48,36 @@ export interface RenderScene {
   readonly camera: ReturnType<HeadlessClient["cameraPose"]>;
   readonly ui: ReturnType<HeadlessClient["frames"]["snapshot"]>;
   readonly environment: SceneEnvironment;
-  /** The cinematic filter drawn over the world and under the UI. */
+
   readonly filter?: ReturnType<HeadlessClient["cineFilterPose"]>;
-  /** Floating text tags, drawn over the world at their place and under the UI. */
+
   readonly textTags?: ReturnType<HeadlessClient["textTags"]["poses"]>;
-  /** The world bounds in headless coordinates, when the project gives its terrain. */
+
   readonly world?: WorldBounds;
   readonly terrain?: Terrain;
   readonly terrainDoodads?: { readonly placements: readonly TerrainDoodad[]; readonly models: Readonly<Record<string, string | readonly string[]>> };
 }
 
-/** The sky, day/night light and terrain fog the map last set (wisp:docs/headless.md, "Lighting, fog and sky"). */
+
 export interface SceneEnvironment extends Environment {
-  /** SetTerrainFogEx/ExV's fields, absent after ResetTerrainFog or before any fog is set. */
+
   readonly fog?: SceneFog;
-  /** BlzSetMinShadowCastingPointLightCount's count: how many omni lights at least cast shadows in Definitive. */
+
   readonly shadowCastingPointLights?: number;
 }
 
 export interface SceneFog {
-  /** 0 linear, 1 exponential, 2 exponential squared, 3 height (3.0). */
+
   readonly style: number;
   readonly zStart: number;
   readonly zEnd: number;
   readonly density: number;
-  /** Red, green and blue, 0 to 1. */
+
   readonly color: readonly [number, number, number];
-  /** A height fog's bottom and top in world Z, between which Definitive's falloff runs. */
+
   readonly heightStart?: number | undefined;
   readonly heightEnd?: number | undefined;
-  /** The linear range a height fog keeps, which Classic draws. */
+
   readonly linearStart?: number | undefined;
   readonly linearEnd?: number | undefined;
   readonly maxLinearDensity?: number | undefined;
@@ -97,10 +97,10 @@ function sceneEnvironment(client: HeadlessClient): SceneEnvironment {
   return { ...environment, dayNight: { ...environment.dayNight }, ...(drawn === undefined ? {} : { fog: drawn }), shadowCastingPointLights: client.scenery.minShadowCastingPointLightCount };
 }
 
-/** A pose the renderer draws: an effect, or a unit drawn like one, which starts on Stand rather than Birth. */
+
 export type DrawnPose = EffectPose & { readonly unit?: true };
 
-/** A visible external particle effect at the model node's sampled world transform. */
+
 export interface PopcornEmitterPose {
   readonly model: string;
   readonly handle: number;
@@ -118,11 +118,11 @@ export interface RenderedFrame {
   readonly pointLights: number;
   readonly absent: string[];
   readonly popcornEmitters: PopcornEmitterPose[];
-  /** Whether the sun's shadow map was drawn, and how many omni lights cast shadows. */
+
   readonly shadows: { readonly sun: boolean; readonly pointCasters: number };
-  /** Which of Definitive's post-processing passes the map's settings turned on. */
+
   readonly post: { readonly ambientOcclusion: boolean; readonly bloom: boolean };
-  /** Whether the terrain's water drew, and whether Definitive's height-fog falloff applied. */
+
   readonly water: boolean;
   readonly heightFog: boolean;
 }
@@ -132,7 +132,7 @@ export const captureScene = (client: HeadlessClient, options: { readonly visible
   environment: sceneEnvironment(client),
 });
 
-/** The Death sequence lengths of `models`, read from the map's assets, for clients whose destroyed effects are drawn. */
+
 export async function loadEffectDeaths(project: HeadlessRenderProject, models: Iterable<string>, graphics: Graphics = "classic"): Promise<EffectDeaths> {
   const deaths = new Map<string, number | undefined>();
   for (const model of models) {
@@ -178,7 +178,7 @@ function projectWorld(project: HeadlessRenderProject): WorldBounds | undefined {
   return bounds === undefined ? undefined : shiftedBounds(bounds, terrain?.origin);
 }
 
-/** Both the still renderer and the player draw unit objects with the same model poses, in the project's world bounds. */
+
 export function sceneWithUnits(project: HeadlessRenderProject, scene: RenderScene): RenderScene {
   const world = projectWorld(project);
   const bytes = project.terrain?.w3e;
@@ -248,7 +248,7 @@ const ChromePages = Schema.fromJsonString(Schema.Array(Schema.Struct({ type: Sch
 
 const renderFailure = (cause: unknown) => (cause instanceof RenderFailure ? cause : new RenderFailure({ cause }));
 
-/** A headless Chrome with the renderer page loaded; Chrome, its server, socket and profile live until the scope closes. */
+
 const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: boolean, graphics: Graphics) => Effect.gen(function*() {
   const directory = yield* Effect.acquireRelease(
     Effect.tryPromise({ try: () => mkdtemp(join(tmpdir(), "wisp-render-")), catch: renderFailure }),
@@ -272,7 +272,7 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
     })());
     return pending;
   };
-  // A stock Definitive asset is extracted and converted on first read; the page asks for dozens at once and one can wait past Bun's 10 s default.
+
   const server = yield* Effect.acquireRelease(Effect.sync(() => Bun.serve({ hostname: "127.0.0.1", port: 0, idleTimeout: 255, async fetch(request) {
     const url = new URL(request.url);
     if (url.pathname === "/") return new Response('<!doctype html><html><body style="margin:0;background:#101522"><script type="module" src="/renderer.js"></script></body></html>', { headers: { "content-type": "text/html" } });
@@ -284,7 +284,7 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
     const body = bodyPath === null ? undefined : resolutions.get(`:${bodyPath}`)?.selected;
     const data = await read(path, graphics, body);
     if (data !== undefined) return new Response(new Uint8Array(data));
-    // A file that only another mode has draws nothing in this one, as Warcraft draws nothing for it.
+
     for (const other of GRAPHICS) if (bodyPath === null && other !== graphics && (await read(path, other)) !== undefined) return new Response(`absent in ${graphics}: ${path}`, { status: 410 });
     return new Response(`missing map asset: ${path}`, { status: 404 });
   }})), (open) => Effect.promise(() => open.stop(true)));
@@ -323,7 +323,7 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
   return { devtools, gpu, resolutions };
 });
 
-/** Chrome on the GPU, or on SwiftShader once that fails; a failed attempt's resources are released before the next. */
+
 const openAnyBrowser = (project: HeadlessRenderProject, bundle: string, graphics: Graphics) => Effect.gen(function*() {
   const attempt = (fallback: boolean) => Effect.gen(function*() {
     const scope = yield* Scope.fork(yield* Effect.scope);
@@ -332,7 +332,7 @@ const openAnyBrowser = (project: HeadlessRenderProject, bundle: string, graphics
   return yield* attempt(false).pipe(Effect.catch(() => attempt(true)));
 });
 
-/** Draws captured scenes with the map's models, textures, camera and UI. */
+
 export const renderScenes = (project: HeadlessRenderProject, scenes: readonly RenderScene[], directory: string, graphics: Graphics = "classic", look: readonly Lever[] = []) => Effect.scoped(Effect.gen(function*() {
   const unsupported = unsupportedLevers(graphics, look);
   if (unsupported.length > 0) return yield* new RenderFailure({ cause: `the look check asks for ${unsupported.join(", ")}, which Wisp does not draw in ${graphics} (wisp:docs/headless.md, "Graphics profiles")` });

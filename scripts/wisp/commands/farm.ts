@@ -1,6 +1,6 @@
-// `wisp farm test [--ref REF] [--wait]`: a project's full suites on GitHub's
-// free hosted runners (wisp:docs/farm.md). A game adds its own farm jobs
-// beside `test` and dispatches `test` here.
+
+
+
 import { parseArgs } from "node:util";
 import { Effect } from "effect";
 import { type Command, UsageFailure, describeCause } from "../command";

@@ -1,7 +1,7 @@
-// `wisp soak`: plays a game's soak (wisp:docs/soak.md) in worker processes,
-// at most four, for at most a set number of minutes, prints each finding with
-// its repro file and what the run cost, and fails when anything was found.
-// `--repro FILE` plays one repro file again in this process.
+
+
+
+
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
@@ -27,17 +27,17 @@ export class SoakFailure extends Schema.TaggedError<SoakFailure>()("SoakFailure"
   }
 }
 
-/** Worker processes at most: a soak shares the machine with everything else running. */
+
 export const MAX_SOAK_WORKERS = 4;
-/** The longest a run may be told to take; it starts no match after its limit. */
+
 export const MAX_SOAK_MINUTES = 30;
 export const DEFAULT_SOAK_MINUTES = 10;
 export const MAX_SOAK_MATCHES = 2000;
 
 export interface SoakCommandOptions {
-  /** The game's soak module, whose default export defineSoak() made. */
+
   readonly project: string;
-  /** Where each run keeps its repro files, in a folder of its own. */
+
   readonly out: string;
 }
 
@@ -54,7 +54,7 @@ interface RunOptions {
 
 const VALUED = ["matches", "seed", "workers", "minutes", "fighter", "stage", "policy", "out", "repro"];
 
-/** CPUs this process's cgroup allows (cgroup v2 cpu.max, the tightest along its path), or every CPU. */
+
 function scopeCpus(): number {
   let cpus = availableParallelism();
   try {
@@ -64,7 +64,7 @@ function scopeCpus(): number {
       if (quota !== "max") cpus = Math.min(cpus, Number(quota) / Number(period));
     }
   } catch {
-    // No cgroup v2 limit to read: every CPU.
+
   }
   return Math.max(1, Math.floor(cpus));
 }
@@ -99,7 +99,7 @@ function parseRun(args: readonly string[], project: SoakProject): RunOptions | s
 
 type Worker = Subprocess<"pipe", "pipe", "pipe">;
 
-/** Reads a stream line by line; undefined once it ends. */
+
 function lineReader(stream: ReadableStream<Uint8Array>): () => Promise<string | undefined> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -119,7 +119,7 @@ function lineReader(stream: ReadableStream<Uint8Array>): () => Promise<string | 
   };
 }
 
-/** The last few kilobytes a stream wrote, read as it goes so the writer never blocks. */
+
 function tail(stream: ReadableStream<Uint8Array>): () => string {
   let text = "";
   void (async () => {
@@ -131,19 +131,19 @@ function tail(stream: ReadableStream<Uint8Array>): () => string {
 
 interface Pool {
   readonly replies: SoakReply[];
-  /** CPU milliseconds the workers used, counted as each one exits. */
+
   cpuMs: number;
   workersStarted: number;
 }
 
-/** A step of talking to a worker process through its pipes. */
+
 const talk = <A>(what: string, run: () => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => new SoakFailure({ problem: `a worker's ${what}`, cause }) });
 
-/**
- * One worker process: it plays matches from `next` until none is left or it
- * stops; a match it stopped in comes back as a crash. Its scope kills it.
- */
+
+
+
+
 const runWorker = (worker: string, project: string, next: () => SoakMatch | undefined, pool: Pool, report: (reply: SoakReply) => Effect.Effect<void, SoakFailure>) =>
   Effect.acquireUseRelease(
     Effect.sync((): Worker => {
@@ -155,7 +155,7 @@ const runWorker = (worker: string, project: string, next: () => SoakMatch | unde
       const stderr = tail(child.stderr);
       for (let match = next(); match !== undefined; match = next()) {
         const sent = match;
-        // A pipe that breaks is a worker that stopped: its match comes back as a crash, like one whose output ended.
+
         const answer = yield* talk(`answer ${describeMatch(sent)}`, async () => {
           child.stdin.write(`${JSON.stringify(sent)}\n`);
           await child.stdin.flush();
@@ -182,18 +182,18 @@ const runWorker = (worker: string, project: string, next: () => SoakMatch | unde
       if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
       await child.exited;
       const usage = child.resourceUsage();
-      // Bun reports these microseconds as bigints, whatever its types say.
+
       if (usage !== undefined) pool.cpuMs += (Number(usage.cpuTime.user) + Number(usage.cpuTime.system)) / 1000;
     }),
   );
 
 const plural = (count: number, noun: string, nouns = `${noun}s`) => `${count.toLocaleString("en-US")} ${count === 1 ? noun : nouns}`;
 
-/**
- * Recovery typing stalls, client frames that stopped longer than 1/60 s
- * taking typed text: how many, the worst and the 95th percentile, against the
- * budget a frame may stop for (limits.typingMs).
- */
+
+
+
+
+
 export function typingStallsLine(stalls: readonly number[], budgetMs: number): string {
   if (stalls.length === 0) return `recovery typing stalls: none (budget ${budgetMs.toFixed(1)} ms)`;
   const sorted = [...stalls].sort((a, b) => a - b);
@@ -202,7 +202,7 @@ export function typingStallsLine(stalls: readonly number[], budgetMs: number): s
   return `recovery typing stalls: ${plural(sorted.length, "client frame")} over 1/60 s, worst ${(sorted.at(-1) ?? 0).toFixed(1)} ms, p95 ${p95.toFixed(1)} ms; budget ${budgetMs.toFixed(1)} ms, ${over === 0 ? "none" : over} over it`;
 }
 
-/** A finding's lines: the match, the finding and where its repro file is. */
+
 const findingLines = (reply: SoakReply, repro: string | undefined) => [
   describeMatch(reply.match),
   ...reply.findings.map(({ kind, frame, slot, text }) => `  ${kind} after frame ${frame}${slot === undefined ? "" : ` (p${slot})`}: ${text}`),
@@ -212,7 +212,7 @@ const findingLines = (reply: SoakReply, repro: string | undefined) => [
 const loadProject = (path: string) =>
   Effect.tryPromise({ try: () => loadSoakProject(path), catch: (cause) => new SoakFailure({ problem: "loading the soak", cause }) });
 
-/** Plays a repro file's match again, in this process, and prints what it finds. */
+
 const replay = (options: SoakCommandOptions, file: string, report?: (reply: SoakReply, repro?: string) => Effect.Effect<void>) => Effect.gen(function*() {
   const project = yield* loadProject(options.project);
   const repro = yield* Effect.try({ try: () => readSoakRepro(readFileSync(file, "utf8")), catch: (cause) => new SoakFailure({ problem: `reading ${file}`, cause }) });
@@ -240,7 +240,7 @@ const replay = (options: SoakCommandOptions, file: string, report?: (reply: Soak
   if (result.findings.length > 0) return yield* new SoakFailure({ problem: `${plural(result.findings.length, "finding")} replaying ${file}` });
 });
 
-/** `soak [--matches N] [--seed N] [--workers N] [--minutes N] [--fighter NAME]... [--stage NAME]... [--policy NAME]... [--out DIR] [--no-shrink] | --repro FILE`. */
+
 export const makeSoak = (options: SoakCommandOptions): Command => (allArgs) => Effect.suspend(() => {
   const json = allArgs.includes("--json");
   const args = allArgs.filter((arg) => arg !== "--json");
@@ -319,7 +319,7 @@ export const makeSoak = (options: SoakCommandOptions): Command => (allArgs) => E
       if (json) yield* jsonReply(reply, written);
       else yield* Console.log([...findingLines(reply, written), ...moments.map(([file]) => `  moment: ${file} (wisp repro)`)].join("\n"));
     });
-    // A worker that stopped gives its place to a new one while matches are left.
+
     const slot = Effect.gen(function*() {
       while (queue.length > 0 && performance.now() < deadline) yield* runWorker(worker, options.project, next, pool, report);
     });

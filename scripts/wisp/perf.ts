@@ -1,14 +1,14 @@
-// Frame-cost runs in 32-bit Lua (wisp:docs/frame-cost.md#headless): what
-// runLuaPerf (wisp:src/headless/luaPerf.ts) prints, read back, and two runs
-// compared. Instructions, calls, memory and typed text per frame are the same
-// on every run of the same code and journey, so a rise is the code's, and so
-// is the predicted native time made from them; Lua time varies with the machine.
+
+
+
+
+
 
 export const PERF_METRICS = ["instructions", "lua-us", "natives", "alloc-kb", "typed", "native-us", "typing-us"] as const;
 export type PerfMetric = (typeof PERF_METRICS)[number];
 
 export interface PerfValues {
-  /** The client's start, before the first frame. */
+
   readonly start: number;
   readonly total: number;
   readonly median: number;
@@ -19,12 +19,12 @@ export interface PerfValues {
 
 export interface PerfRun {
   readonly frames: number;
-  /** Instructions between the count hook's calls. */
+
   readonly step: number;
   readonly problems: number;
-  /** The full collections between the measured runs: their time on this host and the kilobytes they freed. */
+
   readonly collector: { readonly us: number; readonly kb: number };
-  /** Per player slot, per metric. */
+
   readonly clients: ReadonlyMap<number, Readonly<Record<PerfMetric, PerfValues>>>;
 }
 
@@ -34,7 +34,7 @@ const VALUES = /^p(\d+) ([a-z-]+) start=([\d.]+) total=([\d.]+) median=([\d.]+) 
 
 const isMetric = (name: string): name is PerfMetric => (PERF_METRICS as readonly string[]).includes(name);
 
-/** A run's printed lines, read back; throws on a line it doesn't know. */
+
 export function parsePerfRun(text: string): PerfRun {
   const lines = text.split(/\r?\n/).filter((line) => line.trim() !== "");
   const heading = HEADING.exec(lines[0] ?? "");
@@ -64,7 +64,7 @@ export function parsePerfRun(text: string): PerfRun {
   return { frames: Number(heading[1]), step: Number(heading[2]), problems: Number(heading[3]), collector, clients: complete };
 }
 
-/** How much worse B may be than A before compare fails: a share of A, 0.05 for 5%. */
+
 export const DEFAULT_PERF_THRESHOLD = 0.05;
 
 const LABELS: Record<PerfMetric, string> = {
@@ -72,14 +72,14 @@ const LABELS: Record<PerfMetric, string> = {
   "native-us": "predicted native µs", "typing-us": "predicted typing stall µs",
 };
 
-/**
- * What compare holds B to, per metric: the values that may not rise beyond
- * the threshold. The predicted native time (wisp:src/headless/nativeCost.ts)
- * is made from counts, so it is held at its median and 95th percentile; a
- * frame's allocation, which the collector pays for, at its mean and 95th
- * percentile; the typing stall at its worst frame, which a burst of typed text
- * raises. Lua time varies with the machine, so it is reported only.
- */
+
+
+
+
+
+
+
+
 const GATED: Partial<Record<PerfMetric, readonly ("median" | "p95" | "mean" | "max")[]>> = {
   instructions: ["mean", "max"],
   natives: ["mean"],
@@ -93,15 +93,15 @@ const number = (value: number) => (Number.isInteger(value) ? String(value) : val
 
 export interface PerfComparison {
   readonly lines: readonly string[];
-  /** What rose beyond the threshold; empty when B is no worse. */
+
   readonly regressions: readonly string[];
 }
 
-/**
- * B against A, per client and metric, per frame: mean, median, p95 and max,
- * and the start. Each GATED value is held to the threshold; a value that was
- * 0 in A may not appear in B.
- */
+
+
+
+
+
 export function comparePerfRuns(a: PerfRun, b: PerfRun, threshold = DEFAULT_PERF_THRESHOLD): PerfComparison {
   const lines = [`A: ${a.frames} frames, B: ${b.frames} frames, per frame A -> B`];
   const regressions: string[] = [];
@@ -127,7 +127,7 @@ export function comparePerfRuns(a: PerfRun, b: PerfRun, threshold = DEFAULT_PERF
 
 const ms = (us: number) => (us / 1000).toFixed(2);
 
-/** Each client's predicted native cost per frame, in the words a developer reads: callbacks at p50, p95 and worst, and the worst typing stall. */
+
 export function predictionLines(run: PerfRun): string[] {
   return [...run.clients].map(([slot, values]) => {
     const callbacks = values["native-us"];
