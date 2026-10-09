@@ -13,7 +13,7 @@ import { collect } from "./wisp/hostProcess";
 class PackageFailure extends Schema.TaggedError<PackageFailure>()("PackageFailure", { cause: Schema.Unknown }) {
   override get message() { return String(this.cause); }
 }
-const attempt = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: cause => new PackageFailure({ cause }) });
+const attempt = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: cause => new PackageFailure({ cause }) }).pipe(Effect.uninterruptible);
 
 const root = resolve(import.meta.dir, "..");
 const packagePaths = ["scripts", "plugins", "src", "native", "docs", "builds", "vendor", "README.md", "LICENSE", "AGENTS.md", "typescript-toolchain.lock", "tsconfig.library.json"];
