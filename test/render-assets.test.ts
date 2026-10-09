@@ -78,3 +78,15 @@ test("[native] #91 old imported HD body refuses missing HD stock; good pilot sel
     expect(result.suffixConversion, name).toBe(".tif → .dds");
   }
 });
+
+test("[repro #82] installed DE skies read shared base weather textures while imported HD bodies keep their layer", async () => {
+  // Installed 3.0.1 Outland_Sky TEXS names this path; CASC supplies its DDS only in base.
+  const texture = "ReplaceableTextures/Weather/RaysOfLight.tif";
+  const assets = readers({}, { [`base/${texture}`]: "shared weather" });
+  const stock = await Effect.runPromise(resolveRenderAsset(assets, texture, "definitive", { source: "stock", layer: "_de.w3mod", path: "Environment/Sky/Outland_Sky/Outland_Sky.mdx" }));
+  expect(new TextDecoder().decode(stock.bytes)).toBe("shared weather");
+  expect(stock.selected).toEqual({ source: "stock", layer: "base", path: texture });
+  const imported = await Effect.runPromise(resolveRenderAsset(assets, texture, "definitive", { source: "map", layer: "_hd.w3mod", path: "war3mapImported/Body.mdx" }));
+  expect(imported.bytes).toBeUndefined();
+  expect(imported.attempts.filter(({ source }) => source === "stock").map(({ layer }) => layer)).toEqual(["_hd.w3mod"]);
+});

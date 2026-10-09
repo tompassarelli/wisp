@@ -460,8 +460,10 @@ For model textures, `body` is the selected model's `AssetLocation`; pass it to
 nonreplaceable textures are requested before a missing texture refuses the
 model. Explicit HD DDS imports match the
 [native reference](https://github.com/tompassarelli/smashcraft/issues/334#issuecomment-6071233652).
-Texture lookup inherits the selected body alias for stock reads; map imports
-in that alias or base still override stock. The old imported HD candidate
+Imported body textures keep the selected body alias for stock reads; map imports
+in that alias or base still override stock. Installed stock bodies can also read
+lower stock layers: DE skies name `ReplaceableTextures/Weather/RaysOfLight.tif`,
+whose same-path DDS is shared in base. The old imported HD candidate
 cannot borrow DE textures. The earlier pilot used `presentation="native"`
 (script stamp `2889775-3234403`), selecting stock units despite carrying HD
 imports; its stock DE body resolves DE textures.
