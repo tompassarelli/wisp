@@ -91,6 +91,17 @@ function rank(sorted: readonly number[], share: number): number {
   return sorted[index] ?? 0;
 }
 
+export const TOP_SHARE = f32(0.01);
+
+
+function topMean(sorted: readonly number[]): number {
+  if (sorted.length === 0) return 0;
+  const count = Math.max(1, Math.ceil(TOP_SHARE * sorted.length));
+  let sum = 0;
+  for (let index = sorted.length - count; index < sorted.length; index++) sum += sorted[index] ?? 0;
+  return sum / count;
+}
+
 function valueLine(slot: number, name: string, values: readonly number[], first: number, last: number): string {
   const perFrame: number[] = [];
   let total = 0;
@@ -103,7 +114,7 @@ function valueLine(slot: number, name: string, values: readonly number[], first:
   const middle = floorDiv(perFrame.length, 2);
   const median = perFrame.length === 0 ? 0 : floorMod(perFrame.length, 2) === 1 ? perFrame[middle] ?? 0 : ((perFrame[middle - 1] ?? 0) + (perFrame[middle] ?? 0)) / 2;
   const mean = perFrame.length === 0 ? 0 : total / perFrame.length;
-  return `p${slot} ${name} start=${whole(values[0] ?? 0)} total=${whole(total)} median=${whole(median)} p95=${whole(rank(perFrame, f32(0.95)))} mean=${whole(mean)} max=${whole(rank(perFrame, 1))}`;
+  return `p${slot} ${name} start=${whole(values[0] ?? 0)} total=${whole(total)} median=${whole(median)} p95=${whole(rank(perFrame, f32(0.95)))} mean=${whole(mean)} max=${whole(rank(perFrame, 1))} top=${whole(topMean(perFrame))}`;
 }
 
 function costLines(cost: ClientCost, first: number, last: number, model: NativeCostModel): string[] {
