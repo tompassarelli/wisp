@@ -162,6 +162,13 @@ one after it, such as a match's first:
 - **Lua time**: `os.clock` while each client ran, less the time in natives,
   in microseconds. It includes the hook's cost and varies with the machine.
 - **Natives**: every declared function's calls, local-only ones included.
+- **Instructions and allocated KB** count only the map's code: the count hook
+  looks at the function it interrupted every 100 instructions and charges
+  that step and the allocation since the last step to the map's bundle or to
+  Wisp's headless runtime, which prints as its own rows (`runtime-instructions`,
+  `runtime-alloc-kb`). The map's allocation is also split by bundle module
+  (`pSLOT module-alloc-bytes MODULE total=... mean=...`, bytes per frame),
+  and the hook's own allocation is left out of both.
 - **Allocated KB**: what the map's code allocated. The collector stops while
   a client runs, so Lua time holds none of its work; between runs it collects
   once the heap has grown 16 MB, and the run reports those collections' time
@@ -215,7 +222,8 @@ play and `samples` as its next arguments.
   their mean or top 1% mean, its native calls at their mean, its allocation at
   its mean or 95th percentile, its predicted native time at its median or
   95th percentile, or its typing stall at its top 1% mean; or when B's run
-  found a problem. No gate reads a single worst frame: which frame is worst
+  found a problem. It prints every module's mean allocation per frame, A to
+  B, and an allocation failure names the modules that grew most. No gate reads a single worst frame: which frame is worst
   moves whenever a bot's choices change (smashcraft#394). A run written
   before `top=` existed compares its maximum in its place. Each of these is made from counts, so the same code compares
   alike on any machine; Lua time is printed, not held to it.

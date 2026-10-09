@@ -36,6 +36,9 @@ interface ClientCost {
   readonly microseconds: number[];
   readonly natives: number[];
   readonly allocatedKb: number[];
+  readonly runtimeInstructions: number[];
+  readonly runtimeKb: number[];
+  readonly moduleKb: Map<string, number[]>;
   readonly typed: number[];
   calls: number;
 
@@ -91,6 +94,19 @@ function rank(sorted: readonly number[], share: number): number {
   return sorted[index] ?? 0;
 }
 
+function bundleModules(bundle: string): string[] {
+  const modules: string[] = [];
+  let name = "(bundle)";
+  let line = 0;
+  for (const text of bundle.split("\n")) {
+    line++;
+    const [header] = string.match(text, '^%["(.-)"%] = function%(%.%.%.%) $');
+    if (header !== undefined) name = header;
+    modules[line] = name;
+  }
+  return modules;
+}
+
 export const TOP_SHARE = f32(0.01);
 
 
@@ -117,6 +133,23 @@ function valueLine(slot: number, name: string, values: readonly number[], first:
   return `p${slot} ${name} start=${whole(values[0] ?? 0)} total=${whole(total)} median=${whole(median)} p95=${whole(rank(perFrame, f32(0.95)))} mean=${whole(mean)} max=${whole(rank(perFrame, 1))} top=${whole(topMean(perFrame))}`;
 }
 
+const sum = (values: readonly number[], first: number, last: number): number => {
+  let total = 0;
+  for (let frame = first; frame <= last; frame++) total += values[frame] ?? 0;
+  return total;
+};
+
+function moduleLines(cost: ClientCost, first: number, last: number): string[] {
+  const names: string[] = [];
+  for (const [name] of cost.moduleKb) names.push(name);
+  names.sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+  const frames = Math.max(1, last - first + 1);
+  return names.map((name) => {
+    const bytes = sum(cost.moduleKb.get(name) ?? [], first, last) * 1024;
+    return `p${cost.slot} module-alloc-bytes ${name} total=${whole(bytes)} mean=${whole(bytes / frames)}`;
+  });
+}
+
 function costLines(cost: ClientCost, first: number, last: number, model: NativeCostModel): string[] {
   const callbacks: number[] = [];
   const typing: number[] = [];
@@ -131,8 +164,9 @@ function costLines(cost: ClientCost, first: number, last: number, model: NativeC
   const named: readonly (readonly [string, readonly number[]])[] = [
     ["instructions", cost.instructions], ["lua-us", cost.microseconds], ["natives", cost.natives],
     ["alloc-kb", cost.allocatedKb], ["typed", cost.typed], ["native-us", callbacks], ["typing-us", typing],
+    ["runtime-instructions", cost.runtimeInstructions], ["runtime-alloc-kb", cost.runtimeKb],
   ];
-  return named.map(([name, values]) => valueLine(cost.slot, name, values, first, last));
+  return [...named.map(([name, values]) => valueLine(cost.slot, name, values, first, last)), ...moduleLines(cost, first, last)];
 }
 
 
@@ -150,14 +184,44 @@ export function runLuaPerfWith(
   const declarations = readFile(declarationsPath);
   const costs = new Map<HeadlessClient, ClientCost>();
   const bySlot = new Map<number, ClientCost>();
-  let fired = 0;
+  const runtimeSource = debug.getinfo(1, "S")?.source;
+  const moduleOfLine = bundleModules(readFile(bundlePath));
+  let active: ClientCost | undefined;
+  let lastKb = 0;
+  let lastNativeKb = 0;
+  // Level 1 is this hook, level 2 the Lua function the count interrupted.
   const count = () => {
-    fired++;
+    const heap = collectgarbage("count");
+    const info = debug.getinfo(2, "Sl");
+    const cost = active;
+    if (cost !== undefined && info !== undefined) {
+      const frame = clients?.frame ?? 0;
+      const kb = heap - lastKb - (cost.nativeKb - lastNativeKb);
+      const source = info.source ?? "";
+      if (source === runtimeSource) {
+        add(cost.runtimeInstructions, frame, HOOK_STEP);
+        add(cost.runtimeKb, frame, kb);
+      } else {
+        add(cost.instructions, frame, HOOK_STEP);
+        add(cost.allocatedKb, frame, kb);
+        const name = source === "=map" ? moduleOfLine[info.currentline ?? 0] ?? "(bundle)" : source;
+        let series = cost.moduleKb.get(name);
+        if (series === undefined) {
+          series = [];
+          cost.moduleKb.set(name, series);
+        }
+        add(series, frame, kb);
+      }
+      lastNativeKb = cost.nativeKb;
+    }
+    lastKb = collectgarbage("count");
+    // Instructions run inside the hook use up the count; setting it again restarts the full step.
+    debug.sethook(count, "", HOOK_STEP);
   };
   let nativeSeconds = 0;
   let depth = 0;
   let thread = nativeThread();
-  let entered = { fired: 0, seconds: 0, natives: 0, calls: 0, kb: 0, nativeKb: 0 };
+  let entered = { seconds: 0, natives: 0, calls: 0 };
   let collectedKb = collectgarbage("count");
 
   const collector = { us: 0, kb: 0 };
@@ -174,22 +238,24 @@ export function runLuaPerfWith(
       }
       collectgarbage("stop");
       const cost = costs.get(client);
-
+      active = cost;
+      lastKb = collectgarbage("count");
+      lastNativeKb = cost?.nativeKb ?? 0;
       debug.sethook(count, "", HOOK_STEP);
-      entered = { fired, seconds: os.clock(), natives: nativeSeconds, calls: cost?.calls ?? 0, kb: collectgarbage("count"), nativeKb: cost?.nativeKb ?? 0 };
+      entered = { seconds: os.clock(), natives: nativeSeconds, calls: cost?.calls ?? 0 };
     },
     leave: (client) => {
       const seconds = os.clock();
       debug.sethook();
       const kb = collectgarbage("count");
       collectgarbage("restart");
+      active = undefined;
       const cost = costs.get(client);
       if (cost === undefined) return;
       const frame = clients?.frame ?? 0;
-      add(cost.instructions, frame, (fired - entered.fired) * HOOK_STEP);
       add(cost.microseconds, frame, (seconds - entered.seconds - (nativeSeconds - entered.natives)) * 1000000);
       add(cost.natives, frame, cost.calls - entered.calls);
-      add(cost.allocatedKb, frame, kb - entered.kb - (cost.nativeKb - entered.nativeKb));
+      add(cost.runtimeKb, frame, kb - lastKb - (cost.nativeKb - lastNativeKb));
     },
   };
   const counted = (cost: ClientCost, native: Native): Native => (...args: unknown[]) => {
@@ -213,7 +279,7 @@ export function runLuaPerfWith(
   clients = lockstep;
   const names = parseNativeDeclarations(declarations).functions.map(([name]) => name);
   for (const client of lockstep.clients) {
-    const cost: ClientCost = { slot: client.slot, instructions: [], microseconds: [], natives: [], allocatedKb: [], typed: [], calls: 0, nativeKb: 0 };
+    const cost: ClientCost = { slot: client.slot, instructions: [], microseconds: [], natives: [], allocatedKb: [], runtimeInstructions: [], runtimeKb: [], moduleKb: new Map(), typed: [], calls: 0, nativeKb: 0 };
     costs.set(client, cost);
     bySlot.set(client.slot, cost);
     for (const name of names) {

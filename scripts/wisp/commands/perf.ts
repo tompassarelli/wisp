@@ -64,7 +64,7 @@ interface PerfOutput {
 
 const runData = (run: ReturnType<typeof parsePerfRun>) => ({
   frames: run.frames, step: run.step, problems: run.problems, collector: run.collector,
-  clients: [...run.clients].map(([client, metrics]) => ({ client, metrics })),
+  clients: [...run.clients].map(([client, metrics]) => ({ client, metrics, runtime: run.runtime.get(client) ?? {}, modules: [...(run.modules.get(client) ?? [])].map(([name, allocation]) => ({ name, ...allocation })) })),
 });
 
 const compare = (output: PerfOutput): Command => (args) => Effect.gen(function*() {
