@@ -1,19 +1,19 @@
-// `bun run test` (wisp:docs/testing.md): the whole suite, so that a failure
-// means the code is wrong, never that the machine was busy.
-//
-// 1. Correctness tests run first, under whatever load the machine has; their
-//    timeouts only catch hangs.
-// 2. Timing tests (marked with timingTest, wisp:scripts/wisp/timingTest.ts)
-//    run afterwards, alone, inside an exclusive machine-capacity lease this
-//    runner takes, while it samples /proc/pressure/cpu. A timing test that
-//    failed while CPU pressure was above BUSY_PRESSURE is inconclusive, not
-//    failed: it runs again once the machine is quiet.
-// 3. Each test's CPU is held to the ceiling, and on a whole run each file's
-//    CPU per test to its baseline row (wisp:scripts/wisp/testCost.ts).
-// 4. The last line is the machine's CPU pressure during the whole run.
-//
-// Usage: bun scripts/wisp/testRunner.ts [BUN_TEST_ARGS...]
-// A consuming project runs its own suite the same way, from its root.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -24,28 +24,28 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { BASELINE_PATH, TEST_COST_OUT_ENV, addCost, judge, type Costs } from "./testCost";
 import { TEST_PHASE_ENV, TIMING_TEST_PREFIX } from "./timingTest";
 
-/**
- * CPU pressure (some avg10, percent) above which a timing test's failure says
- * nothing about the code. Measured on the 24-core development machine: other
- * agents usually hold it at 20-25%, and Wisp's timing tests passed at every
- * pressure measured, up to 77% under 48 extra one-core busy loops.
- */
+
+
+
+
+
+
 export const BUSY_PRESSURE = 30;
-/** Per-test bound: catches a hang, never a slow machine (10x the slowest test on a quiet machine). */
+
 export const TEST_TIMEOUT_MS = 120_000;
-/** Runs of a timing test before the runner gives up on a quiet machine. */
+
 const TIMING_ATTEMPTS = 3;
-/** How long the runner waits for the machine to quiet before a rerun. */
+
 const QUIET_WAIT = "10 minutes";
-/** Upper bound on one timing phase inside its exclusive lease. */
+
 const LEASE_SECONDS = 1800;
-/**
- * How long the runner queues for its exclusive lease. Other agents' batch
- * leases can hold it off for much longer; then the timing tests run without
- * it, and CPU pressure alone decides whether a failure counts.
- */
+
+
+
+
+
 const LEASE_WAIT_MINUTES = 3;
-/** Exit code when a timing test stayed inconclusive: nothing failed, nothing was shown fast enough. */
+
 export const INCONCLUSIVE_EXIT = 75;
 
 export class TestRunFailure extends Schema.TaggedError<TestRunFailure>()("TestRunFailure", {
@@ -57,13 +57,13 @@ export class TestRunFailure extends Schema.TaggedError<TestRunFailure>()("TestRu
 }
 
 export interface CpuPressure {
-  /** some avg10, percent. */
+
   readonly avg10: number;
-  /** some total, microseconds any task waited for a CPU since boot. */
+
   readonly totalUs: number;
 }
 
-/** Reads /proc/pressure/cpu's "some" line. */
+
 export function parseCpuPressure(text: string): CpuPressure | undefined {
   const some = /^some avg10=([\d.]+) avg60=[\d.]+ avg300=[\d.]+ total=(\d+)$/m.exec(text);
   return some === null ? undefined : { avg10: Number(some[1]), totalUs: Number(some[2]) };
@@ -73,7 +73,7 @@ interface Reading extends CpuPressure {
   readonly atMs: number;
 }
 
-/** Undefined where the kernel has no pressure information, as in some containers. */
+
 const readPressure = Effect.sync((): Reading | undefined => {
   try {
     const pressure = parseCpuPressure(readFileSync("/proc/pressure/cpu", "utf8"));
@@ -84,13 +84,13 @@ const readPressure = Effect.sync((): Reading | undefined => {
 });
 
 export interface PressureDuring {
-  /** The highest some avg10 seen, percent; undefined without /proc/pressure/cpu. */
+
   readonly peak: number | undefined;
-  /** Share of the time some task waited for a CPU, percent. */
+
   readonly average: number | undefined;
 }
 
-/** Runs `work` while sampling CPU pressure every half second. */
+
 export const withPressure = <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.gen(function*() {
   const first = yield* readPressure;
   const peak = yield* Ref.make(first?.avg10);
@@ -108,7 +108,7 @@ export const withPressure = <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.ge
 
 const percent = (value: number | undefined) => (value === undefined ? "unknown" : `${Math.round(value)}%`);
 
-/** Runs a command on this terminal and returns its exit code; closing the scope stops its process group. */
+
 const run = (command: string, args: readonly string[], env: Readonly<Record<string, string>> = {}) =>
   ChildProcessSpawner.ChildProcessSpawner.use((spawner) => spawner.exitCode(ChildProcess.make(command, args, {
     env, extendEnv: true, stdin: "inherit", stdout: "inherit", stderr: "inherit",
@@ -117,15 +117,15 @@ const run = (command: string, args: readonly string[], env: Readonly<Record<stri
     Effect.mapError((failure) => new TestRunFailure({ problem: `${command} ${args.join(" ")}: ${failure.message}` })),
   );
 
-/** bun test flags that take the next argument as their value. */
+
 const VALUE_FLAGS = new Set(["-t", "--test-name-pattern", "--timeout", "--rerun-each", "--retry", "--reporter", "--reporter-outfile", "--preload", "--max-concurrency", "--parallel", "--path-ignore-patterns"]);
 
-/** The path filters among bun test's arguments. */
+
 export function pathFilters(args: readonly string[]): string[] {
   return args.filter((arg, index) => !arg.startsWith("-") && !VALUE_FLAGS.has(args[index - 1] ?? ""));
 }
 
-/** Test files under `root` that declare a timing test, matching bun test's path filters. */
+
 export function timingTestFiles(root: string, filters: readonly string[]): string[] {
   const files: string[] = [];
   for (const file of new Bun.Glob("**/*{.test,_test,.spec,_spec}.{ts,tsx,js,jsx,mts,mjs}").scanSync(root)) {
@@ -136,17 +136,17 @@ export function timingTestFiles(root: string, filters: readonly string[]): strin
   return files.sort();
 }
 
-/** Preloaded into each test process: it measures each test's CPU (wisp:scripts/wisp/testCostPreload.ts). */
+
 const COST_PRELOAD = join(import.meta.dir, "testCostPreload.ts");
 
-/** Written when the timing files start: the lease was admitted. */
+
 const startedFile = (resultsFile: string) => `${resultsFile}.started`;
 
 const TimingResult = Schema.Struct({ file: Schema.String, code: Schema.Int, peak: Schema.optionalKey(Schema.Finite), average: Schema.optionalKey(Schema.Finite) });
 type TimingResult = typeof TimingResult.Type;
 const decodeTimingResult = Schema.decodeUnknownEffect(Schema.fromJsonString(TimingResult));
 
-/** Inside the lease: runs each timing file alone, writing one result line per file. */
+
 const runTimingFiles = (resultsFile: string, files: readonly string[], args: readonly string[]) => Effect.gen(function*() {
   yield* Effect.sync(() => writeFileSync(startedFile(resultsFile), ""));
   const flags = args.filter((arg) => !pathFilters(args).includes(arg));
@@ -168,7 +168,7 @@ const runTimingFiles = (resultsFile: string, files: readonly string[], args: rea
   }
 });
 
-/** The machine-capacity helper (the machine-capacity skill), or undefined where there is none, as on CI. */
+
 const capacityHelper = Effect.gen(function*() {
   const given = process.env["WISP_CAPACITY_HELPER"];
   if (given !== undefined) return existsSync(given) ? given : undefined;
@@ -179,7 +179,7 @@ const capacityHelper = Effect.gen(function*() {
   return Option.isSome(helper) && existsSync(helper.value) ? helper.value : undefined;
 });
 
-/** True inside a machine-capacity scope: an exclusive lease would wait for that very scope to end. */
+
 const insideLease = Effect.sync(() => {
   try {
     return readFileSync("/proc/self/cgroup", "utf8").includes("agent-capacity");
@@ -188,7 +188,7 @@ const insideLease = Effect.sync(() => {
   }
 });
 
-/** One run of `files`, inside an exclusive lease when the machine has the helper. */
+
 const timingPhase = (files: readonly string[], args: readonly string[], print: (line: string) => void) => Effect.acquireUseRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), "wisp-timing-"))),
   (directory) => Effect.gen(function*() {
@@ -206,7 +206,7 @@ const timingPhase = (files: readonly string[], args: readonly string[], print: (
         helper, "run", "--class", "exclusive", "--owner", `wisp-test:${process.pid}`, "--timeout-seconds", String(LEASE_SECONDS),
         "--", process.execPath, import.meta.path, "--timing-run", resultsFile, ...files, "--", ...args,
       ]);
-      // Other agents' batch work can hold the exclusive lease off: stop queueing after LEASE_WAIT_MINUTES.
+
       const admission = Effect.sync(() => existsSync(startedFile(resultsFile))).pipe(
         Effect.repeat({ schedule: Schedule.spaced("2 seconds"), until: (started) => started }),
         Effect.timeoutOption(`${LEASE_WAIT_MINUTES} minutes`),
@@ -227,7 +227,7 @@ const timingPhase = (files: readonly string[], args: readonly string[], print: (
   (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
 );
 
-/** Waits, up to QUIET_WAIT, for some avg10 to fall to BUSY_PRESSURE; the last reading. */
+
 const quiet = readPressure.pipe(
   Effect.repeat({ schedule: Schedule.spaced("5 seconds"), until: (reading) => reading === undefined || reading.avg10 <= BUSY_PRESSURE }),
   Effect.timeoutOption(QUIET_WAIT),
@@ -236,10 +236,10 @@ const quiet = readPressure.pipe(
 
 export type Verdict = "passed" | "failed" | "inconclusive";
 
-/**
- * Timing files run until each passes, fails on a quiet machine, or runs out of attempts.
- * A project whose own runner runs the correctness tests calls this for the timing phase.
- */
+
+
+
+
 export const timingTests = (files: readonly string[], args: readonly string[], print: (line: string) => void) => Effect.gen(function*() {
   const verdicts = new Map<string, Verdict>();
   let pending = [...files];
@@ -275,7 +275,7 @@ export const timingTests = (files: readonly string[], args: readonly string[], p
   return verdicts;
 });
 
-/** One line of wisp:scripts/wisp/testCostPreload.ts's output. */
+
 const CostRow = Schema.Struct({
   unit: Schema.optionalKey(Schema.String),
   tests: Schema.optionalKey(Schema.Int),
@@ -285,11 +285,11 @@ const CostRow = Schema.Struct({
 });
 const decodeCostRow = Schema.decodeUnknownEffect(Schema.fromJsonString(CostRow));
 
-/** A run of every test: no path filter and no name filter. */
+
 export const wholeRun = (args: readonly string[]) =>
   pathFilters(args).length === 0 && !args.some((arg) => arg === "-t" || arg === "--test-name-pattern" || arg.startsWith("--test-name-pattern="));
 
-/** The whole suite; succeeds with the process's exit code. */
+
 export const runTests = (args: readonly string[], print: (line: string) => void = (line) => console.log(line)) => Effect.acquireUseRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), "wisp-test-cost-"))),
   (directory) => Effect.gen(function*() {

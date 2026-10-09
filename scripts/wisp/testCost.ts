@@ -1,30 +1,30 @@
-// The suite's CPU budget (wisp:AGENTS.md, wisp:docs/testing.md "Test cost").
-// Each test file has a committed baseline row in test/cost-baseline.tsv: its
-// test count and CPU seconds, scaled to the reference machine (a GitHub
-// runner). `bun run test` (wisp:scripts/wisp/testRunner.ts) fails a test over
-// the per-test ceiling and, on a whole run, a file whose CPU per test rises
-// more than RISE over its baseline at the same test count. The CPU figures
-// come from wisp:scripts/wisp/testCostPreload.ts.
+
+
+
+
+
+
+
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 /** CPU seconds one test may use (wisp:AGENTS.md). Only Tom raises it. */
 export const TEST_CEILING_S = 4;
-/** The baseline, relative to the project root. */
+
 export const BASELINE_PATH = "test/cost-baseline.tsv";
 export const TEST_COST_OUT_ENV = "WISP_TEST_COST_OUT";
-/** A file fails when its CPU per test exceeds its baseline by more than this share. */
+
 export const RISE = 0.25;
-/** A rise smaller than this many CPU seconds over the whole file is measurement noise. */
+
 export const NOISE_S = 1;
-/** Files with at least this much baseline CPU set the machine's speed against the reference. */
+
 const SPEED_SAMPLE_MIN_S = 0.5;
 const SPEED_SAMPLES_MIN = 8;
 
 export interface UnitCost {
   readonly tests: number;
   readonly cpu: number;
-  /** The CPU seconds of the file's heaviest test, when measured. */
+
   readonly max?: number;
 }
 
@@ -53,11 +53,11 @@ function writeBaseline(path: string, costs: Costs): void {
   writeFileSync(path, `${[HEADER, ...rows].join("\n")}\n`);
 }
 
-/**
- * This machine's CPU seconds per reference-machine CPU second: the median
- * ratio over files measured at their baseline test count. Small shards use
- * their shorter reference rows too, rather than assuming the same machine.
- */
+
+
+
+
+
 export function speedFactor(measured: Costs, baseline: Costs): number {
   const ratios: number[] = [];
   const shorter: number[] = [];
@@ -75,31 +75,31 @@ export function speedFactor(measured: Costs, baseline: Costs): number {
 }
 
 export interface Judgement {
-  /** One line per file over budget, naming it. */
+
   readonly risen: readonly string[];
   readonly factor: number;
   readonly summary: string;
-  /** The files of the five heaviest tests, heaviest first. */
+
   readonly heaviest: string;
-  /** Baseline rows written: new files and files whose test count changed. */
+
   readonly updated: number;
 }
 
-/**
- * Compares a run with its baseline, rewrites the rows of new files and of
- * files whose test count changed (all measured rows with TEST_COST_UPDATE=1),
- * drops rows whose file is gone, and summarizes the run.
- */
+
+
+
+
+
 export function judge(options: {
   readonly label: string;
   readonly measured: Costs;
   readonly baselinePath: string;
   readonly project: string;
   readonly totalCpu?: number;
-  /**
-   * False for a run of a few files: each pays the module loading that the
-   * whole suite shares, so only the ceiling applies and no row is written.
-   */
+
+
+
+
   readonly whole?: boolean;
 }): Judgement {
   const { label, measured, baselinePath, project } = options;
