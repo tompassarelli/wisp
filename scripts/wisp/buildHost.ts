@@ -17,7 +17,7 @@ export interface BuildDiscoveryTarget {
   readonly menuReportPort?: number;
 }
 
-/** The private provider performs passive locate and probes; no client is started or changed. */
+
 const discoverBuild = (target: BuildDiscoveryTarget) => Effect.gen(function*() {
   const provider = join(process.env["HOME"] ?? "", ".local/share/wisp-private/builds/discover.ts");
   const probe = existsSync(provider) ? yield* Effect.tryPromise({

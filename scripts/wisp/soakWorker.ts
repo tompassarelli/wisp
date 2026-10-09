@@ -1,7 +1,7 @@
-// One worker process of `soak` (commands/soak.ts): it loads the game's soak
-// and its match setup once, then plays each match its parent writes to stdin
-// as one JSON line and answers with one JSON line on stdout.
-// Usage: bun soakWorker.ts SOAK_MODULE
+
+
+
+
 import { installHeadless } from "./headless";
 import { loadSoakGame, loadSoakProject, playSoakMatch, readSoakMatch, soakReply } from "./soak";
 

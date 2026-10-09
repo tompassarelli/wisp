@@ -1,11 +1,11 @@
-// `wisp client watch [CLIENT...] [--once] [--json] [--record FILE]`: what each
-// configured Warcraft III client is doing, from the menus' socket, its log,
-// its crash reports, the map's match receipts and its processes; never from
-// its screen (wisp:docs/watch.md).
-//   (default)      one line per change, until interrupted
-//   --once         each client's current state, then exit
-//   --json         the same events as JSON lines
-//   --record FILE  also append every menu socket message to FILE (JSON lines), for test fixtures
+
+
+
+
+
+
+
+
 import { appendFileSync } from "node:fs";
 import { Console, Effect, Schema } from "effect";
 import type { Client } from "./clients";
@@ -16,7 +16,7 @@ const ClientsFile = Schema.Struct({
   clients: Schema.NonEmptyArray(Schema.Struct({ name: Schema.String, documents: Schema.String, menuReportPort: Schema.optionalKey(Schema.Int) })),
 });
 
-/** The clients file's clients; watching needs only their folders and report ports, not their desktops. */
+
 export const watchedClients = (path: string) => Effect.tryPromise({
   try: () => Bun.file(path).json(),
   catch: (cause) => new WatchFailure({ client: path, operation: "read the clients file", problem: String(cause) }),
@@ -26,7 +26,7 @@ export const watchedClients = (path: string) => Effect.tryPromise({
   Effect.mapError((cause) => cause instanceof WatchFailure ? cause : new WatchFailure({ client: path, operation: "decode the clients file", problem: String(cause) })),
 );
 
-/** The named clients, or all of them. */
+
 export const selectClients = (all: readonly Client[], names: readonly string[]) => Effect.gen(function*() {
   const unknown = names.filter((name) => !all.some((client) => client.name === name));
   if (unknown.length > 0) return yield* new UsageFailure({ problem: `unknown client ${unknown.join(", ")}; known: ${all.map(({ name }) => name).join(", ")}` });
@@ -35,7 +35,7 @@ export const selectClients = (all: readonly Client[], names: readonly string[]) 
 
 const FLAGS = new Set(["--once", "--json", "--record"]);
 
-/** `filePrefix` is the map's runtime file prefix, for its match receipts. */
+
 export const makeWatch = (clientsFile: string, options: Pick<WatchOptions, "filePrefix"> = {}): Command => (args) => Effect.gen(function*() {
   const [record] = flagValues(args, "record");
   if (args.includes("--record") && record === undefined) return yield* new UsageFailure({ problem: "--record takes a FILE" });

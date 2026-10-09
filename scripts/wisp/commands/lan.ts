@@ -1,15 +1,15 @@
-// `wisp lan ...`: offline Warcraft III clients that play LAN matches against
-// Wisp's own host, for development on your own maps (wisp:docs/lan.md).
-//   setup --from INSTALL --pairs N     make the pool's clients (no Battle.net, no account)
-//   pool --pairs N [--pool-profile parity|visual|hfr] [--seconds S]
-//                                      run N pairs, each in a private network namespace with only loopback
-//   fresh MAP --pair K [--turn-ms MS]  host MAP on pair K and join both clients; returns once the match plays
-//   solo MAP [--pair K...]             each client of pair K plays MAP alone on its local provider
-//   status [--pair K]                  each pair's clients and current game
-//   speed N --pair K                   deliver game turns N times sooner (1 restores real time)
-//   end --pair K                       end pair K's game
-// Development and testing on your own offline clients and maps only: never
-// signed-in Battle.net clients, never anyone else's game, not for cheating.
+
+
+
+
+
+
+
+
+
+
+
+
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
@@ -37,7 +37,7 @@ const number = (args: readonly string[], name: string, fallback: number | undefi
   return Number.isInteger(value) && value >= 0 ? value : yield* new UsageFailure({ problem: `--${name} takes a whole number` });
 });
 
-/** Talks to a pair agent over its Unix socket. */
+
 const agent = (pair: number, path: string, body?: unknown) => Effect.tryPromise({
   try: async () => {
     const response = await fetch(`http://pair${path}`, { unix: agentSocket(pair), method: body === undefined ? "GET" : "POST", ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { "content-type": "application/json" } }) });
@@ -52,7 +52,7 @@ const setup: Command = (args) => Effect.gen(function*() {
   const [from] = flagValues(args, "from");
   if (from === undefined) return yield* new UsageFailure({ problem: "--from names an existing Warcraft III install folder (the one holding _retail_)" });
   const pairs = yield* number(args, "pairs", 1);
-  // --pair K... makes only those pairs, so a pool already running elsewhere is left alone.
+
   const chosen = flagValues(args, "pair").map(Number);
   if (chosen.some((pair) => !Number.isInteger(pair) || pair < 0)) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
   for (const pair of chosen.length > 0 ? chosen : Array.from({ length: pairs }, (_, index) => index)) {
@@ -60,7 +60,7 @@ const setup: Command = (args) => Effect.gen(function*() {
   }
 });
 
-/** A helper's path printed by `agents path SKILL`, with `script` beside it. */
+
 const skillScript = (skill: string, script: string) =>
   ChildProcessSpawner.ChildProcessSpawner.use((spawner) => spawner.string(ChildProcess.make("agents", ["path", skill], { stderr: "ignore" }))).pipe(
     Effect.map((path) => join(dirname(path.trim()), script)),
@@ -72,13 +72,13 @@ const desktopLauncher = (args: readonly string[]) => {
   return given !== undefined ? Effect.succeed(given) : skillScript("private-desktop-development", "scripts/private-desktop.sh");
 };
 
-/** The machine-capacity helper's script (the machine-capacity skill), or --capacity. */
+
 const capacityHelper = (args: readonly string[]) => {
   const [given] = flagValues(args, "capacity");
   return given !== undefined ? Effect.succeed(given) : skillScript("machine-capacity", "scripts/machine-capacity.mjs");
 };
 
-/** The capacity helper defers a pair: worth trying again later. */
+
 class PairDeferred extends Schema.TaggedError<PairDeferred>()("PairDeferred", {
   reason: Schema.String,
 }) {}
@@ -88,7 +88,7 @@ const AgentFile = Schema.fromJsonString(Schema.Struct({ runs: Schema.optionalKey
 const AgentProcess = Schema.fromJsonString(Schema.Struct({ pid: Schema.Int, runs: Schema.Struct({ a: Schema.String }) }));
 const AgentStatus = Schema.Struct({ clients: Schema.Array(Schema.Struct({ name: Schema.String, pid: Schema.optional(Schema.Int) })) });
 
-/** Decodes a pair's JSON file. */
+
 const readJson = <A>(file: string, schema: Schema.Decoder<A>) => Effect.try({
   try: () => readFileSync(file, "utf8"),
   catch: (cause) => new LanFailure({ problem: `read ${file}: ${cause instanceof Error ? cause.message : String(cause)}` }),
@@ -97,7 +97,7 @@ const readJson = <A>(file: string, schema: Schema.Decoder<A>) => Effect.try({
   Effect.mapError((failure) => (failure instanceof LanFailure ? failure : new LanFailure({ problem: `${file}: ${failure.message}` }))),
 );
 
-/** Both clients' pids from the pair agent, once it answers. */
+
 const clientsReady = (pair: number) => Effect.tryPromise({
   try: () => fetch("http://pair/status", { unix: agentSocket(pair) }).then((response) => response.json()),
   catch: () => undefined,
@@ -107,14 +107,14 @@ const clientsReady = (pair: number) => Effect.tryPromise({
   Effect.orElseSucceed(() => false),
 );
 
-/** How long a started pair session may take until both its clients run. */
+
 const READY = "10 minutes";
 
-/**
- * Starts pair `pair`'s session in the caller's scope and waits until both its
- * clients run. A session that fails or is deferred is stopped before this
- * returns; a deferred one is tried again every 45 s for `waitSeconds`.
- */
+
+
+
+
+
 const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, fps?: number) => {
   const directory = pairDirectory(pair);
   const deadline = Date.now() + waitSeconds * 1000;
@@ -124,10 +124,10 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
     const waiting = yield* pairAdmission(capacity);
     if (waiting !== undefined) return yield* new PairDeferred({ reason: waiting });
     rmSync(admissionFile(directory), { force: true });
-    // The session gets its own scope: stopped at once when this attempt fails, else held by the pool.
+
     const scope = yield* Scope.fork(yield* Effect.scope);
     return yield* Effect.gen(function*() {
-      // The desktops' Xwayland serves the games: in the batch slice a busy machine starved it and 3.0.1 games hung before their window.
+
       const session = yield* spawnLogged(ChildProcess.make(process.execPath, [capacity, "session", "--class", "native", "--memory-gib", "1", "--owner", `wisp-lan-pair-${pair}`, "--", process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity, ...(fps === undefined ? [] : ["--fps", String(fps)])], { stdin: "ignore" }), {
         stdout: join(directory, "session.out"),
         stderr: join(directory, "session.err"),
@@ -138,7 +138,7 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
           const code = yield* session.handle.exitCode.pipe(Effect.map(Number), Effect.orElseSucceed(() => -1));
           yield* session.written.pipe(Effect.timeoutOption("1 second"));
           if (code !== 75) return yield* new LanFailure({ problem: `its session exited with ${code}; see ${directory}/session.err and desktop-*.err` });
-          // Exit 75 is a deferral only when the helper says DEFER; it also exits 75 when it can't reach systemd --user (a user namespace, as run-bounded makes).
+
           const said = readFileSync(join(directory, "session.err"), "utf8");
           const reason = /"decision":"DEFER","reason":"([A-Z_]+)".*?"cpuSomeAvg10":([\d.]+)/.exec(said);
           if (reason === null) return yield* new LanFailure({ problem: `the capacity helper refused: ${said.trim().split("\n").slice(-2).join(" | ")}` });
@@ -161,11 +161,11 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
   );
 };
 
-/**
- * Several pools run at once (one per agent, each on its own pairs), so a pool
- * merges its pairs into pool.json and clients.json instead of replacing them:
- * it keeps every other pair whose agent socket still exists.
- */
+
+
+
+
+
 const registerPairs = (mine: readonly PoolPair[], profile: string, fps: number | undefined) => Effect.gen(function*() {
   const ids = new Set(mine.map(({ id }) => id));
   const others = ((yield* readPool)?.pairs ?? []).filter(({ id, agentSocket: socket }) => !ids.has(id) && existsSync(socket));
@@ -183,7 +183,7 @@ const pool: Command = (args) => Effect.gen(function*() {
   const [fpsText] = flagValues(args, "fps");
   const fps = fpsText === undefined ? undefined : Number(fpsText);
   if (args.includes("--fps") && fpsText === undefined || fps !== undefined && (!Number.isInteger(fps) || fps < 1)) return yield* new UsageFailure({ problem: "--fps takes a positive whole number" });
-  // One profile for every pair, or one per pair (parity,parity,visual): the last one repeats.
+
   const [profileText = "parity"] = flagValues(args, "pool-profile");
   const profiles = profileText.split(",");
   if (profiles.some((name) => PROFILES[name] === undefined)) return yield* new UsageFailure({ problem: `--pool-profile takes ${Object.keys(PROFILES).join(" or ")}, or one per pair separated by commas; pool clients never sign in and draw only Classic, so Reforged and Definitive need a signed-in client` });
@@ -192,7 +192,7 @@ const pool: Command = (args) => Effect.gen(function*() {
   const capacity = yield* capacityHelper(args);
   const sessions: { readonly exitCode: Effect.Effect<unknown, unknown> }[] = [];
   const entries: PoolPair[] = [];
-  // --pair K... picks which pairs and in what order the helper admits them; else 0..N-1.
+
   const chosen = flagValues(args, "pair").map(Number);
   const order = chosen.length > 0 ? chosen : Array.from({ length: pairs }, (_, index) => index);
   if (order.some((pair) => !Number.isInteger(pair) || pair < 0)) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
@@ -200,7 +200,7 @@ const pool: Command = (args) => Effect.gen(function*() {
     const profile = profileOf(pair);
     const started = yield* startPair(pair, profile, launcher, capacity, waitSeconds, fps).pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed(failure)));
     if (started instanceof LanFailure) {
-      // The pool is as big as the machine admits: keep the pairs that started.
+
       yield* Console.log(`${started.problem}; the pool stays at ${admitted} pair${admitted === 1 ? "" : "s"}; waiting: ${order.slice(admitted).join(", ")}`);
       if (admitted === 0) return yield* started;
       break;
@@ -208,7 +208,7 @@ const pool: Command = (args) => Effect.gen(function*() {
     sessions.push(started);
     const agentFile = join(pairDirectory(pair), "agent.json");
     const runs = existsSync(agentFile) ? (yield* readJson(agentFile, AgentFile)).runs ?? {} : {};
-    // The capacity scope can kill the desktop's own cleanup; the pool outlives that scope.
+
     yield* Effect.addFinalizer(() => started.stop.pipe(Effect.andThen(Effect.sync(() => {
       for (const run of [runs.a, runs.b]) {
         if (run !== undefined && basename(run).startsWith("private-desktop.") && existsSync(join(run, "lifecycle-owned"))) rmSync(join(run, "active"), { force: true });
@@ -223,7 +223,7 @@ const pool: Command = (args) => Effect.gen(function*() {
     yield* Console.log(`pair ${pair}: ${clientName(pair, "a")} and ${clientName(pair, "b")} running (${profile}${fps === undefined ? "" : `, ${fps} fps`}); desktops ${runs.a ?? "?"} and ${runs.b ?? "?"}`);
   }
   yield* Console.log(`pool: ${poolFile()}; clients: ${poolClientsFile()}. Ctrl-C stops it.`);
-  // Closing the pool's scope (its end, a failure, Ctrl-C or SIGTERM) stops every session it started.
+
   const ended = Effect.forEach(sessions, (session) => Effect.ignore(session.exitCode), { concurrency: "unbounded", discard: true });
   yield* seconds > 0 ? Effect.timeoutOption(ended, `${seconds} seconds`) : ended;
 }).pipe(Effect.scoped, Effect.provide(BunServices.layer));
@@ -241,7 +241,7 @@ const fresh: Command = (args) => Effect.gen(function*() {
 
 const SoloResult = Schema.Struct({ clients: Schema.Array(Schema.Struct({ client: Schema.String, seconds: Schema.Finite })) });
 
-/** Every client of the named running pairs (default: every pair in the pool) plays MAP alone, the pairs at once. */
+
 const solo: Command = (args) => Effect.gen(function*() {
   const [map] = args.filter((arg, index) => !arg.startsWith("--") && !args[index - 1]?.startsWith("--"));
   if (map === undefined || !existsSync(map)) return yield* new UsageFailure({ problem: "solo takes a built map file (MAP.w3x)" });

@@ -1,10 +1,10 @@
-// The private map-build step of the consumer CI template (wisp:docs/ci.md).
-// Runs the game's map build into a staging file inside the private store,
-// then publishes STORE/NAME-REVISION.w3x and its sha256 digest beside it by
-// rename. The store must lie outside the checkout, and the step refuses a
-// GitHub-hosted runner, so a proprietary map never reaches public artifacts.
-// Usage: bun ciMapBuild.ts --store DIR --name NAME --revision SHA -- COMMAND [ARG...]
-// The command writes the map to $WISP_MAP_OUT; an argument `{out}` is replaced by that path.
+
+
+
+
+
+
+
 import { mkdir, rename, rm, stat } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
@@ -55,11 +55,11 @@ export class CiMapBuildFailure extends Schema.TaggedError<CiMapBuildFailure>()("
 const attempt = <A>(what: string, run: () => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => new CiMapBuildFailure({ problem: `${what}: ${describeCause(cause)}` }) });
 
-/**
- * Builds the map into a staging folder in the store and publishes it there.
- * Interrupting the step (SIGINT or SIGTERM under runMain) stops the build's
- * process group; the staging folder is removed however the step ends.
- */
+
+
+
+
+
 export const buildMapIntoStore = (step: MapBuildStep) => Effect.gen(function*() {
   const problem = stepProblem(step);
   if (problem !== undefined) return yield* new CiMapBuildFailure({ problem });
@@ -88,13 +88,13 @@ export const buildMapIntoStore = (step: MapBuildStep) => Effect.gen(function*() 
   }).pipe(Effect.ensuring(Effect.promise(() => rm(staging, { recursive: true, force: true }))));
 });
 
-/** `buildMapIntoStore` as a promise; it rejects with the step's CiMapBuildFailure. */
+
 export const buildIntoStore = (step: MapBuildStep): Promise<StoredMap> =>
   Effect.runPromise(buildMapIntoStore(step).pipe(Effect.provide(BunServices.layer)));
 
 const USAGE = "usage: bun ciMapBuild.ts --store DIR --name NAME --revision SHA -- COMMAND [ARG...]";
 
-/** The step from the command line: 0 when the map is published, 1 when the build failed, 2 for a usage problem. */
+
 const main = (args: readonly string[]) => Effect.gen(function*() {
   const split = args.indexOf("--");
   const flags = split < 0 ? args : args.slice(0, split);

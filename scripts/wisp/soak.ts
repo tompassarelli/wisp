@@ -1,11 +1,11 @@
-// The soak (wisp:docs/soak.md): many headless matches of a map, played by the
-// game's computers and by fuzzed controllers, faster than real time, each
-// watched for what a playtest would find: a stall, a desync, an error report,
-// a scene problem, a fighter drawn with nothing, and frames that cost more
-// than real time allows or a catch-up that never ends. Each match repeats from
-// its seed; a finding keeps the match and its inputs as a repro file. Plain
-// functions, so tests use them without Effect; commands/soak.ts runs them in
-// worker processes.
+
+
+
+
+
+
+
+
 import { dlopen } from "bun:ffi";
 import { Schema } from "effect";
 import type { ClientFiles, HeadlessClient, MapEntry } from "../../src/headless/client";
@@ -18,100 +18,100 @@ import { type SceneBody, type SceneExpectations, bodyProblems, readSceneLines, s
 import { type NativeCostModel, WARCRAFT_COST, nativeFrameCost } from "../../src/headless/nativeCost";
 import { MEASURED_BATTLE_NET, syncDelivery } from "../../src/headless/syncChannel";
 
-/** A controller the fuzzer drives: buttons, and axes whose values are whole numbers from -axisLimit to axisLimit. */
+
 export interface SoakController {
   readonly buttons: readonly string[];
-  /** How often each button starts a pattern, relative to the others; 1 each by default. */
+
   readonly weights?: readonly number[];
-  /** Buttons that toggle a mode, such as a pause: pressed twice, a moment apart, so the mode doesn't stick. */
+
   readonly toggles?: readonly string[];
   readonly axes: readonly string[];
   readonly axisLimit: number;
-  /** The axis values a player can't feel; the fuzzer jitters inside and across them. */
+
   readonly deadZone: number;
 }
 
-/** One change on a controller, in the order it happens within its frame. */
+
 export type SoakEdge =
   | { readonly button: number; readonly down: boolean }
   | { readonly axis: number; readonly value: number };
 
-/** What a player's input source does on one frame of a match, counted from the frame the match began. */
+
 export interface SoakInputFrame {
-  /** Each fuzzed slot's controller edges, in order. */
+
   readonly edges: ReadonlyMap<number, readonly SoakEdge[]>;
-  /** Slots whose input source starts sending nothing for this many frames. */
+
   readonly silences: ReadonlyMap<number, number>;
-  /** Wall-clock milliseconds the whole game stops before this frame, as in a lag spike. */
+
   readonly hitchMs: number;
-  /** Text each player's input helper typed before this frame, in a match played through the helpers. */
+
   readonly typed: ReadonlyMap<number, readonly string[]>;
-  /** Files each player's input helper put in their CustomMapData that the map read first during this frame; those read before the match began are at frame 0. */
+
   readonly files: ReadonlyMap<number, readonly (readonly [name: string, chunks: readonly string[]])[]>;
 }
 
-/** A match's inputs as a repro file keeps them: only the frames where something happened. */
+
 export interface SoakInputs {
   readonly edges: readonly (readonly [frame: number, slot: number, edge: SoakEdge])[];
   readonly silences: readonly (readonly [frame: number, slot: number, frames: number])[];
   readonly hitches: readonly (readonly [frame: number, ms: number])[];
-  /** Frames whose clients cost more than real time allows, with the milliseconds over, which the replay's clock adds again. */
+
   readonly slow: readonly (readonly [frame: number, ms: number])[];
-  /**
-   * In a match played through its players' input helpers: what each typed,
-   * by the frame it reached the client before, and each file it wrote that the
-   * map read, by the frame the map first read it (0: before the match began).
-   * A replay plays these instead of the edges, which reached the clients
-   * only through the helpers.
-   */
+
+
+
+
+
+
+
   readonly typed?: readonly (readonly [frame: number, slot: number, text: string])[];
   readonly files?: readonly (readonly [frame: number, slot: number, name: string, chunks: readonly string[]])[];
 }
 
 export interface FuzzOptions {
-  /** Chance a new pattern starts on a frame; patterns overlap. */
+
   readonly rate: number;
-  /** Chance per frame that a fuzzed player's input source goes quiet for a while. */
+
   readonly silence: number;
-  /** Chance per frame that the whole game stops for a moment. */
+
   readonly hitch: number;
 }
 
-/** About seven patterns a second, a quiet input source every minute and a lag spike every 40 s of a fuzzed player's match. */
+
 export const SOAK_FUZZ: FuzzOptions = { rate: 1 / 8, silence: 1 / 3600, hitch: 1 / 2400 };
 
-/** The policy name that drives a slot with the fuzzer; every other policy is the game's to interpret. */
+
 export const FUZZ_POLICY = "fuzz";
 
-/** One match of a soak, as data: everything it needs to repeat. */
+
 export interface SoakMatch {
-  /** Its place in the run, which names its repro file. */
+
   readonly index: number;
   readonly seed: number;
-  /** The game's fighter names, one per player slot. */
+
   readonly fighters: readonly string[];
   readonly stage: string;
-  /** One per player slot: FUZZ_POLICY or one of the game's. */
+
   readonly policies: readonly string[];
-  /** Frames the match may run after it began; it ends sooner when the game says it is over. */
+
   readonly frames: number;
-  /** Every player's input came from an input helper typing into their client, which the repro's `typed` inputs replay. */
+
   readonly typed?: boolean;
 }
 
-/** What each match chooses from. */
+
 export interface SoakRoster {
   readonly fighters: readonly string[];
   readonly stages: readonly string[];
-  /** Policy pairs, one policy per player slot. */
+
   readonly policies: readonly (readonly string[])[];
 }
 
-/**
- * `matches` matches: every ordered pair of fighters on every stage, then
- * again with the next policy pair, and so on, each with its own seed. `keep`
- * narrows the cycle, such as to the pairs one fighter plays in.
- */
+
+
+
+
+
 export function planSoak(roster: SoakRoster, matches: number, seed: number, frames: number, keep: (match: SoakMatch) => boolean = () => true): SoakMatch[] {
   const pairs = roster.fighters.flatMap((first) => roster.fighters.map((second) => [first, second] as const));
   const cycle = roster.policies.flatMap((policies) => pairs.flatMap((fighters) => roster.stages.map((stage) => ({ index: 0, seed: 0, fighters, stage, policies, frames }))))
@@ -125,15 +125,15 @@ export function planSoak(roster: SoakRoster, matches: number, seed: number, fram
   });
 }
 
-/** The edges a pattern adds, by frames from now. */
+
 type Pattern = (readonly [delay: number, edge: SoakEdge])[];
 
-/**
- * A controller's input, made of patterns that probe its edges: a press and
- * release in one frame, holds of every length, chords, mashing, a stick
- * flicked to the rim and back, swept across its range or jittered around its
- * dead zone, everything let go at once, and a pause pressed twice.
- */
+
+
+
+
+
+
 class Fuzzer {
   private readonly held = new Set<number>();
   private readonly axes: number[];
@@ -204,7 +204,7 @@ class Fuzzer {
           .concat([[frames, { axis: index, value: 0 }]]);
       }
       case 7: {
-        // A direction and a button on the same frame, as a smash or a tilt.
+
         const index = axis();
         const button = this.button();
         const hold = random.between(1, 12);
@@ -223,7 +223,7 @@ class Fuzzer {
     }
   }
 
-  /** The edges of `frame`: each scheduled change that still changes something. */
+
   frame(frame: number): SoakEdge[] {
     if (this.random.chance(this.rate)) {
       for (const [delay, edge] of this.pattern()) {
@@ -251,12 +251,12 @@ class Fuzzer {
   }
 }
 
-/** A match's inputs frame by frame: from its seed, or as a repro file recorded them. */
+
 export interface SoakInputSource {
   frame(frame: number): SoakInputFrame;
-  /** The milliseconds a frame's clients cost over real time: as measured, or as the repro file recorded them. */
+
   slow(frame: number, measuredMs: number): number;
-  /** What happened so far, for a repro file. */
+
   recorded(): SoakInputs;
 }
 
@@ -265,7 +265,7 @@ const NO_SILENCES: ReadonlyMap<number, number> = new Map();
 const NO_TYPING: ReadonlyMap<number, readonly string[]> = new Map();
 const NO_FILES: ReadonlyMap<number, readonly (readonly [string, readonly string[]])[]> = new Map();
 
-/** Fuzzed input for each slot whose policy is FUZZ_POLICY, and lag spikes for the whole match, all from the match's seed. */
+
 export function fuzzedInputs(match: SoakMatch, controller: SoakController, options: FuzzOptions = SOAK_FUZZ): SoakInputSource {
   const timing = new Random(match.seed * 31 + 7);
   const fuzzers = new Map<number, Fuzzer>();
@@ -304,7 +304,7 @@ export function fuzzedInputs(match: SoakMatch, controller: SoakController, optio
   };
 }
 
-/** A repro file's inputs, frame by frame. */
+
 export function recordedInputs(inputs: SoakInputs): SoakInputSource {
   const edges = new Map<number, Map<number, SoakEdge[]>>();
   for (const [frame, slot, edge] of inputs.edges) {
@@ -337,105 +337,105 @@ export function recordedInputs(inputs: SoakInputs): SoakInputSource {
   };
 }
 
-/** What the game's driver is given before each frame. */
+
 export interface SoakStep {
-  /** The frame about to run, counted from the frame the match began. */
+
   readonly frame: number;
-  /** Wall-clock milliseconds since the match began, as the players' input sources live it. */
+
   readonly wallMs: number;
-  /** Each fuzzed slot's controller edges this frame, in order. */
+
   readonly edges: ReadonlyMap<number, readonly SoakEdge[]>;
-  /** Slots whose input source sends nothing now. */
+
   readonly silent: ReadonlySet<number>;
 }
 
-/** What one client shows the soak after a frame. */
+
 export interface SoakObservation {
-  /** The confirmed frame, while the match should advance; undefined in menus, at results or in a pause. */
+
   readonly progress: number | undefined;
-  /** What tells this player why the match waits, such as "Waiting for Player 2". */
+
   readonly waiting?: string | undefined;
-  /** Frames of input that have reached the client and that it has yet to confirm. */
+
   readonly backlog?: number;
-  /** The match has ended: its result shows. */
+
   readonly over: boolean;
 }
 
-/** One match being played: the game feeds its players' input and reads its clients. */
+
 export interface SoakDriver {
-  /** Before each frame: what every player's input source sends. */
+
   input(step: SoakStep): void;
-  /** In a client, after each frame. */
+
   observe(client: HeadlessClient): SoakObservation;
-  /** In a client: its confirmed state's frame and hash, which every client must agree on. */
+
   confirmed?(client: HeadlessClient): { readonly frame: number; readonly checksum: string } | undefined;
-  /** In a client, when it writes a scene report: what its player must see now, such as each fighter in play. */
+
   bodies?(client: HeadlessClient): readonly SceneBody[];
-  /**
-   * In a client, at a match's first finding: the game's repro of the moments
-   * before it, the lines its repro key saves (wisp:docs/repro.md), which
-   * `wisp repro` replays.
-   */
+
+
+
+
+
   repro?(client: HeadlessClient): readonly string[] | undefined;
-  /**
-   * Characters a player's input helper typed into their client's edit box
-   * before this frame, which Warcraft takes at a cost that grows with their
-   * square (wisp:src/headless/nativeCost.ts).
-   */
+
+
+
+
+
   typed?(slot: number): number;
-  /**
-   * In a client, after each frame: what the game's own detectors found, such
-   * as a fighter caught in a loop it can't escape. Each is a `game` finding,
-   * reported once per match, client and detector.
-   */
+
+
+
+
+
   findings?(client: HeadlessClient): readonly SoakGameFinding[];
 }
 
-/** What one of the game's own detectors found. */
+
 export interface SoakGameFinding {
-  /** The detector's name, which starts the finding's text. */
+
   readonly detector: string;
   readonly text: string;
 }
 
-/** How a game plays a soak match. */
+
 export interface SoakGame {
-  /** The map entry the clients start: the build players run, with the scene recorder when the soak checks scenes. */
+
   readonly entry: MapEntry;
-  /**
-   * Takes started clients to the beginning of `match`: its fighters, stage
-   * and policies. Throws when the match doesn't begin.
-   */
+
+
+
+
   begin(clients: Lockstep, match: SoakMatch): SoakDriver;
 }
 
-/** When a detector reports. Milliseconds are the native game's. */
+
 export interface SoakLimits {
-  /** Frames without confirmed progress that make a stall: 3 s. */
+
   readonly stallFrames: number;
-  /** Wall-clock milliseconds a frame has: 60 frames a second. */
+
   readonly frameMs: number;
-  /** Native milliseconds per measured millisecond of a client's frame. */
+
   readonly costScale: number;
-  /** A client frame whose own work costs more, after costScale, misses its moment. */
+
   readonly spikeMs: number;
-  /**
-   * The longest a frame may stop taking typed text into an edit box: the
-   * bound of what the game's input helper types at once. Over it is a
-   * `typing` finding.
-   */
+
+
+
+
+
   readonly typingMs: number;
-  /** Backlog frames that count as behind; once they keep growing, or stay, the game can't catch up. */
+
   readonly backlogFrames: number;
-  /** Seconds of growing lag or backlog that make a spiral. */
+
   readonly growthSeconds: number;
-  /** Frames a backlog may stay above backlogFrames before the game counts as stuck behind. */
+
   readonly recoverFrames: number;
-  /** Frames between confirmed-state comparisons. */
+
   readonly checksumEvery: number;
-  /** Frames the match plays on after it is over, so what the result screen shows is checked too. */
+
   readonly afterOver: number;
-  /** Frames a process plays before frame costs count: its first frames parse and compile the map's code. */
+
   readonly warmUpFrames: number;
 }
 
@@ -457,7 +457,7 @@ export type SoakFindingKind = "stall" | "desync" | "error" | "scene" | "invisibl
 
 export interface SoakFinding {
   readonly kind: SoakFindingKind;
-  /** The frame it was found after, counted from the frame the match began. */
+
   readonly frame: number;
   readonly slot?: number;
   readonly text: string;
@@ -465,34 +465,34 @@ export interface SoakFinding {
 
 export interface SoakResult {
   readonly match: SoakMatch;
-  /** Frames played after the match began. */
+
   readonly frames: number;
-  /** The game's wall clock at the end: frames at 60 a second, plus lag spikes and frames that cost more. */
+
   readonly wallMs: number;
-  /** Measured milliseconds of the clients' frames, every client together. */
+
   readonly costMs: number;
-  /** The costliest client frame, measured. */
+
   readonly worstFrameMs: number;
-  /**
-   * Recovery typing stalls: each client frame that stopped longer than its
-   * 1/60 s taking typed text, as a backlog drains, in native milliseconds.
-   * Over limits.typingMs one is a `typing` finding.
-   */
+
+
+
+
+
   readonly typingStallsMs: readonly number[];
   readonly over: boolean;
   readonly findings: readonly SoakFinding[];
   readonly inputs: SoakInputs;
-  /** Each client's native call checksum at the end. */
+
   readonly checksums: readonly string[];
-  /** The game's repro lines from each client at the first finding, when the game saves repros. */
+
   readonly repros?: readonly (readonly [slot: number, lines: readonly string[]])[];
 }
 
-/**
- * This thread's CPU milliseconds on Linux, the process's elsewhere: a frame's
- * cost without the time another process held the core, or the collector's and
- * compiler's own threads ran beside it.
- */
+
+
+
+
+
 export const cpuMillis: () => number = (() => {
   if (process.platform !== "linux") {
     return () => {
@@ -509,30 +509,30 @@ export const cpuMillis: () => number = (() => {
   };
 })();
 
-/** Text of a finding with its numbers left out, to report each kind of problem once per client. */
+
 const shape = (text: string) => text.replace(/\d+(\.\d+)?/g, "#");
 
-/** A client frame that cost more than its moment: whose, and how many native milliseconds. */
+
 interface CostlyFrame {
   readonly slot: number;
   readonly ms: number;
 }
 
-/**
- * Watches a match's clients after every frame and keeps what it finds. The
- * soak's own loop and a game's real-time runs (such as through its input
- * helper) share it.
- */
+
+
+
+
+
 export class SoakMonitor {
   readonly findings: SoakFinding[] = [];
-  /** The game's repro lines from each client at the match's first finding. */
+
   readonly repros = new Map<number, readonly string[]>();
-  /** Frames since the match began. */
+
   frame = 0;
   over = false;
   costMs = 0;
   worstFrameMs = 0;
-  /** Recovery typing stalls: each client frame that stopped longer than its 1/60 s taking typed text, in milliseconds. */
+
   readonly typingStallsMs: number[] = [];
   private readonly seen = new Set<string>();
   private readonly errors: number[];
@@ -542,12 +542,12 @@ export class SoakMonitor {
   private stalledSince: number | undefined;
   private stallReported = false;
   private quietUntil = 0;
-  /** Frames a client's cost, after costScale, was over spikeMs: the costliest client of each. */
+
   readonly spikes = new Map<number, CostlyFrame>();
   private behindSince: number | undefined;
   private readonly windows: { readonly lag: number; readonly backlog: number }[] = [];
   private overAt: number | undefined;
-  /** Frames of this match before its frame costs count, while the process still compiles the map's code. */
+
   private readonly warmUp: number;
 
   constructor(
@@ -556,7 +556,7 @@ export class SoakMonitor {
     private readonly limits: SoakLimits = SOAK_LIMITS,
     private readonly scene?: SceneExpectations,
     private readonly filePrefix = "wisp",
-    /** Frames this process played before this match. */
+
     played = Number.POSITIVE_INFINITY,
   ) {
     this.warmUp = Math.max(0, limits.warmUpFrames - played);
@@ -580,17 +580,17 @@ export class SoakMonitor {
     }
   }
 
-  /** Whether the match has played what it should: over, and the result shown a moment. */
+
   get done(): boolean {
     return this.overAt !== undefined && this.frame - this.overAt >= this.limits.afterOver;
   }
 
-  /**
-   * After each frame: `wallMs` is the game's wall clock, `quiet` the slots
-   * whose input source sends nothing now, `nativeMs` each client's predicted
-   * native milliseconds for the frame's own work (by default its measured
-   * cost times costScale) and `typingMs` how long it stops taking typed text.
-   */
+
+
+
+
+
+
   afterFrame(wallMs: number, quiet: ReadonlySet<number>, nativeMs?: readonly number[], typingMs?: readonly number[]): void {
     this.frame++;
     const { clients, driver, limits } = this;
@@ -609,7 +609,7 @@ export class SoakMonitor {
       if (this.frame > this.warmUp && ms > limits.spikeMs) {
         if (ms > (this.spikes.get(this.frame)?.ms ?? 0)) this.spikes.set(this.frame, { slot: client.slot, ms });
       }
-      // Typing is counted, not timed: a frame over the bound is over it on every run.
+
       const typing = typingMs?.[index] ?? 0;
       if (typing > limits.frameMs) this.typingStallsMs.push(typing);
       if (typing > limits.typingMs) {
@@ -653,7 +653,7 @@ export class SoakMonitor {
     client.run(() => {
       expected = bodies.call(this.driver, client);
     });
-    // A body counts as missing once two reports in a row show nothing of it: one report may fall between a KO and the game's state.
+
     const missing = bodyProblems(report, expected, this.scene.visibility?.models);
     const shapes = missing.map(({ seen }) => seen);
     for (const problem of missing) {
@@ -703,7 +703,7 @@ export class SoakMonitor {
   private checkCatchUp(wallMs: number, observations: readonly SoakObservation[], quiet: boolean): void {
     const { limits } = this;
     const backlog = Math.max(0, ...observations.map(({ backlog }) => backlog ?? 0));
-    // A quiet input source holds every client's confirmed frame; catching up starts when it speaks again.
+
     if (quiet) {
       this.behindSince = undefined;
       this.windows.length = 0;
@@ -718,13 +718,13 @@ export class SoakMonitor {
     this.windows.push({ lag, backlog });
     const recent = this.windows.slice(-(limits.growthSeconds + 1));
     if (recent.length <= limits.growthSeconds) return;
-    // Growth by more than a frame a second, so a clock summed frame by frame doesn't grow by its rounding.
+
     const growing = (value: (window: { readonly lag: number; readonly backlog: number }) => number, by: number) =>
       recent.every((window, index) => index === 0 || value(window) > value(recent[index - 1] ?? window) + by);
     if (growing(({ lag }) => lag, limits.frameMs) && lag > 1000) {
       this.find("catch-up", `the game fell ${(lag / 1000).toFixed(1)} s behind real time and kept falling for ${limits.growthSeconds} s (worst client frame ${this.worstFrameMs.toFixed(1)} ms measured)`);
     }
-    // A spiral grows while behind: a game's usual backlog rising a few frames, then a lag spike, is a catch-up starting.
+
     if (growing(({ backlog }) => backlog, 1) && recent.every(({ backlog }) => backlog > limits.backlogFrames)) {
       this.find("catch-up", `catch-up spiral: input not yet played grew for ${limits.growthSeconds} s to ${backlog} frames`);
     }
@@ -736,7 +736,7 @@ export class SoakMonitor {
     if (divergence !== undefined) this.find("desync", `native calls differ ${divergence}`, undefined, "native");
     const confirmed = driver.confirmed;
     if (confirmed === undefined) return;
-    // Clients compare states read on the same frame of the match, each at the confirmed frame it reached.
+
     const states = clients.clients.map((client) => {
       let state: { readonly slot: number; readonly frame: number; readonly checksum: string } | undefined;
       client.run(() => {
@@ -752,7 +752,7 @@ export class SoakMonitor {
     }
   }
 
-  /** Reports the costly frames among `frames`, such as those a replay found costly too. */
+
   costFinding(frames: ReadonlyMap<number, CostlyFrame>, again?: ReadonlyMap<number, { readonly ms: number }>): void {
     let worst: [number, CostlyFrame] | undefined;
     for (const entry of frames) if (worst === undefined || entry[1].ms > worst[1].ms) worst = entry;
@@ -762,10 +762,10 @@ export class SoakMonitor {
     this.find("cost", `${frames.size} client frame${frames.size === 1 ? "" : "s"} cost more than ${this.limits.spikeMs.toFixed(1)} ms${again === undefined ? "" : " in the match and again in its replay"}; the worst, p${slot}'s frame ${frame}, ${ms.toFixed(1)} ms${replayed === undefined ? "" : ` then ${replayed.ms.toFixed(1)} ms`}`);
   }
 
-  /**
-   * The findings the end of the match adds: a last desync check, a match that
-   * didn't end, and with `costs` its costly frames as measured once.
-   */
+
+
+
+
   finish(costs = true): readonly SoakFinding[] {
     this.checkDesync();
     if (costs) this.costFinding(this.spikes);
@@ -774,7 +774,7 @@ export class SoakMonitor {
   }
 }
 
-/** What a soak match needs from the game's soak declaration. */
+
 export interface SoakSetup {
   readonly map: HeadlessMap;
   readonly scene?: SceneExpectations;
@@ -782,14 +782,14 @@ export interface SoakSetup {
   readonly players?: readonly number[];
   readonly limits?: Partial<SoakLimits>;
   readonly fuzz?: Partial<FuzzOptions>;
-  /**
-   * Warcraft's costs beyond the measured frame time, which costScale scales:
-   * each native call and the edit-box stall of typed text (nativeCost.ts).
-   */
+
+
+
+
   readonly cost?: NativeCostModel;
 }
 
-/** Frames this process has played, across matches. */
+
 let framesPlayed = 0;
 
 const describeError = (error: unknown) => (error instanceof Error ? (error.stack ?? error.message).split("\n").slice(0, 8).join("\n    ") : String(error));
@@ -799,19 +799,19 @@ interface Played {
   readonly monitor: SoakMonitor | undefined;
 }
 
-/**
- * Plays one match in two or more clients of the game's entry, faster than real time:
- * the game's wall clock gains 1/60 s a frame, more when a client's frame
- * costs more than that and by every lag spike, and the players' input
- * sources live on that clock. With `inputs` it replays a repro file's.
- */
+
+
+
+
+
+
 export function playSoakMatch(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, match: SoakMatch, inputs?: SoakInputs): SoakResult {
   const first = playOnce(runtime, game, setup, match, inputs);
   const spikes = first.monitor?.spikes;
   if (spikes === undefined || spikes.size === 0 || first.result.findings.some(({ kind }) => kind === "crash")) return first.result;
-  // A frame's cost is measured on a busy machine, where a collection or a
-  // compile can land on any frame: a costly frame counts when its replay,
-  // on the same clock, finds it costly again.
+
+
+
   const replay = playOnce(runtime, game, setup, match, first.result.inputs);
   const again = replay.monitor?.spikes ?? new Map<number, CostlyFrame>();
   const confirmed = new Map([...spikes].filter(([frame]) => again.has(frame)));
@@ -824,14 +824,14 @@ function playOnce(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, ma
   const source = inputs === undefined ? fuzzedInputs(match, setup.controller, { ...SOAK_FUZZ, ...setup.fuzz }) : recordedInputs(inputs);
   const clients = runtime.clients(game.entry, setup.players ?? [0, 1], { delivery: syncDelivery(MEASURED_BATTLE_NET, match.seed), keepCalls: 64, cost: cpuMillis });
   const model = setup.cost ?? WARCRAFT_COST;
-  /** Each client's native calls when its last frame ended. */
+
   let calls: number[] = [];
   let monitor: SoakMonitor | undefined;
   let wallMs = 0;
   const crashes: SoakFinding[] = [];
   try {
     clients.start();
-    // Files a helper wrote that the map read before the match began, such as in its menus, are recorded at frame 0.
+
     for (const [frame, slot, name, chunks] of inputs?.files ?? []) if (frame === 0) clients.client(slot).published.set(name, chunks);
     const driver = game.begin(clients, match);
     calls = clients.clients.map((client) => client.callCount());
@@ -846,13 +846,13 @@ function playOnce(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, ma
       const quiet = new Set<number>();
       for (const [slot, until] of quietUntil) if (until > frame) quiet.add(slot);
       framesPlayed++;
-      // What a player's input helper wrote and typed reaches their client before the frame, as RealtimeClients delivers it.
+
       for (const [slot, written] of step.files) for (const [name, chunks] of written) clients.client(slot).published.set(name, chunks);
       for (const [slot, lines] of step.typed) for (const line of lines) clients.type(slot, line);
-      // In a match played through input helpers the edges reached the clients only as what the helpers typed.
+
       driver.input({ frame, wallMs, edges: match.typed === true ? NO_EDGES : step.edges, silent: quiet });
       clients.frames(1);
-      // A frame's native cost: its measured time scaled, its natives' calls and the stall of what was typed before it.
+
       const typingMs: number[] = [];
       const nativeMs = clients.clients.map((client, index) => {
         const now = client.callCount();
@@ -864,7 +864,7 @@ function playOnce(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, ma
         const measured = framesPlayed > limits.warmUpFrames ? clients.costs[index] ?? 0 : 0;
         return measured * limits.costScale + predicted.callbacksUs / 1000;
       });
-      // The wall clock waits for the costliest client's frame, its typing stall included.
+
       const frameMs = Math.max(0, ...nativeMs.map((ms, index) => ms + (typingMs[index] ?? 0)));
       wallMs += limits.frameMs + source.slow(frame, Math.max(0, frameMs - limits.frameMs));
       watching.afterFrame(wallMs, quiet, nativeMs, typingMs);
@@ -872,7 +872,7 @@ function playOnce(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, ma
   } catch (error) {
     crashes.push({ kind: "crash", frame: monitor?.frame ?? 0, text: describeError(error) });
   }
-  // A crash ends the match early; it is the finding, not the match left unfinished.
+
   const findings = crashes.length > 0 ? [...(monitor?.findings ?? []), ...crashes] : monitor?.finish(false) ?? [];
   const result = {
     match,
@@ -890,11 +890,11 @@ function playOnce(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, ma
   return { result, monitor };
 }
 
-/**
- * What a real-time run through players' input helpers records for its repro:
- * `input` and `files` wrap each player's typed text and CustomMapData, and
- * `recorded` gives what they delivered, by the frame `frame()` says is next.
- */
+
+
+
+
+
 export function helperRecorder(frame: () => number) {
   const typed: [number, number, string][] = [];
   const files: [number, number, string, readonly string[]][] = [];
@@ -924,11 +924,11 @@ export function helperRecorder(frame: () => number) {
   };
 }
 
-/** A repro file: one match, what it found, and its inputs, so `soak --repro FILE` plays it again. */
+
 export interface SoakRepro {
   readonly format: "wisp-soak-repro";
   readonly version: 1;
-  /** The game's soak, such as its name. */
+
   readonly project: string;
   readonly match: SoakMatch;
   readonly findings: readonly SoakFinding[];
@@ -978,13 +978,13 @@ const ReproFile = Schema.fromJsonString(Schema.Struct({
   inputs: InputsSchema,
 }));
 
-/** A repro file's contents; throws when the text isn't one. */
+
 export const readSoakRepro = (text: string): SoakRepro => Schema.decodeSync(ReproFile)(text);
 
-/** A match as the soak command sends it to a worker process, one JSON line. */
+
 export const readSoakMatch = (line: string): SoakMatch => Schema.decodeSync(Schema.fromJsonString(MatchSchema))(line);
 
-/** A worker's answer for one match: its result, with its inputs only when it found something. */
+
 export interface SoakReply extends Omit<SoakResult, "inputs"> {
   readonly inputs?: SoakInputs;
 }
@@ -1006,24 +1006,24 @@ const ReplySchema = Schema.fromJsonString(Schema.Struct({
 export const soakReply = ({ inputs, ...result }: SoakResult): SoakReply => (result.findings.length > 0 ? { ...result, inputs } : result);
 export const readSoakReply = (line: string): SoakReply => Schema.decodeSync(ReplySchema)(line);
 
-/** A match in a line: its fighters, stage, policies and seed. */
+
 export const describeMatch = ({ index, fighters, stage, policies, seed }: SoakMatch) =>
   `match ${index}: ${fighters.join(" vs ")} on ${stage}, ${policies.join("/")}, seed ${seed}`;
 
-/** A game's soak: the default export of its soak module, made with defineSoak(). */
+
 export interface SoakProject extends SoakSetup {
-  /** The game's name, kept in repro files. */
+
   readonly name: string;
-  /**
-   * The module whose default export, made with defineSoakGame(), plays
-   * matches. It loads only where matches play, so the game's host program
-   * never reads map code.
-   */
+
+
+
+
+
   readonly game: string;
   readonly roster: SoakRoster;
-  /** Frames a match may run after it began. */
+
   readonly frames: number;
-  /** Matches a run plays unless told how many. */
+
   readonly matches: number;
 }
 
@@ -1041,14 +1041,14 @@ async function defaultExport(path: string): Promise<unknown> {
   return typeof module === "object" && module !== null && "default" in module ? module.default : undefined;
 }
 
-/** The soak a module declares; throws when its default export isn't one. */
+
 export async function loadSoakProject(path: string): Promise<SoakProject> {
   const value = await defaultExport(path);
   if (!isSoakProject(value)) throw new Error(`${path} exports no defineSoak() declaration as its default`);
   return value;
 }
 
-/** The match setup a module declares; throws when its default export isn't one. */
+
 export async function loadSoakGame(path: string): Promise<SoakGame> {
   const value = await defaultExport(path);
   if (!isSoakGame(value)) throw new Error(`${path} exports no defineSoakGame() setup as its default`);

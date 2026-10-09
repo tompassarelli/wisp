@@ -1,6 +1,6 @@
-// Generates TypeScript declarations for Warcraft's natives from common.j and
-// blizzard.j files that describe the patch the map targets.
-// Usage: bun scripts/natives.ts COMMON_J BLIZZARD_J OUT_D_TS
+
+
+
 const [commonPath, blizzardPath, outPath] = process.argv.slice(2);
 if (commonPath === undefined || blizzardPath === undefined || outPath === undefined) {
   throw new Error("usage: bun scripts/natives.ts COMMON_J BLIZZARD_J OUT_D_TS");
@@ -14,8 +14,8 @@ const PRIMITIVES: Record<string, string> = {
   code: "(this: void) => void",
   nothing: "void",
 };
-// Natives that may legitimately return null in Lua are many; declare handle
-// returns as possibly undefined only where callers must check (left to wrappers).
+
+
 const RESERVED = new Set(["function", "class", "new", "delete", "in", "default", "var", "let", "const", "this", "type", "interface", "enum"]);
 const RENAMED_30_NATIVES = new Set([
   "GetEquippedItem", "GetUnequippedItem", "SetItemColor", "IsItemEquipped", "IsItemInBag", "GetItemEquipmentType", "GetItemTag",

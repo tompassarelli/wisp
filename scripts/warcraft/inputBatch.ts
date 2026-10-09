@@ -1,4 +1,4 @@
-/** Inputs between two observed screen boundaries. Waits are calibrated by the consuming journey. */
+
 export type InputAction =
   | { readonly kind: "keys"; readonly keys: readonly string[]; readonly delayMillis?: number; readonly settleMillis?: number }
   | { readonly kind: "text"; readonly text: string; readonly delayMillis?: number }
@@ -8,17 +8,17 @@ export type InputAction =
 export interface PointerPosition { readonly x: number; readonly y: number }
 export interface InputBatch {
   readonly args: readonly string[];
-  /** Stop before pressing if relative XTEST motion did not reach this point. */
+
   readonly pointer?: PointerPosition;
 }
 
 const SENDING_KEYS = new Set(["return", "kp_enter", "iso_enter", "linefeed"]);
 export const sendsChat = (names: readonly string[]) => names.some((name) => name.split("+").some((key) => SENDING_KEYS.has(key.toLowerCase())));
 
-/**
- * xdotool type consumes the rest of its argv, so it ends one command batch.
- * Arguments are passed directly to the process, never through a shell or its script expander.
- */
+
+
+
+
 export function inputBatches(actions: readonly InputAction[], pointer: PointerPosition): readonly InputBatch[] {
   const commands: InputBatch[] = [];
   let current: string[] = [];
@@ -29,11 +29,11 @@ export function inputBatches(actions: readonly InputAction[], pointer: PointerPo
       case "keys":
         for (const key of action.keys) {
           if (sendsChat([key])) {
-            // Warcraft samples chat per rendered frame; loaded native pools missed 60 ms Return holds.
+
             current.push("keydown", "--clearmodifiers", key);
             wait(300);
             current.push("keyup", "--clearmodifiers", key);
-            // Chat accepts text after its opening transition, beyond key release.
+
             wait(action.settleMillis ?? 660);
           } else current.push("key", "--clearmodifiers", "--delay", String(action.delayMillis ?? 12), key);
         }

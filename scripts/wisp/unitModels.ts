@@ -17,7 +17,7 @@ export class UnitModelsFailure extends Schema.TaggedError<UnitModelsFailure>()("
 
 const modelKey = (path: string) => path.replaceAll("/", "\\").toLowerCase().replace(/\.mdl$/, ".mdx");
 
-/** Local assets supply bytes; declarations supply the intended mode paths and scales. */
+
 export const checkUnitModels = (declaration: UnitModels, sources: readonly ModelSource[]) => Effect.gen(function*() {
   const decoded = yield* Schema.decodeUnknownEffect(UnitModels)(declaration).pipe(
     Effect.mapError((cause) => new UnitModelsFailure({ problem: cause.message })),
@@ -47,7 +47,7 @@ export interface UnitModelChange {
   readonly after: string | number | undefined;
 }
 
-/** Compare observations taken from a particular save pair, without predicting other saves. */
+
 export function compareUnitModels(before: UnitModels, after: UnitModels): readonly UnitModelChange[] {
   const changes: UnitModelChange[] = [];
   const old = new Map(before.units.map((unit) => [unit.id, unit]));

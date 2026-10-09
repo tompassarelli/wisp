@@ -1,18 +1,18 @@
-// What a player's action block says, as one readable line per action
-// (wisp:docs/lan.md, "The action log"). A block is the bytes one
-// OutgoingAction carried: one or more game actions back to back, each an id
-// byte and its fields. Layouts follow W3Champions' Flo (crates/w3gs
-// src/actions.rs, MPL-2.0) and wc3-slop-lan's notes for the checked rollback build, where
-// BlzSendSyncData is action 0x77. An id this decoder doesn't know ends the
-// block's decoding; its remaining bytes are printed as hex.
+
+
+
+// Action layouts follow W3Champions' Flo (MPL-2.0, github.com/BogdanW3/W3C-Flo crates/w3gs/src/actions.rs) and wc3-slop-lan; BlzSendSyncData is 0x77.
+
+
+
 import { Reader } from "./w3gs";
 
 export interface DecodedAction {
-  /** A short name: order, select, sync, chat, frame, key, ... */
+
   readonly kind: string;
-  /** The fields, as `name=value` words. */
+
   readonly text: string;
-  /** For sync data: its prefix and payload. */
+
   readonly sync?: { readonly prefix: string; readonly data: string };
 }
 
@@ -28,7 +28,7 @@ const fourcc = (value: number) => {
 };
 const tag = (reader: Reader) => `${reader.u32().toString(16)}:${reader.u32().toString(16)}`;
 const point = (reader: Reader) => `${reader.f32().toFixed(1)},${reader.f32().toFixed(1)}`;
-/** Escapes a string for one log line. */
+
 export const quote = (text: string) => JSON.stringify(text);
 const latin1 = (bytes: Uint8Array) => Buffer.from(bytes).toString("latin1");
 
@@ -52,7 +52,7 @@ function cache(reader: Reader): string {
   return `${quote(reader.cstring())}/${quote(reader.cstring())}/${quote(reader.cstring())}`;
 }
 
-/** Decodes one action at the reader; undefined when its id is unknown (the reader is left at the id). */
+
 function decodeOne(reader: Reader): DecodedAction | undefined {
   const start = reader.offset;
   const id = reader.u8();
@@ -112,12 +112,12 @@ function decodeOne(reader: Reader): DecodedAction | undefined {
   }
 }
 
-/** Every action in one player's block; an unknown id or a short field ends it with a `raw` action. */
+
 export function decodeActions(block: Uint8Array): DecodedAction[] {
   return decodeActionRecords(block).map(({ offset, raw, ...action }) => action);
 }
 
-/** Byte offsets are relative to the player's original action block. */
+
 export function decodeActionRecords(block: Uint8Array): ActionRecord[] {
   const reader = new Reader(block);
   const actions: ActionRecord[] = [];

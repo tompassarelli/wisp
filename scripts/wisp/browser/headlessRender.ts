@@ -1,4 +1,4 @@
-/// <reference lib="dom" />
+
 import { ModelRenderer, decodeBLP, getBLPImageData, parseMDL, parseMDX, type model } from "../../../vendor/war3-model.mjs";
 import { type AnimationSequence, animationSample, blendWeight, globalSequenceFrame, type SequenceSample } from "../../../src/headless/animation";
 import type { DrawnPose as EffectPose, PopcornEmitterPose, RenderedFrame, RenderScene } from "../headlessRender";
@@ -78,14 +78,14 @@ function camera(scene: RenderScene, aspect: number) {
   const rotation = yaw - Math.PI, elevation = -pitch;
   const halfYaw = rotation / 2, halfPitch = -elevation / 2;
   const quaternion: [number, number, number, number] = [-Math.sin(halfYaw) * Math.sin(halfPitch), Math.cos(halfYaw) * Math.sin(halfPitch), Math.sin(halfYaw) * Math.cos(halfPitch), Math.cos(halfYaw) * Math.cos(halfPitch)];
-  // The sky surrounds the eye beyond the far plane, so it gets its own depth range.
+
   return { view, projection, skyProjection: perspective(SKY_FAR), eye, quaternion, near, far, shadow: { eye, right: x, up: y, back: z, tangent, aspect, near, reach: Math.min(far, distance * SHADOW_REACH) } };
 }
 const SKY_FAR = 1_000_000;
-/** The sun's shadow covers the camera's view out to this many target distances. */
+
 const SHADOW_REACH = 2.5;
 
-/** A track's value at `frame`: its static value, or its keys stepped or interpolated linearly (curves are drawn as lines). */
+
 function sample(track: model.AnimVector | ArrayLike<number> | number | undefined, frame: number, fallback: readonly number[]): number[] {
   if (track === undefined) return [...fallback];
   if (typeof track === "number") return [track];
@@ -108,13 +108,13 @@ function rotate(q: readonly number[], v: readonly number[]): number[] {
   const tx = 2 * (y * vz - z * vy), ty = 2 * (z * vx - x * vz), tz = 2 * (x * vy - y * vx);
   return [vx + w * tx + (y * tz - z * ty), vy + w * ty + (z * tx - x * tz), vz + w * tz + (x * ty - y * tx)];
 }
-/** The world light a draw takes: toward the light, and the key and ambient colours, red first; linear lights in linear colour, as Reforged does. */
+
 interface WorldLight { readonly toward: readonly number[]; readonly key: readonly number[]; readonly ambient: readonly number[]; readonly linear: boolean }
 let environmentLight: Promise<number[]> | undefined;
-/**
- * Reforged's ambient fill: the stock environment map's mean linear radiance,
- * each equirectangular row weighted by its solid angle, red first.
- */
+
+
+
+
 function environmentAmbient(): Promise<number[]> {
   environmentLight ??= textureAt("ReplaceableTextures\\EnvironmentMap.blp").then((texture) => {
     const context = texture.getContext("2d"); if (context === null) throw new Error("no 2D texture context");
@@ -131,16 +131,16 @@ function environmentAmbient(): Promise<number[]> {
   return environmentLight;
 }
 const dayNightModels = new Map<string, Promise<model.Model | undefined>>();
-/**
- * A day/night model's directional light at the time of day: its one sequence
- * spans the day from midnight. The model's light points down its local Z
- * axis; MDX stores colours blue first.
- */
+
+
+
+
+
 async function dayNightLight(path: string, hours: number): Promise<WorldLight | undefined> {
   if (path === "") return undefined;
   let loading = dayNightModels.get(path);
   if (loading === undefined) {
-    // Lights are read whole: the drawing parser drops them.
+
     loading = asset(path).then((bytes) => new TextDecoder().decode(bytes.slice(0, 4)) === "MDLX" ? parseMDX(bytes) : parseMDL(new TextDecoder().decode(bytes)));
     dayNightModels.set(path, loading);
   }
@@ -156,25 +156,25 @@ async function dayNightLight(path: string, hours: number): Promise<WorldLight | 
   };
   const toward = light.LightType === 1 ? normalize(rotate(sample(light.Rotation, frame, [0, 0, 0, 1]), [0, 0, 1])) : [0, 0, 1];
   const key = light.LightType === 2 ? [0, 0, 0] : colour(light.Color, light.Intensity);
-  // Reforged's day/night lights carry no ambient (intensity 0 or below): its fill comes from the environment map.
+
   if ((sample(light.AmbIntensity, frame, [1])[0] ?? 1) <= 0) return { toward, key, ambient: await environmentAmbient(), linear: true };
   return { toward, key, ambient: colour(light.AmbColor, light.AmbIntensity), linear: false };
 }
-/** The direction toward the light in a draw's model space, where its normals are: the inverse of its world transform applied to the world direction. */
+
 function modelDirection(matrix: Matrix, toward: readonly number[]): number[] {
   const m = (row: number, column: number) => matrix[column * 4 + row] ?? 0;
   const [x = 0, y = 0, z = 1] = toward;
   const a = [[m(0, 0), m(0, 1), m(0, 2)], [m(1, 0), m(1, 1), m(1, 2)], [m(2, 0), m(2, 1), m(2, 2)]] as const;
   const c = (r: number, k: number) => a[r]?.[k] ?? 0;
   const cofactor = (r: number, k: number) => c((r + 1) % 3, (k + 1) % 3) * c((r + 2) % 3, (k + 2) % 3) - c((r + 1) % 3, (k + 2) % 3) * c((r + 2) % 3, (k + 1) % 3);
-  // The adjugate is the inverse up to scale, which normalizing removes.
+
   const out = [0, 1, 2].map((k) => cofactor(0, k) * x + cofactor(1, k) * y + cofactor(2, k) * z);
   return Math.hypot(...out) > 0 ? normalize(out) : [0, 0, 1];
 }
-/**
- * Terrain fog as eye-depth linear fog: a height fog (style 3) draws its linear range, up to its maximum density.
- * Definitive adds the height fog's falloff: full below `heightStart`, none above `heightEnd`, reaching full over `zStart` to `zEnd` of eye depth.
- */
+
+
+
+
 function sceneFog(scene: RenderScene, view: ReturnType<typeof camera>, sky: boolean) {
   const fog = scene.environment?.fog;
   if (fog === undefined || (sky && fog.drawOverSky !== true)) return undefined;
@@ -204,12 +204,12 @@ let graphics = "classic";
 const models = new Map<string, Promise<model.Model>>();
 const textures = new Map<string, Promise<HTMLCanvasElement>>();
 const tinted = new Map<string, HTMLCanvasElement>();
-/** `posed` is the scene draw whose pose the renderer holds. */
+
 interface ModelInstance { renderer: ModelRenderer; model: model.Model; path: string; sequences: AnimationSequence[]; sequence: number; clock: number; posed: number }
 let sceneDraw = 0;
 const instances = new Map<number, ModelInstance>();
 const preparedModels = new Map<string, ModelInstance>();
-/** A file only another graphics mode has: Warcraft draws nothing for it in this one. */
+
 class AbsentAsset extends Error {}
 async function asset(path: string, body?: string): Promise<ArrayBuffer> {
   const response = await fetch(`/asset?path=${encodeURIComponent(path)}${body === undefined ? "" : `&body=${encodeURIComponent(body)}`}`);
@@ -264,13 +264,13 @@ function textureAt(path: string, body?: string): Promise<HTMLCanvasElement> {
   return result;
 }
 const teams = [[255, 3, 3], [0, 66, 255], [28, 230, 185], [84, 0, 129], [255, 252, 1], [254, 138, 14], [32, 192, 0], [229, 91, 176], [149, 150, 151], [126, 191, 241], [16, 98, 70], [78, 42, 4]];
-/** The parts of war3-model's renderer that sampling and blending reach into. */
+
 interface Sampler {
   rendererData: { frame: number; animation: number; animationInfo: { Interval: ArrayLike<number> }; globalSequencesFrames: number[]; rootNode: unknown; nodes: { matrix: Matrix }[] };
   interp: { vec3(out: Float32Array, vector: unknown): Float32Array | null; quat(out: Float32Array, vector: unknown): Float32Array | null; animVectorVal(vector: unknown, fallback: number): number };
   updateNode(node: { node: { Translation?: unknown; Rotation?: unknown; Scaling?: unknown } }): void;
 }
-// No interval holds any key, so every non-global track takes its default value.
+
 const NO_SEQUENCE = { Interval: [0xffffffff, 0xffffffff] };
 function show(sampler: Sampler, data: model.Model, sample: SequenceSample): void {
   sampler.rendererData.animation = sample.sequence;
@@ -284,7 +284,7 @@ function slerp(a: Float32Array, b: Float32Array, t: number): Float32Array {
   if (1 - dot > 0.000001) { const angle = Math.acos(dot), sine = Math.sin(angle); left = Math.sin((1 - t) * angle) / sine; right = Math.sin(t * angle) / sine; }
   return new Float32Array([0, 1, 2, 3].map((i) => left * (a[i] ?? 0) + right * sign * (b[i] ?? 0)));
 }
-/** Poses every node, mixing each local transform toward the saved pose by `weight`, as a blend between sequences does. */
+
 function poseNodes(sampler: Sampler, data: model.Model, saved: SequenceSample | undefined, weight: number): void {
   if (saved === undefined || weight <= 0) { sampler.updateNode(sampler.rendererData.rootNode as Parameters<Sampler["updateNode"]>[0]); return; }
   const { interp } = sampler, vec3 = interp.vec3.bind(interp), quat = interp.quat.bind(interp), updateNode = sampler.updateNode.bind(sampler);
@@ -316,11 +316,11 @@ function poseNodes(sampler: Sampler, data: model.Model, saved: SequenceSample | 
   try { updateNode(sampler.rendererData.rootNode as Parameters<Sampler["updateNode"]>[0]); }
   finally { interp.vec3 = vec3; interp.quat = quat; sampler.updateNode = updateNode; node = undefined; }
 }
-/**
- * Unused instances of models without particles or ribbons, by path. Such an
- * instance keeps no state between draws, so a new effect takes one instead of
- * building a renderer and uploading its textures again.
- */
+
+
+
+
+
 const spare = new Map<string, ModelInstance[]>();
 const stateless = (instance: ModelInstance) => instance.model.ParticleEmitters2.length === 0 && instance.model.RibbonEmitters.length === 0;
 function release(instance: ModelInstance): void {
@@ -330,7 +330,7 @@ function release(instance: ModelInstance): void {
   if (free === undefined) spare.set(instance.path, free = []);
   free.push(instance);
 }
-/** Hands the instances of stateless effects that left the scene to new effects. */
+
 function releaseAbsent(effects: readonly { readonly handle: { readonly id: number } }[]): void {
   const present = new Set(effects.map((effect) => effect.handle.id));
   for (const [handle, instance] of instances) {
@@ -350,7 +350,7 @@ async function prepareInstance(pose: EffectPose) {
   return instance;
 }
 const pixels = new Map<string, Promise<ImageData | undefined>>();
-/** A texture's pixels, read back from its canvas once and shared by every instance that uses it. */
+
 function texturePixels(path: string, body: string): Promise<ImageData | undefined> {
   const cacheKey = `${body}:${path}`;
   let result = pixels.get(cacheKey);
@@ -360,7 +360,7 @@ function texturePixels(path: string, body: string): Promise<ImageData | undefine
   }
   return result;
 }
-/** A live pose's loaded or failed instance; `undefined` while it loads, so a new model never stalls the window. */
+
 const loading = new Map<number, { readonly path: string; failure?: unknown }>();
 function liveInstance(pose: EffectPose): ModelInstance | undefined {
   const ready = instances.get(pose.handle.id);
@@ -373,13 +373,13 @@ function liveInstance(pose: EffectPose): ModelInstance | undefined {
   const entry: { readonly path: string; failure?: unknown } = { path: pose.model };
   loading.set(pose.handle.id, entry);
   prepareInstance(pose).then(() => { if (loading.get(pose.handle.id) === entry) loading.delete(pose.handle.id); }, (cause: unknown) => { entry.failure = cause; });
-  // A spare instance is taken at once and draws this frame.
+
   const taken = instances.get(pose.handle.id);
   return taken?.path === pose.model ? taken : undefined;
 }
 async function createInstance(path: string): Promise<ModelInstance> {
   const data = await modelAt(path);
-  // Textures load before the renderer exists, so a failed texture leaves no renderer to destroy.
+
   const images = await Promise.all(data.Textures.map((texture) => texture.Image === "" ? undefined : texturePixels(texture.Image, path)));
   const renderer = new ModelRenderer(data); renderer.initGL(gl);
   data.Textures.forEach((texture, index) => {
@@ -389,9 +389,9 @@ async function createInstance(path: string): Promise<ModelInstance> {
   const sequences = data.Sequences.map((sequence) => ({ name: sequence.Name, start: sequence.Interval[0] ?? 0, end: sequence.Interval[1] ?? 0, looping: !sequence.NonLooping, rarity: sequence.Rarity }));
   return { renderer, model: data, path, sequences, sequence: -2, clock: 0, posed: -1 };
 }
-/** A depth-only pass's view and projection, from world space. */
+
 interface DepthPass { readonly view: Matrix; readonly projection: Matrix }
-/** The sun's and omni lights' depth maps a main pass samples. */
+
 interface Shadows { readonly sun?: { readonly map: WebGLTexture; readonly viewProjection: Matrix; readonly bias: number; readonly texel: number }; readonly points?: { readonly map: WebGLTexture; readonly matrices: Float32Array; readonly far: number } }
 async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, light: WorldLight | undefined, fog: ReturnType<typeof sceneFog>, points: readonly PointLight[], popcornEmitters: PopcornEmitterPose[], shadows: Shadows = {}, depthPass?: DepthPass) {
   const instance = await prepareInstance(pose);
@@ -400,7 +400,7 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
   renderer.setInstanceColor(new Float32Array(pose.color.map((value) => value / 255)));
   renderer.setCamera(new Float32Array(view.eye), view.quaternion);
   const sampler = renderer as unknown as Sampler;
-  // A depth pass poses the model for the frame; the passes after it draw that same pose.
+
   if (instance.posed !== sceneDraw) {
     instance.posed = sceneDraw;
     const kind = pose.unit === true ? "unit" : "effect";
@@ -444,27 +444,27 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
     ...(sun === undefined ? {} : { shadow: { map: sun.map, matrix: multiply(sun.viewProjection, placed), bias: sun.bias, texel: sun.texel } }),
     ...(pointShadow === undefined ? {} : { pointShadow: { map: pointShadow.map, matrices: pointShadow.matrices, near: POINT_NEAR_PLANE, far: pointShadow.far, texel: 1 / POINT_FACE } }),
   });
-  // An HD model's first initGL draws its BRDF table at that table's size and leaves the viewport and framebuffer there.
+
   bindScene();
   renderer.render(multiply(view.view, placed), view.projection, {});
 }
-/** A model's omni light in world space: colour times intensity, red first, full to `start` and zero from `end`. */
+
 interface PointLight { readonly position: readonly number[]; readonly color: readonly number[]; readonly start: number; readonly end: number; readonly casts: boolean; shadowSlot?: number }
 const MAX_POINT_LIGHTS = 8;
 const lightModels = new Map<string, Promise<model.Model | undefined>>();
-/**
- * The omni lights of every drawn model at its pose's time: the light node's
- * pivot placed by the model's transform, its colour, intensity and
- * attenuation sampled on the pose's sequence. Node animation of the light is
- * not followed. Lights are read whole: the drawing parser drops them.
- */
+
+
+
+
+
+
 async function pointLights(poses: readonly EffectPose[]): Promise<PointLight[]> {
   const lights: PointLight[] = [];
   for (const pose of poses) {
     let loading = lightModels.get(pose.model);
     if (loading === undefined) lightModels.set(pose.model, loading = asset(pose.model).then((bytes) => {
       if (new TextDecoder().decode(bytes.slice(0, 4)) !== "MDLX") return parseMDL(new TextDecoder().decode(bytes));
-      // Camera chunks don't parse in every model; only the lights are needed here.
+
       const kept = parsableModel(new Uint8Array(bytes), true);
       return kept.lights > 0 ? parseMDX(kept.bytes.slice().buffer) : undefined;
     }));
@@ -489,25 +489,25 @@ function determinant(m: Matrix): number {
   const a = (row: number, column: number) => m[column * 4 + row] ?? 0;
   return a(0, 0) * (a(1, 1) * a(2, 2) - a(1, 2) * a(2, 1)) - a(0, 1) * (a(1, 0) * a(2, 2) - a(1, 2) * a(2, 0)) + a(0, 2) * (a(1, 0) * a(2, 1) - a(1, 1) * a(2, 0));
 }
-/** The inverse transpose of a transform's 3×3 part, column-major: it carries model-space normals to world space. */
+
 function normalMatrix(m: Matrix): Float32Array {
   const a = (row: number, column: number) => m[column * 4 + row] ?? 0;
   const det = determinant(m) || 1, out = new Float32Array(9);
   for (let row = 0; row < 3; row++) for (let column = 0; column < 3; column++) {
     const r1 = (row + 1) % 3, r2 = (row + 2) % 3, c1 = (column + 1) % 3, c2 = (column + 2) % 3;
-    // Cofactor (row, column) over the determinant is the inverse transpose's entry (row, column).
+
     out[column * 3 + row] = (a(r1, c1) * a(r2, c2) - a(r1, c2) * a(r2, c1)) / det;
   }
   return out;
 }
-/** The lights that reach nearest a draw's origin, at most the shader's count. */
+
 function nearest(points: readonly PointLight[], placed: Matrix): PointLight[] {
   const origin = [placed[12] ?? 0, placed[13] ?? 0, placed[14] ?? 0];
   const gap = (light: PointLight) => Math.hypot(...light.position.map((value, i) => value - (origin[i] ?? 0))) - light.end;
   return [...points].sort((a, b) => gap(a) - gap(b)).slice(0, MAX_POINT_LIGHTS);
 }
 const skies = new Map<string, Promise<ModelInstance>>();
-/** The sky model around the eye, behind everything else, unlit, fogged only when the fog draws over the sky. */
+
 async function drawSky(scene: RenderScene, view: ReturnType<typeof camera>) {
   const environment = scene.environment;
   if (environment === undefined || environment.sky === "" || !environment.skyVisible) return;
@@ -523,7 +523,7 @@ async function drawSky(scene: RenderScene, view: ReturnType<typeof camera>) {
   renderer.setWispEnvironment(fog === undefined ? undefined : { fog });
   bindScene();
   renderer.render(multiply(view.view, placed), view.skyProjection, {});
-  // The sky's layers leave depth writes off, and a masked depth clear clears nothing.
+
   gl.depthMask(true); gl.clear(gl.DEPTH_BUFFER_BIT);
 }
 type FilterPose = NonNullable<RenderScene["filter"]>;
@@ -568,11 +568,11 @@ function filterTexture(path: string, wrap: boolean): Promise<WebGLTexture> {
   }
   return result;
 }
-/** The cinematic filter over the drawn world: its texture times its colour, combined with the scene by its blend mode. */
+
 async function drawFilter(filter: FilterPose, live: boolean): Promise<void> {
   const quad = filterProgram();
   const load = filter.texture === "" ? undefined : filterTexture(filter.texture, /WRAP/.test(String(filter.texMapFlags)));
-  // A live frame draws no filter until its texture has loaded.
+
   const texture = load === undefined ? undefined : live ? loaded(load) : await load;
   if (load !== undefined && texture === undefined) return;
   gl.disable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.CULL_FACE);
@@ -586,7 +586,7 @@ async function drawFilter(filter: FilterPose, live: boolean): Promise<void> {
     case "BLEND_MODE_BLEND": case "BLEND_MODE_KEYALPHA": gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); break;
     case "BLEND_MODE_ADDITIVE": gl.blendFunc(gl.SRC_ALPHA, gl.ONE); break;
     case "BLEND_MODE_MODULATE": gl.blendFunc(gl.DST_COLOR, gl.ZERO); break;
-    // Twice the product: the scene's colour times the filter's, plus the same again.
+
     case "BLEND_MODE_MODULATE_2X": gl.blendFunc(gl.DST_COLOR, gl.SRC_COLOR); break;
     default: gl.disable(gl.BLEND);
   }
@@ -594,7 +594,7 @@ async function drawFilter(filter: FilterPose, live: boolean): Promise<void> {
   gl.bindVertexArray(null); gl.disable(gl.BLEND); gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
 }
 const fonts = new Map<string, Promise<string>>();
-/** A CSS family for a map or stock font file, loaded through the asset server; sans-serif for a font name or a file that won't load. */
+
 function fontFamily(file: string): Promise<string> {
   if (!/\.(ttf|otf)$/i.test(file)) return Promise.resolve("sans-serif");
   let family = fonts.get(file);
@@ -605,12 +605,12 @@ function fontFamily(file: string): Promise<string> {
   }
   return family;
 }
-/** Warcraft text: colour codes stripped, |n and newlines broken into lines, the block placed by its anchor and justification. */
+
 function drawText(context: CanvasRenderingContext2D, raw: string, family: string, size: number, color: string, outline: boolean, x: number, horizontal: "left" | "center" | "right", y: number, vertical: "top" | "middle" | "bottom") {
   const lines = raw.replace(/\|c[0-9a-f]{8}|\|r/gi, "").replaceAll("|n", "\n").split("\n"), leading = size * 1.2;
   const top = vertical === "top" ? y : vertical === "middle" ? y - lines.length * leading / 2 : y - lines.length * leading;
   context.font = `${size}px ${family}`; context.textAlign = horizontal; context.textBaseline = "top";
-  // A colour code colours the whole text: Smashcraft's damage digits are one coloured run.
+
   const coded = /\|c([0-9a-f]{2})([0-9a-f]{6})/i.exec(raw);
   context.lineWidth = Math.max(1, size / 12); context.strokeStyle = "rgba(0,0,0,0.9)"; context.lineJoin = "round";
   context.fillStyle = coded === null ? color : `#${coded[2]}${coded[1]}`;
@@ -622,7 +622,7 @@ function drawText(context: CanvasRenderingContext2D, raw: string, family: string
 }
 function cssColor(color: number, alpha = 255): string { return `rgba(${(color >>> 16) & 255},${(color >>> 8) & 255},${color & 255},${((color >>> 24) / 255) * alpha / 255})`; }
 const settled = new WeakMap<Promise<unknown>, { value?: unknown; failure?: unknown }>();
-/** Records a load's outcome as it settles, for `loaded`. */
+
 function tracked<T>(load: Promise<T>): Promise<T> {
   if (settled.has(load)) return load;
   const entry: { value?: unknown; failure?: unknown } = {};
@@ -630,7 +630,7 @@ function tracked<T>(load: Promise<T>): Promise<T> {
   load.then((value) => { entry.value = value; }, (cause: unknown) => { entry.failure = cause ?? new Error("load failed"); });
   return load;
 }
-/** A load's value once it has settled, or undefined while it runs, so a live frame draws without it rather than wait. */
+
 function loaded<T>(load: Promise<T>): T | undefined {
   const state = settled.get(tracked(load));
   if (state?.failure !== undefined) throw state.failure;
@@ -658,24 +658,24 @@ async function uiTexture(path: string, color: number): Promise<HTMLCanvasElement
 }
 
 const POINT_NEAR_PLANE = 5;
-/** Draws into the scene's multisampled target over the whole canvas. */
+
 function bindScene(): void { gl.bindFramebuffer(gl.FRAMEBUFFER, sceneBuffer.framebuffer); gl.viewport(0, 0, canvas.width, canvas.height); }
-/** One depth view of a depth pass: its matrices from world space, its cell of the map and, for an omni light, the reach a caster must fall within. */
+
 interface DepthView extends DepthPass { readonly viewport: readonly [number, number, number, number]; readonly near?: { readonly position: readonly number[]; readonly reach: number } }
-/** Draws every pose's depth into `target`'s views; a pose that fails here fails again, and is named, in the main pass. */
+
 async function depthPass(target: DepthTarget, poses: readonly EffectPose[], view: ReturnType<typeof camera>, views: readonly DepthView[]): Promise<void> {
   gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer); gl.viewport(0, 0, target.width, target.height);
   gl.depthMask(true); gl.clear(gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
   for (const unit of [7, 8]) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, null); }
   gl.activeTexture(gl.TEXTURE0);
   for (const depth of views) for (const pose of poses) {
-    // A model whose origin is farther from the omni light than its reach and a generous model radius can't shadow what it lights.
+
     if (depth.near !== undefined && Math.hypot(pose.x - (depth.near.position[0] ?? 0), pose.y - (depth.near.position[1] ?? 0), pose.z - (depth.near.position[2] ?? 0)) > depth.near.reach + 1500) continue;
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer); gl.viewport(...depth.viewport);
-    try { await drawEffect(pose, view, undefined, undefined, [], [], {}, depth); } catch { /* named by the main pass */ }
+    try { await drawEffect(pose, view, undefined, undefined, [], [], {}, depth); } catch {                              }
   }
 }
-/** At most two omni lights cast shadows: the flagged ones, then others up to the map's minimum count, nearest `focus` first. */
+
 function shadowCasters(points: readonly PointLight[], minimum: number, focus: readonly number[]): PointLight[] {
   const gap = (light: PointLight) => Math.hypot(...light.position.map((value, i) => value - (focus[i] ?? 0)));
   const byGap = [...points].sort((a, b) => gap(a) - gap(b));
@@ -683,7 +683,7 @@ function shadowCasters(points: readonly PointLight[], minimum: number, focus: re
   return [...flagged, ...others.slice(0, Math.max(0, minimum - flagged.length))].slice(0, 2);
 }
 let postConfig: Promise<PostSettings> | undefined;
-/** Definitive's ambient occlusion and bloom: the install's PostProcessingConfig.txt with the map's war3mapPostProcessing.txt over it. */
+
 function postProcessing(): Promise<PostSettings> {
   const text = (path: string) => asset(path).then((bytes) => new TextDecoder().decode(bytes), () => "");
   postConfig ??= Promise.all([text("PostProcessingConfig.txt"), text("war3mapPostProcessing.txt")]).then(([stock, map]) => postSettings(parsePostProcessing(stock, map)));
@@ -700,7 +700,7 @@ declare global {
 window.prepareRenderer = (width, height, mode = "classic") => {
   graphics = mode;
   canvas.width = output.width = overlay.width = width; canvas.height = output.height = overlay.height = height;
-  // The scene draws into its own multisampled target, which the post-processing pass resolves to this canvas.
+
   const context = canvas.getContext("webgl2", { antialias: false, alpha: false });
   if (context === null) throw new Error("Chrome could not create a WebGL2 context");
   gl = context;
@@ -732,7 +732,7 @@ window.renderScene = async (scene, options) => {
   releaseAbsent(poses);
   sceneDraw++;
   for (const pose of drawnPoses(poses, view.eye, view.far, scene.world)) {
-    // A model the renderer can't load or draw is left out and named, so the rest of the frame still draws.
+
     try {
       if (options?.capture !== false) await prepareInstance(pose);
       else if (liveInstance(pose) === undefined) continue;
@@ -748,18 +748,18 @@ window.renderScene = async (scene, options) => {
   }
   const light = scene.environment === undefined ? undefined : await dayNightLight(scene.environment.dayNight.unit, scene.environment.timeOfDay);
   const fog = sceneFog(scene, view, false);
-  // Classic draws no model omni light; Definitive draws them all.
+
   const points = graphics === "classic" ? [] : await pointLights(visible);
   const ordered = orderDrawnModels(visible, (pose) => instances.get(pose.handle.id)?.model.Materials ?? []);
   const shadows: { sun?: NonNullable<Shadows["sun"]>; points?: NonNullable<Shadows["points"]> } = {};
-  // Both modes shadow the day/night key light with a depth map from the sun.
+
   if (light !== undefined && light.key.some((value) => value > 0)) {
     const sun = sunView(view.shadow, light.toward);
     sunMap ??= depthTarget(gl, SUN_MAP, SUN_MAP);
     await depthPass(sunMap, ordered, view, [{ view: sun.view, projection: sun.projection, viewport: [0, 0, SUN_MAP, SUN_MAP] }]);
     shadows.sun = { map: sunMap.texture, viewProjection: sun.viewProjection, bias: sun.bias, texel: sun.texel };
   }
-  // Definitive's omni lights flagged to cast shadows, topped up to the map's minimum count, nearest the camera's target first.
+
   const casters = shadowCasters(points, scene.environment?.shadowCastingPointLights ?? 0, [scene.camera.x, scene.camera.y, view.shadow.eye[2] ?? 0]);
   if (casters.length > 0) {
     const far = Math.max(...casters.map((light) => light.end)), faces = pointFaces(far), passes: DepthView[] = [];
@@ -778,7 +778,7 @@ window.renderScene = async (scene, options) => {
     try { await drawEffect(pose, view, light, fog, points, popcornEmitters, shadows); } catch (cause) { notDrawn.push(`${pose.model}: ${String(cause)}`); }
   }
   for (const light of points) delete light.shadowSlot;
-  // Terrain water blends over what is under it, and hides with the terrain.
+
   let water = false;
   if (scene.environment.terrainVisible && scene.terrain !== undefined) {
     try { bindScene(); water = await drawWater(gl, scene.terrain, scene.frame, view.view, view.projection, fog, textureAt, asset); }
@@ -812,12 +812,12 @@ window.renderScene = async (scene, options) => {
     const [left, top, right, bottom] = frame.rectangle, x = output.width / 2 + (left - 0.4) * scaleX, y = (0.6 - top) * scaleY, width = (right - left) * scaleX, height = (top - bottom) * scaleY;
     context.globalAlpha = frame.alpha / 255;
     if (frame.texture !== "" && width > 0 && height > 0) {
-      // A live frame leaves out a texture still loading: its download can queue behind newly shown models for seconds.
+
       const image = live ? loaded(uiTextureLoad(frame.texture, frame.color)) : await uiTextureLoad(frame.texture, frame.color);
       context.globalAlpha *= (frame.color >>> 24) / 255; if (image !== undefined) context.drawImage(image, x, y, width, height); context.globalAlpha = frame.alpha / 255;
     }
     if (frame.text !== "") {
-      // A font height is in UI units, 0.6 to the screen's height; BlzFrameSetScale multiplies it.
+
       const size = (frame.font.height > 0 ? frame.font.height * scaleY : Math.max(10, Math.min(22, height || 15))) * frame.scale;
       const alignment = frame.alignment ?? { vertical: "top", horizontal: "left" };
       drawText(context, frame.text, live ? loaded(fontFamily(frame.font.file)) ?? "sans-serif" : await fontFamily(frame.font.file), size, cssColor(frame.textColor), (frame.font.flags & 1) !== 0,

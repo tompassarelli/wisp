@@ -1,20 +1,20 @@
-// `play`: one command from the owner's desktop to a match. It checks that at
-// most one Wine runtime uses the game's prefix, starts or reuses the signed-in
-// Battle.net launcher through its Steam shortcut, asks it to launch Warcraft
-// III (its own `--exec="launch W3"`, not its window's Play), waits for
-// Warcraft III to sign in and read its ladder maps, hosts a custom game of the
-// map, lets the game add its computer opponent at its first screen, starts the
-// game's controller helper, and leaves Warcraft III fullscreen and focused so
-// pointer focus can't leave it. Each step prints one status line; the first
-// problem stops the run with a plain message.
-//
-// It never signs in or out, never starts Warcraft III.exe itself (only the
-// launcher does), and never starts a runtime while another uses the prefix: a
-// launcher started beside another runtime can't start the game.
-// It hosts only through the game's menu page (wisp:docs/driving-warcraft.md),
-// as a private game, and stops when the page doesn't report: a game created by
-// clicks is listed publicly. Leaving a running match reads the game's text in
-// its fullscreen window, so a capture of its output is the game's frame.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { Clock, Context, Effect, Exit, Schema, type Scope } from "effect";
@@ -30,7 +30,7 @@ import { step } from "./timings";
 import { type MenuSocket, hostLobby, startLobby } from "./menus";
 import { ClientWatch, unlessLost } from "./watch";
 
-/** Why play can't go on, in words for the person who ran it. */
+
 export class PlayProblem extends Schema.TaggedError<PlayProblem>()("PlayProblem", {
   problem: Schema.String,
 }) {
@@ -39,7 +39,7 @@ export class PlayProblem extends Schema.TaggedError<PlayProblem>()("PlayProblem"
   }
 }
 
-/** The step a problem stopped play at. */
+
 export class PlayFailure extends Schema.TaggedError<PlayFailure>()("PlayFailure", {
   step: Schema.Int,
   title: Schema.String,
@@ -50,7 +50,7 @@ export class PlayFailure extends Schema.TaggedError<PlayFailure>()("PlayFailure"
   }
 }
 
-/** A window of the owner's compositor. Sizes are logical pixels. */
+
 export interface DesktopWindow {
   readonly id: number;
   readonly title: string;
@@ -58,11 +58,11 @@ export interface DesktopWindow {
   readonly focused: boolean;
   readonly width: number;
   readonly height: number;
-  /** The output that shows the window's workspace. */
+
   readonly output?: { readonly name: string; readonly width: number; readonly height: number };
 }
 
-/** A window of the game's X display, in its root window's pixels. */
+
 export interface XWindow {
   readonly id: string;
   readonly x: number;
@@ -71,129 +71,129 @@ export interface XWindow {
   readonly height: number;
 }
 
-/** The words on an output, at the size it was read. */
+
 export interface Screen {
   readonly width: number;
   readonly height: number;
   readonly words: readonly Word[];
 }
 
-/** The host: its processes and files. */
+
 export class PlayMachine extends Context.Service<PlayMachine, {
   readonly processes: Effect.Effect<readonly ProcessInfo[], PlayProblem>;
-  /** The name of the directory Wine's server for `prefix` lives in. */
+
   readonly serverDirectory: (prefix: string) => Effect.Effect<string, PlayProblem>;
   readonly signal: (pids: readonly number[], signal: "SIGTERM" | "SIGKILL") => Effect.Effect<void>;
-  /**
-   * Asks the running launcher to start Warcraft III: Battle.net.exe
-   * --exec="launch W3" in the launcher's own runtime container (its mount and
-   * user namespaces, environment and folder), so Wine reaches the prefix's
-   * wineserver instead of starting a second one. Battle.net hands the command
-   * to the running launcher and exits.
-   */
+
+
+
+
+
+
+
   readonly launch: (launcher: ProcessInfo) => Effect.Effect<void, PlayProblem>;
-  /** Hands Steam a steam:// URL, as the shortcut's desktop entry does. */
+
   readonly openSteam: (url: string) => Effect.Effect<void, PlayProblem>;
-  /** Starts a program that outlives play; its output goes to `log`, appended, or nowhere. Returns its pid. */
+
   readonly start: (command: readonly string[], log?: string) => Effect.Effect<number, PlayProblem>;
-  /** Runs a program as the user service `unit`, which outlives every caller until stopped (wisp:docs/doctor.md, "Clients as services"); its output goes to `log`, appended. */
+
   readonly startService: (unit: string, command: readonly string[], log?: string) => Effect.Effect<void, PlayProblem>;
-  /** Waits for the machine's client start-up lock (wisp:scripts/wisp/startLock.ts), printing who holds it; returns its release. */
+
   readonly startLock: (holder: string, print: (line: string) => void) => Effect.Effect<Effect.Effect<void>, PlayProblem>;
-  /** A file's text from byte `from`; undefined while it doesn't exist. */
+
   readonly read: (path: string, from?: number) => Effect.Effect<string | undefined, PlayProblem>;
   readonly size: (path: string) => Effect.Effect<number | undefined, PlayProblem>;
-  /** When a file was last written, in epoch milliseconds; undefined while it doesn't exist. */
+
   readonly modified: (path: string) => Effect.Effect<number | undefined, PlayProblem>;
-  /** The SHA-256 of a file's bytes; undefined while it doesn't exist. */
+
   readonly digest: (path: string) => Effect.Effect<string | undefined, PlayProblem>;
   readonly list: (directory: string) => Effect.Effect<readonly string[], PlayProblem>;
-  /** Writes a file whole: a reader sees the old text or the new. */
+
   readonly write: (path: string, text: string) => Effect.Effect<void, PlayProblem>;
-  /** Copies a file whole: the destination appears complete or not at all. */
+
   readonly copy: (from: string, to: string) => Effect.Effect<void, PlayProblem>;
 }>()("wisp/PlayMachine") {}
 
-/** The owner's desktop: its compositor's windows and outputs, and the game's X display. */
+
 export class PlayDesktop extends Context.Service<PlayDesktop, {
   readonly windows: Effect.Effect<readonly DesktopWindow[], PlayProblem>;
   readonly focus: (window: number) => Effect.Effect<void, PlayProblem>;
   readonly toggleFullscreen: (window: number) => Effect.Effect<void, PlayProblem>;
-  /** Captures an output and reads its words, with centres in the capture's pixels. */
+
   readonly read: (output: string, ink: Ink) => Effect.Effect<Screen, PlayProblem>;
-  /** The largest visible X window with this exact title, preferring those of process `pid`. */
+
   readonly xWindow: (title: string, pid?: number) => Effect.Effect<XWindow | undefined, PlayProblem>;
   readonly keys: (window: XWindow, ...keys: string[]) => Effect.Effect<void, PlayProblem>;
-  /** The game's menu page when it reports on this port (wisp:scripts/wisp/menus.ts), connected until the scope closes. */
+
   readonly menus: (reportPort: number) => Effect.Effect<MenuSocket | undefined, never, Scope.Scope>;
 }>()("wisp/PlayDesktop") {}
 
-/** The running game, as the consuming game's steps see it. */
+
 export interface PlayGame {
-  /** Its Documents/Warcraft III folder. */
+
   readonly documents: string;
-  /** Warcraft III's process. */
+
   readonly pid: number;
-  /** Its compositor window. */
+
   readonly window: number;
   readonly xWindow: XWindow;
-  /** Its X display. */
+
   readonly display: string;
 }
 
 export interface PlayDeclaration<R = never> {
-  /** The Wine prefix (the pfx folder) Battle.net and Warcraft III run in. */
+
   readonly prefix: string;
-  /** The X display of the owner's desktop, where the game runs. */
+
   readonly display: string;
-  /** The Steam shortcut that starts Battle.net Launcher.exe in the prefix: its app id and its name in Steam. */
+
   readonly shortcut: { readonly appId: number; readonly name: string };
-  /**
-   * The map: its folder under Maps, its file, the title Create Game lists it
-   * by, and the build it is copied from when the folder lacks it.
-   */
+
+
+
+
   readonly map: { readonly folder: string; readonly file: string; readonly title: string; readonly source?: string };
-  /** The hosted game's name; joining by name is case-sensitive. */
+
   readonly gameName: string;
-  /** The installed menu page's report port for this prefix: play hosts only through it, as a private game. */
+
   readonly menuReportPort: number;
-  /**
-   * The owner's display settings, `[Video]` keys of War3Preferences.txt.
-   * Written in before the game starts and so into the saved copy, so a test
-   * run that left its own settings in the prefix doesn't open the owner's game
-   * with them.
-   */
+
+
+
+
+
+
   readonly displaySettings?: DisplaySettings;
-  /** Warcraft 3.0.1 graphics mode, written to [Misc] before launch. */
+
   readonly graphicsMode?: "classic" | "reforged" | "definitive";
-  /**
-   * Recommended `[Video]` values (graphics quality, frame cap): written only
-   * for keys the file has no entry for, so they never replace a value the
-   * owner set. Applied after `displaySettings`, into the saved copy too.
-   */
+
+
+
+
+
   readonly recommendedSettings?: DisplaySettings;
-  /** Before Warcraft III starts the map: what the map reads at its start, left in Documents/Warcraft III. */
+
   readonly prepare: (documents: string) => Effect.Effect<void, PlayProblem, R>;
-  /** When a run stops before the match: removes what prepare left, so a later session of the map runs as usual. */
+
   readonly cleanup: (documents: string) => Effect.Effect<void, PlayProblem, R>;
-  /** Resolves once the started map shows its first screen; `since` is when the game was asked to start it, on the Effect Clock. */
+
   readonly started: (game: PlayGame, since: number) => Effect.Effect<void, PlayProblem, R>;
-  /** With the helper running: sets up and starts the match, its opponent included, and describes it, as in "computer as Player 3". */
+
   readonly match: (game: PlayGame) => Effect.Effect<string, PlayProblem, R>;
   readonly helper: {
-    /**
-     * An always-on controller service that serves whatever game runs: resolves
-     * with what it says once it serves this game, or fails when it doesn't.
-     */
+
+
+
+
     readonly service: (game: PlayGame) => Effect.Effect<string, PlayProblem, R>;
   } | {
-    /** The helper's executable; a running process of it is an earlier helper. */
+
     readonly binary: string;
-    /** Its arguments for this game. */
+
     readonly args: (game: PlayGame) => Effect.Effect<readonly string[], PlayProblem, R>;
-    /** Output that means it is ready. */
+
     readonly ready: RegExp;
-    /** Where its output goes. */
+
     readonly log: string;
   };
 }
@@ -202,7 +202,7 @@ const STEPS = 7;
 
 const RESTORE_PREFERENCES = fileURLToPath(new URL("./restorePreferences.ts", import.meta.url));
 
-/** Seconds each wait may take. */
+
 export const PLAY_TIMEOUTS = {
   runtimeExit: 20,
   launcherStart: 90,
@@ -212,9 +212,9 @@ export const PLAY_TIMEOUTS = {
   gameFullscreen: 45,
   launch: 45,
   gameWindow: 60,
-  /** Warcraft III's own sign-in, from its start to its login doors closing (14 s on 6 Oct). */
+
   gameSignIn: 120,
-  /** From the login doors closing to the ladder scan (8-12 s on 6 Oct); a game that never scans is hosted after it. */
+
   ladderScan: 30,
   mainMenu: 120,
   screen: 20,
@@ -225,27 +225,27 @@ export const PLAY_TIMEOUTS = {
 
 const POLL = "250 millis";
 
-/** Polls `observe` until it returns a value, or undefined after `seconds` of the Effect Clock. */
+
 const poll = <A, R>(seconds: number, observe: Effect.Effect<A | undefined, PlayProblem, R>) => pollFor(seconds, POLL, observe);
 
-/** Polls `observe` until it returns a value; after `seconds` fails with `problem`. */
+
 const until = <A, R>(seconds: number, observe: Effect.Effect<A | undefined, PlayProblem, R>, problem: () => string) =>
   poll(seconds, observe).pipe(Effect.filterOrFail((value): value is A => value !== undefined, () => new PlayProblem({ problem: problem() })));
 
 const fail = (problem: string) => Effect.fail(new PlayProblem({ problem }));
 
-/** Text folded so OCR's usual confusions (O/0, I/l/1, case, punctuation) compare equal. */
+
 const fold = (text: string) => text.toUpperCase().replace(/[^A-Z0-9.]/g, "").replace(/O/g, "0").replace(/[IL]/g, "1");
 
-/** A short word the reader makes of an icon beside a list entry. */
+
 const isIconNoise = (word: Word | undefined, line: string | undefined) => word === undefined || word.line !== line || fold(word.text).length <= 3;
 
-/**
- * Where `phrase` appears among `words`: consecutive words of one line whose
- * folded text joins to the phrase's, however the reader split them. As an
- * `entry`, as in a list, the phrase is its line's text, allowing one short
- * word for an icon on each side.
- */
+
+
+
+
+
+
 export function findPhrase(words: readonly Word[], phrase: string, entry = false): readonly { readonly x: number; readonly y: number }[] {
   const target = fold(phrase);
   const found: { x: number; y: number }[] = [];
@@ -271,7 +271,7 @@ export function findPhrase(words: readonly Word[], phrase: string, entry = false
 const isFullscreen = (window: DesktopWindow) =>
   window.output !== undefined && window.width === window.output.width && window.height === window.output.height;
 
-/** Runs the declared playtest, printing one status line per step. */
+
 export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) => void) => Effect.gen(function*() {
   const machine = yield* PlayMachine;
   const desktop = yield* PlayDesktop;
@@ -289,7 +289,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     `${use.runtimes.length} Wine runtimes are using ${prefix} (wineserver pids ${pidList(use.runtimes)}). A launcher started beside another runtime can't start the game. ` +
     `Close them with: kill ${pidList(use.runtimes)}   then run play again.`;
 
-  // 1. At most one runtime, on this display, and only with Battle.net in it.
+
   const checkPrefix = Effect.gen(function*() {
     let use = yield* prefixState;
     if (use.runtimes.length > 1) return yield* fail(twoRuntimes(use));
@@ -299,7 +299,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       return yield* fail(`${prefix} is in use on display ${runtime.display} (wineserver pid ${runtime.pid}), not this desktop's ${display}. Close that client with: kill ${runtime.pid}   then run play again.`);
     }
     if (use.launcher === undefined) {
-      // A runtime outlives its last program by a few seconds.
+
       use = yield* until(PLAY_TIMEOUTS.runtimeExit, prefixState.pipe(Effect.map((now) => (now.runtimes.length === 0 || now.launcher !== undefined ? now : undefined))),
         () => `a Wine runtime (wineserver pid ${runtime.pid}) is using ${prefix} without Battle.net. Close it with: kill ${runtime.pid}   then run play again.`);
       if (use.runtimes.length === 0) return yield* status(1, "Wine prefix", "free");
@@ -307,7 +307,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     yield* status(1, "Wine prefix", `Battle.net already running in its only runtime (pid ${use.launcher?.pid})`);
   });
 
-  // 2. A launcher whose log says it signed in.
+
   const loginLog = Effect.gen(function*() {
     const names = (yield* machine.list(logs)).filter((name) => newestLauncherLog([name]) !== undefined).sort().reverse();
     for (const name of names) {
@@ -333,7 +333,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     return Math.round(((yield* Clock.currentTimeMillis) - started) / 1000);
   });
 
-  // Battle.net reads Warcraft III's launch options when it starts and writes its settings back when it exits.
+
   const configPath = launcherConfig(prefix);
   const mapPath = join(documents, "Maps", declaration.map.folder, declaration.map.file);
   const loadOption = loadMapOption(prefix, mapPath);
@@ -342,11 +342,11 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     : Effect.try({ try: () => ({ text, options: launchOptions(text) }), catch: () => new PlayProblem({ problem: `Battle.net's settings at ${configPath} aren't JSON` }) }))));
   const setLaunchOptions = (options: string | undefined) => settings.pipe(Effect.flatMap(({ text }) => machine.write(configPath, withLaunchOptions(text, options))));
 
-  /**
-   * A signed-in launcher that starts Warcraft III without loading a map: a map loaded at
-   * startup loads during the ladder scan (wisp:scripts/warcraft/war3Log.ts). Earlier Wisp runs
-   * left `-loadfile` for this map in the launch options; that one is cleared, another map's refused.
-   */
+
+
+
+
+
   const launcher = Effect.gen(function*() {
     const use = yield* prefixState;
     if (use.game !== undefined) {
@@ -371,14 +371,14 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     }
   });
 
-  // 3. The launcher's launch, confirmed by its log; one restart of the launcher alone when it can't launch.
+
   const windowTitled = (title: string) => desktop.windows.pipe(Effect.map((windows) => windows.find((window) => window.title === title && window.appId === appId)));
   const windowById = (id: number) => desktop.windows.pipe(Effect.flatMap((windows) => {
     const window = windows.find((candidate) => candidate.id === id);
     return window === undefined ? fail(`window ${id} closed`) : Effect.succeed(window);
   }));
-  /** Focuses a window and makes it fullscreen; true when it had to toggle fullscreen on. */
-  /** Windows play asked to go fullscreen: niri's fullscreen is a toggle, and a window loading a map takes its time to follow it. */
+
+
   const asked = new Set<number>();
   const askFullscreen = (id: number) => Effect.gen(function*() {
     yield* desktop.focus(id);
@@ -396,7 +396,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   const leaveFullscreen = (id: number) => desktop.toggleFullscreen(id).pipe(Effect.tap(() => Effect.sync(() => asked.delete(id))));
   const outputOf = (id: number, what: string) => windowById(id).pipe(Effect.flatMap((window) =>
     window.output === undefined ? fail(`${what} isn't on any output`) : Effect.succeed(window.output.name)));
-  /** The launcher's launch of Warcraft III, confirmed by its log: `LaunchBinary`, then a launch or a failure. */
+
   const launchGame = Effect.gen(function*() {
     const { launcher } = yield* prefixState;
     if (launcher === undefined) return yield* fail("Battle.net isn't running in the prefix");
@@ -415,7 +415,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     return { outcome, log: path };
   });
 
-  /** Ends every program of the prefix, then waits for Steam to see the shortcut end, so it can start it again. */
+
   const stopPrefix = Effect.gen(function*() {
     const use = yield* prefixState;
     yield* machine.signal(use.processes.map(({ pid }) => pid), "SIGTERM");
@@ -430,10 +430,10 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     () => `Steam still runs the shortcut "${shortcut.name}" after Battle.net exited`);
   });
 
-  /**
-   * The map in its folder, identical to its declared build. A stale or different copy is replaced
-   * by an atomic copy and verified, all before Warcraft is started or told to load it.
-   */
+
+
+
+
   const installMap = Effect.gen(function*() {
     const { file, source } = declaration.map;
     const installed = yield* machine.digest(mapPath);
@@ -456,13 +456,13 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   });
   const preferences = preferencesPath(documents);
   const backup = preferencesBackupPath(documents);
-  /**
-   * Warcraft III rewrites War3Preferences.txt with this run's display settings
-   * when it exits, which would leave a private desktop sharing the prefix with
-   * the wrong ones. The file is saved before the game starts, and a detached
-   * helper puts it back once the game's process is gone. A backup left by a
-   * helper that never ran (the game ended with the machine) is the file to keep.
-   */
+
+
+
+
+
+
+
   const savePreferences = Effect.gen(function*() {
     const saved = yield* machine.read(backup);
     const found = saved ?? (yield* machine.read(preferences));
@@ -488,9 +488,9 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     yield* declaration.prepare(documents);
     const since = yield* Clock.currentTimeMillis;
     const running = (yield* prefixState).game;
-    // A game already running was started with its own backup and helper.
+
     if (running === undefined) yield* savePreferences;
-    /** The session in Warcraft III's log before the launch; the game's own session replaces it. */
+
     let earlierSession: string | undefined;
     if (running !== undefined) {
       yield* status(3, "Warcraft III", `already running (pid ${running.pid})`);
@@ -510,7 +510,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       () => `Battle.net reported Warcraft III running, but its process didn't appear within ${PLAY_TIMEOUTS.gameWindow} s`);
     yield* restorePreferencesOnExit(process.pid);
     const window = yield* until(PLAY_TIMEOUTS.gameWindow, windowTitled("Warcraft III"), () => `Warcraft III's window didn't appear within ${PLAY_TIMEOUTS.gameWindow} s`);
-    // A game loading a map can take a while to follow; step 7 waits for it.
+
     yield* askFullscreen(window.id);
     const xWindow = yield* until(PLAY_TIMEOUTS.gameWindow, desktop.xWindow("Warcraft III", process.pid),
       () => `Warcraft III's window isn't on display ${display}`);
@@ -518,7 +518,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     return { game: { documents, pid: process.pid, window: window.id, xWindow, display } satisfies PlayGame, since, earlierSession };
   });
 
-  // 4, through the menu page: a private game of the map, started. Without the page play stops: a game created by clicks is listed publicly.
+
   const host = (game: PlayGame) => Effect.scoped(Effect.gen(function*() {
     const { folder, title } = declaration.map;
     if ((yield* clientState)?.kind === "in match") {
@@ -532,7 +532,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       yield* until(5, hasText("Quit Mission"), () => "End Game didn't show Quit Mission");
       yield* key("q");
       yield* until(15, clientState.pipe(Effect.map((state) => state?.kind === "results" ? true : undefined)), () => "Quit Mission didn't reach the results screen");
-      // The checked rollback build ignores the menus' ScoreScreenClose; Escape leaves the score screen.
+
       yield* key("Escape");
       yield* until(10, clientState.pipe(Effect.map((state) => state?.kind === "menus" ? true : undefined)), () => "Results didn't return to the menus");
     }
@@ -549,14 +549,14 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     yield* status(4, "Map", `"${declaration.gameName}" of ${title} hosted as a private game through the menus`);
   }));
 
-  // 4. The map, hosted once Warcraft III has signed in and read its ladder maps.
-  /**
-   * Waits until the game's log shows its ladder scan over: a map loading while Warcraft III opens
-   * the ladder maps as its active mod can't read its own imported models (wisp:scripts/warcraft/war3Log.ts).
-   * A log that ends with ladder lines is over once it stays quiet for SCAN_QUIET_MS; a game that
-   * signed in and scans nothing within PLAY_TIMEOUTS.ladderScan is hosted anyway. Returns the
-   * log's length, where the hosted map's lines start.
-   */
+
+
+
+
+
+
+
+
   const ladderScanned = (earlierSession: string | undefined) => Effect.gen(function*() {
     let quiet: { readonly last: number; readonly count: number; readonly since: number } | undefined;
     let signedInAt: number | undefined;
@@ -564,7 +564,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     return yield* until(signIn + PLAY_TIMEOUTS.ladderScan, Effect.gen(function*() {
       const text = (yield* machine.read(war3Log)) ?? "";
       const now = yield* Clock.currentTimeMillis;
-      // Until the game's launch writes its own log, the one there is an earlier session's.
+
       if (earlierSession !== undefined && sessionStart(text) === earlierSession) return undefined;
       const state = yield* clientState;
       const authenticated = state !== undefined && (state.kind === "menus" || state.kind === "lobby" || state.kind === "loading" || state.kind === "in match" || state.kind === "results");
@@ -574,7 +574,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
           return undefined;
         case "waiting":
           signedInAt ??= now;
-          // A game whose log already spans the wait since its sign-in, such as one that played a match, is hosted at once.
+
           return now - signedInAt >= PLAY_TIMEOUTS.ladderScan * 1000 || (scan.sinceLogin ?? 0) >= PLAY_TIMEOUTS.ladderScan * 1000 ? { text, scanned: false } : undefined;
         case "done":
           return { text, scanned: true };
@@ -587,7 +587,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       : `Warcraft III didn't finish reading its ladder maps (its log: ${war3Log})`);
   });
 
-  /** Stops play when Warcraft III's log shows the hosted map's imported models failing to load. */
+
   const checkImports = (from: number) => Effect.gen(function*() {
     const failures = importFailures(((yield* machine.read(war3Log)) ?? "").slice(from));
     if (failures.count === 0) return;
@@ -608,7 +608,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     return text.length;
   });
 
-  // 6. One helper for this game.
+
   const helper = (game: PlayGame) => Effect.gen(function*() {
     if ("service" in declaration.helper) return yield* status(5, "Controller helper", yield* declaration.helper.service(game));
     const { binary, ready, log } = declaration.helper;
@@ -636,14 +636,14 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     yield* checkPrefix.pipe(inStep(1, "Wine prefix"));
     yield* launcher.pipe(inStep(2, "Battle.net"));
     const { game: running, since, earlierSession } = yield* game.pipe(inStep(3, "Warcraft III"));
-    // A crash or a lost Battle.net ends these steps at once rather than at their timeouts (wisp:docs/watch.md).
+
     const watching = <A, R2>(effect: Effect.Effect<A, PlayProblem, R2>) => unlessLost(watched, effect).pipe(Effect.mapError((cause) => (cause._tag === "WatchFailure" ? new PlayProblem({ problem: `Warcraft III ${cause.problem}` }) : cause)));
     const hosted = yield* watching(loadMap(running, since, earlierSession)).pipe(inStep(4, "Map"));
-    // The helper runs before the match starts, or the match is played on the keyboard.
+
     yield* helper(running).pipe(inStep(5, "Controller helper"));
     const match = yield* Effect.gen(function*() {
       const match = yield* watching(declaration.match(running));
-      // Models the match creates fail the same way.
+
       yield* checkImports(hosted);
       return match;
     }).pipe(inStep(6, "Match"));
@@ -659,7 +659,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     : Effect.void)));
 });
 
-/** Focuses the game's window and presses keys in it. */
+
 const pressInGame = (game: { readonly window: number; readonly xWindow: XWindow }, ...keys: string[]) =>
   Effect.gen(function*() {
     const desktop = yield* PlayDesktop;
@@ -667,12 +667,12 @@ const pressInGame = (game: { readonly window: number; readonly xWindow: XWindow 
     yield* desktop.keys(game.xWindow, ...keys);
   });
 
-/**
- * Leaves the score screen of the game running in the declaration's prefix
- * with Escape in its window: The checked rollback build ignores the menus'
- * ScoreScreenClose. The window is found as play finds it: the compositor's
- * window of the Steam shortcut titled Warcraft III, and the game's X window.
- */
+
+
+
+
+
+
 export const leaveScoreScreen = (declaration: { readonly prefix: string; readonly shortcut: { readonly appId: number } }) => Effect.gen(function*() {
   const machine = yield* PlayMachine;
   const desktop = yield* PlayDesktop;
@@ -686,6 +686,6 @@ export const leaveScoreScreen = (declaration: { readonly prefix: string; readonl
   yield* pressInGame({ window: window.id, xWindow }, "Escape");
 });
 
-/** Names the step a problem stopped play at; the step's time prints with the command's step timings. */
+
 const inStep = (number: number, title: string) => <A, R>(effect: Effect.Effect<A, PlayProblem, R>) =>
   effect.pipe(Effect.mapError(({ problem }) => new PlayFailure({ step: number, title, problem })), step(`${number}/${STEPS} ${title}`));

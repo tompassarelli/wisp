@@ -1,13 +1,13 @@
-// A dev-loop journey process (wisp:docs/dev.md): it loads the headless
-// runtime and reads the native declarations, then waits for one line on stdin
-// naming the game's headless project and journey. Only then does it load the
-// game's modules, so it plays the code as saved. It prints one JSON line: the
-// journey's report.
+
+
+
+
+
 import { type HeadlessProject, type HeadlessReport, installHeadless, loadMapEntry, playHeadless, readNativeDeclarations } from "./headless";
 import { printResult } from "./devResult";
 
 export interface JourneyRequest {
-  /** A module exporting the game's HeadlessProject. */
+
   readonly module: string;
   readonly export: string;
   readonly journey: string;
@@ -33,7 +33,7 @@ async function play(request: JourneyRequest, declarations: ReturnType<typeof rea
   const runtime = installHeadless(project.map, declarations);
   try {
     const clients = runtime.clients(entry, Array.from({ length: request.clients }, (_, slot) => slot));
-    // The dev loop decides on desyncs; checksums only fingerprint a run.
+
     return playHeadless(clients, journey, project.map.filePrefix, project.scene, { checksums: false });
   } finally {
     runtime.restore();

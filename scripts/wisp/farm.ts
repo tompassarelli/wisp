@@ -1,10 +1,10 @@
-// The farm: a project's headless work on GitHub's free hosted runners instead
-// of this machine (wisp:docs/farm.md). A command dispatches one of the
-// checkout's workflow_dispatch workflows for a commit, finds the run by a tag
-// in its name, waits for it and reads its artifacts. Without --ref the commit
-// is the checkout's HEAD: one main doesn't hold yet is pushed with safe-push to
-// a scratch branch farm/<commit>, which CI ignores and the command deletes
-// after the run (so such a run always waits).
+
+
+
+
+
+
+
 import { randomBytes } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,7 +19,7 @@ export class FarmFailure extends Schema.TaggedError<FarmFailure>()("FarmFailure"
   }
 }
 
-/** Runs a program to completion: its trimmed stdout, or a failure naming its stderr; interruption kills and reaps it. */
+
 const runOnce = (argv: readonly string[], inherit: boolean, cwd: string | undefined) => Effect.acquireUseRelease(
   Effect.try({
     try: () => Bun.spawn([...argv], { ...(cwd === undefined ? {} : { cwd }), stdin: "ignore", stdout: inherit ? "inherit" : "pipe", stderr: inherit ? "inherit" : "pipe" }),
@@ -43,32 +43,32 @@ const runOnce = (argv: readonly string[], inherit: boolean, cwd: string | undefi
   }),
 );
 
-/** GitHub's refusal of a request for its primary or secondary rate limit, as gh reports it. */
+
 export const RATE_LIMITED = /rate limit|HTTP 429|abuse detection/i;
 
-/**
- * Runs a program like `runOnce`. A `gh` call GitHub refuses for a rate limit
- * waits and tries again, 30 s and then twice as long each time (at most 5
- * minutes) with jitter, for up to 65 minutes, since the hourly budget can take
- * that long to reset, instead of failing the caller's run.
- */
+
+
+
+
+
+
 export const run = (argv: readonly string[], inherit = false, cwd?: string) => argv[0] !== "gh" ? runOnce(argv, inherit, cwd) : runOnce(argv, inherit, cwd).pipe(
   Effect.tapError((failure) => RATE_LIMITED.test(failure.message) ? Effect.sync(() => console.error(`GitHub is rate-limiting requests; retrying ${argv.slice(0, 3).join(" ")} with backoff`)) : Effect.void),
   Effect.retry({ while: (failure) => RATE_LIMITED.test(failure.message), schedule: Schedule.min([Schedule.exponential("30 seconds"), Schedule.spaced("5 minutes")]).pipe(Schedule.jittered, Schedule.upTo({ duration: "65 minutes" })) }),
 );
 
-/** The checkout's GitHub repository, OWNER/NAME. */
+
 export const currentRepo = run(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]).pipe(
   Effect.tap((repo) => sweepScratch(repo)),
 );
 
-/**
- * The commit to run, and the scratch branch it was pushed to when main doesn't
- * hold it. The branch belongs to the caller's scope: closing it, after the run
- * or on any failure or interrupt from its creation on, deletes the branch.
- */
+
+
+
+
+
 export const resolveRef = (given: string | undefined, repo: string) => Effect.gen(function*() {
-  // actions/checkout needs a full commit id; a branch or short id resolves here.
+
   const sha = yield* run(["git", "rev-parse", "--verify", `${given ?? "HEAD"}^{commit}`]);
   yield* run(["git", "fetch", "--quiet", "origin", "main"]);
   const onMain = yield* run(["git", "merge-base", "--is-ancestor", sha, "FETCH_HEAD"]).pipe(Effect.as(true), Effect.orElseSucceed(() => false));
@@ -76,8 +76,8 @@ export const resolveRef = (given: string | undefined, repo: string) => Effect.ge
   if (sha !== (yield* run(["git", "rev-parse", "HEAD"]))) return yield* new FarmFailure({ problem: `${sha.slice(0, 12)} isn't on main: check it out to run it, so safe-push pushes it` });
   const scratch = `farm/${sha.slice(0, 12)}`;
   console.error(`${sha.slice(0, 12)} isn't on main: pushing it to ${scratch} for the run (deleted afterwards)`);
-  // The scratch branch starts at a commit origin already holds, so safe-push
-  // scans only the lane's own commits; from the root, which holds .gitleaksignore.
+
+
   const base = yield* run(["git", "merge-base", sha, "FETCH_HEAD"]);
   yield* run(["gh", "api", "-X", "DELETE", `repos/${repo}/git/refs/heads/${scratch}`]).pipe(Effect.ignore);
   yield* Effect.acquireRelease(
@@ -89,7 +89,7 @@ export const resolveRef = (given: string | undefined, repo: string) => Effect.ge
   return { ref: sha, scratch };
 });
 
-/** Deletes a scratch branch, reporting rather than failing when it can't. */
+
 const deleteScratch = (repo: string, scratch: string) =>
   run(["gh", "api", "-X", "DELETE", `repos/${repo}/git/refs/heads/${scratch}`]).pipe(Effect.catch((failure) => Effect.sync(() => console.error(`couldn't delete ${scratch}: ${failure.message}`))));
 
@@ -101,7 +101,7 @@ export const RunState = Schema.Struct({
 });
 export type RunState = typeof RunState.Type;
 
-/** gh's JSON output decoded by `schema`. */
+
 export const decoded = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, text: string) =>
   Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(text).pipe(Effect.mapError((cause) => new FarmFailure({ problem: `unexpected gh output: ${describeCause(cause)}` })));
 
@@ -110,7 +110,7 @@ const ScratchPages = Schema.Array(Schema.Struct({ data: Schema.Struct({ reposito
 }) }) }) }));
 const ActivePages = Schema.Array(Schema.Struct({ workflow_runs: Schema.Array(Schema.Struct({ head_branch: Schema.NullOr(Schema.String), head_sha: Schema.String, display_title: Schema.String })) }));
 
-/** Removes farm branches older than a day unless a live run still uses them. */
+
 export const sweepScratch = (repo: string) => Effect.gen(function*() {
   const [owner, name] = repo.split("/");
   const query = `query($owner:String!,$name:String!,$endCursor:String){repository(owner:$owner,name:$name){refs(refPrefix:"refs/heads/farm/",first:100,after:$endCursor){nodes{name target{oid ... on Commit{committedDate}}}pageInfo{hasNextPage endCursor}}}}`;
@@ -130,10 +130,10 @@ export const sweepScratch = (repo: string) => Effect.gen(function*() {
   }
 });
 
-/** A fresh tag that names a dispatched run, so the command finds its own. */
+
 export const runTag = () => randomBytes(4).toString("hex");
 
-/** Starts `workflow` on main with `inputs` (which hold `tag`) and finds the run, by the tag that ends its name. */
+
 export const dispatch = (repo: string, workflow: string, inputs: Readonly<Record<string, string>> & { readonly tag: string }) => Effect.gen(function*() {
   yield* run(["gh", "workflow", "run", workflow, "-R", repo, "--ref", "main", ...Object.entries(inputs).flatMap(([name, value]) => ["-f", `${name}=${value}`])]);
   for (let tries = 0; tries < 24; tries++) {
@@ -148,7 +148,7 @@ export const dispatch = (repo: string, workflow: string, inputs: Readonly<Record
   return yield* new FarmFailure({ problem: `no ${workflow} run named ${inputs.tag} appeared within two minutes` });
 });
 
-/** A queued or running run of `workflow` whose name starts with `prefix`, announced, so a second caller for the same commit joins it instead of starting another. */
+
 export const activeRun = (repo: string, workflow: string, prefix: string) => Effect.gen(function*() {
   for (const status of ["in_progress", "queued"]) {
     const listed = yield* run(["gh", "run", "list", "-R", repo, "--workflow", workflow, "--status", status, "-L", "50", "--json", "databaseId,displayTitle,url"]);
@@ -161,17 +161,17 @@ export const activeRun = (repo: string, workflow: string, prefix: string) => Eff
   return undefined;
 });
 
-/** Seconds between `waitFor`'s polls: the first, the growth while nothing moves, and the cap. */
+
 export const POLL = { first: 10, growth: 1.5, most: 60 } as const;
 
-/** The wait before the next poll: back to the first after a change, otherwise grown up to the cap. */
+
 export const nextPoll = (seconds: number, moved: boolean) => moved ? POLL.first : Math.min(POLL.most, Math.round(seconds * POLL.growth));
 
-/**
- * Polls the run until it completes, printing a line when its jobs move. Polls
- * back off from POLL.first to POLL.most seconds while nothing changes, so many
- * waiting workers cost little CPU and API.
- */
+
+
+
+
+
 export const waitFor = (repo: string, id: number) => Effect.gen(function*() {
   let last = "";
   let seconds: number = POLL.first;
@@ -188,14 +188,14 @@ export const waitFor = (repo: string, id: number) => Effect.gen(function*() {
   }
 });
 
-/** Downloads one artifact of a run into a temporary folder, hands the folder to `use`, then removes it. */
+
 export const withArtifact = <A, E>(repo: string, id: number, name: string, use: (folder: string) => Effect.Effect<A, E>) => Effect.acquireUseRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), "wisp-farm-"))),
   (folder) => run(["gh", "run", "download", String(id), "-R", repo, "-n", name, "-D", folder]).pipe(Effect.andThen(use(folder))),
   (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
 );
 
-/** The summary lines `farm test` prints, and whether the suites passed. */
+
 export function summaryLines(summary: Summary): { readonly lines: readonly string[]; readonly ok: boolean } {
   const suite = (name: string, count: Summary["bun"]) => count.shards === 0 ? []
     : [`${name}: ${count.passed} passed, ${count.failed} failed, ${count.skipped} skipped (${count.shards} shards, slowest ${count.slowestShardSeconds.toFixed(0)} s of tests)`];
@@ -205,15 +205,15 @@ export function summaryLines(summary: Summary): { readonly lines: readonly strin
   };
 }
 
-/**
- * `farm test [--ref REF] [--wait]`: the project's full Bun and 32-bit Lua
- * suites on the runners, through its .github/workflows/farm-test.yml, sharded
- * by measured time; prints pass and fail counts and each failing test.
- */
+
+
+
+
+
 export const farmTest = (options: { readonly ref: string | undefined; readonly wait: boolean }) => Effect.scoped(Effect.gen(function*() {
   const repo = yield* currentRepo;
   const started = performance.now();
-  // A commit another caller is already testing joins that run: no scratch push, no dispatch.
+
   const sha = yield* run(["git", "rev-parse", "--verify", `${options.ref ?? "HEAD"}^{commit}`]);
   const joined = yield* activeRun(repo, "farm-test.yml", `Farm test ${sha} `);
   if (joined !== undefined && !options.wait) return;

@@ -1,13 +1,13 @@
-// One pool pair's session (wisp:docs/lan.md, "Running a pool"), run by
-// `wisp lan pool` inside the pair's machine-capacity session:
-//   bun pairSession.ts --pair K --pool-profile P --launcher PRIVATE_DESKTOP_SH
-// Each client gets its own private desktop, so every client has one game
-// window on its own display, as the signed-in clients A and B do: tools that
-// find "the" Warcraft window on a display, and controller helpers that type
-// into it, work unchanged, and no window covers another. Desktop b only
-// hosts client b's window. Desktop a runs the pair's network namespace (only
-// loopback) with the pair agent in it, which starts both games, client b on
-// desktop b. Either desktop ending ends the pair.
+
+
+
+
+
+
+
+
+
+
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";

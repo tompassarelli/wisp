@@ -1,8 +1,8 @@
-// The LAN host's action log (wisp:scripts/wisp/lan/host.ts) as data. Its
-// header names its start as an ISO time; each line is `SECONDS TEXT`, where
-// a turn's actions read
-//   SECONDS turn N CLIENT pPID KIND FIELDS...
-// and a time mark about every second reads `SECONDS mark turn N game G`.
+
+
+
+
+
 
 export interface LoggedAction {
   readonly seconds: number;
@@ -14,16 +14,16 @@ export interface LoggedAction {
 }
 
 export interface ActionLog {
-  /** Milliseconds since the epoch at the log's second 0. */
+
   readonly start: number;
   readonly actions: readonly LoggedAction[];
-  /** Turn starts the log pins: from marks and from turns with actions. */
+
   readonly turnTimes: readonly { readonly turn: number; readonly seconds: number }[];
-  /** Every other line: joins, phases, loads, leaves, desyncs. */
+
   readonly events: readonly { readonly seconds: number; readonly text: string }[];
 }
 
-/** The ISO time a log header names after "seconds since". */
+
 export function headerStart(text: string): number | undefined {
   const match = /seconds since (\d{4}-\d\d-\d\dT[\d:.]+Z)/.exec(text.split("\n", 1)[0] ?? "");
   if (match === null) return undefined;

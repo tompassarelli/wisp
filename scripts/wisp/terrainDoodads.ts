@@ -3,7 +3,7 @@ import type { TerrainDoodad } from "./doodads";
 import type { DrawnPose } from "./headlessRender";
 import { CELL, type Terrain } from "./terrain";
 
-/** Skin text supplies model fields on current installs; older installs keep them in the SLK. */
+
 export function doodadSkinRows(bytes: Uint8Array): ReadonlyMap<string, Readonly<Record<string, string>>> {
   const rows = new Map<string, Record<string, string>>();
   let row: Record<string, string> | undefined;
@@ -16,7 +16,7 @@ export function doodadSkinRows(bytes: Uint8Array): ReadonlyMap<string, Readonly<
   return rows;
 }
 
-/** Special placements have no stored height: the supporting terrain point gives their base. */
+
 export function terrainDoodadPoses(placements: readonly TerrainDoodad[], terrain: Terrain, rows: ReadonlyMap<string, Readonly<Record<string, string>>>, frame: number,
   models: Readonly<Record<string, string | readonly string[]>> = {}): DrawnPose[] {
   return placements.map((placed, index) => {

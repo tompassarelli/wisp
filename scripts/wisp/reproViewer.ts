@@ -11,7 +11,7 @@ import { REPRO_VIEWER_PAGE } from "./reproViewerPage";
 export interface DeclarationSource { readonly file: string; readonly line: number }
 export interface ReproViewerSources { readonly project: string; readonly file: string; readonly type: string }
 
-/** Maps canonical field paths to their original TypeScript property declarations. */
+
 export function declarationMap(config: ReproViewerSources): (path: string) => DeclarationSource | undefined {
   const parsed = ts.getParsedCommandLineOfConfigFile(resolve(config.project), {}, { ...ts.sys, onUnRecoverableConfigFileDiagnostic: diagnostic => { throw new Error(ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")); } });
   if (parsed === undefined) throw new Error(`can't read ${config.project}`);
@@ -49,13 +49,13 @@ export function createReproViewer(map: HeadlessMap, inspect: ReproInspector, rep
     const prior = cached.get(frame);
     if (prior !== undefined) return prior;
     const states = inspectClientStates(map, inspect, repro, frame);
-    // The selected and previous frame suffice for scrubbing; a long scan need
-    // not retain a complete copy of each client's state at every frame.
+
+
     if (cached.size >= 16) cached.delete(cached.keys().next().value ?? frame);
     cached.set(frame, states);
     return states;
   };
-  // A saved moment can begin after frame zero. Locate its first inspectable frame.
+
   let low = 0;
   let high = repro.frame;
   read(high);

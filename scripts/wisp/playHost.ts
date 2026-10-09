@@ -1,7 +1,7 @@
-// The live machine and desktop `play` runs on: /proc, files and Steam on the
-// host; niri's IPC, grim, Tesseract and xdotool on the owner's desktop. The
-// game's X display is the declared one; niri and grim use the environment play
-// runs in, which on the owner's desktop names its compositor.
+
+
+
+
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, renameSync, statSync, writeFileSync } from "node:fs";
@@ -20,20 +20,20 @@ import { reportedMenus } from "./menus";
 import { acquireStartLock, startLockPath } from "./startLock";
 import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow } from "./play";
 
-/** The programs play runs; each is a command name on PATH or a path. */
+
 export interface PlayTools {
   readonly grim: string;
   readonly xdotool: string;
   readonly tesseract: string;
   readonly niri: string;
   readonly steam: string;
-  /** util-linux nsenter, which runs the launch request inside the launcher's runtime container. */
+
   readonly nsenter: string;
 }
 
 export const PLAY_TOOLS: PlayTools = { grim: "grim", xdotool: "xdotool", tesseract: "tesseract", niri: "niri", steam: "steam", nsenter: "nsenter" };
 
-/** Resolve on the host before replacing PATH with the launcher's environment. */
+
 export function hostNsenter(command: string): string {
   const path = Bun.which(command);
   if (path === null) throw new Error(`couldn't find ${command} on the host PATH`);
@@ -42,7 +42,7 @@ export function hostNsenter(command: string): string {
 
 const problem = (what: string) => (cause: unknown) => new PlayProblem({ problem: `${what}: ${describeCause(cause)}` });
 
-/** Starts a program in its own session, so it outlives play and the terminal's signals. */
+
 const startDetached = (command: readonly string[], log?: string) => Effect.tryPromise({
   try: () => new Promise<number>((resolve, reject) => {
     let output: number | "ignore" = "ignore";
@@ -67,16 +67,16 @@ const startDetached = (command: readonly string[], log?: string) => Effect.tryPr
   catch: problem(`couldn't start ${basename(command[0] ?? "")}`),
 });
 
-/**
- * Battle.net.exe --exec="launch W3" in the running launcher's container. Each
- * Steam runtime container has its own /tmp, where Wine keeps the wineserver's
- * socket, so a Wine started outside would start a second wineserver on the
- * prefix. Joining the launcher's user and mount namespaces (they are this
- * user's) with its environment reaches its wineserver. Its WINESERVERSOCKET is
- * an inherited descriptor, so the new process finds the server by its socket
- * instead. Proton's wine is three folders above the launcher's
- * wine-preloader (files/lib/wine/i386-unix).
- */
+
+
+
+
+
+
+
+
+
+
 const launchInContainer = (run: Runner, tools: PlayTools, launcher: { readonly pid: number }) => Effect.gen(function*() {
   const failed = problem("couldn't ask Battle.net to launch Warcraft III");
   const { env, wine, nsenter, cwd } = yield* Effect.try({
@@ -113,7 +113,7 @@ const machine = (run: Runner, tools: PlayTools): PlayMachine["Service"] => ({
       try {
         process.kill(pid, signal);
       } catch {
-        // Already gone.
+
       }
     }
   }),
@@ -175,7 +175,7 @@ const machine = (run: Runner, tools: PlayTools): PlayMachine["Service"] => ({
   }),
 });
 
-/** Runs a child to completion in its own scope, so interrupting the step stops and reaps it. */
+
 type Runner = (command: ChildProcess.Command) => Effect.Effect<Collected, PlatformError.PlatformError>;
 
 const runner = Effect.gen(function*() {
@@ -183,7 +183,7 @@ const runner = Effect.gen(function*() {
   return ((command) => collect(command).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner))) satisfies Runner;
 });
 
-/** Runs a tool to completion; its stdout on success. A nonzero exit is a problem unless `allowExit` lists it. */
+
 const tool = (run: Runner, command: readonly string[], env: Record<string, string>, stdin?: Uint8Array, allowExit: readonly number[] = []) => {
   const failed = problem(`${basename(command[0] ?? "")} ${command.slice(1, 3).join(" ")} failed`);
   return run(ChildProcess.make(command[0]!, command.slice(1), { env, extendEnv: true, stdin: stdin === undefined ? "ignore" : Stream.make(stdin) })).pipe(
@@ -208,7 +208,7 @@ const NiriOutput = Schema.Struct({
   logical: Schema.NullOr(Schema.Struct({ x: Schema.Int, y: Schema.Int, width: Schema.Int, height: Schema.Int })),
 });
 
-/** `niri msg --json` replies, decoded; outputs come keyed by name. */
+
 const niri = <S extends Schema.Top & { readonly DecodingServices: never }>(run: Runner, tools: PlayTools, what: string, schema: S) =>
   tool(run, [tools.niri, "msg", "--json", what], {}).pipe(
     Effect.flatMap((bytes) => Effect.try({ try: () => JSON.parse(text(bytes)) as unknown, catch: problem(`niri's ${what} reply isn't JSON`) })),
@@ -246,11 +246,11 @@ const desktop = (run: Runner, tools: PlayTools, display: string): PlayDesktop["S
       return { width: frame.width, height: frame.height, words: parseWords(tsv) };
     }),
     xWindow: (title, pid) => Effect.gen(function*() {
-      // xdotool search exits 1 when no window matches.
+
       const ids = text(yield* tool(run, [tools.xdotool, "search", "--onlyvisible", "--name", `^${escapeTitle(title)}$`], x11, undefined, [1])).split("\n").filter((line) => line !== "");
       const candidates: { readonly window: XWindow; readonly owned: boolean }[] = [];
       for (const id of ids) {
-        // Wine sets _NET_WM_PID to the Linux process; a window without one is still a candidate.
+
         const owned = pid !== undefined && Number(text(yield* tool(run, [tools.xdotool, "getwindowpid", id], x11, undefined, [1])).trim()) === pid;
         const values = shellValues(text(yield* xdotool("getwindowgeometry", "--shell", id)));
         candidates.push({ owned, window: { id, x: Number(values.X), y: Number(values.Y), width: Number(values.WIDTH), height: Number(values.HEIGHT) } });
@@ -264,7 +264,7 @@ const desktop = (run: Runner, tools: PlayTools, display: string): PlayDesktop["S
   };
 };
 
-/** The live machine and the owner's desktop, with the game on X display `display`. */
+
 export const playHostLayer = (display: string, tools: Partial<PlayTools> = {}) => {
   const resolved = { ...PLAY_TOOLS, ...tools };
   return Layer.mergeAll(
@@ -273,6 +273,6 @@ export const playHostLayer = (display: string, tools: Partial<PlayTools> = {}) =
   ).pipe(Layer.provide(BunServices.layer));
 };
 
-/** The host alone (processes, files, Steam), for commands that drive no desktop of their own, like `doctor`. */
+
 export const playMachineLayer = (tools: Partial<PlayTools> = {}) =>
   Layer.effect(PlayMachine, Effect.map(runner, (run) => PlayMachine.of(machine(run, { ...PLAY_TOOLS, ...tools })))).pipe(Layer.provide(BunServices.layer));

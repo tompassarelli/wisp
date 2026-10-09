@@ -1,6 +1,6 @@
-// GameFiles: the client folders Wisp shares with the game. Files in a
-// client's CustomMapData carry hot reloads, acknowledgements, error reports and
-// ready signals; its Maps folder takes the map a fresh match hosts.
+
+
+
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, copyFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { Context, Effect, Layer, Option, Schema } from "effect";
@@ -20,41 +20,41 @@ export class GameFileFailure extends Schema.TaggedError<GameFileFailure>()("Game
 
 export interface StoredFile {
   readonly text: string;
-  /** Milliseconds since the epoch, on the Effect Clock's scale. */
+
   readonly modified: number;
 }
 
 export class GameFiles extends Context.Service<GameFiles, {
-  /** A file's text and modification time; undefined while it doesn't exist. */
+
   readonly read: (path: string) => Effect.Effect<StoredFile | undefined, GameFileFailure>;
   readonly write: (path: string, contents: string | Uint8Array) => Effect.Effect<void, GameFileFailure>;
-  /** Written whole: a reader sees the old file or the new one. */
+
   readonly replace: (path: string, text: string) => Effect.Effect<void, GameFileFailure>;
-  /** File names in a directory; none while it doesn't exist. */
+
   readonly list: (directory: string) => Effect.Effect<readonly string[], GameFileFailure>;
   readonly remove: (path: string) => Effect.Effect<void, GameFileFailure>;
-  /** Makes `map` the one map in the configured map folder of the client whose Documents/Warcraft III is `documents`. */
+
   readonly installMap: (documents: string, map: string) => Effect.Effect<void, GameFileFailure>;
 }>()("wisp/GameFiles") {
   static readonly layer = (options: MapDirectories = { mapFolder: "Maps/00-Wisp", replacedMaps: "wisp-replaced-maps" }) => Layer.sync(GameFiles, () => GameFiles.of(local(options)));
 }
 
-/** A client's CustomMapData, given its Documents/Warcraft III folder. */
+
 export const dataDirectory = (documents: string) => join(documents, "CustomMapData");
 
-/**
- * Creates the hot folder of each client's CustomMapData with the host's
- * marker, unless the marker is already there. Run it before a match starts or
- * a reload is published: under Wine a map's lookup of a missing file reads all
- * of CustomMapData while its hot folder is missing, and a map that has seen
- * neither the marker nor a manifest looks for them at most twice a second.
- */
+
+
+
+
+
+
+
 export const prepareHotFolders = (directories: readonly string[], filePrefix = "wisp") =>
   Effect.gen(function*() {
     const files = yield* GameFiles;
     yield* Effect.forEach(directories, (directory) => Effect.gen(function*() {
       const marker = hostPath(directory, hostFile(filePrefix));
-      // The marker's content never changes, and a client may be reading it.
+
       if ((yield* files.read(marker)) === undefined) yield* files.write(marker, linePreloadFile("host"));
     }), { concurrency: 2, discard: true });
   });
@@ -62,11 +62,11 @@ export const prepareHotFolders = (directories: readonly string[], filePrefix = "
 export interface MapDirectories {
   readonly mapFolder: string;
   readonly replacedMaps: string;
-  /** Keep other installed maps when a consumer owns a versioned library. */
+
   readonly preserveMaps?: boolean;
 }
 
-/** A file the game writes, decoded; undefined while it doesn't exist. */
+
 export const readGameFile = <A>(path: string, kind: GameFileKind<A>) =>
   Effect.gen(function*() {
     const files = yield* GameFiles;
@@ -82,7 +82,7 @@ const trySync = <A>(operation: string, path: string, run: () => A) =>
   Effect.try({ try: run, catch: (cause) => new GameFileFailure({ operation, path, cause }) });
 
 const FileSystemFailure = Schema.Struct({ code: Schema.String });
-// A client reading a file can briefly hold it on Proton.
+
 const transientFileErrors = new Set(["EAGAIN", "EBUSY"]);
 
 function isTransient(failure: GameFileFailure): boolean {
@@ -98,7 +98,7 @@ const write = (path: string, contents: string | Uint8Array) =>
   }));
 
 const local = ({ mapFolder, replacedMaps, preserveMaps }: MapDirectories): GameFiles["Service"] => ({
-  // Game files are small and polled every few milliseconds while a reload waits, so they are read synchronously.
+
   read: (path) => trySync("read game file", path, () => {
     const stats = statSync(path, { throwIfNoEntry: false });
     return stats === undefined ? undefined : { text: readFileSync(path, "utf8"), modified: stats.mtimeMs };
@@ -116,7 +116,7 @@ const local = ({ mapFolder, replacedMaps, preserveMaps }: MapDirectories): GameF
     mkdirSync(folder, { recursive: true });
     mkdirSync(replaced, { recursive: true });
     if (!preserveMaps) for (const old of readdirSync(folder).filter((name) => name.endsWith(".w3x") && name !== basename(map))) renameSync(join(folder, old), join(replaced, old));
-    // A running game may still read the old file: replace it by rename, never in place.
+
     const next = join(folder, `${basename(map)}.${process.pid}.next`);
     copyFileSync(map, next);
     renameSync(next, join(folder, basename(map)));

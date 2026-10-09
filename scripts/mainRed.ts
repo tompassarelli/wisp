@@ -1,9 +1,9 @@
-// Keeps one open "BRANCH is red" issue per branch in step with that branch's
-// latest CI run (wisp:.github/workflows/main-red.yml): a failed run
-// opens or updates it with each failing test and the first failing commit
-// since the last green run; a green run closes it. The pre-push gate prints
-// the open "main is red" issue's tests (wisp:scripts/prePush.ts).
-// Usage: bun scripts/mainRed.ts RUN_ID (gh authenticated, repository from GH_REPO or the checkout).
+
+
+
+
+
+
 import { Console, Effect, Schema } from "effect";
 import { captureProcess } from "./wisp/mapBuild";
 
@@ -16,7 +16,7 @@ class MainRedFailure extends Schema.TaggedError<MainRedFailure>()("MainRedFailur
 export const redTitle = (branch: string) => `${branch} is red`;
 const TESTS_HEADING = "## Failing tests";
 
-/** Bun's `(fail) NAME [TIME]` and the Lua32 runner's `fail NAME: MESSAGE` lines; a failed step with neither is named instead. */
+
 export function failingTests(log: string): string[] {
   const tests = new Set<string>();
   const steps = new Map<string, boolean>();
@@ -37,7 +37,7 @@ export function failingTests(log: string): string[] {
   return [...tests, ...unnamed];
 }
 
-/** The failing tests an issue body lists. */
+
 export function issueTests(body: string): string[] {
   const section = body.split(TESTS_HEADING)[1]?.split("\n## ")[0] ?? "";
   return section.split("\n").flatMap((line) => (line.startsWith("- ") ? [line.slice(2)] : []));
@@ -87,7 +87,7 @@ export const reportRun = (runId: string) => Effect.gen(function*() {
   if (run.conclusion !== "success" && run.conclusion !== "failure") return yield* Console.log(`run ${runId} ${run.conclusion || "unfinished"}: nothing to report`);
   const history = yield* gh("run", "list", "--workflow", run.workflowName, "--branch", run.headBranch, "--limit", "100",
     "--json", "databaseId,conclusion,status,headSha,url").pipe(Effect.flatMap(decode(Schema.Array(RunSchema), "gh run list")));
-  // Newest first; a run that finished after this one reports instead, so a late event never reopens or closes out of order.
+
   const completed = history.filter((entry) => entry.conclusion === "success" || entry.conclusion === "failure");
   const index = completed.findIndex((entry) => entry.databaseId === run.databaseId);
   if (index > 0) return yield* Console.log(`run ${runId} is older than run ${completed[0]?.databaseId}: nothing to report`);

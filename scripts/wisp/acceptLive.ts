@@ -1,8 +1,8 @@
-// The accept driver for the signed-in clients: input and frames through
-// Clients' private desktops, receipts and War3Log from each client's
-// Documents folder, and each client's state from ClientWatch, when provided,
-// which decides when a session is ready and what a failed one looked like.
-// Without ClientWatch the game's `start` alone decides that the match runs.
+
+
+
+
+
 import { join } from "node:path";
 import { Effect, Layer, Option } from "effect";
 import { war3LogPath } from "../warcraft/war3Log";
@@ -13,16 +13,16 @@ import { GameFiles, dataDirectory } from "./gameFiles";
 import { ClientWatch, type ClientView, inState, waitFor } from "./watch";
 
 export interface LiveAcceptOptions<R> {
-  /** A fresh match of the map profile in every client, ready for checks (the game's own fresh-match command). */
+
   readonly start: (map: string, session: string) => Effect.Effect<void, CommandFailure, R>;
-  /** Which files of a client's CustomMapData are the map's receipts. */
+
   readonly receipt: (name: string) => boolean;
-  /**
-   * Makes every client usable before a session, such as `wisp client doctor`.
-   * Without it a session starts only when no client is crashed or disconnected.
-   */
+
+
+
+
   readonly prepare?: Effect.Effect<void, CommandFailure, R>;
-  /** How long every client may take to report its match once `start` returns (default 60 s). */
+
   readonly matchSeconds?: number;
 }
 

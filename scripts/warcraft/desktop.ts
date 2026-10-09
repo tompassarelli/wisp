@@ -1,7 +1,7 @@
-// Drives signed-in Warcraft clients on their private desktops. It captures raw
-// frames, reads text from small regions, and sends keyboard and pointer input.
-// Session-bound values (desktop run directories, tool paths) come from a
-// supplied clients file.
+
+
+
+
 import { join } from "node:path";
 import { Clock, Effect, Exit, Schema } from "effect";
 import { describeCause } from "../wisp/command";
@@ -32,9 +32,9 @@ type Tools = typeof ClientsFile.Type["tools"];
 
 export interface Client {
   readonly name: string;
-  /** The client's Documents/Warcraft III folder. */
+
   readonly documents: string;
-  /** This client's installed Wisp page's report port; distinct for every client. Absent uses ordinary menus. */
+
   readonly menuReportPort?: number;
   readonly tools: Tools;
   readonly x11: Record<string, string>;
@@ -42,7 +42,7 @@ export interface Client {
   readonly window: string;
 }
 
-/** A rectangle of the 2560x1440 client frame. */
+
 export interface Region {
   readonly x: number;
   readonly y: number;
@@ -50,10 +50,10 @@ export interface Region {
   readonly height: number;
 }
 
-/**
- * How text is separated from the background before reading: light labels,
- * the gold menu labels, or white text on a coloured button.
- */
+
+
+
+
 export type Ink = "light" | "gold" | "white";
 
 function fail(operation: string, client: string) {
@@ -87,7 +87,7 @@ const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 export type ClientsConfig = typeof ClientsFile.Type;
 export type ClientEntry = ClientsConfig["clients"][number];
 
-/** The clients file, decoded: its tools and each client's desktop run folder, Documents folder and menu port. */
+
 export const readClientsFile = (path: string) =>
   Effect.gen(function*() {
     const raw = yield* Effect.tryPromise({ try: () => Bun.file(path).json(), catch: fail("read clients file", path) });
@@ -99,7 +99,7 @@ export const readClientsFile = (path: string) =>
     return config;
   });
 
-/** A client's private desktop: its X display and its compositor, from its run folder. */
+
 export const desktopSession = (entry: ClientEntry) =>
   Effect.gen(function*() {
     const read = (file: string) =>
@@ -109,11 +109,11 @@ export const desktopSession = (entry: ClientEntry) =>
     return { x11, wayland };
   });
 
-/** The ids of the client display's windows titled exactly `title`. */
+
 export const findWindows = (tools: Tools, name: string, x11: Record<string, string>, title: string) =>
   run(name, `find ${title} window`, [tools.xdotool, "search", "--name", `^${title.replace(/[.\\^$|?*+()[\]{}]/g, "\\$&")}$`], x11).pipe(
     Effect.map((bytes) => text(bytes).split("\n").filter((line) => line !== "")),
-    // xdotool search exits 1 when nothing matches.
+
     Effect.catchTag("DesktopFailure", () => Effect.succeed([] as string[])),
   );
 
@@ -130,19 +130,19 @@ export const loadClients = (path: string) =>
       }));
   });
 
-/** A compositor sample bracketed on the caller's clock, shared with its stimulus. */
+
 export interface TimedFrame {
   readonly frame: Frame;
   readonly beforeNs: number;
   readonly afterNs: number;
 }
 
-/**
- * Captures pixels and brackets acquisition on the supplied monotonic clock.
- * The bracket includes process startup and readback; neither endpoint nor its
- * midpoint is a compositor presentation timestamp. Repeated calls stay serial.
- * An eight-second timeout kills and reaps a stalled capture.
- */
+
+
+
+
+
+
 export const captureTimed = (client: Client, nowNs: () => number, region?: Region) =>
   Effect.gen(function*() {
     const geometry = region === undefined ? [] : ["-g", `${region.x},${region.y} ${region.width}x${region.height}`];
@@ -156,11 +156,11 @@ export const captureTimed = (client: Client, nowNs: () => number, region?: Regio
     return { frame, beforeNs, afterNs } satisfies TimedFrame;
   });
 
-/** A raw frame from the compositor. Use captureTimed when correlating a stimulus. */
+
 export const capture = (client: Client, region?: Region) =>
   captureTimed(client, () => performance.now() * 1_000_000, region).pipe(Effect.map(({ frame }) => frame));
 
-/** Dark text on white as a PGM image, which is what the reader expects. */
+
 export function separateInk(frame: Frame, ink: Ink): Uint8Array {
   const header = new TextEncoder().encode(`P5\n${frame.width} ${frame.height}\n255\n`);
   const pixels = frame.width * frame.height;
@@ -177,7 +177,7 @@ export function separateInk(frame: Frame, ink: Ink): Uint8Array {
   return out;
 }
 
-/** Text in a region (or the whole frame), one line per text line. */
+
 export const read = (client: Client, region?: Region, ink: Ink = "light") =>
   Effect.gen(function*() {
     const frame = yield* capture(client, region);
@@ -189,11 +189,11 @@ export interface Word {
   readonly text: string;
   readonly x: number;
   readonly y: number;
-  /** The reader's block, paragraph and line: equal for the words of one line. */
+
   readonly line?: string;
 }
 
-/** The words of Tesseract's TSV output with their centres; low-confidence words are left out. */
+
 export function parseWords(tsv: string): Word[] {
   return tsv.split("\n").slice(1).flatMap((line): Word[] => {
     const field = line.split("\t");
@@ -203,29 +203,29 @@ export function parseWords(tsv: string): Word[] {
   });
 }
 
-/** Every word in the frame with its centre, for finding where controls are. */
+
 export const words = (client: Client, ink: Ink = "light") =>
   Effect.gen(function*() {
     return yield* frameWords(client, yield* capture(client), ink);
   });
 
-/** Every word of one captured frame, read with one ink. */
+
 export const frameWords = (client: Client, frame: Frame, ink: Ink) =>
   run(client.name, "read words", [client.tools.tesseract, "stdin", "stdout", "--psm", "11", "tsv"], {}, separateInk(frame, ink)).pipe(Effect.map((bytes) => parseWords(text(bytes))));
 
-/** Gives the Warcraft window compositor and X11 focus. */
+
 export const focus = (client: Client) =>
   Effect.gen(function*() {
     yield* run(client.name, "focus Warcraft", [client.tools.wlrctl, "toplevel", "focus", "title:Warcraft III"], client.wayland);
     yield* run(client.name, "activate Warcraft window", [client.tools.xdotool, "windowactivate", "--sync", client.window], client.x11);
   });
 
-/**
- * Refuses typed text and Return unless the client is in a match with its menu
- * page connected (wisp:scripts/wisp/watch.ts `typesIntoMatch`): in the menus
- * they reach Battle.net's public channel, in a lobby its chat. Uses the
- * ClientWatch provided, else watches the client once.
- */
+
+
+
+
+
+
 export const requireMatch = (client: Client, input: string) =>
   Effect.gen(function*() {
     const provided = yield* Effect.serviceOption(ClientWatch);
@@ -241,7 +241,7 @@ export const requireMatch = (client: Client, input: string) =>
     }
   }).pipe(Effect.catchTag("WatchFailure", (cause) => Effect.fail(new DesktopFailure({ operation: `send ${input}`, client: client.name, cause }))));
 
-/** Keys in order, for example `keys(a, "F10")` or `keys(a, "ctrl+a")`. Return needs a match (requireMatch). */
+
 export const keys = (client: Client, ...names: string[]) =>
   Effect.gen(function*() {
     if (sendsChat(names)) yield* requireMatch(client, names.join(" "));
@@ -253,7 +253,7 @@ export const keys = (client: Client, ...names: string[]) =>
     } else yield* run(client.name, `press ${names.join(" ")}`, [client.tools.xdotool, "key", "--clearmodifiers", ...names], client.x11);
   });
 
-/** Types `value`, which may start with "-", into a match (requireMatch); `delayMillis` spaces the keys for text fields that drop fast input. */
+
 export const typeText = (client: Client, value: string, delayMillis?: number) =>
   Effect.gen(function*() {
     yield* requireMatch(client, "typed text");
@@ -262,7 +262,7 @@ export const typeText = (client: Client, value: string, delayMillis?: number) =>
     yield* run(client.name, "type text", [client.tools.xdotool, "type", "--clearmodifiers", ...delay, "--", value], client.x11);
   });
 
-/** The Warcraft process that owns the client's window (its _NET_WM_PID). */
+
 export const windowPid = (client: Client) =>
   Effect.gen(function*() {
     const pid = Number(text(yield* run(client.name, "read window process", [client.tools.xdotool, "getwindowpid", client.window], client.x11)).trim());
@@ -281,25 +281,25 @@ function pointer(client: Client) {
   );
 }
 
-/**
- * Clicks at a frame position. Warcraft follows relative motion under
- * Xwayland, not absolute moves, and consumes it after XTEST reports the new
- * position; there is no signal for that, so a short settle precedes the press.
- */
+
+
+
+
+
 export const click = (client: Client, x: number, y: number) =>
   Effect.gen(function*() {
     yield* focus(client);
     yield* pressAt(client, x, y);
   });
 
-/** Gives a window of the client's display X11 focus, and compositor focus when its toplevel has this title. */
+
 export const focusWindow = (client: Client, title: string) =>
   Effect.gen(function*() {
     yield* run(client.name, `focus ${title}`, [client.tools.wlrctl, "toplevel", "focus", `title:${title}`], client.wayland).pipe(Effect.ignore);
     yield* run(client.name, `activate ${title} window`, [client.tools.xdotool, "windowactivate", "--sync", client.window], client.x11);
   });
 
-/** Clicks at a frame position in whatever window has focus, as click does once Warcraft has it. */
+
 export const pressAt = (client: Client, x: number, y: number) =>
   Effect.gen(function*() {
     const from = yield* pointer(client);
@@ -312,7 +312,7 @@ export const pressAt = (client: Client, x: number, y: number) =>
     yield* run(client.name, "release button", [client.tools.xdotool, "mouseup", "1"], client.x11);
   });
 
-/** Focuses once and batches recorded inputs, verifying relative pointer motion before each click. Text and Return need a match (requireMatch). */
+
 export const batch = Effect.fnUntraced(function*(client: Client, actions: readonly InputAction[]) {
   if (actions.length === 0) return;
   if (actions.some((action) => action.kind === "text" || (action.kind === "keys" && sendsChat(action.keys)))) yield* requireMatch(client, "typed text or Return");
@@ -341,7 +341,7 @@ export const batch = Effect.fnUntraced(function*(client: Client, actions: readon
   }).pipe(step(`${client.name}: input batch (${actions.length} actions)`));
 });
 
-/** Polls until `observe` returns a value, or fails with the last observation after `seconds` of the Effect Clock. */
+
 export const waitFor = <A, E, R>(client: { readonly name: string }, what: string, seconds: number, observe: Effect.Effect<A | undefined, E, R>) =>
   Effect.gen(function*() {
     const deadline = (yield* Clock.currentTimeMillis) + seconds * 1000;
@@ -353,32 +353,32 @@ export const waitFor = <A, E, R>(client: { readonly name: string }, what: string
     }
   });
 
-/** Waits until a region shows text matching `pattern`. */
+
 export const waitForText = (client: Client, what: string, pattern: RegExp, region?: Region, ink: Ink = "light", seconds = 20) =>
   waitFor(client, what, seconds, read(client, region, ink).pipe(Effect.map((seen) => (pattern.test(seen.replace(/\s+/g, " ")) ? seen : undefined))));
 
-/** The X window with input focus on the client's display. */
+
 const activeWindow = (client: Client) =>
   run(client.name, "read active window", [client.tools.xdotool, "getactivewindow"], client.x11).pipe(Effect.map((bytes) => text(bytes).trim()));
 
-/** A window's frame rectangle on the client's display. */
+
 const windowRegion = (client: Client) =>
   run(client.name, "read window geometry", [client.tools.xdotool, "getwindowgeometry", "--shell", client.window], client.x11).pipe(Effect.map((bytes): Region => {
     const fields = Object.fromEntries(text(bytes).split("\n").filter((line) => line.includes("=")).map((line) => line.split("=", 2) as [string, string]));
     return { x: Number(fields.X), y: Number(fields.Y), width: Number(fields.WIDTH), height: Number(fields.HEIGHT) };
   }));
 
-/**
- * Replaces a field of the Battle.net sign-in window `client.window` (titled
- * `title`) with `secret` and submits it with Return. With a `placeholder`, the
- * field is clicked where its empty placeholder (read from the window) is: the
- * password page of 7 Oct loaded with no field focused. Without one, the value
- * goes to the field that has focus, as nixos-config:dotfiles/bin/wc3-login-field
- * types it: the account page focuses its field, and a pointer move on the
- * launcher's window failed on the cloned clients of 8 Oct. The value reaches
- * xdotool on its stdin, never its arguments, and is zeroed after; nothing
- * types unless that window has focus before and after.
- */
+
+
+
+
+
+
+
+
+
+
+
 export const enterLoginField = (client: Client, title: string, placeholder: RegExp | undefined, secret: Uint8Array) =>
   Effect.gen(function*() {
     yield* focusWindow(client, title);

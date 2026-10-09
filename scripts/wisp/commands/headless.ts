@@ -1,8 +1,8 @@
-// `wisp headless`: plays one of the game's journeys in simulated clients of
-// its map, in this process, and prints a desync, error reports, a hot reload
-// that didn't run and what a player would see wrong (wisp:docs/headless.md).
-// With --cost it also plays the journey in 32-bit Lua and prints each
-// client's predicted native cost per frame (wisp:docs/frame-cost.md#predicted-native-cost).
+
+
+
+
+
 import { Cause, Console, Effect, Exit, Schema } from "effect";
 import { type Command, UsageFailure, describeCause, flagValues } from "../command";
 import { type HeadlessProject, installHeadless, loadMapEntry, playHeadless } from "../headless";
@@ -27,7 +27,7 @@ export class HeadlessFailure extends Schema.TaggedError<HeadlessFailure>()("Head
   }
 }
 
-/** The clients the reloader counts: Wisp's per-slot files cover four players. */
+
 export const MAX_CLIENTS = 4;
 
 const JourneyFile = Schema.Struct({
@@ -77,11 +77,11 @@ export function headlessArguments(args: readonly string[]) {
   return { named, frames: [...new Set(frames)].sort((a, b) => a - b), render, journey, sounds, runs, stepFrames, musicVolume, graphics, look };
 }
 
-/**
- * `headless [JOURNEY] [--clients N] [--cost]`; loads the game's modules only
- * when it runs. `cost` is the game's perf program, whose run of the journey's
- * name --cost plays.
- */
+
+
+
+
+
 export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfProject): Command => (args) => Effect.suspend(() => {
   const json = args.includes("--json");
   const started = performance.now();
@@ -146,7 +146,7 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
     const speedMultiple = benchmark.frames * (1000 / 60) / Math.max(elapsedMs, Number.EPSILON);
     const render = project.render;
     if (options.render !== undefined && render !== undefined && destroyedModels.size > 0) {
-      // Death sequences come from model files read asynchronously, so the deterministic journey is played again to draw them during effect cleanup.
+
       const effectDeaths = yield* Effect.tryPromise({ try: () => loadEffectDeaths(render, destroyedModels, options.graphics), catch: (cause) => new HeadlessFailure({ journey: name, problems: 1, cause }) });
       scenes = yield* Effect.try({
         try: () => {

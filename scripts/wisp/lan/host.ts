@@ -1,15 +1,15 @@
-// A LAN game host for offline development clients (wisp:docs/lan.md). It
-// lists one game to the clients' LAN ports, takes their joins, runs the
-// countdown and loading, then relays the game in turns: every `turnMs` it sends
-// every client the actions collected since the last turn. Because every
-// action passes through it, it writes the action log: each turn's actions by
-// player, decoded (orders, BlzSendSyncData payloads with their prefixes,
-// frame and key events, chat), joins, loads and leaves; and it compares the
-// state checksum every client returns for every turn, so a desync is named by
-// its turn the moment it happens.
-//
-// Its join burst and game loop follow W3Champions' Flo (MPL-2.0) as
-// wc3-slop-lan describes it for the checked rollback build; this is Wisp's own code.
+
+
+
+
+
+
+
+
+
+
+// Join/game-loop layouts follow W3Champions' Flo (MPL-2.0) and wc3-slop-lan's checked rollback notes; this is Wisp's own code.
+
 import type { Socket, TCPSocketListener, udp } from "bun";
 import { Deferred, Effect, Exit, Fiber, Schedule, Scope, Semaphore } from "effect";
 import { decodeActions } from "./actions";
@@ -23,19 +23,19 @@ import {
   gameInfo, incomingAction, leaveAck, mapCheck, pingFromHost, playerInfo, playerLeft, playerLoaded, playerProfile, playerSkins, protobufType, rejectJoin, slotInfo, slotInfoJoin, splitPackets,
 } from "./w3gs";
 
-/** Where 3.0 clients listen for LAN games: each takes the first free UDP port from 16000. */
+
 export const CLIENT_PORTS: readonly number[] = [16000, 16001, 16002, 16003, 16004, 16005, 16006, 16007];
-/** Flo waits this long between the countdown packets; sooner sends slow clients to the score screen. */
+/** Flo waits this long between countdown packets; shorter waits send slow clients to the score screen. */
 export const COUNTDOWN_MS = 6000;
-/** The longest step one turn may carry after a stall. */
+
 const MAX_STEP_MS = 250;
-/** How many turns a client may leave unanswered before the host waits for it. */
+
 const SYNC_LIMIT = 50;
-/** Clients drop a host that stays silent before the game starts; classic hosts ping every few seconds. */
+
 const PING_MS = 3000;
-/** Turns between time marks in the action log. */
+
 const MARK_TURNS = 32;
-/** Time for a join burst's echoes to arrive before the countdown. */
+
 const JOIN_SETTLE_MS = 1500;
 const RACE_BITS: Readonly<Record<number, number>> = { 1: 0x01, 2: 0x02, 3: 0x08, 4: 0x04 };
 
@@ -45,29 +45,29 @@ export interface HostOptions {
   readonly buildId?: string;
   readonly map: MapFacts;
   readonly gameName: string;
-  /** Names for the joining clients in join order: client a, client b. */
+
   readonly clients: readonly string[];
-  /** Milliseconds a turn covers (the game's send interval). */
+
   readonly turnMs?: number;
-  /** TCP port to listen on; 0 picks one. */
+
   readonly port?: number;
   readonly announcePorts?: readonly number[];
-  /** Computer players (normal) in the map's user slots after the clients'. */
+
   readonly computers?: number;
-  /** Milliseconds between the countdown packets (COUNTDOWN_MS); tests shorten it. */
+
   readonly countdownMs?: number;
-  /** Milliseconds after the last join before the countdown (JOIN_SETTLE_MS). */
+
   readonly settleMs?: number;
-  /** Keep a lobby open for protocol checks. */
+
   readonly autoStart?: boolean;
-  /** Each action-log line, already formatted. */
+
   readonly log: (line: string) => void;
-  /** Called when the phase changes. */
+
   readonly onPhase?: (phase: Phase) => void;
-  /** Called on a desync: the turn and each client's checksum. */
+
   readonly onDesync?: (turn: number, sums: Readonly<Record<string, number>>) => void;
   readonly now?: () => number;
-  /** Every packet sent or received, for recording an exchange: direction, client label, the whole packet. */
+
   readonly onPacket?: (direction: "in" | "out", client: string, packet: Uint8Array) => void;
 }
 
@@ -86,7 +86,7 @@ interface Player {
 }
 
 interface Connection {
-  /** In order of connecting, from 1. */
+
   readonly id: number;
   buffer: Uint8Array;
   player: Player | undefined;
@@ -106,17 +106,17 @@ export interface LanHost {
   readonly status: () => HostStatus;
   readonly slots: () => SlotTable;
   readonly say: (from: number, to: number, text: string) => void;
-  /** Queues an action as `pid`'s for the next turn (a seat's or any player's). */
+
   readonly inject: (pid: number, data: Uint8Array) => void;
-  /** Deliver unchanged game-time turns sooner; clients may still limit their own clocks. */
+
   readonly setSpeed: (multiple: number) => Effect.Effect<void, LanFailure>;
 }
 
-/** The slot table for `count` human players in the map's first user slots; other map slots closed. */
-/**
- * The slot table: `count` clients in the map's first user slots, `computers`
- * computer players (normal) in the next ones, every other slot closed.
- */
+
+
+
+
+
 export function slotTable(map: MapFacts, count: number, randomSeed: number, joined: (slot: number) => boolean, computers = 0): SlotTable {
   const users = map.players.filter(({ controller }) => controller === 1).map(({ id }) => id);
   if (users.length < count + computers) throw new Error(`the map has ${users.length} user slots; ${count} clients and ${computers} computers need as many`);
@@ -180,8 +180,8 @@ export const startHost = (options: HostOptions) => Effect.gen(function*() {
   const handicaps = new Map<number, number>();
   const setPhase = (next: Phase) => {
     phase = next;
-    // Discovery serves only the lobby. Bun 1.3.13 can spin on a socket that
-    // received ECONNREFUSED from an unused announcement port.
+
+
     if (next !== "lobby") {
       Deferred.doneUnsafe(lobbyEnded, Effect.void);
     }
@@ -367,7 +367,7 @@ export const startHost = (options: HostOptions) => Effect.gen(function*() {
   discovery = yield* Effect.acquireRelease(Effect.tryPromise({ try: () => Bun.udpSocket({
     hostname: "127.0.0.1",
     socket: {
-      // Announcing to a port no client holds comes back as ECONNREFUSED on the next receive.
+
       error: () => {},
       data: (socket, data, port) => {
         if (data[0] !== 0xf7 || data[1] !== PACKET.SearchGame || phase !== "lobby") return;
@@ -390,11 +390,11 @@ export const startHost = (options: HostOptions) => Effect.gen(function*() {
           try {
             discovery.send(listing(), port, "127.0.0.1");
           } catch {
-            // Nothing listens on that port: fewer clients than ports.
+
           }
         }
       }
-      // Skins and profiles are echoed only when other players exist; a lone client sends none.
+
       if (options.autoStart !== false && players.every((player) => player.socket !== undefined && player.mapOk && (players.length === 1 || player.skins)) && at - lastJoin >= (options.settleMs ?? JOIN_SETTLE_MS)) {
         broadcast(slotInfo(table()));
         broadcast(countDownStart());
@@ -427,7 +427,7 @@ export const startHost = (options: HostOptions) => Effect.gen(function*() {
         for (const decoded of decodeActions(action.data)) line(`turn ${turns} ${nameOf(action.playerId)} p${action.playerId} ${decoded.kind} ${decoded.text}`);
       }
       turns++;
-      // A time mark about once a second, so other logs (presence births) align with turns between actions.
+
       if (turns % MARK_TURNS === 0) line(`mark turn ${turns} game ${(gameMs / 1000).toFixed(3)}`);
     }
   };

@@ -12,7 +12,7 @@ const ProbeReply = Schema.fromJsonString(Schema.Struct({
   protectedCpuSomeAvg10: Schema.optional(Schema.Unknown),
 }));
 
-/** Check protected CPU pressure even when the helper uses its away profile; why the pair must wait, or undefined to start it. */
+
 export const pairAdmission = (capacity: string) => Effect.gen(function*() {
   const probe = yield* collect(ChildProcess.make(process.execPath, [capacity, "probe", "--class", "native", "--memory-gib", "3"], { stdin: "ignore" })).pipe(
     Effect.mapError((cause) => new LanFailure({ problem: `the capacity helper did not run: ${cause.message}` })),

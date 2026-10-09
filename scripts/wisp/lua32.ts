@@ -1,18 +1,18 @@
-// The pinned 32-bit Luas tests run in: Lua 5.3.6 from its release tarball,
-// committed at wisp:vendor/lua-5.3.6.tar.gz and checksummed before each build,
-// `make generic` with LUA_32BITS, and its twin whose raw float + - * / and
-// decimal numerals round toward zero (wisp:native/toward-zero.h). Warcraft's
-// raw float arithmetic doesn't always round to nearest, and toward zero is the
-// nearest model of it found; Bun and a stock Lua32 round to nearest. A replay
-// or check that gives the same results in both Luas relies on no raw float
-// + - * / or inexact numeral (wisp:docs/headless.md#raw-float-rounding).
-//
-// Each is built once per user into ~/.cache/wisp/lua32/KEY/lua, KEY hashing
-// the source checksum, make target and flags; a lock file lets parallel
-// worktrees share one build. Building needs gcc and make, or nix, and no network.
-//
-// `bun node_modules/wisp/scripts/wisp/lua32.ts [stock|toward-zero]` prints the
-// executable, building it on first use.
+
+
+
+// Warcraft raw float arithmetic may round toward zero; check both Lua32 variants (docs/headless.md#raw-float-rounding).
+
+
+
+
+
+
+
+
+
+
+
 import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, homedir } from "node:os";
 import { join } from "node:path";
@@ -23,14 +23,14 @@ import { step } from "./timings";
 export const TOWARD_ZERO_HEADER = join(import.meta.dir, "../../native/toward-zero.h");
 
 const LUA_SOURCE = join(import.meta.dir, "../../vendor/lua-5.3.6.tar.gz");
-/** lua.org's SHA-256 of lua-5.3.6.tar.gz. */
+
 const LUA_SOURCE_SHA256 = "fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60";
 
-/** Prints 3 - 1e-30 in binary32: the binary32 below 3 when subtraction rounds toward zero, 3 when it rounds to nearest. */
+
 const ROUNDING_PROBE = "local a, b = 3.0, 1e-30 io.write(string.format('%a', a - b))";
 const TOWARD_ZERO_RESULT = "0x1.7ffffep+1";
 
-/** How `lua` rounds raw float arithmetic: "toward-zero", "nearest", or why it can't tell. */
+
 export function luaRounding(lua: string): "toward-zero" | "nearest" | string {
   const integers = Bun.spawnSync([lua, "-e", "io.write(math.maxinteger)"], { stdout: "pipe", stderr: "pipe" });
   if (integers.exitCode !== 0) return `${lua} doesn't run: ${integers.stderr.toString().trim()}`;
@@ -45,7 +45,7 @@ const fail = (operation: string, path: string, cause: unknown) => new MapBuildFa
 const sha256 = (bytes: Uint8Array | string) => new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
 const trySync = <A>(operation: string, path: string, run: () => A) => Effect.try({ try: run, catch: (cause) => fail(operation, path, cause) });
 
-/** Another process holds the build lock. */
+
 class LockHeld extends Schema.TaggedError<LockHeld>()("LockHeld", { path: Schema.String }) {}
 
 export const lua32CacheRoot = () => join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "wisp/lua32");
@@ -54,19 +54,19 @@ const flagsFor = (variant: Lua32Variant) => variant === "stock"
   ? { flags: "-DLUA_32BITS", header: "" }
   : { flags: "-DLUA_32BITS -include toward-zero.h", header: readFileSync(TOWARD_ZERO_HEADER, "utf8") };
 
-/** The vendored source tarball, once its checksum matches lua.org's. */
+
 const luaSource = trySync("read Lua source", LUA_SOURCE, () => sha256(readFileSync(LUA_SOURCE))).pipe(
   Effect.flatMap((digest) => digest === LUA_SOURCE_SHA256
     ? Effect.succeed(LUA_SOURCE)
     : Effect.fail(fail("check Lua source", LUA_SOURCE, `SHA-256 ${digest} is not lua-5.3.6.tar.gz's`))),
 );
 
-/** `make` arguments run with gcc and make from PATH, else from nixpkgs. */
+
 const makeCommand = (args: readonly string[]) => Bun.which("gcc") !== null && Bun.which("make") !== null
   ? ["make", ...args]
   : ["nix", "shell", "nixpkgs#gcc", "nixpkgs#gnumake", "--command", "make", ...args];
 
-/** Holds `lock` (an exclusive file naming its pid) for the scope, waiting while a live process holds it. */
+
 const buildLock = (lock: string) => Effect.acquireRelease(
   Effect.suspend((): Effect.Effect<void, LockHeld | MapBuildFailure> => {
     try {
@@ -80,10 +80,10 @@ const buildLock = (lock: string) => Effect.acquireRelease(
     let alive = false;
     try {
       const holder = Number(readFileSync(lock, "utf8"));
-      // An empty lock is one its holder hasn't written its pid to yet.
+
       alive = holder === 0 || (Number.isInteger(holder) && process.kill(holder, 0));
     } catch (cause) {
-      // ENOENT: released meanwhile. ESRCH: its build died and left the lock.
+
       alive = (cause as NodeJS.ErrnoException).code === "ENOENT";
     }
     if (!alive) rmSync(lock, { force: true });
@@ -92,7 +92,7 @@ const buildLock = (lock: string) => Effect.acquireRelease(
   () => Effect.sync(() => rmSync(lock, { force: true })),
 );
 
-/** The cached Lua32 `variant`'s executable, built on first use. */
+
 export const lua32 = (variant: Lua32Variant) => Effect.gen(function*() {
   const root = lua32CacheRoot();
   const { flags, header } = flagsFor(variant);
@@ -128,7 +128,7 @@ export const lua32 = (variant: Lua32Variant) => Effect.gen(function*() {
   }));
 }).pipe(step(`Lua32 ${variant}`));
 
-/** Points LUA and TOWARD_ZERO_LUA at the cached Lua32s where they are unset. */
+
 export const provideLua32Env = Effect.gen(function*() {
   if (process.env.LUA === undefined) process.env.LUA = yield* lua32("stock");
   if (process.env.TOWARD_ZERO_LUA === undefined) process.env.TOWARD_ZERO_LUA = yield* lua32("toward-zero");

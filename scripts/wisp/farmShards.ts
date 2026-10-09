@@ -1,15 +1,15 @@
-// The runner side of `wisp farm test` (wisp:docs/farm.md): splits a suite over
-// shards by each unit's measured seconds, turns a shard's output into one
-// result, and merges the shards' results into the summary the command prints
-// and the timings the next run splits by. A project's farm-test workflow calls it:
-//   bun farmShards.ts plan --timings FILE --bun N [--lua N] UNIT... > plan.json
-//     (a unit is a test file, or comma-joined files that must share a process)
-//   bun farmShards.ts lua-plan PLAN.json > assignments.tsv   (NAME<TAB>SHARD a line)
-//   bun farmShards.ts junit --shard K --exit-code C XML... > result.json
-//   bun farmShards.ts lua --shard K --exit-code C TSV... > result.json
-//     (the Lua runner writes STATUS<TAB>SECONDS<TAB>NAME a test; STATUS pass or fail)
-//   bun farmShards.ts merge --plan PLAN.json --timings FILE --out SUMMARY.json RESULT.json...
-//     (rewrites FILE with this run's measurements)
+
+
+
+
+
+
+
+
+
+
+
+
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -26,11 +26,11 @@ const Suite = Schema.Literals(["bun", "lua"]);
 export type Suite = typeof Suite.Type;
 const Seconds = Schema.Record(Schema.String, Schema.Number);
 
-/** Seconds each unit took when last measured: a Bun test file, or a Lua test by name. */
+
 export const Timings = Schema.Struct({ bun: Seconds, lua: Seconds });
 export type Timings = typeof Timings.Type;
 
-/** Each shard's Bun files, and each known Lua test's shard; an unknown Lua test runs on the shard its name hashes to. */
+
 export const Plan = Schema.Struct({ bun: Schema.Array(Schema.Array(Schema.String)), lua: Schema.Number, luaTests: Schema.Record(Schema.String, Schema.Number) });
 export type Plan = typeof Plan.Type;
 
@@ -40,17 +40,17 @@ export const ShardResult = Schema.Struct({ suite: Suite, shard: Schema.Number, e
 export type ShardResult = typeof ShardResult.Type;
 
 const Count = Schema.Struct({ passed: Schema.Number, failed: Schema.Number, skipped: Schema.Number, shards: Schema.Number, slowestShardSeconds: Schema.Number });
-/** What `wisp farm test` prints: counts a suite, each failing test, and each shard that failed without naming a test. */
+
 export const Summary = Schema.Struct({ bun: Count, lua: Count, failures: Schema.Array(Schema.String), problems: Schema.Array(Schema.String) });
 export type Summary = typeof Summary.Type;
 
-/** A file's process start and module loading, which no test case's time includes. */
+
 const FILE_OVERHEAD_SECONDS = 0.3;
 
-/**
- * Longest-first assignment: each unit, slowest first, goes to the shard with
- * the least time so far. Units never measured count as the median measured one.
- */
+
+
+
+
 export function splitByTime<U>(units: readonly U[], seconds: (unit: U) => number | undefined, shards: number): U[][] {
   const known = units.map(seconds).filter((value): value is number => value !== undefined).sort((a, b) => a - b);
   const guess = known.length === 0 ? 1 : known[Math.floor(known.length / 2)] ?? 1;
@@ -84,7 +84,7 @@ const unescapeXml = (text: string) => text.replace(/&(lt|gt|quot|apos|amp|#\d+|#
   return String.fromCodePoint(entity[1] === "x" || entity[1] === "X" ? Number.parseInt(entity.slice(2), 16) : Number(entity.slice(1)));
 });
 
-/** Bun's JUnit report as test results; each test's unit is its file relative to `root`. */
+
 export function parseJunit(xml: string, root: string): TestResult[] {
   const tests: TestResult[] = [];
   for (const match of xml.matchAll(/<testcase\b([^>]*?)(\/>|>([\s\S]*?)<\/testcase>)/g)) {
@@ -103,7 +103,7 @@ export function parseJunit(xml: string, root: string): TestResult[] {
   return tests;
 }
 
-/** The Lua runner's STATUS<TAB>SECONDS<TAB>NAME lines as test results; each test is its own unit. */
+
 export function parseLuaLines(text: string): TestResult[] {
   return text.split("\n").flatMap((line) => {
     const [status, seconds, ...name] = line.split("\t");
@@ -145,7 +145,7 @@ export function merge(planned: Plan, results: readonly ShardResult[], previous: 
   return { summary: { bun, lua, failures, problems }, timings };
 }
 
-// ------------------------------------------------------------------ runner CLI
+
 
 const readJson = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, path: string) => Effect.try({
   try: () => readFileSync(path, "utf8"),
@@ -163,7 +163,7 @@ const writeText = (path: string, text: string) => Effect.try({
   catch: (cause) => new FarmShardFailure({ problem: `couldn't write ${path}: ${describeCause(cause)}` }),
 });
 
-/** A timings file from an earlier run; none yet is no measurements. */
+
 const readTimings = (path: string) => existsSync(path) ? readJson(Timings, path) : Effect.succeed<Timings>({ bun: {}, lua: {} });
 
 const main = Effect.gen(function*() {

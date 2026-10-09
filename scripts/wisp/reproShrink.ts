@@ -5,7 +5,7 @@ const INPUTS = ["edges", "silences", "hitches", "slow", "typed", "files"] as con
 
 export const soakInputCount = (inputs: SoakInputs): number => INPUTS.reduce((count, key) => count + (inputs[key]?.length ?? 0), 0);
 
-/** Keep complementary cuts only when they still reproduce the failure. */
+
 export function deltaDebug<T>(inputs: readonly T[], fails: (cut: readonly T[]) => boolean): readonly T[] {
   let kept = inputs;
   if (fails([])) return [];

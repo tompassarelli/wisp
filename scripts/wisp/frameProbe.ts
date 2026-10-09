@@ -1,19 +1,19 @@
-// Frame probes: does a captured client frame show what the game expects? A
-// game declares features, such as its stage in a band of the screen, as pixel
-// measurements. A probe keeps the frame on disk as a PPM image and decides by
-// those measurements, never by looking at the picture. Plain functions, so a
-// game's tests can measure frames without Effect; playerView.ts reads and
-// writes frame files.
+
+
+
+
+
+
 import type { SceneProblem } from "./scene";
 
-/** Raw 8-bit RGB pixels, row by row. */
+
 export interface Frame {
   readonly width: number;
   readonly height: number;
   readonly rgb: Uint8Array;
 }
 
-/** Part of a frame as fractions of its width and height, so one declaration fits any capture size. */
+
 export interface Band {
   readonly top: number;
   readonly bottom: number;
@@ -25,7 +25,7 @@ export type Color = readonly [red: number, green: number, blue: number];
 
 const PPM_HEADER = /^P6\s+(\d+)\s+(\d+)\s+255\s/;
 
-/** A binary 8-bit PPM image, as grim and ffmpeg write it; undefined for anything else. */
+
 export function decodePpm(bytes: Uint8Array): Frame | undefined {
   const header = PPM_HEADER.exec(new TextDecoder("latin1").decode(bytes.subarray(0, 32)));
   if (header === null) return undefined;
@@ -45,11 +45,11 @@ export function encodePpm({ width, height, rgb }: Frame): Uint8Array {
 
 const span = (from: number, to: number, size: number) => [Math.max(0, Math.floor(from * size)), Math.min(size, Math.floor(to * size))] as const;
 
-/**
- * Rows of `band` holding an unbroken horizontal run of `colors`, each channel
- * within `tolerance`, at least `run` of the frame's width long. Gaps of up to
- * two pixels, such as antialiased edges, don't break a run.
- */
+
+
+
+
+
 export function colorRows(frame: Frame, band: Band, colors: readonly Color[], tolerance: number, run: number): number {
   const [top, bottom] = span(band.top, band.bottom, frame.height);
   const [left, right] = span(band.left, band.right, frame.width);
@@ -79,7 +79,7 @@ export function colorRows(frame: Frame, band: Band, colors: readonly Color[], to
   return rows;
 }
 
-/** The share of the band's pixels `accept` takes, from 0 to 1. */
+
 export function pixelShare(frame: Frame, band: Band, accept: (red: number, green: number, blue: number) => boolean): number {
   const [top, bottom] = span(band.top, band.bottom, frame.height);
   const [left, right] = span(band.left, band.right, frame.width);
@@ -96,15 +96,15 @@ export function pixelShare(frame: Frame, band: Band, accept: (red: number, green
 
 export interface FeatureMeasurement {
   readonly present: boolean;
-  /** The measurement and the threshold it was held to. */
+
   readonly measured: string;
 }
 
-/** Something a player must be able to see in a frame. */
+
 export interface FrameFeature {
-  /** What is measured, such as "stage in the stage band". */
+
   readonly name: string;
-  /** What a player sees when it is absent. */
+
   readonly absent: string;
   readonly measure: (frame: Frame) => FeatureMeasurement;
 }
@@ -116,6 +116,6 @@ export interface FeatureResult extends FeatureMeasurement {
 export const measureFrame = (frame: Frame, features: readonly FrameFeature[]): readonly FeatureResult[] =>
   features.map((feature) => ({ feature, ...feature.measure(frame) }));
 
-/** The absent features, as problems a player would see. */
+
 export const frameProblems = (results: readonly FeatureResult[]): readonly SceneProblem[] =>
   results.filter(({ present }) => !present).map(({ feature, measured }) => ({ seen: feature.absent, evidence: `${feature.name}: ${measured}` }));

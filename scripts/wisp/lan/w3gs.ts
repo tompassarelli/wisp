@@ -1,8 +1,8 @@
-// Warcraft III's game protocol (W3GS) as a LAN host speaks it to 3.0 clients
-// (wisp:docs/lan.md). Every packet is F7, a type byte, a u16 total length and
-// a little-endian payload. Layouts follow W3Champions' Flo (MPL-2.0,
-// github.com/BogdanW3/W3C-Flo crates/w3gs) and wc3-slop-lan's notes for
-// the checked rollback build; this is Wisp's own encoding of them.
+
+
+// W3GS uses F7/type/u16 length/little-endian payload; layouts follow W3Champions' Flo (MPL-2.0, github.com/BogdanW3/W3C-Flo crates/w3gs) and wc3-slop-lan.
+
+
 
 export const PACKET = {
   PingFromHost: 0x01,
@@ -37,7 +37,7 @@ export const PACKET = {
 
 export const PROTOBUF = { PlayerProfile: 0x03, PlayerSkins: 0x04, PlayerUnknown5: 0x05 } as const;
 
-/** Why a player left (W3GS LeaveReason). */
+
 export const LEAVE_REASONS: Readonly<Record<number, string>> = {
   0x01: "disconnect",
   0x07: "lost",
@@ -53,7 +53,7 @@ export interface Packet {
   readonly payload: Uint8Array;
 }
 
-/** Appends little-endian fields; `bytes()` returns what was written. */
+
 export class Writer {
   private chunks: number[] = [];
   u8(value: number): this {
@@ -75,7 +75,7 @@ export class Writer {
     for (const byte of bytes) this.chunks.push(byte & 0xff);
     return this;
   }
-  /** A NUL-terminated string. */
+
   cstring(text: string | Uint8Array): this {
     return this.raw(typeof text === "string" ? new TextEncoder().encode(text) : text).u8(0);
   }
@@ -87,7 +87,7 @@ export class Writer {
   }
 }
 
-/** Reads little-endian fields; throws when the payload ends early. */
+
 export class Reader {
   offset = 0;
   private readonly view: DataView;
@@ -152,7 +152,7 @@ export function encodePacket(type: number, payload: Uint8Array = new Uint8Array(
   return packet;
 }
 
-/** Whole packets at the start of `buffer`, and the bytes left over for the next read. */
+
 export function splitPackets(buffer: Uint8Array): { readonly packets: Packet[]; readonly rest: Uint8Array } {
   const packets: Packet[] = [];
   let at = 0;
@@ -175,12 +175,12 @@ export function sockAddr(writer: Writer, address?: { readonly ip: readonly numbe
 
 export const crc32 = (bytes: Uint8Array): number => Bun.hash.crc32(bytes) >>> 0;
 
-// Slots
+
 
 export const SLOT_OPEN = 0;
 export const SLOT_CLOSED = 1;
 export const SLOT_OCCUPIED = 2;
-/** Race byte: random, selectable. */
+
 export const RACE_RANDOM_SELECTABLE = 0x60;
 export const RACE_HUMAN = 0x01;
 
@@ -199,7 +199,7 @@ export interface Slot {
 export interface SlotTable {
   readonly slots: readonly Slot[];
   readonly randomSeed: number;
-  /** 1 custom forces, plus 2 fixed player settings (wc3-slop-lan: Flo's enum can't say both). */
+/** Flags 1|2 mean custom forces plus fixed player settings (wc3-slop-lan; Flo's enum cannot express both). */
   readonly layout: number;
   readonly players: number;
 }
@@ -234,7 +234,7 @@ export const slotInfo = (table: SlotTable) => encodePacket(PACKET.SlotInfo, enco
 export const slotInfoJoin = (table: SlotTable, playerId: number, address: { readonly ip: readonly number[]; readonly port: number }) =>
   encodePacket(PACKET.SlotInfoJoin, sockAddr(encodeSlotTable(new Writer(), table).u8(playerId), address).bytes());
 
-// Joining
+
 
 export interface ReqJoin {
   readonly hostCounter: number;
@@ -279,16 +279,16 @@ function protoField(writer: Writer, field: number, value: number | string | Uint
 
 const protobuf = (type: number, message: Uint8Array) => encodePacket(PACKET.ProtoBuf, new Writer().u8(type).u32(message.length).raw(message).bytes());
 
-/** PlayerSkinsMessage { player_id = 1 } with no skins. */
+
 export const playerSkins = (playerId: number) => protobuf(PROTOBUF.PlayerSkins, protoField(new Writer(), 1, playerId).bytes());
 
-/** PlayerProfileMessage { player_id = 1, battle_tag = 2, portrait = 4 }, realm offline. */
+
 export const playerProfile = (playerId: number, name: string) =>
   protobuf(PROTOBUF.PlayerProfile, protoField(protoField(protoField(new Writer(), 1, playerId), 2, name), 4, "p042").bytes());
 
 export const protobufType = (payload: Uint8Array) => payload[0] ?? 0;
 
-// The map
+
 
 export interface MapCheck {
   readonly path: string;
@@ -301,22 +301,22 @@ export interface MapCheck {
 export const mapCheck = (map: MapCheck) =>
   encodePacket(PACKET.MapCheck, new Writer().u32(1).cstring(map.path).u32(map.size).u32(map.crc32).u32(map.xoro).raw(map.sha1).bytes());
 
-/** MapSize: the client's own copy's size, 0 when it has no matching map. */
+
 export function decodeMapSize(payload: Uint8Array): { readonly flag: number; readonly size: number } {
   const reader = new Reader(payload);
   reader.u32();
   return { flag: reader.u8(), size: reader.u32() };
 }
 
-// Game settings, as the lobby listing and the map check describe the game
 
-/** Speed fast, default terrain, full observers, teams together and fixed. */
+
+
 export const DEFAULT_GAME_FLAGS = 0x00000002 | 0x00000800 | 0x00001000 | 0x00003000 | 0x00004000 | 0x00060000;
 
-/**
- * The stat string's encoding: every 7 bytes follow a mask byte whose bit k+1
- * says byte k was odd; even bytes are stored plus one, so no byte is zero.
- */
+// Stat strings encode seven bytes after an oddness mask; even bytes add one so no encoded byte is zero.
+
+
+
 export function encodeStatString(source: Uint8Array): Uint8Array {
   const out: number[] = [];
   for (let block = 0; block < source.length; block += 7) {
@@ -352,15 +352,15 @@ export interface GameSettings {
   readonly sha1: Uint8Array;
 }
 
-/** The encoded settings with their NUL terminator. */
+
 export function encodeGameSettings(settings: GameSettings): Uint8Array {
   const plain = new Writer().u32(settings.flags).u8(0).u16(settings.width).u16(settings.height).u32(settings.xoro).cstring(settings.path).cstring(settings.hostName).u8(0).raw(settings.sha1).bytes();
   return new Writer().raw(encodeStatString(plain)).u8(0).bytes();
 }
 
-// Discovery (UDP)
 
-/** Product identifier used by the checked build's SearchGame. */
+
+
 export const PRODUCT = "PX3W";
 
 export interface GameInfo {
@@ -376,7 +376,7 @@ export interface GameInfo {
   readonly port: number;
 }
 
-/** GameInfo as W3Champions' host sends it (wc3-slop-lan host/src/discovery.rs). */
+
 export const gameInfo = (info: GameInfo) =>
   encodePacket(PACKET.GameInfo, new Writer().raw(new TextEncoder().encode(info.product)).u32(info.version).u32(info.hostCounter).u32(info.entryKey)
     .cstring(info.name).u8(0).raw(encodeGameSettings(info.settings)).u32(info.slots).u32(0x00100000).u32(1).u32(info.openSlots).u32(info.uptimeSeconds).u16(info.port).bytes());
@@ -386,7 +386,7 @@ export function decodeSearchGame(payload: Uint8Array): { readonly product: strin
   return { product: new TextDecoder().decode(reader.take(4)), version: reader.u32() };
 }
 
-// Lobby and loading
+
 
 export const countDownStart = () => encodePacket(PACKET.CountDownStart);
 export const countDownEnd = () => encodePacket(PACKET.CountDownEnd);
@@ -397,14 +397,14 @@ export const pingFromHost = (ticks: number) => encodePacket(PACKET.PingFromHost,
 
 export const decodeLeaveReq = (payload: Uint8Array) => new Reader(payload).u32();
 
-// The game: time slots of player actions
+
 
 export interface PlayerAction {
   readonly playerId: number;
   readonly data: Uint8Array;
 }
 
-/** IncomingAction: the slot's milliseconds, then (with actions) a CRC16 of the actions and the actions. */
+
 export function incomingAction(milliseconds: number, actions: readonly PlayerAction[]): Uint8Array {
   const writer = new Writer().u16(milliseconds);
   if (actions.length === 0) return encodePacket(PACKET.IncomingAction, writer.bytes());
@@ -428,7 +428,7 @@ export function decodeIncomingAction(payload: Uint8Array): { readonly millisecon
   return { milliseconds, actions };
 }
 
-/** OutgoingAction: a CRC32 of the action bytes, then the bytes. */
+
 export function decodeOutgoingAction(payload: Uint8Array): Uint8Array {
   const reader = new Reader(payload);
   const crc = reader.u32();
@@ -439,14 +439,14 @@ export function decodeOutgoingAction(payload: Uint8Array): Uint8Array {
 
 export const outgoingAction = (data: Uint8Array) => encodePacket(PACKET.OutgoingAction, new Writer().u32(crc32(data)).raw(data).bytes());
 
-/** OutgoingKeepAlive: a byte, then the client's checksum of its game state for the slot. */
+
 export function decodeKeepAlive(payload: Uint8Array): number {
   const reader = new Reader(payload);
   reader.u8();
   return reader.u32();
 }
 
-// Chat
+
 
 export const CHAT = { Chat: 0x10, TeamChange: 0x11, ColorChange: 0x12, RaceChange: 0x13, HandicapChange: 0x14, Scoped: 0x20 } as const;
 
@@ -454,7 +454,7 @@ export interface Chat {
   readonly to: readonly number[];
   readonly from: number;
   readonly kind: number;
-  /** All, allies, observers, or a player (scope - 3); for Scoped only. */
+
   readonly scope?: number;
   readonly text?: string;
   readonly value?: number;
@@ -470,7 +470,7 @@ export function decodeChat(payload: Uint8Array): Chat {
   return { to, from, kind, value: reader.u8() };
 }
 
-/** ChatFromHost carries the same fields as the ChatToHost it relays. */
+
 export function chatFromHost(chat: Chat): Uint8Array {
   const writer = new Writer().u8(chat.to.length).raw(chat.to).u8(chat.from).u8(chat.kind);
   if (chat.kind === CHAT.Chat) writer.cstring(chat.text ?? "");
