@@ -33,6 +33,12 @@ describe. `layerOpacity` and `layerBlendFactors` export those rules. Particle te
 the grid's last cell. A squirt emitter fires only on a time step that reaches
 its key, never on a zero-length pose refresh.
 
+Opaque SD and HD layers enable source-alpha blending when the model's
+instance alpha is below one, keeping their depth test and depth writes.
+At full alpha they draw without blending. The retained native Definitive
+Cairne roll frame 74 in wisp#84 (build 24268, alpha 140) shows this fade.
+The generated square test reads rendered pixels through both shaders.
+
 Wisp adds five changes to the built file. Light records read the 1200,
 1300 and 1600 fields (shadow intensity, shadow casting, falloff), as Tom's
 `fix/mdx1800-light` branch (`ddda8d7`) reads them, so a whole day/night model

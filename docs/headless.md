@@ -440,6 +440,8 @@ to verifiably offline loopback clients; M1 checks do not require them.
 `p0-frame-64.png` (and one image per requested frame and client), the captured
 scene JSON, and `render.json` naming the GPU, counts of models and textures,
 and each asset's attempted and selected location.
+Unit and effect alpha fades opaque material layers in both Classic and
+Definitive; alpha 140 blends the body with the background, as in a roll.
 Frame numbers are headless client frames after that frame's journey events.
 `--journey FILE.json` replaces the named journey with `{ frames, events }`;
 key events may include `down: true` and a later `down: false` to hold a key.

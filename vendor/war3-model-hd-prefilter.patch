@@ -114,3 +114,26 @@ index 116f22b..5f5d916 100644
 +    private destroyShaderProgramObject<A extends string, U extends string>(object: WebGLProgramObject<A, U> | undefined): void {
 +        if (object?.program) {
              if (object.vertexShader) {
+diff --git a/renderer/modelRenderer.ts b/renderer/modelRenderer.ts
+--- a/renderer/modelRenderer.ts
++++ b/renderer/modelRenderer.ts
+@@ -3685,5 +3685,8 @@
+         const factors = layerBlendFactors(layer.FilterMode) ?? [1, 0, 1, 0];
+         if (layer.FilterMode === FilterMode.None) {
+-            this.gl.disable(this.gl.BLEND);
++            if (this.instanceAlpha < 1) {
++                this.gl.enable(this.gl.BLEND);
++                this.gl.blendFuncSeparate(...layerBlendFactors(FilterMode.Blend));
++            } else this.gl.disable(this.gl.BLEND);
+             this.gl.enable(this.gl.DEPTH_TEST);
+             // this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
+@@ -3774,5 +3777,8 @@
+         const factors = layerBlendFactors(baseLayer.FilterMode) ?? [1, 0, 1, 0];
+         if (baseLayer.FilterMode === FilterMode.None) {
+-            this.gl.disable(this.gl.BLEND);
++            if (this.instanceAlpha < 1) {
++                this.gl.enable(this.gl.BLEND);
++                this.gl.blendFuncSeparate(...layerBlendFactors(FilterMode.Blend));
++            } else this.gl.disable(this.gl.BLEND);
+             this.gl.enable(this.gl.DEPTH_TEST);
+             // this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
