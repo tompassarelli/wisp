@@ -1218,6 +1218,37 @@ ForkedLightningTarget grows on a Bezier scaling track from 0.165 at Birth's
 start to about 0.325 at +2's 33 ms, so the electric counts depend on when
 native samples Birth; which engine rule sets that time is not yet measured.
 
+Re-rendered on 9 October 2026 with the renderer of that day (sky drawn,
+terrain hidden), all 42 frames give the same 12/14. The electric
+disagreement is the halo geoset: ForkedLightningTarget's geoset 0 holds three
+Blue_Glow2 quads (one billboarded, two flat) and geoset 1 the LightningBall
+star and its flat quad. The native +2 frame shows the star and its flat
+quad's thin line but no halo. Electric hit / electric shield +2 counts by
+headless variant:
+
+| Variant | Electric hit +2 | Electric shield +2 |
+| --- | --- | --- |
+| Native | 889 | 424 |
+| Headless | 4352 | 3223 |
+| Without geoset 0 (halo) | 1019 | 469 |
+| Halo's billboarded quad and star removed | 2504 | 1791 |
+| Birth sampled at 0 ms | 1232 | 756 |
+| Birth sampled at 0 ms, without halo | 445 | 110 |
+| Additive opacity squared | 2419 | 1651 |
+| Additive blended in linear light (estimate) | 1751 | 1318 |
+
+Squaring additive opacity takes floor, wall and ceiling tech and ledge
+catch +8 to 0, against native ~1,700. Blending additive layers in linear
+light drops ledge catch +8 to 27, against native 1,430. Neither rule is
+the engine's. Both layers share filter mode (Additive), shading flags,
+layer alpha, geoset alpha track and texture flags, so filter mode,
+material alpha, geoset alpha and the additive blend rule are not what
+separates the halo from the star. The two differ only in texture
+(Blue_Glow2's opaque 32 × 32 colour peaks at blue 132, LightningBall reaches
+white) and in bone. Without the halo, the electric hit +2 count is still
+19 pixels over the 1,000 threshold. The cause stays "other" until one
+native frame of a Blue_Glow2-only model is captured.
+
 Only measured numbers and authored code are kept here. Screenshots, stock
 models and textures stay in private local storage under the clean-room rules.
 
