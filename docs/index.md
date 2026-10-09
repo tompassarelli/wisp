@@ -33,7 +33,11 @@ Results-screen journeys can read configured `playerNames` with
 `GetCameraTargetPositionX`, and log nonlooping `PlayThematicMusic` in the
 existing [audio events](audio.md) log ([headless runtime](headless.md)).
 
-New map? Start from the [sample map](sample-map.md) (wisp:docs/sample-map.md):
+New map? Follow the [editor-free TypeScript workflow](editor-free.md)
+(wisp:docs/editor-free.md) to author triggers and typed object data, build and
+run headless without World Editor. Supply your own [Lua base map](sample-map.md#the-base-map)
+and keep base maps, custom assets and built maps in private storage outside Git.
+Start from the [sample map](sample-map.md) (wisp:docs/sample-map.md):
 a complete two-player map with its build, test, fresh-match and hot-reload
 commands, and what a base map needs.
 
