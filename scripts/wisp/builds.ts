@@ -21,7 +21,7 @@ export const BUILD_COMMANDS = {
   "lan pool": "lanPool", "lan fresh": "privateLanSwitch", "lan dummy": "lanPool",
   "lan solo": "menuDriving", "menus host": "menuDriving", "menus join": "menuDriving",
   "menus start": "menuDriving", "play": "menuDriving", "engine poll": "engineDebugger",
-  "engine trace": "engineDebugger", "pad": "padDriver", "engine frame": "frameNumberRead",
+  "engine trace": "engineDebugger", "engine lua": "engineDebugger", "engine drive": "padDriver",
 } as const satisfies Readonly<Record<string, BuildCapability>>;
 
 export class BuildFailure extends Schema.TaggedError<BuildFailure>()("BuildFailure", { problem: Schema.String }) {

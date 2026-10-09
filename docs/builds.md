@@ -12,6 +12,11 @@ owning the socket; LAN hosts and provider switches use that build's profile
 and protocol. Synthetic protocol checks use the registry's default build.
 `WISP_GAME_BUILD` supplies an explicit build for command checks.
 
+`padDriver` means the private native in-map `engine drive` path. The ordinary
+external pad helper and headless scripted inputs do not require that capability;
+their working comparison results remain valid. `frameNumberRead` means a raw
+native frame-number read, separate from a map's own journal frame stamps.
+
 Private binary details live outside every checkout at
 `~/.local/share/wisp-private/builds/<version>.<build>.json`, with
 `{ id, engine, lan, notes, offsets }`. `engine` holds measured locator facts;
