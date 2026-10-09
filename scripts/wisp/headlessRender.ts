@@ -251,7 +251,7 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
   const assets = new Map<string, Promise<Uint8Array | undefined>>();
   const resolutions = new Map<string, RenderAssetResolution>();
   const read = (path: string, mode: Graphics, body?: AssetLocation) => {
-    const cacheKey = `${mode}:${body?.layer ?? ""}:${path}`;
+    const cacheKey = `${mode}:${body?.source ?? ""}:${body?.layer ?? ""}:${path}`;
     let pending = assets.get(cacheKey);
     if (pending === undefined) assets.set(cacheKey, pending = (async () => {
       if (project.resolveAsset !== undefined) {
