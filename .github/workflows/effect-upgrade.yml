@@ -1,0 +1,86 @@
+name: Effect upgrade
+
+# Weekly: bump effect and @effect/* to the latest stable, sync the vendored
+# source (effect-kit upgrade) and run effect-kit check. A clean upgrade goes
+# to a claude/ branch that Autoland lands; new findings go to the tracking
+# issue with the branch for a worker to fix.
+on:
+  schedule:
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+  issues: write
+
+concurrency:
+  group: effect-upgrade
+  cancel-in-progress: false
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+  TITLE: Weekly Effect upgrade
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+        working-directory: .
+      - run: git clone --depth 1 https://github.com/tompassarelli/north "$RUNNER_TEMP/north"
+      - name: Upgrade
+        id: upgrade
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          bun "$RUNNER_TEMP/north/agent-machinery/scripts/effect-kit.mjs" upgrade | tee "$RUNNER_TEMP/upgrade.log"
+          if git diff --cached --quiet; then
+            echo "Effect packages are already at the latest stable versions." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          issue=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number,title --jq "map(select(.title == \"$TITLE\"))[0].number // empty")
+          if [ -z "$issue" ]; then
+            issue=$(gh issue create --title "$TITLE" --body "The weekly Effect upgrade (.github/workflows/effect-upgrade.yml) reports here when a new version brings findings or fails to land." | sed 's#.*/##')
+          fi
+          version=$(jq -r .version repos/effect.json)
+          git commit -q -m "Upgrade Effect to $version (#$issue)" -m "$(cat "$RUNNER_TEMP/upgrade.log")"
+          echo "issue=$issue" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Check
+        id: check
+        if: steps.upgrade.outputs.issue != ''
+        run: |
+          set +e
+          bun "$RUNNER_TEMP/north/agent-machinery/scripts/effect-kit.mjs" check > "$RUNNER_TEMP/check.log" 2>&1
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+          tail -n 60 "$RUNNER_TEMP/check.log"
+      - name: Land or report
+        if: steps.upgrade.outputs.issue != ''
+        run: |
+          version=${{ steps.upgrade.outputs.version }}
+          issue=${{ steps.upgrade.outputs.issue }}
+          if [ "${{ steps.check.outputs.code }}" = 0 ]; then
+            branch="claude/effect-upgrade-$version-${{ github.run_number }}"
+            git push origin "HEAD:refs/heads/$branch"
+            gh workflow run autoland.yml -f branch="$branch"
+            echo "effect-kit check passed on effect@$version; Autoland is landing $branch." >> "$GITHUB_STEP_SUMMARY"
+          else
+            branch="effect-upgrade/$version-${{ github.run_number }}"
+            git push origin "HEAD:refs/heads/$branch"
+            {
+              echo "effect@$version brings findings. Branch \`$branch\` has the upgrade; fix these and land it (${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."
+              echo
+              echo '```'
+              tail -n 100 "$RUNNER_TEMP/check.log"
+              echo '```'
+            } > "$RUNNER_TEMP/comment.md"
+            gh issue comment "$issue" --body-file "$RUNNER_TEMP/comment.md"
+            echo "effect@$version brings findings; reported on #$issue." >> "$GITHUB_STEP_SUMMARY"
+          fi
