@@ -24,6 +24,7 @@ import { describeCause } from "./command";
 import type { Phase } from "../compiler";
 import { type SourceMapFailure, SourceErrors } from "./sourceErrors";
 import { step } from "./timings";
+import { checkUnitModels, type UnitModels, type ModelSource } from "./unitModels";
 
 export interface BuildProject {
   readonly projectRoot: string;
@@ -76,6 +77,10 @@ export interface BuildOptions {
   /** Generated object-data files; without a war3map.w3a the build adds one holding only FileIO's ability. */
   readonly objectData?: readonly GeneratedFile[];
   readonly imports?: readonly ArchiveEntry[];
+  /** Opt-in validation of map-declared Classic and Definitive models and scales. */
+  readonly unitModels?: UnitModels;
+  /** User-owned installed models available locally, not imports to package. */
+  readonly localModels?: readonly ModelSource[];
 }
 
 export type BuildFailure = MapBuildFailure | CompileFailure | SourceMapFailure;
@@ -277,6 +282,12 @@ const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compil
       ...yield* baseMapFiles(packager, options.base, [...files, ...options.imports ?? []], work).pipe(step("extract base files")),
       ...options.imports ?? [],
     ];
+    if (options.unitModels !== undefined) {
+      yield* checkUnitModels(options.unitModels, [...options.localModels ?? [], ...assets, ...files]).pipe(
+        Effect.mapError((cause) => new MapBuildFailure({ operation: "check unit models", path: out, cause: cause.message })),
+        step("check unit models"),
+      );
+    }
     return { generated, files, assets };
   }).pipe(step("generate"));
 
