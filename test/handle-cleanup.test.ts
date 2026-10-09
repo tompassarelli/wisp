@@ -7,6 +7,7 @@ import { installHeadless } from "../scripts/wisp/headless";
 import { Console, Effect, Layer } from "effect";
 import { MapBuild } from "../scripts/wisp/mapBuild";
 import { SourceErrors } from "../scripts/wisp/sourceErrors";
+import { GameFiles } from "../scripts/wisp/gameFiles";
 
 test("[spec #95] source-owned native allocations warn at their line, cleanup clears them, escaping and branches stay unknown", () => {
   mkdirSync(join(import.meta.dir, "../build"), { recursive: true });
@@ -45,7 +46,7 @@ test("[spec #95] map build compilation prints file:line warnings and matching cl
     rootDir: ".", outDir: "out", sourceMap: true,
   }, include: ["*.ts"], tstl: { luaTarget: "5.3", luaBundle: "map.lua", luaBundleEntry: "map.ts", noHeader: true } }));
   const messages: string[] = [];
-  const sourceErrors = Layer.succeed(SourceErrors, SourceErrors.of({ retain: () => Effect.void, retainModule: () => Effect.void, changed: () => Effect.succeed([]) }));
+  const sourceErrors = SourceErrors.layer({ sourceMapDirectory: join(directory, "sourcemaps") }).pipe(Layer.provide(GameFiles.layer()));
   const maps = MapBuild.layer({ projectRoot: directory, configPath: config, bundlePath: join(directory, "out/map.lua"),
     compileInputs: [source], packager: "unused", toolchainLockPath: "unused", packageDirectory: directory }).pipe(Layer.provide(sourceErrors));
   const compile = MapBuild.use(map => map.compile).pipe(Effect.provide(maps), Effect.provideService(Console.Console, {

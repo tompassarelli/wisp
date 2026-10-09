@@ -9,7 +9,6 @@ import { join } from "node:path";
 import { Console, Effect, Exit } from "effect";
 import { makeSoak } from "../scripts/wisp/commands/soak";
 import { installHeadless } from "../scripts/wisp/headless";
-import type { Lockstep } from "../src/headless/lockstep";
 import { type SceneReport, bodyProblems } from "../scripts/wisp/scene";
 import { RealtimeClients } from "../scripts/wisp/headlessInput";
 import { type SoakMatch, SoakMonitor, helperRecorder, planSoak, playSoakMatch, readSoakRepro, soakRepro } from "../scripts/wisp/soak";
@@ -193,10 +192,13 @@ test("[repro 5a21838] a lag spike's catch-up after a usual backlog's rise is no 
 
   const catchUps = (backlog: (frame: number) => number, frames: number) => {
     let frame = 0;
-    const client = { slot: 0, errors: [], thrown: [], files: new Map(), run: (body: () => void) => body() };
-    const clients = { clients: [client], costs: [0], firstDivergence: () => undefined } as unknown as Lockstep;
+    const clients = runtime.clients({ start: () => {}, install: () => {} }, [0]);
+    clients.start();
     const monitor = new SoakMonitor(clients, { input: () => {}, observe: () => ({ progress: frame, over: false, backlog: backlog(frame) }) });
-    for (frame = 1; frame <= frames; frame++) monitor.afterFrame((frame * 1000) / 60, new Set());
+    for (frame = 1; frame <= frames; frame++) {
+      clients.frames(1);
+      monitor.afterFrame((frame * 1000) / 60, new Set());
+    }
     return monitor.findings.filter(({ kind }) => kind === "catch-up").map(({ text }) => text);
   };
 

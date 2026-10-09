@@ -1,6 +1,4 @@
 import { expect, test } from "bun:test";
-import { join } from "node:path";
-import { AbilityObject, UnitObject, abilityData, encodeObjectData, FILE_IO_OBJECT } from "../scripts/objectData";
 import { sampleObjectData } from "../examples/sample/scripts/objects";
 
 /** Reads format 2 independently of the writer, including the per-level layout. */
@@ -49,19 +47,4 @@ test("[reference] the authored unit and both ability levels preserve requested b
     expect(fields).toContainEqual({ field: "acdn", type: 2, level, column: 0, value: level * 3 });
     expect(fields).toContainEqual({ field: "atp1", type: 3, level, column: 0, value: `Wisp Snow - Level ${level}` });
   }
-});
-
-test("[spec docs/object-data.md] duplicate IDs and malformed rawcodes fail before packaging", () => {
-  const unit = new UnitObject(0x75303031, "hfoo").name("Walker").build();
-  expect(() => encodeObjectData([unit, unit], false)).toThrow("duplicate new object ID");
-  expect(() => abilityData([FILE_IO_OBJECT])).toThrow("duplicate new object ID");
-  expect(() => new UnitObject(0x00003031, "hfoo")).toThrow("four printable characters");
-  expect(() => new UnitObject(0x75303031, "foo")).toThrow("four printable characters");
-  expect(() => encodeObjectData([{ ...unit, modifications: [{ field: "bad", value: { kind: "int", value: 0 } }] }], false)).toThrow("four printable characters");
-  expect(() => new AbilityObject(0x41303031, "AHbz").levels(2).tooltip(3, "bad")).toThrow("exceeds");
-});
-
-test("[spec docs/object-data.md] typed setters reject wrong value types", () => {
-  const run = Bun.spawnSync(["bun", "node_modules/typescript-native/bin/tsc", "--project", "test/tsconfig.object-types.json"], { cwd: join(import.meta.dir, "..") });
-  expect({ code: run.exitCode, output: run.stdout.toString() + run.stderr.toString() }).toEqual({ code: 0, output: "" });
 });

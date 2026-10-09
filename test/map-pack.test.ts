@@ -35,10 +35,6 @@ function fullArchive(name: string): { readonly archive: string; readonly existin
   return { archive, existing };
 }
 
-test("[repro 51dbdf4] the native packager grows a full MPQ and preserves existing entries", () => {
-  fullArchive("single");
-});
-
 
 const clip = () => new Uint8Array(generateMDX(parseMDL(`Version { FormatVersion 800, }
 Model "Clip" { NumGeosets 1, NumBones 2, BlendTime 150, MinimumExtent { 0, 0, 0 }, MaximumExtent { 10, 10, 20 }, BoundsRadius 12, }

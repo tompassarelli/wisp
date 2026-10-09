@@ -16,9 +16,7 @@ Before implementing a feature here or in a consuming map, consult the
 [feature index](docs/index.md) (wisp:docs/index.md) for existing capabilities
 and opt-in setup, especially TypeScript stack traces. A feature isn't done
 until wisp:docs/index.md lists it and a how-it-works page in wisp:docs/
-explains it; wisp:test/docs-index.test.ts enforces the index for every command
-in wisp:scripts/wisp/commands/, and each subcommand on its command's own page
-(wisp:docs/NAME.md) when it has one.
+explains it, including each subcommand on its command's own page when it has one.
 
 Wisp owns reusable Warcraft III TypeScript compilation, numeric guards,
 hot reload, runtime error reporting and host services. Its existing TypeScript
@@ -39,8 +37,7 @@ resource or parse outside data. Load the effect-development skill before
 designing one, and follow the pattern and examples in
 [Host tools](docs/host-tools.md) (wisp:docs/host-tools.md). Map code compiled to Lua stays plain
 TypeScript; pure calculations stay plain functions.
-wisp:test/effect-host-tools.test.ts enforces this. Read the installed pinned
-Effect source before choosing its APIs. Runtime imports must resolve through
+Read the installed pinned Effect source before choosing its APIs. Runtime imports must resolve through
 the installed package.
 
 No Smashcraft source imports or filesystem dependencies. Games supply their

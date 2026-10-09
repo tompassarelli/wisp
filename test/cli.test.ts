@@ -4,7 +4,7 @@ import { runCli } from "../scripts/wisp/cli";
 import { flagValues } from "../scripts/wisp/command";
 import { makeMenus } from "../scripts/wisp/commands/menus";
 
-test("[repro 82410d8] menu dispatch rejects a missing password before the following port flag", async () => {
+test("[property seed 824108] command dispatch preserves value boundaries, empty values and repetition", async () => {
   const lines: string[] = [];
   for (const action of ["host", "join"]) {
     const code = await runCli("wisp", { menus: { usage: "ACTION OPTIONS", load: async () => makeMenus() } },
@@ -13,12 +13,14 @@ test("[repro 82410d8] menu dispatch rejects a missing password before the follow
     expect(code).toBe(2);
   }
   expect(lines.some((line) => line.includes("menus found"))).toBe(false);
-});
-
-test("[repro 82410d8] explicit empty and repeated equals values survive command dispatch", async () => {
-  let values: string[] = [];
-  const code = await runCli("wisp", { join: { usage: "--password VALUE", load: async () => (args) => Effect.sync(() => { values = flagValues(args, "password"); }) } },
-    ["join", "--password=", "--port", "47123", "--password", "pw", "--password=a=b", "--password", "--port", "47124"], () => {});
-  expect(code).toBe(0);
-  expect(values).toEqual(["", "pw", "a=b"]);
+  let seed = 824108;
+  for (let index = 0; index < 32; index++) {
+    seed = Math.imul(seed, 1664525) + 1013904223;
+    const value = String(seed >>> 0);
+    let values: string[] = [];
+    const code = await runCli("wisp", { probe: { usage: "--password VALUE", load: async () => args => Effect.sync(() => { values = flagValues(args, "password"); }) } },
+      ["probe", "--password=", "--port", "47123", "--password", value, `--password=${value}=suffix`, "--password", "--port", "47124"], () => {});
+    expect(code).toBe(0);
+    expect(values).toEqual(["", value, `${value}=suffix`]);
+  }
 });
