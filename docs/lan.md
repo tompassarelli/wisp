@@ -23,18 +23,38 @@ end-to-end command times including loading and JSON output were 1.180 s and
 or the duration of Smashcraft's full parity batch. No frames are drawn and
 no wall-clock waits or engine memory writes are used.
 
-`wisp lan` runs Warcraft III clients that never sign in to Battle.net. On
-3.0.0, pairs played LAN matches hosted by Wisp itself: the host relayed every
-turn, logged every player's actions and compared client checksums. On
-3.0.1, only solo games work; pair checks use the signed-in clients below.
+`wisp lan` runs Warcraft III clients that never sign in to Battle.net. The
+current checked build is **3.0.0.24268** (9 October 2026), after Blizzard
+rolled back 3.0.1. The offline pool is the default for native checks. Its
+pairs play LAN matches hosted by Wisp itself: the host relays every turn,
+logs every player's actions and compares client checksums.
 Each offline pair is isolated in a network namespace with only loopback.
+
+Start from an updated install whose `.build.info` names `3.0.0.24268`:
+
+```sh
+bun wisp lan setup --from "<clone>/pfx/drive_c/Program Files (x86)/Warcraft III" --pairs 2
+bun wisp lan pool --pair 0 --pair 1 --pool-profile parity
+bun wisp lan fresh MAP.w3x --pair 0
+```
+
+On 9 October, two pairs played pad scripts concurrently with every native
+checksum, row and fighter line equal to headless. A pair ran 70 s after
+`lan pool` started and entered its match 36 s after `pad` requested it.
+Two pairs are the default under normal agent load: with the signed-in clones
+stopped, two pairs measured protected CPU pressure of 11–20%, while three
+measured 22–31%. Keep signed-in clones for Battle.net-specific checks.
+
+The private LAN plugin accepts only 24268. If the installed build changes,
+check the plugin before requesting pair games. The 3.0.1 observations below
+describe the earlier 24342 build, not the current pool path.
 
 **Development and testing on your own offline clients and maps only.** Wisp
 never switches a signed-in Battle.net client, and never touches anyone else's
 game. It isn't for cheating. The terms are in
 [driving-warcraft.md](driving-warcraft.md#2-lan-hosting-offline-clients-and-wisps-host).
 
-## 3.0.1: the pool starts, but the game has no LAN provider
+## Historical 3.0.1.24342: no LAN provider
 
 **3.0.1.24342 removed the LAN provider, so pool pairs can't play a LAN
 match.** Its code has no LAN provider left for the switch (below) to select;
@@ -119,12 +139,14 @@ the map is the cause, not the solo path.
 clients to their menus, `lan solo` with another map crashed both while
 loading (a null read). Start the pool again for the next map.
 
-## Signed-in 3.0.1 clients cloned from Tom's install
+## Signed-in clients cloned from Tom's install
 
-Until the offline pool can play on 3.0.1, signed-in clients run 3.0.1 from
-copies of Tom's working Steam/Proton prefix
+Signed-in clients serve checks that need Battle.net itself, including online
+host/join and spectating, and provide the updated install copied into the
+offline pool. Leave them stopped for ordinary native checks. They are copies
+of Tom's working Steam/Proton prefix
 (`~/.local/share/Steam/steamapps/compatdata/3516115571`), as decided in
-[#53](https://github.com/tompassarelli/wisp/issues/53). On 8 October 2026
+[#53](https://github.com/tompassarelli/wisp/issues/53). Historically, on 8 October 2026
 both reached the main menu on 3.0.1.24342, hosted and joined a private
 passworded Smashcraft game, and `archer-neutral.pad` passed parity there.
 They run GE-Proton11-7 (wine-staging 11.0) and Steam Linux Runtime 4, as the
@@ -515,10 +537,10 @@ separately measured about 0.88 core per game, 0.38 per browser renderer and
 
 ### Browser cost and measurements still needed
 
-Offline pool launch runs `Warcraft III.exe` directly, without the Battle.net
-launcher. That does not provide a two-client replacement on 3.0.1: the game
-has no LAN provider. Current pair checks use signed-in Battle.net clones.
-No browser-removal experiment has been run on those live sessions, so there
+Offline pool launch on 3.0.0.24268 runs `Warcraft III.exe` directly, without
+the Battle.net launcher, and supplies the default two-client path. The
+earlier 3.0.1.24342 build had no LAN provider. No browser-removal experiment
+has been run on the signed-in sessions, so there
 is no measured claim that their browser can or cannot be removed.
 
 A read-only `/proc` sample on 9 October 2026 took 10.020 s, with 100 clock
