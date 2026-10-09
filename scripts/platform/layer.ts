@@ -25,7 +25,6 @@ export const unsupportedLayer = (platform: string): Layer.Layer<Platform> => {
       cpuPressure: () => undefined,
       cpuLimit: () => undefined,
       insideCapacityLease: () => false,
-      childCpuSeconds: () => undefined,
       threadCpuMillis: () => {
         const { user, system } = process.cpuUsage();
         return (user + system) / 1000;
