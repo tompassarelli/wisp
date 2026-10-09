@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { decodeTerrain } from "../scripts/wisp/terrain";
-import { terrainCells, terrainLayers } from "../scripts/wisp/terrainMesh";
+import { terrainCells } from "../scripts/wisp/terrainMesh";
+import { terrainTileLayers } from "../scripts/wisp/terrainTiles";
 import { renderScenes, sceneWithUnits, type RenderScene } from "../scripts/wisp/headlessRender";
 import { farmTest } from "../scripts/wisp/farmTest";
 
@@ -33,7 +34,7 @@ test("[reference] W3E heights and split variations reach the renderer at the req
   expect(rendered?.points.map(point => [point.height, point.variation, point.cliffVariation, point.cliff])).toEqual([[0, 1, 2, 15], [1, 1, 2, 15], [2, 1, 2, 15], [3, 1, 2, 15]]);
   const cells = terrainCells(rendered ?? decodeTerrain(w3e));
   expect(cells.map(cell => [cell.x, cell.y])).toEqual([[0, 0]]);
-  expect(terrainLayers(cells[0]!)).toEqual([{ tile: 0, mask: 15, variation: 1 }, { tile: 1, mask: 1, variation: 1 }]);
+  expect(terrainTileLayers(cells[0]!.corners)).toEqual([{ tile: 0, mask: 15, variation: 1 }, { tile: 1, mask: 1, variation: 1 }]);
   expect(sceneWithUnits({ ...project, terrain: { w3e, origin: [0, 0] as const } }, scene).terrain?.originX).toBe(100);
 });
 

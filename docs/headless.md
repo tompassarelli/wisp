@@ -648,13 +648,19 @@ saves them as the scene's `environment`.
   uses the same path. Ground IDs resolve through the user's
   `TerrainArt\\Terrain.slk`; its `dir` and `file` select tile textures using
   `render.readAsset`/`resolveAsset`. Mixed cells draw the lowest ID's full tile
-  then higher IDs' corner masks. Cliff cells select installed models and
+  then higher IDs' corner masks. Extended atlases select variations left to
+  right, then top to bottom; square atlases use their two full-tile variants.
+  UVs stay half a pixel inside each tile to avoid sampling its neighbour.
+  A blighted corner replaces its ground ID with the highest ground layer.
+  Blight texture paths come from the map tileset's entry in the installed
+  `UI\\WorldEditData.txt`, through the same asset callbacks.
+  Cliff cells select installed models and
   textures through `TerrainArt\\CliffTypes.slk`, deforming their vertices by
   the corner heights. Nothing from the install is included in Wisp.
 
   This terrain path is initial drawing support, pending the visible-terrain
   native reference in [#82](https://github.com/tompassarelli/wisp/issues/82).
-  `--look terrain` still fails. Ramp model joins, blight, cliff-adjacent
+  `--look terrain` still fails. Ramp model joins, cliff-adjacent
   ground substitution, special doodads and terrain lighting are unfinished.
   Ground variation, corner-mask and cliff filename facts come from the
   [HiveWE format documentation](https://github.com/stijnherfst/HiveWE/wiki/war3map.w3e-Terrain)

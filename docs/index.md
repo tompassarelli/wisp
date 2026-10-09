@@ -17,7 +17,8 @@ and its [sound start, stop and channel rules](warsmash-notes.md#sound-start-stop
 checked the same way by `test/sounds60/`.
 
 With `render.terrain.w3e`, [terrain drawing](headless.md#lighting-fog-and-sky)
-loads installed ground textures and cliff models for the headless renderer
+loads installed ground textures, tile variations, corner blends and blight,
+and cliff models for the headless renderer
 and standalone player in Classic and Definitive. The terrain look check
 still needs #82's native reference.
 

@@ -1,7 +1,8 @@
 /// <reference lib="dom" />
 import { parseMDX } from "../../../vendor/war3-model.mjs";
 import { CELL, type Terrain } from "../terrain";
-import { terrainCells, terrainLayers, terrainRows, type TerrainCell } from "../terrainMesh";
+import { terrainCells, terrainRows, type TerrainCell } from "../terrainMesh";
+import { terrainTileLayers, terrainTileUV, terrainBlightPath } from "../terrainTiles";
 
 type TextureReader = (path: string) => Promise<HTMLCanvasElement>;
 type AssetReader = (path: string) => Promise<ArrayBuffer>;
@@ -36,13 +37,6 @@ void main(){color=texture(tile,texcoord);if(color.a<0.01)discard;}`);
   if (!gl.getProgramParameter(result, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(result) ?? "terrain program failed");
   return result;
 }
-function atlas(texture: HTMLCanvasElement, mask: number, variation: number): readonly [number, number, number, number] {
-  const columns = texture.width > texture.height ? 8 : 4;
-  const full = mask === 15;
-  const column = full ? columns === 8 ? 4 + Math.floor((variation % 16) / 4) : variation === 0 ? 0 : 3 : Math.floor(mask / 4);
-  const row = full ? columns === 8 ? variation % 4 : variation === 0 ? 0 : 3 : mask % 4;
-  return [column / columns, row / 4, (column + 1) / columns, (row + 1) / 4];
-}
 function ground(cell: TerrainCell, uv: readonly [number, number, number, number]): number[] {
   const [u0, v0, u1, v1] = uv, vertices = cell.corners.map((point, corner) => [cell.x + (corner % 2) * CELL, cell.y + Math.floor(corner / 2) * CELL, point.height, corner % 2 === 0 ? u0 : u1, corner < 2 ? v1 : v0]);
   return [0, 1, 2, 1, 3, 2].flatMap(index => vertices[index] ?? []);
@@ -50,6 +44,8 @@ function ground(cell: TerrainCell, uv: readonly [number, number, number, number]
 async function prepare(gl: WebGL2RenderingContext, terrain: Terrain, readTexture: TextureReader, readAsset: AssetReader): Promise<Prepared> {
   const groundRows = terrainRows(new Uint8Array(await readAsset("TerrainArt\\Terrain.slk")));
   const cliffRows = terrain.cliffTiles.length === 0 ? new Map<string, Readonly<Record<string, string>>>() : terrainRows(new Uint8Array(await readAsset("TerrainArt\\CliffTypes.slk")));
+  const blightPath = terrain.points.some(point => (point.flags & 2) !== 0)
+    ? terrainBlightPath(new Uint8Array(await readAsset("UI\\WorldEditData.txt")), terrain.tileset) : undefined;
   const meshes = new Map<string, { texture: HTMLCanvasElement; vertices: number[]; order: number }>();
   const textures = new Map<string, HTMLCanvasElement>();
   const texture = async (path: string) => {
@@ -90,11 +86,18 @@ async function prepare(gl: WebGL2RenderingContext, terrain: Terrain, readTexture
       }
       continue;
     }
-    for (const layer of terrainLayers(cell)) {
-      const id = terrain.groundTiles[layer.tile], row = id === undefined ? undefined : groundRows.get(id);
-      if (row === undefined) throw new Error(`no installed Terrain.slk row for ${id ?? layer.tile}`);
-      const path = `${row.dir}\\${row.file}.blp`, image = await texture(path);
-      add(path, image, layer.tile, ground(cell, atlas(image, layer.mask, layer.variation)));
+    for (const layer of terrainTileLayers(cell.corners)) {
+      let path: string, order: number;
+      if (layer.tile === "blight") {
+        if (blightPath === undefined) throw new Error("blighted terrain has no installed texture path");
+        path = blightPath; order = terrain.groundTiles.length;
+      } else {
+        const id = terrain.groundTiles[layer.tile], row = id === undefined ? undefined : groundRows.get(id);
+        if (row === undefined) throw new Error(`no installed Terrain.slk row for ${id ?? layer.tile}`);
+        path = `${row.dir}\\${row.file}.blp`; order = layer.tile;
+      }
+      const image = await texture(path);
+      add(path, image, order, ground(cell, terrainTileUV(image.width, image.height, layer.mask, layer.variation)));
     }
   }
   const batches: Batch[] = [];
