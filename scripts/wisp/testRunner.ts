@@ -40,7 +40,7 @@ const TIMING_ATTEMPTS = 3;
 
 const QUIET_WAIT = "10 minutes";
 
-const LEASE_SECONDS = 1800;
+const LEASE_SECONDS = 900;
 
 
 
