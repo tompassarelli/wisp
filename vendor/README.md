@@ -33,7 +33,7 @@ describe. `layerOpacity` and `layerBlendFactors` export those rules. Particle te
 the grid's last cell. A squirt emitter fires only on a time step that reaches
 its key, never on a zero-length pose refresh.
 
-Wisp adds four changes to the built file. Light records read the 1200,
+Wisp adds five changes to the built file. Light records read the 1200,
 1300 and 1600 fields (shadow intensity, shadow casting, falloff), as Tom's
 `fix/mdx1800-light` branch (`ddda8d7`) reads them, so a whole day/night model
 parses. `ModelRenderer.setWispEnvironment` gives the SD and WebGL2 HD model
@@ -50,6 +50,10 @@ to both shaders (SD vertex shaders pass the model-space position on, and the
 draw's model and normal matrices carry it and the normal to world space):
 each adds colour × intensity × N·L, full to its attenuation start and fading
 linearly to zero at its end, into the SD lit term and the HD diffuse term.
+`setWispEnvironment`'s `shadow` and `pointShadow` give both shaders
+Wisp's sun and omni-light depth maps (texture units 7 and 8, unbound when
+absent): the sun's darkens only the key light, a casting omni light's only
+that light (wisp:docs/headless.md, "Lighting, fog and sky").
 `setInstanceColor` multiplies unit/effect RGB into that geoset tint before
 light and fog. Its default is white; particles and ribbons retain emitter colours.
 
