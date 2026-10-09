@@ -54,10 +54,10 @@ Test cost: one test may use at most 4 s of CPU (user plus system, with the
 Lua32 and compiler children it waits for; wisp:scripts/wisp/testCost.ts). It
 was set on 8 Oct (#65), when the heaviest suite test used 2.9 s and the 28
 tests above about 2 s became `farmTest`s, which CI's farm-tests job runs on
-every push. Only Tom raises it. `bun run test` fails a test over it, and on a
-whole run a file whose CPU per test rises more than 25% over its row in
-wisp:test/cost-baseline.tsv, naming the file and "shrink it or move it to the
-farm"; it prints the suite's CPU, test count and CPU per test
+every push. Only Tom raises it. `bun run test` fails a test over it, naming
+the file and "shrink it or move it to the farm", and prints the suite's CPU,
+test count and CPU per test without gating them. Other CI cost gates measure
+deterministic quantities, never CPU seconds (wisp#114, smashcraft#394)
 (wisp:docs/testing.md, "Test cost").
 
 Main stays green. Each CI run on main opens, updates or closes the one

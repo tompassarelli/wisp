@@ -95,7 +95,7 @@ jobs:
       - name: Test shard ${{ matrix.shard }}
         run: |
           set +e
-          WISP_TEST_COST_SHARD=1 bun run test $(jq -r ".bun[${{ matrix.shard }}][] | \"./\" + ." plan.json) --reporter=junit --reporter-outfile=junit.xml
+          bun run test $(jq -r ".bun[${{ matrix.shard }}][] | \"./\" + ." plan.json) --reporter=junit --reporter-outfile=junit.xml
           code=$?
           mapfile -t farm_files < <(jq -r ".bun[${{ matrix.shard }}][]" plan.json | while IFS= read -r file; do
             if rg -q 'farmTest\(' "$file"; then echo "./$file"; fi

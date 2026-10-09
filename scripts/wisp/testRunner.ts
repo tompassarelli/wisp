@@ -21,7 +21,7 @@ import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Cause, Effect, Exit, Fiber, Option, Ref, Schedule, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { BASELINE_PATH, TEST_COST_OUT_ENV, addCost, judge, type Costs } from "./testCost";
+import { TEST_COST_OUT_ENV, addCost, report, type Costs } from "./testCost";
 import { TEST_PHASE_ENV, TIMING_TEST_PREFIX } from "./timingTest";
 
 
@@ -286,9 +286,6 @@ const CostRow = Schema.Struct({
 const decodeCostRow = Schema.decodeUnknownEffect(Schema.fromJsonString(CostRow));
 
 
-export const wholeRun = (args: readonly string[]) =>
-  pathFilters(args).length === 0 && !args.some((arg) => arg === "-t" || arg === "--test-name-pattern" || arg.startsWith("--test-name-pattern="));
-
 
 export const runTests = (args: readonly string[], print: (line: string) => void = (line) => console.log(line)) => Effect.acquireUseRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), "wisp-test-cost-"))),
@@ -304,7 +301,6 @@ export const runTests = (args: readonly string[], print: (line: string) => void 
       const verdicts = files.length === 0 ? new Map<string, Verdict>() : yield* timingTests(files, args, print);
       return { correctness, verdicts: [...verdicts.values()] };
     }));
-    const busy = pressure.peak !== undefined && pressure.peak > BUSY_PRESSURE;
     const measured: Costs = new Map();
     const notes: string[] = [];
     const text = existsSync(costFile) ? readFileSync(costFile, "utf8") : "";
@@ -313,21 +309,18 @@ export const runTests = (args: readonly string[], print: (line: string) => void 
       if (row.inconclusive !== undefined) notes.push(row.inconclusive);
       else if (row.unit !== undefined) addCost(measured, row.unit, row.tests ?? 0, row.cpu ?? 0, row.max ?? 0);
     }
-    const judgement = judge({ label: "suite", measured, baselinePath: join(process.cwd(), BASELINE_PATH), project: process.cwd(), whole: process.env["WISP_TEST_COST_SHARD"] === "1" || wholeRun(args) });
+    const costs = report("suite", measured);
     for (const note of notes) print(note);
-    for (const line of judgement.risen) print(busy ? `${line} (inconclusive: CPU pressure ${percent(pressure.peak)})` : line);
-    if (judgement.updated > 0) print(`test cost baseline: ${judgement.updated} rows updated in ${BASELINE_PATH}; commit them with the tests`);
-    const risen = judgement.risen.length > 0 && !busy;
     const count = (verdict: Verdict) => summary.verdicts.filter((value) => value === verdict).length;
     const timing = summary.verdicts.length === 0
       ? "no timing tests"
       : `timing tests: ${count("passed")} passed, ${count("failed")} failed, ${count("inconclusive")} inconclusive`;
     print(`correctness tests ${summary.correctness === 0 ? "passed" : "FAILED"}; ${timing}`);
-    print(judgement.heaviest);
-    print(judgement.summary);
-    print(`CPU pressure during this run: average ${percent(pressure.average)}, peak some avg10 ${percent(pressure.peak)} (timing and cost verdicts count as inconclusive above ${BUSY_PRESSURE}%)`);
-    if (summary.correctness !== 0 || count("failed") > 0 || risen) return 1;
-    return count("inconclusive") > 0 || notes.length > 0 || (judgement.risen.length > 0 && busy) ? INCONCLUSIVE_EXIT : 0;
+    print(costs.heaviest);
+    print(costs.summary);
+    print(`CPU pressure during this run: average ${percent(pressure.average)}, peak some avg10 ${percent(pressure.peak)} (timing and ceiling verdicts count as inconclusive above ${BUSY_PRESSURE}%)`);
+    if (summary.correctness !== 0 || count("failed") > 0) return 1;
+    return count("inconclusive") > 0 || notes.length > 0 ? INCONCLUSIVE_EXIT : 0;
   }),
   (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
 );
