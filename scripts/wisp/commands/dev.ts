@@ -17,6 +17,7 @@ import { FrameCosts, formatFrameCost } from "../frameCosts";
 import { type ProcessOutput, Standby, runProcess } from "../devProcesses";
 import { SAVED_FILES_ENV, WARM_ENV } from "../devResult";
 import { GameFiles } from "../gameFiles";
+import { modelFailureBridge } from "../modelFailures";
 import { HotReload } from "../hotReload";
 import type { JourneyOutcome, JourneyRequest } from "../journeyRun";
 import { MapBuild } from "../mapBuild";
@@ -426,6 +427,7 @@ export const makeDev = (project: DevProject): Command => (args) => Effect.gen(fu
     const sourceErrors = yield* SourceErrors;
     const desyncs = yield* Desyncs;
     const frameCosts = yield* FrameCosts;
+    const loadFailures = modelFailureBridge(yield* GameFiles, hotProject.filePrefix);
     // Reports from before the loop started are old news.
     yield* sourceErrors.changed(directories);
     yield* frameCosts.changed(directories);
@@ -453,6 +455,7 @@ export const makeDev = (project: DevProject): Command => (args) => Effect.gen(fu
         })));
       }),
       poll: report(Effect.gen(function*() {
+        yield* loadFailures(directories);
         const desync = yield* desyncs.changed;
         if (desync !== undefined) yield* Console.log(formatDesync(desync));
         const reports = yield* sourceErrors.changed(directories);

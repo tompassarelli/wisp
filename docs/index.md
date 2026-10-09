@@ -1,5 +1,8 @@
 # Wisp feature index
 
+[Model load failures](hot-reload.md#model-load-failures) forwards Warcraft's
+failed model paths to existing client visuals during hot and dev watches.
+
 [Shadow Strike field example](shadow-strike.md) names the raw fields, types,
 units and level/column indexing used by two synthetic configurations. Field
 identities come from privately read metadata; initial damage, periodic damage

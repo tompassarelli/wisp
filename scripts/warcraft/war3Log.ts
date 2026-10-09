@@ -19,7 +19,7 @@ const LINE = /^(\d{1,2})\/(\d{1,2}) (\d{2}):(\d{2}):(\d{2})\.(\d{3})\s+(.*)$/;
 const SESSION_START = "GameMain Started";
 const LOGIN = "[CLoginCallbacks] LoginDoorClose called";
 const LADDER = /^Opening (?:map|mod) - .*[\\/]Maps[\\/]Download[\\/]Season\d+[\\/]/;
-const IMPORT_FAILED = /^model creation failed - (war3mapImported[\\/].*)$/;
+const IMPORT_FAILED = /^model creation failed - (.+)$/;
 
 /** Months and days give the order within a year, which is all a session spans. */
 const DAY_MS = 86_400_000;
@@ -91,6 +91,13 @@ export function ladderScan(log: string, authenticated = false): LadderScan {
 }
 
 /** "model creation failed - war3mapImported/..." lines in `log`: how many, and the first model named. */
+export function modelFailurePaths(log: string): string[] {
+  return logLines(log).flatMap(({ text }) => {
+    const match = IMPORT_FAILED.exec(text);
+    return match?.[1] === undefined ? [] : [match[1]];
+  });
+}
+
 export function importFailures(log: string): { readonly count: number; readonly first?: string } {
   let count = 0;
   let first: string | undefined;

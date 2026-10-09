@@ -34,6 +34,7 @@ import { floorDiv, floorMod } from "../sim/intMath";
 import { on, trampoline } from "./dispatch";
 import { readChunk } from "./fileio";
 import { stringChecksum } from "./payloadChecksum";
+import { pollModelFailures } from "./modelFailures";
 
 // 1/32 s: once a host has been seen, each poll is one Preloader call for a manifest that doesn't exist yet.
 const POLL_SECONDS = 0.03125;
@@ -199,6 +200,7 @@ function answer(state: HotState, manifest: Manifest): void {
 }
 
 function poll(): void {
+  pollModelFailures();
   const state = hot();
   // One version at a time: the next waits for the decision on the one this client answered.
   if (state.prepared !== undefined) return;

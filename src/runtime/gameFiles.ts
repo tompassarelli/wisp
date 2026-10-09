@@ -37,6 +37,9 @@ export const payloadFile = (state: string, index: number, prefix = "wisp") => `$
 export const deltaFile = (state: string, base: string, index: number, prefix = "wisp") => `${hotFolder(prefix)}\\${payloadKey(state)}-${payloadKey(base)}-${index}.pld`;
 export const ackFile = (slot: number, prefix = "wisp") => `${prefix}-hot-ack-p${slot}.txt`;
 export const errorFile = (slot: number, prefix = "wisp") => `${prefix}-error-p${slot}.txt`;
+export const modelFailureRequestFile = (slot: number, prefix = "wisp") => `${prefix}-model-load-p${slot}.txt`;
+export const modelFailureTokenFile = (slot: number, ordinal: number, prefix = "wisp") => `${hotFolder(prefix)}\\model-load-token-p${slot}-${ordinal}.pld`;
+export const modelFailureFile = (token: string, ordinal: number, prefix = "wisp") => `${hotFolder(prefix)}\\model-load-${token}-${ordinal}.pld`;
 
 /** The manifest's base when a version offers no delta. */
 export const NO_BASE = "-";
