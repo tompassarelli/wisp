@@ -9,10 +9,10 @@ export function start(this: void): void {
   install();
   const x = GetRectCenterX(bj_mapInitialPlayableArea);
   const y = GetRectCenterY(bj_mapInitialPlayableArea);
-  const shop = CreateUnit(Player(PLAYER_NEUTRAL_PASSIVE), 0x6e736870, x, y, 270);
-  AddUnitAbility(shop, 0x41737564);
-  RemoveItemFromStock(shop, 0x70686561);
-  AddItemToStock(shop, 0x70686561, 1, 1);
+  const shop = CreateUnit(Player(PLAYER_NEUTRAL_PASSIVE), 1853057136, x, y, 270);
+  UnitAddAbility(shop, 0x41737564);
+  RemoveItemFromStock(shop, 1885889889);
+  AddItemToStock(shop, 1885889889, 1, 1);
   AddUnitToStock(shop, 0x68666f6f, 1, 1);
   CreateUnit(Player(0), 0x4870616c, x + 128, y, 270);
   SetPlayerState(Player(0), PLAYER_STATE_RESOURCE_GOLD, 10000);
