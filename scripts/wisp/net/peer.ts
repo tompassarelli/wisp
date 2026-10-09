@@ -58,6 +58,8 @@ export interface NetPeerOptions {
   /** Fault drills: stop sending, or leave, after this frame. */
   readonly freezeAt?: number;
   readonly quitAt?: number;
+  /** Called with the host's UDP port once it listens. */
+  readonly listening?: (port: number) => void;
 }
 
 export interface NetReport {
@@ -163,7 +165,10 @@ export const runNetPeer = (game: NetGame, options: NetPeerOptions, log: (line: s
     }),
     catch: (cause) => new NetFailure({ problem: `UDP socket: ${String(cause)}` }),
   }), (socket) => Effect.sync(() => socket.close()));
-  if (hosting) log(`net: hosting slot 0 on UDP port ${socket.port}`);
+  if (hosting) {
+    log(`net: hosting slot 0 on UDP port ${socket.port}`);
+    options.listening?.(socket.port);
+  }
 
   const send = (datagram: Datagram) => Effect.sync(() => {
     const to = peer;
@@ -345,5 +350,8 @@ export const runNetPeer = (game: NetGame, options: NetPeerOptions, log: (line: s
       yield* nap(session.frame() < due ? 1 : Math.min(next - wallClock(), FRAME_MS));
     }
   });
-  return yield* body.pipe(Effect.tapError((error) => error._tag === "PeerLeft" || error._tag === "PeerSilent" ? Effect.void : leave(error.message)));
+  return yield* body.pipe(
+    Effect.tapError((error) => error._tag === "PeerLeft" || error._tag === "PeerSilent" ? Effect.void : leave(error.message)),
+    Effect.onInterrupt(() => leave("it closed")),
+  );
 }));

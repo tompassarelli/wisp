@@ -162,6 +162,9 @@ delivery time p50/p95/p99/max (from the moment the remote event was raised to
 the frame that delivered it here, both on this host's clock), its step cost,
 slips and late frames.
 
+Players host and join a match from the standalone window by a short code
+(wisp:docs/play.md, Host and join).
+
 For timings off a shared machine, dispatch wisp:.github/workflows/net-timing.yml:
 it runs one `pair` per round trip on its own hosted runner, for this
 repository's sample or a game's (`repository`, `ref`, `directory`, `pair`).

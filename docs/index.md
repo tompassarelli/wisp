@@ -84,7 +84,9 @@ Playtesting? [`wisp play`](play.md) (wisp:docs/play.md) goes from the
 desktop to a match on the owner's display in one command: it checks the Wine
 prefix, reuses or starts the signed-in Battle.net launcher, presses Play,
 hosts the map once Warcraft III has read its ladder maps, starts the game's
-controller helper, has the map start the match and leaves the game fullscreen.
+controller helper, has the map start the match and leaves the game fullscreen. Two players
+host and join a standalone match by a short code, with no server or account
+([host and join](play.md#host-and-join)).
 [Driving Warcraft III without clicks](driving-warcraft.md)
 (wisp:docs/driving-warcraft.md) compares the ways to make the game host,
 join and start games without clicking its menus, with their account risk.

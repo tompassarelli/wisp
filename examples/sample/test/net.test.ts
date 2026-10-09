@@ -70,6 +70,6 @@ test("a ping only one client sees trips the checksum comparison at the next chec
 farmTest("two sample processes play over UDP through the delay and loss proxy with equal checksums [integration]", () => {
   const run = Bun.spawnSync(["bun", join(import.meta.dir, "../scripts/sample.ts"), "net", "pair", "--frames", "240", "--rtt", "60", "--loss", "0.05"], { stdout: "pipe", stderr: "pipe" });
   const lines = run.stdout.toString().trim().split("\n");
-  expect({ code: run.exitCode, lines: lines.length }).toEqual({ code: 0, lines: 2 });
+  expect({ code: run.exitCode, lines: lines.length, stderr: run.exitCode === 0 ? "" : run.stderr.toString() }).toEqual({ code: 0, lines: 2, stderr: "" });
   for (const line of lines) expect(line).toMatch(/^(host|join): 240 frames, delay 3 .* [34] checksums compared, 0 mismatches/);
 }, 60000);
