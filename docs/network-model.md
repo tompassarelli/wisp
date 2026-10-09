@@ -175,6 +175,21 @@ repository's sample or a game's (`repository`, `ref`, `directory`, `pair`).
   with `PeerSilent` "no packet for 3.0 s", also at 120 ms round trip and 1%
   loss; one that leaves (`--quit-at 300`) ends the host with `PeerLeft` 0.05 s
   later.
+- Smashcraft's `cpu-expert.pad`, one slot per process, 1,200 frames through
+  `net proxy` with 1% loss (seed 5), each round trip on its own hosted runner
+  (wisp:.github/workflows/net-timing.yml run 37941062995, Smashcraft
+  97fd7bf20, Wisp 2783de3): 20 checksums compared per side, 0 mismatches at
+  every setting. Delivery p50/p95/p99, host and joiner, against the bound of
+  one way + 2 frames on p95:
+
+  | Round trip | Delay | Host | Joiner | p95 bound |
+  | --- | --- | --- | --- | --- |
+  | 0 ms | 1 | 15.0/19.2/34.0 ms | 14.9/18.2/33.2 ms | 33.3 ms |
+  | 60 ms | 3 | 48.4/57.3/93.7 ms | 48.3/54.9/67.9 ms | 63.3 ms |
+  | 120 ms | 4 | 64.4/82.4/128.1 ms | 64.0/73.1/95.8 ms | 93.3 ms |
+
+  With 8 ms of slack the 120 ms setting picked delay 5 and the host's p95 was
+  96.3 ms (run 37940402704).
 
 The delivery time is the turn delay plus how late the receiving frame runs.
 Late frames come from the map's own slow frames (Smashcraft's step max was
