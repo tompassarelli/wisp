@@ -281,3 +281,33 @@ duration, plus rAF timestamp/deadline and HTTP readiness), graphics adapter,
 audio event/ready/playback counts and missing
 sounds, and a scene JSON and PNG for each chosen frame. Without `frames`,
 the window stays open after the match so the game's own menus can continue.
+
+## Host and join
+
+Two players on two machines play one match through the standalone window,
+with no server and no account. One hosts, the other joins:
+
+```sh
+bun wisp play --standalone --host [--port N]
+bun wisp play --standalone --join CODE
+bun wisp play --standalone --join ADDRESS:PORT
+```
+
+The host prints a join code such as `R2M6-WDYR-7MQC-S0ZA` as soon as its UDP
+socket is bound, then each direct address and port. The code packs the host's
+LAN IPv4 address, its UDP port and the first 8 hex digits of the map hash
+(wisp:scripts/wisp/net/joinCode.ts). A player on another network joins by
+direct address after the host forwards that UDP port; Wisp does no hole
+punching and runs no relay.
+
+A game opts in with `StandaloneGame.net`: `mapHash()` names its build and
+`create(link, slot, { script })` returns one slot's `StandaloneNetSession`
+over Wisp's transport (wisp:docs/network-model.md). A joiner whose map hash
+differs from the code's stops before sending anything with `MapMismatch`,
+naming both hashes; a direct join sends the full hash and the host refuses it.
+Closing either window sends a goodbye, so the other side ends at once with
+`PeerLeft`; a side that goes quiet ends the other after 3 s with `PeerSilent`.
+`--script`, `--headless`, `--frames` and `--out` work as above, one script per
+player. To try it through delay and loss on one machine, put
+`net proxy --listen P --to 127.0.0.1:HOSTPORT --rtt 120` between them and join
+`127.0.0.1:P`.
