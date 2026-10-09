@@ -212,7 +212,7 @@ export class Lockstep {
 
   private apply(client: HeadlessClient, event: LinkEvent): void {
     if (event.kind === "sync") client.deliverSync({ sender: event.sender, prefix: event.prefix, data: event.data });
-    else if (event.kind === "key") client.key(event.sender, event.key, event.meta, event.down);
+    else if (event.kind === "key") client.keyEvent(event.sender, event.key, event.meta, event.down);
     else if (event.kind === "chat") client.chat(event.sender, event.text);
     else client.frameEvent(event.sender, event.frame, client.natives.FRAMEEVENT_CONTROL_CLICK);
   }
@@ -296,7 +296,10 @@ export class Lockstep {
 
 
   key(sender: number, key: number, meta: number, down: boolean): void {
-    if (this.options.link !== undefined) return this.send({ sender, kind: "key", key, meta, down });
+    if (this.options.link !== undefined) {
+      for (const client of this.clients) if (client.slot === sender) client.hold(key, meta, down);
+      return this.send({ sender, kind: "key", key, meta, down });
+    }
     for (const client of this.clients) client.key(sender, key, meta, down);
     this.flush();
   }

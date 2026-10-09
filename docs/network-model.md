@@ -103,6 +103,13 @@ the handshake.
 match) runs only the local slot's client and hands each event to the link
 instead of delivering it in process.
 
+**Local keyboard.** A key press reaches its own player's `BlzIsKeyPressed`
+and `BlzIsMetaKeyPressed` at once, as Warcraft's local keyboard does; only the
+synchronized key event waits for the turn delay. A map that runs its own
+rollback polls the local keyboard and tags each input row with its frame, so
+local input reaches its simulation on the next frame and the map's own input
+delay is the only delay (wisp#112).
+
 **Turns and order.** There is one turn per frame (16.7 ms). An event raised
 while frame n runs is due at frame n + d, one raised between frames n and n + 1
 at n + 1 + d, where d is the turn delay. Every client delivers a frame's
