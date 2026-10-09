@@ -1391,7 +1391,11 @@ export class HeadlessClient {
       },
       BlzSetSpecialEffectYaw: (effect: Handle, yaw: number) => {
         const pose = this.liveEffect(effect);
-        if (pose !== undefined) pose.yaw = f32(yaw);
+        if (pose !== undefined) {
+          pose.yaw = f32(yaw);
+          pose.matrixScale = [1, 1, 1];
+          pose.flat = false;
+        }
       },
       BlzSetSpecialEffectPitch: (effect: Handle, pitch: number) => {
         const pose = this.liveEffect(effect);

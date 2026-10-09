@@ -133,3 +133,20 @@ test("[native #72] 3.0.0 LAN effect clocks advance 25 ms per engine step, and a 
   expect(read(undefined)).toEqual([100, 0, 25, 25, 50, 75, 75]);
   expect([0, 1, 2, 3].map(read)).toEqual([0, 0, 25, 25]);
 });
+
+test("[native #118] a yaw set after a matrix scale resets it to 1; the opposite order keeps it", () => {
+  const clients = runtime.clients({ install, start: () => {
+    const scaleThenYaw = AddSpecialEffect("a.mdx", 0, 0);
+    BlzSetSpecialEffectMatrixScale(scaleThenYaw, 2, 0, 3);
+    BlzSetSpecialEffectYaw(scaleThenYaw, 1);
+    const yawThenScale = AddSpecialEffect("b.mdx", 0, 0);
+    BlzSetSpecialEffectYaw(yawThenScale, 1);
+    BlzSetSpecialEffectMatrixScale(yawThenScale, 2, 0, 3);
+  } });
+  clients.start();
+  const poses = clients.clients[0]?.effectPoses() ?? [];
+  expect(poses.map(pose => [pose.model, pose.yaw, pose.matrixScale, pose.flat])).toEqual([
+    ["a.mdx", 1, [1, 1, 1], false],
+    ["b.mdx", 1, [2, 0, 3], true],
+  ]);
+});

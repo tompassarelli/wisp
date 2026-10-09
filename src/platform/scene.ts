@@ -106,6 +106,7 @@ function wrapNatives(state: SceneState): void {
   const setScale = BlzSetSpecialEffectScale;
   const setMatrixScale = BlzSetSpecialEffectMatrixScale;
   const resetMatrix = BlzResetSpecialEffectMatrix;
+  const setYaw = BlzSetSpecialEffectYaw;
   const setPosition = BlzSetSpecialEffectPosition;
   const setX = BlzSetSpecialEffectX;
   const setY = BlzSetSpecialEffectY;
@@ -146,6 +147,11 @@ function wrapNatives(state: SceneState): void {
     const effect = state.effects.get(handle);
     if (effect !== undefined) effect.flat = false;
     resetMatrix(handle);
+  };
+  natives.BlzSetSpecialEffectYaw = (handle: effect, yaw: number) => {
+    const effect = state.effects.get(handle);
+    if (effect !== undefined) effect.flat = false;
+    setYaw(handle, yaw);
   };
 
   natives.BlzSetSpecialEffectPosition = (handle: effect, x: number, y: number, z: number) => {
