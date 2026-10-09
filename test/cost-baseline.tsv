@@ -68,6 +68,7 @@ test/sync-channel.test.ts	2	0.029
 test/toward-zero.test.ts	2	0.148
 test/traps.test.ts	1	1.002
 test/tune.test.ts	3	0.071
+test/unit-models.test.ts	3	0.004
 test/visibility.test.ts	3	0.027
 test/war3-log.test.ts	3	0.012
 test/watch.test.ts	11	0.041
