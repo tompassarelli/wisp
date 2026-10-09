@@ -34,6 +34,40 @@ import { transformForBindings } from "./loop-bindings";
 
 const floatLiterals = new WeakSet<tstl.NumericLiteral>();
 
+export const MODULE_LOCAL_LIMIT = 190;
+export const MODULE_LOCALS_CODE = 9301;
+const moduleLocals = new Map<string, number>();
+
+const isRequireCall = (expression: tstl.Expression | undefined): boolean =>
+  expression !== undefined && tstl.isCallExpression(expression) && tstl.isIdentifier(expression.expression) && expression.expression.text === "require";
+
+function importAliases(file: tstl.File): { readonly reads: Map<number, tstl.TableIndexExpression>; readonly statements: Set<tstl.Statement> } {
+  const modules = new Set<string>();
+  const counts = new Map<string, number>();
+  const reads = new Map<number, tstl.TableIndexExpression>();
+  const statements = new Set<tstl.Statement>();
+  for (const statement of file.statements) {
+    if (!tstl.isVariableDeclarationStatement(statement) || statement.left.length !== 1 || statement.right?.length !== 1) continue;
+    const [left] = statement.left;
+    const [right] = statement.right;
+    if (left === undefined || right === undefined) continue;
+    if (left.text.startsWith("____") && isRequireCall(right)) {
+      const seen = (counts.get(left.text) ?? 0) + 1;
+      counts.set(left.text, seen);
+      if (seen > 1) left.text = `${left.text}_${seen}`;
+      modules.add(left.text);
+    }
+    else if (left.symbolId !== undefined && tstl.isTableIndexExpression(right) && tstl.isIdentifier(right.table) && modules.has(right.table.text) && tstl.isStringLiteral(right.index)) {
+      reads.set(left.symbolId, right);
+      statements.add(statement);
+    }
+  }
+  return { reads, statements };
+}
+
+const topLevelLocals = (file: tstl.File, removed: ReadonlySet<tstl.Statement>): number =>
+  file.statements.reduce((sum, statement) => sum + (tstl.isVariableDeclarationStatement(statement) && !removed.has(statement) ? statement.left.length : 0), 0);
+
 /**
  * A finite non-integer binary32 value as a Lua hexadecimal float: its
  * significand as an integer and a binary exponent, which any parser reads
@@ -51,6 +85,30 @@ export function exactFloatText(value: number): string | undefined {
 }
 
 class WarcraftNumberPrinter extends LuaPrinter {
+  private reads = new Map<number, tstl.TableIndexExpression>();
+  private removed: ReadonlySet<tstl.Statement> = new Set();
+
+  constructor(emitHost: tstl.EmitHost, program: ts.Program, private readonly fileName: string) {
+    super(emitHost, program, fileName);
+  }
+
+  override print(file: tstl.File) {
+    const { reads, statements } = importAliases(file);
+    this.reads = reads;
+    this.removed = statements;
+    moduleLocals.set(this.fileName, topLevelLocals(file, statements));
+    return super.print(file);
+  }
+
+  override printStatementArray(statements: tstl.Statement[]) {
+    return super.printStatementArray(statements.filter((statement) => !this.removed.has(statement)));
+  }
+
+  override printIdentifier(expression: tstl.Identifier) {
+    const read = expression.symbolId === undefined ? undefined : this.reads.get(expression.symbolId);
+    return read === undefined ? super.printIdentifier(expression) : this.printTableIndexExpression(read);
+  }
+
   override printNumericLiteral(expression: tstl.NumericLiteral) {
     const { value } = expression;
     const text = String(value);
@@ -200,6 +258,17 @@ const plugin = ({ sourcePrefix = "" }: { readonly sourcePrefix?: string }): tstl
     [ts.SyntaxKind.ThrowStatement]: (node, context) => transformThrow(node, context, sourcePrefix),
   },
   printer: (program, emitHost, fileName, file) => new WarcraftNumberPrinter(emitHost, program, fileName).print(file),
+  beforeEmit(program, options) {
+    const project = typeof options.configFilePath === "string" ? dirname(options.configFilePath) : process.cwd();
+    return [...moduleLocals].flatMap(([fileName, count]) => {
+      if (count <= MODULE_LOCAL_LIMIT || program.getSourceFile(fileName) === undefined) return [];
+      const module = relative(project, fileName).replaceAll("\\", "/");
+      return [{
+        file: undefined, start: undefined, length: undefined, category: ts.DiagnosticCategory.Error, code: MODULE_LOCALS_CODE,
+        messageText: `Module ${module} has ${count} top-level locals; Lua allows 200 and Wisp allows ${MODULE_LOCAL_LIMIT}. Split the module.`,
+      }];
+    });
+  },
 });
 
 export default plugin;
