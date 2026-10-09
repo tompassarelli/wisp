@@ -108,3 +108,20 @@ farmTest("[native #59] the same effect cases pass in emitted 32-bit Lua", () => 
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
   expect(run.stdout.toString().trimEnd().split("\n")).toEqual([...[0, 1].flatMap(slot => EXPECTED.map(row => `p${slot} ${row}`)), ...DEATH_TIMELINE]);
 }, 120_000);
+
+test("[native #118] a yaw set after a matrix scale resets it to 1; the opposite order keeps it", () => {
+  const clients = runtime.clients({ install, start: () => {
+    const scaleThenYaw = AddSpecialEffect("a.mdx", 0, 0);
+    BlzSetSpecialEffectMatrixScale(scaleThenYaw, 2, 0, 3);
+    BlzSetSpecialEffectYaw(scaleThenYaw, 1);
+    const yawThenScale = AddSpecialEffect("b.mdx", 0, 0);
+    BlzSetSpecialEffectYaw(yawThenScale, 1);
+    BlzSetSpecialEffectMatrixScale(yawThenScale, 2, 0, 3);
+  } });
+  clients.start();
+  const poses = clients.clients[0]?.effectPoses() ?? [];
+  expect(poses.map(pose => [pose.model, pose.yaw, pose.matrixScale, pose.flat])).toEqual([
+    ["a.mdx", 1, [1, 1, 1], false],
+    ["b.mdx", 1, [2, 0, 3], true],
+  ]);
+});

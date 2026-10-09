@@ -34,7 +34,7 @@ test("[spec docs/player-view.md] the emitted scene recorder reports each model's
   expect(scene).toEqual({
     serial: 6,
     frame: 101,
-    effects: 7,
+    effects: 9,
     models: [
       { model: "", live: 1, inView: 1, drawn: 1, created: 0, age: 101, longest: 101, destroyed: 0 },
 
@@ -43,7 +43,7 @@ test("[spec docs/player-view.md] the emitted scene recorder reports each model's
       { model: "Abilities/Smoke.mdx", live: 1, inView: 0, drawn: 0, created: 29, age: undefined, longest: 38, destroyed: 0 },
       { model: "Abilities/Spark.mdx", live: 1, inView: 0, drawn: 0, created: 0, age: undefined, longest: 9, destroyed: 0 },
       { model: "Abilities/Trap.mdx", live: 1, inView: 1, drawn: 0, created: 0, age: 101, longest: 101, destroyed: 0 },
-      { model: "Flat.mdx", live: 1, inView: 1, drawn: 0, created: 0, age: 101, longest: 101, destroyed: 0 },
+      { model: "Flat.mdx", live: 3, inView: 3, drawn: 1, created: 0, age: 101, longest: 101, destroyed: 0 },
       { model: "Gone.mdx", live: 0, inView: 0, drawn: 0, created: undefined, age: undefined, longest: 90, destroyed: 1 },
 
       { model: "Units/Hero.mdx", live: 2, inView: 2, drawn: 1, created: 0, age: 101, longest: 101, destroyed: 0 },
@@ -54,7 +54,7 @@ test("[spec docs/player-view.md] the emitted scene recorder reports each model's
     "invisible effects: 1 effects were created with no model, 1 of them meant to be drawn now",
     "a smoke stayed in view for 0.63 s; it should be gone within 0.50 s",
     "a spark stayed in view for 0.15 s; it should be gone within 0.13 s",
-    "1 effect in view that the game declares no kind for, the oldest for 1.68 s",
+    "3 effects in view that the game declares no kind for, the oldest for 1.68 s",
     "a flash stayed in view for 1.50 s; it should be gone within 0.50 s",
   ]);
 });

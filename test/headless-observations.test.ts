@@ -100,7 +100,7 @@ test("effect snapshots preserve animation time, playback changes and complete tr
     BlzSetSpecialEffectMatrixScale(effect, 0, 1, 1);
   });
   clients.frames(15);
-  expect(client.effectPoses()[0]).toMatchObject({ animation: "ANIM_TYPE_WALK", subAnimations: [], matrixScale: [0, 3, 4], flat: true });
+  expect(client.effectPoses()[0]).toMatchObject({ animation: "ANIM_TYPE_WALK", subAnimations: [], matrixScale: [0, 1, 1], flat: true });
   expect(client.effectPoses()[0]?.animationElapsed).toBeCloseTo(0.25);
   client.run(() => {
     BlzResetSpecialEffectMatrix(effect);
