@@ -23,6 +23,10 @@ export interface LockstepOptions {
   readonly declarations: NativeDeclarations;
 
   readonly players: readonly number[];
+
+  readonly humans?: readonly number[];
+
+  readonly link?: LockstepLink;
   readonly playerNames?: Readonly<Record<number, string>>;
 
   readonly filePrefix: string;
@@ -70,6 +74,19 @@ export interface SyncDelivery {
   arrivalFrame(this: void, sender: number, frame: number, message: SyncMessage): number;
 }
 
+export type LinkEvent =
+  | { readonly sender: number; readonly kind: "sync"; readonly prefix: string; readonly data: string }
+  | { readonly sender: number; readonly kind: "key"; readonly key: number; readonly meta: number; readonly down: boolean }
+  | { readonly sender: number; readonly kind: "chat"; readonly text: string }
+  | { readonly sender: number; readonly kind: "click"; readonly frame: number };
+
+/** Carries this process's events to the clients other processes run, each due on one frame everywhere (wisp:docs/network-model.md). */
+export interface LockstepLink {
+  readonly delay: number;
+  sent(this: void, frame: number, event: LinkEvent): void;
+  due(this: void, frame: number): readonly LinkEvent[];
+}
+
 interface InFlight {
   readonly arrival: number;
   readonly message: SyncMessage;
@@ -103,6 +120,7 @@ export class Lockstep {
   private readonly options: LockstepOptions;
 
   private divergence: string | undefined;
+  private inFrame = false;
   private readonly publisher: ModulePublisher;
 
   constructor(options: LockstepOptions) {
@@ -116,7 +134,7 @@ export class Lockstep {
       clients.push(new HeadlessClient({
         slot,
         filePrefix: options.filePrefix,
-        humans: options.players,
+        humans: options.humans ?? options.players,
         ...(options.playerNames === undefined ? {} : { playerNames: options.playerNames }),
         declarations: options.declarations,
         localNatives,
@@ -162,6 +180,12 @@ export class Lockstep {
 
   /** Synchronized messages reach every client in the order they were sent, at once or at their arrival frame. */
   private flush(): void {
+    if (this.options.link !== undefined) {
+      for (let message = this.network.shift(); message !== undefined; message = this.network.shift()) {
+        this.send({ sender: message.sender, kind: "sync", prefix: message.prefix, data: message.data });
+      }
+      return;
+    }
     const delivery = this.options.delivery;
     if (delivery !== undefined) {
       for (let message = this.network.shift(); message !== undefined; message = this.network.shift()) {
@@ -180,8 +204,35 @@ export class Lockstep {
     }
   }
 
+  /** An event raised during frame n is due at n + delay; one raised between frames n and n + 1, at n + 1 + delay. */
+  private send(event: LinkEvent): void {
+    const link = this.options.link;
+    if (link !== undefined) link.sent(this.frame + link.delay + (this.inFrame ? 0 : 1), event);
+  }
+
+  private apply(client: HeadlessClient, event: LinkEvent): void {
+    if (event.kind === "sync") client.deliverSync({ sender: event.sender, prefix: event.prefix, data: event.data });
+    else if (event.kind === "key") client.key(event.sender, event.key, event.meta, event.down);
+    else if (event.kind === "chat") client.chat(event.sender, event.text);
+    else client.frameEvent(event.sender, event.frame, client.natives.FRAMEEVENT_CONTROL_CLICK);
+  }
+
   /** Delivers the messages due at the current frame, before its callbacks, as Warcraft runs a turn's events first. */
   private arrive(): void {
+    const link = this.options.link;
+    if (link !== undefined) {
+      for (const event of link.due(this.frame)) {
+        for (let index = 0; index < this.clients.length; index++) {
+          const client = this.clients[index];
+          if (client === undefined) continue;
+          const started = this.options.cost?.();
+          this.apply(client, event);
+          this.charge(index, started);
+        }
+      }
+      this.flush();
+      return;
+    }
     while ((this.inFlight[0]?.arrival ?? this.frame + 1) <= this.frame) {
       const due = this.inFlight.shift();
       if (due === undefined) continue;
@@ -197,6 +248,7 @@ export class Lockstep {
   frames(count: number, options: { readonly draw?: boolean } = {}): void {
     for (let frame = 0; frame < count; frame++) {
       this.frame++;
+      this.inFrame = true;
       for (let index = 0; index < this.clients.length; index++) this.costs[index] = 0;
       this.arrive();
       for (let index = 0; index < this.clients.length; index++) {
@@ -205,6 +257,7 @@ export class Lockstep {
         this.charge(index, started);
       }
       this.flush();
+      this.inFrame = false;
       this.settle();
     }
   }
@@ -231,6 +284,7 @@ export class Lockstep {
   }
 
   chat(sender: number, message: string): void {
+    if (this.options.link !== undefined) return this.send({ sender, kind: "chat", text: message });
     for (const client of this.clients) client.chat(sender, message);
     this.flush();
   }
@@ -242,6 +296,7 @@ export class Lockstep {
 
 
   key(sender: number, key: number, meta: number, down: boolean): void {
+    if (this.options.link !== undefined) return this.send({ sender, kind: "key", key, meta, down });
     for (const client of this.clients) client.key(sender, key, meta, down);
     this.flush();
   }
@@ -276,6 +331,10 @@ export class Lockstep {
     const frame = clicker.clickTarget(x, y);
     if (frame === undefined) return false;
     clicker.frames.focus(frame, true);
+    if (this.options.link !== undefined) {
+      this.send({ sender, kind: "click", frame: frame.id });
+      return true;
+    }
     const click = clicker.natives.FRAMEEVENT_CONTROL_CLICK;
     for (const client of this.clients) client.frameEvent(sender, frame.id, click);
     this.flush();

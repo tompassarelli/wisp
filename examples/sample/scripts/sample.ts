@@ -98,4 +98,8 @@ runMainCli("bun examples/sample/scripts/sample.ts", {
       });
     },
   },
+  net: {
+    usage: "host [--port N] | join ADDRESS:PORT | pair  --frames N [--delay FRAMES] [--freeze-at F] [--quit-at F] [--rtt MS] [--loss P] [--seed N] | proxy --listen PORT --to ADDRESS:PORT [--rtt MS] [--loss P] [--seed N]",
+    load: async () => (await import("wisp/scripts/wisp/commands/net")).makeNet(async () => (await import("../test/net")).SAMPLE_NET, NAME),
+  },
 }, process.argv.slice(2));
