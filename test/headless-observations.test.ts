@@ -4,7 +4,7 @@ import { assertSoundCue } from "../src/headless/client";
 import { runJourney } from "../src/headless/journey";
 import { startSceneReport } from "../src/platform/scene";
 import { sceneMatchFrame } from "../src/runtime/scene";
-import { runtimeConfiguration } from "../src/runtime/config";
+import { configureRuntime, runtimeConfiguration } from "../src/runtime/config";
 
 const runtime = installHeadless({ filePrefix: "observations", globalPrefixes: ["__observations"], frames: [{
   name: "Pips", type: "BACKDROP", width: 0.25, height: 0.125, texture: "panel.blp", children: [{
@@ -254,6 +254,7 @@ test("journey observations run after all same-frame events without changing call
 test("[native capture: smashcraft:ts/src/platform/nativeCaptureMain.ts] match-frame observations wait for the frame the map's scene report names, not the client frame", () => {
   const clock = globalThis as Record<string, timer | undefined>;
   const map = { start: () => {
+    configureRuntime({ filePrefix: "observations", readyPrefix: "OB_HRR", globalPrefix: "__observations" });
     startSceneReport({ frame: () => { const match = clock.__observationsMatch; return match === undefined ? 0 : Math.round(TimerGetElapsed(match) * 60); }, parked: () => false });
     const trigger = CreateTrigger();
     TriggerRegisterPlayerChatEvent(trigger, Player(0), "go", true);
