@@ -31,6 +31,8 @@ export const runProxy = (options: ProxyOptions, log: (line: string) => void = co
           const copy = new Uint8Array(data);
           if (to !== undefined) hold(() => listener.send(copy, to.port, to.address));
         },
+        // A host not yet bound, or gone, answers with ICMP port unreachable, which Bun raises on the next receive.
+        error: () => undefined,
       },
     }),
     catch: (cause) => new NetFailure({ problem: `proxy socket: ${String(cause)}` }),
@@ -45,6 +47,7 @@ export const runProxy = (options: ProxyOptions, log: (line: string) => void = co
           const copy = new Uint8Array(data);
           if (port === client.port) hold(() => toHost.send(copy, options.to.port, options.to.address));
         },
+        error: () => undefined,
       },
     }),
     catch: (cause) => new NetFailure({ problem: `proxy port ${options.listen}: ${String(cause)}` }),

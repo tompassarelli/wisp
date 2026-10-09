@@ -161,6 +161,8 @@ export const runNetPeer = (game: NetGame, options: NetPeerOptions, log: (line: s
           if (decoded.value.t === "pong") pongs.push(lastHeard - decoded.value.at / 1000);
           else inbox.push(decoded.value);
         },
+        // A peer not yet bound, or gone, answers with ICMP port unreachable; the handshake deadline and silence rules decide that.
+        error: () => undefined,
       },
     }),
     catch: (cause) => new NetFailure({ problem: `UDP socket: ${String(cause)}` }),
