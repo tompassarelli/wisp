@@ -27,8 +27,7 @@ const LUA_SOURCE = join(import.meta.dir, "../../vendor/lua-5.3.6.tar.gz");
 const LUA_SOURCE_SHA256 = "fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60";
 
 
-const ROUNDING_PROBE = "local a, b = 3.0, 1e-30 io.write(string.format('%a', a - b))";
-const TOWARD_ZERO_RESULT = "0x1.7ffffep+1";
+const ROUNDING_PROBE = "local a, b = 3.0, 1e-30 io.write(a - b < a and 'toward-zero' or 'nearest')";
 
 
 export const luaRounding = (lua: string) => Effect.gen(function*() {
@@ -36,7 +35,7 @@ export const luaRounding = (lua: string) => Effect.gen(function*() {
   if (integers.exitCode !== 0) return `${lua} doesn't run: ${integers.stderr.trim()}`;
   if (integers.stdout !== "2147483647") return `${lua} is not a 32-bit Lua (LUA_32BITS)`;
   const probe = (yield* captureProcess("probe Lua32 rounding", lua, [lua, "-e", ROUNDING_PROBE])).stdout;
-  return probe === TOWARD_ZERO_RESULT ? "toward-zero" : "nearest";
+  return probe === "toward-zero" ? "toward-zero" : "nearest";
 });
 
 export type Lua32Variant = "stock" | "toward-zero";
