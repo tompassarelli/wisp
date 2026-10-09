@@ -1,6 +1,29 @@
 import { f32 } from "../sim/f32";
 import type { Handle, NativeBehavior } from "./client";
 
+export interface AbilityObjectFixture {
+  readonly base: string;
+  readonly realLevelFields: Readonly<Record<string, readonly number[]>>;
+  readonly impactDelay: number;
+}
+
+export type AbilityObjectFixtures = Readonly<Record<number, AbilityObjectFixture>>;
+
+const REAL_FIELDS: Readonly<Record<string, string>> = {
+  ABILITY_RLF_CASTING_TIME: "acas", ABILITY_RLF_DURATION_NORMAL: "adur",
+  ABILITY_RLF_DURATION_HERO: "ahdu", ABILITY_RLF_CAST_RANGE: "aran",
+  ABILITY_RLF_DECAYING_DAMAGE: "Esh1", ABILITY_RLF_MOVEMENT_SPEED_FACTOR_ESH2: "Esh2",
+  ABILITY_RLF_ATTACK_SPEED_FACTOR_ESH3: "Esh3", ABILITY_RLF_DECAY_POWER: "Esh4",
+  ABILITY_RLF_INITIAL_DAMAGE_ESH5: "Esh5",
+};
+
+const realField = (which: unknown): string => {
+  if (typeof which === "number") for (const field of Object.values(REAL_FIELDS)) {
+    if (which === field.charCodeAt(0) * 0x1000000 + field.charCodeAt(1) * 0x10000 + field.charCodeAt(2) * 0x100 + field.charCodeAt(3)) return field;
+  }
+  return REAL_FIELDS[String(which)] ?? String(which);
+};
+
 interface UnitAbilities {
   readonly cooldowns: Map<string, number>;
   readonly remaining: Map<number, number>;
@@ -13,9 +36,23 @@ interface UnitAbilities {
 }
 
 export class Warcraft3Abilities {
+  constructor(private readonly objects: AbilityObjectFixtures = {}) {}
   private readonly units = new Map<Handle, UnitAbilities>();
   private readonly fields = new Map<Handle, Map<string, unknown>>();
   private readonly ids = new Map<Handle, number>();
+
+  shadowStrike(unit: Handle): { interval: number; duration: number; range: number; initial: number; periodic: number; impactDelay: number } | undefined {
+    const state = this.state(unit);
+    for (const [id, ability] of state.handles) {
+      const object = this.objects[id];
+      if (object?.base !== "AEsh") continue;
+      const level = (state.levels.get(id) ?? 1) - 1;
+      const value = (field: string) => Number(this.fields.get(ability)?.get(`${field} ${level}`) ?? 0);
+      if (value("Esh2") !== 0 || value("Esh3") !== 0 || value("Esh4") !== 0) return undefined;
+      return { interval: value("acas"), duration: value("adur"), range: value("aran"), initial: value("Esh5"), periodic: value("Esh1"), impactDelay: object.impactDelay };
+    }
+    return undefined;
+  }
 
   state(unit: Handle): UnitAbilities {
     let state = this.units.get(unit);
@@ -61,7 +98,12 @@ export class Warcraft3Abilities {
         const ability = handle("ability");
         state.handles.set(id, ability);
         state.levels.set(id, 1);
-        this.fields.set(ability, new Map());
+        const fields = new Map<string, unknown>();
+        const object = this.objects[id];
+        if (object !== undefined) for (const [field, levels] of Object.entries(object.realLevelFields)) {
+          for (let level = 0; level < levels.length; level++) fields.set(`${field} ${level}`, levels[level]);
+        }
+        this.fields.set(ability, fields);
         this.ids.set(ability, id);
         return true;
       },
@@ -105,8 +147,8 @@ export class Warcraft3Abilities {
       BlzStartUnitAbilityCooldown: setRemaining,
       BlzEndUnitAbilityCooldown: (unit: Handle, id: number) => setRemaining(unit, id, 0),
       UnitResetCooldown: (unit: Handle) => this.state(unit).remaining.clear(),
-      BlzGetAbilityRealLevelField: (ability: Handle, which: unknown, level: number) => field(ability, `${String(which)} ${level}`) ?? 0,
-      BlzSetAbilityRealLevelField: (ability: Handle, which: unknown, level: number, value: number) => setField(ability, `${String(which)} ${level}`, f32(value)),
+      BlzGetAbilityRealLevelField: (ability: Handle, which: unknown, level: number) => field(ability, `${realField(which)} ${level}`) ?? 0,
+      BlzSetAbilityRealLevelField: (ability: Handle, which: unknown, level: number, value: number) => setField(ability, `${realField(which)} ${level}`, f32(value)),
       BlzGetAbilityBooleanLevelField: (ability: Handle, which: unknown, level: number) => field(ability, `${String(which)} ${level}`) ?? false,
       BlzSetAbilityBooleanLevelField: (ability: Handle, which: unknown, level: number, value: boolean) => setField(ability, `${String(which)} ${level}`, value),
     };

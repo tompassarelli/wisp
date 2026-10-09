@@ -13,7 +13,7 @@ import { advanceAnimation, type AnimationBlend, type AnimationState, freshAnimat
 import type { FrameTemplate } from "./frames";
 import type { NativeDeclarations } from "./declarations";
 import { FRAME_POINTS, type Frame, Frames } from "./frames";
-import { Warcraft3Abilities } from "./warcraft3Abilities";
+import { Warcraft3Abilities, type AbilityObjectFixtures } from "./warcraft3Abilities";
 import { WARCRAFT3_ENUM_VALUES } from "./warcraft3Natives";
 import { Scenery, type SceneryFixtures } from "./warcraft3Scenery";
 import { TextTags } from "./textTags";
@@ -298,6 +298,7 @@ export interface ClientScope {
 }
 
 export interface ClientOptions {
+  readonly abilityObjects?: AbilityObjectFixtures;
   readonly unitStates?: UnitStateFixtures;
   readonly scenery?: SceneryFixtures;
   readonly inventory?: Warcraft3InventoryFixtures;
@@ -549,7 +550,7 @@ function mixValue(hash: number, value: unknown): number {
 export class HeadlessClient {
   readonly scenery: Scenery;
   readonly inventory: Warcraft3Inventory;
-  readonly abilities = new Warcraft3Abilities();
+  readonly abilities: Warcraft3Abilities;
   /** The floating text tags this client shows. */
   readonly textTags = new TextTags();
   readonly textAreaAutoScroll = new Map<Handle, boolean>();
@@ -594,6 +595,8 @@ export class HeadlessClient {
   private readonly scope: ClientScope | undefined;
   private readonly filePrefix: string;
   private readonly timers: Timer[] = [];
+  private readonly spellHits: { target: Unit; due: number; damage: number }[] = [];
+  private readonly passiveAlliances = new Map<string, boolean>();
   private timerOrder = 0;
   /** Game time as natives read it, in binary32 seconds: a timer callback's own deadline, otherwise the end of the latest frame. */
   private now = 0;
@@ -633,6 +636,7 @@ export class HeadlessClient {
   readonly frames: Frames;
 
   constructor(options: ClientOptions) {
+    this.abilities = new Warcraft3Abilities(options.abilityObjects);
     this.scenery = new Scenery(options.scenery);
     this.inventory = new Warcraft3Inventory({
       handle: kind => this.handle(kind),
@@ -985,6 +989,27 @@ export class HeadlessClient {
         unit.moveSpeed = f32(value);
       },
       GetUnitMoveSpeed: (unit: Unit) => unit.moveSpeed,
+      SetPlayerAlliance: (source: number, target: number, which: string, allied: boolean) => {
+        if (which !== "ALLIANCE_PASSIVE") throw new Error(`SetPlayerAlliance: unsupported alliance ${which}`);
+        this.passiveAlliances.set(`${source} ${target}`, allied);
+      },
+      IssueTargetOrder: (caster: Unit, order: string, target: Unit) => {
+        const spell = order === "shadowstrike" ? this.abilities.shadowStrike(caster) : undefined;
+        if (spell === undefined || spell.interval <= 0 || spell.duration <= 0) {
+          this.missingNatives.push({ native: "IssueTargetOrder", client: this.slot, frame: this.frame });
+          return false;
+        }
+        if (!this.units.has(caster) || !this.units.has(target) || caster.dead || target.dead || caster.owner === target.owner || this.passiveAlliances.get(`${caster.owner} ${target.owner}`) === true) return false;
+        const dx = target.x - caster.x;
+        const dy = target.y - caster.y;
+        if (dx * dx + dy * dy > spell.range * spell.range) return false;
+        const impact = after(this.now, spell.impactDelay);
+        this.spellHits.push({ target, due: impact, damage: spell.initial });
+        for (let elapsed = spell.interval; elapsed < spell.duration; elapsed = after(elapsed, spell.interval)) {
+          this.spellHits.push({ target, due: after(impact, elapsed), damage: spell.periodic });
+        }
+        return true;
+      },
       ...this.abilities.behaviors((kind) => this.handle(kind)),
       BlzGetLocalClientWidth: () => screenWidth,
       BlzGetLocalClientHeight: () => 1080,
@@ -1552,6 +1577,19 @@ export class HeadlessClient {
       for (const timer of this.timers) {
         if (!timer.running || timer.callback === undefined || timer.due > end) continue;
         if (next === undefined || timer.due < next.due || (timer.due === next.due && timer.order < next.order)) next = timer;
+      }
+      let hitIndex = -1;
+      for (let index = 0; index < this.spellHits.length; index++) {
+        const hit = this.spellHits[index];
+        const earliest = this.spellHits[hitIndex];
+        if (hit !== undefined && hit.due <= end && (next === undefined || hit.due <= next.due) && (earliest === undefined || hit.due < earliest.due)) hitIndex = index;
+      }
+      const hit = this.spellHits[hitIndex];
+      if (hit !== undefined) {
+        this.spellHits.splice(hitIndex, 1);
+        this.now = hit.due;
+        if (this.units.has(hit.target) && !hit.target.dead) this.setLife(hit.target, subtractFloat32(this.unitValue(hit.target, "life"), hit.damage));
+        continue;
       }
       if (next === undefined || next.callback === undefined) break;
       this.now = next.due;

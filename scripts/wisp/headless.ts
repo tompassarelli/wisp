@@ -10,6 +10,7 @@ import type { FrameTemplate } from "../../src/headless/frames";
 import type { UnitStateFixtures } from "../../src/headless/client";
 import type { SceneryFixtures } from "../../src/headless/warcraft3Scenery";
 import type { Warcraft3InventoryFixtures } from "../../src/headless/warcraft3Inventory";
+import type { AbilityObjectFixtures } from "../../src/headless/warcraft3Abilities";
 import { join } from "node:path";
 import type { ClientScope, HeadlessClient, LocalNatives, MapEntry, NativeBehaviors, SoundCue, IntentionalNoops } from "../../src/headless/client";
 import type { HeadlessRenderProject } from "./headlessRender";
@@ -23,6 +24,7 @@ import { type SceneExpectations, describeScene, readSceneLines, sceneProblems } 
 
 /** What a game declares about its map for a headless run. */
 export interface HeadlessMap {
+  readonly abilityObjects?: AbilityObjectFixtures;
   readonly unitStates?: UnitStateFixtures;
   readonly scenery?: SceneryFixtures;
   readonly inventory?: Warcraft3InventoryFixtures;
@@ -223,6 +225,7 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
         ...(map.intentionalNoops === undefined ? {} : { intentionalNoops: map.intentionalNoops }),
         ...(map.frames === undefined ? {} : { frames: map.frames }),
         ...(map.unitStates === undefined ? {} : { unitStates: map.unitStates }),
+        ...(map.abilityObjects === undefined ? {} : { abilityObjects: map.abilityObjects }),
         ...(map.scenery === undefined ? {} : { scenery: map.scenery }),
         ...(map.inventory === undefined ? {} : { inventory: map.inventory }),
         ...(map.playerNames === undefined ? {} : { playerNames: map.playerNames }),
