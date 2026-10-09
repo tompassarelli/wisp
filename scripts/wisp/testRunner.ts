@@ -32,7 +32,7 @@ import { TEST_PHASE_ENV, TIMING_TEST_PREFIX } from "./timingTest";
 
 export const BUSY_PRESSURE = 30;
 
-export const TEST_TIMEOUT_MS = 120_000;
+export const TEST_TIMEOUT_MS = 60_000;
 
 const TIMING_ATTEMPTS = 3;
 
@@ -281,7 +281,8 @@ const CostRow = Schema.Struct({
   tests: Schema.optionalKey(Schema.Int),
   cpu: Schema.optionalKey(Schema.Finite),
   max: Schema.optionalKey(Schema.Finite),
-  inconclusive: Schema.optionalKey(Schema.String),
+  maxLuaInstructions: Schema.optionalKey(Schema.Finite),
+  maxFrames: Schema.optionalKey(Schema.Finite),
 });
 const decodeCostRow = Schema.decodeUnknownEffect(Schema.fromJsonString(CostRow));
 
@@ -302,25 +303,23 @@ export const runTests = (args: readonly string[], print: (line: string) => void 
       return { correctness, verdicts: [...verdicts.values()] };
     }));
     const measured: Costs = new Map();
-    const notes: string[] = [];
     const text = existsSync(costFile) ? readFileSync(costFile, "utf8") : "";
     for (const line of text.split("\n").filter((row) => row !== "")) {
       const row = yield* decodeCostRow(line).pipe(Effect.mapError((failure) => new TestRunFailure({ problem: `test cost row ${line}: ${failure.message}` })));
-      if (row.inconclusive !== undefined) notes.push(row.inconclusive);
-      else if (row.unit !== undefined) addCost(measured, row.unit, row.tests ?? 0, row.cpu ?? 0, row.max ?? 0);
+      if (row.unit !== undefined) addCost(measured, row.unit, row.tests ?? 0, row.cpu ?? 0, row.max ?? 0, row.maxLuaInstructions ?? 0, row.maxFrames ?? 0);
     }
     const costs = report("suite", measured);
-    for (const note of notes) print(note);
     const count = (verdict: Verdict) => summary.verdicts.filter((value) => value === verdict).length;
     const timing = summary.verdicts.length === 0
       ? "no timing tests"
       : `timing tests: ${count("passed")} passed, ${count("failed")} failed, ${count("inconclusive")} inconclusive`;
     print(`correctness tests ${summary.correctness === 0 ? "passed" : "FAILED"}; ${timing}`);
     print(costs.heaviest);
+    print(costs.deterministic);
     print(costs.summary);
-    print(`CPU pressure during this run: average ${percent(pressure.average)}, peak some avg10 ${percent(pressure.peak)} (timing and ceiling verdicts count as inconclusive above ${BUSY_PRESSURE}%)`);
+    print(`CPU pressure during this run: average ${percent(pressure.average)}, peak some avg10 ${percent(pressure.peak)} (timing verdicts count as inconclusive above ${BUSY_PRESSURE}%)`);
     if (summary.correctness !== 0 || count("failed") > 0) return 1;
-    return count("inconclusive") > 0 || notes.length > 0 ? INCONCLUSIVE_EXIT : 0;
+    return count("inconclusive") > 0 ? INCONCLUSIVE_EXIT : 0;
   }),
   (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
 );

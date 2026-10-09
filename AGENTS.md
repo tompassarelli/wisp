@@ -50,15 +50,14 @@ configuration, assets, map declaration and acceptance journeys. Keep proprietary
 assets and binaries outside this repository. No releases are authorized.
 Follow [the clean-room rules](docs/clean-room.md) (wisp:docs/clean-room.md, [wisp#75](https://github.com/tompassarelli/wisp/issues/75)).
 
-Test cost: one test may use at most 4 s of CPU (user plus system, with the
-Lua32 and compiler children it waits for; wisp:scripts/wisp/testCost.ts). It
-was set on 8 Oct (#65), when the heaviest suite test used 2.9 s and the 28
-tests above about 2 s became `farmTest`s, which CI's farm-tests job runs on
-every push. Only Tom raises it. `bun run test` fails a test over it, naming
-the file and "shrink it or move it to the farm", and prints the suite's CPU,
-test count and CPU per test without gating them. Other CI cost gates measure
-deterministic quantities, never CPU seconds (wisp#114, smashcraft#394)
-(wisp:docs/testing.md, "Test cost").
+Test cost: one test may run at most 280M Lua32 instructions in its Lua
+children and step at most 80,000 headless frames, each about 4 s on a farm
+runner (wisp:scripts/wisp/testCost.ts). Compilation is bounded only by the
+60 s hang timeout: farm runners expose no instruction counter. Only Tom raises
+the ceilings. `bun run test` fails a test over one, naming the file and
+"shrink it or move it to the farm", and prints CPU without gating it. CI cost
+gates measure deterministic quantities, never CPU seconds (wisp#114,
+smashcraft#394) (wisp:docs/testing.md, "Test cost").
 
 Main stays green. Each CI run on main opens, updates or closes the one
 "main is red" issue, which lists the failing tests and the first failing

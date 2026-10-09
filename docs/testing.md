@@ -62,27 +62,34 @@ A plain `bun test` still runs timing tests like any other test.
 
 ## Test cost
 
-One test may use at most 4 s of CPU (`TEST_CEILING_S` in
-[testCost](../scripts/wisp/testCost.ts), wisp:scripts/wisp/testCost.ts):
-its process's user plus system time, plus the Lua32, compiler and other
-children it waited for. The runner preloads
-[testCostPreload](../scripts/wisp/testCostPreload.ts)
-(wisp:scripts/wisp/testCostPreload.ts), which charges each test's CPU to its
-file. Time outside tests (loading, `beforeAll`) is charged to the file too.
+A test's cost is counted in deterministic quantities, never CPU seconds
+([testCost](../scripts/wisp/testCost.ts), wisp:scripts/wisp/testCost.ts):
 
-- A test over the ceiling fails:
-  `test/x.test.ts: this test used 5.02 s CPU, over the 4 s ceiling per test; shrink it or move it to the farm`.
-- A ceiling verdict reached above 30% CPU pressure is inconclusive (exit 75).
-  A preload-only run has no way to report that exit, so it fails rather than passing a budget miss.
-- No file's CPU is compared with a baseline. CPU seconds vary with the runner,
-  not the code (wisp#114, smashcraft#394), so CI cost gates measure
-  deterministic quantities only, and CPU and wall-clock budgets are judged
-  only in timing tests and exclusive-lease perf measurements.
-- Every run prints the five heaviest tests and the suite's CPU, test count
-  and CPU per test, without gating them:
+- Lua32 instructions its Lua children run, at most 280M per test (4 s at the
+  reference runner's 70M per second). The runner preloads
+  [testCostPreload](../scripts/wisp/testCostPreload.ts)
+  (wisp:scripts/wisp/testCostPreload.ts), which points `LUA` and
+  `TOWARD_ZERO_LUA` at wrappers that count instructions in millions with a
+  count hook. A child that sets its own hook stops its count.
+- Headless client frames it steps, at most 80,000 per test (about 4 s on a
+  farm runner at the suite's heaviest frame rate).
+- TypeScript compilation has no deterministic counter: GitHub's farm runners
+  refuse `perf_event_open` (perf_event_paranoid 4), so compile-heavy tests
+  are bounded only by the 60 s hang timeout (`TEST_TIMEOUT_MS` in
+  wisp:scripts/wisp/testRunner.ts).
+
+Time outside tests (loading, `beforeAll`) is charged to the file.
+
+- A test over a ceiling fails:
+  `test/x.test.ts: this test stepped 90000 headless frames, over the 80000-frame ceiling per test; shrink it or move it to the farm`.
+- No file's cost is compared with a baseline, and CPU and wall-clock budgets
+  are judged only in timing tests and exclusive-lease perf measurements
+  (wisp#114, smashcraft#394).
+- Every run prints the five heaviest tests by CPU, Lua32 instructions and
+  frames, and the suite's CPU, test count and CPU per test, without gating CPU:
 
 ```
-suite CPU: 30.8 s for 261 tests; 0.118 s per test
+suite CPU: 14.7 s for 238 tests; 0.062 s per test (reported, not gated)
 ```
 
 A test that would come near the ceiling, typically one that compiles a
@@ -90,7 +97,7 @@ fixture to 32-bit Lua, is a farm test: declare it with `farmTest` from
 [farmTest](../scripts/wisp/farmTest.ts) (wisp:scripts/wisp/farmTest.ts)
 instead of `test`. `bun run test` skips it; CI's farm-tests job and every
 `bun wisp farm test` shard run it on each push, so it keeps its coverage.
-The ceiling doesn't apply to it. Keep its cheap Bun-side twin in the suite.
+The ceilings don't apply to it. Keep its cheap Bun-side twin in the suite.
 Each farm shard runs the suite files with `bun run test`,
 then its farm tests with `bun test --preload ./scripts/wisp/testCostPreload.ts`.
 Farm tests keep their coverage outside the suite's ceiling.
@@ -100,7 +107,7 @@ Farm tests keep their coverage outside the suite's ceiling.
 Every run ends with the machine's CPU pressure during the run:
 
 ```
-CPU pressure during this run: average 12%, peak some avg10 31% (timing tests count as inconclusive above 30%)
+CPU pressure during this run: average 12%, peak some avg10 31% (timing verdicts count as inconclusive above 30%)
 ```
 
 The run exits 0 when everything passed and 1 on any failure. It exits 75 when

@@ -9,6 +9,7 @@
 import { errorFile, FILE_IO_ABILITY } from "../runtime/gameFiles";
 import { addFloat32, addFloat32TowardZero, divideFloat32, multiplyFloat32TowardZero, roundToFloat32, subtractFloat32, subtractFloat32TowardZero } from "../sim/binary32";
 import { f32 } from "../sim/f32";
+import { steppedFrames } from "./frameCount";
 import { advanceAnimation, type AnimationBlend, type AnimationState, freshAnimation, seekAnimation, selectAnimation } from "./animation";
 import type { FrameTemplate } from "./frames";
 import type { NativeDeclarations } from "./declarations";
@@ -1529,6 +1530,7 @@ export class HeadlessClient {
 
   step(draw = true): void {
     this.frame++;
+    steppedFrames.count++;
 
     this.abilities.tick(f32(1 / FRAMES_PER_SECOND));
     this.scenery.tick(f32(1 / FRAMES_PER_SECOND));

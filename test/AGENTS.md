@@ -14,7 +14,7 @@
 - Scope checks observe exit and owned child cleanup; kill only the fixture's
   exact marked descendants. Never start a real signed-in or offline game here.
 - Full suites, Lua32 compilation and render sweeps run on the farm. Keep the
-  4 CPU second ceiling and 25% file-cost gate in `AGENTS.md` unchanged.
+  per-test instruction and frame ceilings and 25% file-cost gate in `AGENTS.md` unchanged.
 - Melee numerical facts may be external fixtures. ISO images, extracted game
   files, proprietary assets and account data stay outside this repository.
 - Every test is one of five kinds; new titles name it first: `[scenario]`,
