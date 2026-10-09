@@ -1,5 +1,5 @@
-// wisp#56: the timer rules of wisp:docs/warsmash-notes.md#timers-and-frame-stepping,
-// one row each, in Bun and in the same fixture compiled to 32-bit Lua.
+
+
 import { afterAll, expect, test } from "bun:test";
 import { join } from "node:path";
 import { mapCompiler, report } from "../scripts/compiler";

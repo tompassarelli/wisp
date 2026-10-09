@@ -37,7 +37,7 @@ test("[invariant] timed capture brackets the framebuffer producer on the supplie
 test("[invariant] cancelling a stalled framebuffer read stops and reaps its exact child", async () => {
   const pidFile = join(folder, "pid");
   const pending = capture(client("stalled", `await Bun.write(${JSON.stringify(pidFile)}, String(process.pid)); await Bun.sleep(600000);`));
-  // Cancelled once the child has started, however long that takes.
+
   const started = Effect.promise(async () => {
     while (!existsSync(pidFile) || readFileSync(pidFile, "utf8") === "") await Bun.sleep(10);
   });

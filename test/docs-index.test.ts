@@ -22,8 +22,8 @@ test("[spec docs/cli.md] the vocabulary gate rejects undeclared nouns, flags and
   ]);
 });
 
-// A command isn't done until the feature index lists it: future agents and
-// map authors find Wisp's commands there, not by reading scripts/wisp/commands/.
+
+
 test("[spec AGENTS.md] every command in scripts/wisp/commands has an entry in docs/index.md", async () => {
   const index = await Bun.file(join(root, "docs/index.md")).text();
   const commands = await commandNames();
@@ -32,8 +32,8 @@ test("[spec AGENTS.md] every command in scripts/wisp/commands has an entry in do
   expect(unlisted, "add a row to docs/index.md naming `wisp NAME` or linking scripts/wisp/commands/NAME.ts, with a how-it-works page").toEqual([]);
 });
 
-// A command with its own page (docs/NAME.md) documents every subcommand its
-// dispatch accepts there, as `wisp NAME SUB` or within `wisp NAME a|SUB|b`.
+
+
 test("[spec AGENTS.md] every subcommand of a command with its own page appears on that page", async () => {
   const unlisted: string[] = [];
   let checked = 0;
@@ -47,7 +47,7 @@ test("[spec AGENTS.md] every subcommand of a command with its own page appears o
       if (!new RegExp(`wisp ${name} ([\\w-]+\\|)*${sub}(?![\\w-])`).test(text)) unlisted.push(`wisp ${name} ${sub}`);
     }
   }
-  // Guards the pattern: engine's dispatch alone has five subcommands.
+
   expect(checked).toBeGreaterThanOrEqual(5);
   expect(unlisted, "document each subcommand on its command's page in docs/").toEqual([]);
 });

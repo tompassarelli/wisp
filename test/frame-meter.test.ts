@@ -1,6 +1,6 @@
-// The frame meter (wisp:src/platform/frameMeter.ts) in 32-bit Lua: the
-// fixture map (test/frameMeter/entry.ts) plays in two simulated clients, and
-// the host reads what they write.
+
+
+
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -39,8 +39,8 @@ farmTest("[invariant] both clients measure the same frames: no desync, equal rep
   expect(reports[1]?.before.natives).toEqual(reports[0]?.before.natives);
   const run = parsePerfRun(lines.slice(lines.findIndex((line) => line.startsWith("frames "))).join("\n"));
   const [p0, p1] = [run.clients.get(0), run.clients.get(1)];
-  // Frame 0 (start) includes the frame meter's clock probe, which reads os.clock until it changes twice:
-  // its instruction count follows the wall clock, so only the frames after it must match.
+
+
   const frameInstructions = (values: PerfRun["clients"] extends ReadonlyMap<number, infer V> ? V | undefined : never) => ({ ...values?.instructions, start: undefined });
   expect(frameInstructions(p0)).toEqual(frameInstructions(p1));
   expect(p0?.natives).toEqual(p1?.natives ?? {});

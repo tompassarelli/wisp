@@ -1,6 +1,6 @@
-// wisp:scripts/wisp/farm.ts's scratch branch, checked through `bun wisp farm
-// test` with stand-in `gh` and `safe-push` programs on PATH: once created on
-// origin it is deleted whatever fails after it.
+
+
+
 import { expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 
 const wispEntry = resolve(import.meta.dir, "../scripts/wisp/repo.ts");
 
-/** A stand-in program named `name` in `bin`, written in JavaScript and run by this Bun. */
+
 const stub = (bin: string, name: string, body: string) => {
   const path = join(bin, name);
   writeFileSync(path, `#!${process.execPath}\nconst { appendFileSync, writeFileSync } = require("node:fs");\nconst { execFileSync } = require("node:child_process");\nconst args = process.argv.slice(2);\n${body}\n`);

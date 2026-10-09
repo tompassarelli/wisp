@@ -1,9 +1,9 @@
-// Hot reload by module in 32-bit Lua's headless runtime: two simulated
-// clients of a compiled fixture map take its versions as the host publishes
-// them, in full or as deltas, and must end with the same modules, state and
-// native calls whichever way each client loaded them. Damaged or broken
-// versions are refused in every client. Fails with the first broken contract.
-// Usage: lua modules.lua MAP_LUA WARCRAFT_D_TS V1 V2 V3, each version a full payload.
+
+
+
+
+
+
 import type { Lockstep } from "../../src/headless/lockstep";
 import { luaLockstep } from "../../src/headless/lua";
 import { ackFile, deltaFile, payloadFile } from "../../src/runtime/gameFiles";
@@ -38,7 +38,7 @@ const versions = [moduleSet(read(arg[3])), moduleSet(read(arg[4])), moduleSet(re
 const [v1, v2, v3] = versions;
 if (v1 === undefined || v2 === undefined || v3 === undefined) throw "three versions";
 
-/** What the reloader keeps in a client's globals. */
+
 interface HotView {
   applied: number;
   state?: string;
@@ -51,7 +51,7 @@ function hot(clients: Lockstep, index: number): HotView {
   return view as HotView;
 }
 
-/** A client's installed modules, as sorted "name hash" lines. */
+
 function installed(clients: Lockstep, index: number): string {
   const lines: string[] = [];
   const modules = hot(clients, index).modules ?? {};
@@ -59,7 +59,7 @@ function installed(clients: Lockstep, index: number): string {
   return lines.sort().join("\n");
 }
 
-/** Which of the latest version's payloads a client read. */
+
 function readPayload(clients: Lockstep, index: number): string {
   const files = clients.files;
   const client = clients.clients[index];
@@ -78,7 +78,7 @@ function started(): Lockstep {
   return clients;
 }
 
-/** Publishes a version and runs the frames that every client needs to find, answer and decide it. */
+
 function reload(clients: Lockstep, modules: ModuleSet): void {
   clients.reload(modules);
   clients.frames(6);
@@ -105,7 +105,7 @@ function applied(clients: Lockstep, scenario: string, version: number, path: str
   check(acknowledgements[0] === acknowledgements[1], `${scenario}: installed on different frames: ${acknowledgements.join(" / ")}`);
 }
 
-// Incremental: the first version after the map's own bundle is read in full, every later one as a delta.
+
 const incremental = started();
 reload(incremental, v1);
 applied(incremental, "incremental", 1, "full");
@@ -117,7 +117,7 @@ applied(incremental, "incremental", 3, "delta");
 const renamed = incremental.files;
 agree(incremental, "incremental");
 
-// Full: the last version read in full by clients that never ran the others ends in the same modules and state.
+
 const full = started();
 reload(full, v3);
 applied(full, "full", 1, "full");
@@ -125,7 +125,7 @@ agree(full, "full");
 check(installed(full, 0) === installed(incremental, 0), "full and incremental reloads installed different modules");
 check(hot(full, 0).state === hot(incremental, 0).state, "full and incremental reloads ended in different states");
 
-// Mixed: a client that lost its base reads the full payload while the other reads the delta; both install on one frame.
+
 const mixed = started();
 reload(mixed, v1);
 delete hot(mixed, 1).modules;
@@ -135,7 +135,7 @@ check(mixed.unappliedReloads().length === 0, `mixed: ${mixed.unappliedReloads().
 agree(mixed, "mixed");
 check(hot(mixed, 0).state === mixed.files?.manifest.state, "mixed: the clients don't run the version's state");
 
-// Mismatch: one byte of a module in one client's delta disagrees with its hash, so no client installs the version.
+
 const mismatch = started();
 reload(mismatch, v1);
 const before = hot(mismatch, 0).state;
@@ -156,7 +156,7 @@ check(lastMessage(1).startsWith("hot reload 2 not applied: module ") && lastMess
 check(hot(mismatch, 0).state === before && hot(mismatch, 1).state === before, "mismatch: a client left the installed state");
 agree(mismatch, "mismatch");
 
-// Missing: a version whose entry requires a module it doesn't hold is refused everywhere.
+
 const missing = started();
 reload(missing, v1);
 const kept = v3.modules.filter(({ name }) => !name.endsWith("caption"));

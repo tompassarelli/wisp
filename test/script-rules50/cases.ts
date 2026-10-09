@@ -1,10 +1,10 @@
 import { f32 } from "../../src/sim/f32";
 
-/**
- * Script rules Smashcraft relies on outside #56–#61's families: number and
- * text conversions, player slots, frame reads, and synchronized messages with
- * the triggers that receive them (wisp#50).
- */
+
+
+
+
+
 
 const list = (values: readonly string[]) => values.join(",");
 const scaled = (value: number) => `${Math.floor(value * 128)}`;
@@ -25,7 +25,7 @@ function slotState(player: player): string {
   return "other";
 }
 
-/** Rows read at once, the same on every client. */
+
 export function immediateCases(this: void): string[] {
   const rows: string[] = [];
   rows.push(`r2s=${list([R2S(1), R2S(f32(0.1)), R2S(-1.5), R2S(f32(123456.789)), R2S(0)])}`);
@@ -58,16 +58,16 @@ export function immediateCases(this: void): string[] {
   return rows;
 }
 
-/** Data lengths around Warcraft's documented limit of about 255 bytes for prefix and data together. */
+
 export const SYNC_LENGTHS = [200, 251, 252, 300];
 const SYNC_PREFIX = "sr50";
 const SYNC_LONG_PREFIX = "sr5L";
 const SYNC_DESTROY_PREFIX = "sr5D";
 
-/**
- * Each client sends the same messages 0.25 s in; the rows, written 2 s in,
- * list what every client received from each sender in arrival order.
- */
+
+
+
+
 export function syncCases(this: void, done: (this: void, rows: readonly string[]) => void): void {
   const received: string[][] = [[], []];
   const lengths: string[][] = [[], []];

@@ -7,7 +7,7 @@ const table = (sequences: readonly RulerSequence[]): AnimationSequence[] =>
 const RULER_TABLE = table(RULER_SEQUENCES);
 const CLIP_TABLE = table(CLIP_SEQUENCES);
 
-/** Where a sample puts the needle: no sequence leaves every track at its default, the ruler's origin. */
+
 function needle(sequences: readonly RulerSequence[], sample: SequenceSample): [number, number] {
   const sequence = sequences[sample.sequence];
   if (sequence === undefined) return [0, 0];
@@ -20,13 +20,13 @@ const saved = (pose: EffectPose | UnitPose): SavedAnimation => ({
 
 const round = (value: number) => Math.floor(value + 0.5);
 
-/**
- * One case's row, as a screenshot measures it from the drawn origin square
- * with the model stretched by `scale` along X and Y: the needle's X and Y
- * offsets, and the global marker's X less its offset at frame 0, in world
- * units. Unstretched, these are the needle's offsets and half the global
- * frame.
- */
+
+
+
+
+
+
+
 function row(name: string, pose: EffectPose | UnitPose, kind: "effect" | "unit", clip: boolean, scale: readonly [number, number]): string {
   const sequences = clip ? CLIP_SEQUENCES : RULER_SEQUENCES;
   const samples = clip ? CLIP_TABLE : RULER_TABLE;
@@ -42,13 +42,13 @@ function row(name: string, pose: EffectPose | UnitPose, kind: "effect" | "unit",
   return `${name}=${round(dx * scale[0])},${round((dy - ORIGIN_DY) * scale[1] + ORIGIN_DY)},${round(gx * scale[0] - CLOCK_DX)}`;
 }
 
-/** What the headless rules show on every ruler, found by its model and origin, in SLOTS order. */
+
 export function animationRows(effects: readonly EffectPose[], units: readonly UnitPose[]): string[] {
   const rows: string[] = [];
   for (const slot of SLOTS) {
     const effect = effects.find((pose) => (pose.model === RULER || pose.model === CLIP) && pose.x === slot.x && pose.y === slot.y);
     const unit = units.find((pose) => pose.typeId === RULER_UNIT && pose.x === slot.x && pose.y === slot.y);
-    // An effect at scale 0 draws nothing.
+
     if (effect !== undefined && effect.scale === 0) rows.push(`${slot.name}=gone`);
     else if (effect !== undefined) {
       const stretch: [number, number] = [effect.scale * effect.matrixScale[0], effect.scale * effect.matrixScale[1]];

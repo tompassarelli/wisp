@@ -1,17 +1,17 @@
-// Frame cost in 32-bit Lua (wisp:docs/frame-cost.md): the map's compiled
-// bundle plays in simulated clients, as runLuaJourney does, and each client's
-// frames are measured: Lua instructions, Lua time, calls to Warcraft's
-// functions, memory allocated and text typed, and from them the frame's
-// predicted cost in Warcraft (nativeCost.ts). Instructions are what CI
-// compares: the same code and journey count the same instructions on every run.
-//
-// While a client runs, a count hook on the main thread counts every HOOK_STEP
-// instructions, restarted at each run, so a run counts its instructions
-// rounded down to a multiple of HOOK_STEP. The emulated functions run on a
-// coroutine of their own without the hook, so neither their instructions,
-// their time nor their allocations are the map's. The collector stops while a
-// client runs, so Lua time holds none of its work and the memory counted is
-// what the map allocated; between runs it collects once the heap has grown.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import { type ClientScope, type HeadlessClient } from "./client";
 import { parseNativeDeclarations } from "./declarations";
 import { type Journey, type JourneyResult, journeyLines, journeyProblems, runJourney } from "./journey";
@@ -21,15 +21,15 @@ import { type NativeCostModel, WARCRAFT_COST, nativeFrameCost } from "./nativeCo
 import { f32 } from "../sim/f32";
 import { floorDiv, floorMod } from "../sim/intMath";
 
-/** Instructions between the hook's counts: each run of a client counts its instructions rounded down to a multiple of this. */
+
 export const HOOK_STEP = 100;
 
-/** Kilobytes the heap may grow by between full collections, outside the measured runs. */
+
 const COLLECT_EVERY_KB = 16384;
 
 type Native = (this: void, ...args: unknown[]) => unknown;
 
-/** One client's values per frame; index 0 is its start. */
+
 interface ClientCost {
   readonly slot: number;
   readonly instructions: number[];
@@ -38,32 +38,32 @@ interface ClientCost {
   readonly allocatedKb: number[];
   readonly typed: number[];
   calls: number;
-  /** Kilobytes the emulated natives allocated, which are not the map's. */
+
   nativeKb: number;
 }
 
-/** What a game's own driver tells the measurement while it plays the clients. */
+
 export interface PerfMeasure {
-  /** `characters` were typed into `slot`'s edit box before the next frame. */
+
   typed(this: void, slot: number, characters: number): void;
-  /** Counts frames from the next one on, such as a match's first frame after its menus. */
+
   begin(this: void): void;
 }
 
 export interface LuaPerfOptions {
-  /** The model the predicted lines use; Warcraft's measured one by default. */
+
   readonly model?: NativeCostModel;
-  /** Also print every client's every frame, `frame F pSLOT ...`, to calibrate a model. */
+
   readonly samples?: boolean;
-  /** When synchronized messages arrive, such as Warcraft's measured latency; before the next frame without it. */
+
   readonly delivery?: SyncDelivery;
 }
 
-/**
- * Runs the native it is resumed with on the arguments after it, yields the
- * result and serves the next call it is resumed with; tail calls keep it one
- * frame deep. Varargs pass every argument, nil ones included.
- */
+// Varargs retain nil arguments; tail calls keep the native coroutine one frame deep.
+
+
+
+
 const serve = (...call: unknown[]): unknown => {
   const [native] = select(1, ...call);
   return serve(...coroutine.yield((native as Native)(...select(2, ...call))));
@@ -81,10 +81,10 @@ const add = (values: number[], index: number, amount: number) => {
   values[index] = (values[index] ?? 0) + amount;
 };
 
-/** A value to the nearest whole number: binary32 has too few digits for a frame's hundredths of a million instructions. */
+
 const whole = (value: number) => `${Math.floor(value + 0.5)}`;
 
-/** The value at a share of the sorted values, nearest rank. */
+
 function rank(sorted: readonly number[], share: number): number {
   if (sorted.length === 0) return 0;
   const index = Math.max(0, Math.min(sorted.length - 1, Math.ceil(share * sorted.length) - 1));
@@ -124,11 +124,11 @@ function costLines(cost: ClientCost, first: number, last: number, model: NativeC
   return named.map(([name, values]) => valueLine(cost.slot, name, values, first, last));
 }
 
-/**
- * Measures every client's frames while `play` drives the clients of the
- * bundle and declarations at these paths, prints the result as `wisp perf`
- * reads it and returns how many problems `play` found.
- */
+
+
+
+
+
 export function runLuaPerfWith(
   map: LuaHeadlessMap,
   bundlePath: string,
@@ -148,7 +148,7 @@ export function runLuaPerfWith(
   let thread = nativeThread();
   let entered = { fired: 0, seconds: 0, natives: 0, calls: 0, kb: 0, nativeKb: 0 };
   let collectedKb = collectgarbage("count");
-  /** The full collections between runs: their time and the kilobytes they freed. */
+
   const collector = { us: 0, kb: 0 };
   let clients: Lockstep | undefined;
   const scope: ClientScope = {
@@ -163,7 +163,7 @@ export function runLuaPerfWith(
       }
       collectgarbage("stop");
       const cost = costs.get(client);
-      // Restarting the count makes each run's count its own instructions, whatever ran before it.
+
       debug.sethook(count, "", HOOK_STEP);
       entered = { fired, seconds: os.clock(), natives: nativeSeconds, calls: cost?.calls ?? 0, kb: collectgarbage("count"), nativeKb: cost?.nativeKb ?? 0 };
     },
@@ -183,7 +183,7 @@ export function runLuaPerfWith(
   };
   const counted = (cost: ClientCost, native: Native): Native => (...args: unknown[]) => {
     cost.calls++;
-    // A native that runs map code, which calls another, runs it where it is.
+
     if (depth > 0) return native(...args);
     depth++;
     const started = os.clock();
@@ -210,7 +210,7 @@ export function runLuaPerfWith(
       if (typeof native === "function") client.natives[name] = counted(cost, native as Native);
     }
   }
-  /** The first frame the summaries count. */
+
   let first = 1;
   const measure: PerfMeasure = {
     begin: () => {
@@ -218,7 +218,7 @@ export function runLuaPerfWith(
     },
     typed: (slot, characters) => {
       const cost = bySlot.get(slot);
-      // Text typed now reaches the client before its next frame.
+
       if (cost !== undefined) add(cost.typed, lockstep.frame + 1, characters);
     },
   };
@@ -230,7 +230,7 @@ export function runLuaPerfWith(
     collectgarbage("restart");
   }
   print(`frames ${lockstep.frame - first + 1} step ${HOOK_STEP} problems ${result.problems}`);
-  // The collections between runs, all clients' garbage: this host's collector time per kilobyte.
+
   print(`collector us=${whole(collector.us)} kb=${whole(collector.kb)}`);
   const model = options.model ?? WARCRAFT_COST;
   for (const cost of costs.values()) for (const line of costLines(cost, first, lockstep.frame, model)) print(line);
@@ -245,11 +245,11 @@ export function runLuaPerfWith(
   return result.problems;
 }
 
-/**
- * Plays `journey` with the bundle and declarations at these paths, measuring
- * every client's frames, prints the result as `wisp perf` reads it and
- * returns how many problems the journey found.
- */
+
+
+
+
+
 export function runLuaPerf(map: LuaHeadlessMap, journey: Journey, bundlePath: string, declarationsPath: string, options: LuaPerfOptions = {}): number {
   return runLuaPerfWith(map, bundlePath, declarationsPath, (clients) => {
     const result: JourneyResult = runJourney(clients, journey, { checksums: false });

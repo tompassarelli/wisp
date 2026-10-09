@@ -7,7 +7,7 @@ import { decodeDoodads } from "../scripts/wisp/doodads";
 import { renderScenes, sceneWithUnits, type RenderScene } from "../scripts/wisp/headlessRender";
 import { farmTest } from "../scripts/wisp/farmTest";
 
-/** Authored placements following WC3MapSpecification/Doodads/8_11.md; no game bytes. */
+// Fixture placements use WC3MapSpecification/Doodads/8_11.md.
 function placements(skinIds = true, visible = true): Uint8Array {
   const bytes: number[] = [];
   const id = (value: string) => bytes.push(...[...value].map((c) => c.charCodeAt(0)));

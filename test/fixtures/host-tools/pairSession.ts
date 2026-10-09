@@ -1,6 +1,6 @@
-// A stand-in for lan/pairSession.ts in host-tools tests: two `sleep 600`
-// clients and a pair agent socket that reports their pids after
-// WISP_TEST_READY_MS; agent.json is unreadable when WISP_TEST_BAD_AGENT is set.
+
+
+
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { agentSocket, clientName, pairDirectory } from "../../../scripts/wisp/lan/pool";

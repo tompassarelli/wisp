@@ -22,7 +22,7 @@ export const EXPECTED = [
   "held-after-quarter-second=96,6144,12288,96,6144,12288",
 ];
 
-/** EffectDeathTime clears playing and frozen effects after five game seconds. */
+
 const DEATH_TIMELINE = [0, 60, 118, 122, 299, 300, 600].flatMap(frame => {
   const drawn = frame < 300 ? "-200 death,200 death" : "";
   return [0, 1].map(slot => `p${slot} drawn@${frame}=${drawn}`);

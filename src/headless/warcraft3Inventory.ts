@@ -10,7 +10,7 @@ export interface Warcraft3ItemFixture {
   readonly pickRandom: boolean;
 }
 
-/** Slots and asset values come from the map's object data, not engine guesses. */
+
 export interface Warcraft3InventoryUnitFixture {
   readonly bagSize: number;
   readonly inventorySize: number;
@@ -27,7 +27,7 @@ export interface Warcraft3InventoryUnitFixture {
 export interface Warcraft3InventoryFixtures {
   readonly items?: Readonly<Record<number, Warcraft3ItemFixture>>;
   readonly units?: Readonly<Record<number, Warcraft3InventoryUnitFixture>>;
-  /** A synchronized map choice; absent means random selection is unsupported. */
+
   readonly chooseRandom?: (this: void, candidates: readonly number[]) => number;
 }
 

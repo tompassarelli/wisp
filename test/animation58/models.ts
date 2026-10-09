@@ -1,7 +1,7 @@
-// The ruler fixture's models as MDL text, compiled to MDX with war3-model,
-// the path Smashcraft's stage models take into the real game. Every surface
-// is a flat, unshaded, unfogged, team-colored square, so a top-down
-// screenshot shows each part as one solid patch of its player color.
+
+
+
+
 import { generateMDX, parseMDL } from "../../vendor/war3-model.mjs";
 import { BOARD, BOARD_EXTENT, CLIP, CLIP_SEQUENCES, CLOCK_DX, CLOCK_DY, GLOBAL_LENGTH, MARK, ORIGIN_DY, ORIGIN_HALF, RULER, RULER_SEQUENCES, type RulerSequence } from "./layout";
 
@@ -21,7 +21,7 @@ interface Quad {
   readonly z: number;
 }
 
-/** A rectangle facing up, drawn from both sides. */
+
 function geoset(quad: Quad, extent: string): string {
   const [x0, y0] = quad.low;
   const [x1, y1] = quad.high;
@@ -43,7 +43,7 @@ interface ModelText {
   readonly name: string;
   readonly quads: readonly Quad[];
   readonly sequences: readonly RulerSequence[];
-  /** Bone 0's translation keys as frame, X and Y; bone 1 follows the global sequence when there is one, and bone 2 stays still. */
+
   readonly needle: readonly (readonly [frame: number, dx: number, dy: number])[];
   readonly globalLength?: number;
 }
@@ -84,7 +84,7 @@ ${clock}PivotPoints ${bones} { ${Array.from({ length: bones }, () => "{ 0, 0, 0 
 
 const square = (bone: number, x: number, y: number, half: number, z: number): Quad => ({ bone, low: [x - half, y - half], high: [x + half, y + half], z });
 
-/** Each sequence's needle keys at their model frames: its offsets along X, its lane along Y. */
+
 function needleKeys(sequences: readonly RulerSequence[]): [number, number, number][] {
   return sequences.flatMap((sequence) => sequence.keys.map(([offset, dx]): [number, number, number] => [sequence.start + offset, dx, sequence.lane]));
 }
@@ -96,16 +96,16 @@ function ruler(name: string, sequences: readonly RulerSequence[]): string {
 
 const STILL: readonly RulerSequence[] = [{ name: "Stand", start: 0, end: 1000, looping: true, lane: 0, keys: [] }];
 
-/** Every model the fixture imports, by its path in the map, as MDL text. */
+
 export const FIXTURE_MDL: Readonly<Record<string, string>> = {
   [RULER]: ruler("Wisp58Ruler", RULER_SEQUENCES),
   [CLIP]: ruler("Wisp58Clip", CLIP_SEQUENCES),
   [MARK]: mdl({ name: "Wisp58Mark", quads: [square(0, 0, 0, 6, 4)], sequences: STILL, needle: [] }),
-  // Under every ruler of both columns, so the screenshot reads them against one dark color.
+
   [BOARD]: mdl({ name: "Wisp58Board", quads: [{ bone: 0, ...BOARD_EXTENT, z: 1 }], sequences: STILL, needle: [] }),
 };
 
-/** The compiled models, by their path in the map. */
+
 export function fixtureModels(): Map<string, Uint8Array> {
   return new Map(Object.entries(FIXTURE_MDL).map(([path, text]) => [path, new Uint8Array(generateMDX(parseMDL(text)))]));
 }

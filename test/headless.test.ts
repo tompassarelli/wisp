@@ -1,7 +1,7 @@
-// What the headless runtime reports: a call one client makes alone, an error
-// report, a reload no client runs, and what a player would see wrong. The
-// sample's test (examples/sample/test/headless.test.ts) plays a passing
-// journey in Bun and 32-bit Lua.
+
+
+
+
 import { afterAll, expect, test } from "bun:test";
 import { join } from "node:path";
 import { Cause, Effect, Exit } from "effect";
@@ -20,7 +20,7 @@ afterAll(runtime.restore);
 
 const configure = () => configureRuntime({ filePrefix: "fixture", readyPrefix: "FX_HRR", globalPrefix: "__fixture" });
 
-/** A map whose every frame handler is `frame`, run by a periodic timer. */
+
 const everyFrame = (frame: () => void) => ({
   start: () => {
     configure();
@@ -35,7 +35,7 @@ test("a call one client makes alone is the desync, shown with the calls before i
   const clients = runtime.clients(everyFrame(() => {
     const slot = GetPlayerId(GetLocalPlayer());
     BlzFrameSetText(BlzGetFrameByName("Score", 0), `${slot}`);
-    // Match state lives in a global: module locals are shared by every client.
+
     globalThis.__fixtureFrame = (globalThis.__fixtureFrame ?? 0) + 1;
     SetUnitX(CreateUnit(Player(0), 0x68666f6f, 0.0, 0.0, 0.0), 10);
     if (globalThis.__fixtureFrame === 7 && slot === 1) CreateTimer();
@@ -153,7 +153,7 @@ test("the report lists an error report, a reload no client runs and what a playe
   expect(lines.some((line) => line.includes("headless.test.ts"))).toBe(true);
   expect(lines).toContain("p0 would see no stage under the fighters: 0 of the 1 stage deck pieces a match needs are drawn (models Deck.mdx)");
   expect(lines).toContain("p1 would see a spark stayed in view for 0.50 s; it should be gone within 0.10 s (model Spark.mdx: 30 frames without a break, lifetime 6; now 1 of 1 in view, 1 drawn)");
-  // Two unapplied reloads, two error reports, two scene problems per client.
+
   expect(problems).toBe(8);
 });
 
@@ -175,7 +175,7 @@ test("a map that turns error text off shows no report, while its error file and 
     clients.frames(10);
     return clients.clients;
   };
-  // Unconfigured, as before: shown, and the handler fails every frame but is reported once.
+
   for (const client of [...play(), ...play(true)]) {
     expect(client.messages).toEqual(["error in fixture.frame: Error: boom"]);
     expect(client.errors).toEqual(["error in fixture.frame: Error: boom"]);
@@ -232,9 +232,9 @@ test("with a delivery, a sync message reaches every client on its arrival frame,
       return frame;
     });
   };
-  // At once: after the sending frame's callbacks, before the next frame's.
+
   expect(received()).toEqual([5, 5]);
-  // Measured latency: some frames later, on the same frame in both clients.
+
   const later = received(syncDelivery(MEASURED_BATTLE_NET, 1));
   expect(later[0]).toBe(later[1] ?? -1);
   expect(later[0] ?? 0).toBeGreaterThanOrEqual(5 + 4);

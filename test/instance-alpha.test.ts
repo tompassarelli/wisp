@@ -9,7 +9,7 @@ import { renderScenes, type DrawnPose, type RenderScene } from "../scripts/wisp/
 import { farmTest } from "../scripts/wisp/farmTest";
 import { decodePng } from "./animation58/read";
 
-// Authored square and solid textures; no installed game bytes enter this fixture.
+
 const SQUARE = `Version { FormatVersion 800, }
 Model "AlphaSquare" { BlendTime 0, MinimumExtent { -40, -40, 0 }, MaximumExtent { 40, 40, 0 }, BoundsRadius 60, }
 Sequences 1 { Anim "Stand" { Interval { 0, 1000 }, MinimumExtent { -40, -40, 0 }, MaximumExtent { 40, 40, 0 }, BoundsRadius 60, } }

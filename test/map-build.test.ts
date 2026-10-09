@@ -73,7 +73,7 @@ test("[repro dafb85c] a map stages in a file of its own process, writable even f
 test("[invariant] interrupting a map step stops its child process", async () => {
   const directory = mkdtempSync(join(tmpdir(), "wisp-process-"));
   const pidFile = join(directory, "pid");
-  // Interrupted once the child has started, however long that takes.
+
   const started = Effect.promise(async () => {
     while (!existsSync(pidFile) || readFileSync(pidFile, "utf8").trim() === "") await Bun.sleep(10);
   });

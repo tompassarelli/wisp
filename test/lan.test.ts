@@ -72,7 +72,7 @@ describe("host, replaying two recorded offline clients", () => {
     players: [0, 1, 2, 3].map((id) => ({ id, controller: 1, race: 1 })), forces: [15],
   };
   const until = async (done: () => boolean, what: string) => {
-    // A bound for a hang only: a busy machine may take many times longer than 2 s.
+
     const deadline = performance.now() + 60_000;
     while (!done() && performance.now() < deadline) await Bun.sleep(5);
     if (!done()) throw new Error(`timed out waiting for ${what}`);
@@ -93,7 +93,7 @@ describe("host, replaying two recorded offline clients", () => {
       const sockets = await Promise.all([0, 1].map(() => Bun.connect({ hostname: "127.0.0.1", port: host.port, socket: { data: () => {} } })));
       const send = (client: number, packet: Uint8Array) => sockets[client]?.write(packet);
       const kind = (packet: Uint8Array) => packet[1];
-      // Lobby: joins, map sizes, profile echoes; then loading.
+
       for (const { client, packet } of fixture.filter(({ packet }) => kind(packet) !== PACKET.GameLoadedSelf && kind(packet) !== PACKET.OutgoingAction && kind(packet) !== PACKET.OutgoingKeepAlive && kind(packet) !== PACKET.ChatToHost)) {
         send(client, packet);
         if (kind(packet) === PACKET.ReqJoin) await until(() => host.status().players.filter(({ connected }) => connected).length === client + 1, "a join");
@@ -105,7 +105,7 @@ describe("host, replaying two recorded offline clients", () => {
       announcements.send("closed?", discoveryPort, "127.0.0.1");
       await until(() => discoveryClosed, "the retired discovery socket");
       expect(discoveryClosed).toBe(true);
-      // The game: every recorded action and chat, then each client's keepalives, which agree.
+
       for (const { client, packet } of fixture.filter(({ packet }) => kind(packet) === PACKET.OutgoingAction || kind(packet) === PACKET.ChatToHost)) send(client, packet);
       for (const { client, packet } of fixture.filter(({ packet }) => kind(packet) === PACKET.OutgoingKeepAlive)) send(client, packet);
       await until(() => lines.some((line) => / turn \d+ lan0b p2 chat /.test(line)) && host.status().players.every(({ checksums }) => checksums === 100), "the actions and keepalives");
@@ -119,7 +119,7 @@ describe("host, replaying two recorded offline clients", () => {
         "lan0b p2 key object=cbe:cbe event=525113 key=13 meta=0",
       ]);
       expect(lines.some((line) => line.endsWith('chat lan0b p2 "-dev quick"'))).toBe(true);
-      // A keepalive whose checksum differs is a desync, named by its turn.
+
       send(0, encodePacket(PACKET.OutgoingKeepAlive, new Writer().u8(0).u32(1).bytes()));
       send(1, encodePacket(PACKET.OutgoingKeepAlive, new Writer().u8(0).u32(2).bytes()));
       await until(() => host.status().desyncs === 1, "the desync");

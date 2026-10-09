@@ -1,6 +1,6 @@
-// `wisp accept` against a fake pair of clients whose War3Log is the 6 Oct
-// recording in fixtures/war3log of a map loaded during the ladder scan
-// (loadfile-scan-mid-load.txt, import failures; smashcraft#73).
+
+
+
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,7 +15,7 @@ const suite: AcceptSuite = {
   checks: [{ id: "73-load", closes: "game#73 box 2", map: "primary", pass: [{ kind: "log", pattern: "^model creation failed - war3mapImported", since: "session", max: 0 }] }],
 };
 
-/** Two fake clients: the start of a map writes the recorded War3Log. */
+
 const fakeClients = () => {
   const recorded = fixture("loadfile-scan-mid-load.txt");
   const signedIn = recorded.slice(0, recorded.lastIndexOf("\n", recorded.indexOf("model creation failed")) + 1);

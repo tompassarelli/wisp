@@ -1,10 +1,10 @@
-// Headless prediction against the native overlay (wisp:scripts/wisp/nativeFit.ts):
-// the pass rule and a fit that finds the costs a synthetic Warcraft used.
+
+
 import { expect, test } from "bun:test";
 import { type FrameWork, WARCRAFT_COST } from "../src/headless/nativeCost";
 import { checkNative, fitNativeCost, overlayWindows, predictedOverlay } from "../scripts/wisp/nativeFit";
 
-/** A match's frames: Lua busier every 7th, natives every 3rd, so the two can be told apart, and an allocation burst every 60th. */
+
 const frames: FrameWork[] = Array.from({ length: 1800 }, (_, frame) => ({
   instructions: 150_000 + (frame % 7 === 0 ? 400_000 : 0) + (frame % 13) * 5_000,
   natives: 140 + (frame % 3 === 0 ? 300 : 0) + (frame % 5) * 4,
@@ -33,7 +33,7 @@ test("[invariant] the fit brings the prediction to a synthetic Warcraft's readin
   const item = { name: "synthetic", frames, readings };
   const before = checkNative(WARCRAFT_COST, item).errors;
   expect(Math.abs(before.median)).toBeGreaterThan(0.05);
-  // Three summaries don't pin two costs exactly on a 1 ms clock; the fit is judged by what it predicts.
+
   const fitted = fitNativeCost(WARCRAFT_COST, [item]);
   const check = checkNative(fitted, item);
   expect(Math.abs(check.errors.median)).toBeLessThan(0.05);

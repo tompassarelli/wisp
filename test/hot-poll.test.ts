@@ -1,8 +1,8 @@
-// How often the map's reloader looks for files in simulated clients: a lookup
-// of a missing file reads a whole folder under Wine, 35 ms for the 94,057 files
-// of a dev client's CustomMapData while the hot folder doesn't exist
-// (wisp:docs/hot-reload.md). The Lua32 contract of the same rates is
-// test/hot-reload-poll.lua.
+
+
+
+
+
 import { afterAll, expect, test } from "bun:test";
 import { installHeadless } from "../scripts/wisp/headless";
 import type { Lockstep } from "../src/headless/lockstep";
@@ -14,9 +14,9 @@ const runtime = installHeadless({ filePrefix: "fixture", globalPrefixes: ["__fix
 afterAll(runtime.restore);
 
 const FRAMES_PER_SECOND = 60;
-/** A 1/32 s periodic timer fires 32 times a game second, some frames twice as often as others. */
+
 const POLLS_PER_SECOND = 32;
-/** Wine's measured cost of one missing-file lookup in a CustomMapData of 94,057 files with no hot folder. */
+
 const WHOLE_FOLDER_SECONDS = 0.035;
 
 const install = () => {
@@ -30,7 +30,7 @@ const reloader = { install, start: () => {
 } };
 
 const missed = (clients: Lockstep) => clients.clients.map((client) => client.missedLookups);
-/** Each client's missing-file lookups while `frames` frames run. */
+
 function lookupsDuring(clients: Lockstep, frames: number): number[] {
   const before = missed(clients);
   clients.frames(frames);
@@ -40,7 +40,7 @@ function lookupsDuring(clients: Lockstep, frames: number): number[] {
 test("[spec docs/hot-reload.md] clients no host has prepared look up at most twice a second, which a whole-folder lookup keeps under 0.07 s per second", () => {
   const clients = runtime.clients(reloader);
   clients.start({ hostFolder: false });
-  // Start looks for the first manifest and the marker, once.
+
   for (const count of missed(clients)) expect(count).toBeLessThanOrEqual(2);
   const seconds = 20;
   for (const lookups of lookupsDuring(clients, seconds * FRAMES_PER_SECOND)) {
@@ -57,7 +57,7 @@ test("[spec docs/hot-reload.md] the host's marker switches clients to a lookup e
   clients.start({ hostFolder: false });
   clients.frames(100);
   clients.prepareHostFolder();
-  // The marker is found within a second of 32 polls.
+
   clients.frames(64);
   const polls = lookupsDuring(clients, FRAMES_PER_SECOND);
   for (const lookups of polls) expect(lookups).toBe(POLLS_PER_SECOND);
@@ -72,7 +72,7 @@ test("[spec docs/hot-reload.md] a reload published to clients that have seen no 
   clients.start({ hostFolder: false });
   clients.frames(100);
   clients.reload();
-  // A second of 32 polls, and the clients' answers.
+
   clients.frames(64 + 3);
   expect(clients.unappliedReloads()).toEqual([]);
   expect(clients.firstDivergence()).toBeUndefined();

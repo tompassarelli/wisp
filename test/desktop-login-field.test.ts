@@ -1,5 +1,5 @@
-// The sign-in field typing doctor uses (desktop.enterLoginField), against
-// xdotool and wlrctl stand-ins that record what they were asked to do.
+
+
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +10,7 @@ import { type Client, enterLoginField } from "../scripts/warcraft/desktop";
 const folder = mkdtempSync(join(tmpdir(), "wisp-login-field-"));
 const sent = join(folder, "sent");
 const tool = join(folder, "tool");
-// The login window, 42, keeps focus; typed bytes are recorded after the arguments.
+
 writeFileSync(tool, `#!/bin/sh\necho "$*" >> "${sent}"\nif [ "$1" = getactivewindow ]; then echo 42; fi\nif [ "$1" = type ]; then cat >> "${sent}"; echo >> "${sent}"; fi\n`);
 chmodSync(tool, 0o755);
 afterAll(() => rmSync(folder, { recursive: true, force: true }));

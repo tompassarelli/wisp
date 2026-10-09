@@ -1,6 +1,6 @@
-// `wisp tune` (wisp:docs/tune.md): finding and writing a tunable's literal,
-// a tuned value in two 32-bit Lua clients of a compiled fixture map
-// (test/tune/headless-lua.ts), and the panel's requests.
+
+
+
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
@@ -49,7 +49,7 @@ test("[reference] a tunable's literal is found through objects and a wrapping ca
   expect(literalText("f32", 3)).toBe("3.0");
   expect(literalText("f32", -0.25)).toBe("-0.25");
   expect(literalText("int", 4)).toBe("4");
-  // The compiler accepts what tune writes: each real is exactly a binary32 value.
+
   for (const value of [0.1, 2.2, 1.85, 123.456, 1e-8]) expect(Math.fround(Number(literalText("f32", value)))).toBe(Number(literalText("f32", value)));
   const speedTunable = TUNABLES[0]!;
   expect(checkValue(speedTunable, 0.6)).toBe(Math.fround(0.6));
@@ -73,7 +73,7 @@ test("[reference] a kept value's diff is its line with three lines of context, a
     " ",
     " export const OFFSET = -1.5;",
   ].join("\n"));
-  // `git apply` takes it as it stands.
+
   mkdirSync(join(root, "build"), { recursive: true });
   const directory = mkdtempSync(join(root, "build/tune-diff-"));
   try {
@@ -123,7 +123,7 @@ export function start(): void {
 }
 `;
 
-/** A version's full payload, as `wisp hot` sends it. */
+
 function payload(bundled: BundledModules): string {
   const modules = bundled.modules.map((module) => ({ name: module.name, text: Buffer.from(moduleChunk(module.code), "utf8").toString("latin1") }));
   const index = moduleIndex(bundled.entry, modules.map(({ name, text }) => [name, textChecksum(moduleHashText(name, text))] as const));
@@ -157,7 +157,7 @@ farmTest("[spec docs/tune.md] a tuned value is compiled in memory, sent as a del
     copyFileSync(join(directory, "out/map.lua"), bundle);
     const written = statSync(join(directory, "out/map.lua")).mtimeMs;
 
-    // Tune's own path, with a reload that only compiles.
+
     let tuned: BundledModules | undefined;
     const reload = HotReload.of({
       publish: Effect.sync(() => {
@@ -173,7 +173,7 @@ farmTest("[spec docs/tune.md] a tuned value is compiled in memory, sent as a del
     expect(applied.version).toBe(1);
     if (tuned === undefined) throw new Error("tune published nothing");
     expect(replacements.get(join(src, "tuning.ts"))).toBe(DECLARATION.replace("scaled(0.5)", "scaled(0.6000000238418579)"));
-    // The source and the bundle on disk stay as they were.
+
     expect(readFileSync(join(src, "tuning.ts"), "utf8")).toBe(DECLARATION);
     expect(statSync(join(directory, "out/map.lua")).mtimeMs).toBe(written);
     const changed = tuned.modules.filter((module) => untuned.modules.find(({ name }) => name === module.name)?.code !== module.code).map(({ name }) => name);

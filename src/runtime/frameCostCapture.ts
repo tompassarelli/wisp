@@ -1,7 +1,7 @@
-// Raw per-callback measurements shared by the native meter and host readers.
+
 import { reportNumber } from "./frameCost";
 
-/** Five minutes at 60 callbacks a second. */
+
 export const MAX_FRAME_COST_CAPTURE = 18000;
 
 export const frameCostCaptureFile = (slot: number, run: number, prefix = "wisp") => `${prefix}-perf-capture-p${slot}-run${run}.txt`;

@@ -15,7 +15,7 @@ import { SourceErrors } from "../scripts/wisp/sourceErrors";
 import { SourceMapGenerator } from "source-map";
 import { toTypeScript } from "../scripts/sourceMaps";
 const fixture = (name: string) => readFileSync(join(import.meta.dir, "fixtures/wisp", name), "utf8");
-/** A compile of an entry module and the modules it requires, each with its code; like the compiler, it keeps an unchanged module's object. */
+
 const compiledObjects = new Map<string, BundledModules["modules"][number]>();
 const compiledModules = (codes: Readonly<Record<string, string>>): BundledModules => ({
   entry: "main",
@@ -26,7 +26,7 @@ const compiledModules = (codes: Readonly<Record<string, string>>): BundledModule
     return module;
   }),
 });
-/** SourceErrors that records each module source map it keeps. */
+
 const keptMaps = (kept: string[]) => SourceErrors.of({
   retain: () => Effect.void,
   retainModule: (key, sourceMap) => Effect.sync(() => {
@@ -89,7 +89,7 @@ test("[invariant] hot reload gives every client its payload before any manifest 
     return yield* Fiber.join(fiber);
   }).pipe(Effect.provide(Layer.merge(hotLayer, TestClock.layer())));
   expect(await Effect.runPromise(clocked)).toBe(1);
-  // The first client to answer makes every other client load at once.
+
   const lastPayload = events.findLastIndex((event) => event.startsWith("payload:"));
   const firstManifest = events.findIndex((event) => event.startsWith("manifest:"));
   expect(firstManifest).toBeGreaterThan(lastPayload);
@@ -124,10 +124,10 @@ test("[repro d20668a] wisp hot creates every client's hot folder marker when it 
   const dependencies = Layer.mergeAll(Layer.succeed(GameFiles, files), Layer.succeed(MapBuild, mapBuild), Layer.succeed(SourceErrors, keptMaps([])));
   const start = () => Effect.runPromise(Effect.scoped(Layer.build(HotReload.layer(directories, "custom").pipe(Layer.provide(dependencies)))));
   await start();
-  // Starting is all it did: no payload, no manifest.
+
   expect(writes).toEqual(directories.map((directory) => `${directory}/custom-hot/host.pld`));
   expect(stored.get(writes[0] ?? "")).toBe(linePreloadFile("host"));
-  // A later run finds the marker and leaves it alone: a client may be reading it.
+
   await start();
   expect(writes).toHaveLength(directories.length);
 });

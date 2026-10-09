@@ -3,7 +3,7 @@ import { failingTests, redIssueBody } from "../scripts/mainRed";
 import { redNotice } from "../scripts/prePush";
 
 test("[spec AGENTS.md] a failed run's log names each failing test once, and a failed step without one by its step", () => {
-  // Lines as `gh run view --log-failed` printed them for run 37725394675 on 8 Oct 2026.
+
   const step = "framework\tRun CC=gcc STORMLIB_PREFIX=/usr bun run test\t2026-10-08T04:00:54.4835028Z ";
   const log = [
     `${step}(pass) perf compare --json reports success and budget failures; text stays readable [15.00ms]`,

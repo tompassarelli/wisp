@@ -6,7 +6,7 @@ export function install(this: void): void {
   configureRuntime({ filePrefix: "native-rules50", readyPrefix: "NR50_HRR", globalPrefix: "__nativeRules50" });
 }
 
-/** Shared fixture: one online capture decides periodic elapsed time, pause/expiry, and equal-deadline order. */
+
 export function timerCases(this: void, done: (this: void, lines: readonly string[]) => void): void {
   const lines: string[] = [];
   const first = CreateTimer();

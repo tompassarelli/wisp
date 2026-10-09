@@ -1,22 +1,22 @@
-// `doctor` against a simulated client: its prefix's processes (the shapes of
-// clients A and B on 6 Oct), its launcher's log (recorded lines in
-// fixtures/doctor), the watch's view and the launcher's launch are fakes. Each
-// known bad state is recovered with its documented recovery, or stops with
-// one plain line.
-//
-// fixtures/doctor (recorded, account ids replaced by zeros):
-//   launcher-played.log            client A's launcher, 6 Oct: signed in, Play, Warcraft III running
-//   launcher-connection-lost.log   client B's launcher, 3 Oct: signed in, then presence updates timing out
-//   launcher-reconnected.log       the same launcher once restarted: its cached login, signed in again
-//   launcher-signed-in-by-hand.log client A's launcher, 6 Oct: its UnifiedAuth account page, password page and sign-in
-//   launcher-login-rejected.log    written from smashcraft:docs/warcraft-authentication.md's record of
-//                                  3 Oct (ERROR_TOKEN_NOT_FOUND (49), then LoginCredential); that log rotated
-//   war3log-buffered-signed-in.txt client B's War3Log.txt, 6 Oct: written 3 s into a session that signed
-//                                  in and played all evening, and nothing since
-//   ../preferences/*.txt           client A's War3Preferences.txt of 6 Oct, trimmed (private-desktop.txt),
-//                                  and the same with the display values a main-display run writes (main-display.txt;
-//                                  those values are constructed from the 6 Oct report, not recorded)
-//   crash-report.txt               client A's Errors/…/Crash.txt of the 6 Oct menus run that crashed loading
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import { Cause, Effect, Exit, Layer, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { expect, test } from "bun:test";
@@ -57,7 +57,7 @@ const LOST = fixture("launcher-connection-lost.log");
 const RECONNECTED = fixture("launcher-reconnected.log");
 const REJECTED = fixture("launcher-login-rejected.log");
 const BY_HAND = fixture("launcher-signed-in-by-hand.log").split("\n");
-/** The launcher's log up to its account page, then up to its password page, then signed in. */
+
 const ACCOUNT_PAGE = BY_HAND.slice(0, 5).join("\n") + "\n";
 const PASSWORD_PAGE = BY_HAND.slice(5, 13).join("\n") + "\n";
 const SIGNED_IN_BY_FORM = BY_HAND.slice(13).join("\n");
@@ -77,7 +77,7 @@ const SERVER = "server-24-2e7a1c";
 const START = ["env", "-i", "DISPLAY=:2", "steam-run", "proton", "waitforexitandrun", `${PREFIX}/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe`];
 const target: DoctorTarget = { client: { name: "b", documents: DOCUMENTS, menuReportPort: 47123 }, prefix: PREFIX, display: ":2", start: { kind: "command", command: START } };
 
-// Client B's processes on 6 Oct.
+
 const env = { prefix: PREFIX, display: ":2" };
 const wineserver = (pid: number): ProcessInfo => ({ pid, name: "wineserver", args: ["/steam/GE-Proton11-7-x86_64/files/bin/wineserver"], ...env, cwd: `/tmp/.wine-1000/${SERVER}` });
 const launcherProcess = (pid: number): ProcessInfo => ({ pid, name: "CrBrowserMain", args: ["C:\\Program Files (x86)\\Battle.net\\Battle.net.exe", "--from-launcher"], ...env });
@@ -88,30 +88,30 @@ interface Scenario {
   readonly execRequestLog?: boolean;
   readonly processes: "two runtimes" | "game" | "game and dialog" | "launcher" | "runtime alone";
   readonly launcherLog?: string;
-  /** The watch's view while the first game runs. */
+
   readonly state?: ClientState;
   readonly source?: Source;
-  /** What the game Play starts shows. */
+
   readonly afterPlay?: ClientState;
-  /** The launcher log a restarted launcher writes. */
+
   readonly restartedLog?: string;
   readonly war3Log?: string;
   readonly noPlay?: boolean;
-  /** War3Preferences.txt as the client finds it; the client declares DISPLAY settings when set. */
+
   readonly preferences?: string;
-  /** Views the started game reports as `afterPlay` before its menus report MAIN_MENU. */
+
   readonly settlesAfter?: number;
-  /** Escape presses the score screen takes to leave (1 by default); Infinity never leaves. */
+
   readonly scoreEscapes?: number;
-  /** The client declares an account and doctor has hands to type it; "stuck" leaves the form where it is. */
+
   readonly signsIn?: "works" | "stuck";
-  /** The prefix was copied from another install: that install's signed-in log is there, written before this launcher started. */
+
   readonly copiedLog?: boolean;
   readonly hungFirstLaunch?: boolean;
   readonly hungEveryLaunch?: boolean;
 }
 
-/** When the launcher of a copied prefix started, and when the copied install last wrote its log. */
+
 const LAUNCHER_STARTED = Date.parse("2026-10-08T02:19:57Z");
 const COPIED_LOG = `${LOGS}/battle.net-20261005T231502.118204.log`;
 
@@ -159,7 +159,7 @@ function world(scenario: Scenario) {
     }),
     read: (path, from = 0) => Effect.sync(() => files.get(path)?.slice(from)),
     size: (path) => Effect.sync(() => files.get(path)?.length),
-    // Every file is written during the run but the copied install's log, written the evening before.
+
     modified: (path) => Effect.sync(() => (!files.has(path) ? undefined : path === COPIED_LOG ? LAUNCHER_STARTED - 3 * 3600_000 : LAUNCHER_STARTED + 1500)),
     digest: () => Effect.die("unused"),
     list: (directory) => Effect.sync(() => [...files.keys()].filter((path) => path.startsWith(`${directory}/`)).map((path) => path.slice(directory.length + 1))),
@@ -184,7 +184,7 @@ function world(scenario: Scenario) {
       state = { kind: "menus", screen: "CUSTOM_GAMES" };
     }),
     closeScore: () => Effect.sync(() => {
-      // The state the key lands on: doctor may press only on the score screen.
+
       events.push(state.kind === "results" ? "close score" : `close score at ${state.kind}`);
       if (++escapes >= (scenario.scoreEscapes ?? 1)) state = { kind: "menus", screen: "CUSTOM_GAMES" };
     }),
@@ -237,12 +237,12 @@ test("[repro #88] a silent zero-CPU relaunch is ended after 60 seconds and retri
 test("[native] recorded launcher logs: signed in, a lost connection, a reconnect, a rejected saved login", () => {
   expect(launcherHealth(PLAYED)).toEqual({ kind: "signed in" });
   expect(launcherHealth(LOST)).toEqual({ kind: "connection failing", reason: "its last 3 presence updates timed out (ERROR_RPC_REQUEST_TIMED_OUT)" });
-  // One timeout is a blip; a sign-in after the timeouts is a reconnect.
+
   expect(launcherHealth(LOST.split("\n").slice(0, 3).join("\n")).kind).toBe("signed in");
   expect(launcherHealth(RECONNECTED)).toEqual({ kind: "signed in" });
   expect(launcherHealth(REJECTED).kind).toBe("sign-in needed");
   expect(launcherHealth(REJECTED.split("\n")[0]!)).toEqual({ kind: "not signed in" });
-  // The catalog's "DisableLoginCredentialUIRegionList" in every launcher's log is no sign-in form.
+
   expect(launcherHealth(`${SIGNED_IN}D 2026-10-06 12:33:38.741703 [CatalogVarStorage] {Main} Setting var from catalog Client.DisableLoginCredentialUIRegionList=CN\n`).kind).toBe("signed in");
 });
 
@@ -295,7 +295,7 @@ test("[spec #22] stale lobby: leaves it through the menus; the score screen like
 });
 
 test("[repro f14f6f6] a score screen that ignores Escape gets it again, only while it shows, then Warcraft III is ended and launched", async () => {
-  // Client B on 7 Oct stayed on the score screen after one Escape; a later press left it.
+
   const second = await world({ processes: "game", state: { kind: "results" }, scoreEscapes: 2 }).run();
   expect(second.failure).toBeUndefined();
   expect(second.events).toEqual(["close score", "close score"]);
@@ -324,7 +324,7 @@ test("[spec #22] a launcher whose connection is failing is restarted before laun
   const rejected = await world({ processes: "launcher", launcherLog: REJECTED }).run();
   expect(rejected.events).toEqual([]);
   expect(rejected.failure?.split("\n")).toHaveLength(1);
-  // A restart that lands on the sign-in form is the same one line, after its 90 s.
+
   const form = await world({ processes: "launcher", launcherLog: LOST, restartedLog: REJECTED.split("\n")[0]! }).run();
   expect(form.failure?.split("\n")).toHaveLength(1);
 });
@@ -338,14 +338,14 @@ test("[invariant] a state that comes back after its recovery stops doctor instea
 test("[spec #22] withDoctor: a run that fails gets one more try after doctor recovers something; otherwise its failure stands", async () => {
   let runs = 0;
   const flaky = Effect.suspend(() => (++runs === 1 ? Effect.fail(new PlayProblem({ problem: "B dropped from Battle.net" })) : Effect.succeed("match")));
-  // Healthy before and after: the failure was the run's own, so it stands without another try.
+
   const recovering = world({ processes: "game" });
   const result = await recovering.finish(withDoctor(doctor([target], () => {}), () => {}, flaky));
   expect(result.value).toBeUndefined();
   expect(result.failure).toBe("B dropped from Battle.net");
   expect(runs).toBe(1);
   runs = 0;
-  // Healthy before the run; the run fails because the client dropped, which the doctor after it recovers.
+
   const dropping = world({ processes: "game" });
   const failsOnce = Effect.suspend(() => {
     if (++runs > 1) return Effect.succeed("match");
@@ -363,7 +363,7 @@ test("[repro 8f0ba58] display settings changed: a closed game's preferences are 
   const { failure, events } = await changed.run();
   expect(failure).toBeUndefined();
   expect(events).toEqual(["write War3Preferences.txt", "launch 43924"]);
-  // Only the declared Video keys differ from what the client found; sfxvolume (Gameplay) stays 70.
+
   expect(changed.written()).toBe(MAIN.replace(/^(windowmode|windowwidth|windowheight|windowx|windowy|reswidth|resheight|refreshrate|maxfps)=.*$/gm, (_, key: string) => `${key}=${DISPLAY[key]}`));
   expect(displayChanges(changed.written()!, DISPLAY)).toEqual([]);
   expect(changed.written()).toContain("sfxvolume=70");
@@ -384,17 +384,17 @@ test("[invariant] a declared key the file lacks is added to its [Video] section;
   expect(crlf.split("\r\n").length).toBe(MAIN.split("\n").length);
   expect(displayChanges(crlf, DISPLAY)).toEqual([]);
   expect(crlf.replace(/\r\n/g, "\n").split("\n").every((line) => !line.includes("\r"))).toBe(true);
-  // Entries of other sections with a Video key's name are not Video settings.
+
   expect(videoSettings("[Gameplay]\nwindowmode=9\n[Video]\nwindowmode=2\n").windowmode).toBe("2");
 });
 
 test("[native] the launcher's sign-in pages, from its UnifiedAuth log", () => {
   expect(launcherHealth(ACCOUNT_PAGE)).toEqual({ kind: "sign-in form", form: "Login" });
-  // Submitted: no page until the password page loads.
+
   expect(launcherHealth(ACCOUNT_PAGE + BY_HAND.slice(5, 8).join("\n"))).toEqual({ kind: "not signed in" });
   expect(launcherHealth(ACCOUNT_PAGE + PASSWORD_PAGE)).toEqual({ kind: "sign-in form", form: "LoginCredential" });
   expect(launcherHealth(ACCOUNT_PAGE + PASSWORD_PAGE + SIGNED_IN_BY_FORM)).toEqual({ kind: "signed in" });
-  // A rejected saved login, then its form.
+
   expect(launcherHealth(REJECTED + ACCOUNT_PAGE)).toEqual({ kind: "sign-in form", form: "Login" });
 });
 

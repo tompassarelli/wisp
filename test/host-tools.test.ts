@@ -1,7 +1,7 @@
-// Host tools stop everything they started (wisp:docs/host-tools.md): each
-// launcher runs with stand-ins for Warcraft, its desktops and the capacity
-// helper, and after SIGTERM or a failed step no stand-in process or capacity
-// session is left.
+
+
+
+
 import { afterEach, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,13 +19,13 @@ afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup();
 });
 
-/** A run's own state, data and session folders, and the mark every process it starts inherits. */
+
 const sandbox = () => {
   const folder = mkdtempSync(join(tmpdir(), "wisp-host-tools-"));
   const mark = crypto.randomUUID();
   const bin = join(folder, "bin");
   mkdirSync(bin);
-  // PipeWire stand-ins: no client sinks are made on this machine's PipeWire.
+
   writeFileSync(join(bin, "pw-dump"), "#!/bin/sh\nexit 0\n");
   writeFileSync(join(bin, "pw-cli"), "#!/bin/sh\nexit 1\n");
   for (const tool of ["pw-dump", "pw-cli"]) chmodSync(join(bin, tool), 0o755);
@@ -67,7 +67,7 @@ const until = async (check: () => boolean, seconds: number, what: string) => {
   }
 };
 
-/** Waits for the runner to exit, then gives orphans a moment to show. */
+
 const leftovers = async (runner: Bun.Subprocess, box: ReturnType<typeof sandbox>) => {
   const code = await Promise.race([runner.exited, Bun.sleep(30_000).then(() => "still running")]);
   await Bun.sleep(500);
@@ -81,7 +81,7 @@ const agent = (box: ReturnType<typeof sandbox>) => Bun.spawn([process.execPath, 
 test("[repro #62] pair agent: SIGTERM while its games start stops them and the agent", async () => {
   const box = sandbox();
   const runner = agent(box);
-  // The first game's session and its stand-in game run; the second isn't launched yet.
+
   await until(() => box.sessions().length === 1 && box.marked().length >= 5, 30, "the first game");
   runner.kill("SIGTERM");
   const result = await leftovers(runner, box);
@@ -91,7 +91,7 @@ test("[repro #62] pair agent: SIGTERM while its games start stops them and the a
 
 farmTest("[repro #62] pair agent: a step failing after both games started stops them", async () => {
   const box = sandbox();
-  // The first client's menu report port is taken, so the agent fails after launching both games.
+
   const taken = Bun.serve({ hostname: "127.0.0.1", port: reportPort(agentPair, "a"), fetch: () => new Response() });
   cleanups.push(() => taken.stop(true));
   const runner = agent(box);
@@ -106,7 +106,7 @@ const poolPair = 94;
 const pool = (box: ReturnType<typeof sandbox>, extra: Record<string, string>) => {
   const plugin = join(box.env.HOME, ".local/share/wisp-private/lan");
   mkdirSync(plugin, { recursive: true });
-  // The pair-session stand-in never joins a game, so only the pool's plugin preflight runs.
+
   writeFileSync(join(plugin, "index.ts"), "export {};\n");
   return Bun.spawn([process.execPath, join(root, "examples/sample/scripts/sample.ts"), "lan", "pool", "--pair", String(poolPair), "--capacity", capacity, "--desktop", "/bin/true", "--wait", "0"], {
     env: { ...box.env, ...extra }, stdout: "ignore", stderr: "ignore",
@@ -116,7 +116,7 @@ const pool = (box: ReturnType<typeof sandbox>, extra: Record<string, string>) =>
 test("[repro #62] lan pool: SIGTERM while a pair is starting stops its session", async () => {
   const box = sandbox();
   const runner = pool(box, { WISP_TEST_READY_MS: "60000" });
-  // The session and both stand-in clients run; the pair isn't ready yet.
+
   await until(() => box.sessions().length === 1 && box.marked().length >= 5, 30, "the pair session");
   runner.kill("SIGTERM");
   const result = await leftovers(runner, box);

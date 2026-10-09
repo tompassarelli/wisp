@@ -2,7 +2,7 @@ import { IntegerKeysUndeclared, lineTokens, parseRecord, recordTokens, tokenLine
 import { type Repro, assertReproLands, parseRepro, reproLines } from "./repro";
 import { assertDefined, assertEquals, assertTrue, test } from "./testing";
 
-/** An array whose first and third elements are undefined. */
+
 function withGaps(): (number | undefined)[] {
   const items: (number | undefined)[] = [];
   items[1] = 4;
@@ -10,7 +10,7 @@ function withGaps(): (number | undefined)[] {
   return items;
 }
 
-/** Values whose binary32 text Lua prints with too few digits to read back, and Lua's two number kinds. */
+
 function sample(): Record<string, unknown> {
   return {
     count: 7, negative: -5, largest: 2147483647, smallest: -2147483648, zero: 0,
@@ -31,7 +31,7 @@ test("[invariant] record text: values, kinds and nesting survive a round trip ex
   const record = sample();
   const tokens = assertDefined(recordTokens(record), "tokens");
   const back = assertDefined(parseRecord(lineTokens(tokenLines(tokens, 40))), "record");
-  // Writing the record read back gives the same tokens: every value is equal and kept its number kind.
+
   assertEquals(sorted(assertDefined(recordTokens(back), "tokens again")), sorted(tokens));
   for (const name of ["count", "negative", "largest", "smallest", "half", "tenth", "nearTwo", "wide", "whole", "minus", "huge", "tiny", "name", "odd"]) {
     assertEquals(back[name], record[name], name);
@@ -49,7 +49,7 @@ test("[invariant] record text: lines stay within their width and a malformed tok
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === "object" && value !== null;
 
-/** A record keyed by numbers rather than a list: in Lua it is a table with integer keys, as an array is. */
+
 const isKeyed = (value: unknown): value is Readonly<Record<number, unknown>> => typeof value === "object" && value !== null;
 
 function keyedAt(value: unknown, ...keys: readonly number[]): unknown {
@@ -58,7 +58,7 @@ function keyedAt(value: unknown, ...keys: readonly number[]): unknown {
   return current;
 }
 
-/** A kit keyed by action number, with key 0, gaps and negative keys, nested in records, lists and each other. */
+
 function numberKeyedKit(): Record<string, unknown> {
   const poses: Record<number, number> = {};
   poses[-2] = 15;
@@ -109,7 +109,7 @@ test("[repro #25] record text: records keyed by numbers keep their keys, alike i
   assertTrue(Array.isArray(plain) && plain[0] === 10 && plain[2] === 30 && plain.length === 3);
 });
 
-/** The message recordTokens throws for `record`; undefined when it doesn't throw. */
+
 function thrown(record: object, keyed: readonly string[] = []): string | undefined {
   try {
     recordTokens(record, keyed);
@@ -130,7 +130,7 @@ test("[spec #25] record text: a record keyed by numbers that isn't declared thro
 
 const COUNTER: Repro["lines"] = ["start 3", "add 4 5"];
 
-/** A game whose state is a number and whose frames add to it. */
+
 function replayCounter(repro: Repro) {
   let total = 0;
   let frames = 0;

@@ -1,5 +1,5 @@
-// A game for `wisp repro`'s tests: its state is a record of a total, saved as
-// record text, and each frame adds a number.
+
+
 import { lineTokens, parseRecord } from "../../../src/runtime/recordText";
 import type { Repro, ReproInspection, ReproResult } from "../../../src/runtime/repro";
 

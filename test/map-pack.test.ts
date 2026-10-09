@@ -9,7 +9,7 @@ const build = join(import.meta.dir, "../build");
 mkdirSync(build, { recursive: true });
 const work = mkdtempSync(join(build, "map-pack-"));
 
-/** Compiles wisp:native/map-pack.test.c, which creates a full synthetic archive and replaces into it. */
+
 function regression(): string {
   const prefix = process.env.STORMLIB_PREFIX ?? (() => {
     const result = Bun.spawnSync(["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#stormlib"]);
@@ -24,7 +24,7 @@ function regression(): string {
   return binary;
 }
 
-/** A synthetic archive that is full, with its existing entries' file. */
+
 function fullArchive(name: string): { readonly archive: string; readonly existing: string } {
   const existing = join(work, `${name}.txt`);
   writeFileSync(existing, "synthetic archive contents");
@@ -39,7 +39,7 @@ test("[repro 51dbdf4] the native packager grows a full MPQ and preserves existin
   fullArchive("single");
 });
 
-/** A fighter-clip-shaped model: one sequence, two bones, a team-coloured material and a texture with alpha. */
+
 const clip = () => new Uint8Array(generateMDX(parseMDL(`Version { FormatVersion 800, }
 Model "Clip" { NumGeosets 1, NumBones 2, BlendTime 150, MinimumExtent { 0, 0, 0 }, MaximumExtent { 10, 10, 20 }, BoundsRadius 12, }
 Sequences 1 { Anim "Attack Slam" { Interval { 3000, 3800 }, NonLooping, MinimumExtent { 0, 0, 0 }, MaximumExtent { 10, 10, 20 }, BoundsRadius 12, } }
@@ -61,7 +61,7 @@ Bone "Hand" { ObjectId 1, Parent 0, GeosetId 0, GeosetAnimId None, Rotation 2 { 
 PivotPoints 2 { { 0, 0, 0 }, { 0, 0, 10 }, }
 `)));
 
-/** A 4x4 32-bit TGA whose alpha runs 0..255 and whose colour is team red. */
+
 function portrait(): Uint8Array {
   const pixels = 16;
   const bytes = new Uint8Array(18 + pixels * 4);
@@ -74,7 +74,7 @@ function portrait(): Uint8Array {
   return bytes;
 }
 
-/** A BLP1 header with an 8-bit alpha channel, its palette and indexed pixels with their alpha plane. */
+
 function blp(): Uint8Array {
   const bytes = new Uint8Array(156 + 1024 + 32);
   const view = new DataView(bytes.buffer);
@@ -103,7 +103,7 @@ test("[invariant] listed entries are packaged and extracted in one archive openi
   for (const [name, bytes] of Object.entries(files)) {
     const source = join(work, name);
     writeFileSync(source, bytes);
-    // Enough copies to outgrow the full table more than once.
+
     for (let copy = 0; copy < 8; copy++) entries.push({ entry: `war3mapImported\\${name === "tone.ogg" ? `tone-${copy}.ogg` : `${name}-${copy}`}`, source });
   }
   const override = join(work, "override");

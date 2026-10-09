@@ -1,6 +1,6 @@
-// The saved War3Preferences.txt goes back over the one the game rewrote on exit,
-// by the detached helper `play` starts (wisp:scripts/wisp/restorePreferences.ts),
-// on real files.
+
+
+
 import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,7 +15,7 @@ test("[repro 8f0ba58] the helper waits for the game's process, then puts the sav
   writeFileSync(preferencesPath(documents), fixture("main-display.txt"));
   const game = Bun.spawn(["sleep", "600"]);
   const helper = Bun.spawn([process.execPath, join(import.meta.dir, "../scripts/wisp/restorePreferences.ts"), String(game.pid), documents], { stdout: "pipe" });
-  // While the game runs, the helper leaves its file alone.
+
   await Bun.sleep(300);
   expect(readFileSync(preferencesPath(documents), "utf8")).toBe(fixture("main-display.txt"));
   game.kill();

@@ -11,11 +11,11 @@ import { farmTest } from "../scripts/wisp/farmTest";
 const runtime = installHeadless({ filePrefix: "unit-states", globalPrefixes: ["__unitStates"], unitStates: UNIT_FIXTURE });
 afterAll(runtime.restore);
 
-/**
- * Warcraft 3.0.1.24342, 8 October 2026, client A, Classic graphics:
- * ~/.local/state/smashcraft/native-corpus70-20261008/unit44/unit-states-p0.txt.
- * All twenty-four rows are native observations; the first twelve also repeat clone-a's earlier run.
- */
+// Native expectations follow wisp:docs/warsmash-notes.md#native-results-for-44.
+
+
+
+
 export const EXPECTED = [
   "owner-retained=256",
   "facing-writes=11519",
@@ -43,7 +43,7 @@ export const EXPECTED = [
   "removal-one-second=0,0",
 ];
 
-/** Every row is written 1.3125 game seconds after start. */
+
 const FRAMES = 80;
 
 function play() {

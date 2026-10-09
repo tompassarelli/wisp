@@ -1,16 +1,16 @@
-// Warcraft III's own log, recorded on 6 Oct 2026 (abridged, CRLF as written):
-// loadfile-scan-mid-load.txt is a primary-display `wisp play` whose -loadfile
-// map loaded before the ladder scan (326 import failures in the full log);
-// menus-after-scan.txt a client hosting from its menus long after the scan (0);
-// menus-listing-during-scan.txt the `play --menus` run that crashed, whose map
-// listing ran between the scan's Season1 and Season9 batches.
+
+
+
+
+
+
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { importFailures, ladderScan } from "../scripts/warcraft/war3Log";
 
 const fixture = (name: string) => readFileSync(join(import.meta.dir, "fixtures/war3log", name), "utf8");
-/** The log as it stood once every line up to `time` was written. */
+
 const until = (log: string, time: string) => {
   const lines = log.split("\r\n");
   return lines.slice(0, lines.findLastIndex((line) => line !== "" && line.slice(5, 17) <= time) + 1).join("\r\n");
@@ -21,19 +21,19 @@ const interleaved = fixture("menus-listing-during-scan.txt");
 
 test("[native] the ladder scan comes after the login doors close; the startup scan of the same folders doesn't count", () => {
   expect(ladderScan(until(loadfile, "20:34:57.138")).kind).toBe("signing in");
-  // Signed in, the -loadfile map already opening: the scan hasn't started (it did 6 s later).
+
   expect(ladderScan(until(loadfile, "20:35:14.431"))).toMatchObject({ kind: "waiting" });
   expect(ladderScan(until(loadfile, "20:35:18.925"))).toMatchObject({ kind: "scanning", count: 20 });
-  // The failures 2.2 s after the scan's last ladder line end it.
+
   expect(ladderScan(loadfile).kind).toBe("done");
 });
 
 test("[native] the scan's batches are one scan: a pause between them, or other lines in it, don't end it", () => {
-  // Season1's batch ended at 16:21:19.644, Season9's began 0.6 s later.
+
   expect(ladderScan(until(menus, "16:21:19.644"))).toMatchObject({ kind: "scanning" });
   expect(ladderScan(until(menus, "16:21:20.318"))).toMatchObject({ kind: "scanning", count: 24 + 20 });
   expect(ladderScan(menus)).toMatchObject({ kind: "done" });
-  // The crashed run's Create Game listing opened maps between the batches, under 2 s after Season1's last.
+
   expect(ladderScan(until(interleaved, "20:30:21.386")).kind).toBe("scanning");
   expect(ladderScan(until(interleaved, "20:30:21.529")).kind).toBe("scanning");
 });

@@ -1,5 +1,5 @@
-// Test registry shared by Bun and Lua: tests register here, and each runtime's
-// runner executes the registry. No host APIs, so it compiles to Lua unchanged.
+
+
 
 export type TestCase = { name: string; run: () => void };
 export const registeredTests: TestCase[] = [];
@@ -24,7 +24,7 @@ export function assertFalse(value: boolean): void {
   if (value !== false) fail("expected false");
 }
 
-/** Exact equality (Object.is semantics except that 0 equals -0). */
+
 export function assertEquals<T>(actual: T, expected: T, message?: string): void {
   if (actual !== expected) fail(`${message === undefined ? "" : `${message}: `}expected ${String(expected)}, actual ${String(actual)}`);
 }
@@ -41,13 +41,13 @@ export function assertLessThan(actual: number, bound: number): void {
   if (!(actual < bound)) fail(`expected less than ${bound}, actual ${actual}`);
 }
 
-/** The value, or a failure when it is undefined. */
+
 export function assertDefined<T>(value: T | undefined, what = "value"): T {
   if (value === undefined) fail(`expected ${what} to be defined`);
   return value;
 }
 
-/** Runs every registered test, reports each failure and a summary line, and returns the number of failures. */
+
 export function runTests(report: (this: void, line: string) => void): number {
   let failures = 0;
   for (const { name, run } of registeredTests) {

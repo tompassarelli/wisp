@@ -3,7 +3,7 @@ import { Effect, Exit } from "effect";
 import { decodeDesyncSummary, divergedValues } from "../scripts/wisp/desyncs";
 
 // The observed Desync.txt grammar, without the machine description around it.
-// Values are those of a native reload desync: one client allocated one more handle.
+
 const report = (birthTag: string, tempest: string, closed = true) => [
   "<Application>Warcraft III",
   "<Exception.BuildNumber>24268",

@@ -29,7 +29,7 @@ test("[wisp#79] the sun's shadow map covers every corner of the camera's visible
     const half = depth * camera.tangent, point = [sx * half, -1650 + depth, 300 + sy * half / camera.aspect, 1];
     const clip = [0, 1, 2].map((row) => [0, 1, 2, 3].reduce((sum, k) => sum + (sun.viewProjection[k * 4 + row] ?? 0) * (point[k] ?? 0), 0));
     for (const value of clip) expect(Math.abs(value)).toBeLessThanOrEqual(1.0001);
-    // A caster 3,000 units toward the sun from this corner still lands in the map.
+
     const raised = [point[0]! + 0.3 * 3000, point[1]! - 0.4 * 3000, point[2]! + 0.866 * 3000, 1];
     const z = [0, 1, 2, 3].reduce((sum, k) => sum + (sun.viewProjection[k * 4 + 2] ?? 0) * (raised[k] ?? 0), 0);
     expect(z).toBeGreaterThanOrEqual(-1);

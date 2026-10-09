@@ -1,5 +1,5 @@
-// One test per animation playback rule in wisp:docs/warsmash-notes.md,
-// "Animation playback", run in Bun and in 32-bit Lua.
+
+
 import { assertEquals, assertTrue, test } from "../runtime/testing";
 import { f32 } from "../sim/f32";
 import {
@@ -7,7 +7,7 @@ import {
   selectAnimation, selectSequence, sequenceFrame,
 } from "./animation";
 
-/** Element by element, since assertEquals compares arrays by identity. */
+
 function same(actual: readonly unknown[], expected: readonly unknown[], message = ""): void {
   assertEquals(actual.length, expected.length, `${message} length`);
   for (let index = 0; index < expected.length; index++) assertEquals(actual[index], expected[index], `${message} [${index}]`);
@@ -42,7 +42,7 @@ test("animation: a missing tag set falls back to the closest set, then to the pr
   assertEquals(animationSample(MODEL, { animation: "walk", subAnimations: [], elapsed: 0 }, "unit").sequence, 2, "a name that selects nothing shows Stand");
 });
 
-// 3.0.1, 8 Oct 2026: a frozen unit given index 99 of a seven-sequence model showed Stand.
+// An out-of-range sequence index shows Stand.
 test("animation: an index outside the model shows Stand", () => {
   assertEquals(selectSequence(MODEL, 4), 4);
   assertEquals(selectSequence(MODEL, 8), -1);
@@ -81,8 +81,8 @@ test("animation: a seek sets the sequence time without spending blend time", () 
   assertEquals(animationSample(MODEL, { animation, subAnimations, elapsed }, "unit").frame, 4250);
 });
 
-// 3.0.1 ruler capture 2: both effects selected and sought in one callback drew Walk at 0;
-// the frozen pooled clips, selected earlier, drew the later seek at 400 ms.
+// Effect selection and seek in one callback show the restarted clock; later seeks persist.
+
 test("animation: [native #58] an effect selection resets a same-frame seek on the next drawn frame", () => {
   for (const frozenBefore of [false, true]) {
     const state = freshAnimation();
@@ -103,15 +103,15 @@ test("animation: the sample is the clock's whole millisecond", () => {
   assertEquals(sequenceFrame(sequence("Stand", 2000, 3000), 0.5), 2000);
 });
 
-// 3.0.1, 8 Oct 2026: 4.5 s of a 1002 ms loop showed 4500 mod 1002 against a reference clock, 5 ms off,
-// where dropping each lap's overshoot at 61 frames a second would lose about 59 ms.
+// Looping playback keeps overshoot; dropping each lap's overshoot accumulates drift.
+
 test("animation: a looping sequence wraps by its length, keeping the overshoot", () => {
   const loop = sequence("Stand", 1000, 1101);
   same([25, 100, 101, 225, 4500].map((ms) => sequenceFrame(loop, ms)), [1025, 1100, 1000, 1023, 1056]);
   assertEquals(sequenceFrame(loop, 150), 1049, "a seek past the end wraps too");
 });
 
-// 3.0.1, 8 Oct 2026: a non-looping sequence played 3.5 s past its end showed its last key's pose, past end − 1 ms.
+// Non-looping playback holds the final key pose.
 test("animation: a sequence that does not loop holds its interval end", () => {
   const once = sequence("Attack", 4000, 5000, false);
   assertEquals(sequenceFrame(once, 2000), 5000);
@@ -122,7 +122,7 @@ test("animation: a sequence that does not loop holds its interval end", () => {
 test("animation: an effect never told what to play shows Birth once, then Stand looping; a unit shows Stand", () => {
   const playing = (seconds: number) => ({ animation: undefined, subAnimations: [], elapsed: seconds });
   shows(animationSample(MODEL, playing(0.25), "effect"), 6, 6250);
-  // Birth lasts 500 ms; Stand starts when it ends.
+
   shows(animationSample(MODEL, playing(0.5), "effect"), 2, 2000);
   shows(animationSample(MODEL, playing(0.75), "effect"), 2, 2250);
   shows(animationSample(MODEL, playing(0.25), "unit"), 2, 2250);

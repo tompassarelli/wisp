@@ -1,7 +1,7 @@
-// Hot reload by module (wisp:docs/hot-reload.md): a fixture map compiled in
-// three versions, a changed module and a renamed and a deleted one, played by
-// two simulated clients in 32-bit Lua (test/modules/headless-lua.ts). The
-// payload format's own tests are src/runtime/modules.tests.ts, run in Lua.
+
+
+
+
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
@@ -58,7 +58,7 @@ farmTest("[invariant] full and incremental module reloads end in the same module
       tstl: { luaTarget: "5.3", luaBundle: "map.lua", luaBundleEntry: "src/main.ts", noImplicitSelf: true, noHeader: true, luaPlugins: [{ name: "../../plugins/warcraft-numbers.ts" }] },
     }));
     const compile = mapCompiler(join(directory, "tsconfig.json"));
-    /** Compiles the sources as they are and writes the version's full payload, as `wisp hot` would send it. */
+
     const version = (name: string) => {
       expect(report(compile())).toBe("");
       const bundled = compile.modules();
@@ -74,7 +74,7 @@ farmTest("[invariant] full and incremental module reloads end in the same module
     writeFileSync(join(src, "label.ts"), "import { suffix } from \"./extra\";\n\nexport const label = (frames: number): string => `frame ${frames}${suffix}`;\n");
     writeFileSync(join(src, "extra.ts"), "export const suffix = \"!\";\n");
     const v1 = version("v1");
-    // The map's own bundle is the first version's.
+
     const bundle = join(directory, "map.lua");
     copyFileSync(join(directory, "out/map.lua"), bundle);
     writeFileSync(join(src, "counter.ts"), "export const step = (frames: number): number => frames + 2;\n");
@@ -93,7 +93,7 @@ farmTest("[invariant] full and incremental module reloads end in the same module
     const output = run.stdout.toString();
     expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
     expect(output).toContain("module reload contract passed");
-    // A changed module's delta is its text and the index, a small part of the whole.
+
     const [, fullBytes, deltaBytes, changed] = /full payload (\d+) bytes; a changed module's delta (\d+) bytes \(([^)]*)\)/.exec(output) ?? [];
     expect(changed).toEndWith("src.counter");
     expect(Number(deltaBytes)).toBeLessThan(Number(fullBytes) / 4);

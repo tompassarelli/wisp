@@ -18,16 +18,16 @@ function flatTerrain(columns: number, rows: number, originX: number, originY: nu
 const pose = (name: string, x: number, y: number, unit = false) => ({ name, x, y, z: 500, alpha: 255, scale: 1, flat: false, ...(unit ? { unit: true as const } : {}) });
 
 test("[native] an effect whose origin lies outside the terrain's world bounds isn't drawn: Stratholme's cathedral on the 64 x 64 base (smashcraft#297)", () => {
-  // Smashcraft 56fb5249, Classic, Stratholme near view, paused (8 Oct, client D), on a base whose terrain ends at y 4,096:
-  // the city gate at map y 3,544 draws on the left; the ruined cathedral at map y 5,944, 7,948 from the eye inside
-  // FARZ 8,000 and in frame behind the right fighter, doesn't. Tomb's temple and waterfall (map y 5,344) don't either.
+
+
+
   const terrain = decodeTerrain(flatTerrain(65, 65, -4096, -4096));
   expect(worldBounds(terrain)).toEqual({ minX: -4096, maxX: 4096, minY: -4096, maxY: 4096 });
-  // Smashcraft's headless world stands its 0,0 on the playable centre, map (0, -256).
+
   const world = shiftedBounds(worldBounds(terrain), [0, -256]);
   const poses = [pose("gate", -1900, 3800), pose("cathedral", 1500, 6200), pose("fighter", 0, 4400, true)];
   expect(drawnPoses(poses, [0, -1428, 2152], 8000, world).map((p) => p.name)).toEqual(["gate", "fighter"]);
-  // The 64 x 96 base (133375a4) runs to y 8,192 and keeps the cathedral.
+
   const extended = shiftedBounds(worldBounds(decodeTerrain(flatTerrain(65, 97, -4096, -4096))), [0, -256]);
   expect(drawnPoses(poses, [0, -1428, 2152], 8000, extended).map((p) => p.name)).toEqual(["gate", "cathedral", "fighter"]);
 });

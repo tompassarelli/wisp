@@ -1,15 +1,15 @@
-// Plain records as text and back, alike in Bun and in Warcraft's Lua: nested
-// records and arrays of numbers, booleans and strings, such as a game's match
-// state in a repro (wisp:docs/repro.md). Integers and reals keep Lua's number
-// kind, and a real its exact binary value, which Lua's own text for a number
-// (seven digits in 32-bit Lua) doesn't.
-//
-// Tokens: `NAME=VALUE` is a field, `NAME{` and `NAME[` open a record or an
-// array, `}` and `]` close it; an array's names are its indices. `NAME#`
-// opens a record keyed by integers, such as a kit's moves by action number,
-// and `}` closes it; its names are its keys. Values are T
-// and F, an integer's decimal digits, `~` and a real's exact form, or `'` and
-// a string's bytes with every byte but letters, digits, `_`, `.` and `-` as
+
+
+// Lua32's seven-digit float text loses bits; records must retain exact values and Lua number kinds.
+
+
+
+// Tokens use NAME=VALUE, NAME{, NAME[, NAME#, } and ]; strings percent-escape bytes outside letters, digits, _, . and -.
+
+
+
+
+
 // %XX. Undefined fields and elements are left out, as Lua leaves them out.
 
 import { floorDiv } from "../sim/intMath";
@@ -18,7 +18,7 @@ type Fields = Readonly<Record<string, unknown>>;
 
 const isFields = (value: unknown): value is Fields => typeof value === "object" && value !== null;
 
-/** Records nested deeper than this are taken for a cycle. */
+
 const MAX_DEPTH = 32;
 const TWO_26 = 67108864.0;
 const LARGEST_INTEGER = 2147483647;
@@ -34,7 +34,7 @@ function isName(text: string): boolean {
   return true;
 }
 
-/** Whether `text` is an optional minus and decimal digits. */
+
 function isDecimal(text: string): boolean {
   const start = text.charAt(0) === "-" ? 1 : 0;
   if (text.length <= start) return false;
@@ -42,21 +42,21 @@ function isDecimal(text: string): boolean {
   return true;
 }
 
-/**
- * Whether Lua holds the value as an integer: it prints a float with a point
- * or an exponent, and an integer as digits. In Bun, a whole number within
- * Warcraft's 32-bit integers.
- */
+// Lua distinguishes integers from floats in their printed form; Bun integers are restricted to signed 32 bits.
+
+
+
+
 const isInteger = (value: number) => isDecimal(`${value}`) && value >= SMALLEST_INTEGER && value <= LARGEST_INTEGER;
 
 function infinity(): number {
-  // Squaring overflows binary32 and binary64 without dividing by zero.
+
   let result = 16777216.0;
   for (let step = 1; step <= 6; step++) result *= result;
   return result;
 }
 
-/** A real's exact form: sign, binary exponent and 52 fraction bits as two 26-bit integers. Every step is exact. */
+
 function realText(value: number): string {
   if (value !== value) return "~nan";
   const negative = value < 0 || (value === 0 && `${value}`.charAt(0) === "-");
@@ -157,52 +157,52 @@ function parseValue(text: string): unknown {
   return parseInteger(text);
 }
 
-/** A field's name: letters, digits and `_`, not an integer's digits, which a record keyed by integers writes as `#`. */
+
 const isFieldName = (text: string) => isName(text) && !isDecimal(text);
 
-/** The integer an integer key's text spells, written the way `${}` writes it; undefined for any other text. */
+
 function integerName(text: string): number | undefined {
   const value = parseInteger(text);
   return value !== undefined && isInteger(value) && `${value}` === text ? value : undefined;
 }
 
-/**
- * The integer a record's key is: `for...in` gives a number in Lua and its
- * text in Bun.
- */
+// for...in returns numeric integer keys in Lua and string keys in Bun.
+
+
+
 function integerKey(key: string): number | undefined {
   const raw: unknown = key;
   if (typeof raw === "number") return isInteger(raw) ? raw : undefined;
   return integerName(key);
 }
 
-/**
- * Thrown for a table keyed by integers whose field recordTokens wasn't told
- * holds a record keyed by integers, or one it was told does but isn't: written
- * as an array, it would come back with other keys.
- */
+
+
+
+
+
 export class IntegerKeysUndeclared extends Error {}
 
-/** A record being written: its tokens, the fields keyed by integers and the names down to the value being written. */
+
 interface Writer {
   readonly tokens: string[];
   readonly keyed: Readonly<Record<string, boolean>>;
   readonly path: string[];
 }
 
-/** Names the field at the writer's path; only joined when a record is refused. */
+
 function undeclared(writer: Writer, why: string): never {
   throw new IntegerKeysUndeclared(`record text: ${writer.path.join(".")} ${why}`);
 }
 
-/**
- * An array's length; undefined when `value` is a record. In Lua a
- * TypeScript array is a table whose keys are integers from 1, with no key for
- * an undefined element, so its length is its largest key; in Bun an array has
- * string keys and a length. A table with any other key beside them, or a Bun
- * object keyed by integers, is neither (false): a record keyed by integers is
- * the same Lua table as an array, so only its declared name tells them apart.
- */
+// Lua arrays use integer keys from 1 and omit undefined elements; integer-keyed records require a declared field name.
+
+
+
+
+
+
+
 function arrayLength(value: Fields): number | undefined | false {
   let length: number | undefined;
   let named = false;
@@ -218,10 +218,10 @@ function arrayLength(value: Fields): number | undefined | false {
   return undefined;
 }
 
-/** Lets an array arrayLength found be indexed as one, which TypeScriptToLua offsets for Lua's tables from 1. */
+
 const isList = (_value: unknown, length: number | undefined): _value is readonly unknown[] => length !== undefined;
 
-/** Whether `value` can be written as a record keyed by integers: every key an integer, and not a Bun array. */
+
 function isKeyed(value: Fields): boolean {
   let numbers = false;
   for (const key in value) {
@@ -273,16 +273,16 @@ function writeFields(writer: Writer, record: Fields, depth: number): boolean {
   return true;
 }
 
-/**
- * The tokens of a record's fields. A field named in `keyedByInteger` holds
- * a record keyed by integers (`{ readonly [action: number]: T }`), written
- * with its keys. Lua can't tell any other such record from an array, so one
- * not named throws IntegerKeysUndeclared, naming its path, when Bun sees it or
- * Lua sees a key below 1; one with keys from 1 Lua writes as an array, which
- * Lua alone reads back as the same table. Undefined when the record holds
- * anything else: a function, a cycle, a string byte above 255 or a key that
- * isn't letters, digits and `_`.
- */
+// Lua cannot distinguish arrays from integer-keyed records; declare keyed fields to preserve keys on round trips.
+
+
+
+
+
+
+
+
+
 export function recordTokens(record: object, keyedByInteger: readonly string[] = []): string[] | undefined {
   if (!isFields(record) || arrayLength(record) !== undefined) return undefined;
   const keyed: Record<string, boolean> = {};
@@ -291,7 +291,7 @@ export function recordTokens(record: object, keyedByInteger: readonly string[] =
   return writeFields(writer, record, 0) ? writer.tokens : undefined;
 }
 
-/** A record, array or record keyed by integers being filled; exactly one of the three. */
+
 interface Open {
   readonly fields: Record<string, unknown> | undefined;
   readonly items: unknown[] | undefined;
@@ -322,7 +322,7 @@ function opened(last: string): Open {
   return { fields: undefined, items: undefined, keyed: {} };
 }
 
-/** The record that recordTokens wrote `tokens` for; undefined when they are malformed. */
+
 export function parseRecord(tokens: readonly string[]): Record<string, unknown> | undefined {
   const root: Record<string, unknown> = {};
   const stack: Open[] = [{ fields: root, items: undefined, keyed: undefined }];
@@ -348,10 +348,10 @@ export function parseRecord(tokens: readonly string[]): Record<string, unknown> 
   return stack.length === 1 ? root : undefined;
 }
 
-/** Tokens joined by spaces into lines of at most `width` characters; a longer token has a line of its own. */
+
 export function tokenLines(tokens: readonly string[], width: number): string[] {
   const lines: string[] = [];
-  // Each line is joined once: appending token by token copies the line for every token.
+
   let line: string[] = [];
   let length = -1;
   for (const token of tokens) {
@@ -367,7 +367,7 @@ export function tokenLines(tokens: readonly string[], width: number): string[] {
   return lines;
 }
 
-/** The tokens of lines that tokenLines wrote. */
+
 export function lineTokens(lines: readonly string[]): string[] {
   const tokens: string[] = [];
   for (const line of lines) for (const token of line.split(" ")) if (token.length > 0) tokens.push(token);

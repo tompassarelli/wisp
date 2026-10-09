@@ -1,6 +1,6 @@
-// Draws the #58 fixture's capture frame headlessly, client 0's view, so the
-// reader can be tried on it before a native capture:
-// `bun test/animation58/render.ts OUT_DIR`, then read OUT_DIR's PNG.
+
+
+
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Console, Effect } from "effect";
 import { installHeadless } from "../../scripts/wisp/headless";

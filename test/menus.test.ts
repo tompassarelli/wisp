@@ -1,6 +1,6 @@
-// Warcraft III's menus without clicks (wisp:docs/driving-warcraft.md): the
-// menu page's report, the listener, and each lobby step against a fake game
-// that answers the way 3.0.0.24268's menus socket does.
+
+
+
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,7 +22,7 @@ interface Received {
   readonly payload: Record<string, unknown>;
 }
 
-/** A game's menus server: the menus' socket at /webui-socket/GUID, answering as the game does. */
+
 function fakeGame(hosting: "immediate" | "old-setup" | "refused" = "immediate", unreadListings = 0) {
   const received: Received[] = [];
   let unread = unreadListings;
@@ -54,10 +54,10 @@ function fakeGame(hosting: "immediate" | "old-setup" | "refused" = "immediate", 
         switch (message) {
           case "GetMapList": {
             const folder = payload["useLastMap"] === true ? `${MAPS}Download/` : String(payload["subdirectory"]);
-            // Just after starting, the game lists a folder's subfolders before its maps.
+
             const entries = folder !== `${MAPS}Download/` && folder !== MAPS && unread-- > 0 ? [{ filename: "older", isFolder: true }] : FOLDERS[folder] ?? [];
             listed = new Set(entries.map((entry) => `${folder}${entry.filename}`));
-            // A folder is listed with its parent's path.
+
             tell("MapList", { mapList: { maps: entries.map((entry) => ({ ...entry, filepath: folder })) } });
             return;
           }
@@ -150,7 +150,7 @@ test("[repro dabf45f] a hosted lobby is started only once it settles", async () 
     return map;
   }));
   expect(Exit.isSuccess(exit) ? exit.value : failure(exit)).toBe(`${MAPS}00-Wisp/Wisp Sample.w3x`);
-  // LobbyStart right after hosting crashed Warcraft III 3.0 while loading (Smashcraft #119).
+  // LobbyStart immediately after hosting can crash Warcraft while loading.
   expect(settled).toBeGreaterThanOrEqual(290);
 });
 

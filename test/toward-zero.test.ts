@@ -1,15 +1,15 @@
-// wisp:native/toward-zero.h against an exact oracle: every binary32
-// sum, difference, product and quotient the toward-zero Lua computes, and
-// every decimal numeral it reads, must be the exact result truncated toward
-// zero, computed here with integers. The Lua is TOWARD_ZERO_LUA when set,
-// else the cached build (wisp:scripts/wisp/lua32.ts).
+
+
+
+
+
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
 import { lua32, luaRounding } from "../scripts/wisp/lua32";
 
 const lua = process.env.TOWARD_ZERO_LUA ?? await Effect.runPromise(lua32("toward-zero"));
 
-/** A finite binary32 value as sign × significand × 2^exponent, with an integer significand. */
+
 interface Exact {
   readonly sign: 1n | -1n;
   readonly significand: bigint;
@@ -26,7 +26,7 @@ function exact(value: number): Exact {
 
 const MAXIMUM = 16777215 * 2 ** 104;
 
-/** sign × magnitude × 2^exponent rounded toward zero to binary32. */
+
 function towardZero(negative: boolean, magnitude: bigint, exponent: number): number {
   if (magnitude === 0n) return 0;
   const length = magnitude.toString(2).length;
@@ -69,7 +69,7 @@ function quotient(a: number, b: number): number {
   return result === 0 && negative ? -0 : result;
 }
 
-/** A binary32 value as a C hex float Lua reads exactly. */
+
 function hex(value: number): string {
   const { sign, significand, exponent } = exact(value);
   return `${sign < 0n ? "-" : ""}0x${significand.toString(16)}p${exponent}`;
@@ -86,7 +86,7 @@ function parseHex(text: string): number {
   return sign === "-" ? -value : value;
 }
 
-/** Deterministic operands: random significands over the whole exponent range, near exponents and far ones, subnormals and edges. */
+
 function operands(): [number, number][] {
   let state = 0x2545f491;
   const next = () => {
@@ -132,7 +132,7 @@ test("[reference] the toward-zero Lua's + - * / are the exact results truncated 
     });
   });
   expect(wrong.slice(0, 10)).toEqual([]);
-  // Rounding to nearest gives 3 for both.
+
   expect(lines[3]?.split(" ").slice(0, 2)).toEqual(["0x1.8p+1", "0x1.7ffffep+1"]);
 });
 

@@ -1,11 +1,11 @@
-// One simulated Warcraft client for headless runs (wisp:docs/headless.md).
-// Every declared native is stubbed for this client, with the state the stubs
-// need: handles, units, timers, triggers, the FileIO tooltips, the files the
-// map writes and the host publishes, and the special effects it shows. The
-// client logs every native call except the local-only ones, so clients that
-// ran the same events can be compared call by call. Runtime-neutral: it runs
-// in Bun and, compiled with TypeScriptToLua, in 32-bit Lua; each host puts the
-// natives where its map code finds them.
+
+
+
+
+
+
+
+
 import { errorFile, FILE_IO_ABILITY } from "../runtime/gameFiles";
 import { addFloat32, addFloat32TowardZero, divideFloat32, multiplyFloat32TowardZero, roundToFloat32, subtractFloat32, subtractFloat32TowardZero } from "../sim/binary32";
 import { f32 } from "../sim/f32";
@@ -32,16 +32,16 @@ export interface SyncMessage {
   readonly data: string;
 }
 
-/** What a map's entry exports: start once per match, install after each hot reload. */
+
 export interface MapEntry {
   start(this: void): void;
   install(this: void): void;
 }
 
-/** Native name to why a client may call it when the others don't. */
+
 export type LocalNatives = Readonly<Record<string, string>>;
 
-/** Exact native names and why ignoring their behavior is intentional for this map. */
+
 export type IntentionalNoops = Readonly<Record<string, string>>;
 
 export interface MissingNative {
@@ -50,15 +50,15 @@ export interface MissingNative {
   readonly frame: number;
 }
 
-/** A native's behavior; a host or game supplies one for a native the default stub can't answer. */
+
 export type NativeBehavior = (this: void, ...args: never[]) => unknown;
-/** Natives a host or game adds or replaces, and other globals its map code reads, such as Lua's. */
+
 export type NativeBehaviors = Readonly<Record<string, unknown>>;
 
-/**
- * Natives Wisp's own runtime calls on one client only. A game adds the ones
- * its code calls that way: local UI, input polling, conversions for local text.
- */
+
+
+
+
 export const WISP_LOCAL_NATIVES: LocalNatives = {
   GetLocalPlayer: "identifies the client; every local branch starts here",
   GetPlayerId: "names this client's files; no effect",
@@ -79,15 +79,15 @@ export const WISP_LOCAL_NATIVES: LocalNatives = {
   BlzGetLocalSpecialEffectZ: "the scene report reads an effect's local position",
 };
 
-/** A special effect as the client shows it. */
+
 export interface EffectPose extends AnimationState {
   readonly handle: Handle;
   readonly model: string;
-  /** The client frame it was created on. */
+
   readonly created: number;
   x: number;
   y: number;
-  /** Where AddSpecialEffect puts it, 0, until the map moves it. */
+
   z: number;
   alpha: number;
   scale: number;
@@ -99,37 +99,37 @@ export interface EffectPose extends AnimationState {
   color: [number, number, number];
   teamColor: number;
   matrixScale: [number, number, number];
-  /** A matrix scale of zero on some axis since the matrix was last reset. */
+
   flat: boolean;
-  /** The frame DestroyEffect was called; EffectDeathTime removes the model after five game seconds. */
+
   destroyed?: number;
-  /** Seconds of the model's Death sequence, when it has one. */
+
   death?: number;
 }
 
 const copyBlend = (blend: AnimationBlend | undefined): AnimationBlend | undefined =>
   blend === undefined ? undefined : { from: { ...blend.from, subAnimations: [...blend.from.subAnimations] }, remaining: blend.remaining };
 
-/** Seconds of a model's Death sequence at time scale 1; undefined when it has none. */
+
 export type EffectDeaths = (this: void, model: string) => number | undefined;
 
-/**
- * The cinematic filter over the world, under the UI, as SetCineFilter* sets
- * it: a texture tinted by a colour that moves from the start to the end
- * colour over `duration` seconds from DisplayCineFilter(true).
- */
+
+
+
+
+
 export interface CineFilterPose {
   readonly texture: string;
-  /** A blendmode constant's name, such as "BLEND_MODE_MODULATE_2X". */
+
   readonly blendMode: string;
   readonly texMapFlags: unknown;
-  /** Red, green, blue and alpha, 0-255, at the capture: the start colour moved toward the end colour by the elapsed share of the duration. */
+
   readonly color: readonly [number, number, number, number];
-  /** Minimum u, minimum v, maximum u, maximum v at the capture, moved the same way. */
+
   readonly uv: readonly [number, number, number, number];
 }
 
-/** blendmode values in ConvertBlendMode order. */
+
 const BLEND_MODES = ["BLEND_MODE_NONE", "BLEND_MODE_DONT_CARE", "BLEND_MODE_KEYALPHA", "BLEND_MODE_BLEND", "BLEND_MODE_ADDITIVE", "BLEND_MODE_MODULATE", "BLEND_MODE_MODULATE_2X"];
 
 interface CineFilter {
@@ -141,7 +141,7 @@ interface CineFilter {
   startUV: [number, number, number, number];
   endUV: [number, number, number, number];
   duration: number;
-  /** The frame DisplayCineFilter(true) was called, while it shows. */
+
   shown: number | undefined;
 }
 
@@ -185,7 +185,7 @@ interface SoundState {
   killWhenDone: boolean;
 }
 
-/** One pure assertion over emitted cues; creation alone never counts as playing. */
+
 export function assertSoundCue(log: readonly SoundCue[], expected: { readonly source?: string; readonly label?: string; readonly frame?: number; readonly count?: number }): void {
   let count = 0;
   for (const cue of log) {
@@ -205,7 +205,7 @@ export interface UnitPose extends AnimationState {
   x: number;
   y: number;
   z: number;
-  /** Warcraft's unit facing, in degrees. */
+
   facing: number;
   scale: [number, number, number];
   alpha: number;
@@ -215,7 +215,7 @@ export interface UnitPose extends AnimationState {
   visible: boolean;
 }
 
-/** Object-data values declared by the map, keyed by its unit type ID. */
+
 export interface UnitStateFixture {
   readonly life: number;
   readonly maxLife: number;
@@ -233,7 +233,7 @@ interface Unit extends Handle, UnitPose {
   mana: number | undefined;
   maxMana: number | undefined;
   dead: boolean;
-  /** Removal is complete: the handle reads type 0 and life 0 and takes no writes. */
+
   removed: boolean;
 }
 
@@ -242,17 +242,17 @@ type Callback = (this: void) => void;
 interface Timer extends Handle {
   callback: Callback | undefined;
   periodic: boolean;
-  /** The timeout as started, which a read after expiry returns. */
+
   timeout: number;
-  /** The timeout or period after the minimums, in binary32 seconds. */
+
   period: number;
-  /** The game time the current period ends, in binary32 seconds. */
+
   due: number;
   /** Equal deadlines run in TimerStart order; a periodic timer keeps its place. */
   order: number;
   running: boolean;
   expired: boolean;
-  /** Elapsed seconds frozen by PauseTimer. */
+
   paused: number | undefined;
 }
 
@@ -280,18 +280,18 @@ type Registration =
   | { readonly kind: "key"; readonly trigger: Trigger; readonly player: number; readonly key: number; readonly meta: number; readonly down: boolean }
   | { readonly kind: "frame"; readonly trigger: Trigger; readonly frame: Frame; readonly event: unknown };
 
-/**
- * A client's CustomMapData folder outside the process, so another program,
- * such as an input helper, reads what the map writes and writes what it reads.
- */
+
+
+
+
 export interface ClientFiles {
-  /** A file the map wrote with PreloadGenEnd: its Preload lines. */
+
   written(this: void, name: string, lines: readonly string[]): void;
-  /** What Preloader reads from a file someone else wrote: one chunk per FileIO tooltip level; undefined while it is missing. */
+
   read(this: void, name: string): readonly string[] | undefined;
 }
 
-/** How a host makes one client's natives and state the ones map code sees while it runs. */
+
 export interface ClientScope {
   enter(this: void, client: HeadlessClient): void;
   leave(this: void, client: HeadlessClient): void;
@@ -303,11 +303,11 @@ export interface ClientOptions {
   readonly scenery?: SceneryFixtures;
   readonly inventory?: Warcraft3InventoryFixtures;
   readonly slot: number;
-  /** The map's configureRuntime() filePrefix, which names the file its error reports go to. */
+
   readonly filePrefix: string;
-  /** Player slots with a human client; the others are empty. */
+
   readonly humans: readonly number[];
-  /** Lobby names by player slot; unnamed slots use Warcraft's Player N label. */
+
   readonly playerNames?: Readonly<Record<number, string>>;
   readonly declarations: NativeDeclarations;
   readonly localNatives: LocalNatives;
@@ -315,30 +315,30 @@ export interface ClientOptions {
   readonly network: SyncMessage[];
   readonly screenWidth: number;
   readonly scope?: ClientScope;
-  /** Added or replacing natives; values that aren't declared natives, such as Lua globals, are set unlogged. */
+
   readonly natives?: (this: void, client: HeadlessClient) => NativeBehaviors;
   readonly files?: ClientFiles;
-  /** Frame definitions (wisp:docs/ui.md) whose trees BlzCreateFrame makes by name, as their generated FDF does in Warcraft. */
+
   readonly frames?: readonly FrameTemplate[];
-  /** Death sequences of the models drawn; without one, a destroyed effect keeps its animation until cleanup. */
+
   readonly effectDeaths?: EffectDeaths;
-  /** The player's Options > Sound music slider, 0 to 1 (default 1): it scales music cues' effectiveVolume, not sound effects'. */
+
   readonly musicSlider?: number;
 }
 
 export const FRAMES_PER_SECOND = 60;
 /** The shortest repeating period: a zero period fires about 10,000 times a game second (wisp:docs/warsmash-notes.md#timers-and-frame-stepping). */
 const MIN_PERIOD = f32(0.0001);
-/** The shortest one-shot timeout, 1/1024 s. */
+
 const MIN_ONE_SHOT = 0.0009765625;
-/** A frame's end in binary32 game seconds. */
+
 const frameEnd = (frame: number): number => divideFloat32(frame, FRAMES_PER_SECOND);
-/**
- * A deadline `length` after `at`, the sum rounded toward zero as Warcraft's
- * timer clock adds. Where `length` is under the clock's resolution (a
- * 0.0001 s period past 1,024 s) it is one resolution later, so a repeat
- * can't stall the frame; Warcraft's behavior there is unmeasured.
- */
+// Warcraft timer deadlines add toward zero; sub-resolution repeats advance one resolution to avoid stalling.
+
+
+
+
+
 const after = (at: number, length: number): number => {
   const due = addFloat32TowardZero(at, length);
   return due > at ? due : addFloat32TowardZero(at, at * 1.1920928955078125e-7);
@@ -352,22 +352,22 @@ const isHandle = (value: unknown): value is Handle =>
 
 const isFrame = (value: unknown): value is Frame => typeof value === "object" && value !== null && "points" in value;
 
-/** Life at or below this kills a living unit. */
+
 const DEATH_CUTOFF = f32(0.405);
 
 const RADIANS_PER_DEGREE = 0.01745329238474369;
 const DEGREES_PER_RADIAN = 57.295780181884766;
-/** 2π as binary32. */
+
 const TURN = 6.2831854820251465;
 /** Two ulps above the binary32 nearest 1 / TURN, as 3.0.1 multiplies by it. */
 const TURNS_PER_RADIAN = 0.1591549664735794;
 
-/**
- * The degrees GetUnitFacing reads after a facing write: 3.0.1 keeps facing in
- * radians with every product rounded toward zero; an angle in [-TURN, 0) gains
- * a turn, and any other outside [0, TURN) keeps its fraction of a turn
- * (wisp:docs/warsmash-notes.md, "Unit position and facing").
- */
+// Warcraft stores facing in radians with products rounded toward zero (wisp:docs/warsmash-notes.md, Unit position and facing).
+
+
+
+
+
 function unitFacing(degrees: number): number {
   let radians = multiplyFloat32TowardZero(f32(degrees), RADIANS_PER_DEGREE);
   if (radians >= TURN || radians < -TURN) {
@@ -387,11 +387,11 @@ function isDigits(text: string): boolean {
   return true;
 }
 
-/**
- * A number as both runtimes print it alike: an integer in digits, any other
- * value exactly, as an integer times a power of two. Lua prints 3.0 for a
- * float that JavaScript prints as 3, and neither prints every binary digit.
- */
+// Lua and JavaScript print floats differently; exact binary text keeps runtime comparisons deterministic.
+
+
+
+
 export function describeNumber(value: number): string {
   if (value !== value) return "nan";
   if (value === Infinity) return "inf";
@@ -408,7 +408,7 @@ export function describeNumber(value: number): string {
   return exponent === 0 ? mantissa.toFixed(0) : `${mantissa.toFixed(0)}p-${exponent}`;
 }
 
-/** A native argument, the same on every client and in both runtimes: handles by kind and number, callbacks as `fn`. */
+
 export function describeValue(value: unknown): string {
   if (value === undefined || value === null) return "nil";
   if (typeof value === "number") return describeNumber(value);
@@ -428,7 +428,7 @@ export function describeCall({ name, args }: NativeCall): string {
   return `${call})`;
 }
 
-/** Whether two clients made the same call: equal values, handles with the same kind and number, any two callbacks. */
+
 export function sameCall(left: NativeCall, right: NativeCall): boolean {
   if (left.name !== right.name || left.args.length !== right.args.length) return false;
   for (let index = 0; index < left.args.length; index++) {
@@ -445,11 +445,11 @@ export function sameCall(left: NativeCall, right: NativeCall): boolean {
   return true;
 }
 
-/**
- * JASS S2I and S2R read a leading number and ignore the rest; no digits read
- * as 0. S2I skips leading spaces and S2R doesn't (3.0.1: `S2I(" -7")` is -7,
- * `S2R(" 7.25")` is 0; wisp#50).
- */
+// JASS S2I skips leading spaces; S2R does not (wisp:docs/warsmash-notes.md, Script rules).
+
+
+
+
 function leadingNumber(text: string, fraction: boolean): number {
   let start = 0;
   while (!fraction && start < text.length && text.charAt(start) === " ") start++;
@@ -469,13 +469,13 @@ function leadingNumber(text: string, fraction: boolean): number {
   return value === value ? value : 0;
 }
 
-/**
- * A binary32 real with `digits` decimals, as Warcraft's R2S and R2SW print
- * it: correctly rounded, exact ties away from zero (3.0.1: 0.0625 reads
- * "0.063", -0.0625 "-0.063"; wisp#50), the sign kept on a negative that
- * rounds to zero. Neither Lua's string.format (ties to even) nor
- * JavaScript's toFixed (ties up, inexact) gives this, so it's done by hand.
- */
+// Warcraft R2S/R2SW round exact ties away from zero and retain negative zero; host formatters differ.
+
+
+
+
+
+
 function fixed(value: number, digits: number): string {
   const real = roundToFloat32(value);
   if (real !== real || real === Infinity || real === -Infinity || real >= f32(1e21) || real <= -f32(1e21)) return real.toFixed(digits);
@@ -497,14 +497,14 @@ function fixed(value: number, digits: number): string {
   return real < 0 ? `-${text}` : text;
 }
 
-/** Characters of a sync message's data that arrive; the prefix doesn't count (3.0.1: 300 arrive as 255, 252 whole; wisp#50). */
+// Sync data is capped at 255 characters, preserving whole UTF-8 characters (wisp:docs/warsmash-notes.md).
 const SYNC_DATA_LIMIT = 255;
 
-/**
- * Mixes an integer into a 32-bit hash. The product stays below 2^53, so
- * JavaScript computes it exactly, and `| 0` keeps its low 32 bits, as 32-bit
- * Lua's wrapping integers do.
- */
+// Products below 2^53 and | 0 preserve Lua32 wrapping hash arithmetic in JavaScript.
+
+
+
+
 const mix = (hash: number, value: number) => (hash * 1000003 + value) | 0;
 
 function mixText(hash: number, text: string): number {
@@ -513,7 +513,7 @@ function mixText(hash: number, text: string): number {
   return mix(mixed, text.length);
 }
 
-/** Native names and handle kinds recur in every call, so each is hashed once. */
+
 const nameHashes = new Map<string, number>();
 
 function mixCall(hash: number, { name, args }: NativeCall): number {
@@ -533,7 +533,7 @@ function mixName(hash: number, name: string): number {
 
 const INT32_LIMIT = 2147483648;
 
-/** An argument as describeValue identifies it, with a tag per kind of value. */
+
 function mixValue(hash: number, value: unknown): number {
   if (typeof value === "number") {
     // Math.floor makes an integral Lua float an integer, which Lua's `|` needs.
@@ -551,7 +551,7 @@ export class HeadlessClient {
   readonly scenery: Scenery;
   readonly inventory: Warcraft3Inventory;
   readonly abilities: Warcraft3Abilities;
-  /** The floating text tags this client shows. */
+
   readonly textTags = new TextTags();
   readonly textAreaAutoScroll = new Map<Handle, boolean>();
   readonly heldMouseButtons = new Set<unknown>();
@@ -559,35 +559,35 @@ export class HeadlessClient {
   mouseScreenY = 0;
   private heldMeta = 0;
   readonly slot: number;
-  /** Every native call the other clients must make alike, in order, since the calls forget() dropped. */
+
   readonly log: NativeCall[] = [];
-  /** Calls forget() dropped from the front of `log`; the checksum still covers them. */
+
   forgotten = 0;
   private forgottenHash = 0;
-  /** Error reports the map wrote to its error file, shown on screen or not: `error in HANDLER: MESSAGE`. */
+
   readonly errors: string[] = [];
-  /** First unmodeled call of each native, including local-only calls. */
+
   readonly missingNatives: MissingNative[] = [];
-  /** Every message the map showed this client. */
+
   readonly messages: string[] = [];
-  /** Where the host keeps what a thrown error says beyond the map's report, such as a JavaScript stack. */
+
   readonly thrown: string[] = [];
-  /** Files the map wrote, by name: their Preload lines. */
+
   readonly files = new Map<string, string[]>();
-  /** Files the host put in CustomMapData for Preloader: one chunk per FileIO tooltip level. */
+
   readonly published = new Map<string, readonly string[]>();
-  /**
-   * Preloader calls for a file nobody had published, which Wine answers by
-   * reading the folder that should hold it: all of CustomMapData when the
-   * file's own folder is missing too (wisp:docs/hot-reload.md).
-   */
+  // Wine reads the parent folder when a Preloader path is missing (wisp:docs/hot-reload.md).
+
+
+
+
   missedLookups = 0;
   readonly natives: Record<string, unknown> = {};
-  /** Frames this client has run. */
+
   frame = 0;
   private wallSeconds: number | undefined;
 
-  /** The local presentation clock; deterministic journeys use their frame clock. */
+
   clockSeconds(): number { return this.wallSeconds ?? this.frame / FRAMES_PER_SECOND; }
 
   setWallTime(seconds: number): void { this.wallSeconds = seconds; }
@@ -598,18 +598,18 @@ export class HeadlessClient {
   private readonly spellHits: { target: Unit; due: number; damage: number }[] = [];
   private readonly passiveAlliances = new Map<string, boolean>();
   private timerOrder = 0;
-  /** Game time as natives read it, in binary32 seconds: a timer callback's own deadline, otherwise the end of the latest frame. */
+
   private now = 0;
   private readonly registrations: Registration[] = [];
   private readonly heldKeys = new Set<number>();
   private readonly memo = new Map<string, Frame>();
   private allPlayers: Handle | undefined;
-  /** Effects shown, in creation order, including destroyed ones still playing Death. */
+
   private readonly effects = new Map<Handle, EffectPose>();
   private readonly effectDeaths: EffectDeaths | undefined;
   private readonly musicSlider: number;
   private readonly units = new Map<Handle, Unit>();
-  /** Units RemoveUnit took out of the world this frame; their handles keep their state until the frame ends. */
+
   private removals: Unit[] = [];
   private readonly unitStates: UnitStateFixtures;
   private readonly sounds = new Map<Handle, SoundState>();
@@ -632,7 +632,7 @@ export class HeadlessClient {
   private event: EventContext = { player: 0, syncPrefix: "", syncData: "", chat: "", key: 0, timer: undefined, frame: undefined, frameEvent: undefined };
   private preload: string[] = [];
   private readonly stored: ClientFiles | undefined;
-  /** The frames this client shows: their text, places, and which takes a click or the keyboard. */
+
   readonly frames: Frames;
 
   constructor(options: ClientOptions) {
@@ -655,8 +655,8 @@ export class HeadlessClient {
     const behaviors = this.behaviors(options);
     const local = options.localNatives;
     const log = this.log;
-    // A call's arguments land in one array that the log keeps, so the common
-    // arities take them as parameters rather than as a rest array to spread.
+
+
     const logged = (name: string, parameters: number, behave: (this: void, ...args: unknown[]) => unknown): ((this: void, ...args: unknown[]) => unknown) => {
       switch (parameters) {
         case 0: return () => {
@@ -707,7 +707,7 @@ export class HeadlessClient {
       })) as (this: void, ...args: unknown[]) => unknown;
       this.natives[name] = local[name] === undefined ? logged(name, parameters, behave) : behave;
     }
-    // A constant of a handle type is its own name, so comparisons with it work.
+
     for (const [name, type] of options.declarations.constants) this.natives[name] = WARCRAFT3_ENUM_VALUES[name] ?? (type === "number" ? 0 : type === "boolean" ? name === "TRUE" : name);
     for (const [name, type] of options.declarations.variables) this.natives[name] = this.defaultValue(type);
     const points = new Map<unknown, readonly [number, number]>();
@@ -752,7 +752,7 @@ export class HeadlessClient {
     }
   }
 
-  /** A frame Warcraft made, such as an origin frame: one handle per frame, made at its first lookup. */
+
   private memoized(key: string, name = ""): Frame {
     const known = this.memo.get(key);
     if (known !== undefined) return known;
@@ -790,10 +790,10 @@ export class HeadlessClient {
     return value;
   }
 
-  /**
-   * Native life writes round the change from current life before applying it, with halfway changes
-   * toward zero; the cutoff applies to that result (wisp:docs/warsmash-notes.md#native-results-for-44).
-   */
+  // Native life writes round halfway changes toward zero before applying the cutoff (wisp:docs/warsmash-notes.md#native-results-for-44).
+
+
+
   private setLife(unit: Unit, life: number): void {
     if (unit.removed) return;
     const value = unit.life === undefined ? f32(life) : addFloat32(unit.life, subtractFloat32(f32(life), unit.life, true));
@@ -852,13 +852,13 @@ export class HeadlessClient {
     return describeValue(field);
   }
 
-  /** The effect the map can still change: made and not destroyed. */
+
   private liveEffect(effect: Handle): EffectPose | undefined {
     const pose = this.effects.get(effect);
     return pose?.destroyed === undefined ? pose : undefined;
   }
 
-  /** Warcraft starts Death when present, then removes the effect on its gameplay decay timer. */
+
   private destroyEffect(effect: Handle): void {
     const pose = this.liveEffect(effect);
     if (pose === undefined) return;
@@ -882,7 +882,7 @@ export class HeadlessClient {
     this.messages.push(text);
   }
 
-  /** A report file's lines as the screen would show them: its heading names the handler, its next line the message. */
+
   private report(lines: readonly string[]): void {
     const heading = lines[0] ?? "";
     this.errors.push(`error in ${heading.slice(heading.indexOf(" in ") + 4)}: ${lines[1] ?? ""}`);
@@ -1025,7 +1025,7 @@ export class HeadlessClient {
       BlzFrameToPixelY: (frame: number) => Math.round(frame * 1080 / f32(0.6)),
       BlzTextAreaFrameSetAutoScroll: (frame: Handle, value: boolean) => { this.textAreaAutoScroll.set(frame, value); },
       BlzLoadTOCFile: () => true,
-      // A frame getter returns one handle per frame, made at its first call.
+
       BlzGetOriginFrame: (type: unknown, index: number) => this.memoized(`origin ${describeValue(type)} ${index}`),
       BlzGetFrameByName: (name: string, context: number) => this.frames.named(name, context) ?? this.memoized(`name ${name} ${context}`, name),
       BlzFrameGetChildrenCount: (frame: unknown) => (isFrame(frame) ? this.frames.children(frame).length : 0),
@@ -1158,7 +1158,7 @@ export class HeadlessClient {
         timer.periodic = periodic;
         timer.timeout = seconds;
         timer.period = seconds >= shortest ? seconds : shortest;
-        // From the game time natives read: inside a callback, its deadline.
+
         timer.due = after(this.now, timer.period);
         timer.order = ++this.timerOrder;
         timer.running = true;
@@ -1199,7 +1199,7 @@ export class HeadlessClient {
         if (name === errorFile(this.slot, this.filePrefix)) this.report(this.preload);
         this.stored?.written(name, this.preload);
       },
-      // A published file's Preload code sets one FileIO tooltip level per chunk.
+
       Preloader: (name: string) => {
         const chunks = this.preloaded.get(name) ?? this.published.get(name) ?? this.stored?.read(name);
         if (chunks === undefined) {
@@ -1243,7 +1243,7 @@ export class HeadlessClient {
         if (sound !== undefined) sound.duration = Math.max(0, duration);
       },
       GetSoundDuration: (handle: Handle) => this.sounds.get(handle)?.duration ?? 0,
-      // 3.0.1 reads a handle set to be killed as not playing, though it plays out.
+      // A sound marked for destruction reads as not playing while it plays out.
       GetSoundIsPlaying: (handle: Handle) => {
         const sound = this.sounds.get(handle);
         return sound !== undefined && sound.playing && !sound.killWhenDone;
@@ -1307,7 +1307,7 @@ export class HeadlessClient {
       StartSound: (handle: Handle) => this.startSound(handle),
       StartSoundEx: (handle: Handle) => this.startSound(handle),
       AddSpecialEffectLoc: (model: string) => this.effectAt(model, 0, 0),
-      // 3.0.1's local position getters read an attached effect at 0, 0 wherever its unit is.
+      // Local position getters read attached effects at 0, 0 regardless of the unit position.
       AddSpecialEffectTarget: (model: string) => this.effectAt(model, 0, 0),
       DestroyEffect: (effect: Handle) => this.destroyEffect(effect),
       BlzRemoveEffect: (effect: Handle) => { if (this.liveEffect(effect) !== undefined) this.effects.delete(effect); },
@@ -1324,7 +1324,7 @@ export class HeadlessClient {
         if (pose !== undefined) pose.queuedAnimations.push(animation);
       },
       // Effect reals are stored as binary32 (wisp:docs/warsmash-notes.md, "Effects: attachment, scale and lifetime").
-      // An effect that was destroyed or never made changes nothing.
+
       BlzSetSpecialEffectPosition: (effect: Handle, x: number, y: number, z: number) => {
         const pose = this.liveEffect(effect);
         if (pose === undefined) return;
@@ -1421,14 +1421,14 @@ export class HeadlessClient {
           pose.roll = 0;
         }
       },
-      // A destroyed effect still playing Death reads where it stands (3.0.1 capture, wisp#59).
+      // Destroyed effects still playing Death retain their position.
       BlzGetLocalSpecialEffectX: (effect: Handle) => this.effects.get(effect)?.x ?? 0,
       BlzGetLocalSpecialEffectY: (effect: Handle) => this.effects.get(effect)?.y ?? 0,
       BlzGetLocalSpecialEffectZ: (effect: Handle) => this.effects.get(effect)?.z ?? 0,
       I2S: (n: number) => describeNumber(n),
       R2S: (n: number) => fixed(n, 3),
       R2SW: (n: number, width: number, precision: number) => {
-        // 3.0.1 (wisp#50): R2SW(1.5, 8, 2) is "     1.50", R2SW(2.5, 0, 0) and R2SW(3.14159, 0, 0) are "3.0".
+        // R2SW pads to width and rounds to at least one decimal (wisp:docs/warsmash-notes.md, Script rules).
         let text = fixed(n, precision > 0 ? precision : 0);
         if (precision <= 0) text = `${text}.0`;
         while (text.length < width + 1) text = ` ${text}`;
@@ -1451,19 +1451,19 @@ export class HeadlessClient {
     };
   }
 
-  /** The published files Preloader has read in this client, in the order it first read them. */
+
   preloadedFiles(): string[] {
     return [...this.preloaded.keys()];
   }
 
-  /** The effects this client shows now, as copies, in creation order. */
+
   effectPoses(options: { readonly visibleOnly?: boolean } = {}): EffectPose[] {
     const poses: EffectPose[] = [];
     for (const pose of this.effects.values()) if (options.visibleOnly !== true || (pose.alpha > 0 && pose.scale > 0 && !pose.flat)) poses.push({ ...pose, subAnimations: [...pose.subAnimations], animationBlend: copyBlend(pose.animationBlend), color: [...pose.color], matrixScale: [...pose.matrixScale] });
     return poses;
   }
 
-  /** The cinematic filter as this client draws it now; undefined while none shows. */
+
   cineFilterPose(): CineFilterPose | undefined {
     const filter = this.cineFilter;
     if (filter.shown === undefined) return undefined;
@@ -1477,7 +1477,7 @@ export class HeadlessClient {
     return { x: this.cameraX, y: this.cameraY, fields: { ...this.cameraFields } };
   }
 
-  /** Live unit appearance copied in creation order; hidden units retain their pose. */
+
   unitPoses(): UnitPose[] {
     const poses: UnitPose[] = [];
     for (const unit of this.units.values()) poses.push({ handle: unit.handle, typeId: unit.typeId, owner: unit.owner,
@@ -1488,7 +1488,7 @@ export class HeadlessClient {
     return poses;
   }
 
-  /** Makes this client's natives and state the ones map code sees, and runs `body`. */
+
   run(body: (this: void) => void): void {
     this.scope?.enter(this);
     try {
@@ -1522,10 +1522,10 @@ export class HeadlessClient {
     }
   }
 
-  /** One game frame: the engine's clocks advance, then every timer callback due by its end runs. */
+
   step(draw = true): void {
     this.frame++;
-    // Outside run(): the scope measures map code (wisp perf), and these clocks are Warcraft's own work, not the map's.
+
     this.abilities.tick(f32(1 / FRAMES_PER_SECOND));
     this.scenery.tick(f32(1 / FRAMES_PER_SECOND));
     this.textTags.tick(f32(1 / FRAMES_PER_SECOND));
@@ -1547,13 +1547,13 @@ export class HeadlessClient {
     this.removals = [];
   }
 
-  /** A drawn frame spends animation time once, even when several callbacks precede it. */
+
   draw(seconds: number): void {
     for (const pose of this.effects.values()) advanceAnimation(pose, pose.timeScale, f32(seconds));
     for (const unit of this.units.values()) advanceAnimation(unit, unit.timeScale, f32(seconds));
   }
 
-  /** Seconds into a timer's current period, at the game time natives read: its period less what remains, each rounded toward zero. */
+
   private timerElapsed(timer: Timer): number {
     if (timer.paused !== undefined) return timer.paused;
     if (timer.expired) return timer.timeout;
@@ -1562,13 +1562,13 @@ export class HeadlessClient {
     return remaining < timer.period ? subtractFloat32TowardZero(timer.period, remaining) : 0;
   }
 
-  /**
-   * Every callback due by the end of this frame, earliest deadline first and
-   * equal deadlines in TimerStart order; a period shorter than a frame
-   * catches up within it, and a timer started in a callback fires in this
-   * frame when it falls due in it. Each callback reads its own deadline as
-   * the time (wisp:docs/warsmash-notes.md#timers-and-frame-stepping).
-   */
+  // Due callbacks run by deadline then TimerStart order, reading their own deadline as game time.
+
+
+
+
+
+
   private runDueTimers(): void {
     const end = frameEnd(this.frame);
     this.now = end;
@@ -1641,23 +1641,23 @@ export class HeadlessClient {
     });
   }
 
-  /**
-   * Text this client's keyboard types: into the edit box that has the
-   * keyboard, while the player sees it. False when none has it, so Warcraft
-   * would take the text as key presses.
-   */
+
+
+
+
+
   type(text: string): boolean {
     return this.frames.type(text);
   }
 
-  /** The frame a click at (x, y), in Warcraft's UI coordinates, reaches on this client: shown, enabled and registered for clicks. */
+
   clickTarget(x: number, y: number): Frame | undefined {
     const click = this.natives.FRAMEEVENT_CONTROL_CLICK;
     return this.frames.at(x, y, (frame) => this.registrations.some((registration) =>
       registration.kind === "frame" && registration.frame === frame && registration.event === click && !registration.trigger.destroyed));
   }
 
-  /** A frame event from `sender` on the frame with this handle number, as every client receives it. */
+
   frameEvent(sender: number, id: number, event: unknown): void {
     this.run(() => {
       for (const registration of [...this.registrations]) {
@@ -1668,12 +1668,12 @@ export class HeadlessClient {
     });
   }
 
-  /** Every call this client logged, forgotten ones included. */
+
   callCount(): number {
     return this.forgotten + this.log.length;
   }
 
-  /** Folds the first `count` logged calls into the checksum and drops them, so a long run keeps its memory. */
+
   forget(count: number): void {
     let hash = this.forgottenHash;
     for (let index = 0; index < count; index++) {
@@ -1685,7 +1685,7 @@ export class HeadlessClient {
     this.forgotten += count;
   }
 
-  /** A 32-bit hash of every logged call: its name and arguments as describeValue identifies them. Equal logs hash alike in Bun and Lua. */
+
   checksum(): string {
     let hash = this.forgottenHash;
     for (const call of this.log) hash = mixCall(hash, call);

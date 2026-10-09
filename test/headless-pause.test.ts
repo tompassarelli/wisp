@@ -9,8 +9,8 @@ const runtime = installHeadless({ filePrefix: "pause86", globalPrefixes: [] });
 afterAll(runtime.restore);
 
 test("[native #86] a committed map pause keeps fighter animation frozen while callbacks and the local wall clock continue", () => {
-  // Classic helper-0 PAUSE_COMMIT/RESUME in ref-86-pause/native206/helper-0.log;
-  // trace-a.txt callbacks 205..356 continue while the simulation stays at 168.
+
+
   const frameOneNs = 205729362458791;
   const commitNs = 205732733883528;
   const resumeNs = 205735272868774;

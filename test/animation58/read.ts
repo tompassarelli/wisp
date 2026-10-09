@@ -1,9 +1,9 @@
-// Reads a capture of the #58 animation fixture into the rows of expected.ts:
-// `bun test/animation58/read.ts SCREENSHOT.png`. The yellow marks under each
-// ruler give its zero and its 1000-unit end, so the reading holds for any
-// camera scale, rotation or mirroring; the red patches are the needles, the
-// global markers and each ruler's larger origin square, which the other two
-// are measured from.
+
+
+
+
+
+
 import { inflateSync } from "node:zlib";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Console, Effect, Schema } from "effect";
@@ -16,7 +16,7 @@ class ReadFailure extends Schema.TaggedError<ReadFailure>()("ReadFailure", { pro
 
 interface Image { readonly width: number; readonly height: number; readonly rgb: Uint8Array }
 
-/** An 8-bit, non-interlaced RGB or RGBA PNG, as screenshots and the headless renderer write them. */
+
 export function decodePng(bytes: Uint8Array): Image {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let width = 0, height = 0, channels = 0;
@@ -57,7 +57,7 @@ export function decodePng(bytes: Uint8Array): Image {
 
 interface Blob { readonly x: number; readonly y: number; readonly size: number }
 
-/** Connected patches of pixels of one color, with their centroids. */
+
 export function blobs(image: Image, matches: (r: number, g: number, b: number) => boolean): Blob[] {
   const { width, height, rgb } = image;
   const seen = new Uint8Array(width * height);
@@ -88,7 +88,7 @@ export function blobs(image: Image, matches: (r: number, g: number, b: number) =
 export const isRed = (r: number, g: number, b: number) => r >= 150 && g <= 90 && b <= 90 && r - g >= 100;
 export const isYellow = (r: number, g: number, b: number) => r >= 150 && g >= 150 && b <= 110 && Math.abs(r - g) <= 70;
 
-/** World X and Y to pixels: px = a·X + b·Y + c, py = d·X + e·Y + f. */
+
 type Affine = readonly [number, number, number, number, number, number];
 const apply = (m: Affine, x: number, y: number): [number, number] => [m[0] * x + m[1] * y + m[2], m[3] * x + m[4] * y + m[5]];
 
@@ -106,9 +106,9 @@ function nearest(found: readonly Blob[], x: number, y: number, within: number): 
   return best;
 }
 
-/** Least-squares affine map from world points to pixels. */
+
 function fit(pairs: readonly (readonly [number, number, Blob])[]): Affine {
-  // Normal equations for [X Y 1] → px and → py.
+
   const m = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
   const px = [0, 0, 0], py = [0, 0, 0];
   for (const [x, y, blob] of pairs) {
@@ -137,11 +137,11 @@ function fit(pairs: readonly (readonly [number, number, Blob])[]): Affine {
   return [a ?? 0, b ?? 0, c ?? 0, d ?? 0, e ?? 0, f ?? 0];
 }
 
-/**
- * Finds the marks: tries the eight axis-aligned ways the layout can lie on
- * screen, scaled to the yellow patches' extent, keeps the one that matches
- * most marks, and refines it by least squares.
- */
+
+
+
+
+
 export function calibrate(yellow: readonly Blob[]): { affine: Affine; matched: number } {
   const world = marks();
   const span = (values: readonly number[]) => [Math.min(...values), Math.max(...values)] as const;
@@ -181,14 +181,14 @@ export interface Reading {
   readonly dx: number;
   readonly dy: number;
   readonly gx: number;
-  /** Where the origin square was drawn, from where the ruler's slot puts it. */
+
   readonly offset: readonly [number, number];
 }
 
-/**
- * Each ruler's needle and global marker in world units from its drawn origin
- * square, measured along the line through its own two marks.
- */
+
+
+
+
 export function readRulers(image: Image): { readings: (Reading | string)[]; matched: number } {
   const yellow = blobs(image, isYellow);
   const red = blobs(image, isRed);
@@ -199,7 +199,7 @@ export function readRulers(image: Image): { readings: (Reading | string)[]; matc
     const zero = nearest(yellow, zx, zy, 6);
     const end = nearest(yellow, ex, ey, 6);
     if (zero === undefined || end === undefined) return `${slot.name}=no marks`;
-    // Along the ruler from its marks; across it, the global fit's world Y direction.
+
     const u = [(end.x - zero.x) / RULER_LENGTH, (end.y - zero.y) / RULER_LENGTH];
     const v = [affine[1], affine[4]];
     const local = (blob: Blob): [number, number, number] => {
@@ -207,7 +207,7 @@ export function readRulers(image: Image): { readings: (Reading | string)[]; matc
       const det = (u[0] ?? 0) * (v[1] ?? 0) - (u[1] ?? 0) * (v[0] ?? 0);
       return [(px * (v[1] ?? 0) - py * (v[0] ?? 0)) / det, ((u[0] ?? 0) * py - (u[1] ?? 0) * px) / det + MARK_DY, blob.size];
     };
-    // The next column starts 1200 along and the next row 160 across; the row below's top lane sits 76 under this origin.
+
     const own = red.map(local).filter(([x, y]) => x >= -60 && x <= RULER_LENGTH + 150 && y >= -70 && y <= 98);
     if (own.length === 0) return `${slot.name}=gone`;
     let origin: [number, number, number] | undefined;
@@ -231,18 +231,18 @@ export function readRulers(image: Image): { readings: (Reading | string)[]; matc
 
 const parse = (row: string) => (row.split("=")[1] ?? "").split(",").map(Number);
 
-/**
- * Whether a reading matches its expected row: Y within 4 units (lanes are 12
- * apart), X within 6 units, plus the ruler's timing allowance where a clock
- * ran (half of it for the global marker, which moves half a unit a millisecond).
- */
+
+
+
+
+
 export function compare(reading: Reading, effectGlobalPhase = 0): { row: string; matches: boolean } {
   const row = `${reading.slot.name}=${Math.round(reading.dx)},${Math.round(reading.dy)},${Math.round(reading.gx)}`;
   const expected = EXPECTED.find((line) => line.startsWith(`${reading.slot.name}=`)) ?? "";
   if (expected.endsWith("=gone")) return { row, matches: false };
   const [dx = Number.NaN, dy = Number.NaN, gx = Number.NaN] = parse(expected);
   // Warcraft's effects share a renderer-clock starting phase; units start at zero.
-  // The frozen-in-creation effect measures that phase without spending animation time.
+
   const unit = EXPECTED_FILE.some((line) => line.startsWith(`${reading.slot.name}-at=`));
   const period = GLOBAL_LENGTH / 2;
   const delta = reading.gx - gx - (unit ? 0 : effectGlobalPhase);
@@ -254,7 +254,7 @@ export function compare(reading: Reading, effectGlobalPhase = 0): { row: string;
 const reading = (readings: readonly (Reading | string)[], name: string) =>
   readings.find((candidate): candidate is Reading => typeof candidate !== "string" && candidate.slot.name === name);
 
-/** The loop's lost overshoot in ms: the reference clock's time, wrapped by Walk's 1002 ms, minus the loop's frame. */
+
 function overshoot(readings: readonly (Reading | string)[]): number | undefined {
   const loop = reading(readings, "loop-played"), reference = reading(readings, "loop-reference");
   if (loop === undefined || reference === undefined) return undefined;
@@ -262,20 +262,20 @@ function overshoot(readings: readonly (Reading | string)[]): number | undefined 
   return lost < -501 ? lost + 1002 : lost;
 }
 
-/** Death needles move a unit every 30 ms. */
+
 const DEATH_MS = 30;
 
-/** When the capture was taken, in seconds after the map wrote its rows: read from the ruler playing Death since DEATH_SECONDS. */
+
 function captureMoment(readings: readonly (Reading | string)[]): number | undefined {
   const reference = reading(readings, "death-reference");
   return reference === undefined ? undefined : DEATH_SECONDS + reference.dx * DEATH_MS / 1000 - READY_SECONDS;
 }
 
-/**
- * For each ruler destroyed `after` seconds past DEATH_SECONDS: how much later
- * in ms its Death started than the reference's, or that it was gone and how
- * long after its destruction the capture was taken.
- */
+
+
+
+
+
 function deathLags(readings: readonly (Reading | string)[]): string[] {
   const reference = reading(readings, "death-reference");
   return ([["death-at-0", 0], ["death-at-1", 1], ["death-at-2", 2]] as const).map(([name, after]) => {
@@ -286,7 +286,7 @@ function deathLags(readings: readonly (Reading | string)[]): string[] {
   });
 }
 
-/** Rulers whose origin square was drawn more than 3 units from its slot, as `name dx,dy`. */
+
 function offsets(readings: readonly (Reading | string)[]): string {
   const moved = readings.filter((candidate): candidate is Reading => typeof candidate !== "string" && Math.hypot(...candidate.offset) > 3);
   return moved.length === 0 ? "none" : moved.map((moved) => `${moved.slot.name} ${Math.round(moved.offset[0])},${Math.round(moved.offset[1])}`).join("; ");

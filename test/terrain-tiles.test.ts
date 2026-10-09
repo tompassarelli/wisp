@@ -5,7 +5,7 @@ import { terrainTileLayers, terrainTileUV, terrainBlightPath } from "../scripts/
 const point = (ground: number, blight = false): TerrainPoint => ({ ground, flags: blight ? 2 : 0, variation: 1, height: 0, layer: 2, cliff: 15, cliffVariation: 0, water: 0 });
 
 test("[reference] terrain atlas variation 1 is east of 0 and blight replaces corners above ground", () => {
-  // HiveWE's W3E format page, Ground Textures and Blight (16 September 2025).
+  // Fixture layout follows HiveWE's W3E format, Ground Textures and Blight.
   const uv = terrainTileUV(512, 256, 15, 1);
   expect(uv).toEqual([5 / 8 + 0.5 / 512, 0.5 / 256, 6 / 8 - 0.5 / 512, 1 / 4 - 0.5 / 256]);
   expect(terrainTileUV(512, 256, 15, 14)).toEqual([6 / 8 + 0.5 / 512, 3 / 4 + 0.5 / 256, 7 / 8 - 0.5 / 512, 1 - 0.5 / 256]);

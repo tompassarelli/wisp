@@ -1,5 +1,5 @@
-// A map entry for test/headless.test.ts: once a second every client shows a
-// message, and the second player's client alone creates a timer.
+
+
 import { installDispatch, on, trampoline } from "../../src/platform/dispatch";
 import { installHotReload, startHotReload } from "../../src/platform/hotReload";
 import { configureRuntime } from "../../src/runtime/config";

@@ -1,17 +1,17 @@
-// Rounds a real result to binary32 (Math.fround on the host). Warcraft's Lua
-// numbers are binary32, but its raw arithmetic doesn't round to nearest: a
-// product can land an ulp toward zero, and a quotient an ulp away from the
-// nearest (smashcraft's native camera, 7 October 2026). So the
-// warcraft-numbers plugin compiles f32(a + b), f32(a - b), f32(a * b) and
-// f32(a / b) to calls of __wispF32Add, __wispF32Subtract, __wispF32Multiply
-// and __wispF32Divide, which round the exact result to nearest: a sum or
-// difference of magnitudes in [2^-16, 2^16) from integer significands, other
-// operations with the binary32 helpers. Any other f32(x) compiles to x, which
-// is already binary32 there.
+// Warcraft raw arithmetic can miss nearest binary32; compile wrapped operations to exact helpers.
+
+
+
+
+
+
+
+
+
 import { addFloat32, divideFloat32, multiplyFloat32, subtractFloat32 } from "./binary32";
 import { floorDiv } from "./intMath";
 
-// The slow path's cache keys an operation by these.
+
 const ADD = 1;
 const SUBTRACT = 2;
 const MULTIPLY = 3;
@@ -34,8 +34,8 @@ for (let i = 0; i < 8192; i++) {
 }
 
 function slowFloat32(left: number, right: number, operation: number): number {
-  // Zero signs and nonfinite values bypass equality keys. The hash uses exact
-  // power-of-two scaling and integer arithmetic below Warcraft's signed limit.
+  // Zero signs and nonfinite values bypass equality cache keys.
+  // Power-of-two scaling and bounded integer arithmetic keep the hash exact in Lua32.
   let index = -1;
   if (left !== 0 && right !== 0 && left >= -32768 && left <= 32768 && right >= -32768 && right <= 32768) {
     index = (floorDiv(left * 256.0, 1) ^ (floorDiv(right * 256.0, 1) * 31) ^ (operation * 131)) & 8191;
@@ -55,7 +55,7 @@ function slowFloat32(left: number, right: number, operation: number): number {
   return result;
 }
 
-/** A sum or difference whose larger operand is outside [2^-16, 2^16), NaN or infinite. */
+
 function outsideSumRange(value: number, right: number, operation: number): number {
   // Sterbenz: subtracting a same-signed value within a factor of two is exact.
   const subtrahend = operation === SUBTRACT ? right : -right;
@@ -69,15 +69,15 @@ function outsideSumRange(value: number, right: number, operation: number): numbe
   return slowFloat32(value, right, operation);
 }
 
-/**
- * value + addend rounded once, for nonzero operands that aren't both small
- * integers; `operation` and the operand it negated name the operation for the
- * limb helpers. The larger magnitude, big, scaled by a power of two to an
- * integer in [2^23, 2^24), and the smaller by the same power, whose fraction
- * below one unit decides the rounding. Scaling by powers of two, floor and
- * integer arithmetic are exact under any rounding; NaN and infinities take
- * the limb helpers.
- */
+
+
+
+
+
+
+
+
+
 function sum(value: number, addend: number, operation: number): number {
   const valueNegative = value < 0;
   const addendNegative = addend < 0;
@@ -90,8 +90,8 @@ function sum(value: number, addend: number, operation: number): number {
     big = larger;
     negative = addendNegative;
   }
-  // Five comparisons find e, 2^e <= big < 2^(e + 1), for e in [-16, 15]:
-  // up = 2^(23 - e) and down = 2^(e - 23).
+
+
   let up: number;
   let down: number;
   if (big < 1.0) {
@@ -255,7 +255,7 @@ function sum(value: number, addend: number, operation: number): number {
   }
   const scaledBig = big * up;
   const scaledSmall = small * up;
-  // Less than a quarter unit never moves big off its nearest value.
+
   if (scaledSmall < 0.25) return negative ? -(scaledBig * down) : scaledBig * down;
   const whole = floorDiv(scaledSmall, 1);
   const fraction = scaledSmall - whole;
@@ -267,15 +267,15 @@ function sum(value: number, addend: number, operation: number): number {
     if (units < 16777216) {
       if (fraction > 0.5 || (fraction === 0.5 && (units & 1) === 1)) units += 1;
     } else if ((units & 1) === 1) {
-      // From 2^24 the result counts in twos: an odd unit plus the fraction is
-      // past the half unless the fraction is zero, a tie that keeps the even half.
+      // Binary32 values from 2^24 count in twos; exact half ties retain the even significand.
+
       units += fraction > 0 || (units & 2) === 2 ? 1 : -1;
     }
   } else if (fraction === 0) {
     units = bigUnits - smallUnits;
     if (units === 0) return 0.0;
   } else {
-    // big - small = units + (1 - fraction).
+
     units = bigUnits - smallUnits - 1;
     if (units >= 8388608) {
       if (fraction < 0.5 || (fraction === 0.5 && (units & 1) === 1)) units += 1;
@@ -291,12 +291,12 @@ function sum(value: number, addend: number, operation: number): number {
   return negative ? -(units * down) : units * down;
 }
 
-// One function per operation, so a call names its operation instead of
-// passing a code each would test. Results exact under any rounding take Lua's
-// raw operator; the integer tests are inline, as floorDiv(x, 1) is Lua's
-// x // 1, without a call.
 
-/** f32(a + b) in Lua. */
+
+
+
+
+
 export function exactSum(value: number, right: number): number {
   if (value === 0 || right === 0) return value + right;
   if (value === floorDiv(value, 1) && right === floorDiv(right, 1) && value >= -16777216 && value <= 16777216 && right >= -16777216 && right <= 16777216) {
@@ -306,7 +306,7 @@ export function exactSum(value: number, right: number): number {
   return sum(value, right, ADD);
 }
 
-/** f32(a - b) in Lua: the sum with b negated, which is exact; the integer -2^31 has no negation. */
+// Lua32's integer -2^31 cannot be negated; use the float fallback.
 export function exactDifference(value: number, right: number): number {
   if (value === 0 || right === 0) return value - right;
   if (value === floorDiv(value, 1) && right === floorDiv(right, 1) && value >= -16777216 && value <= 16777216 && right >= -16777216 && right <= 16777216) {
@@ -316,7 +316,7 @@ export function exactDifference(value: number, right: number): number {
   return right === -2147483648 ? outsideSumRange(value, right, SUBTRACT) : sum(value, -right, SUBTRACT);
 }
 
-/** f32(a * b) in Lua. */
+
 export function exactProduct(value: number, right: number): number {
   // Zeros keep their IEEE signs; small integers keep Lua's integer type.
   if (value === 0 || right === 0) return value * right;
@@ -326,7 +326,7 @@ export function exactProduct(value: number, right: number): number {
   return slowFloat32(value, right, MULTIPLY);
 }
 
-/** f32(a / b) in Lua. */
+
 export function exactQuotient(value: number, right: number): number {
   // A zero numerator keeps its IEEE sign; integers that divide evenly give an integer within 2^24. Both are exact under any rounding.
   if (value === 0 || right === 0) return value / right;
@@ -338,7 +338,7 @@ export function exactQuotient(value: number, right: number): number {
 }
 
 declare global {
-  /** The operations f32(a + b), f32(a - b), f32(a * b) and f32(a / b) compile to in Lua (wisp:plugins/warcraft-numbers.ts). */
+
   var __wispF32Add: (value: number, right: number) => number;
   var __wispF32Subtract: (value: number, right: number) => number;
   var __wispF32Multiply: (value: number, right: number) => number;
@@ -349,7 +349,7 @@ globalThis.__wispF32Subtract = exactDifference;
 globalThis.__wispF32Multiply = exactProduct;
 globalThis.__wispF32Divide = exactQuotient;
 
-/** Binary32 rounding: Math.fround on the host; the compiler removes it in Lua, whose numbers are binary32. */
+
 export function f32(value: number): number {
   return Math.fround(value);
 }

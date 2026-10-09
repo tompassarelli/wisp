@@ -1,7 +1,7 @@
-// How the soak's tests set up a match of the test map: each policy but
-// "fuzz" switches on a fault, and every controller edge is counted. A
-// "typing" player's helper types a 600-character burst every two seconds.
-// "loop" is the game's own detector finding something from tick 200 on.
+
+
+
+
 import { defineSoakGame } from "../../scripts/wisp/soak";
 import { reproLines } from "../../src/runtime/repro";
 import { LAST_TICK, install, start, state } from "./map";

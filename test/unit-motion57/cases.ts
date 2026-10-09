@@ -4,9 +4,9 @@ import { floorDiv, floorMod } from "../../src/sim/intMath";
 export const UNIT_TYPE = 0x68666f6f;
 /** Crow Form, added and removed so a ground unit's flying height can change. */
 const CROW_FORM = 0x416d7266;
-/** Locust: no selection, no collision. */
+
 const LOCUST = 0x416c6f63;
-/** A stock model every Warcraft install has; headless never loads it. */
+
 const PROBE_MODEL = "Abilities\\Spells\\Other\\Silence\\SilenceTarget.mdx";
 
 export const UNIT_MOTION_NOOPS = {
@@ -14,7 +14,7 @@ export const UNIT_MOTION_NOOPS = {
   PauseUnit: "the fixture's bodies mirror Smashcraft's paused bodies; headless runs no unit AI",
 };
 
-/** Facings written with BlzSetUnitFacingEx and read straight back, each labeled with its source value. */
+
 const FACINGS: readonly (readonly [string, number])[] = [
   ["0", 0], ["0.1", f32(0.1)], ["1/3", f32(1 / 3)], ["0.5", 0.5], ["1", 1], ["30", 30], ["45", 45], ["57.29578", f32(57.29578)],
   ["60", 60], ["90", 90], ["100.25", 100.25], ["135", 135], ["179.9", f32(179.9)], ["180", 180], ["180.1", f32(180.1)],
@@ -22,22 +22,22 @@ const FACINGS: readonly (readonly [string, number])[] = [
   ["450", 450], ["540", 540], ["720", 720], ["720.5", 720.5], ["1080", 1080], ["3600", 3600], ["36000", 36000],
   ["-0.001", f32(-0.001)], ["-90", -90], ["-180", -180], ["-360", -360], ["-720", -720], ["-3600", -3600],
 ];
-/** Facings passed to CreateUnit and read straight back. */
+
 const CREATED_FACINGS: readonly (readonly [string, number])[] = [
   ["0", 0], ["0.1", f32(0.1)], ["90", 90], ["179.9", f32(179.9)], ["180", 180], ["360", 360], ["720.5", 720.5], ["-90", -90],
 ];
 
 const TICK = f32(1 / 60);
-/** Ticks the dashing body is held still before and after the dash. */
+
 const DASH_REST_TICKS = 30;
 const DASH_TICKS = 30;
-/** 1200 units a second, past a footman's move speed of 270. */
+
 const DASH_STEP = 20;
 const DASH_START = -300;
-/** Behind by more than this many ticks of travel is lag, not the drawn frame trailing the set position by a frame or two. */
+
 const DASH_TRAIL_TICKS = 3;
 
-/** A body set up as Smashcraft's fighter bodies are. */
+
 function body(): unit {
   const created = CreateUnit(Player(2), UNIT_TYPE, 0, 0, 180);
   SetUnitPathing(created, false);
@@ -73,13 +73,13 @@ export function exact(value: number): string {
   return `${value < 0 ? "-" : ""}${mantissa}p${exponent}`;
 }
 
-/**
- * A body dashes along X at 1200 units a second, each tick read before it moves: the drawn position is an
- * effect attached at its origin, read with the local position getter, less the offset measured at rest.
- * 3.0.1 reads an attached effect at 0, 0 wherever its unit is, so the count is 26 and says nothing of drawing.
- * `samples` gets each read as tick, set X, drawn X, drawn Y, times 128; `done` gets how many dash ticks
- * read the drawn body more than DASH_TRAIL_TICKS ticks of travel behind its set position.
- */
+
+
+
+
+
+
+
 function dash(this: void, samples: string[], done: (this: void, behind: number) => void): void {
   const u = body();
   SetUnitX(u, DASH_START);
@@ -108,10 +108,10 @@ function dash(this: void, samples: string[], done: (this: void, behind: number) 
   });
 }
 
-/**
- * Each recorded integer is the observed native value times 128; `exact` rows give the read value exactly.
- * The held case reads 0.25 seconds after its writes, then the dash runs; `dashSamples` gets its raw reads.
- */
+// Native observations are scaled by 128; exact rows preserve binary values and held rows read after 0.25 s.
+
+
+
 export function unitMotionCases(this: void, done: (this: void, rows: readonly string[], dashSamples: readonly string[]) => void): void {
   const rows: string[] = [];
   let u = body();
