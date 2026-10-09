@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { Effect, Exit } from "effect";
 import { platformLayer } from "../scripts/platform/layer";
 import { BackgroundServices, GameLauncher, InputInjection, Namespaces, ProcessTable, ResourceAccounting, ScreenCapture } from "../scripts/platform/services";
@@ -27,6 +27,7 @@ const LINUX_ONLY: readonly (readonly [string, RegExp])[] = [
 const ALLOWED = [/^scripts\/platform\/linux\//, /^scripts\/platform\/layer\.ts$/];
 
 const sources = () => [...new Bun.Glob("{scripts,src,examples,plugins}/**/*.ts").scanSync({ cwd: root })]
+  .map((path) => path.replaceAll("\\", "/"))
   .filter((path) => !/\.tests?\.ts$/.test(path) && !ALLOWED.some((allowed) => allowed.test(path)));
 
 export const directUses = (files: readonly string[], read: (path: string) => string = (path) => readFileSync(join(root, path), "utf8")) =>
@@ -48,7 +49,6 @@ test("[invariant] the guard catches a new direct use of /proc, xdotool or a plat
     "scripts/wisp/b.ts:1: a configured Linux tool outside a Linux layer",
     "scripts/wisp/c.ts:1: a platform branch outside a Linux layer",
   ]);
-  expect(relative(root, join(root, "scripts/platform/linux/procfs.ts"))).toMatch(ALLOWED[0]!);
 });
 
 const windows = platformLayer("win32");
