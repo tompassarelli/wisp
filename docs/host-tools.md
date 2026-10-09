@@ -32,6 +32,11 @@ Effect's own pieces. Four rules:
    classes such as `LanFailure` or `WatchFailure`, not strings or thrown
    `Error`s. A wait that times out says it timed out.
 
+wisp:test/effect-host-tools.test.ts enforces the boundary: under `scripts/`,
+except browser pages, every `Bun.spawn`, `Bun.spawnSync`, `Bun.sleep`,
+`setTimeout` or `new Promise` must sit inside an `Effect.*` call, whether or
+not the file imports Effect. There is no exemption list.
+
 If `ChildProcess` can't do something a tool needs, such as starting a process
 inside a network namespace or on a private desktop, write the smallest wrapper
 over it in one module, with one comment saying why.
