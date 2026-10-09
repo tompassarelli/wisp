@@ -2,13 +2,14 @@
 
 ## Direction
 
-Wisp exists to verify Warcraft III maps without waiting on Warcraft III.
-Every check that still needs a native client is a gap to close: move it
-headless (simulation, cost model, rendered frames, cue logs), or drive the
-offline client from inside (wisp:docs/driving-warcraft.md), never
-through the OS keyboard or chat. Judge each step by checks per hour per
-machine and by setup failures, and prefer the frontier move over another
-workaround around the client.
+Wisp verifies Warcraft III maps without waiting on Warcraft III, then plays
+them without it ([wisp#75](https://github.com/tompassarelli/wisp/issues/75)).
+Every verdict that is a number from the map's code (simulation, checksums,
+timing, CPU cost, audio events, which model or effect shows when, where and
+in what pose) runs on Wisp. Appearance that depends on Warcraft's shading is
+one native spot check, never a renderer-fidelity project. Drive a native
+client from inside (wisp:docs/driving-warcraft.md), never through the OS
+keyboard or chat. The frontier is online play over Wisp's own transport (M3).
 Measure the native side with exact reads before pixels: on offline 3.0.0
 clients use the engine debugger's frame-number, state, checksum and cost
 reads (wisp:docs/builds.md) and stack-trace builds, align frames by the read

@@ -521,6 +521,11 @@ sequences follow Warcraft's playback rules in wisp:src/headless/animation.ts,
 listed in [Animation playback](warsmash-notes.md#animation-playback); the
 headless runtime keeps each unit's and effect's clock, seek and blend.
 This is a scene renderer for look checks, not pixel-identical Warcraft shading.
+Under [M1](https://github.com/tompassarelli/wisp/issues/75) (revised 9 Oct),
+its frames give visibility, pose, geometry and HUD-layout verdicts. Appearance
+that depends on Warcraft's shading (light, colour, contrast, materials, fog,
+water, bloom, PopcornFX particles) is iterated on these frames and accepted by
+one native spot check; Wisp does not chase pixel fidelity for it.
 
 Every sound/music start, stop and playing-volume change is printed with its
 client, frame, source or label, loop flag, volume and effective volume.
