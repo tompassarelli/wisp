@@ -1649,11 +1649,17 @@ export class HeadlessClient {
   }
 
   key(sender: number, key: number, meta: number, down: boolean): void {
-    if (sender === this.slot) {
-      this.heldMeta = meta;
-      if (down) this.heldKeys.add(key);
-      else this.heldKeys.delete(key);
-    }
+    if (sender === this.slot) this.hold(key, meta, down);
+    this.keyEvent(sender, key, meta, down);
+  }
+
+  hold(key: number, meta: number, down: boolean): void {
+    this.heldMeta = meta;
+    if (down) this.heldKeys.add(key);
+    else this.heldKeys.delete(key);
+  }
+
+  keyEvent(sender: number, key: number, meta: number, down: boolean): void {
     this.run(() => {
       for (const registration of [...this.registrations]) {
         if (registration.kind === "key" && registration.player === sender && registration.key === key && registration.meta === meta && registration.down === down) {
