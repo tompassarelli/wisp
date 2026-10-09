@@ -439,7 +439,11 @@ export declare class ModelRenderer {
         light?: { direction: ArrayLike<number>; key: ArrayLike<number>; ambient: ArrayLike<number>; linear?: boolean };
         fog?: { color: ArrayLike<number>; start: number; end: number; near: number; far: number; max: number };
         /** Up to eight omni lights in world space (colour times intensity, full to start, zero from end), with the draw's model and normal matrices. */
-        points?: { model: ArrayLike<number>; normal: ArrayLike<number>; lights: readonly { position: ArrayLike<number>; color: ArrayLike<number>; start: number; end: number }[] };
+        points?: { model: ArrayLike<number>; normal: ArrayLike<number>; lights: readonly { position: ArrayLike<number>; color: ArrayLike<number>; start: number; end: number; shadowSlot?: number }[] };
+        /** The sun's depth map (unit 7): model space to its clip space, depth bias and one texel in map coordinates; it darkens only the key light. */
+        shadow?: { map: WebGLTexture; matrix: ArrayLike<number>; bias: number; texel: number };
+        /** Omni-light depth maps (unit 8): a 3 × 4 atlas of cube faces, two lights of six faces; the six faces' matrices from light-relative world space; a light's `shadowSlot` (0 or 1) picks its six. */
+        pointShadow?: { map: WebGLTexture; matrices: ArrayLike<number>; near: number; far: number; texel: number };
     } | undefined): void;
     setLightPosition(lightPos: vec3): void;
     setLightColor(lightColor: vec3): void;

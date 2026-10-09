@@ -61,6 +61,8 @@ export interface RenderScene {
 export interface SceneEnvironment extends Environment {
   /** SetTerrainFogEx/ExV's fields, absent after ResetTerrainFog or before any fog is set. */
   readonly fog?: SceneFog;
+  /** BlzSetMinShadowCastingPointLightCount's count: how many omni lights at least cast shadows in Definitive. */
+  readonly shadowCastingPointLights?: number;
 }
 
 export interface SceneFog {
@@ -88,7 +90,7 @@ function sceneEnvironment(client: HeadlessClient): SceneEnvironment {
     linearStart: number(fog.linearStart), linearEnd: number(fog.linearEnd), maxLinearDensity: number(fog.maxLinearDensity),
     drawOverSky: typeof fog.drawOverSky === "boolean" ? fog.drawOverSky : undefined,
   };
-  return { ...environment, dayNight: { ...environment.dayNight }, ...(drawn === undefined ? {} : { fog: drawn }) };
+  return { ...environment, dayNight: { ...environment.dayNight }, ...(drawn === undefined ? {} : { fog: drawn }), shadowCastingPointLights: client.scenery.minShadowCastingPointLightCount };
 }
 
 /** A pose the renderer draws: an effect, or a unit drawn like one, which starts on Stand rather than Birth. */
@@ -112,6 +114,10 @@ export interface RenderedFrame {
   readonly pointLights: number;
   readonly absent: string[];
   readonly popcornEmitters: PopcornEmitterPose[];
+  /** Whether the sun's shadow map was drawn, and how many omni lights cast shadows. */
+  readonly shadows: { readonly sun: boolean; readonly pointCasters: number };
+  /** Which of Definitive's post-processing passes the map's settings turned on. */
+  readonly post: { readonly ambientOcclusion: boolean; readonly bloom: boolean };
 }
 
 export const captureScene = (client: HeadlessClient, options: { readonly visibleOnly?: boolean } = {}): RenderScene => ({
@@ -322,18 +328,18 @@ export const renderScenes = (project: HeadlessRenderProject, scenes: readonly Re
   const browser = yield* openAnyBrowser(project, bundle, graphics);
   return yield* Effect.tryPromise({ try: async () => {
     await mkdir(directory, { recursive: true });
-    const images: { frame: number; client: number; image: string; models: number; textures: number; notDrawn: string[]; pointLights: number; absent: readonly string[] }[] = [];
+    const images: { frame: number; client: number; image: string; models: number; textures: number; notDrawn: string[]; pointLights: number; absent: readonly string[]; shadows: RenderedFrame["shadows"]; post: RenderedFrame["post"] }[] = [];
     for (const scene of scenes) {
       const result = await browser.devtools.evaluate(`window.renderScene(${JSON.stringify(sceneWithUnits(project, scene))})`) as RenderedFrame;
       for (const failure of result.notDrawn) console.error(`p${scene.client} frame ${scene.frame}: not drawn: ${failure}`);
       const image = `p${scene.client}-frame-${scene.frame}.png`;
       await Bun.write(join(directory, image), Buffer.from(result.png.split(",")[1] ?? "", "base64"));
       await Bun.write(join(directory, `p${scene.client}-frame-${scene.frame}.json`), JSON.stringify({ ...scene, popcornEmitters: result.popcornEmitters }));
-      images.push({ frame: scene.frame, client: scene.client, image, models: result.models, textures: result.textures, notDrawn: result.notDrawn, pointLights: result.pointLights, absent: result.absent });
+      images.push({ frame: scene.frame, client: scene.client, image, models: result.models, textures: result.textures, notDrawn: result.notDrawn, pointLights: result.pointLights, absent: result.absent, shadows: result.shadows, post: result.post });
     }
     await Bun.write(join(directory, "render.json"), JSON.stringify({ renderer: "war3-model 4.0.1 + HD sampling precision", graphics, levers: PROFILES[graphics], look, gpu: browser.gpu, assets: [...browser.resolutions.values()], images }, null, 2) + "\n");
     const failures = images.flatMap((image) => image.notDrawn.map((failure) => `p${image.client} frame ${image.frame}: ${failure}`));
     if (failures.length > 0) throw new Error(failures.join("\n"));
     return images;
   }, catch: (cause) => new RenderFailure({ cause }) });
-})).pipe(Effect.provide(BunServices.layer), Effect.timeout("2 minutes"));
+})).pipe(Effect.provide(BunServices.layer), Effect.timeout("5 minutes"));

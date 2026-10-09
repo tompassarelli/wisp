@@ -27,12 +27,12 @@ export const PROFILES: Readonly<Record<Graphics, Readonly<Record<Lever, LeverSup
     "day-night-light": "drawn", fog: "drawn", sky: "drawn", "cinematic-filter": "drawn",
     // Classic draws a height fog's linear range only, and no model omni light, point-light shadows, PBR, bloom or ambient occlusion.
     "height-fog-falloff": "absent", "point-lights": "absent", "point-light-shadows": "absent", pbr: "absent", bloom: "absent", "ambient-occlusion": "absent",
-    shadows: "unsupported", water: "unsupported", terrain: "unsupported",
+    shadows: "drawn", water: "unsupported", terrain: "unsupported",
   },
   definitive: {
     "day-night-light": "drawn", fog: "drawn", "height-fog-falloff": "unsupported", sky: "drawn", "cinematic-filter": "drawn",
     "point-lights": "drawn", pbr: "drawn",
-    "point-light-shadows": "unsupported", shadows: "unsupported", water: "unsupported", bloom: "unsupported", "ambient-occlusion": "unsupported", terrain: "unsupported",
+    "point-light-shadows": "drawn", shadows: "drawn", water: "unsupported", bloom: "drawn", "ambient-occlusion": "drawn", terrain: "unsupported",
   },
 };
 

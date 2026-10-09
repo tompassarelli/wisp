@@ -659,9 +659,34 @@ saves them as the scene's `environment`.
   Ground variation, corner-mask and cliff filename facts come from the
   [HiveWE format documentation](https://github.com/stijnherfst/HiveWE/wiki/war3map.w3e-Terrain)
   (16 September 2025 revision); Wisp copies no implementation code from it.
-- **Not drawn.** Terrain-modifying special doodads,
-  water, shadows, point-light shadows, a height fog's
-  falloff, bloom and ambient occlusion. A look check that asks for one fails
+- **Sun shadows.** In both modes the day/night key light casts shadows: every
+  drawn model's depth from the sun, an orthographic 4096² map over the
+  camera's view out to 2.5 target distances and reaching 6,000 units toward
+  the sun beyond it, sampled 3 × 3 with a two-texel bias. A shadowed fragment
+  loses only the key light; ambient and omni light stay. Layers that write no
+  depth (blended, additive, particles, ribbons) cast none.
+- **Omni-light shadows.** In Definitive at most two omni lights cast shadows:
+  those whose light record sets shadow casting, then the nearest to the
+  camera's target up to the map's `BlzSetMinShadowCastingPointLightCount`.
+  Each draws a six-face 1024² depth cube out to its attenuation end; a
+  shadowed fragment loses that light. `render.json` records `shadows.sun` and
+  `shadows.pointCasters` per frame.
+- **Ambient occlusion and bloom.** Definitive reads the install's
+  `PostProcessingConfig.txt` with the map's `war3mapPostProcessing.txt` over
+  it, key by key. `[ASSAO]` with `Enabled` above 0 draws screen-space
+  occlusion from the frame's depth: `Radius` in world units, obscurance
+  scaled by `ShadowMultiplier` × 4.3 / 15, clamped to `ShadowClamp`, raised
+  to `ShadowPower`, ignoring occluders below `HorizonAngleThreshold`, faded
+  in by eye depth from `FadeOutFrom` to `FadeOutTo`, and blurred
+  `BlurPassCount` times. `[Bloom]` with `Enabled` above 0 adds the part of
+  each colour above `BloomThreshold`, blurred at half resolution (a Gaussian
+  of `BlurAmount` texels on a 1080-line screen, `BlurSampleCount` taps), by
+  `BloomIntensity` and `BloomSaturation` over the scene scaled by
+  `BaseIntensity` and `BaseSaturation`. Classic draws neither. `render.json`
+  records `post.ambientOcclusion` and `post.bloom` per frame. The map supplies
+  its file through `readAsset("war3mapPostProcessing.txt")`.
+- **Not drawn.** Terrain-modifying special doodads, water and a height fog's
+  falloff. A look check that asks for one fails
   ([Graphics profiles](#graphics-profiles)).
 
 | Check | Can close headless when | Still needs native |
@@ -696,10 +721,10 @@ whether Warcraft draws it and Wisp does not (unsupported):
 | `cinematic-filter` | drawn | drawn |
 | `point-lights` (model omni lights) | absent | drawn |
 | `pbr` (HD materials) | absent | drawn |
-| `point-light-shadows` | absent | unsupported |
-| `bloom` | absent | unsupported |
-| `ambient-occlusion` | absent | unsupported |
-| `shadows` | unsupported | unsupported |
+| `point-light-shadows` | absent | drawn (two casters) |
+| `bloom` | absent | drawn (map's `[Bloom]`) |
+| `ambient-occlusion` | absent | drawn (map's `[ASSAO]`) |
+| `shadows` | drawn (sun shadow map) | drawn (sun shadow map) |
 | `water` | unsupported | unsupported |
 | `terrain` | unsupported | unsupported |
 
@@ -719,17 +744,17 @@ listed first, then absent ones, then unsupported ones in bold:
 
 | Stage | Classic | Definitive |
 | --- | --- | --- |
-| 0 Sky Deck | light, fog, sky; AO absent; **shadows** | light, fog, sky; **AO, shadows** |
-| 2 Frozen Throne | light, fog (height fog's linear range, cap, over sky), sky; falloff, bloom absent; **shadows** | light, fog, sky; **height-fog falloff, bloom, shadows** |
-| 3 Durotar | light, fog, sky; falloff, bloom absent; **shadows** | light, fog, sky; **height-fog falloff, bloom, shadows** |
-| 4 Naxxramas | light, fog, sky; omni light, point-light shadow absent; NaxxDeco0 absent; **shadows** | light, fog, sky, omni light, NaxxDeco0; **point-light shadow, shadows** |
-| 6 Stratholme | light, fog, sky; omni lights absent; **shadows**; 2 models naming the missing `TerrainArt\Misc\misc_CharredEarth.blp` not drawn | light, fog, sky, omni lights; **point-light shadow, shadows**; the same 2 models not drawn |
-| 7 Tomb of Sargeras | light, fog, sky, ordinary waterfall; falloff absent; **shadows** (HD water skipped: terrain hidden) | light, fog, sky, `_de` WaterfallNoMist; **height-fog falloff, shadows** |
-| 10 Nordrassil | light, fog, sky; bloom, falloff absent; **shadows** | light, fog, sky; **bloom, height-fog falloff, shadows** |
-| 11 Gryphon Aerie | light, fog (GA-4 linear range, over sky), sky; falloff absent; **shadows** | light, fog, sky; **height-fog falloff, shadows** |
-| 12 Blackrock | light, fog, sky; omni lights, bloom, AO absent; **shadows** | light, fog, sky, omni lights; **point-light shadow, bloom, AO, shadows** |
-| 13 Ahn'Qiraj | light, fog, sky; falloff absent; **shadows** | light, fog, sky; **height-fog falloff, shadows** |
-| 14 Hellfire | light, fog, sky; omni lights, bloom absent; **shadows** | light, fog, sky, omni lights; **point-light shadow, bloom, shadows** |
+| 0 Sky Deck | light, fog, sky, shadows; AO absent | light, fog, sky, AO, shadows |
+| 2 Frozen Throne | light, fog (height fog's linear range, cap, over sky), sky, shadows; falloff, bloom absent | light, fog, sky, bloom, shadows; **height-fog falloff** |
+| 3 Durotar | light, fog, sky, shadows; falloff, bloom absent | light, fog, sky, bloom, shadows; **height-fog falloff** |
+| 4 Naxxramas | light, fog, sky, shadows; omni light, point-light shadow absent; NaxxDeco0 absent | light, fog, sky, omni light, point-light shadow, NaxxDeco0, shadows |
+| 6 Stratholme | light, fog, sky, shadows; omni lights absent; 2 models naming the missing `TerrainArt\Misc\misc_CharredEarth.blp` not drawn | light, fog, sky, omni lights, point-light shadow, shadows; the same 2 models not drawn |
+| 7 Tomb of Sargeras | light, fog, sky, ordinary waterfall, shadows; falloff absent (HD water skipped: terrain hidden) | light, fog, sky, `_de` WaterfallNoMist, shadows; **height-fog falloff** |
+| 10 Nordrassil | light, fog, sky, shadows; bloom, falloff absent | light, fog, sky, bloom, shadows; **height-fog falloff** |
+| 11 Gryphon Aerie | light, fog (GA-4 linear range, over sky), sky, shadows; falloff absent | light, fog, sky, shadows; **height-fog falloff** |
+| 12 Blackrock | light, fog, sky, shadows; omni lights, bloom, AO absent | light, fog, sky, omni lights, point-light shadow, bloom, AO, shadows |
+| 13 Ahn'Qiraj | light, fog, sky, shadows; falloff absent | light, fog, sky, shadows; **height-fog falloff** |
+| 14 Hellfire | light, fog, sky, shadows; omni lights, bloom absent | light, fog, sky, omni lights, point-light shadow, bloom, shadows |
 
 #### Measured against Warcraft
 
@@ -759,6 +784,22 @@ renderer); the verdict is what is compared.
 | 12 Blackrock | 4.9, 9.6 → 5.0, 10.2 | pass | 14.2, 26.4 → 17.2, 26.6 | pass | 12.8, 24.9 → 17.8, 26.2 | pass |
 | 13 Ahn'Qiraj | 10.4, 14.5 → 9.9, 14.2 | fail | 1.7, 30.2 → 1.5, 28.7 | fail | 3.8, 29.9 → 5.2, 29.2 | fail |
 | 14 Hellfire | no reference | — | 12.3, 32.8 → 15.1, 32.6 | fail | 21.6, 30.0 → 26.7, 32.5 | pass |
+
+With sun shadows, omni-light shadows, ambient occlusion and bloom (wisp#79,
+9 Oct; Smashcraft b859da4f with this Wisp, the same journeys and frame 410),
+the Classic triples on the six stages with a native reference, abs ΔL, ΔE00
+stock → stage: 2 Frozen Throne 2.0, 7.6 → 4.3, 8.2 pass; 3 Durotar 1.2, 31.6
+→ 4.5, 31.3 fail; 4 Naxxramas 10.4, 16.9 → 13.1, 17.6 pass; 11 Gryphon Aerie
+2.2, 19.4 → 9.4, 21.7 pass; 12 Blackrock 10.8, 26.1 → 14.5, 26.1 pass; 13
+Ahn'Qiraj 1.5, 30.2 → 1.2, 28.8 fail. **6 of 6 agree with native, 0
+disagree.** Definitive Blackrock with every lever on (`--look
+shadows,point-light-shadows,bloom,ambient-occlusion`: sun shadow, one
+shadow-casting omni light, the map's `[ASSAO]` and `[Bloom]`): 11.4, 26.3 →
+14.5, 26.7, pass. No Definitive stage has a native reference yet, so no
+Definitive verdict is confirmed. The frames that would confirm the rest are
+native stock / mask / stage triples with the capture profile (shadows,
+point-light shadows and AO on) for Classic stages 0, 6, 7, 10 and 14 and
+Definitive stages 0, 2, 3, 4, 6, 7, 10, 11, 12, 13 and 14.
 
 Classic: Wisp's verdict agrees with Warcraft's on 6 of the 6 stages that
 have a native reference (2, 3, 4, 11, 12, 13), 0 disagreements. Drawing the

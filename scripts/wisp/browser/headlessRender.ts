@@ -7,6 +7,7 @@ import { orderDrawnModels } from "../drawOrder";
 import { drawnPoses } from "../culling";
 import { advanceEmitters, type EmitterRenderer } from "./emitters";
 import { drawTerrain } from "./terrain";
+import { depthTarget, type DepthTarget, invert, parsePostProcessing, POINT_FACE, pointFaces, postProcessor, type PostSettings, postSettings, resolve, sceneTarget, type SceneTarget, SUN_MAP, sunView } from "./passes";
 
 type Matrix = Float32Array;
 const identity = (): Matrix => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -60,9 +61,11 @@ function camera(scene: RenderScene, aspect: number) {
   const halfYaw = rotation / 2, halfPitch = -elevation / 2;
   const quaternion: [number, number, number, number] = [-Math.sin(halfYaw) * Math.sin(halfPitch), Math.cos(halfYaw) * Math.sin(halfPitch), Math.sin(halfYaw) * Math.cos(halfPitch), Math.cos(halfYaw) * Math.cos(halfPitch)];
   // The sky surrounds the eye beyond the far plane, so it gets its own depth range.
-  return { view, projection, skyProjection: perspective(SKY_FAR), eye, quaternion, near, far };
+  return { view, projection, skyProjection: perspective(SKY_FAR), eye, quaternion, near, far, shadow: { eye, right: x, up: y, back: z, tangent, aspect, near, reach: Math.min(far, distance * SHADOW_REACH) } };
 }
 const SKY_FAR = 1_000_000;
+/** The sun's shadow covers the camera's view out to this many target distances. */
+const SHADOW_REACH = 2.5;
 
 /** A track's value at `frame`: its static value, or its keys stepped or interpolated linearly (curves are drawn as lines). */
 function sample(track: model.AnimVector | ArrayLike<number> | number | undefined, frame: number, fallback: readonly number[]): number[] {
@@ -171,6 +174,9 @@ for (const layer of [canvas, overlay, output]) {
 canvas.style.display = overlay.style.display = "none";
 document.body.append(display);
 let gl: WebGL2RenderingContext;
+let sceneBuffer: SceneTarget;
+let compose: ReturnType<typeof postProcessor>;
+let sunMap: DepthTarget | undefined, pointMap: DepthTarget | undefined;
 let graphics = "classic";
 const models = new Map<string, Promise<model.Model>>();
 const textures = new Map<string, Promise<HTMLCanvasElement>>();
@@ -333,7 +339,11 @@ async function createInstance(path: string): Promise<ModelInstance> {
   const sequences = data.Sequences.map((sequence) => ({ name: sequence.Name, start: sequence.Interval[0] ?? 0, end: sequence.Interval[1] ?? 0, looping: !sequence.NonLooping, rarity: sequence.Rarity }));
   return { renderer, model: data, path, sequences, sequence: -2, clock: 0 };
 }
-async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, light: WorldLight | undefined, fog: ReturnType<typeof sceneFog>, points: readonly PointLight[], popcornEmitters: PopcornEmitterPose[]) {
+/** A depth-only pass's view and projection, from world space. */
+interface DepthPass { readonly view: Matrix; readonly projection: Matrix }
+/** The sun's and omni lights' depth maps a main pass samples. */
+interface Shadows { readonly sun?: { readonly map: WebGLTexture; readonly viewProjection: Matrix; readonly bias: number; readonly texel: number }; readonly points?: { readonly map: WebGLTexture; readonly matrices: Float32Array; readonly far: number } }
+async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, light: WorldLight | undefined, fog: ReturnType<typeof sceneFog>, points: readonly PointLight[], popcornEmitters: PopcornEmitterPose[], shadows: Shadows = {}, depthPass?: DepthPass) {
   const instance = await prepareInstance(pose);
   const { renderer, model: data } = instance;
   renderer.setInstanceAlpha(pose.alpha / 255);
@@ -358,6 +368,11 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
   renderer.setTeamColor(new Float32Array((teams[pose.teamColor] ?? [160, 160, 160]).map((v) => v / 255)));
   renderer.setLightPosition([1000, -1000, 3000]); renderer.setLightColor([1, 1, 1]);
   const placed = transform(pose);
+  if (depthPass !== undefined) {
+    renderer.setWispEnvironment(undefined);
+    renderer.render(multiply(depthPass.view, placed), depthPass.projection, {});
+    return;
+  }
   for (const emitter of data.ParticleEmitterPopcorns ?? []) {
     if (sampler.interp.animVectorVal(emitter.Visibility, 1) <= 0 || sampler.interp.animVectorVal(emitter.Alpha, 1) <= 0) continue;
     const node = sampler.rendererData.nodes[emitter.ObjectId];
@@ -367,13 +382,19 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
     const scale = [0, 1, 2].map((axis) => Math.hypot(world[axis * 4] ?? 0, world[axis * 4 + 1] ?? 0, world[axis * 4 + 2] ?? 0)) as [number, number, number];
     popcornEmitters.push({ model: pose.model, handle: pose.handle.id, emitter: emitter.Name, effect: emitter.Path ?? "", position, scale });
   }
-  renderer.setWispEnvironment({ ...(light === undefined ? {} : { light: { direction: modelDirection(placed, light.toward), key: light.key, ambient: light.ambient, linear: light.linear } }), ...(fog === undefined ? {} : { fog }), ...(points.length === 0 ? {} : { points: { model: placed, normal: normalMatrix(placed), lights: nearest(points, placed) } }) });
-  // An HD model's first initGL draws its BRDF table at that table's size and leaves the viewport there.
-  gl.viewport(0, 0, canvas.width, canvas.height);
+  const sun = shadows.sun, pointShadow = shadows.points;
+  renderer.setWispEnvironment({
+    ...(light === undefined ? {} : { light: { direction: modelDirection(placed, light.toward), key: light.key, ambient: light.ambient, linear: light.linear } }), ...(fog === undefined ? {} : { fog }),
+    ...(points.length === 0 ? {} : { points: { model: placed, normal: normalMatrix(placed), lights: nearest(points, placed) } }),
+    ...(sun === undefined ? {} : { shadow: { map: sun.map, matrix: multiply(sun.viewProjection, placed), bias: sun.bias, texel: sun.texel } }),
+    ...(pointShadow === undefined ? {} : { pointShadow: { map: pointShadow.map, matrices: pointShadow.matrices, near: POINT_NEAR_PLANE, far: pointShadow.far, texel: 1 / POINT_FACE } }),
+  });
+  // An HD model's first initGL draws its BRDF table at that table's size and leaves the viewport and framebuffer there.
+  bindScene();
   renderer.render(multiply(view.view, placed), view.projection, {});
 }
 /** A model's omni light in world space: colour times intensity, red first, full to `start` and zero from `end`. */
-interface PointLight { readonly position: readonly number[]; readonly color: readonly number[]; readonly start: number; readonly end: number }
+interface PointLight { readonly position: readonly number[]; readonly color: readonly number[]; readonly start: number; readonly end: number; readonly casts: boolean; shadowSlot?: number }
 const MAX_POINT_LIGHTS = 8;
 const lightModels = new Map<string, Promise<model.Model | undefined>>();
 /**
@@ -404,7 +425,7 @@ async function pointLights(poses: readonly EffectPose[]): Promise<PointLight[]> 
       if (intensity <= 0) continue;
       const pivot = Array.from(data.PivotPoints[light.ObjectId] ?? [0, 0, 0]);
       const position = [0, 1, 2].map((row) => (placed[row] ?? 0) * (pivot[0] ?? 0) + (placed[4 + row] ?? 0) * (pivot[1] ?? 0) + (placed[8 + row] ?? 0) * (pivot[2] ?? 0) + (placed[12 + row] ?? 0));
-      lights.push({ position, color: [red * intensity, green * intensity, blue * intensity], start: (sample(light.AttenuationStart, frame, [0])[0] ?? 0) * scale, end: (sample(light.AttenuationEnd, frame, [0])[0] ?? 0) * scale });
+      lights.push({ position, color: [red * intensity, green * intensity, blue * intensity], start: (sample(light.AttenuationStart, frame, [0])[0] ?? 0) * scale, end: (sample(light.AttenuationEnd, frame, [0])[0] ?? 0) * scale, casts: ((light as { ShadowCasting?: number }).ShadowCasting ?? 0) !== 0 });
     }
   }
   return lights;
@@ -445,7 +466,7 @@ async function drawSky(scene: RenderScene, view: ReturnType<typeof camera>) {
   renderer.update(0);
   const fog = sceneFog(scene, view, true);
   renderer.setWispEnvironment(fog === undefined ? undefined : { fog });
-  gl.viewport(0, 0, canvas.width, canvas.height);
+  bindScene();
   renderer.render(multiply(view.view, placed), view.skyProjection, {});
   // The sky's layers leave depth writes off, and a masked depth clear clears nothing.
   gl.depthMask(true); gl.clear(gl.DEPTH_BUFFER_BIT);
@@ -556,6 +577,39 @@ async function uiTexture(path: string, color: number): Promise<HTMLCanvasElement
   return result;
 }
 
+const POINT_NEAR_PLANE = 5;
+/** Draws into the scene's multisampled target over the whole canvas. */
+function bindScene(): void { gl.bindFramebuffer(gl.FRAMEBUFFER, sceneBuffer.framebuffer); gl.viewport(0, 0, canvas.width, canvas.height); }
+/** One depth view of a depth pass: its matrices from world space, its cell of the map and, for an omni light, the reach a caster must fall within. */
+interface DepthView extends DepthPass { readonly viewport: readonly [number, number, number, number]; readonly near?: { readonly position: readonly number[]; readonly reach: number } }
+/** Draws every pose's depth into `target`'s views; a pose that fails here fails again, and is named, in the main pass. */
+async function depthPass(target: DepthTarget, poses: readonly EffectPose[], view: ReturnType<typeof camera>, views: readonly DepthView[]): Promise<void> {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer); gl.viewport(0, 0, target.width, target.height);
+  gl.depthMask(true); gl.clear(gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
+  for (const unit of [7, 8]) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, null); }
+  gl.activeTexture(gl.TEXTURE0);
+  for (const depth of views) for (const pose of poses) {
+    // A model whose origin is farther from the omni light than its reach and a generous model radius can't shadow what it lights.
+    if (depth.near !== undefined && Math.hypot(pose.x - (depth.near.position[0] ?? 0), pose.y - (depth.near.position[1] ?? 0), pose.z - (depth.near.position[2] ?? 0)) > depth.near.reach + 1500) continue;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer); gl.viewport(...depth.viewport);
+    try { await drawEffect(pose, view, undefined, undefined, [], [], {}, depth); } catch { /* named by the main pass */ }
+  }
+}
+/** At most two omni lights cast shadows: the flagged ones, then others up to the map's minimum count, nearest `focus` first. */
+function shadowCasters(points: readonly PointLight[], minimum: number, focus: readonly number[]): PointLight[] {
+  const gap = (light: PointLight) => Math.hypot(...light.position.map((value, i) => value - (focus[i] ?? 0)));
+  const byGap = [...points].sort((a, b) => gap(a) - gap(b));
+  const flagged = byGap.filter((light) => light.casts), others = byGap.filter((light) => !light.casts);
+  return [...flagged, ...others.slice(0, Math.max(0, minimum - flagged.length))].slice(0, 2);
+}
+let postConfig: Promise<PostSettings> | undefined;
+/** Definitive's ambient occlusion and bloom: the install's PostProcessingConfig.txt with the map's war3mapPostProcessing.txt over it. */
+function postProcessing(): Promise<PostSettings> {
+  const text = (path: string) => asset(path).then((bytes) => new TextDecoder().decode(bytes), () => "");
+  postConfig ??= Promise.all([text("PostProcessingConfig.txt"), text("war3mapPostProcessing.txt")]).then(([stock, map]) => postSettings(parsePostProcessing(stock, map)));
+  return postConfig;
+}
+
 declare global {
   interface Window {
     prepareRenderer: (width: number, height: number, graphics?: string) => string;
@@ -566,10 +620,13 @@ declare global {
 window.prepareRenderer = (width, height, mode = "classic") => {
   graphics = mode;
   canvas.width = output.width = overlay.width = width; canvas.height = output.height = overlay.height = height;
-  const context = canvas.getContext("webgl2", { antialias: true, alpha: false });
+  // The scene draws into its own multisampled target, which the post-processing pass resolves to this canvas.
+  const context = canvas.getContext("webgl2", { antialias: false, alpha: false });
   if (context === null) throw new Error("Chrome could not create a WebGL2 context");
   gl = context;
   gl.depthFunc(gl.LEQUAL);
+  sceneBuffer = sceneTarget(gl, width, height);
+  compose = postProcessor(gl, sceneBuffer);
   const debug = gl.getExtension("WEBGL_debug_renderer_info");
   return debug === null ? String(gl.getParameter(gl.RENDERER)) : String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL));
 };
@@ -586,7 +643,7 @@ window.prepareScene = async (scene, extraModels = [], progress) => {
   return { models: models.size, instances: instances.size + preparedModels.size, textures: textures.size };
 };
 window.renderScene = async (scene, options) => {
-  gl.viewport(0, 0, canvas.width, canvas.height); gl.depthMask(true); gl.clearColor(0.04, 0.06, 0.09, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
+  bindScene(); gl.depthMask(true); gl.clearColor(0.04, 0.06, 0.09, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
   const view = camera(scene, canvas.width / canvas.height);
   const visible: EffectPose[] = [], notDrawn: string[] = [], absent = new Set<string>(), popcornEmitters: PopcornEmitterPose[] = [];
   for (const pose of drawnPoses(scene.effects, view.eye, view.far, scene.world)) {
@@ -601,17 +658,47 @@ window.renderScene = async (scene, options) => {
   }
   await drawSky(scene, view);
   if (scene.environment.terrainVisible && scene.terrain !== undefined) {
-    try { await drawTerrain(gl, scene.terrain, view.view, view.projection, textureAt, asset); }
+    try { bindScene(); await drawTerrain(gl, scene.terrain, view.view, view.projection, textureAt, asset); }
     catch (cause) { notDrawn.push(`terrain: ${String(cause)}`); }
   }
   const light = scene.environment === undefined ? undefined : await dayNightLight(scene.environment.dayNight.unit, scene.environment.timeOfDay);
   const fog = sceneFog(scene, view, false);
   // Classic draws no model omni light; Definitive draws them all.
   const points = graphics === "classic" ? [] : await pointLights(visible);
-  for (const pose of orderDrawnModels(visible, (pose) => instances.get(pose.handle.id)?.model.Materials ?? [])) {
-    try { await drawEffect(pose, view, light, fog, points, popcornEmitters); } catch (cause) { notDrawn.push(`${pose.model}: ${String(cause)}`); }
+  const ordered = orderDrawnModels(visible, (pose) => instances.get(pose.handle.id)?.model.Materials ?? []);
+  const shadows: { sun?: NonNullable<Shadows["sun"]>; points?: NonNullable<Shadows["points"]> } = {};
+  // Both modes shadow the day/night key light with a depth map from the sun.
+  if (light !== undefined && light.key.some((value) => value > 0)) {
+    const sun = sunView(view.shadow, light.toward);
+    sunMap ??= depthTarget(gl, SUN_MAP, SUN_MAP);
+    await depthPass(sunMap, ordered, view, [{ view: sun.view, projection: sun.projection, viewport: [0, 0, SUN_MAP, SUN_MAP] }]);
+    shadows.sun = { map: sunMap.texture, viewProjection: sun.viewProjection, bias: sun.bias, texel: sun.texel };
   }
+  // Definitive's omni lights flagged to cast shadows, topped up to the map's minimum count, nearest the camera's target first.
+  const casters = shadowCasters(points, scene.environment?.shadowCastingPointLights ?? 0, [scene.camera.x, scene.camera.y, view.shadow.eye[2] ?? 0]);
+  if (casters.length > 0) {
+    const far = Math.max(...casters.map((light) => light.end)), faces = pointFaces(far), passes: DepthView[] = [];
+    pointMap ??= depthTarget(gl, 3 * POINT_FACE, 4 * POINT_FACE);
+    casters.forEach((light, slot) => {
+      light.shadowSlot = slot;
+      const toLight = identity(); toLight[12] = -(light.position[0] ?? 0); toLight[13] = -(light.position[1] ?? 0); toLight[14] = -(light.position[2] ?? 0);
+      faces.forEach((face, index) => passes.push({ view: multiply(face.view, toLight), projection: face.projection, viewport: [(index % 3) * POINT_FACE, (Math.floor(index / 3) + 2 * slot) * POINT_FACE, POINT_FACE, POINT_FACE], near: { position: light.position, reach: light.end } }));
+    });
+    await depthPass(pointMap, ordered, view, passes);
+    const matrices = new Float32Array(16 * 6);
+    faces.forEach((face, index) => matrices.set(face.viewProjection, index * 16));
+    shadows.points = { map: pointMap.texture, matrices, far };
+  }
+  for (const pose of ordered) {
+    try { await drawEffect(pose, view, light, fog, points, popcornEmitters, shadows); } catch (cause) { notDrawn.push(`${pose.model}: ${String(cause)}`); }
+  }
+  for (const light of points) delete light.shadowSlot;
   for (const emitter of popcornEmitters) notDrawn.push(`${emitter.model}: undrawn Popcorn emitter "${emitter.emitter}" (${emitter.effect || "no effect path"})`);
+  resolve(gl, sceneBuffer);
+  const post = graphics === "definitive" ? await postProcessing() : {};
+  const projection = view.projection;
+  compose(post, invert(projection), [(projection[0] ?? 1) * canvas.width / 2, (projection[5] ?? 1) * canvas.height / 2]);
+  gl.viewport(0, 0, canvas.width, canvas.height);
   if (scene.filter !== undefined) await drawFilter(scene.filter);
   const live = options?.capture === false;
   const shown = live ? "block" : "none";
@@ -644,5 +731,5 @@ window.renderScene = async (scene, options) => {
     }
   }
   context.globalAlpha = 1;
-  return { png: options?.capture === false ? "" : output.toDataURL("image/png"), models: visible.length, textures: textures.size, notDrawn: [...new Set(notDrawn)], pointLights: points.length, absent: [...absent].sort(), popcornEmitters };
+  return { png: options?.capture === false ? "" : output.toDataURL("image/png"), models: visible.length, textures: textures.size, notDrawn: [...new Set(notDrawn)], pointLights: points.length, absent: [...absent].sort(), popcornEmitters, shadows: { sun: shadows.sun !== undefined, pointCasters: casters.length }, post: { ambientOcclusion: post.occlusion !== undefined, bloom: post.bloom !== undefined } };
 };
