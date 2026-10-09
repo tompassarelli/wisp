@@ -35,6 +35,12 @@ the first match of Smashcraft's #26 runs r7 and r8 (Smashcraft 0.0.42,
 smashcraft:evidence/input-integrity-0042-r7-20261005/ and -r8-). Chat and key
 events still arrive at once.
 
+Hosting: r7 and r8 ran as a Battle.net Custom Game (`[TEST] sc-integrity-r7`/`-r8`,
+created on signed-in client A and found by client B through the Custom Games
+search), not on a LAN, so the fit describes Battle.net-hosted turns. Offline
+pool games are relayed by Wisp's own LAN host, whose turn period is
+`lan fresh --turn-ms` (default 30 ms); their echo ages are not yet measured.
+
 ## Replayed arrivals
 
 `replayedDelivery(arrivals, fallback, nowMs)` replays the arrival times a
