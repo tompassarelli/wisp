@@ -367,7 +367,7 @@ export const captureProcess = (
   operation: string,
   path: string,
   command: readonly string[],
-  options: { readonly env?: Record<string, string>; readonly stdout?: "pipe" | "ignore" } = {},
+  options: { readonly env?: Record<string, string>; readonly stdout?: "pipe" | "ignore"; readonly cwd?: string } = {},
 ) =>
   Effect.acquireUseRelease(
     tryMapSync(operation, path, () => Bun.spawn([...command], {
@@ -388,8 +388,8 @@ export const captureProcess = (
   );
 
 
-export const runProcess = (operation: string, path: string, command: readonly string[]) =>
-  captureProcess(operation, path, command, { stdout: "ignore" }).pipe(Effect.flatMap(({ exitCode, stderr }) =>
+export const runProcess = (operation: string, path: string, command: readonly string[], cwd?: string) =>
+  captureProcess(operation, path, command, { stdout: "ignore", ...(cwd === undefined ? {} : { cwd }) }).pipe(Effect.flatMap(({ exitCode, stderr }) =>
     exitCode === 0
       ? Effect.void
       : Effect.fail(new MapBuildFailure({ operation, path, cause: `${command[0]} exited with ${exitCode}: ${stderr.trim()}` })),

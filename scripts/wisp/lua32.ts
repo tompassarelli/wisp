@@ -112,7 +112,8 @@ export const lua32 = (variant: Lua32Variant) => Effect.gen(function*() {
       rmSync(build, { recursive: true, force: true });
       mkdirSync(build, { recursive: true });
     });
-    yield* runProcess("unpack Lua source", build, ["tar", "--no-same-owner", "-xzf", source, "-C", build]);
+    yield* trySync("decompress Lua source", build, () => writeFileSync(join(build, "lua-5.3.6.tar"), Bun.gunzipSync(readFileSync(source))));
+    yield* runProcess("unpack Lua source", build, ["tar", "--no-same-owner", "-xf", "lua-5.3.6.tar"], build);
     const src = join(build, "lua-5.3.6/src");
     if (header !== "") yield* trySync("write header", src, () => writeFileSync(join(src, "toward-zero.h"), header));
     yield* runProcess(`compile Lua32 ${variant}`, src, makeCommand(["-C", src, `-j${availableParallelism()}`, "generic", `MYCFLAGS=${flags}`]));
