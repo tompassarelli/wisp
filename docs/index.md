@@ -1,5 +1,13 @@
 # Wisp feature index
 
+[Shadow Strike field example](shadow-strike.md) names the raw fields, types,
+units and level/column indexing used by two synthetic configurations. Field
+identities come from privately read metadata; initial damage, periodic damage
+and timing are **unmeasured**, with zero retained native observations and no
+headless/native agreement yet (#94). The source-owned capture and headless
+journey are ready for the offline client's next batch; stock spell execution
+still needs a measured implementation.
+
 [Scripted terrain](terrain.md): `terrainLine` and `terrainRectFill` paint named
 ground tiles into W3E grid points. `bun examples/terrain.ts` writes a synthetic
 line and rectangle; the existing terrain reader and renderer consume its bytes.
