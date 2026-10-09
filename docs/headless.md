@@ -1297,6 +1297,60 @@ so the renderer is unchanged. Under the scaled threshold, native Classic
 passes both electric cases on its stage-edge and receipt pixels, while the
 halo alone (373 and 302) would fail.
 
+### The effect clock on the 3.0.0 LAN pool
+
+On 9 October 2026 the effect's own animation clock was read from memory on
+the offline Classic pool (lan1b, 3.0.0.24268): the engine debugger's
+read-only `/proc` reader followed ForkedLightningTarget's Birth time (an
+integer millisecond in the sequence's 833-1767 interval) beside the map's
+simulation frame, in three runs of the electric-hit cue. With the match
+running steadily, every effect clock changes in whole 25 ms steps about
+every 25 ms of game time (once 50 ms), whatever the picture rate, and the
+map's 1/60 s timer callbacks run one or two per step. Each spawn reads:
+
+- inside the spawn's callback, the map's 0.1 s seek (933);
+- at the next step, Birth restarted at its start (833): the selection
+  replaces the seek, and that step does not advance it;
+- each later step adds 25 ms × time scale (858, 883, ...).
+
+Frozen with time scale 0 in the callback k frames after the spawn, the
+clock read: +0, 0 ms (1 hold); +1, 0 ms (3 of 3); +2, 0 ms (4) and 25 ms
+(1); +3, 0 ms (1) and 25 ms (2). Native held frames therefore show the cue
+0 or 25 ms into Birth where headless had 33 ms, which is #72's sample time.
+Pictures still gate it: right after a hold, when the simulation ran
+several callbacks a few milliseconds apart, the restart and the freeze fell
+between the same two pictures and read 0 ms; in a run whose window drew few
+pictures (the capture tool read 1 of 8 held stamps), no clock moved and the
+seek stayed. So the clock advances when a picture is drawn, by the game time
+since the last one in whole 25 ms steps, and a selection restarts on the
+next picture. `frameNumberRead` stays unchecked: this reads an effect's
+clock, not Warcraft's frame number.
+
+`effectStepMs: 25` (a `ClientOptions`/`runtime.clients` option) makes
+headless effect clocks follow this rule at steady pacing, a picture every
+step: steps end every 25 ms of the headless game clock, after the callbacks
+due by then, and a selection restarts at the next step end without
+advancing. Unset, effect clocks
+advance once per frame as before, which the 3.0.1 #58 rulers pin. The
+reads are pinned in `test/headless-effects.test.ts` ("[native #72]").
+Which callbacks share a step is the session's phase, so a held +2 frame is
+0 ms in one phase and 25 ms in the other two.
+
+All 42 f9d0fbf3 frames, re-timed by the rule, with the 8 October native
+batch and its 1,000-pixel rubric:
+
+| Case | Native +2/+8/+20 | Headless, +2 at 0 ms | Headless, +2 at 25 ms |
+| --- | --- | --- | --- |
+| Electric hit | 889/256/0 | 1271/269/0, disagree | 3234/269/0, disagree |
+| Ice spark | 19072/0/0 | 11331/0/0, agree | 14185/0/0, agree |
+| Electric shield | 424/0/0 | 775/0/0, agree | 2339/0/0, disagree |
+| Other 11 cases | as above | agree | agree |
+
+That is 13/14 in the 0 ms phase and 12/14 in the 25 ms phases. Electric
+hit's remaining 271 pixels over the threshold are the Blue_Glow2 halo and
+the stage-edge rows above, not the clock. The reads, the follow log and the
+capture maps are private in `~/.local/state/wisp/ref-72-clock/`.
+
 Only measured numbers and authored code are kept here. Screenshots, stock
 models and textures stay in private local storage under the clean-room rules.
 

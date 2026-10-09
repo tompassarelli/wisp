@@ -109,3 +109,28 @@ farmTest("[native #59] the same effect cases pass in emitted 32-bit Lua", () => 
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
   expect(run.stdout.toString().trimEnd().split("\n")).toEqual([...[0, 1].flatMap(slot => EXPECTED.map(row => `p${slot} ${row}`)), ...DEATH_TIMELINE]);
 }, 120_000);
+
+// Native reads: Warcraft III 3.0.0.24268, offline LAN pool client lan1b, Classic, 9 Oct 2026; ForkedLightningTarget's
+// Birth clock (interval 833-1767 ms) read from memory: 933 inside the spawn callback (its 0.1 s seek), 833 after that step,
+// then +25 per 25 ms step; frozen at +0, +1, +2 and +3 callbacks after the spawn it read 833, 833, 858 and 858 (wisp#72).
+test("[native #72] 3.0.0 LAN effect clocks advance 25 ms per engine step, and a selection's step restarts without advancing", () => {
+  const read = (held: number | undefined) => {
+    let e: effect | undefined;
+    const clients = runtime.clients({ install, start: () => { e = AddSpecialEffect(DYING, 10, 20); } }, [0], { effectStepMs: 25 });
+    clients.start();
+    clients.frames(30 - clients.clients[0]!.frame);
+    const client = clients.clients[0]!;
+    const elapsed = () => Math.round(client.effectPoses()[0]!.animationElapsed * 1000);
+    const seen: number[] = [];
+    client.run(() => { BlzSetSpecialEffectAnimation(e!, "birth"); BlzSetSpecialEffectTime(e!, 0.1); if (held === 0) BlzSetSpecialEffectTimeScale(e!, 0); });
+    seen.push(elapsed());
+    for (let k = 1; k <= 6; k++) {
+      clients.frames(1);
+      if (k === held) client.run(() => BlzSetSpecialEffectTimeScale(e!, 0));
+      seen.push(elapsed());
+    }
+    return held === undefined ? seen : seen[6];
+  };
+  expect(read(undefined)).toEqual([100, 0, 25, 25, 50, 75, 75]);
+  expect([0, 1, 2, 3].map(read)).toEqual([0, 0, 25, 25]);
+});

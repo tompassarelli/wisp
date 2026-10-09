@@ -56,7 +56,7 @@ export interface HeadlessRuntime {
 
 
 
-  clients(entry: MapEntry, players?: readonly number[], options?: Pick<LockstepOptions, "delivery" | "files" | "keepCalls" | "cost" | "effectDeaths" | "musicSlider">): Lockstep;
+  clients(entry: MapEntry, players?: readonly number[], options?: Pick<LockstepOptions, "delivery" | "files" | "keepCalls" | "cost" | "effectDeaths" | "musicSlider" | "effectStepMs">): Lockstep;
 
 
 
