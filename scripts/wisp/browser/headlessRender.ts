@@ -12,6 +12,18 @@ import { depthTarget, type DepthTarget, invert, parsePostProcessing, POINT_FACE,
 import { terrainRows } from "../terrainMesh";
 import { doodadSkinRows, terrainDoodadPoses } from "../terrainDoodads";
 import { ddsTexture } from "./ddsTexture";
+import { cliffOverrideTextures, cliffTexturePath } from "../terrainCliffs";
+
+let cliffOverrides: ReadonlyMap<string, string> = new Map();
+const cliffOverridesByTerrain = new Map<string, Promise<ReadonlyMap<string, string>>>();
+async function bindCliffTextures(scene: RenderScene): Promise<void> {
+  const tiles = scene.terrain?.cliffTiles ?? [];
+  if (tiles.length === 0) { cliffOverrides = new Map(); return; }
+  const key = tiles.join(",");
+  let loading = cliffOverridesByTerrain.get(key);
+  if (loading === undefined) cliffOverridesByTerrain.set(key, loading = asset("TerrainArt\\CliffTypes.slk").then((bytes) => cliffOverrideTextures(tiles, terrainRows(new Uint8Array(bytes)))));
+  cliffOverrides = await loading;
+}
 
 let installedDoodads: Promise<ReadonlyMap<string, Readonly<Record<string, string>>>> | undefined;
 async function scenePoses(scene: RenderScene): Promise<readonly EffectPose[]> {
@@ -380,7 +392,7 @@ function liveInstance(pose: EffectPose): ModelInstance | undefined {
 async function createInstance(path: string): Promise<ModelInstance> {
   const data = await modelAt(path);
 
-  const images = await Promise.all(data.Textures.map((texture) => texture.Image === "" ? undefined : texturePixels(texture.Image, path)));
+  const images = await Promise.all(data.Textures.map((texture) => texture.Image === "" ? undefined : texturePixels(cliffTexturePath(texture.Image, cliffOverrides), path)));
   const renderer = new ModelRenderer(data); renderer.initGL(gl);
   data.Textures.forEach((texture, index) => {
     const image = images[index];
@@ -711,6 +723,7 @@ window.prepareRenderer = (width, height, mode = "classic") => {
   return debug === null ? String(gl.getParameter(gl.RENDERER)) : String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL));
 };
 window.prepareScene = async (scene, extraModels = [], progress) => {
+  await bindCliffTextures(scene);
   const view = camera(scene, canvas.width / canvas.height);
   const poses = drawnPoses(await scenePoses(scene), view.eye, view.far, scene.world);
   const frames = scene.ui.filter(frame => frame.visible && frame.alpha > 0 && frame.texture !== "");
@@ -728,7 +741,7 @@ window.renderScene = async (scene, options) => {
   const view = camera(scene, canvas.width / canvas.height);
   const visible: EffectPose[] = [], notDrawn: string[] = [], absent = new Set<string>(), popcornEmitters: PopcornEmitterPose[] = [];
   let poses: readonly EffectPose[] = scene.effects;
-  try { poses = await scenePoses(scene); } catch (cause) { notDrawn.push(`terrain doodads: ${String(cause)}`); }
+  try { await bindCliffTextures(scene); poses = await scenePoses(scene); } catch (cause) { notDrawn.push(`terrain doodads: ${String(cause)}`); }
   releaseAbsent(poses);
   sceneDraw++;
   for (const pose of drawnPoses(poses, view.eye, view.far, scene.world)) {

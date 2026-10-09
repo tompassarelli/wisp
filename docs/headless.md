@@ -646,6 +646,12 @@ saves them as the scene's `environment`.
   `render.doodads.models` entries overriding paths. Stored variations select
   model suffixes, and installed fixed rotation and scale position the model.
   The shared effect world-bounds and far cull apply after shifting the origin.
+  A model texture named `ReplaceableTextures\\Cliff\\CliffN` or, in
+  Definitive, `Doodads\\Terrain\\#ignore_Cliffs\\CliffN_Suffix` draws the
+  `texDir\\texFile` (keeping the suffix) of the map's first cliff type whose
+  `CliffTypes.slk` `overrideTexture` names `CliffN`, so a Definitive cave
+  draws its tileset's cliff diffuse, normal and ORM maps
+  (wisp:scripts/wisp/terrainCliffs.ts).
   The record layout follows the [current HiveWE format documentation](https://github.com/stijnherfst/HiveWE/wiki/war3map.doo-Doodads).
   Terrain replacement under their footprint and matching native height and
   rotation references are still pending in #82.

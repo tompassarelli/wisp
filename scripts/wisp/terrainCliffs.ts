@@ -28,3 +28,22 @@ export function cliffGround(terrain: Terrain, rows: ReadonlyMap<string, Readonly
   }
   return { ...terrain, groundTiles, points };
 }
+
+
+export function cliffOverrideTextures(cliffTiles: readonly string[], rows: ReadonlyMap<string, Readonly<Record<string, string>>>): ReadonlyMap<string, string> {
+  const overrides = new Map<string, string>();
+  for (const id of cliffTiles) {
+    const row = rows.get(id), target = row?.overridetexture;
+    if (row === undefined || target === undefined || row.texdir === undefined || row.texfile === undefined) continue;
+    const name = target.split(/[\\/]/).pop()?.toLowerCase();
+    if (name !== undefined && !overrides.has(name)) overrides.set(name, `${row.texdir}\\${row.texfile}`);
+  }
+  return overrides;
+}
+
+
+export function cliffTexturePath(path: string, overrides: ReadonlyMap<string, string>): string {
+  const match = /^(?:ReplaceableTextures[\\/]Cliff|Doodads[\\/]Terrain[\\/]#ignore_Cliffs)[\\/](Cliff\d+)((?:_[A-Za-z]+)?\.[A-Za-z]+)$/i.exec(path);
+  const base = match?.[1] === undefined ? undefined : overrides.get(match[1].toLowerCase());
+  return base === undefined ? path : `${base}${match?.[2] ?? ""}`;
+}
