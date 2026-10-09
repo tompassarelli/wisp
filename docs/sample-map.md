@@ -51,6 +51,11 @@ only reads the base map and container (they may be read-only); the build
 stages the map in a copy of its own process and renames it into `--out`, so
 concurrent builds never share a partial file.
 
+Build and rebuild print [handle cleanup warnings](handle-cleanup.md) with
+source file and line for unmatched `Location`/`CreateGroup` calls. Escaped or
+conditional ownership is labeled UNKNOWN. Headless journeys can inspect each
+client's `liveHandleCounts()` before allocation and after cleanup.
+
 ## The base map
 
 Base maps stay outside the repository. A base map is a Warcraft III World

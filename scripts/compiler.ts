@@ -22,6 +22,8 @@ import { getProgramTranspileResult } from "typescript-to-lua/dist/transpilation/
 import type { EmitFile, ProcessedFile } from "typescript-to-lua/dist/transpilation/utils";
 import { normalizeSlashes } from "typescript-to-lua/dist/utils";
 import { type BundledModules, LuaBundler } from "./luaBundle";
+import { handleWarnings } from "./handleWarnings";
+export { reportHandleWarnings } from "./handleWarnings";
 
 /** Runs one named phase of a compile and returns its result; a caller times the phase by supplying one. */
 export type Phase = <A>(name: string, run: () => A) => A;
@@ -239,6 +241,7 @@ export interface MapCompiler {
   (phase?: Phase): readonly ts.Diagnostic[];
   /** The modules of the last successful compile's bundle; undefined when TypeScriptToLua built it. */
   readonly modules: () => BundledModules | undefined;
+  readonly warnings: () => readonly ts.Diagnostic[];
 }
 
 const noReplacements = (): ReadonlyMap<string, string> => new Map();
@@ -256,6 +259,7 @@ export function mapCompiler(configPath: string, sources: () => ReadonlyMap<strin
   const parsed = new Map<string, CachedSource>();
   let builder: ts.EmitAndSemanticDiagnosticsBuilderProgram | undefined;
   let signaturesPrimed = false;
+  let warnings: readonly ts.Diagnostic[] = [];
   const compile = (phase: Phase = defaultPhase): readonly ts.Diagnostic[] => {
     // Parsed every time so added and removed files are picked up.
     const config = phase("read config", () => parseConfigFileWithSystem(absolute));
@@ -266,6 +270,7 @@ export function mapCompiler(configPath: string, sources: () => ReadonlyMap<strin
     const current = phase("create program", () => ts.createEmitAndSemanticDiagnosticsBuilderProgram(config.fileNames, config.options, host, builder));
     builder = current;
     const program = current.getProgram();
+    warnings = phase("handle cleanup", () => handleWarnings(program));
     const global = [...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
     if (global.length > 0) return global;
     const { affected, diagnostics } = phase("type-check", () => {
@@ -313,7 +318,7 @@ export function mapCompiler(configPath: string, sources: () => ReadonlyMap<strin
       program.getDeclarationDiagnostics = declarationDiagnostics;
     }
   };
-  return Object.assign(compile, { modules: () => transpiler.bundled });
+  return Object.assign(compile, { modules: () => transpiler.bundled, warnings: () => warnings });
 }
 
 export function report(diagnostics: readonly ts.Diagnostic[]): string {

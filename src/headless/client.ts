@@ -610,6 +610,12 @@ export class HeadlessClient {
   private removals: Unit[] = [];
   private readonly unitStates: UnitStateFixtures;
   private readonly sounds = new Map<Handle, SoundState>();
+  private readonly locations = new Map<Handle, { x: number; y: number }>();
+  private readonly groups = new Set<Handle>();
+
+  liveHandleCounts(): { readonly locations: number; readonly groups: number } {
+    return { locations: this.locations.size, groups: this.groups.size };
+  }
   readonly soundLog: SoundCue[] = [];
   private music: SoundState | undefined;
   private musicVolume = 127;
@@ -893,6 +899,24 @@ export class HeadlessClient {
       GetPlayerName: (player: number) => playerNames?.[player] ?? `Player ${player + 1}`,
       GetTriggerPlayer: () => this.event.player,
       GetHandleId: (handle: unknown) => (isHandle(handle) ? handle.id : handle),
+      Location: (x: number, y: number) => {
+        const handle = this.handle("location");
+        this.locations.set(handle, { x, y });
+        return handle;
+      },
+      RemoveLocation: (handle: Handle) => { this.locations.delete(handle); },
+      MoveLocation: (handle: Handle, x: number, y: number) => {
+        const location = this.locations.get(handle);
+        if (location !== undefined) { location.x = x; location.y = y; }
+      },
+      GetLocationX: (handle: Handle) => this.locations.get(handle)?.x ?? 0,
+      GetLocationY: (handle: Handle) => this.locations.get(handle)?.y ?? 0,
+      CreateGroup: () => {
+        const handle = this.handle("group");
+        this.groups.add(handle);
+        return handle;
+      },
+      DestroyGroup: (handle: Handle) => { this.groups.delete(handle); },
       GetPlayerController: (player: number) => (playing(player) ? "MAP_CONTROL_USER" : "MAP_CONTROL_NONE"),
       GetPlayerSlotState: (player: number) => (playing(player) ? "PLAYER_SLOT_STATE_PLAYING" : "PLAYER_SLOT_STATE_EMPTY"),
       GetPlayersAll: () => {
