@@ -19,14 +19,6 @@ export function terrainCells(terrain: Terrain): TerrainCell[] {
   return cells;
 }
 
-/** Ascending ground IDs draw the full base first, then corner masks from the tile atlas. */
-export function terrainLayers(cell: TerrainCell): { tile: number; mask: number; variation: number }[] {
-  return [...new Set(cell.corners.map(point => point.ground))].sort((a, b) => a - b).map((tile, index) => ({
-    tile, mask: index === 0 ? 15 : cell.corners.reduce((mask, point, corner) => mask | (point.ground === tile ? [2, 1, 8, 4][corner] ?? 0 : 0), 0),
-    variation: cell.corners[0].variation,
-  }));
-}
-
 /** Installed SLK cells carry X/Y forward when omitted. Only format fields are retained. */
 export function terrainRows(bytes: Uint8Array): ReadonlyMap<string, Readonly<Record<string, string>>> {
   const rows = new Map<number, Map<number, string>>();
