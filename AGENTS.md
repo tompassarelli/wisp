@@ -9,6 +9,10 @@ offline client from inside (wisp:docs/driving-warcraft.md), never
 through the OS keyboard or chat. Judge each step by checks per hour per
 machine and by setup failures, and prefer the frontier move over another
 workaround around the client.
+Measure the native side with exact reads before pixels: on offline 3.0.0
+clients use the engine debugger's frame-number, state, checksum and cost
+reads (wisp:docs/builds.md) and stack-trace builds, align frames by the read
+frame number, and keep screenshots for appearance only.
 A native check of a TypeScript-only change hot-reloads into the running
 match (`wisp hot --watch`, wisp:docs/hot-reload.md) instead of rebuilding.
 
