@@ -14,15 +14,15 @@
     "package": "bun scripts/package.ts"
   },
   "devDependencies": {
-    "@effect/tsgo": "0.48.0",
+    "@effect/tsgo": "0.51.1",
     "@types/bun": "1.4.2",
     "lua-types": "2.14.1"
   },
   "dependencies": {
-    "@effect/platform-bun": "4.0.1",
-    "@effect/platform-node-shared": "4.0.1",
+    "@effect/platform-bun": "4.0.2",
+    "@effect/platform-node-shared": "4.0.2",
     "dds-parser": "1.0.1",
-    "effect": "4.0.1",
+    "effect": "4.0.2",
     "gl-matrix": "3.3.0",
     "source-map": "0.7.6",
     "typescript": "6.0.2",

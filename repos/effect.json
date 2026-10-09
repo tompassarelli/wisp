@@ -1,9 +1,9 @@
 {
   "repository": "https://github.com/Effect-TS/effect.git",
   "prefix": "repos/effect",
-  "tag": "effect@4.0.1",
-  "version": "4.0.1",
-  "commit": "460272d30457f4697d8b8c52cad41caccbcace08",
+  "tag": "effect@4.0.2",
+  "version": "4.0.2",
+  "commit": "269a7c864351231d42e6e95b7fa8f32050df3691",
   "license": "MIT",
   "licenseFile": "repos/effect/LICENSE",
   "purpose": "Read-only upstream source, tests and examples for agent reference",
