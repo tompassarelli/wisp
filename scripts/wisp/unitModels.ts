@@ -19,7 +19,7 @@ const modelKey = (path: string) => path.replaceAll("/", "\\").toLowerCase().repl
 
 
 export const checkUnitModels = (declaration: UnitModels, sources: readonly ModelSource[]) => Effect.gen(function*() {
-  const decoded = yield* Schema.decodeUnknownEffect(UnitModels)(declaration).pipe(
+  const decoded = yield* Schema.decodeEffect(UnitModels)(declaration).pipe(
     Effect.mapError((cause) => new UnitModelsFailure({ problem: cause.message })),
   );
   const paths = new Map(sources.map((source) => [modelKey(source.entry), source.source]));

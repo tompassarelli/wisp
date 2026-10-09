@@ -108,7 +108,7 @@ export function makeNet(load: (args: readonly string[]) => Promise<NetGame>, gam
         Effect.map(({ stdout, stderr }) => {
           process.stderr.write(stderr.split("\n").filter((line) => line.startsWith("net:")).map((line) => `${label} ${line}\n`).join(""));
           const last = new TextDecoder().decode(stdout).trim().split("\n").at(-1) ?? "";
-          return Schema.decodeUnknownOption(Outcome)(last);
+          return Schema.decodeOption(Outcome)(last);
         }),
         Effect.mapError((cause) => new NetFailure({ problem: `${label}: ${String(cause)}` })),
       );

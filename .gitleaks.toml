@@ -1,0 +1,6 @@
+# Vendored upstream Effect source at the commit pinned in repos/effect.json; its fixtures and docs carry dummy keys.
+[extend]
+useDefault = true
+
+[allowlist]
+paths = ['''^repos/effect/''']

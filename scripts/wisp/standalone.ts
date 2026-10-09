@@ -185,7 +185,7 @@ export const runStandalone = (game: StandaloneGame, options: StandaloneOptions =
   console.log(`${game.title}: standalone window opened. Connect a controller or use the keyboard.`);
   const closed = browser.handle.exitCode.pipe(
     Effect.mapError((cause) => new RenderFailure({ cause })),
-    Effect.flatMap((code) => (code !== 0 ? Effect.fail(failed(`player window exited (${code})`)) : Effect.succeed(undefined))),
+    Effect.flatMap((code) => (code !== 0 ? Effect.fail(failed(`player window exited (${code})`)) : Effect.void)),
   );
   const result = yield* Effect.raceFirst(player.completed, closed);
   if (result !== undefined) {

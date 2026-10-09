@@ -27,7 +27,7 @@ const PUBLISH_CONCURRENCY = 2;
 
 
 export class NotAcknowledged extends Schema.TaggedError<NotAcknowledged>()("NotAcknowledged", {
-  version: Schema.Number,
+  version: Schema.Finite,
   directories: Schema.Array(Schema.String),
 
   problems: Schema.Array(Schema.String),

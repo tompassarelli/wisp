@@ -207,7 +207,7 @@ export function writePoolClients(path: string, clients: readonly PoolClient[]): 
 
 const PoolFileJson = Schema.fromJsonString(Schema.Struct({
   profile: Schema.String,
-  fps: Schema.optionalKey(Schema.Number),
+  fps: Schema.optionalKey(Schema.Finite),
   pairs: Schema.Array(Schema.Struct({
     id: Schema.Int,
     clients: Schema.String,
@@ -220,6 +220,7 @@ const PoolFileJson = Schema.fromJsonString(Schema.Struct({
 
 
 export const readPool: Effect.Effect<PoolFile | undefined, LanFailure> = Effect.suspend(() => {
+  // @effect-diagnostics-next-line effectSucceedWithVoid:off -- an undefined result, which Effect.void's void type cannot satisfy
   if (!existsSync(poolFile())) return Effect.succeed(undefined);
   return Effect.try({ try: () => readFileSync(poolFile(), "utf8"), catch: (cause) => new LanFailure({ problem: `${poolFile()}: ${String(cause)}` }) }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(PoolFileJson)),

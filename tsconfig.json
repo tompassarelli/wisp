@@ -19,10 +19,12 @@
         "name": "@effect/language-service",
         "diagnostics": true,
         "includeSuggestionsInTsc": true,
-        "ignoreEffectSuggestionsInTscExitCode": true,
+        "ignoreEffectSuggestionsInTscExitCode": false,
         "diagnosticSeverity": {
           "unstableApiUsage": "off"
-        }
+        },
+        "ignoreEffectWarningsInTscExitCode": false,
+        "ignoreEffectErrorsInTscExitCode": false
       }
     ],
     "types": [

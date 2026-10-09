@@ -1,2 +1,3 @@
 [test]
 preload = ["./test/lua32.preload.ts"]
+pathIgnorePatterns = ["repos/**"]

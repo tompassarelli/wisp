@@ -309,6 +309,7 @@ const desktop = (run: Runner, tools: PlayTools, display: string): PlayDesktop["S
         (best === undefined || window.width * window.height > best.width * best.height ? window : best), undefined);
     }),
     keys: (_window, ...keys) => xdotool("key", "--clearmodifiers", ...keys).pipe(Effect.asVoid),
+    // @effect-diagnostics-next-line effectSucceedWithVoid:off -- an undefined result, which Effect.void's void type cannot satisfy
     menus: (port) => reportedMenus(port).pipe(Effect.catchTag("MenuFailure", () => Effect.succeed(undefined))),
   };
 };

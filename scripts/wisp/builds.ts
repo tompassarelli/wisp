@@ -5,11 +5,11 @@ import patch from "../../builds/3.0.1.24342.json";
 
 const Capability = Schema.Struct({ status: Schema.Literals(["supported", "unsupported", "unchecked"]), issue: Schema.String });
 const Profile = Schema.Struct({
-  id: Schema.String, version: Schema.String, build: Schema.Number,
+  id: Schema.String, version: Schema.String, build: Schema.Finite,
   capabilities: Schema.Record(Schema.String, Capability),
-  protocolVersion: Schema.NullOr(Schema.Number),
+  protocolVersion: Schema.NullOr(Schema.Finite),
   natives: Schema.Struct({ naming: Schema.String, added: Schema.Array(Schema.String) }),
-  menus: Schema.Struct({ lobbySettleMs: Schema.Number, scoreClose: Schema.Literals(["Escape", "ScoreScreenClose"]), lobbyBack: Schema.Struct({ x: Schema.Number, y: Schema.Number }) }),
+  menus: Schema.Struct({ lobbySettleMs: Schema.Finite, scoreClose: Schema.Literals(["Escape", "ScoreScreenClose"]), lobbyBack: Schema.Struct({ x: Schema.Finite, y: Schema.Finite }) }),
   quirks: Schema.Array(Schema.Struct({ description: Schema.String, issue: Schema.String })),
 });
 export type BuildProfile = typeof Profile.Type;

@@ -55,11 +55,7 @@ export const runProxy = (options: ProxyOptions, log: (line: string) => void = co
     while ((pending[0]?.at ?? Infinity) <= now) {
       const due = pending.shift();
       // A peer that has gone answers with ICMP port unreachable; the peers' own silence rules decide that.
-      try {
-        due?.forward();
-      } catch {
-        continue;
-      }
+      yield* Effect.ignore(Effect.try(() => due?.forward()));
     }
     yield* Effect.sleep(Math.max(0, (pending[0]?.at ?? now + 1) - performance.now()));
   }
