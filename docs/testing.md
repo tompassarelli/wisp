@@ -72,22 +72,17 @@ file. Time outside tests (loading, `beforeAll`) is charged to the file too.
 
 - A test over the ceiling fails:
   `test/x.test.ts: this test used 5.02 s CPU, over the 4 s ceiling per test; shrink it or move it to the farm`.
-- On a whole run (no path or `-t` filter), a file whose CPU per test rises
-  more than 25%, and more than 1 s, over its row in `test/cost-baseline.tsv`
-  at the same test count fails the same way, naming the file. Rows are
-  scaled by the run's median ratio to the baseline, so a slower machine
-  compares fairly.
-- A new file, or a file whose test count changed, passes under the ceiling
-  and rewrites its row: commit the row with the tests.
-  `TEST_COST_UPDATE=1 bun run test` rewrites every row, after a cut.
-- A cost verdict reached above 30% CPU pressure is inconclusive (exit 75).
+- A ceiling verdict reached above 30% CPU pressure is inconclusive (exit 75).
   A preload-only run has no way to report that exit, so it fails rather than passing a budget miss.
-- CI shards set `WISP_TEST_COST_SHARD=1` to compare their selected files with the same baseline and print the same totals.
+- No file's CPU is compared with a baseline. CPU seconds vary with the runner,
+  not the code (wisp#114, smashcraft#394), so CI cost gates measure
+  deterministic quantities only, and CPU and wall-clock budgets are judged
+  only in timing tests and exclusive-lease perf measurements.
 - Every run prints the five heaviest tests and the suite's CPU, test count
-  and CPU per test against the baseline:
+  and CPU per test, without gating them:
 
 ```
-suite CPU: 30.8 s for 261 tests; 0.118 s per test against the baseline's 0.120 s (-2%), this machine at 1.00x the reference
+suite CPU: 30.8 s for 261 tests; 0.118 s per test
 ```
 
 A test that would come near the ceiling, typically one that compiles a
@@ -96,9 +91,9 @@ fixture to 32-bit Lua, is a farm test: declare it with `farmTest` from
 instead of `test`. `bun run test` skips it; CI's farm-tests job and every
 `bun wisp farm test` shard run it on each push, so it keeps its coverage.
 The ceiling doesn't apply to it. Keep its cheap Bun-side twin in the suite.
-Each farm shard runs the suite files with `WISP_TEST_COST_SHARD=1 bun run test`,
+Each farm shard runs the suite files with `bun run test`,
 then its farm tests with `bun test --preload ./scripts/wisp/testCostPreload.ts`.
-Farm tests keep their coverage without changing the suite baseline.
+Farm tests keep their coverage outside the suite's ceiling.
 
 ## The last line
 
