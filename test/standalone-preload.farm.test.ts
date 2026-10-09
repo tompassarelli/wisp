@@ -7,7 +7,7 @@ import { installHeadless } from "../scripts/wisp/headless";
 import { runStandalone } from "../scripts/wisp/standalone";
 import { farmTest } from "../scripts/wisp/farmTest";
 
-farmTest("[repro #48] hidden pooled scenery does not load an unused missing model before the first standalone frame", async () => {
+farmTest("[invariant] hidden pooled scenery does not load an unused missing model before the first standalone frame", async () => {
   const directory = await mkdtemp(join(tmpdir(), "wisp-preload-"));
   const runtime = installHeadless({ filePrefix: "preload-fixture", globalPrefixes: [] });
   const reads: string[] = [];

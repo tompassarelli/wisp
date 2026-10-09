@@ -38,7 +38,7 @@ test("[reference] W3E heights and split variations reach the renderer at the req
   expect(sceneWithUnits({ ...project, terrain: { w3e, origin: [0, 0] as const } }, scene).terrain?.originX).toBe(100);
 });
 
-farmTest("[repro #82] textured W3E terrain changes Classic and Definitive pixels and obeys terrain visibility", async () => {
+farmTest("[scenario] textured W3E terrain changes Classic and Definitive pixels and obeys terrain visibility", async () => {
   const table = new TextEncoder().encode('ID;PWXL;N;E\nC;X1;Y1;K"tileID"\nC;X2;K"dir"\nC;X3;K"file"\nC;X1;Y2;K"TEST"\nC;X2;K"authored"\nC;X3;K"red"\nC;X1;Y3;K"MORE"\nC;X2;K"authored"\nC;X3;K"green"\nE');
   const tga = (red: number, green: number) => { const bytes = new Uint8Array(18 + 4 * 4 * 4); bytes[2] = 2; bytes[12] = bytes[14] = 4; bytes[16] = 32; for (let at = 18; at < bytes.length; at += 4) { bytes[at + 1] = green; bytes[at + 2] = red; bytes[at + 3] = 255; } return bytes; };
   const directory = await mkdtemp(join(tmpdir(), "wisp-terrain-"));

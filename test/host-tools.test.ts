@@ -78,7 +78,7 @@ const capacity = join(fixtures, "capacity.ts");
 const agentPair = 93;
 const agent = (box: ReturnType<typeof sandbox>) => Bun.spawn([process.execPath, join(root, "scripts/wisp/lan/pairAgent.ts"), "--pair", String(agentPair), "--capacity", capacity], { env: box.env, stdout: "ignore", stderr: "ignore" });
 
-test("[repro #62] pair agent: SIGTERM while its games start stops them and the agent", async () => {
+test("[boundary] pair agent: SIGTERM while its games start stops them and the agent", async () => {
   const box = sandbox();
   const runner = agent(box);
 
@@ -89,7 +89,7 @@ test("[repro #62] pair agent: SIGTERM while its games start stops them and the a
   expect({ processes: result.processes, sessions: result.sessions }).toEqual({ processes: 0, sessions: 0 });
 }, 60_000);
 
-farmTest("[repro #62] pair agent: a step failing after both games started stops them", async () => {
+farmTest("[boundary] pair agent: a step failing after both games started stops them", async () => {
   const box = sandbox();
 
   const taken = Bun.serve({ hostname: "127.0.0.1", port: reportPort(agentPair, "a"), fetch: () => new Response() });
@@ -113,7 +113,7 @@ const pool = (box: ReturnType<typeof sandbox>, extra: Record<string, string>) =>
   });
 };
 
-test("[repro #62] lan pool: SIGTERM while a pair is starting stops its session", async () => {
+test("[boundary] lan pool: SIGTERM while a pair is starting stops its session", async () => {
   const box = sandbox();
   const runner = pool(box, { WISP_TEST_READY_MS: "60000" });
 
@@ -124,7 +124,7 @@ test("[repro #62] lan pool: SIGTERM while a pair is starting stops its session",
   expect({ processes: result.processes, sessions: result.sessions }).toEqual({ processes: 0, sessions: 0 });
 }, 60_000);
 
-test("[repro #62] lan pool: a step failing after a pair started stops its session", async () => {
+test("[boundary] lan pool: a step failing after a pair started stops its session", async () => {
   const box = sandbox();
   const runner = pool(box, { WISP_TEST_BAD_AGENT: "1" });
   const result = await leftovers(runner, box);
@@ -132,7 +132,7 @@ test("[repro #62] lan pool: a step failing after a pair started stops its sessio
   expect({ processes: result.processes, sessions: result.sessions }).toEqual({ processes: 0, sessions: 0 });
 }, 60_000);
 
-test("[repro #62] lan pool: SIGTERM removes desktop markers after its native scope exits", async () => {
+test("[boundary] lan pool: SIGTERM removes desktop markers after its native scope exits", async () => {
   const box = sandbox();
   const runner = pool(box, {});
   await until(() => existsSync(join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${poolPair}`, "clients.json")), 30, "the ready pool pair");
@@ -143,7 +143,7 @@ test("[repro #62] lan pool: SIGTERM removes desktop markers after its native sco
   expect({ processes: result.processes, sessions: result.sessions, activeDesktops: box.activeDesktops() }).toEqual({ processes: 0, sessions: 0, activeDesktops: [] });
 }, 60_000);
 
-test("[repro #62] watch: a pair agent that doesn't answer is a timeout, not a client that isn't playing", async () => {
+test("[boundary] watch: a pair agent that doesn't answer is a timeout, not a client that isn't playing", async () => {
   const box = sandbox();
   const previous = process.env["XDG_STATE_HOME"];
   process.env["XDG_STATE_HOME"] = box.env.XDG_STATE_HOME;

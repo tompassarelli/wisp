@@ -43,14 +43,14 @@ farmTest("[invariant] a clean match ends with no findings and repeats from its s
   expect(second.inputs).toEqual(first.inputs);
 });
 
-test("[repro #73] CPU warm-up does not change the seeded match's clock", () => {
+test("[invariant] measured CPU cost and warm-up never change a seeded match's clock", () => {
   const result = playSoakMatch(runtime, game, { ...project, limits: { costScale: 1_000_000, warmUpFrames: 1_000_000 }, fuzz: { hitch: 0, silence: 0 } }, { ...match(["fuzz", "fuzz"]), frames: 20 });
   expect(result.costMs).toBeGreaterThan(0);
   expect(result.inputs.slow).toEqual([]);
   expect(result.wallMs).toBeCloseTo((20 * 1000) / 60, 8);
 });
 
-test("[spec #16] each fault is found by its detector", () => {
+test("[spec #16] each fault is found by its detector, and a lag spike's catch-up is no spiral", () => {
   const kinds = (policies: readonly string[], setup = project) => play(policies, setup).findings.map(({ kind, text }) => `${kind}: ${text.split("\n")[0]}`);
   expect(kinds(["fuzz", "freeze"])).toEqual([
     "stall: the match froze at confirmed frame 90: no progress for 3.0 s and no player is told why",
@@ -77,6 +77,26 @@ test("[spec #16] each fault is found by its detector", () => {
   expect(within.findings.filter(({ kind }) => kind === "typing")).toEqual([]);
   expect(within.typingStallsMs.length).toBeGreaterThan(2);
   expect(within.typingStallsMs.every((ms) => ms === 180)).toBe(true);
+  {
+
+    const catchUps = (backlog: (frame: number) => number, frames: number) => {
+      let frame = 0;
+      const clients = runtime.clients({ start: () => {}, install: () => {} }, [0]);
+      clients.start();
+      const monitor = new SoakMonitor(clients, { input: () => {}, observe: () => ({ progress: frame, over: false, backlog: backlog(frame) }) });
+      for (frame = 1; frame <= frames; frame++) {
+        clients.frames(1);
+        monitor.afterFrame((frame * 1000) / 60, new Set());
+      }
+      return monitor.findings.filter(({ kind }) => kind === "catch-up").map(({ text }) => text);
+    };
+
+
+    const spike = (frame: number) => (frame < 120 ? 11 : frame < 180 ? 17 : frame < 235 ? 23 : frame < 280 ? 105 - (frame - 235) * 2 : 20);
+    expect(catchUps(spike, 600)).toEqual([]);
+    const spiral = (frame: number) => 50 + Math.floor(frame / 10);
+    expect(catchUps(spiral, 600)).toContain("catch-up spiral: input not yet played grew for 3 s to 80 frames");
+  }
 });
 
 test("[invariant] a repro file plays its match again with the same inputs, calls and findings", () => {
@@ -188,23 +208,3 @@ farmTest("[spec #16] the command plays matches in worker processes and keeps a r
   expect(Exit.isFailure(await run(["--workers", "5"]))).toBe(true);
 });
 
-test("[repro 5a21838] a lag spike's catch-up after a usual backlog's rise is no spiral; input left further behind each second is", () => {
-
-  const catchUps = (backlog: (frame: number) => number, frames: number) => {
-    let frame = 0;
-    const clients = runtime.clients({ start: () => {}, install: () => {} }, [0]);
-    clients.start();
-    const monitor = new SoakMonitor(clients, { input: () => {}, observe: () => ({ progress: frame, over: false, backlog: backlog(frame) }) });
-    for (frame = 1; frame <= frames; frame++) {
-      clients.frames(1);
-      monitor.afterFrame((frame * 1000) / 60, new Set());
-    }
-    return monitor.findings.filter(({ kind }) => kind === "catch-up").map(({ text }) => text);
-  };
-
-
-  const spike = (frame: number) => (frame < 120 ? 11 : frame < 180 ? 17 : frame < 235 ? 23 : frame < 280 ? 105 - (frame - 235) * 2 : 20);
-  expect(catchUps(spike, 600)).toEqual([]);
-  const spiral = (frame: number) => 50 + Math.floor(frame / 10);
-  expect(catchUps(spiral, 600)).toContain("catch-up spiral: input not yet played grew for 3 s to 80 frames");
-});

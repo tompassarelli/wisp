@@ -89,8 +89,7 @@ const accept = makeAccept({
 });
 ```
 
-`AcceptDriver` is the only service that touches clients, so tests run a suite
-against a fake driver (wisp:test/accept.test.ts).
+`AcceptDriver` is the only service that touches clients.
 
 Not automated: visual judgement beyond the declared rules. A capture whose
 meaning needs eyes is needs-look, with its cropped frames on disk.

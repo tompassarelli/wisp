@@ -10,7 +10,7 @@ import { generateMDX, parseMDL } from "../vendor/war3-model.mjs";
 import { FIXTURE_MDL } from "./animation58/models";
 import { MARK } from "./animation58/layout";
 
-farmTest("[repro #75] mixed SD and HD scenes replace an SD handle without destroying absent shaders", async () => {
+farmTest("[invariant] mixed SD and HD scenes replace an SD handle without destroying absent shaders", async () => {
   const directory = await mkdtemp(join(tmpdir(), "wisp-mixed-shaders-"));
   const text = FIXTURE_MDL[MARK];
   if (text === undefined) throw new Error("missing authored square");

@@ -9,7 +9,7 @@ import { preferencesBackupPath, preferencesPath, withGraphicsMode } from "../scr
 
 const fixture = (name: string) => readFileSync(join(import.meta.dir, "fixtures/preferences", name), "utf8");
 
-test("[repro 8f0ba58] the helper waits for the game's process, then puts the saved file back and removes the backup", async () => {
+test("[boundary] the restore helper waits for the game's process, then puts the saved file back and removes the backup", async () => {
   const documents = mkdtempSync(join(tmpdir(), "wisp-preferences-"));
   writeFileSync(preferencesBackupPath(documents), fixture("private-desktop.txt"));
   writeFileSync(preferencesPath(documents), fixture("main-display.txt"));

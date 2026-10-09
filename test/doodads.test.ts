@@ -30,7 +30,7 @@ const scene: RenderScene = { frame: 60, client: 0, effects: [], units: [], ui: [
   camera: { x: 0, y: 0, fields: { CAMERA_FIELD_ROTATION: 90, CAMERA_FIELD_ANGLE_OF_ATTACK: 270, CAMERA_FIELD_TARGET_DISTANCE: 300 } },
   environment: { sky: "", skyVisible: false, terrainVisible: false, dayNight: { terrain: "", unit: "" }, timeOfDay: 12 } };
 
-test("[reference] doodad 8/11 skin and legacy records retain placements after item sets", () => {
+test("[reference] doodad 8/11 skin and legacy records retain placements after item sets and join the scene at the map origin with their skin variations", () => {
   for (const skinIds of [true, false]) {
     const rows = decodeDoodads(placements(skinIds), skinIds);
     expect(rows.map((row) => [row.type, row.skin, row.variation, row.x, row.y, row.z, row.scale, row.visible])).toEqual([
@@ -39,18 +39,17 @@ test("[reference] doodad 8/11 skin and legacy records retain placements after it
     ]);
     expect(rows[0]?.angle).toBeCloseTo(Math.PI / 2, 6);
   }
+  {
+    const project = { readAsset: async () => undefined, terrain: { origin: [100, 200] as const }, doodads: { doo: placements(), models: { SKIN: ["first.mdx", "second.mdx"] } } };
+    const poses = sceneWithUnits(project, scene).effects;
+    expect(poses.map((pose) => [pose.model, pose.x, pose.y, pose.z, pose.matrixScale, pose.animation])).toEqual([
+      ["first.mdx", 0, 0, 30, [2, 3, 4], "stand"], ["second.mdx", 5000, 0, 30, [2, 3, 4], "stand"],
+    ]);
+    expect(sceneWithUnits({ ...project, doodads: { ...project.doodads, doo: placements(true, false) } }, scene).effects).toEqual([]);
+  }
 });
 
-test("[repro #82] placed doodads join the scene at the map origin with their skin variations", () => {
-  const project = { readAsset: async () => undefined, terrain: { origin: [100, 200] as const }, doodads: { doo: placements(), models: { SKIN: ["first.mdx", "second.mdx"] } } };
-  const poses = sceneWithUnits(project, scene).effects;
-  expect(poses.map((pose) => [pose.model, pose.x, pose.y, pose.z, pose.matrixScale, pose.animation])).toEqual([
-    ["first.mdx", 0, 0, 30, [2, 3, 4], "stand"], ["second.mdx", 5000, 0, 30, [2, 3, 4], "stand"],
-  ]);
-  expect(sceneWithUnits({ ...project, doodads: { ...project.doodads, doo: placements(true, false) } }, scene).effects).toEqual([]);
-});
-
-farmTest("[repro #82] placed doodads change actual Classic and Definitive frames and outside-bound models cull", async () => {
+farmTest("[scenario] placed doodads change actual Classic and Definitive frames and outside-bound models cull", async () => {
   const mdl = new TextEncoder().encode(`Version { FormatVersion 800, }
 Model "Placed square" { BlendTime 0, MinimumExtent { -20, -20, 0 }, MaximumExtent { 20, 20, 0 }, BoundsRadius 30, }
 Sequences 1 { Anim "Stand" { Interval { 0, 1000 }, } }

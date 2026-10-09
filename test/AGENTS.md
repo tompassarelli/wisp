@@ -17,5 +17,11 @@
   4 CPU second ceiling and 25% file-cost gate in `AGENTS.md` unchanged.
 - Melee numerical facts may be external fixtures. ISO images, extracted game
   files, proprietary assets and account data stay outside this repository.
-- `../docs/test-audit.md` records the reviewed #104 pruning piece and remaining
-  work. Extend an owning retained rule when a new input exposes missing behavior.
+- Every test is one of five kinds; new titles name it first: `[scenario]`,
+  `[property seed N]`/`[invariant]`, `[spec ...]` measurement, `[native]`/
+  `[reference]` external truth, or `[boundary]`. Fold a new bug's input into
+  the owning rule's test instead of adding a `[repro]` test.
+- Fakes stand only for what Wisp doesn't control (Warcraft's menu socket, a
+  capture tool, a clock) and enter as input; never fake a Wisp service layer.
+- Source-policy lints run in `bun run check` (wisp:scripts/effectBoundaries.ts),
+  not in the suite. `../docs/test-audit.md` records the #104 audit.

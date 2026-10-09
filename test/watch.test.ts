@@ -5,13 +5,6 @@ import { type ProcessInfo, prefixUse } from "../scripts/warcraft/battleNet";
 import { sessionStart } from "../scripts/warcraft/war3Log";
 import { type CrashReport, type SocketState, type Sources, changes, crashSummary, decide, eventLine, socketEvent, typesIntoMatch } from "../scripts/wisp/watch";
 
-test("[repro a6125bf] a rendered menu transition replaces old score data, while overlays do not", () => {
-  const results = socketEvent({ connected: true }, { messageType: "UpdateScoreInfo", payload: {} }, 1);
-  const menus = socketEvent(results, { messageType: "ScreenTransitionInfo", payload: { screen: "CREATE_GAME", type: "Screen" } }, 2);
-  expect(menus.last?.state).toEqual({ kind: "menus", screen: "CREATE_GAME" });
-  expect(socketEvent(menus, { messageType: "ScreenTransitionInfo", payload: { screen: "OPTIONS", type: "Overlay" } }, 3)).toEqual(menus);
-});
-
 const fixture = (path: string) => readFileSync(join(import.meta.dir, "fixtures", path), "utf8");
 const PREFIX = "/clients/a/pfx";
 const process = (pid: number, exe: string): ProcessInfo => ({ pid, name: exe.split("\\").at(-1)!, args: [exe], prefix: PREFIX });
@@ -28,22 +21,6 @@ const sources = (now: number, processes: readonly ProcessInfo[], extra: Partial<
   crashes: [],
   socket: { connected: false },
   ...extra,
-});
-
-test("[repro #88] a previous launch's receipt and sign-in cannot place the new process in a match", () => {
-  const log = fixture("war3log/menus-after-scan.txt");
-  const started = on6Oct("16:30");
-  const game = { ...GAME, started };
-  const old = { log, receipt: started - 1000 };
-  expect(decide("a", sources(started + 9000, [LAUNCHER, { ...game, started: on6Oct("16:20") }], { log, receipt: started + 2000 })).state.kind).toBe("in match");
-  expect(decide("a", sources(started + 9000, [LAUNCHER, game], old)).state.kind).toBe("running");
-  expect(decide("a", sources(started + 9000, [LAUNCHER, game], old)).evidence).toContain("starting");
-  expect(decide("a", sources(started + 9000, [LAUNCHER, game], { ...old, socket: { connected: true, last: { state: { kind: "in match" }, at: started - 1000, evidence: "old match" } } })).state.kind).toBe("running");
-  const current = { ...old, socket: { connected: true, last: { state: { kind: "loading" as const }, at: started + 1000, evidence: "loading" } }, receipt: started + 2000 };
-  expect(decide("a", sources(started + 9000, [LAUNCHER, game], current)).state.kind).toBe("in match");
-  for (const state of [{ kind: "menus" as const, screen: "MAIN_MENU" }, { kind: "signed in" as const }]) {
-    expect(decide("a", sources(started + 9000, [LAUNCHER, game], { ...old, socket: { connected: true, last: { state, at: started + 1000, evidence: "current" } } })).state).toEqual(state);
-  }
 });
 
 test("[spec docs/watch.md] offline host permits chat only for its exact loaded, connected, playing process", () => {
@@ -129,9 +106,13 @@ test("[provisional] a hosted match from the menus' socket: screens, lobby host, 
   expect(at(6100).source).toBe("socket");
 
   expect(socketEvent({ connected: true }, { messageType: "SetGlueScreen", payload: { screen: "DISABLED_SCREEN" } }, 0)).toEqual({ connected: true });
+  const results = socketEvent({ connected: true }, { messageType: "UpdateScoreInfo", payload: {} }, 1);
+  const menus = socketEvent(results, { messageType: "ScreenTransitionInfo", payload: { screen: "CREATE_GAME", type: "Screen" } }, 2);
+  expect(menus.last?.state).toEqual({ kind: "menus", screen: "CREATE_GAME" });
+  expect(socketEvent(menus, { messageType: "ScreenTransitionInfo", payload: { screen: "OPTIONS", type: "Overlay" } }, 3)).toEqual(menus);
 });
 
-test("[spec docs/watch.md] chat goes only into a match its menu page reports, never on a receipt alone", () => {
+test("[spec docs/watch.md] chat goes only into a match its menu page reports, never on a receipt alone or a previous launch's evidence", () => {
   const log = fixture("war3log/menus-after-scan.txt");
   const start = on6Oct("16:30");
   const at = (offset: number) => decide("a", sources(start + offset, [LAUNCHER, GAME], { log, socket: trace(fixture("watch/host-match.jsonl"), start, offset) }));
@@ -144,6 +125,18 @@ test("[spec docs/watch.md] chat goes only into a match its menu page reports, ne
   const receiptOnly = decide("a", sources(start, [LAUNCHER, GAME], { log, receipt: start - 1000 }));
   expect(receiptOnly.state).toEqual({ kind: "in match" });
   expect(typesIntoMatch(receiptOnly)).toBe(false);
+  const started = on6Oct("16:30");
+  const game = { ...GAME, started };
+  const old = { log, receipt: started - 1000 };
+  expect(decide("a", sources(started + 9000, [LAUNCHER, { ...game, started: on6Oct("16:20") }], { log, receipt: started + 2000 })).state.kind).toBe("in match");
+  expect(decide("a", sources(started + 9000, [LAUNCHER, game], old)).state.kind).toBe("running");
+  expect(decide("a", sources(started + 9000, [LAUNCHER, game], old)).evidence).toContain("starting");
+  expect(decide("a", sources(started + 9000, [LAUNCHER, game], { ...old, socket: { connected: true, last: { state: { kind: "in match" }, at: started - 1000, evidence: "old match" } } })).state.kind).toBe("running");
+  const current = { ...old, socket: { connected: true, last: { state: { kind: "loading" as const }, at: started + 1000, evidence: "loading" } }, receipt: started + 2000 };
+  expect(decide("a", sources(started + 9000, [LAUNCHER, game], current)).state.kind).toBe("in match");
+  for (const state of [{ kind: "menus" as const, screen: "MAIN_MENU" }, { kind: "signed in" as const }]) {
+    expect(decide("a", sources(started + 9000, [LAUNCHER, game], { ...old, socket: { connected: true, last: { state, at: started + 1000, evidence: "current" } } })).state).toEqual(state);
+  }
 });
 
 test("[native] processes alone: closed, launcher, and a clean exit's log as the last session's", () => {

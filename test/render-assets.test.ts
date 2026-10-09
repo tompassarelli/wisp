@@ -26,18 +26,17 @@ test("[native] #84 Definitive draws either lone Cairne alias and Classic ignores
   expect(headlessArguments(["--render", "/private/render", "--frames", "1", "--graphics", "definitive"]).graphics).toBe("definitive");
 });
 
-test("[spec #84] map overrides win over stock and a missing custom import never loads stock", async () => {
+test("[spec #84] map overrides win over stock, a missing custom import never loads stock, and stock reads keep the request and selected layer for render.json", async () => {
   const result = await Effect.runPromise(resolveRenderAsset(readers({ "Unit.mdx": "override" }, { "_de.w3mod/Unit.mdx": "stock" }), "Unit.mdx", "definitive"));
   expect(new TextDecoder().decode(result.bytes)).toBe("override");
   const missing = await Effect.runPromise(resolveRenderAsset(readers({}, { "base/war3mapImported/Unit.mdx": "stock" }), "war3mapImported\\Unit.mdx", "definitive"));
   expect(missing.bytes).toBeUndefined();
   expect(missing.attempts.every(({ source }) => source === "map")).toBe(true);
-});
-
-test("[spec #84] stock layer reads keep the request and selected layer for render.json", async () => {
-  const result = await Effect.runPromise(resolveRenderAsset(readers({}, { "_de.w3mod/Unit.mdx": "stock DE" }), "Unit.mdx", "definitive"));
-  expect(result).toMatchObject({ requested: "Unit.mdx", graphics: "definitive", selected: { source: "stock", layer: "_de.w3mod", path: "Unit.mdx" } });
-  expect(new TextDecoder().decode(result.bytes)).toBe("stock DE");
+  {
+    const result = await Effect.runPromise(resolveRenderAsset(readers({}, { "_de.w3mod/Unit.mdx": "stock DE" }), "Unit.mdx", "definitive"));
+    expect(result).toMatchObject({ requested: "Unit.mdx", graphics: "definitive", selected: { source: "stock", layer: "_de.w3mod", path: "Unit.mdx" } });
+    expect(new TextDecoder().decode(result.bytes)).toBe("stock DE");
+  }
 });
 
 test("[invariant] an explicit layer path is read once and asset paths cannot escape the install", async () => {
@@ -61,7 +60,7 @@ test("[native] #91 explicit Cairne DDS imports resolve in the HD body alias and 
   }
 });
 
-test("[native] #91 old imported HD body refuses missing HD stock; good pilot selected stock DE body resolves", async () => {
+test("[native] #91 old imported HD body refuses missing HD stock; good pilot selected stock DE body resolves; stock DE skies read shared base weather while imported HD bodies keep their layer", async () => {
 
 
   const texture = "Units/Orc/HeroTaurenChieftain/Tauren_Chieftain_Diffuse.tif";
@@ -77,16 +76,16 @@ test("[native] #91 old imported HD body refuses missing HD stock; good pilot sel
     expect(result.selectedPath, name).toBe(expected === undefined ? null : `_de.w3mod/${dds}`);
     expect(result.suffixConversion, name).toBe(".tif → .dds");
   }
+  {
+
+    const texture = "ReplaceableTextures/Weather/RaysOfLight.tif";
+    const assets = readers({}, { [`base/${texture}`]: "shared weather" });
+    const stock = await Effect.runPromise(resolveRenderAsset(assets, texture, "definitive", { source: "stock", layer: "_de.w3mod", path: "Environment/Sky/Outland_Sky/Outland_Sky.mdx" }));
+    expect(new TextDecoder().decode(stock.bytes)).toBe("shared weather");
+    expect(stock.selected).toEqual({ source: "stock", layer: "base", path: texture });
+    const imported = await Effect.runPromise(resolveRenderAsset(assets, texture, "definitive", { source: "map", layer: "_hd.w3mod", path: "war3mapImported/Body.mdx" }));
+    expect(imported.bytes).toBeUndefined();
+    expect(imported.attempts.filter(({ source }) => source === "stock").map(({ layer }) => layer)).toEqual(["_hd.w3mod"]);
+  }
 });
 
-test("[repro #82] installed DE skies read shared base weather textures while imported HD bodies keep their layer", async () => {
-
-  const texture = "ReplaceableTextures/Weather/RaysOfLight.tif";
-  const assets = readers({}, { [`base/${texture}`]: "shared weather" });
-  const stock = await Effect.runPromise(resolveRenderAsset(assets, texture, "definitive", { source: "stock", layer: "_de.w3mod", path: "Environment/Sky/Outland_Sky/Outland_Sky.mdx" }));
-  expect(new TextDecoder().decode(stock.bytes)).toBe("shared weather");
-  expect(stock.selected).toEqual({ source: "stock", layer: "base", path: texture });
-  const imported = await Effect.runPromise(resolveRenderAsset(assets, texture, "definitive", { source: "map", layer: "_hd.w3mod", path: "war3mapImported/Body.mdx" }));
-  expect(imported.bytes).toBeUndefined();
-  expect(imported.attempts.filter(({ source }) => source === "stock").map(({ layer }) => layer)).toEqual(["_hd.w3mod"]);
-});

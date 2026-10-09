@@ -8,7 +8,7 @@ import { renderScenes, type DrawnPose, type RenderScene } from "../scripts/wisp/
 import { farmTest } from "../scripts/wisp/farmTest";
 import { generateMDX, parseMDL } from "../vendor/war3-model.mjs";
 
-farmTest("[repro #83] a visible Popcorn emitter fails the Definitive render and records its sampled world position and scale", async () => {
+farmTest("[invariant] a visible Popcorn emitter fails the Definitive render and records its sampled world position and scale", async () => {
   const model = new Uint8Array(generateMDX(parseMDL(`Version { FormatVersion 1800, }
 Model "Popcorn repro" { BlendTime 0, MinimumExtent { 0, 0, 0 }, MaximumExtent { 0, 0, 0 }, BoundsRadius 0, }
 Sequences 1 { Anim "Birth" { Interval { 0, 1000 }, NonLooping, MinimumExtent { 0, 0, 0 }, MaximumExtent { 0, 0, 0 }, BoundsRadius 0, } }

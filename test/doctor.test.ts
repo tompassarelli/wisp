@@ -68,20 +68,6 @@ test("[native] the crash dialog is Warcraft III's BlizzardError.exe, not the lau
   expect(isErrorDialog(gameProcess(1))).toBe(false);
 });
 
-test("[invariant] a declared key the file lacks is added to its [Video] section; CRLF files keep their endings", () => {
-  expect(displayChanges(PRIVATE, { vsync: "1" })).toEqual([{ key: "vsync", expected: "1", actual: "0" }]);
-  expect(displayChanges(PRIVATE, { bogus: "1" })).toEqual([{ key: "bogus", expected: "1" }]);
-  const added = withDisplaySettings(PRIVATE, { bogus: "1" });
-  expect(videoSettings(added).bogus).toBe("1");
-  expect(added.indexOf("bogus=1")).toBeGreaterThan(added.indexOf("[Video]"));
-  const crlf = withDisplaySettings(MAIN.replace(/\n/g, "\r\n"), DISPLAY);
-  expect(crlf.split("\r\n").length).toBe(MAIN.split("\n").length);
-  expect(displayChanges(crlf, DISPLAY)).toEqual([]);
-  expect(crlf.replace(/\r\n/g, "\n").split("\n").every((line) => !line.includes("\r"))).toBe(true);
-
-  expect(videoSettings("[Gameplay]\nwindowmode=9\n[Video]\nwindowmode=2\n").windowmode).toBe("2");
-});
-
 test("[native] the launcher's sign-in pages, from its UnifiedAuth log", () => {
   expect(launcherHealth(ACCOUNT_PAGE)).toEqual({ kind: "sign-in form", form: "Login" });
 
@@ -127,7 +113,7 @@ test("[property seed 22] diagnosis preserves ready clients and distinguishes obs
   }
 });
 
-test("[property seed 8058] preference edits are idempotent and preserve every unrelated recorded setting", () => {
+test("[property seed 8058] preference edits are idempotent, add a missing key to [Video], keep CRLF endings and preserve every unrelated recorded setting", () => {
   for (const source of [MAIN, PRIVATE]) for (const newline of ["\n", "\r\n"]) for (const width of [640, 1280, 1920, 2876]) {
     const before = source.replace(/\r?\n/g, newline);
     const settings = { windowwidth: String(width), bogus: "1" };
@@ -137,5 +123,18 @@ test("[property seed 8058] preference edits are idempotent and preserve every un
     expect(displayChanges(after, settings)).toEqual([]);
     const untouched = (text: string) => text.split(newline).filter(line => !/^(windowwidth|bogus)=/.test(line)).join(newline);
     expect(untouched(after)).toBe(untouched(before));
+  }
+  {
+    expect(displayChanges(PRIVATE, { vsync: "1" })).toEqual([{ key: "vsync", expected: "1", actual: "0" }]);
+    expect(displayChanges(PRIVATE, { bogus: "1" })).toEqual([{ key: "bogus", expected: "1" }]);
+    const added = withDisplaySettings(PRIVATE, { bogus: "1" });
+    expect(videoSettings(added).bogus).toBe("1");
+    expect(added.indexOf("bogus=1")).toBeGreaterThan(added.indexOf("[Video]"));
+    const crlf = withDisplaySettings(MAIN.replace(/\n/g, "\r\n"), DISPLAY);
+    expect(crlf.split("\r\n").length).toBe(MAIN.split("\n").length);
+    expect(displayChanges(crlf, DISPLAY)).toEqual([]);
+    expect(crlf.replace(/\r\n/g, "\n").split("\n").every((line) => !line.includes("\r"))).toBe(true);
+
+    expect(videoSettings("[Gameplay]\nwindowmode=9\n[Video]\nwindowmode=2\n").windowmode).toBe("2");
   }
 });

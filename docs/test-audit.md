@@ -4,7 +4,7 @@ Done when
 
 - [x] Remove reviewed tooling scaffolding and injected host decisions; fold
   useful inputs into retained pure rules and real-file boundaries.
-- [ ] Finish the repository-wide five-kind audit: remaining own-code fakes,
+- [x] Finish the repository-wide five-kind audit: remaining own-code fakes,
   repro folds, full cost measurements, deliberate-fault checks and exact-commit
   farm evidence before closing #104.
 
@@ -43,3 +43,21 @@ from this change. These samples are not a whole-suite before/after comparison.
 
 The 4 CPU second ceiling and 25% file-cost gate remain unchanged. Baseline rows
 were removed only for deleted files; remaining file costs await the full audit.
+
+## Second piece: the remaining audit
+
+All 284 source declarations were classified keep, fold or delete. Deleted:
+the lobby, accept and LAN dummy tests, which replaced Wisp's own service
+layers or functions, and the Effect host-boundary source lint, which now runs
+in `bun run check` (wisp:scripts/effectBoundaries.ts). Every `[repro]` test
+either folded into the scenario or property that owns its rule (watch, menus,
+pause, map staging, render assets, soak catch-up, doodads) or, where it was
+that rule's only test, kept its input under the rule's kind
+(`[boundary]`, `[invariant]`, `[reference ...]`). Same-rule tests merged in
+builds, CI map build, effect opacity, effect binary32, graphics modes, JSON
+results, desktop capture and doctor preferences.
+
+A deliberately broken rule failed its kept test for each kind: the menus
+socket scenario (watch), the case-alias property (map build), the 20% native
+fit tolerance (native fit), binary32 addition against the binary64 oracle,
+and the sha256 store format (CI map build).

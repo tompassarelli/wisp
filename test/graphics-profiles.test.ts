@@ -36,14 +36,13 @@ test("[wisp#79] the sun's shadow map covers every corner of the camera's visible
   }
 });
 
-test("[wisp#79] Classic draws no bloom or model omni light either, so asking for them there is no gap", () => {
-  const options = headlessArguments(["--render", "/tmp/out", "--frames", "1", "--look", "bloom,point-lights"]);
-  expect(options.graphics).toBe("classic");
-  expect(options.look).toEqual(["bloom", "point-lights"]);
-});
-
-test("[wisp#79] the graphics modes are Classic and Definitive; Reforged and unknown levers are refused", () => {
+test("[wisp#79] the graphics modes are Classic, the default, and Definitive; Reforged and unknown levers are refused", () => {
   expect(headlessArguments(["--render", "/tmp/out", "--frames", "1", "--graphics", "definitive"]).graphics).toBe("definitive");
   expect(() => headlessArguments(["--render", "/tmp/out", "--frames", "1", "--graphics", "reforged"])).toThrow("--graphics is classic or definitive");
   expect(() => headlessArguments(["--render", "/tmp/out", "--frames", "1", "--look", "lens-flare"])).toThrow("unknown lever lens-flare");
+  {
+    const options = headlessArguments(["--render", "/tmp/out", "--frames", "1", "--look", "bloom,point-lights"]);
+    expect(options.graphics).toBe("classic");
+    expect(options.look).toEqual(["bloom", "point-lights"]);
+  }
 });

@@ -10,7 +10,7 @@ import { decodePng } from "./animation58/read";
 import { FIXTURE_MDL } from "./animation58/models";
 import { MARK } from "./animation58/layout";
 
-farmTest("[repro #40] rendered unit vertex color multiplies texels and team color, and white restores the original", async () => {
+farmTest("[invariant] rendered unit vertex color multiplies texels and team color, and white restores the original", async () => {
   const directory = await mkdtemp(join(tmpdir(), "wisp-tint-"));
   const text = FIXTURE_MDL[MARK];
   if (text === undefined) throw new Error("missing authored square");
