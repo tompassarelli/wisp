@@ -1263,6 +1263,40 @@ white) and in bone. Without the halo, the electric hit +2 count is still
 19 pixels over the 1,000 threshold. The cause stays "other" until one
 native frame of a Blue_Glow2-only model is captured.
 
+On 9 October 2026 both electric cases were retaken on the offline Classic
+pool (lan1a, 3.0.0.24268, `capture-classic`, 1280 × 720 game area), with the
+stock model, a halo-only copy (geoset 1 alpha 0, emitters off) and a
+star-only copy (geoset 0 alpha 0). A read of the map's Lua state during the
+stock run (`engine lua`) shows the shield cue's chat applied on frame 120 and
+the driver holding frames 122, 128 and 140, so the captures are exactly +2,
++8 and +20 after the spawn frame. The engine's own frame counter
+(`frameNumberRead`) and the effect's animation time have no checked read on
+3.0.0, so the sample time below comes from the picture. Counts use the same
+rubric at 1280 × 720, where 1,000 pixels at 1920 × 1080 is 444:
+
+| Case | Variant | Native +2/+8/+20 | Headless +2/+8/+20 |
+| --- | --- | --- | --- |
+| Electric hit | Stock | 755/353/0 | 1989/0/0 |
+| Electric hit | Halo only | 726/353/0 | 1989/0/0 |
+| Electric shield | Stock | 611/0/0 | 1432/0/0 |
+| Electric shield | Halo only | 499/0/0 | 1432/0/0 |
+
+Native draws the halo. In native electric hit, 353 of the +2 pixels are
+two stage-edge rows that also differ at +8, and in electric shield 197 are
+the dev receipt text; headless has 179 stage-edge pixels in hit and no
+receipt. The halo's own pixels are 373 (hit) and 302 (shield) natively,
+against 1,810 and 1,253 headless. The star-only copy changes no pixel
+between +2 and +8 natively, while headless draws about 72 star pixels. The
+native halo matches headless with Birth sampled at 0 ms (418 and 335 halo
+pixels; 8 ms gives 590 and 472). So at the +2 hold native shows
+ForkedLightningTarget at the start of Birth, where headless has advanced it
+33 ms. The same read shows the native sim running frames in bursts (frames
+81 to 87 within 33 ms after a resume), which suggests the effect's clock
+follows drawn frames rather than sim frames; that rule is not yet measured,
+so the renderer is unchanged. Under the scaled threshold, native Classic
+passes both electric cases on its stage-edge and receipt pixels, while the
+halo alone (373 and 302) would fail.
+
 Only measured numbers and authored code are kept here. Screenshots, stock
 models and textures stay in private local storage under the clean-room rules.
 
