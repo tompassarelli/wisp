@@ -1,5 +1,9 @@
 # Wisp feature index
 
+[Scripted terrain](terrain.md): `terrainLine` and `terrainRectFill` paint named
+ground tiles into W3E grid points. `bun examples/terrain.ts` writes a synthetic
+line and rectangle; the existing terrain reader and renderer consume its bytes.
+
 [Warcraft verification prior art](prior-art.md) compares reusable runtimes,
 clients, renderers, hosts, replay parsers and engine access before extending
 Wisp's native checks.
