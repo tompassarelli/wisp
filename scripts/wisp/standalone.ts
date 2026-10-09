@@ -168,7 +168,7 @@ export const runStandalone = (game: StandaloneGame, options: StandaloneOptions =
   const browser = yield* spawnLogged(ChildProcess.make(game.render.chrome ?? process.env.CHROME ?? "google-chrome-stable", [
     "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--disable-sync", "--autoplay-policy=no-user-gesture-required",
     "--disable-renderer-backgrounding", "--disable-background-timer-throttling", `--user-data-dir=${directory}`, `--window-size=${game.render.width ?? 1280},${game.render.height ?? 720}`,
-    ...(options.headless === true ? ["--headless=new", "--use-gl=angle", "--use-angle=gl"] : []), `--app=${player.url}`,
+    ...(options.headless === true ? ["--headless=new", "--use-gl=angle", ...(process.env.CI === "true" ? ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] : ["--use-angle=gl"])] : []), `--app=${player.url}`,
   ]), { stdout: join(directory, "chrome.out"), stderr: join(directory, "chrome.log") }).pipe(Effect.mapError((cause) => new RenderFailure({ cause })));
   console.log(`${game.title}: standalone window opened. Connect a controller or use the keyboard.`);
   const closed = browser.handle.exitCode.pipe(
