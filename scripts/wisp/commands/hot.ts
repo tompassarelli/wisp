@@ -12,6 +12,7 @@ import { HotReload } from "../hotReload";
 import { MapBuild, type BuildProject } from "../mapBuild";
 import { SourceErrors } from "../sourceErrors";
 import { step } from "../timings";
+import { modelFailureBridge } from "../modelFailures";
 
 export interface HotProject {
   readonly project: BuildProject;
@@ -43,6 +44,7 @@ export const makeHot = ({ project, sourceDirectory, sourceMapDirectory, filePref
     const sourceErrors = yield* SourceErrors;
     const desyncs = yield* Desyncs;
     const frameCosts = yield* FrameCosts;
+    const loadFailures = modelFailureBridge(yield* GameFiles, filePrefix);
     // Reports from before Wisp started are old news.
     yield* sourceErrors.changed(directories);
     yield* frameCosts.changed(directories);
@@ -51,6 +53,7 @@ export const makeHot = ({ project, sourceDirectory, sourceMapDirectory, filePref
       return;
     }
     const printErrors = Effect.gen(function*() {
+      yield* loadFailures(directories);
       const desync = yield* desyncs.changed;
       if (desync !== undefined) yield* Console.error(formatDesync(desync));
       const reports = yield* sourceErrors.changed(directories);

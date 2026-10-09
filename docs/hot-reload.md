@@ -1,5 +1,17 @@
 # Hot reload
 
+## Model load failures
+
+Maps call `startModelFailures()` before creating their model pools. This writes
+a per-client request with a fresh numbered token, without allocating a
+handle. `hot --watch` and `dev --data` forward every new `model creation failed`
+path in War3Log, including stock models, into numbered files in the hot folder.
+The existing hot timer polls them once per second; `modelFailed(path)` retains
+the result across reloads. A map uses it only to show or hide existing visual
+handles. Log writes occur in bursts, so the visible fallback can be delayed
+until Warcraft writes the failure. Each new map requests a new token and ignores
+earlier maps' files.
+
 Use hot reload for TypeScript behavior changes during a running match. Changes
 to archived assets, object types or art need a rebuilt map and a fresh match.
 Runtime-settable object fields can change on retained engine handles: the
