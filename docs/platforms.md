@@ -105,7 +105,10 @@ Before #108, by file (all now inside wisp:scripts/platform/linux/):
 The `windows` job (wisp:.github/workflows/windows.yml) runs the core on
 `windows-latest` with no Linux layer: the type check, the Lua32 runner, the
 sample's tests (`wisp test`), its headless journey (`wisp headless`), the
-map build tests and the platform boundary test. It is a separate workflow from CI, so a Windows failure
+map build tests and the platform boundary test. The map build test that
+interrupts a step is left out there: its stand-in child is `sh -c 'echo $$'`,
+whose pid is Git Bash's, not the Windows process `process.kill` checks, so it
+still needs a Windows-native stand-in. It is a separate workflow from CI, so a Windows failure
 shows on the commit without opening the "main is red" issue
 ([CI](ci.md)).
 
