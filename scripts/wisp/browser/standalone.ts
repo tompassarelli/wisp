@@ -89,7 +89,7 @@ async function post(path: string, body: unknown): Promise<Response> {
 async function run(): Promise<void> {
   status.textContent = "Loading game…";
   const startup = performance.now();
-  const config = await fetch("/config").then((response) => response.json()) as { width: number; height: number; scripted: boolean; samples: boolean; gamepadIndex?: number };
+  const config = await fetch("/config").then((response) => response.json()) as { width: number; height: number; scripted: boolean; samples: boolean; gamepadIndex?: number; frames?: number; ahead: number };
   gamepadIndex = config.gamepadIndex;
   const gpu = window.prepareRenderer(config.width, config.height);
   const preparation = await fetch("/prepare").then((response) => response.json()) as { scene: RenderScene; models: readonly string[]; step: number };
@@ -117,7 +117,17 @@ async function run(): Promise<void> {
     if ("error" in frame) throw new Error(frame.error);
     return { frame, requestedMs, respondedMs, readyMs: performance.now() };
   };
-  let pending = loadFrame();
+  // Frames are requested ahead of drawing so the map's step overlaps the browser's draw and a slow step is absorbed.
+  const queue: ReturnType<typeof loadFrame>[] = [];
+  let requested = 0;
+  const request = () => {
+    if (requested >= (config.frames ?? Infinity)) return;
+    requested++;
+    const loaded = loadFrame();
+    loaded.catch(() => undefined);
+    queue.push(loaded);
+  };
+  for (let index = 0; index < config.ahead; index++) request();
   let waiting: { deadlineMs: number; resolve(timestamp: number): void } | undefined;
   let animationFrame = 0;
   const animate = (timestamp: number) => {
@@ -138,9 +148,11 @@ async function run(): Promise<void> {
     if (previous !== 0) intervals.push(began - previous);
     if (previousPresented !== 0) presentations.push(presented - previousPresented);
     previous = began; previousPresented = presented;
-    const { frame, requestedMs, respondedMs, readyMs } = await pending;
+    const next = queue.shift();
+    if (next === undefined) throw new Error("no frame requested");
+    const { frame, requestedMs, respondedMs, readyMs } = await next;
     frame.sounds.forEach(sound);
-    if (!frame.done && !frame.capture) pending = loadFrame();
+    if (!frame.done) request();
     const drawStart = performance.now();
     const rendered = await window.renderScene(frame.scene, { capture: frame.capture });
     if (rendered.notDrawn.length > 0) throw new Error(`frame ${frame.frame}: ${rendered.notDrawn.join("; ")}`);
@@ -149,7 +161,6 @@ async function run(): Promise<void> {
       const blob = await fetch(rendered.png).then((response) => response.blob());
       const response = await fetch(`/capture?frame=${frame.frame}`, { method: "POST", body: blob });
       if (!response.ok) throw new Error(await response.text());
-      if (!frame.done) pending = loadFrame();
     }
     requests.push(readyMs - requestedMs);
     renders.push(drawnMs - drawStart);

@@ -295,15 +295,41 @@ async function prepareInstance(pose: EffectPose) {
   }
   return instance;
 }
+const pixels = new Map<string, Promise<ImageData | undefined>>();
+/** A texture's pixels, read back from its canvas once and shared by every instance that uses it. */
+function texturePixels(path: string, body: string): Promise<ImageData | undefined> {
+  const cacheKey = `${body}:${path}`;
+  let result = pixels.get(cacheKey);
+  if (result === undefined) {
+    result = textureAt(path, body).then((bitmap) => bitmap.getContext("2d")?.getImageData(0, 0, bitmap.width, bitmap.height));
+    pixels.set(cacheKey, result);
+  }
+  return result;
+}
+/** A live pose's loaded or failed instance; `undefined` while it loads, so a new model never stalls the window. */
+const loading = new Map<number, { readonly path: string; failure?: unknown }>();
+function liveInstance(pose: EffectPose): ModelInstance | undefined {
+  const ready = instances.get(pose.handle.id);
+  if (ready !== undefined && ready.path === pose.model) return ready;
+  const pending = loading.get(pose.handle.id);
+  if (pending?.path === pose.model) {
+    if (pending.failure !== undefined) throw pending.failure;
+    return undefined;
+  }
+  const entry: { readonly path: string; failure?: unknown } = { path: pose.model };
+  loading.set(pose.handle.id, entry);
+  prepareInstance(pose).then(() => { if (loading.get(pose.handle.id) === entry) loading.delete(pose.handle.id); }, (cause: unknown) => { entry.failure = cause; });
+  return undefined;
+}
 async function createInstance(path: string): Promise<ModelInstance> {
   const data = await modelAt(path);
+  // Textures load before the renderer exists, so a failed texture leaves no renderer to destroy.
+  const images = await Promise.all(data.Textures.map((texture) => texture.Image === "" ? undefined : texturePixels(texture.Image, path)));
   const renderer = new ModelRenderer(data); renderer.initGL(gl);
-  const loaded = await Promise.allSettled(data.Textures.filter((texture) => texture.Image !== "").map(async (texture) => {
-    const bitmap = await textureAt(texture.Image, path), context = bitmap.getContext("2d");
-    if (context !== null) renderer.setTextureImageData(texture.Image, [context.getImageData(0, 0, bitmap.width, bitmap.height)]);
-  }));
-  const failure = loaded.find((result) => result.status === "rejected");
-  if (failure?.status === "rejected") { renderer.destroy(); throw failure.reason; }
+  data.Textures.forEach((texture, index) => {
+    const image = images[index];
+    if (image !== undefined) renderer.setTextureImageData(texture.Image, [image]);
+  });
   const sequences = data.Sequences.map((sequence) => ({ name: sequence.Name, start: sequence.Interval[0] ?? 0, end: sequence.Interval[1] ?? 0, looping: !sequence.NonLooping, rarity: sequence.Rarity }));
   return { renderer, model: data, path, sequences, sequence: -2, clock: 0 };
 }
@@ -565,7 +591,11 @@ window.renderScene = async (scene, options) => {
   const visible: EffectPose[] = [], notDrawn: string[] = [], absent = new Set<string>(), popcornEmitters: PopcornEmitterPose[] = [];
   for (const pose of drawnPoses(scene.effects, view.eye, view.far, scene.world)) {
     // A model the renderer can't load or draw is left out and named, so the rest of the frame still draws.
-    try { await prepareInstance(pose); visible.push(pose); } catch (cause) {
+    try {
+      if (options?.capture !== false) await prepareInstance(pose);
+      else if (liveInstance(pose) === undefined) continue;
+      visible.push(pose);
+    } catch (cause) {
       if (cause instanceof AbsentAsset) absent.add(pose.model); else notDrawn.push(`${pose.model}: ${String(cause)}`);
     }
   }
