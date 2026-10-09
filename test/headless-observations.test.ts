@@ -2,6 +2,9 @@ import { afterAll, expect, test } from "bun:test";
 import { installHeadless } from "../scripts/wisp/headless";
 import { assertSoundCue } from "../src/headless/client";
 import { runJourney } from "../src/headless/journey";
+import { startSceneReport } from "../src/platform/scene";
+import { sceneMatchFrame } from "../src/runtime/scene";
+import { runtimeConfiguration } from "../src/runtime/config";
 
 const runtime = installHeadless({ filePrefix: "observations", globalPrefixes: ["__observations"], frames: [{
   name: "Pips", type: "BACKDROP", width: 0.25, height: 0.125, texture: "panel.blp", children: [{
@@ -246,6 +249,23 @@ test("journey observations run after all same-frame events without changing call
   });
   expect(observed).toEqual(plain);
   expect(captured).toEqual([[0, ["first"]], [2, ["first"]], [4, ["first", "second", "third"]], [12, ["first", "second", "third"]]]);
+});
+
+test("[native capture: smashcraft:ts/src/platform/nativeCaptureMain.ts] match-frame observations wait for the frame the map's scene report names, not the client frame", () => {
+  const clock = globalThis as Record<string, timer | undefined>;
+  const map = { start: () => {
+    startSceneReport({ frame: () => { const match = clock.__observationsMatch; return match === undefined ? 0 : Math.round(TimerGetElapsed(match) * 60); }, parked: () => false });
+    const trigger = CreateTrigger();
+    TriggerRegisterPlayerChatEvent(trigger, Player(0), "go", true);
+    TriggerAddAction(trigger, () => { const match = CreateTimer(); TimerStart(match, 3600, false, () => {}); clock.__observationsMatch = match; });
+  }, install: () => {} };
+  const seen: number[][] = [];
+  runJourney(runtime.clients(map, [0]), { frames: 100, events: [{ frame: 30, player: 0, chat: "go" }] }, {
+    observationFrames: [50, 10],
+    observationClock: (clients) => { let frame: number | undefined; clients.client(0).run(() => { frame = sceneMatchFrame([runtimeConfiguration().globalPrefix]); }); return frame; },
+    observe: (clients, frame) => seen.push([frame, clients.frame]),
+  });
+  expect(seen).toEqual([[10, 40], [50, 80]]);
 });
 
 test("journey key down and release keep local polling held across frames", () => {

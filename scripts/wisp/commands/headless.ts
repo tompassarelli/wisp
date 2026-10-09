@@ -11,6 +11,8 @@ import { predictionLines } from "../perf";
 import { type Graphics, type Lever, parseGraphics, parseLevers } from "../graphicsProfiles";
 import { captureScene, loadEffectDeaths, renderScenes, type RenderScene } from "../headlessRender";
 import { runJourney } from "../../../src/headless/journey";
+import type { Lockstep } from "../../../src/headless/lockstep";
+import { sceneMatchFrame } from "../../../src/runtime/scene";
 import type { Journey } from "../../../src/headless/journey";
 import { step } from "../timings";
 import { type PerfProject, measureRun } from "./perf";
@@ -39,15 +41,24 @@ const JourneyFile = Schema.Struct({
   ])),
 });
 
+const matchFrameOf = (globalPrefixes: readonly string[]) => (clients: Lockstep): number | undefined => {
+  let frame: number | undefined;
+  clients.clients[0]?.run(() => { frame = sceneMatchFrame(["__wisp", ...globalPrefixes]); });
+  return frame;
+};
+
 export function headlessArguments(args: readonly string[]) {
   const named: string[] = [], frames: number[] = [];
+  let match = false;
   let render: string | undefined, journey: string | undefined, sounds: string | undefined;
   let runs = 1, stepFrames: number | undefined, musicVolume: number | undefined, graphics: Graphics = "classic", look: Lever[] = [];
   for (let index = 0; index < args.length; index++) {
     const arg = args[index] ?? "";
-    if (arg === "--frames") {
+    if (arg === "--frames" || arg === "--match-frames") {
+      if (frames.length > 0) throw new Error("--frames and --match-frames are given once, not together");
+      match = arg === "--match-frames";
       while (index + 1 < args.length && /^\d+(,\d+)*$/.test(args[index + 1] ?? "")) frames.push(...(args[++index] ?? "").split(",").map(Number));
-      if (frames.length === 0) throw new Error("--frames needs one or more frame numbers");
+      if (frames.length === 0) throw new Error(`${arg} needs one or more frame numbers`);
     } else if (["--render", "--journey", "--sound-cues", "--music-volume", "--clients", "--runs", "--step", "--graphics", "--look"].includes(arg)) {
       const value = args[++index];
       if (value === undefined || value.startsWith("--")) throw new Error(`${arg} needs a value`);
@@ -70,11 +81,11 @@ export function headlessArguments(args: readonly string[]) {
     else if (arg.startsWith("--")) throw new Error(`unknown headless option: ${arg}`);
     else named.push(arg);
   }
-  if ((render === undefined) !== (frames.length === 0)) throw new Error("--render DIR and --frames N... are used together");
+  if ((render === undefined) !== (frames.length === 0)) throw new Error("--render DIR and --frames N... (or --match-frames N...) are used together");
   if (journey !== undefined && named.length > 0) throw new Error("--journey FILE takes the place of a named journey");
   if (runs > 1 && render !== undefined) throw new Error("--render captures one run; use --runs for checks without rendering");
   if ((graphics !== "classic" || look.length > 0) && render === undefined) throw new Error("--graphics and --look choose what --render draws");
-  return { named, frames: [...new Set(frames)].sort((a, b) => a - b), render, journey, sounds, runs, stepFrames, musicVolume, graphics, look };
+  return { named, frames: [...new Set(frames)].sort((a, b) => a - b), match, render, journey, sounds, runs, stepFrames, musicVolume, graphics, look };
 }
 
 
@@ -102,13 +113,14 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
     const name = options.journey ?? named[0] ?? names[0];
     const journey: Journey | undefined = options.journey === undefined ? (name === undefined ? undefined : project.journeys[name]) : yield* Effect.tryPromise({ try: () => Bun.file(options.journey ?? "").json(), catch: (cause) => new UsageFailure({ problem: describeCause(cause) }) }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(JourneyFile)), Effect.mapError((cause) => new UsageFailure({ problem: describeCause(cause) })));
     if (name === undefined || journey === undefined) return yield* new UsageFailure({ problem: `journeys: ${names.join(", ")}` });
-    if (options.frames.some((frame) => frame > journey.frames)) return yield* new UsageFailure({ problem: `capture frames must be within this journey's 0–${journey.frames} frames` });
+    if (!options.match && options.frames.some((frame) => frame > journey.frames)) return yield* new UsageFailure({ problem: `capture frames must be within this journey's 0–${journey.frames} frames` });
     if (options.render !== undefined && project.render === undefined) return yield* new UsageFailure({ problem: "this map must provide render.readAsset before using --render" });
     const entry = yield* Effect.tryPromise({
       try: () => loadMapEntry(project.entry),
       catch: (cause) => new HeadlessFailure({ journey: "loading the map entry", problems: 1, cause }),
     }).pipe(step("load map"));
     let scenes: RenderScene[] = [];
+    const observation = { observationFrames: options.frames, ...(options.match ? { observationClock: matchFrameOf(project.map.globalPrefixes) } : {}) };
     const players = Array.from({ length: count }, (_, slot) => slot);
     const destroyedModels = new Set<string>();
     const samples: ReturnType<typeof playHeadless>[] = [];
@@ -121,7 +133,7 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
           let first: string | undefined;
           for (let run = 0; run < options.runs; run++) {
             const clients = runtime.clients(entry, players, { keepCalls: 64, ...(options.musicVolume === undefined ? {} : { musicSlider: options.musicVolume }), effectDeaths: (model) => { destroyedModels.add(model); return undefined; } });
-            let sample = playHeadless(clients, journey, project.map.filePrefix, project.scene, { ...(options.stepFrames === undefined ? {} : { stepFrames: options.stepFrames }), observationFrames: options.frames, observe: (running) => { for (const client of running.clients) scenes.push(captureScene(client)); } });
+            let sample = playHeadless(clients, journey, project.map.filePrefix, project.scene, { ...(options.stepFrames === undefined ? {} : { stepFrames: options.stepFrames }), ...observation, observe: (running, frame) => { for (const client of running.clients) scenes.push(captureScene(client, options.match ? { matchFrame: frame } : {})); } });
             const fingerprint = JSON.stringify(sample.clients.map(({ slot, calls, checksum }) => ({ slot, calls, checksum })));
             if (first !== undefined && first !== fingerprint) {
               const message = `run ${run + 1} differs from the first run's calls or checksum`;
@@ -153,7 +165,7 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
           const runtime = installHeadless(project.map);
           const drawn: RenderScene[] = [];
           try {
-            runJourney(runtime.clients(entry, players, { keepCalls: 1, effectDeaths }), journey, { observationFrames: options.frames, observe: (running) => { for (const client of running.clients) drawn.push(captureScene(client)); } });
+            runJourney(runtime.clients(entry, players, { keepCalls: 1, effectDeaths }), journey, { ...observation, observe: (running, frame) => { for (const client of running.clients) drawn.push(captureScene(client, options.match ? { matchFrame: frame } : {})); } });
           } finally {
             runtime.restore();
           }
@@ -170,6 +182,8 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
         yield* emitJson("headless", { type: "failure", ...finding });
       }
     }
+    const unreached = options.match ? options.frames.filter((frame) => !scenes.some((scene) => scene.matchFrame === frame)) : [];
+    if (unreached.length > 0) return yield* new HeadlessFailure({ journey: name, problems: unreached.length, cause: `the map's match frame never reached ${unreached.join(", ")} in ${journey.frames} frames (the scene report's frame; a longer journey reaches it)` });
     if (!json) yield* Console.log(report.lines.join("\n"));
     if (options.runs > 1 || options.stepFrames !== undefined) {
       if (json) yield* emitJson("headless", { type: "benchmark", ...benchmark, speedMultiple });

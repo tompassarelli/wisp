@@ -443,6 +443,13 @@ and each asset's attempted and selected location.
 Unit and effect alpha fades opaque material layers in both Classic and
 Definitive; alpha 140 blends the body with the background, as in a roll.
 Frame numbers are headless client frames after that frame's journey events.
+`--match-frames N...` in place of `--frames` names the map's own match frame
+instead: the frame its scene report's `frame()` returns (Smashcraft's
+`simulationFrame`, the counter its native captures stamp), captured on the
+first client frame that reads it, with images named `p0-match-N.png`. A
+journey that starts its match at client frame 30 reaches match frame 410 at
+client frame 440; one that ends first fails, naming the frames it never
+reached (wisp:test/headless-observations.test.ts).
 `--journey FILE.json` replaces the named journey with `{ frames, events }`;
 key events may include `down: true` and a later `down: false` to hold a key.
 

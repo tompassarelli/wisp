@@ -4,6 +4,19 @@
 
 
 
+export const sceneReportGlobal = (globalPrefix: string) => `${globalPrefix}SceneReport` as const;
+
+
+export function sceneMatchFrame(globalPrefixes: readonly string[]): number | undefined {
+  const globals = globalThis as Record<`${string}SceneReport`, { readonly options: { readonly frame: (this: void) => number } } | undefined>;
+  for (const prefix of globalPrefixes) {
+    const state = globals[sceneReportGlobal(prefix)];
+    if (state !== undefined) return state.options.frame();
+  }
+  return undefined;
+}
+
+
 export const sceneFile = (slot: number, prefix = "wisp") => `${prefix}-scene-p${slot}.txt`;
 
 
