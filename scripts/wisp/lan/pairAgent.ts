@@ -171,8 +171,9 @@ const agent = Effect.gen(function*() {
     const x11 = (env: Record<string, string>, ...args: string[]) => output(xdotool, args, env);
     const placeWindows = Effect.forEach(clients, (client) => Effect.gen(function*() {
       for (const window of (yield* x11(client.env, "search", "--name", "^Warcraft III$")).split("\n").filter((id) => id !== "")) {
+        // labwc may report the window with or without its 2 px border; matching only one re-placed the game every 3 s.
         const geometry = yield* x11(client.env, "getwindowgeometry", window);
-        if (geometry.includes(`Position: ${client.windowX},0 `) && geometry.includes(`Geometry: ${profile.width + 4}x${profile.height + 4}`)) continue;
+        if (geometry.includes(`Position: ${client.windowX},0 `) && [0, 4].some((border) => geometry.includes(`Geometry: ${profile.width + border}x${profile.height + border}`))) continue;
         yield* x11(client.env, "windowsize", window, String(profile.width), String(profile.height), "windowmove", window, String(client.windowX), "0");
         say(`placed ${client.name}'s window at ${client.windowX},0, ${profile.width}x${profile.height}`);
       }
