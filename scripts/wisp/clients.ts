@@ -24,9 +24,7 @@ export class Clients extends Context.Service<Clients, {
 export const waitForText = (client: Client, what: string, pattern: RegExp, region?: desktop.Region, ink: desktop.Ink = "light", seconds = 20) =>
   Effect.gen(function*() {
     const clients = yield* Clients;
-    return yield* desktop.waitFor(client, what, seconds, clients.read(client, region, ink).pipe(
-      Effect.map((seen) => (pattern.test(seen.replace(/\s+/g, " ")) ? seen : undefined)),
-    ));
+    return yield* desktop.waitFor(client, what, seconds, clients.read(client, region, ink).pipe(Effect.map(desktop.textMatching(pattern))));
   });
 
 const connect = (path: string) => Effect.gen(function*() {

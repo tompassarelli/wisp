@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { readTextOrUndefined } from "./files";
+import { pollFor } from "./hostProcess";
 import { stateHome } from "./xdg";
 import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
@@ -60,7 +61,7 @@ export const startDesktop = (name: string, command: readonly string[], seconds =
   const log = desktopLog(name);
   const offset = readTextOrUndefined(log)?.length ?? 0;
   yield* startService(desktopUnit(name), command, log);
-  for (let waited = 0; waited < seconds * 4; waited++) {
+  const desktopUp = Effect.gen(function*() {
     const written = (readTextOrUndefined(log) ?? "").slice(offset);
     const runDir = /^Run: (\S+)$/m.exec(written)?.[1];
     if (runDir !== undefined && liveDesktop(runDir)) return runDir;
@@ -68,9 +69,10 @@ export const startDesktop = (name: string, command: readonly string[], seconds =
     if (state.active !== "active" && state.active !== "activating") {
       return yield* new ServiceProblem({ problem: `${name}: its desktop service ended before the desktop was up: ${written.trim().split("\n").slice(-3).join(" | ") || state.active} (${log})` });
     }
-    yield* Effect.sleep("250 millis");
-  }
-  return yield* new ServiceProblem({ problem: `${name}: no live desktop within ${seconds} s (${log})` });
+    return undefined;
+  });
+  const runDir = yield* pollFor(seconds, "250 millis", desktopUp);
+  return runDir ?? (yield* new ServiceProblem({ problem: `${name}: no live desktop within ${seconds} s (${log})` }));
 });
 
 export const writeRun = (clientsFile: string, name: string, runDir: string) => Effect.try({
