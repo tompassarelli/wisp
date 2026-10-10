@@ -5,8 +5,7 @@ import { LanFailure } from "./join";
 import { UsageFailure, flagValues, wholeFlag } from "../command";
 import { writeAtomic } from "../files";
 import { cacheHome, dataHome, stateHome } from "../xdg";
-import { InputInjection } from "../../platform/services";
-import { runPlatformSync } from "../../platform/layer";
+import { DESKTOP_TOOLS } from "../../platform/linux/tools";
 import { documentsFolder } from "../../warcraft/battleNet";
 
 export const stateRoot = () => join(stateHome(), "wisp/lan");
@@ -183,8 +182,7 @@ export function writeJson(path: string, value: unknown): void {
 }
 
 export function writePoolClients(path: string, clients: readonly PoolClient[]): void {
-  const tools = runPlatformSync(Effect.gen(function*() { return yield* (yield* InputInjection).tools; }));
-  writeJson(path, { tools, clients });
+  writeJson(path, { tools: DESKTOP_TOOLS, clients });
 }
 
 const PoolFileJson = Schema.fromJsonString(Schema.Struct({

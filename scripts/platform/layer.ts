@@ -43,7 +43,6 @@ export const unsupportedLayer = (platform: string): Layer.Layer<Platform> => {
     Layer.succeed(PageOpener, PageOpener.of({ open: () => refuse("opening a page") })),
     Layer.succeed(ScreenCapture, ScreenCapture.of({ frame: desktop("screen capture") })),
     Layer.succeed(InputInjection, InputInjection.of({
-      tools: refuse("desktop tools"),
       windows: (_config, entry) => desktop("input injection")(entry),
       sessionEnvironment: () => ({}),
       placer: Effect.succeedNone,
