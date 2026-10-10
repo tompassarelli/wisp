@@ -16,6 +16,8 @@ interface CachedFinding {
   readonly message: string;
   readonly condition?: { readonly identifier: number; readonly test: DeclarationTest };
   readonly holeyArray?: number;
+  /** The tested expression's start, end and kind: its type is asked for at its node. */
+  readonly truthiness?: readonly [number, number, number];
 }
 
 interface CachedFile {
@@ -61,6 +63,31 @@ async function isHoleyArray(checker: Checker, type: Type): Promise<boolean> {
   if (!type.isTypeReference() || !(await checker.isArrayType(type) || await checker.isTupleType(type))) return false;
   for (const element of await checker.getTypeArguments(type)) if (await mayBeUndefined(element)) return true;
   return false;
+}
+
+
+async function mayBeNumberOrString(checker: Checker, type: Type): Promise<boolean> {
+  if (type.isUnionType() || type.isIntersectionType()) {
+    for (const member of (await type.getTypes()) ?? []) if (await mayBeNumberOrString(checker, member)) return true;
+    return false;
+  }
+  if (type.flags & TypeFlags.TypeParameter) {
+    const constraint = await checker.getBaseConstraintOfType(type);
+    return constraint !== undefined && constraint.id !== type.id && mayBeNumberOrString(checker, constraint);
+  }
+  return (type.flags & (TypeFlags.NumberLike | TypeFlags.StringLike)) !== 0;
+}
+
+/** The node of `file` with this start, end and kind. */
+function nodeAt(file: syntax.SourceFile, [start, end, kind]: readonly [number, number, number]): syntax.Node | undefined {
+  let found: syntax.Node | undefined;
+  const visit = (node: syntax.Node): true | undefined => {
+    if (node.end < start || node.pos > end) return undefined;
+    if (node.kind === kind && node.end === end && node.getStart(file) === start) return (found = node, true);
+    return node.forEachChild(visit);
+  };
+  file.forEachChild(visit);
+  return found;
 }
 
 
@@ -120,11 +147,12 @@ export async function numberRuleReport(
           const file = await program.getSourceFile(name);
           if (file === undefined) throw new Error(`${name}: TypeScript did not load this file`);
           text = file.text;
-          const findings = file.isDeclarationFile ? [] : scanNumberRules<syntax.Node>(syntax, file).map(({ node, message, condition, holeyArray }): CachedFinding => ({
+          const findings = file.isDeclarationFile ? [] : scanNumberRules<syntax.Node>(syntax, file).map(({ node, message, condition, holeyArray, truthiness }): CachedFinding => ({
             start: node.getStart(file),
             message,
             ...(condition === undefined ? {} : { condition: { identifier: condition.identifier.getStart(file), test: condition.test } }),
             ...(holeyArray === undefined ? {} : { holeyArray: holeyArray.getStart(file) }),
+            ...(truthiness === undefined ? {} : { truthiness: [truthiness.getStart(file), truthiness.end, truthiness.kind] as const }),
           }));
           entry = { hash: hash(text), findings };
         }
@@ -133,13 +161,29 @@ export async function numberRuleReport(
         const resolved = positions.length === 0 ? [] : await checker.getSymbolAtPosition(name, positions);
         const arrays = entry.findings.flatMap(({ holeyArray }) => (holeyArray === undefined ? [] : [holeyArray]));
         const types = arrays.length === 0 ? [] : await checker.getTypeAtPosition(name, arrays);
+        const tested = entry.findings.flatMap(({ truthiness }) => (truthiness === undefined ? [] : [truthiness]));
+        let testedTypes: readonly (Type | undefined)[] = [];
+        if (tested.length > 0) {
+          const file = await program.getSourceFile(name);
+          if (file === undefined) throw new Error(`${name}: TypeScript did not load this file`);
+          const nodes = tested.map((range) => nodeAt(file, range));
+          const found = nodes.filter((node) => node !== undefined);
+          const types = found.length === 0 ? [] : await checker.getTypeAtLocation(found);
+          let nextFound = 0;
+          testedTypes = nodes.map((node) => (node === undefined ? undefined : types[nextFound++]));
+        }
         let next = 0;
         let nextArray = 0;
-        for (const { start, message, condition, holeyArray } of entry.findings) {
+        let nextTested = 0;
+        for (const { start, message, condition, holeyArray, truthiness } of entry.findings) {
           if (condition !== undefined && !stands(condition.test, await declarations(resolved[next++]))) continue;
           if (holeyArray !== undefined) {
             const type = types[nextArray++];
             if (type === undefined || !(await isHoleyArray(checker, type))) continue;
+          }
+          if (truthiness !== undefined) {
+            const type = testedTypes[nextTested++];
+            if (type === undefined || !(await mayBeNumberOrString(checker, type))) continue;
           }
           const file = relative(cwd, name);
           reports.set(`${name}\0${start}\0${message}`, { file, start, line: `${file}(${position(text, start)}): error TS${NUMBER_RULE_CODE}: ${message}` });

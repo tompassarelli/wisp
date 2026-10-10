@@ -10,7 +10,12 @@
 //   natives anywhere: each platform's math library differs by an ulp, and a
 //   headless replay can't repeat Warcraft's own;
 // - type escapes in game code (tests excepted): `any`, `as unknown as` and
-//   non-null `!`, which assert what the code should check.
+//   non-null `!`, which assert what the code should check;
+// - truthiness tests of a number or string: `||`, `&&`, `||=` and `&&=`
+//   operands, `!` operands and `if`, `while`, `do`, `for` and `?:`
+//   conditions. JavaScript treats 0, NaN and "" as false and Lua treats them
+//   as true, so `sign(x) || fallback` differs (smashcraft#389). Booleans and
+//   objects that may be undefined test the same in both.
 // Node, Bun and DOM APIs need no rule: the map tsconfig doesn't declare them.
 //
 // The compiler plugin (wisp:plugins/warcraft-numbers.ts), the editor plugin
@@ -18,7 +23,7 @@
 // (wisp:scripts/numberRules.ts) all run scanNumberRules. Each supplies its
 // TypeScript's syntax module and says where an identifier is declared, so
 // TypeScript 6's language service and TypeScript 7's API share these rules.
-// The length rule also needs the array's type, which each asks its checker for.
+// The length and truthiness rules also need a node's type, which each asks its checker for.
 import type * as ts from "typescript";
 
 /** The diagnostic code every number rule reports. */
@@ -45,13 +50,23 @@ export interface RuleSyntax<N extends RuleNode<N>> {
     readonly MinusToken: number;
     readonly AnyKeyword: number;
     readonly UnknownKeyword: number;
+    readonly ExclamationToken: number;
+    readonly BarBarToken: number;
+    readonly BarBarEqualsToken: number;
+    readonly AmpersandAmpersandToken: number;
+    readonly AmpersandAmpersandEqualsToken: number;
   };
   isNumericLiteral(node: N): node is N & Named;
   isIdentifier(node: N): node is N & Named;
-  isBinaryExpression(node: N): node is N & { readonly operatorToken: N };
+  isBinaryExpression(node: N): node is N & { readonly left: N; readonly operatorToken: N; readonly right: N };
   isCallExpression(node: N): node is N & { readonly expression: N; readonly arguments: readonly N[] };
   isParenthesizedExpression(node: N): node is N & { readonly expression: N };
-  isPrefixUnaryExpression(node: N): node is N & { readonly operator: number };
+  isPrefixUnaryExpression(node: N): node is N & { readonly operator: number; readonly operand: N };
+  isIfStatement(node: N): node is N & { readonly expression: N };
+  isWhileStatement(node: N): node is N & { readonly expression: N };
+  isDoStatement(node: N): node is N & { readonly expression: N };
+  isForStatement(node: N): node is N & { readonly condition?: N | undefined };
+  isConditionalExpression(node: N): node is N & { readonly condition: N };
   isPropertyAccessExpression(node: N): node is N & { readonly expression: N; readonly name: N & Named };
   isAsExpression(node: N): node is N & { readonly expression: N; readonly type: N };
   isNonNullExpression(node: N): boolean;
@@ -79,9 +94,14 @@ export interface Finding<N> {
   readonly condition?: { readonly identifier: N; readonly test: DeclarationTest };
   /** The finding stands only if this node's type is an array or tuple whose elements may be undefined. */
   readonly holeyArray?: N;
+  /** The finding stands only if this expression's type may be a number or a string. */
+  readonly truthiness?: N;
 }
 
 export const HOLEY_LENGTH_MESSAGE = "the length of an array that may hold undefined is any of its borders in Lua; loop to a fixed count or keep the count";
+
+export const TRUTHINESS_MESSAGE = (form: string) =>
+  `${form} tests a number or string for truthiness: JavaScript treats 0 and "" as false, Lua treats them as true; compare explicitly, e.g. \`!== 0\``;
 
 export const ROUNDING_HELPER_FILE = "/src/sim/f32.ts";
 
@@ -135,6 +155,19 @@ export function scanNumberRules<N extends RuleNode<N>>(syntax: RuleSyntax<N>, fi
   };
   const findings: Finding<N>[] = [];
   const reject = (node: N, message: string) => findings.push({ node, message });
+  /** A truthiness test of `tested`, unless `!` or a logical operator already tests its parts. */
+  const truthiness = (form: string, tested: N | undefined): void => {
+    let expression = tested;
+    while (expression !== undefined && syntax.isParenthesizedExpression(expression)) expression = expression.expression;
+    if (expression === undefined) return;
+    if (syntax.isPrefixUnaryExpression(expression) && expression.operator === kind.ExclamationToken) return;
+    if (syntax.isBinaryExpression(expression) && (expression.operatorToken.kind === kind.BarBarToken || expression.operatorToken.kind === kind.AmpersandAmpersandToken)) {
+      // The operator's rule tests the left operand; the condition tests the right one too.
+      truthiness(form, expression.right);
+      return;
+    }
+    findings.push({ node: expression, message: TRUTHINESS_MESSAGE(form), truthiness: expression });
+  };
   const visit = (node: N): void => {
     if (syntax.isNumericLiteral(node)) {
       const text = node.getText();
@@ -158,7 +191,20 @@ export function scanNumberRules<N extends RuleNode<N>>(syntax: RuleSyntax<N>, fi
         reject(node.operatorToken, "`%` truncates in JavaScript and floors in Lua; use floorMod or imod");
       } else if (operator === kind.GreaterThanGreaterThanGreaterThanToken || operator === kind.GreaterThanGreaterThanGreaterThanEqualsToken) {
         reject(node.operatorToken, "`>>>` masks with 2^32 - 1, which 32-bit Lua can't hold; use floorDiv");
+      } else if (operator === kind.BarBarToken || operator === kind.BarBarEqualsToken || operator === kind.AmpersandAmpersandToken || operator === kind.AmpersandAmpersandEqualsToken) {
+        const text = operator === kind.BarBarToken ? "||" : operator === kind.BarBarEqualsToken ? "||=" : operator === kind.AmpersandAmpersandToken ? "&&" : "&&=";
+        truthiness(`\`${text}\``, node.left);
       }
+    } else if (syntax.isPrefixUnaryExpression(node) && node.operator === kind.ExclamationToken) {
+      truthiness("`!`", node.operand);
+    } else if (syntax.isIfStatement(node)) {
+      truthiness("an `if` condition", node.expression);
+    } else if (syntax.isWhileStatement(node) || syntax.isDoStatement(node)) {
+      truthiness("a `while` condition", node.expression);
+    } else if (syntax.isForStatement(node)) {
+      truthiness("a `for` condition", node.condition);
+    } else if (syntax.isConditionalExpression(node)) {
+      truthiness("a `?:` condition", node.condition);
     } else if (syntax.isCallExpression(node)) {
       let argument = node.arguments[0];
       while (argument !== undefined && syntax.isParenthesizedExpression(argument)) argument = argument.expression;
@@ -206,6 +252,16 @@ export function isHoleyArray(typescript: typeof ts, checker: ts.TypeChecker, typ
   return checker.getTypeArguments(type as ts.TypeReference).some(mayBeUndefined);
 }
 
+/** Whether a TypeScript 6 type is, or may be, a number or a string. */
+export function mayBeNumberOrString(typescript: typeof ts, checker: ts.TypeChecker, type: ts.Type): boolean {
+  if (type.isUnionOrIntersection()) return type.types.some((member) => mayBeNumberOrString(typescript, checker, member));
+  if (type.flags & typescript.TypeFlags.TypeParameter) {
+    const constraint = checker.getBaseConstraintOfType(type);
+    return constraint !== undefined && constraint !== type && mayBeNumberOrString(typescript, checker, constraint);
+  }
+  return (type.flags & (typescript.TypeFlags.NumberLike | typescript.TypeFlags.StringLike)) !== 0;
+}
+
 /** The declarations of an identifier's symbol in a TypeScript 6 program, following imports. */
 export function declarationsOf(typescript: typeof ts, program: ts.Program, node: ts.Node): Declaration[] {
   const checker = program.getTypeChecker();
@@ -236,9 +292,10 @@ export function programNumberRules(typescript: typeof ts, program: ts.Program, f
     scans.set(file, findings);
   }
   const diagnostics: ts.Diagnostic[] = [];
-  for (const { node, message, condition, holeyArray } of findings) {
+  for (const { node, message, condition, holeyArray, truthiness } of findings) {
     if (condition !== undefined && !stands(condition.test, declarationsOf(typescript, program, condition.identifier))) continue;
     if (holeyArray !== undefined && !isHoleyArray(typescript, checker, checker.getTypeAtLocation(holeyArray))) continue;
+    if (truthiness !== undefined && !mayBeNumberOrString(typescript, checker, checker.getTypeAtLocation(truthiness))) continue;
     diagnostics.push({
       category: typescript.DiagnosticCategory.Error,
       code: NUMBER_RULE_CODE,
