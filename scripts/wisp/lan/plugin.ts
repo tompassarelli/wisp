@@ -5,6 +5,7 @@ import type { MenuSocket } from "../menus";
 import { LanFailure } from "./join";
 import { isolatedNetworkProblem } from "./offline";
 import { requireCapability } from "../builds";
+import { describeCause } from "../command";
 
 export const LAN_PLUGIN = join(process.env["HOME"] ?? "", ".local/share/wisp-private/lan/index.ts");
 
@@ -39,6 +40,6 @@ export const loadLanPlugin: Effect.Effect<LanPlugin, LanFailure> = Effect.suspen
       };
       return loaded;
     },
-    catch: (cause) => new LanFailure({ problem: `the LAN plugin at ${LAN_PLUGIN} didn't load: ${cause instanceof Error ? cause.message : String(cause)}` }),
+    catch: (cause) => new LanFailure({ problem: `the LAN plugin at ${LAN_PLUGIN} didn't load: ${describeCause(cause)}` }),
   });
 });

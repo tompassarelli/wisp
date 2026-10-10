@@ -1,5 +1,6 @@
 import { type HeadlessProject, type HeadlessReport, installHeadless, loadMapEntry, playHeadless, readNativeDeclarations } from "./headless";
 import { printResult } from "./devResult";
+import { describeStack } from "./command";
 
 export interface JourneyRequest {
 
@@ -10,8 +11,6 @@ export interface JourneyRequest {
 }
 
 export type JourneyOutcome = HeadlessReport | { readonly stopped: string };
-
-const describe = (error: unknown) => (error instanceof Error ? error.stack ?? error.message : String(error));
 
 async function readRequest(): Promise<JourneyRequest> {
   for await (const line of console) return JSON.parse(line) as JourneyRequest;
@@ -42,7 +41,7 @@ if (import.meta.main) {
   try {
     outcome = await play(request, declarations);
   } catch (error) {
-    outcome = { stopped: describe(error) };
+    outcome = { stopped: describeStack(error) };
   }
   printResult(outcome);
   process.exit(0);

@@ -5,6 +5,7 @@ import { ProcessTable } from "../../platform/services";
 import { startHost, type LanHost } from "./host";
 import { LanFailure } from "./join";
 import type { MapFacts } from "./map";
+import { describeCause } from "../command";
 
 interface DummyOptions<E, R> {
   readonly program: string;
@@ -16,7 +17,7 @@ interface DummyOptions<E, R> {
   readonly announcePorts?: readonly number[];
 }
 
-const failure = (cause: unknown) => new LanFailure({ problem: cause instanceof Error ? cause.message : String(cause) });
+const failure = (cause: unknown) => new LanFailure({ problem: describeCause(cause) });
 const until = (ready: () => boolean, description: string) => Effect.sync(ready).pipe(
   Effect.repeat({ schedule: Schedule.spaced("10 millis"), until: (held) => held }),
   Effect.timeoutOrElse({ duration: "10 seconds", orElse: () => Effect.fail(new LanFailure({ problem: `timed out waiting for ${description}` })) }),

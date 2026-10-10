@@ -10,9 +10,10 @@ import {
 import { linuxDesktopLayer } from "./desktop";
 import * as procfs from "./procfs";
 import { startUnit, stopUnit, unitState } from "./systemd";
+import { describeCause } from "../../wisp/command";
 
 const failure = (capability: string) => (cause: unknown) =>
-  new PlatformFailure({ capability, problem: typeof cause === "object" && cause !== null && "problem" in cause ? String(cause.problem) : cause instanceof Error ? cause.message : String(cause) });
+  new PlatformFailure({ capability, problem: typeof cause === "object" && cause !== null && "problem" in cause ? String(cause.problem) : describeCause(cause) });
 
 const steam = () => join(process.env["HOME"] ?? "", ".local/share/Steam");
 const PROTON = "compatibilitytools.d/GE-Proton11-7-x86_64/proton";

@@ -1,5 +1,6 @@
 import { AssertionFailure, registeredTests } from "../../src/runtime/testing";
 import { printResult } from "./devResult";
+import { describeStack } from "./command";
 
 export interface RegistryRequest {
   readonly preload: readonly string[];
@@ -22,8 +23,7 @@ const STACK_LINES = 4;
 
 const describe = (error: unknown) => {
   if (error instanceof AssertionFailure) return error.message;
-  if (error instanceof Error) return (error.stack ?? error.message).split("\n").slice(0, STACK_LINES).join("\n");
-  return String(error);
+  return describeStack(error, STACK_LINES);
 };
 
 async function readRequest(): Promise<RegistryRequest> {

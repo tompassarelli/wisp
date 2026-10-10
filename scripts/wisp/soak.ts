@@ -10,6 +10,7 @@ import { Random } from "../../src/headless/random";
 import { type SceneBody, type SceneExpectations, bodyProblems, readSceneLines, sceneProblems } from "./scene";
 import { type NativeCostModel, WARCRAFT_COST, nativeFrameCost } from "../../src/headless/nativeCost";
 import { MEASURED_BATTLE_NET, syncDelivery } from "../../src/headless/syncChannel";
+import { describeStack } from "./command";
 
 export interface SoakController {
   readonly buttons: readonly string[];
@@ -685,8 +686,6 @@ export interface SoakSetup {
 
 let framesPlayed = 0;
 
-const describeError = (error: unknown) => (error instanceof Error ? (error.stack ?? error.message).split("\n").slice(0, 8).join("\n    ") : String(error));
-
 interface Played {
   readonly result: SoakResult;
   readonly monitor: SoakMonitor | undefined;
@@ -755,7 +754,7 @@ function playOnce(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, ma
       watching.afterFrame(wallMs, quiet, nativeMs, typingMs);
     }
   } catch (error) {
-    crashes.push({ kind: "crash", frame: monitor?.frame ?? 0, text: describeError(error) });
+    crashes.push({ kind: "crash", frame: monitor?.frame ?? 0, text: describeStack(error, 8, "\n    ") });
   }
 
   const findings = crashes.length > 0 ? [...(monitor?.findings ?? []), ...crashes] : monitor?.finish(false) ?? [];

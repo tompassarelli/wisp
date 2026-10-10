@@ -5,7 +5,7 @@ import { Console, Effect, Exit, Schedule, Schema, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { Namespaces } from "../../platform/services";
 import { collect, spawnLogged } from "../hostProcess";
-import { type Command, UsageFailure, flagValues } from "../command";
+import { type Command, UsageFailure, describeCause, flagValues } from "../command";
 import { LanFailure } from "../lan/join";
 import { lanPluginProblem } from "../lan/plugin";
 import {
@@ -33,7 +33,7 @@ const agent = (pair: number, path: string, body?: unknown) => Effect.tryPromise(
     if (!response.ok) throw new Error(String(value["error"] ?? response.status));
     return value;
   },
-  catch: (cause) => new LanFailure({ problem: `pair ${pair}'s agent (${agentSocket(pair)}): ${cause instanceof Error ? cause.message : String(cause)}` }),
+  catch: (cause) => new LanFailure({ problem: `pair ${pair}'s agent (${agentSocket(pair)}): ${describeCause(cause)}` }),
 });
 
 const setup: Command = (args) => Effect.gen(function*() {
@@ -75,7 +75,7 @@ const AgentStatus = Schema.Struct({ clients: Schema.Array(Schema.Struct({ name: 
 
 const readJson = <A>(file: string, schema: Schema.Decoder<A>) => Effect.try({
   try: () => readFileSync(file, "utf8"),
-  catch: (cause) => new LanFailure({ problem: `read ${file}: ${cause instanceof Error ? cause.message : String(cause)}` }),
+  catch: (cause) => new LanFailure({ problem: `read ${file}: ${describeCause(cause)}` }),
 }).pipe(
   Effect.flatMap(Schema.decodeUnknownEffect(schema)),
   Effect.mapError((failure) => (failure instanceof LanFailure ? failure : new LanFailure({ problem: `${file}: ${failure.message}` }))),

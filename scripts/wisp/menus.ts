@@ -6,6 +6,7 @@ import { Clock, Console, Deferred, Effect, Option, Queue, Schema, type Scope } f
 import { pollFor } from "./hostProcess";
 import { DEFAULT_BUILD, profileFor, requireCapability } from "./builds";
 import { loadLanPlugin, lanPluginProblem } from "./lan/plugin";
+import { describeCause } from "./command";
 
 export const DEFAULT_MENU_REPORT_PORT = 47123;
 
@@ -164,7 +165,7 @@ export const removeMenuPage = (retail: string) => Effect.try({
     if (readdirSync(dirname(path)).length === 0) rmdirSync(dirname(path));
     return true;
   },
-  catch: (cause) => new MenuFailure({ operation: "remove the menu page", problem: cause instanceof Error ? cause.message : String(cause) }),
+  catch: (cause) => new MenuFailure({ operation: "remove the menu page", problem: describeCause(cause) }),
 });
 
 const Heard = Schema.Struct({ messageType: Schema.String, at: Schema.Finite, screen: Schema.optionalKey(Schema.String), type: Schema.optionalKey(Schema.String), isHost: Schema.optionalKey(Schema.Boolean) });

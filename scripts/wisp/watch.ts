@@ -9,6 +9,7 @@ import type { Client } from "./clients";
 import { dataDirectory } from "./gameFiles";
 import { type MenuEvent, connectMenus, keptAddress, menuAddress } from "./menus";
 import { pairClients, readPool } from "./lan/pool";
+import { describeCause } from "./command";
 
 export type Source = "socket" | "log" | "receipt" | "process" | "lan";
 
@@ -300,7 +301,7 @@ const LanStatus = Schema.Struct({
 
 const pairStatus = (client: string, socket: string) => Effect.tryPromise({
   try: (signal) => fetch("http://pair/status", { unix: socket, signal }).then((response) => response.json()),
-  catch: (cause) => new WatchFailure({ client, operation: "read the pair agent's status", problem: cause instanceof Error ? cause.message : String(cause) }),
+  catch: (cause) => new WatchFailure({ client, operation: "read the pair agent's status", problem: describeCause(cause) }),
 }).pipe(
   Effect.timeoutOrElse({ duration: "3 seconds", orElse: () => Effect.fail(new WatchFailure({ client, operation: "read the pair agent's status", problem: `${socket} didn't answer within 3 s` })) }),
   Effect.retry({ times: 1 }),
