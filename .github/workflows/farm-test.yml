@@ -63,7 +63,7 @@ jobs:
 
   bun:
     needs: plan
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && vars.FARM_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -84,6 +84,7 @@ jobs:
           key: bun-install-${{ hashFiles('bun.lock') }}
       - run: bun install --frozen-lockfile
       - name: Install the native archive test dependency
+        if: runner.environment == 'github-hosted'
         run: sudo apt-get update -q && sudo apt-get install -y -q libstorm-dev ripgrep
       - uses: actions/cache@v4
         with:
