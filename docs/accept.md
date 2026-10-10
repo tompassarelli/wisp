@@ -30,7 +30,7 @@ profiles, its checks and any frame measurements. A check is:
 | --- | --- |
 | `id`, `closes` | The check's name and the issue box it answers, such as `smashcraft#82 box 2`. |
 | `map`, `session` | The map profile whose fresh match it runs in. Checks of one map share a match unless they name different sessions. |
-| `setup` | Steps on the clients: `{ chat }` (a chat command such as `-dev effects 12`), `{ keys }`, `{ waitMs }`, and `{ receipt }`, which waits for a receipt line written since the check began. |
+| `setup` | Steps on the clients: `{ chat }` (a chat command such as `-dev effects 12`), `{ keys }`, `{ waitMs }`, `{ hover: [x, y] }` and `{ click: [x, y] }` (the pointer moved to, or clicked at, a pixel of the client's Warcraft window, counted from its top-left corner: a menu item's tooltip or description is captured after a `hover`), and `{ receipt }`, which waits for a receipt line written since the check began. |
 | `capture` | `frames` (a region, a count and an interval; saved as PPM), `reading` (text read from a region, such as an overlay; with `pattern`, its first group, as a number when it reads as one) and `measure` (one frame measured by a suite function). Every check also keeps each client's new receipt lines and War3Log lines. |
 | `pass` | Rules: `receipt` and `log` (lines matching a pattern, counted per client, with `min`/`max`; a `log` rule can count `since: "session"`, which covers the map's load) and `reading` (a number within bounds, or text matching a pattern). |
 | `look` | What the owner looks for in the captures. A check with it is needs-look once its rules hold. |
@@ -58,6 +58,18 @@ session.
 Each run's folder (mode 0700) holds `report.txt` and `report.json`, and one
 folder per check with its frames, readings, `receipts-CLIENT.txt`,
 `war3log-CLIENT.txt` and `check.json` (the declaration, rules and verdict).
+
+## Pointer steps
+
+`hover` and `click` take window pixels, the same space as a capture of the
+window. Wisp's platform input layer (wisp:scripts/warcraft/desktop.ts, the
+xdotool it already presses keys with) focuses the Warcraft window, reads its
+geometry, adds the window's origin, moves the pointer there and reads the
+pointer back; a pointer that lands elsewhere, or a pixel outside the window,
+fails the check before anything is pressed. `click` then presses and releases
+button 1. Neither types into the game, so unlike `chat` they run at the menus
+too. A tooltip needs a moment to appear: follow a `hover` with a `waitMs`
+before the capture.
 
 ## Sharding over several client sets
 
