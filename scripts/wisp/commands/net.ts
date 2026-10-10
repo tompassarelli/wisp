@@ -1,7 +1,7 @@
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Fiber, Option, Schema } from "effect";
 import { ChildProcess } from "effect/process";
-import { type Command, UsageFailure, flagValues } from "../command";
+import { type Command, UsageFailure, flagValues, wholeFlag } from "../command";
 import { collect } from "../hostProcess";
 import { type NetGame, type NetPeerOptions, type NetReport, NetFailure, runNetPeer } from "../net/peer";
 import { runProxy } from "../net/proxy";
@@ -24,6 +24,9 @@ const Outcome = Schema.fromJsonString(Schema.Union([
 ]));
 type Outcome = typeof Outcome.Type;
 
+// --rtt and --loss take fractions; every other count is a whole number.
+const FRACTIONAL = ["rtt", "loss"];
+
 function count(args: readonly string[], name: string, fallback: number): number | UsageFailure {
   const [text] = flagValues(args, name);
   if (text === undefined) return fallback;
@@ -34,7 +37,7 @@ function count(args: readonly string[], name: string, fallback: number): number 
 function counts<const Names extends string>(args: readonly string[], defaults: Record<Names, number>): Record<Names, number> | UsageFailure {
   const values = { ...defaults };
   for (const name of Object.keys(values) as Names[]) {
-    const value = count(args, name, values[name]);
+    const value = FRACTIONAL.includes(name) ? count(args, name, values[name]) : wholeFlag(args, name, { fallback: values[name] });
     if (value instanceof UsageFailure) return value;
     values[name] = value;
   }

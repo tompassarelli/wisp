@@ -6,21 +6,16 @@ import { Deferred, Effect, Exit, Fiber, FileSystem, Layer, Scope, Stream } from 
 import { platformLayer } from "../../platform/layer";
 import { Namespaces } from "../../platform/services";
 import { ChildProcess } from "effect/process";
+import { flagValues } from "../command";
 import { spawnLogged } from "../hostProcess";
 import { LanFailure } from "./join";
-import { poolProfile, desktopSize, pairDirectory } from "./pool";
+import { desktopSize, pairDirectory, pairFlags } from "./pool";
 
-const argument = (name: string) => {
-  const at = process.argv.indexOf(`--${name}`);
-  return at < 0 ? undefined : process.argv[at + 1];
-};
-const pair = Number(argument("pair") ?? "0");
-const profileName = argument("pool-profile") ?? "parity";
+const argument = (name: string) => flagValues(process.argv, name)[0];
+const { pair, profile } = pairFlags(process.argv);
 const launcher = argument("launcher");
 const capacity = argument("capacity");
 if (capacity === undefined) throw new Error("pairSession requires --capacity MACHINE_CAPACITY_HELPER");
-const fpsText = argument("fps");
-const profile = poolProfile(profileName, fpsText === undefined ? undefined : Number(fpsText));
 if (launcher === undefined) throw new Error("pairSession takes --pair K --pool-profile parity|visual --launcher PRIVATE_DESKTOP_SH");
 const directory = pairDirectory(pair);
 mkdirSync(directory, { recursive: true });
@@ -43,7 +38,7 @@ const session = Effect.gen(function*() {
   if (!existsSync(join(runB, "active"))) return yield* new LanFailure({ problem: `client b's desktop isn't active: ${runB}` });
   yield* Effect.tryPromise({ try: () => Bun.write(join(directory, "desktop-b.run"), runB), catch: (cause) => new LanFailure({ problem: String(cause) }) });
   const agent = yield* Namespaces.use((namespaces) => namespaces.offline([
-    process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", profileName, "--run-b", runB, "--session-pid", String(process.pid), "--capacity", capacity, ...(fpsText === undefined ? [] : ["--fps", fpsText])]));
+    process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", argument("pool-profile") ?? "parity", "--run-b", runB, "--session-pid", String(process.pid), "--capacity", capacity, ...flagValues(process.argv, "fps").flatMap((fps) => ["--fps", fps])]));
   const desktopA = yield* spawnLogged(ChildProcess.make(launcher, ["start", "--resolution", size, "--", ...agent], {
     stdin: "ignore", forceKillAfter: "15 seconds",
   }), { stdout: join(directory, "desktop-a.out"), stderr: join(directory, "desktop-a.err") });

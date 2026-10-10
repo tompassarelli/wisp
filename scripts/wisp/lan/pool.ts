@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
 import { LanFailure } from "./join";
+import { UsageFailure, flagValues, wholeFlag } from "../command";
 import { cacheHome, dataHome, stateHome } from "../xdg";
 import { DESKTOP_TOOLS } from "../../platform/linux/tools";
 import { documentsFolder } from "../../warcraft/battleNet";
@@ -72,6 +73,15 @@ export function poolProfile(name: string, fps?: number): Profile {
   if (profile === undefined) throw new Error(`unknown pool profile ${name}`);
   if (fps !== undefined && (!Number.isInteger(fps) || fps < 1)) throw new Error("--fps takes a positive whole number");
   return fps === undefined ? profile : { ...profile, maxFps: fps };
+}
+
+/** The pair and pool profile (`--pair K --pool-profile NAME [--fps N]`) that `wisp lan pool` starts a pair's session and agent with. */
+export function pairFlags(argv: readonly string[]): { readonly pair: number; readonly profile: Profile } {
+  const pair = wholeFlag(argv, "pair", { fallback: 0 });
+  const fps = wholeFlag(argv, "fps", { min: 1 });
+  if (pair instanceof UsageFailure) throw pair;
+  if (fps instanceof UsageFailure) throw fps;
+  return { pair, profile: poolProfile(flagValues(argv, "pool-profile")[0] ?? "parity", fps) };
 }
 
 export function profileSections(profile: Profile, windowX: number): Record<string, Record<string, number>> {

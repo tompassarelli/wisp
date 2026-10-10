@@ -1,5 +1,5 @@
 import { Console, Effect } from "effect";
-import { type Command, UsageFailure, flagValues } from "../command";
+import { type Command, UsageFailure, flagValues, portFlag } from "../command";
 import { DEFAULT_MENU_REPORT_PORT, type MenuSocket, connectMenus, hostLobby, installMenuPage, joinLobby, leaveLobby, listenForMenus, removeMenuPage, startLobby } from "../menus";
 import { step } from "../timings";
 import { waitForProcessStop } from "./hot";
@@ -8,11 +8,9 @@ const ANNOUNCE_SECONDS = 5;
 
 const flag = (args: readonly string[], name: string) => flagValues(args, name)[0];
 
-const reportPort = (args: readonly string[]) => Effect.gen(function*() {
-  const text = flag(args, "port") ?? String(DEFAULT_MENU_REPORT_PORT);
-  const port = Number(text);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) return yield* new UsageFailure({ problem: `--port takes a port number, not ${text}` });
-  return port;
+const reportPort = (args: readonly string[]) => Effect.suspend(() => {
+  const port = portFlag(args, DEFAULT_MENU_REPORT_PORT);
+  return port instanceof UsageFailure ? Effect.fail(port) : Effect.succeed(port);
 });
 
 const withMenus = <A, E>(args: readonly string[], use: (menus: MenuSocket) => Effect.Effect<A, E>) => Effect.scoped(Effect.gen(function*() {

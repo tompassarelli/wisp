@@ -1,5 +1,5 @@
 import { Console, Effect, Layer, Schema } from "effect";
-import { type Command, UsageFailure, flagValues } from "../command";
+import { type Command, UsageFailure, flagValues, portFlag } from "../command";
 import { GameFiles } from "../gameFiles";
 import { HotReload } from "../hotReload";
 import { MapBuild } from "../mapBuild";
@@ -57,9 +57,8 @@ export const servePanel = (port: number) => Effect.gen(function*() {
 
 export const makeTune = ({ project, sourceDirectory, sourceMapDirectory, filePrefix = "wisp", root, tunables }: TuneProject): Command => (args) => Effect.gen(function*() {
   const directories = yield* validateDataDirectories(flagValues(args, "data"));
-  const [portText = String(DEFAULT_TUNE_PORT)] = flagValues(args, "port");
-  const port = Number(portText);
-  if (!Number.isInteger(port) || port < 0 || port > 65535) return yield* new UsageFailure({ problem: `--port takes a port number, not ${portText}` });
+  const port = portFlag(args, DEFAULT_TUNE_PORT, { min: 0 });
+  if (port instanceof UsageFailure) return yield* port;
 
   const replacements = new Map<string, string>();
   const services = Tune.layer(root, tunables, replacements).pipe(

@@ -1,5 +1,5 @@
 import { Cause, Console, Effect, Exit, Schema } from "effect";
-import { type Command, UsageFailure, describeCause, flagValues } from "../command";
+import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from "../command";
 import { type HeadlessProject, installHeadless, loadMapEntry, playHeadless } from "../headless";
 import { emitJson } from "../jsonResults";
 import { predictionLines } from "../perf";
@@ -67,8 +67,8 @@ export function headlessArguments(args: readonly string[]) {
       if (arg === "--graphics") graphics = parseGraphics(value);
       if (arg === "--look") look = parseLevers(value);
       if (arg === "--runs" || arg === "--step") {
-        const number = Number(value);
-        if (!Number.isSafeInteger(number) || number < 1) throw new Error(`${arg} needs a positive integer`);
+        const number = wholeFlag([arg, value], arg.slice(2), { min: 1 });
+        if (number instanceof UsageFailure || number === undefined) throw new Error(`${arg} takes a positive whole number`);
         if (arg === "--runs") runs = number;
         else stepFrames = number;
       }
