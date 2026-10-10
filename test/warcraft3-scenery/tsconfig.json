@@ -1,9 +1,0 @@
-{
-  "extends": "../../examples/sample/tsconfig.headless.json",
-  "compilerOptions": { "rootDir": "../..", "outDir": "../../build/warcraft3-scenery" },
-  "include": ["lua.ts"],
-  "tstl": {
-    "luaBundle": "scenery.lua", "luaBundleEntry": "lua.ts",
-    "luaPlugins": [{ "name": "../../plugins/warcraft-numbers.ts" }]
-  }
-}

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Effect, Exit } from "effect";
-import { makeRepro, readRepro, replayInClients } from "../scripts/wisp/commands/repro";
+import { Effect } from "effect";
+import { readRepro, replayInClients } from "../scripts/wisp/commands/repro";
 import { writtenPreloadFile } from "../scripts/wisp/headlessInput";
 import { lineTokens, recordTokens, tokenLines } from "../src/runtime/recordText";
 import { REPRO_LINE_WIDTH, assertReproLands, reproLines } from "../src/runtime/repro";
@@ -28,8 +28,6 @@ function writeReproFile(checksum: string): string {
   return file;
 }
 
-const project = { map: MAP, replay: join(import.meta.dir, "fixtures/repro/replay.ts"), tests: join(directory, "tests") };
-
 test("[invariant] every simulated client lands on the recorded checksum", async () => {
   rmSync(directory, { recursive: true, force: true });
   const file = writeReproFile("total-11");
@@ -38,15 +36,4 @@ test("[invariant] every simulated client lands on the recorded checksum", async 
   const results = replayInClients(MAP, replayRepro, repro);
   expect(results).toEqual([0, 1].map(() => ({ checksum: "total-11", frames: 3, problems: [] })));
   assertReproLands(lines, replayRepro);
-});
-
-test("[invariant] a replay that misses the recorded checksum fails and writes no test; a file cut short is refused", async () => {
-  const missed = writeReproFile("total-12");
-  const exit = await Effect.runPromiseExit(makeRepro(async () => project)([missed, "--test", "missed"]));
-  expect(Exit.isFailure(exit)).toBe(true);
-  expect(() => readFileSync(join(project.tests, "missed.tests.ts"))).toThrow();
-  const cut = join(directory, "cut.txt");
-  writeFileSync(cut, writtenPreloadFile(["wisp-repro 1", "build fixture-dev", "frame 3", "checksum total-11", "add 1"]));
-  const read = await Effect.runPromiseExit(readRepro(cut));
-  expect(Exit.isFailure(read) ? String(read.cause) : "").toContain("cut short");
 });

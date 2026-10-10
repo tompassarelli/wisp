@@ -1,7 +1,0 @@
-<Application>Warcraft III
-<Exception.ProjectId>264
-<Process.Name>\Device\HarddiskVolume1\Program Files (x86)\Warcraft III\_retail_\x86_64\Warcraft III.exe
-<Process.CommandLine>"C:\Program Files (x86)\Warcraft III\_retail_\x86_64\Warcraft III.exe" -launch -uid w3
-<Exception.Summary:>
-ACCESS_VIOLATION (Failed to read address 0x0000000000000500 at instruction 0x00006FFFEEC73856) DBG-OPTIONS<FunctionsOnly SingleLine> DBG-ADDR<00006FFFEEC73856>("Warcraft III.exe") <- DBG-ADDR<00006FFFEF1844F8>("Warcraft III.exe") <- DBG-ADDR<00006FFFEE549D94>("Warcraft III.exe")  DBG-OPTIONS<>
-<:Exception.Summary>

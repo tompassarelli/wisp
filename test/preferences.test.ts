@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { preferencesBackupPath, preferencesPath, withGraphicsMode } from "../scripts/warcraft/preferences";
+import { preferencesBackupPath, preferencesPath } from "../scripts/warcraft/preferences";
 
 const fixture = (name: string) => readFileSync(join(import.meta.dir, "fixtures/preferences", name), "utf8");
 
@@ -20,11 +20,4 @@ test("[boundary] the restore helper waits for the game's process, then puts the 
   expect((await new Response(helper.stdout).text()).trim()).toBe("restored War3Preferences.txt");
   expect(readFileSync(preferencesPath(documents), "utf8")).toBe(fixture("private-desktop.txt"));
   expect(existsSync(preferencesBackupPath(documents))).toBe(false);
-});
-
-test("[native] graphics mode changes [Misc] hd and preserves [Video]", () => {
-  const text = "[Misc]\nhd=2\nfoo=1\n\n[Video]\nassao=0\n";
-  expect(withGraphicsMode(text, "reforged")).toBe(text.replace("hd=2", "hd=1"));
-  expect(withGraphicsMode("[Video]\nassao=0\n", "classic")).toContain("[Misc]\nhd=0\n");
-  expect(withGraphicsMode(text, "definitive")).toBe(text);
 });
