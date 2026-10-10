@@ -61,7 +61,7 @@ The core should run anywhere Bun runs. Only the native side is per platform.
 | wisp:scripts/wisp/net/ (Wisp's own transport) and the LAN protocol in wisp:scripts/wisp/lan/ (`host`, `w3gs`, `join`, `actions`, `actionLog`, `map`) | core |
 | wisp:scripts/warcraft/ (`battleNet`, `war3Log`, `preferences`, `inputBatch`, `desktop`) | core logic over services; `desktop.ts` drives clients through `ScreenCapture` and `InputInjection` |
 | wisp:scripts/wisp/watch.ts, `clients.ts`, `accept.ts`, `doctor.ts`, `play.ts` | core logic over `ProcessTable`, `InputInjection`, `PlayMachine` and `PlayDesktop` |
-| wisp:scripts/platform/services.ts, `layer.ts` | the boundary |
+| wisp:scripts/platform/services.ts, `layer.ts`, `play.ts` | the boundary |
 | wisp:scripts/platform/linux/ | Linux layers |
 
 Linux-only tooling stays out of the consumer path. It goes through the same
@@ -73,8 +73,9 @@ platform call with the named error:
   `plugin` and `wisp lan` (wisp:scripts/wisp/commands/lan.ts);
 - signed-in client services: wisp:scripts/wisp/clientServices.ts,
   `clientServicesCommand.ts`, `doctorHost.ts`, `clientDoctorCommand.ts`;
-- playing on the owner's desktop: wisp:scripts/wisp/playHost.ts selects
-  wisp:scripts/platform/linux/play.ts.
+- playing on the owner's desktop: wisp:scripts/platform/play.ts selects
+  wisp:scripts/platform/linux/play.ts, or a layer that refuses on other
+  platforms.
 
 ## Linux assumptions found
 
