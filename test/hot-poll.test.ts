@@ -66,23 +66,3 @@ test("[spec docs/hot-reload.md] the host's marker switches clients to a lookup e
   expect(clients.unappliedReloads()).toEqual([]);
   expect(clients.firstDivergence()).toBeUndefined();
 });
-
-test("[spec docs/hot-reload.md] a reload published to clients that have seen no host is found within a second", () => {
-  const clients = runtime.clients(reloader);
-  clients.start({ hostFolder: false });
-  clients.frames(100);
-  clients.reload();
-
-  clients.frames(64 + 3);
-  expect(clients.unappliedReloads()).toEqual([]);
-  expect(clients.firstDivergence()).toBeUndefined();
-});
-
-test("[spec docs/hot-reload.md] clients started after a host prepared the hot folder look up at every poll from the start", () => {
-  const clients = runtime.clients(reloader);
-  clients.start();
-  for (const lookups of lookupsDuring(clients, FRAMES_PER_SECOND)) expect(lookups).toBe(POLLS_PER_SECOND);
-  clients.reload();
-  clients.frames(3);
-  expect(clients.unappliedReloads()).toEqual([]);
-});

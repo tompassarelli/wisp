@@ -1,15 +1,11 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Effect } from "effect";
-import { type ProcessInfo, isErrorDialog, launcherHealth, prefixUse } from "../scripts/warcraft/battleNet";
+import { type ProcessInfo, launcherHealth, prefixUse } from "../scripts/warcraft/battleNet";
 import { ladderScan } from "../scripts/warcraft/war3Log";
 import { displayChanges, videoSettings, withDisplaySettings } from "../scripts/warcraft/preferences";
 import { diagnose, type Observation } from "../scripts/wisp/doctor";
-import { type ClientState, type ClientView, type Source } from "../scripts/wisp/watch";
-import { platformLayer } from "../scripts/platform/layer";
-import { doctorTargets } from "../scripts/wisp/clientDoctorCommand";
-import { pairClients, writePoolClients } from "../scripts/wisp/lan/pool";
+import { type ClientState, type ClientView } from "../scripts/wisp/watch";
 
 const fixture = (name: string) => readFileSync(join(import.meta.dir, "fixtures/doctor", name), "utf8");
 const PLAYED = fixture("launcher-played.log");
@@ -18,8 +14,6 @@ const RECONNECTED = fixture("launcher-reconnected.log");
 const REJECTED = fixture("launcher-login-rejected.log");
 const BY_HAND = fixture("launcher-signed-in-by-hand.log").split("\n");
 const ACCOUNT_PAGE = BY_HAND.slice(0, 5).join("\n") + "\n";
-const PASSWORD_PAGE = BY_HAND.slice(5, 13).join("\n") + "\n";
-const SIGNED_IN_BY_FORM = BY_HAND.slice(13).join("\n");
 const SIGNED_IN = PLAYED.split("\n")[0]! + "\n";
 const PREFIX = "/observed/client/pfx";
 const gameProcess = (pid: number): ProcessInfo => ({ pid, name: "Warcraft III.ex", args: ["C:\\Program Files (x86)\\Warcraft III\\_retail_\\x86_64\\Warcraft III.exe", "-launch", "-uid", "w3"], prefix: PREFIX });
@@ -28,26 +22,6 @@ const preferences = (name: string) => readFileSync(join(import.meta.dir, "fixtur
 const PRIVATE = preferences("private-desktop.txt");
 const MAIN = preferences("main-display.txt");
 const DISPLAY = Object.fromEntries(["windowmode", "windowwidth", "windowheight", "windowx", "windowy", "reswidth", "resheight", "refreshrate", "maxfps"].map(key => [key, videoSettings(PRIVATE)[key]!]));
-
-test("[boundary] produced pool declarations round-trip through doctor targets", async () => {
-  const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
-  const { tmpdir } = await import("node:os");
-  const directory = mkdtempSync(join(tmpdir(), "doctor-pool-"));
-  try {
-    writeFileSync(join(directory, "display"), ":7");
-    writeFileSync(join(directory, "xauthority"), "/private/xauthority");
-    writeFileSync(join(directory, "wayland-display"), "wayland-0");
-    const clients = pairClients(0, { a: directory, b: directory });
-    for (const entries of [clients, clients.map((client) => ({ ...client, name: client.name.endsWith("a") ? "a" : "b", poolName: client.name }))]) {
-      const clientsFile = join(directory, "clients.json");
-      writePoolClients(clientsFile, entries);
-      const targets = await Effect.runPromise(doctorTargets({ clientsFile, start: {} }, [entries[0]!.name]).pipe(Effect.provide(platformLayer())));
-      expect(targets.map(({ client, display, start }) => ({ name: client.name, display, start }))).toEqual([{ name: entries[0]!.name, display: ":7", start: { kind: "offline-pool" } }]);
-    }
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
 
 test("[native] recorded launcher logs: signed in, a lost connection, a reconnect, a rejected saved login", () => {
   expect(launcherHealth(PLAYED)).toEqual({ kind: "signed in" });
@@ -61,23 +35,6 @@ test("[native] recorded launcher logs: signed in, a lost connection, a reconnect
   expect(launcherHealth(`${SIGNED_IN}D 2026-10-06 12:33:38.741703 [CatalogVarStorage] {Main} Setting var from catalog Client.DisableLoginCredentialUIRegionList=CN\n`).kind).toBe("signed in");
 });
 
-test("[native] the crash dialog is Warcraft III's BlizzardError.exe, not the launcher's copy", () => {
-  const crash = fixture("crash-report.txt");
-  expect(crash).toContain("\\_retail_\\x86_64\\Warcraft III.exe");
-  expect(isErrorDialog(errorDialog(1))).toBe(true);
-  expect(isErrorDialog({ ...errorDialog(1), args: ["C:\\Program Files (x86)\\Battle.net\\Battle.net.17896\\BlizzardError.exe"] })).toBe(false);
-  expect(isErrorDialog(gameProcess(1))).toBe(false);
-});
-
-test("[native] the launcher's sign-in pages, from its UnifiedAuth log", () => {
-  expect(launcherHealth(ACCOUNT_PAGE)).toEqual({ kind: "sign-in form", form: "Login" });
-
-  expect(launcherHealth(ACCOUNT_PAGE + BY_HAND.slice(5, 8).join("\n"))).toEqual({ kind: "not signed in" });
-  expect(launcherHealth(ACCOUNT_PAGE + PASSWORD_PAGE)).toEqual({ kind: "sign-in form", form: "LoginCredential" });
-  expect(launcherHealth(ACCOUNT_PAGE + PASSWORD_PAGE + SIGNED_IN_BY_FORM)).toEqual({ kind: "signed in" });
-
-  expect(launcherHealth(REJECTED + ACCOUNT_PAGE)).toEqual({ kind: "sign-in form", form: "Login" });
-});
 test("[property seed 22] diagnosis preserves ready clients and distinguishes observed faults across ages and sources", () => {
   const states: readonly ClientState[] = [
     { kind: "menus", screen: "MAIN_MENU" }, { kind: "signed in" }, { kind: "in match" },

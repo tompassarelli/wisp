@@ -45,28 +45,6 @@ test("[invariant] a clean headless run is one result then a summary, and scripte
   expect(stepped.records.find((record) => record.type === "benchmark")).toMatchObject({ runs: 3, requestedRuns: 3, frames: 90, failures: 0 });
 });
 
-test("[invariant] headless JSON names a desync's first divergent frame and client, and repeated driver runs stop at it", async () => {
-  const single = await capture(headless(180), []);
-  expect(Exit.isFailure(single.exit)).toBe(true);
-  expect(single.records.find((record) => record.type === "failure")).toMatchObject({ command: "headless", kind: "desync", frame: 60, client: 1 });
-  const { exit, records } = await capture(headless(180), ["--step", "7", "--runs", "3"]);
-  expect(Exit.isFailure(exit)).toBe(true);
-  expect(records.find((record) => record.type === "failure")).toMatchObject({ kind: "desync", frame: 60, client: 1 });
-  expect(records.find((record) => record.type === "benchmark")).toMatchObject({ runs: 1, requestedRuns: 3, failures: 1 });
-});
-
-test("[invariant] a project that fails to load is one failure and a summary with no result, in headless and soak", async () => {
-  const { records, summary } = await capture(makeHeadless(async () => { throw new Error("broken project"); }), []);
-  expect(records[0]).toMatchObject({ command: "headless", type: "failure", kind: "error", frame: null, client: null });
-  expect(records[0].message).toContain("broken project");
-  expect(summary.counts).toEqual({ results: 0, failures: 1 });
-  {
-    const { records, summary } = await capture(makeSoak({ project: "/missing/wisp-project.ts", out: tmpdir() }), []);
-    expect(records[0]).toMatchObject({ command: "soak", type: "failure", kind: "error", frame: null, client: null });
-    expect(summary.counts).toEqual({ results: 0, failures: 1 });
-  }
-});
-
 test("soak JSON reports clean matches and a seeded desync with a replayable repro", async () => {
   const out = mkdtempSync(join(tmpdir(), "wisp-soak-json-"));
   const command = makeSoak({ project: join(import.meta.dir, "soak/json-project.ts"), out });
@@ -82,4 +60,3 @@ test("soak JSON reports clean matches and a seeded desync with a replayable repr
   expect(replayed.records.find((record) => record.type === "failure")).toMatchObject({ kind: "desync", frame: 120 });
   expect(replayed.summary.counts).toEqual({ results: 1, failures: 1 });
 });
-

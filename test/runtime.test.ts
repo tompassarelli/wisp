@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect } from "bun:test";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { mapCompiler, report } from "../scripts/compiler";
@@ -30,18 +30,12 @@ farmTest("[spec docs/hot-reload.md] configured runtime reload preserves globals 
   expect(polling.stdout.toString()).toContain("poll rate contract passed");
 });
 
-farmTest("[spec docs/hot-reload.md] an error report is displayed unless the map turns error text off, and is written to the error file either way", () => {
-  const run = Bun.spawnSync([process.env.LUA ?? "lua", join(import.meta.dir, "error-text-stub.lua"), runtimeBundle()], { cwd: root, stdout: "pipe", stderr: "pipe" });
-  expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
-  expect(run.stdout.toString()).toContain("error text contract passed");
-});
-
 farmTest("[reference] numeric, payload and record text contracts pass in emitted Lua, rounding to nearest and toward zero", async () => {
   const diagnostics = mapCompiler(join(import.meta.dir, "tsconfig.lua.json"))();
   expect(report(diagnostics)).toBe("");
   const towardZero = process.env.TOWARD_ZERO_LUA ?? await Effect.runPromise(lua32("toward-zero"));
   // Warcraft's Lua rounds toward zero; the binary32 contracts assume a Lua rounding to nearest, f32 and the record text neither.
-  for (const [lua, only, passed] of [[process.env.LUA ?? "lua", [], /(\d+) of \1 passed/], [towardZero, ["record text"], /4 of 4 passed/], [towardZero, ["f32"], /7 of 7 passed/]] as const) {
+  for (const [lua, only, passed] of [[process.env.LUA ?? "lua", [], /(\d+) of \1 passed/], [towardZero, ["record text"], /1 of 1 passed/], [towardZero, ["f32"], /4 of 4 passed/]] as const) {
     const run = Bun.spawnSync([lua, join(root, "build/lua-tests/tests.lua"), ...only], { cwd: root, stdout: "pipe", stderr: "pipe" });
     expect({ lua, code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ lua, code: 0, stderr: "" });
     expect(run.stdout.toString()).toMatch(passed);

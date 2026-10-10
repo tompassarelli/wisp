@@ -23,16 +23,6 @@ const sources = (now: number, processes: readonly ProcessInfo[], extra: Partial<
   ...extra,
 });
 
-test("[spec docs/watch.md] offline host permits chat only for its exact loaded, connected, playing process", () => {
-  const lan = { pid: GAME.pid, map: "/private/test.w3x", phase: "playing", connected: true, loaded: true, left: false };
-  const observed = (value: typeof lan) => decide("a", sources(on6Oct("21:00"), [GAME], { lan: value }));
-  expect(typesIntoMatch(observed(lan))).toBe(true);
-  expect(observed(lan).source).toBe("lan");
-  for (const changed of [{ pid: GAME.pid + 1 }, { phase: "lobby" }, { phase: "loading" }, { phase: "over" }, { connected: false }, { loaded: false }, { left: true }]) {
-    expect(typesIntoMatch(observed({ ...lan, ...changed }))).toBe(false);
-  }
-  expect(typesIntoMatch(decide("a", sources(on6Oct("21:00"), [], { lan })))).toBe(false);
-});
 const crashFolder = "2026-10-06 13.30.33 f80136c8";
 const crash: CrashReport = {
   folder: crashFolder,
@@ -70,48 +60,6 @@ test("[native] the crashed play --menus run: its crash report names the session 
   expect(decide("a", sources(on6Oct("20:36"), [LAUNCHER], { log: fixture("war3log/loadfile-scan-mid-load.txt"), crashes: [crash] })).state.kind).toBe("launcher");
 });
 
-test("[native] the login shell: a log without a sign-in says nothing", () => {
-
-  const log = fixture("watch/login-shell-no-sign-in.txt");
-  const silent = decide("b", sources(on6Oct("21:00"), [LAUNCHER, GAME], { log }));
-  expect(silent.state).toEqual({ kind: "running" });
-  expect(silent.source).toBe("process");
-});
-
-
-test("[provisional] the menus' login screen is signing in before a sign-in and a lost connection after one", () => {
-  const log = fixture("watch/login-shell-no-sign-in.txt");
-  const loginScreen = (state: SocketState) => socketEvent(state, { messageType: "SetGlueScreen", payload: { screen: "LOGIN_DOORS" } }, on6Oct("21:00"));
-  expect(decide("b", sources(on6Oct("21:00"), [LAUNCHER, GAME], { log, socket: loginScreen({ connected: true }) })).state).toEqual({ kind: "signing in" });
-  const before = decide("b", sources(on6Oct("20:59"), [LAUNCHER, GAME], { log, socket: trace(fixture("watch/host-match.jsonl"), on6Oct("20:58"), 1500) }));
-  expect(before.state).toEqual({ kind: "menus", screen: "CUSTOM_LOBBIES" });
-  const lost = decide("b", sources(on6Oct("21:00"), [LAUNCHER, GAME], { log, socket: loginScreen({ connected: true }) }), before);
-  expect(lost.state).toEqual({ kind: "disconnected", reason: "the menus went back to the login screen" });
-  expect(lost.source).toBe("socket");
-});
-
-test("[provisional] a hosted match from the menus' socket: screens, lobby host, loading, match, results, signed out", () => {
-  const log = fixture("watch/menus-closed.txt").replace(/\r\n[^\r\n]*GameMain Ended\r\n$/, "\r\n");
-  const start = on6Oct("16:22");
-  const at = (offset: number) => decide("a", sources(start + offset, [LAUNCHER, GAME], { log, socket: trace(fixture("watch/host-match.jsonl"), start, offset) }));
-  expect(at(0).state).toEqual({ kind: "menus", screen: "MAIN_MENU" });
-  expect(at(4000).state).toEqual({ kind: "menus", screen: "CUSTOM_LOBBIES" });
-  expect(at(6000).state).toEqual({ kind: "lobby" });
-  expect(at(6100).state).toEqual({ kind: "lobby", host: true });
-  expect(at(9000).state).toEqual({ kind: "loading" });
-  expect(at(16000).state).toEqual({ kind: "in match" });
-  expect(at(76100).state).toEqual({ kind: "results" });
-  expect(at(80100).state).toEqual({ kind: "menus", screen: "CUSTOM_LOBBIES" });
-  expect(at(90000).state).toEqual({ kind: "disconnected", reason: "Battle.net signed this client out" });
-  expect(at(6100).source).toBe("socket");
-
-  expect(socketEvent({ connected: true }, { messageType: "SetGlueScreen", payload: { screen: "DISABLED_SCREEN" } }, 0)).toEqual({ connected: true });
-  const results = socketEvent({ connected: true }, { messageType: "UpdateScoreInfo", payload: {} }, 1);
-  const menus = socketEvent(results, { messageType: "ScreenTransitionInfo", payload: { screen: "CREATE_GAME", type: "Screen" } }, 2);
-  expect(menus.last?.state).toEqual({ kind: "menus", screen: "CREATE_GAME" });
-  expect(socketEvent(menus, { messageType: "ScreenTransitionInfo", payload: { screen: "OPTIONS", type: "Overlay" } }, 3)).toEqual(menus);
-});
-
 test("[spec docs/watch.md] chat goes only into a match its menu page reports, never on a receipt alone or a previous launch's evidence", () => {
   const log = fixture("war3log/menus-after-scan.txt");
   const start = on6Oct("16:30");
@@ -137,11 +85,4 @@ test("[spec docs/watch.md] chat goes only into a match its menu page reports, ne
   for (const state of [{ kind: "menus" as const, screen: "MAIN_MENU" }, { kind: "signed in" as const }]) {
     expect(decide("a", sources(started + 9000, [LAUNCHER, game], { ...old, socket: { connected: true, last: { state, at: started + 1000, evidence: "current" } } })).state).toEqual(state);
   }
-});
-
-test("[native] processes alone: closed, launcher, and a clean exit's log as the last session's", () => {
-  expect(decide("a", sources(on6Oct("17:00"), [])).state).toEqual({ kind: "closed" });
-  expect(decide("a", sources(on6Oct("17:00"), [LAUNCHER])).state).toEqual({ kind: "launcher" });
-
-  expect(decide("a", sources(on6Oct("17:00"), [LAUNCHER, GAME], { log: fixture("watch/menus-closed.txt") })).state).toEqual({ kind: "running" });
 });

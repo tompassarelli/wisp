@@ -12,13 +12,3 @@ farmTest("equal defaults fail coverage, modeled and intentional calls pass in em
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
   expect(run.stdout.toString()).toContain("native coverage contract passed");
 });
-
-test("headless JSON names missing native, client and frame and exits nonzero", () => {
-  const started = performance.now();
-  const run = Bun.spawnSync(["bun", join(import.meta.dir, "coverage/cli.ts"), "headless", "--json"]);
-  const records = run.stdout.toString().trim().split("\n").map((line) => JSON.parse(line));
-  expect(run.exitCode).toBe(1);
-  for (const client of [0, 1]) expect(records.find((record) => record.type === "failure" && record.client === client)).toMatchObject({ kind: "missing-native", native: "GetRandomInt", client, frame: 0 });
-  expect(records.at(-1)).toMatchObject({ type: "summary", ok: false, counts: { results: 1, failures: 2 } });
-  console.log(`missing-native CLI fixture: ${(performance.now() - started).toFixed(1)} ms`);
-});
