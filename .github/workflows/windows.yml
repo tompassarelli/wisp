@@ -37,6 +37,8 @@ jobs:
           echo "TOWARD_ZERO_LUA=$toward_zero" >> "$GITHUB_ENV"
       - name: wisp test
         run: bun run test examples/sample
+      - name: The sample in 32-bit Lua
+        run: bun test --timeout 120000 --preload ./scripts/wisp/testCostPreload.ts -t "farm: .*32-bit Lua" ./examples/sample/test/path.test.ts ./examples/sample/test/headless.test.ts
       - name: wisp headless
         run: bun examples/sample/scripts/sample.ts headless
       - name: Map build and the platform boundary
