@@ -11,6 +11,7 @@ import { sceneMatchFrame } from "../../../src/runtime/scene";
 import type { Journey } from "../../../src/headless/journey";
 import { step } from "../timings";
 import { type PerfProject, measureRun } from "./perf";
+import { FRAME_MS } from "../../../src/headless/frameRate";
 
 export class HeadlessFailure extends Schema.TaggedError<HeadlessFailure>()("HeadlessFailure", {
   journey: Schema.String,
@@ -144,7 +145,7 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
     const elapsedMs = performance.now() - runStarted;
     const cpu = process.cpuUsage(cpuStarted);
     const benchmark = { runs: samples.length, requestedRuns: options.runs, frames: samples.reduce((sum, sample) => sum + sample.frames, 0), failures: samples.filter((sample) => sample.problems > 0).length, elapsedMs, cpuMs: (cpu.user + cpu.system) / 1000 };
-    const speedMultiple = benchmark.frames * (1000 / 60) / Math.max(elapsedMs, Number.EPSILON);
+    const speedMultiple = benchmark.frames * FRAME_MS / Math.max(elapsedMs, Number.EPSILON);
     const render = project.render;
     if (options.render !== undefined && render !== undefined && destroyedModels.size > 0) {
 

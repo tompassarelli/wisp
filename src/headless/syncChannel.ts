@@ -2,6 +2,7 @@ import type { SyncMessage } from "./client";
 import type { SyncDelivery } from "./lockstep";
 import { Random } from "./random";
 import { f32 } from "../sim/f32";
+import { FRAME_MS } from "./frameRate";
 
 export interface SyncLatency {
 
@@ -20,7 +21,7 @@ export const MEASURED_BATTLE_NET: SyncLatency = {
   extraTurns: [f32(0.4), f32(0.24), f32(0.144), f32(0.0864), f32(0.05184), f32(0.031104), f32(0.0186624), f32(0.01119744), f32(0.01679616)],
 };
 
-export const CALLBACK_MS = 1000 / 60;
+export const CALLBACK_MS = FRAME_MS;
 
 export function syncAgeMs(latency: SyncLatency, frame: number, extraTurns: number): number {
   const sentMs = frame * CALLBACK_MS;

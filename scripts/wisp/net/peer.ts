@@ -1,8 +1,9 @@
 import { Effect, Option, Schema } from "effect";
 import type { LockstepLink } from "../../../src/headless/lockstep";
 import { TurnLedger, type TurnPacket } from "../../../src/headless/turnLedger";
+import { FRAME_MS } from "../../../src/headless/frameRate";
 
-export const FRAME_MS = 1000 / 60;
+export { FRAME_MS };
 export const SILENCE_MS = 3000;
 const START_LEAD_MS = 400;
 const PINGS = 8;

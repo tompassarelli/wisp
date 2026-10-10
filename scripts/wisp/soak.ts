@@ -11,6 +11,7 @@ import { type SceneBody, type SceneExpectations, bodyProblems, readSceneLines, s
 import { type NativeCostModel, WARCRAFT_COST, nativeFrameCost } from "../../src/headless/nativeCost";
 import { MEASURED_BATTLE_NET, syncDelivery } from "../../src/headless/syncChannel";
 import { describeStack } from "./command";
+import { FRAME_MS } from "../../src/headless/frameRate";
 
 export interface SoakController {
   readonly buttons: readonly string[];
@@ -380,10 +381,10 @@ export interface SoakLimits {
 
 export const SOAK_LIMITS: SoakLimits = {
   stallFrames: 180,
-  frameMs: 1000 / 60,
+  frameMs: FRAME_MS,
   costScale: 1,
-  spikeMs: 1000 / 60,
-  typingMs: 1000 / 60,
+  spikeMs: FRAME_MS,
+  typingMs: FRAME_MS,
   backlogFrames: 60,
   growthSeconds: 3,
   recoverFrames: 180,

@@ -2,6 +2,7 @@ import "./headlessRender";
 import type { SoundCue } from "../../../src/headless/client";
 import type { StandaloneFrame, StandaloneInput } from "../standalone";
 import type { RenderScene } from "../headlessRender";
+import { FRAME_MS } from "../../../src/headless/frameRate";
 
 const held = new Set<string>();
 let gamepadIndex: number | undefined;
@@ -142,7 +143,7 @@ async function run(): Promise<void> {
   while (true) {
     const deadlineMs = nextFrame;
     const presented = await new Promise<number>((resolve) => { waiting = { deadlineMs, resolve }; });
-    nextFrame = Math.max(nextFrame + 1000 / 60, presented);
+    nextFrame = Math.max(nextFrame + FRAME_MS, presented);
     const began = performance.now();
     if (previous !== 0) intervals.push(began - previous);
     if (previousPresented !== 0) presentations.push(presented - previousPresented);

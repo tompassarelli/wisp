@@ -1,6 +1,7 @@
 import { type AnimationSequence, animationSample, type SavedAnimation } from "../../../src/headless/animation";
+import { FRAME_MS } from "../../../src/headless/frameRate";
 
-const STEP_MS = 1000 / 60;
+const STEP_MS = FRAME_MS;
 
 export interface EmitterRenderer {
   update(delta: number): void;

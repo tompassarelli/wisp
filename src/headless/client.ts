@@ -12,6 +12,7 @@ import { Scenery, type SceneryFixtures } from "./warcraft3Scenery";
 import { TextTags } from "./textTags";
 import { Lightnings } from "./lightnings";
 import { Warcraft3Inventory, type Warcraft3InventoryFixtures } from "./warcraft3Inventory";
+import { FRAMES_PER_SECOND } from "./frameRate";
 
 export type Handle = { readonly kind: string; readonly id: number };
 
@@ -299,7 +300,7 @@ export interface ClientOptions {
   readonly effectStepMs?: number;
 }
 
-export const FRAMES_PER_SECOND = 60;
+export { FRAMES_PER_SECOND };
 /** The shortest repeating period: a zero period fires about 10,000 times a game second (wisp:docs/warsmash-notes.md#timers-and-frame-stepping). */
 const MIN_PERIOD = f32(0.0001);
 
