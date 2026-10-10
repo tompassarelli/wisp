@@ -1,6 +1,7 @@
 import type { Terrain } from "../terrain";
 import { terrainRows } from "../terrainMesh";
 import { waterMesh, waterTable, waterTexture, type WaterTable } from "../water";
+import { linkProgram } from "./gl";
 
 type TextureReader = (path: string) => Promise<HTMLCanvasElement>;
 type AssetReader = (path: string) => Promise<ArrayBuffer>;
@@ -16,24 +17,14 @@ interface Prepared { program: WebGLProgram; vao: WebGLVertexArrayObject; buffer:
 const prepared = new Map<string, Promise<Prepared | undefined>>();
 const frames = new Map<string, Promise<WebGLTexture>>();
 
-function compile(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
-  const shader = gl.createShader(type);
-  if (shader === null) throw new Error("cannot create water shader");
-  gl.shaderSource(shader, source); gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader) ?? "water shader failed");
-  return shader;
-}
 function program(gl: WebGL2RenderingContext): WebGLProgram {
-  const result = gl.createProgram();
-  if (result === null) throw new Error("cannot create water program");
-  const vertex = compile(gl, gl.VERTEX_SHADER, `#version 300 es
+  return linkProgram(gl, "water", `#version 300 es
 layout(location=0) in vec3 position;
 layout(location=1) in vec2 uv;
 layout(location=2) in vec4 tint;
 uniform mat4 view, projection;
 out vec2 texcoord; out vec4 shade; out float depth; out float height;
-void main(){vec4 eye=view*vec4(position,1.0);texcoord=uv;shade=tint;depth=-eye.z;height=position.z;gl_Position=projection*eye;}`);
-  const fragment = compile(gl, gl.FRAGMENT_SHADER, `#version 300 es
+void main(){vec4 eye=view*vec4(position,1.0);texcoord=uv;shade=tint;depth=-eye.z;height=position.z;gl_Position=projection*eye;}`, `#version 300 es
 precision highp float;
 in vec2 texcoord; in vec4 shade; in float depth; in float height;
 uniform sampler2D surface;
@@ -52,10 +43,6 @@ void main(){
   }
   if(color.a<0.004)discard;
 }`);
-  gl.attachShader(result, vertex); gl.attachShader(result, fragment); gl.linkProgram(result);
-  gl.deleteShader(vertex); gl.deleteShader(fragment);
-  if (!gl.getProgramParameter(result, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(result) ?? "water program failed");
-  return result;
 }
 async function prepare(gl: WebGL2RenderingContext, terrain: Terrain, readAsset: AssetReader): Promise<Prepared | undefined> {
   if (!terrain.points.some((point) => (point.flags & 4) !== 0)) return undefined;

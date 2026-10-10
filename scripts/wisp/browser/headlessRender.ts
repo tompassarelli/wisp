@@ -6,6 +6,7 @@ import { drawnPoses } from "../culling";
 import { advanceEmitters, type EmitterRenderer } from "./emitters";
 import { drawTerrain } from "./terrain";
 import { drawWater } from "./water";
+import { linkProgram } from "./gl";
 import { depthTarget, type DepthTarget, invert, parsePostProcessing, POINT_FACE, pointFaces, postProcessor, type PostSettings, postSettings, resolve, sceneTarget, type SceneTarget, SUN_MAP, sunView } from "./passes";
 import { terrainRows } from "../terrainMesh";
 import { doodadSkinRows, terrainDoodadPoses } from "../terrainDoodads";
@@ -528,21 +529,12 @@ let filterQuad: { program: WebGLProgram; vao: WebGLVertexArrayObject; color: Web
 const filterTextures = new Map<string, Promise<WebGLTexture>>();
 function filterProgram() {
   if (filterQuad !== undefined) return filterQuad;
-  const shader = (type: number, source: string) => {
-    const made = gl.createShader(type); if (made === null) throw new Error("no filter shader");
-    gl.shaderSource(made, source); gl.compileShader(made);
-    if (!gl.getShaderParameter(made, gl.COMPILE_STATUS)) throw new Error(`filter shader: ${gl.getShaderInfoLog(made)}`);
-    return made;
-  };
-  const program = gl.createProgram(), vao = gl.createVertexArray(), buffer = gl.createBuffer();
-  gl.attachShader(program, shader(gl.VERTEX_SHADER, `#version 300 es
+  const program = linkProgram(gl, "filter", `#version 300 es
 in vec2 position; uniform vec4 uvRect; out vec2 uv;
-void main() { uv = mix(uvRect.xy, uvRect.zw, vec2(position.x * 0.5 + 0.5, 0.5 - position.y * 0.5)); gl_Position = vec4(position, 0.0, 1.0); }`));
-  gl.attachShader(program, shader(gl.FRAGMENT_SHADER, `#version 300 es
+void main() { uv = mix(uvRect.xy, uvRect.zw, vec2(position.x * 0.5 + 0.5, 0.5 - position.y * 0.5)); gl_Position = vec4(position, 0.0, 1.0); }`, `#version 300 es
 precision mediump float; in vec2 uv; uniform sampler2D map; uniform vec4 color; uniform bool textured; out vec4 fragment;
-void main() { fragment = (textured ? texture(map, uv) : vec4(1.0)) * color; }`));
-  gl.bindAttribLocation(program, 0, "position"); gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(`filter program: ${gl.getProgramInfoLog(program)}`);
+void main() { fragment = (textured ? texture(map, uv) : vec4(1.0)) * color; }`, ["position"]);
+  const vao = gl.createVertexArray(), buffer = gl.createBuffer();
   gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
