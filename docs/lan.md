@@ -722,7 +722,7 @@ that names its start time, then one line per event, in seconds since then:
 9.370 map lan0a has it
 12.917 phase countdown
 99.869 phase playing
-100.834 mark turn 32 game 0.965
+100.834 mark turn 32 game 0.965 behind lan0a=1 lan0b=2
 104.347 turn 59 lan0a p1 sync prefix="SC_FE" bytes=0 data=""
 256.536 chat lan0b p2 "-dev quick"
 256.548 turn 4468 lan0b p2 chat trigger=10a3:10a3 text="-dev quick"
@@ -737,7 +737,10 @@ that names its start time, then one line per event, in seconds since then:
   events, `cache` stores, `pause` and `speed`. An unknown action id ends that
   player's block with a `raw` line in hex.
 - **A mark line** about every second pins the turn count to the time, so other
-  logs align between actions.
+  logs align between actions. It ends with each connected client's turns
+  behind: turns sent minus checksums returned. A Warcraft client stops when
+  its turns stop, so this lag, not the map's frame-based lateness, shows a
+  stall.
 - **Event lines** cover joins, map checks, phases, loads, leaves (with their
   reason), chat, and every desync, with each client's checksum.
 

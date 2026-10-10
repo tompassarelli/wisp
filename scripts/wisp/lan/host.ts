@@ -412,7 +412,7 @@ export const startHost = (options: HostOptions) => Effect.gen(function*() {
       }
       turns++;
 
-      if (turns % MARK_TURNS === 0) line(`mark turn ${turns} game ${(gameMs / 1000).toFixed(3)}`);
+      if (turns % MARK_TURNS === 0) line(`mark turn ${turns} game ${(gameMs / 1000).toFixed(3)} behind ${players.filter((player) => !player.left).map((player) => `${player.label}=${turns - player.checksums.length}`).join(" ")}`);
     }
   };
   yield* Effect.forkScoped(Effect.sync(() => {

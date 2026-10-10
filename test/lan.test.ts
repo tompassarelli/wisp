@@ -64,7 +64,10 @@ describe("host, replaying two recorded offline clients", () => {
       for (const { client, packet } of fixture.filter(({ packet }) => kind(packet) === PACKET.OutgoingKeepAlive)) send(client, packet);
       await until(() => lines.some((line) => / turn \d+ lan0b p2 chat /.test(line)) && host.status().players.every(({ checksums }) => checksums === 100), "the actions and keepalives");
       expect(host.status().desyncs).toBe(0);
-      const logged = lines.filter((line) => / turn \d+ /.test(line)).map((line) => line.replace(/^\S+ turn \d+ /, ""));
+      await until(() => lines.some((line) => / mark turn 64 /.test(line)), "two mark lines");
+      const marks = lines.filter((line) => / mark turn /.test(line));
+      for (const mark of marks) expect(mark).toMatch(/ mark turn \d+ game \d+\.\d{3} behind lan0a=-?\d+ lan0b=-?\d+$/);
+      const logged = lines.filter((line) => /^\S+ turn \d+ /.test(line)).map((line) => line.replace(/^\S+ turn \d+ /, ""));
       expect(logged).toEqual([
         'lan0a p1 sync prefix="SC_FE" bytes=0 data=""',
         'lan0b p2 sync prefix="SC_FE" bytes=0 data=""',
