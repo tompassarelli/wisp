@@ -6803,7 +6803,7 @@ var RibbonsController = class {
 	}
 	updateEmitter(emitter, delta) {
 		const now = Date.now();
-		if (this.interp.animVectorVal(emitter.props.Visibility, 0) > 0) {
+		if (this.interp.animVectorVal(emitter.props.Visibility, 1) > 0) {
 			const emissionRate = emitter.props.EmissionRate;
 			emitter.emission += emissionRate * delta;
 			if (emitter.emission >= 1e3) {
