@@ -1,5 +1,6 @@
 import { Effect, Layer } from "effect";
 import type { Platform } from "../platform/services";
+import { documentsFolder, prefixFromDocuments } from "../warcraft/battleNet";
 import * as desktop from "../warcraft/desktop";
 import { type Command, type CommandFailure, UsageFailure } from "./command";
 import { type ClientProfile, clientSettings } from "./lan/pool";
@@ -18,8 +19,6 @@ export interface DoctorDeclaration {
   readonly accounts?: Readonly<Record<string, NonNullable<DoctorTarget["account"]>>>;
 }
 
-const DOCUMENTS = "/drive_c/users/steamuser/Documents/Warcraft III";
-
 export const profileSettings = (entry: { readonly profile?: ClientProfile | undefined; readonly displaySettings?: Readonly<Record<string, string>> | undefined }) => {
   const settings = clientSettings(entry.profile ?? "minimal");
   return { ...settings, Video: { ...settings["Video"], ...entry.displaySettings } };
@@ -33,11 +32,12 @@ export const doctorTargets = (declaration: DoctorDeclaration, names: readonly st
   return yield* Effect.forEach(chosen, (entry) => Effect.gen(function*() {
     const start = entry.offline === true ? { kind: "offline-pool" } as const : declaration.start[entry.name];
     if (start === undefined) return yield* new DoctorStop({ problem: `${entry.name}: the game declares no way to start its Battle.net` });
-    if (!entry.documents.endsWith(DOCUMENTS)) return yield* new DoctorStop({ problem: `${entry.name}: its documents folder isn't a Wine prefix's ${DOCUMENTS}: ${entry.documents}` });
+    const prefix = prefixFromDocuments(entry.documents);
+    if (prefix === undefined) return yield* new DoctorStop({ problem: `${entry.name}: its documents folder isn't a Wine prefix's /${documentsFolder("")}: ${entry.documents}` });
     const display = yield* desktop.displayOf(entry).pipe(Effect.mapError((cause) => new DoctorStop({ problem: cause.message })));
     return {
       client: { name: entry.name, documents: entry.documents, ...(entry.menuReportPort === undefined ? {} : { menuReportPort: entry.menuReportPort }) },
-      prefix: entry.documents.slice(0, -DOCUMENTS.length),
+      prefix,
       display,
       start,
 
