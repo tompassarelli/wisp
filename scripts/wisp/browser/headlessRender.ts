@@ -784,7 +784,8 @@ window.renderScene = async (scene, options) => {
   const live = options?.capture === false;
   const shown = live ? "block" : "none";
   if (canvas.style.display !== shown) { canvas.style.display = overlay.style.display = shown; output.style.display = live ? "none" : "block"; }
-  const context = (live ? overlay : output).getContext("2d"); if (context === null) throw new Error("no output canvas");
+  // Determinism: captures raster on the CPU; Chrome's GPU 2D canvas reorders abutting UI draws depending on earlier frames.
+  const context = live ? overlay.getContext("2d") : output.getContext("2d", { willReadFrequently: true }); if (context === null) throw new Error("no output canvas");
   if (live) context.clearRect(0, 0, overlay.width, overlay.height);
   else context.drawImage(canvas, 0, 0);
   const clip = multiply(view.projection, view.view);
