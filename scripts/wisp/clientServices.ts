@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { readTextOrUndefined } from "./files";
+import { stateHome } from "./xdg";
 import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
 import { BackgroundServices, CapacityAdmission, type PlatformError, ProcessTable, type ServiceOwner } from "../platform/services";
@@ -17,7 +18,7 @@ export const desktopUnit = (name: string) => `wisp-desktop-${name}.service`;
 
 export const clientUnit = (name: string) => `wisp-client-${name}.service`;
 
-export const desktopLog = (name: string) => join(process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local/state"), "wisp/desktops", `${name}.log`);
+export const desktopLog = (name: string) => join(stateHome(), "wisp/desktops", `${name}.log`);
 
 export const DESKTOP_RESOLUTION = "1920x1080";
 
@@ -30,14 +31,6 @@ export const serviceState = (unit: string) => BackgroundServices.use((services) 
 
 export const stopService = (unit: string) => BackgroundServices.use((services) => services.stop(unit)).pipe(Effect.mapError(problem));
 
-const readText = (path: string) => {
-  try {
-    return readFileSync(path, "utf8");
-  } catch {
-    return undefined;
-  }
-};
-
 export type Owner = ServiceOwner;
 
 export const ownerOf = (pid: number) => BackgroundServices.use((services) => services.owner(pid)).pipe(Effect.mapError(problem));
@@ -48,7 +41,7 @@ export const describeOwner = (owner: Owner | undefined) =>
 export const liveDesktop = (run: string) => existsSync(join(run, "runtime/wayland-0")) && existsSync(join(run, "display"));
 
 export const desktopPid = (run: string) => Effect.gen(function*() {
-  const pid = Number(readText(join(run, "launcher-pid"))?.trim());
+  const pid = Number(readTextOrUndefined(join(run, "launcher-pid"))?.trim());
   return Number.isInteger(pid) && pid > 0 && (yield* ProcessTable.use((table) => table.alive(pid)).pipe(Effect.mapError(problem))) ? pid : undefined;
 });
 
@@ -65,10 +58,10 @@ export const desktopCommand = (capacity: string, desktop: string, name: string) 
 
 export const startDesktop = (name: string, command: readonly string[], seconds = 60) => Effect.gen(function*() {
   const log = desktopLog(name);
-  const offset = readText(log)?.length ?? 0;
+  const offset = readTextOrUndefined(log)?.length ?? 0;
   yield* startService(desktopUnit(name), command, log);
   for (let waited = 0; waited < seconds * 4; waited++) {
-    const written = (readText(log) ?? "").slice(offset);
+    const written = (readTextOrUndefined(log) ?? "").slice(offset);
     const runDir = /^Run: (\S+)$/m.exec(written)?.[1];
     if (runDir !== undefined && liveDesktop(runDir)) return runDir;
     const state = yield* serviceState(desktopUnit(name));

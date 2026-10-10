@@ -12,7 +12,7 @@ import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { readMapFacts } from "./map";
-import { PAIR_SIDES, poolProfile, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
+import { PAIR_SIDES, poolProfile, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
 import { admissionFile, nativeCommand } from "./admission";
 
 const argument = (name: string) => {
@@ -22,7 +22,7 @@ const argument = (name: string) => {
 const pair = Number(argument("pair") ?? "0");
 const fpsText = argument("fps");
 const profile = poolProfile(argument("pool-profile") ?? "parity", fpsText === undefined ? undefined : Number(fpsText));
-const packager = argument("packager") ?? join(process.env["XDG_CACHE_HOME"] ?? join(process.env["HOME"] ?? "", ".cache"), "wisp/lan/map-pack");
+const packager = argument("packager") ?? mapPackager();
 const directory = pairDirectory(pair);
 const agentLog = join(directory, "agent.log");
 const say = (text: string) => appendFileSync(agentLog, `${new Date().toISOString()} ${text}\n`);

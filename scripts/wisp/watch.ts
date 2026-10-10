@@ -1,4 +1,5 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
+import { readTextOrUndefined } from "./files";
 import { join } from "node:path";
 import { Clock, Context, Effect, Layer, Schedule, Schema } from "effect";
 import { ackFile } from "../../src/runtime/gameFiles";
@@ -286,14 +287,6 @@ export const prefixOf = (documents: string) => {
   return at < 0 ? undefined : documents.slice(0, at);
 };
 
-const readText = (path: string) => {
-  try {
-    return readFileSync(path, "utf8");
-  } catch {
-    return undefined;
-  }
-};
-
 const LanStatus = Schema.Struct({
   clients: Schema.Array(Schema.Struct({ name: Schema.String, documents: Schema.String, pid: Schema.optional(Schema.Int) })),
   game: Schema.optional(Schema.Struct({ map: Schema.String, phase: Schema.String, players: Schema.Array(Schema.Struct({ label: Schema.String, connected: Schema.Boolean, loaded: Schema.Boolean, left: Schema.Boolean })) })),
@@ -367,8 +360,8 @@ const liveWatch = (options: WatchOptions) => Effect.gen(function*() {
     }
     for (const folder of folders) {
       if (known.get(folder) !== undefined) continue;
-      const crash = readText(join(errors, folder, "Crash.txt"));
-      const copy = readText(join(errors, folder, "War3Log.txt"));
+      const crash = readTextOrUndefined(join(errors, folder, "Crash.txt"));
+      const copy = readTextOrUndefined(join(errors, folder, "War3Log.txt"));
       const session = copy === undefined ? undefined : sessionStart(copy);
 
       known.set(folder, crash === undefined || session === undefined ? undefined : { folder, session, summary: crashSummary(crash), written: modified(join(errors, folder, "Crash.txt")) ?? 0 });
@@ -411,7 +404,7 @@ const liveWatch = (options: WatchOptions) => Effect.gen(function*() {
     const key = stamp === undefined ? "" : `${stamp.size}:${stamp.mtimeMs}`;
     if (tracker.logKey !== key) {
       tracker.logKey = key;
-      tracker.log = stamp === undefined ? undefined : readText(path);
+      tracker.log = stamp === undefined ? undefined : readTextOrUndefined(path);
     }
     const { log } = tracker;
     const lan = yield* lanObservation(client);
