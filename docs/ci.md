@@ -223,8 +223,8 @@ the open "Weekly Effect upgrade" issue with the branch to fix.
 
 ## Runner capacity and waiting
 
-The account runs at most 20 jobs at once across all of its repositories
-(GitHub Free), and further jobs wait in one first-come queue. Workflows keep
+The account runs at most 40 jobs at once across all of its repositories
+(GitHub Pro), and further jobs wait in one first-come queue. Workflows keep
 their share bounded so a new run's first job starts within a minute: a large
 matrix sets `max-parallel` and packs enough work in each job that setup stays
 a small part of it, and CI runs once per ref (a newer push replaces the queued
