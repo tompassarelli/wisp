@@ -70,6 +70,7 @@ program can register it; "game" means the consuming game defines it.
 | `online` | Direct play over Battle.net by join code | `setup`, `host`, `join` | game |
 | `lan` | The offline LAN client pool | `setup`, `pool`, `fresh`, `status`, `end` | Wisp |
 | `engine` | Warcraft III's engine inside a client, for desyncs and offline scripted runs | `desync`, `poll`, `diff`, `trace`, `locate`, `actions`, `drive` | Wisp |
+| `fidelity` | Held-out look captures within calibration | `check` | Wisp |
 | `headless` | A journey in simulated clients | (journey name) | Wisp |
 | `soak` | Many headless matches by computers and a fuzzed controller | (session) | Wisp |
 | `perf` | Predicted frame cost | (run name), `compare`, `native`, `fit`, `budget`, `profile`, `census` | Wisp |
