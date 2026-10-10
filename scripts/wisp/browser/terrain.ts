@@ -3,6 +3,7 @@ import { CELL, type Terrain } from "../terrain";
 import { terrainCells, terrainRows, type TerrainCell } from "../terrainMesh";
 import { terrainTileLayers, terrainTileUV, terrainBlightPath } from "../terrainTiles";
 import { cliffGround, cliffShape } from "../terrainCliffs";
+import { linkProgram } from "./gl";
 
 type TextureReader = (path: string) => Promise<HTMLCanvasElement>;
 type AssetReader = (path: string) => Promise<ArrayBuffer>;
@@ -10,32 +11,18 @@ interface Batch { texture: WebGLTexture; buffer: WebGLBuffer; count: number }
 interface Prepared { program: WebGLProgram; vao: WebGLVertexArrayObject; batches: Batch[] }
 const prepared = new Map<string, Promise<Prepared>>();
 
-function shader(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
-  const shader = gl.createShader(type);
-  if (shader === null) throw new Error("cannot create terrain shader");
-  gl.shaderSource(shader, source); gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader) ?? "terrain shader failed");
-  return shader;
-}
 function program(gl: WebGL2RenderingContext): WebGLProgram {
-  const result = gl.createProgram();
-  if (result === null) throw new Error("cannot create terrain program");
-  const vertex = shader(gl, gl.VERTEX_SHADER, `#version 300 es
+  return linkProgram(gl, "terrain", `#version 300 es
 layout(location=0) in vec3 position;
 layout(location=1) in vec2 uv;
 uniform mat4 view, projection;
 out vec2 texcoord;
-void main(){texcoord=uv;gl_Position=projection*view*vec4(position,1.0);}`);
-  const fragment = shader(gl, gl.FRAGMENT_SHADER, `#version 300 es
+void main(){texcoord=uv;gl_Position=projection*view*vec4(position,1.0);}`, `#version 300 es
 precision highp float;
 in vec2 texcoord;
 uniform sampler2D tile;
 out vec4 color;
 void main(){color=texture(tile,texcoord);if(color.a<0.01)discard;}`);
-  gl.attachShader(result, vertex); gl.attachShader(result, fragment); gl.linkProgram(result);
-  gl.deleteShader(vertex); gl.deleteShader(fragment);
-  if (!gl.getProgramParameter(result, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(result) ?? "terrain program failed");
-  return result;
 }
 function ground(cell: TerrainCell, uv: readonly [number, number, number, number]): number[] {
   const [u0, v0, u1, v1] = uv, vertices = cell.corners.map((point, corner) => [cell.x + (corner % 2) * CELL, cell.y + Math.floor(corner / 2) * CELL, point.height, corner % 2 === 0 ? u0 : u1, corner < 2 ? v1 : v0]);

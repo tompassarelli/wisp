@@ -1,3 +1,5 @@
+import { linkProgram } from "./gl";
+
 type Matrix = Float32Array;
 
 export function multiply(a: Matrix, b: Matrix): Matrix {
@@ -130,16 +132,7 @@ in vec2 position; out vec2 uv;
 void main() { uv = position * 0.5 + 0.5; gl_Position = vec4(position, 0.0, 1.0); }`;
 interface Pass { program: WebGLProgram; uniform: (name: string) => WebGLUniformLocation | null }
 function pass(gl: WebGL2RenderingContext, fragment: string): Pass {
-  const compile = (type: number, source: string) => {
-    const shader = gl.createShader(type); if (shader === null) throw new Error("no post-processing shader");
-    gl.shaderSource(shader, source); gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(`post-processing shader: ${gl.getShaderInfoLog(shader)}`);
-    return shader;
-  };
-  const program = gl.createProgram();
-  gl.attachShader(program, compile(gl.VERTEX_SHADER, QUAD_VS)); gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragment));
-  gl.bindAttribLocation(program, 0, "position"); gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(`post-processing program: ${gl.getProgramInfoLog(program)}`);
+  const program = linkProgram(gl, "post-processing", QUAD_VS, fragment, ["position"]);
   const locations = new Map<string, WebGLUniformLocation | null>();
   return { program, uniform: (name) => { if (!locations.has(name)) locations.set(name, gl.getUniformLocation(program, name)); return locations.get(name) ?? null; } };
 }
