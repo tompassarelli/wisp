@@ -2,8 +2,13 @@ import { dlopen } from "bun:ffi";
 import { existsSync, readFileSync, readdirSync, readlinkSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { ProcessInfo } from "../../warcraft/battleNet";
-import { prefixPath } from "../../wisp/lan/processes";
 import type { CpuPressure, GameProcess, LauncherProcess, ServiceOwner } from "../services";
+
+function prefixPath(prefix: string, windowsPath: string): string {
+  const match = /^([A-Za-z]):\\(.*)$/.exec(windowsPath);
+  if (match === null) return windowsPath;
+  return join(prefix, `drive_${(match[1] ?? "c").toLowerCase()}`, ...(match[2] ?? "").split("\\"));
+}
 
 const readText = (path: string) => {
   try {

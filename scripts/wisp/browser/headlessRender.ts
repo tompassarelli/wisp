@@ -2,7 +2,6 @@ import { ModelRenderer, decodeBLP, getBLPImageData, parseMDL, parseMDX, type mod
 import { type AnimationSequence, animationSample, blendWeight, globalSequenceFrame, type SequenceSample } from "../../../src/headless/animation";
 import type { DrawnPose as EffectPose, PopcornEmitterPose, RenderedFrame, RenderScene } from "../headlessRender";
 import { parsableModel } from "../models";
-import { orderDrawnModels } from "../drawOrder";
 import { drawnPoses } from "../culling";
 import { advanceEmitters, type EmitterRenderer } from "./emitters";
 import { drawTerrain } from "./terrain";
@@ -12,6 +11,13 @@ import { terrainRows } from "../terrainMesh";
 import { doodadSkinRows, terrainDoodadPoses } from "../terrainDoodads";
 import { ddsTexture } from "./ddsTexture";
 import { cliffOverrideTextures, cliffTexturePath } from "../terrainCliffs";
+
+interface Material { readonly Layers: readonly { readonly FilterMode?: number }[] }
+
+function orderDrawnModels<T>(poses: readonly T[], materials: (pose: T) => readonly Material[]): T[] {
+  const transparent = (pose: T) => materials(pose).some((material) => material.Layers.some((layer) => (layer.FilterMode ?? 0) < 2)) ? 0 : 1;
+  return [...poses].sort((a, b) => transparent(a) - transparent(b));
+}
 
 let cliffOverrides: ReadonlyMap<string, string> = new Map();
 const cliffOverridesByTerrain = new Map<string, Promise<ReadonlyMap<string, string>>>();
