@@ -1,16 +1,7 @@
 // Warcraft raw arithmetic can miss nearest binary32; compile wrapped operations to exact helpers.
 
-
-
-
-
-
-
-
-
 import { addFloat32, divideFloat32, multiplyFloat32, subtractFloat32 } from "./binary32";
 import { floorDiv } from "./intMath";
-
 
 const ADD = 1;
 const SUBTRACT = 2;
@@ -55,7 +46,6 @@ function slowFloat32(left: number, right: number, operation: number): number {
   return result;
 }
 
-
 function outsideSumRange(value: number, right: number, operation: number): number {
   // Sterbenz: subtracting a same-signed value within a factor of two is exact.
   const subtrahend = operation === SUBTRACT ? right : -right;
@@ -69,15 +59,6 @@ function outsideSumRange(value: number, right: number, operation: number): numbe
   return slowFloat32(value, right, operation);
 }
 
-
-
-
-
-
-
-
-
-
 function sum(value: number, addend: number, operation: number): number {
   const valueNegative = value < 0;
   const addendNegative = addend < 0;
@@ -90,7 +71,6 @@ function sum(value: number, addend: number, operation: number): number {
     big = larger;
     negative = addendNegative;
   }
-
 
   let up: number;
   let down: number;
@@ -291,12 +271,6 @@ function sum(value: number, addend: number, operation: number): number {
   return negative ? -(units * down) : units * down;
 }
 
-
-
-
-
-
-
 export function exactSum(value: number, right: number): number {
   if (value === 0 || right === 0) return value + right;
   if (value === floorDiv(value, 1) && right === floorDiv(right, 1) && value >= -16777216 && value <= 16777216 && right >= -16777216 && right <= 16777216) {
@@ -316,7 +290,6 @@ export function exactDifference(value: number, right: number): number {
   return right === -2147483648 ? outsideSumRange(value, right, SUBTRACT) : sum(value, -right, SUBTRACT);
 }
 
-
 export function exactProduct(value: number, right: number): number {
   // Zeros keep their IEEE signs; small integers keep Lua's integer type.
   if (value === 0 || right === 0) return value * right;
@@ -325,7 +298,6 @@ export function exactProduct(value: number, right: number): number {
   if (right === 1 || right === -1 || value === 1 || value === -1) return value * right * 1.0;
   return slowFloat32(value, right, MULTIPLY);
 }
-
 
 export function exactQuotient(value: number, right: number): number {
   // A zero numerator keeps its IEEE sign; integers that divide evenly give an integer within 2^24. Both are exact under any rounding.
@@ -348,7 +320,6 @@ globalThis.__wispF32Add = exactSum;
 globalThis.__wispF32Subtract = exactDifference;
 globalThis.__wispF32Multiply = exactProduct;
 globalThis.__wispF32Divide = exactQuotient;
-
 
 export function f32(value: number): number {
   return Math.fround(value);

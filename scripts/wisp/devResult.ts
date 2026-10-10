@@ -1,16 +1,10 @@
-
-
-
 export const RESULT_PREFIX = "@@wisp-dev ";
 
 export const printResult = (value: unknown) => console.log(`${RESULT_PREFIX}${JSON.stringify(value)}`);
 
-
 export const WARM_ENV = "WISP_DEV_WARM";
 
-
 export const SAVED_FILES_ENV = "WISP_DEV_FILES";
-
 
 export function savedFiles(): readonly string[] | undefined {
   const value = process.env[SAVED_FILES_ENV];

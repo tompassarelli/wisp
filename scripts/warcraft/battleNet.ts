@@ -1,10 +1,5 @@
-
-
-
-
 import { join } from "node:path";
 import { Schema } from "effect";
-
 
 export interface ProcessInfo {
 
@@ -25,7 +20,6 @@ export interface ProcessInfo {
   readonly started?: number;
 }
 
-
 export interface PrefixUse {
 
   readonly runtimes: readonly ProcessInfo[];
@@ -43,11 +37,6 @@ const isRuntime = (process: ProcessInfo) => process.runtime === true;
 const isLauncher = (process: ProcessInfo) => /\\Battle\.net\\Battle\.net\.exe(?:\s|"|$)/i.test(commandLine(process)) && !/--type=/.test(commandLine(process));
 const isGame = (process: ProcessInfo) => /\\Warcraft III\.exe(?:\s|"|$)/i.test(commandLine(process));
 
-
-
-
-
-
 export const serverDirectoryName = (device: bigint, inode: bigint) => `server-${device.toString(16)}-${inode.toString(16)}`;
 
 export function prefixUse(processes: readonly ProcessInfo[], prefix: string, serverDirectory: string): PrefixUse {
@@ -60,24 +49,18 @@ export function prefixUse(processes: readonly ProcessInfo[], prefix: string, ser
   return { runtimes: inPrefix.filter(isRuntime), processes: inPrefix, ...(launcher === undefined ? {} : { launcher }), ...(game === undefined ? {} : { game }) };
 }
 
-
 export const shortcutUrl = (appId: number) => `steam://rungameid/${((BigInt(appId) << 32n) | 0x02000000n).toString()}`;
-
 
 export const shortcutAppId = (appId: number) => `steam_app_${appId}`;
 
-
 export const launcherLogDirectory = (prefix: string) => join(prefix, "drive_c/users/steamuser/AppData/Local/Battle.net/Logs");
-
 
 export const newestLauncherLog = (names: readonly string[]) =>
   names.filter((name) => /^battle\.net-\d{8}T[\d.]+\.log$/.test(name)).sort().at(-1);
 
 export const documentsFolder = (prefix: string) => join(prefix, "drive_c/users/steamuser/Documents/Warcraft III");
 
-
 export const launcherConfig = (prefix: string) => join(prefix, "drive_c/users/steamuser/AppData/Roaming/Battle.net/Battle.net.config");
-
 
 export function windowsPath(prefix: string, path: string): string {
   const drive = join(prefix, "drive_c");
@@ -85,33 +68,21 @@ export function windowsPath(prefix: string, path: string): string {
   return `C:\\${path.slice(drive.length + 1).replaceAll("/", "\\")}`;
 }
 
-
-
-
-
 export const loadMapOption = (prefix: string, map: string) => `-loadfile "${windowsPath(prefix, map)}"`;
-
-
-
-
-
 
 const Settings = Schema.Record(Schema.String, Schema.Unknown);
 const LauncherSettings = Schema.fromJsonString(Settings);
 const Games = Schema.UndefinedOr(Schema.Record(Schema.String, Settings));
-
 
 function decodeSettings(config: string) {
   const settings = Schema.decodeSync(LauncherSettings)(config);
   return { settings, games: Schema.decodeUnknownSync(Games)(settings.Games) };
 }
 
-
 export function launchOptions(config: string): string | undefined {
   const value = decodeSettings(config).games?.w3?.AdditionalLaunchArguments;
   return typeof value === "string" && value !== "" ? value : undefined;
 }
-
 
 export function withLaunchOptions(config: string, options: string | undefined): string {
   const { settings, games = {} } = decodeSettings(config);
@@ -125,15 +96,9 @@ export function withLaunchOptions(config: string, options: string | undefined): 
 const SIGNED_IN = /\[BNLogin\] .*Logged into Battle\.net successfully/;
 export const signedIn = (log: string) => SIGNED_IN.test(log);
 
-
 export const launchRequested = (log: string) => /\[GameLaunchController\] .*LaunchBinary: uid=w3\b/.test(log);
 
 export type LaunchOutcome = { readonly kind: "running" } | { readonly kind: "failed"; readonly reason: string };
-
-
-
-
-
 
 export function launchOutcome(log: string): LaunchOutcome | undefined {
   for (const line of log.split("\n")) {
@@ -143,11 +108,6 @@ export function launchOutcome(log: string): LaunchOutcome | undefined {
   }
   return undefined;
 }
-
-
-
-
-
 
 export const isErrorDialog = (process: ProcessInfo) => /\\Warcraft III\\_retail_\\x86_64\\BlizzardError\.exe(?:\s|"|$)/i.test(commandLine(process));
 
@@ -165,15 +125,7 @@ export type LauncherHealth =
 
 const LOGIN_REJECTED = /ERROR_TOKEN_NOT_FOUND/;
 
-
 export type LoginForm = "Login" | "LoginCredential";
-
-
-
-
-
-
-
 
 export function loginForm(lines: readonly string[]): LoginForm | undefined {
   let form: LoginForm | undefined;
@@ -188,13 +140,6 @@ const SSO_FAILED = /GenerateAuth.*(?:fail|error)|SSO token generation error/i;
 const RPC_TIMEOUT = /ERROR_RPC_REQUEST_TIMED_OUT/;
 
 const RPC_TIMEOUTS_FAILING = 2;
-
-
-
-
-
-
-
 
 export function launcherHealth(log: string): LauncherHealth {
   const lines = log.split("\n");
@@ -220,12 +165,6 @@ export function launcherHealth(log: string): LauncherHealth {
 
 const SAVED_LOGIN_KEY = "[Software\\\\Blizzard Entertainment\\\\Battle.net\\\\UnifiedAuth]";
 
-
-
-
-
-
-
 export function withoutSavedLogin(userReg: string): string {
   const lines = userReg.split("\n");
   const kept: string[] = [];
@@ -239,6 +178,5 @@ export function withoutSavedLogin(userReg: string): string {
   }
   return kept.join("\n");
 }
-
 
 export const hasSavedLogin = (userReg: string) => withoutSavedLogin(userReg) !== userReg;

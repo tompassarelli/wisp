@@ -1,8 +1,3 @@
-
-
-
-
-
 import { join } from "node:path";
 import { Cause, Clock, Console, Effect, Exit, Option, Schema } from "effect";
 import { mapCompiler, report } from "../../compiler";
@@ -14,7 +9,6 @@ import { emitJson } from "../jsonResults";
 import { type NativeCase, checkNative, fitNativeCost, nativeCheckLines, parseNativeReadings, parsePerfSamples } from "../nativeFit";
 import { type NativeCostModel, WARCRAFT_COST } from "../../../src/headless/nativeCost";
 
-
 export interface LuaBuild {
   readonly config: string;
   readonly bundle: string;
@@ -23,11 +17,6 @@ export interface LuaBuild {
 export interface PerfProject {
 
   readonly map: LuaBuild;
-
-
-
-
-
 
   readonly program: LuaBuild;
 
@@ -87,12 +76,9 @@ const compare = (output: PerfOutput): Command => (args) => Effect.gen(function*(
   if (!output.json) yield* Console.log(`B is no worse than A beyond ${threshold * 100}%`);
 });
 
-
 const DEFAULT_FRAMES = 1800;
 
-
 const projectRuns = (project: PerfProject): Readonly<Record<string, LuaBuild>> => ({ [project.defaultRun ?? "journey"]: project.map, ...project.runs });
-
 
 export const measureRun = (project: PerfProject, name: string, frames: number, samples: boolean) => Effect.gen(function*() {
   const map = projectRuns(project)[name];
@@ -117,7 +103,6 @@ const readText = (path: string) => Effect.tryPromise({
   catch: (cause) => new PerfFailure({ problem: `${path}: ${describeCause(cause)}` }),
 });
 
-
 const readCase = (samplesText: string, readingsPath: string, slot: number) => Effect.gen(function*() {
   const frames = parsePerfSamples(samplesText).get(slot);
   if (frames === undefined || frames.length === 0) return yield* new PerfFailure({ problem: `the samples have no frames of p${slot}: run perf with --samples` });
@@ -128,11 +113,6 @@ const readCase = (samplesText: string, readingsPath: string, slot: number) => Ef
 
 const modelLine = (model: NativeCostModel) =>
   `model: Lua factor ${model.luaFactor.toFixed(2)} x ${model.hostUsPerThousandInstructions.toFixed(1)} µs per 1000 instructions, native call ${model.nativeCallUs} µs, collector ${model.collectorUsPerKb} µs per KB, typing ${model.typingUsPerCharacterSquared} µs per character squared`;
-
-
-
-
-
 
 const native = (project: PerfProject, output: PerfOutput): Command => (args) => Effect.gen(function*() {
   const [samples] = flagValues(args, "samples");
@@ -150,11 +130,6 @@ const native = (project: PerfProject, output: PerfOutput): Command => (args) => 
     return yield* new PerfFailure({ problem: "the prediction misses native by more than 20%, or the readings show no p95" });
   }
 });
-
-
-
-
-
 
 const fit = (output: PerfOutput): Command => (args) => Effect.gen(function*() {
   const [slotText = "0"] = flagValues(args, "slot");
@@ -182,8 +157,6 @@ const fit = (output: PerfOutput): Command => (args) => Effect.gen(function*() {
   if (!output.json) yield* Console.log(lines.join("\n"));
 });
 
-
-
 const perf = (project: PerfProject, output: PerfOutput): Command => (args) => Effect.gen(function*() {
   if (args[0] === "compare") return yield* compare(output)(args.slice(1));
   if (args[0] === "native") return yield* native(project, output)(args.slice(1));
@@ -209,7 +182,6 @@ const perf = (project: PerfProject, output: PerfOutput): Command => (args) => Ef
     return yield* new PerfFailure({ problem: `the run found ${measured.problems} problem(s); its frames are not a measurement` });
   }
 });
-
 
 export const makePerf = (project: PerfProject): Command => (args) => Effect.gen(function*() {
   const json = args.includes("--json");

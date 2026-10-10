@@ -1,17 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import { Console, Effect, Layer } from "effect";
 import { Clients, type Ink } from "../clients";
 import { type Command, UsageFailure, flagValues } from "../command";
@@ -25,7 +11,6 @@ const numbers = (values: readonly string[], count: number) => {
   return parsed.length === count && parsed.every(Number.isInteger) ? parsed : undefined;
 };
 
-
 const watchAction = (clientsFile: string, action: "wait", name: string | undefined, rest: readonly string[], watch: WatchOptions) => Effect.gen(function*() {
   const [target] = yield* selectClients(yield* watchedClients(clientsFile), name === undefined ? [] : [name]);
   if (name === undefined || target === undefined) return yield* new UsageFailure({ problem: `${action} takes CLIENT` });
@@ -38,11 +23,6 @@ const watchAction = (clientsFile: string, action: "wait", name: string | undefin
   const view = yield* waitFor(target, inState(...(kinds as StateKind[])), { what: kinds.join(" or "), seconds: Number(seconds), failOn: FAIL_ON.filter((kind) => !kinds.includes(kind)) });
   yield* Console.log(describeView(view));
 }).pipe(Effect.provide(ClientWatch.layer(watch)), step(`${action} ${name ?? ""}`));
-
-
-
-
-
 
 export const makeClient = (stateFilePath: string, watch: WatchOptions = {}, doctor?: Command, signOut?: Command): Command => ([action, name, ...rest]) => action === "start" ? (doctor === undefined ? Effect.fail(new UsageFailure({ problem: "the game has not declared client recovery" })) : serviceStart(stateFilePath, [...(name === undefined ? [] : [name]), ...rest], doctor, watch)) : action === "stop" ? serviceStop(stateFilePath, [...(name === undefined ? [] : [name]), ...rest]) : action === "status" ? serviceStatus(stateFilePath, [...(name === undefined ? [] : [name]), ...rest], watch) : action === "sign-out" ? (signOut === undefined ? Effect.fail(new UsageFailure({ problem: "the game has not declared client sign-out" })) : signOut([...(name === undefined ? [] : [name]), ...rest])) : action === "watch" ? makeWatch(stateFilePath, watch)([...(name === undefined ? [] : [name]), ...rest]) : action === "doctor" ? (doctor === undefined ? Effect.fail(new UsageFailure({ problem: "the game has not declared client recovery" })) : serviceDoctor(stateFilePath, [...(name === undefined ? [] : [name]), ...rest], doctor)) : action === "wait" ? watchAction(stateFilePath, action, name, rest, watch) : Effect.gen(function*() {
   const clients = yield* Clients;

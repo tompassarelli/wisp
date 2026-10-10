@@ -16,7 +16,6 @@ const previous = 1 - pow2(-23);
 const quantum = pow2(-149);
 const maximum = 16777215 * pow2(104);
 
-
 const same = (actual: number, expected: number) =>
   assertEquals(actual === expected ? 1 / actual === 1 / expected : actual !== actual && expected !== expected, true, `${actual} vs ${expected}`);
 

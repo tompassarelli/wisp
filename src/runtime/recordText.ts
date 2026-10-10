@@ -1,14 +1,6 @@
-
-
 // Lua32's seven-digit float text loses bits; records must retain exact values and Lua number kinds.
 
-
-
 // Tokens use NAME=VALUE, NAME{, NAME[, NAME#, } and ]; strings percent-escape bytes outside letters, digits, _, . and -.
-
-
-
-
 
 // %XX. Undefined fields and elements are left out, as Lua leaves them out.
 
@@ -17,7 +9,6 @@ import { floorDiv } from "../sim/intMath";
 type Fields = Readonly<Record<string, unknown>>;
 
 const isFields = (value: unknown): value is Fields => typeof value === "object" && value !== null;
-
 
 const MAX_DEPTH = 32;
 const TWO_26 = 67108864.0;
@@ -34,7 +25,6 @@ function isName(text: string): boolean {
   return true;
 }
 
-
 function isDecimal(text: string): boolean {
   const start = text.charAt(0) === "-" ? 1 : 0;
   if (text.length <= start) return false;
@@ -44,9 +34,6 @@ function isDecimal(text: string): boolean {
 
 // Lua distinguishes integers from floats in their printed form; Bun integers are restricted to signed 32 bits.
 
-
-
-
 const isInteger = (value: number) => isDecimal(`${value}`) && value >= SMALLEST_INTEGER && value <= LARGEST_INTEGER;
 
 function infinity(): number {
@@ -55,7 +42,6 @@ function infinity(): number {
   for (let step = 1; step <= 6; step++) result *= result;
   return result;
 }
-
 
 function realText(value: number): string {
   if (value !== value) return "~nan";
@@ -157,9 +143,7 @@ function parseValue(text: string): unknown {
   return parseInteger(text);
 }
 
-
 const isFieldName = (text: string) => isName(text) && !isDecimal(text);
-
 
 function integerName(text: string): number | undefined {
   const value = parseInteger(text);
@@ -168,21 +152,13 @@ function integerName(text: string): number | undefined {
 
 // for...in returns numeric integer keys in Lua and string keys in Bun.
 
-
-
 function integerKey(key: string): number | undefined {
   const raw: unknown = key;
   if (typeof raw === "number") return isInteger(raw) ? raw : undefined;
   return integerName(key);
 }
 
-
-
-
-
-
 export class IntegerKeysUndeclared extends Error {}
-
 
 interface Writer {
   readonly tokens: string[];
@@ -190,18 +166,11 @@ interface Writer {
   readonly path: string[];
 }
 
-
 function undeclared(writer: Writer, why: string): never {
   throw new IntegerKeysUndeclared(`record text: ${writer.path.join(".")} ${why}`);
 }
 
 // Lua arrays use integer keys from 1 and omit undefined elements; integer-keyed records require a declared field name.
-
-
-
-
-
-
 
 function arrayLength(value: Fields): number | undefined | false {
   let length: number | undefined;
@@ -218,9 +187,7 @@ function arrayLength(value: Fields): number | undefined | false {
   return undefined;
 }
 
-
 const isList = (_value: unknown, length: number | undefined): _value is readonly unknown[] => length !== undefined;
-
 
 function isKeyed(value: Fields): boolean {
   let numbers = false;
@@ -275,14 +242,6 @@ function writeFields(writer: Writer, record: Fields, depth: number): boolean {
 
 // Lua cannot distinguish arrays from integer-keyed records; declare keyed fields to preserve keys on round trips.
 
-
-
-
-
-
-
-
-
 export function recordTokens(record: object, keyedByInteger: readonly string[] = []): string[] | undefined {
   if (!isFields(record) || arrayLength(record) !== undefined) return undefined;
   const keyed: Record<string, boolean> = {};
@@ -290,7 +249,6 @@ export function recordTokens(record: object, keyedByInteger: readonly string[] =
   const writer: Writer = { tokens: [], keyed, path: [] };
   return writeFields(writer, record, 0) ? writer.tokens : undefined;
 }
-
 
 interface Open {
   readonly fields: Record<string, unknown> | undefined;
@@ -322,7 +280,6 @@ function opened(last: string): Open {
   return { fields: undefined, items: undefined, keyed: {} };
 }
 
-
 export function parseRecord(tokens: readonly string[]): Record<string, unknown> | undefined {
   const root: Record<string, unknown> = {};
   const stack: Open[] = [{ fields: root, items: undefined, keyed: undefined }];
@@ -348,7 +305,6 @@ export function parseRecord(tokens: readonly string[]): Record<string, unknown> 
   return stack.length === 1 ? root : undefined;
 }
 
-
 export function tokenLines(tokens: readonly string[], width: number): string[] {
   const lines: string[] = [];
 
@@ -366,7 +322,6 @@ export function tokenLines(tokens: readonly string[], width: number): string[] {
   if (line.length > 0) lines.push(line.join(" "));
   return lines;
 }
-
 
 export function lineTokens(lines: readonly string[]): string[] {
   const tokens: string[] = [];

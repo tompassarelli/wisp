@@ -1,19 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -26,12 +10,6 @@ import { type CpuPressure, ResourceAccounting } from "../platform/services";
 import { TEST_COST_OUT_ENV, addCost, report, type Costs } from "./testCost";
 import { TEST_PHASE_ENV, TIMING_TEST_PREFIX } from "./timingTest";
 
-
-
-
-
-
-
 export const BUSY_PRESSURE = 30;
 
 export const TEST_TIMEOUT_MS = 60_000;
@@ -41,10 +19,6 @@ const TIMING_ATTEMPTS = 3;
 const QUIET_WAIT = "10 minutes";
 
 const LEASE_SECONDS = 900;
-
-
-
-
 
 const LEASE_WAIT_MINUTES = 3;
 
@@ -58,11 +32,9 @@ export class TestRunFailure extends Schema.TaggedError<TestRunFailure>()("TestRu
   }
 }
 
-
 interface Reading extends CpuPressure {
   readonly atMs: number;
 }
-
 
 const readPressure = ResourceAccounting.use((accounting) => Effect.sync((): Reading | undefined => {
   const pressure = accounting.cpuPressure();
@@ -75,7 +47,6 @@ export interface PressureDuring {
 
   readonly average: number | undefined;
 }
-
 
 export const withPressure = <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.gen(function*() {
   const first = yield* readPressure;
@@ -94,7 +65,6 @@ export const withPressure = <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.ge
 
 const percent = (value: number | undefined) => (value === undefined ? "unknown" : `${Math.round(value)}%`);
 
-
 const run = (command: string, args: readonly string[], env: Readonly<Record<string, string>> = {}) =>
   ChildProcessSpawner.ChildProcessSpawner.use((spawner) => spawner.exitCode(ChildProcess.make(command, args, {
     env, extendEnv: true, stdin: "inherit", stdout: "inherit", stderr: "inherit",
@@ -103,14 +73,11 @@ const run = (command: string, args: readonly string[], env: Readonly<Record<stri
     Effect.mapError((failure) => new TestRunFailure({ problem: `${command} ${args.join(" ")}: ${failure.message}` })),
   );
 
-
 const VALUE_FLAGS = new Set(["-t", "--test-name-pattern", "--timeout", "--rerun-each", "--retry", "--reporter", "--reporter-outfile", "--preload", "--max-concurrency", "--parallel", "--path-ignore-patterns"]);
-
 
 export function pathFilters(args: readonly string[]): string[] {
   return args.filter((arg, index) => !arg.startsWith("-") && !VALUE_FLAGS.has(args[index - 1] ?? ""));
 }
-
 
 export function timingTestFiles(root: string, filters: readonly string[]): string[] {
   const files: string[] = [];
@@ -122,16 +89,13 @@ export function timingTestFiles(root: string, filters: readonly string[]): strin
   return files.sort();
 }
 
-
 const COST_PRELOAD = join(import.meta.dir, "testCostPreload.ts");
-
 
 const startedFile = (resultsFile: string) => `${resultsFile}.started`;
 
 const TimingResult = Schema.Struct({ file: Schema.String, code: Schema.Int, peak: Schema.optionalKey(Schema.Finite), average: Schema.optionalKey(Schema.Finite) });
 type TimingResult = typeof TimingResult.Type;
 const decodeTimingResult = Schema.decodeUnknownEffect(Schema.fromJsonString(TimingResult));
-
 
 const runTimingFiles = (resultsFile: string, files: readonly string[], args: readonly string[]) => Effect.gen(function*() {
   yield* Effect.sync(() => writeFileSync(startedFile(resultsFile), ""));
@@ -154,7 +118,6 @@ const runTimingFiles = (resultsFile: string, files: readonly string[], args: rea
   }
 });
 
-
 const capacityHelper = Effect.gen(function*() {
   const given = process.env["WISP_CAPACITY_HELPER"];
   if (given !== undefined) return existsSync(given) ? given : undefined;
@@ -165,9 +128,7 @@ const capacityHelper = Effect.gen(function*() {
   return Option.isSome(helper) && existsSync(helper.value) ? helper.value : undefined;
 });
 
-
 const insideLease = ResourceAccounting.use((accounting) => Effect.sync(accounting.insideCapacityLease));
-
 
 const timingPhase = (files: readonly string[], args: readonly string[], print: (line: string) => void) => Effect.acquireUseRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), "wisp-timing-"))),
@@ -207,7 +168,6 @@ const timingPhase = (files: readonly string[], args: readonly string[], print: (
   (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
 );
 
-
 const quiet = readPressure.pipe(
   Effect.repeat({ schedule: Schedule.spaced("5 seconds"), until: (reading) => reading === undefined || reading.avg10 <= BUSY_PRESSURE }),
   Effect.timeoutOption(QUIET_WAIT),
@@ -215,10 +175,6 @@ const quiet = readPressure.pipe(
 );
 
 export type Verdict = "passed" | "failed" | "inconclusive";
-
-
-
-
 
 export const timingTests = (files: readonly string[], args: readonly string[], print: (line: string) => void) => Effect.gen(function*() {
   const verdicts = new Map<string, Verdict>();
@@ -255,7 +211,6 @@ export const timingTests = (files: readonly string[], args: readonly string[], p
   return verdicts;
 });
 
-
 const CostRow = Schema.Struct({
   unit: Schema.optionalKey(Schema.String),
   tests: Schema.optionalKey(Schema.Int),
@@ -265,8 +220,6 @@ const CostRow = Schema.Struct({
   maxFrames: Schema.optionalKey(Schema.Finite),
 });
 const decodeCostRow = Schema.decodeUnknownEffect(Schema.fromJsonString(CostRow));
-
-
 
 export const runTests = (args: readonly string[], print: (line: string) => void = (line) => console.log(line)) => Effect.acquireUseRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), "wisp-test-cost-"))),

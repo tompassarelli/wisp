@@ -1,18 +1,12 @@
-
-
-
-
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ArchiveEntry } from "./mapBuild";
-
 
 export const FRAME_TYPES = ["FRAME", "BACKDROP", "TEXT", "GLUETEXTBUTTON"] as const;
 export type FrameType = (typeof FRAME_TYPES)[number];
 
 export const FRAME_POINTS = ["TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT"] as const;
 export type FramePoint = (typeof FRAME_POINTS)[number];
-
 
 export const WARCRAFT_TEMPLATES = ["ScriptDialogButton", "EscMenuBackdrop"] as const;
 const WARCRAFT_TEMPLATE_FDFS = new Map<string, string>([
@@ -88,7 +82,6 @@ const RESERVED_KEYS = new Set(["root", "toc"]);
 const capitalize = (key: string) => key.charAt(0).toUpperCase() + key.slice(1);
 const flatten = (nodes: readonly FrameNode[]): FrameNode[] => nodes.flatMap((node) => [node, ...flatten(node.children ?? [])]);
 
-
 export function frameDefinitionProblems(definition: FrameDefinition): string[] {
   const problems: string[] = [];
   if (!IDENTIFIER.test(definition.name)) problems.push(`definition name "${definition.name}" is not an identifier`);
@@ -134,7 +127,6 @@ export function frameDefinitionProblems(definition: FrameDefinition): string[] {
   return problems;
 }
 
-
 const fdfNumber = (value: number) => {
   if (!Number.isFinite(value)) throw new FrameDefinitionError([`number ${value} is not finite`]);
   const fixed = value.toFixed(6).replace(/\.?0+$/, "");
@@ -163,7 +155,6 @@ function fdfFrame(definition: FrameDefinition, node: FrameNode, name: string, pa
   lines.push(`${pad}}`);
   return lines;
 }
-
 
 const scriptNumber = (value: number) => {
   if (!Number.isFinite(value)) throw new FrameDefinitionError([`number ${value} is not finite`]);
@@ -202,7 +193,6 @@ function bindingsSource(definition: FrameDefinition, tocEntry: string): string {
   return lines.join("\n");
 }
 
-
 export function generateFrames(definition: FrameDefinition): GeneratedFrames {
   const problems = frameDefinitionProblems(definition);
   if (problems.length > 0) throw new FrameDefinitionError(problems);
@@ -218,10 +208,6 @@ export function generateFrames(definition: FrameDefinition): GeneratedFrames {
 
   return { fdfEntry, tocEntry, fdf: `${[...includes, ...rootLines].join("\n")}\n`, toc: `${fdfEntry}\r\n\r\n`, bindings: bindingsSource(definition, tocEntry) };
 }
-
-
-
-
 
 export function writeFrames(definition: FrameDefinition, importDir: string, bindingsFile: string): ArchiveEntry[] {
   const generated = generateFrames(definition);

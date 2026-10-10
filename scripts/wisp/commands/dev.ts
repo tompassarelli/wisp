@@ -1,12 +1,3 @@
-
-
-
-
-
-
-
-
-
 import { type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { availableParallelism } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
@@ -29,7 +20,6 @@ import { type Changes, type Selection, type TestDeclaration, type TestProcess, T
 import { step } from "../timings";
 import { TypeChecker, formatTypeError } from "../typeCheck";
 import { type HotProject, validateDataDirectories, waitForProcessStop } from "./hot";
-
 
 export interface DevProject {
 
@@ -65,13 +55,11 @@ const EDITOR_FILE = /^(?:\..*|.*~|.*\.sw[a-p]|4913)$/;
 
 const OUTPUT_LINES = 40;
 
-
 const cpuBudget = (limit: number | undefined) => Math.max(1, Math.floor(Math.min(availableParallelism(), limit ?? Infinity)));
 
 const seconds = (since: number) => `${((Date.now() - since) / 1000).toFixed(3).padStart(8)} s  `;
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 const indent = (text: string) => text.split("\n").map((line) => `           ${line}`).join("\n");
-
 
 class SavedFiles {
   private readonly hashes = new Map<string, number | bigint>();
@@ -83,7 +71,6 @@ class SavedFiles {
     for (const path of new Bun.Glob("*").scanSync({ cwd: root, onlyFiles: true })) if (PROJECT_FILE.test(path)) this.read(join(root, path));
   }
 
-
   follows(path: string): boolean {
     const local = relative(this.root, path);
     if (local.startsWith("..") || EDITOR_FILE.test(basename(path)) || local.split(sep).includes("node_modules")) return false;
@@ -93,7 +80,6 @@ class SavedFiles {
   isProjectFile(path: string): boolean {
     return dirname(relative(this.root, path)) === ".";
   }
-
 
   changes(paths: Iterable<string>): Changes {
     const changed: string[] = [];
@@ -134,7 +120,6 @@ interface ProcessResult {
   readonly failures: readonly string[];
 }
 
-
 function fileResult(paths: string, { exitCode, output }: ProcessOutput): ProcessResult {
   const passed = Number(/^\s*(\d+) pass$/m.exec(output)?.[1] ?? 0);
   if (exitCode === 0) return { passed, failures: [] };
@@ -145,7 +130,6 @@ function fileResult(paths: string, { exitCode, output }: ProcessOutput): Process
 
 const isRegistryResult = (value: unknown): value is RegistryResult =>
   typeof value === "object" && value !== null && "module" in value && "passed" in value && "failures" in value;
-
 
 function registryResult(modules: readonly TestUnit[], { exitCode, results, output }: ProcessOutput, local: (path: string) => string): ProcessResult {
   const reported = new Map(results.filter(isRegistryResult).map((result) => [result.module, result]));
@@ -166,7 +150,6 @@ function registryResult(modules: readonly TestUnit[], { exitCode, results, outpu
 const isJourneyOutcome = (value: unknown): value is JourneyOutcome =>
   typeof value === "object" && value !== null && ("stopped" in value || ("lines" in value && "problems" in value));
 
-
 export class TypeCheckFailure extends Schema.TaggedError<TypeCheckFailure>()("TypeCheckFailure", {
   operation: Schema.String,
   problem: Schema.String,
@@ -178,7 +161,6 @@ export class TypeCheckFailure extends Schema.TaggedError<TypeCheckFailure>()("Ty
 
 const typeChecking = <A>(operation: string, run: () => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => new TypeCheckFailure({ operation, problem: describeCause(cause) }) });
-
 
 interface HotSide {
 
@@ -199,9 +181,6 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
   const cpus = cpuBudget((yield* ResourceAccounting).cpuLimit());
 
   const behind = Bun.which("nice") === null ? [] : ["nice", "-n", "10"];
-
-
-
 
   const unitProcesses = cpus < CONCURRENT_CPUS ? Math.max(1, cpus - 2) : Math.floor(cpus / 2) - 1;
   const turns = cpus < CONCURRENT_CPUS ? Semaphore.makeUnsafe(Math.max(1, cpus - 1)) : undefined;
@@ -257,7 +236,6 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
     return fileResult(process.units.map((unit) => local(unit.path)).join(", "), output);
   }).pipe(Effect.catch((failure) => Effect.succeed({ passed: 0, failures: [`${process.units.map((unit) => local(unit.path)).join(", ")}: ${failure.message}`] })));
 
-
   const runSide = (units: readonly TestUnit[], audits: ReadonlyMap<string, readonly string[]>, count: number, savedAt: number) => Effect.gen(function*() {
 
     const alone = (path: string) => audits.has(path) || waiting.has(path);
@@ -287,7 +265,6 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
     yield* Console.log(`${seconds(savedAt)}unit tests: ${counts(passed, failed)} (${scope(units, selection)}${audits})`);
   });
 
-
   const ownJourney = Effect.gen(function*() {
     if (project.journey === undefined || journeys === undefined) return undefined;
     const { module, name, clients = 2 } = project.journey;
@@ -302,10 +279,6 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
     return { summary: `${name}: ${plural(outcome.problems, "problem")}`, report: outcome.lines.join("\n") };
   });
 
-
-
-
-
   const allJourneys = (selection: Selection, savedAt: number, before: Effect.Effect<void>) => Effect.gen(function*() {
     const units = selection.units.filter((unit) => plan.isJourney(unit.path));
     // @effect-diagnostics-next-line effectSucceedWithVoid:off -- an undefined result, which Effect.void's void type cannot satisfy
@@ -319,7 +292,6 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
     ];
     yield* Console.log(`${seconds(savedAt)}journeys: ${parts.join("; ")}${own?.report === undefined ? "" : `\n${indent(own.report)}`}`);
   });
-
 
   const run = (changes: Changes | undefined, savedAt: number) => Effect.gen(function*() {
     const saved = changes === undefined ? [] : [...changes.changed, ...changes.created, ...changes.deleted];
@@ -351,7 +323,6 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
   });
 
   for (const [path, why] of plan.alwaysRun()) yield* Console.log(`runs on every save: ${local(path)}: ${why}`);
-
 
   const events = yield* Effect.acquireRelease(Queue.unbounded<string>(), (queue) => Queue.shutdown(queue));
   const firstEvent = { at: 0 };
@@ -390,7 +361,6 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
   yield* Effect.forkScoped(worker);
   yield* waitForProcessStop;
 }));
-
 
 export const makeDev = (project: DevProject): Command => (args) => Effect.gen(function*() {
   const data = flagValues(args, "data");

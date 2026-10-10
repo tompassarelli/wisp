@@ -1,5 +1,3 @@
-
-
 import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
@@ -52,7 +50,6 @@ farmTest("[spec #7] a number or string tested for truthiness fails compilation o
   expect(reported.map((report) => report.replace(/,\d+\)/, ")"))).toEqual(rejected);
   expect(TRUTHINESS_MESSAGE("`||`")).toContain("compare explicitly, e.g. `!== 0`");
 }, 120_000);
-
 
 async function tsserver(cwd: string, probe: string, requests: readonly { readonly command: string; readonly arguments: object }[]) {
   const server = Bun.spawn([process.execPath, join(root, "node_modules/typescript/lib/tsserver.js"), "--disableAutomaticTypingAcquisition", "--pluginProbeLocations", probe], {

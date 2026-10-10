@@ -1,8 +1,3 @@
-
-
-
-
-
 import { Effect, Layer } from "effect";
 import type { Platform } from "../platform/services";
 import * as desktop from "../warcraft/desktop";
@@ -25,12 +20,10 @@ export interface DoctorDeclaration {
 
 const DOCUMENTS = "/drive_c/users/steamuser/Documents/Warcraft III";
 
-
 export const profileSettings = (entry: { readonly profile?: ClientProfile | undefined; readonly displaySettings?: Readonly<Record<string, string>> | undefined }) => {
   const settings = clientSettings(entry.profile ?? "minimal");
   return { ...settings, Video: { ...settings["Video"], ...entry.displaySettings } };
 };
-
 
 export const doctorTargets = (declaration: DoctorDeclaration, names: readonly string[] = []) => Effect.gen(function*() {
   const config = yield* desktop.readClientsFile(declaration.clientsFile).pipe(Effect.mapError((cause) => new DoctorStop({ problem: cause.message })));
@@ -54,25 +47,18 @@ export const doctorTargets = (declaration: DoctorDeclaration, names: readonly st
   }));
 });
 
-
 export const doctorLayer = (declaration: DoctorDeclaration, tools: Partial<PlayTools> = {}): Layer.Layer<PlayMachine | DoctorHands, CommandFailure, Platform> =>
   Layer.merge(playMachineLayer(tools), privateDoctorHands(declaration.clientsFile));
-
-
-
-
 
 export const clientsDoctor = (declaration: DoctorDeclaration, names: readonly string[] = [], print: (line: string) => void = console.log, tools: Partial<PlayTools> = {}) =>
   Effect.gen(function*() {
     return yield* doctor(yield* doctorTargets(declaration, names), print);
   }).pipe(Effect.provide(doctorLayer(declaration, tools)));
 
-
 export const makeDoctor = (declaration: DoctorDeclaration, watch: Layer.Layer<ClientWatch, CommandFailure, Platform>, tools: Partial<PlayTools> = {}): Command => (names) =>
   names.some((name) => name.startsWith("-"))
     ? Effect.fail(new UsageFailure({ problem: "doctor takes client names only" }))
     : clientsDoctor(declaration, names, (line) => console.log(line), tools).pipe(Effect.provide(watch), Effect.asVoid);
-
 
 export const makeSignOut = (declaration: DoctorDeclaration, tools: Partial<PlayTools> = {}): Command => (names) =>
   names.length === 0 || names.some((name) => name.startsWith("-"))

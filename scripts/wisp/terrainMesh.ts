@@ -7,7 +7,6 @@ export interface TerrainCell {
   readonly corners: readonly [TerrainPoint, TerrainPoint, TerrainPoint, TerrainPoint];
 }
 
-
 export function terrainCells(terrain: Terrain): TerrainCell[] {
   const cells: TerrainCell[] = [];
   for (let row = 0; row < terrain.rows - 1; row++) for (let column = 0; column < terrain.columns - 1; column++) {

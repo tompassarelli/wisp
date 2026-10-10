@@ -1,4 +1,3 @@
-
 export function vocabularyProblems(source: string, vocabulary: string): readonly string[] {
   const nouns = new Set([...vocabulary.matchAll(/^\| `([\w-]+)` \|/gm)].map((match) => match[1]));
   const flags = new Set([...vocabulary.matchAll(/^\| `(--[\w-]+)/gm)].map((match) => match[1]));

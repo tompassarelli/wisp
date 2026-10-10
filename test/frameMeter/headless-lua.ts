@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import { luaLockstep, readFile } from "../../src/headless/lua";
 import { runLuaPerf } from "../../src/headless/luaPerf";
 import { frameCostFile } from "../../src/runtime/frameCost";

@@ -1,7 +1,3 @@
-
-
-
-
 import { generateMDX, parseMDL } from "../../vendor/war3-model.mjs";
 import { BOARD, BOARD_EXTENT, CLIP, CLIP_SEQUENCES, CLOCK_DX, CLOCK_DY, GLOBAL_LENGTH, MARK, ORIGIN_DY, ORIGIN_HALF, RULER, RULER_SEQUENCES, type RulerSequence } from "./layout";
 
@@ -20,7 +16,6 @@ interface Quad {
   readonly high: readonly [number, number];
   readonly z: number;
 }
-
 
 function geoset(quad: Quad, extent: string): string {
   const [x0, y0] = quad.low;
@@ -84,7 +79,6 @@ ${clock}PivotPoints ${bones} { ${Array.from({ length: bones }, () => "{ 0, 0, 0 
 
 const square = (bone: number, x: number, y: number, half: number, z: number): Quad => ({ bone, low: [x - half, y - half], high: [x + half, y + half], z });
 
-
 function needleKeys(sequences: readonly RulerSequence[]): [number, number, number][] {
   return sequences.flatMap((sequence) => sequence.keys.map(([offset, dx]): [number, number, number] => [sequence.start + offset, dx, sequence.lane]));
 }
@@ -96,7 +90,6 @@ function ruler(name: string, sequences: readonly RulerSequence[]): string {
 
 const STILL: readonly RulerSequence[] = [{ name: "Stand", start: 0, end: 1000, looping: true, lane: 0, keys: [] }];
 
-
 export const FIXTURE_MDL: Readonly<Record<string, string>> = {
   [RULER]: ruler("Wisp58Ruler", RULER_SEQUENCES),
   [CLIP]: ruler("Wisp58Clip", CLIP_SEQUENCES),
@@ -104,7 +97,6 @@ export const FIXTURE_MDL: Readonly<Record<string, string>> = {
 
   [BOARD]: mdl({ name: "Wisp58Board", quads: [{ bone: 0, ...BOARD_EXTENT, z: 1 }], sequences: STILL, needle: [] }),
 };
-
 
 export function fixtureModels(): Map<string, Uint8Array> {
   return new Map(Object.entries(FIXTURE_MDL).map(([path, text]) => [path, new Uint8Array(generateMDX(parseMDL(text)))]));

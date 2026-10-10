@@ -1,8 +1,3 @@
-
-
-
-
-
 import { AssertionFailure } from "./testing";
 
 export const REPRO_HEADER = "wisp-repro 1";
@@ -24,7 +19,6 @@ export interface Repro extends ReproHeader {
   readonly lines: readonly string[];
 }
 
-
 export interface ReproResult {
 
   readonly checksum: string;
@@ -34,9 +28,7 @@ export interface ReproResult {
   readonly problems: readonly string[];
 }
 
-
 export type ReproReplay = (this: void, repro: Repro) => ReproResult;
-
 
 export interface ReproInspection {
   readonly frame: number;
@@ -45,17 +37,14 @@ export interface ReproInspection {
   readonly fields: readonly { readonly path: string; readonly value: string }[];
 }
 
-
 export type ReproInspector = (this: void, repro: Repro, frame: number) => ReproInspection | string;
 
 /** A new name for each repro a client saves, as Preloader runs the first content it read from a name for the rest of the session. */
 export const reproFile = (slot: number, frame: number, serial: number, prefix = "wisp") => `${prefix}-repro-p${slot}-f${frame}-${serial}.txt`;
 
-
 export function reproLines({ build, frame, checksum }: ReproHeader, lines: readonly string[]): string[] {
   return [REPRO_HEADER, `build ${build}`, `frame ${frame}`, `checksum ${checksum}`, ...lines, `end ${lines.length}`];
 }
-
 
 function after(line: string | undefined, word: string): string | undefined {
   if (line === undefined || !line.startsWith(`${word} `)) return undefined;
@@ -74,7 +63,6 @@ function count(text: string | undefined): number | undefined {
   return value;
 }
 
-
 export function parseRepro(lines: readonly string[]): Repro | string {
   if (lines[0] !== REPRO_HEADER) return `not a repro: its first line isn't "${REPRO_HEADER}"`;
   const build = after(lines[1], "build");
@@ -85,10 +73,6 @@ export function parseRepro(lines: readonly string[]): Repro | string {
   if (end === undefined || end !== lines.length - 5) return "the repro is cut short: its end line doesn't count its lines";
   return { build, frame, checksum, lines: lines.slice(4, lines.length - 1) };
 }
-
-
-
-
 
 export function assertReproLands(lines: readonly string[], replay: ReproReplay): void {
   const repro = parseRepro(lines);

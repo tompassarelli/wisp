@@ -1,6 +1,3 @@
-
-
-
 import { readFileSync } from "node:fs";
 import { payloadKey } from "../src/runtime/gameFiles";
 import { checksum } from "../src/runtime/payload";
@@ -12,7 +9,6 @@ export interface Bundle {
 
   readonly key: string;
 }
-
 
 export function loadBundle(path: string, sourceMapDirectory: string): Bundle {
   const bytes = readFileSync(path);
@@ -28,11 +24,6 @@ function renameOnly(script: string, from: string, to: string): string {
   return script.replace(declaration, `function ${to}()`);
 }
 
-
-
-
-
-
 export function typescriptBase(baseMapScript: string, mapConfig: string): string {
   const script = renameOnly(renameOnly(baseMapScript, "main", "baseMain"), "config", "baseConfig");
   const initialization = /^RunInitializationTriggers\(\)$/gm;
@@ -41,7 +32,6 @@ export function typescriptBase(baseMapScript: string, mapConfig: string): string
 
   return `${script.replace(initialization, "-- Suppressed default melee initialization for the custom map.")}\n${mapConfig}`;
 }
-
 
 export function composeScript(base: string, bundle: Bundle | undefined, entryGlobal = "wispTs"): string {
   if (bundle === undefined) throw new Error("a map needs the TypeScript bundle");

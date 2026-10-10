@@ -1,8 +1,4 @@
-
-
 // W3GS uses F7/type/u16 length/little-endian payload; layouts follow W3Champions' Flo (MPL-2.0, github.com/BogdanW3/W3C-Flo crates/w3gs) and wc3-slop-lan.
-
-
 
 export const PACKET = {
   PingFromHost: 0x01,
@@ -37,7 +33,6 @@ export const PACKET = {
 
 export const PROTOBUF = { PlayerProfile: 0x03, PlayerSkins: 0x04, PlayerUnknown5: 0x05 } as const;
 
-
 export const LEAVE_REASONS: Readonly<Record<number, string>> = {
   0x01: "disconnect",
   0x07: "lost",
@@ -52,7 +47,6 @@ export interface Packet {
   readonly type: number;
   readonly payload: Uint8Array;
 }
-
 
 export class Writer {
   private chunks: number[] = [];
@@ -86,7 +80,6 @@ export class Writer {
     return Uint8Array.from(this.chunks);
   }
 }
-
 
 export class Reader {
   offset = 0;
@@ -152,7 +145,6 @@ export function encodePacket(type: number, payload: Uint8Array = new Uint8Array(
   return packet;
 }
 
-
 export function splitPackets(buffer: Uint8Array): { readonly packets: Packet[]; readonly rest: Uint8Array } {
   const packets: Packet[] = [];
   let at = 0;
@@ -174,8 +166,6 @@ export function sockAddr(writer: Writer, address?: { readonly ip: readonly numbe
 }
 
 export const crc32 = (bytes: Uint8Array): number => Bun.hash.crc32(bytes) >>> 0;
-
-
 
 export const SLOT_OPEN = 0;
 export const SLOT_CLOSED = 1;
@@ -234,8 +224,6 @@ export const slotInfo = (table: SlotTable) => encodePacket(PACKET.SlotInfo, enco
 export const slotInfoJoin = (table: SlotTable, playerId: number, address: { readonly ip: readonly number[]; readonly port: number }) =>
   encodePacket(PACKET.SlotInfoJoin, sockAddr(encodeSlotTable(new Writer(), table).u8(playerId), address).bytes());
 
-
-
 export interface ReqJoin {
   readonly hostCounter: number;
   readonly entryKey: number;
@@ -279,16 +267,12 @@ function protoField(writer: Writer, field: number, value: number | string | Uint
 
 const protobuf = (type: number, message: Uint8Array) => encodePacket(PACKET.ProtoBuf, new Writer().u8(type).u32(message.length).raw(message).bytes());
 
-
 export const playerSkins = (playerId: number) => protobuf(PROTOBUF.PlayerSkins, protoField(new Writer(), 1, playerId).bytes());
-
 
 export const playerProfile = (playerId: number, name: string) =>
   protobuf(PROTOBUF.PlayerProfile, protoField(protoField(protoField(new Writer(), 1, playerId), 2, name), 4, "p042").bytes());
 
 export const protobufType = (payload: Uint8Array) => payload[0] ?? 0;
-
-
 
 export interface MapCheck {
   readonly path: string;
@@ -301,21 +285,15 @@ export interface MapCheck {
 export const mapCheck = (map: MapCheck) =>
   encodePacket(PACKET.MapCheck, new Writer().u32(1).cstring(map.path).u32(map.size).u32(map.crc32).u32(map.xoro).raw(map.sha1).bytes());
 
-
 export function decodeMapSize(payload: Uint8Array): { readonly flag: number; readonly size: number } {
   const reader = new Reader(payload);
   reader.u32();
   return { flag: reader.u8(), size: reader.u32() };
 }
 
-
-
-
 export const DEFAULT_GAME_FLAGS = 0x00000002 | 0x00000800 | 0x00001000 | 0x00003000 | 0x00004000 | 0x00060000;
 
 // Stat strings encode seven bytes after an oddness mask; even bytes add one so no encoded byte is zero.
-
-
 
 export function encodeStatString(source: Uint8Array): Uint8Array {
   const out: number[] = [];
@@ -352,14 +330,10 @@ export interface GameSettings {
   readonly sha1: Uint8Array;
 }
 
-
 export function encodeGameSettings(settings: GameSettings): Uint8Array {
   const plain = new Writer().u32(settings.flags).u8(0).u16(settings.width).u16(settings.height).u32(settings.xoro).cstring(settings.path).cstring(settings.hostName).u8(0).raw(settings.sha1).bytes();
   return new Writer().raw(encodeStatString(plain)).u8(0).bytes();
 }
-
-
-
 
 export const PRODUCT = "PX3W";
 
@@ -376,7 +350,6 @@ export interface GameInfo {
   readonly port: number;
 }
 
-
 export const gameInfo = (info: GameInfo) =>
   encodePacket(PACKET.GameInfo, new Writer().raw(new TextEncoder().encode(info.product)).u32(info.version).u32(info.hostCounter).u32(info.entryKey)
     .cstring(info.name).u8(0).raw(encodeGameSettings(info.settings)).u32(info.slots).u32(0x00100000).u32(1).u32(info.openSlots).u32(info.uptimeSeconds).u16(info.port).bytes());
@@ -385,8 +358,6 @@ export function decodeSearchGame(payload: Uint8Array): { readonly product: strin
   const reader = new Reader(payload);
   return { product: new TextDecoder().decode(reader.take(4)), version: reader.u32() };
 }
-
-
 
 export const countDownStart = () => encodePacket(PACKET.CountDownStart);
 export const countDownEnd = () => encodePacket(PACKET.CountDownEnd);
@@ -397,13 +368,10 @@ export const pingFromHost = (ticks: number) => encodePacket(PACKET.PingFromHost,
 
 export const decodeLeaveReq = (payload: Uint8Array) => new Reader(payload).u32();
 
-
-
 export interface PlayerAction {
   readonly playerId: number;
   readonly data: Uint8Array;
 }
-
 
 export function incomingAction(milliseconds: number, actions: readonly PlayerAction[]): Uint8Array {
   const writer = new Writer().u16(milliseconds);
@@ -428,7 +396,6 @@ export function decodeIncomingAction(payload: Uint8Array): { readonly millisecon
   return { milliseconds, actions };
 }
 
-
 export function decodeOutgoingAction(payload: Uint8Array): Uint8Array {
   const reader = new Reader(payload);
   const crc = reader.u32();
@@ -439,14 +406,11 @@ export function decodeOutgoingAction(payload: Uint8Array): Uint8Array {
 
 export const outgoingAction = (data: Uint8Array) => encodePacket(PACKET.OutgoingAction, new Writer().u32(crc32(data)).raw(data).bytes());
 
-
 export function decodeKeepAlive(payload: Uint8Array): number {
   const reader = new Reader(payload);
   reader.u8();
   return reader.u32();
 }
-
-
 
 export const CHAT = { Chat: 0x10, TeamChange: 0x11, ColorChange: 0x12, RaceChange: 0x13, HandicapChange: 0x14, Scoped: 0x20 } as const;
 
@@ -469,7 +433,6 @@ export function decodeChat(payload: Uint8Array): Chat {
   if (kind === CHAT.Scoped) return { to, from, kind, scope: reader.u32(), text: reader.cstring() };
   return { to, from, kind, value: reader.u8() };
 }
-
 
 export function chatFromHost(chat: Chat): Uint8Array {
   const writer = new Writer().u8(chat.to.length).raw(chat.to).u8(chat.from).u8(chat.kind);

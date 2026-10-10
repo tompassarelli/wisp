@@ -1,16 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
 import { FILE_SLOTS } from "../runtime/gameFiles";
 import { runtimeConfiguration } from "../runtime/config";
 import { type FrameWindow, frameCostFile, frameCostHeading, frameWindowLine, reportNumber, spread } from "../runtime/frameCost";
@@ -18,7 +5,6 @@ import { MAX_FRAME_COST_CAPTURE, frameCostCaptureFile, frameCostCaptureHeading, 
 import { f32 } from "../sim/f32";
 import { floorMod } from "../sim/intMath";
 import { on, trampoline } from "./dispatch";
-
 
 export const FRAME_WINDOW = 120;
 
@@ -43,7 +29,6 @@ type Run = (this: void, name: string) => void;
 interface DispatchTable {
   run: Run;
 }
-
 
 interface Ring {
   readonly values: number[];
@@ -138,12 +123,10 @@ function dispatchTable(): DispatchTable {
   return table;
 }
 
-
 function installedVersion(): number {
   const globals = globalThis as Record<`${string}Hot`, { readonly applied: number } | undefined>;
   return globals[`${runtimeConfiguration().globalPrefix}Hot`]?.applied ?? 0;
 }
-
 
 function findClock(): { clock: ((this: void) => number) | undefined; step: number } {
   if (typeof os !== "object" || os === null || typeof os.clock !== "function") return { clock: undefined, step: 0 };
@@ -163,7 +146,6 @@ function findClock(): { clock: ((this: void) => number) | undefined; step: numbe
 }
 
 const milliseconds = (microseconds: number) => reportNumber(microseconds / 1000);
-
 
 function ninetyFifth(source: Ring): number {
   const sorted: number[] = [];
@@ -193,7 +175,6 @@ function writeReport(state: MeterState, before: { readonly version: number; read
   Preload(frameWindowLine("after", microseconds(summary(state, state.current))));
   PreloadGenEnd(frameCostFile(GetPlayerId(GetLocalPlayer()), runtimeConfiguration().filePrefix));
 }
-
 
 export function startFrameCostCapture(frames: number): number {
   if (frames < 1 || frames > MAX_FRAME_COST_CAPTURE || frames !== Math.floor(frames)) throw new Error("frame cost capture needs 1 to 18000 frames");
@@ -231,7 +212,6 @@ function captureFrame(state: MeterState, calls: number, catchUp: number, version
   }
   PreloadGenEnd(frameCostCaptureFile(GetPlayerId(GetLocalPlayer()), capture.run, runtimeConfiguration().filePrefix));
 }
-
 
 function endFrame(state: MeterState): void {
   const calls = state.calls - state.frameCalls;
@@ -293,7 +273,6 @@ function toggle(): void {
   state.frameCalls += state.calls - calls;
 }
 
-
 function countCalls(state: MeterState): void {
   const globals = globalThis as Record<string, unknown>;
   // Only in Lua: a JavaScript host's global object holds its own capitalized constructors, which must stay untouched.
@@ -322,11 +301,6 @@ function createOverlay(): framehandle {
   return frame;
 }
 
-
-
-
-
-
 export function installFrameMeter(): void {
   const globals = globalThis as Record<`${string}FrameMeter`, MeterState | undefined>;
   const state = globals[`${runtimeConfiguration().globalPrefix}FrameMeter`];
@@ -338,10 +312,6 @@ export function installFrameMeter(): void {
   table.run = measured;
   on(TOGGLE, toggle);
 }
-
-
-
-
 
 export function startFrameMeter(options: FrameMeterOptions): void {
   const configuration = runtimeConfiguration();

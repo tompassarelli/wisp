@@ -2,17 +2,10 @@ import { type AnimationSequence, animationSample, type SavedAnimation } from "..
 
 const STEP_MS = 1000 / 60;
 
-
 export interface EmitterRenderer {
   update(delta: number): void;
   rendererData: { frame: number; animation: number; animationInfo: { Interval: ArrayLike<number> } };
 }
-
-
-
-
-
-
 
 export function advanceEmitters(renderer: EmitterRenderer, intervals: readonly { Interval: ArrayLike<number> }[], sequences: readonly AnimationSequence[], animation: SavedAnimation, kind: "effect" | "unit", clock: number, elapsed: number): number {
   const emitted = elapsed - STEP_MS;

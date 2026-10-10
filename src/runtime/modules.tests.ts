@@ -9,7 +9,6 @@ const set = (codes: readonly (readonly [string, string])[]): ModuleSet => ({
 
 const names = (pairs: readonly (readonly [string, string])[]) => pairs.map(([name]) => name).join(",");
 
-
 function published(files: readonly (readonly [string, string])[], path: string): string | undefined {
   for (const [name, text] of files) if (name === path) return text;
   return undefined;
@@ -74,7 +73,6 @@ test("[invariant] modules: once a state is installed, a version's delta carries 
   assertEquals(full?.texts.main, moduleChunk("return 1"));
 
   assertEquals(new ModulePublisher("fx").files(7, changed).manifest.state, second.manifest.state);
-
 
   const third = publisher.files(3, set([["main", "return 1"], ["renamed", "return 20"]]));
   const renamed = parsePayload(published(third.payloads, deltaFile(third.manifest.state, first.manifest.state, 0, "fx")) ?? "");

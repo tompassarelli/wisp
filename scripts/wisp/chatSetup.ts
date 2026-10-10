@@ -7,7 +7,6 @@ export interface ChatEntry {
   readonly modified: number;
 }
 
-
 export const openObservedChat = <E, R>(client: { readonly name: string }, entry: Effect.Effect<ChatEntry | undefined, E, R>, pressReturn: Effect.Effect<void, E, R>) => Effect.gen(function*() {
   for (let attempt = 0; attempt < 2; attempt++) {
     const before = yield* waitFor(client, "chat entry ready", 8, entry);
@@ -26,7 +25,6 @@ export interface CommandReceipt<A, E, R> {
   readonly read: Effect.Effect<A | undefined, E, R>;
   readonly requested: (current: A, before: A | undefined) => boolean;
 }
-
 
 export const confirmedCommand = <A, E, R>(command: string, receipts: readonly CommandReceipt<A, E, R>[], send: Effect.Effect<void, E, R>) => Effect.gen(function*() {
   const before = yield* Effect.forEach(receipts, (target) => target.read);

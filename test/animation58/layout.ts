@@ -1,12 +1,3 @@
-
-
-
-
-
-
-
-
-
 import { floorDiv, floorMod } from "../../src/sim/intMath";
 
 export const RULER = "war3mapImported\\Wisp58Ruler.mdx";
@@ -16,7 +7,6 @@ export const MARK = "war3mapImported\\Wisp58Mark.mdx";
 export const BOARD = "war3mapImported\\Wisp58Board.mdx";
 
 export const RULER_UNIT = 0x68303538;
-
 
 export type NeedleKey = readonly [offset: number, dx: number];
 
@@ -31,7 +21,6 @@ export interface RulerSequence {
 }
 
 const linear = (length: number, dx = length): readonly NeedleKey[] => [[0, 0], [length, dx]];
-
 
 export const RULER_SEQUENCES: readonly RulerSequence[] = [
   { name: "Stand Hit", start: 1000, end: 2000, looping: true, lane: 12, keys: linear(1000) },
@@ -49,20 +38,14 @@ export const RULER_SEQUENCES: readonly RulerSequence[] = [
 
 export const RULER_DEATH_SECONDS = 30;
 
-
 export const CLIP_SEQUENCES: readonly RulerSequence[] = [
   { name: "Stand", start: 80435, end: 81435, looping: false, lane: 24, keys: [[0, 0], [300, 300], [500, 500], [600, 600], [1000, 1000]] },
 ];
-
 
 export const GLOBAL_LENGTH = 2000;
 
 export const CLOCK_DX = 40;
 export const CLOCK_DY = -15;
-
-
-
-
 
 export const ORIGIN_DY = -35;
 export const ORIGIN_HALF = 10;
@@ -70,7 +53,6 @@ export const ORIGIN_HALF = 10;
 export const MARK_DY = -60;
 
 export const RULER_LENGTH = 1000;
-
 
 export function needleDx(keys: readonly NeedleKey[], offset: number): number {
   let previous: NeedleKey | undefined;
@@ -88,11 +70,6 @@ export interface Slot {
   readonly name: string;
   readonly x: number;
   readonly y: number;
-
-
-
-
-
 
   readonly timing: number;
   readonly issue: 58 | 59;
@@ -121,10 +98,6 @@ export const SLOTS: readonly Slot[] = NAMES.map(([name, timing, issue], index) =
 
 export const BOARD_EXTENT = { low: [(COLUMNS[0] ?? 0) - 80, ROW_TOP - ROW_PITCH * (ROWS - 1) + MARK_DY - 20], high: [(COLUMNS[2] ?? 0) + 1180, ROW_TOP + 110] } as const;
 
-
-
-
-
 export const ORIENTATION_MARK: readonly [number, number] = [(COLUMNS[0] ?? 0) - 60, ROW_TOP + MARK_DY];
 
 export function slotNamed(name: string): Slot {
@@ -132,16 +105,7 @@ export function slotNamed(name: string): Slot {
   throw new Error(`no ruler named ${name}`);
 }
 
-
-
-
-
-
 export const CAMERA = { x: 0, y: 20, distance: 2700, fieldOfView: 70 };
-
-
-
-
 
 export const START_SECONDS = 3;
 

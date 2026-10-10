@@ -17,7 +17,6 @@ export class UnitModelsFailure extends Schema.TaggedError<UnitModelsFailure>()("
 
 const modelKey = (path: string) => path.replaceAll("/", "\\").toLowerCase().replace(/\.mdl$/, ".mdx");
 
-
 export const checkUnitModels = (declaration: UnitModels, sources: readonly ModelSource[]) => Effect.gen(function*() {
   const decoded = yield* Schema.decodeEffect(UnitModels)(declaration).pipe(
     Effect.mapError((cause) => new UnitModelsFailure({ problem: cause.message })),
@@ -46,7 +45,6 @@ export interface UnitModelChange {
   readonly before: string | number | undefined;
   readonly after: string | number | undefined;
 }
-
 
 export function compareUnitModels(before: UnitModels, after: UnitModels): readonly UnitModelChange[] {
   const changes: UnitModelChange[] = [];

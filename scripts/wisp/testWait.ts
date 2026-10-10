@@ -1,8 +1,3 @@
-
-
-
-
-
 import { SAVED_FILES_ENV, WARM_ENV } from "./devResult";
 
 export interface WaitingTestRequest {
@@ -14,7 +9,6 @@ export interface WaitingTestRequest {
 const warm: unknown = JSON.parse(process.env[WARM_ENV] ?? "[]");
 if (!Array.isArray(warm)) throw new Error(`${WARM_ENV} is not a list of modules`);
 for (const module of warm) await import(String(module));
-
 
 let text = "";
 const decoder = new TextDecoder();

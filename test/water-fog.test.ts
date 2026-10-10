@@ -11,9 +11,6 @@ import { terrainRows } from "../scripts/wisp/terrainMesh";
 import { waterColor, waterMesh, waterTable, waterTexture } from "../scripts/wisp/water";
 import { decodePng } from "./animation58/read";
 
-
-
-
 function terrainBytes(water: boolean): Uint8Array {
   const bytes = new Uint8Array(41 + 4 * 7), view = new DataView(bytes.buffer);
   bytes.set(new TextEncoder().encode("W3E!")); view.setInt32(4, 11, true); bytes[8] = 76;
@@ -108,7 +105,6 @@ PivotPoints 1 { { 0, 0, 0 }, }`);
 farmTest("[wisp#79] Definitive's height fog fades in below its top and over its depth range; Classic draws only the linear range", async () => {
   const white = tga(255, 255, 255);
   const square: DrawnPose = { ...freshAnimation(), handle: { kind: "effect", id: 1 }, model: "square.mdl", created: 0, x: 0, y: 0, z: 0, alpha: 255, scale: 1, timeScale: 1, queuedAnimations: [], yaw: 0, pitch: 0, roll: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1], flat: false };
-
 
   const fog = { style: 3, zStart: 0, zEnd: 200, density: 0.25, color: [0, 0, 1] as [number, number, number], heightStart: -100, heightEnd: 100, linearStart: 1000, linearEnd: 2000, maxLinearDensity: 1 };
   const base: RenderScene = { frame: 0, client: 0, effects: [square], units: [], ui: [], camera: { x: 0, y: 0, fields: { CAMERA_FIELD_ROTATION: 90, CAMERA_FIELD_ANGLE_OF_ATTACK: 270, CAMERA_FIELD_TARGET_DISTANCE: 100 } },

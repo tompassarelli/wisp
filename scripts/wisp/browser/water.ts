@@ -1,4 +1,3 @@
-
 import type { Terrain } from "../terrain";
 import { terrainRows } from "../terrainMesh";
 import { waterMesh, waterTable, waterTexture, type WaterTable } from "../water";
@@ -84,7 +83,6 @@ function frameTexture(gl: WebGL2RenderingContext, path: string, readTexture: Tex
   }));
   return loading;
 }
-
 
 export async function drawWater(gl: WebGL2RenderingContext, terrain: Terrain, frame: number, view: Float32Array, projection: Float32Array, fog: WaterFog | undefined, readTexture: TextureReader, readAsset: AssetReader): Promise<boolean> {
   const key = JSON.stringify(terrain);

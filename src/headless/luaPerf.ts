@@ -1,17 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import { type ClientScope, type HeadlessClient } from "./client";
 import { parseNativeDeclarations } from "./declarations";
 import { type Journey, type JourneyResult, journeyLines, journeyProblems, runJourney } from "./journey";
@@ -21,14 +7,11 @@ import { type NativeCostModel, WARCRAFT_COST, nativeFrameCost } from "./nativeCo
 import { f32 } from "../sim/f32";
 import { floorDiv, floorMod } from "../sim/intMath";
 
-
 export const HOOK_STEP = 100;
-
 
 const COLLECT_EVERY_KB = 16384;
 
 type Native = (this: void, ...args: unknown[]) => unknown;
-
 
 interface ClientCost {
   readonly slot: number;
@@ -44,7 +27,6 @@ interface ClientCost {
 
   nativeKb: number;
 }
-
 
 export interface PerfMeasure {
 
@@ -64,9 +46,6 @@ export interface LuaPerfOptions {
 
 // Varargs retain nil arguments; tail calls keep the native coroutine one frame deep.
 
-
-
-
 const serve = (...call: unknown[]): unknown => {
   const [native] = select(1, ...call);
   return serve(...coroutine.yield((native as Native)(...select(2, ...call))));
@@ -84,9 +63,7 @@ const add = (values: number[], index: number, amount: number) => {
   values[index] = (values[index] ?? 0) + amount;
 };
 
-
 const whole = (value: number) => `${Math.floor(value + 0.5)}`;
-
 
 function rank(sorted: readonly number[], share: number): number {
   if (sorted.length === 0) return 0;
@@ -108,7 +85,6 @@ function bundleModules(bundle: string): string[] {
 }
 
 export const TOP_SHARE = f32(0.01);
-
 
 function topMean(sorted: readonly number[]): number {
   if (sorted.length === 0) return 0;
@@ -168,11 +144,6 @@ function costLines(cost: ClientCost, first: number, last: number, model: NativeC
   ];
   return [...named.map(([name, values]) => valueLine(cost.slot, name, values, first, last)), ...moduleLines(cost, first, last)];
 }
-
-
-
-
-
 
 export function runLuaPerfWith(
   map: LuaHeadlessMap,
@@ -321,11 +292,6 @@ export function runLuaPerfWith(
   if (result.problems > 0) for (const line of result.lines) print(`journey: ${line}`);
   return result.problems;
 }
-
-
-
-
-
 
 export function runLuaPerf(map: LuaHeadlessMap, journey: Journey, bundlePath: string, declarationsPath: string, options: LuaPerfOptions = {}): number {
   return runLuaPerfWith(map, bundlePath, declarationsPath, (clients) => {

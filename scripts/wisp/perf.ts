@@ -1,9 +1,3 @@
-
-
-
-
-
-
 export const PERF_METRICS = ["instructions", "lua-us", "natives", "alloc-kb", "typed", "native-us", "typing-us"] as const;
 export type PerfMetric = (typeof PERF_METRICS)[number];
 
@@ -50,7 +44,6 @@ const MODULE = /^p(\d+) module-alloc-bytes (\S+) total=(-?\d+) mean=(-?\d+)$/;
 const isMetric = (name: string): name is PerfMetric => (PERF_METRICS as readonly string[]).includes(name);
 const isRuntimeMetric = (name: string): name is RuntimeMetric => (RUNTIME_METRICS as readonly string[]).includes(name);
 
-
 export function parsePerfRun(text: string): PerfRun {
   const lines = text.split(/\r?\n/).filter((line) => line.trim() !== "");
   const heading = HEADING.exec(lines[0] ?? "");
@@ -94,21 +87,12 @@ export function parsePerfRun(text: string): PerfRun {
   return { frames: Number(heading[1]), step: Number(heading[2]), problems: Number(heading[3]), collector, clients: complete, runtime, modules };
 }
 
-
 export const DEFAULT_PERF_THRESHOLD = 0.05;
 
 const LABELS: Record<PerfMetric, string> = {
   instructions: "Lua instructions", "lua-us": "Lua µs", natives: "native calls", "alloc-kb": "allocated KB", typed: "typed characters",
   "native-us": "predicted native µs", "typing-us": "predicted typing stall µs",
 };
-
-
-
-
-
-
-
-
 
 const GATED: Partial<Record<PerfMetric, readonly ("median" | "p95" | "mean" | "top")[]>> = {
   instructions: ["mean", "top"],
@@ -148,11 +132,6 @@ export interface PerfComparison {
   readonly regressions: readonly string[];
 }
 
-
-
-
-
-
 export function comparePerfRuns(a: PerfRun, b: PerfRun, threshold = DEFAULT_PERF_THRESHOLD): PerfComparison {
   const lines = [`A: ${a.frames} frames, B: ${b.frames} frames, per frame A -> B`];
   const regressions: string[] = [];
@@ -185,7 +164,6 @@ export function comparePerfRuns(a: PerfRun, b: PerfRun, threshold = DEFAULT_PERF
 }
 
 const ms = (us: number) => (us / 1000).toFixed(2);
-
 
 export function predictionLines(run: PerfRun): string[] {
   return [...run.clients].map(([slot, values]) => {

@@ -1,17 +1,4 @@
-
-
-
 // Warcraft raw float arithmetic may round toward zero; check both Lua32 variants (docs/headless.md#raw-float-rounding).
-
-
-
-
-
-
-
-
-
-
 
 import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, homedir } from "node:os";
@@ -26,9 +13,7 @@ const LUA_SOURCE = join(import.meta.dir, "../../vendor/lua-5.3.6.tar.gz");
 
 const LUA_SOURCE_SHA256 = "fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60";
 
-
 const ROUNDING_PROBE = "local a, b = 3.0, 1e-30 io.write(a - b < a and 'toward-zero' or 'nearest')";
-
 
 export const luaRounding = (lua: string) => Effect.gen(function*() {
   const integers = yield* captureProcess("probe Lua32", lua, [lua, "-e", "io.write(math.maxinteger)"]);
@@ -44,7 +29,6 @@ const fail = (operation: string, path: string, cause: unknown) => new MapBuildFa
 const sha256 = (bytes: Uint8Array | string) => new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
 const trySync = <A>(operation: string, path: string, run: () => A) => Effect.try({ try: run, catch: (cause) => fail(operation, path, cause) });
 
-
 class LockHeld extends Schema.TaggedError<LockHeld>()("LockHeld", { path: Schema.String }) {}
 
 export const lua32CacheRoot = () => join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "wisp/lua32");
@@ -53,18 +37,15 @@ const flagsFor = (variant: Lua32Variant) => variant === "stock"
   ? { flags: "-DLUA_32BITS", header: "" }
   : { flags: "-DLUA_32BITS -include toward-zero.h", header: readFileSync(TOWARD_ZERO_HEADER, "utf8") };
 
-
 const luaSource = trySync("read Lua source", LUA_SOURCE, () => sha256(readFileSync(LUA_SOURCE))).pipe(
   Effect.flatMap((digest) => digest === LUA_SOURCE_SHA256
     ? Effect.succeed(LUA_SOURCE)
     : Effect.fail(fail("check Lua source", LUA_SOURCE, `SHA-256 ${digest} is not lua-5.3.6.tar.gz's`))),
 );
 
-
 const makeCommand = (args: readonly string[]) => Bun.which("gcc") !== null && Bun.which("make") !== null
   ? ["make", ...args]
   : ["nix", "shell", "nixpkgs#gcc", "nixpkgs#gnumake", "--command", "make", ...args];
-
 
 const buildLock = (lock: string) => Effect.acquireRelease(
   Effect.suspend((): Effect.Effect<void, LockHeld | MapBuildFailure> => {
@@ -90,7 +71,6 @@ const buildLock = (lock: string) => Effect.acquireRelease(
   }).pipe(Effect.retry({ while: (error) => error._tag === "LockHeld", schedule: Schedule.spaced("200 millis"), times: 6000 })),
   () => Effect.sync(() => rmSync(lock, { force: true })),
 );
-
 
 export const lua32 = (variant: Lua32Variant) => Effect.gen(function*() {
   const root = lua32CacheRoot();
@@ -130,7 +110,6 @@ export const lua32 = (variant: Lua32Variant) => Effect.gen(function*() {
     return join(directory, executable);
   }));
 }).pipe(step(`Lua32 ${variant}`));
-
 
 export const provideLua32Env = Effect.gen(function*() {
   if (process.env.LUA === undefined) process.env.LUA = yield* lua32("stock");

@@ -1,7 +1,5 @@
 /// <reference path="../../src/natives/warcraft.d.ts" />
 
-
-
 import { f32 } from "../../src/sim/f32";
 
 function Sin(value: number): number {

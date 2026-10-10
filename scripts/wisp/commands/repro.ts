@@ -1,7 +1,3 @@
-
-
-
-
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { Console, Effect, Schema } from "effect";
@@ -19,16 +15,11 @@ import { importNativeReplay, compareReplayHost, type NativeReplay } from "../rep
 import { writtenPreloadFile } from "../headlessInput";
 import { reproLines } from "../../../src/runtime/repro";
 
-
 export interface ReproProject {
   readonly viewerSources?: ReproViewerSources;
 
   readonly viewerScanDivergence?: boolean;
   readonly map: HeadlessMap;
-
-
-
-
 
   readonly replay: string;
 
@@ -48,11 +39,9 @@ export class ReproFailure extends Schema.TaggedError<ReproFailure>()("ReproFailu
   }
 }
 
-
 const CLIENTS = [0, 1];
 
 const ReproFile = preloadRecord({ rest: "lines" }, Schema.Struct({ lines: Schema.Array(Schema.String) }));
-
 
 export const readRepro = (file: string) => Effect.gen(function*() {
   const text = yield* Effect.try({ try: () => readFileSync(file, "utf8"), catch: (cause) => new ReproFailure({ file, problem: describeCause(cause) }) });
@@ -61,7 +50,6 @@ export const readRepro = (file: string) => Effect.gen(function*() {
   return typeof repro === "string" ? yield* new ReproFailure({ file, problem: repro }) : { repro, lines };
 });
 
-
 export async function loadReplay(path: string): Promise<ReproReplay> {
   const module: unknown = await import(path);
   if (typeof module !== "object" || module === null || !("replayRepro" in module) || typeof module.replayRepro !== "function") throw new Error(`${path} exports no replayRepro()`);
@@ -69,14 +57,12 @@ export async function loadReplay(path: string): Promise<ReproReplay> {
   return (repro) => replayRepro(repro);
 }
 
-
 export async function loadInspector(path: string): Promise<ReproInspector> {
   const module: unknown = await import(path);
   if (typeof module !== "object" || module === null || !("inspectRepro" in module) || typeof module.inspectRepro !== "function") throw new Error(`${path} exports no inspectRepro()`);
   const { inspectRepro } = module;
   return (repro, frame) => inspectRepro(repro, frame);
 }
-
 
 export function replayInClients(map: HeadlessMap, replay: ReproReplay, repro: Repro): ReproResult[] {
   return inClients(map, () => replay(repro));
@@ -121,7 +107,6 @@ function inClients<Result>(map: HeadlessMap, run: () => Result): Result[] {
   }
 }
 
-
 export function reproReport(file: string, repro: Repro, results: readonly ReproResult[]): { readonly lines: string[]; readonly landed: boolean } {
   const lines = [`${basename(file)}: build ${repro.build}, frame ${repro.frame}, checksum ${repro.checksum}`];
   let landed = true;
@@ -136,9 +121,7 @@ export function reproReport(file: string, repro: Repro, results: readonly ReproR
   return { lines, landed };
 }
 
-
 const isTestName = (name: string) => /^[a-z0-9][a-z0-9-]*$/.test(name);
-
 
 export function reproTestSource(name: string, file: string, repro: Repro, replayImport: string, lines: readonly string[]): string {
   return [
@@ -157,12 +140,10 @@ export function reproTestSource(name: string, file: string, repro: Repro, replay
   ].join("\n");
 }
 
-
 function importFrom(directory: string, module: string): string {
   const path = relative(directory, module).replace(/\.ts$/, "");
   return path.startsWith(".") ? path : `./${path}`;
 }
-
 
 export const makeRepro = (load: () => Promise<ReproProject>): Command => (args) => Effect.gen(function*() {
   if (args[0] === "import") {

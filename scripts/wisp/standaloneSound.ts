@@ -46,7 +46,6 @@ function soundRows(bytes: Uint8Array): Map<string, string[]> {
   return sounds;
 }
 
-
 export function createSoundResolver(readAsset: SoundAssetReader): (cue: SoundCue) => Promise<SoundAsset | undefined> {
   let labels: Promise<Map<string, string[]>> | undefined;
   const assets = new Map<string, Promise<SoundAsset | undefined>>();

@@ -1,7 +1,3 @@
-
-
-
-
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Schedule } from "effect";
@@ -19,7 +15,6 @@ export interface LanPlugin {
 
   readonly enableLan: (pid: number, exePath: string, menus: MenuSocket, log: (line: string) => void) => Effect.Effect<void, LanFailure>;
 }
-
 
 export const lanPluginProblem = (path = LAN_PLUGIN) => (existsSync(path) ? undefined
   : `joining LAN games needs Wisp's private LAN plugin at ${path}, and it isn't installed on this machine`);

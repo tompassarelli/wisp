@@ -1,7 +1,3 @@
-
-
-
-
 import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
@@ -26,11 +22,7 @@ export function xoroUpdate(start: number, bytes: Uint8Array): number {
 export const SCRIPT_ENTRIES = ["war3map.j", "scripts\\war3map.j", "war3map.lua", "scripts\\war3map.lua"] as const;
 // The checked rollback checksum folds war3map.w3l after war3map.w3q (wc3-slop-lan docs/protocol.md, 'The map check').
 
-
-
-
 export const CHECKED_ENTRIES = ["war3map.w3e", "war3map.wpm", "war3map.doo", "war3map.w3u", "war3map.w3b", "war3map.w3d", "war3map.w3a", "war3map.w3q", "war3map.w3l"] as const;
-
 
 export function mapXoro(entry: (name: string) => Uint8Array | undefined): number {
   const script = SCRIPT_ENTRIES.map(entry).find((bytes) => bytes !== undefined);
@@ -72,14 +64,12 @@ export interface MapFacts {
 const USE_CUSTOM_FORCES = 0x40;
 const FIXED_PLAYER_SETTINGS = 0x20;
 
-
 export function pathInGame(file: string): string {
   const parts = file.split(sep).filter((part) => part !== "");
   const maps = parts.findLastIndex((part) => part.toLowerCase() === "maps");
   if (maps < 0) throw new Error(`${file} is not under a Maps folder`);
   return ["Maps", ...parts.slice(maps + 1)].join("\\");
 }
-
 
 export function mapFactsFrom(file: Uint8Array, path: string, entry: (name: string) => Uint8Array | undefined): MapFacts {
   const w3i = entry("war3map.w3i");
@@ -99,7 +89,6 @@ export function mapFactsFrom(file: Uint8Array, path: string, entry: (name: strin
     forces: info.forces.map(({ playerMask }) => playerMask),
   };
 }
-
 
 const read = <A>(run: () => A) => Effect.try({ try: run, catch: cause => new LanFailure({ problem: String(cause) }) });
 

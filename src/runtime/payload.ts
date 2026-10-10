@@ -1,12 +1,6 @@
-
-
-
 import { floorMod } from "../sim/intMath";
 
 // Each modulus keeps lane * 263 + 256 + 1 below 2^31 so Lua32 integers never wrap.
-
-
-
 
 export function checksum(length: number, byteAt: (index: number) => number): string {
   let first = 0;

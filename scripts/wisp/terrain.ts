@@ -1,8 +1,3 @@
-
-
-
-
-
 export interface WorldBounds {
   readonly minX: number;
   readonly maxX: number;
@@ -44,14 +39,9 @@ export interface Terrain {
   readonly points: readonly TerrainPoint[];
 }
 
-
 export const CELL = 128;
 
 // war3map.w3e v11/v12 points are 7/8 bytes; heights use zero 0x2000, four steps/unit, cliff steps 128 above layer 2, and 14-bit water levels.
-
-
-
-
 
 export function decodeTerrain(bytes: Uint8Array): Terrain {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -87,11 +77,9 @@ export function decodeTerrain(bytes: Uint8Array): Terrain {
   return { version, tileset, groundTiles, cliffTiles, columns, rows, originX, originY, points };
 }
 
-
 export function worldBounds(terrain: Pick<Terrain, "columns" | "rows" | "originX" | "originY">): WorldBounds {
   return { minX: terrain.originX, maxX: terrain.originX + (terrain.columns - 1) * CELL, minY: terrain.originY, maxY: terrain.originY + (terrain.rows - 1) * CELL };
 }
-
 
 export function shiftedBounds(bounds: WorldBounds, origin: readonly [number, number] = [0, 0]): WorldBounds {
   const [x, y] = origin;

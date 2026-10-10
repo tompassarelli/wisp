@@ -1,6 +1,3 @@
-
-
-
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -41,7 +38,6 @@ farmTest("[invariant] both clients measure the same frames: no desync, equal rep
   const [p0, p1] = [run.clients.get(0), run.clients.get(1)];
   expect(run.runtime.get(0)?.["runtime-instructions"]?.total).toBeGreaterThan(0);
   expect(run.modules.get(0)?.has("src.platform.dispatch")).toBe(true);
-
 
   const frameInstructions = (values: PerfRun["clients"] extends ReadonlyMap<number, infer V> ? V | undefined : never) => ({ ...values?.instructions, start: undefined });
   expect(frameInstructions(p0)).toEqual(frameInstructions(p1));

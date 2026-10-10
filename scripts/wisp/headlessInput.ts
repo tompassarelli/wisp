@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { Predicate } from "effect";
@@ -18,21 +12,11 @@ export function writtenPreloadFile(lines: readonly string[]): string {
 
 const TOOLTIP = /^\s*call BlzSetAbilityTooltip\('\$wsl', "(.*)", (\d+)\)\s*$/gm;
 
-
-
-
-
-
 export function fileIoChunks(text: string): string[] {
   const chunks: string[] = [];
   for (const [, chunk = "", level = "0"] of text.matchAll(TOOLTIP)) chunks[Number(level)] = chunk;
   return Array.from(chunks, (chunk) => chunk ?? "");
 }
-
-
-
-
-
 
 export function customMapData(directory: string): ClientFiles {
   mkdirSync(directory, { recursive: true });
@@ -53,17 +37,11 @@ export function customMapData(directory: string): ClientFiles {
   };
 }
 
-
 export interface TypedInput {
 
   read(): readonly string[];
   close(): void;
 }
-
-
-
-
-
 
 export function typedFile(path: string): TypedInput {
   const fd = openSync(path, "w+");
@@ -96,13 +74,6 @@ export interface DrawTiming {
   readonly callbacks: number;
 }
 
-
-
-
-
-
-
-
 export class RealtimeClients {
   private origin = 0;
   private ran = 0;
@@ -110,7 +81,6 @@ export class RealtimeClients {
   private drawnAt = 0;
   private draws = 0;
   private readonly held = new Set<number>();
-
 
   constructor(
     readonly clients: Lockstep,
@@ -121,7 +91,6 @@ export class RealtimeClients {
 
     private readonly afterDraw: (this: void, timing: DrawTiming) => void = () => undefined,
   ) {}
-
 
   start(): void {
     this.clients.start();
@@ -139,7 +108,6 @@ export class RealtimeClients {
       for (const text of input.read()) this.clients.type(slot, text);
     }
   }
-
 
   advance(): number {
     const frameMillis = 1000 / FRAMES_PER_SECOND;
@@ -161,7 +129,6 @@ export class RealtimeClients {
     }
     return this.origin + (this.ran + 1) * frameMillis - this.now();
   }
-
 
   frameDueMs(): number {
     return this.origin + ((this.ran + 1) * 1000) / FRAMES_PER_SECOND;

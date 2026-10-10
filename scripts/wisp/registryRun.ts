@@ -1,8 +1,3 @@
-
-
-
-
-
 import { AssertionFailure, registeredTests } from "../../src/runtime/testing";
 import { printResult } from "./devResult";
 

@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import type { Lockstep } from "../../src/headless/lockstep";
 import { luaLockstep } from "../../src/headless/lua";
 import { ackFile, deltaFile, payloadFile } from "../../src/runtime/gameFiles";
@@ -38,7 +32,6 @@ const versions = [moduleSet(read(arg[3])), moduleSet(read(arg[4])), moduleSet(re
 const [v1, v2, v3] = versions;
 if (v1 === undefined || v2 === undefined || v3 === undefined) throw "three versions";
 
-
 interface HotView {
   applied: number;
   state?: string;
@@ -51,14 +44,12 @@ function hot(clients: Lockstep, index: number): HotView {
   return view as HotView;
 }
 
-
 function installed(clients: Lockstep, index: number): string {
   const lines: string[] = [];
   const modules = hot(clients, index).modules ?? {};
   for (const name of Object.keys(modules)) lines.push(`${name} ${modules[name]?.hash}`);
   return lines.sort().join("\n");
 }
-
 
 function readPayload(clients: Lockstep, index: number): string {
   const files = clients.files;
@@ -77,7 +68,6 @@ function started(): Lockstep {
   clients.frames(10);
   return clients;
 }
-
 
 function reload(clients: Lockstep, modules: ModuleSet): void {
   clients.reload(modules);
@@ -105,7 +95,6 @@ function applied(clients: Lockstep, scenario: string, version: number, path: str
   check(acknowledgements[0] === acknowledgements[1], `${scenario}: installed on different frames: ${acknowledgements.join(" / ")}`);
 }
 
-
 const incremental = started();
 reload(incremental, v1);
 applied(incremental, "incremental", 1, "full");
@@ -117,14 +106,12 @@ applied(incremental, "incremental", 3, "delta");
 const renamed = incremental.files;
 agree(incremental, "incremental");
 
-
 const full = started();
 reload(full, v3);
 applied(full, "full", 1, "full");
 agree(full, "full");
 check(installed(full, 0) === installed(incremental, 0), "full and incremental reloads installed different modules");
 check(hot(full, 0).state === hot(incremental, 0).state, "full and incremental reloads ended in different states");
-
 
 const mixed = started();
 reload(mixed, v1);
@@ -134,7 +121,6 @@ check(readPayload(mixed, 0) === "delta" && readPayload(mixed, 1) === "full", `mi
 check(mixed.unappliedReloads().length === 0, `mixed: ${mixed.unappliedReloads().join("; ")}`);
 agree(mixed, "mixed");
 check(hot(mixed, 0).state === mixed.files?.manifest.state, "mixed: the clients don't run the version's state");
-
 
 const mismatch = started();
 reload(mismatch, v1);
@@ -155,7 +141,6 @@ check(lastMessage(0) === "hot reload 2 not applied: another client couldn't load
 check(lastMessage(1).startsWith("hot reload 2 not applied: module ") && lastMessage(1).endsWith(" damaged"), `mismatch: p1 said ${lastMessage(1)}`);
 check(hot(mismatch, 0).state === before && hot(mismatch, 1).state === before, "mismatch: a client left the installed state");
 agree(mismatch, "mismatch");
-
 
 const missing = started();
 reload(missing, v1);

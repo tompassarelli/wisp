@@ -1,6 +1,3 @@
-
-
-
 import { floorDiv, floorMod } from "../sim/intMath";
 
 /** Park-Miller minimal standard generator in Schrage's form: every product stays below 2^31. */
@@ -11,7 +8,6 @@ export class Random {
     this.state = floorMod(Math.abs(Math.trunc(seed)), 2147483646) + 1;
   }
 
-
   next(): number {
     const high = floorDiv(this.state, 44488);
     const next = 48271 * (this.state - high * 44488) - 3399 * high;
@@ -19,16 +15,13 @@ export class Random {
     return this.state / 2147483647;
   }
 
-
   between(low: number, high: number): number {
     return low + Math.min(high - low, Math.floor(this.next() * (high - low + 1)));
   }
 
-
   chance(p: number): boolean {
     return this.next() < p;
   }
-
 
   pick<T>(items: readonly T[]): T {
     const item = items[this.between(0, items.length - 1)];

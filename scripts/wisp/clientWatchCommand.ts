@@ -1,11 +1,3 @@
-
-
-
-
-
-
-
-
 import { appendFileSync } from "node:fs";
 import { Console, Effect, Schema } from "effect";
 import type { Client } from "./clients";
@@ -16,7 +8,6 @@ const ClientsFile = Schema.Struct({
   clients: Schema.NonEmptyArray(Schema.Struct({ name: Schema.String, documents: Schema.String, menuReportPort: Schema.optionalKey(Schema.Int) })),
 });
 
-
 export const watchedClients = (path: string) => Effect.tryPromise({
   try: () => Bun.file(path).json(),
   catch: (cause) => new WatchFailure({ client: path, operation: "read the clients file", problem: String(cause) }),
@@ -26,7 +17,6 @@ export const watchedClients = (path: string) => Effect.tryPromise({
   Effect.mapError((cause) => cause instanceof WatchFailure ? cause : new WatchFailure({ client: path, operation: "decode the clients file", problem: String(cause) })),
 );
 
-
 export const selectClients = (all: readonly Client[], names: readonly string[]) => Effect.gen(function*() {
   const unknown = names.filter((name) => !all.some((client) => client.name === name));
   if (unknown.length > 0) return yield* new UsageFailure({ problem: `unknown client ${unknown.join(", ")}; known: ${all.map(({ name }) => name).join(", ")}` });
@@ -34,7 +24,6 @@ export const selectClients = (all: readonly Client[], names: readonly string[]) 
 });
 
 const FLAGS = new Set(["--once", "--json", "--record"]);
-
 
 export const makeWatch = (clientsFile: string, options: Pick<WatchOptions, "filePrefix"> = {}): Command => (args) => Effect.gen(function*() {
   const [record] = flagValues(args, "record");

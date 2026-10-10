@@ -1,11 +1,5 @@
-
-
-
-
-
 export type Graphics = "classic" | "definitive";
 export const GRAPHICS: readonly Graphics[] = ["classic", "definitive"];
-
 
 export type Lever =
   | "day-night-light" | "fog" | "height-fog-falloff" | "sky" | "cinematic-filter" | "point-lights"
@@ -14,11 +8,6 @@ export const LEVERS: readonly Lever[] = [
   "day-night-light", "fog", "height-fog-falloff", "sky", "cinematic-filter", "point-lights",
   "point-light-shadows", "shadows", "water", "pbr", "bloom", "ambient-occlusion", "terrain",
 ];
-
-
-
-
-
 
 export type LeverSupport = "drawn" | "absent" | "unsupported";
 
@@ -41,13 +30,11 @@ export function parseGraphics(value: string): Graphics {
   return value as Graphics;
 }
 
-
 export function parseLevers(value: string): Lever[] {
   const names = value.split(",").map((name) => name.trim()).filter((name) => name !== "");
   for (const name of names) if (!(LEVERS as readonly string[]).includes(name)) throw new Error(`--look names an unknown lever ${name}; levers: ${LEVERS.join(", ")}`);
   return names as Lever[];
 }
-
 
 export const unsupportedLevers = (graphics: Graphics, levers: readonly Lever[]): Lever[] =>
   levers.filter((lever) => PROFILES[graphics][lever] === "unsupported");

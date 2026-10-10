@@ -1,16 +1,9 @@
-
-
-
-
-
-
 import type ts from "typescript";
 import { getBundleResult, sourceMapTracebackBundlePlaceholder } from "typescript-to-lua/dist/transpilation/bundle";
 import { getEmitPathRelativeToOutDir } from "typescript-to-lua/dist/transpilation/transpiler";
 import type { EmitFile, ProcessedFile } from "typescript-to-lua/dist/transpilation/utils";
 import { escapeString } from "typescript-to-lua/dist/LuaPrinter";
 import { formatPathToLuaPath, trimExtension } from "typescript-to-lua/dist/utils";
-
 
 interface Node {
   readonly children: readonly (Node | string)[];
@@ -21,7 +14,6 @@ interface Node {
   readonly sourceContents: Record<string, unknown>;
 }
 
-
 interface Walk {
   readonly text: string;
   readonly newlines: number;
@@ -30,7 +22,6 @@ interface Walk {
   readonly sources: readonly string[];
   readonly names: readonly string[];
 }
-
 
 interface Encoded {
   readonly sourceIndices: readonly number[];
@@ -57,7 +48,6 @@ interface Cached {
   encoded?: Encoded;
   module?: BundledModule;
 }
-
 
 export interface BundledModule {
 
@@ -98,12 +88,6 @@ const vlq = (value: number) => (value >= -SMALL && value <= SMALL ? SMALL_VLQ[va
 
 const isNode = (chunk: unknown): chunk is Node =>
   typeof chunk === "object" && chunk !== null && Array.isArray((chunk as { children?: unknown }).children);
-
-
-
-
-
-
 
 function walkModule(head: string, content: Node | string, tail: string): Walk | undefined {
   const parts: string[] = [];
@@ -202,7 +186,6 @@ function walkModule(head: string, content: Node | string, tail: string): Walk | 
   };
 }
 
-
 function dedupe(mappings: readonly number[]): Int32Array {
   const kept: number[] = [];
   for (let index = 0; index < mappings.length; index += FIELDS) {
@@ -216,11 +199,6 @@ function dedupe(mappings: readonly number[]): Int32Array {
   }
   return Int32Array.from(kept);
 }
-
-
-
-
-
 
 function encodeModule(walk: Walk, sourceIndices: readonly number[], nameIndices: readonly number[]): Encoded {
   const m = walk.mappings;
@@ -277,11 +255,6 @@ function encodeModule(walk: Walk, sourceIndices: readonly number[], nameIndices:
   return { sourceIndices, nameIndices, head: vlq(m[1]!), middle, crossName, tail, lastMapped, lastNamed, firstNamed };
 }
 
-
-
-
-
-
 function chunkSourceMap(walk: Walk): string {
   const m = walk.mappings;
   let mappings = "";
@@ -316,12 +289,10 @@ function chunkSourceMap(walk: Walk): string {
 const sameIndices = (left: readonly number[], right: readonly number[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
-
 export class LuaBundler {
   private readonly modules = new Map<string, Cached>();
 
   bundled: BundledModules | undefined;
-
 
   bundle(program: ts.Program, files: readonly ProcessedFile[]): [ts.Diagnostic[], EmitFile] | undefined {
     this.bundled = undefined;

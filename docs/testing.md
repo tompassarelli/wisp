@@ -15,6 +15,10 @@ file appearing), it waits for that thing. Its timeout only catches a hang:
 the runner gives each test two minutes, about ten times the slowest test on
 a quiet machine. They run first, under whatever load the machine has.
 
+wisp:test/blank-lines.test.ts keeps TypeScript sources free of leading
+blank lines and runs of blank lines outside strings. It skips test/stack/
+and test/throw/, whose stack-trace tests pin their line numbers.
+
 ## Timing tests
 
 A test that asserts speed, such as a duration, a frame rate or a perf

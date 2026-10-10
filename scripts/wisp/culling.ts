@@ -1,4 +1,3 @@
-
 import type { WorldBounds } from "./terrain";
 
 interface Placed {
@@ -10,12 +9,6 @@ interface Placed {
   readonly flat: boolean;
   readonly unit?: true;
 }
-
-
-
-
-
-
 
 export function drawnPoses<T extends Placed>(poses: readonly T[], eye: readonly number[], far: number, world?: WorldBounds): T[] {
   const [ex = 0, ey = 0, ez = 0] = eye;

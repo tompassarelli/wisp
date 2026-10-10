@@ -1,6 +1,4 @@
-
 import { reportNumber } from "./frameCost";
-
 
 export const MAX_FRAME_COST_CAPTURE = 18000;
 

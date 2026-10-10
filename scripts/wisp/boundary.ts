@@ -1,11 +1,3 @@
-
-
-
-
-
-
-
-
 import { join } from "node:path";
 import { Effect, Schema, SchemaIssue } from "effect";
 import { FILE_IO_ABILITY, FILE_SLOTS } from "../../src/runtime/gameFiles";
@@ -21,7 +13,6 @@ export class MalformedGameFile extends Schema.TaggedError<MalformedGameFile>()("
   }
 }
 
-
 export interface GameFileKind<A> {
   readonly decode: (file: string, text: string) => Effect.Effect<A, MalformedGameFile>;
 }
@@ -29,19 +20,12 @@ export interface GameFileKind<A> {
 const PRELOAD_HEADER = /^function PreloadFiles takes nothing returns nothing\r?\n/;
 const PRELOAD_LINE = /^\s*call Preload\( "(.*)" \)[\t ]*\r?$/gm;
 
-
 export function preloadLines(text: string): string[] | undefined {
   if (!PRELOAD_HEADER.test(text) || !text.trimEnd().endsWith("endfunction")) return undefined;
   return [...text.matchAll(PRELOAD_LINE)].map((match) => match[1] ?? "");
 }
 
 const FIELD = /^\{(\w+)\}$/;
-
-
-
-
-
-
 
 function lineFields(template: string, line: string): Record<string, string> | undefined {
   const parts = template.split(" ");
@@ -60,7 +44,6 @@ function lineFields(template: string, line: string): Record<string, string> | un
     const next = parts[index + 1];
     const nextKey = next === undefined ? undefined : /^([\w.-]+)=\{\w+\}$/.exec(next)?.[1];
 
-
     const nextCursor = index === parts.length - 1 ? words.length : nextKey === undefined ? cursor + 1
       : words.findIndex((word, position) => position > cursor && word.startsWith(`${nextKey}=`));
     const end = nextCursor < 0 ? words.length : nextCursor;
@@ -73,7 +56,6 @@ function lineFields(template: string, line: string): Record<string, string> | un
   return fields;
 }
 
-
 export interface Layout {
 
   readonly head?: readonly string[];
@@ -82,7 +64,6 @@ export interface Layout {
 
   readonly tail?: readonly string[];
 }
-
 
 export function preloadRecord<S extends Schema.Top & { readonly DecodingServices: never }>(
   { head = [], rest, tail = [] }: Layout,
@@ -115,31 +96,21 @@ export function preloadRecord<S extends Schema.Top & { readonly DecodingServices
 export const Count = Schema.FiniteFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
 export const Seconds = Schema.FiniteFromString.check(Schema.isGreaterThanOrEqualTo(0));
 
-
 export const Acknowledgement = preloadRecord(
   { head: ["applied {version} at {elapsed}"] },
   Schema.Struct({ version: Count, elapsed: Seconds }),
 );
-
 
 export const ErrorReport = preloadRecord(
   { head: ["error {count} in {handler}"], rest: "lines" },
   Schema.Struct({ count: Count.check(Schema.isGreaterThanOrEqualTo(1)), handler: Schema.NonEmptyString, lines: Schema.Array(Schema.String) }),
 );
 
-
 export const FILE_SLOT_NUMBERS: readonly number[] = Array.from({ length: FILE_SLOTS }, (_, slot) => slot);
-
-
-
 
 export function linePreloadFile(line: string): string {
   return `function PreloadFiles takes nothing returns nothing\ncall BlzSetAbilityTooltip('$wsl', "${line}", 0)\nendfunction\n`;
 }
-
-
-
-
 
 export function payloadPreloadFile(bytes: Uint8Array): Uint8Array {
   const [open, close] = longBrackets(new TextDecoder().decode(bytes));
@@ -156,8 +127,6 @@ export function payloadPreloadFile(bytes: Uint8Array): Uint8Array {
 
 // Both checksum lanes stay below 2^31, where JavaScript % agrees with payload.ts floorMod.
 
-
-
 export function bytesChecksum(bytes: Uint8Array): string {
   let first = 0;
   let second = 0;
@@ -168,15 +137,12 @@ export function bytesChecksum(bytes: Uint8Array): string {
   return `${first}:${second}`;
 }
 
-
 export const hostPath = (directory: string, gamePath: string) => join(directory, ...gamePath.split("\\"));
-
 
 export function manifestVersion(name: string): number | undefined {
   const version = /^manifest-(\d+)\.pld$/.exec(name)?.[1];
   return version === undefined ? undefined : Number(version);
 }
-
 
 export function payloadFileKey(name: string): string | undefined {
   return /^(\d+-\d+(?:-\d+-\d+)?)-\d+\.pld$/.exec(name)?.[1];

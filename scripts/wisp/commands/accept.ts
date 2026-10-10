@@ -1,8 +1,3 @@
-
-
-
-
-
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Clock, Console, Effect, type Layer, Option, Result, Schema } from "effect";
@@ -21,12 +16,6 @@ export interface AcceptOptions {
 
   readonly clients?: readonly [string, ...string[]];
 
-
-
-
-
-
-
   readonly shards?: AcceptShards;
 }
 
@@ -37,7 +26,6 @@ export interface AcceptShards {
 
   readonly flags: readonly string[];
 }
-
 
 const ShardReport = Schema.fromJsonString(Schema.Struct({
   directory: Schema.String,
@@ -57,7 +45,6 @@ const ShardReport = Schema.fromJsonString(Schema.Struct({
   })),
 }));
 
-
 const readShardReport = (file: string) => Effect.gen(function*() {
   if (!existsSync(file)) return undefined;
   const text = yield* Effect.tryPromise({ try: () => Bun.file(file).text(), catch: (cause) => new AcceptFailure({ operation: "read shard report", problem: `${file}: ${describeCause(cause)}` }) });
@@ -66,7 +53,6 @@ const readShardReport = (file: string) => Effect.gen(function*() {
 });
 
 const FLAGS = new Set(["--only", "--dry-run", "--out", "--json"]);
-
 
 const onlyValues = (args: readonly string[]) => {
   const values: string[] = [];
@@ -77,7 +63,6 @@ const onlyValues = (args: readonly string[]) => {
   }
   return values;
 };
-
 
 const runName = (millis: number) => new Date(millis).toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
 
@@ -120,9 +105,7 @@ export const makeAccept = ({ suite, evidenceRoot, driver, clients = ["host"], sh
   if (failed.length > 0) return yield* new AcceptFailure({ operation: "accept", problem: `${failed.length} failed: ${failed.map(({ id }) => id).join(", ")}; report ${join(directory, "report.txt")}` });
 });
 
-
 const shardProblem = (shard: string, failure: CommandFailure) => `shard ${shard}: ${"problem" in failure && typeof failure.problem === "string" ? failure.problem : failure.message}`;
-
 
 const runShards = (shards: AcceptShards, selected: readonly string[], split: readonly (readonly PlannedSession[])[], checks: AcceptSuite["checks"], directory: string, json = false) => Effect.gen(function*() {
   const started = yield* Clock.currentTimeMillis;

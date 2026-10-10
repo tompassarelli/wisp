@@ -1,10 +1,3 @@
-
-
-
-
-
-
-
 import { randomBytes } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -18,7 +11,6 @@ export class FarmFailure extends Schema.TaggedError<FarmFailure>()("FarmFailure"
     return this.problem;
   }
 }
-
 
 const runOnce = (argv: readonly string[], inherit: boolean, cwd: string | undefined) => Effect.acquireUseRelease(
   Effect.try({
@@ -43,29 +35,16 @@ const runOnce = (argv: readonly string[], inherit: boolean, cwd: string | undefi
   }),
 );
 
-
 export const RATE_LIMITED = /rate limit|HTTP 429|abuse detection/i;
-
-
-
-
-
-
 
 export const run = (argv: readonly string[], inherit = false, cwd?: string) => argv[0] !== "gh" ? runOnce(argv, inherit, cwd) : runOnce(argv, inherit, cwd).pipe(
   Effect.tapError((failure) => RATE_LIMITED.test(failure.message) ? Effect.sync(() => console.error(`GitHub is rate-limiting requests; retrying ${argv.slice(0, 3).join(" ")} with backoff`)) : Effect.void),
   Effect.retry({ while: (failure) => RATE_LIMITED.test(failure.message), schedule: Schedule.min([Schedule.exponential("30 seconds"), Schedule.spaced("5 minutes")]).pipe(Schedule.jittered, Schedule.upTo({ duration: "65 minutes" })) }),
 );
 
-
 export const currentRepo = run(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]).pipe(
   Effect.tap((repo) => sweepScratch(repo)),
 );
-
-
-
-
-
 
 export const resolveRef = (given: string | undefined, repo: string) => Effect.gen(function*() {
 
@@ -76,7 +55,6 @@ export const resolveRef = (given: string | undefined, repo: string) => Effect.ge
   if (sha !== (yield* run(["git", "rev-parse", "HEAD"]))) return yield* new FarmFailure({ problem: `${sha.slice(0, 12)} isn't on main: check it out to run it, so safe-push pushes it` });
   const scratch = `farm/${sha.slice(0, 12)}`;
   console.error(`${sha.slice(0, 12)} isn't on main: pushing it to ${scratch} for the run (deleted afterwards)`);
-
 
   const base = yield* run(["git", "merge-base", sha, "FETCH_HEAD"]);
   yield* run(["gh", "api", "-X", "DELETE", `repos/${repo}/git/refs/heads/${scratch}`]).pipe(Effect.ignore);
@@ -89,7 +67,6 @@ export const resolveRef = (given: string | undefined, repo: string) => Effect.ge
   return { ref: sha, scratch };
 });
 
-
 const deleteScratch = (repo: string, scratch: string) =>
   run(["gh", "api", "-X", "DELETE", `repos/${repo}/git/refs/heads/${scratch}`]).pipe(Effect.catch((failure) => Effect.sync(() => console.error(`couldn't delete ${scratch}: ${failure.message}`))));
 
@@ -101,7 +78,6 @@ export const RunState = Schema.Struct({
 });
 export type RunState = typeof RunState.Type;
 
-
 export const decoded = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, text: string) =>
   Schema.decodeEffect(Schema.fromJsonString(schema))(text).pipe(Effect.mapError((cause) => new FarmFailure({ problem: `unexpected gh output: ${describeCause(cause)}` })));
 
@@ -109,7 +85,6 @@ const ScratchPages = Schema.Array(Schema.Struct({ data: Schema.Struct({ reposito
   nodes: Schema.Array(Schema.Struct({ name: Schema.String, target: Schema.Struct({ oid: Schema.String, committedDate: Schema.String }) })),
 }) }) }) }));
 const ActivePages = Schema.Array(Schema.Struct({ workflow_runs: Schema.Array(Schema.Struct({ head_branch: Schema.NullOr(Schema.String), head_sha: Schema.String, display_title: Schema.String })) }));
-
 
 export const sweepScratch = (repo: string) => Effect.gen(function*() {
   const [owner, name] = repo.split("/");
@@ -130,9 +105,7 @@ export const sweepScratch = (repo: string) => Effect.gen(function*() {
   }
 });
 
-
 export const runTag = () => randomBytes(4).toString("hex");
-
 
 export const dispatch = (repo: string, workflow: string, inputs: Readonly<Record<string, string>> & { readonly tag: string }) => Effect.gen(function*() {
   yield* run(["gh", "workflow", "run", workflow, "-R", repo, "--ref", "main", ...Object.entries(inputs).flatMap(([name, value]) => ["-f", `${name}=${value}`])]);
@@ -148,7 +121,6 @@ export const dispatch = (repo: string, workflow: string, inputs: Readonly<Record
   return yield* new FarmFailure({ problem: `no ${workflow} run named ${inputs.tag} appeared within two minutes` });
 });
 
-
 export const activeRun = (repo: string, workflow: string, prefix: string) => Effect.gen(function*() {
   for (const status of ["in_progress", "queued"]) {
     const listed = yield* run(["gh", "run", "list", "-R", repo, "--workflow", workflow, "--status", status, "-L", "50", "--json", "databaseId,displayTitle,url"]);
@@ -161,16 +133,9 @@ export const activeRun = (repo: string, workflow: string, prefix: string) => Eff
   return undefined;
 });
 
-
 export const POLL = { first: 10, growth: 1.5, most: 60 } as const;
 
-
 export const nextPoll = (seconds: number, moved: boolean) => moved ? POLL.first : Math.min(POLL.most, Math.round(seconds * POLL.growth));
-
-
-
-
-
 
 export const waitFor = (repo: string, id: number) => Effect.gen(function*() {
   let last = "";
@@ -188,13 +153,11 @@ export const waitFor = (repo: string, id: number) => Effect.gen(function*() {
   }
 });
 
-
 export const withArtifact = <A, E>(repo: string, id: number, name: string, use: (folder: string) => Effect.Effect<A, E>) => Effect.acquireUseRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), "wisp-farm-"))),
   (folder) => run(["gh", "run", "download", String(id), "-R", repo, "-n", name, "-D", folder]).pipe(Effect.andThen(use(folder))),
   (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
 );
-
 
 export function summaryLines(summary: Summary): { readonly lines: readonly string[]; readonly ok: boolean } {
   const suite = (name: string, count: Summary["bun"]) => count.shards === 0 ? []
@@ -204,11 +167,6 @@ export function summaryLines(summary: Summary): { readonly lines: readonly strin
     ok: summary.failures.length === 0 && summary.problems.length === 0,
   };
 }
-
-
-
-
-
 
 export const farmTest = (options: { readonly ref: string | undefined; readonly wait: boolean }) => Effect.scoped(Effect.gen(function*() {
   const repo = yield* currentRepo;

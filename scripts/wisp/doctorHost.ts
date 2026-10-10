@@ -1,8 +1,3 @@
-
-
-
-
-
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Layer } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -15,23 +10,14 @@ import { PlayProblem } from "./play";
 import { detectBuild, executableIn } from "./buildHost";
 import { requireCapability } from "./builds";
 
-
-
-
-
-
-
-
 const PLACEHOLDERS = { username: undefined, password: /^Password$/ } as const;
 
 const problem = (cause: { readonly message: string }) => new PlayProblem({ problem: cause.message });
-
 
 export const privateDoctorHands = (clientsFile: string) => Layer.effect(DoctorHands, Effect.gen(function*() {
   const config = yield* desktop.readClientsFile(clientsFile).pipe(Effect.mapError(problem));
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const platform = yield* Effect.context<Platform>();
-
 
   const windowOf = (target: DoctorTarget, title: string) => Effect.gen(function*() {
     const entry = config.clients.find((client) => client.name === target.client.name);
@@ -41,7 +27,6 @@ export const privateDoctorHands = (clientsFile: string) => Layer.effect(DoctorHa
     return window;
   }).pipe(Effect.mapError((cause) => (cause instanceof PlayProblem ? cause : problem(cause))));
 
-
   const leaveLobbyOf = (target: DoctorTarget) => Effect.scoped(Effect.gen(function*() {
     const menus = yield* reportedMenus(target.client.menuReportPort).pipe(Effect.catchTag("MenuFailure", () => Effect.void));
     if (menus !== undefined) return yield* leaveLobby(menus);
@@ -49,7 +34,6 @@ export const privateDoctorHands = (clientsFile: string) => Layer.effect(DoctorHa
     const profile = yield* requireCapability(yield* detectBuild(executableIn(target.prefix)), "menuDriving");
     yield* desktop.click(game, profile.menus.lobbyBack.x, profile.menus.lobbyBack.y);
   })).pipe(Effect.mapError((cause) => (cause instanceof PlayProblem ? cause : problem(cause))));
-
 
   const closeScoreOf = (target: DoctorTarget) => Effect.scoped(Effect.gen(function*() {
     const game = yield* windowOf(target, "Warcraft III");
@@ -61,11 +45,6 @@ export const privateDoctorHands = (clientsFile: string) => Layer.effect(DoctorHa
       yield* menus.send(profile.menus.scoreClose);
     }
   })).pipe(Effect.mapError((cause) => (cause instanceof PlayProblem ? cause : problem(cause))));
-
-
-
-
-
 
   const enterLoginOf = (target: DoctorTarget, field: "username" | "password") => Effect.gen(function*() {
     const command = target.account?.[field];

@@ -1,10 +1,5 @@
-
-
-
-
 import { assertEquals, test } from "../runtime/testing";
 import { f32 } from "./f32";
-
 
 const same = (actual: number, expected: number) =>
   assertEquals(actual === expected && 1 / actual === 1 / expected, true, `${actual} vs ${expected}`);
@@ -24,7 +19,6 @@ test("[reference] f32 arithmetic rounds the exact result to nearest", () => {
   same(f32((16777215 + 2)), 16777216);
   same(f32(-1 - 16777216), -16777216);
   same(f32(1.5 * 4096.5), 6144.75);
-
 
   for (let i = 0; i < 3; i++) {
     same(f32(tenth + fifth), 0.30000001192092896);

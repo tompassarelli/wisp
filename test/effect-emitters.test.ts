@@ -30,7 +30,6 @@ const emitter = (name: string, id: number, rate: string, squirt: boolean) => `Pa
   LifeSpan 1,
 }`;
 
-
 const nova = parseMDL(`Version { FormatVersion 800, }
 Model "Nova" { NumGeosets 0, BlendTime 150, }
 Sequences 1 { Anim "Birth" { Interval { 0, 1500 }, NonLooping, } }
@@ -40,7 +39,6 @@ ${emitter("Fifty", 1, "static EmissionRate 50", false)}
 ${emitter("Sixty", 2, "static EmissionRate 60", false)}
 PivotPoints 3 { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 }, }`);
 const sequences = nova.Sequences.map((sequence) => ({ name: sequence.Name, start: sequence.Interval[0] ?? 0, end: sequence.Interval[1] ?? 0, looping: !sequence.NonLooping, rarity: sequence.Rarity }));
-
 
 function particlesAt(ms: number): Record<string, number> {
   const renderer = new ModelRenderer(nova);

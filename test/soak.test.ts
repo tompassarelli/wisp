@@ -1,7 +1,3 @@
-
-
-
-
 import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -91,7 +87,6 @@ test("[spec #16] each fault is found by its detector, and a lag spike's catch-up
       }
       return monitor.findings.filter(({ kind }) => kind === "catch-up").map(({ text }) => text);
     };
-
 
     const spike = (frame: number) => (frame < 120 ? 11 : frame < 180 ? 17 : frame < 235 ? 23 : frame < 280 ? 105 - (frame - 235) * 2 : 20);
     expect(catchUps(spike, 600)).toEqual([]);

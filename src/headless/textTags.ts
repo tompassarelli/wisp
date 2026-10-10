@@ -1,5 +1,3 @@
-
-
 import { f32 } from "../sim/f32";
 import type { Handle } from "./client";
 
@@ -24,7 +22,6 @@ interface TextTag {
   lifespan: number;
   fadepoint: number;
 }
-
 
 export interface TextTagPose {
   readonly handle: Handle;
@@ -84,7 +81,6 @@ export class TextTags {
     };
   }
 
-
   tick(seconds: number): void {
     for (const found of this.tags.values()) {
       if (found.suspended) continue;
@@ -94,7 +90,6 @@ export class TextTags {
       if (!found.permanent && found.age >= found.lifespan) this.tags.delete(found.handle);
     }
   }
-
 
   poses(): TextTagPose[] {
     const poses: TextTagPose[] = [];

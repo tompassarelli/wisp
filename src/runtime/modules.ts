@@ -1,16 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
 import { NO_BASE, PAYLOAD_FILE_BYTES, deltaFile, payloadFile, type Manifest } from "./gameFiles";
 import { checksum } from "./payload";
 
@@ -21,7 +8,6 @@ export interface HotModule {
   readonly text: string;
 }
 
-
 export interface ModuleSet {
   readonly entry: string;
   readonly modules: readonly HotModule[];
@@ -29,24 +15,17 @@ export interface ModuleSet {
 
 // A module chunk's head stays one line so source-map line positions match the bundle.
 
-
-
-
 export const MODULE_HEAD = "local require = ... return function(...) \n";
 export const MODULE_TAIL = " end\n";
 export const moduleChunk = (code: string) => `${MODULE_HEAD}${code}${MODULE_TAIL}`;
 
-
 export const BUNDLE_MODULE = "bundle";
 export const bundleModules = (bundle: string): ModuleSet => ({ entry: BUNDLE_MODULE, modules: [{ name: BUNDLE_MODULE, text: moduleChunk(bundle) }] });
-
 
 export type Hash = (this: void, text: string) => string;
 export const textChecksum: Hash = (text) => checksum(text.length, (index) => text.charCodeAt(index));
 
-
 export const moduleHashText = (name: string, text: string) => `${name}\n${text}`;
-
 
 export function moduleIndex(entry: string, hashes: readonly (readonly [name: string, hash: string])[]): string {
   const lines = [entry];
@@ -74,12 +53,10 @@ export interface Payload {
   readonly texts: Readonly<Record<string, string | undefined>>;
 }
 
-
 function field(line: string): [string, string] | undefined {
   const space = line.indexOf(" ");
   return space <= 0 || space === line.length - 1 ? undefined : [line.slice(0, space), line.slice(space + 1)];
 }
-
 
 export function parsePayload(text: string): Payload | undefined {
   const indexEnd = text.indexOf("\n\n");
@@ -133,12 +110,10 @@ export function payloadPieces(text: string): string[] {
   return pieces;
 }
 
-
 export interface ModuleState {
   readonly state: string;
   readonly hashes: Readonly<Record<string, string | undefined>>;
 }
-
 
 export interface VersionFiles {
   readonly manifest: Manifest;
@@ -151,17 +126,11 @@ export interface VersionFiles {
   readonly fullBytes: number;
 }
 
-
-
-
-
-
 export class ModulePublisher {
   private known: Record<string, { readonly text: string; readonly hash: string } | undefined> = {};
   private base: ModuleState | undefined;
 
   constructor(private readonly prefix: string, private readonly hash: Hash = textChecksum) {}
-
 
   installed(state: ModuleState): void {
     this.base = state;

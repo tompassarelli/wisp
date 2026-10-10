@@ -19,8 +19,6 @@ const pose = (name: string, x: number, y: number, unit = false) => ({ name, x, y
 
 test("[native] an effect whose origin lies outside the terrain's world bounds isn't drawn: Stratholme's cathedral on the 64 x 64 base (smashcraft#297)", () => {
 
-
-
   const terrain = decodeTerrain(flatTerrain(65, 65, -4096, -4096));
   expect(worldBounds(terrain)).toEqual({ minX: -4096, maxX: 4096, minY: -4096, maxY: 4096 });
 

@@ -1,9 +1,3 @@
-
-
-
-
-
-
 type Matrix = Float32Array;
 
 export function multiply(a: Matrix, b: Matrix): Matrix {
@@ -18,7 +12,6 @@ export function multiply(a: Matrix, b: Matrix): Matrix {
 const normalize = (v: readonly number[]): number[] => { const length = Math.hypot(...v) || 1; return v.map((value) => value / length); };
 const cross = (a: readonly number[], b: readonly number[]): number[] => [(a[1] ?? 0) * (b[2] ?? 0) - (a[2] ?? 0) * (b[1] ?? 0), (a[2] ?? 0) * (b[0] ?? 0) - (a[0] ?? 0) * (b[2] ?? 0), (a[0] ?? 0) * (b[1] ?? 0) - (a[1] ?? 0) * (b[0] ?? 0)];
 const dot = (a: readonly number[], b: readonly number[]) => a.reduce((sum, value, i) => sum + value * (b[i] ?? 0), 0);
-
 
 function basis(z: readonly number[]): Matrix {
   const forward = normalize(z), up = Math.abs(forward[2] ?? 0) > 0.99 ? [0, 1, 0] : [0, 0, 1];
@@ -39,16 +32,11 @@ function perspective(tangent: number, near: number, far: number): Matrix {
   return out;
 }
 
-
 export interface ShadowCamera { eye: readonly number[]; right: readonly number[]; up: readonly number[]; back: readonly number[]; tangent: number; aspect: number; near: number; reach: number }
 
 export const SUN_MAP = 4096;
 
 const CASTER_REACH = 6000;
-
-
-
-
 
 export function sunView(camera: ShadowCamera, toward: readonly number[]) {
   const rotation = basis(toward), corners: number[][] = [];
@@ -90,7 +78,6 @@ export function depthTarget(gl: WebGL2RenderingContext, width: number, height: n
   return { texture, framebuffer, width, height };
 }
 
-
 export interface SceneTarget { framebuffer: WebGLFramebuffer; resolved: WebGLFramebuffer; color: WebGLTexture; depth: WebGLTexture; width: number; height: number }
 function colorTexture(gl: WebGL2RenderingContext, width: number, height: number): WebGLTexture {
   const texture = gl.createTexture();
@@ -122,7 +109,6 @@ export function resolve(gl: WebGL2RenderingContext, target: SceneTarget): void {
   gl.blitFramebuffer(0, 0, target.width, target.height, 0, 0, target.width, target.height, gl.DEPTH_BUFFER_BIT, gl.NEAREST);
   gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
 }
-
 
 export type PostProcessing = Readonly<Record<string, Readonly<Record<string, number>>>>;
 export function parsePostProcessing(...texts: readonly string[]): PostProcessing {
@@ -157,12 +143,6 @@ function pass(gl: WebGL2RenderingContext, fragment: string): Pass {
   const locations = new Map<string, WebGLUniformLocation | null>();
   return { program, uniform: (name) => { if (!locations.has(name)) locations.set(name, gl.getUniformLocation(program, name)); return locations.get(name) ?? null; } };
 }
-
-
-
-
-
-
 
 const AO_FS = `#version 300 es
 precision highp float;
@@ -264,7 +244,6 @@ function image(gl: WebGL2RenderingContext, width: number, height: number): Image
   return { texture, framebuffer, width, height };
 }
 
-
 export function postProcessor(gl: WebGL2RenderingContext, target: SceneTarget) {
   const vao = gl.createVertexArray(), buffer = gl.createBuffer();
   gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -324,7 +303,6 @@ export function postProcessor(gl: WebGL2RenderingContext, target: SceneTarget) {
     gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
   };
 }
-
 
 export function invert(m: Matrix): Matrix {
   const out = new Float32Array(16), a = Array.from(m);

@@ -1,5 +1,3 @@
-
-
 import { Effect } from "effect";
 import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";

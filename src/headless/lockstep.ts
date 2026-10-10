@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import { ackFile, formatManifest, hostFile, manifestFile } from "../runtime/gameFiles";
 import type { FrameTemplate } from "./frames";
 import { type Hash, type ModuleSet, ModulePublisher, type VersionFiles } from "../runtime/modules";
@@ -46,9 +40,6 @@ export interface LockstepOptions {
 
   readonly files?: (this: void, slot: number) => ClientFiles | undefined;
 
-
-
-
   readonly keepCalls?: number;
 
   readonly effectDeaths?: EffectDeaths;
@@ -56,18 +47,10 @@ export interface LockstepOptions {
   readonly musicSlider?: number;
   readonly effectStepMs?: number;
 
-
-
-
   readonly cost?: (this: void) => number;
 
   readonly frames?: readonly FrameTemplate[];
 }
-
-
-
-
-
 
 export interface SyncDelivery {
 
@@ -92,7 +75,6 @@ interface InFlight {
   readonly message: SyncMessage;
 }
 
-
 function typedKey(code: number): readonly [key: number, meta: number] | undefined {
   // a-z: Warcraft's key codes are the capital letters'.
   if (code >= 97 && code <= 122) return [code - 32, 0];
@@ -100,7 +82,6 @@ function typedKey(code: number): readonly [key: number, meta: number] | undefine
   if ((code >= 48 && code <= 57) || code === 32) return [code, 0];
   return undefined;
 }
-
 
 const MAX_MESSAGES_PER_FLUSH = 10000;
 
@@ -158,11 +139,6 @@ export class Lockstep {
     this.clients = clients;
   }
 
-
-
-
-
-
   start(options: { readonly hostFolder?: boolean } = {}): void {
     if (options.hostFolder !== false) this.prepareHostFolder();
     const entry = this.options.entry;
@@ -171,7 +147,6 @@ export class Lockstep {
     }
     this.flush();
   }
-
 
   everywhere(body: (this: void) => void): void {
     for (const client of this.clients) client.run(body);
@@ -262,16 +237,10 @@ export class Lockstep {
     }
   }
 
-
   private charge(index: number, started: number | undefined): void {
     const clock = this.options.cost;
     if (clock !== undefined && started !== undefined) this.costs[index] = (this.costs[index] ?? 0) + clock() - started;
   }
-
-
-
-
-
 
   private settle(): void {
     const keep = this.options.keepCalls;
@@ -289,11 +258,9 @@ export class Lockstep {
     this.flush();
   }
 
-
   press(sender: number, key: number, meta = 0): void {
     for (const down of [true, false]) this.key(sender, key, meta, down);
   }
-
 
   key(sender: number, key: number, meta: number, down: boolean): void {
     if (this.options.link !== undefined) {
@@ -304,16 +271,10 @@ export class Lockstep {
     this.flush();
   }
 
-
   client(slot: number): HeadlessClient {
     for (const client of this.clients) if (client.slot === slot) return client;
     throw new Error(`no client plays slot ${slot}`);
   }
-
-
-
-
-
 
   type(sender: number, text: string): void {
     if (this.client(sender).type(text)) return;
@@ -323,11 +284,6 @@ export class Lockstep {
       this.press(sender, key[0], key[1]);
     }
   }
-
-
-
-
-
 
   click(sender: number, x: number, y: number): boolean {
     const clicker = this.client(sender);
@@ -344,21 +300,13 @@ export class Lockstep {
     return true;
   }
 
-
   publish(name: string, chunks: readonly string[]): void {
     for (const client of this.clients) client.published.set(name, chunks);
   }
 
-
   prepareHostFolder(): void {
     for (const client of this.clients) client.published.set(hostFile(this.options.filePrefix), ["host"]);
   }
-
-
-
-
-
-
 
   reload(modules: ModuleSet = this.options.modules): number {
     this.prepareHostFolder();
@@ -372,7 +320,6 @@ export class Lockstep {
     return this.version;
   }
 
-
   unappliedReloads(): string[] {
     if (this.version === 0) return [];
     const problems: string[] = [];
@@ -385,7 +332,6 @@ export class Lockstep {
     }
     return problems;
   }
-
 
   firstDivergence(): string | undefined {
     return this.divergence ?? this.compare();

@@ -1,7 +1,3 @@
-
-
-
-
 import { floorMod } from "../sim/intMath";
 
 const FIRST = 8165329;

@@ -18,7 +18,6 @@ interface Allocation {
   cleanupAt: number;
 }
 
-
 export function handleWarnings(program: ts.Program): readonly ts.Diagnostic[] {
   const checker = program.getTypeChecker();
   const warnings: ts.Diagnostic[] = [];

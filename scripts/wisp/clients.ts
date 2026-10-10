@@ -1,11 +1,8 @@
-
-
 import { Context, Effect, Layer } from "effect";
 import type { Platform } from "../platform/services";
 import * as desktop from "../warcraft/desktop";
 import type { Frame } from "./frameProbe";
 export { DesktopFailure, type Ink, type Region, type Word, type InputAction, waitFor } from "../warcraft/desktop";
-
 
 export type Client = Pick<desktop.Client, "name" | "documents" | "menuReportPort">;
 
@@ -23,7 +20,6 @@ export class Clients extends Context.Service<Clients, {
 }>()("wisp/Clients") {
   static readonly layer = (path: string) => Layer.effect(Clients, connect(path));
 }
-
 
 export const waitForText = (client: Client, what: string, pattern: RegExp, region?: desktop.Region, ink: desktop.Ink = "light", seconds = 20) =>
   Effect.gen(function*() {

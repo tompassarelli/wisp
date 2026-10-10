@@ -1,7 +1,3 @@
-
-
-
-
 import { afterEach, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -18,7 +14,6 @@ const cleanups: (() => void)[] = [];
 afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup();
 });
-
 
 const sandbox = () => {
   const folder = mkdtempSync(join(tmpdir(), "wisp-host-tools-"));
@@ -66,7 +61,6 @@ const until = async (check: () => boolean, seconds: number, what: string) => {
     await Bun.sleep(100);
   }
 };
-
 
 const leftovers = async (runner: Bun.Subprocess, box: ReturnType<typeof sandbox>) => {
   const code = await Promise.race([runner.exited, Bun.sleep(30_000).then(() => "still running")]);

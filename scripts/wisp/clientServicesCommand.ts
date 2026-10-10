@@ -1,6 +1,3 @@
-
-
-
 import { Console, Effect } from "effect";
 import type { Platform } from "../platform/services";
 import * as desktop from "../warcraft/desktop";
@@ -13,7 +10,6 @@ import { ClientWatch, type WatchOptions, describeView, inState, waitFor } from "
 
 const DOCUMENTS = "/drive_c/users/steamuser/Documents/Warcraft III";
 
-
 const chosenClients = (clientsFile: string, names: readonly string[]) => Effect.gen(function*() {
   if (names.some((name) => name.startsWith("-"))) return yield* new UsageFailure({ problem: "takes client names only" });
   const config = yield* desktop.readClientsFile(clientsFile).pipe(Effect.mapError((cause) => new ServiceProblem({ problem: cause.message })));
@@ -23,7 +19,6 @@ const chosenClients = (clientsFile: string, names: readonly string[]) => Effect.
 });
 
 const unitLine = (unit: string) => serviceState(unit).pipe(Effect.map((state) => `${state.active}${state.since === "" ? "" : ` since ${state.since}`}`));
-
 
 const statusLines = (clientsFile: string, names: readonly string[], watch: WatchOptions) => Effect.gen(function*() {
   const clients = yield* chosenClients(clientsFile, names);
@@ -45,17 +40,11 @@ const statusLines = (clientsFile: string, names: readonly string[], watch: Watch
 
 export const serviceStatus = (clientsFile: string, names: readonly string[], watch: WatchOptions) => statusLines(clientsFile, names, watch);
 
-
 const desktopService = (name: string) => Effect.gen(function*() {
   const capacity = yield* skillScript("machine-capacity", "scripts/machine-capacity.mjs");
   const launcher = yield* skillScript("private-desktop-development", "scripts/private-desktop.sh");
   return yield* startDesktop(name, yield* desktopCommand(capacity, launcher, name));
 });
-
-
-
-
-
 
 export const reviveDesktops = <E = never>(clientsFile: string, names: readonly string[], start: (name: string) => Effect.Effect<string, ServiceProblem | E, Platform> = desktopService) => Effect.gen(function*() {
   const missing = (yield* chosenClients(clientsFile, names)).filter((entry) => !liveDesktop(entry.run));
@@ -67,15 +56,8 @@ export const reviveDesktops = <E = never>(clientsFile: string, names: readonly s
   }
 });
 
-
 export const serviceDoctor = (clientsFile: string, names: readonly string[], doctor: Command) =>
   reviveDesktops(clientsFile, names).pipe(Effect.andThen(doctor(names)));
-
-
-
-
-
-
 
 export const serviceStart = (clientsFile: string, names: readonly string[], doctor: Command, watch: WatchOptions) => Effect.gen(function*() {
   const clients = yield* chosenClients(clientsFile, names);
@@ -89,9 +71,7 @@ export const serviceStart = (clientsFile: string, names: readonly string[], doct
   yield* statusLines(clientsFile, clients.map(({ name }) => name), watch);
 });
 
-
 const MENU_SECONDS = 420;
-
 
 export const serviceStop = (clientsFile: string, names: readonly string[]) => Effect.gen(function*() {
   const clients = yield* chosenClients(clientsFile, names);

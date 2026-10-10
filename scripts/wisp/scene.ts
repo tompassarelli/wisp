@@ -1,13 +1,3 @@
-
-
-
-
-
-
-
-
-
-
 import { type SceneModel, reportedModel } from "../../src/runtime/scene";
 import type { ModelFacts } from "./models";
 import { type VisibilityExpectations, visibilityProblems } from "./visibility";
@@ -32,7 +22,6 @@ export interface MalformedSceneLine {
   readonly problem: string;
 }
 
-
 export function readSceneLines(lines: readonly string[]): SceneReport | MalformedSceneLine {
   const [heading = "", ...rest] = lines;
   const head = HEADING.exec(heading);
@@ -54,7 +43,6 @@ export function readSceneLines(lines: readonly string[]): SceneReport | Malforme
   }
   return { serial: Number(head[1]), frame: Number(head[2]), effects: Number(head[3]), models };
 }
-
 
 export interface SceneKind {
 
@@ -83,7 +71,6 @@ export interface SceneProblem {
 }
 
 const names = (kinds: readonly SceneKind[]) => [...new Set(kinds.map(({ name }) => name))].join(", ");
-
 
 export function sceneProblems(report: SceneReport, expected: SceneExpectations): readonly SceneProblem[] {
   const declared = new Map<string, SceneKind[]>();
@@ -135,10 +122,8 @@ export function sceneProblems(report: SceneReport, expected: SceneExpectations):
 const stageModelsOf = (expected: SceneExpectations) =>
   new Set((expected.kinds.find(({ name }) => name === expected.stage.kind)?.models ?? []).map(reportedModel).filter((model) => model !== ""));
 
-
 const stagePieces = (report: SceneReport, models: ReadonlySet<string>) =>
   report.models.filter(({ model }) => models.has(model)).reduce((sum, { drawn }) => sum + drawn, 0);
-
 
 export function describeScene(report: SceneReport, expected: SceneExpectations): string {
   const pieces = stagePieces(report, stageModelsOf(expected));
@@ -146,18 +131,11 @@ export function describeScene(report: SceneReport, expected: SceneExpectations):
   return `frame ${report.frame}: ${pieces} ${expected.stage.kind} piece${pieces === 1 ? "" : "s"} drawn; ${inView} of ${report.effects} effects in view across ${report.models.length} models`;
 }
 
-
 export interface SceneBody {
 
   readonly name: string;
   readonly models: readonly string[];
 }
-
-
-
-
-
-
 
 export function bodyProblems(report: SceneReport, bodies: readonly SceneBody[], facts: Readonly<Record<string, ModelFacts>> = {}): readonly SceneProblem[] {
   const triangles = new Map(Object.entries(facts).map(([model, entry]) => [reportedModel(model).toLowerCase(), entry.triangles]));

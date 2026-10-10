@@ -1,7 +1,3 @@
-
-
-
-
 import { installHeadless } from "./headless";
 import { loadSoakGame, loadSoakProject, playSoakMatch, readSoakMatch, soakReply } from "./soak";
 

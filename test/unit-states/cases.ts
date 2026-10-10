@@ -16,10 +16,6 @@ function fixture(): unit {
 
 // Native observations are scaled by 128 and wrapped to Lua32 integers; unit type IDs must wrap identically.
 
-
-
-
-
 export function unitStateCases(this: void, done: (this: void, rows: readonly string[]) => void): void {
   const rows: string[] = [];
   const record = (name: string, values: readonly number[]) => {
@@ -107,8 +103,6 @@ export function unitStateCases(this: void, done: (this: void, rows: readonly str
   }
   record("death-cutoff", cutoff);
 
-
-
   let dies = 13589546;
   let lives = 13631488;
   while (lives - dies > 1) {
@@ -120,7 +114,6 @@ export function unitStateCases(this: void, done: (this: void, rows: readonly str
     RemoveUnit(u);
   }
   rows.push(`death-cutoff-first-alive=${exact(lives * 0.0000000298023223876953125)}`);
-
 
   const lifeReads: string[] = [];
   for (const life of [7.5, f32(6.7), 13.5]) {

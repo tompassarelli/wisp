@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { API, type Diagnostic, DiagnosticCategory, type Snapshot } from "typescript-native/unstable/async";
@@ -25,7 +19,6 @@ export interface FileCheck {
 const flatten = (diagnostic: Diagnostic, depth = 0): string =>
   [`${"  ".repeat(depth)}${diagnostic.text}`, ...(diagnostic.messageChain ?? []).map((chained) => flatten(chained, depth + 1))].join("\n");
 
-
 function position(text: string, offset: number): { readonly line: number; readonly column: number } {
   let line = 1;
   let lineStart = 0;
@@ -35,7 +28,6 @@ function position(text: string, offset: number): { readonly line: number; readon
   }
   return { line, column: offset - lineStart + 1 };
 }
-
 
 export const formatTypeError = (root: string, error: TypeError) =>
   `${relative(root, error.file)}:${error.line}:${error.column} TS${error.code} ${error.message}`;
@@ -49,13 +41,11 @@ export class TypeChecker {
 
   private constructor(private readonly api: API, private readonly projects: readonly string[]) {}
 
-
   static async open(root: string, projects: readonly string[]): Promise<TypeChecker> {
     const checker = new TypeChecker(new API({ cwd: root }), projects.map((project) => resolve(root, project)));
     await checker.reopen();
     return checker;
   }
-
 
   reopen(): Promise<void> {
     return this.serially(async () => {
@@ -66,7 +56,6 @@ export class TypeChecker {
       }
     });
   }
-
 
   check(files: readonly string[]): Promise<FileCheck> {
     return this.serially(async () => {

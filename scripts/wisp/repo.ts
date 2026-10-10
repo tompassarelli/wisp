@@ -1,5 +1,3 @@
-
-
 import { runCli } from "./cli";
 
 process.exit(await runCli("bun wisp", {

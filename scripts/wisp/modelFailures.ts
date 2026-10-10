@@ -5,7 +5,6 @@ import { FILE_SLOTS, modelFailureFile, modelFailureRequestFile, modelFailureToke
 import { hostPath, linePreloadFile, preloadLines } from "./boundary";
 import { GameFiles } from "./gameFiles";
 
-
 export function modelFailureBridge(files: GameFiles["Service"], filePrefix = "wisp") {
   const sent = new Map<string, number>();
   return (directories: readonly string[]) => Effect.gen(function*() {

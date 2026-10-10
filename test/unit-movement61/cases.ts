@@ -9,7 +9,6 @@ export const UNIT_MOVEMENT_NOOPS = {
   PauseUnit: "the fixture's bodies mirror Smashcraft's paused bodies; headless runs no unit AI",
 };
 
-
 function body(crowForm: boolean): unit {
   const created = CreateUnit(Player(2), UNIT_TYPE, 0, 0, 180);
   SetUnitPathing(created, false);

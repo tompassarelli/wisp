@@ -1,4 +1,3 @@
-
 import { ModelRenderer, decodeBLP, getBLPImageData, parseMDL, parseMDX, type model } from "../../../vendor/war3-model.mjs";
 import { type AnimationSequence, animationSample, blendWeight, globalSequenceFrame, type SequenceSample } from "../../../src/headless/animation";
 import type { DrawnPose as EffectPose, PopcornEmitterPose, RenderedFrame, RenderScene } from "../headlessRender";
@@ -97,7 +96,6 @@ const SKY_FAR = 1_000_000;
 
 const SHADOW_REACH = 2.5;
 
-
 function sample(track: model.AnimVector | ArrayLike<number> | number | undefined, frame: number, fallback: readonly number[]): number[] {
   if (track === undefined) return [...fallback];
   if (typeof track === "number") return [track];
@@ -124,9 +122,6 @@ function rotate(q: readonly number[], v: readonly number[]): number[] {
 interface WorldLight { readonly toward: readonly number[]; readonly key: readonly number[]; readonly ambient: readonly number[]; readonly linear: boolean }
 let environmentLight: Promise<number[]> | undefined;
 
-
-
-
 function environmentAmbient(): Promise<number[]> {
   environmentLight ??= textureAt("ReplaceableTextures\\EnvironmentMap.blp").then((texture) => {
     const context = texture.getContext("2d"); if (context === null) throw new Error("no 2D texture context");
@@ -143,10 +138,6 @@ function environmentAmbient(): Promise<number[]> {
   return environmentLight;
 }
 const dayNightModels = new Map<string, Promise<model.Model | undefined>>();
-
-
-
-
 
 async function dayNightLight(path: string, hours: number): Promise<WorldLight | undefined> {
   if (path === "") return undefined;
@@ -183,9 +174,6 @@ function modelDirection(matrix: Matrix, toward: readonly number[]): number[] {
   const out = [0, 1, 2].map((k) => cofactor(0, k) * x + cofactor(1, k) * y + cofactor(2, k) * z);
   return Math.hypot(...out) > 0 ? normalize(out) : [0, 0, 1];
 }
-
-
-
 
 function sceneFog(scene: RenderScene, view: ReturnType<typeof camera>, sky: boolean) {
   const fog = scene.environment?.fog;
@@ -329,10 +317,6 @@ function poseNodes(sampler: Sampler, data: model.Model, saved: SequenceSample | 
   finally { interp.vec3 = vec3; interp.quat = quat; sampler.updateNode = updateNode; node = undefined; }
 }
 
-
-
-
-
 const spare = new Map<string, ModelInstance[]>();
 const stateless = (instance: ModelInstance) => instance.model.ParticleEmitters2.length === 0 && instance.model.RibbonEmitters.length === 0;
 function release(instance: ModelInstance): void {
@@ -464,11 +448,6 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
 interface PointLight { readonly position: readonly number[]; readonly color: readonly number[]; readonly start: number; readonly end: number; readonly casts: boolean; shadowSlot?: number }
 const MAX_POINT_LIGHTS = 8;
 const lightModels = new Map<string, Promise<model.Model | undefined>>();
-
-
-
-
-
 
 async function pointLights(poses: readonly EffectPose[]): Promise<PointLight[]> {
   const lights: PointLight[] = [];

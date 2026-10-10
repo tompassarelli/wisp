@@ -13,9 +13,6 @@ afterAll(runtime.restore);
 
 // Native expectations follow wisp:docs/warsmash-notes.md#native-results-for-44.
 
-
-
-
 export const EXPECTED = [
   "owner-retained=256",
   "facing-writes=11519",
@@ -42,7 +39,6 @@ export const EXPECTED = [
   "removal-quarter-second=0,0",
   "removal-one-second=0,0",
 ];
-
 
 const FRAMES = 80;
 

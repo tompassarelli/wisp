@@ -1,6 +1,3 @@
-
-
-
 import { runLuaPerf } from "wisp/src/headless/luaPerf";
 
 declare const arg: Readonly<Record<number, string | undefined>>;

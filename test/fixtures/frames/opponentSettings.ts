@@ -1,6 +1,3 @@
-
-
-
 import type { FrameDefinition, FrameNode } from "../../../scripts/wisp/frames";
 
 const FONT = "Fonts\\FRIZQT__.TTF";

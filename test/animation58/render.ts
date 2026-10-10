@@ -1,6 +1,3 @@
-
-
-
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Console, Effect } from "effect";
 import { installHeadless } from "../../scripts/wisp/headless";

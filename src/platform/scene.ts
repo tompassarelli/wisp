@@ -1,11 +1,3 @@
-
-
-
-
-
-
-
-
 import { runtimeConfiguration } from "../runtime/config";
 import { type SceneModel, reportedModel, sceneFile, sceneHeading, sceneModelLine, sceneReportGlobal } from "../runtime/scene";
 import { on, trampoline } from "./dispatch";
@@ -18,14 +10,7 @@ export interface SceneOptions {
   readonly frame: (this: void) => number;
   // Particle emitters keep running at any alpha, scale or time scale; hidden effects must be parked off camera.
 
-
-
-
   readonly parked: (this: void, x: number, y: number, z: number) => boolean;
-
-
-
-
 
   readonly unitModel?: ((this: void, unitType: number) => string | undefined) | undefined;
 }
@@ -80,12 +65,6 @@ function leftView(state: SceneState, effect: Recorded, frame: number): void {
   if (stayed > (state.longest.get(effect.model) ?? 0)) state.longest.set(effect.model, stayed);
   effect.since = undefined;
 }
-
-
-
-
-
-
 
 function placed(state: SceneState, effect: Recorded, x: number, y: number, z: number): void {
   if (state.options.parked(x, y, z)) leftView(state, effect, now(state));
@@ -178,7 +157,6 @@ function wrapNatives(state: SceneState): void {
   if (unitModel !== undefined) wrapUnitNatives(state, unitModel);
 }
 
-
 function wrapUnitNatives(state: SceneState, unitModel: (this: void, unitType: number) => string | undefined): void {
   const create = CreateUnit;
   const remove = RemoveUnit;
@@ -226,7 +204,6 @@ function wrapUnitNatives(state: SceneState, unitModel: (this: void, unitType: nu
   };
 }
 
-
 function observe(state: SceneState, frame: number): void {
   const { parked } = state.options;
   for (const [handle, effect] of state.effects) {
@@ -245,7 +222,6 @@ interface Summary {
   created: number;
   since: number | undefined;
 }
-
 
 function sceneModels(state: SceneState, frame: number): SceneModel[] {
   const summaries = new Map<string, Summary>();
@@ -288,15 +264,9 @@ function writeReport(): void {
   PreloadGenEnd(sceneFile(GetPlayerId(GetLocalPlayer()), runtimeConfiguration().filePrefix));
 }
 
-
 export function installSceneReport(): void {
   on(REPORT, writeReport);
 }
-
-
-
-
-
 
 export function startSceneReport(options: SceneOptions): void {
   const globals = globalThis as Record<`${string}SceneReport`, SceneState | undefined>;

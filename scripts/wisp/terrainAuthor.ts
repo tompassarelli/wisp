@@ -22,7 +22,6 @@ function painter(bytes: Uint8Array, tile: string, endpoints: readonly TerrainGri
   } };
 }
 
-
 export function terrainLine(bytes: Uint8Array, tile: string, from: TerrainGridPoint, to: TerrainGridPoint): Uint8Array {
   const { output, paint } = painter(bytes, tile, [from, to]);
   let [x, y] = from;
@@ -38,7 +37,6 @@ export function terrainLine(bytes: Uint8Array, tile: string, from: TerrainGridPo
   }
   return output;
 }
-
 
 export function terrainRectFill(bytes: Uint8Array, tile: string, first: TerrainGridPoint, second: TerrainGridPoint): Uint8Array {
   const { output, paint } = painter(bytes, tile, [first, second]);

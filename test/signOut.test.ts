@@ -1,4 +1,3 @@
-
 import { expect, test } from "bun:test";
 import { hasSavedLogin, withoutSavedLogin } from "../scripts/warcraft/battleNet";
 

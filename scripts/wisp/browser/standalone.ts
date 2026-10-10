@@ -1,4 +1,3 @@
-
 import "./headlessRender";
 import type { SoundCue } from "../../../src/headless/client";
 import type { StandaloneFrame, StandaloneInput } from "../standalone";

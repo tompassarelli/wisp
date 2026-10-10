@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import { existsSync, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
@@ -15,8 +9,6 @@ import { installMenuPage } from "../menus";
 import { LanFailure } from "./join";
 import { clientRoot, installOf, prefixOf, retailOf } from "./pool";
 
-
-
 const run = (what: string, command: readonly string[], env: Readonly<Record<string, string>> = {}) =>
   collect(ChildProcess.make(command[0]!, command.slice(1), { env, extendEnv: true, stdin: "ignore" })).pipe(
     Effect.provide(BunServices.layer),
@@ -24,7 +16,6 @@ const run = (what: string, command: readonly string[], env: Readonly<Record<stri
     Effect.flatMap(({ exitCode, stderr }) => (exitCode === 0 ? Effect.void
       : Effect.fail(new LanFailure({ problem: `${what}: exited with ${exitCode}: ${stderr.trim().split("\n").slice(-3).join(" | ")}` })))),
   );
-
 
 export const setupClient = (name: string, from: string, port: number, log: (line: string) => void) => Effect.gen(function*() {
   if (!existsSync(join(from, "_retail_/x86_64/Warcraft III.exe"))) return yield* new LanFailure({ problem: `${from} isn't a Warcraft III install (no _retail_/x86_64/Warcraft III.exe)` });

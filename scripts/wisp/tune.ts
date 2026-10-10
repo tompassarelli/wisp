@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import { readFileSync, writeFileSync } from "node:fs";
 import { normalize, resolve } from "node:path";
 import ts from "typescript";
@@ -12,7 +6,6 @@ import { describeCause } from "./command";
 import { HotReload, type HotReloadFailure } from "./hotReload";
 import { step } from "./timings";
 
-
 export interface Tunable {
 
   readonly name: string;
@@ -20,11 +13,6 @@ export interface Tunable {
   readonly group?: string;
 
   readonly file: string;
-
-
-
-
-
 
   readonly path: readonly string[];
 
@@ -43,7 +31,6 @@ export class TuneFailure extends Schema.TaggedError<TuneFailure>()("TuneFailure"
   }
 }
 
-
 export interface Literal {
   readonly start: number;
   readonly end: number;
@@ -59,7 +46,6 @@ function unwrap(node: ts.Expression): ts.Expression {
 function propertyName(name: ts.PropertyName): string | undefined {
   return ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name) ? name.text : undefined;
 }
-
 
 export function findLiteral(text: string, path: readonly string[]): Literal | string {
   const source = ts.createSourceFile("tunable.ts", text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
@@ -92,19 +78,13 @@ export function findLiteral(text: string, path: readonly string[]): Literal | st
   return { start, end, text: text.slice(start, end), value: (negative ? -1 : 1) * Number(literal.text) };
 }
 
-
 export const runValue = (kind: Tunable["kind"], value: number) => (kind === "f32" ? Math.fround(value) : value);
-
-
-
-
 
 export function literalText(kind: Tunable["kind"], value: number): string {
   if (kind === "int") return String(value);
   const text = String(Math.fround(value));
   return /[.eE]/.test(text) ? text : `${text}.0`;
 }
-
 
 export function checkValue(tunable: Tunable, value: number): number | string {
   if (!Number.isFinite(value)) return `${tunable.name}: ${value} is not a number`;
@@ -113,7 +93,6 @@ export function checkValue(tunable: Tunable, value: number): number | string {
   return runValue(tunable.kind, value);
 }
 
-
 export function replaceSpans(text: string, spans: readonly { readonly start: number; readonly end: number; readonly text: string }[]): string {
   let result = text;
   for (const span of [...spans].sort((a, b) => b.start - a.start)) result = result.slice(0, span.start) + span.text + result.slice(span.end);
@@ -121,10 +100,6 @@ export function replaceSpans(text: string, spans: readonly { readonly start: num
 }
 
 const CONTEXT_LINES = 3;
-
-
-
-
 
 export function lineDiff(file: string, before: string, after: string): string {
   const old = before.split("\n");
@@ -159,7 +134,6 @@ export function lineDiff(file: string, before: string, after: string): string {
   return lines.join("\n");
 }
 
-
 export interface TunableState {
   readonly name: string;
   readonly group: string;
@@ -175,7 +149,6 @@ export interface TunableState {
   readonly source: number | undefined;
 }
 
-
 export interface Applied {
   readonly version: number | undefined;
   readonly milliseconds: number;
@@ -190,10 +163,6 @@ export class Tune extends Context.Service<Tune, {
 
   readonly reset: (name: string) => Effect.Effect<{ readonly diff: string; readonly applied: Applied }, TuneFailure | HotReloadFailure>;
 }>()("wisp/Tune") {
-
-
-
-
 
   static readonly layer = (root: string, tunables: readonly Tunable[], replacements: Map<string, string>) => Layer.effect(Tune, Effect.gen(function*() {
     const reload = yield* HotReload;
@@ -226,7 +195,6 @@ export class Tune extends Context.Service<Tune, {
       return found === undefined ? Effect.fail(new TuneFailure({ problem: `no tunable named ${name}` })) : Effect.succeed(found);
     };
 
-
     const replace = Effect.gen(function*() {
       for (const path of files) {
         const text = yield* read(path);
@@ -240,7 +208,6 @@ export class Tune extends Context.Service<Tune, {
         else replacements.set(path, replaceSpans(text, spans));
       }
     });
-
 
     const run = (target: Entry, value: number) => Effect.gen(function*() {
       const started = yield* Clock.currentTimeMillis;
@@ -256,7 +223,6 @@ export class Tune extends Context.Service<Tune, {
       return { version, milliseconds: (yield* Clock.currentTimeMillis) - started } satisfies Applied;
     });
 
-
     const rewrite = (target: Entry, text: (literal: Literal) => string | undefined) => Effect.gen(function*() {
       const before = yield* read(target.path);
       const literal = yield* locate(target, before);
@@ -269,7 +235,6 @@ export class Tune extends Context.Service<Tune, {
       yield* replace;
       return diff;
     });
-
 
     const lock = yield* Semaphore.make(1);
     const serial = <A, E>(effect: Effect.Effect<A, E>) => Semaphore.withPermit(lock, effect);

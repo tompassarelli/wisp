@@ -1,7 +1,3 @@
-
-
-
-
 import { afterAll, expect, test } from "bun:test";
 import { join } from "node:path";
 import { Cause, Effect, Exit } from "effect";
@@ -19,7 +15,6 @@ const runtime = installHeadless(FIXTURE);
 afterAll(runtime.restore);
 
 const configure = () => configureRuntime({ filePrefix: "fixture", readyPrefix: "FX_HRR", globalPrefix: "__fixture" });
-
 
 const everyFrame = (frame: () => void) => ({
   start: () => {

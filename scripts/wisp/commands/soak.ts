@@ -1,7 +1,3 @@
-
-
-
-
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
@@ -28,7 +24,6 @@ export class SoakFailure extends Schema.TaggedError<SoakFailure>()("SoakFailure"
   }
 }
 
-
 export const MAX_SOAK_WORKERS = 4;
 
 export const MAX_SOAK_MINUTES = 30;
@@ -54,7 +49,6 @@ interface RunOptions {
 }
 
 const VALUED = ["matches", "seed", "workers", "minutes", "fighter", "stage", "policy", "out", "repro"];
-
 
 const scopeCpus = (limit: number | undefined) => Math.max(1, Math.floor(Math.min(availableParallelism(), limit ?? Infinity)));
 
@@ -88,7 +82,6 @@ function parseRun(args: readonly string[], project: SoakProject, cpuLimit: numbe
 
 type Worker = Subprocess<"pipe", "pipe", "pipe">;
 
-
 function lineReader(stream: ReadableStream<Uint8Array>): () => Promise<string | undefined> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -108,7 +101,6 @@ function lineReader(stream: ReadableStream<Uint8Array>): () => Promise<string | 
   };
 }
 
-
 function tail(stream: ReadableStream<Uint8Array>): () => string {
   let text = "";
   void (async () => {
@@ -125,13 +117,8 @@ interface Pool {
   workersStarted: number;
 }
 
-
 const talk = <A>(what: string, run: () => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => new SoakFailure({ problem: `a worker's ${what}`, cause }) });
-
-
-
-
 
 const runWorker = (worker: string, project: string, next: () => SoakMatch | undefined, pool: Pool, report: (reply: SoakReply) => Effect.Effect<void, SoakFailure>) =>
   Effect.acquireUseRelease(
@@ -178,11 +165,6 @@ const runWorker = (worker: string, project: string, next: () => SoakMatch | unde
 
 const plural = (count: number, noun: string, nouns = `${noun}s`) => `${count.toLocaleString("en-US")} ${count === 1 ? noun : nouns}`;
 
-
-
-
-
-
 export function typingStallsLine(stalls: readonly number[], budgetMs: number): string {
   if (stalls.length === 0) return `recovery typing stalls: none (budget ${budgetMs.toFixed(1)} ms)`;
   const sorted = [...stalls].sort((a, b) => a - b);
@@ -190,7 +172,6 @@ export function typingStallsLine(stalls: readonly number[], budgetMs: number): s
   const over = sorted.filter((ms) => ms > budgetMs).length;
   return `recovery typing stalls: ${plural(sorted.length, "client frame")} over 1/60 s, worst ${(sorted.at(-1) ?? 0).toFixed(1)} ms, p95 ${p95.toFixed(1)} ms; budget ${budgetMs.toFixed(1)} ms, ${over === 0 ? "none" : over} over it`;
 }
-
 
 const findingLines = (reply: SoakReply, repro: string | undefined) => [
   describeMatch(reply.match),
@@ -200,7 +181,6 @@ const findingLines = (reply: SoakReply, repro: string | undefined) => [
 
 const loadProject = (path: string) =>
   Effect.tryPromise({ try: () => loadSoakProject(path), catch: (cause) => new SoakFailure({ problem: "loading the soak", cause }) });
-
 
 const replay = (options: SoakCommandOptions, file: string, report?: (reply: SoakReply, repro?: string) => Effect.Effect<void>) => Effect.gen(function*() {
   const project = yield* loadProject(options.project);
@@ -228,7 +208,6 @@ const replay = (options: SoakCommandOptions, file: string, report?: (reply: Soak
   ].filter((line) => line !== "").join("\n"));
   if (result.findings.length > 0) return yield* new SoakFailure({ problem: `${plural(result.findings.length, "finding")} replaying ${file}` });
 });
-
 
 export const makeSoak = (options: SoakCommandOptions): Command => (allArgs) => Effect.suspend(() => {
   const json = allArgs.includes("--json");

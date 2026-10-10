@@ -17,7 +17,6 @@ export interface BuildDiscoveryTarget {
   readonly menuReportPort?: number;
 }
 
-
 const discoverBuild = (target: BuildDiscoveryTarget) => Effect.gen(function*() {
   const provider = join(process.env["HOME"] ?? "", ".local/share/wisp-private/builds/discover.ts");
   const probe = existsSync(provider) ? yield* Effect.tryPromise({

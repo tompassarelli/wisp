@@ -1,5 +1,3 @@
-
-
 import { configureRuntime } from "../../src/runtime/config";
 import { installDispatch, on, trampoline } from "../../src/platform/dispatch";
 import { installFrameMeter, startFrameMeter, startFrameCostCapture } from "../../src/platform/frameMeter";

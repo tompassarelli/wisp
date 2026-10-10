@@ -10,7 +10,6 @@ afterAll(runtime.restore);
 
 test("[native #86] a committed map pause keeps fighter animation frozen while callbacks and the local wall clock continue, and the presentation clock includes the pause", () => {
 
-
   const frameOneNs = 205729362458791;
   const commitNs = 205732733883528;
   const resumeNs = 205735272868774;

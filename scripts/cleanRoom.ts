@@ -1,13 +1,8 @@
-
-
-
-
 import { join } from "node:path";
 import { Console, Data, Effect } from "effect";
 import { captureProcess } from "./wisp/mapBuild";
 
 export const ALLOWLIST = "clean-room-allowlist.tsv";
-
 
 export const GAME_EXTENSIONS = [
   "mdx", "mdl", "blp", "dds", "tga", "wav", "mp3", "flac", "ogg", "opus", "w3x", "w3m", "w3n", "w3g", "mpq",
@@ -15,15 +10,11 @@ export const GAME_EXTENSIONS = [
   "doo", "shd", "mmp", "w3i", "w3r", "w3c", "w3s", "ttf", "otf", "png", "jpg", "jpeg", "gif", "webp", "bmp",
 ] as const;
 
-
 const MAGIC = ["MDLX", "BLP1", "BLP2", "MPQ\x1a", "MPQ\x1b", "HM3W"];
-
 
 export const JASS_DECLARATION = String.raw`^[[:space:]]*((constant[[:space:]]+)?native[[:space:]]+[A-Za-z0-9_]+[[:space:]]+takes[[:space:]]|function[[:space:]]+[A-Za-z0-9_]+[[:space:]]+takes[[:space:]].*[[:space:]]returns[[:space:]]|type[[:space:]]+[A-Za-z0-9_]+[[:space:]]+extends[[:space:]]|constant[[:space:]]+[A-Za-z0-9_]+[[:space:]]+[A-Za-z0-9_]+[[:space:]]*=)`;
 
-
 export const JASS_LIMIT = 20;
-
 
 export const JASS_SCAN_BYTES = 2_000_000;
 
@@ -36,7 +27,6 @@ export interface Policy {
 
 export interface Entry { readonly path: string; readonly origin: string; readonly how: string }
 
-
 export function parseAllowlist(text: string): Entry[] {
   return text.split("\n").filter((line) => line.trim() !== "" && !line.startsWith("#")).map((line) => {
     const [path = "", origin = "", how = ""] = line.split("\t");
@@ -46,7 +36,6 @@ export function parseAllowlist(text: string): Entry[] {
 
 const fix = (policy: Policy) => "Delete it, regenerate it from our own source, or load it from the user's install at run time;"
   + ` if it is ours, add it to ${ALLOWLIST} as PATH<TAB>${policy.origins.join("|")}<TAB>HOW (wisp:docs/clean-room.md).`;
-
 
 export function cleanRoomProblems(input: {
   readonly files: readonly { readonly path: string; readonly head: string }[];
@@ -86,7 +75,6 @@ export class CleanRoomError extends Data.TaggedError("CleanRoomError")<{ readonl
 
 const git = (root: string, args: readonly string[]) => captureProcess(`git ${args[0]}`, root, ["git", "-C", root, ...args]);
 
-
 export const cleanRoom = (root: string, policy: Policy) => Effect.gen(function*() {
   const listed = yield* git(root, ["ls-files", "-z"]);
   if (listed.exitCode !== 0) return yield* new CleanRoomError({ message: `clean room: git ls-files failed: ${listed.stderr.trim()}` });
@@ -113,13 +101,11 @@ export const cleanRoom = (root: string, policy: Policy) => Effect.gen(function*(
   return cleanRoomProblems({ files, jassLines, allowlist, policy });
 });
 
-
 export const runCleanRoom = (root: string, policy: Policy) => cleanRoom(root, policy).pipe(
   Effect.flatMap((problems) => problems.length === 0
     ? Console.log("clean room: no game files or copied game scripts outside the allowlist")
     : Effect.forEach(problems, (problem) => Console.error(problem), { discard: true }).pipe(Effect.andThen(Effect.sync(() => process.exit(1))))),
 );
-
 
 export const WISP_POLICY: Policy = { origins: ["original", "generated"] };
 

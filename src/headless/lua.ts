@@ -1,6 +1,3 @@
-
-
-
 import type { ClientScope, EffectDeaths, LocalNatives, MapEntry, IntentionalNoops, HeadlessClient, NativeBehaviors, UnitStateFixtures } from "./client";
 import type { FrameTemplate } from "./frames";
 import type { SyncDelivery } from "./lockstep";
@@ -12,7 +9,6 @@ import { stringChecksum } from "../platform/payloadChecksum";
 import type { SceneryFixtures } from "./warcraft3Scenery";
 import type { Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 import type { AbilityObjectFixtures } from "./warcraft3Abilities";
-
 
 export interface LuaHeadlessMap {
   readonly abilityObjects?: AbilityObjectFixtures;
@@ -33,7 +29,6 @@ export interface LuaHeadlessMap {
   readonly effectDeaths?: EffectDeaths;
 }
 
-
 export function readFile(path: string): string {
   const [file, problem] = io.open(path, "rb");
   if (file === undefined) throw new Error(`can't read ${path}: ${problem}`);
@@ -42,11 +37,6 @@ export function readFile(path: string): string {
   if (text === undefined) throw new Error(`can't read ${path}`);
   return text;
 }
-
-
-
-
-
 
 export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: string, scope?: ClientScope, delivery?: SyncDelivery): Lockstep {
   return new Lockstep({
@@ -81,7 +71,6 @@ export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: s
     },
   });
 }
-
 
 export function runLuaJourney(map: LuaHeadlessMap, journey: Journey, bundlePath: string, declarationsPath: string): number {
   const result = runJourney(luaLockstep(map, readFile(bundlePath), readFile(declarationsPath)), journey);

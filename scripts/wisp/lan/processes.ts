@@ -1,9 +1,5 @@
-
-
-
 import { join } from "node:path";
 import { ProcessTable } from "../../platform/services";
-
 
 export function prefixPath(prefix: string, windowsPath: string): string {
   const match = /^([A-Za-z]):\\(.*)$/.exec(windowsPath);

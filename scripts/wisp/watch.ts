@@ -1,8 +1,3 @@
-
-
-
-
-
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { Clock, Context, Effect, Layer, Schedule, Schema } from "effect";
@@ -15,9 +10,7 @@ import { dataDirectory } from "./gameFiles";
 import { type MenuEvent, connectMenus, keptAddress, menuAddress } from "./menus";
 import { pairClients, readPool } from "./lan/pool";
 
-
 export type Source = "socket" | "log" | "receipt" | "process" | "lan";
-
 
 export type ClientState =
 
@@ -45,7 +38,6 @@ export type ClientState =
 
 export type StateKind = ClientState["kind"];
 
-
 export interface ClientView {
   readonly client: string;
   readonly state: ClientState;
@@ -61,7 +53,6 @@ export interface ClientView {
   readonly menus?: boolean;
 }
 
-
 export type WatchEvent =
   | { readonly type: "state"; readonly client: string; readonly at: number; readonly source: Source; readonly state: ClientState; readonly evidence: string }
   | { readonly type: "ladder scan"; readonly client: string; readonly at: number; readonly source: "log"; readonly scan: LadderScan["kind"] }
@@ -76,7 +67,6 @@ export class WatchFailure extends Schema.TaggedError<WatchFailure>()("WatchFailu
     return `${this.operation} failed for ${this.client}: ${this.problem}`;
   }
 }
-
 
 export class ClientWatch extends Context.Service<ClientWatch, {
   readonly view: (client: Client) => Effect.Effect<ClientView, WatchFailure>;
@@ -99,16 +89,11 @@ export const FAIL_ON: readonly StateKind[] = ["crashed", "disconnected"];
 
 export const STATE_KINDS: readonly StateKind[] = ["closed", "launcher", "running", "signing in", "signed in", "menus", "lobby", "loading", "in match", "results", "disconnected", "crashed"];
 
-
 export const describeView = (view: ClientView) => {
   const { state } = view;
   const detail = "reason" in state ? `: ${state.reason}` : "screen" in state ? ` (${state.screen})` : "host" in state && state.host !== undefined ? (state.host ? " (host)" : " (guest)") : "";
   return `${state.kind}${detail}, by ${view.source}: ${view.evidence}`;
 };
-
-
-
-
 
 export const waitFor = (client: Client, predicate: (view: ClientView) => boolean, options: WaitOptions = {}) => Effect.gen(function*() {
   const watch = yield* ClientWatch;
@@ -130,21 +115,9 @@ export const waitFor = (client: Client, predicate: (view: ClientView) => boolean
   return last!;
 });
 
-
-
-
-
-
-
 export const typesIntoMatch = (view: ClientView) => view.state.kind === "in match" && (view.menus === true || view.source === "lan");
 
-
 export const inState = (...kinds: readonly StateKind[]) => (view: ClientView) => kinds.includes(view.state.kind);
-
-
-
-
-
 
 export const unlessLost = <A, E, R>(client: Client, effect: Effect.Effect<A, E, R>) => Effect.gen(function*() {
   const watch = yield* Effect.serviceOption(ClientWatch);
@@ -153,15 +126,11 @@ export const unlessLost = <A, E, R>(client: Client, effect: Effect.Effect<A, E, 
   return yield* Effect.raceFirst(effect, lost.pipe(Effect.flatMap(() => Effect.never)));
 });
 
-
-
-
 export interface Observed {
   readonly state: ClientState;
   readonly at: number;
   readonly evidence: string;
 }
-
 
 export interface SocketState {
   readonly connected: boolean;
@@ -170,14 +139,7 @@ export interface SocketState {
 
 const record = (value: unknown): Readonly<Record<string, unknown>> => (typeof value === "object" && value !== null ? value as Record<string, unknown> : {});
 
-
 const LOBBY_SCREENS = new Set(["GAME_LOBBY", "CUSTOM_GAME_LOBBY"]);
-
-
-
-
-
-
 
 export function socketEvent(previous: SocketState, event: MenuEvent, at: number): SocketState {
   const said = (state: ClientState, evidence: string): SocketState => ({ connected: true, last: { state, at, evidence } });
@@ -209,7 +171,6 @@ export function socketEvent(previous: SocketState, event: MenuEvent, at: number)
   }
 }
 
-
 export interface CrashReport {
   readonly folder: string;
   readonly session: string;
@@ -218,14 +179,12 @@ export interface CrashReport {
   readonly written: number;
 }
 
-
 export function crashSummary(crash: string): string {
   const lines = crash.split(/\r?\n/);
   const start = lines.findIndex((line) => line.startsWith("<Exception.Summary:>"));
   const line = start < 0 ? undefined : lines[start + 1];
   return line === undefined ? "Warcraft III wrote a crash report" : line.replace(/\s*DBG-OPTIONS.*$/, "").trim();
 }
-
 
 export interface Sources {
   readonly now: number;
@@ -240,16 +199,9 @@ export interface Sources {
   readonly lan?: { readonly pid: number; readonly map: string; readonly phase: string; readonly connected: boolean; readonly loaded: boolean; readonly left: boolean };
 }
 
-
 const SIGNED_IN: readonly StateKind[] = ["signed in", "menus", "lobby", "loading", "in match", "results", "disconnected"];
 
-
 const CRASH_FRESH_MS = 60_000;
-
-
-
-
-
 
 export function decide(client: string, sources: Sources, previous?: ClientView): ClientView {
   const { now } = sources;
@@ -279,9 +231,6 @@ export function decide(client: string, sources: Sources, previous?: ClientView):
     return keep(view({ kind: "in match", map: sources.lan.map }, "lan", `offline host playing; Warcraft III.exe pid ${game.pid} loaded and connected`));
   }
 
-
-
-
   const login = marks.login === undefined || marks.ended !== undefined ? undefined : logTime(marks.login.at, now);
   const receipt = sources.receipt !== undefined && (started === undefined || sources.receipt >= started) && (login === undefined || sources.receipt >= login) ? sources.receipt : undefined;
   const said = socket.last;
@@ -303,7 +252,6 @@ export function decide(client: string, sources: Sources, previous?: ClientView):
 
 const sameState = (a: ClientState, b: ClientState) => JSON.stringify(a) === JSON.stringify(b);
 
-
 export function changes(previous: ClientView | undefined, next: ClientView): WatchEvent[] {
   const events: WatchEvent[] = [];
   const { client } = next;
@@ -316,7 +264,6 @@ export function changes(previous: ClientView | undefined, next: ClientView): Wat
   }
   return events;
 }
-
 
 export function eventLine(event: WatchEvent): string {
   const time = new Date(event.at).toTimeString().slice(0, 8);
@@ -332,9 +279,6 @@ export function eventLine(event: WatchEvent): string {
       return `${time} ${event.client} load errors: ${event.count} models failed${event.first === undefined ? "" : `, first ${event.first}`}  [log]`;
   }
 }
-
-
-
 
 export const prefixOf = (documents: string) => {
   const at = documents.indexOf("/drive_c/");
@@ -354,12 +298,6 @@ const LanStatus = Schema.Struct({
   game: Schema.optional(Schema.Struct({ map: Schema.String, phase: Schema.String, players: Schema.Array(Schema.Struct({ label: Schema.String, connected: Schema.Boolean, loaded: Schema.Boolean, left: Schema.Boolean })) })),
 });
 
-
-
-
-
-
-
 const pairStatus = (client: string, socket: string) => Effect.tryPromise({
   try: (signal) => fetch("http://pair/status", { unix: socket, signal }).then((response) => response.json()),
   catch: (cause) => new WatchFailure({ client, operation: "read the pair agent's status", problem: cause instanceof Error ? cause.message : String(cause) }),
@@ -369,7 +307,6 @@ const pairStatus = (client: string, socket: string) => Effect.tryPromise({
   Effect.flatMap(Schema.decodeUnknownEffect(LanStatus)),
   Effect.mapError((failure) => (failure instanceof WatchFailure ? failure : new WatchFailure({ client, operation: "read the pair agent's status", problem: failure.message }))),
 );
-
 
 export const lanObservation = (client: Pick<Client, "name" | "documents">) => Effect.gen(function*() {
   const { documents } = client;
@@ -397,7 +334,6 @@ const liveWatch = (options: WatchOptions) => Effect.gen(function*() {
   const scope = yield* Effect.scope;
   const table = yield* ProcessTable;
   const trackers = new Map<string, { socket: SocketState; tried: boolean; view?: ClientView; log?: string | undefined; logKey?: string; crashes: Map<string, CrashReport | undefined> }>();
-
 
   const follow = (client: Client, tracker: { socket: SocketState; tried: boolean }) => Effect.gen(function*() {
     const port = client.menuReportPort!;
@@ -459,7 +395,6 @@ const liveWatch = (options: WatchOptions) => Effect.gen(function*() {
         for (let waited = 0; waited < 40 && !(first.tried && (first.socket.connected || waited > 2)); waited++) yield* Effect.sleep("100 millis");
       }
     }
-
 
     const recent = client.menuReportPort === undefined ? undefined : keptAddress(client.menuReportPort)?.recent;
     const newest = recent?.at(-1);

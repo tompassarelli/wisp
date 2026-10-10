@@ -1,7 +1,3 @@
-
-
-
-
 import type { Subprocess } from "bun";
 import { Effect, Schema, type Scope } from "effect";
 import { describeCause } from "./command";
@@ -14,7 +10,6 @@ export interface ProcessOutput {
 
   readonly output: string;
 }
-
 
 export class DevProcessFailure extends Schema.TaggedError<DevProcessFailure>()("DevProcessFailure", {
   command: Schema.String,
@@ -31,7 +26,6 @@ const ResultLine = Schema.fromJsonString(Schema.Unknown);
 
 const spawn = (command: readonly string[], cwd: string, env: Readonly<Record<string, string | undefined>>): Effect.Effect<Child> =>
   Effect.sync((): Child => Bun.spawn([...command], { cwd, env: { ...process.env, ...env }, stdin: "pipe", stdout: "pipe", stderr: "pipe" }));
-
 
 const collect = (command: readonly string[], child: Child, input?: string) => Effect.gen(function*() {
   const failure = (problem: string) => new DevProcessFailure({ command: command.join(" "), problem });
@@ -60,7 +54,6 @@ const reap = (child: Child) => Effect.promise(async () => {
   await child.exited;
 });
 
-
 export const runProcess = (command: readonly string[], cwd: string, env: Readonly<Record<string, string | undefined>> = {}) =>
   Effect.acquireUseRelease(
     spawn(command, cwd, env),
@@ -68,11 +61,9 @@ export const runProcess = (command: readonly string[], cwd: string, env: Readonl
     reap,
   );
 
-
 export class Standby {
   private readonly ready: Child[] = [];
   private closed = false;
-
 
   static make(command: readonly string[], cwd: string, count: number, env: Readonly<Record<string, string | undefined>> = {}): Effect.Effect<Standby, never, Scope.Scope> {
     return Effect.acquireRelease(Effect.sync(() => new Standby(command, cwd, count, env)).pipe(Effect.tap((standby) => standby.refill)), (standby) => standby.close);
@@ -85,11 +76,6 @@ export class Standby {
     private readonly env: Readonly<Record<string, string | undefined>>,
   ) {}
 
-
-
-
-
-
   run(request: unknown): Effect.Effect<ProcessOutput, DevProcessFailure> {
     return Effect.acquireUseRelease(
       Effect.suspend(() => {
@@ -100,7 +86,6 @@ export class Standby {
       (child) => reap(child).pipe(Effect.ensuring(this.refill)),
     );
   }
-
 
   private readonly close = Effect.suspend(() => {
     this.closed = true;

@@ -1,7 +1,3 @@
-
-
-
-
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Console, Effect, Schema } from "effect";
@@ -16,7 +12,6 @@ import { step } from "./timings";
 
 const SceneLines = preloadRecord({ rest: "lines" }, Schema.Struct({ lines: Schema.Array(Schema.String) }));
 
-
 export const SceneReportFile: GameFileKind<SceneReport> = {
   decode: (file, text) => Effect.gen(function*() {
     const read = readSceneLines((yield* SceneLines.decode(file, text)).lines);
@@ -24,7 +19,6 @@ export const SceneReportFile: GameFileKind<SceneReport> = {
     return read;
   }),
 };
-
 
 export class PlayerViewFailure extends Schema.TaggedError<PlayerViewFailure>()("PlayerViewFailure", {
   client: Schema.String,
@@ -46,7 +40,6 @@ export class FrameFileFailure extends Schema.TaggedError<FrameFileFailure>()("Fr
     return `${this.operation} failed for ${this.path}: ${describeCause(this.cause)}`;
   }
 }
-
 
 export const writeFrame = (path: string, frame: Frame) =>
   Effect.tryPromise({
@@ -74,7 +67,6 @@ export interface PlayerViewExpectations {
   readonly frame?: readonly FrameFeature[];
 }
 
-
 const settledReport = (client: Client, since: number, filePrefix: string, settledFrame: number) => Effect.gen(function*() {
   let problem: MalformedGameFile | undefined;
 
@@ -93,11 +85,6 @@ const settledReport = (client: Client, since: number, filePrefix: string, settle
     Effect.catchTag("DesktopFailure", (timeout): Effect.Effect<never, DesktopFailure | MalformedGameFile> => (problem === undefined ? Effect.fail(timeout) : Effect.fail(problem))),
   );
 });
-
-
-
-
-
 
 export const checkPlayerView = (expected: PlayerViewExpectations, since: number, frames: string) => Effect.gen(function*() {
   const clients = yield* Clients;

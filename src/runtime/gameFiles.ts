@@ -1,10 +1,5 @@
-
-
-
 export const CHUNKS_PER_FILE = 64;
 // Payload tooltip capacity is based on a 200,000-character native round trip.
-
-
 
 export const PAYLOAD_FILE_BYTES = 200_000;
 
@@ -14,16 +9,7 @@ export const FILE_SLOTS = 4;
 
 // Preloader caches each path's first content for the session; never reuse a name for different bytes.
 
-
-
-
-
 // Wine scans the parent of a missing Preloader path; keep polling in a dedicated hot folder.
-
-
-
-
-
 
 export const hotFolder = (prefix = "wisp") => `${prefix}-hot`;
 
@@ -41,7 +27,6 @@ export const modelFailureRequestFile = (slot: number, prefix = "wisp") => `${pre
 export const modelFailureTokenFile = (slot: number, ordinal: number, prefix = "wisp") => `${hotFolder(prefix)}\\model-load-token-p${slot}-${ordinal}.pld`;
 export const modelFailureFile = (token: string, ordinal: number, prefix = "wisp") => `${hotFolder(prefix)}\\model-load-${token}-${ordinal}.pld`;
 
-
 export const NO_BASE = "-";
 
 export interface Manifest {
@@ -56,7 +41,6 @@ export interface Manifest {
   changes: number;
 }
 
-
 export const formatManifest = ({ version, state, files, base, changes }: Manifest) => `${version} ${state} ${files} ${base} ${changes}`;
 
 export function parseManifest(text: string): Manifest | undefined {
@@ -69,7 +53,6 @@ export function parseManifest(text: string): Manifest | undefined {
   if ((base === NO_BASE) !== (changes === 0)) return undefined;
   return { version, state, files, base, changes };
 }
-
 
 export const acknowledgementLine = (version: number, elapsed: number) => `applied ${version} at ${elapsed}`;
 

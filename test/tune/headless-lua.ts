@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import { luaLockstep } from "../../src/headless/lua";
 import { type ModuleSet, parsePayload } from "../../src/runtime/modules";
 
@@ -27,7 +21,6 @@ function moduleSet(text: string): ModuleSet {
 function check(condition: boolean, message: string): void {
   if (!condition) throw message;
 }
-
 
 interface Fixture {
   readonly ticks: number;

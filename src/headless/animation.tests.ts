@@ -1,12 +1,9 @@
-
-
 import { assertEquals, assertTrue, test } from "../runtime/testing";
 import { f32 } from "../sim/f32";
 import {
   advanceAnimation, type AnimationSequence, animationSample, blendWeight, freshAnimation, globalSequenceFrame, seekAnimation,
   selectAnimation, selectSequence, sequenceFrame,
 } from "./animation";
-
 
 function same(actual: readonly unknown[], expected: readonly unknown[], message = ""): void {
   assertEquals(actual.length, expected.length, `${message} length`);

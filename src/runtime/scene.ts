@@ -1,11 +1,4 @@
-
-
-
-
-
-
 export const sceneReportGlobal = (globalPrefix: string) => `${globalPrefix}SceneReport` as const;
-
 
 export function sceneMatchFrame(globalPrefixes: readonly string[]): number | undefined {
   const globals = globalThis as Record<`${string}SceneReport`, { readonly options: { readonly frame: (this: void) => number } } | undefined>;
@@ -16,12 +9,9 @@ export function sceneMatchFrame(globalPrefixes: readonly string[]): number | und
   return undefined;
 }
 
-
 export const sceneFile = (slot: number, prefix = "wisp") => `${prefix}-scene-p${slot}.txt`;
 
-
 export const sceneHeading = (serial: number, frame: number, effects: number) => `scene ${serial} frame ${frame} effects ${effects}`;
-
 
 export interface SceneModel {
 

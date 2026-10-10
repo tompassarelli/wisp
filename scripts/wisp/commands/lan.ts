@@ -1,15 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
@@ -38,7 +26,6 @@ const number = (args: readonly string[], name: string, fallback: number | undefi
   return Number.isInteger(value) && value >= 0 ? value : yield* new UsageFailure({ problem: `--${name} takes a whole number` });
 });
 
-
 const agent = (pair: number, path: string, body?: unknown) => Effect.tryPromise({
   try: async () => {
     const response = await fetch(`http://pair${path}`, { unix: agentSocket(pair), method: body === undefined ? "GET" : "POST", ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { "content-type": "application/json" } }) });
@@ -61,7 +48,6 @@ const setup: Command = (args) => Effect.gen(function*() {
   }
 });
 
-
 const skillScript = (skill: string, script: string) =>
   ChildProcessSpawner.ChildProcessSpawner.use((spawner) => spawner.string(ChildProcess.make("agents", ["path", skill], { stderr: "ignore" }))).pipe(
     Effect.map((path) => join(dirname(path.trim()), script)),
@@ -73,12 +59,10 @@ const desktopLauncher = (args: readonly string[]) => {
   return given !== undefined ? Effect.succeed(given) : skillScript("private-desktop-development", "scripts/private-desktop.sh");
 };
 
-
 const capacityHelper = (args: readonly string[]) => {
   const [given] = flagValues(args, "capacity");
   return given !== undefined ? Effect.succeed(given) : skillScript("machine-capacity", "scripts/machine-capacity.mjs");
 };
-
 
 class PairDeferred extends Schema.TaggedError<PairDeferred>()("PairDeferred", {
   reason: Schema.String,
@@ -89,7 +73,6 @@ const AgentFile = Schema.fromJsonString(Schema.Struct({ runs: Schema.optionalKey
 const AgentProcess = Schema.fromJsonString(Schema.Struct({ pid: Schema.Int, runs: Schema.Struct({ a: Schema.String }) }));
 const AgentStatus = Schema.Struct({ clients: Schema.Array(Schema.Struct({ name: Schema.String, pid: Schema.optional(Schema.Int) })) });
 
-
 const readJson = <A>(file: string, schema: Schema.Decoder<A>) => Effect.try({
   try: () => readFileSync(file, "utf8"),
   catch: (cause) => new LanFailure({ problem: `read ${file}: ${cause instanceof Error ? cause.message : String(cause)}` }),
@@ -97,7 +80,6 @@ const readJson = <A>(file: string, schema: Schema.Decoder<A>) => Effect.try({
   Effect.flatMap(Schema.decodeUnknownEffect(schema)),
   Effect.mapError((failure) => (failure instanceof LanFailure ? failure : new LanFailure({ problem: `${file}: ${failure.message}` }))),
 );
-
 
 const clientsReady = (pair: number) => Effect.tryPromise({
   try: () => fetch("http://pair/status", { unix: agentSocket(pair) }).then((response) => response.json()),
@@ -108,13 +90,7 @@ const clientsReady = (pair: number) => Effect.tryPromise({
   Effect.orElseSucceed(() => false),
 );
 
-
 const READY = "10 minutes";
-
-
-
-
-
 
 const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, fps?: number) => {
   const directory = pairDirectory(pair);
@@ -161,11 +137,6 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
     Effect.mapError((failure) => new LanFailure({ problem: `pair ${pair}: ${failure.message}` })),
   );
 };
-
-
-
-
-
 
 const registerPairs = (mine: readonly PoolPair[], profile: string, fps: number | undefined) => Effect.gen(function*() {
   const ids = new Set(mine.map(({ id }) => id));
@@ -241,7 +212,6 @@ const fresh: Command = (args) => Effect.gen(function*() {
 });
 
 const SoloResult = Schema.Struct({ clients: Schema.Array(Schema.Struct({ client: Schema.String, seconds: Schema.Finite })) });
-
 
 const solo: Command = (args) => Effect.gen(function*() {
   const [map] = args.filter((arg, index) => !arg.startsWith("--") && !args[index - 1]?.startsWith("--"));

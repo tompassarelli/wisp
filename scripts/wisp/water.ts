@@ -1,6 +1,3 @@
-
-
-
 import { CELL, type Terrain } from "./terrain";
 import { terrainCells } from "./terrainMesh";
 
@@ -21,9 +18,7 @@ export interface WaterTable {
   readonly deep: readonly [Rgba, Rgba];
 }
 
-
 export const SHALLOW_DEPTH = CELL / 2;
-
 
 export function waterTable(rows: ReadonlyMap<string, Readonly<Record<string, string>>>, tileset: string): WaterTable {
   const row = rows.get(`${tileset}Sha`);
@@ -40,7 +35,6 @@ export function waterTable(rows: ReadonlyMap<string, Readonly<Record<string, str
     shallow: [rgba("Smin"), rgba("Smax")], deep: [rgba("Dmin"), rgba("Dmax")] };
 }
 
-
 export function waterColor(table: WaterTable, depth: number): Rgba {
   if (depth <= 0) return [table.shallow[0][0], table.shallow[0][1], table.shallow[0][2], 0];
   const [from, to] = depth <= SHALLOW_DEPTH ? table.shallow : table.deep;
@@ -48,15 +42,10 @@ export function waterColor(table: WaterTable, depth: number): Rgba {
   return [0, 1, 2, 3].map((index) => (from[index] ?? 0) + ((to[index] ?? 0) - (from[index] ?? 0)) * t) as unknown as Rgba;
 }
 
-
 export function waterTexture(table: WaterTable, frame: number): string {
   const index = Math.floor(frame * table.rate / 60) % table.frames;
   return `${table.texture}${String(index).padStart(2, "0")}.blp`;
 }
-
-
-
-
 
 export function waterMesh(terrain: Terrain, table: WaterTable): Float32Array {
   const out: number[] = [], span = table.cells * CELL;

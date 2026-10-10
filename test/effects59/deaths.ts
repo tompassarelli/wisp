@@ -2,15 +2,9 @@ import type { EffectDeaths } from "../../src/headless/client";
 import type { Lockstep } from "../../src/headless/lockstep";
 import { DYING } from "./cases";
 
-
 export const EFFECT_DEATHS: EffectDeaths = (model) => (model === DYING ? 2 : undefined);
 
-
 const READS = [0, 60, 118, 122, 299, 300, 600];
-
-
-
-
 
 export function deathTimeline(this: void, clients: Lockstep): string[] {
   const lines: string[] = [];

@@ -22,7 +22,6 @@ const until = (ready: () => boolean, description: string) => Effect.sync(ready).
   Effect.timeoutOrElse({ duration: "10 seconds", orElse: () => Effect.fail(new LanFailure({ problem: `timed out waiting for ${description}` })) }),
 );
 
-
 export const checkDummy = <E, R>(options: DummyOptions<E, R>) => Effect.suspend(() => {
   const started = performance.now();
   let step = "host startup";

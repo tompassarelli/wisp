@@ -1,29 +1,4 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // Modules load on each client's local frame; module scope must not call natives or read synchronized state.
-
-
-
-
-
-
 
 // Poll timers must tick alike across clients regardless of their local files.
 
@@ -36,20 +11,16 @@ import { readChunk } from "./fileio";
 import { stringChecksum } from "./payloadChecksum";
 import { pollModelFailures } from "./modelFailures";
 
-
 const POLL_SECONDS = 0.03125;
-
 
 const IDLE_POLLS = 16;
 const MAX_SLOTS = 4;
-
 
 export interface Reloadable {
   install(this: void): void;
 }
 
 type Require = (this: void, name: string) => unknown;
-
 
 interface LoadedModule {
   readonly hash: string;
@@ -58,14 +29,12 @@ interface LoadedModule {
 
 type ModuleTable = Record<string, LoadedModule | undefined>;
 
-
 interface Prepared {
   version: number;
   state: string;
   bundle: Reloadable | string;
   modules: ModuleTable;
 }
-
 
 interface Pending {
   manifest: Manifest;
@@ -106,11 +75,6 @@ function isReloadable(value: unknown): value is Reloadable {
 const manifestExists = (version: number) => readChunk(manifestFile(version, runtimeConfiguration().filePrefix)) !== undefined;
 const hostSeen = () => readChunk(hostFile(runtimeConfiguration().filePrefix)) !== undefined;
 
-
-
-
-
-
 function latestVersion(): number {
   if (!manifestExists(1)) return 0;
   let low = 1;
@@ -143,7 +107,6 @@ function report(text: string): void {
   DisplayTextToPlayer(GetLocalPlayer(), 0, 0, text);
 }
 
-
 function link(modules: ModuleTable): Require {
   const values: Record<string, { readonly value: unknown } | undefined> = {};
   const require: Require = (name) => {
@@ -157,7 +120,6 @@ function link(modules: ModuleTable): Require {
   };
   return require;
 }
-
 
 function loadLocal(state: HotState, manifest: Manifest): { bundle: Reloadable | string; modules: ModuleTable } {
   const prefix = runtimeConfiguration().filePrefix;
@@ -191,7 +153,6 @@ function loadLocal(state: HotState, manifest: Manifest): { bundle: Reloadable | 
   return { bundle: isReloadable(entry) ? entry : "bundle exports no install()", modules };
 }
 
-
 function answer(state: HotState, manifest: Manifest): void {
   if (state.next <= manifest.version) state.next = manifest.version + 1;
   const { bundle, modules } = loadLocal(state, manifest);
@@ -222,7 +183,6 @@ function poll(): void {
   }
   answer(state, manifest);
 }
-
 
 function acknowledge(version: number, elapsed: number): void {
   PreloadGenClear();
@@ -276,12 +236,10 @@ function answered(): void {
   if (pending.waiting <= 0 && state.pending === pending) decide(state, pending);
 }
 
-
 export function installHotReload(): void {
   on("hotReload.poll", poll);
   on("hotReload.answered", answered);
 }
-
 
 export function startHotReload(): void {
   const configuration = runtimeConfiguration();
