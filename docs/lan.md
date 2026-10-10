@@ -313,6 +313,7 @@ Tom's `system.reg`, `user.reg`, `Warcraft III/.build.info` and Battle.net
 | `wisp lan solo MAP [--pair K...]` | Each client of the named running pairs (default: all) plays MAP alone, as a local game on the loopback provider; returns once every client's game UI is up. Works on 3.0.1. See "Solo games". |
 | `wisp lan status [--pair K]` | Each pair's clients and processes, and its game: phase, turns, desyncs, players. |
 | `wisp lan speed N --pair K` | Diagnostic turn delivery at 1–16 times real time; 1 restores normal delivery. Measure client frame progress to establish actual game speed. |
+| `wisp lan netem --pair K --rtt MS [--loss PERCENT]`, `wisp lan netem off --pair K` | Adds round-trip delay and packet loss to pair K's loopback, or removes it, and prints the loopback's queueing discipline. See "Simulated latency and loss". |
 | `wisp lan end --pair K` | Ends pair K's game. The clients go back to their menus. |
 
 Pool clients are named `lan<K>a` and `lan<K>b`. The pool writes three files
@@ -683,6 +684,22 @@ FLO's observer send queue uses the same protocol fact: speed changes packet
 delivery delay, not the game-time increment encoded in each packet
 ([source at 6db3a401](https://github.com/BogdanW3/W3C-Flo/blob/6db3a4010fab0b0b29824a61f2c9c956f97fd211/crates/client/src/observer/send_queue.rs)).
 Wisp's implementation changes its existing timer; no FLO code is copied.
+
+### Simulated latency and loss
+
+A pair's clients and host talk only over the loopback of the pair's own
+network namespace, so `wisp lan netem --pair K --rtt 60 --loss 1` puts a
+Linux `netem` queueing discipline on that loopback
+(wisp:scripts/wisp/commands/lan.ts, `netem`). Every loopback send is delayed
+once, so each send waits half the round trip (30 ms here) and each send is
+dropped with the given percentage, in both directions. Running it again
+replaces the setting; `wisp lan netem off --pair K` removes it. The pair keeps
+it until it is removed or the pair stops.
+
+The namespace belongs to the pair agent's user namespace (bwrap
+`--unshare-net`), so Wisp enters both with `nsenter --user --net
+--preserve-credentials --keep-caps`, which keeps the user namespace's
+`CAP_NET_ADMIN` for `tc`. No root or host network change is needed.
 
 ### Reading the log
 

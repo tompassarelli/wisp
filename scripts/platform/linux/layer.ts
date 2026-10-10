@@ -105,9 +105,10 @@ const synchronous = Layer.mergeAll(
   })),
   Layer.succeed(Namespaces, Namespaces.of({
     offline: (command) => Effect.succeed([...OFFLINE, ...command]),
-    enter: (pid, namespaces, command, workingDirectory) => Effect.succeed([
+    enter: (pid, namespaces, command, options) => Effect.succeed([
       "nsenter", "--target", String(pid), ...namespaces.flatMap((namespace) => NAMESPACE_FLAGS[namespace]), "--preserve-credentials",
-      ...(workingDirectory === undefined ? [] : [`--wd=${workingDirectory}`]), ...command,
+      ...(options?.keepCapabilities === true ? ["--keep-caps"] : []),
+      ...(options?.workingDirectory === undefined ? [] : [`--wd=${options.workingDirectory}`]), ...command,
     ]),
   })),
 );

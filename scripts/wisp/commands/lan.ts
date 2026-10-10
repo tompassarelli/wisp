@@ -16,7 +16,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Console, Effect, Exit, Schedule, Schema, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { Namespaces } from "../../platform/services";
-import { spawnLogged } from "../hostProcess";
+import { collect, spawnLogged } from "../hostProcess";
 import { type Command, UsageFailure, flagValues } from "../command";
 import { LanFailure } from "../lan/join";
 import { lanPluginProblem } from "../lan/plugin";
@@ -303,7 +303,32 @@ const speed: Command = (args) => Effect.gen(function*() {
   yield* Console.log(`pair ${pair}: delivering turns at ${value}x; compare client frame progress to measure game speed`);
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | solo MAP [--pair K...] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | status [--pair K] | end --pair K";
+const inPairNetwork = (pair: number, command: readonly string[]) => Effect.gen(function*() {
+  const state = yield* readJson(join(pairDirectory(pair), "agent.json"), AgentProcess);
+  const [program = "", ...rest] = yield* Namespaces.use((namespaces) => namespaces.enter(state.pid, ["user", "net"], command, { keepCapabilities: true }));
+  const result = yield* collect(ChildProcess.make(program, rest, { stdin: "ignore" })).pipe(Effect.provide(BunServices.layer), Effect.mapError((failure) => new LanFailure({ problem: failure.message })));
+  return { exitCode: Number(result.exitCode), stdout: new TextDecoder().decode(result.stdout).trim(), stderr: result.stderr.trim() };
+});
+
+const netem: Command = (args) => Effect.gen(function*() {
+  const pair = yield* number(args, "pair", undefined);
+  if (args[0] === "off") {
+    const cleared = yield* inPairNetwork(pair, ["tc", "qdisc", "del", "dev", "lo", "root"]);
+    if (cleared.exitCode !== 0 && !/No such file|handle of zero/.test(cleared.stderr)) return yield* new LanFailure({ problem: `pair ${pair}: tc qdisc del: ${cleared.stderr}` });
+  } else {
+    const [rttText] = flagValues(args, "rtt");
+    const [lossText = "0"] = flagValues(args, "loss");
+    const rtt = Number(rttText);
+    const loss = Number(lossText);
+    if (rttText === undefined || !Number.isFinite(rtt) || rtt < 0 || !Number.isFinite(loss) || loss < 0 || loss > 100) return yield* new UsageFailure({ problem: "netem takes --pair K --rtt MS [--loss PERCENT], or off --pair K" });
+    const set = yield* inPairNetwork(pair, ["tc", "qdisc", "replace", "dev", "lo", "root", "netem", "delay", `${rtt / 2}ms`, "loss", `${loss}%`]);
+    if (set.exitCode !== 0) return yield* new LanFailure({ problem: `pair ${pair}: tc qdisc replace: ${set.stderr}` });
+  }
+  const shown = yield* inPairNetwork(pair, ["tc", "qdisc", "show", "dev", "lo"]);
+  yield* Console.log(`pair ${pair}: ${shown.stdout}`);
+});
+
+export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | solo MAP [--pair K...] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] | netem off --pair K | status [--pair K] | end --pair K";
 
 export const lan: Command = ([sub, ...args]) => {
   switch (sub) {
@@ -314,6 +339,7 @@ export const lan: Command = ([sub, ...args]) => {
     case "dummy": return dummy(args);
     case "status": return status(args);
     case "speed": return speed(args);
+    case "netem": return netem(args);
     case "end": return end(args);
     default: return Effect.fail(new UsageFailure({ problem: `lan takes ${LAN_USAGE}` }));
   }
