@@ -1,4 +1,5 @@
-import { Clock, Effect, Schema } from "effect";
+import { Effect, Schema } from "effect";
+import { pollFor } from "../wisp/hostProcess";
 import { describeCause } from "../wisp/command";
 import { type Frame, decodePpm } from "../wisp/frameProbe";
 import { InputInjection, ScreenCapture } from "../platform/services";
@@ -225,18 +226,16 @@ export const batch = Effect.fnUntraced(function*(client: Client, actions: readon
 });
 
 export const waitFor = <A, E, R>(client: { readonly name: string }, what: string, seconds: number, observe: Effect.Effect<A | undefined, E, R>) =>
-  Effect.gen(function*() {
-    const deadline = (yield* Clock.currentTimeMillis) + seconds * 1000;
-    while (true) {
-      const value = yield* observe;
-      if (value !== undefined) return value;
-      if ((yield* Clock.currentTimeMillis) > deadline) return yield* new DesktopFailure({ operation: `wait for ${what}`, client: client.name, cause: `not seen within ${seconds} s` });
-      yield* Effect.sleep("50 millis");
-    }
-  });
+  pollFor(seconds, "50 millis", observe).pipe(Effect.filterOrFail(
+    (value): value is A => value !== undefined,
+    () => new DesktopFailure({ operation: `wait for ${what}`, client: client.name, cause: `not seen within ${seconds} s` }),
+  ));
+
+/** The text read, when it matches `pattern` with its whitespace runs collapsed to single spaces. */
+export const textMatching = (pattern: RegExp) => (seen: string) => (pattern.test(seen.replace(/\s+/g, " ")) ? seen : undefined);
 
 export const waitForText = (client: Client, what: string, pattern: RegExp, region?: Region, ink: Ink = "light", seconds = 20) =>
-  waitFor(client, what, seconds, read(client, region, ink).pipe(Effect.map((seen) => (pattern.test(seen.replace(/\s+/g, " ")) ? seen : undefined))));
+  waitFor(client, what, seconds, read(client, region, ink).pipe(Effect.map(textMatching(pattern))));
 
 export const enterLoginField = (client: Client, title: string, placeholder: RegExp | undefined, secret: Uint8Array) =>
   Effect.gen(function*() {
