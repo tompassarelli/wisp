@@ -145,4 +145,8 @@ export class InputInjection extends Context.Service<InputInjection, {
   readonly batch: (client: Client, actions: readonly InputAction[]) => Effect.Effect<void, DesktopFailure>;
 }>()("wisp/platform/InputInjection") {}
 
-export type Platform = ScreenCapture | InputInjection | ProcessTable | ResourceAccounting | BackgroundServices | GameLauncher | Namespaces | AudioIsolation | CapacityAdmission;
+export class PageOpener extends Context.Service<PageOpener, {
+  readonly open: (url: string) => Effect.Effect<void, PlatformError>;
+}>()("wisp/platform/PageOpener") {}
+
+export type Platform = ScreenCapture | InputInjection | ProcessTable | ResourceAccounting | BackgroundServices | GameLauncher | Namespaces | AudioIsolation | CapacityAdmission | PageOpener;

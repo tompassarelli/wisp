@@ -5,7 +5,7 @@ import { Effect, Layer, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { collect } from "../../wisp/hostProcess";
 import {
-  AudioIsolation, BackgroundServices, CapacityAdmission, GameLauncher, Namespaces, PlatformFailure, ProcessTable, ResourceAccounting,
+  AudioIsolation, BackgroundServices, CapacityAdmission, GameLauncher, Namespaces, PageOpener, PlatformFailure, ProcessTable, ResourceAccounting,
 } from "../services";
 import { linuxDesktopLayer } from "./desktop";
 import * as procfs from "./procfs";
@@ -111,6 +111,9 @@ const synchronous = Layer.mergeAll(
       ...(options?.keepCapabilities === true ? ["--keep-caps"] : []),
       ...(options?.workingDirectory === undefined ? [] : [`--wd=${options.workingDirectory}`]), ...command,
     ]),
+  })),
+  Layer.succeed(PageOpener, PageOpener.of({
+    open: (url) => Effect.try({ try: () => { Bun.spawn(["xdg-open", url], { stdout: "ignore", stderr: "ignore" }); }, catch: failure("opening a page") }),
   })),
 );
 
