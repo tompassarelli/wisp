@@ -12,6 +12,7 @@ import {
   chatFromHost, countDownEnd, countDownStart, decodeChat, decodeKeepAlive, decodeLeaveReq, decodeMapSize, decodeOutgoingAction, decodeReqJoin, decodeSearchGame,
   gameInfo, incomingAction, leaveAck, mapCheck, pingFromHost, playerInfo, playerLeft, playerLoaded, playerProfile, playerSkins, protobufType, rejectJoin, slotInfo, slotInfoJoin, splitPackets,
 } from "./w3gs";
+import { describeCause } from "../command";
 
 export const CLIENT_PORTS: readonly number[] = [16000, 16001, 16002, 16003, 16004, 16005, 16006, 16007];
 /** Flo waits this long between countdown packets; shorter waits send slow clients to the score screen. */
@@ -324,7 +325,7 @@ export const startHost = (options: HostOptions) => Effect.gen(function*() {
           connection.buffer = rest;
           for (const packet of packets) handle(connection, socket, packet.type, packet.payload);
         } catch (cause) {
-          line(`dropped ${connection.player?.label ?? "a connection"}: ${cause instanceof Error ? cause.message : String(cause)}`);
+          line(`dropped ${connection.player?.label ?? "a connection"}: ${describeCause(cause)}`);
           socket.end();
         }
       },

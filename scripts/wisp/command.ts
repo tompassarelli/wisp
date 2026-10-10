@@ -23,6 +23,12 @@ export function describeCause(cause: unknown): string {
   return String(cause);
 }
 
+/** An error's stack (or message), cut to its first `lines` lines and joined by `separator`. */
+export function describeStack(cause: unknown, lines = Number.POSITIVE_INFINITY, separator = "\n"): string {
+  if (!(cause instanceof Error)) return String(cause);
+  return (cause.stack ?? cause.message).split("\n").slice(0, lines).join(separator);
+}
+
 export function flagValues(args: readonly string[], name: string): string[] {
   const flag = `--${name}`;
   return args.flatMap((arg, index) => {

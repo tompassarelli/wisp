@@ -14,6 +14,7 @@ import { errorFile } from "../../src/runtime/gameFiles";
 import { BUNDLE_MODULE, type ModuleSet } from "../../src/runtime/modules";
 import { sceneFile } from "../../src/runtime/scene";
 import { type SceneExpectations, describeScene, readSceneLines, sceneProblems } from "./scene";
+import { describeStack } from "./command";
 
 export interface HeadlessMap {
   readonly abilityObjects?: AbilityObjectFixtures;
@@ -55,8 +56,6 @@ export function readNativeDeclarations(path = join(import.meta.dir, "../../src/n
   return declarations;
 }
 
-const describeThrown = (error: unknown) => (error instanceof Error ? error.stack ?? error.message : String(error));
-
 function luaFunctions(client: HeadlessClient, bundles: ReadonlyMap<string, MapEntry>): NativeBehaviors {
   return {
     os: { clock: () => client.clockSeconds() },
@@ -64,7 +63,7 @@ function luaFunctions(client: HeadlessClient, bundles: ReadonlyMap<string, MapEn
       try {
         return [true, callback(...args)];
       } catch (error) {
-        client.thrown.push(describeThrown(error));
+        client.thrown.push(describeStack(error));
         return [false, handler(error)];
       }
     },
