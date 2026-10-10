@@ -95,6 +95,7 @@ export const linuxDesktopLayer = Layer.mergeAll(
     },
   })),
   Layer.succeed(InputInjection, InputInjection.of({
+    tools: Effect.succeed({ grim: "grim", xdotool: "xdotool", wlrctl: "wlrctl", tesseract: "tesseract" }),
     windows: (config, entry, title, strict) => Effect.gen(function*() {
       const { x11, wayland } = yield* desktopSession(entry);
       const found = findWindows(config, entry, x11, title);
