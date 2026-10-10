@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Console, Effect, Schema } from "effect";
 import { sceneFile } from "../../src/runtime/scene";
-import { FILE_SLOT_NUMBERS, type GameFileKind, MalformedGameFile, preloadRecord } from "./boundary";
+import { FILE_SLOT_NUMBERS, type GameFileKind, MalformedGameFile, preloadRecord } from "./preloadRecord";
 import { type Client, Clients, type DesktopFailure, waitFor } from "./clients";
 import { describeCause } from "./command";
 import { type Frame, type FrameFeature, decodePpm, encodePpm, frameProblems, measureFrame } from "./frameProbe";

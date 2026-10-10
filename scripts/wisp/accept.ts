@@ -4,7 +4,7 @@ import { Clock, Context, Duration, Effect, Schema } from "effect";
 import { pollUntil } from "./hostProcess";
 import { logLines, sessionStart } from "../warcraft/war3Log";
 import type { Ink, Region } from "../warcraft/desktop";
-import { preloadLines } from "./boundary";
+import { preloadLines } from "./preloadRecord";
 import { describeCause } from "./command";
 import { encodePpm, type Frame } from "./frameProbe";
 

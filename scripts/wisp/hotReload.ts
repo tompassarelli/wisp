@@ -4,7 +4,7 @@ import { pollUntil } from "./hostProcess";
 import { type Manifest, NO_BASE, ackFile, formatManifest, hotFolder, manifestFile, payloadKey } from "../../src/runtime/gameFiles";
 import { ModulePublisher, type ModuleSet, type VersionFiles, moduleChunk } from "../../src/runtime/modules";
 import type { BundledModule, BundledModules } from "../luaBundle";
-import { Acknowledgement, FILE_SLOT_NUMBERS, type MalformedGameFile, hostPath, linePreloadFile, manifestVersion, payloadFileKey, payloadPreloadFile } from "./boundary";
+import { Acknowledgement, FILE_SLOT_NUMBERS, type MalformedGameFile, hostPath, linePreloadFile, manifestVersion, payloadFileKey, payloadPreloadFile } from "./preloadRecord";
 import { type GameFileFailure, GameFiles, prepareHotFolders, readGameFile } from "./gameFiles";
 import { type CompileFailure, MapBuild, type MapBuildFailure } from "./mapBuild";
 import { type SourceMapFailure, SourceErrors } from "./sourceErrors";

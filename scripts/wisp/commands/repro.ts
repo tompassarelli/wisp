@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { Console, Effect, Schema } from "effect";
 import { type Repro, type ReproInspector, type ReproInspection, type ReproReplay, type ReproResult, parseRepro } from "../../../src/runtime/repro";
-import { preloadRecord } from "../boundary";
+import { preloadRecord } from "../preloadRecord";
 import { type Command, UsageFailure, describeCause, flagValues } from "../command";
 import { type HeadlessMap, installHeadless } from "../headless";
 import { step } from "../timings";

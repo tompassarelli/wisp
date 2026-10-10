@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { Predicate } from "effect";
 import type { ClientFiles } from "../../src/headless/client";
 import type { Lockstep } from "../../src/headless/lockstep";
-import { hostPath } from "./boundary";
+import { hostPath } from "./preloadRecord";
 import { FRAMES_PER_SECOND } from "../../src/headless/frameRate";
 
 /** The file Warcraft writes for PreloadGenEnd, byte for byte: Preload lines in a JASS function, with its CRLF and tab whitespace. */

@@ -7,7 +7,7 @@ import { type Bundle, composeScript, typescriptBase } from "../mapScript";
 import type { BundledModules } from "../luaBundle";
 import { BUNDLE_MODULE } from "../../src/runtime/modules";
 import { abilityData } from "../objectData";
-import { bytesChecksum } from "./boundary";
+import { bytesChecksum } from "./preloadRecord";
 import { describeCause } from "./command";
 import type { Phase } from "../compiler";
 import { type SourceMapFailure, SourceErrors } from "./sourceErrors";

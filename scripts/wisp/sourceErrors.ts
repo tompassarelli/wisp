@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { errorFile, errorHeading } from "../../src/runtime/gameFiles";
 import { keepModuleSourceMap, keepSourceMap, toTypeScript } from "../sourceMaps";
-import { ErrorReport, FILE_SLOT_NUMBERS, type MalformedGameFile } from "./boundary";
+import { ErrorReport, FILE_SLOT_NUMBERS, type MalformedGameFile } from "./preloadRecord";
 import { describeCause } from "./command";
 import { type GameFileFailure, GameFiles } from "./gameFiles";
 

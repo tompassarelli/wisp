@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, s
 import { basename, join } from "node:path";
 import { Context, Effect, Layer, Option, Schema } from "effect";
 import { hostFile } from "../../src/runtime/gameFiles";
-import { type GameFileKind, MalformedGameFile, hostPath, linePreloadFile } from "./boundary";
+import { type GameFileKind, MalformedGameFile, hostPath, linePreloadFile } from "./preloadRecord";
 import { describeCause } from "./command";
 
 export class GameFileFailure extends Schema.TaggedError<GameFileFailure>()("GameFileFailure", {

@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect";
-import { MalformedGameFile } from "./boundary";
+import { MalformedGameFile } from "./preloadRecord";
 import { GameFiles, type GameFileFailure } from "./gameFiles";
 
 export interface DesyncSummary {
