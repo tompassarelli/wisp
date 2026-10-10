@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
 import { LanFailure } from "./join";
 import { UsageFailure, flagValues, wholeFlag } from "../command";
+import { writeAtomic } from "../files";
 import { cacheHome, dataHome, stateHome } from "../xdg";
 import { DESKTOP_TOOLS } from "../../platform/linux/tools";
 import { documentsFolder } from "../../warcraft/battleNet";
@@ -177,8 +178,7 @@ export function pairClients(pair: number, runs: Readonly<Partial<Record<Side, st
 
 export function writeJson(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(`${path}.next`, `${JSON.stringify(value, null, 2)}\n`);
-  renameSync(`${path}.next`, path);
+  writeAtomic(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 export function writePoolClients(path: string, clients: readonly PoolClient[]): void {

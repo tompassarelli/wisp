@@ -8,6 +8,7 @@ import type { BundledModules } from "../luaBundle";
 import { BUNDLE_MODULE } from "../../src/runtime/modules";
 import { abilityData } from "../objectData";
 import { bytesChecksum } from "./preloadRecord";
+import { writeAtomic } from "./files";
 import { describeCause } from "./command";
 import type { Phase } from "../compiler";
 import { type SourceMapFailure, SourceErrors } from "./sourceErrors";
@@ -300,8 +301,7 @@ const compilePackager = (path: string, source: string, stamp: string) => Effect.
     `-L${stormlib}/lib`, `-Wl,-rpath,${stormlib}/lib`, "-lstorm", "-o", `${path}.${process.pid}.next`]);
   yield* tryMapSync("install map packager", path, () => {
     renameSync(`${path}.${process.pid}.next`, path);
-    writeFileSync(`${stamp}.${process.pid}.next`, `${source}\n`);
-    renameSync(`${stamp}.${process.pid}.next`, stamp);
+    writeAtomic(stamp, `${source}\n`);
   });
 }).pipe(step("compile map packager"));
 

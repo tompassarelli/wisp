@@ -1,9 +1,10 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Clock, Console, Deferred, Effect, Option, Queue, Schema, type Scope } from "effect";
 import { pollFor } from "./hostProcess";
+import { writeAtomic } from "./files";
 import { DEFAULT_BUILD, profileFor, requireCapability } from "./builds";
 import { loadLanPlugin, lanPluginProblem } from "./lan/plugin";
 import { describeCause } from "./command";
@@ -179,8 +180,7 @@ const KeptAddress = Schema.Struct({ port: Schema.Int, guid: Schema.String, recen
 const keepAddress = (reportPort: number, address: MenuAddress) => {
   try {
     const path = menuAddressFile(reportPort);
-    writeFileSync(`${path}.new`, JSON.stringify({ ...address, at: Date.now() }), { mode: 0o600 });
-    renameSync(`${path}.new`, path);
+    writeAtomic(path, JSON.stringify({ ...address, at: Date.now() }), { mode: 0o600 });
   } catch {
 
   }
