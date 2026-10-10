@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { generateMDX, parseMDL, parseMDX } from "../vendor/war3-model.mjs";
@@ -9,6 +9,15 @@ const build = join(import.meta.dir, "../build");
 mkdirSync(build, { recursive: true });
 const work = mkdtempSync(join(build, "map-pack-"));
 
+// nix reports its downloads on stderr, so realise gcc first and assert only on gcc's own diagnostics.
+function nixGcc(): string {
+  const result = Bun.spawnSync(["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#gcc"]);
+  expect(result.exitCode).toBe(0);
+  const gcc = result.stdout.toString().trim().split("\n").map((path) => join(path, "bin/gcc")).find((path) => existsSync(path));
+  expect(gcc).toBeDefined();
+  return gcc ?? "gcc";
+}
+
 function regression(): string {
   const prefix = process.env.STORMLIB_PREFIX ?? (() => {
     const result = Bun.spawnSync(["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#stormlib"]);
@@ -16,7 +25,7 @@ function regression(): string {
     return result.stdout.toString().trim();
   })();
   const binary = join(work, "regression");
-  const compiler = process.env.CC === undefined ? ["nix", "shell", "nixpkgs#gcc", "--command", "gcc"] : [process.env.CC];
+  const compiler = process.env.CC === undefined ? [nixGcc()] : [process.env.CC];
   const compiled = Bun.spawnSync([...compiler, `-I${prefix}/include`, join(import.meta.dir, "../native/map-pack.test.c"),
     `-L${prefix}/lib`, `-Wl,-rpath,${prefix}/lib`, "-lstorm", "-o", binary]);
   expect({ code: compiled.exitCode, stderr: compiled.stderr.toString() }).toEqual({ code: 0, stderr: "" });
