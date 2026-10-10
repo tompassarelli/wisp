@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
 import { type FrameWindow, type Spread, frameCostFile } from "../../src/runtime/frameCost";
-import { Count, FILE_SLOT_NUMBERS, type MalformedGameFile, Seconds, preloadRecord } from "./boundary";
+import { Count, FILE_SLOT_NUMBERS, type MalformedGameFile, Seconds, preloadRecord } from "./preloadRecord";
 import { type GameFileFailure, GameFiles } from "./gameFiles";
 
 const SpreadText = Schema.String.check(Schema.isPattern(/^\d+(\.\d+)?\/\d+(\.\d+)?\/\d+(\.\d+)?$/));

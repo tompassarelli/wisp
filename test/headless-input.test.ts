@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { linePreloadFile } from "../scripts/wisp/boundary";
+import { linePreloadFile } from "../scripts/wisp/preloadRecord";
 import { installHeadless } from "../scripts/wisp/headless";
 import { customMapData, writtenPreloadFile } from "../scripts/wisp/headlessInput";
 import { installDispatch, on, trampoline } from "../src/platform/dispatch";

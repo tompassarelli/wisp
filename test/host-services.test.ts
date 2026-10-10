@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect, Schema } from "effect";
-import { preloadRecord } from "../scripts/wisp/boundary";
+import { preloadRecord } from "../scripts/wisp/preloadRecord";
 
 test("[property seed 94905] Preload assignments preserve text between independently generated numeric fields", async () => {
   const kind = preloadRecord({ head: ["received-mask={mask} reason={reason} sequence={sequence} frame={frame}"] }, Schema.Struct({ mask: Schema.FiniteFromString, reason: Schema.NonEmptyString, sequence: Schema.FiniteFromString, frame: Schema.FiniteFromString }));

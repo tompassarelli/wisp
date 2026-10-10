@@ -2,7 +2,7 @@ import { dirname, join } from "node:path";
 import { Effect } from "effect";
 import { logLines, logTime, modelFailurePaths, sessionText, war3LogPath } from "../warcraft/war3Log";
 import { FILE_SLOTS, modelFailureFile, modelFailureRequestFile, modelFailureTokenFile } from "../../src/runtime/gameFiles";
-import { hostPath, linePreloadFile, preloadLines } from "./boundary";
+import { hostPath, linePreloadFile, preloadLines } from "./preloadRecord";
 import { GameFiles } from "./gameFiles";
 
 export function modelFailureBridge(files: GameFiles["Service"], filePrefix = "wisp") {

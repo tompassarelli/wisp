@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { basename, join } from "node:path";
 import { Clock, Console, Effect, Schedule } from "effect";
 import { ackFile } from "../../src/runtime/gameFiles";
-import { Acknowledgement, FILE_SLOT_NUMBERS, type MalformedGameFile } from "./boundary";
+import { Acknowledgement, FILE_SLOT_NUMBERS, type MalformedGameFile } from "./preloadRecord";
 import { type Client, Clients, type DesktopFailure, waitFor } from "./clients";
 import { GameFiles, dataDirectory, prepareHotFolders, readGameFile } from "./gameFiles";
 import { MenuFailure, hostLobby, joinLobby, leaveLobby, reportedMenus, startLobby } from "./menus";
