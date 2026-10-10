@@ -122,7 +122,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
   let soundOffset = 0, steps = 0;
   const checksums: { step: number; frame: number; checksum: string; simulationMs: number }[] = [];
   const captures = new Set(options.captureFrames ?? []);
-  const recordChecksums = options.recordChecksums ?? options.script !== undefined;
+  const recordChecksums = options.recordChecksums ?? (options.script !== undefined && session.paced !== true);
   const sounds = createSoundResolver(game.render.readAsset);
   const assets = new Map<string, Promise<Uint8Array | undefined>>();
   const completion = yield* Deferred.make<Readonly<Record<string, unknown>>, RenderFailure>();

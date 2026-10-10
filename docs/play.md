@@ -271,7 +271,8 @@ bun wisp play --standalone --script test/journey.pad --headless --frames 1070 --
 The generic options are `script` (file path), `frames` (step count), `out`
 (folder), `headless` (hidden Chrome) and `captureFrames` (simulation frame
 numbers). Scripted runs record a checksum after every step; ordinary live
-play skips that work. `recordChecksums` can explicitly enable or disable
+play and networked play skip that work (a networked match's peers compare
+checksums themselves, and a checksum per display request starves their link). `recordChecksums` can explicitly enable or disable
 recording, including for scripted performance runs. Recorded runs write
 `checksums.jsonl`. The output contains `standalone.json` with
 frame timing (each frame's callback work, loop-start interval with its p50,

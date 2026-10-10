@@ -6,13 +6,13 @@ import { Effect } from "effect";
 import { installHeadless } from "../scripts/wisp/headless";
 import { openStandalone, type StandaloneGame, type StandaloneOptions } from "../scripts/wisp/standalone";
 
-test("[spec docs/play.md] standalone records scripted checksums and skips live or explicitly disabled checksums", async () => {
+test("[spec docs/play.md] standalone records scripted checksums and skips live, networked or explicitly disabled checksums", async () => {
   const directory = await mkdtemp(join(tmpdir(), "wisp-checksums-"));
   try {
     const script = join(directory, "input.pad");
     await Bun.write(script, "script fixture");
-    const cases: readonly [StandaloneOptions, number][] = [[{}, 0], [{ script }, 3], [{ script, recordChecksums: false }, 0]];
-    for (const [index, [options, expected]] of cases.entries()) {
+    const cases: readonly [StandaloneOptions, number, boolean?][] = [[{}, 0], [{ script }, 3], [{ script, recordChecksums: false }, 0], [{ script }, 0, true]];
+    for (const [index, [options, expected, paced]] of cases.entries()) {
       let checksumCalls = 0;
       const runtime = installHeadless({ filePrefix: "checksum-fixture", globalPrefixes: [] });
       const clients = runtime.clients({ install() {}, start() {} }, [0]);
@@ -20,7 +20,7 @@ test("[spec docs/play.md] standalone records scripted checksums and skips live o
       const game: StandaloneGame = {
         title: "Checksum fixture", render: { readAsset: async () => undefined },
         create: async () => ({
-          client: clients.client(0), step: () => clients.frames(1),
+          client: clients.client(0), step: () => clients.frames(1), ...(paced === true ? { paced: true } : {}),
           checksum: () => { checksumCalls++; return "fixture"; }, close: () => runtime.restore(),
         }),
       };
