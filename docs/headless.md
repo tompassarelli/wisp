@@ -695,6 +695,14 @@ saves them as the scene's `environment`.
   every listed emitter produces an `undrawn Popcorn emitter` failure naming
   the model, emitter and effect file. The failure preserves the scene JSON so
   the missing element can be traced.
+  Each frame in `render.json` also carries `popcornEmitters` and an
+  `unsupportedEmitters` inventory of every Popcorn and version-1 model
+  particle emitter in the drawn models, including hidden emitters. Entries
+  record `kind`, node `objectId`, sampled `visible`, `supported: false`,
+  model, handle, name, external path, position and scale. An empty MDX name
+  uses its kind and node ID. Visible version-1 model emitters also fail by
+  name; hidden entries remain inventory only. No external particle file is
+  decoded, and these records assert neither particle presence nor fidelity.
 - **Omni lights.** In Definitive every drawn model's omni lights (MDX light
   type 0, such as a light-only model a map places) light the other models:
   colour × intensity × N·L, sampled at the model's pose, full out to the

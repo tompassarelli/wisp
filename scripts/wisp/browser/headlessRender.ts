@@ -1,6 +1,6 @@
 import { ModelRenderer, decodeBLP, getBLPImageData, parseMDL, parseMDX, type model } from "../../../vendor/war3-model.mjs";
 import { type AnimationSequence, animationSample, blendWeight, globalSequenceFrame, type SequenceSample } from "../../../src/headless/animation";
-import type { DrawnPose as EffectPose, PopcornEmitterPose, RenderedFrame, RenderScene } from "../headlessRender";
+import type { DrawnPose as EffectPose, PopcornEmitterPose, UnsupportedEmitterPose, RenderedFrame, RenderScene } from "../headlessRender";
 import { parsableModel } from "../models";
 import { drawnPoses } from "../culling";
 import { advanceEmitters, type EmitterRenderer } from "./emitters";
@@ -396,7 +396,7 @@ async function createInstance(path: string): Promise<ModelInstance> {
 interface DepthPass { readonly view: Matrix; readonly projection: Matrix }
 
 interface Shadows { readonly sun?: { readonly map: WebGLTexture; readonly viewProjection: Matrix; readonly bias: number; readonly texel: number }; readonly points?: { readonly map: WebGLTexture; readonly matrices: Float32Array; readonly far: number } }
-async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, light: WorldLight | undefined, fog: ReturnType<typeof sceneFog>, points: readonly PointLight[], popcornEmitters: PopcornEmitterPose[], shadows: Shadows = {}, depthPass?: DepthPass) {
+async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, light: WorldLight | undefined, fog: ReturnType<typeof sceneFog>, points: readonly PointLight[], popcornEmitters: PopcornEmitterPose[], shadows: Shadows = {}, depthPass?: DepthPass, unsupportedEmitters: UnsupportedEmitterPose[] = []) {
   const instance = await prepareInstance(pose);
   const { renderer, model: data } = instance;
   renderer.setInstanceAlpha(pose.alpha / 255);
@@ -431,14 +431,18 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
     renderer.render(multiply(depthPass.view, placed), depthPass.projection, {});
     return;
   }
-  for (const emitter of data.ParticleEmitterPopcorns ?? []) {
-    if (sampler.interp.animVectorVal(emitter.Visibility, 1) <= 0 || sampler.interp.animVectorVal(emitter.Alpha, 1) <= 0) continue;
+  const emitters = [...(data.ParticleEmitterPopcorns ?? []).map((emitter) => ({ emitter, kind: "popcorn" as const })), ...data.ParticleEmitters.map((emitter) => ({ emitter, kind: "model particle" as const }))];
+  for (const { emitter, kind } of emitters) {
+    const alpha = "Alpha" in emitter ? sampler.interp.animVectorVal(emitter.Alpha, 1) : 1;
+    const visible = pose.alpha > 0 && sampler.interp.animVectorVal(emitter.Visibility, 1) > 0 && alpha > 0;
     const node = sampler.rendererData.nodes[emitter.ObjectId];
-    if (node === undefined) throw new Error(`missing node for Popcorn emitter "${emitter.Name}"`);
+    if (node === undefined) throw new Error(`missing node for ${kind} emitter "${emitter.Name}"`);
     const world = multiply(placed, node.matrix), pivot = emitter.PivotPoint ?? data.PivotPoints[emitter.ObjectId];
     const position = [0, 1, 2].map((row) => (world[12 + row] ?? 0) + [0, 1, 2].reduce((sum, axis) => sum + (world[axis * 4 + row] ?? 0) * (pivot?.[axis] ?? 0), 0)) as [number, number, number];
     const scale = [0, 1, 2].map((axis) => Math.hypot(world[axis * 4] ?? 0, world[axis * 4 + 1] ?? 0, world[axis * 4 + 2] ?? 0)) as [number, number, number];
-    popcornEmitters.push({ model: pose.model, handle: pose.handle.id, emitter: emitter.Name, effect: emitter.Path ?? "", position, scale });
+    const entry = { model: pose.model, handle: pose.handle.id, emitter: emitter.Name || `${kind}#${emitter.ObjectId}`, effect: emitter.Path ?? "", position, scale };
+    unsupportedEmitters.push({ ...entry, kind, objectId: emitter.ObjectId, visible, supported: false });
+    if (visible && kind === "popcorn") popcornEmitters.push(entry);
   }
   const sun = shadows.sun, pointShadow = shadows.points;
   renderer.setWispEnvironment({
@@ -716,7 +720,7 @@ window.prepareScene = async (scene, extraModels = [], progress) => {
 window.renderScene = async (scene, options) => {
   bindScene(); gl.depthMask(true); gl.clearColor(0.04, 0.06, 0.09, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
   const view = camera(scene, canvas.width / canvas.height);
-  const visible: EffectPose[] = [], notDrawn: string[] = [], absent = new Set<string>(), popcornEmitters: PopcornEmitterPose[] = [];
+  const visible: EffectPose[] = [], notDrawn: string[] = [], absent = new Set<string>(), popcornEmitters: PopcornEmitterPose[] = [], unsupportedEmitters: UnsupportedEmitterPose[] = [];
   let poses: readonly EffectPose[] = scene.effects;
   try { await bindCliffTextures(scene); poses = await scenePoses(scene); } catch (cause) { notDrawn.push(`terrain doodads: ${String(cause)}`); }
   releaseAbsent(poses);
@@ -765,7 +769,7 @@ window.renderScene = async (scene, options) => {
     shadows.points = { map: pointMap.texture, matrices, far };
   }
   for (const pose of ordered) {
-    try { await drawEffect(pose, view, light, fog, points, popcornEmitters, shadows); } catch (cause) { notDrawn.push(`${pose.model}: ${String(cause)}`); }
+    try { await drawEffect(pose, view, light, fog, points, popcornEmitters, shadows, undefined, unsupportedEmitters); } catch (cause) { notDrawn.push(`${pose.model}: ${String(cause)}`); }
   }
   for (const light of points) delete light.shadowSlot;
 
@@ -774,7 +778,7 @@ window.renderScene = async (scene, options) => {
     try { bindScene(); water = await drawWater(gl, scene.terrain, scene.frame, view.view, view.projection, fog, textureAt, asset); }
     catch (cause) { notDrawn.push(`water: ${String(cause)}`); }
   }
-  for (const emitter of popcornEmitters) notDrawn.push(`${emitter.model}: undrawn Popcorn emitter "${emitter.emitter}" (${emitter.effect || "no effect path"})`);
+  for (const emitter of unsupportedEmitters) if (emitter.visible) notDrawn.push(`${emitter.model}: undrawn ${emitter.kind === "popcorn" ? "Popcorn" : "version-1 model"} emitter "${emitter.emitter}" (${emitter.effect || "no effect path"})`);
   resolve(gl, sceneBuffer);
   const post = graphics === "definitive" ? await postProcessing() : {};
   const projection = view.projection;
@@ -830,5 +834,5 @@ window.renderScene = async (scene, options) => {
     }
   }
   context.globalAlpha = 1;
-  return { png: options?.capture === false ? "" : output.toDataURL("image/png"), models: visible.length, textures: textures.size, notDrawn: [...new Set(notDrawn)], pointLights: points.length, absent: [...absent].sort(), popcornEmitters, shadows: { sun: shadows.sun !== undefined, pointCasters: casters.length }, post: { ambientOcclusion: post.occlusion !== undefined, bloom: post.bloom !== undefined }, water, heightFog: fog?.height !== undefined };
+  return { png: options?.capture === false ? "" : output.toDataURL("image/png"), models: visible.length, textures: textures.size, notDrawn: [...new Set(notDrawn)], pointLights: points.length, absent: [...absent].sort(), popcornEmitters, unsupportedEmitters, shadows: { sun: shadows.sun !== undefined, pointCasters: casters.length }, post: { ambientOcclusion: post.occlusion !== undefined, bloom: post.bloom !== undefined }, water, heightFog: fog?.height !== undefined };
 };
