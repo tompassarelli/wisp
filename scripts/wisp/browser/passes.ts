@@ -84,15 +84,19 @@ export interface SceneTarget { framebuffer: WebGLFramebuffer; resolved: WebGLFra
 function colorTexture(gl: WebGL2RenderingContext, width: number, height: number): WebGLTexture {
   const texture = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, height);
+  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA16F, width, height);
   for (const [name, value] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]] as const) gl.texParameteri(gl.TEXTURE_2D, name, value);
   gl.bindTexture(gl.TEXTURE_2D, null);
   return texture;
 }
 export function sceneTarget(gl: WebGL2RenderingContext, width: number, height: number): SceneTarget {
-  const samples = Math.min(4, gl.getParameter(gl.MAX_SAMPLES) as number);
+  if (gl.getExtension("EXT_color_buffer_float") === null) throw new Error("linear HDR requires EXT_color_buffer_float");
+  const colorSamples = Array.from(gl.getInternalformatParameter(gl.RENDERBUFFER, gl.RGBA16F, gl.SAMPLES) as Int32Array);
+  const depthSamples = Array.from(gl.getInternalformatParameter(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, gl.SAMPLES) as Int32Array);
+  const samples = Math.min(4, ...colorSamples.filter(value => depthSamples.includes(value)));
+  if (!Number.isFinite(samples)) throw new Error("linear HDR requires multisampled RGBA16F colour and depth");
   const framebuffer = gl.createFramebuffer(), colorBuffer = gl.createRenderbuffer(), depthBuffer = gl.createRenderbuffer();
-  gl.bindRenderbuffer(gl.RENDERBUFFER, colorBuffer); gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.RGBA8, width, height);
+  gl.bindRenderbuffer(gl.RENDERBUFFER, colorBuffer); gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.RGBA16F, width, height);
   gl.bindRenderbuffer(gl.RENDERBUFFER, depthBuffer); gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH_COMPONENT24, width, height);
   gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
   gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, colorBuffer);
@@ -102,6 +106,7 @@ export function sceneTarget(gl: WebGL2RenderingContext, width: number, height: n
   gl.bindFramebuffer(gl.FRAMEBUFFER, depth.framebuffer);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, color, 0);
   gl.drawBuffers([gl.COLOR_ATTACHMENT0]); gl.readBuffer(gl.COLOR_ATTACHMENT0);
+  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error("the resolved HDR scene target is incomplete");
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   return { framebuffer, resolved: depth.framebuffer, color, depth: depth.texture, width, height };
 }
@@ -185,7 +190,7 @@ const BRIGHT_FS = `#version 300 es
 precision highp float;
 in vec2 uv; out vec4 fragment;
 uniform sampler2D scene; uniform float threshold;
-void main() { fragment = vec4(clamp((texture(scene, uv).rgb - threshold) / (1.0 - threshold), 0.0, 1.0), 1.0); }`;
+void main() { fragment = vec4(max(texture(scene, uv).rgb - threshold, 0.0), 1.0); }`;
 
 const BLUR_FS = `#version 300 es
 precision highp float;
@@ -205,7 +210,7 @@ const COMPOSE_FS = `#version 300 es
 precision highp float;
 in vec2 uv; out vec4 fragment;
 uniform sampler2D scene; uniform sampler2D occlusion; uniform sampler2D bloom;
-uniform bool occluded, bloomed; uniform vec4 bloomTerms;
+uniform bool occluded, bloomed, toneMapped; uniform vec4 bloomTerms;
 vec3 saturation(vec3 c, float amount) { return mix(vec3(dot(c, vec3(0.3, 0.59, 0.11))), c, amount); }
 void main() {
   vec3 base = texture(scene, uv).rgb;
@@ -213,9 +218,15 @@ void main() {
   if (bloomed) {
     vec3 glow = saturation(texture(bloom, uv).rgb, bloomTerms.y) * bloomTerms.x;
     base = saturation(base, bloomTerms.w) * bloomTerms.z;
-    base = base * (1.0 - clamp(glow, 0.0, 1.0)) + glow;
+    base += glow;
   }
-  fragment = vec4(base, 1.0);
+  base = max(base, 0.0);
+  if (toneMapped) {
+    vec3 shoulder = max(base - 0.8, 0.0);
+    base = min(base, 0.8) + 0.2 * shoulder / (shoulder + 0.2);
+  }
+  vec3 encoded = mix(1.055 * pow(base, vec3(1.0 / 2.4)) - 0.055, 12.92 * base, lessThanEqual(base, vec3(0.0031308)));
+  fragment = vec4(encoded, 1.0);
 }`;
 
 export interface PostSettings { readonly occlusion?: { radius: number; strength: number; power: number; clampTo: number; horizon: number; fadeFrom: number; fadeTo: number; passes: number }; readonly bloom?: { threshold: number; intensity: number; saturation: number; baseIntensity: number; baseSaturation: number; blur: number; taps: number } }
@@ -233,6 +244,7 @@ function image(gl: WebGL2RenderingContext, width: number, height: number): Image
   const texture = colorTexture(gl, width, height), framebuffer = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error("the linear HDR post target is incomplete");
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   return { texture, framebuffer, width, height };
 }
@@ -255,7 +267,7 @@ export function postProcessor(gl: WebGL2RenderingContext, target: SceneTarget) {
     uniforms(used.uniform);
     gl.bindVertexArray(vao); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); gl.bindVertexArray(null);
   };
-  return (settings: PostSettings, inverseProjection: Matrix, focal: readonly [number, number]) => {
+  return (settings: PostSettings, inverseProjection: Matrix, focal: readonly [number, number], toneMapped = true) => {
     gl.disable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE);
     const texel = [1 / target.width, 1 / target.height] as const;
     let occlusion: Image | undefined;
@@ -280,7 +292,7 @@ export function postProcessor(gl: WebGL2RenderingContext, target: SceneTarget) {
     let glow: Image | undefined;
     if (settings.bloom !== undefined) {
       const bloom = settings.bloom;
-      draw(half[0], passes.bright, [["scene", target.color]], (at) => gl.uniform1f(at("threshold"), Math.min(bloom.threshold, 0.999)));
+      draw(half[0], passes.bright, [["scene", target.color]], (at) => gl.uniform1f(at("threshold"), Math.max(bloom.threshold, 0)));
 
       const scale = target.height / 1080;
       draw(half[1], passes.blur, [["image", half[0].texture]], (at) => { gl.uniform2f(at("step"), scale / halfWidth, 0); gl.uniform1f(at("deviation"), bloom.blur); gl.uniform1i(at("taps"), bloom.taps); });
@@ -288,6 +300,7 @@ export function postProcessor(gl: WebGL2RenderingContext, target: SceneTarget) {
       glow = half[0];
     }
     draw(null, passes.compose, [["scene", target.color], ["occlusion", occlusion?.texture ?? target.color], ["bloom", glow?.texture ?? target.color]], (at) => {
+      gl.uniform1i(at("toneMapped"), toneMapped ? 1 : 0);
       gl.uniform1i(at("occluded"), occlusion === undefined ? 0 : 1); gl.uniform1i(at("bloomed"), glow === undefined ? 0 : 1);
       const b = settings.bloom;
       gl.uniform4f(at("bloomTerms"), b?.intensity ?? 0, b?.saturation ?? 1, b?.baseIntensity ?? 1, b?.baseSaturation ?? 1);

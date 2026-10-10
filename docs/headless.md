@@ -766,7 +766,21 @@ saves them as the scene's `environment`.
   Each draws a six-face 1024² depth cube out to its attenuation end; a
   shadowed fragment loses that light. `render.json` records `shadows.sun` and
   `shadows.pointCasters` per frame.
-- **Ambient occlusion and bloom.** Definitive reads the install's
+- **Colour pipeline, ambient occlusion and bloom.** Scene colour, resolve,
+  and post-process targets are linear `RGBA16F`; WebGL2 requires
+  `EXT_color_buffer_float` and a shared colour/depth multisample count.
+  Model, sky, terrain and water colours enter this buffer decoded from sRGB;
+  HD shaders emit linear radiance without local tone mapping or gamma encoding.
+  SD lighting keeps its existing material terms, with its result decoded before
+  fog and blending; P6 owns the lighting equations. Bloom extracts
+  `max(linearRGB - BloomThreshold, 0)` per channel, without normalizing by
+  `1 - BloomThreshold` or clipping HDR highlights. Blur and additive bloom
+  composition run in linear HDR. After composition Definitive's neutral shoulder leaves
+  channels through 0.8 unchanged and maps larger channels with
+  `0.8 + 0.2 * (c - 0.8) / (c - 0.8 + 0.2)`, then the piecewise sRGB
+  transfer encodes the output once. Classic uses an identity tone map with
+  display-range clipping. UI and cinematic filters overlay this
+  display output. Definitive reads the install's
   `PostProcessingConfig.txt` with the map's `war3mapPostProcessing.txt` over
   it, key by key. `[ASSAO]` with `Enabled` above 0 draws screen-space
   occlusion from the frame's depth: `Radius` in world units, obscurance

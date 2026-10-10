@@ -32,6 +32,7 @@ uniform vec4 fogColor; uniform vec3 fogRange; uniform vec4 heightFog; uniform fl
 out vec4 color;
 void main(){
   color=texture(surface,texcoord)*shade;
+  color.rgb=mix(pow((max(color.rgb,0.0)+0.055)/1.055,vec3(2.4)),color.rgb/12.92,lessThanEqual(color.rgb,vec3(0.04045)));
   if(fogColor.w>0.5){
     float fog=clamp((depth-fogRange.x)/max(fogRange.y-fogRange.x,1.0),0.0,fogRange.z);
     if(heightFogOn>0.5){
@@ -39,7 +40,8 @@ void main(){
       float reach=clamp((depth-heightFog.z)/max(heightFog.w-heightFog.z,1.0),0.0,1.0);
       fog=1.0-(1.0-fog)*(1.0-below*reach);
     }
-    color.rgb=mix(color.rgb,fogColor.rgb,fog);
+    vec3 fogLinear=mix(pow((max(fogColor.rgb,0.0)+0.055)/1.055,vec3(2.4)),fogColor.rgb/12.92,lessThanEqual(fogColor.rgb,vec3(0.04045)));
+    color.rgb=mix(color.rgb,fogLinear,fog);
   }
   if(color.a<0.004)discard;
 }`);

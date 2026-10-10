@@ -436,6 +436,7 @@ export declare class ModelRenderer {
     setCamera(cameraPos: vec3, cameraQuat: quat): void;
     /** Wisp: a directional key light and ambient fill, its direction in model space toward the light, and linear fog by eye depth. */
     setWispEnvironment(environment: {
+        linearOutput?: boolean;
         light?: { direction: ArrayLike<number>; key: ArrayLike<number>; ambient: ArrayLike<number>; linear?: boolean; overbright?: boolean };
         fog?: { color: ArrayLike<number>; start: number; end: number; near: number; far: number; max: number; height?: { bottom: number; top: number; start: number; end: number; model?: Float32Array } };
         /** Up to eight omni lights in world space (colour times intensity, full to start, zero from end), with the draw's model and normal matrices. */

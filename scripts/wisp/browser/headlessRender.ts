@@ -446,6 +446,7 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
   }
   const sun = shadows.sun, pointShadow = shadows.points;
   renderer.setWispEnvironment({
+    linearOutput: true,
     ...(light === undefined ? {} : { light: { direction: modelDirection(placed, light.toward), key: light.key, ambient: light.ambient, linear: light.linear, overbright: graphics === "definitive" } }), ...(fog === undefined ? {} : { fog: fog.height === undefined ? fog : { ...fog, height: { ...fog.height, model: placed } } }),
     ...(points.length === 0 ? {} : { points: { model: placed, normal: normalMatrix(placed), lights: nearest(points, placed) } }),
     ...(sun === undefined ? {} : { shadow: { map: sun.map, matrix: multiply(sun.viewProjection, placed), bias: sun.bias, texel: sun.texel } }),
@@ -522,7 +523,7 @@ async function drawSky(scene: RenderScene, view: ReturnType<typeof camera>) {
   if (data.Sequences.length > 0) { renderer.setSequence(0); show(renderer as unknown as Sampler, data, { sequence: 0, frame: data.Sequences[0]?.Interval[0] ?? 0 }); }
   renderer.update(0);
   const fog = sceneFog(scene, view, true);
-  renderer.setWispEnvironment(fog === undefined ? undefined : { fog });
+  renderer.setWispEnvironment({ linearOutput: true, ...(fog === undefined ? {} : { fog }) });
   bindScene();
   renderer.render(multiply(view.view, placed), view.skyProjection, {});
 
@@ -718,7 +719,7 @@ window.prepareScene = async (scene, extraModels = [], progress) => {
   return { models: models.size, instances: instances.size + preparedModels.size, textures: textures.size };
 };
 window.renderScene = async (scene, options) => {
-  bindScene(); gl.depthMask(true); gl.clearColor(0.04, 0.06, 0.09, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
+  bindScene(); gl.depthMask(true); gl.clearColor(0.04 / 12.92, ((0.06 + 0.055) / 1.055) ** 2.4, ((0.09 + 0.055) / 1.055) ** 2.4, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
   const view = camera(scene, canvas.width / canvas.height);
   const visible: EffectPose[] = [], notDrawn: string[] = [], absent = new Set<string>(), popcornEmitters: PopcornEmitterPose[] = [], unsupportedEmitters: UnsupportedEmitterPose[] = [];
   let poses: readonly EffectPose[] = scene.effects;
@@ -782,7 +783,7 @@ window.renderScene = async (scene, options) => {
   resolve(gl, sceneBuffer);
   const post = graphics === "definitive" ? await postProcessing() : {};
   const projection = view.projection;
-  compose(post, invert(projection), [(projection[0] ?? 1) * canvas.width / 2, (projection[5] ?? 1) * canvas.height / 2]);
+  compose(post, invert(projection), [(projection[0] ?? 1) * canvas.width / 2, (projection[5] ?? 1) * canvas.height / 2], graphics === "definitive");
   gl.viewport(0, 0, canvas.width, canvas.height);
   if (scene.filter !== undefined) await drawFilter(scene.filter, options?.capture === false);
   const live = options?.capture === false;

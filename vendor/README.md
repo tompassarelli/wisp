@@ -103,3 +103,9 @@ tests run in from it, so a build needs no network: cloud sessions can't reach
 lua.org.
 
 License: MIT, Copyright (C) 1994-2020 Lua.org, PUC-Rio, in `lua.LICENSE`.
+
+For Wisp's linear HDR colour pipeline, `setWispEnvironment({ linearOutput: true })`
+emits linear colour: SD converts its existing lit result before fog and blending;
+WebGL2 HD skips shader-local tone mapping and gamma encoding. Wisp's final
+post-process pass owns tone mapping and sRGB encoding. This flag leaves the
+material shading terms available for P6 changes (wisp#75 P7.0).
