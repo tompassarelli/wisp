@@ -64,12 +64,16 @@ export function splitByTime<U>(units: readonly U[], seconds: (unit: U) => number
   return bins.map((bin) => bin.units).filter((group) => group.length > 0);
 }
 
+// bunfig.toml's pathIgnorePatterns: vendored repositories' tests never run, so they get no shard.
+const ignored = (file: string) => file.startsWith("repos/");
+
 export function plan(units: readonly string[], timings: Timings, bunShards: number, luaShards: number): Plan {
+  const suite = units.filter((unit) => !unit.split(",").every(ignored));
   const unitSeconds = (unit: string) => {
     const files = unit.split(",");
     return files.every((file) => timings.bun[file] === undefined) ? undefined : files.reduce((sum, file) => sum + (timings.bun[file] ?? 0), 0);
   };
-  const bun = splitByTime(units, unitSeconds, bunShards).map((group) => group.flatMap((unit) => unit.split(",")));
+  const bun = splitByTime(suite, unitSeconds, bunShards).map((group) => group.flatMap((unit) => unit.split(",").filter((file) => !ignored(file))));
   const names = Object.keys(timings.lua);
   const luaTests: Record<string, number> = {};
   splitByTime(names, (name) => timings.lua[name], luaShards).forEach((group, shard) => {

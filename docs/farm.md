@@ -36,7 +36,8 @@ This clears branches left by a killed command or a manual push.
    shards, slowest first, each to the shard with the least time so far
    (wisp:scripts/wisp/farmShards.ts). A file or test never measured counts
    as the median measured one; a Lua test never measured runs on the shard
-   its name hashes to.
+   its name hashes to. Test files under `repos/` (vendored repositories,
+   which bunfig.toml's `pathIgnorePatterns` keeps out of every run) get no shard.
 4. **Shards.** Bun shards run their files with Bun's JUnit reporter. Lua jobs
    compile the test bundle once and run several shards at once, one Lua
    process per core, each writing a line per test with its status and
