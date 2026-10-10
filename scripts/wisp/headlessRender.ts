@@ -103,6 +103,13 @@ export interface PopcornEmitterPose {
   readonly scale: readonly [number, number, number];
 }
 
+export interface UnsupportedEmitterPose extends PopcornEmitterPose {
+  readonly kind: "popcorn" | "model particle";
+  readonly objectId: number;
+  readonly visible: boolean;
+  readonly supported: false;
+}
+
 export interface RenderedFrame {
   readonly png: string;
   readonly models: number;
@@ -111,6 +118,7 @@ export interface RenderedFrame {
   readonly pointLights: number;
   readonly absent: string[];
   readonly popcornEmitters: PopcornEmitterPose[];
+  readonly unsupportedEmitters: UnsupportedEmitterPose[];
 
   readonly shadows: { readonly sun: boolean; readonly pointCasters: number };
 
@@ -334,7 +342,7 @@ export const renderScenes = (project: HeadlessRenderProject, scenes: readonly Re
   const browser = yield* openAnyBrowser(project, bundle, graphics);
   const write = (run: () => Promise<unknown>) => Effect.tryPromise({ try: run, catch: (cause) => new RenderFailure({ cause }) });
   yield* write(() => mkdir(directory, { recursive: true }));
-  const images: { frame: number; matchFrame?: number; client: number; image: string; models: number; textures: number; notDrawn: string[]; pointLights: number; absent: readonly string[]; shadows: RenderedFrame["shadows"]; post: RenderedFrame["post"]; water: boolean; heightFog: boolean; milliseconds: number }[] = [];
+  const images: { frame: number; matchFrame?: number; client: number; image: string; models: number; textures: number; notDrawn: string[]; popcornEmitters: PopcornEmitterPose[]; unsupportedEmitters: UnsupportedEmitterPose[]; pointLights: number; absent: readonly string[]; shadows: RenderedFrame["shadows"]; post: RenderedFrame["post"]; water: boolean; heightFog: boolean; milliseconds: number }[] = [];
   for (const scene of scenes) {
     const started = performance.now();
     const result = (yield* browser.devtools.evaluate(`window.renderScene(${JSON.stringify(sceneWithUnits(project, scene))})`)) as RenderedFrame;
@@ -342,8 +350,8 @@ export const renderScenes = (project: HeadlessRenderProject, scenes: readonly Re
     for (const failure of result.notDrawn) console.error(`${name}: not drawn: ${failure}`);
     const image = `${name}.png`;
     yield* write(() => Bun.write(join(directory, image), Buffer.from(result.png.split(",")[1] ?? "", "base64")));
-    yield* write(() => Bun.write(join(directory, `${name}.json`), JSON.stringify({ ...scene, popcornEmitters: result.popcornEmitters })));
-    images.push({ frame: scene.frame, ...(scene.matchFrame === undefined ? {} : { matchFrame: scene.matchFrame }), client: scene.client, image, models: result.models, textures: result.textures, notDrawn: result.notDrawn, pointLights: result.pointLights, absent: result.absent, shadows: result.shadows, post: result.post, water: result.water, heightFog: result.heightFog, milliseconds: Math.round(performance.now() - started) });
+    yield* write(() => Bun.write(join(directory, `${name}.json`), JSON.stringify({ ...scene, popcornEmitters: result.popcornEmitters, unsupportedEmitters: result.unsupportedEmitters })));
+    images.push({ frame: scene.frame, ...(scene.matchFrame === undefined ? {} : { matchFrame: scene.matchFrame }), client: scene.client, image, models: result.models, textures: result.textures, notDrawn: result.notDrawn, popcornEmitters: result.popcornEmitters, unsupportedEmitters: result.unsupportedEmitters, pointLights: result.pointLights, absent: result.absent, shadows: result.shadows, post: result.post, water: result.water, heightFog: result.heightFog, milliseconds: Math.round(performance.now() - started) });
   }
   yield* write(() => Bun.write(join(directory, "render.json"), JSON.stringify({ renderer: "war3-model 4.0.1 + HD sampling precision", graphics, levers: PROFILES[graphics], look, gpu: browser.gpu, assets: [...browser.resolutions.values()], images }, null, 2) + "\n"));
   const failures = images.flatMap((image) => image.notDrawn.map((failure) => `p${image.client} ${image.matchFrame === undefined ? "frame" : "match frame"} ${image.matchFrame ?? image.frame}: ${failure}`));
