@@ -89,7 +89,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.cache/wisp/lua32
-          key: wisp-lua32-${{ hashFiles('scripts/wisp/lua32.ts', 'native/toward-zero.h') }}
+          key: wisp-lua32-${{ runner.environment }}-${{ hashFiles('scripts/wisp/lua32.ts', 'native/toward-zero.h') }}
       - uses: actions/download-artifact@v4
         with:
           name: farm-test-plan
