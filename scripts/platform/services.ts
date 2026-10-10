@@ -99,7 +99,7 @@ export type Namespace = "user" | "net" | "mount";
 export class Namespaces extends Context.Service<Namespaces, {
 
   readonly offline: (command: readonly string[]) => Effect.Effect<readonly string[], PlatformUnsupported>;
-  readonly enter: (pid: number, namespaces: readonly Namespace[], command: readonly string[], workingDirectory?: string) => Effect.Effect<readonly string[], PlatformUnsupported>;
+  readonly enter: (pid: number, namespaces: readonly Namespace[], command: readonly string[], options?: { readonly workingDirectory?: string; readonly keepCapabilities?: boolean }) => Effect.Effect<readonly string[], PlatformUnsupported>;
 }>()("wisp/platform/Namespaces") {}
 
 export class AudioIsolation extends Context.Service<AudioIsolation, {
