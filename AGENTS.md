@@ -6,8 +6,13 @@ Wisp verifies Warcraft III maps without waiting on Warcraft III, then plays
 them without it ([wisp#75](https://github.com/tompassarelli/wisp/issues/75)).
 Every verdict that is a number from the map's code (simulation, checksums,
 timing, CPU cost, audio events, which model or effect shows when, where and
-in what pose) runs on Wisp. Appearance that depends on Warcraft's shading is
-one native spot check, never a renderer-fidelity project. Drive a native
+in what pose) runs on Wisp. Under M5, a look lever whose fidelity gate passes
+gets its verdict on Wisp within its calibrated range, when that verdict is
+outside the gate's error margin. Native truth runs on the Warcraft VM:
+one spot check per lever per build for verdicts inside the error margin,
+settings outside the calibrated range, or Popcorn-dependent appearance.
+Unstable references are inconclusive; they never widen the gate's bounds.
+The laptop runs only product proofs. Drive a native
 client from inside (wisp:docs/driving-warcraft.md), never through the OS
 keyboard or chat. The frontier is online play over Wisp's own transport (M3).
 Measure the native side with exact reads before pixels: on offline 3.0.0

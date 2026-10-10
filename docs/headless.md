@@ -520,12 +520,15 @@ Sequence selection, loop ends, Birth before Stand, blending and global
 sequences follow Warcraft's playback rules in wisp:src/headless/animation.ts,
 listed in [Animation playback](warsmash-notes.md#animation-playback); the
 headless runtime keeps each unit's and effect's clock, seek and blend.
-This is a scene renderer for look checks, not pixel-identical Warcraft shading.
-Under [M1](https://github.com/tompassarelli/wisp/issues/75) (revised 9 Oct),
-its frames give visibility, pose, geometry and HUD-layout verdicts. Appearance
-that depends on Warcraft's shading (light, colour, contrast, materials, fog,
-water, bloom, PopcornFX particles) is iterated on these frames and accepted by
-one native spot check; Wisp does not chase pixel fidelity for it.
+Under [M5](https://github.com/tompassarelli/wisp/issues/75), these frames give
+visibility, pose, geometry and HUD-layout verdicts. A look lever whose fidelity
+gate passes gets its verdict on Wisp within its calibrated range, when the
+verdict is outside the gate's error margin. Native truth runs on the Warcraft
+VM: take one spot check per lever per build when the verdict is inside that
+margin, the settings fall outside the calibrated range, or the appearance
+depends on PopcornFX particles. An unstable reference makes the gate
+inconclusive; it never widens the error bound. The laptop runs only product
+proofs, such as performance on Tom's machine, trailers and listening clips.
 
 Every sound/music start, stop and playing-volume change is printed with its
 client, frame, source or label, loop flag, volume and effective volume.
