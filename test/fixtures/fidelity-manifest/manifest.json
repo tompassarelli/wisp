@@ -1,0 +1,399 @@
+{
+  "version": 1,
+  "split": {
+    "frozenAt": "2026-10-10T00:00:00.000Z",
+    "fit": [
+      "synthetic-fit"
+    ],
+    "heldOut": [
+      "synthetic-ruler"
+    ],
+    "retired": []
+  },
+  "slices": [
+    {
+      "lever": "fog",
+      "scene": "synthetic-ruler",
+      "kind": "lever",
+      "split": "held-out",
+      "pad": "synthetic.pad",
+      "frames": [
+        0,
+        1
+      ],
+      "camera": {
+        "position": [
+          0,
+          -10,
+          5
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "fov": 60
+      },
+      "look": "definitive",
+      "identity": {
+        "build": "synthetic-build",
+        "assetLayers": [
+          "synthetic-assets"
+        ],
+        "mapHash": "synthetic-map-hash",
+        "settingsFile": "synthetic-settings.json",
+        "resolution": {
+          "width": 4,
+          "height": 4
+        },
+        "gpu": "synthetic-gpu"
+      },
+      "settings": {
+        "density": 0.5
+      },
+      "calibratedRanges": {
+        "density": {
+          "min": 0,
+          "max": 1
+        }
+      },
+      "regions": [
+        {
+          "id": "critical",
+          "x": 0,
+          "y": 0,
+          "width": 4,
+          "height": 4,
+          "critical": true
+        }
+      ],
+      "controls": [
+        {
+          "id": "stock",
+          "mode": "stock",
+          "fog": false,
+          "bloom": false,
+          "dof": 0,
+          "cine": false
+        },
+        {
+          "id": "mask",
+          "mode": "mask",
+          "fog": false,
+          "bloom": false,
+          "dof": 0,
+          "cine": false
+        },
+        {
+          "id": "stage",
+          "mode": "stage",
+          "fog": false,
+          "bloom": false,
+          "dof": 0,
+          "cine": false
+        },
+        {
+          "id": "fog-on",
+          "mode": "stock",
+          "fog": true,
+          "bloom": false,
+          "dof": 0,
+          "cine": false
+        },
+        {
+          "id": "bloom-on",
+          "mode": "stock",
+          "fog": false,
+          "bloom": true,
+          "dof": 0,
+          "cine": false
+        },
+        {
+          "id": "dof-near",
+          "mode": "stock",
+          "fog": false,
+          "bloom": false,
+          "dof": 1,
+          "cine": false
+        },
+        {
+          "id": "dof-far",
+          "mode": "stock",
+          "fog": false,
+          "bloom": false,
+          "dof": 2,
+          "cine": false
+        },
+        {
+          "id": "cine-on",
+          "mode": "stock",
+          "fog": false,
+          "bloom": false,
+          "dof": 0,
+          "cine": true
+        }
+      ],
+      "cineWindow": {
+        "start": 0,
+        "end": 1
+      },
+      "runs": [
+        {
+          "id": "run-1",
+          "captures": [
+            {
+              "frame": 0,
+              "control": "stock",
+              "image": "run-1/0-stock.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "mask",
+              "image": "run-1/0-mask.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "stage",
+              "image": "run-1/0-stage.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "fog-on",
+              "image": "run-1/0-fog-on.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "bloom-on",
+              "image": "run-1/0-bloom-on.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "dof-near",
+              "image": "run-1/0-dof-near.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "dof-far",
+              "image": "run-1/0-dof-far.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "cine-on",
+              "image": "run-1/0-cine-on.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "stock",
+              "image": "run-1/1-stock.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "mask",
+              "image": "run-1/1-mask.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "stage",
+              "image": "run-1/1-stage.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "fog-on",
+              "image": "run-1/1-fog-on.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "bloom-on",
+              "image": "run-1/1-bloom-on.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "dof-near",
+              "image": "run-1/1-dof-near.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "dof-far",
+              "image": "run-1/1-dof-far.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "cine-on",
+              "image": "run-1/1-cine-on.ppm"
+            }
+          ]
+        },
+        {
+          "id": "run-2",
+          "captures": [
+            {
+              "frame": 0,
+              "control": "stock",
+              "image": "run-2/0-stock.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "mask",
+              "image": "run-2/0-mask.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "stage",
+              "image": "run-2/0-stage.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "fog-on",
+              "image": "run-2/0-fog-on.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "bloom-on",
+              "image": "run-2/0-bloom-on.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "dof-near",
+              "image": "run-2/0-dof-near.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "dof-far",
+              "image": "run-2/0-dof-far.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "cine-on",
+              "image": "run-2/0-cine-on.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "stock",
+              "image": "run-2/1-stock.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "mask",
+              "image": "run-2/1-mask.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "stage",
+              "image": "run-2/1-stage.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "fog-on",
+              "image": "run-2/1-fog-on.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "bloom-on",
+              "image": "run-2/1-bloom-on.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "dof-near",
+              "image": "run-2/1-dof-near.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "dof-far",
+              "image": "run-2/1-dof-far.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "cine-on",
+              "image": "run-2/1-cine-on.ppm"
+            }
+          ]
+        },
+        {
+          "id": "run-3",
+          "captures": [
+            {
+              "frame": 0,
+              "control": "stock",
+              "image": "run-3/0-stock.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "mask",
+              "image": "run-3/0-mask.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "stage",
+              "image": "run-3/0-stage.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "fog-on",
+              "image": "run-3/0-fog-on.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "bloom-on",
+              "image": "run-3/0-bloom-on.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "dof-near",
+              "image": "run-3/0-dof-near.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "dof-far",
+              "image": "run-3/0-dof-far.ppm"
+            },
+            {
+              "frame": 0,
+              "control": "cine-on",
+              "image": "run-3/0-cine-on.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "stock",
+              "image": "run-3/1-stock.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "mask",
+              "image": "run-3/1-mask.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "stage",
+              "image": "run-3/1-stage.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "fog-on",
+              "image": "run-3/1-fog-on.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "bloom-on",
+              "image": "run-3/1-bloom-on.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "dof-near",
+              "image": "run-3/1-dof-near.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "dof-far",
+              "image": "run-3/1-dof-far.ppm"
+            },
+            {
+              "frame": 1,
+              "control": "cine-on",
+              "image": "run-3/1-cine-on.ppm"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
