@@ -13,7 +13,8 @@ Platform-specific work sits behind Effect services
 (wisp:scripts/platform/services.ts). Each is a `Context.Service` tag with a
 Linux layer under wisp:scripts/platform/linux/. Nothing outside that folder
 reads `/proc`, cgroup files or runs `nsenter`, `wine`, `grim`, `xdotool`,
-`wlrctl`, `systemd-run`, `systemctl`, `steam-run`, `bwrap`, PipeWire or niri.
+`wlrctl`, `systemd-run`, `systemctl`, `steam-run`, `bwrap`, `xdg-open`, PipeWire
+or niri.
 
 | Service | What it does | Linux layer |
 | --- | --- | --- |
@@ -27,6 +28,7 @@ reads `/proc`, cgroup files or runs `nsenter`, `wine`, `grim`, `xdotool`,
 | `AudioIsolation` | a client's own audio sink | PipeWire null sinks (`pw-dump`, `pw-cli`) |
 | `BackgroundServices` | background services and which service owns a process | `systemd-run --user`, `systemctl --user`, cgroups |
 | `CapacityAdmission` | capacity admission: probing and leasing the machine-capacity helper | the cgroup-based helper |
+| `PageOpener` | opening a local page in the owner's browser ([`wisp repro --view`](repro.md)) | `xdg-open` |
 
 Layers are composed at the application boundary. `cliProgram`
 (wisp:scripts/wisp/cli.ts) provides `platformLayer()`

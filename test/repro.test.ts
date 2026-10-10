@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { readRepro, replayInClients } from "../scripts/wisp/commands/repro";
+import { readRepro, replayInClients } from "../scripts/wisp/repro/replay";
 import { writtenPreloadFile } from "../scripts/wisp/headlessInput";
 import { lineTokens, recordTokens, tokenLines } from "../src/runtime/recordText";
 import { REPRO_LINE_WIDTH, assertReproLands, reproLines } from "../src/runtime/repro";

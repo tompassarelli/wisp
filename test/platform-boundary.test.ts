@@ -8,7 +8,7 @@ const root = join(import.meta.dir, "..");
 const LINUX_ONLY: readonly (readonly [string, RegExp])[] = [
   ["/proc", /["'`]\/proc\b/],
   ["cgroup files", /\/sys\/fs\/cgroup/],
-  ["a Linux tool", /["'`](nsenter|wine|wine64|wineserver|grim|xdotool|wlrctl|systemd-run|systemctl|steam-run|pw-cli|pw-dump|niri|dbus-run-session|bwrap)["'`]/],
+  ["a Linux tool", /["'`](nsenter|wine|wine64|wineserver|grim|xdotool|wlrctl|systemd-run|systemctl|steam-run|pw-cli|pw-dump|niri|dbus-run-session|bwrap|xdg-open)["'`]/],
   ["a configured Linux tool", /\b(?:tools|config\.tools|client\.tools)\.(grim|xdotool|wlrctl|nsenter|niri)\b/],
   ["Wine's binary", /bin\/wine\b/],
   ["Wine's runtime", /\/wineserver\b/],

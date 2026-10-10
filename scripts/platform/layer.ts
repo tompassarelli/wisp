@@ -2,7 +2,7 @@ import { Effect, Layer } from "effect";
 import { DesktopFailure } from "../warcraft/desktop";
 import { linuxLayer } from "./linux/layer";
 import {
-  AudioIsolation, BackgroundServices, CapacityAdmission, GameLauncher, InputInjection, Namespaces, type Platform, PlatformUnsupported, ProcessTable,
+  AudioIsolation, BackgroundServices, CapacityAdmission, GameLauncher, InputInjection, Namespaces, PageOpener, type Platform, PlatformUnsupported, ProcessTable,
   ResourceAccounting, ScreenCapture,
 } from "./services";
 
@@ -40,6 +40,7 @@ export const unsupportedLayer = (platform: string): Layer.Layer<Platform> => {
     Layer.succeed(Namespaces, Namespaces.of({ offline: () => refuse("network isolation"), enter: () => refuse("process namespaces") })),
     Layer.succeed(AudioIsolation, AudioIsolation.of({ sink: (name) => Effect.succeed({ env: {}, problem: `${name}: audio isolation is not supported on this platform (${platform}); it shares the default output` }) })),
     Layer.succeed(CapacityAdmission, CapacityAdmission.of({ probe: () => refuse("capacity admission"), session: () => refuse("capacity admission") })),
+    Layer.succeed(PageOpener, PageOpener.of({ open: () => refuse("opening a page") })),
     Layer.succeed(ScreenCapture, ScreenCapture.of({ frame: desktop("screen capture") })),
     Layer.succeed(InputInjection, InputInjection.of({
       windows: (_config, entry) => desktop("input injection")(entry),

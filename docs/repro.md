@@ -61,7 +61,10 @@ a map that saves during play spreads that work over frames.
 ## Replaying: `wisp repro FILE [--test NAME]`
 
 A project adds the command with `makeRepro`
-(wisp:scripts/wisp/commands/repro.ts):
+(wisp:scripts/wisp/commands/repro.ts). The command parses its arguments with
+the pure `parseReproArgs`; reading, replaying and reporting a repro live in
+wisp:scripts/wisp/repro/replay.ts, and `--view` opens its page through the
+platform's `PageOpener` (wisp:docs/platforms.md):
 
 ```ts
 repro: {

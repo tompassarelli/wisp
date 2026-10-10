@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import ts from "typescript";
 import type { Repro, ReproInspection, ReproInspector } from "../../src/runtime/repro";
 import type { HeadlessMap } from "./headless";
-import { inspectClientStates } from "./commands/repro";
+import { inspectClientStates } from "./repro/replay";
 import { diffReproStates } from "./reproInspection";
 import { panelServer } from "./panelServer";
 import { REPRO_VIEWER_PAGE } from "./reproViewerPage";
