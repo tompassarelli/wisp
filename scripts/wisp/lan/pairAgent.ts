@@ -6,7 +6,7 @@ import { Cause, Effect, Exit, FiberSet, Layer, Option, Schedule, Schema, Scope }
 import { platformLayer, runPlatformSync } from "../../platform/layer";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { AudioIsolation, GameLauncher, InputInjection, ProcessTable } from "../../platform/services";
-import { spawnLogged } from "../hostProcess";
+import { pollUntil, spawnLogged } from "../hostProcess";
 import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports, playLocalGame } from "../menus";
 import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";
@@ -38,11 +38,7 @@ const clients = PAIR_SIDES.map((side) => ({ side, name: clientName(pair, side), 
 type PoolClient = (typeof clients)[number];
 
 const until = <E, R>(check: Effect.Effect<boolean, E, R>, limit: `${number} seconds`) =>
-  check.pipe(
-    Effect.repeat({ schedule: Schedule.spaced("250 millis"), until: (held) => held }),
-    Effect.timeoutOption(limit),
-    Effect.map(Option.isSome),
-  );
+  pollUntil(check, { until: (held) => held, every: "250 millis", within: limit, onTimeout: () => Effect.succeed(false) });
 
 const launch = (capacity: string, client: PoolClient) => Effect.gen(function*() {
   // A second runtime on a live prefix joins its wineserver and dies: a game left from before must be stopped first.
@@ -185,11 +181,10 @@ const agent = Effect.gen(function*() {
       yield* joinLanGame(menus, `wisp-${pair}-${id.slice(11, 19)}`);
       yield* until(Effect.sync(() => host.status().players.some(({ label, connected }) => label === client.name && connected)), "20 seconds");
     }
-    const playing = yield* Effect.sync(() => host.status().phase).pipe(
-      Effect.repeat({ schedule: Schedule.spaced("250 millis"), until: (phase) => phase === "playing" || phase === "over" }),
-      Effect.timeoutOption("120 seconds"),
-    );
-    if (Option.isSome(playing) && playing.value === "playing") return { log, game: id };
+    const playing = yield* pollUntil(Effect.sync(() => host.status().phase), {
+      until: (phase) => phase === "playing" || phase === "over", every: "250 millis", within: "120 seconds", onTimeout: () => Effect.void,
+    });
+    if (playing === "playing") return { log, game: id };
     return yield* new LanFailure({ problem: `the match didn't start: ${JSON.stringify(host.status())}` });
   }));
 

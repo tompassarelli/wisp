@@ -1,4 +1,5 @@
-import { Effect, Schedule, Schema } from "effect";
+import { Effect, Schema } from "effect";
+import { pollUntil } from "../hostProcess";
 import type { MenuSocket } from "../menus";
 
 export class LanFailure extends Schema.TaggedError<LanFailure>()("LanFailure", {
@@ -30,9 +31,8 @@ export const joinLanGame = (menus: MenuSocket, gameName: string, seconds = 30) =
     const games = yield* menus.expect("list LAN games", 3, (event) => (event.messageType === "GameList" ? { done: listedGames(event.payload) } : undefined)).pipe(Effect.orElseSucceed((): ListedGame[] => []));
     return games.find(({ name }) => name === gameName);
   });
-  const game = yield* listed.pipe(
-    Effect.repeat({ schedule: Schedule.spaced("1 second"), until: (found) => found !== undefined }),
-    Effect.timeoutOrElse({ duration: `${seconds} seconds`, orElse: () => fail(`no LAN game named ${gameName} listed within ${seconds} s`) }),
-  );
+  const game = yield* pollUntil(listed, {
+    until: (found) => found !== undefined, every: "1 second", within: `${seconds} seconds`, onTimeout: () => fail(`no LAN game named ${gameName} listed within ${seconds} s`),
+  });
   if (game !== undefined) yield* menus.send("JoinGame", { gameId: game.id, password: "", mapFile: game.mapFile });
 }).pipe(Effect.mapError((failure) => (failure instanceof LanFailure ? failure : new LanFailure({ problem: failure.message }))));

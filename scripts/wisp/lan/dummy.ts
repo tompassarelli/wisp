@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Cause, Effect, Schedule } from "effect";
+import { Cause, Effect } from "effect";
+import { pollUntil } from "../hostProcess";
 import { ProcessTable } from "../../platform/services";
 import { startHost, type LanHost } from "./host";
 import { LanFailure } from "./join";
@@ -18,10 +19,9 @@ interface DummyOptions<E, R> {
 }
 
 const failure = (cause: unknown) => new LanFailure({ problem: describeCause(cause) });
-const until = (ready: () => boolean, description: string) => Effect.sync(ready).pipe(
-  Effect.repeat({ schedule: Schedule.spaced("10 millis"), until: (held) => held }),
-  Effect.timeoutOrElse({ duration: "10 seconds", orElse: () => Effect.fail(new LanFailure({ problem: `timed out waiting for ${description}` })) }),
-);
+const until = (ready: () => boolean, description: string) => pollUntil(Effect.sync(ready), {
+  until: (held) => held, every: "10 millis", within: "10 seconds", onTimeout: () => Effect.fail(new LanFailure({ problem: `timed out waiting for ${description}` })),
+});
 
 export const checkDummy = <E, R>(options: DummyOptions<E, R>) => Effect.suspend(() => {
   const started = performance.now();
