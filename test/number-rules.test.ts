@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
 import ts from "typescript";
 import { parseConfigFileWithSystem, transpileFiles } from "typescript-to-lua";
-import { NUMBER_RULE_CODE, programNumberRules } from "../plugins/number-rules";
+import { NUMBER_RULE_CODE, TRUTHINESS_MESSAGE, programNumberRules } from "../plugins/number-rules";
 import { numberRuleReport } from "../scripts/numberRules";
 import { writeEditorPlugin } from "../scripts/package";
 import { farmTest } from "../scripts/wisp/farmTest";
@@ -25,7 +25,7 @@ farmTest("[spec #7] the check command reports the compiler's number-rule errors,
   const { luaBundle, luaBundleEntry, ...unbundled } = options;
   const { diagnostics } = transpileFiles(files, { ...unbundled, rootDir: root, noEmitOnError: false }, () => {});
   const compiled = diagnostics.filter((diagnostic) => diagnostic.code === NUMBER_RULE_CODE).map((diagnostic) => line(diagnostic, root)).sort();
-  expect(compiled.length).toBe(23);
+  expect(compiled.length).toBe(34);
   await mkdir(join(root, "build"), { recursive: true });
   const directory = await mkdtemp(join(root, "build/number-rules-"));
   try {
@@ -35,6 +35,22 @@ farmTest("[spec #7] the check command reports the compiler's number-rule errors,
   } finally {
     await rm(directory, { recursive: true });
   }
+}, 120_000);
+
+farmTest("[spec #7] a number or string tested for truthiness fails compilation on its line; booleans and objects that may be undefined pass", async () => {
+  const fixture = join(import.meta.dir, "traps/truthiness.ts");
+  const { options } = parseConfigFileWithSystem(join(root, "test/tsconfig.traps.json"));
+  const { luaBundle, luaBundleEntry, ...unbundled } = options;
+  const { diagnostics } = transpileFiles([fixture], { ...unbundled, rootDir: root, noEmitOnError: false }, () => {});
+  const reported = diagnostics.filter((diagnostic) => diagnostic.code === NUMBER_RULE_CODE).map((diagnostic) => line(diagnostic, root));
+  const lines = (await Bun.file(fixture).text()).split("\n");
+  const rejected = lines.flatMap((text, index) => {
+    const form = /\/\/ rejected: (.*)$/.exec(text)?.[1];
+    return form === undefined ? [] : [`test/traps/truthiness.ts(${index + 1}): error TS${NUMBER_RULE_CODE}: ${TRUTHINESS_MESSAGE(form)}`];
+  });
+  expect(rejected.length).toBe(11);
+  expect(reported.map((report) => report.replace(/,\d+\)/, ")"))).toEqual(rejected);
+  expect(TRUTHINESS_MESSAGE("`||`")).toContain("compare explicitly, e.g. `!== 0`");
 }, 120_000);
 
 
