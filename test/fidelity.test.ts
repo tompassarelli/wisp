@@ -24,7 +24,7 @@ function fixture(): CaptureManifest {
     camera:{position:[0,0,10],target:[0,0,0],fov:45},look:"definitive",
     identity:{build:"synthetic",assetLayers:["synthetic"],mapHash:"synthetic",settingsFile:"synthetic",resolution:{width:9,height:9},gpu:"synthetic"},
     settings:{density:1},calibratedRanges:{density:{min:0,max:2}},regions:[region],controls,cineWindow:{start:227,end:227},
-    runs:[0,1,2].map(run=>({id:String(run),captures:controls.map(control=>({frame:227,control:control.id,image:`${run}-${control.id}.png`}))})),
+    runs:[0,1,2].map(run=>({id:String(run),captures:controls.map(control=>({frame:227,frameSource:"journal" as const,control:control.id,image:`${run}-${control.id}.png`}))})),
   }]};
 }
 function png(value: number): Uint8Array {
