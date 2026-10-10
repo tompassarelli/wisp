@@ -1,9 +1,3 @@
-
-
-
-
-
-
 export interface LoggedAction {
   readonly seconds: number;
   readonly turn: number;
@@ -22,7 +16,6 @@ export interface ActionLog {
 
   readonly events: readonly { readonly seconds: number; readonly text: string }[];
 }
-
 
 export function headerStart(text: string): number | undefined {
   const match = /seconds since (\d{4}-\d\d-\d\dT[\d:.]+Z)/.exec(text.split("\n", 1)[0] ?? "");

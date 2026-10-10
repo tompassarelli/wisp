@@ -1,23 +1,12 @@
-
-
-
-
-
-
-
 import { type FrameWork, type NativeCostModel, nativeFrameCost } from "../../src/headless/nativeCost";
 import { type FrameCostCapture, parseFrameCostCapture } from "./frameCostCapture";
 
-
 export const NATIVE_TOLERANCE = 0.2;
-
 
 const WINDOW_FRAMES = 120;
 const WINDOW_STRIDE = 30;
 
-
 export const NATIVE_CLOCK_STEP_MS = 0.97656;
-
 
 export interface OverlayWindow {
   readonly median: number;
@@ -31,7 +20,6 @@ export interface NativeReadings {
   readonly clockStepMs: number;
 }
 
-
 export interface WindowSummary {
   readonly median: number;
   readonly p95?: number;
@@ -41,11 +29,6 @@ export interface WindowSummary {
 
 const record = (value: unknown): Record<string, unknown> => (typeof value === "object" && value !== null ? value as Record<string, unknown> : {});
 const finite = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : undefined);
-
-
-
-
-
 
 export function parseNativeReadings(text: string): NativeReadings {
   if (text.trimStart().startsWith("function PreloadFiles")) return frameCostCaptureReadings(parseFrameCostCapture(text));
@@ -65,7 +48,6 @@ export function parseNativeReadings(text: string): NativeReadings {
 }
 
 const SAMPLE = /^frame (\d+) p(\d+) instructions=(\d+) lua-us=\d+ natives=(\d+) alloc-bytes=(\d+) typed=(\d+)$/;
-
 
 export function parsePerfSamples(text: string): Map<number, FrameWork[]> {
   const bySlot = new Map<number, FrameWork[]>();
@@ -93,7 +75,6 @@ const rank = (values: readonly number[], share: number) => {
   return order[Math.max(0, Math.min(order.length - 1, Math.ceil(share * order.length) - 1))]!;
 };
 
-
 export function frameCostCaptureReadings(capture: FrameCostCapture): NativeReadings {
   const times = capture.samples.map(({ luaUs }) => luaUs / 1000);
   const windows: OverlayWindow[] = [];
@@ -104,12 +85,6 @@ export function frameCostCaptureReadings(capture: FrameCostCapture): NativeReadi
   if (windows.length === 0) throw new Error("frame capture needs at least 120 samples for native calibration");
   return { windows, clockStepMs: capture.clockStepUs / 1000 };
 }
-
-
-
-
-
-
 
 export function overlayWindows(frameUs: readonly number[], clockStepMs: number): OverlayWindow[] {
   const step = clockStepMs * 1000;
@@ -133,7 +108,6 @@ export function summarizeWindows(windows: readonly OverlayWindow[]): WindowSumma
     windows: windows.length,
   };
 }
-
 
 export const predictedOverlay = (model: NativeCostModel, frames: readonly FrameWork[], clockStepMs: number) =>
   summarizeWindows(overlayWindows(frames.map((work) => nativeFrameCost(model, work).callbacksUs), clockStepMs));
@@ -167,7 +141,6 @@ export function checkNative(model: NativeCostModel, item: NativeCase): NativeChe
 const percent = (share: number) => `${share >= 0 ? "+" : ""}${(share * 100).toFixed(0)}%`;
 const ms = (value: number) => value.toFixed(2);
 
-
 export function nativeCheckLines(check: NativeCheck): string[] {
   const { native, predicted, errors } = check;
   return [
@@ -179,9 +152,7 @@ export function nativeCheckLines(check: NativeCheck): string[] {
   ];
 }
 
-
 const MAX_WEIGHT = 0.25;
-
 
 function misfit(model: NativeCostModel, cases: readonly NativeCase[]): number {
   let total = 0;
@@ -194,11 +165,6 @@ function misfit(model: NativeCostModel, cases: readonly NativeCase[]): number {
   }
   return total;
 }
-
-
-
-
-
 
 export function fitNativeCost(base: NativeCostModel, cases: readonly NativeCase[]): NativeCostModel {
   let best = { model: base, misfit: Number.POSITIVE_INFINITY };

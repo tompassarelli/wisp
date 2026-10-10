@@ -1,7 +1,3 @@
-
-
-
-
 import type { Handle } from "./client";
 
 export interface Frame extends Handle {
@@ -34,11 +30,6 @@ export interface Frame extends Handle {
   destroyed: boolean;
 }
 
-
-
-
-
-
 export const FRAME_POINTS: readonly (readonly [name: string, fromLeft: number, fromTop: number])[] = [
   ["FRAMEPOINT_TOPLEFT", 0, 0],
   ["FRAMEPOINT_TOP", 0.5, 0],
@@ -50,10 +41,6 @@ export const FRAME_POINTS: readonly (readonly [name: string, fromLeft: number, f
   ["FRAMEPOINT_BOTTOM", 0.5, 1],
   ["FRAMEPOINT_BOTTOMRIGHT", 1, 1],
 ];
-
-
-
-
 
 export interface FrameTemplateNode {
   readonly key: string;
@@ -88,7 +75,6 @@ export interface TemplateJustify { readonly horizontal: "LEFT" | "CENTER" | "RIG
 export interface FrameFont { readonly file: string; readonly height: number; readonly flags: number }
 export interface TextAlignment { readonly vertical: "top" | "middle" | "bottom"; readonly horizontal: "left" | "center" | "right" }
 
-
 function textJustify(value: unknown): string {
   if (typeof value === "number") return ["top", "middle", "bottom", "left", "center", "right"][value] ?? "";
   return typeof value === "string" ? (value.startsWith("TEXT_JUSTIFY_") ? value.slice("TEXT_JUSTIFY_".length) : value).toLowerCase() : "";
@@ -100,14 +86,12 @@ export function textAlignment(alignment: Frame["alignment"]): TextAlignment | un
   return { vertical: vertical === "middle" || vertical === "bottom" ? vertical : "top", horizontal: horizontal === "center" || horizontal === "right" ? horizontal : "left" };
 }
 
-
 function styleText(frame: Frame, declared: { readonly font?: TemplateFont; readonly justify?: TemplateJustify }): void {
   if (declared.font === undefined) return;
   frame.font = { file: declared.font.file, height: declared.font.size, flags: declared.font.flags ?? 0 };
   const justify = declared.justify ?? { horizontal: "CENTER", vertical: "MIDDLE" };
   frame.alignment = { vertical: justify.vertical, horizontal: justify.horizontal };
 }
-
 
 export interface Anchor {
   readonly point: string;
@@ -117,12 +101,10 @@ export interface Anchor {
   readonly y: number;
 }
 
-
 const NAMED_POINTS = new Map(FRAME_POINTS.map(([name, fromLeft, fromTop]) => [name.slice("FRAMEPOINT_".length), [fromLeft, fromTop] as const]));
 
 // New edit boxes have the engine text limit; negative limits truncate nothing (wisp:docs/warsmash-notes.md).
 const DEFAULT_TEXT_LIMIT = -256;
-
 
 export type Rectangle = readonly [number, number, number, number];
 
@@ -150,10 +132,6 @@ export class Frames {
   private focused: Frame | undefined;
   private readonly templates = new Map<string, FrameTemplate>();
 
-
-
-
-
   constructor(private readonly points: ReadonlyMap<unknown, readonly [number, number]>) {}
 
   add(handle: Handle, type: string, name: string, parent: Frame | undefined, context: number): Frame {
@@ -167,11 +145,9 @@ export class Frames {
     return frame;
   }
 
-
   define(definitions: readonly FrameTemplate[]): void {
     for (const definition of definitions) this.templates.set(definition.name, definition);
   }
-
 
   create(handle: (this: void) => Handle, name: string, parent: Frame | undefined, context: number): Frame {
     const definition = this.templates.get(name);
@@ -208,7 +184,6 @@ export class Frames {
     return root;
   }
 
-
   named(name: string, context: number): Frame | undefined {
     for (const frame of this.all) if (!frame.destroyed && frame.name === name && frame.context === context) return frame;
     return undefined;
@@ -219,13 +194,11 @@ export class Frames {
     return undefined;
   }
 
-
   children(parent: Frame): Frame[] {
     const found: Frame[] = [];
     for (const frame of this.all) if (frame.parent === parent && !frame.destroyed) found.push(frame);
     return found;
   }
-
 
   destroy(frame: Frame): void {
     frame.destroyed = true;
@@ -238,19 +211,16 @@ export class Frames {
     else if (this.focused === frame) this.focused = undefined;
   }
 
-
   shown(frame: Frame): boolean {
     for (let at: Frame | undefined = frame; at !== undefined; at = at.parent) if (at.destroyed || !at.visible) return false;
     return true;
   }
-
 
   shownText(): string[] {
     const texts: string[] = [];
     for (const frame of this.all) if (frame.text !== "" && this.shown(frame)) texts.push(frame.text);
     return texts;
   }
-
 
   snapshot(options: { readonly visibleOnly?: boolean } = {}): FrameSnapshot[] {
     const snapshots: FrameSnapshot[] = [];
@@ -265,7 +235,6 @@ export class Frames {
     }
     return snapshots;
   }
-
 
   private rectangle(frame: Frame, visited: Set<Frame> = new Set()): Rectangle | undefined {
     if (visited.has(frame)) return undefined;
@@ -306,11 +275,6 @@ export class Frames {
     return found === 0 ? undefined : corners;
   }
 
-
-
-
-
-
   at(x: number, y: number, takes: (frame: Frame) => boolean): Frame | undefined {
     let found: Frame | undefined;
     for (const frame of this.all) {
@@ -323,11 +287,6 @@ export class Frames {
     }
     return found;
   }
-
-
-
-
-
 
   type(text: string): boolean {
     const box = this.focused;

@@ -1,11 +1,3 @@
-
-
-
-
-
-
-
-
 export const EXPECTED = [
 
   "unit-stand=0,24,0",
@@ -40,7 +32,6 @@ export const EXPECTED = [
   "blend-switch-frozen=500,24,250",
   "timescale-then-select=0,36,250",
 
-
   "death-reference=125,84,500",
   "death-at-0=125,84,500",
   "death-at-1=92,84,500",
@@ -51,12 +42,10 @@ export const EXPECTED = [
 
   "teardown-hidden=gone",
 
-
   "matrix-scale-once=250,24,140",
   "matrix-scale-twice=500,24,320",
   "matrix-scale-reset=250,24,140",
 ];
-
 
 export const EXPECTED_FILE = [
   "ready=30",

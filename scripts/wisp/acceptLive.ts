@@ -1,8 +1,3 @@
-
-
-
-
-
 import { join } from "node:path";
 import { Effect, Layer, Option } from "effect";
 import { war3LogPath } from "../warcraft/war3Log";
@@ -17,9 +12,6 @@ export interface LiveAcceptOptions<R> {
   readonly start: (map: string, session: string) => Effect.Effect<void, CommandFailure, R>;
 
   readonly receipt: (name: string) => boolean;
-
-
-
 
   readonly prepare?: Effect.Effect<void, CommandFailure, R>;
 

@@ -1,8 +1,3 @@
-
-
-
-
-
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -15,7 +10,6 @@ export const dataRoot = () => join(process.env["XDG_DATA_HOME"] ?? join(homedir(
 
 export const PAIR_SIDES = ["a", "b"] as const;
 export type Side = (typeof PAIR_SIDES)[number];
-
 
 export const clientName = (pair: number, side: Side) => `lan${pair}${side}`;
 
@@ -32,7 +26,6 @@ export const pairDirectory = (pair: number) => join(stateRoot(), `pair-${pair}`)
 export const audioSinkOf = (name: string) => `wisp-lan-${name}`;
 
 export const agentSocket = (pair: number) => join(pairDirectory(pair), "agent.sock");
-
 
 export interface Profile {
   readonly name: string;
@@ -54,15 +47,6 @@ const LOWEST: Readonly<Record<string, number>> = {
   shadowquality: 0, texquality: 0, waterquality: 0, vsync: 0,
 };
 
-
-
-
-
-
-
-
-
-
 const PARITY: Profile = { name: "parity", width: 800, height: 600, maxFps: 60, video: LOWEST, graphicsMode: "classic", sound: false, music: false };
 const VISUAL: Profile = { name: "visual", width: 1280, height: 720, maxFps: 60, video: { ...LOWEST, lightingquality: 2, texquality: 1 }, graphicsMode: "reforged", sound: true, music: true };
 const CAPTURE_VIDEO = { ...LOWEST, lightingquality: 2, texquality: 1, shadowquality: 2, pointlightshadowquality: 2, waterquality: 2, assao: 1 };
@@ -81,14 +65,12 @@ export const PROFILES: Readonly<Record<string, Profile>> = {
   "capture-classic": CAPTURE_PROFILES["capture-classic"],
 };
 
-
 export function poolProfile(name: string, fps?: number): Profile {
   const profile = PROFILES[name];
   if (profile === undefined) throw new Error(`unknown pool profile ${name}`);
   if (fps !== undefined && (!Number.isInteger(fps) || fps < 1)) throw new Error("--fps takes a positive whole number");
   return fps === undefined ? profile : { ...profile, maxFps: fps };
 }
-
 
 export function profileSections(profile: Profile, windowX: number): Record<string, Record<string, number>> {
   const video: Record<string, number> = {
@@ -118,18 +100,9 @@ export function profileSections(profile: Profile, windowX: number): Record<strin
   };
 }
 
-
 export function preferences(profile: Profile, windowX: number): string {
   return Object.entries(profileSections(profile, windowX)).map(([name, values]) => `[${name}]\n${Object.keys(values).sort().map((key) => `${key}=${values[key]}`).join("\n")}\n`).join("\n");
 }
-
-
-
-
-
-
-
-
 
 export const CLIENT_PROFILES = {
   minimal: { ...PARITY, name: "minimal" },
@@ -140,27 +113,21 @@ export const CLIENT_PROFILES = {
 export type ClientProfile = keyof typeof CLIENT_PROFILES;
 export const CLIENT_PROFILE_NAMES = Object.keys(CLIENT_PROFILES) as readonly ClientProfile[];
 
-
 export const profileOf = (client: { readonly profile?: ClientProfile | undefined; readonly offline?: boolean | undefined }) =>
   client.offline === true ? "pool" : client.profile ?? "minimal";
 
-
 export const profilesLine = (clients: readonly { readonly name: string; readonly profile?: ClientProfile | undefined; readonly offline?: boolean | undefined }[]) =>
   `graphics profiles: ${clients.map((client) => `${client.name}=${profileOf(client)}`).join(" ")}`;
-
 
 export const measurementRefusal = (clients: readonly { readonly name: string; readonly profile?: ClientProfile | undefined; readonly offline?: boolean | undefined }[]) => {
   const others = clients.filter((client) => profileOf(client) !== "player");
   return others.length === 0 ? undefined : `performance and frame-pacing measurements run under the player graphics profile, and ${others.map((client) => `${client.name} runs ${profileOf(client)}`).join(", ")}: set "profile": "player" in the clients file and restart the client`;
 };
 
-
 export const clientSettings = (profile: ClientProfile): Record<string, Record<string, string>> =>
   Object.fromEntries(Object.entries(profileSections(CLIENT_PROFILES[profile], 0)).map(([section, values]) => [section, Object.fromEntries(Object.entries(values).map(([key, value]) => [key, String(value)]))]));
 
-
 export const desktopSize = (profile: Profile) => `${profile.width + 40}x${profile.height + 40}`;
-
 
 export interface PoolClient {
   readonly name: string;
@@ -219,7 +186,6 @@ const PoolFileJson = Schema.fromJsonString(Schema.Struct({
   })),
 }));
 
-
 export const readPool: Effect.Effect<PoolFile | undefined, LanFailure> = Effect.suspend(() => {
   // @effect-diagnostics-next-line effectSucceedWithVoid:off -- an undefined result, which Effect.void's void type cannot satisfy
   if (!existsSync(poolFile())) return Effect.succeed(undefined);
@@ -228,7 +194,6 @@ export const readPool: Effect.Effect<PoolFile | undefined, LanFailure> = Effect.
     Effect.mapError((cause) => (cause instanceof LanFailure ? cause : new LanFailure({ problem: `${poolFile()}: ${cause.message}` }))),
   );
 });
-
 
 export function pairOf(pool: PoolFile, names: readonly string[]): PoolPair | undefined {
   return pool.pairs.find(({ id }) => names.every((name) => PAIR_SIDES.some((side) => clientName(id, side) === name)));

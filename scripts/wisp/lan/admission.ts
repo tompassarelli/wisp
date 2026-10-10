@@ -11,7 +11,6 @@ const ProbeReply = Schema.fromJsonString(Schema.Struct({
   protectedCpuSomeAvg10: Schema.optional(Schema.Unknown),
 }));
 
-
 export const pairAdmission = (capacity: string) => Effect.gen(function*() {
   const probe = yield* CapacityAdmission.use((admission) => admission.probe(capacity, 3)).pipe(
     Effect.mapError((cause) => new LanFailure({ problem: `the capacity helper did not run: ${cause._tag === "PlatformFailure" ? cause.problem : cause.message}` })),

@@ -1,10 +1,3 @@
-
-
-
-
-
-
-
 import type { SyncMessage } from "./client";
 import type { SyncDelivery } from "./lockstep";
 import { Random } from "./random";
@@ -21,25 +14,19 @@ export interface SyncLatency {
 
 // Battle.net latency and turn probabilities use the native capture in wisp:docs/network-model.md.
 
-
-
-
 export const MEASURED_BATTLE_NET: SyncLatency = {
   latencyMs: 80,
   turnMs: 25,
   extraTurns: [f32(0.4), f32(0.24), f32(0.144), f32(0.0864), f32(0.05184), f32(0.031104), f32(0.0186624), f32(0.01119744), f32(0.01679616)],
 };
 
-
 export const CALLBACK_MS = 1000 / 60;
-
 
 export function syncAgeMs(latency: SyncLatency, frame: number, extraTurns: number): number {
   const sentMs = frame * CALLBACK_MS;
   const turn = Math.ceil((sentMs + latency.latencyMs) / latency.turnMs - f32(1e-9)) + extraTurns;
   return turn * latency.turnMs - sentMs;
 }
-
 
 function turnsFor(probabilities: readonly number[], draw: number): number {
   let rest = draw;
@@ -49,11 +36,6 @@ function turnsFor(probabilities: readonly number[], draw: number): number {
   }
   return probabilities.length - 1;
 }
-
-
-
-
-
 
 export function syncDelivery(latency: SyncLatency = MEASURED_BATTLE_NET, seed = 1): SyncDelivery {
   const total = latency.extraTurns.reduce((sum, p) => sum + p, 0);
@@ -75,20 +57,12 @@ export function syncDelivery(latency: SyncLatency = MEASURED_BATTLE_NET, seed = 
   };
 }
 
-
 export interface ReplayedArrival {
   readonly accepts: (this: void, message: SyncMessage) => boolean;
   readonly atMs: number;
 }
 
 // Captured arrivals preserve each sender's message order even when frames run late.
-
-
-
-
-
-
-
 
 export function replayedDelivery(arrivals: (this: void) => readonly ReplayedArrival[], fallback: SyncDelivery, nowMs: (this: void) => number): SyncDelivery {
   const used = new Set<ReplayedArrival>();

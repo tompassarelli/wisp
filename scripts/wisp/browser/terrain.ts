@@ -1,4 +1,3 @@
-
 import { parseMDX } from "../../../vendor/war3-model.mjs";
 import { CELL, type Terrain } from "../terrain";
 import { terrainCells, terrainRows, type TerrainCell } from "../terrainMesh";
@@ -117,7 +116,6 @@ async function prepare(gl: WebGL2RenderingContext, terrain: Terrain, readTexture
   if (vao === null) throw new Error("cannot allocate terrain vertex array");
   return { program: program(gl), vao, batches };
 }
-
 
 export async function drawTerrain(gl: WebGL2RenderingContext, terrain: Terrain, view: Float32Array, projection: Float32Array, readTexture: TextureReader, readAsset: AssetReader): Promise<void> {
   const key = JSON.stringify(terrain);

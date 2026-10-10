@@ -1,10 +1,3 @@
-
-
-
-
-
-
-
 import { mkdir, rename } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { API, type Checker, SymbolFlags, type Symbol as TsSymbol, type Type, TypeFlags } from "typescript-native/unstable/async";
@@ -32,7 +25,6 @@ interface Cache {
 
 const hash = (text: string) => Bun.hash(text).toString(36);
 
-
 async function cacheVersion(): Promise<string> {
   const rules = await Bun.file(resolve(import.meta.dir, "../plugins/number-rules.ts")).text();
   const parser: { readonly version: string } = await Bun.file(Bun.fileURLToPath(import.meta.resolve("typescript-native/package.json"))).json();
@@ -47,7 +39,6 @@ async function readCache(path: string, version: string): Promise<Cache["files"]>
     return {};
   }
 }
-
 
 async function isHoleyArray(checker: Checker, type: Type): Promise<boolean> {
   const mayBeUndefined = async (element: Type): Promise<boolean> => {
@@ -64,7 +55,6 @@ async function isHoleyArray(checker: Checker, type: Type): Promise<boolean> {
   for (const element of await checker.getTypeArguments(type)) if (await mayBeUndefined(element)) return true;
   return false;
 }
-
 
 async function mayBeNumberOrString(checker: Checker, type: Type): Promise<boolean> {
   if (type.isUnionType() || type.isIntersectionType()) {
@@ -90,7 +80,6 @@ function nodeAt(file: syntax.SourceFile, [start, end, kind]: readonly [number, n
   return found;
 }
 
-
 function position(text: string, offset: number): string {
   let line = 1;
   let lineStart = 0;
@@ -100,7 +89,6 @@ function position(text: string, offset: number): string {
   }
   return `${line},${offset - lineStart + 1}`;
 }
-
 
 export async function numberRuleReport(
   configs: readonly string[],

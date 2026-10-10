@@ -1,15 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -26,10 +14,8 @@ const Suite = Schema.Literals(["bun", "lua"]);
 export type Suite = typeof Suite.Type;
 const Seconds = Schema.Record(Schema.String, Schema.Finite);
 
-
 export const Timings = Schema.Struct({ bun: Seconds, lua: Seconds });
 export type Timings = typeof Timings.Type;
-
 
 export const Plan = Schema.Struct({ bun: Schema.Array(Schema.Array(Schema.String)), lua: Schema.Finite, luaTests: Schema.Record(Schema.String, Schema.Finite) });
 export type Plan = typeof Plan.Type;
@@ -44,12 +30,7 @@ const Count = Schema.Struct({ passed: Schema.Finite, failed: Schema.Finite, skip
 export const Summary = Schema.Struct({ bun: Count, lua: Count, failures: Schema.Array(Schema.String), problems: Schema.Array(Schema.String) });
 export type Summary = typeof Summary.Type;
 
-
 const FILE_OVERHEAD_SECONDS = 0.3;
-
-
-
-
 
 export function splitByTime<U>(units: readonly U[], seconds: (unit: U) => number | undefined, shards: number): U[][] {
   const known = units.map(seconds).filter((value): value is number => value !== undefined).sort((a, b) => a - b);
@@ -88,7 +69,6 @@ const unescapeXml = (text: string) => text.replace(/&(lt|gt|quot|apos|amp|#\d+|#
   return String.fromCodePoint(entity[1] === "x" || entity[1] === "X" ? Number.parseInt(entity.slice(2), 16) : Number(entity.slice(1)));
 });
 
-
 export function parseJunit(xml: string, root: string): TestResult[] {
   const tests: TestResult[] = [];
   for (const match of xml.matchAll(/<testcase\b([^>]*?)(\/>|>([\s\S]*?)<\/testcase>)/g)) {
@@ -106,7 +86,6 @@ export function parseJunit(xml: string, root: string): TestResult[] {
   }
   return tests;
 }
-
 
 export function parseLuaLines(text: string): TestResult[] {
   return text.split("\n").flatMap((line) => {
@@ -149,8 +128,6 @@ export function merge(planned: Plan, results: readonly ShardResult[], previous: 
   return { summary: { bun, lua, failures, problems }, timings };
 }
 
-
-
 const readJson = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, path: string) => Effect.try({
   try: () => readFileSync(path, "utf8"),
   catch: (cause) => new FarmShardFailure({ problem: `couldn't read ${path}: ${describeCause(cause)}` }),
@@ -166,7 +143,6 @@ const writeText = (path: string, text: string) => Effect.try({
   try: () => writeFileSync(path, text),
   catch: (cause) => new FarmShardFailure({ problem: `couldn't write ${path}: ${describeCause(cause)}` }),
 });
-
 
 const readTimings = (path: string) => existsSync(path) ? readJson(Timings, path) : Effect.succeed<Timings>({ bun: {}, lua: {} });
 

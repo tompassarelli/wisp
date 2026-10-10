@@ -1,6 +1,3 @@
-
-
-
 import { Console, Effect, Layer, Schema } from "effect";
 import { type Command, UsageFailure, flagValues } from "../command";
 import { GameFiles } from "../gameFiles";
@@ -25,11 +22,6 @@ const ApplyRequest = Schema.Struct({ name: Schema.String, value: Schema.Finite }
 const NameRequest = Schema.Struct({ name: Schema.String });
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
-
-
-
-
-
 
 export const servePanel = (port: number) => Effect.gen(function*() {
   const tune = yield* Tune;
@@ -62,7 +54,6 @@ export const servePanel = (port: number) => Effect.gen(function*() {
         }).pipe(Effect.mapError(cause => new UsageFailure({ problem: `can't serve the panel on 127.0.0.1:${port}: ${String(cause)}` })));
   return `http://127.0.0.1:${server.port}/`;
 });
-
 
 export const makeTune = ({ project, sourceDirectory, sourceMapDirectory, filePrefix = "wisp", root, tunables }: TuneProject): Command => (args) => Effect.gen(function*() {
   const directories = yield* validateDataDirectories(flagValues(args, "data"));

@@ -1,18 +1,11 @@
-
-
-
-
-
 import { test } from "bun:test";
 import { TEST_PHASE_ENV } from "./timingTest";
-
 
 export const FARM_TEST_PREFIX = "farm: ";
 
 export const FARM_TEST_RUNNING = "wispFarmTestRunning";
 
 type Body = () => unknown;
-
 
 export function farmTest(name: string, ...rest: [Body, number?] | [{ timeout?: number }, Body]): void {
   const run = process.env[TEST_PHASE_ENV] === "correctness" ? test.skip : test;

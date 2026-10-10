@@ -2,14 +2,12 @@ import { IntegerKeysUndeclared, lineTokens, parseRecord, recordTokens, tokenLine
 import { type Repro, assertReproLands, parseRepro, reproLines } from "./repro";
 import { assertDefined, assertEquals, assertTrue, test } from "./testing";
 
-
 function withGaps(): (number | undefined)[] {
   const items: (number | undefined)[] = [];
   items[1] = 4;
   items[3] = 0.25;
   return items;
 }
-
 
 function sample(): Record<string, unknown> {
   return {
@@ -49,7 +47,6 @@ test("[invariant] record text: lines stay within their width and a malformed tok
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === "object" && value !== null;
 
-
 const isKeyed = (value: unknown): value is Readonly<Record<number, unknown>> => typeof value === "object" && value !== null;
 
 function keyedAt(value: unknown, ...keys: readonly number[]): unknown {
@@ -57,7 +54,6 @@ function keyedAt(value: unknown, ...keys: readonly number[]): unknown {
   for (const key of keys) current = isKeyed(current) ? current[key] : undefined;
   return current;
 }
-
 
 function numberKeyedKit(): Record<string, unknown> {
   const poses: Record<number, number> = {};
@@ -109,7 +105,6 @@ test("[repro #25] record text: records keyed by numbers keep their keys, alike i
   assertTrue(Array.isArray(plain) && plain[0] === 10 && plain[2] === 30 && plain.length === 3);
 });
 
-
 function thrown(record: object, keyed: readonly string[] = []): string | undefined {
   try {
     recordTokens(record, keyed);
@@ -129,7 +124,6 @@ test("[spec #25] record text: a record keyed by numbers that isn't declared thro
 });
 
 const COUNTER: Repro["lines"] = ["start 3", "add 4 5"];
-
 
 function replayCounter(repro: Repro) {
   let total = 0;

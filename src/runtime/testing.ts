@@ -1,6 +1,3 @@
-
-
-
 export type TestCase = { name: string; run: () => void };
 export const registeredTests: TestCase[] = [];
 
@@ -24,7 +21,6 @@ export function assertFalse(value: boolean): void {
   if (value !== false) fail("expected false");
 }
 
-
 export function assertEquals<T>(actual: T, expected: T, message?: string): void {
   if (actual !== expected) fail(`${message === undefined ? "" : `${message}: `}expected ${String(expected)}, actual ${String(actual)}`);
 }
@@ -41,12 +37,10 @@ export function assertLessThan(actual: number, bound: number): void {
   if (!(actual < bound)) fail(`expected less than ${bound}, actual ${actual}`);
 }
 
-
 export function assertDefined<T>(value: T | undefined, what = "value"): T {
   if (value === undefined) fail(`expected ${what} to be defined`);
   return value;
 }
-
 
 export function runTests(report: (this: void, line: string) => void): number {
   let failures = 0;

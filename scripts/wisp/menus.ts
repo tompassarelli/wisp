@@ -1,12 +1,3 @@
-
-
-
-
-
-
-
-
-
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,7 +6,6 @@ import { Clock, Console, Deferred, Effect, Option, Queue, Schema, type Scope } f
 import { pollFor } from "./hostProcess";
 import { DEFAULT_BUILD, profileFor, requireCapability } from "./builds";
 import { loadLanPlugin, lanPluginProblem } from "./lan/plugin";
-
 
 export const DEFAULT_MENU_REPORT_PORT = 47123;
 
@@ -28,7 +18,6 @@ export class MenuFailure extends Schema.TaggedError<MenuFailure>()("MenuFailure"
   }
 }
 
-
 export interface MenuAddress {
   readonly buildId?: string;
   readonly port: number;
@@ -36,7 +25,6 @@ export interface MenuAddress {
 
   readonly recent?: readonly HeardMessage[];
 }
-
 
 export interface HeardMessage {
   readonly messageType: string;
@@ -46,12 +34,10 @@ export interface HeardMessage {
   readonly isHost?: boolean;
 }
 
-
 export interface SentMessage {
   readonly message: string;
   readonly payload?: unknown;
 }
-
 
 export interface MenuEvent {
   readonly messageType: string;
@@ -66,12 +52,6 @@ const PAGE_STATES = "SetGlueScreen|GameLobbySetup|UpdateScoreInfo|LoggedOut";
 const RECENT_KEPT = 4;
 
 const ANNOUNCE_MS = 500;
-
-
-
-
-
-
 
 export function menuPage(reportPort: number): string {
   return `<!DOCTYPE html>
@@ -159,7 +139,6 @@ export function menuPage(reportPort: number): string {
 
 const pagePath = (retail: string) => join(retail, "webui", "index.html");
 
-
 export const installMenuPage = (retail: string, reportPort = DEFAULT_MENU_REPORT_PORT) => Effect.gen(function*() {
   const path = pagePath(retail);
   if (!existsSync(join(retail, "x86_64"))) return yield* new MenuFailure({ operation: "install the menu page", problem: `${retail} is not Warcraft III's _retail_ folder (it has no x86_64)` });
@@ -176,7 +155,6 @@ export const installMenuPage = (retail: string, reportPort = DEFAULT_MENU_REPORT
   return path;
 });
 
-
 export const removeMenuPage = (retail: string) => Effect.try({
   try: () => {
     const path = pagePath(retail);
@@ -192,11 +170,6 @@ export const removeMenuPage = (retail: string) => Effect.try({
 const Heard = Schema.Struct({ messageType: Schema.String, at: Schema.Finite, screen: Schema.optionalKey(Schema.String), type: Schema.optionalKey(Schema.String), isHost: Schema.optionalKey(Schema.Boolean) });
 const Announcement = Schema.Struct({ port: Schema.Int, guid: Schema.String, recent: Schema.optionalKey(Schema.Array(Heard)) });
 
-
-
-
-
-
 export const menuAddressFile = (reportPort: number) => join(process.env["XDG_RUNTIME_DIR"] ?? tmpdir(), `wisp-menus-${reportPort}.json`);
 
 const ADDRESS_FRESH_MS = 6000;
@@ -211,7 +184,6 @@ const keepAddress = (reportPort: number, address: MenuAddress) => {
 
   }
 };
-
 
 export const keptAddress = (reportPort: number, now = Date.now()): MenuAddress | undefined => {
   const kept = Schema.decodeUnknownOption(KeptAddress)(parseJson(existsSync(menuAddressFile(reportPort)) ? readFileSync(menuAddressFile(reportPort), "utf8") : ""));
@@ -243,11 +215,6 @@ export interface MenuReports {
 
   readonly sent: Effect.Effect<readonly SentMessage[]>;
 }
-
-
-
-
-
 
 export const listenForMenus = (reportPort = DEFAULT_MENU_REPORT_PORT, onSent: (sent: SentMessage) => void = () => {}): Effect.Effect<MenuReports, MenuFailure, Scope.Scope> => Effect.gen(function*() {
   let latest: MenuAddress | undefined;
@@ -300,7 +267,6 @@ export const listenForMenus = (reportPort = DEFAULT_MENU_REPORT_PORT, onSent: (s
   };
 });
 
-
 export type Outcome<A> = { readonly done: A } | { readonly failed: string } | undefined;
 
 export interface MenuSocket {
@@ -314,7 +280,6 @@ export interface MenuSocket {
 }
 
 const CLOSED: MenuEvent = { messageType: "", payload: undefined };
-
 
 export const connectMenus = (address: MenuAddress): Effect.Effect<MenuSocket, MenuFailure, Scope.Scope> => Effect.gen(function*() {
   const buildId = address.buildId ?? process.env["WISP_GAME_BUILD"] ?? (lanPluginProblem() === undefined ? (yield* loadLanPlugin.pipe(Effect.mapError((cause) => new MenuFailure({ operation: "detect menu build", problem: cause.message })))).versionForPort?.(address.port) : undefined);
@@ -359,10 +324,6 @@ export const connectMenus = (address: MenuAddress): Effect.Effect<MenuSocket, Me
   return { ...(buildId === undefined ? {} : { buildId }), send, expect, forget: Queue.clear(events).pipe(Effect.asVoid) };
 });
 
-
-
-
-
 export const menuAddress = (reportPort: number, seconds: number): Effect.Effect<MenuAddress, MenuFailure, Scope.Scope> =>
   listenForMenus(reportPort).pipe(
     Effect.flatMap((reports) => reports.waitForAddress(seconds)),
@@ -370,7 +331,6 @@ export const menuAddress = (reportPort: number, seconds: number): Effect.Effect<
       Effect.filterOrFail((kept): kept is MenuAddress => kept !== undefined, () => failure),
     )),
   );
-
 
 export const reportedMenus = (reportPort: number | undefined): Effect.Effect<MenuSocket | undefined, MenuFailure, Scope.Scope> => Effect.gen(function*() {
   if (reportPort === undefined) return undefined;
@@ -396,7 +356,6 @@ const listedMaps = (payload: unknown): ListedMap[] => {
   }));
 };
 
-
 const MAP_LIST_WAIT_SECONDS = 15;
 
 export const MAP_LIST_SECONDS = 90;
@@ -406,10 +365,6 @@ const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const separator = (path: string) => (path.includes("\\") && !path.includes("/") ? "\\" : "/");
 const withSeparator = (path: string) => (/[\\/]$/.test(path) ? path : `${path}${separator(path)}`);
 const inFolder = (path: string, folder: string) => path.replaceAll("\\", "/").replace(/\/$/, "").toLowerCase().endsWith(`/${folder.replaceAll("\\", "/").toLowerCase()}`);
-
-
-
-
 
 export const findMap = (menus: MenuSocket, folder: string, file: string) => Effect.gen(function*() {
   const asked = new Set<string>();
@@ -461,7 +416,6 @@ const lobbyHost = (event: MenuEvent): Outcome<"host" | "refresh"> => {
   return undefined;
 };
 
-
 export const hostLobby = (menus: MenuSocket, options: HostOptions) => Effect.gen(function*() {
   const filename = yield* findMap(menus, options.folder, options.file);
   const password = options.password === "" ? randomBytes(6).toString("hex") : options.password;
@@ -496,16 +450,8 @@ export const hostLobby = (menus: MenuSocket, options: HostOptions) => Effect.gen
   return filename;
 });
 
-
-
-
-
-
-
-
 export const LOBBY_SETTLE_MS = profileFor(DEFAULT_BUILD)!.menus.lobbySettleMs;
 const hostedAt = new WeakMap<MenuSocket, number>();
-
 
 export const joinLobby = (menus: MenuSocket, gameName: string, password: string, seconds = 20) => Effect.gen(function*() {
   const what = `join "${gameName}"`;
@@ -520,10 +466,6 @@ export const joinLobby = (menus: MenuSocket, gameName: string, password: string,
   yield* menus.expect(what, seconds, (event) => (joined(event) ? { done: undefined } : event.messageType === "RequestForPassword" ? { failed: "the game asked for the password again: it is wrong" } : undefined));
 });
 
-
-
-
-
 export const startLobby = (menus: MenuSocket, settleMs = profileFor(menus.buildId ?? DEFAULT_BUILD)?.menus.lobbySettleMs ?? LOBBY_SETTLE_MS) => Effect.gen(function*() {
   if (menus.buildId !== undefined) yield* requireCapability(menus.buildId, "menuDriving").pipe(Effect.mapError((cause) => new MenuFailure({ operation: "start lobby", problem: cause.message })));
   const hosted = hostedAt.get(menus);
@@ -535,7 +477,6 @@ export const startLobby = (menus: MenuSocket, settleMs = profileFor(menus.buildI
   yield* menus.send("LobbyStart");
   yield* menus.expect("start the game", 30, (event) => (event.messageType === "SetGlueScreen" && record(event.payload)["screen"] === "LOADING_SCREEN" ? { done: undefined } : undefined));
 });
-
 
 export const leaveLobby = (menus: MenuSocket) => Effect.gen(function*() {
   yield* menus.forget;
@@ -550,13 +491,6 @@ export interface LocalGameOptions {
 
   readonly playerName: string;
 }
-
-
-
-
-
-
-
 
 export const playLocalGame = (menus: MenuSocket, options: LocalGameOptions) => Effect.gen(function*() {
   yield* menus.forget;

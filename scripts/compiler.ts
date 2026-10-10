@@ -1,11 +1,3 @@
-
-
-
-
-
-
-
-
 import { statSync } from "node:fs";
 import { normalize, resolve } from "node:path";
 import ts from "typescript";
@@ -25,9 +17,7 @@ import { type BundledModules, LuaBundler } from "./luaBundle";
 import { handleWarnings } from "./handleWarnings";
 export { reportHandleWarnings } from "./handleWarnings";
 
-
 export type Phase = <A>(name: string, run: () => A) => A;
-
 
 const defaultPhase: Phase = (name, run) => {
   if (process.env.COMPILER_TIMINGS === undefined) return run();
@@ -43,7 +33,6 @@ interface CachedModule {
   readonly file: ProcessedFile;
   readonly sourceMapChildren: readonly { readonly node: SourceNode; readonly children: SourceNode[] }[];
 }
-
 
 function cacheModule(file: ProcessedFile): CachedModule {
   const sourceMapChildren: { readonly node: SourceNode; readonly children: SourceNode[] }[] = [];
@@ -72,16 +61,13 @@ class IncrementalTranspiler extends Transpiler {
   private readonly resolvedTrees = new Set<CachedModule>();
   private resolvedProgramFiles = "";
 
-
   get bundled(): BundledModules | undefined {
     return this.bundler.bundled;
   }
 
-
   protected override getEmitPlan(program: ts.Program, diagnostics: ts.Diagnostic[], files: ProcessedFile[], plugins: Plugin[]): { emitPlan: EmitFile[] } {
     const options: CompilerOptions = program.getCompilerOptions();
     if (!isBundleEnabled(options)) return super.getEmitPlan(program, diagnostics, files, plugins);
-
 
     const cached = !options.sourceMapTraceback;
     const withLualib = (resolved: ProcessedFile[]) => {
@@ -114,13 +100,6 @@ class IncrementalTranspiler extends Transpiler {
     diagnostics.push(...bundleDiagnostics);
     return { emitPlan: [bundle] };
   }
-
-
-
-
-
-
-
 
   private resolveChanged(program: ts.Program, files: ProcessedFile[], plugins: Plugin[]): { resolved: ProcessedFile[]; diagnostics: ts.Diagnostic[] } {
     const programFiles = program.getSourceFiles().map((file) => file.fileName).join("\n");
@@ -159,7 +138,6 @@ class IncrementalTranspiler extends Transpiler {
     return { resolved, diagnostics };
   }
 
-
   compile(program: ts.Program, affected: readonly ts.SourceFile[], phase: Phase, write: boolean): readonly ts.Diagnostic[] {
     const writeFile: ts.WriteFileCallback = write ? this.emitHost.writeFile : () => {};
     const transpiled = phase("transpile", () => {
@@ -184,7 +162,6 @@ class IncrementalTranspiler extends Transpiler {
       try {
         plan = this.getEmitPlan(program, planDiagnostics, ordered, transpiled.plugins);
       } finally {
-
 
         for (const module of this.resolvedTrees) {
           for (const { node, children } of module.sourceMapChildren) node.children = children;
@@ -212,10 +189,6 @@ interface CachedSource {
   readonly stamp: string;
   readonly file: ts.SourceFile;
 }
-
-
-
-
 
 function cachingHost(options: ts.CompilerOptions, cache: Map<string, CachedSource>, replaced: ReadonlyMap<string, string>): ts.CompilerHost {
   const host = ts.createIncrementalCompilerHost(options);
@@ -246,13 +219,7 @@ export interface MapCompiler {
 
 const noReplacements = (): ReadonlyMap<string, string> => new Map();
 
-
-
-
-
-
 export function mapCompiler(configPath: string, sources: () => ReadonlyMap<string, string> = noReplacements): MapCompiler {
-
 
   const absolute = resolve(configPath);
   const transpiler = new IncrementalTranspiler();
@@ -296,9 +263,6 @@ export function mapCompiler(configPath: string, sources: () => ReadonlyMap<strin
       });
     }
     if (diagnostics.length > 0) return diagnostics;
-
-
-
 
     const declarationDiagnostics = program.getDeclarationDiagnostics;
     const incrementalDeclarations = current.getDeclarationDiagnostics;

@@ -1,8 +1,3 @@
-
-
-
-
-
 import { alive, preferencesBackupPath, preferencesPath, restorePreferences } from "../warcraft/preferences";
 
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";

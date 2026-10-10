@@ -1,7 +1,3 @@
-
-
-
-
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SourceMapConsumer } from "source-map";
@@ -17,7 +13,6 @@ export function keepSourceMap(bundlePath: string, key: string, mapDirectory: str
   consumers.delete(path);
 }
 
-
 export function keepModuleSourceMap(key: string, sourceMap: string, mapDirectory: string): void {
   mkdirSync(mapDirectory, { recursive: true });
   const path = join(mapDirectory, `${key}.lua.map`);
@@ -31,7 +26,6 @@ async function consumer(key: string, mapDirectory: string): Promise<SourceMapCon
   return consumers.get(path);
 }
 
-
 async function locate(key: string, line: number, mapDirectory: string): Promise<string | undefined> {
   const map = await consumer(key, mapDirectory);
   const position = map?.originalPositionFor({ line, column: 0, bias: SourceMapConsumer.LEAST_UPPER_BOUND });
@@ -40,7 +34,6 @@ async function locate(key: string, line: number, mapDirectory: string): Promise<
   const sourceStart = position.source.indexOf("src/");
   return `${sourceStart < 0 ? position.source : position.source.slice(sourceStart)}:${position.line}`;
 }
-
 
 export async function toTypeScript(text: string, mapDirectory: string): Promise<string> {
   const replacements = await Promise.all(

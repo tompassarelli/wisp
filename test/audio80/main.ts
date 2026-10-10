@@ -1,6 +1,5 @@
 export function install(this: void): void {}
 
-
 export function start(this: void): void {
   const cue = CreateSound("Imported\\Hit.ogg", true, false, false, 0, 0, "");
   SetSoundDuration(cue, 50);

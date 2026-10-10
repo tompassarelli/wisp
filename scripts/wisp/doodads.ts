@@ -18,7 +18,6 @@ export interface TerrainDoodad {
   readonly y: number;
 }
 
-
 export function decodeDoodadFile(bytes: Uint8Array, skinIds = true): { placed: PlacedDoodad[]; terrain: TerrainDoodad[] } {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let at = 0;

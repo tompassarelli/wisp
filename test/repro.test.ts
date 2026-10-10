@@ -1,6 +1,3 @@
-
-
-
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -12,8 +9,6 @@ import { REPRO_LINE_WIDTH, assertReproLands, reproLines } from "../src/runtime/r
 import { registeredTests } from "../src/runtime/testing";
 import { replayRepro } from "./fixtures/repro/replay";
 
-
-
 const registered = registeredTests.length;
 await import("../src/runtime/recordText.tests");
 const contracts = registeredTests.splice(registered);
@@ -23,7 +18,6 @@ describe("record text and repro contracts", () => {
 
 const MAP = { filePrefix: "fixture", globalPrefixes: ["__fixture"] };
 const directory = join(import.meta.dir, "../build/repro-tests");
-
 
 function writeReproFile(checksum: string): string {
   const state = tokenLines(recordTokens({ total: 5 }) ?? [], REPRO_LINE_WIDTH);

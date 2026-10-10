@@ -84,12 +84,6 @@ export interface StandaloneFrame {
   readonly serverMs: number;
 }
 
-
-
-
-
-
-
 const framesAhead = (scripted: boolean) => (scripted ? 3 : 1);
 
 const Input = Schema.Struct({ buttons: Schema.Array(Schema.String), axisX: Schema.Finite, axisY: Schema.Finite });
@@ -111,10 +105,6 @@ const decode = <S extends Schema.Top & { readonly DecodingServices: never }>(sch
   Schema.decodeUnknownEffect(schema)(input).pipe(Effect.mapError((cause) => failed(cause.message)));
 
 const thrownAsFailure = Effect.catchDefect((cause) => Effect.fail(new RenderFailure({ cause })));
-
-
-
-
 
 export const openStandalone = (game: StandaloneGame, options: StandaloneOptions = {}) => Effect.gen(function*() {
   const script = options.script === undefined ? undefined : yield* attempt(() => Bun.file(options.script!).text());
@@ -205,7 +195,6 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
   }, fetch: (request, server) => run(handle(request, server)) })), (open) => Effect.promise(() => open.stop(true)));
   return { url: `http://127.0.0.1:${server.port}/`, completed: Deferred.await(completion) };
 });
-
 
 const openWindow = (game: StandaloneGame, options: StandaloneOptions, url: string) => Effect.gen(function*() {
   const directory = yield* Effect.acquireRelease(attempt(() => mkdtemp(join(tmpdir(), "wisp-player-"))), (path) => Effect.promise(() => rm(path, { recursive: true, force: true })));

@@ -1,8 +1,3 @@
-
-
-
-
-
 import { randomBytes } from "node:crypto";
 import { basename, join } from "node:path";
 import { Clock, Console, Effect, Schedule } from "effect";
@@ -14,7 +9,6 @@ import { MenuFailure, hostLobby, joinLobby, leaveLobby, reportedMenus, startLobb
 import { step } from "./timings";
 import { ClientWatch, inState, unlessLost, waitFor as waitForState } from "./watch";
 
-
 export const MENU_SECONDS = 180;
 
 export interface FreshMatchOptions {
@@ -24,7 +18,6 @@ export interface FreshMatchOptions {
 
   readonly filePrefix?: string;
 }
-
 
 export const freshMatch = ({ map, folder, filePrefix = "wisp" }: FreshMatchOptions) => Effect.scoped(Effect.gen(function*() {
   const clients = yield* Clients;
@@ -40,11 +33,6 @@ export const freshMatch = ({ map, folder, filePrefix = "wisp" }: FreshMatchOptio
   const menus = new Map(clients.all.map((client, index) => [client.name, pages[index]!]));
   const page = (client: Client) => menus.get(client.name)!;
 
-
-
-
-
-
   const leave = (client: Client) => Effect.gen(function*() {
     const { state } = yield* ClientWatch.use((watch) => watch.view(client));
     if (state.kind === "menus" || state.kind === "signed in") return;
@@ -55,7 +43,6 @@ export const freshMatch = ({ map, folder, filePrefix = "wisp" }: FreshMatchOptio
     yield* Console.log(`${client.name}: waiting for the menus (up to ${MENU_SECONDS} s)`);
     yield* waitForState(client, inState("menus"), { what: "the menus", seconds: MENU_SECONDS });
   }).pipe(step(`${client.name} at the menus`));
-
 
   const install = Effect.gen(function*() {
     yield* prepareHotFolders(clients.all.map((client) => dataDirectory(client.documents)), filePrefix);
@@ -76,10 +63,6 @@ export const freshMatch = ({ map, folder, filePrefix = "wisp" }: FreshMatchOptio
   yield* startLobby(page(first));
   yield* Effect.forEach(clients.all, (client) => unlessLost(client, startedAfter(client, start, filePrefix)), { concurrency: "unbounded", discard: true }).pipe(step("match running in every client"));
 }));
-
-
-
-
 
 export const startedAfter = (client: Client, since: number, filePrefix = "wisp") => Effect.gen(function*() {
   let problem: MalformedGameFile | undefined;

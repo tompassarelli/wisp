@@ -1,13 +1,3 @@
-
-
-
-
-
-
-
-
-
-
 // Join/game-loop layouts follow W3Champions' Flo (MPL-2.0) and wc3-slop-lan's checked rollback notes; this is Wisp's own code.
 
 import type { Socket, TCPSocketListener, udp } from "bun";
@@ -22,7 +12,6 @@ import {
   chatFromHost, countDownEnd, countDownStart, decodeChat, decodeKeepAlive, decodeLeaveReq, decodeMapSize, decodeOutgoingAction, decodeReqJoin, decodeSearchGame,
   gameInfo, incomingAction, leaveAck, mapCheck, pingFromHost, playerInfo, playerLeft, playerLoaded, playerProfile, playerSkins, protobufType, rejectJoin, slotInfo, slotInfoJoin, splitPackets,
 } from "./w3gs";
-
 
 export const CLIENT_PORTS: readonly number[] = [16000, 16001, 16002, 16003, 16004, 16005, 16006, 16007];
 /** Flo waits this long between countdown packets; shorter waits send slow clients to the score screen. */
@@ -112,11 +101,6 @@ export interface LanHost {
   readonly setSpeed: (multiple: number) => Effect.Effect<void, LanFailure>;
 }
 
-
-
-
-
-
 export function slotTable(map: MapFacts, count: number, randomSeed: number, joined: (slot: number) => boolean, computers = 0): SlotTable {
   const users = map.players.filter(({ controller }) => controller === 1).map(({ id }) => id);
   if (users.length < count + computers) throw new Error(`the map has ${users.length} user slots; ${count} clients and ${computers} computers need as many`);
@@ -180,7 +164,6 @@ export const startHost = (options: HostOptions) => Effect.gen(function*() {
   const handicaps = new Map<number, number>();
   const setPhase = (next: Phase) => {
     phase = next;
-
 
     if (next !== "lobby") {
       Deferred.doneUnsafe(lobbyEnded, Effect.void);

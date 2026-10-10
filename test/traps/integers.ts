@@ -1,4 +1,3 @@
-
 import { floorDiv, floorMod, idiv, imod } from "../../src/sim/intMath";
 
 export function traps(a: number, b: number): number[] {

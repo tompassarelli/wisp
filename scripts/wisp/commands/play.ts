@@ -1,8 +1,3 @@
-
-
-
-
-
 import { Effect, Layer } from "effect";
 import { documentsFolder } from "../../warcraft/battleNet";
 import { type Command, type CommandFailure, UsageFailure } from "../command";
@@ -11,7 +6,6 @@ import { type MenuFailure, type MenuSocket, leaveLobby, reportedMenus } from "..
 import { type PlayDeclaration, PlayProblem, leaveScoreScreen, play } from "../play";
 import { type PlayTools, playHostLayer, playMachineLayer } from "../playHost";
 import type { ClientWatch } from "../watch";
-
 
 const leaveBy = (port: number | undefined, what: string, leave: (menus: MenuSocket) => Effect.Effect<void, MenuFailure>) =>
   Effect.scoped(Effect.gen(function*() {

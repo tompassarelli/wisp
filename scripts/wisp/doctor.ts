@@ -1,13 +1,3 @@
-
-
-
-
-
-
-
-
-
-
 import { join } from "node:path";
 import { reportBuild } from "./buildHost";
 import { Clock, Context, Effect, Schema } from "effect";
@@ -23,7 +13,6 @@ import { pollFor } from "./hostProcess";
 import { PlayMachine, type PlayProblem } from "./play";
 import { type ClientView, ClientWatch, type StateKind, waitFor } from "./watch";
 
-
 export interface DoctorTarget {
   readonly client: Client;
 
@@ -31,33 +20,16 @@ export interface DoctorTarget {
 
   readonly display?: string;
 
-
-
-
-
-
   readonly start:
     | { readonly kind: "steam"; readonly appId: number; readonly name: string }
     | { readonly kind: "command"; readonly command: readonly string[]; readonly log?: string }
 
     | { readonly kind: "offline-pool" };
 
-
-
-
-
-
-
   readonly settings?: PreferenceSettings;
-
-
-
-
-
 
   readonly account?: { readonly username: readonly string[]; readonly password: readonly string[] };
 }
-
 
 export class DoctorStop extends Schema.TaggedError<DoctorStop>()("DoctorStop", {
   problem: Schema.String,
@@ -66,11 +38,6 @@ export class DoctorStop extends Schema.TaggedError<DoctorStop>()("DoctorStop", {
     return this.problem;
   }
 }
-
-
-
-
-
 
 export class DoctorHands extends Context.Service<DoctorHands, {
   readonly launches: boolean;
@@ -81,7 +48,6 @@ export class DoctorHands extends Context.Service<DoctorHands, {
 
   readonly enterLogin?: (target: DoctorTarget, field: "username" | "password") => Effect.Effect<void, PlayProblem>;
 }>()("wisp/DoctorHands") {}
-
 
 export const DOCTOR_TIMEOUTS = {
 
@@ -102,7 +68,6 @@ export const DOCTOR_TIMEOUTS = {
   loading: 120,
 } as const;
 
-
 export interface Observation {
   readonly use: PrefixUse;
 
@@ -120,7 +85,6 @@ export interface Observation {
 
   readonly startupCpu?: number;
 }
-
 
 export type Problem =
   | "two runtimes"
@@ -148,7 +112,6 @@ export type Diagnosis =
 
   | { readonly kind: "stop"; readonly problem: string };
 
-
 export const RECOVERY: Readonly<Record<Problem, string>> = {
   "two runtimes": "ending every program of the prefix",
   "runtime without Battle.net": "ending every program of the prefix",
@@ -175,11 +138,6 @@ const describeView = (view: ClientView) => {
   const { state } = view;
   return "screen" in state ? `${state.kind} (${state.screen})` : state.kind;
 };
-
-
-
-
-
 
 export function diagnose(seen: Observation, canPlay: boolean, display?: string, started = false, signsIn = false): Diagnosis {
   const { use, view, held } = seen;
@@ -264,7 +222,6 @@ export function diagnose(seen: Observation, canPlay: boolean, display?: string, 
   }
 }
 
-
 export interface DoctorResult {
   readonly client: string;
 
@@ -277,15 +234,9 @@ const POLL = "1 second";
 
 const LEAVE_SECONDS = 10;
 
-
-
-
-
 export const SCORE_ESCAPES = 3;
 
-
 const LOG_START_SLACK_MS = 1000;
-
 
 export const doctorClient = (target: DoctorTarget, print: (line: string) => void) => {
 
@@ -328,10 +279,6 @@ const doctorRun = (target: DoctorTarget, print: (line: string) => void, holdStar
   const newestLog = machine.list(logs).pipe(Effect.map(newestLauncherLog), Effect.mapError(failed));
   let priorSessionLog: string | undefined;
 
-
-
-
-
   const loginLog = (launcher: ProcessInfo | undefined) => Effect.gen(function*() {
     const names = (yield* machine.list(logs)).filter((name) => newestLauncherLog([name]) !== undefined && (priorSessionLog === undefined || name > priorSessionLog)).sort().reverse();
     const since = launcher?.started;
@@ -345,7 +292,6 @@ const doctorRun = (target: DoctorTarget, print: (line: string) => void, holdStar
     }
     return current[0];
   }).pipe(Effect.mapError(failed));
-
 
   const sessionSpan = machine.read(war3Log).pipe(Effect.map((text) => {
     const lines = sessionLines(text ?? "");
@@ -390,7 +336,6 @@ const doctorRun = (target: DoctorTarget, print: (line: string) => void, holdStar
 
   const poll = <A>(seconds: number, check: Effect.Effect<A | undefined, DoctorStop>) => pollFor(seconds, POLL, check);
 
-
   const end = (what: string, pick: (use: PrefixUse) => readonly ProcessInfo[]) => Effect.gen(function*() {
     const targets = pick(yield* prefixState);
     if (targets.length === 0) return;
@@ -403,7 +348,6 @@ const doctorRun = (target: DoctorTarget, print: (line: string) => void, holdStar
     yield* machine.signal(left.map(({ pid }) => pid), "SIGKILL");
     if ((yield* poll(DOCTOR_TIMEOUTS.exit, gone)) === undefined) return yield* stop(`can't end ${what}: kill -9 ${pids(pick(yield* prefixState))}`);
   });
-
 
   const endPrefix = Effect.gen(function*() {
     yield* end("every program of the prefix", (use) => use.processes);
@@ -436,7 +380,6 @@ const doctorRun = (target: DoctorTarget, print: (line: string) => void, holdStar
     yield* say("Battle.net started");
   });
 
-
   const launchGame = Effect.gen(function*() {
     const { launcher } = yield* prefixState;
     if (launcher === undefined) return yield* stop("Battle.net isn't running in the prefix");
@@ -460,13 +403,11 @@ const doctorRun = (target: DoctorTarget, print: (line: string) => void, holdStar
     return true;
   });
 
-
   const launcherNow = Effect.gen(function*() {
     const log = yield* loginLog((yield* prefixState).launcher);
     return log === undefined ? undefined : launcherHealth((yield* machine.read(join(logs, log)).pipe(Effect.mapError(failed))) ?? "");
   });
   const enter = (field: "username" | "password") => (hands.enterLogin === undefined ? stop("doctor has no hands to sign in") : hands.enterLogin(target, field).pipe(Effect.mapError(failed)));
-
 
   const signInWithAccount = Effect.gen(function*() {
     let health = yield* launcherNow;
@@ -485,16 +426,9 @@ const doctorRun = (target: DoctorTarget, print: (line: string) => void, holdStar
     if ((yield* launcherNow)?.kind === "signed in") yield* say("Battle.net signed in");
   });
 
-
   const left = (kind: StateKind) => waitFor(client, (view) => view.state.kind !== kind, { what: `leaving ${kind}`, seconds: LEAVE_SECONDS, failOn: [] }).pipe(Effect.ignore, Effect.asVoid);
 
-
-
-
-
-
   const onScoreScreen = watch.view(client).pipe(Effect.map((view) => view.state.kind === "results"), Effect.orElseSucceed(() => false));
-
 
   let started = false;
   const recover = (problem: Problem) => Effect.gen(function*() {
@@ -585,12 +519,6 @@ const doctorRun = (target: DoctorTarget, print: (line: string) => void, holdStar
   }
 });
 
-
-
-
-
-
-
 export const signOut = (target: DoctorTarget, print: (line: string) => void) => Effect.gen(function*() {
   const machine = yield* PlayMachine;
   const name = target.client.name;
@@ -617,7 +545,6 @@ export const signOut = (target: DoctorTarget, print: (line: string) => void) => 
   print(`${name}: signed out: removed Battle.net's saved login; doctor signs it in again`);
 });
 
-
 export const doctor = (targets: readonly DoctorTarget[], print: (line: string) => void) => Effect.gen(function*() {
   const results = yield* Effect.forEach(targets, (target) => doctorClient(target, print).pipe(Effect.result), { concurrency: "unbounded" });
   const stops = results.flatMap((result) => (result._tag === "Failure" ? [result.failure.problem] : []));
@@ -625,17 +552,7 @@ export const doctor = (targets: readonly DoctorTarget[], print: (line: string) =
   return results.flatMap((result) => (result._tag === "Success" ? [result.success] : []));
 });
 
-
 export const recoveredAny = (results: readonly DoctorResult[]) => results.some((result) => result.recovered.length > 0);
-
-
-
-
-
-
-
-
-
 
 export const withDoctor = <A, E, R, E2, R2>(check: Effect.Effect<readonly DoctorResult[], E2, R2>, print: (line: string) => void, run: Effect.Effect<A, E, R>, { retry = true, attempts = 2 }: { readonly retry?: boolean; readonly attempts?: number } = {}) =>
   healedRun(check, print, run, retry, attempts);

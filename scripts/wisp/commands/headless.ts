@@ -1,8 +1,3 @@
-
-
-
-
-
 import { Cause, Console, Effect, Exit, Schema } from "effect";
 import { type Command, UsageFailure, describeCause, flagValues } from "../command";
 import { type HeadlessProject, installHeadless, loadMapEntry, playHeadless } from "../headless";
@@ -28,7 +23,6 @@ export class HeadlessFailure extends Schema.TaggedError<HeadlessFailure>()("Head
       : `${this.journey} stopped: ${describeCause(this.cause)}`;
   }
 }
-
 
 export const MAX_CLIENTS = 4;
 
@@ -87,11 +81,6 @@ export function headlessArguments(args: readonly string[]) {
   if ((graphics !== "classic" || look.length > 0) && render === undefined) throw new Error("--graphics and --look choose what --render draws");
   return { named, frames: [...new Set(frames)].sort((a, b) => a - b), match, render, journey, sounds, runs, stepFrames, musicVolume, graphics, look };
 }
-
-
-
-
-
 
 export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfProject): Command => (args) => Effect.suspend(() => {
   const json = args.includes("--json");

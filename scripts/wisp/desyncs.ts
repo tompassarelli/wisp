@@ -1,7 +1,3 @@
-
-
-
-
 import { dirname, join } from "node:path";
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect";
 import { MalformedGameFile } from "./boundary";
@@ -16,7 +12,6 @@ export interface DesyncSummary {
 const ASSERTION_START = "<Exception.Assertion:>";
 const ASSERTION_END = "<:Exception.Assertion>";
 const Turn = Schema.FiniteFromString.check(Schema.isInt(), Schema.isBetween({ minimum: 0, maximum: 0xffffffff }));
-
 
 export const decodeDesyncSummary = (file: string, text: string): Effect.Effect<DesyncSummary | undefined, MalformedGameFile> =>
   Effect.gen(function*() {
@@ -45,7 +40,6 @@ export interface DesyncDifference {
   readonly values: readonly string[];
 }
 
-
 export function divergedValues(summaries: readonly DesyncSummary[]): readonly DesyncDifference[] {
   const tables = summaries.map(({ values }) => new Map(values));
   const names = [...new Set(summaries.flatMap(({ values }) => values.map(([name]) => name)))];
@@ -67,7 +61,6 @@ export interface DesyncReport {
 
   readonly latency: number;
 }
-
 
 export const PARTNER_WAIT_MILLIS = 1000;
 

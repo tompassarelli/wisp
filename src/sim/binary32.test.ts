@@ -30,7 +30,6 @@ describe("operations match the binary64 oracle on random binary32 operands", () 
 
   // Integer operands scaled by 2^-100 make a * b + c an exact integer times 2^-200.
 
-
   const view = new DataView(new ArrayBuffer(4));
   const step = (value: number, by: number) => {
     view.setFloat32(0, value);
@@ -93,7 +92,6 @@ test("[reference] f32 repeated operands retain every result bit across operation
         same(exactSum(a, b), Math.fround(a + b));
         same(exactDifference(a, b), Math.fround(a - b));
         same(exactProduct(a, b), Math.fround(a * b));
-
 
         const originalUnderflow = a === Math.fround(2 ** -149) && (b === Math.fround(-32.2) || b === -32768);
         same(exactQuotient(a, b), originalUnderflow ? 0 : Math.fround(a / b));

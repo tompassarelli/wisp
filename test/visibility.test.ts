@@ -44,7 +44,6 @@ const emitter = (name: string, id: number, visibility: string, speed: number, gr
   LifeSpan ${lifespan},
 }`;
 
-
 const missile = (burst = { speed: 400, gravity: 900, lifespan: 0.75 }) => new Uint8Array(generateMDX(parseMDL(`Version { FormatVersion 800, }
 Model "Missile" { NumGeosets 1, NumBones 1, BlendTime 150, MinimumExtent { 0, 0, 0 }, MaximumExtent { 10, 10, 20 }, BoundsRadius 12, }
 Sequences 2 {
@@ -59,7 +58,6 @@ ${emitter("Smoke", 1, "2000: 0", 0, 0, 30, 0.5)}
 ${emitter("Burst", 2, "0: 0, 2000: 1, 2500: 0", burst.speed, burst.gravity, 140, burst.lifespan)}
 PivotPoints 3 { { 0, 0, 0 }, { 0, 0, 10 }, { 0, 0, 10 }, }
 `)));
-
 
 const empty = () => new Uint8Array(generateMDX(parseMDL(`Version { FormatVersion 800, }
 Model "Empty" { NumBones 1, BlendTime 150, MinimumExtent { 0, 0, 0 }, MaximumExtent { 0, 0, 0 }, BoundsRadius 0, }
@@ -109,7 +107,6 @@ test("a model's facts: its mesh, lights, and each emitter's running, burst and r
   expect(drawsNothing(modelFacts(empty()))).toBe(true);
   expect(() => modelFacts(new Uint8Array(8))).toThrow("not an MDX model");
 });
-
 
 const camera: CameraView = { target: [0, 0, 160], distance: 1450, angleOfAttack: 350, rotation: 90, fieldOfView: 70, aspect: 16 / 9, farZ: 8000 };
 const at = (x: number, y: number, z: number) => ({ min: [x, y, z] as const, max: [x, y, z] as const });

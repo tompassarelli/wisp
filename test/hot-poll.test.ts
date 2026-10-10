@@ -1,8 +1,3 @@
-
-
-
-
-
 import { afterAll, expect, test } from "bun:test";
 import { installHeadless } from "../scripts/wisp/headless";
 import type { Lockstep } from "../src/headless/lockstep";

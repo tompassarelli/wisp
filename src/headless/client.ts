@@ -1,11 +1,3 @@
-
-
-
-
-
-
-
-
 import { errorFile, FILE_IO_ABILITY } from "../runtime/gameFiles";
 import { addFloat32, addFloat32TowardZero, divideFloat32, multiplyFloat32TowardZero, roundToFloat32, subtractFloat32, subtractFloat32TowardZero } from "../sim/binary32";
 import { f32 } from "../sim/f32";
@@ -34,15 +26,12 @@ export interface SyncMessage {
   readonly data: string;
 }
 
-
 export interface MapEntry {
   start(this: void): void;
   install(this: void): void;
 }
 
-
 export type LocalNatives = Readonly<Record<string, string>>;
-
 
 export type IntentionalNoops = Readonly<Record<string, string>>;
 
@@ -52,14 +41,9 @@ export interface MissingNative {
   readonly frame: number;
 }
 
-
 export type NativeBehavior = (this: void, ...args: never[]) => unknown;
 
 export type NativeBehaviors = Readonly<Record<string, unknown>>;
-
-
-
-
 
 export const WISP_LOCAL_NATIVES: LocalNatives = {
   GetLocalPlayer: "identifies the client; every local branch starts here",
@@ -80,7 +64,6 @@ export const WISP_LOCAL_NATIVES: LocalNatives = {
   BlzGetLocalSpecialEffectY: "the scene report reads an effect's local position",
   BlzGetLocalSpecialEffectZ: "the scene report reads an effect's local position",
 };
-
 
 export interface EffectPose extends AnimationState {
   readonly handle: Handle;
@@ -112,13 +95,7 @@ export interface EffectPose extends AnimationState {
 const copyBlend = (blend: AnimationBlend | undefined): AnimationBlend | undefined =>
   blend === undefined ? undefined : { from: { ...blend.from, subAnimations: [...blend.from.subAnimations] }, remaining: blend.remaining };
 
-
 export type EffectDeaths = (this: void, model: string) => number | undefined;
-
-
-
-
-
 
 export interface CineFilterPose {
   readonly texture: string;
@@ -130,7 +107,6 @@ export interface CineFilterPose {
 
   readonly uv: readonly [number, number, number, number];
 }
-
 
 const BLEND_MODES = ["BLEND_MODE_NONE", "BLEND_MODE_DONT_CARE", "BLEND_MODE_KEYALPHA", "BLEND_MODE_BLEND", "BLEND_MODE_ADDITIVE", "BLEND_MODE_MODULATE", "BLEND_MODE_MODULATE_2X"];
 
@@ -187,7 +163,6 @@ interface SoundState {
   killWhenDone: boolean;
 }
 
-
 export function assertSoundCue(log: readonly SoundCue[], expected: { readonly source?: string; readonly label?: string; readonly frame?: number; readonly count?: number }): void {
   let count = 0;
   for (const cue of log) {
@@ -216,7 +191,6 @@ export interface UnitPose extends AnimationState {
   timeScale: number;
   visible: boolean;
 }
-
 
 export interface UnitStateFixture {
   readonly life: number;
@@ -282,17 +256,12 @@ type Registration =
   | { readonly kind: "key"; readonly trigger: Trigger; readonly player: number; readonly key: number; readonly meta: number; readonly down: boolean }
   | { readonly kind: "frame"; readonly trigger: Trigger; readonly frame: Frame; readonly event: unknown };
 
-
-
-
-
 export interface ClientFiles {
 
   written(this: void, name: string, lines: readonly string[]): void;
 
   read(this: void, name: string): readonly string[] | undefined;
 }
-
 
 export interface ClientScope {
   enter(this: void, client: HeadlessClient): void;
@@ -339,10 +308,6 @@ const MIN_ONE_SHOT = 0.0009765625;
 const frameEnd = (frame: number): number => divideFloat32(frame, FRAMES_PER_SECOND);
 // Warcraft timer deadlines add toward zero; sub-resolution repeats advance one resolution to avoid stalling.
 
-
-
-
-
 const after = (at: number, length: number): number => {
   const due = addFloat32TowardZero(at, length);
   return due > at ? due : addFloat32TowardZero(at, at * 1.1920928955078125e-7);
@@ -356,7 +321,6 @@ const isHandle = (value: unknown): value is Handle =>
 
 const isFrame = (value: unknown): value is Frame => typeof value === "object" && value !== null && "points" in value;
 
-
 const DEATH_CUTOFF = f32(0.405);
 
 const RADIANS_PER_DEGREE = 0.01745329238474369;
@@ -367,10 +331,6 @@ const TURN = 6.2831854820251465;
 const TURNS_PER_RADIAN = 0.1591549664735794;
 
 // Warcraft stores facing in radians with products rounded toward zero (wisp:docs/warsmash-notes.md, Unit position and facing).
-
-
-
-
 
 function unitFacing(degrees: number): number {
   let radians = multiplyFloat32TowardZero(f32(degrees), RADIANS_PER_DEGREE);
@@ -393,9 +353,6 @@ function isDigits(text: string): boolean {
 
 // Lua and JavaScript print floats differently; exact binary text keeps runtime comparisons deterministic.
 
-
-
-
 export function describeNumber(value: number): string {
   if (value !== value) return "nan";
   if (value === Infinity) return "inf";
@@ -411,7 +368,6 @@ export function describeNumber(value: number): string {
   }
   return exponent === 0 ? mantissa.toFixed(0) : `${mantissa.toFixed(0)}p-${exponent}`;
 }
-
 
 export function describeValue(value: unknown): string {
   if (value === undefined || value === null) return "nil";
@@ -432,7 +388,6 @@ export function describeCall({ name, args }: NativeCall): string {
   return `${call})`;
 }
 
-
 export function sameCall(left: NativeCall, right: NativeCall): boolean {
   if (left.name !== right.name || left.args.length !== right.args.length) return false;
   for (let index = 0; index < left.args.length; index++) {
@@ -450,9 +405,6 @@ export function sameCall(left: NativeCall, right: NativeCall): boolean {
 }
 
 // JASS S2I skips leading spaces; S2R does not (wisp:docs/warsmash-notes.md, Script rules).
-
-
-
 
 function leadingNumber(text: string, fraction: boolean): number {
   let start = 0;
@@ -474,11 +426,6 @@ function leadingNumber(text: string, fraction: boolean): number {
 }
 
 // Warcraft R2S/R2SW round exact ties away from zero and retain negative zero; host formatters differ.
-
-
-
-
-
 
 function fixed(value: number, digits: number): string {
   const real = roundToFloat32(value);
@@ -506,9 +453,6 @@ const SYNC_DATA_LIMIT = 255;
 
 // Products below 2^53 and | 0 preserve Lua32 wrapping hash arithmetic in JavaScript.
 
-
-
-
 const mix = (hash: number, value: number) => (hash * 1000003 + value) | 0;
 
 function mixText(hash: number, text: string): number {
@@ -516,7 +460,6 @@ function mixText(hash: number, text: string): number {
   for (let index = 0; index < text.length; index++) mixed = mix(mixed, text.charCodeAt(index));
   return mix(mixed, text.length);
 }
-
 
 const nameHashes = new Map<string, number>();
 
@@ -536,7 +479,6 @@ function mixName(hash: number, name: string): number {
 }
 
 const INT32_LIMIT = 2147483648;
-
 
 function mixValue(hash: number, value: unknown): number {
   if (typeof value === "number") {
@@ -583,15 +525,11 @@ export class HeadlessClient {
   readonly published = new Map<string, readonly string[]>();
   // Wine reads the parent folder when a Preloader path is missing (wisp:docs/hot-reload.md).
 
-
-
-
   missedLookups = 0;
   readonly natives: Record<string, unknown> = {};
 
   frame = 0;
   private wallSeconds: number | undefined;
-
 
   clockSeconds(): number { return this.wallSeconds ?? this.frame / FRAMES_PER_SECOND; }
 
@@ -662,7 +600,6 @@ export class HeadlessClient {
     const behaviors = this.behaviors(options);
     const local = options.localNatives;
     const log = this.log;
-
 
     const logged = (name: string, parameters: number, behave: (this: void, ...args: unknown[]) => unknown): ((this: void, ...args: unknown[]) => unknown) => {
       switch (parameters) {
@@ -759,7 +696,6 @@ export class HeadlessClient {
     }
   }
 
-
   private memoized(key: string, name = ""): Frame {
     const known = this.memo.get(key);
     if (known !== undefined) return known;
@@ -798,8 +734,6 @@ export class HeadlessClient {
   }
 
   // Native life writes round halfway changes toward zero before applying the cutoff (wisp:docs/warsmash-notes.md#native-results-for-44).
-
-
 
   private setLife(unit: Unit, life: number): void {
     if (unit.removed) return;
@@ -859,12 +793,10 @@ export class HeadlessClient {
     return describeValue(field);
   }
 
-
   private liveEffect(effect: Handle): EffectPose | undefined {
     const pose = this.effects.get(effect);
     return pose?.destroyed === undefined ? pose : undefined;
   }
-
 
   private destroyEffect(effect: Handle): void {
     const pose = this.liveEffect(effect);
@@ -888,7 +820,6 @@ export class HeadlessClient {
   private show(text: string): void {
     this.messages.push(text);
   }
-
 
   private report(lines: readonly string[]): void {
     const heading = lines[0] ?? "";
@@ -1463,18 +1394,15 @@ export class HeadlessClient {
     };
   }
 
-
   preloadedFiles(): string[] {
     return [...this.preloaded.keys()];
   }
-
 
   effectPoses(options: { readonly visibleOnly?: boolean } = {}): EffectPose[] {
     const poses: EffectPose[] = [];
     for (const pose of this.effects.values()) if (options.visibleOnly !== true || (pose.alpha > 0 && pose.scale > 0 && !pose.flat)) poses.push({ ...pose, subAnimations: [...pose.subAnimations], animationBlend: copyBlend(pose.animationBlend), color: [...pose.color], matrixScale: [...pose.matrixScale] });
     return poses;
   }
-
 
   cineFilterPose(): CineFilterPose | undefined {
     const filter = this.cineFilter;
@@ -1489,7 +1417,6 @@ export class HeadlessClient {
     return { x: this.cameraX, y: this.cameraY, fields: { ...this.cameraFields } };
   }
 
-
   unitPoses(): UnitPose[] {
     const poses: UnitPose[] = [];
     for (const unit of this.units.values()) poses.push({ handle: unit.handle, typeId: unit.typeId, owner: unit.owner,
@@ -1499,7 +1426,6 @@ export class HeadlessClient {
       animationBlendTime: unit.animationBlendTime, animationBlend: copyBlend(unit.animationBlend) });
     return poses;
   }
-
 
   run(body: (this: void) => void): void {
     this.scope?.enter(this);
@@ -1534,7 +1460,6 @@ export class HeadlessClient {
     }
   }
 
-
   step(draw = true): void {
     this.frame++;
     steppedFrames.count++;
@@ -1561,12 +1486,10 @@ export class HeadlessClient {
     this.removals = [];
   }
 
-
   draw(seconds: number): void {
     if (this.effectStepMs === undefined) for (const pose of this.effects.values()) advanceAnimation(pose, pose.timeScale, f32(seconds));
     for (const unit of this.units.values()) advanceAnimation(unit, unit.timeScale, f32(seconds));
   }
-
 
   /** Engine steps end every `ms` of game time, after the callbacks due by then; frame n runs those ending in [(n - 1)/60, n/60) s first. */
   private stepEffects(ms: number): void {
@@ -1592,11 +1515,6 @@ export class HeadlessClient {
   }
 
   // Due callbacks run by deadline then TimerStart order, reading their own deadline as game time.
-
-
-
-
-
 
   private runDueTimers(): void {
     const end = frameEnd(this.frame);
@@ -1676,22 +1594,15 @@ export class HeadlessClient {
     });
   }
 
-
-
-
-
-
   type(text: string): boolean {
     return this.frames.type(text);
   }
-
 
   clickTarget(x: number, y: number): Frame | undefined {
     const click = this.natives.FRAMEEVENT_CONTROL_CLICK;
     return this.frames.at(x, y, (frame) => this.registrations.some((registration) =>
       registration.kind === "frame" && registration.frame === frame && registration.event === click && !registration.trigger.destroyed));
   }
-
 
   frameEvent(sender: number, id: number, event: unknown): void {
     this.run(() => {
@@ -1703,11 +1614,9 @@ export class HeadlessClient {
     });
   }
 
-
   callCount(): number {
     return this.forgotten + this.log.length;
   }
-
 
   forget(count: number): void {
     let hash = this.forgottenHash;
@@ -1719,7 +1628,6 @@ export class HeadlessClient {
     this.log.splice(0, count);
     this.forgotten += count;
   }
-
 
   checksum(): string {
     let hash = this.forgottenHash;

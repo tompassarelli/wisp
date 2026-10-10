@@ -1,6 +1,3 @@
-
-
-
 import { Effect, Schedule, Schema } from "effect";
 import type { MenuSocket } from "../menus";
 
@@ -24,7 +21,6 @@ const listedGames = (payload: unknown): ListedGame[] => {
   const games = typeof payload === "object" && payload !== null ? (payload as { games?: unknown }).games : undefined;
   return Array.isArray(games) ? games.filter((game): game is ListedGame => typeof game === "object" && game !== null && typeof (game as ListedGame).name === "string") : [];
 };
-
 
 export const joinLanGame = (menus: MenuSocket, gameName: string, seconds = 30) => Effect.gen(function*() {
   yield* menus.forget;

@@ -1,20 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { Clock, Context, Effect, Exit, Schema, type Scope } from "effect";
@@ -30,7 +13,6 @@ import { step } from "./timings";
 import { type MenuSocket, hostLobby, startLobby } from "./menus";
 import { ClientWatch, unlessLost } from "./watch";
 
-
 export class PlayProblem extends Schema.TaggedError<PlayProblem>()("PlayProblem", {
   problem: Schema.String,
 }) {
@@ -38,7 +20,6 @@ export class PlayProblem extends Schema.TaggedError<PlayProblem>()("PlayProblem"
     return this.problem;
   }
 }
-
 
 export class PlayFailure extends Schema.TaggedError<PlayFailure>()("PlayFailure", {
   step: Schema.Int,
@@ -49,7 +30,6 @@ export class PlayFailure extends Schema.TaggedError<PlayFailure>()("PlayFailure"
     return `${this.step}/${STEPS} ${this.title} stopped: ${this.problem}`;
   }
 }
-
 
 export interface DesktopWindow {
   readonly id: number;
@@ -62,7 +42,6 @@ export interface DesktopWindow {
   readonly output?: { readonly name: string; readonly width: number; readonly height: number };
 }
 
-
 export interface XWindow {
   readonly id: string;
   readonly x: number;
@@ -71,25 +50,17 @@ export interface XWindow {
   readonly height: number;
 }
 
-
 export interface Screen {
   readonly width: number;
   readonly height: number;
   readonly words: readonly Word[];
 }
 
-
 export class PlayMachine extends Context.Service<PlayMachine, {
   readonly processes: Effect.Effect<readonly ProcessInfo[], PlayProblem>;
 
   readonly serverDirectory: (prefix: string) => Effect.Effect<string, PlayProblem>;
   readonly signal: (pids: readonly number[], signal: "SIGTERM" | "SIGKILL") => Effect.Effect<void>;
-
-
-
-
-
-
 
   readonly launch: (launcher: ProcessInfo, client: string) => Effect.Effect<void, PlayProblem>;
 
@@ -114,7 +85,6 @@ export class PlayMachine extends Context.Service<PlayMachine, {
   readonly copy: (from: string, to: string) => Effect.Effect<void, PlayProblem>;
 }>()("wisp/PlayMachine") {}
 
-
 export class PlayDesktop extends Context.Service<PlayDesktop, {
   readonly windows: Effect.Effect<readonly DesktopWindow[], PlayProblem>;
   readonly focus: (window: number) => Effect.Effect<void, PlayProblem>;
@@ -127,7 +97,6 @@ export class PlayDesktop extends Context.Service<PlayDesktop, {
 
   readonly menus: (reportPort: number) => Effect.Effect<MenuSocket | undefined, never, Scope.Scope>;
 }>()("wisp/PlayDesktop") {}
-
 
 export interface PlayGame {
 
@@ -149,27 +118,15 @@ export interface PlayDeclaration<R = never> {
 
   readonly shortcut: { readonly appId: number; readonly name: string };
 
-
-
-
   readonly map: { readonly folder: string; readonly file: string; readonly title: string; readonly source?: string };
 
   readonly gameName: string;
 
   readonly menuReportPort: number;
 
-
-
-
-
-
   readonly displaySettings?: DisplaySettings;
 
   readonly graphicsMode?: "classic" | "reforged" | "definitive";
-
-
-
-
 
   readonly recommendedSettings?: DisplaySettings;
 
@@ -181,9 +138,6 @@ export interface PlayDeclaration<R = never> {
 
   readonly match: (game: PlayGame) => Effect.Effect<string, PlayProblem, R>;
   readonly helper: {
-
-
-
 
     readonly service: (game: PlayGame) => Effect.Effect<string, PlayProblem, R>;
   } | {
@@ -201,7 +155,6 @@ export interface PlayDeclaration<R = never> {
 const STEPS = 7;
 
 const RESTORE_PREFERENCES = fileURLToPath(new URL("./restorePreferences.ts", import.meta.url));
-
 
 export const PLAY_TIMEOUTS = {
   runtimeExit: 20,
@@ -225,26 +178,16 @@ export const PLAY_TIMEOUTS = {
 
 const POLL = "250 millis";
 
-
 const poll = <A, R>(seconds: number, observe: Effect.Effect<A | undefined, PlayProblem, R>) => pollFor(seconds, POLL, observe);
-
 
 const until = <A, R>(seconds: number, observe: Effect.Effect<A | undefined, PlayProblem, R>, problem: () => string) =>
   poll(seconds, observe).pipe(Effect.filterOrFail((value): value is A => value !== undefined, () => new PlayProblem({ problem: problem() })));
 
 const fail = (problem: string) => Effect.fail(new PlayProblem({ problem }));
 
-
 const fold = (text: string) => text.toUpperCase().replace(/[^A-Z0-9.]/g, "").replace(/O/g, "0").replace(/[IL]/g, "1");
 
-
 const isIconNoise = (word: Word | undefined, line: string | undefined) => word === undefined || word.line !== line || fold(word.text).length <= 3;
-
-
-
-
-
-
 
 export function findPhrase(words: readonly Word[], phrase: string, entry = false): readonly { readonly x: number; readonly y: number }[] {
   const target = fold(phrase);
@@ -271,7 +214,6 @@ export function findPhrase(words: readonly Word[], phrase: string, entry = false
 const isFullscreen = (window: DesktopWindow) =>
   window.output !== undefined && window.width === window.output.width && window.height === window.output.height;
 
-
 export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) => void) => Effect.gen(function*() {
   const machine = yield* PlayMachine;
   const desktop = yield* PlayDesktop;
@@ -289,7 +231,6 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     `${use.runtimes.length} Wine runtimes are using ${prefix} (wineserver pids ${pidList(use.runtimes)}). A launcher started beside another runtime can't start the game. ` +
     `Close them with: kill ${pidList(use.runtimes)}   then run play again.`;
 
-
   const checkPrefix = Effect.gen(function*() {
     let use = yield* prefixState;
     if (use.runtimes.length > 1) return yield* fail(twoRuntimes(use));
@@ -306,7 +247,6 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     }
     yield* status(1, "Wine prefix", `Battle.net already running in its only runtime (pid ${use.launcher?.pid})`);
   });
-
 
   const loginLog = Effect.gen(function*() {
     const names = (yield* machine.list(logs)).filter((name) => newestLauncherLog([name]) !== undefined).sort().reverse();
@@ -333,7 +273,6 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     return Math.round(((yield* Clock.currentTimeMillis) - started) / 1000);
   });
 
-
   const configPath = launcherConfig(prefix);
   const mapPath = join(documents, "Maps", declaration.map.folder, declaration.map.file);
   const loadOption = loadMapOption(prefix, mapPath);
@@ -341,11 +280,6 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     ? fail(`Battle.net has no settings at ${configPath}; start it once from Steam, then run play again`)
     : Effect.try({ try: () => ({ text, options: launchOptions(text) }), catch: () => new PlayProblem({ problem: `Battle.net's settings at ${configPath} aren't JSON` }) }))));
   const setLaunchOptions = (options: string | undefined) => settings.pipe(Effect.flatMap(({ text }) => machine.write(configPath, withLaunchOptions(text, options))));
-
-
-
-
-
 
   const launcher = Effect.gen(function*() {
     const use = yield* prefixState;
@@ -371,13 +305,11 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     }
   });
 
-
   const windowTitled = (title: string) => desktop.windows.pipe(Effect.map((windows) => windows.find((window) => window.title === title && window.appId === appId)));
   const windowById = (id: number) => desktop.windows.pipe(Effect.flatMap((windows) => {
     const window = windows.find((candidate) => candidate.id === id);
     return window === undefined ? fail(`window ${id} closed`) : Effect.succeed(window);
   }));
-
 
   const asked = new Set<number>();
   const askFullscreen = (id: number) => Effect.gen(function*() {
@@ -415,7 +347,6 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     return { outcome, log: path };
   });
 
-
   const stopPrefix = Effect.gen(function*() {
     const use = yield* prefixState;
     yield* machine.signal(use.processes.map(({ pid }) => pid), "SIGTERM");
@@ -429,10 +360,6 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       (processes.some((process) => process.args.includes("SteamLaunch") && process.args.includes(launch)) ? undefined : true))),
     () => `Steam still runs the shortcut "${shortcut.name}" after Battle.net exited`);
   });
-
-
-
-
 
   const installMap = Effect.gen(function*() {
     const { file, source } = declaration.map;
@@ -456,12 +383,6 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   });
   const preferences = preferencesPath(documents);
   const backup = preferencesBackupPath(documents);
-
-
-
-
-
-
 
   const savePreferences = Effect.gen(function*() {
     const saved = yield* machine.read(backup);
@@ -518,7 +439,6 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     return { game: { documents, pid: process.pid, window: window.id, xWindow, display } satisfies PlayGame, since, earlierSession };
   });
 
-
   const host = (game: PlayGame) => Effect.scoped(Effect.gen(function*() {
     const { folder, title } = declaration.map;
     if ((yield* clientState)?.kind === "in match") {
@@ -548,14 +468,6 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     }).pipe(Effect.mapError((cause) => cause._tag === "MenuFailure" ? new PlayProblem({ problem: cause.message }) : cause));
     yield* status(4, "Map", `"${declaration.gameName}" of ${title} hosted as a private game through the menus`);
   }));
-
-
-
-
-
-
-
-
 
   const ladderScanned = (earlierSession: string | undefined) => Effect.gen(function*() {
     let quiet: { readonly last: number; readonly count: number; readonly since: number } | undefined;
@@ -587,7 +499,6 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       : `Warcraft III didn't finish reading its ladder maps (its log: ${war3Log})`);
   });
 
-
   const checkImports = (from: number) => Effect.gen(function*() {
     const failures = importFailures(((yield* machine.read(war3Log)) ?? "").slice(from));
     if (failures.count === 0) return;
@@ -607,7 +518,6 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     yield* status(4, "Map", `fighter selection ${seconds} s after launch`);
     return text.length;
   });
-
 
   const helper = (game: PlayGame) => Effect.gen(function*() {
     if ("service" in declaration.helper) return yield* status(5, "Controller helper", yield* declaration.helper.service(game));
@@ -659,19 +569,12 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     : Effect.void)));
 });
 
-
 const pressInGame = (game: { readonly window: number; readonly xWindow: XWindow }, ...keys: string[]) =>
   Effect.gen(function*() {
     const desktop = yield* PlayDesktop;
     yield* desktop.focus(game.window);
     yield* desktop.keys(game.xWindow, ...keys);
   });
-
-
-
-
-
-
 
 export const leaveScoreScreen = (declaration: { readonly prefix: string; readonly shortcut: { readonly appId: number } }) => Effect.gen(function*() {
   const machine = yield* PlayMachine;
@@ -685,7 +588,6 @@ export const leaveScoreScreen = (declaration: { readonly prefix: string; readonl
   if (window === undefined || xWindow === undefined) return yield* fail("Warcraft III's window isn't on this desktop, so its score screen can't be left");
   yield* pressInGame({ window: window.id, xWindow }, "Escape");
 });
-
 
 const inStep = (number: number, title: string) => <A, R>(effect: Effect.Effect<A, PlayProblem, R>) =>
   effect.pipe(Effect.mapError(({ problem }) => new PlayFailure({ step: number, title, problem })), step(`${number}/${STEPS} ${title}`));

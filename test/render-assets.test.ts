@@ -62,7 +62,6 @@ test("[native] #91 explicit Cairne DDS imports resolve in the HD body alias and 
 
 test("[native] #91 old imported HD body refuses missing HD stock; good pilot selected stock DE body resolves; stock DE skies read shared base weather while imported HD bodies keep their layer", async () => {
 
-
   const texture = "Units/Orc/HeroTaurenChieftain/Tauren_Chieftain_Diffuse.tif";
   const dds = texture.replace(/\.tif$/, ".dds");
   const assets = readers({}, { [`_de.w3mod/${dds}`]: "native stock" });

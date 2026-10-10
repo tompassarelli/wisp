@@ -1,18 +1,10 @@
-
-
-
-
-
-
 import type { SceneProblem } from "./scene";
-
 
 export interface Frame {
   readonly width: number;
   readonly height: number;
   readonly rgb: Uint8Array;
 }
-
 
 export interface Band {
   readonly top: number;
@@ -24,7 +16,6 @@ export interface Band {
 export type Color = readonly [red: number, green: number, blue: number];
 
 const PPM_HEADER = /^P6\s+(\d+)\s+(\d+)\s+255\s/;
-
 
 export function decodePpm(bytes: Uint8Array): Frame | undefined {
   const header = PPM_HEADER.exec(new TextDecoder("latin1").decode(bytes.subarray(0, 32)));
@@ -44,11 +35,6 @@ export function encodePpm({ width, height, rgb }: Frame): Uint8Array {
 }
 
 const span = (from: number, to: number, size: number) => [Math.max(0, Math.floor(from * size)), Math.min(size, Math.floor(to * size))] as const;
-
-
-
-
-
 
 export function colorRows(frame: Frame, band: Band, colors: readonly Color[], tolerance: number, run: number): number {
   const [top, bottom] = span(band.top, band.bottom, frame.height);
@@ -79,7 +65,6 @@ export function colorRows(frame: Frame, band: Band, colors: readonly Color[], to
   return rows;
 }
 
-
 export function pixelShare(frame: Frame, band: Band, accept: (red: number, green: number, blue: number) => boolean): number {
   const [top, bottom] = span(band.top, band.bottom, frame.height);
   const [left, right] = span(band.left, band.right, frame.width);
@@ -100,7 +85,6 @@ export interface FeatureMeasurement {
   readonly measured: string;
 }
 
-
 export interface FrameFeature {
 
   readonly name: string;
@@ -115,7 +99,6 @@ export interface FeatureResult extends FeatureMeasurement {
 
 export const measureFrame = (frame: Frame, features: readonly FrameFeature[]): readonly FeatureResult[] =>
   features.map((feature) => ({ feature, ...feature.measure(frame) }));
-
 
 export const frameProblems = (results: readonly FeatureResult[]): readonly SceneProblem[] =>
   results.filter(({ present }) => !present).map(({ feature, measured }) => ({ seen: feature.absent, evidence: `${feature.name}: ${measured}` }));

@@ -11,7 +11,6 @@ import { REPRO_VIEWER_PAGE } from "./reproViewerPage";
 export interface DeclarationSource { readonly file: string; readonly line: number }
 export interface ReproViewerSources { readonly project: string; readonly file: string; readonly type: string }
 
-
 export function declarationMap(config: ReproViewerSources): (path: string) => DeclarationSource | undefined {
   const parsed = ts.getParsedCommandLineOfConfigFile(resolve(config.project), {}, { ...ts.sys, onUnRecoverableConfigFileDiagnostic: diagnostic => { throw new Error(ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")); } });
   if (parsed === undefined) throw new Error(`can't read ${config.project}`);
@@ -49,7 +48,6 @@ export function createReproViewer(map: HeadlessMap, inspect: ReproInspector, rep
     const prior = cached.get(frame);
     if (prior !== undefined) return prior;
     const states = inspectClientStates(map, inspect, repro, frame);
-
 
     if (cached.size >= 16) cached.delete(cached.keys().next().value ?? frame);
     cached.set(frame, states);

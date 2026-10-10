@@ -1,6 +1,3 @@
-
-
-
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, copyFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { Context, Effect, Layer, Option, Schema } from "effect";
@@ -39,15 +36,7 @@ export class GameFiles extends Context.Service<GameFiles, {
   static readonly layer = (options: MapDirectories = { mapFolder: "Maps/00-Wisp", replacedMaps: "wisp-replaced-maps" }) => Layer.sync(GameFiles, () => GameFiles.of(local(options)));
 }
 
-
 export const dataDirectory = (documents: string) => join(documents, "CustomMapData");
-
-
-
-
-
-
-
 
 export const prepareHotFolders = (directories: readonly string[], filePrefix = "wisp") =>
   Effect.gen(function*() {
@@ -65,7 +54,6 @@ export interface MapDirectories {
 
   readonly preserveMaps?: boolean;
 }
-
 
 export const readGameFile = <A>(path: string, kind: GameFileKind<A>) =>
   Effect.gen(function*() {

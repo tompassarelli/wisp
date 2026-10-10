@@ -1,5 +1,3 @@
-
-
 import { afterAll, expect, test } from "bun:test";
 import { join } from "node:path";
 import { mapCompiler, report } from "../scripts/compiler";

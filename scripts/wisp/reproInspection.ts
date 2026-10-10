@@ -7,7 +7,6 @@ export interface ReproFieldDiff {
   readonly after: string | null;
 }
 
-
 export function diffReproStates(before: ReproInspection, after: ReproInspection): ReproFieldDiff[] {
   const left = new Map(before.fields.map(field => [field.path, field.value]));
   const right = new Map(after.fields.map(field => [field.path, field.value]));

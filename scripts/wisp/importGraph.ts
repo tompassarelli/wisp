@@ -1,10 +1,3 @@
-
-
-
-
-
-
-
 import { readFileSync } from "node:fs";
 import { dirname, extname, relative, sep } from "node:path";
 
@@ -27,20 +20,16 @@ export class ImportGraph {
   private readonly importers = new Map<string, Set<string>>();
   private readonly transpilers = new Map<string, Bun.Transpiler>();
 
-
   constructor(private readonly root: string) {}
-
 
   owns(path: string): boolean {
     const local = relative(this.root, path);
     return !local.startsWith("..") && !local.split(sep).includes("node_modules") && isModulePath(path);
   }
 
-
   has(path: string): boolean {
     return this.nodes.has(path);
   }
-
 
   add(entries: readonly string[]): void {
     const pending = entries.filter((entry) => !this.nodes.has(entry));
@@ -52,23 +41,19 @@ export class ImportGraph {
     }
   }
 
-
   update(path: string): void {
     const node = this.scan(path);
     this.set(path, node);
     this.add(node.imports);
   }
 
-
   dependents(path: string): Set<string> {
     return this.reach(path, (next) => this.importers.get(next) ?? []);
   }
 
-
   dependencies(path: string): Set<string> {
     return this.reach(path, (next) => this.nodes.get(next)?.imports ?? []);
   }
-
 
   computedImport(path: string): string | undefined {
     for (const module of this.dependencies(path)) if (this.nodes.get(module)?.computed === true) return module;

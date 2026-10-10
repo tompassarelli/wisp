@@ -1,6 +1,3 @@
-
-
-
 import { afterAll, expect, test } from "bun:test";
 import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -35,7 +32,6 @@ afterAll(() => rmSync(folder, { recursive: true, force: true }));
 const seen = (text: string) => {
   globalThis.__fixtureSeen = `${globalThis.__fixtureSeen ?? ""}${text} `;
 };
-
 
 const editBoxMap = {
   start: () => {

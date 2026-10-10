@@ -1,11 +1,3 @@
-
-
-
-
-
-
-
-
 import { Effect, Schema } from "effect";
 import { runPlatformSync } from "../platform/layer";
 import { ResourceAccounting } from "../platform/services";
@@ -19,7 +11,6 @@ import { type SceneBody, type SceneExpectations, bodyProblems, readSceneLines, s
 import { type NativeCostModel, WARCRAFT_COST, nativeFrameCost } from "../../src/headless/nativeCost";
 import { MEASURED_BATTLE_NET, syncDelivery } from "../../src/headless/syncChannel";
 
-
 export interface SoakController {
   readonly buttons: readonly string[];
 
@@ -32,11 +23,9 @@ export interface SoakController {
   readonly deadZone: number;
 }
 
-
 export type SoakEdge =
   | { readonly button: number; readonly down: boolean }
   | { readonly axis: number; readonly value: number };
-
 
 export interface SoakInputFrame {
 
@@ -51,19 +40,12 @@ export interface SoakInputFrame {
   readonly files: ReadonlyMap<number, readonly (readonly [name: string, chunks: readonly string[]])[]>;
 }
 
-
 export interface SoakInputs {
   readonly edges: readonly (readonly [frame: number, slot: number, edge: SoakEdge])[];
   readonly silences: readonly (readonly [frame: number, slot: number, frames: number])[];
   readonly hitches: readonly (readonly [frame: number, ms: number])[];
 
   readonly slow: readonly (readonly [frame: number, ms: number])[];
-
-
-
-
-
-
 
   readonly typed?: readonly (readonly [frame: number, slot: number, text: string])[];
   readonly files?: readonly (readonly [frame: number, slot: number, name: string, chunks: readonly string[]])[];
@@ -78,12 +60,9 @@ export interface FuzzOptions {
   readonly hitch: number;
 }
 
-
 export const SOAK_FUZZ: FuzzOptions = { rate: 1 / 8, silence: 1 / 3600, hitch: 1 / 2400 };
 
-
 export const FUZZ_POLICY = "fuzz";
-
 
 export interface SoakMatch {
 
@@ -100,18 +79,12 @@ export interface SoakMatch {
   readonly typed?: boolean;
 }
 
-
 export interface SoakRoster {
   readonly fighters: readonly string[];
   readonly stages: readonly string[];
 
   readonly policies: readonly (readonly string[])[];
 }
-
-
-
-
-
 
 export function planSoak(roster: SoakRoster, matches: number, seed: number, frames: number, keep: (match: SoakMatch) => boolean = () => true): SoakMatch[] {
   const pairs = roster.fighters.flatMap((first) => roster.fighters.map((second) => [first, second] as const));
@@ -126,14 +99,7 @@ export function planSoak(roster: SoakRoster, matches: number, seed: number, fram
   });
 }
 
-
 type Pattern = (readonly [delay: number, edge: SoakEdge])[];
-
-
-
-
-
-
 
 class Fuzzer {
   private readonly held = new Set<number>();
@@ -224,7 +190,6 @@ class Fuzzer {
     }
   }
 
-
   frame(frame: number): SoakEdge[] {
     if (this.random.chance(this.rate)) {
       for (const [delay, edge] of this.pattern()) {
@@ -252,7 +217,6 @@ class Fuzzer {
   }
 }
 
-
 export interface SoakInputSource {
   frame(frame: number): SoakInputFrame;
 
@@ -265,7 +229,6 @@ const NO_EDGES: ReadonlyMap<number, readonly SoakEdge[]> = new Map();
 const NO_SILENCES: ReadonlyMap<number, number> = new Map();
 const NO_TYPING: ReadonlyMap<number, readonly string[]> = new Map();
 const NO_FILES: ReadonlyMap<number, readonly (readonly [string, readonly string[]])[]> = new Map();
-
 
 export function fuzzedInputs(match: SoakMatch, controller: SoakController, options: FuzzOptions = SOAK_FUZZ): SoakInputSource {
   const timing = new Random(match.seed * 31 + 7);
@@ -305,7 +268,6 @@ export function fuzzedInputs(match: SoakMatch, controller: SoakController, optio
   };
 }
 
-
 export function recordedInputs(inputs: SoakInputs): SoakInputSource {
   const edges = new Map<number, Map<number, SoakEdge[]>>();
   for (const [frame, slot, edge] of inputs.edges) {
@@ -338,7 +300,6 @@ export function recordedInputs(inputs: SoakInputs): SoakInputSource {
   };
 }
 
-
 export interface SoakStep {
 
   readonly frame: number;
@@ -349,7 +310,6 @@ export interface SoakStep {
 
   readonly silent: ReadonlySet<number>;
 }
-
 
 export interface SoakObservation {
 
@@ -362,7 +322,6 @@ export interface SoakObservation {
   readonly over: boolean;
 }
 
-
 export interface SoakDriver {
 
   input(step: SoakStep): void;
@@ -373,25 +332,12 @@ export interface SoakDriver {
 
   bodies?(client: HeadlessClient): readonly SceneBody[];
 
-
-
-
-
   repro?(client: HeadlessClient): readonly string[] | undefined;
-
-
-
-
 
   typed?(slot: number): number;
 
-
-
-
-
   findings?(client: HeadlessClient): readonly SoakGameFinding[];
 }
-
 
 export interface SoakGameFinding {
 
@@ -399,17 +345,12 @@ export interface SoakGameFinding {
   readonly text: string;
 }
 
-
 export interface SoakGame {
 
   readonly entry: MapEntry;
 
-
-
-
   begin(clients: Lockstep, match: SoakMatch): SoakDriver;
 }
-
 
 export interface SoakLimits {
 
@@ -420,10 +361,6 @@ export interface SoakLimits {
   readonly costScale: number;
 
   readonly spikeMs: number;
-
-
-
-
 
   readonly typingMs: number;
 
@@ -475,10 +412,6 @@ export interface SoakResult {
 
   readonly worstFrameMs: number;
 
-
-
-
-
   readonly typingStallsMs: readonly number[];
   readonly over: boolean;
   readonly findings: readonly SoakFinding[];
@@ -489,28 +422,16 @@ export interface SoakResult {
   readonly repros?: readonly (readonly [slot: number, lines: readonly string[]])[];
 }
 
-
-
-
-
-
 let threadClock: (() => number) | undefined;
 
 export const cpuMillis = (): number => (threadClock ??= runPlatformSync(ResourceAccounting.use((accounting) => Effect.succeed(accounting.threadCpuMillis))))();
 
-
 const shape = (text: string) => text.replace(/\d+(\.\d+)?/g, "#");
-
 
 interface CostlyFrame {
   readonly slot: number;
   readonly ms: number;
 }
-
-
-
-
-
 
 export class SoakMonitor {
   readonly findings: SoakFinding[] = [];
@@ -569,16 +490,9 @@ export class SoakMonitor {
     }
   }
 
-
   get done(): boolean {
     return this.overAt !== undefined && this.frame - this.overAt >= this.limits.afterOver;
   }
-
-
-
-
-
-
 
   afterFrame(wallMs: number, quiet: ReadonlySet<number>, nativeMs?: readonly number[], typingMs?: readonly number[]): void {
     this.frame++;
@@ -741,7 +655,6 @@ export class SoakMonitor {
     }
   }
 
-
   costFinding(frames: ReadonlyMap<number, CostlyFrame>, again?: ReadonlyMap<number, { readonly ms: number }>): void {
     let worst: [number, CostlyFrame] | undefined;
     for (const entry of frames) if (worst === undefined || entry[1].ms > worst[1].ms) worst = entry;
@@ -751,10 +664,6 @@ export class SoakMonitor {
     this.find("cost", `${frames.size} client frame${frames.size === 1 ? "" : "s"} cost more than ${this.limits.spikeMs.toFixed(1)} ms${again === undefined ? "" : " in the match and again in its replay"}; the worst, p${slot}'s frame ${frame}, ${ms.toFixed(1)} ms${replayed === undefined ? "" : ` then ${replayed.ms.toFixed(1)} ms`}`);
   }
 
-
-
-
-
   finish(costs = true): readonly SoakFinding[] {
     this.checkDesync();
     if (costs) this.costFinding(this.spikes);
@@ -762,7 +671,6 @@ export class SoakMonitor {
     return this.findings;
   }
 }
-
 
 export interface SoakSetup {
   readonly map: HeadlessMap;
@@ -772,12 +680,8 @@ export interface SoakSetup {
   readonly limits?: Partial<SoakLimits>;
   readonly fuzz?: Partial<FuzzOptions>;
 
-
-
-
   readonly cost?: NativeCostModel;
 }
-
 
 let framesPlayed = 0;
 
@@ -788,18 +692,10 @@ interface Played {
   readonly monitor: SoakMonitor | undefined;
 }
 
-
-
-
-
-
-
 export function playSoakMatch(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, match: SoakMatch, inputs?: SoakInputs): SoakResult {
   const first = playOnce(runtime, game, setup, match, inputs);
   const spikes = first.monitor?.spikes;
   if (spikes === undefined || spikes.size === 0 || first.result.findings.some(({ kind }) => kind === "crash")) return first.result;
-
-
 
   const replay = playOnce(runtime, game, setup, match, first.result.inputs);
   const again = replay.monitor?.spikes ?? new Map<number, CostlyFrame>();
@@ -879,11 +775,6 @@ function playOnce(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, ma
   return { result, monitor };
 }
 
-
-
-
-
-
 export function helperRecorder(frame: () => number) {
   const typed: [number, number, string][] = [];
   const files: [number, number, string, readonly string[]][] = [];
@@ -912,7 +803,6 @@ export function helperRecorder(frame: () => number) {
     recorded: (inputs: SoakInputs): SoakInputs => ({ ...inputs, typed, files }),
   };
 }
-
 
 export interface SoakRepro {
   readonly format: "wisp-soak-repro";
@@ -967,12 +857,9 @@ const ReproFile = Schema.fromJsonString(Schema.Struct({
   inputs: InputsSchema,
 }));
 
-
 export const readSoakRepro = (text: string): SoakRepro => Schema.decodeSync(ReproFile)(text);
 
-
 export const readSoakMatch = (line: string): SoakMatch => Schema.decodeSync(Schema.fromJsonString(MatchSchema))(line);
-
 
 export interface SoakReply extends Omit<SoakResult, "inputs"> {
   readonly inputs?: SoakInputs;
@@ -995,18 +882,12 @@ const ReplySchema = Schema.fromJsonString(Schema.Struct({
 export const soakReply = ({ inputs, ...result }: SoakResult): SoakReply => (result.findings.length > 0 ? { ...result, inputs } : result);
 export const readSoakReply = (line: string): SoakReply => Schema.decodeSync(ReplySchema)(line);
 
-
 export const describeMatch = ({ index, fighters, stage, policies, seed }: SoakMatch) =>
   `match ${index}: ${fighters.join(" vs ")} on ${stage}, ${policies.join("/")}, seed ${seed}`;
-
 
 export interface SoakProject extends SoakSetup {
 
   readonly name: string;
-
-
-
-
 
   readonly game: string;
   readonly roster: SoakRoster;
@@ -1030,13 +911,11 @@ async function defaultExport(path: string): Promise<unknown> {
   return typeof module === "object" && module !== null && "default" in module ? module.default : undefined;
 }
 
-
 export async function loadSoakProject(path: string): Promise<SoakProject> {
   const value = await defaultExport(path);
   if (!isSoakProject(value)) throw new Error(`${path} exports no defineSoak() declaration as its default`);
   return value;
 }
-
 
 export async function loadSoakGame(path: string): Promise<SoakGame> {
   const value = await defaultExport(path);

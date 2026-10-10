@@ -1,6 +1,3 @@
-
-
-
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
@@ -123,7 +120,6 @@ export function start(): void {
 }
 `;
 
-
 function payload(bundled: BundledModules): string {
   const modules = bundled.modules.map((module) => ({ name: module.name, text: Buffer.from(moduleChunk(module.code), "utf8").toString("latin1") }));
   const index = moduleIndex(bundled.entry, modules.map(({ name, text }) => [name, textChecksum(moduleHashText(name, text))] as const));
@@ -156,7 +152,6 @@ farmTest("[spec docs/tune.md] a tuned value is compiled in memory, sent as a del
     const bundle = join(directory, "map.lua");
     copyFileSync(join(directory, "out/map.lua"), bundle);
     const written = statSync(join(directory, "out/map.lua")).mtimeMs;
-
 
     let tuned: BundledModules | undefined;
     const reload = HotReload.of({

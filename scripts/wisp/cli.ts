@@ -1,6 +1,3 @@
-
-
-
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Cause, Effect, Exit, Layer, Option } from "effect";
 import { platformLayer } from "../platform/layer";
@@ -14,7 +11,6 @@ export interface CommandEntry {
 
   readonly load: () => Promise<Command>;
 }
-
 
 export const cliProgram = (program: string, commands: Readonly<Record<string, CommandEntry>>, argv: readonly string[], print: (line: string) => void = console.error, platform: Layer.Layer<Platform> = platformLayer()) => Effect.gen(function*() {
   const [name, ...args] = argv;
@@ -39,13 +35,7 @@ export const cliProgram = (program: string, commands: Readonly<Record<string, Co
   return 1;
 });
 
-
 export const runCli = (...args: Parameters<typeof cliProgram>): Promise<number> => Effect.runPromise(cliProgram(...args));
-
-
-
-
-
 
 export const runMainCli = (program: string, commands: Readonly<Record<string, CommandEntry>>, argv: readonly string[]) =>
   BunRuntime.runMain(cliProgram(program, commands, argv), {

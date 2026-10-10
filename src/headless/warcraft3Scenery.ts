@@ -47,11 +47,6 @@ export interface SceneryContext {
 }
 interface Region { readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number }
 
-
-
-
-
-
 export interface Environment {
   sky: string;
   skyVisible: boolean;
@@ -61,7 +56,6 @@ export interface Environment {
 
   timeOfDay: number;
 }
-
 
 export class Scenery {
   readonly doodads: DoodadState[];

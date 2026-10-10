@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { createReproViewer } from "../scripts/wisp/reproViewer";
 import type { ReproInspector } from "../src/runtime/repro";
 
-
 const inspect: ReproInspector = (_repro, frame) => {
   if (frame < 2 || frame > 5) return "outside the saved interval";
   const total = frame + (frame >= 4 ? GetPlayerId(GetLocalPlayer()) : 0);

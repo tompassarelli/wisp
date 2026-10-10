@@ -1,10 +1,3 @@
-
-
-
-
-
-
-
 import { readFileSync } from "node:fs";
 import type { FrameTemplate } from "../../src/headless/frames";
 import type { UnitStateFixtures } from "../../src/headless/client";
@@ -22,7 +15,6 @@ import { BUNDLE_MODULE, type ModuleSet } from "../../src/runtime/modules";
 import { sceneFile } from "../../src/runtime/scene";
 import { type SceneExpectations, describeScene, readSceneLines, sceneProblems } from "./scene";
 
-
 export interface HeadlessMap {
   readonly abilityObjects?: AbilityObjectFixtures;
   readonly unitStates?: UnitStateFixtures;
@@ -39,28 +31,12 @@ export interface HeadlessMap {
 
   readonly natives?: (client: HeadlessClient) => NativeBehaviors;
 
-
-
-
   readonly frames?: readonly FrameTemplate[];
 }
 
 export interface HeadlessRuntime {
 
-
-
-
-
-
-
-
-
-
   clients(entry: MapEntry, players?: readonly number[], options?: Pick<LockstepOptions, "delivery" | "humans" | "link" | "files" | "keepCalls" | "cost" | "effectDeaths" | "musicSlider" | "effectStepMs">): Lockstep;
-
-
-
-
 
   modules(entry: MapEntry): ModuleSet;
 
@@ -71,7 +47,6 @@ const LUA_GLOBALS = ["xpcall", "pcall", "load", "setmetatable", "string", "os"];
 
 const declarationsRead = new Map<string, NativeDeclarations>();
 
-
 export function readNativeDeclarations(path = join(import.meta.dir, "../../src/natives/warcraft.d.ts")): NativeDeclarations {
   const known = declarationsRead.get(path);
   if (known !== undefined) return known;
@@ -81,7 +56,6 @@ export function readNativeDeclarations(path = join(import.meta.dir, "../../src/n
 }
 
 const describeThrown = (error: unknown) => (error instanceof Error ? error.stack ?? error.message : String(error));
-
 
 function luaFunctions(client: HeadlessClient, bundles: ReadonlyMap<string, MapEntry>): NativeBehaviors {
   return {
@@ -118,11 +92,6 @@ function luaFunctions(client: HeadlessClient, bundles: ReadonlyMap<string, MapEn
   };
 }
 
-
-
-
-
-
 export function installHeadless(map: HeadlessMap, declarations = readNativeDeclarations()): HeadlessRuntime {
   const prefixes = ["__wisp", ...map.globalPrefixes];
   const names = [
@@ -148,10 +117,6 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
       },
     });
   }
-
-
-
-
 
   const isOwnGlobal = (key: string | symbol): key is string => typeof key === "string" && prefixes.some((prefix) => key.startsWith(prefix));
   const starting: Record<string, unknown> = {};
@@ -243,13 +208,8 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
   };
 }
 
-
 export interface HeadlessProject {
   readonly map: HeadlessMap;
-
-
-
-
 
   readonly entry: string;
 
@@ -257,7 +217,6 @@ export interface HeadlessProject {
   readonly scene?: SceneExpectations;
   readonly render?: HeadlessRenderProject;
 }
-
 
 export async function loadMapEntry(path: string): Promise<MapEntry> {
   const module: unknown = await import(path);
@@ -283,13 +242,6 @@ export interface HeadlessFinding {
   readonly message: string;
   readonly native?: string;
 }
-
-
-
-
-
-
-
 
 export function playHeadless(clients: Lockstep, journey: Journey, filePrefix: string, scene?: SceneExpectations, options?: JourneyOptions): HeadlessReport {
   const result = runJourney(clients, journey, options);

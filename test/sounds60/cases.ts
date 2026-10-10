@@ -1,15 +1,8 @@
-
-
-
-
-
 export const SOUND_PATH = "Sound\\Interface\\QuestNew.wav";
-
 
 export const SOUND_NATIVES = () => ({
   GetSoundFileDuration: (path: string) => (path === SOUND_PATH ? 2000 : 0),
 });
-
 
 const CONCURRENT = 12;
 
@@ -19,7 +12,6 @@ function cue(this: void, looping: boolean, duration: number): sound {
   SetSoundVolume(created, 0);
   return created;
 }
-
 
 export function soundCases(this: void, done: (this: void, rows: readonly string[]) => void): void {
   const rows: string[] = [];
@@ -34,7 +26,6 @@ export function soundCases(this: void, done: (this: void, rows: readonly string[
     run();
   });
 
-
   const warm = cue(false, duration);
   StartSound(warm);
   KillSoundWhenDone(warm);
@@ -42,12 +33,10 @@ export function soundCases(this: void, done: (this: void, rows: readonly string[
 
   at(start, () => {
 
-
     const again = cue(false, duration);
     StartSound(again);
     at(length * 0.5, () => StartSound(again));
     at(length * 1.25, () => rows.push(`start-while-playing-at-1.25=${GetSoundIsPlaying(again)}`));
-
 
     const restart = cue(false, duration);
     StartSound(restart);
@@ -56,8 +45,6 @@ export function soundCases(this: void, done: (this: void, rows: readonly string[
       StartSound(restart);
     });
     at(length * 1.25, () => rows.push(`stop-then-start-at-1.25=${GetSoundIsPlaying(restart)}`));
-
-
 
     const killed = cue(false, duration);
     StartSound(killed);
@@ -69,7 +56,6 @@ export function soundCases(this: void, done: (this: void, rows: readonly string[
       rows.push(`released-handle-started=${GetSoundIsPlaying(killed)}`);
     });
 
-
     const stopped = cue(false, duration);
     StartSound(stopped);
     KillSoundWhenDone(stopped);
@@ -79,13 +65,11 @@ export function soundCases(this: void, done: (this: void, rows: readonly string[
     });
     at(length * 0.5, () => rows.push(`stopped-kill-when-done-restarted=${GetSoundIsPlaying(stopped)}`));
 
-
     const fast = cue(false, duration);
     SetSoundPitch(fast, 2.0);
     StartSound(fast);
     at(length * 0.25, () => rows.push(`pitch-two-at-0.25=${GetSoundIsPlaying(fast)}`));
     at(length * 0.75, () => rows.push(`pitch-two-at-0.75=${GetSoundIsPlaying(fast)}`));
-
 
     const loop = cue(true, duration);
     StartSound(loop);
@@ -98,7 +82,6 @@ export function soundCases(this: void, done: (this: void, rows: readonly string[
       rows.push(`fade-stopped-loop-restarted=${GetSoundIsPlaying(loop)}`);
       StopSound(loop, true, false);
     });
-
 
     const concurrent: sound[] = [];
     for (let index = 0; index < CONCURRENT; index++) {

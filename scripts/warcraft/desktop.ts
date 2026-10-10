@@ -1,7 +1,3 @@
-
-
-
-
 import { Clock, Effect, Schema } from "effect";
 import { describeCause } from "../wisp/command";
 import { type Frame, decodePpm } from "../wisp/frameProbe";
@@ -41,17 +37,12 @@ export interface Client {
   readonly window: string;
 }
 
-
 export interface Region {
   readonly x: number;
   readonly y: number;
   readonly width: number;
   readonly height: number;
 }
-
-
-
-
 
 export type Ink = "light" | "gold" | "white";
 
@@ -86,7 +77,6 @@ const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 export type ClientsConfig = typeof ClientsFile.Type;
 export type ClientEntry = ClientsConfig["clients"][number];
 
-
 export const readClientsFile = (path: string) =>
   Effect.gen(function*() {
     const raw = yield* Effect.tryPromise({ try: () => Bun.file(path).json(), catch: fail("read clients file", path) });
@@ -97,7 +87,6 @@ export const readClientsFile = (path: string) =>
     }
     return config;
   });
-
 
 export const windowsOf = (config: ClientsConfig, entry: ClientEntry, title: string) => InputInjection.use((input) => input.windows(config, entry, title, false));
 
@@ -115,18 +104,11 @@ export const loadClients = (path: string) =>
       }));
   });
 
-
 export interface TimedFrame {
   readonly frame: Frame;
   readonly beforeNs: number;
   readonly afterNs: number;
 }
-
-
-
-
-
-
 
 export const captureTimed = (client: Client, nowNs: () => number, region?: Region) =>
   Effect.gen(function*() {
@@ -141,10 +123,8 @@ export const captureTimed = (client: Client, nowNs: () => number, region?: Regio
     return { frame, beforeNs, afterNs } satisfies TimedFrame;
   });
 
-
 export const capture = (client: Client, region?: Region) =>
   captureTimed(client, () => performance.now() * 1_000_000, region).pipe(Effect.map(({ frame }) => frame));
-
 
 export function separateInk(frame: Frame, ink: Ink): Uint8Array {
   const header = new TextEncoder().encode(`P5\n${frame.width} ${frame.height}\n255\n`);
@@ -162,7 +142,6 @@ export function separateInk(frame: Frame, ink: Ink): Uint8Array {
   return out;
 }
 
-
 export const read = (client: Client, region?: Region, ink: Ink = "light") =>
   Effect.gen(function*() {
     const frame = yield* capture(client, region);
@@ -178,7 +157,6 @@ export interface Word {
   readonly line?: string;
 }
 
-
 export function parseWords(tsv: string): Word[] {
   return tsv.split("\n").slice(1).flatMap((line): Word[] => {
     const field = line.split("\t");
@@ -188,19 +166,15 @@ export function parseWords(tsv: string): Word[] {
   });
 }
 
-
 export const words = (client: Client, ink: Ink = "light") =>
   Effect.gen(function*() {
     return yield* frameWords(client, yield* capture(client), ink);
   });
 
-
 export const frameWords = (client: Client, frame: Frame, ink: Ink) =>
   runTool(client.name, "read words", [client.tools.tesseract, "stdin", "stdout", "--psm", "11", "tsv"], {}, separateInk(frame, ink)).pipe(Effect.map((bytes) => parseWords(text(bytes))));
 
-
 export const focus = (client: Client) => InputInjection.use((input) => input.focus(client, "Warcraft III", true));
-
 
 export const requireMatch = (client: Client, input: string) =>
   Effect.gen(function*() {
@@ -217,14 +191,12 @@ export const requireMatch = (client: Client, input: string) =>
     }
   }).pipe(Effect.catchTag("WatchFailure", (cause) => Effect.fail(new DesktopFailure({ operation: `send ${input}`, client: client.name, cause }))));
 
-
 export const keys = (client: Client, ...names: string[]) =>
   Effect.gen(function*() {
     if (sendsChat(names)) yield* requireMatch(client, names.join(" "));
     yield* focus(client);
     yield* InputInjection.use((input) => input.keys(client, names));
   });
-
 
 export const typeText = (client: Client, value: string, delayMillis?: number) =>
   Effect.gen(function*() {
@@ -233,9 +205,7 @@ export const typeText = (client: Client, value: string, delayMillis?: number) =>
     yield* InputInjection.use((input) => input.typeText(client, value, delayMillis));
   });
 
-
 export const windowPid = (client: Client) => InputInjection.use((input) => input.windowPid(client));
-
 
 export const click = (client: Client, x: number, y: number) =>
   Effect.gen(function*() {
@@ -243,12 +213,9 @@ export const click = (client: Client, x: number, y: number) =>
     yield* pressAt(client, x, y);
   });
 
-
 export const focusWindow = (client: Client, title: string) => InputInjection.use((input) => input.focus(client, title, false));
 
-
 export const pressAt = (client: Client, x: number, y: number) => InputInjection.use((input) => input.pressAt(client, x, y));
-
 
 export const batch = Effect.fnUntraced(function*(client: Client, actions: readonly InputAction[]) {
   if (actions.length === 0) return;
@@ -256,7 +223,6 @@ export const batch = Effect.fnUntraced(function*(client: Client, actions: readon
   yield* focus(client);
   yield* InputInjection.use((input) => input.batch(client, actions));
 });
-
 
 export const waitFor = <A, E, R>(client: { readonly name: string }, what: string, seconds: number, observe: Effect.Effect<A | undefined, E, R>) =>
   Effect.gen(function*() {
@@ -269,10 +235,8 @@ export const waitFor = <A, E, R>(client: { readonly name: string }, what: string
     }
   });
 
-
 export const waitForText = (client: Client, what: string, pattern: RegExp, region?: Region, ink: Ink = "light", seconds = 20) =>
   waitFor(client, what, seconds, read(client, region, ink).pipe(Effect.map((seen) => (pattern.test(seen.replace(/\s+/g, " ")) ? seen : undefined))));
-
 
 export const enterLoginField = (client: Client, title: string, placeholder: RegExp | undefined, secret: Uint8Array) =>
   Effect.gen(function*() {

@@ -1,5 +1,3 @@
-
-
 import { CHUNKS_PER_FILE, FILE_IO_ABILITY } from "../src/runtime/gameFiles";
 
 export type ObjectValue =
@@ -42,7 +40,6 @@ function idText(value: number): string {
 function integer(value: number, label: string, minimum = -0x80000000): void {
   if (!Number.isInteger(value) || value < minimum || value > 0x7fffffff) throw new Error(`invalid ${label}: ${value}`);
 }
-
 
 export function encodeObjectData(definitions: readonly ObjectDefinition[], levels: boolean): Uint8Array {
   const ids = new Set<number>();
@@ -101,10 +98,6 @@ export function encodeObjectData(definitions: readonly ObjectDefinition[], level
   return Uint8Array.from(bytes);
 }
 
-
-
-
-
 export const FILE_IO_OBJECT: ObjectDefinition = {
   base: "ANcl",
   id: FILE_IO_ABILITY,
@@ -113,7 +106,6 @@ export const FILE_IO_OBJECT: ObjectDefinition = {
     ...Array.from({ length: CHUNKS_PER_FILE }, (_, index): Modification => ({ field: "atp1", value: { kind: "string", value: " " }, level: index + 1 })),
   ],
 };
-
 
 export function abilityData(definitions: readonly ObjectDefinition[] = []): Uint8Array {
   return encodeObjectData([FILE_IO_OBJECT, ...definitions], true);
@@ -134,7 +126,6 @@ class ObjectBuilder {
   }
 }
 
-
 export class UnitObject extends ObjectBuilder {
   name(value: string): this { return this.set("unam", { kind: "string", value }); }
   tooltip(value: string): this { return this.set("utip", { kind: "string", value }); }
@@ -147,7 +138,6 @@ export class UnitObject extends ObjectBuilder {
 }
 
 export type AbilityTarget = "air" | "ground" | "enemy" | "friend" | "self" | "neutral" | "organic" | "mechanical" | "structure" | "hero" | "nonhero" | "vulnerable" | "invulnerable";
-
 
 export class AbilityObject extends ObjectBuilder {
   private count = 1;

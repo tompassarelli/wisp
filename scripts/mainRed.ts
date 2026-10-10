@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import { Console, Effect, Schema } from "effect";
 import { captureProcess } from "./wisp/mapBuild";
 
@@ -15,7 +9,6 @@ class MainRedFailure extends Schema.TaggedError<MainRedFailure>()("MainRedFailur
 
 export const redTitle = (branch: string) => `${branch} is red`;
 const TESTS_HEADING = "## Failing tests";
-
 
 export function failingTests(log: string): string[] {
   const tests = new Set<string>();
@@ -36,7 +29,6 @@ export function failingTests(log: string): string[] {
   const unnamed = [...steps].filter(([key, named]) => !named && key !== ": ").map(([key]) => `step ${key}`);
   return [...tests, ...unnamed];
 }
-
 
 export function issueTests(body: string): string[] {
   const section = body.split(TESTS_HEADING)[1]?.split("\n## ")[0] ?? "";

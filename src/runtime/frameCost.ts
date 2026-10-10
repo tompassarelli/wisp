@@ -1,18 +1,12 @@
-
-
-
 import { floorDiv, floorMod } from "../sim/intMath";
 
-
 export const frameCostFile = (slot: number, prefix = "wisp") => `${prefix}-perf-p${slot}.txt`;
-
 
 export interface Spread {
   readonly median: number;
   readonly mean: number;
   readonly max: number;
 }
-
 
 export interface FrameWindow {
   readonly frames: number;
@@ -23,7 +17,6 @@ export interface FrameWindow {
 
   readonly catchUp: Spread;
 }
-
 
 export function spread(values: readonly number[], count: number): Spread {
   if (count <= 0) return { median: 0, mean: 0, max: 0 };
@@ -40,7 +33,6 @@ export function spread(values: readonly number[], count: number): Spread {
   return { median, mean: total / count, max: sorted[count - 1] ?? 0 };
 }
 
-
 export function reportNumber(value: number): string {
   const hundredths = Math.floor(value * 100 + 0.5);
   const whole = floorDiv(hundredths, 100);
@@ -51,10 +43,8 @@ export function reportNumber(value: number): string {
 
 const spreadText = ({ median, mean, max }: Spread) => `${reportNumber(median)}/${reportNumber(mean)}/${reportNumber(max)}`;
 
-
 export const frameCostHeading = (version: number, previous: number, clockStep: number) =>
   `frame cost v${version} after v${previous} clock=${reportNumber(clockStep)}`;
-
 
 export const frameWindowLine = (label: string, window: FrameWindow) =>
   `${label} frames=${window.frames} lua=${window.lua === undefined ? "none" : spreadText(window.lua)} natives=${spreadText(window.natives)} catchup=${spreadText(window.catchUp)}`;

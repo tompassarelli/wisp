@@ -3,8 +3,6 @@ import { decodePreviewTexture, decodeMinimapMarkers, drawStartMarkers, selectMap
 
 test("[native] #85 parchment and custom-lineup archive choices match two captured maps in Classic and Definitive", () => {
 
-
-
   for (const reference of [
     { map: "smashcraft-0911b5da", flags: 40016, shown: "war3mapMap.blp" },
     { map: "custom-minimap-d8fe5996", flags: 40016, shown: "war3mapMap.blp" },

@@ -1,7 +1,6 @@
 import { f32 } from "../../src/sim/f32";
 import { BOARD, CAMERA, CLIP, DEATH_SECONDS, MARK, MARK_DY, ORIENTATION_MARK, READY_SECONDS, RULER, RULER_LENGTH, RULER_UNIT, SLOTS, START_SECONDS, slotNamed } from "./layout";
 
-
 const LOCUST = 0x416c6f63;
 
 const PRELOAD_Y = -1300;
@@ -14,7 +13,6 @@ export const ANIMATION_NOOPS = {
   SetUnitPathing: "the fixture's units mirror Smashcraft's bodies, which turn off pathing; headless has no pathing to turn off",
   PauseUnit: "the fixture's units mirror Smashcraft's paused bodies; headless runs no unit AI",
 };
-
 
 function view(this: void): void {
   const { x, y } = CAMERA;
@@ -42,12 +40,10 @@ function colored(this: void, model: string, x: number, y: number, player: number
   return created;
 }
 
-
 function rulerEffect(this: void, name: string): effect {
   const slot = slotNamed(name);
   return colored(RULER, slot.x, slot.y, 0);
 }
-
 
 function rulerUnit(this: void, name: string, blendTime: number): unit {
   const slot = slotNamed(name);
@@ -61,7 +57,6 @@ function rulerUnit(this: void, name: string, blendTime: number): unit {
   return created;
 }
 
-
 function poolClip(this: void, name: string): effect {
   const slot = slotNamed(name);
   const clip = colored(CLIP, slot.x, slot.y, 0);
@@ -73,7 +68,6 @@ function poolClip(this: void, name: string): effect {
   return clip;
 }
 
-
 function showClip(this: void, clip: effect, name: string): void {
   const slot = slotNamed(name);
   BlzSetSpecialEffectPosition(clip, slot.x, slot.y, 0);
@@ -81,7 +75,6 @@ function showClip(this: void, clip: effect, name: string): void {
   BlzSetSpecialEffectScale(clip, 1);
   BlzSetSpecialEffectTime(clip, f32(0.4));
 }
-
 
 function preload(this: void): void {
   for (const model of [RULER, CLIP]) BlzSetSpecialEffectScale(AddSpecialEffect(model, 0, PRELOAD_Y), 0);
@@ -91,17 +84,9 @@ function preload(this: void): void {
   SetUnitScale(body, 0, 0, 0);
 }
 
-
 function unitPositions(this: void, units: readonly (readonly [string, unit])[]): string[] {
   return units.map(([name, body]) => `${name}-at=${Math.floor(GetUnitX(body) * 128)},${Math.floor(GetUnitY(body) * 128)}`);
 }
-
-
-
-
-
-
-
 
 export function animationCases(this: void, done: (this: void, rows: readonly string[]) => void): void {
   FogEnable(false);
@@ -129,7 +114,6 @@ function cases(this: void, done: (this: void, rows: readonly string[]) => void):
   SetUnitAnimation(standHit, "stand hit");
   SetUnitTimeScale(standHit, 0);
 
-
   const loop = rulerEffect("loop-played");
   BlzSetSpecialEffectAnimation(loop, "walk");
   const reference = rulerEffect("loop-reference");
@@ -146,12 +130,10 @@ function cases(this: void, done: (this: void, rows: readonly string[]) => void):
     at(1, () => BlzSetSpecialEffectTime(sought, 1.5));
   }
 
-
   const birthDuring = rulerEffect("birth-during");
   at(0.25, () => BlzSetSpecialEffectTimeScale(birthDuring, 0));
   const birthAfter = rulerEffect("birth-after");
   at(1, () => BlzSetSpecialEffectTimeScale(birthAfter, 0));
-
 
   const blended = rulerUnit("blend-150", f32(0.15));
   const unblended = rulerUnit("blend-0", 0);
@@ -175,7 +157,6 @@ function cases(this: void, done: (this: void, rows: readonly string[]) => void):
     SetUnitTimeScale(switchFrozen, 0);
     SetUnitTimeScale(frozenSelect, 0);
   });
-
 
   const globalFrozen = rulerEffect("global-frozen");
   BlzSetSpecialEffectAnimation(globalFrozen, "stand");
@@ -204,7 +185,6 @@ function cases(this: void, done: (this: void, rows: readonly string[]) => void):
     BlzSetSpecialEffectTime(freezeFirst, 0.25);
   });
 
-
   const shown = poolClip("clip-shown");
   const reseek = poolClip("clip-second-seek");
   at(1, () => {
@@ -212,9 +192,6 @@ function cases(this: void, done: (this: void, rows: readonly string[]) => void):
     showClip(reseek, "clip-second-seek");
   });
   at(f32(1.05), () => BlzSetSpecialEffectTime(reseek, f32(0.4)));
-
-
-
 
   const deathReference = rulerEffect("death-reference");
   BlzSetSpecialEffectAnimation(deathReference, "stand");
@@ -237,7 +214,6 @@ function cases(this: void, done: (this: void, rows: readonly string[]) => void):
     BlzSetSpecialEffectScale(teardown, 0);
     DestroyEffect(teardown);
   });
-
 
   for (const [name, reset, calls] of [["matrix-scale-once", false, 1], ["matrix-scale-twice", false, 2], ["matrix-scale-reset", true, 2]] as const) {
     const scaled = rulerEffect(name);

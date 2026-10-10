@@ -1,19 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
@@ -53,18 +37,12 @@ const displayOf = (run: string | undefined): Record<string, string> => {
 const clients = PAIR_SIDES.map((side) => ({ side, name: clientName(pair, side), port: reportPort(pair, side), windowX: 0, env: side === "b" ? displayOf(runB) : {} }));
 type PoolClient = (typeof clients)[number];
 
-
-
-
-
-
 const until = <E, R>(check: Effect.Effect<boolean, E, R>, limit: `${number} seconds`) =>
   check.pipe(
     Effect.repeat({ schedule: Schedule.spaced("250 millis"), until: (held) => held }),
     Effect.timeoutOption(limit),
     Effect.map(Option.isSome),
   );
-
 
 const launch = (capacity: string, client: PoolClient) => Effect.gen(function*() {
   // A second runtime on a live prefix joins its wineserver and dies: a game left from before must be stopped first.
@@ -78,8 +56,6 @@ const launch = (capacity: string, client: PoolClient) => Effect.gen(function*() 
   mkdirSync(documentsOf(client.name), { recursive: true });
   writeFileSync(join(documentsOf(client.name), "War3Preferences.txt"), preferences(profile, client.windowX));
   const appId = String(3516115600 + pair * 2 + PAIR_SIDES.indexOf(client.side));
-
-
 
   const launched = yield* GameLauncher.use((launcher) => launcher.inPrefix({ root: clientRoot(client.name), exe: exeOf(client.name), args: ["-launch", "-windowmode", "windowed", "-nowfpause"], appId, sessionBus: true }));
   const gameRuntime = client.env["XDG_RUNTIME_DIR"] ?? process.env["XDG_RUNTIME_DIR"] ?? launched.env["XDG_RUNTIME_DIR"] ?? "";
@@ -106,7 +82,6 @@ const launch = (capacity: string, client: PoolClient) => Effect.gen(function*() 
   return game.handle;
 });
 
-
 interface Game {
   readonly id: string;
   readonly log: string;
@@ -128,14 +103,8 @@ const agent = Effect.gen(function*() {
   const table = yield* ProcessTable;
   const gamePid = (name: string) => table.games(prefixOf(name)).pipe(Effect.map((games) => games[0]?.pid), Effect.orElseSucceed(() => undefined));
 
-
   const games: { readonly isRunning: Effect.Effect<boolean, unknown> }[] = [];
   yield* Effect.forEach(clients, (client) => launch(capacity, client).pipe(Effect.map((handle) => { games.push(handle); })), { discard: true });
-
-
-
-
-
 
   const placer = yield* (yield* InputInjection).placer;
   if (Option.isNone(placer)) say("no window placement: game windows keep the size and place the desktop gives them");
@@ -146,8 +115,6 @@ const agent = Effect.gen(function*() {
     }), { discard: true });
     yield* Effect.forkScoped(Effect.repeat(placeWindows, Schedule.spaced("3 seconds")));
   }
-
-
 
   const reports = new Map<string, MenuReports>();
   for (const client of clients) {
@@ -175,7 +142,6 @@ const agent = Effect.gen(function*() {
 
     return Scope.close(ending.scope, Exit.void).pipe(Effect.andThen(Effect.sync(() => say(`ended ${ending.id}`))));
   });
-
 
   const fresh = (mapFile: string, turnMs: number | undefined, computers: number | undefined) => Effect.scoped(Effect.gen(function*() {
     yield* endGame;
@@ -226,12 +192,6 @@ const agent = Effect.gen(function*() {
     if (Option.isSome(playing) && playing.value === "playing") return { log, game: id };
     return yield* new LanFailure({ problem: `the match didn't start: ${JSON.stringify(host.status())}` });
   }));
-
-
-
-
-
-
 
   const solo = (mapFile: string) => Effect.scoped(Effect.gen(function*() {
     yield* endGame;
@@ -305,7 +265,6 @@ const agent = Effect.gen(function*() {
   yield* Effect.addFinalizer(() => endGame);
   writeFileSync(join(directory, "agent.json"), `${JSON.stringify({ pid: process.pid, socket: agentSocket(pair), profile: profile.name, fps: profile.maxFps, runs })}\n`);
   say(`agent on ${agentSocket(pair)}`);
-
 
   const sessionPid = Number(argument("session-pid") ?? "0");
   if (sessionPid <= 0) return yield* Effect.never;

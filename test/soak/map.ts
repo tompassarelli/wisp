@@ -1,7 +1,3 @@
-
-
-
-
 import { configureRuntime } from "../../src/runtime/config";
 import { installDispatch, on, trampoline } from "../../src/platform/dispatch";
 

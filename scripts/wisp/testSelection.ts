@@ -1,16 +1,6 @@
-
-
-
-
-
-
-
-
-
 import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { ImportGraph, isModulePath } from "./importGraph";
-
 
 export interface TestDeclaration {
 
@@ -24,23 +14,11 @@ export interface TestDeclaration {
 
   readonly reads?: Readonly<Record<string, readonly string[]>>;
 
-
-
-
-
   readonly isolated?: readonly (readonly string[])[];
 
   readonly journeys?: readonly string[];
 
-
-
-
-
   readonly perFile?: readonly string[];
-
-
-
-
 
   readonly warm?: Readonly<Record<string, readonly string[]>>;
 
@@ -68,7 +46,6 @@ export interface Selection {
 
   readonly audits?: ReadonlyMap<string, readonly string[]>;
 }
-
 
 const READS_FILES = /\b(?:readFileSync|readFile|readdirSync|readdir|Bun\.file|Bun\.Glob|sys\.readFile|createReadStream)\b/;
 
@@ -98,26 +75,21 @@ export class TestPlan {
     this.rescan();
   }
 
-
   isJourney(path: string): boolean {
     return this.journeys.has(path);
   }
-
 
   group(path: string): string {
     return this.groups.get(path) ?? "shared";
   }
 
-
   all(): readonly TestUnit[] {
     return this.units;
   }
 
-
   alwaysRun(): ReadonlyMap<string, string> {
     return this.everySave;
   }
-
 
   rescan(): void {
     const runners = new Set((this.declaration.registryRunners ?? []).map((path) => resolve(this.root, path)));
@@ -133,7 +105,6 @@ export class TestPlan {
     this.preloads = new Set(preload.flatMap((path) => [...this.graph.dependencies(path)]));
     this.classify();
   }
-
 
   select(changes: Changes): Selection {
     const created = changes.created[0];
@@ -163,7 +134,6 @@ export class TestPlan {
     }
     return { units: this.units.filter((unit) => selected.has(unit.path)), audits };
   }
-
 
   everything(reason: string): Selection {
     this.rescan();
@@ -195,7 +165,6 @@ export class TestPlan {
   }
 }
 
-
 export interface TestProcess {
   readonly kind: TestUnit["kind"];
   readonly units: readonly TestUnit[];
@@ -210,7 +179,6 @@ interface Packing {
   work: number;
 }
 
-
 function packSide(units: readonly TestUnit[], expected: (unit: TestUnit) => number, key: (unit: TestUnit) => string, count: number): Packing[] {
   const processes: Packing[] = [];
   for (const unit of [...units].sort((left, right) => expected(right) - expected(left))) {
@@ -224,13 +192,6 @@ function packSide(units: readonly TestUnit[], expected: (unit: TestUnit) => numb
   }
   return processes;
 }
-
-
-
-
-
-
-
 
 export function packTests(units: readonly TestUnit[], expected: (unit: TestUnit) => number, group: (path: string) => string, count: number): TestProcess[] {
   const registry = units.filter((unit) => unit.kind === "registry");

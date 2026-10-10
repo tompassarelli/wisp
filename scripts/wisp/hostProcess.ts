@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import { Duration, Effect, Exit, Fiber, FileSystem, Option, Schedule, Scope, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
@@ -11,12 +5,6 @@ export interface LogFiles {
   readonly stdout: string;
   readonly stderr: string;
 }
-
-
-
-
-
-
 
 export const spawnLogged = (command: ChildProcess.Command, files: LogFiles) => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
@@ -30,17 +18,11 @@ export const spawnLogged = (command: ChildProcess.Command, files: LogFiles) => E
   return { handle, written };
 });
 
-
 export interface Collected {
   readonly exitCode: number;
   readonly stdout: Uint8Array;
   readonly stderr: string;
 }
-
-
-
-
-
 
 export const collect = (command: ChildProcess.Command) => Effect.scoped(Effect.gen(function*() {
   const handle = yield* command;
@@ -58,10 +40,6 @@ export const collect = (command: ChildProcess.Command) => Effect.scoped(Effect.g
   }
   return { exitCode, stdout, stderr } satisfies Collected;
 }));
-
-
-
-
 
 export const pollFor = <A, E, R>(seconds: number, every: Duration.Input, check: Effect.Effect<A | undefined, E, R>): Effect.Effect<A | undefined, E, R> =>
   check.pipe(

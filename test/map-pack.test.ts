@@ -9,7 +9,6 @@ const build = join(import.meta.dir, "../build");
 mkdirSync(build, { recursive: true });
 const work = mkdtempSync(join(build, "map-pack-"));
 
-
 function regression(): string {
   const prefix = process.env.STORMLIB_PREFIX ?? (() => {
     const result = Bun.spawnSync(["nix", "build", "--no-link", "--print-out-paths", "nixpkgs#stormlib"]);
@@ -24,7 +23,6 @@ function regression(): string {
   return binary;
 }
 
-
 function fullArchive(name: string): { readonly archive: string; readonly existing: string } {
   const existing = join(work, `${name}.txt`);
   writeFileSync(existing, "synthetic archive contents");
@@ -34,7 +32,6 @@ function fullArchive(name: string): { readonly archive: string; readonly existin
   expect(result.stdout.toString()).toContain("existing entries preserved");
   return { archive, existing };
 }
-
 
 const clip = () => new Uint8Array(generateMDX(parseMDL(`Version { FormatVersion 800, }
 Model "Clip" { NumGeosets 1, NumBones 2, BlendTime 150, MinimumExtent { 0, 0, 0 }, MaximumExtent { 10, 10, 20 }, BoundsRadius 12, }
@@ -57,7 +54,6 @@ Bone "Hand" { ObjectId 1, Parent 0, GeosetId 0, GeosetAnimId None, Rotation 2 { 
 PivotPoints 2 { { 0, 0, 0 }, { 0, 0, 10 }, }
 `)));
 
-
 function portrait(): Uint8Array {
   const pixels = 16;
   const bytes = new Uint8Array(18 + pixels * 4);
@@ -69,7 +65,6 @@ function portrait(): Uint8Array {
   for (let i = 0; i < pixels; i++) bytes.set([0, 3, 255, i * 17], 18 + i * 4);
   return bytes;
 }
-
 
 function blp(): Uint8Array {
   const bytes = new Uint8Array(156 + 1024 + 32);

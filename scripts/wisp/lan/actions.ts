@@ -1,9 +1,4 @@
-
-
-
 // Action layouts follow W3Champions' Flo (MPL-2.0, github.com/BogdanW3/W3C-Flo crates/w3gs/src/actions.rs) and wc3-slop-lan; BlzSendSyncData is 0x77.
-
-
 
 import { Reader } from "./w3gs";
 
@@ -51,7 +46,6 @@ function objects(reader: Reader, count: number): string {
 function cache(reader: Reader): string {
   return `${quote(reader.cstring())}/${quote(reader.cstring())}/${quote(reader.cstring())}`;
 }
-
 
 function decodeOne(reader: Reader): DecodedAction | undefined {
   const start = reader.offset;
@@ -112,11 +106,9 @@ function decodeOne(reader: Reader): DecodedAction | undefined {
   }
 }
 
-
 export function decodeActions(block: Uint8Array): DecodedAction[] {
   return decodeActionRecords(block).map(({ offset, raw, ...action }) => action);
 }
-
 
 export function decodeActionRecords(block: Uint8Array): ActionRecord[] {
   const reader = new Reader(block);

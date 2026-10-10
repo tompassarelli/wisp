@@ -1,6 +1,3 @@
-
-
-
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,7 +18,6 @@ interface Received {
   readonly message: string;
   readonly payload: Record<string, unknown>;
 }
-
 
 function fakeGame(hosting: "immediate" | "old-setup" | "refused" = "immediate", unreadListings = 0) {
   const received: Received[] = [];

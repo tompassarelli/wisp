@@ -1,26 +1,12 @@
-
-
-
-
-
-
-
-
-
-
-
 import { join } from "node:path";
 
-
 export const war3LogPath = (documents: string) => join(documents, "Logs", "War3Log.txt");
-
 
 const LINE = /^(\d{1,2})\/(\d{1,2}) (\d{2}):(\d{2}):(\d{2})\.(\d{3})\s+(.*)$/;
 const SESSION_START = "GameMain Started";
 const LOGIN = "[CLoginCallbacks] LoginDoorClose called";
 const LADDER = /^Opening (?:map|mod) - .*[\\/]Maps[\\/]Download[\\/]Season\d+[\\/]/;
 const IMPORT_FAILED = /^model creation failed - (.+)$/;
-
 
 const DAY_MS = 86_400_000;
 
@@ -29,7 +15,6 @@ export interface LogLine {
   readonly at: number;
   readonly text: string;
 }
-
 
 export function logLines(log: string): LogLine[] {
   return log.split(/\r?\n/).flatMap((raw) => {
@@ -41,13 +26,11 @@ export function logLines(log: string): LogLine[] {
   });
 }
 
-
 export function sessionLines(log: string): LogLine[] {
   const lines = logLines(log);
   const start = lines.findLastIndex(({ text }) => text === SESSION_START);
   return start < 0 ? lines : lines.slice(start);
 }
-
 
 export const sessionStart = (log: string): string | undefined => {
   const lines = logLines(log);
@@ -55,27 +38,16 @@ export const sessionStart = (log: string): string | undefined => {
   return start === undefined ? undefined : `${start.at}`;
 };
 
-
 export const SCAN_QUIET_MS = 2000;
 
 export type LadderScan =
 
   | { readonly kind: "signing in" }
 
-
-
-
-
   | { readonly kind: "waiting"; readonly login?: number; readonly sinceLogin?: number }
 
   | { readonly kind: "scanning"; readonly last: number; readonly count: number }
   | { readonly kind: "done"; readonly login?: number; readonly last: number };
-
-
-
-
-
-
 
 export function ladderScan(log: string, authenticated = false): LadderScan {
   const lines = sessionLines(log);
@@ -89,7 +61,6 @@ export function ladderScan(log: string, authenticated = false): LadderScan {
   if (after.some(({ at, text }) => at - last.at >= SCAN_QUIET_MS && !LADDER.test(text))) return { kind: "done", ...signedIn, last: last.at };
   return { kind: "scanning", last: last.at, count: ladder.length };
 }
-
 
 export function modelFailurePaths(log: string): string[] {
   return logLines(log).flatMap(({ text }) => {
@@ -110,7 +81,6 @@ export function importFailures(log: string): { readonly count: number; readonly 
   return first === undefined ? { count } : { count, first };
 }
 
-
 export function logTime(at: number, now: number): number {
   const days = Math.floor(at / DAY_MS);
   const within = at - days * DAY_MS;
@@ -122,7 +92,6 @@ export function logTime(at: number, now: number): number {
 
 const SESSION_END = "GameMain Ended";
 
-
 export function sessionMarks(log: string): { readonly start?: LogLine; readonly login?: LogLine; readonly ended?: LogLine } {
   const lines = sessionLines(log);
   const start = lines.find(({ text }) => text === SESSION_START);
@@ -130,7 +99,6 @@ export function sessionMarks(log: string): { readonly start?: LogLine; readonly 
   const ended = lines.findLast(({ text }) => text === SESSION_END);
   return { ...(start === undefined ? {} : { start }), ...(login === undefined ? {} : { login }), ...(ended === undefined ? {} : { ended }) };
 }
-
 
 export const sessionText = (log: string) => {
   const start = log.lastIndexOf(SESSION_START);

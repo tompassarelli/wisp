@@ -7,7 +7,6 @@ const point = (layer = 2): TerrainPoint => ({ layer, height: (layer - 2) * 128, 
 
 test("[reference] installed cliff model high corners stay at NW, SW, SE, NE", () => {
 
-
   for (const [corner, shape] of [[2, "BAAA"], [0, "ABAA"], [1, "AABA"], [3, "AAAB"]] as const) {
     expect(cliffShape({ x: 0, y: 0, corners: [point(corner === 0 ? 3 : 2), point(corner === 1 ? 3 : 2), point(corner === 2 ? 3 : 2), point(corner === 3 ? 3 : 2)] })).toBe(shape);
   }

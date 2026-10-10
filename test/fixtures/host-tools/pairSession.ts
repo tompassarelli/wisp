@@ -1,6 +1,3 @@
-
-
-
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { agentSocket, clientName, pairDirectory } from "../../../scripts/wisp/lan/pool";

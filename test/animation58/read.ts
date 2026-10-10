@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import { inflateSync } from "node:zlib";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Console, Effect, Schema } from "effect";
@@ -15,7 +9,6 @@ class ReadFailure extends Schema.TaggedError<ReadFailure>()("ReadFailure", { pro
 }
 
 interface Image { readonly width: number; readonly height: number; readonly rgb: Uint8Array }
-
 
 export function decodePng(bytes: Uint8Array): Image {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -57,7 +50,6 @@ export function decodePng(bytes: Uint8Array): Image {
 
 interface Blob { readonly x: number; readonly y: number; readonly size: number }
 
-
 export function blobs(image: Image, matches: (r: number, g: number, b: number) => boolean): Blob[] {
   const { width, height, rgb } = image;
   const seen = new Uint8Array(width * height);
@@ -88,7 +80,6 @@ export function blobs(image: Image, matches: (r: number, g: number, b: number) =
 export const isRed = (r: number, g: number, b: number) => r >= 150 && g <= 90 && b <= 90 && r - g >= 100;
 export const isYellow = (r: number, g: number, b: number) => r >= 150 && g >= 150 && b <= 110 && Math.abs(r - g) <= 70;
 
-
 type Affine = readonly [number, number, number, number, number, number];
 const apply = (m: Affine, x: number, y: number): [number, number] => [m[0] * x + m[1] * y + m[2], m[3] * x + m[4] * y + m[5]];
 
@@ -105,7 +96,6 @@ function nearest(found: readonly Blob[], x: number, y: number, within: number): 
   }
   return best;
 }
-
 
 function fit(pairs: readonly (readonly [number, number, Blob])[]): Affine {
 
@@ -136,11 +126,6 @@ function fit(pairs: readonly (readonly [number, number, Blob])[]): Affine {
   const [d, e, f] = solve(py);
   return [a ?? 0, b ?? 0, c ?? 0, d ?? 0, e ?? 0, f ?? 0];
 }
-
-
-
-
-
 
 export function calibrate(yellow: readonly Blob[]): { affine: Affine; matched: number } {
   const world = marks();
@@ -185,10 +170,6 @@ export interface Reading {
   readonly offset: readonly [number, number];
 }
 
-
-
-
-
 export function readRulers(image: Image): { readings: (Reading | string)[]; matched: number } {
   const yellow = blobs(image, isYellow);
   const red = blobs(image, isRed);
@@ -231,11 +212,6 @@ export function readRulers(image: Image): { readings: (Reading | string)[]; matc
 
 const parse = (row: string) => (row.split("=")[1] ?? "").split(",").map(Number);
 
-
-
-
-
-
 export function compare(reading: Reading, effectGlobalPhase = 0): { row: string; matches: boolean } {
   const row = `${reading.slot.name}=${Math.round(reading.dx)},${Math.round(reading.dy)},${Math.round(reading.gx)}`;
   const expected = EXPECTED.find((line) => line.startsWith(`${reading.slot.name}=`)) ?? "";
@@ -254,7 +230,6 @@ export function compare(reading: Reading, effectGlobalPhase = 0): { row: string;
 const reading = (readings: readonly (Reading | string)[], name: string) =>
   readings.find((candidate): candidate is Reading => typeof candidate !== "string" && candidate.slot.name === name);
 
-
 function overshoot(readings: readonly (Reading | string)[]): number | undefined {
   const loop = reading(readings, "loop-played"), reference = reading(readings, "loop-reference");
   if (loop === undefined || reference === undefined) return undefined;
@@ -262,19 +237,12 @@ function overshoot(readings: readonly (Reading | string)[]): number | undefined 
   return lost < -501 ? lost + 1002 : lost;
 }
 
-
 const DEATH_MS = 30;
-
 
 function captureMoment(readings: readonly (Reading | string)[]): number | undefined {
   const reference = reading(readings, "death-reference");
   return reference === undefined ? undefined : DEATH_SECONDS + reference.dx * DEATH_MS / 1000 - READY_SECONDS;
 }
-
-
-
-
-
 
 function deathLags(readings: readonly (Reading | string)[]): string[] {
   const reference = reading(readings, "death-reference");
@@ -285,7 +253,6 @@ function deathLags(readings: readonly (Reading | string)[]): string[] {
     return `${name}-lag=${dying === undefined ? "gone" : "unread"}${since === undefined ? "" : `, ${since.toFixed(2)} s after DestroyEffect`}`;
   });
 }
-
 
 function offsets(readings: readonly (Reading | string)[]): string {
   const moved = readings.filter((candidate): candidate is Reading => typeof candidate !== "string" && Math.hypot(...candidate.offset) > 3);

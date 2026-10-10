@@ -1,11 +1,5 @@
-
-
-
-
-
 import { errorFile, errorHeading } from "../runtime/gameFiles";
 import { runtimeConfiguration } from "../runtime/config";
-
 
 const MAX_LINE = 240;
 
@@ -29,7 +23,6 @@ declare global {
   var __wispThrown: unknown;
   var __wispThrowSite: string | undefined;
 }
-
 
 export function stackDepth(): number {
   return globalThis.__wispStack?.depth ?? 0;
@@ -67,7 +60,6 @@ export function traceback(error?: unknown): string {
   }
   return typeof debug === "object" ? debug.traceback(undefined, 3) : "";
 }
-
 
 function throwSite(error: unknown, stack: string): string | undefined {
   return stack === "" && error === globalThis.__wispThrown ? globalThis.__wispThrowSite : undefined;

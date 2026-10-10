@@ -1,17 +1,10 @@
-
-
-
-
-
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Effect } from "effect";
 import { PlayProblem } from "./play";
 
-
 export const startLockPath = () => join(process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local/state"), "wisp/online/client-start.lock");
-
 
 export const START_LOCK_SECONDS = 300;
 
@@ -32,10 +25,6 @@ const holderOf = (path: string) => {
     return "unknown";
   }
 };
-
-
-
-
 
 export const acquireStartLock = ({ path, holder, seconds = START_LOCK_SECONDS, noteEvery = 10, print }: StartLockOptions) => Effect.gen(function*() {
   yield* Effect.try({ try: () => mkdirSync(dirname(path), { recursive: true }), catch: (cause) => new PlayProblem({ problem: `create ${dirname(path)}: ${String(cause)}` }) });

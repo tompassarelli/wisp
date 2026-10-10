@@ -1,10 +1,3 @@
-
-
-
-
-
-
-
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Clock, Context, Duration, Effect, Schedule, Schema } from "effect";
@@ -14,7 +7,6 @@ import { preloadLines } from "./boundary";
 import { describeCause } from "./command";
 import { encodePpm, type Frame } from "./frameProbe";
 
-
 export type Step =
 
   | { readonly chat: string; readonly client?: string }
@@ -23,28 +15,18 @@ export type Step =
 
   | { readonly receipt: string; readonly client?: string; readonly seconds?: number };
 
-
 export type Capture =
 
   | { readonly kind: "frames"; readonly name: string; readonly client?: string; readonly region?: Region; readonly count?: number; readonly everyMs?: number }
-
-
-
 
   | { readonly kind: "reading"; readonly name: string; readonly client?: string; readonly region?: Region; readonly ink?: Ink; readonly pattern?: string }
 
   | { readonly kind: "measure"; readonly name: string; readonly client?: string; readonly region?: Region; readonly measure: string };
 
-
 interface Count {
   readonly min?: number;
   readonly max?: number;
 }
-
-
-
-
-
 
 export type Rule = (
 
@@ -87,14 +69,12 @@ export class AcceptFailure extends Schema.TaggedError<AcceptFailure>()("AcceptFa
   }
 }
 
-
 export interface ReceiptFile {
   readonly name: string;
   readonly text: string;
 
   readonly modified: number;
 }
-
 
 export class AcceptDriver extends Context.Service<AcceptDriver, {
 
@@ -115,8 +95,6 @@ export class AcceptDriver extends Context.Service<AcceptDriver, {
   readonly state: (client: string) => Effect.Effect<string, AcceptFailure>;
 }>()("wisp/AcceptDriver") {}
 
-
-
 export interface PlannedSession {
   readonly map: string;
   readonly session: string;
@@ -124,7 +102,6 @@ export interface PlannedSession {
 }
 
 const DEFAULT_SESSION = "shared";
-
 
 export function selectChecks(suite: AcceptSuite, only: readonly string[]): { readonly checks: readonly NativeCheck[]; readonly unknown: readonly string[] } {
   if (only.length === 0) return { checks: suite.checks, unknown: [] };
@@ -134,11 +111,6 @@ export function selectChecks(suite: AcceptSuite, only: readonly string[]): { rea
     unknown: only.filter((pattern) => !suite.checks.some(({ id }) => matches(pattern, id))),
   };
 }
-
-
-
-
-
 
 export function planSessions(checks: readonly NativeCheck[]): PlannedSession[] {
   const maps = new Map<string, Map<string, NativeCheck[]>>();
@@ -150,7 +122,6 @@ export function planSessions(checks: readonly NativeCheck[]): PlannedSession[] {
   }
   return [...maps].flatMap(([map, sessions]) => [...sessions].map(([session, grouped]) => ({ map, session, checks: grouped })));
 }
-
 
 export function suiteProblems(suite: AcceptSuite, clients?: readonly string[]): string[] {
   const problems: string[] = [];
@@ -216,7 +187,6 @@ export function describeRule(rule: Rule): string {
   return `reading ${rule.name} ${bounds}${look}`;
 }
 
-
 export function describePlan(suite: AcceptSuite, sessions: readonly PlannedSession[], host: string): string[] {
   const total = sessions.reduce((sum, { checks }) => sum + checks.length, 0);
   const lines = [`${total} check${total === 1 ? "" : "s"} in ${sessions.length} session${sessions.length === 1 ? "" : "s"}`];
@@ -232,8 +202,6 @@ export function describePlan(suite: AcceptSuite, sessions: readonly PlannedSessi
   });
   return lines;
 }
-
-
 
 export type Verdict = "pass" | "fail" | "needs-look";
 
@@ -268,7 +236,6 @@ export interface AcceptReport {
 const DEFAULT_RECEIPT_SECONDS = 10;
 const RECEIPT_POLL = Duration.millis(100);
 
-
 interface Mark {
   readonly receipts: ReadonlyMap<string, number>;
   readonly logSession: string | undefined;
@@ -285,7 +252,6 @@ interface Observed {
 
 const fileFailure = (operation: string) => (cause: unknown) => new AcceptFailure({ operation, problem: describeCause(cause) });
 
-
 export const privateDirectory = (path: string) => Effect.try({
   try: () => {
     mkdirSync(path, { recursive: true, mode: 0o700 });
@@ -296,7 +262,6 @@ export const privateDirectory = (path: string) => Effect.try({
 });
 
 const save = (path: string, contents: string | Uint8Array) => Effect.try({ try: () => writeFileSync(path, contents, { mode: 0o600 }), catch: fileFailure(`write ${path}`) });
-
 
 export function cropFrame(frame: Frame, region: Region | undefined): Frame {
   if (region === undefined) return frame;
@@ -312,13 +277,11 @@ export function cropFrame(frame: Frame, region: Region | undefined): Frame {
   return { width, height, rgb };
 }
 
-
 export const receiptLines = (text: string) => preloadLines(text) ?? text.split(/\r?\n/).filter((line) => line.trim() !== "");
 
 const fileName = (value: string) => value.replace(/[^A-Za-z0-9._-]+/g, "_");
 
 const countHolds = (count: number, { min, max }: Count) => count >= (min ?? (max === undefined ? 1 : 0)) && (max === undefined || count <= max);
-
 
 export const runAccept = (suite: AcceptSuite, sessions: readonly PlannedSession[], directory: string, print: (line: string) => Effect.Effect<void> = () => Effect.void) =>
   Effect.gen(function*() {
@@ -334,7 +297,6 @@ export const runAccept = (suite: AcceptSuite, sessions: readonly PlannedSession[
       return { receipts, logSession: sessionStart(log), logLines: logLines(log).length } satisfies Mark;
     });
     const marks = (clients: readonly string[]) => Effect.forEach(clients, (client) => Effect.map(mark(client), (value) => [client, value] as const)).pipe(Effect.map((entries) => new Map(entries)));
-
 
     const newReceipts = (client: string, since: Mark) => Effect.map(driver.receipts(client), (files) =>
       files.filter(({ name, modified }) => modified > (since.receipts.get(name) ?? -Infinity)).flatMap(({ text }) => receiptLines(text)));
@@ -488,15 +450,7 @@ export function summaryLine(results: readonly CheckResult[]): string {
   return `${results.length} checks: ${count("pass")} pass, ${count("fail")} fail, ${count("needs-look")} needs-look`;
 }
 
-
-
-
 const sessionWeight = (session: PlannedSession) => 4 + session.checks.length;
-
-
-
-
-
 
 export function shardSessions(sessions: readonly PlannedSession[], count: number): PlannedSession[][] {
   const shards = Array.from({ length: Math.max(1, count) }, () => ({ weight: 0, indexes: [] as number[] }));
@@ -508,10 +462,6 @@ export function shardSessions(sessions: readonly PlannedSession[], count: number
   }
   return shards.filter(({ indexes }) => indexes.length > 0).map(({ indexes }) => indexes.sort((left, right) => left - right).map((index) => sessions[index]!));
 }
-
-
-
-
 
 export function mergeReports(directory: string, checks: readonly NativeCheck[], reports: readonly AcceptReport[], started: number, finished: number, missing: (check: NativeCheck) => CheckResult): AcceptReport {
   const byId = new Map(reports.flatMap(({ results }) => results.map((result) => [result.id, result] as const)));

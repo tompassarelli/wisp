@@ -1,7 +1,3 @@
-
-
-
-
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
@@ -21,7 +17,6 @@ import { reportedMenus } from "../../wisp/menus";
 import { acquireStartLock, startLockPath } from "../../wisp/startLock";
 import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow } from "../../wisp/play";
 
-
 export interface PlayTools {
   readonly grim: string;
   readonly xdotool: string;
@@ -36,7 +31,6 @@ export interface PlayTools {
 
 export const PLAY_TOOLS: PlayTools = { grim: "grim", xdotool: "xdotool", tesseract: "tesseract", niri: "niri", steam: "steam", nsenter: "nsenter" };
 
-
 export function hostNsenter(command: string): string {
   const path = Bun.which(command);
   if (path === null) throw new Error(`couldn't find ${command} on the host PATH`);
@@ -44,7 +38,6 @@ export function hostNsenter(command: string): string {
 }
 
 const problem = (what: string) => (cause: unknown) => new PlayProblem({ problem: `${what}: ${describeCause(cause)}` });
-
 
 const startDetached = (command: readonly string[], log?: string) => Effect.tryPromise({
   try: () => new Promise<number>((resolve, reject) => {
@@ -70,16 +63,6 @@ const startDetached = (command: readonly string[], log?: string) => Effect.tryPr
   catch: problem(`couldn't start ${basename(command[0] ?? "")}`),
 });
 
-
-
-
-
-
-
-
-
-
-
 export interface LaunchRequest {
   readonly bun: string;
   readonly capacity: string;
@@ -93,7 +76,6 @@ export interface LaunchRequest {
 
 const HOST_KEYS = ["PATH", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"] as const;
 
-
 export const launchCommand = (request: LaunchRequest) => {
   const { launcher } = request;
   const restore = HOST_KEYS.flatMap((key) => (launcher.env[key] === undefined ? ["-u", key] : [`${key}=${launcher.env[key]}`]));
@@ -106,13 +88,11 @@ export const launchCommand = (request: LaunchRequest) => {
   };
 };
 
-
 export const capacityDeferral = (stderr: string) => /"decision":"DEFER","reason":"([A-Z_]+)"/.exec(stderr)?.[1];
 
 class LaunchDeferred extends Schema.TaggedError<LaunchDeferred>()("LaunchDeferred", { reason: Schema.String }) {}
 
 const LAUNCH_WAIT_SECONDS = 1800;
-
 
 const launchInContainer = (run: Runner, tools: PlayTools, launcher: { readonly pid: number }, client: string) => Effect.gen(function*() {
   const failed = problem("couldn't ask Battle.net to launch Warcraft III");
@@ -221,14 +201,12 @@ const machine = (run: Runner, tools: PlayTools): PlayMachine["Service"] => ({
   }),
 });
 
-
 type Runner = (command: ChildProcess.Command) => Effect.Effect<Collected, PlatformError.PlatformError>;
 
 const runner = Effect.gen(function*() {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   return ((command) => collect(command).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner))) satisfies Runner;
 });
-
 
 const tool = (run: Runner, command: readonly string[], env: Record<string, string>, stdin?: Uint8Array, allowExit: readonly number[] = []) => {
   const failed = problem(`${basename(command[0] ?? "")} ${command.slice(1, 3).join(" ")} failed`);
@@ -253,7 +231,6 @@ const NiriOutput = Schema.Struct({
   name: Schema.String,
   logical: Schema.NullOr(Schema.Struct({ x: Schema.Int, y: Schema.Int, width: Schema.Int, height: Schema.Int })),
 });
-
 
 const niri = <S extends Schema.Top & { readonly DecodingServices: never }>(run: Runner, tools: PlayTools, what: string, schema: S) =>
   tool(run, [tools.niri, "msg", "--json", what], {}).pipe(
@@ -311,7 +288,6 @@ const desktop = (run: Runner, tools: PlayTools, display: string): PlayDesktop["S
   };
 };
 
-
 export const linuxPlayHostLayer = (display: string, tools: Partial<PlayTools> = {}) => {
   const resolved = { ...PLAY_TOOLS, ...tools };
   return Layer.mergeAll(
@@ -319,7 +295,6 @@ export const linuxPlayHostLayer = (display: string, tools: Partial<PlayTools> = 
     Layer.effect(PlayDesktop, Effect.map(runner, (run) => PlayDesktop.of(desktop(run, resolved, display)))),
   ).pipe(Layer.provide(BunServices.layer));
 };
-
 
 export const linuxPlayMachineLayer = (tools: Partial<PlayTools> = {}) =>
   Layer.effect(PlayMachine, Effect.map(runner, (run) => PlayMachine.of(machine(run, { ...PLAY_TOOLS, ...tools })))).pipe(Layer.provide(BunServices.layer));

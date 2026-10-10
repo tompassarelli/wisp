@@ -1,8 +1,3 @@
-
-
-
-
-
 export interface NativeDeclarations {
 
   readonly functions: readonly (readonly [name: string, returns: string, parameters: number])[];
@@ -10,7 +5,6 @@ export interface NativeDeclarations {
 
   readonly variables: readonly (readonly [name: string, type: string])[];
 }
-
 
 function declaredName(line: string, keyword: string): string | undefined {
   const start = keyword.length;
@@ -23,7 +17,6 @@ function declaredName(line: string, keyword: string): string | undefined {
   return end > start ? line.slice(start, end) : undefined;
 }
 
-
 function declaredType(line: string): string | undefined {
   if (!line.endsWith(";")) return undefined;
   for (let colon = line.length - 2; colon > 0; colon--) {
@@ -31,7 +24,6 @@ function declaredType(line: string): string | undefined {
   }
   return undefined;
 }
-
 
 function declaredParameters(line: string, from: number): number {
   let depth = 0;

@@ -1,4 +1,3 @@
-
 import { readFileSync } from "node:fs"; // rejected
 
 export const file = Bun.file("x"); // rejected

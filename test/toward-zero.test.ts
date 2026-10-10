@@ -1,14 +1,8 @@
-
-
-
-
-
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
 import { lua32, luaRounding } from "../scripts/wisp/lua32";
 
 const lua = process.env.TOWARD_ZERO_LUA ?? await Effect.runPromise(lua32("toward-zero"));
-
 
 interface Exact {
   readonly sign: 1n | -1n;
@@ -25,7 +19,6 @@ function exact(value: number): Exact {
 }
 
 const MAXIMUM = 16777215 * 2 ** 104;
-
 
 function towardZero(negative: boolean, magnitude: bigint, exponent: number): number {
   if (magnitude === 0n) return 0;
@@ -69,7 +62,6 @@ function quotient(a: number, b: number): number {
   return result === 0 && negative ? -0 : result;
 }
 
-
 function hex(value: number): string {
   const { sign, significand, exponent } = exact(value);
   return `${sign < 0n ? "-" : ""}0x${significand.toString(16)}p${exponent}`;
@@ -85,7 +77,6 @@ function parseHex(text: string): number {
   const value = Number(BigInt(`0x${whole}${fraction}`)) * 2 ** (Number(exponent) - 4 * fraction.length);
   return sign === "-" ? -value : value;
 }
-
 
 function operands(): [number, number][] {
   let state = 0x2545f491;

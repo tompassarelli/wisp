@@ -1,9 +1,4 @@
-
-
-
-
 import { longBrackets } from "./lua";
-
 
 export interface MapDeclaration {
   readonly author: string;
@@ -193,11 +188,6 @@ export function encodeMapInfo(info: MapInfo): Uint8Array {
   ]);
 }
 
-
-
-
-
-
 export function declareMap(base: MapInfo, name: string, map: MapDeclaration): MapInfo {
   return {
     ...base,
@@ -228,7 +218,6 @@ export function declareMap(base: MapInfo, name: string, map: MapDeclaration): Ma
   };
 }
 
-
 export function mapHeader(info: MapInfo): Uint8Array {
   const header = new Uint8Array(512);
   const fields = concat([new TextEncoder().encode("HM3W"), int32Bytes(0), stringBytes(info.name), int32Bytes(info.flags), int32Bytes(info.players.length)]);
@@ -246,11 +235,6 @@ function luaString(text: string): string {
 function luaReal(value: number): string {
   return Number.isInteger(value) ? value.toFixed(1) : String(value);
 }
-
-
-
-
-
 
 export function mapConfig(info: MapInfo): string {
   if (info.players.some((player) => player.controller !== USER || player.race !== HUMAN)) {

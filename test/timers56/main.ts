@@ -1,9 +1,5 @@
-
-
-
 import { configureRuntime } from "../../src/runtime/config";
 import { writeLines } from "../../src/platform/fileio";
-
 
 export const TIMER_RULES_SECONDS = 1.25;
 
@@ -11,13 +7,11 @@ export function install(this: void): void {
   configureRuntime({ filePrefix: "timers56", readyPrefix: "TM56_HRR", globalPrefix: "__timers56" });
 }
 
-
 export function timerRules(this: void, done: (this: void, lines: readonly string[]) => void): void {
   const lines: string[] = [];
   const ms = (clock: timer) => R2I(TimerGetElapsed(clock) * 1000.0);
   const reference = CreateTimer();
   TimerStart(reference, 3600.0, false, () => {});
-
 
   TimerStart(CreateTimer(), 0.0, false, () => lines.push(`zero-one-shot-reads-ms=${ms(reference)}`));
 
@@ -27,12 +21,8 @@ export function timerRules(this: void, done: (this: void, lines: readonly string
   TimerStart(second, 0.5, false, () => lines.push("same-deadline=second-started-first"));
   TimerStart(first, 0.5, false, () => lines.push("same-deadline=first-created-first"));
 
-
   TimerStart(CreateTimer(), 0.5078125, false, () => lines.push("in-frame-order=later-deadline-first"));
   TimerStart(CreateTimer(), 0.50390625, false, () => lines.push("in-frame-order=earlier-deadline-first"));
-
-
-
 
   let ticks = 0;
   let fast = 0;
@@ -60,17 +50,12 @@ export function timerRules(this: void, done: (this: void, lines: readonly string
     zero++;
   });
 
-
-
   const periodic = CreateTimer();
   const expired = CreateTimer();
   const paused = CreateTimer();
   TimerStart(periodic, 0.5, true, () => {});
   TimerStart(expired, 0.5, false, () => {});
   TimerStart(paused, 10.0, false, () => lines.push("unexpected-paused-callback"));
-
-
-
 
   const deferred = CreateTimer();
   let fastAtStart = 0;

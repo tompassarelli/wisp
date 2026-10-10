@@ -14,7 +14,6 @@ export const UNIT_MOTION_NOOPS = {
   PauseUnit: "the fixture's bodies mirror Smashcraft's paused bodies; headless runs no unit AI",
 };
 
-
 const FACINGS: readonly (readonly [string, number])[] = [
   ["0", 0], ["0.1", f32(0.1)], ["1/3", f32(1 / 3)], ["0.5", 0.5], ["1", 1], ["30", 30], ["45", 45], ["57.29578", f32(57.29578)],
   ["60", 60], ["90", 90], ["100.25", 100.25], ["135", 135], ["179.9", f32(179.9)], ["180", 180], ["180.1", f32(180.1)],
@@ -36,7 +35,6 @@ const DASH_STEP = 20;
 const DASH_START = -300;
 
 const DASH_TRAIL_TICKS = 3;
-
 
 function body(): unit {
   const created = CreateUnit(Player(2), UNIT_TYPE, 0, 0, 180);
@@ -73,13 +71,6 @@ export function exact(value: number): string {
   return `${value < 0 ? "-" : ""}${mantissa}p${exponent}`;
 }
 
-
-
-
-
-
-
-
 function dash(this: void, samples: string[], done: (this: void, behind: number) => void): void {
   const u = body();
   SetUnitX(u, DASH_START);
@@ -109,8 +100,6 @@ function dash(this: void, samples: string[], done: (this: void, behind: number) 
 }
 
 // Native observations are scaled by 128; exact rows preserve binary values and held rows read after 0.25 s.
-
-
 
 export function unitMotionCases(this: void, done: (this: void, rows: readonly string[], dashSamples: readonly string[]) => void): void {
   const rows: string[] = [];

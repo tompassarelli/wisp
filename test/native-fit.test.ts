@@ -1,9 +1,6 @@
-
-
 import { expect, test } from "bun:test";
 import { type FrameWork, WARCRAFT_COST } from "../src/headless/nativeCost";
 import { checkNative, fitNativeCost, overlayWindows, predictedOverlay } from "../scripts/wisp/nativeFit";
-
 
 const frames: FrameWork[] = Array.from({ length: 1800 }, (_, frame) => ({
   instructions: 150_000 + (frame % 7 === 0 ? 400_000 : 0) + (frame % 13) * 5_000,

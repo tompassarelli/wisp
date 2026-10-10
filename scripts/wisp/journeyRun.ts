@@ -1,8 +1,3 @@
-
-
-
-
-
 import { type HeadlessProject, type HeadlessReport, installHeadless, loadMapEntry, playHeadless, readNativeDeclarations } from "./headless";
 import { printResult } from "./devResult";
 

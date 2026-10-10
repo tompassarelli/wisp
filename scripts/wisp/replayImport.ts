@@ -24,8 +24,6 @@ export interface NativeReplay {
   readonly records: readonly { readonly offset: number; readonly id: number; readonly raw: string }[];
 }
 
-
-
 interface RawGameParser {
   parser: { offset: number; buffer: Buffer };
   actionParser: { parse: (bytes: Buffer, post202?: boolean) => Action[] };
@@ -66,7 +64,6 @@ export async function importNativeReplay(bytes: Buffer): Promise<NativeReplay> {
   const info = await parser.parse(bytes);
   return { format: "wisp-w3g-actions-1", engine: info.subheader, players: info.metadata.playerRecords, slots: info.metadata.slotRecords, map: info.metadata.map, turns: turn + 1, timeMs, commands, records };
 }
-
 
 export function compareReplayHost(replay: NativeReplay, hostText: string) {
   const host = parseActionLog(hostText).actions;

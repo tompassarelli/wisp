@@ -1,15 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
 import { join } from "node:path";
 import { Context, Effect, Layer, Schedule, Schema } from "effect";
 import { type Manifest, NO_BASE, ackFile, formatManifest, hotFolder, manifestFile, payloadKey } from "../../src/runtime/gameFiles";
@@ -25,7 +13,6 @@ const ACK_TIMEOUT_MS = 10_000;
 
 const PUBLISH_CONCURRENCY = 2;
 
-
 export class NotAcknowledged extends Schema.TaggedError<NotAcknowledged>()("NotAcknowledged", {
   version: Schema.Finite,
   directories: Schema.Array(Schema.String),
@@ -39,7 +26,6 @@ export class NotAcknowledged extends Schema.TaggedError<NotAcknowledged>()("NotA
 }
 
 export type HotReloadFailure = CompileFailure | MapBuildFailure | SourceMapFailure | GameFileFailure | NotAcknowledged;
-
 
 const versionKeys = ({ state, base }: Manifest) => (base === NO_BASE ? [payloadKey(state)] : [payloadKey(state), `${payloadKey(state)}-${payloadKey(base)}`]);
 
@@ -103,7 +89,6 @@ export class HotReload extends Context.Service<HotReload, {
         yield* Effect.forEach(stale, (name) => files.remove(join(folder(directory), name)), { discard: true });
       }));
     });
-
 
     const acknowledgements = (current: number) => {
       const pending = new Set(directories);

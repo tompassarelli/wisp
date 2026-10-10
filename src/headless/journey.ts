@@ -1,8 +1,5 @@
-
-
 import type { Lockstep } from "./lockstep";
 import type { MissingNative } from "./client";
-
 
 export type JourneyEvent =
   | { readonly frame: number; readonly player: number; readonly chat: string }
@@ -48,7 +45,6 @@ export interface JourneyOptions {
 
   readonly observationClock?: (this: void, clients: Lockstep) => number | undefined;
 }
-
 
 export function runJourney(clients: Lockstep, journey: Journey, options: JourneyOptions = {}): JourneyResult {
   const clock = options.observationClock;
@@ -103,13 +99,11 @@ export function runJourney(clients: Lockstep, journey: Journey, options: Journey
   return { frames: clients.frame, clients: results, divergence: clients.firstDivergence(), reloaded: clients.version, reloads: clients.unappliedReloads() };
 }
 
-
 export function journeyProblems(result: JourneyResult): number {
   let problems = (result.divergence === undefined ? 0 : 1) + result.reloads.length;
   for (const client of result.clients) problems += client.errors.length + client.missingNatives.length;
   return problems;
 }
-
 
 export function journeyLines(result: JourneyResult): string[] {
   const lines: string[] = [];

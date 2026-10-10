@@ -1,11 +1,5 @@
 import { f32 } from "../../src/sim/f32";
 
-
-
-
-
-
-
 const list = (values: readonly string[]) => values.join(",");
 const scaled = (value: number) => `${Math.floor(value * 128)}`;
 
@@ -24,7 +18,6 @@ function slotState(player: player): string {
   if (state === PLAYER_SLOT_STATE_LEFT) return "left";
   return "other";
 }
-
 
 export function immediateCases(this: void): string[] {
   const rows: string[] = [];
@@ -58,15 +51,10 @@ export function immediateCases(this: void): string[] {
   return rows;
 }
 
-
 export const SYNC_LENGTHS = [200, 251, 252, 300];
 const SYNC_PREFIX = "sr50";
 const SYNC_LONG_PREFIX = "sr5L";
 const SYNC_DESTROY_PREFIX = "sr5D";
-
-
-
-
 
 export function syncCases(this: void, done: (this: void, rows: readonly string[]) => void): void {
   const received: string[][] = [[], []];

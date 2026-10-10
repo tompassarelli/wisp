@@ -30,7 +30,6 @@ export class RenderAssetFailure extends Schema.TaggedError<RenderAssetFailure>()
   override get message(): string { return `render asset: ${String(this.cause)}`; }
 }
 
-
 export const resolveRenderAsset = (readers: RenderAssetReaders, requested: string, graphics: Graphics = "classic", body?: AssetLocation) => Effect.gen(function*() {
   const path = requested.replaceAll("\\", "/").replace(/\.mdl$/i, ".mdx");
   if (path.startsWith("/") || path.split("/").some((part) => part === "..") || path.includes(":")) {

@@ -7,7 +7,6 @@ const table = (sequences: readonly RulerSequence[]): AnimationSequence[] =>
 const RULER_TABLE = table(RULER_SEQUENCES);
 const CLIP_TABLE = table(CLIP_SEQUENCES);
 
-
 function needle(sequences: readonly RulerSequence[], sample: SequenceSample): [number, number] {
   const sequence = sequences[sample.sequence];
   if (sequence === undefined) return [0, 0];
@@ -19,13 +18,6 @@ const saved = (pose: EffectPose | UnitPose): SavedAnimation => ({
 });
 
 const round = (value: number) => Math.floor(value + 0.5);
-
-
-
-
-
-
-
 
 function row(name: string, pose: EffectPose | UnitPose, kind: "effect" | "unit", clip: boolean, scale: readonly [number, number]): string {
   const sequences = clip ? CLIP_SEQUENCES : RULER_SEQUENCES;
@@ -41,7 +33,6 @@ function row(name: string, pose: EffectPose | UnitPose, kind: "effect" | "unit",
   const gx = CLOCK_DX + globalSequenceFrame(pose.animationClock, GLOBAL_LENGTH) / 2;
   return `${name}=${round(dx * scale[0])},${round((dy - ORIGIN_DY) * scale[1] + ORIGIN_DY)},${round(gx * scale[0] - CLOCK_DX)}`;
 }
-
 
 export function animationRows(effects: readonly EffectPose[], units: readonly UnitPose[]): string[] {
   const rows: string[] = [];

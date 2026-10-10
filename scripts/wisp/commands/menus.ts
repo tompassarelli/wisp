@@ -1,18 +1,8 @@
-
-
-
-
-
-
-
-
-
 import { Console, Effect } from "effect";
 import { type Command, UsageFailure, flagValues } from "../command";
 import { DEFAULT_MENU_REPORT_PORT, type MenuSocket, connectMenus, hostLobby, installMenuPage, joinLobby, leaveLobby, listenForMenus, removeMenuPage, startLobby } from "../menus";
 import { step } from "../timings";
 import { waitForProcessStop } from "./hot";
-
 
 const ANNOUNCE_SECONDS = 5;
 
@@ -24,7 +14,6 @@ const reportPort = (args: readonly string[]) => Effect.gen(function*() {
   if (!Number.isInteger(port) || port < 1 || port > 65535) return yield* new UsageFailure({ problem: `--port takes a port number, not ${text}` });
   return port;
 });
-
 
 const withMenus = <A, E>(args: readonly string[], use: (menus: MenuSocket) => Effect.Effect<A, E>) => Effect.scoped(Effect.gen(function*() {
   const reports = yield* listenForMenus(yield* reportPort(args));

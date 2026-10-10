@@ -3,7 +3,6 @@ import type { TerrainDoodad } from "./doodads";
 import type { DrawnPose } from "./headlessRender";
 import { CELL, type Terrain } from "./terrain";
 
-
 export function doodadSkinRows(bytes: Uint8Array): ReadonlyMap<string, Readonly<Record<string, string>>> {
   const rows = new Map<string, Record<string, string>>();
   let row: Record<string, string> | undefined;
@@ -15,7 +14,6 @@ export function doodadSkinRows(bytes: Uint8Array): ReadonlyMap<string, Readonly<
   }
   return rows;
 }
-
 
 export function terrainDoodadPoses(placements: readonly TerrainDoodad[], terrain: Terrain, rows: ReadonlyMap<string, Readonly<Record<string, string>>>, frame: number,
   models: Readonly<Record<string, string | readonly string[]>> = {}): DrawnPose[] {

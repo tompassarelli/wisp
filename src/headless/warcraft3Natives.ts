@@ -1,4 +1,3 @@
-
 export const WARCRAFT3_NATIVES = [
   "ConvertFogStyle",
   "ConvertEquipmentType",

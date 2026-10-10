@@ -10,7 +10,6 @@ export interface Warcraft3ItemFixture {
   readonly pickRandom: boolean;
 }
 
-
 export interface Warcraft3InventoryUnitFixture {
   readonly bagSize: number;
   readonly inventorySize: number;

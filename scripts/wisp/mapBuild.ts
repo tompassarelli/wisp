@@ -1,15 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
 import { chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { Console, Context, Effect, Layer, Schema } from "effect";
@@ -46,7 +34,6 @@ export class MapBuildFailure extends Schema.TaggedError<MapBuildFailure>()("MapB
     return `${this.operation} failed for ${this.path}: ${describeCause(this.cause)}`;
   }
 }
-
 
 export class CompileFailure extends Schema.TaggedError<CompileFailure>()("CompileFailure", {
   diagnostics: Schema.String,
@@ -88,22 +75,12 @@ type CompilerModule = typeof import("../compiler");
 
 export class MapBuild extends Context.Service<MapBuild, {
 
-
-
-
   readonly compile: Effect.Effect<BundledModules, BuildFailure>;
-
-
-
-
 
   readonly build: (options: BuildOptions) => Effect.Effect<void, BuildFailure>;
 
   readonly rebuild: (map: string, packager?: string) => Effect.Effect<void, BuildFailure>;
 }>()("wisp/MapBuild") {
-
-
-
 
   static layer(project: BuildProject, sources?: () => ReadonlyMap<string, string>) {
     const { configPath, bundlePath, compileInputs } = project;
@@ -168,17 +145,11 @@ export class MapBuild extends Context.Service<MapBuild, {
   }
 }
 
-
 function newestModification(path: string): number {
   const stats = statSync(path);
   if (!stats.isDirectory()) return stats.mtimeMs;
   return readdirSync(path).reduce((newest, name) => Math.max(newest, newestModification(join(path, name))), 0);
 }
-
-
-
-
-
 
 export function freshBundleAge(bundle: string, inputs: readonly string[], now: number): number | undefined {
   if (!existsSync(bundle) || !existsSync(`${bundle}.map`)) return undefined;
@@ -202,7 +173,6 @@ const rebuildMap = (map: string, compile: Effect.Effect<CompiledBundle, BuildFai
   yield* Console.log(`rebuilt ${map}`);
 }));
 
-
 export const baseMapEntryNames = (list: string, replacements: readonly ArchiveEntry[]) => {
   const replaced = new Set(replacements.map(({ entry }) => entry.toLowerCase()));
   return list.split(/\r?\n/).filter((entry) => entry.length > 0 && !replaced.has(entry.toLowerCase()));
@@ -217,11 +187,6 @@ const baseMapFiles = (packager: string, base: string, replacements: readonly Arc
   yield* mapPack(packager).extractAll(base, entries, join(work, "base-entries"));
   return entries;
 });
-
-
-
-
-
 
 export const writeHeader = (map: string, header: Uint8Array) => tryMapSync("write map header", map, () => {
   const file = openSync(map, "r+");
@@ -310,21 +275,11 @@ const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compil
   yield* Console.log(`built ${out}`);
 }));
 
-
-
-
 export function withFileIo(objectData: readonly GeneratedFile[] = []): readonly GeneratedFile[] {
   return objectData.some(({ entry }) => entry === "war3map.w3a") ? objectData : [...objectData, { entry: "war3map.w3a", contents: abilityData() }];
 }
 
 const PACKAGER_SOURCE = join(import.meta.dir, "../../native/map-pack.c");
-
-
-
-
-
-
-
 
 export const ensurePackager = (path: string) => Effect.suspend(() => {
   const source = new Bun.CryptoHasher("sha256").update(readFileSync(PACKAGER_SOURCE)).digest("hex");
@@ -350,7 +305,6 @@ const compilePackager = (path: string, source: string, stamp: string) => Effect.
   });
 }).pipe(step("compile map packager"));
 
-
 export const ensureLua = (directory: string) => Effect.suspend(() => existsSync(join(directory, "bin/luac")) ? Effect.void : Effect.gen(function*() {
   yield* tryMapSync("create Lua directory", directory, () => mkdirSync(dirname(directory), { recursive: true }));
   yield* runProcess("link Lua compiler", directory, ["nix", "build", "--out-link", directory, "nixpkgs#lua5_3"]);
@@ -361,7 +315,6 @@ const tryMapPromise = <A>(operation: string, path: string, run: () => PromiseLik
 
 const tryMapSync = <A>(operation: string, path: string, run: () => A) =>
   Effect.try({ try: run, catch: (cause) => new MapBuildFailure({ operation, path, cause }) });
-
 
 export const captureProcess = (
   operation: string,
@@ -387,7 +340,6 @@ export const captureProcess = (
     }),
   );
 
-
 export const runProcess = (operation: string, path: string, command: readonly string[], cwd?: string) =>
   captureProcess(operation, path, command, { stdout: "ignore", ...(cwd === undefined ? {} : { cwd }) }).pipe(Effect.flatMap(({ exitCode, stderr }) =>
     exitCode === 0
@@ -404,11 +356,6 @@ const entryList = (entries: readonly ArchiveEntry[]) => entries.map(({ entry, so
 const writeEntryList = (path: string, entries: readonly ArchiveEntry[]) =>
   tryMapSync("write entry list", path, () => writeFileSync(path, entryList(entries)));
 
-
-
-
-
-
 function mapPack(packager: string) {
   return {
 
@@ -424,19 +371,11 @@ function mapPack(packager: string) {
   };
 }
 
-
 const workDirectory = (parent: string) =>
   Effect.acquireRelease(
     tryMapSync("create work directory", parent, () => mkdtempSync(join(parent, "ts-map."))),
     (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
   );
-
-
-
-
-
-
-
 
 export const stageMap = <E>(source: string, destination: string, edit: (staged: string) => Effect.Effect<void, E>) =>
   Effect.acquireUseRelease(
@@ -456,13 +395,11 @@ export interface ArchiveEntry {
   readonly source: string;
 }
 
-
 export const packageEntries = (
   replaceAll: (entries: readonly ArchiveEntry[]) => Effect.Effect<void, BuildFailure>,
   assets: readonly ArchiveEntry[],
   files: readonly ArchiveEntry[],
 ) => replaceAll([...assets, ...files]);
-
 
 const verifyArchive = (packager: string, archive: string, entries: readonly ArchiveEntry[], scratch: string) => Effect.gen(function*() {
   const extracted = entries.map(({ entry }, index): ArchiveEntry => ({ entry, source: join(scratch, `verify-${index}`) }));
@@ -477,7 +414,6 @@ const verifyArchive = (packager: string, archive: string, entries: readonly Arch
 
 const decode = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, path: string, value: unknown) =>
   Schema.decodeUnknownEffect(schema)(value).pipe(Effect.mapError((cause) => new MapBuildFailure({ operation: "decode", path, cause })));
-
 
 const readJson = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, path: string) =>
   tryMapPromise("read JSON", path, () => Bun.file(path).json()).pipe(Effect.flatMap((json) => decode(schema, path, json)));
@@ -497,10 +433,6 @@ const ProjectPackage = Schema.Struct({
   devDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
 const InstalledPackage = Schema.Struct({ version: Schema.String });
-
-
-
-
 
 export const verifyToolchain = (lockPath: string, packageDirectory: string) => Effect.gen(function*() {
   const text = yield* tryMapPromise("read toolchain lock", lockPath, () => Bun.file(lockPath).text());

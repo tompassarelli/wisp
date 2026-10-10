@@ -1,6 +1,3 @@
-
-
-
 import { parseArgs } from "node:util";
 import { Effect } from "effect";
 import { type Command, UsageFailure, describeCause } from "../command";

@@ -14,7 +14,6 @@ function state(): ModelFailures | undefined {
   return globals[`${runtimeConfiguration().globalPrefix}ModelFailures`];
 }
 
-
 export function startModelFailures(): void {
   const config = runtimeConfiguration();
   const globals = globalThis as Record<`${string}ModelFailures`, ModelFailures | undefined>;

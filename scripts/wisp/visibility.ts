@@ -1,14 +1,6 @@
-
-
-
-
-
-
-
 import { reportedModel } from "../../src/runtime/scene";
 import { type Box, type ModelFacts, type Vector3, drawsNothing, hiddenEmitters, modelReach } from "./models";
 import type { SceneKind, SceneProblem, SceneReport } from "./scene";
-
 
 export interface CameraView {
 
@@ -39,7 +31,6 @@ type Vector = readonly [number, number, number];
 const radians = (degrees: number) => (degrees * Math.PI) / 180;
 const dot = (a: Vector, b: Vector) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a: Vector, b: Vector): Vector => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-
 
 interface CameraFrame {
   readonly eye: Vector;
@@ -77,10 +68,6 @@ function cameraFrame(camera: CameraView): CameraFrame {
   return frame;
 }
 
-
-
-
-
 export function boxSeen(box: Box, camera: CameraView): boolean {
   const { eye, right, up, forward, planes } = cameraFrame(camera);
   const corners: Vector[] = [];
@@ -108,7 +95,6 @@ interface Sighting {
   readonly box: Box;
 }
 
-
 const prepared = new WeakMap<VisibilityExpectations, { readonly facts: ReadonlyMap<string, ModelFacts>; readonly sightings: Map<string, Sighting | undefined> }>();
 
 function preparedFor(expected: VisibilityExpectations) {
@@ -119,7 +105,6 @@ function preparedFor(expected: VisibilityExpectations) {
   }
   return entry;
 }
-
 
 function sighting(expected: VisibilityExpectations, model: string, boxes: readonly Box[]): Sighting | undefined {
   const { sightings } = preparedFor(expected);
@@ -138,17 +123,6 @@ function sighting(expected: VisibilityExpectations, model: string, boxes: readon
   sightings.set(model, found);
   return found;
 }
-
-
-
-
-
-
-
-
-
-
-
 
 export function visibilityProblems(report: SceneReport, kinds: readonly SceneKind[], expected: VisibilityExpectations): readonly SceneProblem[] {
   const { facts } = preparedFor(expected);

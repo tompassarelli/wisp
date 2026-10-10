@@ -11,10 +11,6 @@ afterAll(runtime.restore);
 
 // Native expectations follow wisp:docs/warsmash-notes.md, Script rules outside the six families.
 
-
-
-
-
 export const EXPECTED = [
   "r2s=1.000,0.100,-1.500,123456.789,0.000",
   "r2s-ties=0.063,0.313,-0.063,0.188",

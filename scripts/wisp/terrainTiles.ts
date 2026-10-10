@@ -6,7 +6,6 @@ export interface TerrainTileLayer {
   readonly variation: number;
 }
 
-
 export function terrainTileLayers(corners: readonly [TerrainPoint, TerrainPoint, TerrainPoint, TerrainPoint]): TerrainTileLayer[] {
   const tiles = corners.map(point => (point.flags & 2) !== 0 ? "blight" as const : point.ground);
   return [...new Set(tiles)].sort((a, b) => a === "blight" ? 1 : b === "blight" ? -1 : a - b).map((tile, index) => ({
@@ -15,7 +14,6 @@ export function terrainTileLayers(corners: readonly [TerrainPoint, TerrainPoint,
   }));
 }
 
-
 export function terrainTileUV(width: number, height: number, mask: number, variation: number): readonly [number, number, number, number] {
   const columns = width > height ? 8 : 4;
   const full = mask === 15, variant = variation & 15;
@@ -23,7 +21,6 @@ export function terrainTileUV(width: number, height: number, mask: number, varia
   const row = full ? columns === 8 ? Math.floor(variant / 4) : variation === 0 ? 0 : 3 : Math.floor(mask / 4);
   return [column / columns + 0.5 / width, row / 4 + 0.5 / height, (column + 1) / columns - 0.5 / width, (row + 1) / 4 - 0.5 / height];
 }
-
 
 export function terrainBlightPath(bytes: Uint8Array, tileset: string): string {
   let section = "";

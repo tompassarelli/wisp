@@ -1,11 +1,7 @@
-
-
 import { registeredTests, runTests } from "../../src/runtime/testing";
 import "./index";
 
-
 declare const arg: readonly (string | undefined)[];
-
 
 function untagged(name: string): string {
   const end = name.indexOf("] ");

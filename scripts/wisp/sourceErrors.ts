@@ -1,6 +1,3 @@
-
-
-
 import { join } from "node:path";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { errorFile, errorHeading } from "../../src/runtime/gameFiles";
@@ -18,7 +15,6 @@ export class SourceMapFailure extends Schema.TaggedError<SourceMapFailure>()("So
     return `${this.operation} failed for ${this.path}: ${describeCause(this.cause)}`;
   }
 }
-
 
 export interface SourceError {
   readonly slot: number;

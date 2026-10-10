@@ -1,21 +1,12 @@
-
-
-
-
 import { Cause, Effect, Exit, Layer, Option, Tracer } from "effect";
 
 const STEP = "wisp.step";
-
-
-
-
 
 export const step = (name: string, options: { readonly root?: boolean } = {}) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.withSpan(effect, name, { attributes: { [STEP]: true }, ...(options.root === true ? { root: true } : {}) });
 
 const isStep = (span: Tracer.AnySpan): span is Tracer.Span => span._tag === "Span" && span.attributes.get(STEP) === true;
-
 
 function outermostStep(span: Tracer.Span): Tracer.Span {
   let outermost = span;
@@ -31,7 +22,6 @@ function outcome(exit: Exit.Exit<unknown, unknown>): string {
   if (Exit.isSuccess(exit)) return "";
   return Cause.hasInterruptsOnly(exit.cause) ? " interrupted" : " failed";
 }
-
 
 export function timings(print: (line: string) => void): Tracer.Tracer {
   class StepSpan extends Tracer.NativeSpan {

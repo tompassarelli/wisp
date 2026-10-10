@@ -1,14 +1,7 @@
-
-
-
-
-
-
 import { type model as mdx, parseMDL, parseMDX } from "../../vendor/war3-model.mjs";
 import { selectSequence } from "../../src/headless/animation";
 
 export type Vector3 = readonly [x: number, y: number, z: number];
-
 
 export interface Box {
   readonly min: Vector3;
@@ -48,7 +41,6 @@ type Track = mdx.AnimVector | number | undefined;
 /** Chunks that facts don't use and the pinned war3-model 4.0.1 misreads: a version 1800 light record carries 24 bytes more than it reads, and some camera records don't parse. */
 const SKIPPED = new Set(["LITE", "CAMS"]);
 
-
 export function parsableModel(bytes: Uint8Array, keepLights = false): { readonly bytes: Uint8Array; readonly lights: number } {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const tag = (at: number) => String.fromCharCode(...bytes.subarray(at, at + 4));
@@ -77,11 +69,9 @@ export function parsableModel(bytes: Uint8Array, keepLights = false): { readonly
   return { bytes: joined, lights };
 }
 
-
 export function parseModelMDX(bytes: ArrayBuffer): mdx.Model {
   return parseMDX(parsableModel(new Uint8Array(bytes)).bytes.slice().buffer);
 }
-
 
 function valuesIn(model: mdx.Model, track: Track, from: number, to: number, fallback: number): number[] {
   if (track === undefined) return [fallback];
@@ -94,7 +84,6 @@ function valuesIn(model: mdx.Model, track: Track, from: number, to: number, fall
   return keys.length > 0 ? keys : [fallback];
 }
 
-
 function allValues(track: Track, fallback: number): number[] {
   if (track === undefined) return [fallback];
   if (typeof track === "number") return [track];
@@ -104,12 +93,9 @@ function allValues(track: Track, fallback: number): number[] {
 const most = (track: Track, fallback = 0) => Math.max(...allValues(track, fallback));
 const least = (track: Track, fallback = 0) => Math.min(...allValues(track, fallback));
 
-
 const DEATH = /^(death|decay|dissipate)/i;
 
-
 function running(model: mdx.Model, visibility: Track, rate: Track): { readonly whileShown: boolean; readonly onDeath: boolean } {
-
 
   const fallbackRate = most(rate);
   const runs = (from: number, to: number) =>
@@ -130,16 +116,7 @@ const pivotOf = (model: mdx.Model, node: mdx.Node): Vector3 => {
   return [pivot?.[0] ?? 0, pivot?.[1] ?? 0, pivot?.[2] ?? 0];
 };
 
-
 const RINGS = 8;
-
-
-
-
-
-
-
-
 
 function flight(pivot: Vector3, speed: number, gravity: { readonly down: number; readonly up: number }, lifespan: number, pad: number): Box[] {
   const across = speed * lifespan;
@@ -157,7 +134,6 @@ function flight(pivot: Vector3, speed: number, gravity: { readonly down: number;
 }
 
 const gravityOf = (track: Track) => ({ down: Math.max(0, most(track)), up: Math.max(0, -least(track)) });
-
 
 const TAIL = 2;
 
@@ -193,7 +169,6 @@ function ribbonEmitter(model: mdx.Model, emitter: mdx.RibbonEmitter): EmitterFac
   };
 }
 
-
 function modelEmitter(model: mdx.Model, emitter: mdx.ParticleEmitter): EmitterFacts {
   const lifespan = most(emitter.LifeSpan);
   return {
@@ -206,7 +181,6 @@ function modelEmitter(model: mdx.Model, emitter: mdx.ParticleEmitter): EmitterFa
     reach: flight(pivotOf(model, emitter), most(emitter.InitVelocity), gravityOf(emitter.Gravity), lifespan, 0),
   };
 }
-
 
 function popcornEmitter(model: mdx.Model, emitter: mdx.ParticleEmitterPopcorn): EmitterFacts {
   return {
@@ -224,7 +198,6 @@ const usable = (min: ArrayLike<number> | undefined, max: ArrayLike<number> | und
   min !== undefined && max !== undefined && min.length >= 3 && max.length >= 3
   && [0, 1, 2].every((axis) => Math.abs(min[axis] ?? 0) < 1e6 && Math.abs(max[axis] ?? 0) < 1e6 && (min[axis] ?? 0) <= (max[axis] ?? 0));
 
-
 export function union(boxes: readonly Box[]): Box | undefined {
   if (boxes.length === 0) return undefined;
   const axis = (pick: (box: Box) => Vector3, choose: (...values: number[]) => number, index: 0 | 1 | 2) => choose(...boxes.map((box) => pick(box)[index]));
@@ -238,7 +211,6 @@ const boxOf = (min: ArrayLike<number>, max: ArrayLike<number>): Box => ({
   min: [min[0] ?? 0, min[1] ?? 0, min[2] ?? 0],
   max: [max[0] ?? 0, max[1] ?? 0, max[2] ?? 0],
 });
-
 
 function meshBounds(model: mdx.Model): Box | undefined {
   const boxes: Box[] = [];
@@ -265,7 +237,6 @@ function meshBounds(model: mdx.Model): Box | undefined {
   return union(boxes);
 }
 
-
 export function modelFacts(file: Uint8Array): ModelFacts {
   const { bytes, lights } = parsableModel(file);
   const model = parseMDX(bytes.slice().buffer);
@@ -285,12 +256,9 @@ export function modelFacts(file: Uint8Array): ModelFacts {
   };
 }
 
-
 export const drawsNothing = (facts: ModelFacts) => facts.triangles === 0 && facts.lights === 0 && !facts.emitters.some(({ visible }) => visible);
 
-
 export const hiddenEmitters = (facts: ModelFacts) => facts.emitters.filter(({ whileShown, visible }) => whileShown && visible);
-
 
 export function modelReach(facts: ModelFacts): { readonly boxes: readonly Box[]; readonly unknown: readonly string[] } {
   const shown = facts.emitters.filter(({ visible, whileShown, onDeath }) => visible && (whileShown || onDeath));
@@ -299,11 +267,6 @@ export function modelReach(facts: ModelFacts): { readonly boxes: readonly Box[];
     unknown: shown.filter(({ reach }) => reach === undefined).map(({ name }) => name),
   };
 }
-
-
-
-
-
 
 export function deathSeconds(file: Uint8Array): number | undefined {
   const model = new TextDecoder().decode(file.subarray(0, 4)) === "MDLX" ? parseMDX(parsableModel(file).bytes.slice().buffer) : parseMDL(new TextDecoder().decode(file));

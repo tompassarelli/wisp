@@ -1,6 +1,3 @@
-
-
-
 const [commonPath, blizzardPath, outPath] = process.argv.slice(2);
 if (commonPath === undefined || blizzardPath === undefined || outPath === undefined) {
   throw new Error("usage: bun scripts/natives.ts COMMON_J BLIZZARD_J OUT_D_TS");
@@ -14,7 +11,6 @@ const PRIMITIVES: Record<string, string> = {
   code: "(this: void) => void",
   nothing: "void",
 };
-
 
 const RESERVED = new Set(["function", "class", "new", "delete", "in", "default", "var", "let", "const", "this", "type", "interface", "enum"]);
 const RENAMED_30_NATIVES = new Set([

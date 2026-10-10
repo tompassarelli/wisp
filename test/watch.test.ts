@@ -78,7 +78,6 @@ test("[native] the login shell: a log without a sign-in says nothing", () => {
   expect(silent.source).toBe("process");
 });
 
-
 test("[provisional] the menus' login screen is signing in before a sign-in and a lost connection after one", () => {
   const log = fixture("watch/login-shell-no-sign-in.txt");
   const loginScreen = (state: SocketState) => socketEvent(state, { messageType: "SetGlueScreen", payload: { screen: "LOGIN_DOORS" } }, on6Oct("21:00"));

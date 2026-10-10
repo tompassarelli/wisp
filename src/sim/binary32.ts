@@ -1,20 +1,13 @@
 // Derived from the Binary32 package of tompassarelli/WurstStdlib2 (e3714f6).
 
-
 // Integer limbs stay below 2^31, the range of Warcraft's Lua integers.
 
 // Warcraft + and * can round toward zero; integer arithmetic and power-of-two scaling preserve nearest-even results.
 
-
-
-
 import { at } from "../runtime/lookup";
 import { floorDiv, floorMod } from "./intMath";
 
-
-
 const TWO_POWERS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728, 268435456, 536870912, 1073741824];
-
 
 export function toInt(value: number): number {
   return value < 0 ? Math.ceil(value) : Math.floor(value);
@@ -24,7 +17,6 @@ export function toInt(value: number): number {
 
 const INFINITY = Infinity;
 const SIGNIFICAND_UNIT = 1.1920928955078125e-7;
-
 
 const NORMAL_POWERS: number[] = [];
 {
@@ -38,14 +30,12 @@ const NORMAL_POWERS: number[] = [];
 }
 const SMALLEST_NORMAL = at(NORMAL_POWERS, 0);
 
-
 function normalResult(significand: number, exponent: number, negative: boolean): number | undefined {
   const power = NORMAL_POWERS[exponent + 149];
   if (power === undefined) return undefined;
   const magnitude = significand * SIGNIFICAND_UNIT * power;
   return negative ? -magnitude : magnitude;
 }
-
 
 export function roundToFloat32(value: number): number {
   // Lua values are already binary32; Math.fround rounds host values without importing f32 cyclically.
@@ -98,11 +88,8 @@ export function roundToFloat32(value: number): number {
   return negative ? -result : result;
 }
 
-
-
 let splitSignificand = 0;
 let splitExponent = 0;
-
 
 function split(value: number): void {
 
@@ -157,11 +144,6 @@ function split(value: number): void {
   splitExponent = exponent;
 }
 
-
-
-
-
-
 function roundLimbsToNormal(high: number, low: number, exponent: number, sticky: boolean, negative: boolean): number | undefined {
   let top = high;
   let bottom = low;
@@ -212,10 +194,6 @@ function roundLimbsToNormal(high: number, low: number, exponent: number, sticky:
   }
   return normalResult(significand, scale, negative);
 }
-
-
-
-
 
 function addToLimbs(high: number, low: number, exponent: number, negative: boolean, c: number): number | undefined {
   split(c);
@@ -317,12 +295,6 @@ function addToLimbs(high: number, low: number, exponent: number, negative: boole
   }
   return roundLimbsToNormal(top, bottom, exponent, false, sign);
 }
-
-
-
-
-
-
 
 function sumOfSplits(aSignificand: number, aExponent: number, aNegative: boolean, bSignificand: number, bExponent: number, bNegative: boolean, tiesTowardZero = false): number | undefined {
 
@@ -428,8 +400,6 @@ export function subtractFloat32(a: number, b: number, tiesTowardZero = false): n
 
 // Warcraft timer-clock sums round toward zero (wisp:docs/warsmash-notes.md#timers-and-frame-stepping).
 
-
-
 export function addFloat32TowardZero(a: number, b: number): number {
   if (a === 0) return b;
   if (b === 0) return a;
@@ -453,7 +423,6 @@ export function addFloat32TowardZero(a: number, b: number): number {
   }
   return normalResult(sum, exponent, false) ?? a + b;
 }
-
 
 export function subtractFloat32TowardZero(a: number, b: number): number {
   if (b === 0) return a;
@@ -485,12 +454,9 @@ export function subtractFloat32TowardZero(a: number, b: number): number {
   return normalResult(difference, exponent, false) ?? a - b;
 }
 
-
-
 let productHigh = 0;
 let productLow = 0;
 let productExponent = 0;
-
 
 function multiplySplit(a: number, b: number): void {
   split(a);
@@ -547,10 +513,6 @@ export function multiplyFloat32TowardZero(a: number, b: number): number {
   return limbFusedMultiplyAdd(a, b, 0.0);
 }
 
-
-
-
-
 export function fusedMultiplyAddFloat32(a: number, b: number, c: number): number {
   if (a === 0 || b === 0) return a * b + c;
   if (a < INFINITY && a > -INFINITY && b < INFINITY && b > -INFINITY && c < INFINITY && c > -INFINITY) {
@@ -563,7 +525,6 @@ export function fusedMultiplyAddFloat32(a: number, b: number, c: number): number
   }
   return limbFusedMultiplyAdd(a, b, c);
 }
-
 
 export function divideFloat32(numerator: number, denominator: number): number {
   if (denominator === 0) {
@@ -628,7 +589,6 @@ export function divideFloat32(numerator: number, denominator: number): number {
   const result = scaleByPowerOfTwo(rounded, scale);
   return negative ? -result : result;
 }
-
 
 export function squareRootFloat32(value: number): number {
   if (value === 0 || value !== value) return value;
@@ -749,7 +709,6 @@ function lessThan(a: Limbs, b: Limbs): boolean {
   return a.high < b.high || (a.high === b.high && (a.middle < b.middle || (a.middle === b.middle && a.low < b.low)));
 }
 
-
 function subtractLimbs(a: Limbs, b: Limbs): Limbs {
   let low = a.low - b.low;
   let middle = a.middle - b.middle;
@@ -818,7 +777,6 @@ function roundLimbs(value: Limbs, scale: number, negative: boolean): number {
   const result = scaleByPowerOfTwo(rounded, resultScale);
   return negative ? -result : result;
 }
-
 
 function limbFusedMultiplyAdd(a: number, b: number, c: number): number {
   if (a === 0 || b === 0) return a * b + c;

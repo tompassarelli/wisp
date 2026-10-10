@@ -1,14 +1,4 @@
-
-
-
-
-
-
-
-
-
 import { f32 } from "../sim/f32";
-
 
 export interface FrameWork {
 
@@ -34,7 +24,6 @@ export interface NativeCostModel {
   readonly typingUsPerCharacterSquared: number;
 }
 
-
 export interface NativeFrameCost {
 
   readonly callbacksUs: number;
@@ -51,12 +40,6 @@ export function nativeFrameCost(model: NativeCostModel, work: FrameWork): Native
 }
 
 // Model coefficients use the native measurements in wisp:docs/frame-cost.md#predicted-native-cost.
-
-
-
-
-
-
 
 export const WARCRAFT_COST: NativeCostModel = {
   hostUsPerThousandInstructions: f32(18.2),

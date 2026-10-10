@@ -1,5 +1,3 @@
-
-
 import { installDispatch, on, trampoline } from "../../src/platform/dispatch";
 import { installHotReload, startHotReload } from "../../src/platform/hotReload";
 import { configureRuntime } from "../../src/runtime/config";

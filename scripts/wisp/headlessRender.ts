@@ -18,9 +18,6 @@ export type { Graphics } from "./graphicsProfiles";
 
 export interface HeadlessRenderProject {
 
-
-
-
   readonly readAsset: (path: string, graphics?: Graphics) => Promise<Uint8Array | undefined>;
 
   readonly resolveAsset?: (path: string, graphics: Graphics, body?: AssetLocation) => Promise<ResolvedRenderAsset>;
@@ -30,10 +27,6 @@ export interface HeadlessRenderProject {
   readonly height?: number;
   readonly chrome?: string;
   readonly preloadModels?: readonly string[];
-
-
-
-
 
   readonly terrain?: { readonly w3e?: Uint8Array; readonly bounds?: WorldBounds; readonly origin?: readonly [number, number] };
 
@@ -60,7 +53,6 @@ export interface RenderScene {
   readonly terrain?: Terrain;
   readonly terrainDoodads?: { readonly placements: readonly TerrainDoodad[]; readonly models: Readonly<Record<string, string | readonly string[]>> };
 }
-
 
 export interface SceneEnvironment extends Environment {
 
@@ -100,9 +92,7 @@ function sceneEnvironment(client: HeadlessClient): SceneEnvironment {
   return { ...environment, dayNight: { ...environment.dayNight }, ...(drawn === undefined ? {} : { fog: drawn }), shadowCastingPointLights: client.scenery.minShadowCastingPointLightCount };
 }
 
-
 export type DrawnPose = EffectPose & { readonly unit?: true };
-
 
 export interface PopcornEmitterPose {
   readonly model: string;
@@ -134,7 +124,6 @@ export const captureScene = (client: HeadlessClient, options: { readonly visible
   frame: client.frame, ...(options.matchFrame === undefined ? {} : { matchFrame: options.matchFrame }), client: client.slot, effects: client.effectPoses({ visibleOnly: options.visibleOnly ?? false }), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot({ visibleOnly: options.visibleOnly ?? false }), filter: client.cineFilterPose(), textTags: client.textTags.poses(), lightnings: client.lightnings.poses(),
   environment: sceneEnvironment(client),
 });
-
 
 export async function loadEffectDeaths(project: HeadlessRenderProject, models: Iterable<string>, graphics: Graphics = "classic"): Promise<EffectDeaths> {
   const deaths = new Map<string, number | undefined>();
@@ -180,7 +169,6 @@ function projectWorld(project: HeadlessRenderProject): WorldBounds | undefined {
   if (bounds === undefined && w3e !== undefined) terrainBounds.set(w3e, bounds = worldBounds(decodeTerrain(w3e)));
   return bounds === undefined ? undefined : shiftedBounds(bounds, terrain?.origin);
 }
-
 
 export function sceneWithUnits(project: HeadlessRenderProject, scene: RenderScene): RenderScene {
   const world = projectWorld(project);
@@ -252,7 +240,6 @@ class DevTools {
 const ChromePages = Schema.fromJsonString(Schema.Array(Schema.Struct({ type: Schema.String, webSocketDebuggerUrl: Schema.optional(Schema.String) })));
 
 const renderFailure = (cause: unknown) => (cause instanceof RenderFailure ? cause : new RenderFailure({ cause }));
-
 
 const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: boolean, graphics: Graphics) => Effect.gen(function*() {
   const directory = yield* Effect.acquireRelease(
@@ -328,7 +315,6 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
   return { devtools, gpu, resolutions };
 });
 
-
 const openAnyBrowser = (project: HeadlessRenderProject, bundle: string, graphics: Graphics) => Effect.gen(function*() {
   const attempt = (fallback: boolean) => Effect.gen(function*() {
     const scope = yield* Scope.fork(yield* Effect.scope);
@@ -336,7 +322,6 @@ const openAnyBrowser = (project: HeadlessRenderProject, bundle: string, graphics
   });
   return yield* attempt(false).pipe(Effect.catch(() => attempt(true)));
 });
-
 
 export const renderScenes = (project: HeadlessRenderProject, scenes: readonly RenderScene[], directory: string, graphics: Graphics = "classic", look: readonly Lever[] = []) => Effect.scoped(Effect.gen(function*() {
   const unsupported = unsupportedLevers(graphics, look);

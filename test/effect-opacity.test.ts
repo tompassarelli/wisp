@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { layerBlendFactors, layerOpacity, model } from "../vendor/war3-model.mjs";
 
-
 const SRC_COLOR = 0x0300, SRC_ALPHA = 0x0302, ONE_MINUS_SRC_ALPHA = 0x0303;
 function blended(filterMode: model.FilterMode, color: number, alpha: number, backdrop: number): number {
   const factors = layerBlendFactors(filterMode);

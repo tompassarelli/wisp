@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { MEASURED_BATTLE_NET, replayedDelivery, syncAgeMs, syncDelivery } from "../src/headless/syncChannel";
 
-
 function modelAges(samples: number): number[] {
   const ages: number[] = [];
   for (let frame = 0; frame < 3; frame++) {

@@ -1,7 +1,3 @@
-
-
-
-
 import { type FSWatcher, watch } from "node:fs";
 import { Console, Effect, Layer, Queue, Schema } from "effect";
 import { type Command, type CommandFailure, UsageFailure, flagValues } from "../command";
@@ -71,7 +67,6 @@ export const makeHot = ({ project, sourceDirectory, sourceMapDirectory, filePref
 
 const report = <A>(effect: Effect.Effect<A, CommandFailure>) => effect.pipe(Effect.asVoid, Effect.catch((failure) => Console.error(failure.message)));
 
-
 function coalesced<A, E>(effect: Effect.Effect<A, E>): Effect.Effect<void, E> {
   let running = false;
   let again = false;
@@ -92,7 +87,6 @@ function coalesced<A, E>(effect: Effect.Effect<A, E>): Effect.Effect<void, E> {
   });
 }
 
-
 export const waitForProcessStop: Effect.Effect<void> = Effect.callback<void>((resume) => {
   const stop = () => resume(Effect.void);
   process.once("SIGINT", stop);
@@ -102,11 +96,6 @@ export const waitForProcessStop: Effect.Effect<void> = Effect.callback<void>((re
     process.removeListener("SIGTERM", stop);
   });
 });
-
-
-
-
-
 
 export const runHotWatch = (
   sourceDirectory: string,

@@ -1,10 +1,3 @@
-
-
-
-
-
-
-
 import { mkdir, rename, rm, stat } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
@@ -55,11 +48,6 @@ export class CiMapBuildFailure extends Schema.TaggedError<CiMapBuildFailure>()("
 const attempt = <A>(what: string, run: () => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => new CiMapBuildFailure({ problem: `${what}: ${describeCause(cause)}` }) });
 
-
-
-
-
-
 export const buildMapIntoStore = (step: MapBuildStep) => Effect.gen(function*() {
   const problem = stepProblem(step);
   if (problem !== undefined) return yield* new CiMapBuildFailure({ problem });
@@ -88,12 +76,10 @@ export const buildMapIntoStore = (step: MapBuildStep) => Effect.gen(function*() 
   }).pipe(Effect.ensuring(Effect.promise(() => rm(staging, { recursive: true, force: true }))));
 });
 
-
 export const buildIntoStore = (step: MapBuildStep): Promise<StoredMap> =>
   Effect.runPromise(buildMapIntoStore(step).pipe(Effect.provide(BunServices.layer)));
 
 const USAGE = "usage: bun ciMapBuild.ts --store DIR --name NAME --revision SHA -- COMMAND [ARG...]";
-
 
 const main = (args: readonly string[]) => Effect.gen(function*() {
   const split = args.indexOf("--");

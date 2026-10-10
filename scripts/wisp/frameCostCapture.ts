@@ -1,5 +1,3 @@
-
-
 import { MAX_FRAME_COST_CAPTURE } from "../../src/runtime/frameCostCapture";
 import { preloadLines } from "./boundary";
 
@@ -25,7 +23,6 @@ export interface CaptureDistribution {
   readonly max: number;
 }
 
-
 export function parseFrameCostCapture(text: string): FrameCostCapture {
   const lines = preloadLines(text);
   if (lines === undefined) throw new Error("frame capture is not a complete Preload file");
@@ -45,7 +42,6 @@ export function parseFrameCostCapture(text: string): FrameCostCapture {
   });
   return { run, version, clockStepUs, elapsedMs, samples };
 }
-
 
 export function captureDistribution(capture: FrameCostCapture): CaptureDistribution {
   const sorted = capture.samples.map(({ luaUs }) => luaUs).sort((a, b) => a - b);

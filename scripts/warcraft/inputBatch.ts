@@ -1,4 +1,3 @@
-
 export type InputAction =
   | { readonly kind: "keys"; readonly keys: readonly string[]; readonly delayMillis?: number; readonly settleMillis?: number }
   | { readonly kind: "text"; readonly text: string; readonly delayMillis?: number }
@@ -14,10 +13,6 @@ export interface InputBatch {
 
 const SENDING_KEYS = new Set(["return", "kp_enter", "iso_enter", "linefeed"]);
 export const sendsChat = (names: readonly string[]) => names.some((name) => name.split("+").some((key) => SENDING_KEYS.has(key.toLowerCase())));
-
-
-
-
 
 export function inputBatches(actions: readonly InputAction[], pointer: PointerPosition): readonly InputBatch[] {
   const commands: InputBatch[] = [];

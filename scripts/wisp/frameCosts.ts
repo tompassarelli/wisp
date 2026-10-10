@@ -1,7 +1,3 @@
-
-
-
-
 import { join } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
 import { type FrameWindow, type Spread, frameCostFile } from "../../src/runtime/frameCost";
@@ -11,7 +7,6 @@ import { type GameFileFailure, GameFiles } from "./gameFiles";
 const SpreadText = Schema.String.check(Schema.isPattern(/^\d+(\.\d+)?\/\d+(\.\d+)?\/\d+(\.\d+)?$/));
 const LuaText = Schema.Union([Schema.Literal("none"), SpreadText]);
 const windowFields = (label: string) => `${label} frames={${label}Frames} lua={${label}Lua} natives={${label}Natives} catchup={${label}CatchUp}`;
-
 
 export const FrameCostReportFile = preloadRecord(
   { head: ["frame cost {version} after {previous} clock={clock}", windowFields("before"), windowFields("after")] },
@@ -41,7 +36,6 @@ function parseSpread(text: string): Spread {
 const window = (frames: number, lua: string, natives: string, catchUp: string): FrameWindow =>
   ({ frames, lua: lua === "none" ? undefined : parseSpread(lua), natives: parseSpread(natives), catchUp: parseSpread(catchUp) });
 
-
 export const decodeFrameCostReport = (file: string, text: string): Effect.Effect<FrameCostReport, MalformedGameFile> =>
   FrameCostReportFile.decode(file, text).pipe(Effect.map((fields) => ({
     version: Number(fields.version.slice(1)),
@@ -51,13 +45,11 @@ export const decodeFrameCostReport = (file: string, text: string): Effect.Effect
     after: window(fields.afterFrames, fields.afterLua, fields.afterNatives, fields.afterCatchUp),
   })));
 
-
 export const DEFAULT_FRAME_COST_THRESHOLD = 0.2;
 
 const milliseconds = (microseconds: number) => (microseconds / 1000).toFixed(2);
 const change = (before: number, after: number) => (before === 0 ? (after === 0 ? "+0%" : "new") : `${after >= before ? "+" : ""}${Math.round((after / before - 1) * 100)}%`);
 const rose = (before: number, after: number, threshold: number) => after > before * (1 + threshold);
-
 
 export function frameCostRegressions({ before, after, clockStep }: FrameCostReport, threshold = DEFAULT_FRAME_COST_THRESHOLD): string[] {
   const regressions: string[] = [];
@@ -68,7 +60,6 @@ export function frameCostRegressions({ before, after, clockStep }: FrameCostRepo
   if (rose(before.natives.median, after.natives.median, threshold)) regressions.push(`natives ${change(before.natives.median, after.natives.median)}`);
   return regressions;
 }
-
 
 export function formatFrameCost(slot: number, report: FrameCostReport, threshold = DEFAULT_FRAME_COST_THRESHOLD): string {
   const { before, after } = report;

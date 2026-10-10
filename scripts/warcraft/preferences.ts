@@ -1,14 +1,5 @@
-
-
-
-
-
-
-
-
 import { rename, rm } from "node:fs/promises";
 import { join } from "node:path";
-
 
 export type DisplaySettings = Readonly<Record<string, string>>;
 
@@ -19,9 +10,7 @@ export const preferencesBackupPath = (documents: string) => join(documents, "War
 const SECTION = /^\s*\[([^\]]*)\]\s*$/;
 const ENTRY = /^([^=;/\s][^=]*)=(.*?)\r?$/;
 
-
 export type PreferenceSettings = Readonly<Record<string, DisplaySettings>>;
-
 
 export function videoSettings(text: string, sectionName = "Video"): Record<string, string> {
   const settings: Record<string, string> = {};
@@ -45,27 +34,22 @@ export interface DisplayChange {
   readonly actual?: string;
 }
 
-
 export function displayChanges(text: string, expected: DisplaySettings, sectionName = "Video"): DisplayChange[] {
   const actual = videoSettings(text, sectionName);
   const named = (key: string) => (sectionName === "Video" ? key : `${sectionName}.${key}`);
   return Object.entries(expected).flatMap(([key, value]) => (actual[key] === value ? [] : [{ key: named(key), expected: value, ...(actual[key] === undefined ? {} : { actual: actual[key] }) }]));
 }
 
-
 export const preferenceChanges = (text: string, expected: PreferenceSettings): DisplayChange[] =>
   Object.entries(expected).flatMap(([section, settings]) => displayChanges(text, settings, section));
 
-
 export const withPreferences = (text: string, expected: PreferenceSettings): string =>
   Object.entries(expected).reduce((written, [section, settings]) => withDisplaySettings(written, settings, section), text);
-
 
 export function absentSettings(text: string, recommended: DisplaySettings): DisplaySettings {
   const actual = videoSettings(text);
   return Object.fromEntries(Object.entries(recommended).filter(([key]) => actual[key] === undefined));
 }
-
 
 export function withDisplaySettings(text: string, expected: DisplaySettings, sectionName = "Video"): string {
   const lines = text.split("\n");
@@ -99,7 +83,6 @@ export function withDisplaySettings(text: string, expected: DisplaySettings, sec
   return `${out.join("\n")}${tail}[${sectionName}]${cr}\n${missing.join("\n")}\n`;
 }
 
-
 export async function restorePreferences(backup: string, preferences: string): Promise<boolean> {
   const file = Bun.file(backup);
   if (!(await file.exists())) return false;
@@ -110,7 +93,6 @@ export async function restorePreferences(backup: string, preferences: string): P
   return true;
 }
 
-
 export const alive = (pid: number) => {
   try {
     process.kill(pid, 0);
@@ -119,7 +101,6 @@ export const alive = (pid: number) => {
     return (error as NodeJS.ErrnoException).code === "EPERM";
   }
 };
-
 
 export function withGraphicsMode(text: string, mode: "classic" | "reforged" | "definitive"): string {
   return withDisplaySettings(text, { hd: String({ classic: 0, reforged: 1, definitive: 2 }[mode]) }, "Misc");

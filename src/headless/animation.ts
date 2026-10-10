@@ -1,10 +1,5 @@
-
-
-
-
 import { f32 } from "../sim/f32";
 import { floorMod } from "../sim/intMath";
-
 
 export interface AnimationSequence {
   readonly name: string;
@@ -13,7 +8,6 @@ export interface AnimationSequence {
   readonly looping: boolean;
   readonly rarity: number;
 }
-
 
 export interface SavedAnimation {
   readonly animation: string | number | undefined;
@@ -26,7 +20,6 @@ export interface AnimationBlend {
 
   remaining: number;
 }
-
 
 export interface AnimationState {
   animation: string | number | undefined;
@@ -45,11 +38,6 @@ export function freshAnimation(): AnimationState {
   return { animation: undefined, subAnimations: [], animationElapsed: 0, animationClock: 0, animationBlendTime: 0, animationBlend: undefined };
 }
 
-
-
-
-
-
 export function selectAnimation(state: AnimationState, animation: string | number, subAnimations?: readonly (string | number)[], restartOnNextFrame = false): void {
   if (state.animationBlendTime > 0 && state.animation !== undefined && state.animationBlend === undefined && state.animationClock * 1000 >= 1) {
     state.animationBlend = {
@@ -63,14 +51,11 @@ export function selectAnimation(state: AnimationState, animation: string | numbe
   state.animationRestartPending = restartOnNextFrame;
 }
 
-
 export function seekAnimation(state: AnimationState, seconds: number): void {
   state.animationElapsed = seconds;
 }
 
 // Advance clocks in binary32 so Bun and Lua floor the same animation frames.
-
-
 
 export function advanceAnimation(state: AnimationState, timeScale: number, frameSeconds: number): void {
   if (state.animationRestartPending) {
@@ -86,7 +71,6 @@ export function advanceAnimation(state: AnimationState, timeScale: number, frame
   blend.remaining = f32(blend.remaining - f32(step * 1000));
   if (blend.remaining <= 0) state.animationBlend = undefined;
 }
-
 
 export function blendWeight(state: AnimationState): number {
   const blend = state.animationBlend;
@@ -129,10 +113,6 @@ function words(name: string): string[] {
   return out;
 }
 
-
-
-
-
 export function animationTags(name: string, extra: readonly (string | number)[] = []): AnimationTags {
   const primary: string[] = [];
   const secondary: string[] = [];
@@ -155,14 +135,6 @@ function sameTags(a: readonly string[], b: readonly string[]): boolean {
   for (let index = 0; index < a.length; index++) if (a[index] !== b[index]) return false;
   return true;
 }
-
-
-
-
-
-
-
-
 
 export function selectSequence(sequences: readonly AnimationSequence[], animation: string | number, subAnimations: readonly (string | number)[] = []): number {
   if (typeof animation === "number") return animation >= 0 && animation < sequences.length ? animation : -1;
@@ -200,9 +172,6 @@ export function selectSequence(sequences: readonly AnimationSequence[], animatio
 
 // Looping MDX sequences keep overshoot; non-looping sequences hold the interval end.
 
-
-
-
 export function sequenceFrame(sequence: AnimationSequence, ms: number, looping = sequence.looping): number {
   const length = sequence.end - sequence.start;
   if (length <= 0) return sequence.start;
@@ -214,11 +183,6 @@ export interface SequenceSample {
   readonly sequence: number;
   readonly frame: number;
 }
-
-
-
-
-
 
 export function animationSample(sequences: readonly AnimationSequence[], animation: SavedAnimation, kind: "effect" | "unit"): SequenceSample {
   const ms = f32(animation.elapsed * 1000);
@@ -241,7 +205,6 @@ export function animationSample(sequences: readonly AnimationSequence[], animati
   if (stand === undefined) return { sequence: -1, frame: 0 };
   return { sequence: standIndex, frame: sequenceFrame(stand, ms, kind === "effect" ? true : stand.looping) };
 }
-
 
 export function globalSequenceFrame(clockSeconds: number, length: number): number {
   if (length <= 0) return 0;
