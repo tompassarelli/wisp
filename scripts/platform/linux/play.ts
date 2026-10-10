@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { Console, Effect, Layer, type PlatformError, Schedule, Schema, Stream } from "effect";
+import { Effect, Layer, type PlatformError, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { serverDirectoryName } from "../../warcraft/battleNet";
 import { launcherProcess, listProcesses } from "./procfs";
@@ -15,6 +15,7 @@ import { skillScript } from "../../wisp/clientServices";
 import { startUnit } from "./systemd";
 import { reportedMenus } from "../../wisp/menus";
 import { acquireStartLock, startLockPath } from "../../wisp/startLock";
+import { CapacityDeferred, capacityDeferral, deferredExit, retryWhileDeferred } from "../../wisp/lan/admission";
 import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow } from "../../wisp/play";
 
 export interface PlayTools {
@@ -88,10 +89,6 @@ export const launchCommand = (request: LaunchRequest) => {
   };
 };
 
-export const capacityDeferral = (stderr: string) => /"decision":"DEFER","reason":"([A-Z_]+)"/.exec(stderr)?.[1];
-
-class LaunchDeferred extends Schema.TaggedError<LaunchDeferred>()("LaunchDeferred", { reason: Schema.String }) {}
-
 const LAUNCH_WAIT_SECONDS = 1800;
 
 const launchInContainer = (run: Runner, tools: PlayTools, launcher: { readonly pid: number }, client: string) => Effect.gen(function*() {
@@ -108,21 +105,20 @@ const launchInContainer = (run: Runner, tools: PlayTools, launcher: { readonly p
     catch: failed,
   });
   const { command, env } = launchCommand(request);
-  const deadline = Date.now() + LAUNCH_WAIT_SECONDS * 1000;
   const attempt = Effect.gen(function*() {
     const { exitCode, stderr } = yield* run(ChildProcess.make(command[0]!, command.slice(1), { env, stdin: "ignore", stdout: "ignore" })).pipe(
       Effect.mapError(failed),
       Effect.timeoutOrElse({ duration: "30 seconds", orElse: () => Effect.fail(failed("didn't exit within 30 s")) }),
     );
-    const deferred = exitCode === 75 ? capacityDeferral(stderr) : undefined;
-    if (deferred !== undefined) return yield* new LaunchDeferred({ reason: deferred });
+    const deferred = deferredExit(exitCode) ? capacityDeferral(stderr) : undefined;
+    if (deferred !== undefined) return yield* new CapacityDeferred({ reason: deferred.reason });
     if (exitCode !== 0) return yield* failed(`exited ${exitCode}: ${stderr.trim().split("\n").slice(-3).join(" ")}`);
   });
-  yield* attempt.pipe(
-    Effect.tapError((failure) => failure._tag === "LaunchDeferred" && Date.now() < deadline ? Console.log(`${client}: waiting: the capacity helper defers launching Warcraft III (${failure.reason}); trying again in 45 s`) : Effect.void),
-    Effect.retry({ schedule: Schedule.spaced("45 seconds"), while: (failure) => failure._tag === "LaunchDeferred" && Date.now() < deadline }),
-    Effect.catchTag("LaunchDeferred", (failure) => Effect.fail(failed(`the capacity helper kept deferring it for ${LAUNCH_WAIT_SECONDS} s (${failure.reason})`))),
-  );
+  yield* retryWhileDeferred(attempt, {
+    seconds: LAUNCH_WAIT_SECONDS,
+    waiting: (reason) => `${client}: waiting: the capacity helper defers launching Warcraft III (${reason})`,
+    exhausted: (reason) => failed(`the capacity helper kept deferring it for ${LAUNCH_WAIT_SECONDS} s (${reason})`),
+  });
 });
 
 const machine = (run: Runner, tools: PlayTools): PlayMachine["Service"] => ({
