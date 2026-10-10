@@ -1,6 +1,7 @@
-import { runCli } from "./cli";
+import { runMainCli } from "./cli";
 
-process.exit(await runCli("bun wisp", {
+runMainCli("bun wisp", {
+  native: { usage: "remote --host HOST --project DIR --map FILE --pads DIR --clients-file FILE --run RUN [--dry-run] -- WISP_ARGS", load: async () => (await import("./commands/nativeRemote")).nativeRemote },
   map: { usage: "preview MAP.w3x --out IMAGE.ppm [--packager PATH] [--assets DIR]", load: async () => (await import("./commands/map")).map },
   farm: { usage: "test [--ref REF] [--wait]   (the full suites on GitHub's free runners: docs/farm.md)", load: async () => (await import("./commands/farm")).farm },
   headless: {
@@ -11,4 +12,4 @@ process.exit(await runCli("bun wisp", {
       journeys: { "audio-acceptance": { frames: 48, events: [] } },
     })),
   },
-}, process.argv.slice(2)));
+}, process.argv.slice(2));

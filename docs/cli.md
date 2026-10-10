@@ -64,6 +64,7 @@ program can register it; "game" means the consuming game defines it.
 | `play` | The owner's desktop to a match | (session) | Wisp |
 | `controller` | The always-on controller service | (session) | game |
 | `accept` | The game's declared native checks | (session) | Wisp |
+| `native` | A native run on an SSH VM, with staged inputs and downloaded evidence | `remote` | Wisp |
 | `client` | One native client: its screen, input, state, recovery and services | `look`, `read`, `click`, `keys`, `chat`, `wait`, `watch`, `doctor`, `sign-out`, `start`, `stop`, `status` | Wisp |
 | `menus` | Warcraft III's menus through Wisp's menu page | `install`, `remove`, `listen`, `host`, `join`, `start`, `leave` | Wisp |
 | `online` | Direct play over Battle.net by join code | `setup`, `host`, `join` | game |
@@ -127,7 +128,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--record FILE` | Also append every event to a file | `client watch` |
 | `--seconds N` | A time limit in seconds | `client wait`, `soak` |
 | `--minutes N` | A time limit in minutes | `soak` |
-| `--dry-run` | Print the plan without touching clients | `accept` |
+| `--dry-run` | Print the plan without touching clients | `accept`, `native remote` |
 | `--only ID` | Only these checks; repeatable | `accept` |
 | `--repair` | Reinstall the menu page first | `online` |
 | `--app-id SLOT=ID` | A client's private desktop window, per slot | `pad` |
