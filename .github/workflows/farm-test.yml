@@ -12,6 +12,9 @@ on:
       tag:
         description: Names the run so `bun wisp farm test` can find the one it dispatched
         default: ""
+      farm-runner:
+        description: Runner label for the even shard jobs in place of the FARM_RUNNER variable (measures a box before enabling it)
+        default: ""
   # Autoland (autoland.yml) runs the suites for a rebased branch inside its own run.
   workflow_call:
     inputs:
@@ -37,6 +40,7 @@ jobs:
     outputs:
       sha: ${{ steps.plan.outputs.sha }}
       bun: ${{ steps.plan.outputs.bun }}
+      bun-runners: ${{ steps.plan.outputs.bun-runners }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,10 +55,15 @@ jobs:
           key: farm-test-timings-${{ github.run_id }}
           restore-keys: farm-test-timings-
       - id: plan
+        env:
+          FARM: ${{ github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && (inputs.farm-runner || vars.FARM_RUNNER) || '' }}
         run: |
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           bun scripts/wisp/farmShards.ts plan --timings farm-timings.json --bun "$BUN_SHARDS" $(git ls-files '*.test.ts') > plan.json
+          # Even shard jobs go to FARM_RUNNER when it is set, odd ones to hosted runners, so both pools run at once.
+          pool() { jq -c -n --arg farm "$FARM" "[range($1) | if \$farm != \"\" and . % 2 == 0 then \$farm else \"ubuntu-latest\" end]"; }
           echo "bun=$(jq -c '[range(.bun | length)]' plan.json)" >> "$GITHUB_OUTPUT"
+          echo "bun-runners=$(pool "$(jq '.bun | length' plan.json)")" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
           name: farm-test-plan
@@ -63,7 +72,7 @@ jobs:
 
   bun:
     needs: plan
-    runs-on: ${{ github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && vars.FARM_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ fromJSON(needs.plan.outputs.bun-runners)[matrix.shard] }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -72,9 +81,24 @@ jobs:
         shard: ${{ fromJSON(needs.plan.outputs.bun) }}
     name: bun ${{ matrix.shard }}
     steps:
-      - uses: actions/checkout@v4
+      - if: runner.environment == 'github-hosted'
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.plan.outputs.sha }}
+      # The farm box keeps a mirror of the repository (/srv/farm-mirror, refreshed each minute): fetch only what it lacks.
+      - if: runner.environment == 'self-hosted'
+        name: Check out from the farm box's mirror
+        env:
+          SHA: ${{ needs.plan.outputs.sha }}
+        run: |
+          [ ! -f .git/shallow ] || rm -rf .git
+          git init -q .
+          git remote get-url origin >/dev/null 2>&1 || git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          mirror="/srv/farm-mirror/${GITHUB_REPOSITORY#*/}.git/objects"
+          if [ -d "$mirror" ]; then echo "$mirror" > .git/objects/info/alternates; fi
+          git -c gc.auto=0 fetch -q --no-tags origin "$SHA"
+          git checkout -q --force --detach "$SHA"
+          git clean -q -ffdx
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.13
