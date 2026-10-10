@@ -1,4 +1,4 @@
-import { expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,7 +6,32 @@ import { Effect } from "effect";
 import { freshAnimation } from "../src/headless/animation";
 import { renderScenes, type DrawnPose, type RenderScene } from "../scripts/wisp/headlessRender";
 import { farmTest } from "../scripts/wisp/farmTest";
-import { generateMDX, parseMDL } from "../vendor/war3-model.mjs";
+import { generateMDX, ModelRenderer, parseMDL, parseMDX } from "../vendor/war3-model.mjs";
+
+test("[scenario wisp#121 provisional] a ribbon's Death visibility key leaves Birth and Stand visible and hides Death", () => {
+  const model = parseMDX(generateMDX(parseMDL(`Version { FormatVersion 800, }
+Model "Death-only ribbon visibility" { BlendTime 0, MinimumExtent { 0, 0, 0 }, MaximumExtent { 0, 0, 0 }, BoundsRadius 0, }
+Sequences 3 {
+  Anim "Birth" { Interval { 0, 300 }, NonLooping, MinimumExtent { 0, 0, 0 }, MaximumExtent { 0, 0, 0 }, BoundsRadius 0, }
+  Anim "Stand" { Interval { 400, 700 }, MinimumExtent { 0, 0, 0 }, MaximumExtent { 0, 0, 0 }, BoundsRadius 0, }
+  Anim "Death" { Interval { 800, 1100 }, NonLooping, MinimumExtent { 0, 0, 0 }, MaximumExtent { 0, 0, 0 }, BoundsRadius 0, }
+}
+RibbonEmitter "Ribbon" {
+  ObjectId 0,
+  static HeightAbove 10, static HeightBelow 10, static Alpha 1, static Color { 1, 1, 1 }, static TextureSlot 0,
+  Visibility 1 { DontInterp, 900: 0, }
+  EmissionRate 10, LifeSpan 1, Rows 1, Columns 1, MaterialID 0,
+}
+PivotPoints 1 { { 0, 0, 0 }, }`)));
+  for (const [sequence, emitted] of [[0, 1], [1, 1], [2, 0]] as const) {
+    const renderer = new ModelRenderer(model);
+    renderer.setSequence(sequence);
+    renderer.update(100);
+    const ribbon = Reflect.get(renderer, "ribbonsController").emitters[0];
+    expect(ribbon.creationTimes).toHaveLength(emitted);
+    expect(ribbon.vertices === null ? 0 : ribbon.vertices.length).toBe(emitted * 6);
+  }
+});
 
 farmTest("[boundary MDX/render.json #75 P9.1] every Popcorn and version-1 emitter is named, and visible unsupported emitters fail", async () => {
   const model = new Uint8Array(generateMDX(parseMDL(`Version { FormatVersion 1800, }
