@@ -10,7 +10,7 @@ import { joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { readMapFacts } from "./map";
 import { isolatedNetworkProblem } from "./offline";
-import { clientName, documentsOf, exeOf, pairDirectory, reportPort } from "./pool";
+import { clientName, documentsOf, exeOf, mapPackager, pairDirectory, reportPort } from "./pool";
 
 const [pairText, mapFile, program, countText, nativePidText] = process.argv.slice(2);
 if (pairText === undefined || mapFile === undefined || program === undefined || countText === undefined || nativePidText === undefined) throw new Error("dummySession requires pair, map, program, count and native PID");
@@ -25,7 +25,7 @@ const inGame = `Maps\\Wisp\\${basename(mapFile)}`;
 const target = join(documentsOf(name), "Maps/Wisp", basename(mapFile));
 mkdirSync(dirname(target), { recursive: true });
 if (target !== mapFile) copyFileSync(mapFile, target);
-const packager = join(process.env["XDG_CACHE_HOME"] ?? join(process.env["HOME"] ?? "", ".cache"), "wisp/lan/map-pack");
+const packager = mapPackager();
 const output = join(pairDirectory(pair), "dummy", new Date().toISOString().replace(/[:.]/g, "-"));
 BunRuntime.runMain(Effect.scoped(Effect.gen(function*() {
   const map = yield* readMapFacts(mapFile, packager, inGame);

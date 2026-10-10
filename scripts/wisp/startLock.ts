@@ -1,10 +1,10 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { stateHome } from "./xdg";
 import { dirname, join } from "node:path";
 import { Effect } from "effect";
 import { PlayProblem } from "./play";
 
-export const startLockPath = () => join(process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local/state"), "wisp/online/client-start.lock");
+export const startLockPath = () => join(stateHome(), "wisp/online/client-start.lock");
 
 export const START_LOCK_SECONDS = 300;
 

@@ -1,7 +1,8 @@
 // Warcraft raw float arithmetic may round toward zero; check both Lua32 variants (docs/headless.md#raw-float-rounding).
 
 import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { availableParallelism, homedir } from "node:os";
+import { availableParallelism } from "node:os";
+import { cacheHome } from "./xdg";
 import { join } from "node:path";
 import { Console, Effect, Schedule, Schema } from "effect";
 import { MapBuildFailure, captureProcess, runProcess } from "./mapBuild";
@@ -31,7 +32,7 @@ const trySync = <A>(operation: string, path: string, run: () => A) => Effect.try
 
 class LockHeld extends Schema.TaggedError<LockHeld>()("LockHeld", { path: Schema.String }) {}
 
-export const lua32CacheRoot = () => join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "wisp/lua32");
+export const lua32CacheRoot = () => join(cacheHome(), "wisp/lua32");
 
 const flagsFor = (variant: Lua32Variant) => variant === "stock"
   ? { flags: "-DLUA_32BITS", header: "" }

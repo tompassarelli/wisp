@@ -1,13 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
 import { LanFailure } from "./join";
+import { cacheHome, dataHome, stateHome } from "../xdg";
 import { DESKTOP_TOOLS } from "../../platform/linux/tools";
 import { documentsFolder } from "../../warcraft/battleNet";
 
-export const stateRoot = () => join(process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local/state"), "wisp/lan");
-export const dataRoot = () => join(process.env["XDG_DATA_HOME"] ?? join(homedir(), ".local/share"), "wisp/lan");
+export const stateRoot = () => join(stateHome(), "wisp/lan");
+export const dataRoot = () => join(dataHome(), "wisp/lan");
+export const mapPackager = () => join(cacheHome(), "wisp/lan/map-pack");
 
 export const PAIR_SIDES = ["a", "b"] as const;
 export type Side = (typeof PAIR_SIDES)[number];
