@@ -114,4 +114,5 @@ const synchronous = Layer.mergeAll(
   })),
 );
 
-export const linuxLayer = Layer.mergeAll(synchronous, linuxDesktopLayer, audio, admission).pipe(Layer.provide(BunServices.layer));
+// ./desktop reaches this module back through warcraft/desktop, so its layer may not exist yet when this one loads.
+export const linuxLayer = Layer.mergeAll(synchronous, Layer.suspend(() => linuxDesktopLayer), audio, admission).pipe(Layer.provide(BunServices.layer));
