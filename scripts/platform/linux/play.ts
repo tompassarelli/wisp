@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, statSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Layer, type PlatformError, Schema, Stream } from "effect";
@@ -15,6 +15,7 @@ import { skillScript } from "../../wisp/clientServices";
 import { startUnit } from "./systemd";
 import { reportedMenus } from "../../wisp/menus";
 import { acquireStartLock, startLockPath } from "../../wisp/startLock";
+import { writeAtomic } from "../../wisp/files";
 import { CapacityDeferred, capacityDeferral, deferredExit, retryWhileDeferred } from "../../wisp/lan/admission";
 import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow } from "../../wisp/play";
 
@@ -182,8 +183,7 @@ const machine = (run: Runner, tools: PlayTools): PlayMachine["Service"] => ({
   write: (path, text) => Effect.try({
     try: () => {
       mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(`${path}.${process.pid}.next`, text);
-      renameSync(`${path}.${process.pid}.next`, path);
+      writeAtomic(path, text);
     },
     catch: problem(`couldn't write ${path}`),
   }),

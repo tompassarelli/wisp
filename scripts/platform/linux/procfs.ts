@@ -3,20 +3,13 @@ import { existsSync, readFileSync, readdirSync, readlinkSync, statSync } from "n
 import { dirname, join, resolve } from "node:path";
 import type { ProcessInfo } from "../../warcraft/battleNet";
 import type { CpuPressure, GameProcess, LauncherProcess, ServiceOwner } from "../services";
+import { readTextOrUndefined as readText } from "../../wisp/files";
 
 function prefixPath(prefix: string, windowsPath: string): string {
   const match = /^([A-Za-z]):\\(.*)$/.exec(windowsPath);
   if (match === null) return windowsPath;
   return join(prefix, `drive_${(match[1] ?? "c").toLowerCase()}`, ...(match[2] ?? "").split("\\"));
 }
-
-const readText = (path: string) => {
-  try {
-    return readFileSync(path, "utf8");
-  } catch {
-    return undefined;
-  }
-};
 
 const wineRuntime = (name: string, args: readonly string[]) => name === "wineserver" || /\/wineserver$/.test(args[0] ?? "");
 
