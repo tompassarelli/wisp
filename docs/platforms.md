@@ -103,7 +103,7 @@ Before #108, by file (all now inside wisp:scripts/platform/linux/):
 
 The `windows` job (wisp:.github/workflows/windows.yml) runs the core on
 `windows-latest` with no Linux layer: the type check, the Lua32 runner, the
-sample's tests (`wisp test`), its headless journey (`wisp headless`), the
+sample's tests (`bun run test examples/sample`), its headless journey (`wisp headless`), the
 map build tests and the platform boundary test. The map build test that
 interrupts a step is left out there: its stand-in child is `sh -c 'echo $$'`,
 whose pid is Git Bash's, not the Windows process `process.kill` checks, so it

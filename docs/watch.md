@@ -103,7 +103,9 @@ yield* unlessLost(client, startedAfter(client, since, filePrefix));
 Provide `ClientWatch.layer({ filePrefix })` once per program. `unlessLost`
 needs no ClientWatch: without one, the wait runs as before, so tests with fake
 clients are unchanged. `play`, `freshMatch` and the `client wait` action use
-them; tests replace the service with `Layer.succeed(ClientWatch, ...)`.
+them. The accept runner provides an already built watch with
+`Layer.succeed(ClientWatch, ...)` (wisp:scripts/wisp/acceptLive.ts); no test
+substitutes the service.
 
 ## Typing only into a match
 
