@@ -126,7 +126,6 @@ export class ScreenCapture extends Context.Service<ScreenCapture, {
 export type WindowPlacer = (env: Readonly<Record<string, string>>, title: string, place: Region) => Effect.Effect<number>;
 
 export class InputInjection extends Context.Service<InputInjection, {
-  readonly tools: Effect.Effect<Client["tools"], PlatformUnsupported>;
   readonly windows: (config: ClientsConfig, entry: ClientEntry, title: string, strict: boolean) => Effect.Effect<readonly Client[], DesktopFailure>;
 
   readonly sessionEnvironment: (run: string) => Readonly<Record<string, string>>;
