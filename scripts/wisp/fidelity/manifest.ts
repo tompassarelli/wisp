@@ -5,16 +5,16 @@ const Text = Schema.NonEmptyString;
 const Frame = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Size = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 const Vector = Schema.Tuple([Schema.Finite, Schema.Finite, Schema.Finite]);
-const Control = Schema.Struct({ id: Text, mode: Schema.Literals(["stock", "mask", "stage"]), fog: Schema.Boolean, bloom: Schema.Boolean, dof: Schema.Finite, cine: Schema.Boolean });
+const Control = Schema.Struct({ id: Text, mode: Schema.optionalKey(Schema.Literals(["stock", "mask", "stage"])), fog: Schema.optionalKey(Schema.Boolean), bloom: Schema.optionalKey(Schema.Boolean), dof: Schema.optionalKey(Schema.Finite), cine: Schema.optionalKey(Schema.Boolean) });
 const Identity = Schema.Struct({ build: Text, assetLayers: Schema.Array(Text), mapHash: Text, settingsFile: Text, resolution: Schema.Struct({ width: Size, height: Size }), gpu: Text });
-const Run = Schema.Struct({ id: Text, captures: Schema.Array(Schema.Struct({ frame: Frame, control: Text, image: Text })) });
+const Run = Schema.Struct({ id: Text, captures: Schema.Array(Schema.Struct({ frame: Frame, frameSource: Schema.Literals(["journal", "debugger"]), control: Text, image: Text })) });
 const Slice = Schema.Struct({
   lever: Text, scene: Text, kind: Schema.Literals(["lever", "stage"]), split: Schema.Literals(["fit", "held-out", "retired"]),
   pad: Text, frames: Schema.Array(Frame), camera: Schema.Struct({ position: Vector, target: Vector, fov: Schema.Finite }),
   look: Schema.Literals(["classic", "definitive"]), identity: Identity,
   settings: Schema.Record(Text, Schema.Finite), calibratedRanges: Schema.Record(Text, Schema.Struct({ min: Schema.Finite, max: Schema.Finite })),
   regions: Schema.Array(Schema.Struct({ id: Text, x: Frame, y: Frame, width: Size, height: Size, critical: Schema.Boolean })),
-  controls: Schema.Array(Control), cineWindow: Schema.Struct({ start: Frame, end: Frame }), runs: Schema.Array(Run),
+  controls: Schema.Array(Control), cineWindow: Schema.optionalKey(Schema.Struct({ start: Frame, end: Frame })), runs: Schema.Array(Run),
 });
 
 export const CaptureManifestSchema = Schema.Struct({
@@ -62,16 +62,22 @@ export function manifestProblems(manifest: CaptureManifest): string[] {
     for (const region of slice.regions) {
       if (region.x + region.width > slice.identity.resolution.width || region.y + region.height > slice.identity.resolution.height) fail(`${region.id}: region exceeds capture resolution`);
     }
-    if (!unique(slice.controls.map((control) => control.id))) fail("control IDs must be unique");
-    for (const mode of ["stock", "mask", "stage"]) if (!slice.controls.some((control) => control.mode === mode)) fail(`missing ${mode} control`);
-    for (const mode of ["fog", "bloom"] as const) for (const enabled of [false, true]) {
-      if (!slice.controls.some((control) => control[mode] === enabled)) fail(`missing ${mode} ${enabled ? "on" : "off"} control`);
+    if (slice.controls.length === 0 || !unique(slice.controls.map((control) => control.id))) fail("control IDs must be nonempty and unique");
+    if (slice.kind === "stage" || ["fog", "height-fog-falloff", "sky", "water", "day-night-light", "point-lights", "pbr"].includes(slice.lever)) {
+      for (const mode of ["stock", "mask", "stage"]) if (!slice.controls.some((control) => control.mode === mode)) fail(`missing ${mode} control`);
     }
-    if (new Set(slice.controls.map((control) => control.dof)).size < 3) fail("DOF sweep requires at least three values");
-    if (!slice.controls.some((control) => control.cine) || !slice.controls.some((control) => !control.cine)) fail("cine on/off controls are required");
-    if (slice.cineWindow.end < slice.cineWindow.start) fail("cine window end precedes start");
-    const cineFrames = slice.frames.filter((frame) => frame >= slice.cineWindow.start && frame <= slice.cineWindow.end);
-    if (cineFrames.length !== slice.cineWindow.end - slice.cineWindow.start + 1) fail("every cine window frame must be listed");
+    const toggle = slice.lever === "cinematic-filter" ? "cine" : ["fog", "height-fog-falloff"].includes(slice.lever) ? "fog" : slice.lever === "bloom" && slice.look === "definitive" ? "bloom" : undefined;
+    if (toggle !== undefined) for (const enabled of [false, true]) {
+      if (!slice.controls.some((control) => control[toggle] === enabled)) fail(`missing ${toggle} ${enabled ? "on" : "off"} control`);
+    }
+    if (slice.lever === "dof" && slice.look === "definitive" && new Set(slice.controls.flatMap((control) => control.dof === undefined ? [] : [control.dof])).size < 3) fail("DOF sweep requires at least three values");
+    const window = slice.cineWindow;
+    if (slice.lever === "cinematic-filter" && window === undefined) fail("cine window is required");
+    if (window !== undefined) {
+      if (window.end < window.start) fail("cine window end precedes start");
+      const cineFrames = slice.frames.filter((frame) => frame >= window.start && frame <= window.end);
+      if (cineFrames.length !== window.end - window.start + 1) fail("every cine window frame must be listed");
+    }
     if (slice.runs.length < 3 || !unique(slice.runs.map((run) => run.id))) fail("at least three distinct runs are required");
     const images = new Set<string>();
     for (const run of slice.runs) {
