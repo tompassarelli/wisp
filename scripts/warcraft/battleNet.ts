@@ -17,6 +17,9 @@ export interface ProcessInfo {
   readonly prefix?: string;
   readonly display?: string;
 
+  /** The prefix's runtime process (wineserver on Linux), as the process table's layer recognises it. */
+  readonly runtime?: boolean;
+
   readonly cwd?: string;
 
   readonly started?: number;
@@ -36,7 +39,7 @@ export interface PrefixUse {
 
 const trimSlash = (path: string) => path.replace(/\/+$/, "");
 const commandLine = (process: ProcessInfo) => process.args.join(" ");
-const isRuntime = (process: ProcessInfo) => process.name === "wineserver" || /\/wineserver$/.test(process.args[0] ?? "");
+const isRuntime = (process: ProcessInfo) => process.runtime === true;
 const isLauncher = (process: ProcessInfo) => /\\Battle\.net\\Battle\.net\.exe(?:\s|"|$)/i.test(commandLine(process)) && !/--type=/.test(commandLine(process));
 const isGame = (process: ProcessInfo) => /\\Warcraft III\.exe(?:\s|"|$)/i.test(commandLine(process));
 
