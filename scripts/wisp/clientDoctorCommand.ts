@@ -7,7 +7,7 @@ import { type ClientProfile, clientSettings } from "./lan/pool";
 import { DoctorHands, DoctorStop, type DoctorTarget, doctor, signOut } from "./doctor";
 import { privateDoctorHands } from "./doctorHost";
 import { PlayMachine } from "./play";
-import { type PlayTools, playMachineLayer } from "./playHost";
+import { type PlayTools, playMachineLayer } from "../platform/play";
 import type { ClientWatch } from "./watch";
 
 export interface DoctorDeclaration {
