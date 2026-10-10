@@ -34,6 +34,20 @@ test("[native #59] seven effect cases agree in two clients", () => {
   for (const client of clients.clients) expect(client.files.get(`effects-p${client.slot}.txt`)).toEqual(EXPECTED);
   // Playing and frozen destroyed effects clear after five game seconds.
   expect(deathTimeline(runtime.clients({ install, start }, [0, 1], { effectDeaths: EFFECT_DEATHS }))).toEqual(DEATH_TIMELINE);
+  // A yaw set after a matrix scale resets it to 1; the opposite order keeps it (#118).
+  const ordered = runtime.clients({ install, start: () => {
+    const scaleThenYaw = AddSpecialEffect("a.mdx", 0, 0);
+    BlzSetSpecialEffectMatrixScale(scaleThenYaw, 2, 0, 3);
+    BlzSetSpecialEffectYaw(scaleThenYaw, 1);
+    const yawThenScale = AddSpecialEffect("b.mdx", 0, 0);
+    BlzSetSpecialEffectYaw(yawThenScale, 1);
+    BlzSetSpecialEffectMatrixScale(yawThenScale, 2, 0, 3);
+  } });
+  ordered.start();
+  expect((ordered.clients[0]?.effectPoses() ?? []).map(pose => [pose.model, pose.yaw, pose.matrixScale, pose.flat])).toEqual([
+    ["a.mdx", 1, [1, 1, 1], false],
+    ["b.mdx", 1, [2, 0, 3], true],
+  ]);
 });
 
 farmTest("[native #59] the same effect cases pass in emitted 32-bit Lua", () => {
