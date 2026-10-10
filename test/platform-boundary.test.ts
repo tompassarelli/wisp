@@ -14,9 +14,10 @@ const root = join(import.meta.dir, "..");
 const LINUX_ONLY: readonly (readonly [string, RegExp])[] = [
   ["/proc", /["'`]\/proc\b/],
   ["cgroup files", /\/sys\/fs\/cgroup/],
-  ["a Linux tool", /["'`](nsenter|wine|wine64|grim|xdotool|wlrctl|systemd-run|systemctl|steam-run|pw-cli|pw-dump|niri|dbus-run-session|bwrap)["'`]/],
+  ["a Linux tool", /["'`](nsenter|wine|wine64|wineserver|grim|xdotool|wlrctl|systemd-run|systemctl|steam-run|pw-cli|pw-dump|niri|dbus-run-session|bwrap)["'`]/],
   ["a configured Linux tool", /\b(?:tools|config\.tools|client\.tools)\.(grim|xdotool|wlrctl|nsenter|niri)\b/],
   ["Wine's binary", /bin\/wine\b/],
+  ["Wine's runtime", /\/wineserver\b/],
   ["Proton", /\/proton\b/],
   ["a user runtime directory", /\/run\/user\//],
   ["a Wayland display", /WAYLAND_DISPLAY/],
@@ -38,16 +39,18 @@ test("[invariant] no Linux-specific call sits outside scripts/platform/linux", (
   expect(directUses(sources())).toEqual([]);
 });
 
-test("[invariant] the guard catches a new direct use of /proc, xdotool or a platform branch", () => {
+test("[invariant] the guard catches a new direct use of /proc, xdotool, Wine's runtime or a platform branch", () => {
   const planted: Record<string, string> = {
     "scripts/wisp/a.ts": "const status = readFileSync(`/proc/${pid}/status`);",
     "scripts/wisp/b.ts": "run([client.tools.xdotool, \"key\", \"Return\"]);",
     "scripts/wisp/c.ts": "if (process.platform === \"win32\") return;",
+    "scripts/wisp/d.ts": "const runtime = info.name === \"wineserver\";",
   };
   expect(directUses(Object.keys(planted), (path) => planted[path] ?? "")).toEqual([
     "scripts/wisp/a.ts:1: /proc outside a Linux layer",
     "scripts/wisp/b.ts:1: a configured Linux tool outside a Linux layer",
     "scripts/wisp/c.ts:1: a platform branch outside a Linux layer",
+    "scripts/wisp/d.ts:1: a Linux tool outside a Linux layer",
   ]);
 });
 

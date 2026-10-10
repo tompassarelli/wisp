@@ -13,6 +13,8 @@ const readText = (path: string) => {
   }
 };
 
+const wineRuntime = (name: string, args: readonly string[]) => name === "wineserver" || /\/wineserver$/.test(args[0] ?? "");
+
 const wineLike = (name: string, args: readonly string[]) => name === "wineserver" || args.some((arg) => /\.exe\b/i.test(arg));
 
 /** Linux's USER_HZ: /proc reports CPU times in these ticks. */
@@ -37,6 +39,7 @@ export function listProcesses(): ProcessInfo[] {
     const args = cmdline.split("\0");
     if (args.at(-1) === "") args.pop();
     const process: { -readonly [K in keyof ProcessInfo]: ProcessInfo[K] } = { pid: Number(entry), name, args };
+    if (wineRuntime(name, args)) process.runtime = true;
     if (wineLike(name, args)) {
       for (const variable of (readText(`${base}/environ`) ?? "").split("\0")) {
         if (variable.startsWith("WINEPREFIX=")) process.prefix = variable.slice("WINEPREFIX=".length).replace(/\/+$/, "");
