@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { Cause, Console, Effect, Exit, Result, Schema } from "effect";
 import { ResourceAccounting } from "../../platform/services";
-import { type Command, UsageFailure, describeCause, flagValues } from "../command";
+import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from "../command";
 import { installHeadless } from "../headless";
 import { writtenPreloadFile } from "../headlessInput";
 import {
@@ -60,16 +60,14 @@ function parseRun(args: readonly string[], project: SoakProject, cpuLimit: numbe
     if (args[index + 1] === undefined) return `${arg} takes a value`;
     index++;
   }
-  const whole = (name: string, fallback: number, low: number, high: number): number | string => {
-    const [text] = flagValues(args, name);
-    const value = text === undefined ? fallback : Number(text);
-    return Number.isInteger(value) && value >= low && value <= high ? value : `--${name} takes a whole number from ${low} to ${high}`;
-  };
-  const matches = whole("matches", project.matches, 1, MAX_SOAK_MATCHES);
-  const seed = whole("seed", 1, 1, 2147483646);
-  const minutes = whole("minutes", DEFAULT_SOAK_MINUTES, 1, MAX_SOAK_MINUTES);
-  const workers = whole("workers", Math.min(MAX_SOAK_WORKERS, scopeCpus(cpuLimit)), 1, MAX_SOAK_WORKERS);
-  for (const value of [matches, seed, minutes, workers]) if (typeof value === "string") return value;
+  const matches = wholeFlag(args, "matches", { fallback: project.matches, min: 1, max: MAX_SOAK_MATCHES });
+  const seed = wholeFlag(args, "seed", { fallback: 1, min: 1, max: 2147483646 });
+  const minutes = wholeFlag(args, "minutes", { fallback: DEFAULT_SOAK_MINUTES, min: 1, max: MAX_SOAK_MINUTES });
+  const workers = wholeFlag(args, "workers", { fallback: Math.min(MAX_SOAK_WORKERS, scopeCpus(cpuLimit)), min: 1, max: MAX_SOAK_WORKERS });
+  if (matches instanceof UsageFailure) return matches.problem;
+  if (seed instanceof UsageFailure) return seed.problem;
+  if (minutes instanceof UsageFailure) return minutes.problem;
+  if (workers instanceof UsageFailure) return workers.problem;
   const named = (flag: string, known: readonly string[]) => flagValues(args, flag).find((name) => !known.includes(name));
   const fighters = flagValues(args, "fighter");
   const stages = flagValues(args, "stage");
@@ -77,7 +75,7 @@ function parseRun(args: readonly string[], project: SoakProject, cpuLimit: numbe
   const strange = named("fighter", project.roster.fighters) ?? named("stage", project.roster.stages) ?? named("policy", [...new Set(project.roster.policies.flat())]);
   if (strange !== undefined) return `${project.name} has no fighter, stage or policy named ${strange}`;
   const [out] = flagValues(args, "out");
-  return { matches: Number(matches), seed: Number(seed), minutes: Number(minutes), workers: Number(workers), fighters, stages, policies, out };
+  return { matches, seed, minutes, workers, fighters, stages, policies, out };
 }
 
 type Worker = Subprocess<"pipe", "pipe", "pipe">;

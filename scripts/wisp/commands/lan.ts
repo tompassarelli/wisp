@@ -5,7 +5,7 @@ import { Console, Effect, Exit, Schedule, Schema, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { Namespaces } from "../../platform/services";
 import { collect, pollUntil, spawnLogged } from "../hostProcess";
-import { type Command, UsageFailure, describeCause, flagValues } from "../command";
+import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from "../command";
 import { LanFailure } from "../lan/join";
 import { lanPluginProblem } from "../lan/plugin";
 import {
@@ -16,14 +16,9 @@ import { admissionFile, pairAdmission } from "../lan/admission";
 
 const SESSION = join(import.meta.dir, "../lan/pairSession.ts");
 
-const number = (args: readonly string[], name: string, fallback: number | undefined) => Effect.gen(function*() {
-  const [text] = flagValues(args, name);
-  if (text === undefined) {
-    if (fallback === undefined) return yield* new UsageFailure({ problem: `--${name} is required` });
-    return fallback;
-  }
-  const value = Number(text);
-  return Number.isInteger(value) && value >= 0 ? value : yield* new UsageFailure({ problem: `--${name} takes a whole number` });
+const number = (args: readonly string[], name: string, fallback: number | undefined) => Effect.suspend(() => {
+  const value = wholeFlag(args, name, fallback === undefined ? {} : { fallback });
+  return value instanceof UsageFailure ? Effect.fail(value) : value === undefined ? Effect.fail(new UsageFailure({ problem: `--${name} is required` })) : Effect.succeed(value);
 });
 
 const agent = (pair: number, path: string, body?: unknown) => Effect.tryPromise({
@@ -152,9 +147,8 @@ const pool: Command = (args) => Effect.gen(function*() {
   const pairs = yield* number(args, "pairs", 1);
   const seconds = yield* number(args, "seconds", 0);
   const waitSeconds = yield* number(args, "wait", 1800);
-  const [fpsText] = flagValues(args, "fps");
-  const fps = fpsText === undefined ? undefined : Number(fpsText);
-  if (args.includes("--fps") && fpsText === undefined || fps !== undefined && (!Number.isInteger(fps) || fps < 1)) return yield* new UsageFailure({ problem: "--fps takes a positive whole number" });
+  const fps = wholeFlag(args, "fps", { min: 1 });
+  if (fps instanceof UsageFailure) return yield* fps;
 
   const [profileText = "parity"] = flagValues(args, "pool-profile");
   const profiles = profileText.split(",");

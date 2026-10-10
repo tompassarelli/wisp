@@ -37,3 +37,27 @@ export function flagValues(args: readonly string[], name: string): string[] {
     return arg === flag && value !== undefined && !value.startsWith("--") ? [value] : [];
   });
 }
+
+interface WholeFlag {
+  readonly min?: number;
+  readonly max?: number;
+}
+
+/** `--NAME N`'s whole number from `min` (0) to `max`, or `fallback` when the flag is absent. */
+export function wholeFlag(args: readonly string[], name: string, options: WholeFlag & { readonly fallback: number }): number | UsageFailure;
+export function wholeFlag(args: readonly string[], name: string, options?: WholeFlag & { readonly fallback?: number }): number | undefined | UsageFailure;
+export function wholeFlag(args: readonly string[], name: string, { fallback, min = 0, max }: WholeFlag & { readonly fallback?: number } = {}): number | undefined | UsageFailure {
+  const [text] = flagValues(args, name);
+  if (text === undefined && !args.includes(`--${name}`)) return fallback;
+  const value = Number(text);
+  if (text !== undefined && Number.isSafeInteger(value) && value >= min && (max === undefined || value <= max)) return value;
+  const kind = max !== undefined ? `a whole number from ${min} to ${max}` : min === 0 ? "a whole number" : min === 1 ? "a positive whole number" : `a whole number of at least ${min}`;
+  return new UsageFailure({ problem: `--${name} takes ${kind}` });
+}
+
+/** `--port N`, a TCP or UDP port; `min: 0` lets the system choose one. */
+export function portFlag(args: readonly string[], fallback: number, { min = 1 }: { readonly min?: 0 | 1 } = {}): number | UsageFailure {
+  const [text = String(fallback)] = flagValues(args, "port");
+  const port = Number(text);
+  return Number.isInteger(port) && port >= min && port <= 65535 ? port : new UsageFailure({ problem: `--port takes a port number, not ${text}` });
+}

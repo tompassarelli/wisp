@@ -6,22 +6,18 @@ import { Cause, Effect, Exit, FiberSet, Layer, Option, Schedule, Schema, Scope }
 import { platformLayer, runPlatformSync } from "../../platform/layer";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { AudioIsolation, GameLauncher, InputInjection, ProcessTable } from "../../platform/services";
+import { UsageFailure, flagValues, wholeFlag } from "../command";
 import { pollUntil, spawnLogged } from "../hostProcess";
 import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports, playLocalGame } from "../menus";
 import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { readMapFacts } from "./map";
-import { PAIR_SIDES, poolProfile, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
+import { PAIR_SIDES, pairFlags, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
 import { admissionFile, nativeCommand } from "./admission";
 
-const argument = (name: string) => {
-  const at = process.argv.indexOf(`--${name}`);
-  return at < 0 ? undefined : process.argv[at + 1];
-};
-const pair = Number(argument("pair") ?? "0");
-const fpsText = argument("fps");
-const profile = poolProfile(argument("pool-profile") ?? "parity", fpsText === undefined ? undefined : Number(fpsText));
+const argument = (name: string) => flagValues(process.argv, name)[0];
+const { pair, profile } = pairFlags(process.argv);
 const packager = argument("packager") ?? mapPackager();
 const directory = pairDirectory(pair);
 const agentLog = join(directory, "agent.log");
@@ -261,7 +257,8 @@ const agent = Effect.gen(function*() {
   writeFileSync(join(directory, "agent.json"), `${JSON.stringify({ pid: process.pid, socket: agentSocket(pair), profile: profile.name, fps: profile.maxFps, runs })}\n`);
   say(`agent on ${agentSocket(pair)}`);
 
-  const sessionPid = Number(argument("session-pid") ?? "0");
+  const sessionPid = wholeFlag(process.argv, "session-pid", { fallback: 0 });
+  if (sessionPid instanceof UsageFailure) return yield* sessionPid;
   if (sessionPid <= 0) return yield* Effect.never;
   const alive = () => {
     try {
