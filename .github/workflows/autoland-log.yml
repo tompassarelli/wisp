@@ -1,0 +1,23 @@
+name: Autoland log
+
+# Dispatch-only: opens and pins the "Autoland log" issue as github-actions[bot],
+# so its comments don't notify the people who would otherwise author it; then
+# point the AUTOLAND_LOG_ISSUE repository variable at the printed number.
+on:
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - run: |
+          url=$(gh issue create --title "Autoland log" --body "Agent-facing Autoland and sheriff notices are posted here, from github-actions[bot].")
+          gh issue pin "$url"
+          echo "Opened and pinned $url; run: gh variable set AUTOLAND_LOG_ISSUE --body ${url##*/}" >> "$GITHUB_STEP_SUMMARY"

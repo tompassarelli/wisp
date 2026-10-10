@@ -32,6 +32,7 @@ env:
   BRANCH: ${{ inputs.branch || github.ref_name }}
   GH_TOKEN: ${{ github.token }}
   GH_REPO: ${{ github.repository }}
+  AUTOLAND_LOG_ISSUE: ${{ vars.AUTOLAND_LOG_ISSUE }}
 
 jobs:
   # A push runs the branch's copy of this file; the landing runs main's.
@@ -206,11 +207,10 @@ jobs:
           git config user.email "41898183+github-actions[bot]@users.noreply.github.com"
           short=${SHA:0:10}
           refuse() {
-            { echo "Autoland didn't land \`$BRANCH\`${SHA:+ ($short, rebased onto main ${BASE:0:10})}: $1"; echo; printf '%s\n' "$2" | head -60
+            { [ -z "$ISSUES" ] || printf '`wisp#%s` ' $ISSUES; echo "Autoland didn't land \`$BRANCH\`${SHA:+ ($short, rebased onto main ${BASE:0:10})}: $1"; echo; printf '%s\n' "$2" | head -60
               echo; echo "Run: $RUN_URL. The branch stays; push a fix to it and it tries again."; } > comment.md
             cat comment.md >> "$GITHUB_STEP_SUMMARY"
-            for issue in $ISSUES; do gh issue comment "$issue" --body-file comment.md; done
-            [ -n "$ISSUES" ] || echo "::warning::no Refs wisp#N in the commits: nothing to comment on"
+            gh issue comment "$AUTOLAND_LOG_ISSUE" --body-file comment.md
             exit 1
           }
           case "$VERDICT" in
