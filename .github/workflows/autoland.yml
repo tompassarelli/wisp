@@ -3,8 +3,8 @@ name: Autoland
 # A claude/** branch (a cloud worker's) lands on main by itself: rebased onto
 # main, checked, and run through the full suites (farm-test.yml); it lands when
 # it fails no test main's farm run doesn't also fail. Otherwise the branch stays
-# and the issue its commits reference gets the conflicting files or the new
-# failures (wisp:docs/ci.md).
+# and the run's summary names the conflicting files or the new failures
+# (wisp:docs/ci.md).
 on:
   push:
     branches: ["claude/**"]
@@ -19,7 +19,6 @@ run-name: Autoland ${{ inputs.branch || format('{0} (push)', github.ref_name) }}
 permissions:
   contents: write
   actions: write
-  issues: write
 
 # One landing at a time; up to 100 branches wait their turn in order. A push
 # only queues the branch, so it never waits here itself.
@@ -32,7 +31,6 @@ env:
   BRANCH: ${{ inputs.branch || github.ref_name }}
   GH_TOKEN: ${{ github.token }}
   GH_REPO: ${{ github.repository }}
-  AUTOLAND_LOG_ISSUE: ${{ vars.AUTOLAND_LOG_ISSUE }}
 
 jobs:
   # A push runs the branch's copy of this file; the landing runs main's.
@@ -52,7 +50,6 @@ jobs:
       sha: ${{ steps.rebase.outputs.sha }}
       base: ${{ steps.rebase.outputs.base }}
       scratch: ${{ steps.rebase.outputs.scratch }}
-      issues: ${{ steps.rebase.outputs.issues }}
       detail: ${{ steps.rebase.outputs.detail }}
     steps:
       - uses: actions/checkout@v4
@@ -74,7 +71,6 @@ jobs:
           if ! git fetch -q origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"; then out verdict gone; exit 0; fi
           base=$(git rev-parse origin/main)
           out base "$base"
-          out issues "$(git log --format=%B "origin/main..origin/$BRANCH" | grep -ioE '(refs|fixes|closes) (wisp)?#[0-9]+' | grep -oE '[0-9]+$' | sort -un | tr '\n' ' ')"
           if [ -z "$(git rev-list "origin/main..origin/$BRANCH")" ]; then out verdict empty; exit 0; fi
           git checkout -q -B autoland "origin/$BRANCH"
           if ! git rebase -q origin/main > rebase.log 2>&1; then
@@ -176,9 +172,7 @@ jobs:
       SHA: ${{ needs.rebase.outputs.sha }}
       BASE: ${{ needs.rebase.outputs.base }}
       SCRATCH: ${{ needs.rebase.outputs.scratch }}
-      ISSUES: ${{ needs.rebase.outputs.issues }}
       DETAIL: ${{ needs.rebase.outputs.detail }}
-      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -207,10 +201,9 @@ jobs:
           git config user.email "41898183+github-actions[bot]@users.noreply.github.com"
           short=${SHA:0:10}
           refuse() {
-            { [ -z "$ISSUES" ] || printf '`wisp#%s` ' $ISSUES; echo "Autoland didn't land \`$BRANCH\`${SHA:+ ($short, rebased onto main ${BASE:0:10})}: $1"; echo; printf '%s\n' "$2" | head -60
-              echo; echo "Run: $RUN_URL. The branch stays; push a fix to it and it tries again."; } > comment.md
-            cat comment.md >> "$GITHUB_STEP_SUMMARY"
-            gh issue comment "$AUTOLAND_LOG_ISSUE" --body-file comment.md
+            { echo "Autoland didn't land \`$BRANCH\`${SHA:+ ($short, rebased onto main ${BASE:0:10})}: $1"; echo; printf '%s\n' "$2" | head -60
+              echo; echo "The branch stays; push a fix to it and it tries again."; } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Autoland didn't land::$BRANCH${SHA:+ ($short)}: $1"
             exit 1
           }
           case "$VERDICT" in

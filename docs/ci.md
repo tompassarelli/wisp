@@ -148,7 +148,9 @@ wisp:scripts/mainRed.ts). A failed run lists each failing test (Bun's
 `(fail)` lines; a failed step with none, such as the type check, by its step
 name), the first failing commit since the last green run and the compare link
 from that green commit. A later failed run rewrites the list; a green run
-closes the issue and posts "Green again" on the "Autoland log" issue. A run that finishes after a newer one reports nothing, so
+closes the issue. The workflow posts no issue comments: each run's job
+summary says whether main is red, still red or green again (`gh run view
+RUN_ID`). A run that finishes after a newer one reports nothing, so
 events arriving out of order never reopen or close it.
 
 Dispatching the workflow with a CI run ID reports any branch's run the same
@@ -196,12 +198,11 @@ it locally.
    replayed onto it, as a local landing would; only a conflict sends the
    branch through again.
 6. **Refuse.** On a conflict, a failed check or new failures, the branch
-   stays and the pinned "Autoland log" issue (repository variable
-   `AUTOLAND_LOG_ISSUE`) gets one comment, prefixed with the issues the
-   commits reference as `` `wisp#N` ``, naming the files or tests and linking
-   the run. The referenced issues get no comment: safe-push prints the
-   refusal. Push a fix to the same
-   branch and it tries again.
+   stays and the run fails; its job summary says "Autoland didn't land" and
+   names the conflicting files, failed check or new failing tests. Autoland
+   posts no issue comments: read outcomes with `gh run list --workflow
+   autoland.yml --branch claude/NAME` and `gh run view RUN_ID`. Push a fix to
+   the same branch and it tries again.
 
 The push itself only queues a run of main's copy of the workflow, so a
 branch made from an older main still lands with the current rules. Runs
@@ -211,7 +212,7 @@ whenever a suite shard fails, main's known failures included; its `land`
 job and summary say whether it landed. To retry a branch without a new
 commit: `gh workflow run autoland.yml -f branch=claude/NAME`. A commit that
 changes `.github/workflows/` can't land this way (the workflow token may not
-push workflow changes); the run says so on the log issue, and it lands through a
+push workflow changes); the run's summary says so, and it lands through a
 normal `safe-push`.
 
 ## Effect upgrades
@@ -261,10 +262,3 @@ To see where runs wait, compare each run's `created_at` with its first job's
 `started_at` (`gh api repos/OWNER/REPO/actions/runs/ID/jobs`); a queued job
 has no `runner_name` yet. A run's status alone hides the jobs running inside
 a queued run, so count jobs, not runs.
-
-## Autoland log
-
-Dispatch-only wisp:.github/workflows/autoland-log.yml opens and pins the
-"Autoland log" issue as github-actions[bot], so its comments notify nobody
-who would otherwise author it; the repository variable `AUTOLAND_LOG_ISSUE`
-names it.
