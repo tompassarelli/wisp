@@ -110,9 +110,10 @@ jobs:
         env:
           CC: gcc
           STORMLIB_PREFIX: /usr
-      - name: Scratch CPU ceiling checks (#65)
+      - name: Scratch cost ceiling checks (#65)
         if: ${{ matrix.shard == 0 && !cancelled() }}
         run: |
+          set -o pipefail
           scratch=$(mktemp -d .cost-proof-XXXXXX)
           trap 'rm -rf "$scratch"' EXIT
           cat > "$scratch/cheap.test.ts" <<'EOF'
@@ -120,7 +121,8 @@ jobs:
           for (let i = 0; i < 10; i++) test(`[spec #65] cheap input ${i}`, () => expect(i + 1).toBeGreaterThan(i));
           EOF
           bun run test "./$scratch/cheap.test.ts"
-          cat > "$scratch/slow.test.ts" <<'EOF'
+          # CPU is reported, not gated (wisp#114): five CPU seconds pass.
+          cat > "$scratch/cpu.test.ts" <<'EOF'
           import { test } from "bun:test";
           test("[spec #65] scratch test burns five CPU seconds", () => {
             const start = process.cpuUsage();
@@ -130,13 +132,24 @@ jobs:
             }
           }, 120000);
           EOF
+          bun run test "./$scratch/cpu.test.ts" | tee "$scratch/cpu.log"
+          rg 'cpu.test.ts [0-9.]+ s' "$scratch/cpu.log"
+          # A test over the frame ceiling fails and names its file.
+          cat > "$scratch/frames.test.ts" <<'EOF'
+          import { test } from "bun:test";
+          import { steppedFrames } from "../src/headless/frameCount";
+          import { TEST_CEILING_FRAMES } from "../scripts/wisp/testCost";
+          test("[spec #65] scratch test steps one frame over the ceiling", () => {
+            steppedFrames.count += TEST_CEILING_FRAMES + 1;
+          });
+          EOF
           set +e
-          bun run test "./$scratch/slow.test.ts" > "$scratch/slow.log" 2>&1
+          bun run test "./$scratch/frames.test.ts" > "$scratch/frames.log" 2>&1
           code=$?
           set -e
-          cat "$scratch/slow.log"
+          cat "$scratch/frames.log"
           test "$code" -eq 1
-          rg 'slow.test.ts: this test used .*over the 4 s ceiling per test; shrink it or move it to the farm' "$scratch/slow.log"
+          rg 'frames.test.ts: this test stepped 80001 headless frames, over the 80000-frame ceiling per test; shrink it or move it to the farm' "$scratch/frames.log"
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
