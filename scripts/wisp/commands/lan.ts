@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { Console, Effect, Exit, Schedule, Schema, Scope } from "effect";
+import { Console, Effect, Exit, Schema, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { Namespaces } from "../../platform/services";
 import { collect, pollUntil, spawnLogged } from "../hostProcess";
@@ -12,7 +12,7 @@ import {
   PAIR_SIDES, PROFILES, type PoolPair, agentSocket, clientName, desktopSize, pairClients, pairDirectory, poolClientsFile, poolFile, readPool, reportPort, writeJson, writePoolClients,
 } from "../lan/pool";
 import { setupClient } from "../lan/setup";
-import { admissionFile, pairAdmission } from "../lan/admission";
+import { CapacityDeferred, admissionFile, capacityDeferral, deferredExit, pairAdmission, retryWhileDeferred } from "../lan/admission";
 
 const SESSION = join(import.meta.dir, "../lan/pairSession.ts");
 
@@ -59,10 +59,6 @@ const capacityHelper = (args: readonly string[]) => {
   return given !== undefined ? Effect.succeed(given) : skillScript("machine-capacity", "scripts/machine-capacity.mjs");
 };
 
-class PairDeferred extends Schema.TaggedError<PairDeferred>()("PairDeferred", {
-  reason: Schema.String,
-}) {}
-
 const AdmissionRefusal = Schema.fromJsonString(Schema.Struct({ reason: Schema.String }));
 const AgentFile = Schema.fromJsonString(Schema.Struct({ runs: Schema.optionalKey(Schema.Struct({ a: Schema.optionalKey(Schema.String), b: Schema.optionalKey(Schema.String) })) }));
 const AgentProcess = Schema.fromJsonString(Schema.Struct({ pid: Schema.Int, runs: Schema.Struct({ a: Schema.String }) }));
@@ -89,12 +85,11 @@ const READY = "10 minutes";
 
 const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, fps?: number) => {
   const directory = pairDirectory(pair);
-  const deadline = Date.now() + waitSeconds * 1000;
   const attempt = Effect.gen(function*() {
     mkdirSync(directory, { recursive: true });
     rmSync(agentSocket(pair), { force: true });
     const waiting = yield* pairAdmission(capacity);
-    if (waiting !== undefined) return yield* new PairDeferred({ reason: waiting });
+    if (waiting !== undefined) return yield* new CapacityDeferred({ reason: waiting });
     rmSync(admissionFile(directory), { force: true });
 
     const scope = yield* Scope.fork(yield* Effect.scope);
@@ -105,16 +100,16 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
         stderr: join(directory, "session.err"),
       });
       const step = Effect.gen(function*() {
-        if (existsSync(admissionFile(directory))) return yield* new PairDeferred({ reason: (yield* readJson(admissionFile(directory), AdmissionRefusal)).reason });
+        if (existsSync(admissionFile(directory))) return yield* new CapacityDeferred({ reason: (yield* readJson(admissionFile(directory), AdmissionRefusal)).reason });
         if (!(yield* session.handle.isRunning.pipe(Effect.orElseSucceed(() => false)))) {
           const code = yield* session.handle.exitCode.pipe(Effect.map(Number), Effect.orElseSucceed(() => -1));
           yield* session.written.pipe(Effect.timeoutOption("1 second"));
-          if (code !== 75) return yield* new LanFailure({ problem: `its session exited with ${code}; see ${directory}/session.err and desktop-*.err` });
+          if (!deferredExit(code)) return yield* new LanFailure({ problem: `its session exited with ${code}; see ${directory}/session.err and desktop-*.err` });
 
           const said = readFileSync(join(directory, "session.err"), "utf8");
-          const reason = /"decision":"DEFER","reason":"([A-Z_]+)".*?"cpuSomeAvg10":([\d.]+)/.exec(said);
-          if (reason === null) return yield* new LanFailure({ problem: `the capacity helper refused: ${said.trim().split("\n").slice(-2).join(" | ")}` });
-          return yield* new PairDeferred({ reason: `${reason[1]}, CPU pressure ${reason[2]}%` });
+          const deferred = capacityDeferral(said);
+          if (deferred?.cpuSomeAvg10 === undefined) return yield* new LanFailure({ problem: `the capacity helper refused: ${said.trim().split("\n").slice(-2).join(" | ")}` });
+          return yield* new CapacityDeferred({ reason: `${deferred.reason}, CPU pressure ${deferred.cpuSomeAvg10}%` });
         }
         return yield* clientsReady(pair);
       });
@@ -125,10 +120,11 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
       return { ...session.handle, stop: Scope.close(scope, Exit.void) };
     }).pipe(Scope.provide(scope), Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))));
   });
-  return attempt.pipe(
-    Effect.tapError((failure) => failure._tag === "PairDeferred" && Date.now() < deadline ? Console.log(`pair ${pair}: the capacity helper defers it (${failure.reason}); trying again in 45 s`) : Effect.void),
-    Effect.retry({ schedule: Schedule.spaced("45 seconds"), while: (failure) => failure._tag === "PairDeferred" && Date.now() < deadline }),
-    Effect.catchTag("PairDeferred", (failure) => Effect.fail(new LanFailure({ problem: `the capacity helper kept deferring it for ${waitSeconds} s (${failure.reason})` }))),
+  return retryWhileDeferred(attempt, {
+    seconds: waitSeconds,
+    waiting: (reason) => `pair ${pair}: the capacity helper defers it (${reason})`,
+    exhausted: (reason) => new LanFailure({ problem: `the capacity helper kept deferring it for ${waitSeconds} s (${reason})` }),
+  }).pipe(
     Effect.mapError((failure) => new LanFailure({ problem: `pair ${pair}: ${failure.message}` })),
   );
 };

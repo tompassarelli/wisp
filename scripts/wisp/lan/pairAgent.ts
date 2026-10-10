@@ -14,7 +14,7 @@ import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { readMapFacts } from "./map";
 import { PAIR_SIDES, pairFlags, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
-import { admissionFile, nativeCommand } from "./admission";
+import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
 
 const argument = (name: string) => flagValues(process.argv, name)[0];
 const { pair, profile } = pairFlags(process.argv);
@@ -62,11 +62,10 @@ const launch = (capacity: string, client: PoolClient) => Effect.gen(function*() 
   const early = yield* game.handle.exitCode.pipe(Effect.map(Number), Effect.orElseSucceed(() => -1), Effect.timeoutOption("5 seconds"));
   if (Option.isSome(early)) {
     yield* game.written;
-    const said = early.value === 75 ? readFileSync(errFile, "utf8") : "";
-    const deferred = /"decision":"DEFER","reason":"([A-Z_]+)"/.exec(said);
-    if (deferred !== null) {
-      writeFileSync(admissionFile(directory), JSON.stringify({ reason: `${client.name}: ${deferred[1]}` }));
-      return yield* new LanFailure({ problem: `${client.name}: waiting for native capacity (${deferred[1]})` });
+    const deferred = deferredExit(early.value) ? capacityDeferral(readFileSync(errFile, "utf8")) : undefined;
+    if (deferred !== undefined) {
+      writeFileSync(admissionFile(directory), JSON.stringify({ reason: `${client.name}: ${deferred.reason}` }));
+      return yield* new LanFailure({ problem: `${client.name}: waiting for native capacity (${deferred.reason})` });
     }
     return yield* new LanFailure({ problem: `${client.name}: its native launcher exited with ${early.value}` });
   }
