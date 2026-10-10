@@ -1,4 +1,0 @@
-{
-  "extends": "./tsconfig.traps.json",
-  "include": ["traps/*.ts"]
-}

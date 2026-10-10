@@ -188,7 +188,7 @@ to report the first visible resumed fighter positions and animation times.
 The fifth argument remains a callback observation and should be used for
 simulation diagnostics rather than a visible-frame comparison.
 
-The focused `bun test test/headless-pause.test.ts` checks a three-second
+A three-second
 pause and a resume batch through real timers, units, effects and the local
 clock. A consumer's pad check must retain the native pause capture's helper
 acknowledgments and use this draw observation with its actual map and helper;
@@ -582,7 +582,7 @@ saves them as the scene's `environment`.
   Definitive fighters rose from L* 25.2 under stock light to 54.5 under
   Naxxramas' ambient 0.7 × intensity 2 (wisp#79, clone-d, 9 Oct), where
   Classic's clamp holds them near their texture; clamped, Wisp drew 35.0, and
-  unclamped 43.0 (wisp:test/light-range.test.ts).
+  unclamped 43.0.
   The headless clock does not advance the time of day. Before the map sets
   day/night models, models draw unlit, as before.
 - **Fog.** Linear fog by eye depth from `zStart` to `zEnd` in the fog colour.
@@ -647,7 +647,7 @@ saves them as the scene's `environment`.
   Native Classic, Smashcraft 56fb5249 on a base ending at y 4,096, Stratholme
   near view (8 Oct): the ruined cathedral at map y 5,944, 7,948 from the eye
   and in frame, isn't drawn, nor are Tomb's Temple of Tides and waterfall
-  (y 5,344); the city gate at y 3,544 is (wisp:test/world-bounds.test.ts).
+  (y 5,344); the city gate at y 3,544 is.
 - **Models that fail.** A model the renderer can't load or draw is left out
   of the frame and named on stderr and in `render.json`'s `notDrawn`; the
   rest of the frame still draws. The render command exits with a failure after
@@ -1109,8 +1109,8 @@ settings, doodad colors and animations, and all 24 destructable creation
 variants. `SceneryFixtures` supplies map doodads, cinematic shot durations,
 terrain pathing cells and HUD scale. Queries for missing cinematic or terrain
 facts fail with the needed fixture name.
-`bun test test/warcraft3-scenery.test.ts` exercises 92
-native calls in Bun and Lua32, with zero missing-native reports.
+The Warcraft 3 native fixture (wisp:test/headless-warcraft3.test.ts) exercises 92
+scenery native calls in Bun and Lua32, with zero missing-native reports.
 
 Set `scenery` and `inventory` on `HeadlessMap` or `LuaHeadlessMap`; both are
 passed to every client. `inventory.items` declares item types, levels,
@@ -1190,8 +1190,7 @@ The native batch passes 12 cases and fails both electric cases.
 
 Floor tech was overpainted by the opaque platform: pooled cues were drawn
 first because they were created first. Drawing opaque models before blended
-models increases its counts to 1970/2260/0 and agreement to 11/14. The
-native-pinned regression is `test/draw-order.test.ts`.
+models increases its counts to 1970/2260/0 and agreement to 11/14.
 
 The renderer now multiplies each layer's alpha by its geoset's animated
 alpha and blends additive layers with source alpha, so fades scale what an
@@ -1200,8 +1199,7 @@ ledge dust's 1×1 Dust5A grid had been sampled outside the texture and drew
 nothing. Emitters run one frame behind animation time, and each step poses
 the model at that step's own time (wisp:scripts/wisp/browser/emitters.ts).
 A squirt fires only when emitter time reaches its key: Frost Nova's ring,
-keyed at 33 ms, is absent two frames in, as natively
-(`test/effect-emitters.test.ts`). On all 42 frames:
+keyed at 33 ms, is absent two frames in, as natively. On all 42 frames:
 
 | Case | Native +2/+8/+20 | Headless +2/+8/+20 | Agreement |
 | --- | --- | --- | --- |
@@ -1227,8 +1225,7 @@ backdrop where native draws the stage sky; a sky-coloured clear brings
 electric hit's +8 from 538 to 269 (native 256) but leaves +2 at 4356.
 
 The effect's alpha is the renderer's model alpha (`setInstanceAlpha`) and
-fades every layer once; the three rules are pinned in
-`test/effect-opacity.test.ts`. With the map's sky drawn, two further
+fades every layer once. With the map's sky drawn, two further
 variants were measured on all 42 frames:
 
 - Fading additive colour by the effect alpha a second time: electric hit

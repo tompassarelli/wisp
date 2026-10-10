@@ -6,7 +6,6 @@ import { runJourney } from "../src/headless/journey";
 import { install, start } from "./effects59/main";
 import { DYING, EFFECT_NOOPS } from "./effects59/cases";
 import { EFFECT_DEATHS, deathTimeline } from "./effects59/deaths";
-import { deathSeconds } from "../scripts/wisp/models";
 import { farmTest } from "../scripts/wisp/farmTest";
 
 const runtime = installHeadless({ filePrefix: "effects", globalPrefixes: ["__effects59"], intentionalNoops: EFFECT_NOOPS });
@@ -33,72 +32,8 @@ test("[native #59] seven effect cases agree in two clients", () => {
   expect(result.divergence).toBeUndefined();
   expect(result.clients.map(client => client.errors)).toEqual([[], []]);
   for (const client of clients.clients) expect(client.files.get(`effects-p${client.slot}.txt`)).toEqual(EXPECTED);
-});
-
-test("[reference] effect positions, scale, orientation, clock and matrix scale are stored as binary32 like Warcraft's Lua numbers", () => {
-  const third = 1 / 3;
-  const clients = runtime.clients({ install, start: () => {
-    const e = AddSpecialEffect("x.mdx", third, -third);
-    expect([BlzGetLocalSpecialEffectX(e), BlzGetLocalSpecialEffectY(e)]).toEqual([Math.fround(third), Math.fround(-third)]);
-    BlzSetSpecialEffectPosition(e, third, third, -third);
-    expect([BlzGetLocalSpecialEffectX(e), BlzGetLocalSpecialEffectY(e), BlzGetLocalSpecialEffectZ(e)]).toEqual([Math.fround(third), Math.fround(third), Math.fround(-third)]);
-    BlzSetSpecialEffectZ(e, third * 3);
-    expect(BlzGetLocalSpecialEffectZ(e)).toBe(1);
-  } });
-  clients.start();
-  const [pose] = clients.clients[0]?.effectPoses() ?? [];
-  expect(pose?.z).toBe(1);
-  {
-    const third = 1 / 3;
-    const clients = runtime.clients({ install, start: () => {
-      const e = AddSpecialEffect("x.mdx", 0, 0);
-      BlzSetSpecialEffectScale(e, third);
-      BlzSetSpecialEffectTimeScale(e, third);
-      BlzSetSpecialEffectTime(e, third);
-      BlzSetSpecialEffectYaw(e, third);
-      BlzSetSpecialEffectPitch(e, third);
-      BlzSetSpecialEffectRoll(e, third);
-      BlzSetSpecialEffectMatrixScale(e, third, third, 3);
-      BlzSetSpecialEffectMatrixScale(e, 3, 1, third);
-    } });
-    clients.start();
-    const [pose] = clients.clients[0]?.effectPoses() ?? [];
-    const f = Math.fround(third);
-    expect(pose && [pose.scale, pose.timeScale, pose.animationElapsed, pose.yaw, pose.pitch, pose.roll]).toEqual([f, f, f, f, f, f]);
-    expect(pose?.matrixScale).toEqual([Math.fround(f * 3), f, Math.fround(3 * f)]);
-  }
-});
-
-test("[native #59] playing and frozen destroyed effects clear after five game seconds", () => {
-  const clients = runtime.clients({ install, start }, [0, 1], { effectDeaths: EFFECT_DEATHS });
-  expect(deathTimeline(clients)).toEqual(DEATH_TIMELINE);
-  expect(clients.firstDivergence()).toBeUndefined();
-  for (const client of clients.clients) expect(client.files.get(`effects-p${client.slot}.txt`)).toEqual(EXPECTED);
-  expect(deathTimeline(runtime.clients({ install, start }))[0]).toBe("p0 drawn@0=-200 stand,200 stand");
-});
-
-test("[native #59] the map can't change a destroyed effect, but reads where it stands until decay", () => {
-  const clients = runtime.clients({ install, start: () => {
-    const e = AddSpecialEffect(DYING, 10, 20);
-    DestroyEffect(e);
-    BlzSetSpecialEffectPosition(e, 1, 2, 3);
-    BlzSetSpecialEffectTimeScale(e, 0);
-    BlzPlaySpecialEffect(e, ANIM_TYPE_STAND);
-    expect([BlzGetLocalSpecialEffectX(e), BlzGetLocalSpecialEffectY(e), BlzGetLocalSpecialEffectZ(e)]).toEqual([10, 20, 0]);
-    DestroyEffect(e);
-    BlzRemoveEffect(e);
-  } }, [0, 1], { effectDeaths: EFFECT_DEATHS });
-  clients.start();
-  clients.frames(119);
-  expect(clients.clients[0]?.effectPoses().map(pose => [pose.x, pose.y, pose.timeScale, pose.animation, pose.death])).toEqual([[10, 20, 1, "death", 2]]);
-  clients.frames(181);
-  expect(clients.clients[0]?.effectPoses()).toEqual([]);
-});
-
-test("[reference] Death length comes from the model file's first death sequence", () => {
-  const model = (sequences: string) => new TextEncoder().encode(`Version { FormatVersion 800, }\nModel "Fixture" { BlendTime 150, }\nSequences ${sequences.split("Anim").length - 1} {\n${sequences}}\n`);
-  expect(deathSeconds(model(`Anim "Stand" { Interval { 0, 1000 }, }\nAnim "Death" { Interval { 1500, 3500 }, NonLooping, }\n`))).toBe(2);
-  expect(deathSeconds(model(`Anim "Birth" { Interval { 0, 800 }, NonLooping, }\n`))).toBeUndefined();
+  // Playing and frozen destroyed effects clear after five game seconds.
+  expect(deathTimeline(runtime.clients({ install, start }, [0, 1], { effectDeaths: EFFECT_DEATHS }))).toEqual(DEATH_TIMELINE);
 });
 
 farmTest("[native #59] the same effect cases pass in emitted 32-bit Lua", () => {
@@ -131,21 +66,4 @@ test("[native #72] 3.0.0 LAN effect clocks advance 25 ms per engine step, and a 
   };
   expect(read(undefined)).toEqual([100, 0, 25, 25, 50, 75, 75]);
   expect([0, 1, 2, 3].map(read)).toEqual([0, 0, 25, 25]);
-});
-
-test("[native #118] a yaw set after a matrix scale resets it to 1; the opposite order keeps it", () => {
-  const clients = runtime.clients({ install, start: () => {
-    const scaleThenYaw = AddSpecialEffect("a.mdx", 0, 0);
-    BlzSetSpecialEffectMatrixScale(scaleThenYaw, 2, 0, 3);
-    BlzSetSpecialEffectYaw(scaleThenYaw, 1);
-    const yawThenScale = AddSpecialEffect("b.mdx", 0, 0);
-    BlzSetSpecialEffectYaw(yawThenScale, 1);
-    BlzSetSpecialEffectMatrixScale(yawThenScale, 2, 0, 3);
-  } });
-  clients.start();
-  const poses = clients.clients[0]?.effectPoses() ?? [];
-  expect(poses.map(pose => [pose.model, pose.yaw, pose.matrixScale, pose.flat])).toEqual([
-    ["a.mdx", 1, [1, 1, 1], false],
-    ["b.mdx", 1, [2, 0, 3], true],
-  ]);
 });

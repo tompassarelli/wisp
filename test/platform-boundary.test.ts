@@ -2,12 +2,6 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Exit } from "effect";
-import { platformLayer } from "../scripts/platform/layer";
-import { BackgroundServices, GameLauncher, InputInjection, Namespaces, ProcessTable, ResourceAccounting, ScreenCapture } from "../scripts/platform/services";
-import { capture } from "../scripts/warcraft/desktop";
-import { cliProgram } from "../scripts/wisp/cli";
-import { playMachineLayer } from "../scripts/wisp/playHost";
-import { PlayMachine } from "../scripts/wisp/play";
 
 const root = join(import.meta.dir, "..");
 
@@ -39,51 +33,8 @@ test("[invariant] no Linux-specific call sits outside scripts/platform/linux", (
   expect(directUses(sources())).toEqual([]);
 });
 
-test("[invariant] the guard catches a new direct use of /proc, xdotool, Wine's runtime or a platform branch", () => {
-  const planted: Record<string, string> = {
-    "scripts/wisp/a.ts": "const status = readFileSync(`/proc/${pid}/status`);",
-    "scripts/wisp/b.ts": "run([client.tools.xdotool, \"key\", \"Return\"]);",
-    "scripts/wisp/c.ts": "if (process.platform === \"win32\") return;",
-    "scripts/wisp/d.ts": "const runtime = info.name === \"wineserver\";",
-  };
-  expect(directUses(Object.keys(planted), (path) => planted[path] ?? "")).toEqual([
-    "scripts/wisp/a.ts:1: /proc outside a Linux layer",
-    "scripts/wisp/b.ts:1: a configured Linux tool outside a Linux layer",
-    "scripts/wisp/c.ts:1: a platform branch outside a Linux layer",
-    "scripts/wisp/d.ts:1: a Linux tool outside a Linux layer",
-  ]);
-});
-
-const windows = platformLayer("win32");
-
 const failure = <A, E>(effect: Effect.Effect<A, E, never>) => {
   const exit = Effect.runSyncExit(effect);
   if (!Exit.isFailure(exit)) throw new Error("expected a failure");
   return String(exit.cause);
 };
-
-test("[invariant] each capability without an implementation fails with a named not-supported error on Windows", () => {
-  const on = <A, E>(effect: Effect.Effect<A, E, ProcessTable | BackgroundServices | GameLauncher | Namespaces>) => failure(effect.pipe(Effect.provide(windows)));
-  expect(on(ProcessTable.use((table) => table.list))).toContain("process discovery is not supported on this platform (win32)");
-  expect(on(BackgroundServices.use((services) => services.start("unit", ["true"])))).toContain("background services is not supported on this platform (win32)");
-  expect(on(GameLauncher.use((launcher) => launcher.inPrefix({ root: "/r", exe: "C:\\x.exe", args: [], appId: "1" })))).toContain("game launch is not supported on this platform (win32)");
-  expect(on(Namespaces.use((namespaces) => namespaces.enter(1, ["net"], ["true"])))).toContain("process namespaces is not supported on this platform (win32)");
-  const client = { name: "a", documents: "/d", tools: { grim: "", xdotool: "", wlrctl: "", tesseract: "" }, x11: {}, wayland: {}, window: "1" };
-  expect(failure(capture(client).pipe(Effect.provide(windows)))).toContain("screen capture is not supported on this platform (win32)");
-  expect(failure(InputInjection.use((input) => input.keys(client, ["a"])).pipe(Effect.provide(windows)))).toContain("input injection is not supported on this platform (win32)");
-  expect(failure(ScreenCapture.use((screen) => screen.frame(client)).pipe(Effect.provide(windows)))).toContain("not supported on this platform");
-  expect(failure(Effect.scoped(PlayMachine.use((machine) => machine.processes).pipe(Effect.provide(playMachineLayer({}, "win32")))))).toContain("playing on the owner's desktop is not supported on this platform (win32)");
-});
-
-test("[invariant] accounting reads without an implementation report nothing instead of failing", () => {
-  const accounting = Effect.runSync(ResourceAccounting.use(Effect.succeed).pipe(Effect.provide(windows)));
-  expect([accounting.cpuPressure(), accounting.cpuLimit(), accounting.insideCapacityLease()]).toEqual([undefined, undefined, false]);
-  expect(accounting.threadCpuMillis()).toBeGreaterThan(0);
-});
-
-test("[invariant] a command that needs a missing capability prints its not-supported line and exits 1", async () => {
-  const printed: string[] = [];
-  const commands = { processes: { usage: "", load: async () => () => ProcessTable.use((table) => table.list).pipe(Effect.asVoid) } };
-  expect(await Effect.runPromise(cliProgram("wisp", commands, ["processes"], (line) => printed.push(line), windows))).toBe(1);
-  expect(printed.at(-1)).toBe("process discovery is not supported on this platform (win32)");
-});

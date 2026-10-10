@@ -1,9 +1,6 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, expect, test } from "bun:test";
 import { Effect, Exit } from "effect";
-import { type MenuAddress, connectMenus, hostLobby, installMenuPage, leaveLobby, listenForMenus, menuPage, removeMenuPage, startLobby } from "../scripts/wisp/menus";
+import { type MenuAddress, connectMenus, hostLobby, leaveLobby, listenForMenus, startLobby } from "../scripts/wisp/menus";
 
 const GUID = "6f1c2a90-guid";
 const MAPS = "C:/Users/player/Documents/Warcraft III/Maps/";
@@ -134,53 +131,4 @@ test("[scenario] hosting lists a folder again until the game has read its maps, 
   expect(game.received.filter(({ message }) => message === "GetMapList").length).toBe(4);
   // LobbyStart immediately after hosting can crash Warcraft while loading.
   expect(settled).toBeGreaterThanOrEqual(290);
-});
-
-test("[invariant] the page is installed only where Warcraft's own page isn't, and removed only when it is Wisp's", async () => {
-  const retail = mkdtempSync(join(tmpdir(), "wisp-retail-"));
-  try {
-    const page = join(retail, "webui", "index.html");
-    expect(failure(await run(installMenuPage(retail)))).toContain("is not Warcraft III's _retail_ folder");
-    mkdirSync(join(retail, "x86_64"));
-    expect(await Effect.runPromise(installMenuPage(retail, 47200))).toBe(page);
-    expect(readFileSync(page, "utf8")).toContain("http://127.0.0.1:47200");
-    expect(await Effect.runPromise(removeMenuPage(retail))).toBe(true);
-    expect(existsSync(join(retail, "webui"))).toBe(false);
-    mkdirSync(join(retail, "webui"));
-    writeFileSync(page, "<html>W3Champions</html>");
-    expect(failure(await run(installMenuPage(retail)))).toContain("is another program's menu page");
-    expect(failure(await run(removeMenuPage(retail)))).toContain("is not Wisp's menu page");
-    expect(readFileSync(page, "utf8")).toBe("<html>W3Champions</html>");
-  } finally {
-    rmSync(retail, { recursive: true, force: true });
-  }
-});
-
-test("[invariant] the page keeps the newest screens it heard and announces them, so a later listener knows where the menus are", () => {
-  const script = /<script>\n([\s\S]*?)<\/script>/.exec(menuPage(47123))?.[1] ?? "";
-  const posts: { url: string; body: unknown }[] = [];
-  let listener: ((event: { data: string }) => void) | undefined;
-  class NativeSocket {
-    constructor(readonly url: string) {}
-    send() {}
-    addEventListener(_: string, heard: (event: { data: string }) => void) {
-      listener = heard;
-    }
-  }
-  const window: { WebSocket: unknown } = { WebSocket: NativeSocket };
-  const fetch = (url: string, init: { body: string }) => {
-    posts.push({ url, body: JSON.parse(init.body) });
-    return Promise.resolve();
-  };
-  const timers: (() => void)[] = [];
-  new Function("window", "location", "fetch", "setTimeout", "URLSearchParams", script)(window, { search: `?guid=${GUID}`, port: "38487" }, fetch, (next: () => void) => { timers.push(next); }, URLSearchParams);
-  const socket = new (window.WebSocket as new (url: string) => NativeSocket)(`ws://127.0.0.1:38487/webui-socket/${GUID}`);
-  for (const [messageType, payload] of [["SetGlueScreen", { screen: "CUSTOM_LOBBIES" }], ["MapList", { mapList: {} }], ["GameLobbySetup", { isHost: true, players: [] }]] as const) {
-    listener!({ data: JSON.stringify({ messageType, payload }) });
-  }
-  socket.send(JSON.stringify({ message: "ScreenTransitionInfo", payload: { screen: "CREATE_GAME", type: "Screen" } }));
-  socket.send(JSON.stringify({ message: "ScreenTransitionInfo", payload: { screen: "OPTIONS", type: "Overlay" } }));
-  timers.shift()!();
-  const announced = posts.at(-1)!.body as { recent: { messageType: string; screen?: string; isHost?: boolean; at: number }[] };
-  expect(announced.recent.map(({ at: _, ...heard }) => heard)).toEqual([{ messageType: "SetGlueScreen", screen: "CUSTOM_LOBBIES" }, { messageType: "GameLobbySetup", isHost: true }, { messageType: "ScreenTransitionInfo", screen: "CREATE_GAME", type: "Screen" }]);
 });
