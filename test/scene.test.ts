@@ -102,7 +102,7 @@ test("[spec docs/player-view.md] the player-view check reads each client's settl
     const sky = new Uint8Array(4 * 4 * 3).fill(200);
     const client = { name: "a", documents };
     const fail = () => Effect.die("unused");
-    const clients = Layer.succeed(Clients, Clients.of({ all: [client], capture: () => Effect.succeed({ width: 4, height: 4, rgb: sky }), read: fail, words: fail, click: fail, keys: fail, typeText: fail, batch: fail }));
+    const clients = Layer.succeed(Clients, Clients.of({ all: [client], capture: () => Effect.succeed({ width: 4, height: 4, rgb: sky }), read: fail, words: fail, click: fail, hover: fail, clickInWindow: fail, keys: fail, typeText: fail, batch: fail }));
     const expected = {
       filePrefix: "fixture",
       scene: { ...expectations, settledFrame: 30 },

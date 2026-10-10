@@ -21,6 +21,9 @@ export type Step =
   | { readonly keys: readonly string[]; readonly client?: string }
   | { readonly waitMs: number }
 
+  | { readonly hover: readonly [x: number, y: number]; readonly client?: string }
+  | { readonly click: readonly [x: number, y: number]; readonly client?: string }
+
   | { readonly receipt: string; readonly client?: string; readonly seconds?: number };
 
 
@@ -105,6 +108,8 @@ export class AcceptDriver extends Context.Service<AcceptDriver, {
   readonly start: (map: string, session: string) => Effect.Effect<void, AcceptFailure>;
   readonly chat: (client: string, text: string) => Effect.Effect<void, AcceptFailure>;
   readonly keys: (client: string, keys: readonly string[]) => Effect.Effect<void, AcceptFailure>;
+  readonly hover: (client: string, x: number, y: number) => Effect.Effect<void, AcceptFailure>;
+  readonly click: (client: string, x: number, y: number) => Effect.Effect<void, AcceptFailure>;
   readonly capture: (client: string) => Effect.Effect<Frame, AcceptFailure>;
   readonly read: (client: string, region: Region | undefined, ink: Ink) => Effect.Effect<string, AcceptFailure>;
 
@@ -174,6 +179,8 @@ export function suiteProblems(suite: AcceptSuite, clients?: readonly string[]): 
     for (const step of check.setup ?? []) {
       if ("receipt" in step) pattern(id, step.receipt);
       if ("client" in step) client(id, step.client);
+      const point = "hover" in step ? step.hover : "click" in step ? step.click : undefined;
+      if (point !== undefined && !point.every((value) => Number.isInteger(value) && value >= 0)) problems.push(`${id}: ${describeStep(step, "host")} is not a window pixel`);
     }
     for (const capture of check.capture ?? []) {
       client(id, capture.client);
@@ -198,6 +205,8 @@ export function describeStep(step: Step, host: string): string {
   if ("chat" in step) return `chat ${step.client ?? host}: ${step.chat}`;
   if ("keys" in step) return `keys ${step.client ?? host}: ${step.keys.join(" ")}`;
   if ("waitMs" in step) return `wait ${step.waitMs} ms`;
+  if ("hover" in step) return `hover ${step.client ?? host}: ${step.hover.join(" ")}`;
+  if ("click" in step) return `click ${step.client ?? host}: ${step.click.join(" ")}`;
   return `wait for receipt ${step.client ?? host} /${step.receipt}/ (${step.seconds ?? DEFAULT_RECEIPT_SECONDS} s)`;
 }
 
@@ -355,6 +364,8 @@ export const runAccept = (suite: AcceptSuite, sessions: readonly PlannedSession[
         if ("chat" in step) yield* driver.chat(step.client ?? host, step.chat);
         else if ("keys" in step) yield* driver.keys(step.client ?? host, step.keys);
         else if ("waitMs" in step) yield* Effect.sleep(Duration.millis(step.waitMs));
+        else if ("hover" in step) yield* driver.hover(step.client ?? host, ...step.hover);
+        else if ("click" in step) yield* driver.click(step.client ?? host, ...step.click);
         else {
           const client = step.client ?? host;
           const pattern = new RegExp(step.receipt);

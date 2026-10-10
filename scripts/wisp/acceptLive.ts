@@ -62,6 +62,8 @@ export const liveAcceptDriver = <R>({ start, receipt, prepare, matchSeconds = 60
       }).pipe(Effect.provide(context)),
       chat: (name, text) => on(name, "chat", (client) => clients.batch(client, [{ kind: "keys", keys: ["Return"] }, { kind: "text", text }, { kind: "keys", keys: ["Return"] }])),
       keys: (name, keys) => on(name, "keys", (client) => clients.keys(client, ...keys)),
+      hover: (name, x, y) => on(name, "hover", (client) => clients.hover(client, x, y)),
+      click: (name, x, y) => on(name, "click", (client) => clients.clickInWindow(client, x, y)),
       capture: (name) => on(name, "capture", (client) => clients.capture(client)),
       read: (name, region, ink) => on(name, "read", (client) => clients.read(client, region, ink)),
       receipts: (name) => on(name, "receipts", (client) => Effect.gen(function*() {

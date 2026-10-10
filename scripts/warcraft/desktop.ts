@@ -10,7 +10,7 @@ import { captureProcess } from "../wisp/mapBuild";
 import { step } from "../wisp/timings";
 import { ClientWatch, describeView, typesIntoMatch } from "../wisp/watch";
 import { CLIENT_PROFILE_NAMES } from "../wisp/lan/pool";
-import { inputBatches, sendsChat, type InputAction } from "./inputBatch";
+import { inputBatches, sendsChat, type InputAction, type PointerPosition } from "./inputBatch";
 export type { InputAction } from "./inputBatch";
 export { sendsChat } from "./inputBatch";
 
@@ -300,12 +300,48 @@ export const focusWindow = (client: Client, title: string) =>
   });
 
 
-export const pressAt = (client: Client, x: number, y: number) =>
+const movePointer = (client: Client, x: number, y: number) =>
   Effect.gen(function*() {
     const from = yield* pointer(client);
     yield* run(client.name, "move pointer", [client.tools.xdotool, "mousemove_relative", "--", String(x - from.x), String(y - from.y)], client.x11);
     const at = yield* pointer(client);
     if (at.x !== x || at.y !== y) return yield* new DesktopFailure({ operation: "move pointer", client: client.name, cause: `pointer at ${at.x},${at.y}, wanted ${x},${y}` });
+  });
+
+
+export function windowPoint(window: Region, x: number, y: number): PointerPosition | undefined {
+  if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= window.width || y >= window.height) return undefined;
+  return { x: window.x + x, y: window.y + y };
+}
+
+
+const toWindowPoint = (client: Client, x: number, y: number) =>
+  Effect.gen(function*() {
+    yield* focus(client);
+    const window = yield* windowRegion(client);
+    const at = windowPoint(window, x, y);
+    if (at === undefined) return yield* new DesktopFailure({ operation: "move pointer", client: client.name, cause: `${x},${y} is outside the ${window.width}x${window.height} Warcraft window` });
+    return at;
+  });
+
+
+export const hover = (client: Client, x: number, y: number) =>
+  Effect.gen(function*() {
+    const at = yield* toWindowPoint(client, x, y);
+    yield* movePointer(client, at.x, at.y);
+  });
+
+
+export const clickInWindow = (client: Client, x: number, y: number) =>
+  Effect.gen(function*() {
+    const at = yield* toWindowPoint(client, x, y);
+    yield* pressAt(client, at.x, at.y);
+  });
+
+
+export const pressAt = (client: Client, x: number, y: number) =>
+  Effect.gen(function*() {
+    yield* movePointer(client, x, y);
     yield* Effect.sleep("120 millis");
     yield* run(client.name, "press button", [client.tools.xdotool, "mousedown", "1"], client.x11);
     yield* Effect.sleep("60 millis");

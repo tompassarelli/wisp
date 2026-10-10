@@ -16,6 +16,8 @@ export class Clients extends Context.Service<Clients, {
   readonly capture: (client: Client) => Effect.Effect<Frame, desktop.DesktopFailure>;
   readonly words: (client: Client, ink?: desktop.Ink) => Effect.Effect<readonly desktop.Word[], desktop.DesktopFailure>;
   readonly click: (client: Client, x: number, y: number) => Effect.Effect<void, desktop.DesktopFailure>;
+  readonly hover: (client: Client, x: number, y: number) => Effect.Effect<void, desktop.DesktopFailure>;
+  readonly clickInWindow: (client: Client, x: number, y: number) => Effect.Effect<void, desktop.DesktopFailure>;
   readonly keys: (client: Client, ...names: string[]) => Effect.Effect<void, desktop.DesktopFailure>;
   readonly typeText: (client: Client, value: string) => Effect.Effect<void, desktop.DesktopFailure>;
   readonly batch: (client: Client, actions: readonly desktop.InputAction[]) => Effect.Effect<void, desktop.DesktopFailure>;
@@ -48,6 +50,8 @@ const connect = (path: string) => Effect.gen(function*() {
     capture: (client) => Effect.flatMap(session(client), (value) => desktop.capture(value)),
     words: (client, ink = "light") => Effect.flatMap(session(client), (value) => desktop.words(value, ink)),
     click: (client, x, y) => Effect.flatMap(session(client), (value) => desktop.click(value, x, y)),
+    hover: (client, x, y) => Effect.flatMap(session(client), (value) => desktop.hover(value, x, y)),
+    clickInWindow: (client, x, y) => Effect.flatMap(session(client), (value) => desktop.clickInWindow(value, x, y)),
     keys: (client, ...names) => Effect.flatMap(session(client), (value) => desktop.keys(value, ...names)),
     typeText: (client, value) => Effect.flatMap(session(client), (target) => desktop.typeText(target, value)),
     batch: (client, actions) => Effect.flatMap(session(client), (target) => desktop.batch(target, actions)),
