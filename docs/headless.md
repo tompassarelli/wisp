@@ -632,6 +632,12 @@ saves them as the scene's `environment`.
   its lifespan; velocity follows `TextTagSpeed2Velocity` (0.071 is 128 world
   units a second). A tag draws outlined over the world, its text's
   bottom-left at its place, under the UI.
+- **Lightning.** `AddLightning`, `AddLightningEx`, `MoveLightning`,
+  `MoveLightningEx`, `SetLightningColor`, its colour reads and
+  `DestroyLightning` are simulated; `captureScene` saves live bolts as
+  `lightnings` (code name, both endpoints, colour 0-1). A bolt with alpha
+  above 0 draws as a 3 px line in its colour over the world, under text tags;
+  its code name's texture isn't drawn.
 - **World bounds.** With `render.terrain` (the map's `war3map.w3e`, or only
   its `bounds`, and `origin`, the map point the headless world's 0,0 stands
   on), an effect whose origin lies outside the world bounds is not drawn;

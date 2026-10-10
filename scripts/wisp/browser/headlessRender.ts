@@ -811,6 +811,19 @@ window.renderScene = async (scene, options) => {
   if (live) context.clearRect(0, 0, overlay.width, overlay.height);
   else context.drawImage(canvas, 0, 0);
   const clip = multiply(view.projection, view.view);
+  const onScreen = (x: number, y: number, z: number): [number, number] | undefined => {
+    const at = [0, 1, 3].map((row) => (clip[row] ?? 0) * x + (clip[4 + row] ?? 0) * y + (clip[8 + row] ?? 0) * z + (clip[12 + row] ?? 0));
+    const w = at[2] ?? 0;
+    return w <= 0 ? undefined : [((at[0] ?? 0) / w + 1) / 2 * output.width, (1 - (at[1] ?? 0) / w) / 2 * output.height];
+  };
+  for (const bolt of scene.lightnings ?? []) {
+    const from = onScreen(...bolt.from), to = onScreen(...bolt.to);
+    if (from === undefined || to === undefined || bolt.color[3] <= 0) continue;
+    const [red, green, blue, alpha] = bolt.color.map((channel) => Math.max(0, Math.min(1, channel)));
+    context.strokeStyle = `rgba(${Math.round((red ?? 1) * 255)},${Math.round((green ?? 1) * 255)},${Math.round((blue ?? 1) * 255)},${alpha})`;
+    context.lineWidth = 3;
+    context.beginPath(); context.moveTo(...from); context.lineTo(...to); context.stroke();
+  }
   for (const tag of scene.textTags ?? []) {
     const at = [0, 1, 2, 3].map((row) => (clip[row] ?? 0) * tag.x + (clip[4 + row] ?? 0) * tag.y + (clip[8 + row] ?? 0) * tag.z + (clip[12 + row] ?? 0));
     const w = at[3] ?? 0;

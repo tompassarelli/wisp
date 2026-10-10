@@ -18,6 +18,7 @@ import { Warcraft3Abilities, type AbilityObjectFixtures } from "./warcraft3Abili
 import { WARCRAFT3_ENUM_VALUES } from "./warcraft3Natives";
 import { Scenery, type SceneryFixtures } from "./warcraft3Scenery";
 import { TextTags } from "./textTags";
+import { Lightnings } from "./lightnings";
 import { Warcraft3Inventory, type Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 
 export type Handle = { readonly kind: string; readonly id: number };
@@ -556,6 +557,7 @@ export class HeadlessClient {
   readonly abilities: Warcraft3Abilities;
 
   readonly textTags = new TextTags();
+  readonly lightnings = new Lightnings();
   readonly textAreaAutoScroll = new Map<Handle, boolean>();
   readonly heldMouseButtons = new Set<unknown>();
   mouseScreenX = 0;
@@ -901,6 +903,7 @@ export class HeadlessClient {
         handle: kind => this.handle(kind),
         unitPosition: (unit) => { const live = unit as Unit | undefined; return live === undefined || live.removed ? undefined : { x: live.x, y: live.y, z: live.z }; },
       }),
+      ...this.lightnings.behaviors({ handle: kind => this.handle(kind) }),
       ...this.inventory.behaviors(),
       GetLocalPlayer: () => this.slot,
       Player: (n: number) => n,
