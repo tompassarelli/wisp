@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Cause, Effect, Exit, Fiber, Layer, Option, Ref, Schedule, Schema } from "effect";
+import { pollUntil } from "./hostProcess";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { platformLayer } from "../platform/layer";
 import { type CpuPressure, ResourceAccounting } from "../platform/services";
@@ -148,11 +149,9 @@ const timingPhase = (files: readonly string[], args: readonly string[], print: (
         "--", process.execPath, import.meta.path, "--timing-run", resultsFile, ...files, "--", ...args,
       ]);
 
-      const admission = Effect.sync(() => existsSync(startedFile(resultsFile))).pipe(
-        Effect.repeat({ schedule: Schedule.spaced("2 seconds"), until: (started) => started }),
-        Effect.timeoutOption(`${LEASE_WAIT_MINUTES} minutes`),
-        Effect.flatMap((started) => (Option.isSome(started) ? Effect.never : Effect.void)),
-      );
+      const admission = pollUntil(Effect.sync(() => existsSync(startedFile(resultsFile))), {
+        until: (started) => started, every: "2 seconds", within: `${LEASE_WAIT_MINUTES} minutes`, onTimeout: () => Effect.succeed(false),
+      }).pipe(Effect.flatMap((started) => (started ? Effect.never : Effect.void)));
       const code = yield* Effect.raceFirst(leased, admission);
       if (code === undefined) {
         print(`timing tests: no exclusive lease within ${LEASE_WAIT_MINUTES} minutes; running them without one, judged by CPU pressure`);
@@ -168,11 +167,9 @@ const timingPhase = (files: readonly string[], args: readonly string[], print: (
   (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
 );
 
-const quiet = readPressure.pipe(
-  Effect.repeat({ schedule: Schedule.spaced("5 seconds"), until: (reading) => reading === undefined || reading.avg10 <= BUSY_PRESSURE }),
-  Effect.timeoutOption(QUIET_WAIT),
-  Effect.flatMap((reading) => (Option.isSome(reading) ? Effect.succeed(reading.value) : readPressure)),
-);
+const quiet = pollUntil(readPressure, {
+  until: (reading) => reading === undefined || reading.avg10 <= BUSY_PRESSURE, every: "5 seconds", within: QUIET_WAIT, onTimeout: () => readPressure,
+});
 
 export type Verdict = "passed" | "failed" | "inconclusive";
 

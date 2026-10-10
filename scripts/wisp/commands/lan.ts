@@ -4,7 +4,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Console, Effect, Exit, Schedule, Schema, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { Namespaces } from "../../platform/services";
-import { collect, spawnLogged } from "../hostProcess";
+import { collect, pollUntil, spawnLogged } from "../hostProcess";
 import { type Command, UsageFailure, describeCause, flagValues } from "../command";
 import { LanFailure } from "../lan/join";
 import { lanPluginProblem } from "../lan/plugin";
@@ -123,10 +123,10 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
         }
         return yield* clientsReady(pair);
       });
-      yield* step.pipe(
-        Effect.repeat({ schedule: Schedule.spaced("1 second"), until: (ready) => ready }),
-        Effect.timeoutOrElse({ duration: READY, orElse: () => Effect.fail(new LanFailure({ problem: `its clients weren't both running within ${READY}; see ${directory}` })) }),
-      );
+      yield* pollUntil(step, {
+        until: (ready) => ready, every: "1 second", within: READY,
+        onTimeout: () => Effect.fail(new LanFailure({ problem: `its clients weren't both running within ${READY}; see ${directory}` })),
+      });
       return { ...session.handle, stop: Scope.close(scope, Exit.void) };
     }).pipe(Scope.provide(scope), Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))));
   });

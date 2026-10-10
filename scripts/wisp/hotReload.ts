@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import { Context, Effect, Layer, Schedule, Schema } from "effect";
+import { Context, Effect, Layer, Schema } from "effect";
+import { pollUntil } from "./hostProcess";
 import { type Manifest, NO_BASE, ackFile, formatManifest, hotFolder, manifestFile, payloadKey } from "../../src/runtime/gameFiles";
 import { ModulePublisher, type ModuleSet, type VersionFiles, moduleChunk } from "../../src/runtime/modules";
 import type { BundledModule, BundledModules } from "../luaBundle";
@@ -112,14 +113,10 @@ export class HotReload extends Context.Service<HotReload, {
         }
         return pending.size === 0;
       });
-      return look.pipe(
-        Effect.repeat({ schedule: Schedule.spaced("5 millis"), until: (done) => done }),
-        Effect.timeoutOrElse({
-          duration: ACK_TIMEOUT_MS,
-          orElse: () => Effect.fail(new NotAcknowledged({ version: current, directories: [...pending], problems: [...problems.values()].map((problem) => problem.message) })),
-        }),
-        Effect.asVoid,
-      );
+      return pollUntil(look, {
+        until: (done) => done, every: "5 millis", within: ACK_TIMEOUT_MS,
+        onTimeout: () => Effect.fail(new NotAcknowledged({ version: current, directories: [...pending], problems: [...problems.values()].map((problem) => problem.message) })),
+      }).pipe(Effect.asVoid);
     };
 
     const publish = Effect.gen(function*() {

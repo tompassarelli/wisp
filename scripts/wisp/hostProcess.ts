@@ -41,6 +41,18 @@ export const collect = (command: ChildProcess.Command) => Effect.scoped(Effect.g
   return { exitCode, stdout, stderr } satisfies Collected;
 }));
 
+/** Runs `check` every `every` until `until` holds; after `within` it stops and runs `onTimeout` instead. */
+export const pollUntil = <A, E, R, A2, E2, R2>(check: Effect.Effect<A, E, R>, options: {
+  readonly until: (value: A) => boolean;
+  readonly every: Duration.Input;
+  readonly within: Duration.Input;
+  readonly onTimeout: () => Effect.Effect<A2, E2, R2>;
+}): Effect.Effect<A | A2, E | E2, R | R2> =>
+  check.pipe(
+    Effect.repeat({ schedule: Schedule.spaced(options.every), until: options.until }),
+    Effect.timeoutOrElse({ duration: options.within, orElse: options.onTimeout }),
+  );
+
 export const pollFor = <A, E, R>(seconds: number, every: Duration.Input, check: Effect.Effect<A | undefined, E, R>): Effect.Effect<A | undefined, E, R> =>
   check.pipe(
     Effect.repeat({ schedule: Schedule.spaced(every), until: (value) => value !== undefined }),
