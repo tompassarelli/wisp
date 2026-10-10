@@ -87,7 +87,11 @@ export const reportRun = (runId: string) => Effect.gen(function*() {
   const open = (yield* gh("issue", "list", "--state", "open", "--search", `"${title}" in:title`, "--json", "number,title").pipe(Effect.flatMap(decode(Issues, "gh issue list"))))
     .filter((issue) => issue.title === title);
   if (run.conclusion === "success") {
-    for (const { number } of open) yield* gh("issue", "close", String(number), "--comment", `Green again at run ${runId}.`);
+    const repo = process.env.GH_REPO?.split("/")[1] ?? "";
+    for (const { number } of open) {
+      yield* gh("issue", "close", String(number));
+      yield* gh("issue", "comment", process.env.AUTOLAND_LOG_ISSUE ?? "", "--body", `\`${repo}#${number}\` Green again at run ${runId}.`);
+    }
     return yield* Console.log(open.length === 0 ? `${run.headBranch} is green` : `${run.headBranch} is green: closed #${open.map(({ number }) => number).join(", #")}`);
   }
   const { nameWithOwner } = yield* gh("repo", "view", "--json", "nameWithOwner").pipe(Effect.flatMap(decode(Repository, "gh repo view")));
