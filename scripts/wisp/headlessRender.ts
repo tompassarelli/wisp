@@ -54,6 +54,8 @@ export interface RenderScene {
 
   readonly textTags?: ReturnType<HeadlessClient["textTags"]["poses"]>;
 
+  readonly lightnings?: ReturnType<HeadlessClient["lightnings"]["poses"]>;
+
   readonly world?: WorldBounds;
   readonly terrain?: Terrain;
   readonly terrainDoodads?: { readonly placements: readonly TerrainDoodad[]; readonly models: Readonly<Record<string, string | readonly string[]>> };
@@ -129,7 +131,7 @@ export interface RenderedFrame {
 }
 
 export const captureScene = (client: HeadlessClient, options: { readonly visibleOnly?: boolean; readonly matchFrame?: number } = {}): RenderScene => ({
-  frame: client.frame, ...(options.matchFrame === undefined ? {} : { matchFrame: options.matchFrame }), client: client.slot, effects: client.effectPoses({ visibleOnly: options.visibleOnly ?? false }), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot({ visibleOnly: options.visibleOnly ?? false }), filter: client.cineFilterPose(), textTags: client.textTags.poses(),
+  frame: client.frame, ...(options.matchFrame === undefined ? {} : { matchFrame: options.matchFrame }), client: client.slot, effects: client.effectPoses({ visibleOnly: options.visibleOnly ?? false }), units: client.unitPoses(), camera: client.cameraPose(), ui: client.frames.snapshot({ visibleOnly: options.visibleOnly ?? false }), filter: client.cineFilterPose(), textTags: client.textTags.poses(), lightnings: client.lightnings.poses(),
   environment: sceneEnvironment(client),
 });
 
