@@ -1,5 +1,6 @@
 import { Console, Effect } from "effect";
 import type { Platform } from "../platform/services";
+import { prefixFromDocuments } from "../warcraft/battleNet";
 import * as desktop from "../warcraft/desktop";
 import type { Command } from "./command";
 import { UsageFailure } from "./command";
@@ -7,8 +8,6 @@ import {
   ServiceProblem, clientUnit, describeOwner, desktopCommand, desktopPid, desktopUnit, liveDesktop, ownerOf, prefixProcesses, serviceState, skillScript, startDesktop, stopService, writeRun,
 } from "./clientServices";
 import { ClientWatch, type WatchOptions, describeView, inState, waitFor } from "./watch";
-
-const DOCUMENTS = "/drive_c/users/steamuser/Documents/Warcraft III";
 
 const chosenClients = (clientsFile: string, names: readonly string[]) => Effect.gen(function*() {
   if (names.some((name) => name.startsWith("-"))) return yield* new UsageFailure({ problem: "takes client names only" });
@@ -28,7 +27,7 @@ const statusLines = (clientsFile: string, names: readonly string[], watch: Watch
     const desktopOwner = pid === undefined ? undefined : yield* ownerOf(pid);
     const desktopText = !liveDesktop(entry.run) ? `no live desktop at ${entry.run}` : `${entry.run}, ${describeOwner(desktopOwner)}${desktopOwner !== undefined && "unit" in desktopOwner ? ` (${yield* unitLine(desktopOwner.unit)})` : ""}`;
     yield* Console.log(`${entry.name}: desktop: ${desktopText}`);
-    const prefix = entry.documents.endsWith(DOCUMENTS) ? entry.documents.slice(0, -DOCUMENTS.length) : undefined;
+    const prefix = prefixFromDocuments(entry.documents);
     const [first] = prefix === undefined ? [] : yield* prefixProcesses(prefix);
     const owner = first === undefined ? undefined : yield* ownerOf(first.pid);
     const battleNet = first === undefined ? "not running" : `${describeOwner(owner)}${owner !== undefined && "unit" in owner ? ` (${yield* unitLine(owner.unit)})` : ""}`;
@@ -76,7 +75,7 @@ const MENU_SECONDS = 420;
 export const serviceStop = (clientsFile: string, names: readonly string[]) => Effect.gen(function*() {
   const clients = yield* chosenClients(clientsFile, names);
   for (const entry of clients) {
-    const prefix = entry.documents.endsWith(DOCUMENTS) ? entry.documents.slice(0, -DOCUMENTS.length) : undefined;
+    const prefix = prefixFromDocuments(entry.documents);
     const [first] = prefix === undefined ? [] : yield* prefixProcesses(prefix);
     const owner = first === undefined ? undefined : yield* ownerOf(first.pid);
     const pid = yield* desktopPid(entry.run);

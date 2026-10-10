@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
 import { LanFailure } from "./join";
 import { DESKTOP_TOOLS } from "../../platform/linux/tools";
+import { documentsFolder } from "../../warcraft/battleNet";
 
 export const stateRoot = () => join(process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local/state"), "wisp/lan");
 export const dataRoot = () => join(process.env["XDG_DATA_HOME"] ?? join(homedir(), ".local/share"), "wisp/lan");
@@ -20,7 +21,7 @@ export const prefixOf = (name: string) => join(clientRoot(name), "pfx");
 export const installOf = (name: string) => join(prefixOf(name), "drive_c/Program Files (x86)/Warcraft III");
 export const retailOf = (name: string) => join(installOf(name), "_retail_");
 export const exeOf = (name: string) => join(retailOf(name), "x86_64/Warcraft III.exe");
-export const documentsOf = (name: string) => join(prefixOf(name), "drive_c/users/steamuser/Documents/Warcraft III");
+export const documentsOf = (name: string) => documentsFolder(prefixOf(name));
 export const pairDirectory = (pair: number) => join(stateRoot(), `pair-${pair}`);
 
 export const audioSinkOf = (name: string) => `wisp-lan-${name}`;

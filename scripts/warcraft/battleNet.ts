@@ -58,7 +58,11 @@ export const launcherLogDirectory = (prefix: string) => join(prefix, "drive_c/us
 export const newestLauncherLog = (names: readonly string[]) =>
   names.filter((name) => /^battle\.net-\d{8}T[\d.]+\.log$/.test(name)).sort().at(-1);
 
-export const documentsFolder = (prefix: string) => join(prefix, "drive_c/users/steamuser/Documents/Warcraft III");
+const DOCUMENTS = "drive_c/users/steamuser/Documents/Warcraft III";
+
+export const documentsFolder = (prefix: string) => join(prefix, DOCUMENTS);
+
+export const prefixFromDocuments = (documents: string) => documents.endsWith(`/${DOCUMENTS}`) ? documents.slice(0, -DOCUMENTS.length - 1) : undefined;
 
 export const launcherConfig = (prefix: string) => join(prefix, "drive_c/users/steamuser/AppData/Roaming/Battle.net/Battle.net.config");
 
