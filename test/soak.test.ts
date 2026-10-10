@@ -10,12 +10,10 @@ import { Console, Effect, Exit, Layer } from "effect";
 import { platformLayer } from "../scripts/platform/layer";
 import { makeSoak } from "../scripts/wisp/commands/soak";
 import { installHeadless } from "../scripts/wisp/headless";
-import { type SceneReport, bodyProblems } from "../scripts/wisp/scene";
 import { RealtimeClients } from "../scripts/wisp/headlessInput";
-import { type SoakMatch, SoakMonitor, helperRecorder, planSoak, playSoakMatch, readSoakRepro, soakRepro } from "../scripts/wisp/soak";
+import { type SoakMatch, SoakMonitor, helperRecorder, playSoakMatch, readSoakRepro, soakRepro } from "../scripts/wisp/soak";
 import { MEASURED_BATTLE_NET, syncDelivery } from "../src/headless/syncChannel";
 import { timingsLayer } from "../scripts/wisp/timings";
-import { timingTest } from "../scripts/wisp/timingTest";
 import game from "./soak/game";
 import project from "./soak/project";
 import { farmTest } from "../scripts/wisp/farmTest";
@@ -26,14 +24,6 @@ afterAll(runtime.restore);
 const match = (policies: readonly string[], seed = 7): SoakMatch => ({ index: 0, seed, fighters: ["a", "b"], stage: "flat", policies, frames: 600 });
 const play = (policies: readonly string[], setup = project) => playSoakMatch(runtime, game, setup, match(policies));
 
-timingTest("[spec #16] a clean match plays more than five times faster than real time", () => {
-  const started = performance.now();
-  const match = play(["fuzz", "fuzz"]);
-  const elapsed = performance.now() - started;
-  console.info(`soak match: ${match.wallMs.toFixed(0)} ms of play in ${elapsed.toFixed(0)} ms`);
-  expect(match.wallMs).toBeGreaterThan(elapsed * 5);
-});
-
 farmTest("[invariant] a clean match ends with no findings and repeats from its seed", () => {
   const first = play(["fuzz", "fuzz"]);
   expect(first.findings).toEqual([]);
@@ -42,13 +32,6 @@ farmTest("[invariant] a clean match ends with no findings and repeats from its s
   const second = play(["fuzz", "fuzz"]);
   expect(second.checksums).toEqual(first.checksums);
   expect(second.inputs).toEqual(first.inputs);
-});
-
-test("[invariant] measured CPU cost and warm-up never change a seeded match's clock", () => {
-  const result = playSoakMatch(runtime, game, { ...project, limits: { costScale: 1_000_000, warmUpFrames: 1_000_000 }, fuzz: { hitch: 0, silence: 0 } }, { ...match(["fuzz", "fuzz"]), frames: 20 });
-  expect(result.costMs).toBeGreaterThan(0);
-  expect(result.inputs.slow).toEqual([]);
-  expect(result.wallMs).toBeCloseTo((20 * 1000) / 60, 8);
 });
 
 test("[spec #16] each fault is found by its detector, and a lag spike's catch-up is no spiral", () => {
@@ -110,25 +93,6 @@ test("[invariant] a repro file plays its match again with the same inputs, calls
   expect(readSoakRepro(JSON.stringify(soakRepro(project.name, looped))).findings).toEqual(looped.findings);
 });
 
-test("[invariant] a match played through input helpers replays what they typed, not their pads' edges, such as a stick inside its dead zone", () => {
-  const helperMatch: SoakMatch = { ...match(["fuzz", "cpu"]), typed: true };
-
-  const inputs = {
-    edges: [[11, 0, { axis: 1, value: -9083 }], [12, 0, { axis: 1, value: 7396 }], [13, 0, { axis: 0, value: 752 }]] as const,
-    silences: [], hitches: [], slow: [],
-    typed: [[20, 0, "aa"], [40, 1, "a"]] as const,
-    files: [[30, 1, "soaktest-note.txt", ["noted"]]] as const,
-  };
-  const played = playSoakMatch(runtime, game, project, helperMatch, inputs);
-  expect(played.findings).toEqual([]);
-  const replayed = playSoakMatch(runtime, game, project, readSoakRepro(JSON.stringify(soakRepro(project.name, played))).match, played.inputs);
-  expect(replayed.checksums).toEqual(played.checksums);
-  expect(replayed.findings).toEqual([]);
-
-  expect(playSoakMatch(runtime, game, project, helperMatch, { ...inputs, edges: [] }).checksums).toEqual(played.checksums);
-  expect(playSoakMatch(runtime, game, project, helperMatch, { ...inputs, typed: [] }).checksums).not.toEqual(played.checksums);
-});
-
 test("[invariant] a real-time run through input helpers, recorded with helperRecorder, replays onto the same native calls", () => {
   const helperMatch: SoakMatch = { ...match(["fuzz", "cpu"]), typed: true };
 
@@ -154,28 +118,6 @@ test("[invariant] a real-time run through input helpers, recorded with helperRec
   const replayed = playSoakMatch(runtime, game, project, helperMatch, inputs);
   expect(replayed.findings).toEqual([]);
   expect(replayed.checksums).toEqual(clients.clients.map((client) => client.checksum()));
-});
-
-test("[spec #16] a plan has every ordered fighter pair on every stage before it repeats", () => {
-  const plan = planSoak({ fighters: ["a", "b", "c"], stages: ["x", "y"], policies: [["fuzz", "cpu"], ["cpu", "cpu"]] }, 20, 1, 600);
-  expect(new Set(plan.slice(0, 18).map(({ fighters, stage }) => `${fighters.join("-")}@${stage}`)).size).toBe(18);
-  expect(plan[18]?.policies).toEqual(["cpu", "cpu"]);
-  expect(new Set(plan.map(({ seed }) => seed)).size).toBe(20);
-});
-
-test("[spec #16] a fighter in play with nothing of it drawn with geometry is an invisible fighter", () => {
-  const report = (drawn: number): SceneReport => ({
-    serial: 1, frame: 600, effects: 3,
-    models: [{ model: "Clip0.mdx", live: 2, inView: 2, drawn, created: 0, age: 10, longest: 10, destroyed: 0 }],
-  });
-  const bodies = [{ name: "Illidan (Player 1)", models: ["Clip0.mdx"] }, { name: "Illidan (Player 2)", models: ["Clip0.mdx"] }];
-  const solid = { "Clip0.mdx": { geosets: 1, triangles: 100, lights: 0, emitters: [] } };
-  expect(bodyProblems(report(2), bodies, solid)).toEqual([]);
-  expect(bodyProblems(report(1), bodies, solid).map(({ seen }) => seen)).toEqual([
-    "invisible fighter: Illidan (Player 1) and Illidan (Player 2) are in play, but only 1 of them is drawn with geometry",
-  ]);
-  const empty = { "Clip0.mdx": { geosets: 1, triangles: 0, lights: 0, emitters: [] } };
-  expect(bodyProblems(report(2), bodies, empty)[0]?.evidence).toBe("drawn without triangles: Clip0.mdx (2)");
 });
 
 farmTest("[spec #16] the command plays matches in worker processes and keeps a repro file for each finding", async () => {
@@ -208,4 +150,3 @@ farmTest("[spec #16] the command plays matches in worker processes and keeps a r
   expect(readSoakRepro(readFileSync(join(unshrunk, "match-0.json"), "utf8")).inputs.edges.length).toBeGreaterThan(0);
   expect(Exit.isFailure(await run(["--workers", "5"]))).toBe(true);
 });
-

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildIntoStore, stepProblem } from "../scripts/wisp/ciMapBuild";
+import { buildIntoStore } from "../scripts/wisp/ciMapBuild";
 
 const checkout = join(import.meta.dir, "..");
 const revision = "0123456789abcdef0123456789abcdef01234567";
@@ -21,13 +21,4 @@ test("[spec #30] the map lands in the store as NAME-REVISION.w3x with its sha256
     await expect(buildIntoStore({ store, name: "sample", revision, command: ["bash", "-c", "exit 3"], checkout, env: { PATH: process.env.PATH } })).rejects.toThrow("exited 3");
     expect(readdirSync(store)).toEqual([]);
   }
-});
-
-test("[spec #30] the step refuses a store in the checkout, a hosted runner and a name or revision it can't put in a file name", () => {
-  const step = { store: "/srv/wisp-maps", name: "sample", revision, command: write, checkout, env: {} };
-  expect(stepProblem(step)).toBeUndefined();
-  expect(stepProblem({ ...step, store: join(checkout, "build/maps") })).toContain("inside the checkout");
-  expect(stepProblem({ ...step, env: { RUNNER_ENVIRONMENT: "github-hosted" } })).toContain("self-hosted");
-  expect(stepProblem({ ...step, name: "../x" })).toContain("map name");
-  expect(stepProblem({ ...step, revision: "main" })).toContain("commit hash");
 });

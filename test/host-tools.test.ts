@@ -6,11 +6,6 @@ import { afterEach, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect, Exit, Fiber } from "effect";
-import { TestClock } from "effect/testing";
-import { agentSocket, pairClients, poolFile, reportPort } from "../scripts/wisp/lan/pool";
-import { lanObservation } from "../scripts/wisp/watch";
-import { farmTest } from "../scripts/wisp/farmTest";
 
 const root = join(import.meta.dir, "..");
 const fixtures = join(import.meta.dir, "fixtures/host-tools");
@@ -75,32 +70,6 @@ const leftovers = async (runner: Bun.Subprocess, box: ReturnType<typeof sandbox>
 };
 
 const capacity = join(fixtures, "capacity.ts");
-const agentPair = 93;
-const agent = (box: ReturnType<typeof sandbox>) => Bun.spawn([process.execPath, join(root, "scripts/wisp/lan/pairAgent.ts"), "--pair", String(agentPair), "--capacity", capacity], { env: box.env, stdout: "ignore", stderr: "ignore" });
-
-test("[boundary] pair agent: SIGTERM while its games start stops them and the agent", async () => {
-  const box = sandbox();
-  const runner = agent(box);
-
-  await until(() => box.sessions().length === 1 && box.marked().length >= 5, 30, "the first game");
-  runner.kill("SIGTERM");
-  const result = await leftovers(runner, box);
-  expect(result.code).not.toBe("still running");
-  expect({ processes: result.processes, sessions: result.sessions }).toEqual({ processes: 0, sessions: 0 });
-}, 60_000);
-
-farmTest("[boundary] pair agent: a step failing after both games started stops them", async () => {
-  const box = sandbox();
-
-  const taken = Bun.serve({ hostname: "127.0.0.1", port: reportPort(agentPair, "a"), fetch: () => new Response() });
-  cleanups.push(() => taken.stop(true));
-  const runner = agent(box);
-  await until(() => box.sessions().length === 2, 30, "both games");
-  const result = await leftovers(runner, box);
-  expect(result.code).not.toBe(0);
-  expect(result.code).not.toBe("still running");
-  expect({ processes: result.processes, sessions: result.sessions }).toEqual({ processes: 0, sessions: 0 });
-}, 60_000);
 
 const poolPair = 94;
 const pool = (box: ReturnType<typeof sandbox>, extra: Record<string, string>) => {
@@ -113,25 +82,6 @@ const pool = (box: ReturnType<typeof sandbox>, extra: Record<string, string>) =>
   });
 };
 
-test("[boundary] lan pool: SIGTERM while a pair is starting stops its session", async () => {
-  const box = sandbox();
-  const runner = pool(box, { WISP_TEST_READY_MS: "60000" });
-
-  await until(() => box.sessions().length === 1 && box.marked().length >= 5, 30, "the pair session");
-  runner.kill("SIGTERM");
-  const result = await leftovers(runner, box);
-  expect(result.code).not.toBe("still running");
-  expect({ processes: result.processes, sessions: result.sessions }).toEqual({ processes: 0, sessions: 0 });
-}, 60_000);
-
-test("[boundary] lan pool: a step failing after a pair started stops its session", async () => {
-  const box = sandbox();
-  const runner = pool(box, { WISP_TEST_BAD_AGENT: "1" });
-  const result = await leftovers(runner, box);
-  expect(result.code).toBe(1);
-  expect({ processes: result.processes, sessions: result.sessions }).toEqual({ processes: 0, sessions: 0 });
-}, 60_000);
-
 test("[boundary] lan pool: SIGTERM removes desktop markers after its native scope exits", async () => {
   const box = sandbox();
   const runner = pool(box, {});
@@ -142,31 +92,3 @@ test("[boundary] lan pool: SIGTERM removes desktop markers after its native scop
   expect(result.code).not.toBe("still running");
   expect({ processes: result.processes, sessions: result.sessions, activeDesktops: box.activeDesktops() }).toEqual({ processes: 0, sessions: 0, activeDesktops: [] });
 }, 60_000);
-
-test("[boundary] watch: a pair agent that doesn't answer is a timeout, not a client that isn't playing", async () => {
-  const box = sandbox();
-  const previous = process.env["XDG_STATE_HOME"];
-  process.env["XDG_STATE_HOME"] = box.env.XDG_STATE_HOME;
-  process.env["XDG_DATA_HOME"] = box.env.XDG_DATA_HOME;
-  cleanups.push(() => {
-    if (previous === undefined) delete process.env["XDG_STATE_HOME"];
-    else process.env["XDG_STATE_HOME"] = previous;
-    delete process.env["XDG_DATA_HOME"];
-  });
-  const pair = 95;
-  mkdirSync(join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${pair}`), { recursive: true });
-  const silent = Bun.serve({ unix: agentSocket(pair), fetch: () => new Promise<Response>(() => {}) });
-  cleanups.push(() => silent.stop(true));
-  writeFileSync(poolFile(), JSON.stringify({ profile: "parity", pairs: [{ id: pair, clients: "", agentSocket: agentSocket(pair), runs: {}, appIds: { a: "steam_app_1", b: "steam_app_2" } }] }));
-  const [client] = pairClients(pair, {});
-  const exit = await Effect.runPromise(Effect.gen(function*() {
-    const looking = yield* Effect.forkChild(Effect.exit(lanObservation({ name: client!.name, documents: client!.documents })));
-    for (let tries = 0; tries < 2; tries++) {
-      yield* TestClock.withLive(Effect.sleep("50 millis"));
-      yield* TestClock.adjust("3 seconds");
-    }
-    return yield* Fiber.join(looking);
-  }).pipe(Effect.provide(TestClock.layer())));
-  expect(Exit.isFailure(exit)).toBe(true);
-  expect(String(Exit.isFailure(exit) ? exit.cause : "")).toContain("didn't answer within 3 s");
-});

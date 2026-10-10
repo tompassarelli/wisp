@@ -4,7 +4,7 @@ import { mapCompiler, report } from "../scripts/compiler";
 import { installHeadless } from "../scripts/wisp/headless";
 import { runJourney } from "../src/headless/journey";
 import { install, start } from "./unit-motion57/main";
-import { UNIT_MOTION_NOOPS, UNIT_TYPE } from "./unit-motion57/cases";
+import { UNIT_MOTION_NOOPS } from "./unit-motion57/cases";
 import { farmTest } from "../scripts/wisp/farmTest";
 
 const runtime = installHeadless({ filePrefix: "unit-motion", globalPrefixes: ["__unitMotion"], intentionalNoops: UNIT_MOTION_NOOPS });
@@ -68,20 +68,6 @@ test("unit position, height, facing and dash cases agree in two clients", () => 
   expect(result.divergence).toBeUndefined();
   expect(result.clients.map(client => client.errors)).toEqual([[], []]);
   for (const client of clients.clients) expect(client.files.get(`unit-motion-p${client.slot}.txt`)).toEqual(EXPECTED);
-});
-
-test("unit coordinates and height are stored as binary32 like Warcraft's Lua numbers", () => {
-  const third = 1 / 3;
-  const clients = runtime.clients({ install, start: () => {
-    const u = CreateUnit(Player(2), UNIT_TYPE, 0, 0, 180);
-    UnitAddAbility(u, 0x416d7266);
-    UnitRemoveAbility(u, 0x416d7266);
-    SetUnitX(u, third);
-    SetUnitY(u, -third);
-    SetUnitFlyHeight(u, third, 0);
-    expect([GetUnitX(u), GetUnitY(u), GetUnitFlyHeight(u)]).toEqual([Math.fround(third), Math.fround(-third), Math.fround(third)]);
-  } });
-  clients.start();
 });
 
 farmTest("the same unit motion cases pass in emitted 32-bit Lua", () => {

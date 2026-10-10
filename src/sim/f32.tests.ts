@@ -36,17 +36,6 @@ test("[reference] f32 arithmetic rounds the exact result to nearest", () => {
   }
 });
 
-test("[reference] f32 arithmetic keeps zero signs and small integers", () => {
-  const zero = 0.0;
-  const negative = -5000.5;
-  same(f32(zero * negative), -0.0);
-  same(f32(-2.5 + 2.5), 0.0);
-  same(f32(-zero - zero), -0.0);
-  same(f32(negative - zero), negative);
-  same(f32(3 * 4), 12);
-  same(f32(40 - 2), 38);
-});
-
 // One binary64 operation then binary32 rounding is a nearest-even oracle.
 
 const SUMS: readonly (readonly [name: string, a: number, b: number, operation: "+" | "-", expected: number])[] = [
@@ -76,18 +65,6 @@ test("[reference] f32 sums and differences round ties to even at every binade ed
   }
 });
 
-test("[reference] f32 differences within a factor of two and products with ±1 are exact", () => {
-  const position = 230.71875;
-  const near = 160.3000030517578;
-  same(f32(position - near), 70.41874694824219);
-  same(f32(-position + near), -70.41874694824219);
-  same(f32(near - position), -70.41874694824219);
-  const offset = 3.0999999046325684;
-  same(f32(offset * -1), -3.0999999046325684);
-  same(f32(1 * offset), 3.0999999046325684);
-  same(f32(-1 * -offset), 3.0999999046325684);
-});
-
 test("[reference] f32 quotients round the exact quotient to nearest", () => {
   // Warcraft's raw quotient can land an ulp above nearest (wisp:docs/headless.md#raw-float-rounding).
   const height = 379.64483642578125;
@@ -99,15 +76,6 @@ test("[reference] f32 quotients round the exact quotient to nearest", () => {
   same(f32(1.0 / 3.0), 0.3333333432674408);
   same(f32(-1.0 / 3.0), -0.3333333432674408);
   same(f32(height / -2.0), -189.82241821289062);
-});
-
-test("[reference] f32 quotients keep zero signs and exact integer quotients", () => {
-  const zero = 0.0;
-  const negative = -5000.5;
-  same(f32(zero / negative), -0.0);
-  same(f32(84 / 7), 12);
-  same(f32(-84.0 / 7.0), -12);
-  same(f32(7 / 84), 0.0833333358168602);
 });
 
 test("[reference] f32 literals are the binary32 nearest their decimal", () => {

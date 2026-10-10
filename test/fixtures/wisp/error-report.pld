@@ -1,7 +1,0 @@
-function PreloadFiles takes nothing returns nothing
-call PreloadStart()
-call Preload( "error 3 in OnTrigger" )
-call Preload( "attempt to call nil value" )
-call Preload( "smashcraft-hot-101-24:42: in function 'OnTrigger'" )
-call PreloadEnd( 0.0 )
-endfunction

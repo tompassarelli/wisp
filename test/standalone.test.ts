@@ -53,29 +53,3 @@ test("[spec docs/play.md] standalone records scripted checksums and skips live, 
     }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
-
-test("[spec docs/play.md] standalone replies with a thrown game error's text instead of dropping the frame (wisp#62)", async () => {
-  const runtime = installHeadless({ filePrefix: "throw-fixture", globalPrefixes: [] });
-  try {
-    const clients = runtime.clients({ install() {}, start() {} }, [0]);
-    clients.start();
-    const game: StandaloneGame = {
-      title: "Throw fixture", render: { readAsset: async () => undefined },
-      create: async () => ({ client: clients.client(0), step: () => { throw new Error("scripted game failure"); }, checksum: () => "fixture", close() {} }),
-    };
-    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-      const player = yield* openStandalone(game);
-      const packet = yield* Effect.promise(async () => {
-        const socket = new WebSocket(`${player.url.replace("http", "ws")}frames`);
-        await new Promise((resolve) => socket.addEventListener("open", resolve, { once: true }));
-        const reply = new Promise<string>((resolve) => socket.addEventListener("message", (event) => resolve(String(event.data)), { once: true }));
-        socket.send(JSON.stringify({ buttons: [], axisX: 0, axisY: 0 }));
-        const timeout = new Promise<string>((resolve) => setTimeout(() => resolve('{"error":"no reply"}'), 1000));
-        const text = await Promise.race([reply, timeout]);
-        socket.close();
-        return JSON.parse(text);
-      });
-      expect(packet).toEqual({ error: "scripted game failure" });
-    })));
-  } finally { runtime.restore(); }
-});

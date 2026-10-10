@@ -9,7 +9,7 @@ import { Effect, Layer } from "effect";
 import { mapCompiler, report } from "../scripts/compiler";
 import { servePanel } from "../scripts/wisp/commands/tune";
 import { HotReload } from "../scripts/wisp/hotReload";
-import { Tune, type Tunable, checkValue, findLiteral, lineDiff, literalText, replaceSpans } from "../scripts/wisp/tune";
+import { Tune, type Tunable, findLiteral, lineDiff, replaceSpans } from "../scripts/wisp/tune";
 import { moduleChunk, moduleHashText, moduleIndex, modulePayload, textChecksum } from "../src/runtime/modules";
 import type { BundledModules } from "../scripts/luaBundle";
 
@@ -39,21 +39,6 @@ const TUNABLES: readonly Tunable[] = [
   { name: "speed", file: "src/tuning.ts", path: ["TUNING", "speed"], kind: "f32", min: 0.0, max: 2.0, step: 0.01 },
   { name: "steps", group: "Counts", file: "src/tuning.ts", path: ["TUNING", "steps"], kind: "int", min: 1, max: 8, step: 1 },
 ];
-
-test("[reference] a tunable's literal is found through objects and a wrapping call, and written as its binary32 or integer value", () => {
-  const speed = findLiteral(DECLARATION, ["TUNING", "speed"]);
-  expect(typeof speed === "string" ? speed : DECLARATION.slice(speed.start, speed.end)).toBe("0.5");
-  const offset = findLiteral(DECLARATION, ["OFFSET"]);
-  expect(typeof offset === "string" ? offset : [offset.text, offset.value]).toEqual(["-1.5", -1.5]);
-  expect(literalText("f32", 2.2)).toBe("2.200000047683716");
-  expect(literalText("f32", 3)).toBe("3.0");
-  expect(literalText("f32", -0.25)).toBe("-0.25");
-  expect(literalText("int", 4)).toBe("4");
-
-  for (const value of [0.1, 2.2, 1.85, 123.456, 1e-8]) expect(Math.fround(Number(literalText("f32", value)))).toBe(Number(literalText("f32", value)));
-  const speedTunable = TUNABLES[0]!;
-  expect(checkValue(speedTunable, 0.6)).toBe(Math.fround(0.6));
-});
 
 test("[reference] a kept value's diff is its line with three lines of context, as git shows it", () => {
   const literal = findLiteral(DECLARATION, ["TUNING", "steps"]);

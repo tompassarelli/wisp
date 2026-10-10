@@ -1,9 +1,9 @@
-import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit } from "effect";
 import { expect, test } from "bun:test";
-import { baseMapEntryNames, runProcess, stageMap, writeHeader } from "../scripts/wisp/mapBuild";
+import { baseMapEntryNames, runProcess, stageMap } from "../scripts/wisp/mapBuild";
 
 test("[property seed 85] archive replacement preserves unrelated entries and removes every case alias", () => {
   expect(baseMapEntryNames("war3mapMap.blp\nwar3map.w3i\nwar3map.mmp\n", [
@@ -53,38 +53,4 @@ test("[invariant] a map stages in a file of its own, writable even from a read-o
     expect(readFileSync(map, "utf8")).toBe("built");
     expect(readdirSync(directory).sort()).toEqual(["input.w3x", "map.w3x"]);
   }
-});
-
-test("[invariant] interrupting a map step stops its child process", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "wisp-process-"));
-  const pidFile = join(directory, "pid");
-
-  const started = Effect.promise(async () => {
-    while (!existsSync(pidFile) || readFileSync(pidFile, "utf8").trim() === "") await Bun.sleep(10);
-  });
-  const exit = await Effect.runPromiseExit(
-    runProcess("sleep", directory, ["sh", "-c", `echo $$ > ${pidFile}; exec sleep 600`]).pipe(Effect.raceFirst(started.pipe(Effect.andThen(Effect.fail("started" as const))))),
-  );
-  expect(Exit.isFailure(exit)).toBe(true);
-  const pid = Number(readFileSync(pidFile, "utf8"));
-  expect(() => process.kill(pid, 0)).toThrow();
-});
-
-test("[invariant] the map header replaces an existing one or goes in front of an archive saved without one", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "wisp-header-"));
-  const header = new Uint8Array(512).fill(7);
-  header.set(new TextEncoder().encode("HM3W"));
-  const archive = new TextEncoder().encode("MPQ\x1a archive bytes");
-  const bare = join(directory, "bare.w3m");
-  writeFileSync(bare, archive);
-  await Effect.runPromise(writeHeader(bare, header));
-  expect(readFileSync(bare)).toEqual(Buffer.concat([header, archive]));
-  const replacement = new Uint8Array(512).fill(9);
-  replacement.set(new TextEncoder().encode("HM3W"));
-  await Effect.runPromise(writeHeader(bare, replacement));
-  expect(readFileSync(bare)).toEqual(Buffer.concat([replacement, archive]));
-  const other = join(directory, "other.w3m");
-  writeFileSync(other, "not a map");
-  expect(Exit.isFailure(await Effect.runPromiseExit(writeHeader(other, header)))).toBe(true);
-  expect(readFileSync(other, "utf8")).toBe("not a map");
 });

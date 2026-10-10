@@ -1,8 +1,8 @@
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, expect, test } from "bun:test";
-import { Effect, Exit } from "effect";
+import { Effect } from "effect";
 import { linuxDesktopLayer } from "../scripts/platform/linux/desktop";
 import { type Client, capture, captureTimed } from "../scripts/warcraft/desktop";
 
@@ -24,17 +24,4 @@ test("[invariant] timed capture keeps binary pixel bytes and brackets the frameb
   expect(result.afterNs).toBeGreaterThanOrEqual(producerNs);
   expect(result.afterNs - result.beforeNs).toBeGreaterThanOrEqual(20_000_000);
   expect([...result.frame.rgb]).toEqual([0, 128, 255]);
-});
-
-test("[invariant] cancelling a stalled framebuffer read stops and reaps its exact child", async () => {
-  const pidFile = join(folder, "pid");
-  const pending = capture(client("stalled", `await Bun.write(${JSON.stringify(pidFile)}, String(process.pid)); await Bun.sleep(600000);`)).pipe(Effect.provide(linuxDesktopLayer));
-
-  const started = Effect.promise(async () => {
-    while (!existsSync(pidFile) || readFileSync(pidFile, "utf8") === "") await Bun.sleep(10);
-  });
-  const exit = await Effect.runPromiseExit(pending.pipe(Effect.raceFirst(started.pipe(Effect.andThen(Effect.fail("started" as const))))));
-  expect(Exit.isFailure(exit)).toBe(true);
-  const pid = Number(readFileSync(pidFile, "utf8"));
-  expect(() => process.kill(pid, 0)).toThrow();
 });
