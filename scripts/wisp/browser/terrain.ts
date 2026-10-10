@@ -22,7 +22,7 @@ precision highp float;
 in vec2 texcoord;
 uniform sampler2D tile;
 out vec4 color;
-void main(){color=texture(tile,texcoord);if(color.a<0.01)discard;}`);
+void main(){color=texture(tile,texcoord);color.rgb=mix(pow((max(color.rgb,0.0)+0.055)/1.055,vec3(2.4)),color.rgb/12.92,lessThanEqual(color.rgb,vec3(0.04045)));if(color.a<0.01)discard;}`);
 }
 function ground(cell: TerrainCell, uv: readonly [number, number, number, number]): number[] {
   const [u0, v0, u1, v1] = uv, vertices = cell.corners.map((point, corner) => [cell.x + (corner % 2) * CELL, cell.y + Math.floor(corner / 2) * CELL, point.height, corner % 2 === 0 ? u0 : u1, corner < 2 ? v1 : v0]);
