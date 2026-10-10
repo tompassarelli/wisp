@@ -45,5 +45,5 @@ farmTest("the compiled bundle in 32-bit Lua makes the same native calls as the T
     join(sample, "build/map.lua"), join(sample, "../../src/natives/warcraft.d.ts"),
   ], { stdout: "pipe", stderr: "pipe" });
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
-  expect(run.stdout.toString().trimEnd().split("\n")).toEqual(journeyLines(playInBun().result));
+  expect(run.stdout.toString().trimEnd().split(/\r?\n/)).toEqual(journeyLines(playInBun().result));
 });
