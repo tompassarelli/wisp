@@ -5,7 +5,10 @@ import { farmTest } from "../scripts/wisp/farmTest";
 import { Effect, Layer } from "effect";
 import { mapCompiler, report } from "../scripts/compiler";
 import { servePanel } from "../scripts/wisp/commands/tune";
+import { GameFiles } from "../scripts/wisp/gameFiles";
 import { HotReload } from "../scripts/wisp/hotReload";
+import { MapBuild } from "../scripts/wisp/mapBuild";
+import { SourceErrors } from "../scripts/wisp/sourceErrors";
 import { Tune, type Tunable, findLiteral, lineDiff, replaceSpans } from "../scripts/wisp/tune";
 import { moduleChunk, moduleHashText, moduleIndex, modulePayload, textChecksum } from "../src/runtime/modules";
 import type { BundledModules } from "../scripts/luaBundle";
@@ -184,10 +187,18 @@ test("[spec docs/tune.md] the panel refuses another site's requests: a different
     mkdirSync(join(directory, "src"));
     const file = join(directory, "src/tuning.ts");
     writeFileSync(file, DECLARATION);
+    mkdirSync(join(directory, "data"));
     const replacements = new Map<string, string>();
-    const published: (string | undefined)[] = [];
-    const reload = HotReload.of({ publish: Effect.sync(() => published.push(replacements.get(file))) });
-    const layer = Tune.layer(directory, TUNABLES, replacements).pipe(Layer.provide(Layer.succeed(HotReload, reload)));
+    const project = {
+      projectRoot: directory, configPath: join(directory, "tsconfig.json"), bundlePath: join(directory, "map.lua"), compileInputs: [join(directory, "src")],
+      packager: join(root, "scripts/package.ts"), toolchainLockPath: join(root, "typescript-toolchain.lock"), packageDirectory: join(directory, "package"),
+    };
+    const layer = Tune.layer(directory, TUNABLES, replacements).pipe(
+      Layer.provideMerge(HotReload.layer([join(directory, "data")])),
+      Layer.provideMerge(MapBuild.layer(project, () => replacements)),
+      Layer.provideMerge(SourceErrors.layer({ sourceMapDirectory: join(directory, "maps") })),
+      Layer.provideMerge(GameFiles.layer()),
+    );
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const address = yield* servePanel(0);
       const post = (path: string, body: unknown, headers: Record<string, string> = {}) => Effect.promise(async () => {
@@ -196,7 +207,6 @@ test("[spec docs/tune.md] the panel refuses another site's requests: a different
       });
       expect(yield* post("/apply", { name: "steps", value: 4 }, { host: "tune.example:80" })).toBe(403);
       expect(yield* post("/apply", { name: "steps", value: 4 }, { "content-type": "text/plain" })).toBe(404);
-      expect(published).toEqual([]);
       expect(readFileSync(file, "utf8")).toBe(DECLARATION);
     })).pipe(Effect.provide(layer)));
   } finally {

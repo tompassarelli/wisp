@@ -21,7 +21,7 @@ test("[spec docs/play.md] standalone records scripted checksums and skips live, 
         title: "Checksum fixture", render: { readAsset: async () => undefined },
         create: async () => ({
           client: clients.client(0), step: () => clients.frames(1), ...(paced === true ? { paced: true } : {}),
-          checksum: () => { checksumCalls++; return "fixture"; }, close: () => runtime.restore(),
+          checksum: () => { checksumCalls++; return clients.client(0).checksum(); }, close: () => runtime.restore(),
         }),
       };
       const out = join(directory, String(index));
@@ -39,7 +39,7 @@ test("[spec docs/play.md] standalone records scripted checksums and skips live, 
             socket.send(JSON.stringify({ buttons: [], axisX: 0, axisY: 0 }));
             const packet = JSON.parse(await reply);
             expect(packet.error).toBeUndefined();
-            expect(packet.checksum).toBe(expected === 0 ? undefined : "fixture");
+            expect(packet.checksum).toBe(expected === 0 ? undefined : clients.client(0).checksum());
           }
           socket.close();
           await fetch(`${player.url}complete`, { method: "POST", body: "{}" });
