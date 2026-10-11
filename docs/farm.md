@@ -44,10 +44,39 @@ This clears branches left by a killed command or a manual push.
    seconds. `bun install`'s download cache and the pinned 32-bit Lua build
    (5.3.6 with `LUA_32BITS`, from the checksum-pinned source, plus the
    round-toward-zero build, wisp:scripts/wisp/lua32.ts's ~/.cache/wisp/lua32)
-   come from the Actions cache.
+   come from the Actions cache. Each shard runs on a hosted runner or the
+   farm box ([Where shards run](#where-shards-run)).
 5. **Merge.** The merge job reads every shard's result into `summary.json`,
    which the command downloads and prints, and saves this run's measured
    seconds as the next run's `farm-timings.json`.
+
+## Where shards run
+
+When the `FARM_RUNNER` repository variable names a self-hosted runner label
+(Wisp's is the farm-big box), the plan job sends the even Bun shards there
+and the odd ones to hosted runners, so both pools run at once. It sends an
+even shard to the farm only while the box can take it (wisp#132): the farm box
+ran shards 1.37x slower than hosted while its VM pool loaded it to 62 on
+30 cores.
+
+wisp:.github/workflows/farm-load.yml runs every 5 minutes (and on dispatch)
+on the `FARM_RUNNER` label, with no checkout. It writes
+`{"load1":L,"cores":C,"at":UNIX_SECONDS}` from `/proc/loadavg` and `nproc` to
+`farm-load.json` and saves it in the Actions cache under
+`farm-load-RUN_ID`; one probe waits for the box at a time. Schedules run on
+main, so every branch's plan job restores the newest sample (`restore-keys:
+farm-load-`), the same way it restores `farm-timings.json`. Without
+`FARM_RUNNER` the probe is skipped.
+
+`placeShards` in wisp:scripts/wisp/farmShards.ts (`farmShards.ts place`)
+decides each shard. An even shard goes to the farm label only when a sample
+exists, it is at most 900 s old, and `load1 <= cores`. Otherwise it goes to
+`ubuntu-latest` with the reason `missing`, `stale AGEs` (a box too busy to
+take the probe for 15 minutes is too busy for shards) or `load L > C cores`.
+Without `FARM_RUNNER` every shard is hosted (`no farm runner`). A
+`farm-runner` dispatch input, which measures a box before enabling it, skips
+the load check (`farm-runner input`). The plan job's run summary has one line
+per shard, such as `- bun 0: ubuntu-latest (load 62.1 > 30 cores)`.
 
 ## A repository's workflow
 
@@ -57,6 +86,7 @@ one job per shard and a merge job, talking through `farmShards.ts`:
 | Step | Command |
 | --- | --- |
 | Split | `farmShards.ts plan --timings FILE --bun N [--lua N] UNIT... > plan.json`; a unit is a test file, or comma-joined files that share one process |
+| Placement | `farmShards.ts place --shards N --farm LABEL [--load farm-load.json]` prints each shard's `{runner, reason}`; without `--load` the load check is skipped, and a `--load` file that doesn't exist reads as `missing` |
 | Lua assignments | `farmShards.ts lua-plan plan.json` prints `NAME<TAB>SHARD` lines for the Lua runner |
 | Bun shard result | `farmShards.ts junit --shard K --exit-code C XML... > result.json` |
 | Lua shard result | `farmShards.ts lua --shard K --exit-code C TSV... > result.json`, from `pass\|fail<TAB>SECONDS<TAB>NAME` lines |

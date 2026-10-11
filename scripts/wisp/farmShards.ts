@@ -32,6 +32,30 @@ export type Summary = typeof Summary.Type;
 
 const FILE_OVERHEAD_SECONDS = 0.3;
 
+// farm-load.yml's newest sample of the farm box: 1-minute load average, cores, and when (Unix seconds).
+export const FarmLoad = Schema.Struct({ load1: Schema.Finite, cores: Schema.Finite, at: Schema.Finite });
+export type FarmLoad = typeof FarmLoad.Type;
+export const FARM_LOAD_MAX_AGE_SECONDS = 900;
+
+export interface Placement { readonly runner: string; readonly reason: string }
+
+// Even shards go to the farm label while its newest load sample is at most 15 minutes old and its load fits its
+// cores; odd shards, and every shard when the farm is unset, missing, stale or overloaded, go to hosted runners.
+// `gated` false (a farm-runner dispatch input, measuring a box the probe doesn't sample) skips the load check.
+export function placeShards(sample: FarmLoad | undefined, nowSeconds: number, shards: number, farm: string, gated = true): Placement[] {
+  const age = sample === undefined ? 0 : Math.round(nowSeconds - sample.at);
+  const refusal = farm === "" ? "no farm runner"
+    : !gated ? undefined
+    : sample === undefined ? "missing"
+    : age > FARM_LOAD_MAX_AGE_SECONDS ? `stale ${age}s`
+    : sample.load1 > sample.cores ? `load ${sample.load1} > ${sample.cores} cores`
+    : undefined;
+  const accepted = !gated ? "farm-runner input" : sample === undefined ? "" : `load ${sample.load1} <= ${sample.cores} cores, ${age}s old`;
+  return Array.from({ length: shards }, (_, shard) => shard % 2 === 1 && farm !== "" ? { runner: "ubuntu-latest", reason: "odd shard" }
+    : refusal === undefined ? { runner: farm, reason: accepted }
+    : { runner: "ubuntu-latest", reason: refusal });
+}
+
 export function splitByTime<U>(units: readonly U[], seconds: (unit: U) => number | undefined, shards: number): U[][] {
   const known = units.map(seconds).filter((value): value is number => value !== undefined).sort((a, b) => a - b);
   const guess = known.length === 0 ? 1 : known[Math.floor(known.length / 2)] ?? 1;
@@ -150,6 +174,7 @@ const main = Effect.gen(function*() {
   const { values, positionals } = yield* Effect.try({
     try: () => parseArgs({ args: process.argv.slice(2), allowPositionals: true, options: {
       timings: { type: "string" }, bun: { type: "string" }, lua: { type: "string" }, shard: { type: "string" }, "exit-code": { type: "string" }, plan: { type: "string" }, out: { type: "string" },
+      shards: { type: "string" }, farm: { type: "string" }, load: { type: "string" },
     } }),
     catch: (cause) => new FarmShardFailure({ problem: describeCause(cause) }),
   });
@@ -159,6 +184,12 @@ const main = Effect.gen(function*() {
     case "plan":
       console.log(JSON.stringify(plan(paths, yield* readTimings(values.timings ?? ""), Number(values.bun ?? 1), Number(values.lua ?? 0))));
       return;
+    case "place": {
+      const loadPath = values.load;
+      const sample = loadPath !== undefined && existsSync(loadPath) ? yield* readJson(FarmLoad, loadPath) : undefined;
+      console.log(JSON.stringify(placeShards(sample, Date.now() / 1000, Number(values.shards ?? 0), values.farm ?? "", loadPath !== undefined)));
+      return;
+    }
     case "lua-plan": {
       const planned = yield* readJson(Plan, paths[0] ?? "");
       console.log(Object.entries(planned.luaTests).map(([name, shard]) => `${name}\t${shard}`).join("\n"));
@@ -183,7 +214,7 @@ const main = Effect.gen(function*() {
       return;
     }
     default:
-      return yield* new FarmShardFailure({ problem: "farmShards.ts plan | lua-plan | junit | lua | merge" });
+      return yield* new FarmShardFailure({ problem: "farmShards.ts plan | place | lua-plan | junit | lua | merge" });
   }
 });
 

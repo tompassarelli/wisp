@@ -141,6 +141,11 @@ map packager (wisp:scripts/wisp/mapBuild.ts) and its tests
 (wisp:test/map-pack.test.ts) build against that StormLib instead of nixpkgs';
 without those two variables they use `nix`.
 
+Every 5 minutes wisp:.github/workflows/farm-load.yml samples the load of the
+`FARM_RUNNER` box into the Actions cache; the farm test's plan job reads the
+newest sample and sends shards to hosted runners while it is missing, stale
+or over the box's cores ([Where shards run](farm.md#where-shards-run)).
+
 ## Main stays green
 
 Each finished CI run on `main` opens, updates or closes one issue titled

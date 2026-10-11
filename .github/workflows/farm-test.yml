@@ -54,16 +54,27 @@ jobs:
           path: farm-timings.json
           key: farm-test-timings-${{ github.run_id }}
           restore-keys: farm-test-timings-
+      # farm-load.yml samples the farm box every 5 minutes; the newest sample restores here.
+      - uses: actions/cache/restore@v4
+        with:
+          path: farm-load.json
+          key: farm-load-${{ github.run_id }}
+          restore-keys: farm-load-
       - id: plan
         env:
           FARM: ${{ github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && (inputs.farm-runner || vars.FARM_RUNNER) || '' }}
+          FARM_INPUT: ${{ inputs.farm-runner }}
         run: |
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           bun scripts/wisp/farmShards.ts plan --timings farm-timings.json --bun "$BUN_SHARDS" $(git ls-files '*.test.ts') > plan.json
-          # Even shard jobs go to FARM_RUNNER when it is set, odd ones to hosted runners, so both pools run at once.
-          pool() { jq -c -n --arg farm "$FARM" "[range($1) | if \$farm != \"\" and . % 2 == 0 then \$farm else \"ubuntu-latest\" end]"; }
+          # Even shard jobs go to FARM_RUNNER while its load sample is fresh and fits its cores, odd ones to hosted
+          # runners, so both pools run at once. A farm-runner input skips the load check.
+          load=(--load farm-load.json)
+          if [ -n "$FARM_INPUT" ]; then load=(); fi
+          bun scripts/wisp/farmShards.ts place --shards "$(jq '.bun | length' plan.json)" --farm "$FARM" "${load[@]}" > placement.json
           echo "bun=$(jq -c '[range(.bun | length)]' plan.json)" >> "$GITHUB_OUTPUT"
-          echo "bun-runners=$(pool "$(jq '.bun | length' plan.json)")" >> "$GITHUB_OUTPUT"
+          echo "bun-runners=$(jq -c 'map(.runner)' placement.json)" >> "$GITHUB_OUTPUT"
+          jq -r 'to_entries[] | "- bun \(.key): \(.value.runner) (\(.value.reason))"' placement.json >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: farm-test-plan
