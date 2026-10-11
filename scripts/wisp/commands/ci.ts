@@ -195,30 +195,40 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
 
   // `seeds` and `nightly`: the soak command itself, read through its --json records. Each failing match's repro gets
   // its replay command and an issue body beside it.
-  const soakSeeds = (soak: SoakCommandOptions, stage: string, matches: number, seed: number, minutes: number, upfront: boolean) => timed(stage, Effect.gen(function*() {
+  const soakSeeds = (soak: SoakCommandOptions, stage: string, matches: number, firstSeed: number, minutes: number, nightly: boolean) => timed(stage, Effect.gen(function*() {
     const soaked = yield* soakProject(soak);
-    yield* say(`${stage}: ${matches} matches from seed ${seed}, at most ${minutes} min`);
-    if (upfront) for (const match of planSoak(soaked.roster, matches, seed, soaked.frames)) yield* say(`seed ${match.seed} starts: ${describeMatch(match)}`);
-    const lines: string[] = [];
-    const capture = { ...console, log: (...parts: unknown[]) => lines.push(parts.join(" ")) };
-    yield* makeSoak(soak)(["--matches", String(matches), "--seed", String(seed), "--minutes", String(minutes), "--json"]).pipe(
-      Effect.provideService(Console.Console, capture),
-      Effect.ignore,
-    );
-    const records = yield* Effect.forEach(lines, (line) => decodeSoakRecord(line).pipe(Effect.mapError((issue) => ciFailure(`a soak record: ${issue.message}`))));
-    const results = records.filter((each) => each.type === "result");
-    if (!upfront) for (const result of results) if (result.match !== undefined) yield* say(`seed ${result.match.seed} (match ${result.match.index})`);
-    // The soak reports reaching its time limit as a failure; for nightly that limit is the plan.
-    const failures = records.filter((each) => each.type === "failure" && !(stage === "nightly" && each.match === undefined && each.message?.startsWith("stopped at the ") === true));
+    const deadline = performance.now() + minutes * 60_000;
+    const failed = new Map<string, { readonly seed?: number; readonly repro?: string; readonly findings: string[] }>();
+    const seeds: number[] = [];
+    let played = 0;
+    // Nightly plays batches of new random seeds until its minutes are up; seeds plays one batch.
+    for (let seed = firstSeed; ; seed = randomSeed()) {
+      const left = Math.max(1, Math.ceil((deadline - performance.now()) / 60_000));
+      seeds.push(seed);
+      yield* say(`${stage}: ${matches} matches from seed ${seed}, at most ${left} min`);
+      if (!nightly) for (const match of planSoak(soaked.roster, matches, seed, soaked.frames)) yield* say(`seed ${match.seed} starts: ${describeMatch(match)}`);
+      const lines: string[] = [];
+      const capture = { ...console, log: (...parts: unknown[]) => lines.push(parts.join(" ")) };
+      yield* makeSoak(soak)(["--matches", String(matches), "--seed", String(seed), "--minutes", String(left), "--json"]).pipe(
+        Effect.provideService(Console.Console, capture),
+        Effect.ignore,
+      );
+      const records = yield* Effect.forEach(lines, (line) => decodeSoakRecord(line).pipe(Effect.mapError((issue) => ciFailure(`a soak record: ${issue.message}`))));
+      const results = records.filter((each) => each.type === "result");
+      played += results.length;
+      if (nightly) for (const result of results) if (result.match !== undefined) yield* say(`seed ${result.match.seed} (match ${result.match.index} from seed ${seed})`);
+      // The soak reports reaching its time limit as a failure; for nightly that limit is the plan.
+      const limited = (each: (typeof records)[number]) => nightly && each.match === undefined && each.message?.startsWith("stopped at the ") === true;
+      for (const failure of records.filter((each) => each.type === "failure" && !limited(each))) {
+        const key = failure.match === undefined ? `run from seed ${seed}` : `match ${failure.match.index} from seed ${seed}`;
+        const entry = failed.get(key) ?? { ...(failure.match === undefined ? {} : { seed: failure.match.seed }), ...(failure.repro === undefined ? {} : { repro: failure.repro }), findings: [] };
+        entry.findings.push(`${failure.kind ?? "failure"}: ${failure.message ?? ""}`);
+        failed.set(key, entry);
+      }
+      if (!nightly || performance.now() >= deadline || results.length < matches) break;
+    }
     const commit = (yield* text("git", ["rev-parse", "HEAD"]).pipe(Effect.orElseSucceed(() => "unknown"))).trim();
     const cli = process.argv[1] === undefined ? "CLI" : relative(process.cwd(), process.argv[1]);
-    const failed = new Map<string, { readonly seed?: number; readonly repro?: string; readonly findings: string[] }>();
-    for (const failure of failures) {
-      const key = failure.match === undefined ? `run ${failed.size}` : `match ${failure.match.index}`;
-      const entry = failed.get(key) ?? { ...(failure.match === undefined ? {} : { seed: failure.match.seed }), ...(failure.repro === undefined ? {} : { repro: failure.repro }), findings: [] };
-      entry.findings.push(`${failure.kind ?? "failure"}: ${failure.message ?? ""}`);
-      failed.set(key, entry);
-    }
     const repros: string[] = [];
     for (const [key, entry] of failed) {
       yield* say(`${stage}: ${entry.seed === undefined ? key : `seed ${entry.seed} (${key})`} failed:\n${entry.findings.map((finding) => `  ${finding.split("\n")[0]}`).join("\n")}`);
@@ -240,7 +250,7 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
       repros.push(entry.repro);
       yield* say(`  replay: ${replay}\n  issue: ${issue}`);
     }
-    return { verdict: failed.size === 0 && results.length > 0 ? "passed" as const : "failed" as const, detail: { seed, matches: results.length, failures: failed.size, repros } };
+    return { verdict: failed.size === 0 && played > 0 ? "passed" as const : "failed" as const, detail: { seeds, matches: played, failures: failed.size, repros } };
   }));
 
   const needSoak = (name: string) => project.soak === undefined ? Effect.fail(new UsageFailure({ problem: `ci ${name} plays the soak, and this project declares none` })) : Effect.succeed(project.soak);
@@ -270,7 +280,7 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
     case "nightly": {
       yield* known(["minutes"]);
       const minutes = yield* flag(wholeFlag(args, "minutes", { fallback: DEFAULT_SOAK_MINUTES, min: 1, max: MAX_SOAK_MINUTES }));
-      yield* soakSeeds(yield* needSoak("nightly"), "nightly", MAX_SOAK_MATCHES, randomSeed(), minutes, false);
+      yield* soakSeeds(yield* needSoak("nightly"), "nightly", MAX_SOAK_MATCHES, randomSeed(), minutes, true);
       break;
     }
     case "seeds": {
@@ -278,7 +288,7 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
       const count = yield* flag(wholeFlag(args, "n", { min: 1, max: MAX_SOAK_MATCHES }));
       if (count === undefined) return yield* new UsageFailure({ problem: "ci seeds takes --n N" });
       const seed = yield* flag(wholeFlag(args, "seed", { fallback: randomSeed(), min: 1, max: MAX_SEED }));
-      yield* soakSeeds(yield* needSoak("seeds"), "seeds", count, seed, DEFAULT_SOAK_MINUTES, true);
+      yield* soakSeeds(yield* needSoak("seeds"), "seeds", count, seed, DEFAULT_SOAK_MINUTES, false);
       break;
     }
     default:

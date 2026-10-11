@@ -20,10 +20,10 @@ Add `--json` to any tier for one JSON line per stage (`type: "result"`,
 stderr. Without it each stage prints one line when it ends:
 
 ```text
-type check, passed, 9.4
-tests, passed, 21.0
-determinism LUA, passed, 1.9
-determinism TOWARD_ZERO_LUA, passed, 2.3
+type check, passed, 4.7
+tests, passed, 31.4
+determinism LUA, passed, 1.0
+determinism TOWARD_ZERO_LUA, passed, 1.0
 ```
 
 The run exits 0 when every stage passed, 1 when one failed, and 75 when
@@ -73,8 +73,10 @@ test files, and the soak test's map with fault-free policies
    as on a save. Files the diff creates or deletes count as changed: the plan
    is scanned fresh, so it already knows them. The selected files run through
    the project's `bun run test`; the stage prints how many of all the test
-   files it selected (`tests: 3 of 76 test files affected by 2 changed
-   files since SHA`).
+   files it selected (`tests: 50 of 76 test files affected by 1 changed
+   files since SHA`; in Wisp all 50 run on every save, as `wisp dev` prints at its
+   start: they read files without declaring which, or reach an `import()`
+   the import graph can't follow).
 3. **determinism LUA** and **determinism TOWARD_ZERO_LUA**: the soak's
    first 8 matches from seed 1, each capped at 600 frames, in a soak worker
    process (wisp:scripts/wisp/soakWorker.ts), once with the stock Lua32 as
@@ -87,8 +89,10 @@ test files, and the soak test's map with fault-free policies
    runs are a determinism repeat in two fresh processes; a game whose soak
    plays emitted Lua gets both roundings.
 
-On a 4-core machine the determinism stages take about 2 s together for Wisp's
-soak (8 matches of 600 frames each, both modes at once; measured 11 Oct 2026).
+On a 4-core machine the determinism stages take about 1 s each, run at the
+same time, for Wisp's soak (8 matches of 600 frames, measured 11 Oct 2026);
+the whole `ci pre-merge --base HEAD~1` for a one-test change took 38 s there,
+31 s of it the 50 selected test files.
 For Smashcraft this is an estimate, not a measurement: its 200-match soak
 used 241 CPU seconds (6 Oct 2026), about 1.2 s a match over its full length,
 which puts 8 capped matches under 10 s per mode, inside the 30 s budget.
@@ -108,8 +112,11 @@ which puts 8 capped matches under 10 s per mode, inside the 30 s budget.
 (`makeSoak`, read through its `--json` records): a random plan seed, or
 `--seed S`, which plans the same N matches every time. Each match's seed
 prints as the run starts. `ci nightly [--minutes M]` plays random seeds until
-M minutes pass (10 by default, at most the soak's 30); reaching that limit is
-how it ends, not a failure.
+M minutes pass (10 by default, at most the soak's 30): batches of the soak's
+2,000-match limit, each from a new random seed and limited to the minutes
+left (rounded up to a whole minute), so a run ends within a minute of M.
+Reaching the time limit is how it ends, not a failure; each match's seed
+prints as it finishes.
 
 A failing match keeps the soak's repro file (`OUT/match-N.json`, shrunk, with
 the original beside it) and gets an issue body beside it,
