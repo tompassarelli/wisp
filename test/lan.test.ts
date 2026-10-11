@@ -8,21 +8,30 @@ import { ALARM_AFTER_MS, driverVerdict, wrongUser } from "../scripts/wisp/lan/po
 import { type MapFacts, mapCopies } from "../scripts/wisp/lan/map";
 import { PACKET, Writer, encodePacket } from "../scripts/wisp/lan/w3gs";
 
-describe("offline check", () => {
-
-});
-
 describe("pool operability", () => {
-  test("a run as another user than the live pool's owner names the owner and the command to run instead", () => {
+  test("[reference POSIX sh] a run as another user than a live pool's owners is refused with a command that sh reads back as that owner's sudo and this exact command line", () => {
     const tom = { uid: 1000, user: "tom", home: "/home/tom", pool: "/home/tom/.local/state/wisp/lan/pool.json" };
-    expect(wrongUser(0, [tom], ["bun", "/home/tom/game/scripts/game.ts", "lan", "fresh", "a b.w3x"])).toBe(
-      "the running LAN pool (/home/tom/.local/state/wisp/lan/pool.json) belongs to tom (uid 1000), and its state and agent sockets live under that user's home and runtime directory; run it as that user: sudo -u tom env HOME=/home/tom XDG_RUNTIME_DIR=/run/user/1000 bun /home/tom/game/scripts/game.ts lan fresh 'a b.w3x'",
-    );
-    expect(wrongUser(1000, [tom], ["bun", "game.ts", "lan", "status"])).toBeUndefined();
-    expect(wrongUser(0, [], ["bun", "game.ts", "lan", "pool"])).toBeUndefined();
+    const ann = { uid: 1001, user: "ann", pool: "/home/ann/.local/state/wisp/lan/pool.json" };
+    let seed = 1000;
+    const next = (below: number) => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return (seed >>> 16) % below;
+    };
+    const letters = ["a", "Z", "0", " ", "'", "\"", "$", "`", "\\", "*", "~", "é", "\n", ";", "&", "|", "(", "#", "=", ":", "-", ".", "/", "@", "%", "+", ","];
+    for (let sample = 0; sample < 60; sample++) {
+      const command = ["bun", ...Array.from({ length: 1 + next(5) }, () => Array.from({ length: next(6) }, () => letters[next(letters.length)]).join(""))];
+      const owners = next(2) === 0 ? [tom, ann] : [ann, tom];
+      const [owner] = owners;
+      const refusal = wrongUser(next(2) === 0 ? 0 : 1002, owners, command) ?? "";
+      expect(refusal).toContain(`the running LAN pool (${owner!.pool}) belongs to ${owner!.user} (uid ${owner!.uid})`);
+      const run = Bun.spawnSync(["sh", "-c", `sudo() { printf '%s\\0' "$@"; }; ${refusal.split("run it as that user: ")[1]}`]);
+      expect(run.stdout.toString().split("\0").slice(0, -1), JSON.stringify(command)).toEqual(["-u", owner!.user, "env", ...("home" in owner! ? [`HOME=${owner.home}`] : []), `XDG_RUNTIME_DIR=/run/user/${owner!.uid}`, ...command]);
+      expect(wrongUser(owners[next(2)]!.uid, owners, command)).toBeUndefined();
+      expect(wrongUser(0, [], command)).toBeUndefined();
+    }
   });
 
-  test("a pair whose driver died is idle at once and raises its alarm after ten minutes", () => {
+  test("[spec docs/lan.md] a pair whose driver died is idle at once and raises its alarm after the owner's ten minutes", () => {
     const goneAt = "2026-10-11T10:00:00.000Z";
     expect(driverVerdict({ pid: 7, since: "2026-10-11T09:00:00.000Z" }, Date.parse(goneAt) + ALARM_AFTER_MS)).toEqual({ alarm: false });
     const gone = { pid: 7, since: "2026-10-11T09:00:00.000Z", goneAt };
@@ -53,10 +62,6 @@ describe("map copies", () => {
     expect([readdirSync(a).sort(), readdirSync(b)]).toEqual([["own.w3x", "second.w3x"], []]);
     expect(readFileSync(join(a, "own.w3x"), "utf8")).toBe("the player's map");
   });
-});
-
-describe("W3GS", () => {
-
 });
 
 describe("host, replaying two recorded offline clients", () => {
