@@ -105,6 +105,9 @@ fixture to 32-bit Lua, is a farm test: declare it with `farmTest` from
 instead of `test`. `bun run test` skips it; CI's farm-tests job and every
 `bun wisp farm test` shard run it on each push, so it keeps its coverage.
 The ceilings don't apply to it. Keep its cheap Bun-side twin in the suite.
+The headless fixtures' Lua32 twins are one farm test file,
+`test/lua32-fixtures.test.ts`, which runs every fixture in one Lua32 process
+and reports each fixture's rows against its Bun rows.
 Each farm shard runs the suite files with `bun run test`,
 then its farm tests with `bun test --preload ./scripts/wisp/testCostPreload.ts`.
 Farm tests keep their coverage outside the suite's ceiling.

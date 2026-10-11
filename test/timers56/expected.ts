@@ -1,0 +1,18 @@
+export const EXPECTED = [
+  "zero-one-shot-reads-ms=0",
+  "started-in-callback-fast-before=1",
+  "same-deadline=second-started-first",
+  "same-deadline=first-created-first",
+  "fast-512th-reads-ms=500",
+  "in-frame-order=earlier-deadline-first",
+  "in-frame-order=later-deadline-first",
+  "periodic-between-ms=250",
+  "expired-after-ms=500",
+  "paused-at-pause-ms=750",
+  "ticks-in-one-second=60",
+  "fast-in-one-second=1024",
+  "fast-between-ticks=17..18",
+  "zero-period-in-one-second=10002",
+  "paused-later-ms=750",
+  "periodic-after-ms=250",
+];

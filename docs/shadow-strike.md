@@ -145,13 +145,13 @@ accepted orders and nonempty damage rows before interpreting tick timing.
 The same map bundle has a 540-frame headless journey:
 
 ```sh
-bun node_modules/typescript-to-lua/dist/tstl.js -p test/shadow-strike94/tsconfig.headless.json
-LUA32 build/shadow-strike94/headless/headless.lua \
-  build/shadow-strike94/map.lua src/natives/warcraft.d.ts
+bun node_modules/typescript-to-lua/dist/tstl.js -p test/shadow-strike94/tsconfig.json
+bun node_modules/typescript-to-lua/dist/tstl.js -p test/lua32-fixtures/tsconfig.json
+LUA32 build/lua32-fixtures/fixtures.lua src/natives/warcraft.d.ts \
+  shadow-strike=build/shadow-strike94/map.lua
 ```
 
 `LUA32` denotes the repository's pinned 32-bit interpreter. The journey
-compares every output row with the retained numerical native observations
-and exits nonzero on the first mismatching configuration. The same native
-rows are pinned by `test/headless-shadow-strike.test.ts`; the emitted Lua
-version runs on the farm. Keep raw private inputs outside Git.
+prints every output row, prefixed `shadow-strike`. The same native rows are
+pinned by `test/headless-shadow-strike.test.ts`, and the farm test
+`test/lua32-fixtures.test.ts` compares the emitted Lua rows with them. Keep raw private inputs outside Git.

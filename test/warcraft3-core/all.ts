@@ -5,8 +5,7 @@ import { inventoryFixture, INVENTORY_TESTED_NAMES } from "../warcraft3-inventory
 import { sceneryFixture } from "../warcraft3-scenery/fixture";
 import { HeadlessClient } from "../../src/headless/client";
 
-export function allWarcraft3Fixtures(declarations: NativeDeclarations): number {
-  const tested = new Set<string>();
+export function allWarcraft3Fixtures(declarations: NativeDeclarations, tested = new Set<string>()): number {
   coreFixture(declarations, tested);
   sceneryFixture(declarations, tested);
   inventoryFixture(declarations);
