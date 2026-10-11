@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { parseMDL } from "../vendor/war3-model.mjs";
 import type { DrawnPose, RenderScene } from "../scripts/wisp/headlessRender";
 import { boundsModel, compareEdges, inFrame, sceneBounds, silhouetteBounds, SILHOUETTE_DELTA, type PixelBox, type Texels } from "../scripts/wisp/screenBounds";
+import { NATIVE_RISE, NATIVE_SPREAD } from "../scripts/wisp/screen";
 
 type Vector3 = readonly [number, number, number];
 
@@ -117,7 +118,7 @@ test("[property] posed screen bounds of a turning cube equal the analytic projec
     const yaw = fields.CAMERA_FIELD_ROTATION * Math.PI / 180, pitch = fields.CAMERA_FIELD_ANGLE_OF_ATTACK * Math.PI / 180;
     const forward: Vector3 = [Math.cos(yaw) * Math.cos(pitch), Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch)];
     const eye = sub(target, scaled(forward, fields.CAMERA_FIELD_TARGET_DISTANCE)), right = unit(cross(forward, [0, 0, 1])), up = cross(right, forward);
-    const tangent = Math.tan(fields.CAMERA_FIELD_FIELD_OF_VIEW * Math.PI / 360);
+    const tangent = Math.tan(fields.CAMERA_FIELD_FIELD_OF_VIEW * Math.PI / 360) * NATIVE_SPREAD;
     // An opaque texel rectangle in a transparent border, and a red radial falloff reaching zero at `reach` from the centre.
     const c0 = Math.floor(between(2, 20)), c1 = Math.floor(between(c0 + 8, 62)), r0 = Math.floor(between(2, 20)), r1 = Math.floor(between(r0 + 8, 62)), reach = between(0.15, 0.48);
     const keyedTexels = texture((x, y) => x >= c0 && x < c1 && y >= r0 && y < r1 ? [255, 255, 255, 255] : [255, 255, 255, 0]);
@@ -133,7 +134,7 @@ test("[property] posed screen bounds of a turning cube equal the analytic projec
     for (const [width, height] of [[800, 600], [1280, 720], [2560, 1080]] as const) {
       const project = (point: Vector3) => {
         const relative = sub(point, eye), depth = dot(relative, forward);
-        return { depth, x: (dot(relative, right) / (depth * tangent) + 1) * width / 2, y: (1 - dot(relative, up) * (width / height) / (depth * tangent)) * height / 2 };
+        return { depth, x: (dot(relative, right) / (depth * tangent) + 1) * width / 2, y: (1 - dot(relative, up) * (width / height) / (depth * tangent) - NATIVE_RISE) * height / 2 };
       };
       const [row, ...others] = sceneBounds(scene, (path) => path === "Cube.mdl" ? model : undefined, width, height);
       expect(others).toEqual([]);
@@ -240,10 +241,10 @@ test("[property] the in-frame raster covers a cube's projected polygon, labels i
     const yaw = fields.CAMERA_FIELD_ROTATION * Math.PI / 180, pitch = fields.CAMERA_FIELD_ANGLE_OF_ATTACK * Math.PI / 180;
     const forward: Vector3 = [Math.cos(yaw) * Math.cos(pitch), Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch)];
     const eye = sub(target, scaled(forward, fields.CAMERA_FIELD_TARGET_DISTANCE)), right = unit(cross(forward, [0, 0, 1])), up = cross(right, forward);
-    const tangent = Math.tan(fields.CAMERA_FIELD_FIELD_OF_VIEW * Math.PI / 360);
+    const tangent = Math.tan(fields.CAMERA_FIELD_FIELD_OF_VIEW * Math.PI / 360) * NATIVE_SPREAD;
     const project = (point: Vector3) => {
       const relative = sub(point, eye), depth = dot(relative, forward);
-      return { depth, x: (dot(relative, right) / (depth * tangent) + 1) * width / 2, y: (1 - dot(relative, up) * (width / height) / (depth * tangent)) * height / 2 };
+      return { depth, x: (dot(relative, right) / (depth * tangent) + 1) * width / 2, y: (1 - dot(relative, up) * (width / height) / (depth * tangent) - NATIVE_RISE) * height / 2 };
     };
     const placed = (model: string, at: Vector3) => pose({ model, x: at[0], y: at[1], z: at[2], yaw: between(-Math.PI, Math.PI), pitch: between(-Math.PI, Math.PI), roll: between(-Math.PI, Math.PI),
       scale: between(0.3, 1.2), matrixScale: [between(0.7, 1.3), between(0.7, 1.3), between(0.7, 1.3)], animationElapsed: between(0, 5) });

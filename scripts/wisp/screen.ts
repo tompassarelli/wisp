@@ -32,16 +32,24 @@ export function camera(scene: RenderScene, aspect: number) {
     view[13] = (view[13] ?? 0) - (y[axis] ?? 0) * (eye[axis] ?? 0);
     view[14] = (view[14] ?? 0) - (z[axis] ?? 0) * (eye[axis] ?? 0);
   }
-  const tangent = Math.tan(field("FIELD_OF_VIEW", 70) * Math.PI / 360);
+  const tangent = Math.tan(field("FIELD_OF_VIEW", 70) * Math.PI / 360) * NATIVE_SPREAD;
   const near = field("NEARZ", 10), far = field("FARZ", 10000);
-  const projection = perspective(tangent, near, far, aspect);
+  const projection = nativeProjection(tangent, near, far, aspect);
   const rotation = yaw - Math.PI, elevation = -pitch;
   const halfYaw = rotation / 2, halfPitch = -elevation / 2;
   const quaternion: [number, number, number, number] = [-Math.sin(halfYaw) * Math.sin(halfPitch), Math.cos(halfYaw) * Math.sin(halfPitch), Math.sin(halfYaw) * Math.cos(halfPitch), Math.cos(halfYaw) * Math.cos(halfPitch)];
 
-  return { view, projection, skyProjection: perspective(tangent, near, SKY_FAR, aspect), eye, quaternion, near, far, shadow: { eye, right: x, up: y, back: z, tangent, aspect, near, reach: Math.min(far, distance * SHADOW_REACH) } };
+  return { view, projection, skyProjection: nativeProjection(tangent, near, SKY_FAR, aspect), eye, quaternion, near, far, shadow: { eye, right: x, up: y, back: z, tangent, aspect, near, reach: Math.min(far, distance * SHADOW_REACH) } };
 }
 export const SKY_FAR = 1_000_000;
+
+/** Build 3.0.0.24268 at 1920x1080 draws the world 1/1.0472 the size the FOV gives, about the screen centre, and 0.00633 of the half-height higher (wisp#125 box 3). */
+export const NATIVE_SPREAD = 1.0472, NATIVE_RISE = 0.00633;
+function nativeProjection(tangent: number, near: number, far: number, aspect: number): Matrix {
+  const out = perspective(tangent, near, far, aspect);
+  out[9] = -NATIVE_RISE;
+  return out;
+}
 
 const SHADOW_REACH = 2.5;
 

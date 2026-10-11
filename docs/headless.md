@@ -592,6 +592,21 @@ wisp:test/headless-bounds.test.ts).
   client also reports to `BlzGetLocalClientWidth/Height`; without it, at the
   render canvas (`render.width`/`height`, default 1280x720), while client i
   lays out for (1920 + 640·i) × 1080.
+- **Projection.** `camera(scene, aspect)` (wisp:scripts/wisp/screen.ts),
+  which the renderer and posed bounds share, spreads the camera FOV across the
+  full width and then widens the half-tangent by 1.0472 and raises the picture
+  by 0.00633 of the half-height, because native draws the world at a uniform
+  0.9549 about the screen centre and 3.42 px higher at 1080. Measured on build
+  3.0.0.24268, Classic 1920x1080, FOV 62.92-62.95° and camera distances
+  859-1037, from the deck edges of 40 hidden captures (wisp#125 box 3). The
+  scale doesn't change with distance, so it isn't the eye placement; native's
+  target z read equals `CAMERA_FIELD_ZOFFSET` and the offset doesn't scale
+  with 1/distance, so it is a viewport offset, not a target height. Native
+  reports target y 256 below the map's `SetCameraPosition` y, but draws at the
+  map's y. Other FOVs, aspects and sizes are unmeasured, so a fixed half-tangent
+  factor and a fixed FOV offset are not told apart (checked by
+  "[reference wisp#125] world projection matches native at 1920x1080",
+  wisp:test/screen.test.ts).
 - **The pixel rule.** `ui` rows are `uiReport(scene, width, height, textures)`
   (wisp:scripts/wisp/screen.ts): the 0.8 x 0.6 UI area is centred and scaled
   by the screen height, so x = W/2 + (left − 0.4)·H/0.6 and
