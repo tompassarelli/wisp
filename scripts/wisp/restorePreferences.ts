@@ -18,7 +18,10 @@ if (import.meta.main) {
       Effect.mapError(() => new PreferencesUsage({})),
     );
     const [pid, documents] = args;
-    yield* Effect.sync(() => alive(pid)).pipe(Effect.repeat({ schedule: Schedule.spaced("1 second"), until: running => !running }));
+    if (alive(pid)) {
+      console.log(`waiting for process ${pid}`);
+      yield* Effect.sync(() => alive(pid)).pipe(Effect.repeat({ schedule: Schedule.spaced("1 second"), until: running => !running }));
+    }
     const restored = yield* Effect.tryPromise({
       try: () => restorePreferences(preferencesBackupPath(documents), preferencesPath(documents)),
       catch: cause => new PreferencesFailure({ cause }),
