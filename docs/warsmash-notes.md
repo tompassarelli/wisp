@@ -391,7 +391,7 @@ then `BlzSetUnitFacingEx(90)` (11519). Each part is forced by the data:
 [facing normalization](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L1840-L1844),
 [height and coordinate setters](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/simulation/CUnit.java#L2633-L2690).
 
-**Native rows.** `EXPECTED` in `test/headless-unit-motion.test.ts` is the
+**Native rows.** `EXPECTED` in `test/unit-motion57/expected.ts` is the
 3.0.1 file, all 49 rows; Bun and both 32-bit Luas write it exactly. The dash
 row reads 26 there and headless, because the attached effect reads 0, 0. To
 recapture, build `bun test/unit-motion57/build.ts BASE.w3m OUT.w3x`, play it
@@ -703,7 +703,7 @@ real rule.
 3.0.1 capture (8 Oct 2026, wisp#50): one private online game, two signed-in
 clients, both writing identical files
 (~/.local/state/wisp/script-rules50-20261008/out/). Those 22 rows are now
-`EXPECTED` and `EXPECTED_SYNC` in `test/headless-script-rules.test.ts`,
+`EXPECTED` and `EXPECTED_SYNC` in `test/script-rules50/expected.ts`,
 tagged `[native]`; 14 matched headless as it was and 8 needed the fixes
 below.
 
@@ -882,7 +882,7 @@ supply the length.
 The native capture builds `bun test/sounds60/build.ts BASE.w3m OUT.w3x`, plays
 it in a two-player 3.0.1 private game for at least 0.5 game seconds plus 1.5
 times the fixture file's length and collects `sounds60-p0.txt` and `sounds60-p1.txt`.
-Each must equal `EXPECTED` in `test/headless-sounds.test.ts`; the rows'
+Each must equal `EXPECTED` in `test/sounds60/expected.ts`; the rows'
 order depends only on fractions of the file's length, so the stock file's
 real length (rather than headless's 2,000 ms) keeps the same rows. A
 `missing-file=...` row means the stock path is wrong for that build, or the

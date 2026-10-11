@@ -1,0 +1,28 @@
+// Native expectations follow wisp:docs/warsmash-notes.md#native-results-for-44.
+
+export const EXPECTED = [
+  "owner-retained=256",
+  "facing-writes=11519",
+  "life-getter-setter-agreement=4800,4800,3200,3200",
+  "mana-getter-setter-agreement=1600",
+  "max-life-writes=25600,25600,25600,25600",
+  "max-mana-writes=20480,20480,20480,20480",
+  "fractional-boundary-alive=52,1280",
+  "fractional-boundary-dead=0,1280",
+  "life-after-kill=0,0",
+  "dead-widget-life-write=6400",
+  "dead-unit-state-write=6400",
+  "removal=859289472,6400",
+  "death-cutoff=0,0,0",
+  "death-cutoff-first-alive=106169p-18",
+  "life-write-exact=15p-1,439091p-16,27p-1",
+  "mana-write-exact=13107p-17,209715p-16",
+  "life-after-max-change=6400",
+  "dead-low-write=51",
+  "dead-raised-low-write=51",
+  "facing-writes-exact=11796479p-17",
+  "removal-same-deadline=859289472,12800",
+  "removal-next-frame=0,0",
+  "removal-quarter-second=0,0",
+  "removal-one-second=0,0",
+];
