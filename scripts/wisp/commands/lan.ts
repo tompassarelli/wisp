@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import { userInfo } from "node:os";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Console, Effect, Exit, Schema, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -9,7 +10,7 @@ import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from
 import { LanFailure } from "../lan/join";
 import { lanPluginProblem } from "../lan/plugin";
 import {
-  PAIR_SIDES, PROFILES, type PoolPair, agentSocket, clientName, desktopSize, pairClients, pairDirectory, poolClientsFile, poolFile, readPool, reportPort, writeJson, writePoolClients,
+  PAIR_SIDES, PROFILES, type PoolPair, agentSocket, clientName, desktopSize, pairClients, pairDirectory, poolClientsFile, poolFile, poolOwners, readPool, reportPort, writeJson, writePoolClients, wrongUser,
 } from "../lan/pool";
 import { setupClient } from "../lan/setup";
 import { CapacityDeferred, admissionFile, capacityDeferral, deferredExit, pairAdmission, retryWhileDeferred } from "../lan/admission";
@@ -30,6 +31,18 @@ const agent = (pair: number, path: string, body?: unknown) => Effect.tryPromise(
   },
   catch: (cause) => new LanFailure({ problem: `pair ${pair}'s agent (${agentSocket(pair)}): ${describeCause(cause)}` }),
 });
+
+/** The process that drives the pair: this command's caller, past the package-script wrappers (`bun run wisp`, `bun wisp`, `bun GAME`) that exit with it. */
+const driverPid = Effect.try(() => {
+  let pid = process.ppid;
+  for (let depth = 0; depth < 8; depth++) {
+    const [, ...words] = readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0");
+    const verb = words.find((word) => !word.startsWith("-"));
+    if (readFileSync(`/proc/${pid}/comm`, "utf8").trim() !== "bun" || verb === undefined || /[./]/.test(verb)) return pid;
+    pid = Number(readFileSync(`/proc/${pid}/stat`, "utf8").split(") ")[1]?.split(" ")[1]);
+  }
+  return pid;
+}).pipe(Effect.orElseSucceed(() => process.ppid));
 
 const setup: Command = (args) => Effect.gen(function*() {
   const [from] = flagValues(args, "from");
@@ -133,7 +146,7 @@ const registerPairs = (mine: readonly PoolPair[], profile: string, fps: number |
   const ids = new Set(mine.map(({ id }) => id));
   const others = ((yield* readPool)?.pairs ?? []).filter(({ id, agentSocket: socket }) => !ids.has(id) && existsSync(socket));
   const pairs = [...others, ...mine].sort((left, right) => left.id - right.id);
-  writeJson(poolFile(), { profile, ...(fps === undefined ? {} : { fps }), pairs });
+  writeJson(poolFile(), { profile, ...(fps === undefined ? {} : { fps }), owner: { uid: process.getuid?.() ?? 0, user: userInfo().username }, pairs });
   writePoolClients(poolClientsFile(), pairs.flatMap(({ id, runs }) => pairClients(id, runs)));
 });
 
@@ -197,7 +210,7 @@ const fresh: Command = (args) => Effect.gen(function*() {
   const [turnText] = flagValues(args, "turn-ms");
   const computers = yield* number(args, "computers", 0);
   const started = Date.now();
-  const result = yield* agent(pair, "/fresh", { map, computers, ...(turnText === undefined ? {} : { turnMs: Number(turnText) }) });
+  const result = yield* agent(pair, "/fresh", { map, computers, driver: yield* driverPid, ...(turnText === undefined ? {} : { turnMs: Number(turnText) }) });
   yield* Console.log(`pair ${pair}: playing ${map} after ${((Date.now() - started) / 1000).toFixed(1)} s; action log ${String(result["log"])}`);
 });
 
@@ -210,7 +223,8 @@ const solo: Command = (args) => Effect.gen(function*() {
   if (chosen.some((pair) => !Number.isInteger(pair) || pair < 0)) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
   const pairs = chosen.length > 0 ? chosen : ((yield* readPool)?.pairs ?? []).filter(({ agentSocket: socket }) => existsSync(socket)).map(({ id }) => id);
   if (pairs.length === 0) return yield* new LanFailure({ problem: "no pool pair is running; start one with wisp lan pool" });
-  yield* Effect.forEach(pairs, (pair) => agent(pair, "/solo", { map: resolve(map) }).pipe(
+  const driver = yield* driverPid;
+  yield* Effect.forEach(pairs, (pair) => agent(pair, "/solo", { map: resolve(map), driver }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(SoloResult)),
     Effect.mapError((failure) => (failure instanceof LanFailure ? failure : new LanFailure({ problem: `pair ${pair}: ${failure.message}` }))),
     Effect.flatMap(({ clients }) => Effect.forEach(clients, ({ client, seconds }) => Console.log(`${client}: playing ${map} alone after ${seconds.toFixed(1)} s`), { discard: true })),
@@ -290,7 +304,14 @@ const netem: Command = (args) => Effect.gen(function*() {
 
 export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | solo MAP [--pair K...] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] | netem off --pair K | status [--pair K] | end --pair K";
 
-export const lan: Command = ([sub, ...args]) => {
+const ownerCheck = poolOwners.pipe(Effect.flatMap((owners) => {
+  const refusal = wrongUser(process.getuid?.() ?? 0, owners, ["bun", ...process.argv.slice(1)]);
+  return refusal === undefined ? Effect.void : Effect.fail(new LanFailure({ problem: refusal }));
+}));
+
+export const lan: Command = (argv) => ownerCheck.pipe(Effect.andThen(Effect.suspend(() => subcommand(argv))));
+
+const subcommand: Command = ([sub, ...args]) => {
   switch (sub) {
     case "setup": return setup(args);
     case "pool": return pool(args);

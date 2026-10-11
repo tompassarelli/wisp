@@ -3,11 +3,32 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Exit, Scope } from "effect";
 import { startHost } from "../scripts/wisp/lan/host";
+import { ALARM_AFTER_MS, driverVerdict, wrongUser } from "../scripts/wisp/lan/pool";
 import type { MapFacts } from "../scripts/wisp/lan/map";
 import { PACKET, Writer, encodePacket } from "../scripts/wisp/lan/w3gs";
 
 describe("offline check", () => {
 
+});
+
+describe("pool operability", () => {
+  test("a run as another user than the live pool's owner names the owner and the command to run instead", () => {
+    const tom = { uid: 1000, user: "tom", home: "/home/tom", pool: "/home/tom/.local/state/wisp/lan/pool.json" };
+    expect(wrongUser(0, [tom], ["bun", "/home/tom/game/scripts/game.ts", "lan", "fresh", "a b.w3x"])).toBe(
+      "the running LAN pool (/home/tom/.local/state/wisp/lan/pool.json) belongs to tom (uid 1000), and its state and agent sockets live under that user's home and runtime directory; run it as that user: sudo -u tom env HOME=/home/tom XDG_RUNTIME_DIR=/run/user/1000 bun /home/tom/game/scripts/game.ts lan fresh 'a b.w3x'",
+    );
+    expect(wrongUser(1000, [tom], ["bun", "game.ts", "lan", "status"])).toBeUndefined();
+    expect(wrongUser(0, [], ["bun", "game.ts", "lan", "pool"])).toBeUndefined();
+  });
+
+  test("a pair whose driver died is idle at once and raises its alarm after ten minutes", () => {
+    const goneAt = "2026-10-11T10:00:00.000Z";
+    expect(driverVerdict({ pid: 7, since: "2026-10-11T09:00:00.000Z" }, Date.parse(goneAt) + ALARM_AFTER_MS)).toEqual({ alarm: false });
+    const gone = { pid: 7, since: "2026-10-11T09:00:00.000Z", goneAt };
+    expect(driverVerdict(gone, Date.parse(goneAt) + ALARM_AFTER_MS - 1)).toEqual({ idle: `idle since ${goneAt}, driver gone`, alarm: false });
+    expect(driverVerdict(gone, Date.parse(goneAt) + ALARM_AFTER_MS).alarm).toBe(true);
+    expect(ALARM_AFTER_MS).toBe(600_000);
+  });
 });
 
 describe("W3GS", () => {

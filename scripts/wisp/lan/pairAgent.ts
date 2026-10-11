@@ -2,7 +2,7 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSy
 import { basename, join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { Cause, Effect, Exit, FiberSet, Layer, Option, Schedule, Schema, Scope } from "effect";
+import { Cause, Duration, Effect, Exit, Fiber, FiberSet, Layer, Option, Schedule, Schema, Scope } from "effect";
 import { platformLayer, runPlatformSync } from "../../platform/layer";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { AudioIsolation, GameLauncher, InputInjection, ProcessTable } from "../../platform/services";
@@ -13,7 +13,7 @@ import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { readMapFacts } from "./map";
-import { PAIR_SIDES, pairFlags, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
+import { ALARM_AFTER_MS, type Driver, PAIR_SIDES, alarmLog, driverVerdict, pairFlags, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
 
 const argument = (name: string) => flagValues(process.argv, name)[0];
@@ -82,9 +82,18 @@ interface Game {
   readonly scope: Scope.Closeable;
 }
 
-const FreshRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, turnMs: Schema.optionalKey(Schema.Finite), computers: Schema.optionalKey(Schema.Finite) }));
-const SoloRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String }));
+const FreshRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, turnMs: Schema.optionalKey(Schema.Finite), computers: Schema.optionalKey(Schema.Finite), driver: Schema.optionalKey(Schema.Int) }));
+const SoloRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, driver: Schema.optionalKey(Schema.Int) }));
 const SpeedRequest = Schema.fromJsonString(Schema.Struct({ speed: Schema.Finite }));
+
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 const agent = Effect.gen(function*() {
   const capacity = argument("capacity");
@@ -126,6 +135,31 @@ const agent = Effect.gen(function*() {
   });
 
   let game: Game | undefined;
+
+  // The process driving the pair, until `wisp lan end` releases it. Its watcher marks the pair idle once it dies, and raises the alarm 10 minutes later.
+  let driver: Driver | undefined;
+  let watcher: Fiber.Fiber<void> | undefined;
+  const forever = { within: Duration.infinity, onTimeout: () => Effect.void };
+  const release = Effect.suspend(() => {
+    const watching = watcher;
+    driver = undefined;
+    watcher = undefined;
+    return watching === undefined ? Effect.void : Fiber.interrupt(watching);
+  });
+  const drive = (pid: number | undefined) => Effect.gen(function*() {
+    yield* release;
+    if (pid === undefined) return;
+    driver = { pid, since: new Date().toISOString() };
+    watcher = yield* pollUntil(Effect.sync(() => alive(pid)), { until: (running) => !running, every: "5 seconds", ...forever }).pipe(
+      Effect.andThen(Effect.sync(() => {
+        if (driver !== undefined) driver = { ...driver, goneAt: new Date().toISOString() };
+        say(`driver ${pid} is gone without wisp lan end; the pair is idle`);
+      })),
+      Effect.andThen(pollUntil(Effect.sync(() => driverVerdict(driver, Date.now()).alarm), { until: (due) => due, every: "15 seconds", ...forever })),
+      Effect.andThen(Effect.sync(() => appendFileSync(alarmLog(), `${new Date().toISOString()} pair ${pair}: ${driverVerdict(driver, Date.now()).idle ?? "idle"} (pid ${pid}) for ${ALARM_AFTER_MS / 60_000} min without wisp lan end\n`))),
+      Effect.forkIn(agentScope),
+    );
+  });
   const endGame = Effect.suspend(() => {
     const ending = game;
     if (ending === undefined) return Effect.void;
@@ -215,11 +249,14 @@ const agent = Effect.gen(function*() {
         fps: profile.maxFps,
         clients: yield* Effect.forEach(clients, ({ name }) => gamePid(name).pipe(Effect.map((pid) => ({ name, pid, documents: documentsOf(name) })))),
         game: game === undefined ? undefined : { id: game.id, log: game.log, map: game.map, ...game.host.status() },
+        driver,
+        idle: driverVerdict(driver, Date.now()).idle,
       });
     }
     if (url.pathname === "/fresh" && request.method === "POST") {
       const body = yield* decode(FreshRequest, request);
       if (!existsSync(body.map)) return Response.json({ error: `no map at ${body.map}` }, { status: 400 });
+      yield* drive(body.driver);
       const exit = yield* Effect.exit(fresh(body.map, body.turnMs, body.computers));
       if (Exit.isSuccess(exit)) return Response.json(exit.value);
       say(`fresh failed: ${String(exit.cause)}`);
@@ -228,12 +265,14 @@ const agent = Effect.gen(function*() {
     if (url.pathname === "/solo" && request.method === "POST") {
       const body = yield* decode(SoloRequest, request);
       if (!existsSync(body.map)) return Response.json({ error: `no map at ${body.map}` }, { status: 400 });
+      yield* drive(body.driver);
       const exit = yield* Effect.exit(solo(body.map));
       if (Exit.isSuccess(exit)) return Response.json({ clients: exit.value });
       say(`solo failed: ${String(exit.cause)}`);
       return Response.json({ error: String(exit.cause) }, { status: 500 });
     }
     if (url.pathname === "/end" && request.method === "POST") {
+      yield* release;
       yield* endGame;
       return Response.json({ ended: true });
     }
@@ -259,15 +298,7 @@ const agent = Effect.gen(function*() {
   const sessionPid = wholeFlag(process.argv, "session-pid", { fallback: 0 });
   if (sessionPid instanceof UsageFailure) return yield* sessionPid;
   if (sessionPid <= 0) return yield* Effect.never;
-  const alive = () => {
-    try {
-      process.kill(sessionPid, 0);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-  yield* Effect.sync(alive).pipe(Effect.repeat({ schedule: Schedule.spaced("2 seconds"), while: (running) => running }));
+  yield* Effect.sync(() => alive(sessionPid)).pipe(Effect.repeat({ schedule: Schedule.spaced("2 seconds"), while: (running) => running }));
   say(`stopping: the pair session ${sessionPid} ended`);
 }).pipe(Effect.onInterrupt(() => Effect.sync(() => say("stopping: asked to"))));
 

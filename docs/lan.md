@@ -323,13 +323,52 @@ under `$XDG_STATE_HOME/wisp/lan/` (default `~/.local/state/wisp/lan/`):
 - `clients.json`: every pool client in the clients-file schema
   (`WISP_CLIENTS=~/.local/state/wisp/lan/clients.json`);
 - `pair-K/clients.json`: one pair's clients, named `a` and `b`, for tools
-  written against two clients A and B.
+  written against two clients A and B;
+- `alarms.log`: one line per pair whose driver died and left it idle for 10
+  minutes (see "Pool owner and drivers").
 
 `pair-K/<client>-menus.log` keeps every request that client's menus send, as
 `wisp menus listen` prints them: the agent holds the clients' report ports.
 
 Each game's files are under `pair-K/games/<time>/`: `actions.log` and
 `packets.log` (every packet except empty turns, in hex).
+
+## Pool owner and drivers
+
+A pool belongs to the user who ran `wisp lan pool`: its state is under that
+user's `$XDG_STATE_HOME`, its desktops under their `XDG_RUNTIME_DIR`, and
+`pool.json` records them as `owner: { uid, user }`. Before any `wisp lan`
+command runs, Wisp looks for pools with a live pair (one whose agent socket
+exists) in its own state directory and in each account's default
+`~/.local/state/wisp/lan/pool.json` it can read. When only another user's pool
+is live, the command exits 1 and names the owner and the command to run
+instead, for example as root:
+
+```
+the running LAN pool (/home/tom/.local/state/wisp/lan/pool.json) belongs to tom (uid 1000), and its state and agent sockets live under that user's home and runtime directory; run it as that user: sudo -u tom env HOME=/home/tom XDG_RUNTIME_DIR=/run/user/1000 bun /home/tom/game/scripts/game.ts lan status
+```
+
+The owner comes from `owner.uid`, or from the file's owner for a pool written
+before Wisp recorded it, and the user name from `/etc/passwd`. A user who can't
+read the owner's home sees no pool there and gets the ordinary "no pool"
+answers.
+
+`wisp lan fresh` and `wisp lan solo` make their caller the pair's driver: the
+process that ran the command, past a `bun run` or `bun wisp` wrapper. `wisp
+lan end` releases it, and the next `fresh` or `solo` replaces it. The pair
+agent checks the driver every 5 seconds (`pollUntil`). Once it is gone without
+`end`, `wisp lan status` shows the pair with `"idle": "idle since <time>,
+driver gone"` beside `"driver": { pid, since, goneAt }`, and `agent.log` says
+so. Ten minutes later the agent appends one line to
+`$XDG_STATE_HOME/wisp/lan/alarms.log` (default
+`~/.local/state/wisp/lan/alarms.log`) for the owner's tick to read:
+
+```
+2026-10-11T10:10:05.012Z pair 0: idle since 2026-10-11T10:00:03.981Z, driver gone (pid 4242) for 10 min without wisp lan end
+```
+
+Each driver raises the alarm once. The decision is `driverVerdict`
+(wisp:scripts/wisp/lan/pool.ts).
 
 ## Dummy lobby checks
 

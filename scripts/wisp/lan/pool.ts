@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
 import { LanFailure } from "./join";
@@ -163,11 +163,15 @@ export interface PoolPair {
 export interface PoolFile {
   readonly profile: string;
   readonly pairs: readonly PoolPair[];
+  readonly owner?: { readonly uid: number; readonly user: string };
 }
 
 export const poolFile = () => join(stateRoot(), "pool.json");
 
 export const poolClientsFile = () => join(stateRoot(), "clients.json");
+
+/** One line per pair whose driver died without `wisp lan end` and stayed gone for ALARM_AFTER_MS, for the owner's tick to read. */
+export const alarmLog = () => join(stateRoot(), "alarms.log");
 
 export function pairClients(pair: number, runs: Readonly<Partial<Record<Side, string>>>): PoolClient[] {
   return PAIR_SIDES.map((side) => {
@@ -188,6 +192,7 @@ export function writePoolClients(path: string, clients: readonly PoolClient[]): 
 const PoolFileJson = Schema.fromJsonString(Schema.Struct({
   profile: Schema.String,
   fps: Schema.optionalKey(Schema.Finite),
+  owner: Schema.optionalKey(Schema.Struct({ uid: Schema.Int, user: Schema.String })),
   pairs: Schema.Array(Schema.Struct({
     id: Schema.Int,
     clients: Schema.String,
@@ -198,14 +203,66 @@ const PoolFileJson = Schema.fromJsonString(Schema.Struct({
   })),
 }));
 
-export const readPool: Effect.Effect<PoolFile | undefined, LanFailure> = Effect.suspend(() => {
+const readPoolAt = (file: string): Effect.Effect<PoolFile | undefined, LanFailure> => Effect.suspend(() => {
   // @effect-diagnostics-next-line effectSucceedWithVoid:off -- an undefined result, which Effect.void's void type cannot satisfy
-  if (!existsSync(poolFile())) return Effect.succeed(undefined);
-  return Effect.try({ try: () => readFileSync(poolFile(), "utf8"), catch: (cause) => new LanFailure({ problem: `${poolFile()}: ${String(cause)}` }) }).pipe(
+  if (!existsSync(file)) return Effect.succeed(undefined);
+  return Effect.try({ try: () => readFileSync(file, "utf8"), catch: (cause) => new LanFailure({ problem: `${file}: ${String(cause)}` }) }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(PoolFileJson)),
-    Effect.mapError((cause) => (cause instanceof LanFailure ? cause : new LanFailure({ problem: `${poolFile()}: ${cause.message}` }))),
+    Effect.mapError((cause) => (cause instanceof LanFailure ? cause : new LanFailure({ problem: `${file}: ${cause.message}` }))),
   );
 });
+
+export const readPool: Effect.Effect<PoolFile | undefined, LanFailure> = Effect.suspend(() => readPoolAt(poolFile()));
+
+export interface PoolOwner {
+  readonly uid: number;
+  readonly user: string;
+  readonly home?: string;
+  readonly pool: string;
+}
+
+const shellWord = (word: string) => (/^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`);
+
+/** Why user `uid` may not run the `wisp lan` COMMAND (its whole command line) while `owners` hold live pools, or undefined when it may: its pool state and agent sockets are another user's. */
+export function wrongUser(uid: number, owners: readonly PoolOwner[], command: readonly string[]): string | undefined {
+  const [owner] = owners;
+  if (owner === undefined || owners.some((candidate) => candidate.uid === uid)) return undefined;
+  return `the running LAN pool (${owner.pool}) belongs to ${owner.user} (uid ${owner.uid}), and its state and agent sockets live under that user's home and runtime directory; run it as that user: sudo -u ${owner.user} env ${owner.home === undefined ? "" : `HOME=${owner.home} `}XDG_RUNTIME_DIR=/run/user/${owner.uid} ${command.map(shellWord).join(" ")}`;
+}
+
+/** The owners of every pool with a live pair: this user's own state, and each account's default state directory that this user can read. */
+export const poolOwners: Effect.Effect<readonly PoolOwner[]> = Effect.gen(function*() {
+  const accounts = yield* Effect.try(() => readFileSync("/etc/passwd", "utf8")).pipe(
+    Effect.map((text) => text.split("\n").map((line) => line.split(":")).filter((fields) => fields.length >= 7).map(([user = "", , uid = "", , , home = ""]) => ({ user, uid: Number(uid), home }))),
+    Effect.orElseSucceed(() => []),
+  );
+  const files = [...new Set([poolFile(), ...accounts.filter(({ home }) => home.startsWith("/")).map(({ home }) => join(home, ".local/state/wisp/lan/pool.json"))])];
+  const owners = yield* Effect.forEach(files, (file) => readPoolAt(file).pipe(
+    Effect.flatMap((pool) => Effect.try(() => {
+      if (pool === undefined || !pool.pairs.some(({ agentSocket: socket }) => existsSync(socket))) return undefined;
+      const uid = pool.owner?.uid ?? statSync(file).uid;
+      const account = accounts.find((candidate) => candidate.uid === uid);
+      return { uid, user: pool.owner?.user ?? account?.user ?? `#${uid}`, pool: file, ...(account === undefined ? {} : { home: account.home }) };
+    })),
+    Effect.orElseSucceed(() => undefined),
+  ));
+  return owners.filter((owner) => owner !== undefined);
+});
+
+/** The process driving a pair through `wisp lan fresh` or `solo`, and when its death was first seen. */
+export interface Driver {
+  readonly pid: number;
+  readonly since: string;
+  readonly goneAt?: string;
+}
+
+export const ALARM_AFTER_MS = 10 * 60_000;
+
+/** What `wisp lan status` marks on a pair whose driver is `driver` at `now`, and whether its line in the alarm log is due. */
+export function driverVerdict(driver: Driver | undefined, now: number): { readonly idle?: string; readonly alarm: boolean } {
+  if (driver?.goneAt === undefined) return { alarm: false };
+  return { idle: `idle since ${driver.goneAt}, driver gone`, alarm: now - Date.parse(driver.goneAt) >= ALARM_AFTER_MS };
+}
 
 export function pairOf(pool: PoolFile, names: readonly string[]): PoolPair | undefined {
   return pool.pairs.find(({ id }) => names.every((name) => PAIR_SIDES.some((side) => clientName(id, side) === name)));
