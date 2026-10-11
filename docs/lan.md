@@ -308,7 +308,7 @@ Tom's `system.reg`, `user.reg`, `Warcraft III/.build.info` and Battle.net
 | Command | What it does |
 | --- | --- |
 | `wisp lan setup --from INSTALL [--pairs N \| --pair K...]` | Creates the pool's clients from an existing Warcraft III install folder (the one holding `_retail_`): pairs 0..N-1, or only the pairs named, leaving clients other runners use alone. See "Setting up". |
-| `wisp lan pool [--pairs N \| --pair K...] [--pool-profile parity\|visual\|hfr[,...]] [--fps N] [--seconds S]` | Runs up to N pairs, each admitted by the machine-capacity helper. It stays in the foreground; Ctrl-C stops the pool. |
+| `wisp lan pool [--pairs N \| --pair K...] [--pool-profile parity\|visual\|hfr[,...]] [--fps N] [--seconds S]` | Runs up to N pairs, each admitted by the machine-capacity helper. It stays in the foreground; Ctrl-C or SIGTERM stops the pool: each pair session stops its agent, which stops its games, before the desktops close. A pair another live pool holds (`pair-K/pool.pid`) is refused with that pool's PID. |
 | `wisp lan fresh MAP [--pair K] [--computers N] [--turn-ms MS]` | Hosts MAP on pair K, switches both clients to LAN, joins them, and returns once the match plays. It prints the game's action log. |
 | `wisp lan dummy MAP --program W3GSCLIENT [--pair K] [--count N]` | Joins side a to a lobby, then runs N dummy joins, handicap changes and leaves (default 20). The pair must have no active game. |
 | `wisp lan solo MAP [--pair K...]` | Each client of the named running pairs (default: all) plays MAP alone, as a local game on the loopback provider; returns once every client's game UI is up. Works on 3.0.1. See "Solo games". |

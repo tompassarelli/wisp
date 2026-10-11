@@ -13,7 +13,7 @@ import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { mapCopies, readMapFacts } from "./map";
-import { ALARM_AFTER_MS, type Driver, PAIR_SIDES, alarmLog, driverVerdict, pairFlags, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
+import { ALARM_AFTER_MS, type Driver, alive, PAIR_SIDES, alarmLog, driverVerdict, pairFlags, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
 
 const argument = (name: string) => flagValues(process.argv, name)[0];
@@ -86,14 +86,6 @@ const FreshRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, t
 const SoloRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, driver: Schema.optionalKey(Schema.Int) }));
 const SpeedRequest = Schema.fromJsonString(Schema.Struct({ speed: Schema.Finite }));
 
-const alive = (pid: number) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 const agent = Effect.gen(function*() {
   const capacity = argument("capacity");

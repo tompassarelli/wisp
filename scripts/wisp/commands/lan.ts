@@ -10,7 +10,7 @@ import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from
 import { LanFailure } from "../lan/join";
 import { lanPluginProblem } from "../lan/plugin";
 import {
-  PAIR_SIDES, PROFILES, type PoolPair, agentSocket, clientName, desktopSize, pairClients, pairDirectory, poolClientsFile, poolFile, poolOwners, readPool, reportPort, writeJson, writePoolClients, wrongUser,
+  PAIR_SIDES, PROFILES, type PoolPair, agentSocket, alive, clientName, desktopSize, pairClients, pairDirectory, poolClientsFile, poolFile, poolOwners, readPool, reportPort, writeJson, writePoolClients, wrongUser,
 } from "../lan/pool";
 import { setupClient } from "../lan/setup";
 import { CapacityDeferred, admissionFile, capacityDeferral, deferredExit, pairAdmission, retryWhileDeferred } from "../lan/admission";
@@ -96,6 +96,20 @@ const clientsReady = (pair: number) => Effect.tryPromise({
 
 const READY = "10 minutes";
 
+const holderFile = (pair: number) => join(pairDirectory(pair), "pool.pid");
+
+const holdPair = (pair: number) => Effect.acquireRelease(
+  Effect.suspend(() => {
+    const holder = Number(existsSync(holderFile(pair)) ? readFileSync(holderFile(pair), "utf8").trim() : "");
+    if (Number.isInteger(holder) && holder > 0 && holder !== process.pid && alive(holder)) return Effect.fail(new LanFailure({ problem: `it is held by wisp lan pool ${holder}; stop that pool first` }));
+    writeJson(holderFile(pair), process.pid);
+    return Effect.void;
+  }),
+  () => Effect.sync(() => {
+    if (existsSync(holderFile(pair)) && readFileSync(holderFile(pair), "utf8").trim() === String(process.pid)) rmSync(holderFile(pair), { force: true });
+  }),
+);
+
 const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, fps?: number) => {
   const directory = pairDirectory(pair);
   const attempt = Effect.gen(function*() {
@@ -108,7 +122,7 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
     const scope = yield* Scope.fork(yield* Effect.scope);
     return yield* Effect.gen(function*() {
 
-      const session = yield* spawnLogged(ChildProcess.make(process.execPath, [capacity, "session", "--class", "native", "--memory-gib", "1", "--owner", `wisp-lan-pair-${pair}`, "--", process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity, ...(fps === undefined ? [] : ["--fps", String(fps)])], { stdin: "ignore" }), {
+      const session = yield* spawnLogged(ChildProcess.make(process.execPath, [capacity, "session", "--class", "native", "--memory-gib", "1", "--owner", `wisp-lan-pair-${pair}`, "--", process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity, ...(fps === undefined ? [] : ["--fps", String(fps)])], { stdin: "ignore", forceKillAfter: "90 seconds" }), {
         stdout: join(directory, "session.out"),
         stderr: join(directory, "session.err"),
       });
@@ -133,13 +147,11 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
       return { ...session.handle, stop: Scope.close(scope, Exit.void) };
     }).pipe(Scope.provide(scope), Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))));
   });
-  return retryWhileDeferred(attempt, {
+  return holdPair(pair).pipe(Effect.andThen(retryWhileDeferred(attempt, {
     seconds: waitSeconds,
     waiting: (reason) => `pair ${pair}: the capacity helper defers it (${reason})`,
     exhausted: (reason) => new LanFailure({ problem: `the capacity helper kept deferring it for ${waitSeconds} s (${reason})` }),
-  }).pipe(
-    Effect.mapError((failure) => new LanFailure({ problem: `pair ${pair}: ${failure.message}` })),
-  );
+  })), Effect.mapError((failure) => new LanFailure({ problem: `pair ${pair}: ${failure.message}` })));
 };
 
 const registerPairs = (mine: readonly PoolPair[], profile: string, fps: number | undefined) => Effect.gen(function*() {

@@ -6,6 +6,8 @@ export interface LogFiles {
   readonly stderr: string;
 }
 
+const OUTPUT_GRACE = "5 seconds";
+
 export const spawnLogged = (command: ChildProcess.Command, files: LogFiles) => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const childScope = yield* Scope.fork(yield* Effect.scope);
@@ -14,7 +16,8 @@ export const spawnLogged = (command: ChildProcess.Command, files: LogFiles) => E
   const stderr = yield* Effect.forkScoped(Stream.run(handle.stderr, fs.sink(files.stderr)));
   const written = Effect.all([Fiber.await(stdout), Fiber.await(stderr)], { discard: true });
 
-  yield* Effect.addFinalizer(() => Scope.close(childScope, Exit.void).pipe(Effect.andThen(written)));
+  // A descendant that left the child's process group (a session bus, a setsid'd helper) can hold its output open after it exits.
+  yield* Effect.addFinalizer(() => Scope.close(childScope, Exit.void).pipe(Effect.andThen(Effect.timeoutOption(written, OUTPUT_GRACE))));
   return { handle, written };
 });
 

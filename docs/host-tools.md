@@ -14,7 +14,9 @@ Effect's own pieces. Four rules:
    failure, interruption, and SIGINT or SIGTERM. Hold sockets, servers,
    watchers and timers the same way, with `Effect.acquireRelease` or
    `Effect.forkScoped`. To write a child's output to files, use `spawnLogged`
-   (wisp:scripts/wisp/hostProcess.ts).
+   (wisp:scripts/wisp/hostProcess.ts); its scope waits at most 5 s for the
+   output to close, since a descendant outside the process group (a session
+   bus, a `setsid` helper) can hold it open forever.
 2. **The entry point runs under `runMain`.** A project's `bun` entry calls
    `runMainCli` (wisp:scripts/wisp/cli.ts), and a standalone script calls
    `BunRuntime.runMain` (`@effect/platform-bun/BunRuntime`). Ctrl-C or a kill

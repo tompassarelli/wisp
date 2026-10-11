@@ -256,6 +256,15 @@ export interface Driver {
   readonly goneAt?: string;
 }
 
+export const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const ALARM_AFTER_MS = 10 * 60_000;
 
 /** What `wisp lan status` marks on a pair whose driver is `driver` at `now`, and whether its line in the alarm log is due. */

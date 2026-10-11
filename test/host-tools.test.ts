@@ -29,6 +29,7 @@ const sandbox = () => {
     WISP_TEST_SESSIONS: join(folder, "sessions"),
     WISP_TEST_DESKTOPS: join(folder, "desktops"),
     WISP_TEST_MARK: mark,
+    WISP_TEST_BUN: process.execPath,
   };
   const marked = () => readdirSync("/proc").filter((entry) => /^\d+$/.test(entry)).filter((pid) => {
     try {
@@ -39,7 +40,8 @@ const sandbox = () => {
   }).map(Number);
   const sessions = () => (existsSync(env.WISP_TEST_SESSIONS) ? readdirSync(env.WISP_TEST_SESSIONS) : []);
   cleanups.push(() => {
-    for (const pid of marked()) {
+    const holders = join(env.WISP_TEST_DESKTOPS, "holders");
+    for (const pid of [...marked(), ...(existsSync(holders) ? readFileSync(holders, "utf8").split("\n").filter(Boolean).map(Number) : [])]) {
       try {
         process.kill(pid, "SIGKILL");
       } catch {}
@@ -71,16 +73,21 @@ const pool = (box: ReturnType<typeof sandbox>, extra: Record<string, string>) =>
   mkdirSync(plugin, { recursive: true });
 
   writeFileSync(join(plugin, "index.ts"), "export {};\n");
-  return Bun.spawn([process.execPath, join(root, "examples/sample/scripts/sample.ts"), "lan", "pool", "--pair", String(poolPair), "--capacity", capacity, "--desktop", "/bin/true", "--wait", "0"], {
-    env: { ...box.env, ...extra }, stdout: "ignore", stderr: "ignore",
+  return Bun.spawn([process.execPath, join(root, "examples/sample/scripts/sample.ts"), "lan", "pool", "--pair", String(poolPair), "--capacity", capacity, "--desktop", join(fixtures, "desktop.sh"), "--wait", "0"], {
+    env: { ...box.env, ...extra }, stdout: "pipe", stderr: "pipe",
   });
 };
 
-test("[boundary] lan pool: SIGTERM removes desktop markers after its native scope exits", async () => {
+test("[boundary] lan pool: a held pair refuses a second pool, and SIGTERM stops every pair process and removes desktop markers", async () => {
   const box = sandbox();
   const runner = pool(box, {});
   await until(() => existsSync(join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${poolPair}`, "clients.json")), 30, "the ready pool pair");
   expect(box.activeDesktops()).toEqual(["a", "b"]);
+  const second = pool(box, {});
+  const secondCode = await Promise.race([second.exited, Bun.sleep(20_000).then(() => "still running")]);
+  if (secondCode === "still running") second.kill("SIGKILL");
+  const secondOut = await new Response(second.stdout).text();
+  expect({ code: secondCode, held: secondOut.includes(`held by wisp lan pool ${runner.pid}`) }).toEqual({ code: 1, held: true });
   runner.kill("SIGTERM");
   const result = await leftovers(runner, box);
   expect(result.code).not.toBe("still running");
