@@ -32,10 +32,11 @@ Bone "${bone}" { ObjectId 0,${parent === undefined ? "" : " Parent 1,"} GeosetId
 ${parent === undefined ? "" : `Bone "${parent}" { ObjectId 1, GeosetId None, GeosetAnimId None, }\n`}PivotPoints ${parent === undefined ? 1 : 2} { { ${PIVOT.join(", ")} },${parent === undefined ? "" : " { 0, 0, 0 },"} }
 `;
 const cube = cubeModel("Arm");
-// The cube with an additive team-glow quad through its middle, wider than the cube: only the glow's disc, inside the cube, draws.
+// The cube, opaque, with a quad through its middle wider than the cube, drawn by `layer` from a second texture `bitmap`:
+// an additive team glow, of which only the disc inside the cube draws, or an alpha-keyed Transparent veil.
 const GLOW_HALF = HALF * 1.38, glowCorners: Vector3[] = [0, 1, 2, 3].map((i) => [CENTRE[0] + (i & 1 ? GLOW_HALF : -GLOW_HALF), CENTRE[1] + (i & 2 ? GLOW_HALF : -GLOW_HALF), CENTRE[2]]);
-const glowCube = cube.replace("NumGeosets 1", "NumGeosets 2").replace('Textures 1 { Bitmap { Image "", ReplaceableId 1, } }', 'Textures 2 { Bitmap { Image "", ReplaceableId 1, } Bitmap { Image "", ReplaceableId 2, } }')
-  .replace("Materials 1 {", "Materials 2 {").replace("Alpha 1, } } }", "Alpha 1, } } Material { Layer { FilterMode Additive, static TextureID 1, static Alpha 1, } } }").replace("Bone \"Arm\"", `Geoset {
+const quadCube = (bitmap: string, layer: string) => cube.replace("FilterMode Transparent", "FilterMode None").replace("NumGeosets 1", "NumGeosets 2").replace('Textures 1 { Bitmap { Image "", ReplaceableId 1, } }', `Textures 2 { Bitmap { Image "", ReplaceableId 1, } Bitmap { ${bitmap} } }`)
+  .replace("Materials 1 {", "Materials 2 {").replace("Alpha 1, } } }", `Alpha 1, } } Material { Layer { ${layer} static TextureID 1, static Alpha 1, } } }`).replace("Bone \"Arm\"", `Geoset {
     Vertices 4 { ${glowCorners.map((c) => `{ ${c.join(", ")} },`).join(" ")} }
     Normals 4 { ${glowCorners.map(() => "{ 0, 0, 1 },").join(" ")} }
     TVertices 4 { { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 }, }
@@ -46,6 +47,7 @@ const glowCube = cube.replace("NumGeosets 1", "NumGeosets 2").replace('Textures 
     SelectionGroup 0,
 }
 Bone "Arm"`);
+const glowCube = quadCube('Image "", ReplaceableId 2,', "FilterMode Additive,"), veiledCube = quadCube('Image "Veil.blp",', "FilterMode Transparent,");
 
 // A square on the turning bone, wider than the cube, drawn by one layer: an alpha-keyed texture, or an additive team glow at alpha 0.75.
 const QUAD_HALF = HALF * 2, QUAD_Z = CENTRE[2] + HALF, GLOW_ALPHA = 0.75;
@@ -98,10 +100,10 @@ function pose(fields: Partial<DrawnPose>): DrawnPose {
 }
 
 test("[property] posed screen bounds of a turning cube equal the analytic projection of its corners, and of a textured quad only the texels its layer draws", () => {
-  const model = boundsModel(parseMDL(cube)), glow = boundsModel(parseMDL(glowCube)), keyed = boundsModel(parseMDL(keyedQuad)), glowing = boundsModel(parseMDL(glowQuad)), next = random(125);
+  const model = boundsModel(parseMDL(cube)), glow = boundsModel(parseMDL(glowCube)), veiled = boundsModel(parseMDL(veiledCube)), keyed = boundsModel(parseMDL(keyedQuad)), glowing = boundsModel(parseMDL(glowQuad)), next = random(125);
   const brightTexels = texture(() => [255, 255, 255, 255]);
   const between = (low: number, high: number) => low + (high - low) * next();
-  let compared = 0, offFrame = 0, farCulled = 0, textured = 0, brightGlow = 0;
+  let compared = 0, offFrame = 0, farCulled = 0, textured = 0, brightGlow = 0, veils = 0;
   for (let round = 0; round < 300; round++) {
     const fields = { CAMERA_FIELD_ROTATION: between(0, 360), CAMERA_FIELD_ANGLE_OF_ATTACK: between(280, 360), CAMERA_FIELD_TARGET_DISTANCE: between(1200, 3000), CAMERA_FIELD_ZOFFSET: between(-100, 300),
       CAMERA_FIELD_FIELD_OF_VIEW: between(40, 100), CAMERA_FIELD_NEARZ: between(10, 100), CAMERA_FIELD_FARZ: between(1500, 6000) };
@@ -170,6 +172,21 @@ test("[property] posed screen bounds of a turning cube equal the analytic projec
         expect(glowRow.teamGlow).toBe("texture");
         brightGlow++;
       }
+      // The body leaves out a see-through geoset too: an opaque-texelled Transparent veil, read or not, while the whole box counts it.
+      if (width === 800) for (const veilTextures of [undefined, { image: (path: string) => path === "Veil.blp" ? brightTexels : undefined, teamGlow: () => undefined }]) {
+        const veilRow = sceneBounds(scene, (path) => path === "Cube.mdl" ? veiled : undefined, width, height, veilTextures)[0];
+        if (veilRow?.body === undefined || veilRow.box === undefined) throw new Error("no veiled body box in front of the eye");
+        for (const edge of ["left", "top", "right", "bottom"] as const) expect(Math.abs(veilRow.body[edge] - expected[edge])).toBeLessThanOrEqual(0.01);
+        const veilPoints = glowCorners.map(atAngle);
+        if (!veilPoints.every((p) => p.depth >= fields.CAMERA_FIELD_NEARZ && p.depth <= fields.CAMERA_FIELD_FARZ && p.x >= 0 && p.y >= 0 && p.x <= width && p.y <= height)) continue;
+        // Unread, the veil counts its whole surface by its corners; read, the pixels whose centres its opaque texels cover.
+        const veilBox = veilTextures === undefined ? { left: Math.min(...veilPoints.map((p) => p.x)), top: Math.min(...veilPoints.map((p) => p.y)), right: Math.max(...veilPoints.map((p) => p.x)), bottom: Math.max(...veilPoints.map((p) => p.y)) }
+          : centreBox(hull(veilPoints.map((p) => [p.x, p.y])));
+        if (veilBox === undefined) continue;
+        const whole = { left: Math.min(expected.left, veilBox.left), top: Math.min(expected.top, veilBox.top), right: Math.max(expected.right, veilBox.right), bottom: Math.max(expected.bottom, veilBox.bottom) };
+        for (const edge of ["left", "top", "right", "bottom"] as const) expect(Math.abs(veilRow.box[edge] - whole[edge])).toBeLessThanOrEqual(veilTextures === undefined ? 0.01 : 1);
+        if (veilTextures !== undefined && (["left", "top", "right", "bottom"] as const).some((edge) => Math.abs(whole[edge] - expected[edge]) > 2)) veils++;
+      }
       if (width === 800) for (const [quad, region] of [[keyed, keyedRegion], [glowing, glowRegion]] as const) {
         const quadCorners = [quadPoint(0, 0), quadPoint(1, 0), quadPoint(0, 1), quadPoint(1, 1)].map(atAngle);
         if (!quadCorners.every((p) => p.depth >= fields.CAMERA_FIELD_NEARZ && p.depth <= fields.CAMERA_FIELD_FARZ)) continue;
@@ -195,6 +212,7 @@ test("[property] posed screen bounds of a turning cube equal the analytic projec
   expect(compared).toBeGreaterThan(450);
   expect(textured).toBeGreaterThan(400);
   expect(brightGlow).toBeGreaterThan(200);
+  expect(veils).toBeGreaterThan(100);
   expect(offFrame).toBeGreaterThan(0);
   expect(farCulled).toBeGreaterThan(0);
 });

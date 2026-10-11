@@ -623,7 +623,9 @@ wisp:test/headless-bounds.test.ts).
   (origin top left, y down), `offFrame`, `behindEye`, `farCulled`, each
   geoset's alpha, filter mode and whether it is drawn, and each posed node's
   box and pivot. Its `body` is the same drawn-pixel box over only the
-  geosets that aren't team glow, left out when none of them draws. A model
+  geosets with an opaque (None) layer, so it leaves out team glow and every
+  see-through geoset (Transparent, Blend, Additive, AddAlpha or Modulate
+  layers only), left out when none of them draws. A model
   whose bytes are absent has no row.
 - **Drawn pixels.** The box counts only pixels the model draws (wisp#125).
   A geoset with a None (opaque) layer, or a solid team-colour layer that

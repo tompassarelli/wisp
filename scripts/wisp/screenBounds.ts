@@ -50,7 +50,7 @@ export interface ModelBounds {
   readonly nodes: readonly NodeBounds[];
   /** How drawn team-glow geosets were bounded: by the install's team-glow texture, or by the disc rule without it. */
   readonly teamGlow?: "texture" | "disc";
-  /** Box of the drawn pixels of every geoset that isn't team glow; absent when none draws. */
+  /** Box of the drawn pixels of every geoset with an opaque (filter mode None) layer; absent when none draws. */
   readonly body?: PixelBox;
 }
 
@@ -107,6 +107,11 @@ const GLOW_SAMPLES = 256;
 function glowOnly(data: model.Model, materialId: number): boolean {
   const layers = data.Materials[materialId]?.Layers ?? [];
   return layers.length > 0 && layers.every((layer) => ADDITIVE.has(Number(layer.FilterMode ?? 0)) && typeof layer.TextureID === "number" && data.Textures[layer.TextureID]?.ReplaceableId === 2);
+}
+
+/** Some layer is opaque (filter mode None), so the geoset counts toward the body; see-through geosets don't. */
+function opaque(data: model.Model, materialId: number): boolean {
+  return (data.Materials[materialId]?.Layers ?? []).some((layer) => Number(layer.FilterMode ?? 0) === 0);
 }
 
 /**
@@ -262,12 +267,12 @@ export function poseBounds(pose: DrawnPose, found: BoundsModel, view: ReturnType
   const nodeBox = new Float64Array(nodes.length * 4);
   for (let i = 0; i < nodes.length; i++) nodeBox.set([Infinity, Infinity, -Infinity, -Infinity], i * 4);
   let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity, ahead = false;
-  let bodyLeft = Infinity, bodyTop = Infinity, bodyRight = -Infinity, bodyBottom = -Infinity, glow = false;
+  let bodyLeft = Infinity, bodyTop = Infinity, bodyRight = -Infinity, bodyBottom = -Infinity, glow = false, bodied = false;
   let teamGlow: "texture" | "disc" | undefined;
   const m0 = m[0] ?? 0, m1 = m[1] ?? 0, m3 = m[3] ?? 0, m4 = m[4] ?? 0, m5 = m[5] ?? 0, m7 = m[7] ?? 0, m8 = m[8] ?? 0, m9 = m[9] ?? 0, m11 = m[11] ?? 0, m12 = m[12] ?? 0, m13 = m[13] ?? 0, m15 = m[15] ?? 0;
   const extend = (x0: number, y0: number, x1: number, y1: number, main: number) => {
     if (x0 < left) left = x0; if (x1 > right) right = x1; if (y0 < top) top = y0; if (y1 > bottom) bottom = y1;
-    if (!glow) { if (x0 < bodyLeft) bodyLeft = x0; if (x1 > bodyRight) bodyRight = x1; if (y0 < bodyTop) bodyTop = y0; if (y1 > bodyBottom) bodyBottom = y1; }
+    if (bodied) { if (x0 < bodyLeft) bodyLeft = x0; if (x1 > bodyRight) bodyRight = x1; if (y0 < bodyTop) bodyTop = y0; if (y1 > bodyBottom) bodyBottom = y1; }
     if (main < 0) return;
     const o = main * 4;
     if (x0 < (nodeBox[o] ?? 0)) nodeBox[o] = x0; if (y0 < (nodeBox[o + 1] ?? 0)) nodeBox[o + 1] = y0;
@@ -277,7 +282,9 @@ export function poseBounds(pose: DrawnPose, found: BoundsModel, view: ReturnType
   for (const mesh of drawn) {
     const { positions, main: mains, faces } = mesh;
     for (let vertex = 0; vertex < mains.length; vertex++) if (m3 * (positions[vertex * 3] ?? 0) + m7 * (positions[vertex * 3 + 1] ?? 0) + m11 * (positions[vertex * 3 + 2] ?? 0) + m15 >= near) { ahead = true; break; }
-    glow = glowOnly(found.data, found.data.Geosets[mesh.geoset]?.MaterialID ?? -1);
+    const material = found.data.Geosets[mesh.geoset]?.MaterialID ?? -1;
+    glow = glowOnly(found.data, material);
+    bodied = opaque(found.data, material);
     const layers = drawnLayers(found.data, mesh.geoset, pose, sampler, textures);
     if (glow) teamGlow = layers === "unknown" ? "disc" : teamGlow ?? "texture";
     if (layers === "nothing") continue;
