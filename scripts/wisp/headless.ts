@@ -37,7 +37,7 @@ export interface HeadlessMap {
 
 export interface HeadlessRuntime {
 
-  clients(entry: MapEntry, players?: readonly number[], options?: Pick<LockstepOptions, "delivery" | "humans" | "link" | "files" | "keepCalls" | "cost" | "effectDeaths" | "musicSlider" | "effectStepMs">): Lockstep;
+  clients(entry: MapEntry, players?: readonly number[], options?: Pick<LockstepOptions, "delivery" | "humans" | "link" | "files" | "keepCalls" | "cost" | "effectDeaths" | "musicSlider" | "effectStepMs" | "screen">): Lockstep;
 
   modules(entry: MapEntry): ModuleSet;
 

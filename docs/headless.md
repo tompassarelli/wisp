@@ -430,6 +430,24 @@ bun examples/sample/scripts/sample.ts headless ping-reload --runs 20 --json
 `p0-frame-64.png` (and one image per requested frame and client), the captured
 scene JSON, and `render.json` naming the GPU, counts of models and textures,
 and each asset's attempted and selected location.
+Each image in `render.json` also lists `ui`: one row per drawn frame, in
+drawing order, from `uiReport(scene, width, height)` in
+wisp:scripts/wisp/screen.ts. A row names the frame, its type, level and
+texture, the texture's selected layer and sha256, its texture region (UV
+`[0, 0, 1, 1]`: a texture set with `BlzFrameSetTexture` is drawn whole), its
+`[left, top, right, bottom]` in UI units, its pixel rectangle, and
+`outside43` when an edge leaves the 0.8 x 0.6 area of the 4:3 screen. Pixels
+follow the renderer's rule: the 4:3 area is centred and scaled by the screen
+height, so x = W/2 + (left − 0.4)·H/0.6 and y = (0.6 − top)·H/0.6. Frame
+scale and the 4:3 clamp of `GAME_UI` children are not applied yet (wisp#125
+lane 5).
+
+Without `--resolution`, client i reports a (1920 + 640·i) × 1080 screen to
+`BlzGetLocalClientWidth/Height`, `BlzPixelToFrame*` and `BlzFrameToPixel*`,
+and frames render at the map's `render.width`/`height` (default 1280x720).
+`--resolution WxH` gives every client and the render canvas that size, so a
+map's layout and its picture agree, such as `--resolution 800x600` for a 4:3
+Classic pool client.
 Unit and effect alpha fades opaque material layers in both Classic and
 Definitive; alpha 140 blends the body with the background, as in a roll.
 Frame numbers are headless client frames after that frame's journey events.

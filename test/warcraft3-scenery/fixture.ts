@@ -14,7 +14,7 @@ export function sceneryFixture(this: void, declarations: NativeDeclarations, tes
     doodads: [0, 1, 2].map(i => ({ id: i === 2 ? 8 : 7, x: i * 10, y: i + 1, z: i + 2, scaleX: 2, scaleY: 3, scaleZ: 4, usingModelAxes: true, yaw: 5, pitch: 6, roll: 7, variation: 8 })),
   });
   let next = 1000;
-  const client = new HeadlessClient({ slot: 0, filePrefix: "scenery", humans: [0], declarations, localNatives: {}, network: [], screenWidth: 1600, natives: () => scenery.behaviors({ handle: kind => ({ kind, id: ++next }) }) });
+  const client = new HeadlessClient({ slot: 0, filePrefix: "scenery", humans: [0], declarations, localNatives: {}, network: [], screen: { width: 1600, height: 1080 }, natives: () => scenery.behaviors({ handle: kind => ({ kind, id: ++next }) }) });
   const called = new Set<string>();
   const call = (name: string, ...args: unknown[]): unknown => {
     const native = client.natives[name];

@@ -46,6 +46,8 @@ export interface LockstepOptions {
 
   readonly musicSlider?: number;
   readonly effectStepMs?: number;
+  /** Every client's screen in pixels; unset, client i reports (1920 + 640·i) × 1080. */
+  readonly screen?: { readonly width: number; readonly height: number };
 
   readonly cost?: (this: void) => number;
 
@@ -122,7 +124,7 @@ export class Lockstep {
         ...(options.intentionalNoops === undefined ? {} : { intentionalNoops: options.intentionalNoops }),
         network: this.network,
 
-        screenWidth: 1920 + 640 * index,
+        screen: options.screen ?? { width: 1920 + 640 * index, height: 1080 },
         ...(options.scope === undefined ? {} : { scope: options.scope }),
         ...(options.natives === undefined ? {} : { natives: options.natives }),
         ...(files === undefined ? {} : { files }),

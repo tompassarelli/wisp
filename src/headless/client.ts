@@ -285,7 +285,8 @@ export interface ClientOptions {
   readonly localNatives: LocalNatives;
   readonly intentionalNoops?: IntentionalNoops;
   readonly network: SyncMessage[];
-  readonly screenWidth: number;
+  /** Pixels `BlzGetLocalClientWidth/Height`, `BlzPixelToFrame*` and `BlzFrameToPixel*` read. */
+  readonly screen: { readonly width: number; readonly height: number };
   readonly scope?: ClientScope;
 
   readonly natives?: (this: void, client: HeadlessClient) => NativeBehaviors;
@@ -827,7 +828,7 @@ export class HeadlessClient {
     this.errors.push(`error in ${heading.slice(heading.indexOf(" in ") + 4)}: ${lines[1] ?? ""}`);
   }
 
-  private behaviors({ humans, playerNames, network, screenWidth }: ClientOptions): Readonly<Record<string, NativeBehavior>> {
+  private behaviors({ humans, playerNames, network, screen }: ClientOptions): Readonly<Record<string, NativeBehavior>> {
     const playing = (player: number) => humans.includes(player);
     return {
       ...this.scenery.behaviors({ handle: kind => this.handle(kind) }),
@@ -951,18 +952,18 @@ export class HeadlessClient {
         return true;
       },
       ...this.abilities.behaviors((kind) => this.handle(kind)),
-      BlzGetLocalClientWidth: () => screenWidth,
-      BlzGetLocalClientHeight: () => 1080,
+      BlzGetLocalClientWidth: () => screen.width,
+      BlzGetLocalClientHeight: () => screen.height,
       BlzIsLocalClientActive: () => true,
       BlzIsKeyPressed: (key: number) => this.heldKeys.has(key),
       BlzIsMetaKeyPressed: (meta: number) => (this.heldMeta & meta) === meta,
       BlzIsMouseButtonPressed: (button: unknown) => this.heldMouseButtons.has(button),
       BlzGetMouseScreenPosX: () => this.mouseScreenX,
       BlzGetMouseScreenPosY: () => this.mouseScreenY,
-      BlzPixelToFrameX: (pixel: number) => f32(pixel * f32(0.8) / screenWidth),
-      BlzPixelToFrameY: (pixel: number) => f32(pixel * f32(0.6) / 1080),
-      BlzFrameToPixelX: (frame: number) => Math.round(frame * screenWidth / f32(0.8)),
-      BlzFrameToPixelY: (frame: number) => Math.round(frame * 1080 / f32(0.6)),
+      BlzPixelToFrameX: (pixel: number) => f32(pixel * f32(0.8) / screen.width),
+      BlzPixelToFrameY: (pixel: number) => f32(pixel * f32(0.6) / screen.height),
+      BlzFrameToPixelX: (frame: number) => Math.round(frame * screen.width / f32(0.8)),
+      BlzFrameToPixelY: (frame: number) => Math.round(frame * screen.height / f32(0.6)),
       BlzTextAreaFrameSetAutoScroll: (frame: Handle, value: boolean) => { this.textAreaAutoScroll.set(frame, value); },
       BlzLoadTOCFile: () => true,
 

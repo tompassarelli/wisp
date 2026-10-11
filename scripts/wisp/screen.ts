@@ -118,3 +118,32 @@ export function uiPixels(rect: readonly [left: number, top: number, right: numbe
   const [left, top, right, bottom] = rect, scale = height / 0.6;
   return { x: width / 2 + (left - 0.4) * scale, y: (0.6 - top) * scale, width: (right - left) * scale, height: (top - bottom) * scale };
 }
+
+/** Where a UI texture came from: the asset layer that supplied it and the sha256 of its bytes. */
+export interface TextureIdentity { readonly layer: string; readonly sha256: string }
+export interface UiRow {
+  readonly name: string;
+  readonly type: string;
+  readonly level: number;
+  readonly texture: string | null;
+  readonly layer: string | null;
+  readonly sha256: string | null;
+  /** UV [u0, v0, u1, v1]: a texture set with `BlzFrameSetTexture` is drawn whole. */
+  readonly region: readonly [number, number, number, number] | null;
+  /** [left, top, right, bottom] in UI units. */
+  readonly ui: readonly [number, number, number, number];
+  readonly pixels: PixelRect;
+  /** Some edge lies outside the 0.8 x 0.6 area of the 4:3 screen. */
+  readonly outside43: boolean;
+}
+/** One row per frame the renderer draws, in its drawing order, at a `width` x `height` canvas. */
+export function uiReport(scene: Pick<RenderScene, "ui">, width: number, height: number, textures: (path: string) => TextureIdentity | undefined = () => undefined): UiRow[] {
+  return [...scene.ui].sort((a, b) => a.level - b.level).flatMap((frame) => {
+    if (!frame.visible || frame.alpha <= 0 || frame.rectangle === undefined) return [];
+    const [left, top, right, bottom] = frame.rectangle, texture = frame.texture === "" ? undefined : frame.texture;
+    const identity = texture === undefined ? undefined : textures(texture);
+    return [{ name: frame.name, type: frame.type, level: frame.level, texture: texture ?? null, layer: identity?.layer ?? null, sha256: identity?.sha256 ?? null,
+      region: texture === undefined ? null : [0, 0, 1, 1], ui: [left, top, right, bottom], pixels: uiPixels(frame.rectangle, width, height),
+      outside43: left < 0 || right > 0.8 || bottom < 0 || top > 0.6 }];
+  });
+}

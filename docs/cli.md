@@ -168,6 +168,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--step N` | Advance at most N simulation frames at a time | `headless` |
 | `--runs N` | Fresh scripted starts compared with the first run | `headless` |
 | `--graphics classic\|definitive` | Draw `--render` frames in Classic or Definitive Edition: its models, textures, day/night lights and the levers its profile draws ([Graphics profiles](headless.md#graphics-profiles)); the map's `readAsset` receives the choice | `headless` |
+| `--resolution WxH` | Every headless client's screen size (`BlzGetLocalClientWidth/Height`, pixel/frame conversions) and the `--render` canvas; unset, client i is (1920 + 640·i) × 1080 and renders are the map's size ([Rendered frames](headless.md#rendered-frames-and-sound-cues)) | `headless` |
 | `--look LEVER,...` | The levers the frames' look check asks for; the render fails naming each one the graphics profile does not draw | `headless` |
 | `--sound-cues FILE` | Write the headless sound/music event log, including stops, loops and volume | `headless` |
 | `--music-volume 0..1` | The player's Options > Sound music slider (default 1): scales music cues' `effectiveVolume`; sound effects are unchanged | `headless` |

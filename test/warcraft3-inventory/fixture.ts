@@ -99,7 +99,7 @@ export function inventoryFixture(this: void, nativeDeclarations: NativeDeclarati
   let unequipEvents = 0;
   client = new HeadlessClient({
     slot: 0, filePrefix: "inventory", humans: [0], declarations: nativeDeclarations,
-    network: [], screenWidth: 1920, localNatives: {},
+    network: [], screen: { width: 1920, height: 1080 }, localNatives: {},
     unitStates: { 11: { life: 40, maxLife: 100, mana: 0, maxMana: 0 } },
     natives: (current) => {
       const invoke = (name: string, ...args: unknown[]) => (current.natives[name] as (this: void, ...args: unknown[]) => unknown)(...args);
