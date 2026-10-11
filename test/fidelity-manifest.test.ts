@@ -37,9 +37,30 @@ function omit(value: unknown, path: readonly (string | number)[]): void {
   delete (cursor as Record<string | number, unknown>)[last];
 }
 
-test("[wisp#75 P4.2] public capture file boundary accepts a complete slice and rejects every missing required field", async () => {
+function makeManifest(lever: string, look: "classic" | "definitive", controls: readonly CaptureControl[]) {
+  const original = fixture.slices[0];
+  if (!original) throw new Error("missing capture fixture");
+  const { cineWindow, ...slice } = original;
+  return { ...fixture, slices: [{
+    ...slice, lever, look, controls,
+    ...(lever === "cinematic-filter" ? { cineWindow } : {}),
+    runs: slice.runs.map((run) => ({ ...run, captures: slice.frames.flatMap((frame) => controls.map((control) => ({ frame, frameSource: "journal", control: control.id, image: `${run.id}/${frame}-${control.id}.ppm` }))) })),
+  }] };
+}
+
+test("[wisp#75 P4.2 and P1.3] public capture file boundary accepts a complete slice with its own lever's controls per look and rejects every missing required field", async () => {
   const manifest = await Effect.runPromise(decodeManifest(fixture));
   expect(manifest.slices).toHaveLength(1);
+  const accepted = (input: unknown) => Effect.runPromise(decodeManifest(input).pipe(Effect.isSuccess));
+  const ko = makeManifest("cinematic-filter", "classic", [{ id: "cine-off", cine: false }, { id: "cine-on", cine: true }]);
+  const debuggerKO = structuredClone(ko);
+  for (const run of debuggerKO.slices[0]?.runs ?? []) for (const capture of run.captures) capture.frameSource = "debugger";
+  const tombControls: CaptureControl[] = [
+    { id: "stock", mode: "stock", fog: false }, { id: "mask", mode: "mask", fog: false },
+    { id: "stage", mode: "stage", fog: false }, { id: "fog-on", mode: "stage", fog: true },
+  ];
+  for (const complete of [ko, debuggerKO, ...(["classic", "definitive"] as const).map((look) => makeManifest("fog", look, tombControls))]) expect(await accepted(complete)).toBe(true);
+  await expect(Effect.runPromise(decodeManifest(makeManifest("cinematic-filter", "classic", [{ id: "cine-off", cine: false }])))).rejects.toThrow("missing cine on control");
   const paths = fieldPaths(fixture).filter((path) => path.join(".") !== "slices.0.cineWindow" && !(path[2] === "controls" && path.length === 5 && path[4] !== "id"));
   for (const path of paths) {
     const incomplete = structuredClone(fixture);
@@ -67,44 +88,15 @@ test("[wisp#75 P4.2] public capture file boundary accepts a complete slice and r
   for (const value of [false, true]) faults.push((input) => {
     const slice = input.slices[0]; if (slice) for (const control of slice.controls) control.fog = value;
   });
+  faults.push((input) => { const capture = input.slices[0]?.runs[0]?.captures[0]; if (capture) capture.frameSource = "wall-clock"; });
   for (const [index, fault] of faults.entries()) {
     const incomplete = structuredClone(fixture);
     fault(incomplete);
     expect(await Effect.runPromise(decodeManifest(incomplete).pipe(Effect.isSuccess)), `fault ${index}`).toBe(false);
   }
-  console.log(`capture manifest: ${paths.length} required-field omissions and ${faults.length} invalid slices rejected`);
-});
-
-test("[wisp#75 P1.3] capture slices require their own lever's controls per look and record the frame source", async () => {
-  const makeManifest = (lever: string, look: "classic" | "definitive", controls: readonly CaptureControl[]) => {
-    const original = fixture.slices[0];
-    if (!original) throw new Error("missing capture fixture");
-    const { cineWindow, ...slice } = original;
-    return { ...fixture, slices: [{
-      ...slice, lever, look, controls,
-      ...(lever === "cinematic-filter" ? { cineWindow } : {}),
-      runs: slice.runs.map((run) => ({ ...run, captures: slice.frames.flatMap((frame) => controls.map((control) => ({ frame, frameSource: "journal", control: control.id, image: `${run.id}/${frame}-${control.id}.ppm` }))) })),
-    }] };
-  };
-  const accepted = (input: unknown) => Effect.runPromise(decodeManifest(input).pipe(Effect.isSuccess));
-  const ko = makeManifest("cinematic-filter", "classic", [{ id: "cine-off", cine: false }, { id: "cine-on", cine: true }]);
-  expect(await accepted(ko)).toBe(true);
-  const debuggerKO = structuredClone(ko);
-  for (const run of debuggerKO.slices[0]?.runs ?? []) for (const capture of run.captures) capture.frameSource = "debugger";
-  expect(await accepted(debuggerKO)).toBe(true);
-  const invalidSource = structuredClone(ko);
-  const capture = invalidSource.slices[0]?.runs[0]?.captures[0];
-  if (capture) capture.frameSource = "wall-clock";
-  expect(await accepted(invalidSource)).toBe(false);
-  await expect(Effect.runPromise(decodeManifest(makeManifest("cinematic-filter", "classic", [{ id: "cine-off", cine: false }])))).rejects.toThrow("missing cine on control");
-  const tombControls: CaptureControl[] = [
-    { id: "stock", mode: "stock", fog: false }, { id: "mask", mode: "mask", fog: false },
-    { id: "stage", mode: "stage", fog: false }, { id: "fog-on", mode: "stage", fog: true },
-  ];
   for (const look of ["classic", "definitive"] as const) {
-    expect(await accepted(makeManifest("fog", look, tombControls))).toBe(true);
-    expect(await accepted(makeManifest("fog", look, tombControls.filter((control) => control.fog !== true)))).toBe(false);
-    expect(await accepted(makeManifest("fog", look, tombControls.filter((control) => control.mode !== "mask")))).toBe(false);
+    expect(await accepted(makeManifest("fog", look, tombControls.filter((control) => control.fog !== true))), `${look} without fog on`).toBe(false);
+    expect(await accepted(makeManifest("fog", look, tombControls.filter((control) => control.mode !== "mask"))), `${look} without mask`).toBe(false);
   }
-  console.log("capture manifest: Classic KO and Tomb accepted; missing own-lever controls and invalid frame source rejected");
+  console.log(`capture manifest: ${paths.length} required-field omissions and ${faults.length} invalid slices rejected`);
 });
