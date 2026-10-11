@@ -99,8 +99,9 @@ function pose(fields: Partial<DrawnPose>): DrawnPose {
 
 test("[property] posed screen bounds of a turning cube equal the analytic projection of its corners, and of a textured quad only the texels its layer draws", () => {
   const model = boundsModel(parseMDL(cube)), glow = boundsModel(parseMDL(glowCube)), keyed = boundsModel(parseMDL(keyedQuad)), glowing = boundsModel(parseMDL(glowQuad)), next = random(125);
+  const brightTexels = texture(() => [255, 255, 255, 255]);
   const between = (low: number, high: number) => low + (high - low) * next();
-  let compared = 0, offFrame = 0, farCulled = 0, textured = 0;
+  let compared = 0, offFrame = 0, farCulled = 0, textured = 0, brightGlow = 0;
   for (let round = 0; round < 300; round++) {
     const fields = { CAMERA_FIELD_ROTATION: between(0, 360), CAMERA_FIELD_ANGLE_OF_ATTACK: between(280, 360), CAMERA_FIELD_TARGET_DISTANCE: between(1200, 3000), CAMERA_FIELD_ZOFFSET: between(-100, 300),
       CAMERA_FIELD_FIELD_OF_VIEW: between(40, 100), CAMERA_FIELD_NEARZ: between(10, 100), CAMERA_FIELD_FARZ: between(1500, 6000) };
@@ -124,6 +125,7 @@ test("[property] posed screen bounds of a turning cube equal the analytic projec
     const keyedTexels = texture((x, y) => x >= c0 && x < c1 && y >= r0 && y < r1 ? [255, 255, 255, 255] : [255, 255, 255, 0]);
     const glowTexels = texture((x, y) => [Math.round(255 * Math.max(0, 1 - Math.hypot((x + 0.5) / TEXELS - 0.5, (y + 0.5) / TEXELS - 0.5) / reach)), 0, 0, 255]);
     const textures = { image: (path: string) => path === "Quad.blp" ? keyedTexels : undefined, teamGlow: (team: number) => team === 0 ? glowTexels : undefined };
+    const brightTextures = { image: () => undefined, teamGlow: () => brightTexels };
     // Bilinear alpha is the product of two ramps across the opaque texels' edges, so it reaches the 0.75 cut a quarter texel inside each edge and on
     // the hyperbola ramp(x) * ramp(y) = 0.75 at each corner; the glow adds more than the silhouette threshold inside `shows`.
     const keyedRegion = [[c0 - 1, r0 - 1, 1, 1], [c1, r0 - 1, -1, 1], [c0 - 1, r1, 1, -1], [c1, r1, -1, -1]].flatMap(([x = 0, y = 0, sx = 0, sy = 0]) =>
@@ -153,6 +155,21 @@ test("[property] posed screen bounds of a turning cube equal the analytic projec
       for (const box of [row.box, arm.box, glowBox]) for (const edge of ["left", "top", "right", "bottom"] as const) expect(Math.abs(box[edge] - expected[edge])).toBeLessThanOrEqual(0.01);
       expect(sceneBounds(scene, (path) => path === "Cube.mdl" ? glow : undefined, width, height)[0]?.teamGlow).toBe("disc");
       const atAngle = (local: Vector3) => project(world(add(rotate(sub(local, PIVOT), AXIS, angle), PIVOT)));
+      // The body leaves the glow out whatever its texture: none (the disc rule), the radial falloff, or a full-bright one that draws the whole quad.
+      for (const glowTextures of width === 800 ? [undefined, textures, brightTextures] : [undefined]) {
+        const glowRow = sceneBounds(scene, (path) => path === "Cube.mdl" ? glow : undefined, width, height, glowTextures)[0];
+        if (glowRow?.body === undefined || glowRow.box === undefined) throw new Error("no body box in front of the eye");
+        for (const edge of ["left", "top", "right", "bottom"] as const) expect(Math.abs(glowRow.body[edge] - expected[edge])).toBeLessThanOrEqual(0.01);
+        if (glowTextures !== brightTextures) continue;
+        const glowPoints = glowCorners.map(atAngle);
+        if (!glowPoints.every((p) => p.depth >= fields.CAMERA_FIELD_NEARZ && p.depth <= fields.CAMERA_FIELD_FARZ && p.x >= 0 && p.y >= 0 && p.x <= width && p.y <= height)) continue;
+        const quadBox = centreBox(hull(glowPoints.map((p) => [p.x, p.y])));
+        if (quadBox === undefined) continue;
+        const whole = { left: Math.min(expected.left, quadBox.left), top: Math.min(expected.top, quadBox.top), right: Math.max(expected.right, quadBox.right), bottom: Math.max(expected.bottom, quadBox.bottom) };
+        for (const edge of ["left", "top", "right", "bottom"] as const) expect(Math.abs(glowRow.box[edge] - whole[edge])).toBeLessThanOrEqual(1);
+        expect(glowRow.teamGlow).toBe("texture");
+        brightGlow++;
+      }
       if (width === 800) for (const [quad, region] of [[keyed, keyedRegion], [glowing, glowRegion]] as const) {
         const quadCorners = [quadPoint(0, 0), quadPoint(1, 0), quadPoint(0, 1), quadPoint(1, 1)].map(atAngle);
         if (!quadCorners.every((p) => p.depth >= fields.CAMERA_FIELD_NEARZ && p.depth <= fields.CAMERA_FIELD_FARZ)) continue;
@@ -177,6 +194,7 @@ test("[property] posed screen bounds of a turning cube equal the analytic projec
   }
   expect(compared).toBeGreaterThan(450);
   expect(textured).toBeGreaterThan(400);
+  expect(brightGlow).toBeGreaterThan(200);
   expect(offFrame).toBeGreaterThan(0);
   expect(farCulled).toBeGreaterThan(0);
 });

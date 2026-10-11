@@ -50,6 +50,8 @@ export interface ModelBounds {
   readonly nodes: readonly NodeBounds[];
   /** How drawn team-glow geosets were bounded: by the install's team-glow texture, or by the disc rule without it. */
   readonly teamGlow?: "texture" | "disc";
+  /** Box of the drawn pixels of every geoset that isn't team glow; absent when none draws. */
+  readonly body?: PixelBox;
 }
 
 /** RGBA texels, 4 bytes each, rows from the image's top. */
@@ -260,10 +262,12 @@ export function poseBounds(pose: DrawnPose, found: BoundsModel, view: ReturnType
   const nodeBox = new Float64Array(nodes.length * 4);
   for (let i = 0; i < nodes.length; i++) nodeBox.set([Infinity, Infinity, -Infinity, -Infinity], i * 4);
   let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity, ahead = false;
+  let bodyLeft = Infinity, bodyTop = Infinity, bodyRight = -Infinity, bodyBottom = -Infinity, glow = false;
   let teamGlow: "texture" | "disc" | undefined;
   const m0 = m[0] ?? 0, m1 = m[1] ?? 0, m3 = m[3] ?? 0, m4 = m[4] ?? 0, m5 = m[5] ?? 0, m7 = m[7] ?? 0, m8 = m[8] ?? 0, m9 = m[9] ?? 0, m11 = m[11] ?? 0, m12 = m[12] ?? 0, m13 = m[13] ?? 0, m15 = m[15] ?? 0;
   const extend = (x0: number, y0: number, x1: number, y1: number, main: number) => {
     if (x0 < left) left = x0; if (x1 > right) right = x1; if (y0 < top) top = y0; if (y1 > bottom) bottom = y1;
+    if (!glow) { if (x0 < bodyLeft) bodyLeft = x0; if (x1 > bodyRight) bodyRight = x1; if (y0 < bodyTop) bodyTop = y0; if (y1 > bodyBottom) bodyBottom = y1; }
     if (main < 0) return;
     const o = main * 4;
     if (x0 < (nodeBox[o] ?? 0)) nodeBox[o] = x0; if (y0 < (nodeBox[o + 1] ?? 0)) nodeBox[o + 1] = y0;
@@ -273,7 +277,7 @@ export function poseBounds(pose: DrawnPose, found: BoundsModel, view: ReturnType
   for (const mesh of drawn) {
     const { positions, main: mains, faces } = mesh;
     for (let vertex = 0; vertex < mains.length; vertex++) if (m3 * (positions[vertex * 3] ?? 0) + m7 * (positions[vertex * 3 + 1] ?? 0) + m11 * (positions[vertex * 3 + 2] ?? 0) + m15 >= near) { ahead = true; break; }
-    const glow = glowOnly(found.data, found.data.Geosets[mesh.geoset]?.MaterialID ?? -1);
+    glow = glowOnly(found.data, found.data.Geosets[mesh.geoset]?.MaterialID ?? -1);
     const layers = drawnLayers(found.data, mesh.geoset, pose, sampler, textures);
     if (glow) teamGlow = layers === "unknown" ? "disc" : teamGlow ?? "texture";
     if (layers === "nothing") continue;
@@ -312,6 +316,7 @@ export function poseBounds(pose: DrawnPose, found: BoundsModel, view: ReturnType
   }
 
   const box = left <= right ? { left, top, right, bottom } : undefined;
+  const body = bodyLeft <= bodyRight ? { left: bodyLeft, top: bodyTop, right: bodyRight, bottom: bodyBottom } : undefined;
   const nodeRows: NodeBounds[] = [];
   // The renderer poses only nodes that place vertices or emitters, and their ancestors; the others keep no matrix.
   for (const [id, entry] of nodes.entries()) {
@@ -332,6 +337,7 @@ export function poseBounds(pose: DrawnPose, found: BoundsModel, view: ReturnType
     handle: pose.handle.id, model: pose.model, unit: pose.unit === true, box,
     offFrame: box === undefined || box.right < 0 || box.left > width || box.bottom < 0 || box.top > height,
     behindEye: !ahead, farCulled, geosets, nodes: nodeRows, ...(teamGlow === undefined ? {} : { teamGlow }),
+    ...(body === undefined ? {} : { body }),
   };
 }
 
