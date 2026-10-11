@@ -274,6 +274,13 @@ export function driverVerdict(driver: Driver | undefined, now: number): { readon
   return { idle: `idle since ${driver.goneAt}, driver gone`, alarm: now - Date.parse(driver.goneAt) >= ALARM_AFTER_MS };
 }
 
+/** Whether a pair is driven at `now`, and since when it has been idle: the latest of the agent's start `started`, its last `wisp lan end` `ended` and its driver's `goneAt`. */
+export function idleness(started: string, ended: string | undefined, driver: Driver | undefined, now: number): { readonly state: "busy" | "idle"; readonly idleSince: string; readonly idleSeconds: number } {
+  const since = Math.max(Date.parse(started), ended === undefined ? -Infinity : Date.parse(ended), driver?.goneAt === undefined ? -Infinity : Date.parse(driver.goneAt));
+  const busy = driver !== undefined && driver.goneAt === undefined;
+  return { state: busy ? "busy" : "idle", idleSince: new Date(since).toISOString(), idleSeconds: busy ? 0 : Math.max(0, Math.floor((now - since) / 1000)) };
+}
+
 export function pairOf(pool: PoolFile, names: readonly string[]): PoolPair | undefined {
   return pool.pairs.find(({ id }) => names.every((name) => PAIR_SIDES.some((side) => clientName(id, side) === name)));
 }

@@ -13,7 +13,7 @@ import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { mapCopies, readMapFacts } from "./map";
-import { ALARM_AFTER_MS, type Driver, alive, PAIR_SIDES, alarmLog, driverVerdict, pairFlags, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
+import { ALARM_AFTER_MS, type Driver, alive, PAIR_SIDES, alarmLog, driverVerdict, idleness, pairFlags, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
 
 const argument = (name: string) => flagValues(process.argv, name)[0];
@@ -131,11 +131,15 @@ const agent = Effect.gen(function*() {
 
   // The process driving the pair, until `wisp lan end` releases it. Its watcher marks the pair idle once it dies, and raises the alarm 10 minutes later.
   let driver: Driver | undefined;
+  // The agent's start and its last release, from which `wisp lan status` counts an undriven pair's idle time.
+  const started = new Date().toISOString();
+  let ended: string | undefined;
   let watcher: Fiber.Fiber<void> | undefined;
   const forever = { within: Duration.infinity, onTimeout: () => Effect.void };
   const release = Effect.suspend(() => {
     const watching = watcher;
     driver = undefined;
+    ended = new Date().toISOString();
     watcher = undefined;
     return watching === undefined ? Effect.void : Fiber.interrupt(watching);
   });
@@ -236,6 +240,7 @@ const agent = Effect.gen(function*() {
         game: game === undefined ? undefined : { id: game.id, log: game.log, map: game.map, ...game.host.status() },
         driver,
         idle: driverVerdict(driver, Date.now()).idle,
+        ...idleness(started, ended, driver, Date.now()),
       });
     }
     if (url.pathname === "/fresh" && request.method === "POST") {

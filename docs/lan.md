@@ -371,6 +371,19 @@ so. Ten minutes later the agent appends one line to
 Each driver raises the alarm once. The decision is `driverVerdict`
 (wisp:scripts/wisp/lan/pool.ts).
 
+Every pair's `wisp lan status` line also says whether it is idle and for how
+long: `state` is `"busy"` while a driver is recorded and alive, otherwise
+`"idle"`; `idleSince` is the latest of the agent's start, the last `wisp lan
+end` and the moment the driver was found gone; `idleSeconds` is the whole
+seconds since `idleSince`, 0 while busy. A pair released with `end` 17 minutes
+ago reads, among its other fields:
+
+```
+{"pair":0,"profile":"parity","state":"idle","idleSince":"2026-10-11T10:00:03.981Z","idleSeconds":1020}
+```
+
+The calculation is `idleness`, beside `driverVerdict`.
+
 ## Dummy lobby checks
 
 `wisp lan dummy MAP --program /path/to/w3gsclient --pair K` uses the

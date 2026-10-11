@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Effect, Exit, Scope } from "effect";
 import { GameLauncher } from "../scripts/platform/services";
 import { startHost } from "../scripts/wisp/lan/host";
-import { ALARM_AFTER_MS, driverVerdict, installOf, prefixOf, wrongUser } from "../scripts/wisp/lan/pool";
+import { ALARM_AFTER_MS, type Driver, driverVerdict, idleness, installOf, prefixOf, wrongUser } from "../scripts/wisp/lan/pool";
 import { setupClient } from "../scripts/wisp/lan/setup";
 import { menuPage } from "../scripts/wisp/menus";
 import { type MapFacts, mapCopies } from "../scripts/wisp/lan/map";
@@ -34,13 +34,63 @@ describe("pool operability", () => {
     }
   });
 
-  test("[spec docs/lan.md] a pair whose driver died is idle at once and raises its alarm after the owner's ten minutes", () => {
+  test("[spec docs/lan.md] a pair whose driver died is idle at once and raises its alarm after the owner's ten minutes, and every pair counts whole idle seconds from its last start, end or dead driver", () => {
     const goneAt = "2026-10-11T10:00:00.000Z";
     expect(driverVerdict({ pid: 7, since: "2026-10-11T09:00:00.000Z" }, Date.parse(goneAt) + ALARM_AFTER_MS)).toEqual({ alarm: false });
     const gone = { pid: 7, since: "2026-10-11T09:00:00.000Z", goneAt };
     expect(driverVerdict(gone, Date.parse(goneAt) + ALARM_AFTER_MS - 1)).toEqual({ idle: `idle since ${goneAt}, driver gone`, alarm: false });
     expect(driverVerdict(gone, Date.parse(goneAt) + ALARM_AFTER_MS).alarm).toBe(true);
     expect(ALARM_AFTER_MS).toBe(600_000);
+
+    let seed = 128;
+    const next = (below: number) => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return (seed >>> 16) % below;
+    };
+    for (let sample = 0; sample < 200; sample++) {
+      let now = Date.parse("2026-10-11T09:00:00.000Z") + next(1000);
+      const started = new Date(now).toISOString();
+      let ended: string | undefined;
+      let driver: Driver | undefined;
+      let idleStart = now;
+      let previous: number | undefined;
+      const trace: string[] = ["start"];
+      for (let step = 0; step < 40; step++) {
+        now += next(4) === 0 ? next(2_000_000) : next(3000);
+        const event = next(5);
+        if (event === 0) {
+          driver = { pid: 1 + next(9), since: new Date(now).toISOString() };
+          ended = new Date(now).toISOString();
+          trace.push(`drive ${driver.pid}`);
+        } else if (event === 1) {
+          driver = undefined;
+          ended = new Date(now).toISOString();
+          idleStart = now;
+          previous = undefined;
+          trace.push("end");
+        } else if (event === 2 && driver !== undefined && driver.goneAt === undefined) {
+          driver = { ...driver, goneAt: new Date(now).toISOString() };
+          idleStart = now;
+          previous = undefined;
+          trace.push("gone");
+        } else {
+          const read = idleness(started, ended, driver, now);
+          const live = driver !== undefined && driver.goneAt === undefined;
+          trace.push(`read +${now - idleStart} ms`);
+          const why = trace.join(", ");
+          expect(read.state, why).toBe(live ? "busy" : "idle");
+          if (live) {
+            expect(read.idleSeconds, why).toBe(0);
+            previous = undefined;
+          } else {
+            expect(read.idleSince, why).toBe(new Date(idleStart).toISOString());
+            expect(read.idleSeconds, why).toBe(Math.floor((now - idleStart) / 1000));
+            expect(read.idleSeconds, why).toBeGreaterThanOrEqual(previous ?? 0);
+            previous = read.idleSeconds;
+          }
+        }
+      }
+    }
   });
 });
 
