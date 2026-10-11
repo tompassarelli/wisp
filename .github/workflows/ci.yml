@@ -72,3 +72,16 @@ jobs:
       - run: gh workflow run main-red.yml -R "${{ github.repository }}" -f run="${{ github.run_id }}"
         env:
           GH_TOKEN: ${{ github.token }}
+
+  # The seed farm's workflow_run trigger misses dispatched runs the same way.
+  seed-farm:
+    needs: [framework, sample, sample-failing-fixture]
+    if: ${{ success() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - run: gh workflow run seed-farm.yml -R "${{ github.repository }}" --ref main
+        env:
+          GH_TOKEN: ${{ github.token }}

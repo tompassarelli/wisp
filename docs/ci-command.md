@@ -196,7 +196,8 @@ the recorded kind of finding ([repros](repro.md#shrinking-a-soak-failure)).
 
 The seed farm, wisp:.github/workflows/seed-farm.yml, plays `ci nightly` on the
 newest main on a hosted `ubuntu-latest` runner after every CI run on main
-(`workflow_run`) and once an hour (`schedule` at minute 17, which GitHub
+(`workflow_run` for pushes; a CI run that Autoland dispatches starts no
+workflow_run, so ci.yml's `seed-farm` job dispatches it instead) and once an hour (`schedule` at minute 17, which GitHub
 fires late or skips under load), and files every new failure as an issue. A run checks out the
 ref, installs Bun 1.3.13 and both Lua32 builds with ci.yml's and the farm
 tests' cache keys, and runs `COMMAND ci nightly --minutes M --json`.
