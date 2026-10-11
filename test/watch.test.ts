@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type ProcessInfo, prefixUse } from "../scripts/warcraft/battleNet";
 import { sessionStart } from "../scripts/warcraft/war3Log";
-import { type CrashReport, type SocketState, type Sources, changes, crashSummary, decide, eventLine, socketEvent, typesIntoMatch } from "../scripts/wisp/watch";
+import { type ClientState, type CrashReport, type SocketState, type Sources, changes, crashSummary, decide, eventLine, socketEvent, typesIntoMatch } from "../scripts/wisp/watch";
 
 const fixture = (path: string) => readFileSync(join(import.meta.dir, "fixtures", path), "utf8");
 const PREFIX = "/clients/a/pfx";
@@ -31,11 +31,6 @@ const crash: CrashReport = {
   written: on6Oct("20:30:35"),
 };
 
-const trace = (lines: string, start: number, upTo = Number.POSITIVE_INFINITY): SocketState =>
-  lines.trim().split("\n").map((line) => JSON.parse(line) as { at: number; messageType: string; payload: unknown })
-    .filter(({ at }) => at <= upTo)
-    .reduce<SocketState>((socket, { at, messageType, payload }) => socketEvent(socket, { messageType, payload }, start + at), { connected: true });
-
 test("[native] the bad -loadfile run: signed in, ladder scan done, its map's imported models failing", () => {
   const log = fixture("war3log/loadfile-scan-mid-load.txt");
   const seen = decide("a", sources(on6Oct("20:36"), [LAUNCHER, GAME], { log }));
@@ -60,29 +55,41 @@ test("[native] the crashed play --menus run: its crash report names the session 
   expect(decide("a", sources(on6Oct("20:36"), [LAUNCHER], { log: fixture("war3log/loadfile-scan-mid-load.txt"), crashes: [crash] })).state.kind).toBe("launcher");
 });
 
-test("[spec docs/watch.md] chat goes only into a match its menu page reports, never on a receipt alone or a previous launch's evidence", () => {
+test("[property seed 4141] evidence from before the game started never counts, a fresh receipt outranks an older lobby or loading screen, and chat goes only into a match its menu page reports", () => {
+  let seed = 4141;
+  const next = (below: number) => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return (seed >>> 16) % below;
+  };
   const log = fixture("war3log/menus-after-scan.txt");
-  const start = on6Oct("16:30");
-  const at = (offset: number) => decide("a", sources(start + offset, [LAUNCHER, GAME], { log, socket: trace(fixture("watch/host-match.jsonl"), start, offset) }));
-
-  for (const offset of [0, 4000, 6100, 9000, 76100, 80100]) expect(typesIntoMatch(at(offset))).toBe(false);
-  expect(typesIntoMatch(at(16000))).toBe(true);
-
-  expect(typesIntoMatch(decide("a", sources(start + 12_000, [LAUNCHER, GAME], { log, socket: trace(fixture("watch/host-match.jsonl"), start, 9000), receipt: start + 11_000 })))).toBe(true);
-
-  const receiptOnly = decide("a", sources(start, [LAUNCHER, GAME], { log, receipt: start - 1000 }));
-  expect(receiptOnly.state).toEqual({ kind: "in match" });
-  expect(typesIntoMatch(receiptOnly)).toBe(false);
-  const started = on6Oct("16:30");
-  const game = { ...GAME, started };
-  const old = { log, receipt: started - 1000 };
-  expect(decide("a", sources(started + 9000, [LAUNCHER, { ...game, started: on6Oct("16:20") }], { log, receipt: started + 2000 })).state.kind).toBe("in match");
-  expect(decide("a", sources(started + 9000, [LAUNCHER, game], old)).state.kind).toBe("running");
-  expect(decide("a", sources(started + 9000, [LAUNCHER, game], old)).evidence).toContain("starting");
-  expect(decide("a", sources(started + 9000, [LAUNCHER, game], { ...old, socket: { connected: true, last: { state: { kind: "in match" }, at: started - 1000, evidence: "old match" } } })).state.kind).toBe("running");
-  const current = { ...old, socket: { connected: true, last: { state: { kind: "loading" as const }, at: started + 1000, evidence: "loading" } }, receipt: started + 2000 };
-  expect(decide("a", sources(started + 9000, [LAUNCHER, game], current)).state.kind).toBe("in match");
-  for (const state of [{ kind: "menus" as const, screen: "MAIN_MENU" }, { kind: "signed in" as const }]) {
-    expect(decide("a", sources(started + 9000, [LAUNCHER, game], { ...old, socket: { connected: true, last: { state, at: started + 1000, evidence: "current" } } })).state).toEqual(state);
+  const logStart = on6Oct("16:20:57") + 156, login = on6Oct("16:21:11") + 129, now = on6Oct("16:36");
+  const states: readonly ClientState[] = [{ kind: "menus", screen: "MAIN_MENU" }, { kind: "lobby" }, { kind: "loading" }, { kind: "in match" }, { kind: "results" }, { kind: "signing in" }];
+  for (let sample = 0; sample < 400; sample++) {
+    const started = on6Oct("16:20") + next(4) * 30_000;
+    const time = () => started - 60_000 + next(180) * 1000;
+    const socket: SocketState = next(3) === 0 ? { connected: false } : { connected: true, last: { state: states[next(states.length)]!, at: time(), evidence: "generated" } };
+    const extra = { socket, ...(next(2) === 0 ? { log } : {}), ...(next(3) === 0 ? {} : { receipt: time() }) };
+    const view = decide("a", sources(now, [LAUNCHER, { ...GAME, started }], extra));
+    const said = socket.last !== undefined && socket.last.at >= started ? socket.last : undefined;
+    const receipt = extra.receipt !== undefined && extra.receipt >= started ? extra.receipt : undefined;
+    const signedIn = extra.log !== undefined && logStart >= started;
+    const fresh = { socket: said === undefined ? { connected: false } : socket, ...(signedIn ? { log } : {}), ...(receipt === undefined ? {} : { receipt }) };
+    const evidence = `sample ${sample}: ${JSON.stringify(extra.socket)} receipt ${String(extra.receipt)} log ${extra.log !== undefined} started ${started}`;
+    expect(view, evidence).toEqual(decide("a", sources(now, [LAUNCHER, { ...GAME, started }], fresh)));
+    expect(typesIntoMatch(view), evidence).toBe(view.state.kind === "in match" && said !== undefined);
+    const counted = receipt !== undefined && (!signedIn || receipt >= login) ? receipt : undefined;
+    if (said === undefined) {
+      expect(view.state.kind, evidence).toBe(counted !== undefined && signedIn ? "in match" : signedIn ? "signed in" : "running");
+    } else if ((said.state.kind === "lobby" || said.state.kind === "loading") && counted !== undefined) {
+      expect(view.state, evidence).toEqual(counted > said.at ? { kind: "in match" } : said.state);
+    }
+  }
+  for (let sample = 0; sample < 200; sample++) {
+    const screens = Array.from({ length: 6 }, () => ["MAIN_MENU", "GAME_LOBBY", "LOADING_SCREEN", "DISABLED_SCREEN", "SCORE_SCREEN"][next(5)]!);
+    screens.reduce<SocketState>((socket, screen, index) => {
+      const after = socketEvent(socket, { messageType: "SetGlueScreen", payload: { screen } }, index);
+      if (screen === "DISABLED_SCREEN") expect(after.last?.state.kind === "in match", screens.join(" ")).toBe(socket.last?.state.kind === "loading" || socket.last?.state.kind === "in match");
+      return after;
+    }, { connected: true });
   }
 });
