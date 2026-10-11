@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Console, Effect, Exit, Layer } from "effect";
 import { platformLayer } from "../scripts/platform/layer";
 import { makeHeadless } from "../scripts/wisp/commands/headless";
+import type { HeadlessRenderProject } from "../scripts/wisp/headlessRender";
 import { timingsLayer } from "../scripts/wisp/timings";
 
 const cube = `Version { FormatVersion 800, }
@@ -27,7 +28,14 @@ PivotPoints 1 { { 0, 0, 0 }, }
 `;
 const assets: Record<string, Uint8Array> = { "Cube.mdl": new TextEncoder().encode(cube), "Bust.blp": new Uint8Array([1, 2, 3]) };
 
-test("[boundary] wisp headless --bounds writes frame and posed model rows for every requested frame and client, without Chrome", async () => {
+// The bust texture's receipt: the cube filling a 128x128 render, whole into a 64x64 texture.
+const portrait = {
+  scene: { camera: { x: 0, y: 0, fields: { CAMERA_FIELD_TARGET_DISTANCE: 300, CAMERA_FIELD_ZOFFSET: 40 } }, effects: [{ handle: { kind: "effect", id: 1 }, model: "Cube.mdl", created: 0, x: 0, y: 0, z: 0, alpha: 255, scale: 1, timeScale: 1,
+    queuedAnimations: [], yaw: 0, pitch: 0, roll: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1], flat: false, animation: "stand", subAnimations: [], animationElapsed: 0, animationClock: 0, animationBlendTime: 0, animationBlend: undefined }] },
+  width: 128, height: 128, crop: { x: 0, y: 0, width: 128, height: 128 }, texture: { width: 64, height: 64 }, parts: { head: ["Root"], weapon: [] },
+} as unknown as NonNullable<HeadlessRenderProject["portraits"]>[string];
+
+test("[boundary] wisp headless --bounds writes frame rows with their portraits' in-frame verdict and posed model rows for every requested frame and client, without Chrome", async () => {
   const directory = mkdtempSync(join(tmpdir(), "wisp-bounds-"));
   const command = makeHeadless(async () => ({
     map: { filePrefix: "bounds", globalPrefixes: ["__bounds"] },
@@ -41,6 +49,7 @@ test("[boundary] wisp headless --bounds writes frame and posed model rows for ev
         return { requested: path, graphics, attempts: selected === undefined ? [] : [selected], selected, bytes };
       },
       chrome: "/nonexistent/chrome",
+      portraits: { "Bust.blp": portrait },
     },
   }));
   const exit = await Effect.runPromiseExit(command(["--bounds", directory, "--frames", "1", "30", "--resolution", "800x600", "--graphics", "definitive"]).pipe(
@@ -56,6 +65,11 @@ test("[boundary] wisp headless --bounds writes frame and posed model rows for ev
     const [frame, ...others] = image.ui;
     expect(others).toEqual([]);
     expect(frame).toMatchObject({ name: "bust", type: "BACKDROP", texture: "Bust.blp", layer: "_de.w3mod", sha256, region: [0, 0, 1, 1], outside43: false });
+    expect(frame.inFrame.headHiddenByWeapon).toBe(0);
+    expect(frame.inFrame.parts.head.pixels).toBeGreaterThan(100);
+    expect(frame.inFrame.parts.head.box.left).toBeGreaterThanOrEqual(26);
+    expect(frame.inFrame.parts.head.box.bottom).toBeLessThanOrEqual(578);
+    expect(frame.inFrame.crownMargin).toBe(frame.inFrame.parts.head.box.top - 498);
     for (const [actual, expected] of [[frame.pixels.x, 26.25], [frame.pixels.y, 498], [frame.pixels.width, 80], [frame.pixels.height, 80]]) expect(actual).toBeCloseTo(expected, 4);
     const [effect, ...rest] = image.models;
     expect(rest).toEqual([]);

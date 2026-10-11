@@ -11,7 +11,7 @@ import { parseMDL } from "../../../vendor/war3-model.mjs";
 import { captureScene, type HeadlessRenderProject, loadEffectDeaths, renderScenes, type RenderScene, sceneWithUnits } from "../headlessRender";
 import { parseModelMDX } from "../models";
 import { type TextureIdentity, uiReport } from "../screen";
-import { type BoundsModel, boundsModel, sceneBounds } from "../screenBounds";
+import { type BoundsModel, boundsModel, inFrame, sceneBounds } from "../screenBounds";
 import { runJourney } from "../../../src/headless/journey";
 import type { Lockstep } from "../../../src/headless/lockstep";
 import { sceneMatchFrame } from "../../../src/runtime/scene";
@@ -49,7 +49,7 @@ const matchFrameOf = (globalPrefixes: readonly string[]) => (clients: Lockstep):
   return frame;
 };
 
-/** Per scene: its frame rows and its posed model rows at a `width` x `height` canvas, without Chrome. */
+/** Per scene: its frame rows (with the in-frame verdict of a frame showing a portrait) and its posed model rows at a `width` x `height` canvas, without Chrome. */
 async function boundsImages(render: HeadlessRenderProject, scenes: readonly RenderScene[], width: number, height: number, graphics: Graphics) {
   const read = async (path: string) => {
     if (render.resolveAsset === undefined) {
@@ -61,7 +61,8 @@ async function boundsImages(render: HeadlessRenderProject, scenes: readonly Rend
   };
   const posed = scenes.map((scene) => sceneWithUnits(render, scene));
   const models = new Map<string, BoundsModel>();
-  for (const path of new Set(posed.flatMap((scene) => scene.effects.map((pose) => pose.model)))) {
+  const portraits = Object.values(render.portraits ?? {});
+  for (const path of new Set([...posed, ...portraits.map((portrait) => portrait.scene)].flatMap((scene) => scene.effects.map((pose) => pose.model)))) {
     const { bytes } = await read(path);
     if (bytes !== undefined) models.set(path, boundsModel(new TextDecoder().decode(bytes.subarray(0, 4)) === "MDLX" ? parseModelMDX(bytes.slice().buffer) : parseMDL(new TextDecoder().decode(bytes))));
   }
@@ -71,7 +72,10 @@ async function boundsImages(render: HeadlessRenderProject, scenes: readonly Rend
     if (bytes !== undefined && layer !== undefined) textures.set(path, { layer, sha256: new Bun.CryptoHasher("sha256").update(bytes).digest("hex") });
   }
   return posed.map((scene) => ({ frame: scene.frame, ...(scene.matchFrame === undefined ? {} : { matchFrame: scene.matchFrame }), client: scene.client,
-    ui: uiReport(scene, width, height, (path) => textures.get(path)), models: sceneBounds(scene, (path) => models.get(path), width, height) }));
+    ui: uiReport(scene, width, height, (path) => textures.get(path)).map((row) => {
+      const portrait = row.texture === null ? undefined : render.portraits?.[row.texture];
+      return portrait === undefined ? row : { ...row, inFrame: inFrame(portrait, (path) => models.get(path), row.pixels) };
+    }), models: sceneBounds(scene, (path) => models.get(path), width, height) }));
 }
 
 export function headlessArguments(args: readonly string[]) {

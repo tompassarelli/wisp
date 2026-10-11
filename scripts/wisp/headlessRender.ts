@@ -13,7 +13,7 @@ import { decodeTerrain, shiftedBounds, worldBounds, type Terrain, type WorldBoun
 import { decodeDoodadFile, type TerrainDoodad } from "./doodads";
 import { freshAnimation } from "../../src/headless/animation";
 import { type TextureIdentity, uiReport } from "./screen";
-import type { ModelBounds } from "./screenBounds";
+import type { ModelBounds, Portrait } from "./screenBounds";
 
 import { GRAPHICS, type Graphics, type Lever, PROFILES, unsupportedLevers } from "./graphicsProfiles";
 export type { Graphics } from "./graphicsProfiles";
@@ -33,6 +33,9 @@ export interface HeadlessRenderProject {
   readonly terrain?: { readonly w3e?: Uint8Array; readonly bounds?: WorldBounds; readonly origin?: readonly [number, number] };
 
   readonly doodads?: { readonly doo: Uint8Array; readonly models: Readonly<Record<string, string | readonly string[]>>; readonly skinIds?: boolean };
+
+  /** Portrait receipts by UI texture path; `--bounds` gives each drawn frame showing one an `inFrame` verdict. */
+  readonly portraits?: Readonly<Record<string, Portrait>>;
 }
 
 export interface RenderScene {

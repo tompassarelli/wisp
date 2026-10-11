@@ -606,6 +606,26 @@ wisp:test/headless-bounds.test.ts).
   (origin top left, y down), `offFrame`, `behindEye`, `farCulled`, each
   geoset's alpha, filter mode and whether it is drawn, and each posed node's
   box and pivot. A model whose bytes are absent has no row.
+- **In-frame verdict.** A map that renders portraits into HUD textures gives
+  `render.portraits` a receipt per texture path: the portrait `scene` (camera
+  and effects), its render `width` and `height`, the `crop` of that render the
+  texture holds, the `texture` size, and `parts`, mapping the game's part names
+  (head, face, weapon, gripping hand) to node names. Each `ui` row whose
+  texture has a receipt gets `inFrame`, from `inFrame(portrait, models,
+  row.pixels)` (wisp:scripts/wisp/screenBounds.ts). It poses the portrait as
+  posed bounds do and rasterizes its triangles with a depth buffer at the
+  render size, labelling each pixel with the node its nearest vertex weights
+  most. Each screen pixel whose centre lies in the frame shows the texel at its
+  place in the texture (drawn whole), and that texel shows the render pixel at
+  its centre within the crop. Per part, `inFrame.parts` counts the visible
+  pixels and gives their pixel `box`; `crownMargin` is the rows between the
+  frame's top row and the head's top visible row; `headHiddenByWeapon` counts
+  pixels where the weapon is nearest and the head would show without it. The
+  rows are numbers only: the game declares the pass rules and thresholds.
+  Checked by a property over random cubes (wisp:test/screen-bounds.test.ts):
+  coverage equals the projected polygon's area within 1 px per edge, the box
+  matches the pixel centres that polygon holds, and a cube behind another
+  reports the overlap as hidden.
 
 - **Frame scale.** A frame's rectangle (wisp:src/headless/frames.ts) uses
   its size times its scale, where the scale is its own `BlzFrameSetScale`
