@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { parseMDL } from "../vendor/war3-model.mjs";
 import type { DrawnPose, RenderScene } from "../scripts/wisp/headlessRender";
-import { boundsModel, compareEdges, inFrame, sceneBounds, silhouetteBounds, type PixelBox } from "../scripts/wisp/screenBounds";
+import { boundsModel, compareEdges, inFrame, sceneBounds, silhouetteBounds, SILHOUETTE_DELTA, type PixelBox, type Texels } from "../scripts/wisp/screenBounds";
 
 type Vector3 = readonly [number, number, number];
 
@@ -46,6 +46,37 @@ const glowCube = cube.replace("NumGeosets 1", "NumGeosets 2").replace('Textures 
 }
 Bone "Arm"`);
 
+// A square on the turning bone, wider than the cube, drawn by one layer: an alpha-keyed texture, or an additive team glow at alpha 0.75.
+const QUAD_HALF = HALF * 2, QUAD_Z = CENTRE[2] + HALF, GLOW_ALPHA = 0.75;
+const quadModel = (texture: string, layer: string) => `Version { FormatVersion 800, }
+Model "Quad" { NumGeosets 1, NumBones 1, BlendTime 150, }
+Sequences 1 { Anim "Stand" { Interval { 0, 2000 }, } }
+Textures 1 { Bitmap { ${texture} } }
+Materials 1 { Material { Layer { ${layer} static TextureID 0, } } }
+Geoset {
+    Vertices 4 { ${[0, 1, 2, 3].map((i) => `{ ${CENTRE[0] + (i & 1 ? QUAD_HALF : -QUAD_HALF)}, ${CENTRE[1] + (i & 2 ? QUAD_HALF : -QUAD_HALF)}, ${QUAD_Z} },`).join(" ")} }
+    Normals 4 { ${[0, 1, 2, 3].map(() => "{ 0, 0, 1 },").join(" ")} }
+    TVertices 4 { { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 }, }
+    VertexGroup { 0, 0, 0, 0, }
+    Faces 1 6 { Triangles { { 0, 1, 3, 0, 3, 2 }, } }
+    Groups 1 1 { Matrices { 0 }, }
+    MaterialID 0,
+    SelectionGroup 0,
+}
+Bone "Arm" { ObjectId 0, GeosetId 0, GeosetAnimId None,
+    Rotation 3 { Linear, 0: { ${turn(0)} }, 1000: { ${turn(90)} }, 2000: { ${turn(180)} }, }
+}
+PivotPoints 1 { { ${PIVOT.join(", ")} }, }
+`;
+const keyedQuad = quadModel('Image "Quad.blp",', "FilterMode Transparent, static Alpha 1,"), glowQuad = quadModel('Image "", ReplaceableId 2,', `FilterMode Additive, static Alpha ${GLOW_ALPHA},`);
+const quadPoint = (u: number, v: number): Vector3 => [CENTRE[0] - QUAD_HALF + 2 * QUAD_HALF * u, CENTRE[1] - QUAD_HALF + 2 * QUAD_HALF * v, QUAD_Z];
+const TEXELS = 64;
+const texture = (rgba: (x: number, y: number) => readonly [number, number, number, number]): Texels => {
+  const data = new Uint8Array(TEXELS * TEXELS * 4);
+  for (let y = 0; y < TEXELS; y++) for (let x = 0; x < TEXELS; x++) data.set(rgba(x, y), (y * TEXELS + x) * 4);
+  return { width: TEXELS, height: TEXELS, data };
+};
+
 function random(seed: number): () => number {
   let state = seed >>> 0;
   return () => { state = (state + 0x6d2b79f5) >>> 0; let t = state; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -65,10 +96,10 @@ function pose(fields: Partial<DrawnPose>): DrawnPose {
     color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1], flat: false, animation: "stand", subAnimations: [], animationElapsed: 0, animationClock: 0, animationBlendTime: 0, animationBlend: undefined, ...fields };
 }
 
-test("[property] posed screen bounds of a turning cube equal the analytic projection of its corners", () => {
-  const model = boundsModel(parseMDL(cube)), glow = boundsModel(parseMDL(glowCube)), next = random(125);
+test("[property] posed screen bounds of a turning cube equal the analytic projection of its corners, and of a textured quad only the texels its layer draws", () => {
+  const model = boundsModel(parseMDL(cube)), glow = boundsModel(parseMDL(glowCube)), keyed = boundsModel(parseMDL(keyedQuad)), glowing = boundsModel(parseMDL(glowQuad)), next = random(125);
   const between = (low: number, high: number) => low + (high - low) * next();
-  let compared = 0, offFrame = 0, farCulled = 0;
+  let compared = 0, offFrame = 0, farCulled = 0, textured = 0;
   for (let round = 0; round < 300; round++) {
     const fields = { CAMERA_FIELD_ROTATION: between(0, 360), CAMERA_FIELD_ANGLE_OF_ATTACK: between(280, 360), CAMERA_FIELD_TARGET_DISTANCE: between(1200, 3000), CAMERA_FIELD_ZOFFSET: between(-100, 300),
       CAMERA_FIELD_FIELD_OF_VIEW: between(40, 100), CAMERA_FIELD_NEARZ: between(10, 100), CAMERA_FIELD_FARZ: between(1500, 6000) };
@@ -87,6 +118,17 @@ test("[property] posed screen bounds of a turning cube equal the analytic projec
     const forward: Vector3 = [Math.cos(yaw) * Math.cos(pitch), Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch)];
     const eye = sub(target, scaled(forward, fields.CAMERA_FIELD_TARGET_DISTANCE)), right = unit(cross(forward, [0, 0, 1])), up = cross(right, forward);
     const tangent = Math.tan(fields.CAMERA_FIELD_FIELD_OF_VIEW * Math.PI / 360);
+    // An opaque texel rectangle in a transparent border, and a red radial falloff reaching zero at `reach` from the centre.
+    const c0 = Math.floor(between(2, 20)), c1 = Math.floor(between(c0 + 8, 62)), r0 = Math.floor(between(2, 20)), r1 = Math.floor(between(r0 + 8, 62)), reach = between(0.15, 0.48);
+    const keyedTexels = texture((x, y) => x >= c0 && x < c1 && y >= r0 && y < r1 ? [255, 255, 255, 255] : [255, 255, 255, 0]);
+    const glowTexels = texture((x, y) => [Math.round(255 * Math.max(0, 1 - Math.hypot((x + 0.5) / TEXELS - 0.5, (y + 0.5) / TEXELS - 0.5) / reach)), 0, 0, 255]);
+    const textures = { image: (path: string) => path === "Quad.blp" ? keyedTexels : undefined, teamGlow: (team: number) => team === 0 ? glowTexels : undefined };
+    // Bilinear alpha is the product of two ramps across the opaque texels' edges, so it reaches the 0.75 cut a quarter texel inside each edge and on
+    // the hyperbola ramp(x) * ramp(y) = 0.75 at each corner; the glow adds more than the silhouette threshold inside `shows`.
+    const keyedRegion = [[c0 - 1, r0 - 1, 1, 1], [c1, r0 - 1, -1, 1], [c0 - 1, r1, 1, -1], [c1, r1, -1, -1]].flatMap(([x = 0, y = 0, sx = 0, sy = 0]) =>
+      Array.from({ length: 17 }, (_, i) => { const fx = 0.75 + 0.25 * i / 16; return [(x + sx * fx + 0.5) / TEXELS, (y + sy * 0.75 / fx + 0.5) / TEXELS] as const; }));
+    const shows = reach * (1 - SILHOUETTE_DELTA / 255 / GLOW_ALPHA);
+    const glowRegion = Array.from({ length: 180 }, (_, i) => [0.5 + shows * Math.cos(i * Math.PI / 90), 0.5 + shows * Math.sin(i * Math.PI / 90)] as const);
 
     for (const [width, height] of [[800, 600], [1280, 720], [2560, 1080]] as const) {
       const project = (point: Vector3) => {
@@ -108,6 +150,21 @@ test("[property] posed screen bounds of a turning cube equal the analytic projec
       const glowBox = sceneBounds(scene, (path) => path === "Cube.mdl" ? glow : undefined, width, height)[0]?.box;
       if (glowBox === undefined) throw new Error("no glow box in front of the eye");
       for (const box of [row.box, arm.box, glowBox]) for (const edge of ["left", "top", "right", "bottom"] as const) expect(Math.abs(box[edge] - expected[edge])).toBeLessThanOrEqual(0.01);
+      expect(sceneBounds(scene, (path) => path === "Cube.mdl" ? glow : undefined, width, height)[0]?.teamGlow).toBe("disc");
+      const atAngle = (local: Vector3) => project(world(add(rotate(sub(local, PIVOT), AXIS, angle), PIVOT)));
+      if (width === 800) for (const [quad, region] of [[keyed, keyedRegion], [glowing, glowRegion]] as const) {
+        const quadCorners = [quadPoint(0, 0), quadPoint(1, 0), quadPoint(0, 1), quadPoint(1, 1)].map(atAngle);
+        if (!quadCorners.every((p) => p.depth >= fields.CAMERA_FIELD_NEARZ && p.depth <= fields.CAMERA_FIELD_FARZ)) continue;
+        const drawn = region.map(([u, v]) => atAngle(quadPoint(u, v)));
+        if (drawn.some((p) => p.x < 0 || p.y < 0 || p.x > width || p.y > height)) continue;
+        const want = centreBox(hull(drawn.map((p) => [p.x, p.y])));
+        if (want === undefined || want.right - want.left < 3 || want.bottom - want.top < 3) continue;
+        const quadRow = sceneBounds(scene, (path) => path === "Cube.mdl" ? quad : undefined, width, height, textures)[0];
+        if (quadRow?.box === undefined) throw new Error("no textured box");
+        for (const edge of ["left", "top", "right", "bottom"] as const) expect(Math.abs(quadRow.box[edge] - want[edge])).toBeLessThanOrEqual(1);
+        if (quad === glowing) expect(quadRow.teamGlow).toBe("texture");
+        textured++;
+      }
       const pivot = project(world(PIVOT));
       expect(arm.name).toBe("Arm");
       expect(Math.abs(arm.pivot.x - pivot.x)).toBeLessThanOrEqual(0.01);
@@ -118,6 +175,7 @@ test("[property] posed screen bounds of a turning cube equal the analytic projec
     }
   }
   expect(compared).toBeGreaterThan(450);
+  expect(textured).toBeGreaterThan(400);
   expect(offFrame).toBeGreaterThan(0);
   expect(farCulled).toBeGreaterThan(0);
 });
@@ -146,6 +204,25 @@ function intersect(polygon: readonly Point[], by: readonly Point[]): Point[] {
     });
   });
   return out;
+}
+/** Pixel edges of the pixels whose centres a convex polygon holds; undefined when it holds none. */
+function centreBox(polygon: readonly Point[]): PixelBox | undefined {
+  let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+  const ys = polygon.map((p) => p[1]);
+  for (let row = Math.floor(Math.min(...ys)); row <= Math.ceil(Math.max(...ys)); row++) {
+    const y = row + 0.5;
+    let low = Infinity, high = -Infinity;
+    polygon.forEach((p, i) => {
+      const q = polygon[(i + 1) % polygon.length] as Point;
+      if ((p[1] - y) * (q[1] - y) > 0 || p[1] === q[1]) return;
+      const x = p[0] + (q[0] - p[0]) * (y - p[1]) / (q[1] - p[1]);
+      low = Math.min(low, x); high = Math.max(high, x);
+    });
+    const first = Math.ceil(low - 0.5), last = Math.floor(high - 0.5);
+    if (first > last) continue;
+    left = Math.min(left, first); right = Math.max(right, last + 1); top = Math.min(top, row); bottom = Math.max(bottom, row + 1);
+  }
+  return left <= right ? { left, top, right, bottom } : undefined;
 }
 const area = (polygon: readonly Point[]) => Math.abs(polygon.reduce((sum, p, i) => { const q = polygon[(i + 1) % polygon.length] as Point; return sum + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2;
 const perimeter = (polygon: readonly Point[]) => polygon.reduce((sum, p, i) => { const q = polygon[(i + 1) % polygon.length] as Point; return sum + Math.hypot(q[0] - p[0], q[1] - p[1]); }, 0);

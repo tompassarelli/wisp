@@ -607,12 +607,31 @@ wisp:test/headless-bounds.test.ts).
   projected through the scene's camera. Each row has the model's pixel `box`
   (origin top left, y down), `offFrame`, `behindEye`, `farCulled`, each
   geoset's alpha, filter mode and whether it is drawn, and each posed node's
-  box and pivot. A model whose bytes are absent has no row. Geometry that
-  draws nothing is left out: a geoset whose every layer adds the team glow
-  (`ReplaceableId` 2, Additive or AddAlpha) counts only the part of each
-  triangle inside the glow's disc, texture coordinates within 1/2.8 of the
-  centre, where the renderer's glow is not black, so a hero glow ring's
-  quad corners don't widen the box (wisp#125).
+  box and pivot. A model whose bytes are absent has no row.
+- **Drawn pixels.** The box counts only pixels the model draws (wisp#125).
+  A geoset with a None (opaque) layer, or a solid team-colour layer that
+  passes its cut, counts its whole surface by its vertices. Otherwise each
+  triangle is rasterized (pixel centres, perspective-correct texture
+  coordinates, within one canvas size of the canvas) and a pixel counts when
+  some layer's bilinear sample of its texture's top mip level, read from the
+  map or the install through `render.resolveAsset`/`readAsset` (PNG or BLP),
+  draws there: alpha-keyed (Transparent) when texel alpha × opacity reaches
+  the renderer's 0.75 cut, Blend when it exceeds 24/255, Additive and
+  AddAlpha when the largest channel × alpha × opacity exceeds 24/255, the
+  silhouette threshold, where opacity is geoset alpha × layer alpha × the
+  pose's alpha. The team glow (`ReplaceableId` 2) is the same additive rule
+  on the install's `ReplaceableTextures\TeamGlow\TeamGlowNN.blp` for the
+  pose's team colour, whose texels carry that colour, so a pixel counts when
+  texel × layer opacity exceeds 24/255, and the row says `teamGlow:
+  "texture"`. Without that texture (no install), a geoset whose every layer
+  adds the team glow counts only the part of each triangle within 1/2.8 of
+  the texture's centre, the Wisp renderer's black edge, and the row says
+  `teamGlow: "disc"`; another texture the bounds can't read (DDS, an
+  animated texture or texture coordinates) counts the whole surface.
+  Particle and ribbon emitters are not counted. Checked by a property
+  (wisp:test/screen-bounds.test.ts): an alpha-keyed quad with a transparent
+  border bounds its opaque texels within 1 px, and a radial glow texture
+  bounds at its threshold radius.
 - **In-frame verdict.** A map that renders portraits into HUD textures gives
   `render.portraits` a receipt per texture path: the portrait `scene` (camera
   and effects), its render `width` and `height`, the `crop` of that render the

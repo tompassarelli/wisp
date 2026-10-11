@@ -11,7 +11,7 @@ import { parseMDL } from "../../../vendor/war3-model.mjs";
 import { captureScene, type HeadlessRenderProject, loadEffectDeaths, renderScenes, type RenderScene, sceneWithUnits } from "../headlessRender";
 import { parseModelMDX } from "../models";
 import { type TextureIdentity, uiReport } from "../screen";
-import { type BoundsModel, boundsModel, compareEdges, inFrame, sceneBounds, silhouetteBounds } from "../screenBounds";
+import { type BoundsModel, type BoundsTextures, type Texels, boundsModel, compareEdges, inFrame, sceneBounds, silhouetteBounds, teamGlowPath, texels } from "../screenBounds";
 import { decodePng } from "../fidelity/image";
 import { decodePpm } from "../frameProbe";
 import { runJourney } from "../../../src/headless/journey";
@@ -68,6 +68,18 @@ async function boundsImages(render: HeadlessRenderProject, scenes: readonly Rend
     const { bytes } = await read(path);
     if (bytes !== undefined) models.set(path, boundsModel(new TextDecoder().decode(bytes.subarray(0, 4)) === "MDLX" ? parseModelMDX(bytes.slice().buffer) : parseMDL(new TextDecoder().decode(bytes))));
   }
+  const images = new Map<string, Texels>(), glows = new Map<number, Texels>();
+  // A texture the bounds can't decode (DDS, palette PNG) leaves its geoset bounded by its whole surface.
+  const decoded = async (path: string) => { const { bytes } = await read(path); try { return bytes === undefined ? undefined : texels(bytes); } catch { return undefined; } };
+  for (const path of new Set([...models.values()].flatMap((found) => found.data.Textures.map((texture) => texture.Image ?? "")))) if (path !== "") {
+    const image = await decoded(path);
+    if (image !== undefined) images.set(path, image);
+  }
+  for (const team of new Set(posed.flatMap((scene) => scene.effects.map((pose) => pose.teamColor)))) {
+    const glow = await decoded(teamGlowPath(team));
+    if (glow !== undefined) glows.set(team, glow);
+  }
+  const drawnTextures: BoundsTextures = { image: (path) => images.get(path), teamGlow: (team) => glows.get(team) };
   const textures = new Map<string, TextureIdentity>();
   for (const path of new Set(scenes.flatMap((scene) => scene.ui.map((frame) => frame.texture)))) if (path !== "") {
     const { bytes, layer } = await read(path);
@@ -77,7 +89,7 @@ async function boundsImages(render: HeadlessRenderProject, scenes: readonly Rend
     ui: uiReport(scene, width, height, (path) => textures.get(path)).map((row) => {
       const portrait = row.texture === null ? undefined : render.portraits?.[row.texture];
       return portrait === undefined ? row : { ...row, inFrame: inFrame(portrait, (path) => models.get(path), row.pixels) };
-    }), models: sceneBounds(scene, (path) => models.get(path), width, height) }));
+    }), models: sceneBounds(scene, (path) => models.get(path), width, height, drawnTextures) }));
 }
 
 export function headlessArguments(args: readonly string[]) {

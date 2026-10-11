@@ -18,6 +18,22 @@ export function mean(image: Image, region: Region): RGB {
   return [(sums[0] ?? 0) / n, (sums[1] ?? 0) / n, (sums[2] ?? 0) / n];
 }
 export function decodePng(bytes: Uint8Array): Image {
+  const { width, height, channels, decoded } = pngSamples(bytes);
+  const rgb = new Uint8Array(width * height * 3);
+  for (let i = 0; i < width * height; i++) rgb.set(decoded.subarray(i * channels, i * channels + 3), i * 3);
+  return { width, height, rgb };
+}
+
+/** A PNG's pixels as RGBA, 4 bytes each; RGB images are opaque. */
+export function decodePngRgba(bytes: Uint8Array): { readonly width: number; readonly height: number; readonly rgba: Uint8Array } {
+  const { width, height, channels, decoded } = pngSamples(bytes);
+  if (channels === 4) return { width, height, rgba: decoded };
+  const rgba = new Uint8Array(width * height * 4).fill(255);
+  for (let i = 0; i < width * height; i++) rgba.set(decoded.subarray(i * 3, i * 3 + 3), i * 4);
+  return { width, height, rgba };
+}
+
+function pngSamples(bytes: Uint8Array): { width: number; height: number; channels: number; decoded: Uint8Array } {
   if (bytes.length < 33 || ![137,80,78,71,13,10,26,10].every((v,i) => bytes[i] === v)) throw new Error("not a PNG image");
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let width = 0, height = 0, channels = 0;
@@ -52,7 +68,5 @@ export function decodePng(bytes: Uint8Array): Image {
       decoded[y * stride + x] = ((raw[y * (stride + 1) + x + 1] ?? 0) + (predictors[filter] ?? 0)) & 255;
     }
   }
-  const rgb = new Uint8Array(width * height * 3);
-  for (let i = 0; i < width * height; i++) rgb.set(decoded.subarray(i * channels, i * channels + 3), i * 3);
-  return { width, height, rgb };
+  return { width, height, channels, decoded };
 }

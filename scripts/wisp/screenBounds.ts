@@ -1,8 +1,9 @@
-import { ModelRenderer, type model } from "../../vendor/war3-model.mjs";
+import { ModelRenderer, decodeBLP, getBLPImageData, type model } from "../../vendor/war3-model.mjs";
 import { type AnimationSequence, animationSample, blendWeight, globalSequenceFrame } from "../../src/headless/animation";
 import { drawnPoses } from "./culling";
 import type { DrawnPose, RenderScene } from "./headlessRender";
 import { multiply } from "./browser/matrix";
+import { decodePngRgba } from "./fidelity/image";
 import { camera, type PixelRect, poseNodes, type Sampler, show, transform } from "./screen";
 
 /** A parsed model with the renderer state that poses it, without GL. */
@@ -47,6 +48,27 @@ export interface ModelBounds {
   readonly farCulled: boolean;
   readonly geosets: readonly GeosetBounds[];
   readonly nodes: readonly NodeBounds[];
+  /** How drawn team-glow geosets were bounded: by the install's team-glow texture, or by the disc rule without it. */
+  readonly teamGlow?: "texture" | "disc";
+}
+
+/** RGBA texels, 4 bytes each, rows from the image's top. */
+export interface Texels { readonly width: number; readonly height: number; readonly data: ArrayLike<number> }
+
+/** Textures the bounds sample, read from the install the caller points to: a model texture by path, and the team glow (ReplaceableId 2) by team colour index. */
+export interface BoundsTextures {
+  readonly image: (path: string) => Texels | undefined;
+  readonly teamGlow: (team: number) => Texels | undefined;
+}
+
+export const teamGlowPath = (team: number) => `ReplaceableTextures\\TeamGlow\\TeamGlow${String(team).padStart(2, "0")}.blp`;
+
+/** A PNG or BLP texture's top mip level; undefined for other formats. */
+export function texels(bytes: Uint8Array): Texels | undefined {
+  if (bytes[0] === 137 && bytes[1] === 80) { const { width, height, rgba } = decodePngRgba(bytes); return { width, height, data: rgba }; }
+  if (bytes[0] !== 66 || bytes[1] !== 76) return undefined;
+  const image = getBLPImageData(decodeBLP(bytes.slice().buffer), 0);
+  return { width: image.width, height: image.height, data: image.data };
 }
 
 const GEOSET_HIDDEN = 1e-6;
@@ -56,13 +78,13 @@ const GEOSET_HIDDEN = 1e-6;
  * at a `width` x `height` canvas. Poses the renderer culls for alpha, scale, flatness or the world bounds are left
  * out; poses beyond the far distance are reported with `farCulled`.
  */
-export function sceneBounds(scene: RenderScene, models: (path: string) => BoundsModel | undefined, width: number, height: number): ModelBounds[] {
+export function sceneBounds(scene: RenderScene, models: (path: string) => BoundsModel | undefined, width: number, height: number, textures?: BoundsTextures): ModelBounds[] {
   const view = camera(scene, width / height);
   const kept = new Set(drawnPoses(scene.effects, view.eye, view.far, scene.world));
   const rows: ModelBounds[] = [];
   for (const pose of drawnPoses(scene.effects, view.eye, Infinity, scene.world)) {
     const found = models(pose.model);
-    if (found !== undefined) rows.push(poseBounds(pose, found, view, width, height, !kept.has(pose)));
+    if (found !== undefined) rows.push(poseBounds(pose, found, view, width, height, !kept.has(pose), textures));
   }
   return rows;
 }
@@ -70,14 +92,11 @@ export function sceneBounds(scene: RenderScene, models: (path: string) => Bounds
 interface PosedMesh {
   readonly sampler: Sampler & { rendererData: { geosetAlpha: number[] } };
   readonly geosets: readonly GeosetBounds[];
-  /**
-   * Per drawn geoset: skinned model-space positions, each vertex's most-weighted node (or -1), and its triangles. `visible`
-   * holds the points that bound what the geoset draws, with their nodes, when that is less than its whole surface.
-   */
-  readonly drawn: readonly { readonly positions: Float64Array; readonly main: Int32Array; readonly faces: ArrayLike<number>; readonly visible?: { readonly positions: Float64Array; readonly main: Int32Array } }[];
+  /** Per drawn geoset: its index, skinned model-space positions, each vertex's most-weighted node (or -1), and its triangles. */
+  readonly drawn: readonly { readonly geoset: number; readonly positions: Float64Array; readonly main: Int32Array; readonly faces: ArrayLike<number> }[];
 }
 
-/** The renderer's team glow (ReplaceableId 2) is black from this distance to the texture's centre, in texture coordinates. */
+/** Without the install's team-glow texture: the renderer's team glow (ReplaceableId 2) is black from this distance to the texture's centre, in texture coordinates. */
 export const GLOW_RADIUS = 1 / 2.8;
 const ADDITIVE = new Set([3, 4]);
 const GLOW_SAMPLES = 256;
@@ -175,34 +194,120 @@ function posedMesh(pose: DrawnPose, found: BoundsModel, view: ReturnType<typeof 
       }
       positions[vertex * 3] = x; positions[vertex * 3 + 1] = y; positions[vertex * 3 + 2] = z; mains[vertex] = main;
     }
-    const uv = geoset.TVertices[0];
-    drawnMeshes.push({ positions, main: mains, faces: geoset.Faces, ...(uv !== undefined && glowOnly(data, geoset.MaterialID) ? { visible: glowPoints(positions, mains, uv, geoset.Faces) } : {}) });
+    drawnMeshes.push({ geoset: index, positions, main: mains, faces: geoset.Faces });
   });
   return { sampler, geosets, drawn: drawnMeshes };
 }
 
-export function poseBounds(pose: DrawnPose, found: BoundsModel, view: ReturnType<typeof camera>, width: number, height: number, farCulled = false): ModelBounds {
+/** A layer whose texels decide where it draws: its filter mode, opacity, texture and texture coordinates. */
+interface TexelLayer { readonly filter: number; readonly opacity: number; readonly texture: Texels; readonly wrapU: boolean; readonly wrapV: boolean; readonly uv: ArrayLike<number> }
+
+/** The smallest alpha an alpha-keyed (Transparent) layer draws, as the renderer discards below it. */
+export const ALPHA_KEY = 0.75;
+
+/**
+ * Whether a texel (RGBA from 0 to 1) of a layer with `filter` and `opacity` changes the screen by more than the silhouette
+ * threshold: an alpha-keyed texel at the alpha cut, a blended or additive one when its contribution exceeds SILHOUETTE_DELTA / 255.
+ */
+function draws(filter: number, opacity: number, r: number, g: number, b: number, a: number): boolean {
+  const shows = SILHOUETTE_DELTA / 255;
+  if (filter === 1) return a * opacity >= ALPHA_KEY;
+  if (filter === 2) return a * opacity > shows;
+  if (filter === 3 || filter === 4) return Math.max(r, g, b) * a * opacity > shows;
+  if (filter === 5) return 1 - Math.min(r, g, b) > shows;
+  if (filter === 6) return Math.max(Math.abs(2 * r - 1), Math.abs(2 * g - 1), Math.abs(2 * b - 1)) > shows;
+  return true;
+}
+
+/**
+ * How a drawn geoset is bounded: its whole surface, nothing, the texels its layers draw, or (a texture the bounds can't
+ * read) the fallback: the disc rule for team glow, the whole surface otherwise.
+ */
+function drawnLayers(data: model.Model, geoset: number, pose: DrawnPose, sampler: PosedMesh["sampler"], textures: BoundsTextures | undefined): "whole" | "nothing" | "unknown" | TexelLayer[] {
+  const source = data.Geosets[geoset], layers = data.Materials[source?.MaterialID ?? -1]?.Layers ?? [];
+  const geosetAlpha = sampler.rendererData.geosetAlpha[geoset] ?? 1, out: TexelLayer[] = [];
+  let unknown = false;
+  for (const layer of layers) {
+    const filter = Number(layer.FilterMode ?? 0);
+    if (filter === 0) return "whole";
+    const own = typeof layer.Alpha === "number" ? layer.Alpha : layer.Alpha === undefined ? 1 : sampler.interp.animVectorVal(layer.Alpha, 1);
+    const opacity = geosetAlpha * own * pose.alpha / 255, texture = typeof layer.TextureID === "number" ? data.Textures[layer.TextureID] : undefined;
+    const uv = source?.TVertices[layer.CoordId ?? 0];
+    if (texture === undefined || uv === undefined || typeof layer.TVertexAnimId === "number") { unknown = true; continue; }
+    const image = texture.Image ?? "";
+    if (image === "" && texture.ReplaceableId === 1) { if (draws(filter, opacity, 1, 1, 1, 1)) return "whole"; continue; }
+    const texels = image !== "" ? textures?.image(image) : texture.ReplaceableId === 2 ? textures?.teamGlow(pose.teamColor) : undefined;
+    if (texels === undefined) { unknown = true; continue; }
+    out.push({ filter, opacity, texture: texels, wrapU: ((texture.Flags ?? 0) & 1) !== 0, wrapV: ((texture.Flags ?? 0) & 2) !== 0, uv });
+  }
+  return unknown ? "unknown" : out.length === 0 ? "nothing" : out;
+}
+
+/** The bilinear RGBA sample (0 to 1) at texture coordinates (u, v), clamped to the edge unless the texture wraps, as the renderer samples the top mip level. */
+function sample(layer: TexelLayer, u: number, v: number, out: Float64Array): void {
+  const { width, height, data } = layer.texture;
+  const x = u * width - 0.5, y = v * height - 0.5, x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0;
+  const column = (i: number) => layer.wrapU ? ((i % width) + width) % width : Math.min(width - 1, Math.max(0, i));
+  const row = (i: number) => layer.wrapV ? ((i % height) + height) % height : Math.min(height - 1, Math.max(0, i));
+  const a = (row(y0) * width + column(x0)) * 4, b = (row(y0) * width + column(x0 + 1)) * 4, c = (row(y0 + 1) * width + column(x0)) * 4, d = (row(y0 + 1) * width + column(x0 + 1)) * 4;
+  for (let k = 0; k < 4; k++) out[k] = (((data[a + k] ?? 0) * (1 - fx) + (data[b + k] ?? 0) * fx) * (1 - fy) + ((data[c + k] ?? 0) * (1 - fx) + (data[d + k] ?? 0) * fx) * fy) / 255;
+}
+
+export function poseBounds(pose: DrawnPose, found: BoundsModel, view: ReturnType<typeof camera>, width: number, height: number, farCulled = false, textures?: BoundsTextures): ModelBounds {
   const { sampler, geosets, drawn } = posedMesh(pose, found, view);
   const m = multiply(multiply(view.projection, view.view), transform(pose));
   const nodes = sampler.rendererData.nodes, near = view.near, far = view.far;
   const nodeBox = new Float64Array(nodes.length * 4);
   for (let i = 0; i < nodes.length; i++) nodeBox.set([Infinity, Infinity, -Infinity, -Infinity], i * 4);
   let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity, ahead = false;
+  let teamGlow: "texture" | "disc" | undefined;
   const m0 = m[0] ?? 0, m1 = m[1] ?? 0, m3 = m[3] ?? 0, m4 = m[4] ?? 0, m5 = m[5] ?? 0, m7 = m[7] ?? 0, m8 = m[8] ?? 0, m9 = m[9] ?? 0, m11 = m[11] ?? 0, m12 = m[12] ?? 0, m13 = m[13] ?? 0, m15 = m[15] ?? 0;
+  const extend = (x0: number, y0: number, x1: number, y1: number, main: number) => {
+    if (x0 < left) left = x0; if (x1 > right) right = x1; if (y0 < top) top = y0; if (y1 > bottom) bottom = y1;
+    if (main < 0) return;
+    const o = main * 4;
+    if (x0 < (nodeBox[o] ?? 0)) nodeBox[o] = x0; if (y0 < (nodeBox[o + 1] ?? 0)) nodeBox[o + 1] = y0;
+    if (x1 > (nodeBox[o + 2] ?? 0)) nodeBox[o + 2] = x1; if (y1 > (nodeBox[o + 3] ?? 0)) nodeBox[o + 3] = y1;
+  };
+  const texel = new Float64Array(4);
   for (const mesh of drawn) {
-    const { positions, main: mains } = mesh.visible ?? mesh;
-    for (let vertex = 0; vertex < mains.length; vertex++) {
-      const x = positions[vertex * 3] ?? 0, y = positions[vertex * 3 + 1] ?? 0, z = positions[vertex * 3 + 2] ?? 0, main = mains[vertex] ?? -1;
+    const { positions, main: mains, faces } = mesh;
+    for (let vertex = 0; vertex < mains.length; vertex++) if (m3 * (positions[vertex * 3] ?? 0) + m7 * (positions[vertex * 3 + 1] ?? 0) + m11 * (positions[vertex * 3 + 2] ?? 0) + m15 >= near) { ahead = true; break; }
+    const glow = glowOnly(found.data, found.data.Geosets[mesh.geoset]?.MaterialID ?? -1);
+    const layers = drawnLayers(found.data, mesh.geoset, pose, sampler, textures);
+    if (glow) teamGlow = layers === "unknown" ? "disc" : teamGlow ?? "texture";
+    if (layers === "nothing") continue;
+    if (layers !== "whole" && layers !== "unknown") {
+      const window = { left: -width, top: -height, right: 2 * width, bottom: 2 * height };
+      for (let face = 0; face + 2 < faces.length; face += 3) {
+        const corners = [faces[face] ?? 0, faces[face + 1] ?? 0, faces[face + 2] ?? 0] as const;
+        let polygon: number[][] = corners.map((v, corner) => {
+          const x = positions[v * 3] ?? 0, y = positions[v * 3 + 1] ?? 0, z = positions[v * 3 + 2] ?? 0;
+          return [m0 * x + m4 * y + m8 * z + m12, m1 * x + m5 * y + m9 * z + m13, m3 * x + m7 * y + m11 * z + m15, corner === 0 ? 1 : 0, corner === 1 ? 1 : 0, corner === 2 ? 1 : 0];
+        });
+        if (polygon.some((p) => (p[2] ?? 0) < near)) polygon = clipNear(polygon, near);
+        for (let fan = 1; fan + 1 < polygon.length; fan++) {
+          coverTriangle([polygon[0], polygon[fan], polygon[fan + 1]] as number[][], width, height, far, window, (column, row, _inverse, weights) => {
+            const drawnHere = layers.some((layer) => {
+              const u = weights[0] * (layer.uv[corners[0] * 2] ?? 0) + weights[1] * (layer.uv[corners[1] * 2] ?? 0) + weights[2] * (layer.uv[corners[2] * 2] ?? 0);
+              const v = weights[0] * (layer.uv[corners[0] * 2 + 1] ?? 0) + weights[1] * (layer.uv[corners[1] * 2 + 1] ?? 0) + weights[2] * (layer.uv[corners[2] * 2 + 1] ?? 0);
+              sample(layer, u, v, texel);
+              return draws(layer.filter, layer.opacity, texel[0] ?? 0, texel[1] ?? 0, texel[2] ?? 0, texel[3] ?? 0);
+            });
+            if (drawnHere) extend(column, row, column + 1, row + 1, mains[corners[weights[0] >= weights[1] && weights[0] >= weights[2] ? 0 : weights[1] >= weights[2] ? 1 : 2]] ?? -1);
+          });
+        }
+      }
+      continue;
+    }
+    const uv = found.data.Geosets[mesh.geoset]?.TVertices[0];
+    const points = layers === "unknown" && glow && uv !== undefined ? glowPoints(positions, mains, uv, faces) : { positions, main: mains };
+    for (let vertex = 0; vertex < points.main.length; vertex++) {
+      const x = points.positions[vertex * 3] ?? 0, y = points.positions[vertex * 3 + 1] ?? 0, z = points.positions[vertex * 3 + 2] ?? 0;
       const w = m3 * x + m7 * y + m11 * z + m15;
-      if (w < near) continue;
-      ahead = true;
-      if (w > far) continue;
+      if (w < near || w > far) continue;
       const px = ((m0 * x + m4 * y + m8 * z + m12) / w + 1) * width / 2, py = (1 - (m1 * x + m5 * y + m9 * z + m13) / w) * height / 2;
-      if (px < left) left = px; if (px > right) right = px; if (py < top) top = py; if (py > bottom) bottom = py;
-      if (main < 0) continue;
-      const o = main * 4;
-      if (px < (nodeBox[o] ?? 0)) nodeBox[o] = px; if (py < (nodeBox[o + 1] ?? 0)) nodeBox[o + 1] = py;
-      if (px > (nodeBox[o + 2] ?? 0)) nodeBox[o + 2] = px; if (py > (nodeBox[o + 3] ?? 0)) nodeBox[o + 3] = py;
+      extend(px, py, px, py, points.main[vertex] ?? -1);
     }
   }
 
@@ -226,7 +331,7 @@ export function poseBounds(pose: DrawnPose, found: BoundsModel, view: ReturnType
   return {
     handle: pose.handle.id, model: pose.model, unit: pose.unit === true, box,
     offFrame: box === undefined || box.right < 0 || box.left > width || box.bottom < 0 || box.top > height,
-    behindEye: !ahead, farCulled, geosets, nodes: nodeRows,
+    behindEye: !ahead, farCulled, geosets, nodes: nodeRows, ...(teamGlow === undefined ? {} : { teamGlow }),
   };
 }
 
@@ -356,13 +461,18 @@ function clipNear(polygon: readonly number[][], near: number): number[][] {
 
 /** Visits each pixel whose centre the clip-space triangle covers, with its perspective-correct 1/w and vertex weights. */
 function rasterTriangle(triangle: readonly number[][], width: number, height: number, far: number, visit: (pixel: number, inverse: number, weights: readonly [number, number, number]) => void): void {
+  coverTriangle(triangle, width, height, far, { left: 0, top: 0, right: width, bottom: height }, (column, row, inverse, weights) => visit(row * width + column, inverse, weights));
+}
+
+/** rasterTriangle over the pixel columns and rows `window` spans, which may reach past the canvas. */
+function coverTriangle(triangle: readonly number[][], width: number, height: number, far: number, window: PixelBox, visit: (column: number, row: number, inverse: number, weights: readonly [number, number, number]) => void): void {
   const [a = [], b = [], c = []] = triangle;
   const screen = (p: readonly number[]) => [((p[0] ?? 0) / (p[2] ?? 1) + 1) * width / 2, (1 - (p[1] ?? 0) / (p[2] ?? 1)) * height / 2, 1 / (p[2] ?? 1)] as const;
   const [ax, ay, ai] = screen(a), [bx, by, bi] = screen(b), [cx, cy, ci] = screen(c);
   const area = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
   if (area === 0 || !Number.isFinite(area)) return;
-  const left = Math.max(0, Math.ceil(Math.min(ax, bx, cx) - 0.5)), right = Math.min(width - 1, Math.floor(Math.max(ax, bx, cx) - 0.5));
-  const top = Math.max(0, Math.ceil(Math.min(ay, by, cy) - 0.5)), bottom = Math.min(height - 1, Math.floor(Math.max(ay, by, cy) - 0.5));
+  const left = Math.max(window.left, Math.ceil(Math.min(ax, bx, cx) - 0.5)), right = Math.min(window.right - 1, Math.floor(Math.max(ax, bx, cx) - 0.5));
+  const top = Math.max(window.top, Math.ceil(Math.min(ay, by, cy) - 0.5)), bottom = Math.min(window.bottom - 1, Math.floor(Math.max(ay, by, cy) - 0.5));
   const weights: [number, number, number] = [0, 0, 0];
   for (let row = top; row <= bottom; row++) {
     const py = row + 0.5;
@@ -373,7 +483,7 @@ function rasterTriangle(triangle: readonly number[][], width: number, height: nu
       const inverse = la * ai + lb * bi + lc * ci;
       if (1 / inverse > far) continue;
       for (let k = 0; k < 3; k++) weights[k] = (la * ai * (a[3 + k] ?? 0) + lb * bi * (b[3 + k] ?? 0) + lc * ci * (c[3 + k] ?? 0)) / inverse;
-      visit(row * width + column, inverse, weights);
+      visit(column, row, inverse, weights);
     }
   }
 }
