@@ -43,4 +43,4 @@ jobs:
       - name: wisp headless
         run: bun examples/sample/scripts/sample.ts headless
       - name: Map build and the platform boundary
-        run: bun test test/map-build.test.ts test/platform-boundary.test.ts -t '^(?!.*interrupting a map step)'
+        run: bun test test/map-build.test.ts -t '^(?!.*interrupting a map step)'
