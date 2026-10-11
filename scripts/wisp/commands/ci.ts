@@ -2,7 +2,7 @@
 // nightly (docs/ci-command.md). Each tier is a list of stages; each stage runs an existing runner.
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Console, Effect, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -10,6 +10,7 @@ import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from
 import { emitJson } from "../jsonResults";
 import { lua32 } from "../lua32";
 import { type SoakMatch, describeMatch, loadSoakProject, planSoak, readSoakReply } from "../soak";
+import { ImportGraph } from "../importGraph";
 import { INCONCLUSIVE_EXIT, junitFailures } from "../testRunner";
 import { type Changes, type Selection, TestPlan } from "../testSelection";
 import { type DevProject, followsSave, isProjectFile } from "./dev";
@@ -19,7 +20,12 @@ export interface CiProject extends Pick<DevProject, "root" | "sources" | "tests"
   readonly typeCheck: Pick<DevProject["typeCheck"], "command">;
 
   /** The game's soak (`makeSoak`'s options); without one, no tier plays matches. */
-  readonly soak?: SoakCommandOptions;
+  readonly soak?: CiSoak;
+}
+
+export interface CiSoak extends SoakCommandOptions {
+  /** Globs, from `root`, of the files the soak reads without importing them (maps, data, JSON). */
+  readonly reads?: readonly string[];
 }
 
 export class CiFailure extends Schema.TaggedError<CiFailure>()("CiFailure", {
@@ -37,12 +43,14 @@ export const DETERMINISM_FRAMES = 600;
 
 const TEST_COST_PRELOAD = join(import.meta.dir, "../testCostPreload.ts");
 const SOAK_WORKER = join(import.meta.dir, "../soakWorker.ts");
+/** Wisp's own scripts: their import() calls load the soak's project and game, or paths no soak plays. */
+const WISP_SCRIPTS = resolve(import.meta.dir, "../..");
 /** farmTest's name prefix (wisp:scripts/wisp/farmTest.ts, which imports bun:test and can't load here). */
 const FARM_TEST_PREFIX = "farm: ";
 const FARM_TEST_TIMEOUT_MS = 120_000;
 const MAX_SEED = 2147483646;
 
-type Verdict = "passed" | "failed" | "inconclusive";
+type Verdict = "passed" | "failed" | "inconclusive" | "skipped";
 
 interface Stage {
   readonly name: string;
@@ -80,8 +88,8 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
 
   const record = (stage: Stage) => Effect.gen(function*() {
     stages.push(stage);
-    if (json) yield* emitJson("ci", { type: "result", ok: stage.verdict === "passed", stage: stage.name, verdict: stage.verdict, seconds: stage.seconds, ...stage.detail });
-    else yield* Console.log(`${stage.name}, ${stage.verdict}, ${stage.seconds.toFixed(1)}`);
+    if (json) yield* emitJson("ci", { type: "result", ok: stage.verdict === "passed" || stage.verdict === "skipped", stage: stage.name, verdict: stage.verdict, seconds: stage.seconds, ...stage.detail });
+    else yield* Console.log(`${stage.name}, ${stage.verdict}, ${stage.seconds.toFixed(1)}${stage.verdict === "skipped" ? ` (${String(stage.detail?.["reason"])})` : ""}`);
   });
 
   const timed = <E, R>(name: string, run: Effect.Effect<{ readonly verdict: Verdict; readonly detail?: Readonly<Record<string, unknown>> }, E, R>) => Effect.gen(function*() {
@@ -107,12 +115,15 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
 
   // The diff since --base as one save: every path the dev loop follows counts as changed. A fresh scan already
   // knows created files and has dropped deleted ones, so neither forces the whole suite as a new save does.
-  const affected = (base: string) => Effect.gen(function*() {
+  const changedSince = (base: string) => Effect.gen(function*() {
     const top = (yield* text("git", ["rev-parse", "--show-toplevel"])).trim();
     const diff = yield* text("git", ["diff", "--name-only", "--no-renames", base, "--", "."]);
     const untracked = yield* text("git", ["ls-files", "--others", "--exclude-standard", "--full-name", "--", "."]);
-    const paths = [...new Set([...diff.split("\n"), ...untracked.split("\n")].filter((line) => line !== "").map((line) => resolve(top, line)))]
-      .filter((path) => followsSave(root, project.sources, path));
+    return [...new Set([...diff.split("\n"), ...untracked.split("\n")].filter((line) => line !== "").map((line) => resolve(top, line)))];
+  });
+
+  const affected = (base: string) => Effect.gen(function*() {
+    const paths = (yield* changedSince(base)).filter((path) => followsSave(root, project.sources, path));
     const tests = plan();
     const projectFiles = paths.filter((path) => isProjectFile(root, path));
     const selection: Selection = projectFiles.length > 0
@@ -163,12 +174,14 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
     return { verdict: ran.verdict, detail: { ...detail, ...ran.detail } };
   }));
 
-  // --plan-only: pre-merge's test selection and why each file is in it, with no stage run.
+  // --plan-only: pre-merge's test selection and why each file is in it, and whether determinism runs, with no stage run.
   const preMergePlan = (base: string) => Effect.gen(function*() {
     const { files, total, changed, scope, reasons } = yield* preMergeSelection(base);
     for (const path of files) yield* say(relative(root, path));
     yield* say(`tests: ${scope} since ${base}`);
-    if (json) yield* emitJson("ci", { type: "plan", base, selected: files.map((path) => relative(root, path)), total, changed: changed.map((path) => relative(root, path)), reasons });
+    const soak = project.soak === undefined ? undefined : yield* reachesSoak(project.soak, base);
+    if (soak !== undefined) yield* say(`determinism: ${soak.runs ? "runs" : "skipped"} (${soak.reason})`);
+    if (json) yield* emitJson("ci", { type: "plan", base, selected: files.map((path) => relative(root, path)), total, changed: changed.map((path) => relative(root, path)), reasons, ...(soak === undefined ? {} : { determinism: soak }) });
   });
 
   const farmTests = timed("farm tests", Effect.gen(function*() {
@@ -181,9 +194,34 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
 
   const soakProject = (soak: SoakCommandOptions) => Effect.tryPromise({ try: () => loadSoakProject(soak.project), catch: (cause) => ciFailure(`loading the soak: ${describeCause(cause)}`) });
 
+  // Whether the changes since base can reach the soak: the module closure of its project, its game and the soak worker,
+  // plus the files `reads` declares. A changed project file, or an import() the graph can't follow, runs the stage.
+  const reachesSoak = (soak: CiSoak, base: string) => Effect.gen(function*() {
+    const changed = yield* changedSince(base);
+    const projectFile = changed.find((path) => isProjectFile(root, path) && followsSave(root, project.sources, path));
+    if (projectFile !== undefined) return { runs: true, reason: `${relative(root, projectFile)} changed` };
+    const loaded = yield* soakProject(soak).pipe(Effect.map(({ game }) => ({ game })), Effect.catch((failure) => Effect.succeed({ problem: failure.problem })));
+    if ("problem" in loaded) return { runs: true, reason: `the soak's modules aren't known: ${loaded.problem}` };
+    const entries = [soak.project, loaded.game, SOAK_WORKER].map((path) => resolve(root, path));
+    const graph = new ImportGraph(root);
+    graph.add(entries);
+    for (const entry of entries) {
+      const computed = graph.computedImport(entry, (module) => module.startsWith(`${WISP_SCRIPTS}${sep}`));
+      if (computed !== undefined) return { runs: true, reason: `${relative(root, computed)} has an import() the graph can't follow` };
+    }
+    const closure = new Set(entries.flatMap((entry) => [...graph.dependencies(entry)]));
+    const reads = (soak.reads ?? []).map((glob) => new Bun.Glob(glob));
+    const reaching = changed.find((path) => closure.has(path) || reads.some((glob) => glob.match(relative(root, path))));
+    if (reaching !== undefined) return { runs: true, reason: `${relative(root, reaching)} reaches the soak` };
+    return { runs: false, reason: `no change since ${base} reaches the soak: ${changed.length} changed files` };
+  });
+
   // Pre-merge's seconds-long determinism stage: the soak's fixed seeds with capped frames, once with each Lua32 as
   // LUA, in soak worker processes. Each must end with no finding but its cap, and the two must agree call for call.
-  const determinism = (soak: SoakCommandOptions) => Effect.gen(function*() {
+  const determinism = (soak: CiSoak, base: string) => Effect.gen(function*() {
+    const { runs, reason } = yield* reachesSoak(soak, base);
+    if (!runs) return yield* record({ name: "determinism", verdict: "skipped", seconds: 0, detail: { reason } });
+    yield* say(`determinism: runs (${reason})`);
     const soaked = yield* soakProject(soak);
     const matches = planSoak(soaked.roster, DETERMINISM_MATCHES, 1, DETERMINISM_FRAMES);
     const stock = yield* lua32("stock");
@@ -219,7 +257,7 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
       const problems = [...run.problems, ...disagreements];
       for (const problem of problems) yield* say(`determinism ${run.mode.name}: ${problem}`);
       const failed = matches.filter((match) => run.failing.has(match) || disagreeing.includes(match)).map(describeMatch);
-      yield* record({ name: `determinism ${run.mode.name}`, verdict: problems.length === 0 ? "passed" : "failed", seconds: run.seconds, detail: { seeds: matches.map((match) => match.seed), frames: DETERMINISM_FRAMES, ...(failed.length === 0 ? {} : { failed }) } });
+      yield* record({ name: `determinism ${run.mode.name}`, verdict: problems.length === 0 ? "passed" : "failed", seconds: run.seconds, detail: { seeds: matches.map((match) => match.seed), frames: DETERMINISM_FRAMES, reason, ...(failed.length === 0 ? {} : { failed }) } });
     }
   }).pipe(Effect.catch((failure) => Effect.gen(function*() {
     yield* say(`determinism: ${describeCause(failure)}`);
@@ -305,7 +343,7 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
       if (args.includes("--plan-only")) return yield* preMergePlan(base);
       yield* typeCheck;
       yield* preMergeTests(base);
-      if (project.soak !== undefined) yield* determinism(project.soak);
+      if (project.soak !== undefined) yield* determinism(project.soak, base);
       break;
     }
     case "post-merge":
@@ -333,7 +371,7 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
   }
 
   const count = (verdict: Verdict) => stages.filter((stage) => stage.verdict === verdict).length;
-  if (json) yield* emitJson("ci", { type: "summary", ok: count("passed") === stages.length, tier, counts: { passed: count("passed"), failed: count("failed"), inconclusive: count("inconclusive") }, elapsedMs: performance.now() - started });
+  if (json) yield* emitJson("ci", { type: "summary", ok: count("passed") + count("skipped") === stages.length, tier, counts: { passed: count("passed"), failed: count("failed"), inconclusive: count("inconclusive") }, elapsedMs: performance.now() - started });
   if (count("failed") > 0) return yield* ciFailure(`ci ${tier}: ${count("failed")} of ${stages.length} stages failed`);
   if (count("inconclusive") > 0) return yield* new CiFailure({ problem: `ci ${tier}: ${count("inconclusive")} of ${stages.length} stages inconclusive`, exitCode: INCONCLUSIVE_EXIT });
 }).pipe(Effect.provide(BunServices.layer));

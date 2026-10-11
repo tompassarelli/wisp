@@ -55,8 +55,8 @@ export class ImportGraph {
     return this.reach(path, (next) => this.nodes.get(next)?.imports ?? []);
   }
 
-  computedImport(path: string): string | undefined {
-    for (const module of this.dependencies(path)) if (this.nodes.get(module)?.computed === true) return module;
+  computedImport(path: string, follows: (module: string) => boolean = () => false): string | undefined {
+    for (const module of this.dependencies(path)) if (this.nodes.get(module)?.computed === true && !follows(module)) return module;
     return undefined;
   }
 

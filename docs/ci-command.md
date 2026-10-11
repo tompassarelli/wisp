@@ -8,7 +8,7 @@ same thing. Workflows call a tier instead of restating its commands.
 
 ```sh
 bun wisp ci pre-merge --base SHA     # type check, the affected tests, determinism
-bun wisp ci pre-merge --base SHA --plan-only   # only print which tests it would run
+bun wisp ci pre-merge --base SHA --plan-only   # only print which tests it would run, and whether determinism runs
 bun wisp ci post-merge               # type check, the whole suite, the farm tests
 bun wisp ci nightly [--minutes M]    # random soak seeds for M minutes
 bun wisp ci seeds --n N [--seed S]   # N soak seeds, or N seeds from S
@@ -40,7 +40,12 @@ determinism LUA, passed, 1.0
 determinism TOWARD_ZERO_LUA, passed, 1.0
 ```
 
-The run exits 0 when every stage passed, 1 when one failed, and 75 when
+A stage that had nothing to check is `skipped`: its text line adds the
+reason (`determinism, skipped, 0.0 (no change since SHA reaches the soak: 3
+changed files)`) and its JSON line has `verdict: "skipped"`, `ok: true` and a
+`reason` string.
+
+The run exits 0 when every stage passed or was skipped, 1 when one failed, and 75 when
 none failed but one was inconclusive: the timing tests' busy-machine verdict
 (wisp:scripts/wisp/testRunner.ts, [Testing](testing.md#timing-tests)). A
 usage problem exits 2. Every stage runs even after one fails, so one run
@@ -56,14 +61,17 @@ ci: {
   usage: "pre-merge --base SHA [--plan-only] | post-merge | nightly [--minutes M] | seeds --n N [--seed S]   [--json]",
   load: async () => (await import("wisp/scripts/wisp/commands/ci")).makeCi({
     root: DEV.root, sources: DEV.sources, typeCheck: DEV.typeCheck, tests: DEV.tests,
-    soak: SOAK,          // the options the game passes makeSoak
+    soak: { ...SOAK, reads: ["maps/**"] },   // the options the game passes makeSoak, and what the soak reads
   }),
 },
 repro: { ... },        // makeRepro with the same soak: the replay command ci prints
 ```
 
 `root`, `sources`, `typeCheck.command` and `tests` are `wisp dev`'s
-([dev](dev.md)); `soak` is the game's `makeSoak` options ([soak](soak.md)). A
+([dev](dev.md)); `soak` is the game's `makeSoak` options ([soak](soak.md))
+plus an optional `reads`: globs, from `root`, of the files the soak reads
+without importing them (maps, data, JSON), which pre-merge's determinism
+stage counts among its inputs. A
 game without a soak leaves it out: pre-merge then has no determinism stage,
 and `nightly` and `seeds` refuse. The failing-seed replay command is the
 game's own `repro` command, so a game with a soak declares `repro` with the
@@ -71,7 +79,8 @@ same soak ([repros](repro.md#shrinking-a-soak-failure)).
 
 Wisp declares its own in wisp:scripts/wisp/repo.ts: its `bun run check`, its
 test files, and the soak test's map with fault-free policies
-(wisp:test/soak/ci-project.ts), with `repro` beside it. `bun run ci` is
+(wisp:test/soak/ci-project.ts), with `repro` beside it. That soak imports
+everything it plays, so it declares no `reads`. `bun run ci` is
 `ci post-merge`.
 
 ## pre-merge
@@ -105,7 +114,29 @@ test files, and the soak test's map with fault-free policies
    `runs on every save: WHY`; a whole-suite selection gives every file its
    reason (`src/x.ts is new`). Autoland's shadow lander compares selections
    this way without running them.
-3. **determinism LUA** and **determinism TOWARD_ZERO_LUA**: the soak's
+
+   A game with a soak also gets pre-merge's determinism decision: the line
+   `determinism: runs|skipped (REASON)` after the `tests:` line, and
+   `"determinism":{"runs":false,"reason":"..."}` in the plan line.
+3. **determinism LUA** and **determinism TOWARD_ZERO_LUA**, when a change
+   since `--base` can reach the soak. The soak's inputs are the import
+   closure (wisp:scripts/wisp/importGraph.ts, as `TestPlan` follows it) of
+   the soak's project, the `game` it names and the soak worker, plus the
+   files `soak.reads` matches. The changes are every path `git diff
+   --name-only BASE` and the untracked files name, wherever they are. The
+   stage runs when one of them is an input or a project file (`package.json`,
+   `tsconfig*.json`, `bunfig.toml`, a lockfile), and when the inputs can't be
+   known: the project doesn't load, or a module in the closure has an
+   `import()` the graph can't follow. Wisp's own scripts' `import()` calls
+   don't count: the soak's loaders load its project and game, which are inputs
+   already, and the rest load paths no soak plays (in a game they sit in
+   `node_modules`, outside the graph). Otherwise the stage is one line,
+   `determinism, skipped, 0.0 (no change since BASE reaches the soak: N
+   changed files)`, and counts as passing. When it runs, it prints
+   `determinism: runs (REASON)` (`src/a.ts reaches the soak`) and its two
+   result lines carry that `reason`.
+
+   It plays the soak's
    first 8 matches from seed 1, each capped at 600 frames, in a soak worker
    process (wisp:scripts/wisp/soakWorker.ts), once with the stock Lua32 as
    `LUA` and once with the toward-zero Lua32 as `LUA`

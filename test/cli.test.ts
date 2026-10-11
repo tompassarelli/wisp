@@ -29,7 +29,7 @@ test("[property seed 824108] command dispatch preserves value boundaries, empty 
   }
 });
 
-test("[boundary] ci pre-merge runs the type check and only the tests the diff since --base reaches, exiting 0 or 1 by their verdicts and naming the failing tests; --plan-only runs none", async () => {
+test("[boundary] ci pre-merge runs the type check, only the tests the diff since --base reaches and determinism only when the diff reaches the soak, exiting 0 or 1 by their verdicts and naming the failing tests; --plan-only runs none", async () => {
   const root = mkdtempSync(join(tmpdir(), "wisp-ci-"));
   const write = (path: string, text: string) => {
     mkdirSync(dirname(join(root, path)), { recursive: true });
@@ -38,6 +38,9 @@ test("[boundary] ci pre-merge runs the type check and only the tests the diff si
   write("package.json", JSON.stringify({ name: "ci-boundary", private: true, scripts: { test: `bun ${join(import.meta.dir, "../scripts/wisp/testRunner.ts")}` } }));
   write("src/a.ts", "export const a = 1;\n");
   write("src/b.ts", "export const b = 1;\n");
+  write("notes.md", "notes\n");
+  // The soak imports a but not b or the notes: Wisp's own soak project, reached from inside the root through a.
+  write("soak/project.ts", `import "../src/a";\nexport { default } from ${JSON.stringify(join(import.meta.dir, "soak/ci-project.ts"))};\n`);
   write("test/a.test.ts", 'import { expect, test } from "bun:test";\nimport { a } from "../src/a";\ntest("a", () => expect(a).toBe(1));\n');
   // b's test fails whenever it runs, and leaves a mark: pre-merge must leave it out until b changes, and --plan-only always.
   write("test/b.test.ts", 'import { appendFileSync } from "node:fs";\nimport { expect, test } from "bun:test";\nimport { b } from "../src/b";\ntest("b", () => { appendFileSync("b-ran", ""); expect(b).toBe(2); });\n');
@@ -45,7 +48,7 @@ test("[boundary] ci pre-merge runs the type check and only the tests the diff si
   git("init", "-q");
   git("add", ".");
   git("commit", "-q", "-m", "base");
-  const ci = makeCi({ root, sources: ["src", "test"], typeCheck: { command: ["true"] }, tests: { files: ["test/**/*.test.ts"] } });
+  const ci = makeCi({ root, sources: ["src", "test"], typeCheck: { command: ["true"] }, tests: { files: ["test/**/*.test.ts"] }, soak: { project: join(root, "soak/project.ts"), out: join(root, "out") } });
   const output = async (...flags: string[]) => {
     const lines: string[] = [];
     const code = await Effect.runPromise(cliProgram("ci", { ci: { usage: "", load: async () => ci } }, ["ci", "pre-merge", "--base", "HEAD", "--json", ...flags], () => {}).pipe(
@@ -55,24 +58,37 @@ test("[boundary] ci pre-merge runs the type check and only the tests the diff si
   };
   const run = async () => {
     const { code, lines } = await output();
-    return { code, results: lines.filter((line) => line.type === "result").map(({ stage, verdict, selected, total, failed }) => ({ stage, verdict, selected, total, failed })) };
+    return { code, results: lines.filter((line) => line.type === "result").map(({ stage, verdict, selected, total, failed, reason }) => ({ stage, verdict, selected, total, failed, reason })) };
   };
-  write("src/a.ts", "export const a = 1; // changed\n");
+  write("notes.md", "notes, changed\n");
+  const skipped = "no change since HEAD reaches the soak: 1 changed files";
   expect(await run()).toEqual({ code: 0, results: [
-    { stage: "type check", verdict: "passed", selected: undefined, total: undefined, failed: undefined },
-    { stage: "tests", verdict: "passed", selected: 1, total: 2, failed: undefined },
+    { stage: "type check", verdict: "passed", selected: undefined, total: undefined, failed: undefined, reason: undefined },
+    { stage: "tests", verdict: "passed", selected: 0, total: 2, failed: undefined, reason: undefined },
+    { stage: "determinism", verdict: "skipped", selected: undefined, total: undefined, failed: undefined, reason: skipped },
+  ] });
+  expect((await output("--plan-only")).lines.map(({ determinism }) => determinism)).toEqual([{ runs: false, reason: skipped }]);
+  write("src/a.ts", "export const a = 1; // changed\n");
+  const reaches = "src/a.ts reaches the soak";
+  expect(await run()).toEqual({ code: 0, results: [
+    { stage: "type check", verdict: "passed", selected: undefined, total: undefined, failed: undefined, reason: undefined },
+    { stage: "tests", verdict: "passed", selected: 1, total: 2, failed: undefined, reason: undefined },
+    { stage: "determinism LUA", verdict: "passed", selected: undefined, total: undefined, failed: undefined, reason: reaches },
+    { stage: "determinism TOWARD_ZERO_LUA", verdict: "passed", selected: undefined, total: undefined, failed: undefined, reason: reaches },
   ] });
   write("src/b.ts", "export const b = 1; // changed\n");
   const plan = await output("--plan-only");
   expect(plan.code).toBe(0);
-  expect(plan.lines.map(({ type, base, selected, total, changed, reasons }) => ({ type, base, selected, total, changed, reasons }))).toEqual([{
+  expect(plan.lines.map(({ type, base, selected, total, changed, reasons, determinism }) => ({ type, base, selected, total, changed, reasons, determinism }))).toEqual([{
     type: "plan", base: "HEAD", selected: ["test/a.test.ts", "test/b.test.ts"], total: 2, changed: ["src/a.ts", "src/b.ts"],
-    reasons: { "test/a.test.ts": "imports src/a.ts", "test/b.test.ts": "imports src/b.ts" },
+    reasons: { "test/a.test.ts": "imports src/a.ts", "test/b.test.ts": "imports src/b.ts" }, determinism: { runs: true, reason: reaches },
   }]);
   expect(existsSync(join(root, "b-ran"))).toBe(false);
   expect(await run()).toEqual({ code: 1, results: [
-    { stage: "type check", verdict: "passed", selected: undefined, total: undefined, failed: undefined },
-    { stage: "tests", verdict: "failed", selected: 2, total: 2, failed: ["test/b.test.ts > b"] },
+    { stage: "type check", verdict: "passed", selected: undefined, total: undefined, failed: undefined, reason: undefined },
+    { stage: "tests", verdict: "failed", selected: 2, total: 2, failed: ["test/b.test.ts > b"], reason: undefined },
+    { stage: "determinism LUA", verdict: "passed", selected: undefined, total: undefined, failed: undefined, reason: reaches },
+    { stage: "determinism TOWARD_ZERO_LUA", verdict: "passed", selected: undefined, total: undefined, failed: undefined, reason: reaches },
   ] });
   expect(existsSync(join(root, "b-ran"))).toBe(true);
 });
