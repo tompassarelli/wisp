@@ -33,7 +33,8 @@ record values outside calibration, but the fidelity gate refuses them. Metric
 all regions must fit inside the recorded resolution.
 
 Each control has a unique `id` and only the fields its lever uses: `mode`
-(`stock`, `mask` or `stage`), booleans `fog`, `bloom` and `cine`, or numeric `dof`.
+(`stock`, `mask` or `stage`), booleans `fog`, `bloom` and `cine`, numeric `dof`,
+or `visibility` (`shown` or `hidden`).
 A slice carries its own lever's controls per look, rather than all levers:
 
 - A KO-window `cinematic-filter` slice needs cine on/off in both looks, plus
@@ -42,6 +43,10 @@ A slice carries its own lever's controls per look, rather than all levers:
   fog on/off in both looks. They require no bloom, DOF or cine controls.
 - Stage slices and `sky`, `water`, `day-night-light`, `point-lights` and `pbr`
   slices need stock/mask/stage controls.
+- A `draw-extent` slice needs exactly one `visibility: shown` and one
+  `visibility: hidden` control: the same held frame with the measured
+  drawing shown and hidden. The gate measures each run's shown capture
+  against that run's hidden capture, never the hidden control alone.
 - Definitive `bloom` needs bloom on/off; Definitive `dof` needs at least three
   distinct finite DOF values. These controls are not required in Classic,
   which does not draw those levers.

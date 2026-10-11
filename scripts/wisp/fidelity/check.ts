@@ -10,6 +10,7 @@ import { cinematicFilter } from "./cinematic-filter";
 import { dof } from "./dof";
 import { bloom } from "./bloom";
 import { shading } from "./shading";
+import { drawExtent } from "./draw-extent";
 
 export class FidelityFailure extends Schema.TaggedError<FidelityFailure>()("FidelityFailure", { problem: Schema.String }) {
   override get message(): string { return this.problem; }
@@ -55,6 +56,7 @@ export function metricsFor(lever: string, settings: Readonly<Record<string,numbe
       return bloom(threshold);
     }
     case "day-night-light": case "point-lights": case "pbr": return shading;
+    case "draw-extent": return drawExtent;
     default: throw new Error(`no decided fidelity bound for lever ${lever}`);
   }
 }
@@ -84,10 +86,16 @@ export const checkFidelity = (lever: string, referenceDirectory: string, candida
   const measurements: Measurement[] = [];
   for (const [ref,cand] of pairs) {
     const metrics = yield* Effect.try({ try: () => metricsFor(lever,ref.settings), catch: cause => new FidelityFailure({ problem: String(cause) }) });
+    // draw-extent measures each shown capture against its run's hidden capture, so the hidden control is not measured alone.
+    const hidden = lever === "draw-extent" ? ref.controls.find(c => c.visibility === "hidden") : undefined;
     for (const frame of ref.frames) for (const control of ref.controls) {
+      if (hidden !== undefined && control.visibility !== "shown") continue;
       const load = (slice: CaptureSlice, directory: string) => Effect.forEach(slice.runs, run => {
-        const capture = run.captures.find(c => c.frame === frame && c.control === control.id);
-        return capture === undefined ? Effect.fail(new FidelityFailure({ problem: `missing ${key(slice)} frame ${frame} control ${control.id}` })) : readImage(directory,capture.image);
+        const image = (id: string) => {
+          const capture = run.captures.find(c => c.frame === frame && c.control === id);
+          return capture === undefined ? Effect.fail(new FidelityFailure({ problem: `missing ${key(slice)} frame ${frame} control ${id}` })) : readImage(directory,capture.image);
+        };
+        return hidden === undefined ? image(control.id) : Effect.zipWith(image(control.id), image(hidden.id), (shown, pair) => ({ ...shown, hidden: pair }));
       }, { concurrency: 1 });
       const references = yield* load(ref,referenceDirectory), candidates = yield* load(cand,candidateDirectory);
       if ([...references,...candidates].some(image => image.width !== ref.identity.resolution.width || image.height !== ref.identity.resolution.height)) return yield* new FidelityFailure({ problem: `${key(ref)} image resolution differs from identity` });
