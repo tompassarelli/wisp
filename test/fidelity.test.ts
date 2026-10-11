@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect } from "effect";
-import { checkFidelity, measureImages, validateComparison, metricsFor } from "../scripts/wisp/fidelity/check";
+import { checkFidelity, measureImages } from "../scripts/wisp/fidelity/check";
 import { deltaE00 } from "../scripts/wisp/fidelity/colour";
 import { colourMetric } from "../scripts/wisp/fidelity/metric";
 import type { CaptureManifest } from "../scripts/wisp/fidelity/manifest";
@@ -37,7 +37,7 @@ function png(value: number): Uint8Array {
   const raw=Buffer.alloc(9*(9*3+1),value);for(let y=0;y<9;y++)raw[y*28]=0;
   return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk("IHDR",header),chunk("IDAT",deflateSync(raw)),chunk("IEND",new Uint8Array())]);
 }
-test(`${source}: synthetic PNG capture boundary returns PASS, FAIL, INCONCLUSIVE`, async () => {
+test(`${source}: synthetic PNG capture boundary returns PASS, FAIL, INCONCLUSIVE, and refuses identities, fit scenes, calibration and undecided levers before pixels`, async () => {
   const directory=mkdtempSync(join(tmpdir(),"wisp-fidelity-"));
   try {
     const write = async (dir: string, values: readonly number[]) => {
@@ -53,6 +53,13 @@ test(`${source}: synthetic PNG capture boundary returns PASS, FAIL, INCONCLUSIVE
     const candidate=fixture();candidate.slices[0]!.identity.build="different";
     await Bun.write(join(cand,"manifest.json"),JSON.stringify(candidate));
     await expect(check()).rejects.toThrow("identity mismatch");
+    const refuse = async (edit: (manifest: CaptureManifest) => void, lever: string, problem: string) => {
+      for (const dir of [ref,cand]) { const manifest=fixture();edit(manifest);await Bun.write(join(dir,"manifest.json"),JSON.stringify(manifest)); }
+      await expect(Effect.runPromise(checkFidelity(lever,ref,cand).pipe(Effect.provide(BunServices.layer)))).rejects.toThrow(problem);
+    };
+    await refuse(manifest=>{manifest.slices[0]!.settings.density=3;},"water","outside calibrated range");
+    await refuse(manifest=>{manifest.slices[0]!.scene="fit-scene";manifest.slices[0]!.split="fit";},"water","fit-set");
+    await refuse(manifest=>{manifest.slices[0]!.lever="terrain";},"terrain","no decided fidelity bound");
   } finally { rmSync(directory,{recursive:true,force:true}); }
 });
 test(`${source}: strict half-bound spread and full-bound comparison`, () => {
@@ -60,14 +67,6 @@ test(`${source}: strict half-bound spread and full-bound comparison`, () => {
   expect(measureImages(scalar,[image(0),image(2),image(0)],[image(4)],region).verdict).toBe("PASS");
   expect(measureImages(scalar,[image(0),image(3),image(0)],[image(4)],region).verdict).toBe("INCONCLUSIVE");
   expect(measureImages(scalar,[image(0),image(0),image(0)],[image(5)],region).verdict).toBe("FAIL");
-});
-test(`${source}: fit scenes, identities, and calibration are refused before pixels`, () => {
-  const ref=fixture(), cand=fixture();
-  cand.slices[0]!.settings.density=3;ref.slices[0]!.settings.density=3;
-  expect(()=>validateComparison(ref,cand,"water")).toThrow("outside calibrated range");
-  const fit=fixture();fit.slices[0]!.scene="fit-scene";fit.slices[0]!.split="fit";
-  expect(()=>validateComparison(fit,fit,"water")).toThrow("fit-set");
-  expect(()=>metricsFor("terrain",{})).toThrow("no decided fidelity bound");
 });
 test("CIEDE2000 published Sharma supplementary pair 1 and identity", () => {
   expect(deltaE00([50,2.6772,-79.7751],[50,0,-82.7485])).toBeCloseTo(2.0425,4);
