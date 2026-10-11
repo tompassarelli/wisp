@@ -70,8 +70,59 @@ export function sceneBounds(scene: RenderScene, models: (path: string) => Bounds
 interface PosedMesh {
   readonly sampler: Sampler & { rendererData: { geosetAlpha: number[] } };
   readonly geosets: readonly GeosetBounds[];
-  /** Per drawn geoset: skinned model-space positions, each vertex's most-weighted node (or -1), and its triangles. */
-  readonly drawn: readonly { readonly positions: Float64Array; readonly main: Int32Array; readonly faces: ArrayLike<number> }[];
+  /**
+   * Per drawn geoset: skinned model-space positions, each vertex's most-weighted node (or -1), and its triangles. `visible`
+   * holds the points that bound what the geoset draws, with their nodes, when that is less than its whole surface.
+   */
+  readonly drawn: readonly { readonly positions: Float64Array; readonly main: Int32Array; readonly faces: ArrayLike<number>; readonly visible?: { readonly positions: Float64Array; readonly main: Int32Array } }[];
+}
+
+/** The renderer's team glow (ReplaceableId 2) is black from this distance to the texture's centre, in texture coordinates. */
+export const GLOW_RADIUS = 1 / 2.8;
+const ADDITIVE = new Set([3, 4]);
+const GLOW_SAMPLES = 256;
+
+/** Every layer adds the team glow, so the geoset draws nothing outside the glow's disc. */
+function glowOnly(data: model.Model, materialId: number): boolean {
+  const layers = data.Materials[materialId]?.Layers ?? [];
+  return layers.length > 0 && layers.every((layer) => ADDITIVE.has(Number(layer.FilterMode ?? 0)) && typeof layer.TextureID === "number" && data.Textures[layer.TextureID]?.ReplaceableId === 2);
+}
+
+/**
+ * Points bounding the part of each triangle inside the glow's disc: corners inside it, edge crossings and the disc's
+ * edge where it lies inside the triangle. The part is convex, so these hold its box under any projection in front of the eye.
+ */
+function glowPoints(positions: Float64Array, mains: Int32Array, uv: ArrayLike<number>, faces: ArrayLike<number>): { positions: Float64Array; main: Int32Array } {
+  const out: number[] = [], nodes: number[] = [], r2 = GLOW_RADIUS * GLOW_RADIUS;
+  const at = (v: number, k: number) => positions[v * 3 + k] ?? 0, u = (v: number) => (uv[v * 2] ?? 0) - 0.5, w = (v: number) => (uv[v * 2 + 1] ?? 0) - 0.5;
+  const push = (a: number, b: number, c: number, la: number, lb: number, lc: number) => {
+    for (let k = 0; k < 3; k++) out.push(at(a, k) * la + at(b, k) * lb + at(c, k) * lc);
+    nodes.push(mains[la >= lb && la >= lc ? a : lb >= lc ? b : c] ?? -1);
+  };
+  for (let face = 0; face + 2 < faces.length; face += 3) {
+    const a = faces[face] ?? 0, b = faces[face + 1] ?? 0, c = faces[face + 2] ?? 0;
+    const corners = [a, b, c] as const;
+    for (let i = 0; i < 3; i++) {
+      const p = corners[i] ?? 0, q = corners[(i + 1) % 3] ?? 0, weights = [0, 0, 0];
+      if (u(p) * u(p) + w(p) * w(p) <= r2) { weights[i] = 1; push(a, b, c, weights[0] ?? 0, weights[1] ?? 0, weights[2] ?? 0); }
+      const du = u(q) - u(p), dw = w(q) - w(p), qa = du * du + dw * dw, qb = 2 * (u(p) * du + w(p) * dw), qc = u(p) * u(p) + w(p) * w(p) - r2;
+      const disc = qb * qb - 4 * qa * qc;
+      if (qa === 0 || disc < 0) continue;
+      for (const t of [(-qb - Math.sqrt(disc)) / (2 * qa), (-qb + Math.sqrt(disc)) / (2 * qa)]) {
+        if (t < 0 || t > 1) continue;
+        const edge = [0, 0, 0]; edge[i] = 1 - t; edge[(i + 1) % 3] = t;
+        push(a, b, c, edge[0] ?? 0, edge[1] ?? 0, edge[2] ?? 0);
+      }
+    }
+    const det = (u(b) - u(a)) * (w(c) - w(a)) - (u(c) - u(a)) * (w(b) - w(a));
+    if (det === 0) continue;
+    for (let sample = 0; sample < GLOW_SAMPLES; sample++) {
+      const angle = sample * 2 * Math.PI / GLOW_SAMPLES, x = GLOW_RADIUS * Math.cos(angle) - u(a), y = GLOW_RADIUS * Math.sin(angle) - w(a);
+      const lb = (x * (w(c) - w(a)) - y * (u(c) - u(a))) / det, lc = (y * (u(b) - u(a)) - x * (w(b) - w(a))) / det, la = 1 - lb - lc;
+      if (la >= 0 && lb >= 0 && lc >= 0) push(a, b, c, la, lb, lc);
+    }
+  }
+  return { positions: Float64Array.from(out), main: Int32Array.from(nodes) };
 }
 
 /** Poses and skins a model on the CPU, as drawEffect in browser/headlessRender.ts poses it. */
@@ -124,7 +175,8 @@ function posedMesh(pose: DrawnPose, found: BoundsModel, view: ReturnType<typeof 
       }
       positions[vertex * 3] = x; positions[vertex * 3 + 1] = y; positions[vertex * 3 + 2] = z; mains[vertex] = main;
     }
-    drawnMeshes.push({ positions, main: mains, faces: geoset.Faces });
+    const uv = geoset.TVertices[0];
+    drawnMeshes.push({ positions, main: mains, faces: geoset.Faces, ...(uv !== undefined && glowOnly(data, geoset.MaterialID) ? { visible: glowPoints(positions, mains, uv, geoset.Faces) } : {}) });
   });
   return { sampler, geosets, drawn: drawnMeshes };
 }
@@ -137,7 +189,8 @@ export function poseBounds(pose: DrawnPose, found: BoundsModel, view: ReturnType
   for (let i = 0; i < nodes.length; i++) nodeBox.set([Infinity, Infinity, -Infinity, -Infinity], i * 4);
   let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity, ahead = false;
   const m0 = m[0] ?? 0, m1 = m[1] ?? 0, m3 = m[3] ?? 0, m4 = m[4] ?? 0, m5 = m[5] ?? 0, m7 = m[7] ?? 0, m8 = m[8] ?? 0, m9 = m[9] ?? 0, m11 = m[11] ?? 0, m12 = m[12] ?? 0, m13 = m[13] ?? 0, m15 = m[15] ?? 0;
-  for (const { positions, main: mains } of drawn) {
+  for (const mesh of drawn) {
+    const { positions, main: mains } = mesh.visible ?? mesh;
     for (let vertex = 0; vertex < mains.length; vertex++) {
       const x = positions[vertex * 3] ?? 0, y = positions[vertex * 3 + 1] ?? 0, z = positions[vertex * 3 + 2] ?? 0, main = mains[vertex] ?? -1;
       const w = m3 * x + m7 * y + m11 * z + m15;

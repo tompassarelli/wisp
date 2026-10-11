@@ -607,7 +607,12 @@ wisp:test/headless-bounds.test.ts).
   projected through the scene's camera. Each row has the model's pixel `box`
   (origin top left, y down), `offFrame`, `behindEye`, `farCulled`, each
   geoset's alpha, filter mode and whether it is drawn, and each posed node's
-  box and pivot. A model whose bytes are absent has no row.
+  box and pivot. A model whose bytes are absent has no row. Geometry that
+  draws nothing is left out: a geoset whose every layer adds the team glow
+  (`ReplaceableId` 2, Additive or AddAlpha) counts only the part of each
+  triangle inside the glow's disc, texture coordinates within 1/2.8 of the
+  centre, where the renderer's glow is not black, so a hero glow ring's
+  quad corners don't widen the box (wisp#125).
 - **In-frame verdict.** A map that renders portraits into HUD textures gives
   `render.portraits` a receipt per texture path: the portrait `scene` (camera
   and effects), its render `width` and `height`, the `crop` of that render the

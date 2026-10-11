@@ -30,6 +30,20 @@ Bone "${bone}" { ObjectId 0, GeosetId 0, GeosetAnimId None,
 PivotPoints 1 { { ${PIVOT.join(", ")} }, }
 `;
 const cube = cubeModel("Arm");
+// The cube with an additive team-glow quad through its middle, wider than the cube: only the glow's disc, inside the cube, draws.
+const GLOW_HALF = HALF * 1.38, glowCorners: Vector3[] = [0, 1, 2, 3].map((i) => [CENTRE[0] + (i & 1 ? GLOW_HALF : -GLOW_HALF), CENTRE[1] + (i & 2 ? GLOW_HALF : -GLOW_HALF), CENTRE[2]]);
+const glowCube = cube.replace("NumGeosets 1", "NumGeosets 2").replace('Textures 1 { Bitmap { Image "", ReplaceableId 1, } }', 'Textures 2 { Bitmap { Image "", ReplaceableId 1, } Bitmap { Image "", ReplaceableId 2, } }')
+  .replace("Materials 1 {", "Materials 2 {").replace("Alpha 1, } } }", "Alpha 1, } } Material { Layer { FilterMode Additive, static TextureID 1, static Alpha 1, } } }").replace("Bone \"Arm\"", `Geoset {
+    Vertices 4 { ${glowCorners.map((c) => `{ ${c.join(", ")} },`).join(" ")} }
+    Normals 4 { ${glowCorners.map(() => "{ 0, 0, 1 },").join(" ")} }
+    TVertices 4 { { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 }, }
+    VertexGroup { 0, 0, 0, 0, }
+    Faces 1 6 { Triangles { { 0, 1, 3, 0, 3, 2 }, } }
+    Groups 1 1 { Matrices { 0 }, }
+    MaterialID 1,
+    SelectionGroup 0,
+}
+Bone "Arm"`);
 
 function random(seed: number): () => number {
   let state = seed >>> 0;
@@ -51,7 +65,7 @@ function pose(fields: Partial<DrawnPose>): DrawnPose {
 }
 
 test("[property] posed screen bounds of a turning cube equal the analytic projection of its corners", () => {
-  const model = boundsModel(parseMDL(cube)), next = random(125);
+  const model = boundsModel(parseMDL(cube)), glow = boundsModel(parseMDL(glowCube)), next = random(125);
   const between = (low: number, high: number) => low + (high - low) * next();
   let compared = 0, offFrame = 0, farCulled = 0;
   for (let round = 0; round < 300; round++) {
@@ -90,7 +104,9 @@ test("[property] posed screen bounds of a turning cube equal the analytic projec
       const expected: PixelBox = { left: Math.min(...points.map((p) => p.x)), top: Math.min(...points.map((p) => p.y)), right: Math.max(...points.map((p) => p.x)), bottom: Math.max(...points.map((p) => p.y)) };
       const [arm] = row.nodes;
       if (row.box === undefined || arm?.box === undefined) throw new Error("no box in front of the eye");
-      for (const box of [row.box, arm.box]) for (const edge of ["left", "top", "right", "bottom"] as const) expect(Math.abs(box[edge] - expected[edge])).toBeLessThanOrEqual(0.01);
+      const glowBox = sceneBounds(scene, (path) => path === "Cube.mdl" ? glow : undefined, width, height)[0]?.box;
+      if (glowBox === undefined) throw new Error("no glow box in front of the eye");
+      for (const box of [row.box, arm.box, glowBox]) for (const edge of ["left", "top", "right", "bottom"] as const) expect(Math.abs(box[edge] - expected[edge])).toBeLessThanOrEqual(0.01);
       const pivot = project(world(PIVOT));
       expect(arm.name).toBe("Arm");
       expect(Math.abs(arm.pivot.x - pivot.x)).toBeLessThanOrEqual(0.01);
