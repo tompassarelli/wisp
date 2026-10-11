@@ -14,7 +14,7 @@ test("[boundary] installing a test map preserves other tests and the owner's pla
     writeFileSync(join(folder, "tests/First.w3x"), "first test");
     const candidate = join(root, "Second.w3x");
     writeFileSync(candidate, "second test");
-    await Effect.runPromise(GameFiles.use((files) => files.installMap(root, candidate)).pipe(Effect.provide(GameFiles.layer({ mapFolder: "Maps/00-Game/tests", replacedMaps: "Maps/00-Game/tests", preserveMaps: true }))));
+    await Effect.runPromise(GameFiles.use((files) => files.installMap(root, candidate)).pipe(Effect.provide(GameFiles.layer({ mapFolder: "Maps/00-Game/tests", replacedMaps: "wisp-replaced-maps", preserveMaps: true }))));
     expect(readFileSync(join(folder, "Latest.w3x"), "utf8")).toBe("playable");
     expect(readFileSync(join(folder, "tests/First.w3x"), "utf8")).toBe("first test");
     expect(readFileSync(join(folder, "tests/Second.w3x"), "utf8")).toBe("second test");
