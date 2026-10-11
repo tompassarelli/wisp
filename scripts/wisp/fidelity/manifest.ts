@@ -5,7 +5,7 @@ const Text = Schema.NonEmptyString;
 const Frame = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Size = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 const Vector = Schema.Tuple([Schema.Finite, Schema.Finite, Schema.Finite]);
-const Control = Schema.Struct({ id: Text, mode: Schema.optionalKey(Schema.Literals(["stock", "mask", "stage"])), fog: Schema.optionalKey(Schema.Boolean), bloom: Schema.optionalKey(Schema.Boolean), dof: Schema.optionalKey(Schema.Finite), cine: Schema.optionalKey(Schema.Boolean) });
+const Control = Schema.Struct({ id: Text, mode: Schema.optionalKey(Schema.Literals(["stock", "mask", "stage"])), fog: Schema.optionalKey(Schema.Boolean), bloom: Schema.optionalKey(Schema.Boolean), dof: Schema.optionalKey(Schema.Finite), cine: Schema.optionalKey(Schema.Boolean), visibility: Schema.optionalKey(Schema.Literals(["shown", "hidden"])) });
 const Identity = Schema.Struct({ build: Text, assetLayers: Schema.Array(Text), mapHash: Text, settingsFile: Text, resolution: Schema.Struct({ width: Size, height: Size }), gpu: Text });
 const Run = Schema.Struct({ id: Text, captures: Schema.Array(Schema.Struct({ frame: Frame, frameSource: Schema.Literals(["journal", "debugger"]), control: Text, image: Text })) });
 const Slice = Schema.Struct({
@@ -69,6 +69,9 @@ export function manifestProblems(manifest: CaptureManifest): string[] {
     const toggle = slice.lever === "cinematic-filter" ? "cine" : ["fog", "height-fog-falloff"].includes(slice.lever) ? "fog" : slice.lever === "bloom" && slice.look === "definitive" ? "bloom" : undefined;
     if (toggle !== undefined) for (const enabled of [false, true]) {
       if (!slice.controls.some((control) => control[toggle] === enabled)) fail(`missing ${toggle} ${enabled ? "on" : "off"} control`);
+    }
+    if (slice.lever === "draw-extent") for (const visibility of ["shown", "hidden"]) {
+      if (slice.controls.filter((control) => control.visibility === visibility).length !== 1) fail(`needs exactly one ${visibility} visibility control`);
     }
     if (slice.lever === "dof" && slice.look === "definitive" && new Set(slice.controls.flatMap((control) => control.dof === undefined ? [] : [control.dof])).size < 3) fail("DOF sweep requires at least three values");
     const window = slice.cineWindow;
