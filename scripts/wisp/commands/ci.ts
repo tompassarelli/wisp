@@ -1,6 +1,7 @@
 // One entry point for every check a project runs: local, farm, Autoland's pre-merge step, post-merge and
 // nightly (docs/ci-command.md). Each tier is a list of stages; each stage runs an existing runner.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Console, Effect, Schema, Stream } from "effect";
@@ -9,7 +10,7 @@ import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from
 import { emitJson } from "../jsonResults";
 import { lua32 } from "../lua32";
 import { type SoakMatch, describeMatch, loadSoakProject, planSoak, readSoakReply } from "../soak";
-import { INCONCLUSIVE_EXIT } from "../testRunner";
+import { INCONCLUSIVE_EXIT, junitFailures } from "../testRunner";
 import { type Changes, type Selection, TestPlan } from "../testSelection";
 import { type DevProject, followsSave, isProjectFile } from "./dev";
 import { DEFAULT_SOAK_MINUTES, MAX_SOAK_MATCHES, MAX_SOAK_MINUTES, type SoakCommandOptions, makeSoak } from "./soak";
@@ -117,7 +118,7 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
     const selection: Selection = projectFiles.length > 0
       ? tests.everything(`${projectFiles.map((path) => relative(root, path)).join(", ")} changed`)
       : tests.select({ changed: paths, created: [], deleted: [] } satisfies Changes);
-    return { selection, total: tests.all().length, changed: paths.length };
+    return { selection, total: tests.all().length, changed: paths };
   });
 
   const testFiles = (selection: Selection) => {
@@ -126,28 +127,56 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
     return [...new Set([...files, ...runners])].sort();
   };
 
+  // A test stage runs with bun test's junit reporter into a scratch folder, and names its failing tests from the
+  // reports there (the timing phase writes one beside it per file, wisp:scripts/wisp/testRunner.ts).
+  const withFailures = (command: (reporter: readonly string[]) => readonly string[], env: Readonly<Record<string, string>> | undefined) => Effect.acquireUseRelease(
+    Effect.sync(() => mkdtempSync(join(tmpdir(), "wisp-ci-junit-"))),
+    (directory) => Effect.gen(function*() {
+      const code = yield* exitCodeOf(command(["--reporter=junit", `--reporter-outfile=${join(directory, "junit.xml")}`]), { ...env });
+      const failed = readdirSync(directory).filter((file) => file.endsWith(".xml")).sort().flatMap((file) => junitFailures(readFileSync(join(directory, file), "utf8")));
+      return { verdict: verdictOf(code), ...(failed.length === 0 ? {} : { failed }) };
+    }),
+    (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+  );
+
   const runTests = (files: readonly string[] | undefined) => {
     const paths = (files ?? []).map((path) => `./${relative(root, path)}`);
     const env = files === undefined ? project.tests.env : project.tests.envForFiles?.(files) ?? project.tests.env;
-    return exitCodeOf([process.execPath, "run", "test", ...paths], { ...env }).pipe(Effect.map((code) => ({ verdict: verdictOf(code) })));
+    return withFailures((reporter) => [process.execPath, "run", "test", ...paths, ...reporter], env)
+      .pipe(Effect.map(({ verdict, failed }) => ({ verdict, ...(failed === undefined ? {} : { detail: { failed } }) })));
   };
 
-  const preMergeTests = (base: string) => timed("tests", Effect.gen(function*() {
+  const preMergeSelection = (base: string) => Effect.gen(function*() {
     const { selection, total, changed } = yield* affected(base);
     const files = testFiles(selection);
-    const scope = selection.full === undefined ? `${files.length} of ${total} test files affected by ${changed} changed files` : `all ${files.length} of ${total} test files: ${selection.full}`;
+    const scope = selection.full === undefined ? `${files.length} of ${total} test files affected by ${changed.length} changed files` : `all ${files.length} of ${total} test files: ${selection.full}`;
+    const reasons = Object.fromEntries(files.map((path) => [relative(root, path), selection.full ?? selection.reasons?.get(path) ?? "runs the registry's tests"]));
+    return { files, total, changed, scope, reasons };
+  });
+
+  const preMergeTests = (base: string) => timed("tests", Effect.gen(function*() {
+    const { files, total, scope } = yield* preMergeSelection(base);
     yield* say(`tests: ${scope} since ${base}`);
     const detail = { selected: files.length, total };
     if (files.length === 0) return { verdict: "passed" as const, detail };
-    return { ...(yield* runTests(files)), detail };
+    const ran = yield* runTests(files);
+    return { verdict: ran.verdict, detail: { ...detail, ...ran.detail } };
   }));
+
+  // --plan-only: pre-merge's test selection and why each file is in it, with no stage run.
+  const preMergePlan = (base: string) => Effect.gen(function*() {
+    const { files, total, changed, scope, reasons } = yield* preMergeSelection(base);
+    for (const path of files) yield* say(relative(root, path));
+    yield* say(`tests: ${scope} since ${base}`);
+    if (json) yield* emitJson("ci", { type: "plan", base, selected: files.map((path) => relative(root, path)), total, changed: changed.map((path) => relative(root, path)), reasons });
+  });
 
   const farmTests = timed("farm tests", Effect.gen(function*() {
     const files = plan().all().filter((unit) => unit.kind === "file" && readFileSync(unit.path, "utf8").includes("farmTest(")).map((unit) => `./${relative(root, unit.path)}`);
     yield* say(`farm tests: ${files.length} files`);
     if (files.length === 0) return { verdict: "passed" as const, detail: { files: 0 } };
-    const code = yield* exitCodeOf([process.execPath, "test", "--timeout", String(FARM_TEST_TIMEOUT_MS), "--preload", TEST_COST_PRELOAD, "-t", FARM_TEST_PREFIX, ...files], { ...project.tests.env });
-    return { verdict: verdictOf(code), detail: { files: files.length } };
+    const ran = yield* withFailures((reporter) => [process.execPath, "test", "--timeout", String(FARM_TEST_TIMEOUT_MS), "--preload", TEST_COST_PRELOAD, ...reporter, "-t", FARM_TEST_PREFIX, ...files], project.tests.env);
+    return { verdict: ran.verdict, detail: { files: files.length, ...(ran.failed === undefined ? {} : { failed: ran.failed }) } };
   }));
 
   const soakProject = (soak: SoakCommandOptions) => Effect.tryPromise({ try: () => loadSoakProject(soak.project), catch: (cause) => ciFailure(`loading the soak: ${describeCause(cause)}`) });
@@ -169,24 +198,28 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
       })));
       const replies = yield* Effect.forEach(output.split("\n").filter((line) => line !== ""), (line) => Effect.try({ try: () => readSoakReply(line), catch: (cause) => ciFailure(`a soak worker's reply: ${describeCause(cause)}`) }));
       const problems: string[] = [];
+      const failing = new Set<SoakMatch>();
       for (const match of matches) {
         const reply = replies.find((each) => each.match.index === match.index);
         if (reply === undefined) problems.push(`seed ${match.seed}: no reply`);
         for (const finding of reply?.findings ?? []) if (finding.kind !== "unfinished") problems.push(`seed ${match.seed}: ${finding.kind} after frame ${finding.frame}: ${finding.text.split("\n")[0]}`);
+        if (reply === undefined || reply.findings.some((finding) => finding.kind !== "unfinished")) failing.add(match);
       }
-      return { mode, replies, problems, seconds: (performance.now() - from) / 1000 };
+      return { mode, replies, problems, failing, seconds: (performance.now() - from) / 1000 };
     });
     const [first, second] = yield* Effect.all(LUA_MODES.map(play), { concurrency: "unbounded" });
     if (first === undefined || second === undefined) return;
-    const disagreements = matches.flatMap((match) => {
+    const disagreeing = matches.filter((match) => {
       const one = first.replies.find((reply) => reply.match.index === match.index)?.checksums.join(" ");
       const other = second.replies.find((reply) => reply.match.index === match.index)?.checksums.join(" ");
-      return one === other ? [] : [`seed ${match.seed}: native call checksums differ between LUA and TOWARD_ZERO_LUA`];
+      return one !== other;
     });
+    const disagreements = disagreeing.map((match) => `seed ${match.seed}: native call checksums differ between LUA and TOWARD_ZERO_LUA`);
     for (const run of [first, second]) {
       const problems = [...run.problems, ...disagreements];
       for (const problem of problems) yield* say(`determinism ${run.mode.name}: ${problem}`);
-      yield* record({ name: `determinism ${run.mode.name}`, verdict: problems.length === 0 ? "passed" : "failed", seconds: run.seconds, detail: { seeds: matches.map((match) => match.seed), frames: DETERMINISM_FRAMES } });
+      const failed = matches.filter((match) => run.failing.has(match) || disagreeing.includes(match)).map(describeMatch);
+      yield* record({ name: `determinism ${run.mode.name}`, verdict: problems.length === 0 ? "passed" : "failed", seconds: run.seconds, detail: { seeds: matches.map((match) => match.seed), frames: DETERMINISM_FRAMES, ...(failed.length === 0 ? {} : { failed }) } });
     }
   }).pipe(Effect.catch((failure) => Effect.gen(function*() {
     yield* say(`determinism: ${describeCause(failure)}`);
@@ -198,7 +231,7 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
   const soakSeeds = (soak: SoakCommandOptions, stage: string, matches: number, firstSeed: number, minutes: number, nightly: boolean) => timed(stage, Effect.gen(function*() {
     const soaked = yield* soakProject(soak);
     const deadline = performance.now() + minutes * 60_000;
-    const failed = new Map<string, { readonly seed?: number; readonly repro?: string; readonly findings: string[] }>();
+    const failed = new Map<string, { readonly seed?: number; readonly name: string; readonly repro?: string; readonly findings: string[] }>();
     const seeds: number[] = [];
     let played = 0;
     // Nightly plays batches of new random seeds until its minutes are up; seeds plays one batch.
@@ -221,7 +254,10 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
       const limited = (each: (typeof records)[number]) => nightly && each.match === undefined && each.message?.startsWith("stopped at the ") === true;
       for (const failure of records.filter((each) => each.type === "failure" && !limited(each))) {
         const key = failure.match === undefined ? `run from seed ${seed}` : `match ${failure.match.index} from seed ${seed}`;
-        const entry = failed.get(key) ?? { ...(failure.match === undefined ? {} : { seed: failure.match.seed }), ...(failure.repro === undefined ? {} : { repro: failure.repro }), findings: [] };
+        const index = failure.match?.index;
+        const planned = index === undefined ? undefined : planSoak(soaked.roster, index + 1, seed, soaked.frames).find((match) => match.index === index);
+        const name = planned === undefined ? key : describeMatch(planned);
+        const entry = failed.get(key) ?? { ...(failure.match === undefined ? {} : { seed: failure.match.seed }), name, ...(failure.repro === undefined ? {} : { repro: failure.repro }), findings: [] };
         entry.findings.push(`${failure.kind ?? "failure"}: ${failure.message ?? ""}`);
         failed.set(key, entry);
       }
@@ -250,7 +286,7 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
       repros.push(entry.repro);
       yield* say(`  replay: ${replay}\n  issue: ${issue}`);
     }
-    return { verdict: failed.size === 0 && played > 0 ? "passed" as const : "failed" as const, detail: { seeds, matches: played, failures: failed.size, repros } };
+    return { verdict: failed.size === 0 && played > 0 ? "passed" as const : "failed" as const, detail: { seeds, matches: played, failures: failed.size, repros, ...(failed.size === 0 ? {} : { failed: [...failed.values()].map((entry) => entry.name) }) } };
   }));
 
   const needSoak = (name: string) => project.soak === undefined ? Effect.fail(new UsageFailure({ problem: `ci ${name} plays the soak, and this project declares none` })) : Effect.succeed(project.soak);
@@ -263,9 +299,10 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
 
   switch (tier) {
     case "pre-merge": {
-      yield* known(["base"]);
+      yield* known(["base", "plan-only"]);
       const [base] = flagValues(args, "base");
       if (base === undefined) return yield* new UsageFailure({ problem: "ci pre-merge takes --base SHA" });
+      if (args.includes("--plan-only")) return yield* preMergePlan(base);
       yield* typeCheck;
       yield* preMergeTests(base);
       if (project.soak !== undefined) yield* determinism(project.soak);
@@ -292,7 +329,7 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
       break;
     }
     default:
-      return yield* new UsageFailure({ problem: "ci takes pre-merge --base SHA | post-merge | nightly [--minutes M] | seeds --n N [--seed S]" });
+      return yield* new UsageFailure({ problem: "ci takes pre-merge --base SHA [--plan-only] | post-merge | nightly [--minutes M] | seeds --n N [--seed S]" });
   }
 
   const count = (verdict: Verdict) => stages.filter((stage) => stage.verdict === verdict).length;

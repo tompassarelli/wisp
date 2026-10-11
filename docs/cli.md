@@ -134,6 +134,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--n N` | How many seeds to play | `ci seeds` |
 | `--seed S` | The seed a run's seeds derive from | `soak`, `ci seeds`, `net` |
 | `--dry-run` | Print the plan without touching clients | `accept`, `native remote` |
+| `--plan-only` | Print the tests the diff selects, and why, without running any stage | `ci pre-merge` |
 | `--only ID` | Only these checks; repeatable | `accept` |
 | `--repair` | Reinstall the menu page first | `online` |
 | `--app-id SLOT=ID` | A client's private desktop window, per slot | `pad` |

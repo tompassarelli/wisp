@@ -8,6 +8,7 @@ same thing. Workflows call a tier instead of restating its commands.
 
 ```sh
 bun wisp ci pre-merge --base SHA     # type check, the affected tests, determinism
+bun wisp ci pre-merge --base SHA --plan-only   # only print which tests it would run
 bun wisp ci post-merge               # type check, the whole suite, the farm tests
 bun wisp ci nightly [--minutes M]    # random soak seeds for M minutes
 bun wisp ci seeds --n N [--seed S]   # N soak seeds, or N seeds from S
@@ -17,7 +18,20 @@ Add `--json` to any tier for one JSON line per stage (`type: "result"`,
 `stage`, `verdict`, `seconds` and the stage's counts) and a last
 `type: "summary"` line, with `schema: 1` and `command: "ci"`
 (wisp:scripts/wisp/jsonResults.ts); the stages' own output then goes to
-stderr. Without it each stage prints one line when it ends:
+stderr. A stage that ran tests and had any fail adds `failed`, the failing
+tests as `file > test name` (describe blocks between), read from bun test's
+junit report: the stage passes `--reporter=junit` and a scratch
+`--reporter-outfile` to its runner, and the timing phase writes one report
+beside it per file (`junitFailures` in wisp:scripts/wisp/testRunner.ts). A
+seed stage that fails (determinism, `seeds`, `nightly`) adds `failed` as the
+failing matches' names (`match 3: a vs b on stage, policy/policy, seed N`).
+Nothing failed, or no tests run, leaves `failed` out:
+
+```json
+{"schema":1,"command":"ci","type":"result","ok":false,"stage":"tests","verdict":"failed","seconds":2.1,"selected":2,"total":2,"failed":["test/b.test.ts > b"]}
+```
+
+Without it each stage prints one line when it ends:
 
 ```text
 type check, passed, 4.7
@@ -39,7 +53,7 @@ A game declares `ci` with `makeCi` (wisp:scripts/wisp/commands/ci.ts) next to
 
 ```ts
 ci: {
-  usage: "pre-merge --base SHA | post-merge | nightly [--minutes M] | seeds --n N [--seed S]   [--json]",
+  usage: "pre-merge --base SHA [--plan-only] | post-merge | nightly [--minutes M] | seeds --n N [--seed S]   [--json]",
   load: async () => (await import("wisp/scripts/wisp/commands/ci")).makeCi({
     root: DEV.root, sources: DEV.sources, typeCheck: DEV.typeCheck, tests: DEV.tests,
     soak: SOAK,          // the options the game passes makeSoak
@@ -77,6 +91,20 @@ test files, and the soak test's map with fault-free policies
    files since SHA`; in Wisp all 50 run on every save, as `wisp dev` prints at its
    start: they read files without declaring which, or reach an `import()`
    the import graph can't follow).
+
+   `--plan-only` (pre-merge only) runs no stage: it prints the selected test
+   files, one a line, then the `tests:` line, and exits 0. With `--json` it
+   prints one line instead of results:
+
+   ```json
+   {"schema":1,"command":"ci","type":"plan","base":"SHA","selected":["test/a.test.ts"],"total":76,"changed":["src/a.ts"],"reasons":{"test/a.test.ts":"imports src/a.ts"}}
+   ```
+
+   `reasons` says why each file is selected, as `TestPlan.select` found it:
+   `changed directly`, `imports PATH`, `reads PATH` (a declared read) or
+   `runs on every save: WHY`; a whole-suite selection gives every file its
+   reason (`src/x.ts is new`). Autoland's shadow lander compares selections
+   this way without running them.
 3. **determinism LUA** and **determinism TOWARD_ZERO_LUA**: the soak's
    first 8 matches from seed 1, each capped at 600 frames, in a soak worker
    process (wisp:scripts/wisp/soakWorker.ts), once with the stock Lua32 as

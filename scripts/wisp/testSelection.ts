@@ -45,6 +45,9 @@ export interface Selection {
   readonly full?: string;
 
   readonly audits?: ReadonlyMap<string, readonly string[]>;
+
+  /** Why select chose each unit: the first changed file that reached it, or why it runs on every save. */
+  readonly reasons?: ReadonlyMap<string, string>;
 }
 
 const READS_FILES = /\b(?:readFileSync|readFile|readdirSync|readdir|Bun\.file|Bun\.Glob|sys\.readFile|createReadStream)\b/;
@@ -112,6 +115,8 @@ export class TestPlan {
     const deleted = changes.deleted[0];
     if (deleted !== undefined) return this.everything(`${this.local(deleted)} was deleted`);
     const selected = new Set<string>(this.everySave.keys());
+    const reasons = new Map<string, string>();
+    const because = (unit: string, why: string) => { if (!reasons.has(unit)) reasons.set(unit, why); };
     const read = new Map<string, string[]>();
     for (const path of changes.changed) {
       const readers = this.readers(path);
@@ -123,7 +128,10 @@ export class TestPlan {
       if (!this.graph.has(path)) continue;
       this.graph.update(path);
       if (this.preloads.has(path)) return this.everything(`every test preloads ${this.local(path)}`);
-      for (const dependent of this.graph.dependents(path)) selected.add(dependent);
+      for (const dependent of this.graph.dependents(path)) {
+        selected.add(dependent);
+        because(dependent, dependent === path ? "changed directly" : `imports ${this.local(path)}`);
+      }
     }
     this.classify();
     for (const path of this.everySave.keys()) selected.add(path);
@@ -131,8 +139,10 @@ export class TestPlan {
     for (const [reader, paths] of read) {
       if (this.perFile.has(reader) && !selected.has(reader)) audits.set(reader, paths);
       selected.add(reader);
+      because(reader, `reads ${paths.map((path) => this.local(path)).join(", ")}`);
     }
-    return { units: this.units.filter((unit) => selected.has(unit.path)), audits };
+    for (const [path, why] of this.everySave) because(path, `runs on every save: ${why}`);
+    return { units: this.units.filter((unit) => selected.has(unit.path)), audits, reasons };
   }
 
   everything(reason: string): Selection {

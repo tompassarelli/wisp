@@ -181,6 +181,31 @@ export const timingTests = (files: readonly string[], args: readonly string[], p
   return verdicts;
 });
 
+const XML_ENTITIES: Readonly<Record<string, string>> = { lt: "<", gt: ">", amp: "&", quot: "\"", apos: "'" };
+const unescapeXml = (text: string) => text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, name: string) => name.startsWith("#x") || name.startsWith("#X")
+  ? String.fromCodePoint(Number.parseInt(name.slice(2), 16))
+  : name.startsWith("#") ? String.fromCodePoint(Number(name.slice(1))) : XML_ENTITIES[name] ?? entity);
+
+/** The failing tests in a `bun test --reporter=junit` report, each as `file > test name` (describe blocks between). */
+export function junitFailures(xml: string): string[] {
+  const failures: string[] = [];
+  const suites: string[] = [];
+  let testCase: string | undefined;
+  for (const [, closing, tag, attributes = "", selfClosing] of xml.matchAll(/<(\/?)(testsuite|testcase|failure|error)\b([^>]*?)(\/?)>/g)) {
+    const attribute = (key: string) => unescapeXml(new RegExp(`\\s${key}="([^"]*)"`).exec(attributes)?.[1] ?? "");
+    if (tag === "testsuite") {
+      if (closing === "/") suites.pop();
+      else if (selfClosing === "") suites.push(attribute("name"));
+    } else if (tag === "testcase") {
+      testCase = closing === "/" || selfClosing === "/" ? undefined : [attribute("file") || suites[0] || "", ...suites.slice(1), attribute("name")].join(" > ");
+    } else if (closing === "" && testCase !== undefined) {
+      failures.push(testCase);
+      testCase = undefined;
+    }
+  }
+  return failures;
+}
+
 const CostRow = Schema.Struct({
   unit: Schema.optionalKey(Schema.String),
   tests: Schema.optionalKey(Schema.Int),

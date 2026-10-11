@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Console, Effect } from "effect";
@@ -29,7 +29,7 @@ test("[property seed 824108] command dispatch preserves value boundaries, empty 
   }
 });
 
-test("[boundary] ci pre-merge runs the type check and only the tests the diff since --base reaches, exiting 0 or 1 by their verdicts", async () => {
+test("[boundary] ci pre-merge runs the type check and only the tests the diff since --base reaches, exiting 0 or 1 by their verdicts and naming the failing tests; --plan-only runs none", async () => {
   const root = mkdtempSync(join(tmpdir(), "wisp-ci-"));
   const write = (path: string, text: string) => {
     mkdirSync(dirname(join(root, path)), { recursive: true });
@@ -39,28 +39,40 @@ test("[boundary] ci pre-merge runs the type check and only the tests the diff si
   write("src/a.ts", "export const a = 1;\n");
   write("src/b.ts", "export const b = 1;\n");
   write("test/a.test.ts", 'import { expect, test } from "bun:test";\nimport { a } from "../src/a";\ntest("a", () => expect(a).toBe(1));\n');
-  // b's test fails whenever it runs: pre-merge must leave it out until b changes.
-  write("test/b.test.ts", 'import { expect, test } from "bun:test";\nimport { b } from "../src/b";\ntest("b", () => expect(b).toBe(2));\n');
+  // b's test fails whenever it runs, and leaves a mark: pre-merge must leave it out until b changes, and --plan-only always.
+  write("test/b.test.ts", 'import { appendFileSync } from "node:fs";\nimport { expect, test } from "bun:test";\nimport { b } from "../src/b";\ntest("b", () => { appendFileSync("b-ran", ""); expect(b).toBe(2); });\n');
   const git = (...args: string[]) => expect(Bun.spawnSync(["git", "-c", "user.name=ci", "-c", "user.email=ci@example.invalid", ...args], { cwd: root }).exitCode).toBe(0);
   git("init", "-q");
   git("add", ".");
   git("commit", "-q", "-m", "base");
   const ci = makeCi({ root, sources: ["src", "test"], typeCheck: { command: ["true"] }, tests: { files: ["test/**/*.test.ts"] } });
-  const run = async () => {
+  const output = async (...flags: string[]) => {
     const lines: string[] = [];
-    const code = await Effect.runPromise(cliProgram("ci", { ci: { usage: "", load: async () => ci } }, ["ci", "pre-merge", "--base", "HEAD", "--json"], () => {}).pipe(
+    const code = await Effect.runPromise(cliProgram("ci", { ci: { usage: "", load: async () => ci } }, ["ci", "pre-merge", "--base", "HEAD", "--json", ...flags], () => {}).pipe(
       Effect.provideService(Console.Console, { ...console, log: (...text: unknown[]) => lines.push(text.join(" ")), error: () => {} }),
     ));
-    return { code, results: lines.map((line) => JSON.parse(line) as Record<string, unknown>).filter((line) => line.type === "result").map(({ stage, verdict, selected, total }) => ({ stage, verdict, selected, total })) };
+    return { code, lines: lines.map((line) => JSON.parse(line) as Record<string, unknown>) };
+  };
+  const run = async () => {
+    const { code, lines } = await output();
+    return { code, results: lines.filter((line) => line.type === "result").map(({ stage, verdict, selected, total, failed }) => ({ stage, verdict, selected, total, failed })) };
   };
   write("src/a.ts", "export const a = 1; // changed\n");
   expect(await run()).toEqual({ code: 0, results: [
-    { stage: "type check", verdict: "passed", selected: undefined, total: undefined },
-    { stage: "tests", verdict: "passed", selected: 1, total: 2 },
+    { stage: "type check", verdict: "passed", selected: undefined, total: undefined, failed: undefined },
+    { stage: "tests", verdict: "passed", selected: 1, total: 2, failed: undefined },
   ] });
   write("src/b.ts", "export const b = 1; // changed\n");
+  const plan = await output("--plan-only");
+  expect(plan.code).toBe(0);
+  expect(plan.lines.map(({ type, base, selected, total, changed, reasons }) => ({ type, base, selected, total, changed, reasons }))).toEqual([{
+    type: "plan", base: "HEAD", selected: ["test/a.test.ts", "test/b.test.ts"], total: 2, changed: ["src/a.ts", "src/b.ts"],
+    reasons: { "test/a.test.ts": "imports src/a.ts", "test/b.test.ts": "imports src/b.ts" },
+  }]);
+  expect(existsSync(join(root, "b-ran"))).toBe(false);
   expect(await run()).toEqual({ code: 1, results: [
-    { stage: "type check", verdict: "passed", selected: undefined, total: undefined },
-    { stage: "tests", verdict: "failed", selected: 2, total: 2 },
+    { stage: "type check", verdict: "passed", selected: undefined, total: undefined, failed: undefined },
+    { stage: "tests", verdict: "failed", selected: 2, total: 2, failed: ["test/b.test.ts > b"] },
   ] });
+  expect(existsSync(join(root, "b-ran"))).toBe(true);
 });

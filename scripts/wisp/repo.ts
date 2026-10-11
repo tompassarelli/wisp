@@ -10,7 +10,7 @@ runMainCli("bun wisp", {
   fidelity: { usage: "check LEVER --reference DIR --candidate DIR   (docs/fidelity.md)", load: async () => (await import("./commands/fidelity")).fidelity },
   map: { usage: "preview MAP.w3x --out IMAGE.ppm [--packager PATH] [--assets DIR]", load: async () => (await import("./commands/map")).map },
   ci: {
-    usage: "pre-merge --base SHA | post-merge | nightly [--minutes M] | seeds --n N [--seed S]   [--json]   (docs/ci-command.md)",
+    usage: "pre-merge --base SHA [--plan-only] | post-merge | nightly [--minutes M] | seeds --n N [--seed S]   [--json]   (docs/ci-command.md)",
     load: async () => (await import("./commands/ci")).makeCi({
       root,
       sources: ["scripts", "src", "test", "examples", "plugins", "native"],
