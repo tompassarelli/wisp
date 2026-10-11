@@ -100,59 +100,67 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
     ...LUA_GLOBALS,
   ];
   const global = globalThis as Record<string, unknown>;
-  const before = new Map(names.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)] as const));
   let current: HeadlessClient | undefined;
-  for (const name of names) {
-    Object.defineProperty(globalThis, name, {
-      configurable: true,
-      get: () => {
-        if (current === undefined) throw new Error(`${name} used outside a simulated client`);
-        return current.natives[name];
-      },
-
-      set: (value: unknown) => {
-        if (current === undefined) throw new Error(`${name} replaced outside a simulated client`);
-        current.natives[name] = value;
-      },
-    });
-  }
-
   const isOwnGlobal = (key: string | symbol): key is string => typeof key === "string" && prefixes.some((prefix) => key.startsWith(prefix));
-  const starting: Record<string, unknown> = {};
-  for (const key of Object.keys(globalThis).filter(isOwnGlobal)) {
-    before.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    starting[key] = global[key];
-    delete global[key];
-  }
-
   const values = new WeakMap<HeadlessClient, Record<string, unknown>>();
+  let starting: Record<string, unknown> = {};
   const valuesOf = (client: HeadlessClient) => {
     let own = values.get(client);
     if (own === undefined) values.set(client, own = { ...starting });
     return own;
   };
-  const ownNames = new Set<string>();
-  const defineOwn = (key: string) => {
-    ownNames.add(key);
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      enumerable: true,
-      get: () => (current === undefined ? undefined : valuesOf(current)[key]),
-      set: (value: unknown) => {
-        if (current === undefined) throw new Error(`${key} set outside a simulated client`);
-        valuesOf(current)[key] = value;
+  // The globals go in on the first clients() call, not at load: Bun 1.3.13 skips afterAll in a file whose tests
+  // -t filters out, so a load-time install outlives the file, and while this Proxy sits in globalThis's prototype
+  // chain Bun can't evaluate any CommonJS module ("Expected CommonJS module to have a function wrapper").
+  let installed: { readonly before: Map<string, PropertyDescriptor | undefined>; readonly ownNames: Set<string>; readonly outerPrototype: object | null } | undefined;
+  const install = () => {
+    const before = new Map(names.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)] as const));
+    for (const name of names) {
+      Object.defineProperty(globalThis, name, {
+        configurable: true,
+        get: () => {
+          if (current === undefined) throw new Error(`${name} used outside a simulated client`);
+          return current.natives[name];
+        },
+
+        set: (value: unknown) => {
+          if (current === undefined) throw new Error(`${name} replaced outside a simulated client`);
+          current.natives[name] = value;
+        },
+      });
+    }
+
+    starting = {};
+    for (const key of Object.keys(globalThis).filter(isOwnGlobal)) {
+      before.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+      starting[key] = global[key];
+      delete global[key];
+    }
+
+    const ownNames = new Set<string>();
+    const defineOwn = (key: string) => {
+      ownNames.add(key);
+      Object.defineProperty(globalThis, key, {
+        configurable: true,
+        enumerable: true,
+        get: () => (current === undefined ? undefined : valuesOf(current)[key]),
+        set: (value: unknown) => {
+          if (current === undefined) throw new Error(`${key} set outside a simulated client`);
+          valuesOf(current)[key] = value;
+        },
+      });
+    };
+    for (const key of Object.keys(starting)) defineOwn(key);
+    const outerPrototype = Object.getPrototypeOf(globalThis) as object | null;
+    Reflect.setPrototypeOf(globalThis, new Proxy(outerPrototype ?? Object.prototype, {
+      set: (target, key, value, receiver) => {
+        if (receiver !== globalThis || !isOwnGlobal(key)) return Reflect.set(target, key, value, receiver);
+        defineOwn(key);
+        return Reflect.set(globalThis, key, value);
       },
-    });
+    }));
+    installed = { before, ownNames, outerPrototype };
   };
-  for (const key of Object.keys(starting)) defineOwn(key);
-  const outerPrototype = Object.getPrototypeOf(globalThis) as object | null;
-  Reflect.setPrototypeOf(globalThis, new Proxy(outerPrototype ?? Object.prototype, {
-    set: (target, key, value, receiver) => {
-      if (receiver !== globalThis || !isOwnGlobal(key)) return Reflect.set(target, key, value, receiver);
-      defineOwn(key);
-      return Reflect.set(globalThis, key, value);
-    },
-  }));
   const scope: ClientScope = {
     enter: (client) => {
       if (current !== undefined) throw new Error(`p${client.slot} can't run inside p${current.slot}`);
@@ -177,6 +185,7 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
   return {
     modules,
     clients: (entry, players = [0, 1], options = {}) => {
+      if (installed === undefined) install();
       return new Lockstep({
         declarations,
         players,
@@ -197,6 +206,9 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
       });
     },
     restore: () => {
+      if (installed === undefined) return;
+      const { before, ownNames, outerPrototype } = installed;
+      installed = undefined;
       Reflect.setPrototypeOf(globalThis, outerPrototype);
       for (const key of ownNames) delete global[key];
       for (const [name, descriptor] of before) {

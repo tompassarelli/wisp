@@ -283,7 +283,9 @@ const result = runJourney(clients, JOURNEY);
 
 `installHeadless` makes every declared native, constant and global variable a
 global of the process that reads the running client's; call it once per test
-file and restore after. A test can also drive the `Lockstep` directly:
+file and restore after. The globals go in at the first `clients()` call, so a
+file whose tests a `-t` filter skips (and whose `afterAll` Bun then skips too)
+installs nothing. A test can also drive the `Lockstep` directly:
 `start()`, `frames(n)`, `chat(player, text)`, `press(player, key, meta)`,
 `reload()`, and `everywhere(body)` to run code, such as an `install()`, in every
 client on one frame. `client.run(body)` runs code in one client.
