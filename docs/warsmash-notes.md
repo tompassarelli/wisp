@@ -544,8 +544,8 @@ Fallback bodies (`platform/shell/view.ts`) call `SetUnitAnimation(ByIndex)`,
 then `SetUnitTimeScale`, after `SetUnitBlendTime` from object data. It calls
 no `QueueUnitAnimation`, `BlzQueueSpecialEffectAnimation` or rarity control.
 Rules live in wisp:src/headless/animation.ts, used by the headless runtime and
-the renderer; wisp:src/headless/animation.tests.ts holds one test per rule,
-run in Bun (`test/animation.test.ts`) and 32-bit Lua (`test/runtime.test.ts`).
+the renderer; wisp:src/headless/animation.tests.ts holds the rules the #58
+rulers (wisp:test/headless-animation.test.ts) leave unchecked, run in Bun (`test/animation.test.ts`) and 32-bit Lua (`test/runtime.test.ts`).
 
 | Behavior Smashcraft relies on | Warsmash rule | Wisp before #58 | Verdict |
 | --- | --- | --- | --- |

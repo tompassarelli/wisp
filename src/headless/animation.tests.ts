@@ -1,6 +1,5 @@
 import { assertEquals, assertTrue, test } from "../runtime/testing";
-import { f32 } from "../sim/f32";
-import { advanceAnimation, type AnimationSequence, animationSample, blendWeight, freshAnimation, seekAnimation, selectAnimation, sequenceFrame } from "./animation";
+import { advanceAnimation, type AnimationSequence, animationSample, blendWeight, freshAnimation, selectAnimation } from "./animation";
 
 function same(actual: readonly unknown[], expected: readonly unknown[], message = ""): void {
   assertEquals(actual.length, expected.length, `${message} length`);
@@ -20,31 +19,6 @@ const MODEL = [
   sequence("Birth", 6000, 6500, false),
   sequence("Death", 7000, 8000, false),
 ];
-
-// Effect selection and seek in one callback show the restarted clock; later seeks persist.
-
-test("animation: [native #58] an effect selection resets a same-frame seek on the next drawn frame", () => {
-  for (const frozenBefore of [false, true]) {
-    const state = freshAnimation();
-    advanceAnimation(state, 1, 0.5);
-    if (frozenBefore) advanceAnimation(state, 0, 0.5);
-    selectAnimation(state, "walk", undefined, true);
-    seekAnimation(state, 0.25);
-    advanceAnimation(state, 0, 1 / 60);
-    assertEquals(state.animationElapsed, 0, "the pending selection restarts after the callback's seek");
-    seekAnimation(state, f32(0.4));
-    advanceAnimation(state, 0, 1 / 60);
-    assertEquals(state.animationElapsed, f32(0.4), "a seek after the selection was drawn persists while frozen");
-  }
-});
-
-// Looping playback keeps overshoot; dropping each lap's overshoot accumulates drift.
-
-test("animation: a looping sequence wraps by its length, keeping the overshoot", () => {
-  const loop = sequence("Stand", 1000, 1101);
-  same([25, 100, 101, 225, 4500].map((ms) => sequenceFrame(loop, ms)), [1025, 1100, 1000, 1023, 1056]);
-  assertEquals(sequenceFrame(loop, 150), 1049, "a seek past the end wraps too");
-});
 
 test("animation: an effect never told what to play shows Birth once, then Stand looping; a unit shows Stand", () => {
   const playing = (seconds: number) => ({ animation: undefined, subAnimations: [], elapsed: seconds });

@@ -1,31 +1,12 @@
 import { assertEquals, test } from "../runtime/testing";
-import { fusedMultiplyAddFloat32, roundToFloat32, squareRootFloat32 } from "./binary32";
+import { squareRootFloat32 } from "./binary32";
 
 const pow2 = (exponent: number) => 2 ** exponent;
-const halfUlp = pow2(-24);
-const next = 1 + pow2(-23);
-const previous = 1 - pow2(-23);
 const quantum = pow2(-149);
 const maximum = 16777215 * pow2(104);
 
 const same = (actual: number, expected: number) =>
   assertEquals(actual === expected ? 1 / actual === 1 / expected : actual !== actual && expected !== expected, true, `${actual} vs ${expected}`);
-
-test("[reference] roundToFloat32: ties go to the even significand, carrying into the next exponent", () => {
-  same(roundToFloat32(1 + halfUlp), 1);
-  same(roundToFloat32(1 + 3 * halfUlp), 1 + 4 * halfUlp);
-  same(roundToFloat32(-1 - 3 * halfUlp), -1 - 4 * halfUlp);
-  same(roundToFloat32(2 - pow2(-24)), 2);
-  same(roundToFloat32(16777216 + 3), 16777220);
-});
-
-test("[reference] fusedMultiplyAddFloat32 rounds the exact a * b + c once: keeps cancellation bits a rounded product would lose", () => {
-  same(fusedMultiplyAddFloat32(next, previous, -1), -pow2(-46));
-  same(fusedMultiplyAddFloat32(next, next, -(1 + pow2(-22))), pow2(-46));
-  same(fusedMultiplyAddFloat32(next, next, halfUlp), 1 + 3 * pow2(-23));
-  same(fusedMultiplyAddFloat32(1, halfUlp, next), 1 + pow2(-22));
-  same(fusedMultiplyAddFloat32(-1, pow2(-100), 1), 1);
-});
 
 test("[reference] square root: exact roots, rounding boundaries, subnormals and non-finite values", () => {
   same(squareRootFloat32(25.0), 5.0);

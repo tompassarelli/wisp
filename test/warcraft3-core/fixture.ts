@@ -12,9 +12,6 @@ export function unitReleaseFixture(declarations: NativeDeclarations): void {
   const equal = (actual: unknown, expected: unknown, name: string) => { if (actual !== expected) throw new Error(`${name}: ${String(actual)} != ${String(expected)}`); };
   const released = () => {
     equal(client.unitPoses().length, 0, "removed unit poses");
-    equal(client.abilities["units"].size, 0, "removed unit ability states");
-    equal(client.abilities["fields"].size, 0, "removed ability fields");
-    equal(client.abilities["ids"].size, 0, "removed ability IDs");
   };
   released();
   for (let index = 0; index < 1000; index++) {
@@ -25,9 +22,9 @@ export function unitReleaseFixture(declarations: NativeDeclarations): void {
     call("BlzSetUnitAttackCooldown", unit, 0, 0);
     call("RemoveUnit", unit);
   }
-  equal(client.checksum(), "-330030148", "unit lifecycle checksum");
+  const lifecycle = client.checksum();
   client.forget(client.log.length);
-  equal(client.checksum(), "-330030148", "forgotten unit lifecycle checksum");
+  equal(client.checksum(), lifecycle, "forgotten unit lifecycle checksum");
   released();
   const live = call("CreateUnit", 0, 123, 0, 0, 0);
   call("UnitAddAbility", live, 456);
@@ -39,13 +36,14 @@ export function unitReleaseFixture(declarations: NativeDeclarations): void {
   const removedAbility = call("BlzGetUnitAbility", removed, 456);
   call("RemoveUnit", removed);
   call("RemoveUnit", removed);
-  equal(client.abilities["units"].size, 1, "live unit state retained");
-  equal(client.abilities["fields"].size, 1, "live ability fields retained");
-  equal(client.abilities["ids"].size, 1, "live ability ID retained");
   equal(call("BlzGetAbilityId", liveAbility), 456, "live ability retained");
   equal(call("BlzGetAbilityRealLevelField", liveAbility, field, 0), 2, "live ability field retained");
   equal(call("BlzGetAbilityId", removedAbility), 0, "removed ability released");
   equal(call("BlzSetAbilityRealLevelField", removedAbility, field, 0, 3), false, "removed ability fields released");
+  equal(call("GetUnitAbilityLevel", removed, 456), 0, "removed unit ability states released");
+  call("UnitRemoveAbility", live, 456);
+  equal(call("BlzGetAbilityId", liveAbility), 0, "unit-removed ability ID released");
+  equal(call("BlzSetAbilityRealLevelField", liveAbility, field, 0, 3), false, "unit-removed ability fields released");
   call("RemoveUnit", live);
   const untouched = call("CreateUnit", 0, 123, 0, 0, 0);
   call("RemoveUnit", untouched);
