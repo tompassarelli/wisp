@@ -30,6 +30,7 @@ export const retryWhileDeferred = <A, E, R, E2>(
   const retrying = (failure: E | CapacityDeferred): failure is CapacityDeferred => failure instanceof CapacityDeferred && Date.now() < deadline;
   return attempt.pipe(
     Effect.tapError((failure) => (retrying(failure) ? Console.log(`${waiting(failure.reason)}; trying again in 45 s`) : Effect.void)),
+    // Not a poll: it retries an attempt the capacity helper deferred.
     Effect.retry({ schedule: Schedule.spaced("45 seconds"), while: retrying }),
     Effect.catchIf((failure): failure is CapacityDeferred => failure instanceof CapacityDeferred, (failure) => Effect.fail(exhausted(failure.reason))),
   ) as Effect.Effect<A, Exclude<E, CapacityDeferred> | E2, R>;

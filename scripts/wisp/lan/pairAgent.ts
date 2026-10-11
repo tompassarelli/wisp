@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { basename, join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { Cause, Duration, Effect, Exit, Fiber, FiberSet, Layer, Option, Schedule, Schema, Scope } from "effect";
+import { Cause, Duration, Effect, Exit, Fiber, FiberSet, Layer, Option, Schema, Scope } from "effect";
 import { platformLayer, runPlatformSync } from "../../platform/layer";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { AudioIsolation, GameLauncher, InputInjection, ProcessTable } from "../../platform/services";
@@ -106,7 +106,7 @@ const agent = Effect.gen(function*() {
       const placed = yield* placer.value(client.env, "Warcraft III", { x: client.windowX, y: 0, width: profile.width, height: profile.height });
       for (let window = 0; window < placed; window++) say(`placed ${client.name}'s window at ${client.windowX},0, ${profile.width}x${profile.height}`);
     }), { discard: true });
-    yield* Effect.forkScoped(Effect.repeat(placeWindows, Schedule.spaced("3 seconds")));
+    yield* Effect.forkScoped(pollUntil(placeWindows, { every: "3 seconds" }));
   }
 
   const reports = new Map<string, MenuReports>();
@@ -283,7 +283,7 @@ const agent = Effect.gen(function*() {
   const sessionPid = wholeFlag(process.argv, "session-pid", { fallback: 0 });
   if (sessionPid instanceof UsageFailure) return yield* sessionPid;
   if (sessionPid <= 0) return yield* Effect.never;
-  yield* Effect.sync(() => alive(sessionPid)).pipe(Effect.repeat({ schedule: Schedule.spaced("2 seconds"), while: (running) => running }));
+  yield* pollUntil(Effect.sync(() => alive(sessionPid)), { until: (running) => !running, every: "2 seconds" });
   say(`stopping: the pair session ${sessionPid} ended`);
 }).pipe(Effect.onInterrupt(() => Effect.sync(() => say("stopping: asked to"))));
 

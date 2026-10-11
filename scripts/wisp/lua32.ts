@@ -69,6 +69,7 @@ const buildLock = (lock: string) => Effect.acquireRelease(
     }
     if (!alive) rmSync(lock, { force: true });
     return Effect.fail(new LockHeld({ path: lock }));
+  // Not a poll: it retries taking the build lock while another process holds it.
   }).pipe(Effect.retry({ while: (error) => error._tag === "LockHeld", schedule: Schedule.spaced("200 millis"), times: 6000 })),
   () => Effect.sync(() => rmSync(lock, { force: true })),
 );

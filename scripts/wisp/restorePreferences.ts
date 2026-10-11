@@ -1,7 +1,8 @@
 import { alive, preferencesBackupPath, preferencesPath, restorePreferences } from "../warcraft/preferences";
 
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
-import { Effect, Runtime, Schedule, Schema } from "effect";
+import { Effect, Runtime, Schema } from "effect";
+import { pollUntil } from "./hostProcess";
 
 class PreferencesFailure extends Schema.TaggedError<PreferencesFailure>()("PreferencesFailure", { cause: Schema.Unknown }) {
   override get message() { return String(this.cause); }
@@ -20,7 +21,7 @@ if (import.meta.main) {
     const [pid, documents] = args;
     if (alive(pid)) {
       console.log(`waiting for process ${pid}`);
-      yield* Effect.sync(() => alive(pid)).pipe(Effect.repeat({ schedule: Schedule.spaced("1 second"), until: running => !running }));
+      yield* pollUntil(Effect.sync(() => alive(pid)), { until: running => !running, every: "1 second" });
     }
     const restored = yield* Effect.tryPromise({
       try: () => restorePreferences(preferencesBackupPath(documents), preferencesPath(documents)),

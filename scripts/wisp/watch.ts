@@ -1,7 +1,7 @@
 import { readdirSync, statSync } from "node:fs";
 import { readTextOrUndefined } from "./files";
 import { join } from "node:path";
-import { Clock, Context, Effect, Layer, Schedule, Schema } from "effect";
+import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { ackFile } from "../../src/runtime/gameFiles";
 import { type PrefixUse, type ProcessInfo, prefixUse } from "../warcraft/battleNet";
 import { ProcessTable } from "../platform/services";
@@ -11,6 +11,7 @@ import { dataDirectory } from "./gameFiles";
 import { type MenuEvent, connectMenus, keptAddress, menuAddress } from "./menus";
 import { pairClients, readPool } from "./lan/pool";
 import { describeCause } from "./command";
+import { pollUntil } from "./hostProcess";
 
 export type Source = "socket" | "log" | "receipt" | "process" | "lan";
 
@@ -107,13 +108,12 @@ export const waitFor = (client: Client, predicate: (view: ClientView) => boolean
     if (failOn.includes(view.state.kind)) return Effect.fail(new WatchFailure({ client: client.name, operation: `wait for ${what}`, problem: describeView(view) }));
     return Effect.succeed(false);
   }));
-  const waited = look.pipe(Effect.repeat({ schedule: Schedule.spaced(POLL), until: (done) => done }));
   if (Number.isFinite(seconds)) {
-    yield* waited.pipe(Effect.timeoutOrElse({
-      duration: `${seconds} seconds`,
-      orElse: () => Effect.fail(new WatchFailure({ client: client.name, operation: `wait for ${what}`, problem: `not within ${seconds} s; last ${last === undefined ? "no view" : describeView(last)}` })),
-    }));
-  } else yield* waited;
+    yield* pollUntil(look, {
+      until: (done) => done, every: POLL, within: `${seconds} seconds`,
+      onTimeout: () => Effect.fail(new WatchFailure({ client: client.name, operation: `wait for ${what}`, problem: `not within ${seconds} s; last ${last === undefined ? "no view" : describeView(last)}` })),
+    });
+  } else yield* pollUntil(look, { until: (done) => done, every: POLL });
   return last!;
 });
 

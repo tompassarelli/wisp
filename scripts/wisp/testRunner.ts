@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { Cause, Effect, Exit, Fiber, Layer, Ref, Schedule, Schema } from "effect";
+import { Cause, Effect, Exit, Fiber, Layer, Ref, Schema } from "effect";
 import { capacityHelper } from "./gpuLease";
 import { pollUntil } from "./hostProcess";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -50,7 +50,7 @@ export const withPressure = <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.ge
   const first = yield* readPressure;
   const peak = yield* Ref.make(first?.avg10);
   const note = (reading: Reading | undefined) => Ref.update(peak, (highest) => reading === undefined ? highest : Math.max(highest ?? 0, reading.avg10));
-  const sampler = yield* Effect.forkChild(readPressure.pipe(Effect.flatMap(note), Effect.repeat(Schedule.spaced("500 millis"))));
+  const sampler = yield* Effect.forkChild(pollUntil(readPressure.pipe(Effect.flatMap(note)), { every: "500 millis" }));
   const value = yield* work;
   yield* Fiber.interrupt(sampler);
   const last = yield* readPressure;

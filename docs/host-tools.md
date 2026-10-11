@@ -24,8 +24,10 @@ Effect's own pieces. Four rules:
    Don't add `process.on("SIGTERM")` handlers or call `process.exit` from
    inside a program.
 3. **Waits and retries use `Schedule` with a deadline.** Poll with
-   `Effect.repeat({ schedule: Schedule.spaced(...), until })` and bound it
-   with `Effect.timeout`, `Effect.timeoutOption` or `Effect.timeoutOrElse`.
+   `pollUntil(check, { until, every, within, onTimeout })`
+   (wisp:scripts/wisp/hostProcess.ts), or `pollFor` when the check returns
+   `undefined` until it is done; leave out `within` only for a wait that ends
+   by interruption or by its `until`.
    Retry only failures that can recover, with `Effect.retry({ schedule,
    while })`, bounded by `Schedule.upTo` or `times`.
 4. **Outside data is decoded, and failures are tagged.** Read files, replies
@@ -58,7 +60,7 @@ inline in a host tool.
   the pool otherwise. Readiness is polled under `Effect.timeoutOrElse`, and
   deferrals are retried every 45 s within `--wait`.
 - wisp:scripts/wisp/watch.ts (`lanObservation`, `waitFor`): a 3 s timeout
-  with one retry, reported as a `WatchFailure`, and a `Schedule.spaced` poll
+  with one retry, reported as a `WatchFailure`, and a `pollUntil` poll
   under a deadline.
 - wisp:scripts/wisp/lan/host.ts (`startHost`): the caller's scope holds the
   TCP listener and turn fibers; a child scope closes UDP discovery when the

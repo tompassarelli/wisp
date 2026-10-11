@@ -52,6 +52,7 @@ export const freshMatch = ({ map, folder, filePrefix = "wisp" }: FreshMatchOptio
   const host = (client: Client) => hostLobby(page(client), { folder, file: basename(map), gameName: game, password }).pipe(step(`${client.name} hosting "${game}"`));
 
   const joinGame = (client: Client) => joinLobby(page(client), game, password, 10).pipe(
+    // Not a poll: it retries a failed join twice.
     Effect.retry({ times: 2, schedule: Schedule.spaced("2 seconds") }),
     step(`${client.name} joined`),
   );

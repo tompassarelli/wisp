@@ -1,6 +1,6 @@
 import { chmodSync, copyFileSync, renameSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { Duration, Effect, Exit, Fiber, FileSystem, Option, Schedule, Schema, Scope, Stream } from "effect";
+import { Duration, Effect, Exit, Fiber, FileSystem, Schedule, Schema, Scope, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 export function describeCause(cause: unknown): string {
@@ -52,24 +52,29 @@ export const collect = (command: ChildProcess.Command) => Effect.scoped(Effect.g
   return { exitCode, stdout, stderr } satisfies Collected;
 }));
 
-/** Runs `check` every `every` until `until` holds; after `within` it stops and runs `onTimeout` instead. */
-export const pollUntil = <A, E, R, A2, E2, R2>(check: Effect.Effect<A, E, R>, options: {
-  readonly until: (value: A) => boolean;
+interface Poll<A> {
+  readonly until?: (value: A) => boolean;
   readonly every: Duration.Input;
+}
+
+/** Runs `check` every `every` until `until` holds, or until interrupted without one; after `within` it stops and runs `onTimeout` instead. */
+export function pollUntil<A, E, R>(check: Effect.Effect<A, E, R>, options: Poll<A>): Effect.Effect<A, E, R>;
+export function pollUntil<A, E, R, A2, E2, R2>(check: Effect.Effect<A, E, R>, options: Poll<A> & {
   readonly within: Duration.Input;
   readonly onTimeout: () => Effect.Effect<A2, E2, R2>;
-}): Effect.Effect<A | A2, E | E2, R | R2> =>
-  check.pipe(
-    Effect.repeat({ schedule: Schedule.spaced(options.every), until: options.until }),
-    Effect.timeoutOrElse({ duration: options.within, orElse: options.onTimeout }),
-  );
+}): Effect.Effect<A | A2, E | E2, R | R2>;
+export function pollUntil<A, E, R, A2, E2, R2>(check: Effect.Effect<A, E, R>, options: Poll<A> & {
+  readonly within?: Duration.Input;
+  readonly onTimeout?: () => Effect.Effect<A2, E2, R2>;
+}): Effect.Effect<A | A2, E | E2, R | R2> {
+  // Not a copy: this is the one poll that every wait in scripts/ goes through.
+  const polled = check.pipe(Effect.repeat({ schedule: Schedule.spaced(options.every), ...(options.until === undefined ? {} : { until: options.until }) }));
+  return options.within === undefined || options.onTimeout === undefined ? polled : polled.pipe(Effect.timeoutOrElse({ duration: options.within, orElse: options.onTimeout }));
+}
 
 export const pollFor = <A, E, R>(seconds: number, every: Duration.Input, check: Effect.Effect<A | undefined, E, R>): Effect.Effect<A | undefined, E, R> =>
-  check.pipe(
-    Effect.repeat({ schedule: Schedule.spaced(every), until: (value) => value !== undefined }),
-    Effect.timeoutOption(Duration.seconds(seconds)),
-    Effect.map(Option.getOrUndefined),
-  );
+  // @effect-diagnostics-next-line effectSucceedWithVoid:off -- an undefined result, which Effect.void's void type cannot satisfy
+  pollUntil(check, { until: (value) => value !== undefined, every, within: Duration.seconds(seconds), onTimeout: () => Effect.succeed(undefined) });
 
 export class MapBuildFailure extends Schema.TaggedError<MapBuildFailure>()("MapBuildFailure", {
   operation: Schema.String,

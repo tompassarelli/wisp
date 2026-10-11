@@ -39,6 +39,7 @@ export const RATE_LIMITED = /rate limit|HTTP 429|abuse detection/i;
 
 export const run = (argv: readonly string[], inherit = false, cwd?: string) => argv[0] !== "gh" ? runOnce(argv, inherit, cwd) : runOnce(argv, inherit, cwd).pipe(
   Effect.tapError((failure) => RATE_LIMITED.test(failure.message) ? Effect.sync(() => console.error(`GitHub is rate-limiting requests; retrying ${argv.slice(0, 3).join(" ")} with backoff`)) : Effect.void),
+  // Not a poll: it retries a failed gh call, backing off while GitHub rate-limits.
   Effect.retry({ while: (failure) => RATE_LIMITED.test(failure.message), schedule: Schedule.min([Schedule.exponential("30 seconds"), Schedule.spaced("5 minutes")]).pipe(Schedule.jittered, Schedule.upTo({ duration: "65 minutes" })) }),
 );
 
