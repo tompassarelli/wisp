@@ -1179,9 +1179,14 @@ Measured at 800x600 on 3.0.0.24268 (11 October 2026): scale multiplies a
 frame's size and its relative-point offsets, and the scaled frame's children
 inherit it (size and offsets). An absolute point is not scaled: the frame
 grows from that point (TOPLEFT stays put, CENTER stays centred). Frames
-wholly outside x 0..0.8 are not drawn at 4:3. The 1280x720 capture, which
-decides whether `GAME_UI` children outside 0..0.8 draw on a wide screen, is
-still to be taken.
+wholly outside x 0..0.8 are not drawn at 4:3.
+
+Measured at 1280x720 (client area 1276x716, the visual profile): the UI is
+the 4:3 area centred on the screen, one UI unit being 716/0.6 px and x 0
+falling at (1276 - 0.8 × 716/0.6) / 2 = 160.7 px; every drawn box lands
+there to the pixel. The `GAME_UI` children at x -0.05 and 0.82 would sit on
+screen (at 101 px and 1139 px) and are still not drawn: a `GAME_UI` child
+outside x 0..0.8 is not drawn on a wide screen either.
 
 ## Warcraft 3.0 natives
 
