@@ -1,5 +1,3 @@
-import { longBrackets } from "./lua";
-
 export interface MapDeclaration {
   readonly author: string;
   readonly description: string;
@@ -274,4 +272,10 @@ export function mapConfig(info: MapInfo): string {
   }
   for (const index of info.players.keys()) lines.push(`SetStartLocPrioCount(${index}, 0)`, `SetEnemyStartLocPrioCount(${index}, 0)`);
   return `function mapConfig()\n${lines.map((line) => `    ${line}\n`).join("")}end\n`;
+}
+
+export function longBrackets(text: string): [open: string, close: string] {
+  let level = "";
+  while (text.includes(`]${level}]`)) level += "=";
+  return [`[${level}[`, `]${level}]`];
 }

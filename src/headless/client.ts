@@ -1,7 +1,6 @@
 import { errorFile, FILE_IO_ABILITY } from "../runtime/gameFiles";
 import { addFloat32, addFloat32TowardZero, divideFloat32, multiplyFloat32TowardZero, roundToFloat32, subtractFloat32, subtractFloat32TowardZero } from "../sim/binary32";
 import { f32 } from "../sim/f32";
-import { steppedFrames } from "./frameCount";
 import { advanceAnimation, type AnimationBlend, type AnimationState, freshAnimation, seekAnimation, selectAnimation, settleAnimation } from "./animation";
 import type { FrameTemplate } from "./frames";
 import type { NativeDeclarations } from "./declarations";
@@ -12,7 +11,7 @@ import { Scenery, type SceneryFixtures } from "./warcraft3Scenery";
 import { TextTags } from "./textTags";
 import { Lightnings } from "./lightnings";
 import { Warcraft3Inventory, type Warcraft3InventoryFixtures } from "./warcraft3Inventory";
-import { FRAMES_PER_SECOND } from "./frameRate";
+import { FRAMES_PER_SECOND, steppedFrames } from "./frameRate";
 
 export type Handle = { readonly kind: string; readonly id: number };
 

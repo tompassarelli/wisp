@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { Effect, Schema, SchemaIssue } from "effect";
 import { FILE_IO_ABILITY, FILE_SLOTS } from "../../src/runtime/gameFiles";
-import { longBrackets } from "../lua";
+import { longBrackets } from "../mapInfo";
 
 export class MalformedGameFile extends Schema.TaggedError<MalformedGameFile>()("MalformedGameFile", {
   file: Schema.String,

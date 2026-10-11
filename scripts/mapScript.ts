@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { payloadKey } from "../src/runtime/gameFiles";
 import { checksum } from "../src/runtime/payload";
-import { longBrackets } from "./lua";
+import { longBrackets } from "./mapInfo";
 import { keepSourceMap } from "./sourceMaps";
 
 export interface Bundle {
