@@ -232,15 +232,18 @@ const agent = Effect.gen(function*() {
   const handle = (request: Request) => Effect.gen(function*() {
     const url = new URL(request.url);
     if (url.pathname === "/status") {
+      const running = yield* Effect.forEach(clients, ({ name }) => gamePid(name).pipe(Effect.map((pid) => ({ name, pid, documents: documentsOf(name) }))));
+      const status = game === undefined ? undefined : game.host.status();
+      const playing = status !== undefined && status.phase !== "lobby" && status.phase !== "over";
       return Response.json({
         pair,
         profile: profile.name,
         fps: profile.maxFps,
-        clients: yield* Effect.forEach(clients, ({ name }) => gamePid(name).pipe(Effect.map((pid) => ({ name, pid, documents: documentsOf(name) })))),
-        game: game === undefined ? undefined : { id: game.id, log: game.log, map: game.map, ...game.host.status() },
+        clients: running,
+        game: game === undefined ? undefined : { id: game.id, log: game.log, map: game.map, ...status },
         driver,
         idle: driverVerdict(driver, Date.now()).idle,
-        ...idleness(started, ended, driver, Date.now()),
+        ...idleness(started, ended, driver, playing, running.filter(({ pid }) => pid === undefined).map(({ name }) => name), Date.now()),
       });
     }
     if (url.pathname === "/fresh" && request.method === "POST") {

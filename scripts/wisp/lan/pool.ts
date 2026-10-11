@@ -274,11 +274,13 @@ export function driverVerdict(driver: Driver | undefined, now: number): { readon
   return { idle: `idle since ${driver.goneAt}, driver gone`, alarm: now - Date.parse(driver.goneAt) >= ALARM_AFTER_MS };
 }
 
-/** Whether a pair is driven at `now`, and since when it has been idle: the latest of the agent's start `started`, its last `wisp lan end` `ended` and its driver's `goneAt`. */
-export function idleness(started: string, ended: string | undefined, driver: Driver | undefined, now: number): { readonly state: "busy" | "idle"; readonly idleSince: string; readonly idleSeconds: number } {
+/** Whether a pair is dead (a client in `down` has no game process), busy (a live driver or a game in progress, `playing`) or idle at `now`, and since when it has been idle: the latest of the agent's start `started`, its last `wisp lan end` `ended` and its driver's `goneAt`. */
+export function idleness(started: string, ended: string | undefined, driver: Driver | undefined, playing: boolean, down: readonly string[], now: number): { readonly state: "dead" | "busy" | "idle"; readonly idleSince: string; readonly idleSeconds: number; readonly down?: readonly string[] } {
   const since = Math.max(Date.parse(started), ended === undefined ? -Infinity : Date.parse(ended), driver?.goneAt === undefined ? -Infinity : Date.parse(driver.goneAt));
-  const busy = driver !== undefined && driver.goneAt === undefined;
-  return { state: busy ? "busy" : "idle", idleSince: new Date(since).toISOString(), idleSeconds: busy ? 0 : Math.max(0, Math.floor((now - since) / 1000)) };
+  const idleSince = new Date(since).toISOString();
+  if (down.length > 0) return { state: "dead", idleSince, idleSeconds: 0, down };
+  const busy = playing || (driver !== undefined && driver.goneAt === undefined);
+  return { state: busy ? "busy" : "idle", idleSince, idleSeconds: busy ? 0 : Math.max(0, Math.floor((now - since) / 1000)) };
 }
 
 export function pairOf(pool: PoolFile, names: readonly string[]): PoolPair | undefined {

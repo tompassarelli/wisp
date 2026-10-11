@@ -372,10 +372,11 @@ Each driver raises the alarm once. The decision is `driverVerdict`
 (wisp:scripts/wisp/lan/pool.ts).
 
 Every pair's `wisp lan status` line also says whether it is idle and for how
-long: `state` is `"busy"` while a driver is recorded and alive, otherwise
-`"idle"`; `idleSince` is the latest of the agent's start, the last `wisp lan
+long: `state` is `"dead"`, with the names in `down`, while a client has no
+game process; `"busy"` while a driver is recorded and alive or its game is
+counting down, loading or playing; otherwise `"idle"`. `idleSince` is the latest of the agent's start, the last `wisp lan
 end` and the moment the driver was found gone; `idleSeconds` is the whole
-seconds since `idleSince`, 0 while busy. A pair released with `end` 17 minutes
+seconds since `idleSince`, 0 while busy or dead. A pair released with `end` 17 minutes
 ago reads, among its other fields:
 
 ```

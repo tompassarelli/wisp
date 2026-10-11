@@ -34,7 +34,7 @@ describe("pool operability", () => {
     }
   });
 
-  test("[spec docs/lan.md] a pair whose driver died is idle at once and raises its alarm after the owner's ten minutes, and every pair counts whole idle seconds from its last start, end or dead driver", () => {
+  test("[spec docs/lan.md] a pair whose driver died is idle at once and raises its alarm after the owner's ten minutes, a pair with a client down is dead, a pair playing a game is busy, and every pair counts whole idle seconds from its last start, end or dead driver", () => {
     const goneAt = "2026-10-11T10:00:00.000Z";
     expect(driverVerdict({ pid: 7, since: "2026-10-11T09:00:00.000Z" }, Date.parse(goneAt) + ALARM_AFTER_MS)).toEqual({ alarm: false });
     const gone = { pid: 7, since: "2026-10-11T09:00:00.000Z", goneAt };
@@ -74,10 +74,18 @@ describe("pool operability", () => {
           previous = undefined;
           trace.push("gone");
         } else {
-          const read = idleness(started, ended, driver, now);
-          const live = driver !== undefined && driver.goneAt === undefined;
-          trace.push(`read +${now - idleStart} ms`);
+          const playing = next(3) === 0;
+          const down = next(4) === 0 ? ["lan0b"] : [];
+          const read = idleness(started, ended, driver, playing, down, now);
+          const live = playing || (driver !== undefined && driver.goneAt === undefined);
+          trace.push(`read +${now - idleStart} ms${playing ? " playing" : ""}${down.length > 0 ? " down" : ""}`);
           const why = trace.join(", ");
+          if (down.length > 0) {
+            expect(read.state, why).toBe("dead");
+            expect(read.down, why).toEqual(down);
+            expect(read.idleSeconds, why).toBe(0);
+            continue;
+          }
           expect(read.state, why).toBe(live ? "busy" : "idle");
           if (live) {
             expect(read.idleSeconds, why).toBe(0);
