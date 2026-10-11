@@ -191,3 +191,62 @@ seeds: seed 385148257 (match 5) failed:
 
 The replay command plays the repro again and exits 0 when it still fails with
 the recorded kind of finding ([repros](repro.md#shrinking-a-soak-failure)).
+
+## Seed farm
+
+The seed farm, wisp:.github/workflows/seed-farm.yml, plays `ci nightly` on the
+newest main once an hour on a hosted `ubuntu-latest` runner (`schedule` at
+minute 17) and files every new failure as an issue. A run checks out the
+ref, installs Bun 1.3.13 and both Lua32 builds with ci.yml's and the farm
+tests' cache keys, and runs `COMMAND ci nightly --minutes M --json`.
+Runs never overlap: a new one cancels nothing and waits behind the running
+one, and GitHub keeps one waiting run per repository, so scheduled runs
+never stack. A run with a failing seed ends red after filing.
+
+For each failing match, the run reads the repro file the `--json` result's
+`repros` names and titles its issue from the repro's first finding:
+`seed farm: nightly: KIND: CLAUSE`, the finding's first clause with its
+numbers as `N` (`seed farm: nightly: desync: native calls differ after frame
+N`), so the same fault on another seed has the same title. Before filing,
+it searches the open issues for that exact title: when one exists it
+comments there with the new seed, commit and replay command; otherwise it
+files `match-N.issue.md` with `gh issue create --body-file`, adding a
+link to the run and the fresh-clone replay below, with the `bug` label when
+the repository has one (it creates no labels). One issue per title, at most
+5 filed or commented per run. The filed matches' repro files (`match-N.json`,
+the unshrunk original, the issue body and the clients' logs) go in the run's
+artifact `seed-farm-RUN_ID` under their paths from the checkout, kept 30 days.
+
+Replaying from a fresh clone, as the issue prints it:
+
+```sh
+git clone https://github.com/OWNER/REPO && cd REPO
+gh run download RUN_ID -R OWNER/REPO -n seed-farm-RUN_ID   # build/soak/…/match-N.json
+git checkout COMMIT && bun install --frozen-lockfile && bun scripts/wisp/repo.ts repro build/soak/…/match-N.json
+```
+
+`build/` is ignored, so the checkout keeps the downloaded repro. The replay
+exits 0 when the repro still fails with the recorded kind of finding.
+
+Run it by hand, on any branch or commit, with `workflow_dispatch`'s `ref`
+(default: the dispatched branch) and `minutes` (default 10). A game calls it
+from its own workflow, pinned to a Wisp commit, with the command that runs
+its `ci` and `repro` and its minutes, and grants it `issues: write`:
+
+```yaml
+on:
+  schedule:
+    - cron: "41 * * * *"
+permissions:
+  contents: read
+  issues: write
+jobs:
+  seed-farm:
+    uses: tompassarelli/wisp/.github/workflows/seed-farm.yml@WISP_COMMIT
+    with:
+      command: bun scripts/game.ts   # default: bun scripts/wisp/repo.ts
+      minutes: 10                    # default 10, at most 30
+```
+
+The run farms the calling workflow's ref and files issues in the
+calling repository.

@@ -307,7 +307,8 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
     for (const [key, entry] of failed) {
       yield* say(`${stage}: ${entry.seed === undefined ? key : `seed ${entry.seed} (${key})`} failed:\n${entry.findings.map((finding) => `  ${finding.split("\n")[0]}`).join("\n")}`);
       if (entry.repro === undefined || !existsSync(entry.repro)) continue;
-      const replay = `bun ${cli} repro ${entry.repro}`;
+      // Relative to where ci ran, so the replay works from a fresh clone holding the repro at the same path.
+      const replay = `bun ${cli} repro ${relative(process.cwd(), entry.repro)}`;
       const issue = entry.repro.replace(/(?:\.json)?$/, ".issue.md");
       yield* Effect.try({
         try: () => writeFileSync(issue, [
