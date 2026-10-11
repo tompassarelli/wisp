@@ -9,8 +9,9 @@ type Vector3 = readonly [number, number, number];
 const AXIS: Vector3 = [1 / 3, 2 / 3, 2 / 3], PIVOT: Vector3 = [0, 0, 30], CENTRE: Vector3 = [120, 0, 60], HALF = 40;
 const corners: Vector3[] = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => [CENTRE[0] + (i & 1 ? HALF : -HALF), CENTRE[1] + (i & 2 ? HALF : -HALF), CENTRE[2] + (i & 4 ? HALF : -HALF)]);
 const turn = (degrees: number) => { const half = degrees * Math.PI / 360; return [...AXIS.map((v) => v * Math.sin(half)), Math.cos(half)].join(", "); };
-const cubeModel = (bone: string) => `Version { FormatVersion 800, }
-Model "Cube" { NumGeosets 1, NumBones 1, BlendTime 150, }
+// With `parent`, the turning bone hangs from a still bone of that name pivoting at the origin.
+const cubeModel = (bone: string, parent?: string) => `Version { FormatVersion 800, }
+Model "Cube" { NumGeosets 1, NumBones ${parent === undefined ? 1 : 2}, BlendTime 150, }
 Sequences 1 { Anim "Stand" { Interval { 0, 2000 }, } }
 Textures 1 { Bitmap { Image "", ReplaceableId 1, } }
 Materials 1 { Material { Layer { FilterMode Transparent, static TextureID 0, static Alpha 1, } } }
@@ -24,10 +25,10 @@ Geoset {
     MaterialID 0,
     SelectionGroup 0,
 }
-Bone "${bone}" { ObjectId 0, GeosetId 0, GeosetAnimId None,
+Bone "${bone}" { ObjectId 0,${parent === undefined ? "" : " Parent 1,"} GeosetId 0, GeosetAnimId None,
     Rotation 3 { Linear, 0: { ${turn(0)} }, 1000: { ${turn(90)} }, 2000: { ${turn(180)} }, }
 }
-PivotPoints 1 { { ${PIVOT.join(", ")} }, }
+${parent === undefined ? "" : `Bone "${parent}" { ObjectId 1, GeosetId None, GeosetAnimId None, }\n`}PivotPoints ${parent === undefined ? 1 : 2} { { ${PIVOT.join(", ")} },${parent === undefined ? "" : " { 0, 0, 0 },"} }
 `;
 const cube = cubeModel("Arm");
 // The cube with an additive team-glow quad through its middle, wider than the cube: only the glow's disc, inside the cube, draws.
@@ -149,8 +150,9 @@ function intersect(polygon: readonly Point[], by: readonly Point[]): Point[] {
 const area = (polygon: readonly Point[]) => Math.abs(polygon.reduce((sum, p, i) => { const q = polygon[(i + 1) % polygon.length] as Point; return sum + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2;
 const perimeter = (polygon: readonly Point[]) => polygon.reduce((sum, p, i) => { const q = polygon[(i + 1) % polygon.length] as Point; return sum + Math.hypot(q[0] - p[0], q[1] - p[1]); }, 0);
 
-test("[property] the in-frame raster covers a cube's projected polygon and hides the overlap of a cube in front", () => {
-  const models = new Map([["Head.mdl", boundsModel(parseMDL(cubeModel("Head")))], ["Weapon.mdl", boundsModel(parseMDL(cubeModel("Weapon")))]]), next = random(126);
+// The head cube is skinned to an unnamed child of the named head node, the weapon cube to the named weapon node under the named hand.
+test("[property] the in-frame raster covers a cube's projected polygon, labels it with its nearest named node, and hides the overlap of a cube in front", () => {
+  const models = new Map([["Head.mdl", boundsModel(parseMDL(cubeModel("HeadMesh", "Head")))], ["Weapon.mdl", boundsModel(parseMDL(cubeModel("Weapon", "Hand")))]]), next = random(126);
   const between = (low: number, high: number) => low + (high - low) * next(), whole = (low: number, high: number) => Math.floor(between(low, high + 1));
   let covered = 0, cropped = 0, overlapped = 0, edges = 0, missed = 0;
   for (let round = 0; round < 120; round++) {
@@ -187,7 +189,7 @@ test("[property] the in-frame raster covers a cube's projected polygon and hides
     const cropPolygon = hull([[crop.x, crop.y], [crop.x + crop.width, crop.y], [crop.x, crop.y + crop.height], [crop.x + crop.width, crop.y + crop.height]]);
     const backPolygon = intersect(hull(backCorners.map((p) => [p.x, p.y])), cropPolygon), frontPolygon = intersect(hull(frontCorners.map((p) => [p.x, p.y])), cropPolygon);
     const portrait = (effects: DrawnPose[]) => inFrame({ scene: { camera: { x: target[0], y: target[1], fields }, effects } as unknown as RenderScene, width, height, crop, texture: { width: crop.width, height: crop.height },
-      parts: { head: ["Head"], weapon: ["Weapon"] } }, (path) => models.get(path), frame);
+      parts: { head: ["Head"], weapon: ["Weapon"], hand: ["Hand"] } }, (path) => models.get(path), frame);
 
     const alone = portrait([back]), head = alone.parts.head;
     if (head === undefined) throw new Error("no head row");
@@ -214,6 +216,7 @@ test("[property] the in-frame raster covers a cube's projected polygon and hides
     expect(Math.abs(both.headHiddenByWeapon - area(overlap))).toBeLessThanOrEqual(perimeter(overlap) + 1);
     expect(Math.abs((both.parts.weapon?.pixels ?? 0) - area(frontPolygon))).toBeLessThanOrEqual(perimeter(frontPolygon) + 1);
     expect(Math.abs((both.parts.head?.pixels ?? 0) - (head.pixels - both.headHiddenByWeapon))).toBe(0);
+    expect(both.parts.hand?.pixels).toBe(0);
     if (area(overlap) > 4) overlapped++;
   }
   expect(missed).toBeLessThanOrEqual(edges * 0.02);

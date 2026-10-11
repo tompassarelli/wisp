@@ -262,12 +262,13 @@ const EMPTY = -1, UNNAMED = -2;
 /**
  * Per declared part, what of a portrait shows inside a HUD frame drawn at `frame` (screen pixels), with the texture drawn
  * whole. The portrait's posed triangles are rasterized with a depth buffer at its render size, each pixel labelled with the
- * node its nearest vertex weights most; each frame pixel samples the texel it shows and the render pixel at that texel's centre.
+ * nearest named node at or above the node its nearest vertex weights most, so a part takes the named nodes' descendants
+ * down to another named node; each frame pixel samples the texel it shows and the render pixel at that texel's centre.
  */
 export function inFrame(portrait: Portrait, models: (path: string) => BoundsModel | undefined, frame: PixelRect): InFrame {
   const { width, height, crop, texture, parts } = portrait;
   const view = camera(portrait.scene as RenderScene, width / height);
-  const names = new Map<string, number>(), weapon = new Set(parts.weapon ?? []);
+  const names = new Map<string, number>(), weapon = new Set(parts.weapon ?? []), named = new Set(Object.values(parts).flat());
   const label = new Int32Array(width * height).fill(EMPTY), depth = new Float64Array(width * height);
   const under = new Int32Array(width * height).fill(EMPTY), underDepth = new Float64Array(width * height);
   const near = view.near, far = view.far;
@@ -275,11 +276,16 @@ export function inFrame(portrait: Portrait, models: (path: string) => BoundsMode
     const found = models(pose.model);
     if (found === undefined) continue;
     const { sampler, drawn } = posedMesh(pose, found, view);
-    const nodeLabels = sampler.rendererData.nodes.map((entry) => {
-      const name = (entry as { node?: model.Node }).node?.Name;
-      if (name === undefined) return UNNAMED;
-      if (!names.has(name)) names.set(name, names.size);
-      return names.get(name) ?? UNNAMED;
+    const nodeLabels = found.data.Nodes.map((_, id) => {
+      for (let at: model.Node | undefined = found.data.Nodes[id], steps = 0; at !== undefined && steps < found.data.Nodes.length; steps++) {
+        if (named.has(at.Name)) {
+          if (!names.has(at.Name)) names.set(at.Name, names.size);
+          return names.get(at.Name) ?? UNNAMED;
+        }
+        const parent = at.Parent ?? -1;
+        at = parent < 0 ? undefined : found.data.Nodes[parent];
+      }
+      return UNNAMED;
     });
     const weaponLabels = new Set([...weapon].map((name) => names.get(name)));
     const m = multiply(multiply(view.projection, view.view), transform(pose));

@@ -621,8 +621,11 @@ wisp:test/headless-bounds.test.ts).
   texture has a receipt gets `inFrame`, from `inFrame(portrait, models,
   row.pixels)` (wisp:scripts/wisp/screenBounds.ts). It poses the portrait as
   posed bounds do and rasterizes its triangles with a depth buffer at the
-  render size, labelling each pixel with the node its nearest vertex weights
-  most. Each screen pixel whose centre lies in the frame shows the texel at its
+  render size, labelling each pixel with the nearest named node at or above
+  the node its nearest vertex weights most: a part takes its named nodes and
+  their descendants, down to a node another part names, so a head mesh skinned
+  to the head bone's children counts as head and a weapon under the hand
+  counts as weapon only. Each screen pixel whose centre lies in the frame shows the texel at its
   place in the texture (drawn whole), and that texel shows the render pixel at
   its centre within the crop. Per part, `inFrame.parts` counts the visible
   pixels and gives their pixel `box`; `crownMargin` is the rows between the
@@ -631,7 +634,8 @@ wisp:test/headless-bounds.test.ts).
   rows are numbers only: the game declares the pass rules and thresholds.
   Checked by a property over random cubes (wisp:test/screen-bounds.test.ts):
   coverage equals the projected polygon's area within 1 px per edge, the box
-  matches the pixel centres that polygon holds, and a cube behind another
+  matches the pixel centres that polygon holds, a cube skinned to a named
+  node's child counts toward that node's part, and a cube behind another
   reports the overlap as hidden.
 - **Native silhouette.** `wisp headless silhouette SHOWN HIDDEN
   LEFT,TOP,RIGHT,BOTTOM` measures the native side of a posed box. `SHOWN` and
