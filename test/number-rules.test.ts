@@ -5,6 +5,7 @@ import { join, relative } from "node:path";
 import ts from "typescript";
 import { parseConfigFileWithSystem, transpileFiles } from "typescript-to-lua";
 import { NUMBER_RULE_CODE } from "../plugins/number-rules";
+import { numberRuleReport } from "../scripts/numberRules";
 import { farmTest } from "../scripts/wisp/farmTest";
 
 const root = join(import.meta.dir, "..");
@@ -35,6 +36,28 @@ farmTest("[spec #7] a number or string tested for truthiness fails compilation o
   const marked = (await Promise.all(others.map(async (file) => (await Bun.file(file).text()).split("\n")
     .flatMap((text, index) => text.includes("// rejected") ? [`${relative(root, file)}(${index + 1})`] : [])))).flat();
   expect([...new Set(failed)].sort()).toEqual(marked.sort());
+}, 120_000);
+
+farmTest("[spec #129] the check command reports every number-rule error the Lua32 compile reports, on the same line and column", async () => {
+  const cwd = join(import.meta.dir, "refused");
+  // Each input Smashcraft's Autoland refused at the Lua32 compile, by line and the start of its diagnostic.
+  const refused = [
+    ["4,17", "`||` tests a number or string"],
+    ["4,29", "`||` tests a number or string"],
+    ["5,22", "`%` truncates"],
+    ["6,17", "10.6 isn't a binary32 value"],
+    ["7,7", "an `if` condition tests a number or string"],
+  ];
+  const { options } = parseConfigFileWithSystem(join(cwd, "tsconfig.json"));
+  const compiled = transpileFiles([join(cwd, "inputs.ts")], { ...options, noEmitOnError: false }, () => {}).diagnostics
+    .filter((diagnostic) => diagnostic.code === NUMBER_RULE_CODE)
+    .map((diagnostic) => `${line(diagnostic, cwd).replace(/ Error /, " error ")}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`);
+  const checked = await numberRuleReport(["tsconfig.json"], { cwd, cachePath: join(root, "build/number-rules-refused.json") });
+  expect(checked).toEqual(compiled);
+  expect(checked.map((report, index) => {
+    const [, at, message] = /^inputs\.ts\((\d+,\d+)\): error TS9300: (.*)$/.exec(report) ?? [];
+    return [at, message?.slice(0, refused[index]?.[1]?.length)];
+  })).toEqual(refused);
 }, 120_000);
 
 async function tsserver(cwd: string, probe: string, requests: readonly { readonly command: string; readonly arguments: object }[]) {

@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ESNext", "lib": ["ES2015"], "module": "ESNext",
+    "moduleResolution": "Bundler", "strict": true, "noEmit": true,
+    "skipLibCheck": true, "types": [], "rootDir": "../.."
+  },
+  "files": ["inputs.ts"],
+  "tstl": {
+    "luaTarget": "5.3", "noImplicitSelf": true, "noHeader": true,
+    "luaPlugins": [{ "name": "../../plugins/warcraft-numbers.ts" }]
+  }
+}
