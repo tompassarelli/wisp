@@ -63,42 +63,54 @@ test("with keepCalls, clients compare every frame and keep only their latest cal
   expect(kept.clients.map((client) => client.log.length)).toEqual([2, 2]);
 });
 
-test("with a delivery, a sync message reaches every client on its arrival frame, before that frame's callbacks", () => {
-  const map = () => ({
-    start: () => {
-      configure();
-      installDispatch();
-      on("fixture.frame", () => {
-        globalThis.__fixtureFrame = (globalThis.__fixtureFrame ?? 0) + 1;
-        if (globalThis.__fixtureFrame === 5 && GetPlayerId(GetLocalPlayer()) === 0) BlzSendSyncData("FX_SYNC", "ping");
-      });
-      on("fixture.sync", () => {
-        globalThis.__fixtureReceived = globalThis.__fixtureFrame ?? 0;
-      });
-      const trigger = CreateTrigger();
-      BlzTriggerRegisterPlayerSyncEvent(trigger, Player(0), "FX_SYNC", false);
-      TriggerAddAction(trigger, trampoline("fixture.sync"));
-      TimerStart(CreateTimer(), 1 / 60, true, trampoline("fixture.frame"));
-    },
-    install: () => {},
-  });
-  const received = (delivery?: ReturnType<typeof syncDelivery>) => {
-    const clients = runtime.clients(map(), [0, 1], delivery === undefined ? {} : { delivery });
-    clients.start();
-    clients.frames(30);
-    expect(clients.firstDivergence()).toBeUndefined();
-    return clients.clients.map((client) => {
-      let frame = -1;
-      client.run(() => {
-        frame = globalThis.__fixtureReceived ?? -1;
-      });
-      return frame;
-    });
+test("[property seed 66] every client receives each sync message on the frame its delivery gives, before that frame's callbacks, in arrival then send order; without a delivery, on the frame it was sent", () => {
+  let seed = 66;
+  const next = (below: number) => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return (seed >>> 16) % below;
   };
-
-  expect(received()).toEqual([5, 5]);
-
-  const later = received(syncDelivery(MEASURED_BATTLE_NET, 1));
-  expect(later[0]).toBe(later[1] ?? -1);
-  expect(later[0] ?? 0).toBeGreaterThanOrEqual(5 + 4);
+  for (const channel of [1, 2, 3]) {
+    const sends = Array.from({ length: 60 }, (_, index) => [0, 1].filter(() => next(4) === 0).map((sender) => ({ sender, frame: index + 1 }))).flat();
+    const map = () => ({
+      start: () => {
+        configure();
+        installDispatch();
+        globalThis.__fixtureReceived = [];
+        on("fixture.frame", () => {
+          globalThis.__fixtureFrame = (globalThis.__fixtureFrame ?? 0) + 1;
+          const slot = GetPlayerId(GetLocalPlayer());
+          for (const { sender, frame } of sends) if (sender === slot && frame === globalThis.__fixtureFrame) BlzSendSyncData("FX_SYNC", `${sender}:${frame}`);
+        });
+        on("fixture.sync", () => {
+          globalThis.__fixtureReceived?.push(`${BlzGetTriggerSyncData()}@${globalThis.__fixtureFrame ?? 0}`);
+        });
+        const trigger = CreateTrigger();
+        for (const sender of [0, 1]) BlzTriggerRegisterPlayerSyncEvent(trigger, Player(sender), "FX_SYNC", false);
+        TriggerAddAction(trigger, trampoline("fixture.sync"));
+        TimerStart(CreateTimer(), 1 / 60, true, trampoline("fixture.frame"));
+      },
+      install: () => {},
+    });
+    const received = (delivery?: ReturnType<typeof syncDelivery>) => {
+      const clients = runtime.clients(map(), [0, 1], delivery === undefined ? {} : { delivery });
+      clients.start();
+      clients.frames(90);
+      expect(clients.firstDivergence()).toBeUndefined();
+      return clients.clients.map((client) => {
+        let seen: readonly string[] = [];
+        client.run(() => {
+          seen = globalThis.__fixtureReceived ?? [];
+        });
+        return seen;
+      });
+    };
+    const model = syncDelivery(MEASURED_BATTLE_NET, channel);
+    const arrivals = sends.map((send) => ({ ...send, arrival: model.arrivalFrame(send.sender, send.frame, { sender: send.sender, prefix: "FX_SYNC", data: `${send.sender}:${send.frame}` }) }));
+    // A message arriving at frame n is delivered before frame n's callbacks, which then count frame n.
+    const expected = arrivals.toSorted((a, b) => a.arrival - b.arrival).map(({ sender, frame, arrival }) => `${sender}:${frame}@${arrival - 1}`);
+    expect(arrivals.every(({ arrival }) => arrival < 90)).toBe(true);
+    expect(received(syncDelivery(MEASURED_BATTLE_NET, channel))).toEqual([expected, expected]);
+    const sent = sends.map(({ sender, frame }) => `${sender}:${frame}@${frame}`);
+    expect(received()).toEqual([sent, sent]);
+  }
 });
