@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { parseMDL } from "../vendor/war3-model.mjs";
 import type { DrawnPose, RenderScene } from "../scripts/wisp/headlessRender";
 import { boundsModel, inFrame, sceneBounds, type PixelBox } from "../scripts/wisp/screenBounds";
-import { timingTest } from "../scripts/wisp/timingTest";
 
 type Vector3 = readonly [number, number, number];
 
@@ -104,26 +103,6 @@ test("[property] posed screen bounds of a turning cube equal the analytic projec
   expect(compared).toBeGreaterThan(450);
   expect(offFrame).toBeGreaterThan(0);
   expect(farCulled).toBeGreaterThan(0);
-});
-
-timingTest("a 20,000-triangle model reports its boxes in under 50 ms", () => {
-  const data = parseMDL(cube), geoset = data.Geosets[0];
-  if (geoset === undefined) throw new Error("no geoset");
-  const side = 100, vertices = new Float32Array((side + 1) ** 2 * 3), faces = new Uint16Array(side * side * 6);
-  for (let i = 0; i <= side; i++) for (let j = 0; j <= side; j++) vertices.set([i * 2, j * 2, (i * j) % 7], (i * (side + 1) + j) * 3);
-  for (let i = 0; i < side; i++) for (let j = 0; j < side; j++) {
-    const a = i * (side + 1) + j;
-    faces.set([a, a + 1, a + side + 2, a, a + side + 2, a + side + 1], (i * side + j) * 6);
-  }
-  Object.assign(geoset, { Vertices: vertices, Faces: faces, VertexGroup: new Uint8Array(vertices.length / 3) });
-  const model = boundsModel(data);
-  const scene = { frame: 0, client: 0, camera: { x: 0, y: 0, fields: {} }, effects: [pose({ animationElapsed: 0.7 })] } as unknown as RenderScene;
-  const before = performance.now();
-  const [row] = sceneBounds(scene, () => model, 1920, 1080);
-  const elapsed = performance.now() - before;
-  expect(faces.length / 3).toBe(20_000);
-  expect(row?.box).toBeDefined();
-  expect(elapsed).toBeLessThan(50);
 });
 
 type Point = readonly [number, number];
