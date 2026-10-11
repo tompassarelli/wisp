@@ -626,6 +626,23 @@ wisp:test/headless-bounds.test.ts).
   coverage equals the projected polygon's area within 1 px per edge, the box
   matches the pixel centres that polygon holds, and a cube behind another
   reports the overlap as hidden.
+- **Native silhouette.** `wisp headless silhouette SHOWN HIDDEN
+  LEFT,TOP,RIGHT,BOTTOM` measures the native side of a posed box. `SHOWN` and
+  `HIDDEN` are two captures of the same held frame, the model shown and then
+  hidden, as PNG (`decodePng`, wisp:scripts/wisp/fidelity/image.ts; RGBA keeps
+  its RGB) or 8-bit binary PPM (`decodePpm`, wisp:scripts/wisp/frameProbe.ts),
+  and the box is Wisp's posed `box` for that frame in pixels.
+  `silhouetteBounds(shown, hidden, near)` (wisp:scripts/wisp/screenBounds.ts)
+  marks each pixel whose largest per-channel |Δ| is above 24, keeps the
+  8-connected regions with a pixel overlapping `near` (the command passes
+  Wisp's box grown by 20 px), and returns their box in pixel edges, or none.
+  `compareEdges(wisp, native)` gives native minus Wisp per edge and `within`
+  when all four are within 4 px, the per-frame test of wisp#125 box 3 (at
+  1920x1080, 19 of 20 frames). The command prints the native box and the
+  edges, or one JSON object with `--json`. Checked by a property over random
+  backgrounds (wisp:test/screen-bounds.test.ts): with noise of |Δ| up to 24 on
+  every pixel and a distractor blob outside `near`, the box equals the drawn
+  connected blob's exactly.
 
 - **Frame scale.** A frame's rectangle (wisp:src/headless/frames.ts) uses
   its size times its scale, where the scale is its own `BlzFrameSetScale`

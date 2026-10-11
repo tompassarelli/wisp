@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { parseMDL } from "../vendor/war3-model.mjs";
 import type { DrawnPose, RenderScene } from "../scripts/wisp/headlessRender";
-import { boundsModel, inFrame, sceneBounds, type PixelBox } from "../scripts/wisp/screenBounds";
+import { boundsModel, compareEdges, inFrame, sceneBounds, silhouetteBounds, type PixelBox } from "../scripts/wisp/screenBounds";
 
 type Vector3 = readonly [number, number, number];
 
@@ -204,4 +204,60 @@ test("[property] the in-frame raster covers a cube's projected polygon and hides
   expect(covered).toBeGreaterThan(60);
   expect(cropped).toBeGreaterThan(5);
   expect(overlapped).toBeGreaterThan(10);
+});
+
+test("[property] the native silhouette's box is the drawn blob's near Wisp's box, under sub-threshold noise and a distractor", () => {
+  const next = random(127), whole = (low: number, high: number) => Math.floor(low + (high - low + 1) * next());
+  let rounds = 0, atBorder = 0;
+  for (let round = 0; round < 150; round++) {
+    const width = whole(100, 180), height = whole(100, 180), size = width * height;
+    const hidden = new Uint8Array(size * 3).map(() => whole(0, 255));
+    // The shown capture differs from the hidden one by at most 24 per channel everywhere, often by exactly 24.
+    const shown = hidden.map((value) => Math.max(0, Math.min(255, value + (next() < 0.3 ? (next() < 0.5 ? -24 : 24) : whole(-24, 24)))));
+    const paint = (blob: Uint8Array) => {
+      for (let i = 0; i < size; i++) {
+        if (blob[i] !== 1) continue;
+        const c = whole(0, 2), value = hidden[i * 3 + c] ?? 0;
+        shown[i * 3 + c] = value >= 128 ? value - whole(25, value) : value + whole(25, 255 - value);
+      }
+    };
+    // A connected blob: each rectangle or ellipse is centred on a pixel already drawn.
+    const draw = (cx: number, cy: number, span: number) => {
+      const blob = new Uint8Array(size), drawn: number[] = [cy * width + cx], box = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+      for (let shape = whole(1, 5); shape > 0; shape--) {
+        const at = drawn[whole(0, drawn.length - 1)] ?? 0, x0 = at % width, y0 = Math.floor(at / width), rx = whole(0, span), ry = whole(0, span), ellipse = next() < 0.5;
+        for (let y = Math.max(0, y0 - ry); y <= Math.min(height - 1, y0 + ry); y++) for (let x = Math.max(0, x0 - rx); x <= Math.min(width - 1, x0 + rx); x++) {
+          if (ellipse && ((x - x0) / (rx + 0.5)) ** 2 + ((y - y0) / (ry + 0.5)) ** 2 > 1) continue;
+          if (blob[y * width + x] === 1) continue;
+          blob[y * width + x] = 1; drawn.push(y * width + x);
+          box.left = Math.min(box.left, x); box.top = Math.min(box.top, y); box.right = Math.max(box.right, x + 1); box.bottom = Math.max(box.bottom, y + 1);
+        }
+      }
+      return { blob, box };
+    };
+    const { blob, box } = draw(whole(0, width - 1), whole(0, height - 1), 15);
+    paint(blob);
+    // Wisp's box is off the blob's by up to 10 px an edge; `near` grows it by 20.
+    const near = { left: box.left + whole(-10, 10) - 20, top: box.top + whole(-10, 10) - 20, right: box.right + whole(-10, 10) + 20, bottom: box.bottom + whole(-10, 10) + 20 };
+    const alone = silhouetteBounds({ width, height, rgb: shown }, { width, height, rgb: hidden }, near);
+    expect(alone).toEqual(box);
+    if (alone?.left === 0 || alone?.top === 0 || alone?.right === width || alone?.bottom === height) atBorder++;
+
+    // A distractor wholly outside `near`.
+    const corners = [[0, 0], [width - 1, 0], [0, height - 1], [width - 1, height - 1]].filter(([x = 0, y = 0]) => x + 12 < near.left || x - 12 >= near.right || y + 12 < near.top || y - 12 >= near.bottom);
+    const corner = corners[whole(0, corners.length - 1)];
+    if (corner === undefined) continue;
+    const distractor = draw(corner[0] ?? 0, corner[1] ?? 0, 6);
+    const outside = distractor.box.right <= near.left || distractor.box.left >= near.right || distractor.box.bottom <= near.top || distractor.box.top >= near.bottom;
+    if (!outside) continue;
+    paint(distractor.blob);
+    expect(silhouetteBounds({ width, height, rgb: shown }, { width, height, rgb: hidden }, near)).toEqual(box);
+
+    const wisp = { left: box.left + whole(-6, 6), top: box.top + whole(-6, 6), right: box.right + whole(-6, 6), bottom: box.bottom + whole(-6, 6) };
+    const edges = { left: box.left - wisp.left, top: box.top - wisp.top, right: box.right - wisp.right, bottom: box.bottom - wisp.bottom };
+    expect(compareEdges(wisp, box)).toEqual({ ...edges, within: Object.values(edges).every((edge) => Math.abs(edge) <= 4) });
+    rounds++;
+  }
+  expect(rounds).toBeGreaterThan(120);
+  expect(atBorder).toBeGreaterThan(0);
 });

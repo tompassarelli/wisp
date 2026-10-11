@@ -317,3 +317,61 @@ function rasterTriangle(triangle: readonly number[][], width: number, height: nu
     }
   }
 }
+
+/** A decoded capture: `rgb` holds 3 bytes a pixel, as decodePng (wisp:scripts/wisp/fidelity/image.ts) and decodePpm (wisp:scripts/wisp/frameProbe.ts) give it. */
+export interface Capture { readonly width: number; readonly height: number; readonly rgb: Uint8Array }
+
+/** Larger per-channel differences between the shown and hidden captures mark a silhouette pixel. */
+export const SILHOUETTE_DELTA = 24;
+
+/**
+ * The native silhouette's pixel box from two captures of one held frame, the fighter `shown` and `hidden`: pixels whose
+ * largest per-channel |Δ| is above SILHOUETTE_DELTA, kept in the 8-connected regions that have a pixel overlapping `near`
+ * (Wisp's posed box grown by 20 px). Edges are pixel edges; undefined when no marked pixel overlaps `near`.
+ */
+export function silhouetteBounds(shown: Capture, hidden: Capture, near: PixelBox): PixelBox | undefined {
+  const { width, height } = shown;
+  if (hidden.width !== width || hidden.height !== height) throw new Error(`captures differ in size: ${width}x${height} and ${hidden.width}x${hidden.height}`);
+  const marked = new Uint8Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    for (let c = 0; c < 3; c++) if (Math.abs((shown.rgb[i * 3 + c] ?? 0) - (hidden.rgb[i * 3 + c] ?? 0)) > SILHOUETTE_DELTA) { marked[i] = 1; break; }
+  }
+  let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+  const queue = new Int32Array(width * height);
+  const firstColumn = Math.max(0, Math.floor(near.left)), endColumn = Math.min(width, Math.ceil(near.right));
+  const firstRow = Math.max(0, Math.floor(near.top)), endRow = Math.min(height, Math.ceil(near.bottom));
+  for (let row = firstRow; row < endRow; row++) for (let column = firstColumn; column < endColumn; column++) {
+    if (marked[row * width + column] !== 1) continue;
+    // Flood the region; visited pixels are marked 2.
+    let head = 0, tail = 0;
+    queue[tail++] = row * width + column; marked[row * width + column] = 2;
+    while (head < tail) {
+      const at = queue[head++] ?? 0, x = at % width, y = (at - x) / width;
+      if (x < left) left = x; if (x + 1 > right) right = x + 1; if (y < top) top = y; if (y + 1 > bottom) bottom = y + 1;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height || marked[ny * width + nx] !== 1) continue;
+        marked[ny * width + nx] = 2; queue[tail++] = ny * width + nx;
+      }
+    }
+  }
+  return left <= right ? { left, top, right, bottom } : undefined;
+}
+
+export interface EdgeComparison {
+  /** Native minus Wisp, per edge, in px. */
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+  /** Every edge within 4 px. */
+  readonly within: boolean;
+}
+
+export const EDGE_TOLERANCE = 4;
+
+/** Box 3's per-frame verdict (wisp#125): Wisp's posed box against the native silhouette's, edge by edge. */
+export function compareEdges(wisp: PixelBox, native: PixelBox): EdgeComparison {
+  const left = native.left - wisp.left, top = native.top - wisp.top, right = native.right - wisp.right, bottom = native.bottom - wisp.bottom;
+  return { left, top, right, bottom, within: [left, top, right, bottom].every((edge) => Math.abs(edge) <= EDGE_TOLERANCE) };
+}

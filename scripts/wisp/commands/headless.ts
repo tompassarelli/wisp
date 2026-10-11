@@ -11,7 +11,9 @@ import { parseMDL } from "../../../vendor/war3-model.mjs";
 import { captureScene, type HeadlessRenderProject, loadEffectDeaths, renderScenes, type RenderScene, sceneWithUnits } from "../headlessRender";
 import { parseModelMDX } from "../models";
 import { type TextureIdentity, uiReport } from "../screen";
-import { type BoundsModel, boundsModel, inFrame, sceneBounds } from "../screenBounds";
+import { type BoundsModel, boundsModel, compareEdges, inFrame, sceneBounds, silhouetteBounds } from "../screenBounds";
+import { decodePng } from "../fidelity/image";
+import { decodePpm } from "../frameProbe";
 import { runJourney } from "../../../src/headless/journey";
 import type { Lockstep } from "../../../src/headless/lockstep";
 import { sceneMatchFrame } from "../../../src/runtime/scene";
@@ -127,8 +129,38 @@ export function headlessArguments(args: readonly string[]) {
   return { named, frames: [...new Set(frames)].sort((a, b) => a - b), match, render, bounds, journey, sounds, runs, stepFrames, musicVolume, graphics, look, screen };
 }
 
+/** Wisp's posed box is grown by this much to find the native silhouette near it (wisp#125, box 3). */
+const SILHOUETTE_NEAR = 20;
+
+/** `headless silhouette SHOWN HIDDEN LEFT,TOP,RIGHT,BOTTOM`: the native silhouette's box from two captures of one held frame, against Wisp's posed box. */
+const silhouette = (args: readonly string[], json: boolean) => Effect.gen(function*() {
+  const [shownPath, hiddenPath, boxText, ...rest] = args.filter((arg) => arg !== "--json");
+  const edges = (boxText ?? "").split(",").map(Number);
+  if (shownPath === undefined || hiddenPath === undefined || rest.length > 0 || edges.length !== 4 || !edges.every(Number.isFinite)) {
+    return yield* new UsageFailure({ problem: "headless silhouette SHOWN.png|ppm HIDDEN.png|ppm LEFT,TOP,RIGHT,BOTTOM (Wisp's posed box in pixels)" });
+  }
+  const read = (path: string) => Effect.tryPromise({ try: () => Bun.file(path).bytes(), catch: (cause) => new HeadlessFailure({ journey: "silhouette", problems: 1, cause }) }).pipe(
+    Effect.flatMap((bytes) => Effect.try({
+      try: () => {
+        const image = path.toLowerCase().endsWith(".png") ? decodePng(bytes) : decodePpm(bytes);
+        if (image === undefined) throw new Error(`${path}: not a PNG or an 8-bit binary PPM image`);
+        return image;
+      },
+      catch: (cause) => new HeadlessFailure({ journey: "silhouette", problems: 1, cause }),
+    })));
+  const shown = yield* read(shownPath), hidden = yield* read(hiddenPath);
+  const [left = 0, top = 0, right = 0, bottom = 0] = edges, wisp = { left, top, right, bottom };
+  const near = { left: left - SILHOUETTE_NEAR, top: top - SILHOUETTE_NEAR, right: right + SILHOUETTE_NEAR, bottom: bottom + SILHOUETTE_NEAR };
+  const native = yield* Effect.try({ try: () => silhouetteBounds(shown, hidden, near), catch: (cause) => new HeadlessFailure({ journey: "silhouette", problems: 1, cause }) });
+  const comparison = native === undefined ? undefined : compareEdges(wisp, native);
+  if (json) return yield* emitJson("headless", { type: "silhouette", wisp, native: native ?? null, edges: comparison ?? null });
+  if (native === undefined || comparison === undefined) return yield* Console.log(`no silhouette within ${SILHOUETTE_NEAR} px of Wisp's box`);
+  return yield* Console.log(`native ${native.left},${native.top},${native.right},${native.bottom}; native − Wisp: left ${comparison.left}, top ${comparison.top}, right ${comparison.right}, bottom ${comparison.bottom}; ${comparison.within ? "within" : "not within"} 4 px`);
+});
+
 export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfProject): Command => (args) => Effect.suspend(() => {
   const json = args.includes("--json");
+  if (args[0] === "silhouette") return silhouette(args.slice(1), json);
   const started = performance.now();
   let results = 0;
   let failures = 0;
