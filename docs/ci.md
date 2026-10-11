@@ -131,7 +131,8 @@ only the first client creates an extra unit, with `expect-failure: true`,
 so it passes only when the journey reports the desync. Both upload their
 output as `wisp-ci-sample` and `wisp-ci-sample-failing-fixture`.
 wisp:examples/sample/test/failing-fixture.test.ts checks the same verdict
-locally. Wisp has no self-hosted runner, so its CI never sets
+locally. Job `framework` leaves examples/ out of its `bun run test`, so the
+sample's tests run once, in job `sample`. Wisp has no self-hosted runner, so its CI never sets
 `private-map-build`.
 
 The `framework` job runs Wisp's own check and full Bun suite. It installs

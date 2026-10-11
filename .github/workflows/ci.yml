@@ -33,7 +33,7 @@ jobs:
       - run: bun "$RUNNER_TEMP/north/agent-machinery/scripts/effect-kit.mjs" check
       - name: Install the native archive test dependency
         run: sudo apt-get update && sudo apt-get install -y libstorm-dev
-      - run: CC=gcc STORMLIB_PREFIX=/usr bun run test
+      - run: CC=gcc STORMLIB_PREFIX=/usr bun run test --path-ignore-patterns 'repos/**' --path-ignore-patterns 'examples/**'
 
   # Tests marked farmTest (wisp:docs/testing.md "Test cost"): too heavy for
   # `bun run test`'s per-test CPU ceiling, so they run here on every push.
