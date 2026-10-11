@@ -23,7 +23,7 @@ const stable = (value: unknown): string => {
   return JSON.stringify(value) ?? "undefined";
 };
 const key = (slice: CaptureSlice) => `${slice.lever}/${slice.scene}/${slice.look}`;
-export function validateComparison(reference: CaptureManifest, candidate: CaptureManifest, lever: string): readonly (readonly [CaptureSlice,CaptureSlice])[] {
+export function validateComparison(reference: CaptureManifest, candidate: CaptureManifest, lever: string, liveBuild: string): readonly (readonly [CaptureSlice,CaptureSlice])[] {
   if (stable(reference.split) !== stable(candidate.split)) throw new Error("capture split differs");
   const refs = reference.slices.filter(s => s.lever === lever), candidates = candidate.slices.filter(s => s.lever === lever);
   if (refs.length === 0 || refs.length !== candidates.length) throw new Error(`missing or unequal slices for ${lever}`);
@@ -35,6 +35,7 @@ export function validateComparison(reference: CaptureManifest, candidate: Captur
     for (const field of ["identity","pad","frames","camera","look","controls","regions","settings","calibratedRanges","cineWindow"] as const) {
       if (stable(ref[field]) !== stable(cand[field])) throw new Error(`${key(ref)} ${field} mismatch`);
     }
+    if (ref.identity.build !== liveBuild) throw new Error(`${key(ref)} was recorded on build ${ref.identity.build}, not the live ${liveBuild}: record again on ${liveBuild}`);
     for (const slice of [ref,cand]) for (const [setting,value] of Object.entries(slice.settings)) {
       const range = slice.calibratedRanges[setting];
       if (range === undefined || value < range.min || value > range.max) throw new Error(`${key(slice)} setting ${setting} outside calibrated range`);
@@ -78,9 +79,9 @@ const readImage = (directory: string, name: string) => Effect.gen(function*() {
   const bytes = yield* Effect.tryPromise({ try: () => Bun.file(file).bytes(), catch: cause => new FidelityFailure({ problem: `${file}: ${String(cause)}` }) });
   return yield* Effect.try({ try: () => decodePng(bytes), catch: cause => new FidelityFailure({ problem: `${file}: ${String(cause)}` }) });
 });
-export const checkFidelity = (lever: string, referenceDirectory: string, candidateDirectory: string) => Effect.gen(function*() {
+export const checkFidelity = (lever: string, referenceDirectory: string, candidateDirectory: string, liveBuild: string) => Effect.gen(function*() {
   const reference = yield* readManifest(referenceDirectory), candidate = yield* readManifest(candidateDirectory);
-  const pairs = yield* Effect.try({ try: () => validateComparison(reference,candidate,lever), catch: cause => new FidelityFailure({ problem: String(cause) }) });
+  const pairs = yield* Effect.try({ try: () => validateComparison(reference,candidate,lever,liveBuild), catch: cause => new FidelityFailure({ problem: String(cause) }) });
   const measurements: Measurement[] = [];
   for (const [ref,cand] of pairs) {
     const metrics = yield* Effect.try({ try: () => metricsFor(lever,ref.settings), catch: cause => new FidelityFailure({ problem: String(cause) }) });

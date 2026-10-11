@@ -1,13 +1,17 @@
 # Fidelity gates
 
-`bun wisp fidelity check LEVER --reference DIR --candidate DIR` reads each
-folder's `manifest.json` and PNG captures. Capture manifests follow
+`bun wisp fidelity check LEVER --reference DIR --candidate DIR [--live-build BUILD]`
+reads each folder's `manifest.json` and PNG captures. Capture manifests follow
 [the capture contract](fidelity-captures.md). Keep private captures outside Git.
 
 The tool compares only frozen held-out scenes. Fit and retired scenes,
 different capture identities, pads, frame lists, cameras, controls, metric
 regions, settings or calibrated ranges are refused before images are read.
-Every setting must lie inside its declared calibration range. Reference and
+A slice whose `identity.build` isn't the live Warcraft III build is refused,
+naming the slice and "record again on BUILD"; the live build is the us row's
+`VersionsName` in the patch CDN's `w3/versions` file, or `--live-build BUILD`
+for offline runs, and when neither gives one the check refuses rather than
+skipping it. Every setting must lie inside its declared calibration range. Reference and
 candidate use the same calibration; the candidate cannot widen it.
 
 Each selected frame, control and region is checked independently. The maximum

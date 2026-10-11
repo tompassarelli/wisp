@@ -22,7 +22,7 @@ function fixture(): CaptureManifest {
   return {version:1,split:{frozenAt:"2026-10-10T00:00:00Z",fit:["fit-scene"],heldOut:["held-scene"],retired:[]},slices:[{
     lever:"water",scene:"held-scene",kind:"lever",split:"held-out",pad:"synthetic.pad",frames:[227],
     camera:{position:[0,0,10],target:[0,0,0],fov:45},look:"definitive",
-    identity:{build:"synthetic",assetLayers:["synthetic"],mapHash:"synthetic",settingsFile:"synthetic",resolution:{width:9,height:9},gpu:"synthetic"},
+    identity:{build:"3.0.0.24268",assetLayers:["synthetic"],mapHash:"synthetic",settingsFile:"synthetic",resolution:{width:9,height:9},gpu:"synthetic"},
     settings:{density:1},calibratedRanges:{density:{min:0,max:2}},regions:[region],controls,cineWindow:{start:227,end:227},
     runs:[0,1,2].map(run=>({id:String(run),captures:controls.map(control=>({frame:227,frameSource:"journal" as const,control:control.id,image:`${run}-${control.id}.png`}))})),
   }]};
@@ -37,7 +37,7 @@ function png(value: number): Uint8Array {
   const raw=Buffer.alloc(9*(9*3+1),value);for(let y=0;y<9;y++)raw[y*28]=0;
   return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk("IHDR",header),chunk("IDAT",deflateSync(raw)),chunk("IEND",new Uint8Array())]);
 }
-test(`${source}: synthetic PNG capture boundary returns PASS, FAIL, INCONCLUSIVE, and refuses identities, fit scenes, calibration and undecided levers before pixels`, async () => {
+test(`${source}: synthetic PNG capture boundary returns PASS, FAIL, INCONCLUSIVE, and refuses identities, builds other than the live one, fit scenes, calibration and undecided levers before pixels`, async () => {
   const directory=mkdtempSync(join(tmpdir(),"wisp-fidelity-"));
   try {
     const write = async (dir: string, values: readonly number[]) => {
@@ -46,8 +46,9 @@ test(`${source}: synthetic PNG capture boundary returns PASS, FAIL, INCONCLUSIVE
     };
     const ref=join(directory,"reference"),cand=join(directory,"candidate");
     await write(ref,[100,100,100]);await write(cand,[101,101,101]);
-    const check=()=>Effect.runPromise(checkFidelity("water",ref,cand).pipe(Effect.provide(BunServices.layer)));
+    const check=(live="3.0.0.24268")=>Effect.runPromise(checkFidelity("water",ref,cand,live).pipe(Effect.provide(BunServices.layer)));
     expect((await check()).verdict).toBe("PASS");
+    await expect(check("3.0.1.24342")).rejects.toThrow("water/held-scene/definitive was recorded on build 3.0.0.24268, not the live 3.0.1.24342: record again on 3.0.1.24342");
     await write(cand,[220,220,220]);expect((await check()).verdict).toBe("FAIL");
     await write(ref,[100,150,100]);expect((await check()).verdict).toBe("INCONCLUSIVE");
     const candidate=fixture();candidate.slices[0]!.identity.build="different";
@@ -55,7 +56,7 @@ test(`${source}: synthetic PNG capture boundary returns PASS, FAIL, INCONCLUSIVE
     await expect(check()).rejects.toThrow("identity mismatch");
     const refuse = async (edit: (manifest: CaptureManifest) => void, lever: string, problem: string) => {
       for (const dir of [ref,cand]) { const manifest=fixture();edit(manifest);await Bun.write(join(dir,"manifest.json"),JSON.stringify(manifest)); }
-      await expect(Effect.runPromise(checkFidelity(lever,ref,cand).pipe(Effect.provide(BunServices.layer)))).rejects.toThrow(problem);
+      await expect(Effect.runPromise(checkFidelity(lever,ref,cand,"3.0.0.24268").pipe(Effect.provide(BunServices.layer)))).rejects.toThrow(problem);
     };
     await refuse(manifest=>{manifest.slices[0]!.settings.density=3;},"water","outside calibrated range");
     await refuse(manifest=>{manifest.slices[0]!.scene="fit-scene";manifest.slices[0]!.split="fit";},"water","fit-set");

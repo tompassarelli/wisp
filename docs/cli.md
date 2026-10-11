@@ -107,6 +107,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--out PATH` | Where the command writes its result, a file or folder as its usage says | many |
 | `--helper BINARY` | The controller helper that plays input | `integrity`, `pad`, `soak` |
 | `--build BUILD` | The build under test, recorded in the result | `pad` |
+| `--live-build BUILD` | The live Warcraft III build, instead of reading it from the patch CDN | `fidelity check` |
 | `--rubric FILE` | Measurement rules for retained captures | `judge` |
 | `--hot` | Reload the current map script between batch checks | `pad` |
 | `--solo` | Run each selected client in a separate single-player game | `accept` |

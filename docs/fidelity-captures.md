@@ -19,7 +19,8 @@ A slice identifies a `lever`, `scene`, `kind` (`lever` or `stage`), `pad`, `look
 (`classic` or `definitive`), unique integer `frames`, and a camera with
 `position`, `target` and degree `fov`. Its `identity` records the native `build`,
 ordered `assetLayers`, `mapHash`, `settingsFile`, pixel `resolution` (width and
-height), and `gpu`. Every capture must record `frameSource: "journal" | "debugger"`
+height), and `gpu`. The gate refuses a slice whose `build` isn't the live build,
+so a new Warcraft III patch means recording the references again. Every capture must record `frameSource: "journal" | "debugger"`
 alongside its integer `frame` to name the source of its frame stamp. The map's journal stamp is
 accepted while `frameNumberRead` is unchecked on build 3.0.0.24268; later checked
 debugger reads can replace it. The look and each capture's frame are also part
