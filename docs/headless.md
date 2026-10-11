@@ -672,14 +672,17 @@ wisp:test/headless-bounds.test.ts).
   `inFrame` passes it as `texture.alpha`. Per part, `inFrame.parts` counts the visible
   pixels and gives their pixel `box`; `crownMargin` is the rows between the
   frame's top row and the head's top visible row; `headHiddenByWeapon` counts
-  pixels where the weapon is nearest and the head would show without it. The
+  pixels where the weapon is nearest and the head would show without it;
+  `handGap` is the pixel distance between the hand's and the weapon's boxes
+  (0 when they touch or overlap, absent unless both show). The
   rows are numbers only: the game declares the pass rules and thresholds.
   Checked by a property over random cubes (wisp:test/screen-bounds.test.ts):
   coverage equals the projected polygon's area within 1 px per edge, the box
   matches the pixel centres that polygon holds, a cube skinned to a named
   node's child counts toward that node's part, texels under half opacity
-  count exactly as a crop ending above them, and a cube behind another
-  reports the overlap as hidden.
+  count exactly as a crop ending above them, a cube behind another
+  reports the overlap as hidden, and the hand gap between two cubes is their
+  boxes' distance (0 when they overlap).
 - **Native silhouette.** `wisp headless silhouette SHOWN HIDDEN
   LEFT,TOP,RIGHT,BOTTOM` measures the native side of a posed box. `SHOWN` and
   `HIDDEN` are two captures of the same held frame, the model shown and then

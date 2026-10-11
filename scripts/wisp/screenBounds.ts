@@ -374,6 +374,8 @@ export interface InFrame {
   readonly crownMargin: number | undefined;
   /** Frame pixels where the weapon is nearest and the head would show without it. */
   readonly headHiddenByWeapon: number;
+  /** Pixels between the hand's and the weapon's visible boxes (0 when they touch or overlap); undefined unless both show. */
+  readonly handGap: number | undefined;
 }
 
 const EMPTY = -1, UNNAMED = -2;
@@ -459,8 +461,10 @@ export function inFrame(portrait: Portrait, models: (path: string) => BoundsMode
     }
   }
   const rows = Object.fromEntries([...counts].map(([part, { pixels, left, top, right, bottom }]) => [part, { pixels, box: pixels === 0 ? undefined : { left, top, right, bottom } }]));
-  const headBox = rows.head?.box;
-  return { parts: rows, crownMargin: headBox === undefined ? undefined : headBox.top - firstRow, headHiddenByWeapon: hidden };
+  const headBox = rows.head?.box, handBox = rows.hand?.box, weaponBox = rows.weapon?.box;
+  const handGap = handBox === undefined || weaponBox === undefined ? undefined
+    : Math.hypot(Math.max(0, handBox.left - weaponBox.right, weaponBox.left - handBox.right), Math.max(0, handBox.top - weaponBox.bottom, weaponBox.top - handBox.bottom));
+  return { parts: rows, crownMargin: headBox === undefined ? undefined : headBox.top - firstRow, headHiddenByWeapon: hidden, handGap };
 }
 
 /** Sutherland-Hodgman against w >= near, interpolating every attribute linearly in clip space. */

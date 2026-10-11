@@ -268,7 +268,7 @@ const perimeter = (polygon: readonly Point[]) => polygon.reduce((sum, p, i) => {
 test("[property] the in-frame raster covers a cube's projected polygon, labels it with its nearest named node, shows it only through texels at least half opaque, and hides the overlap of a cube in front", () => {
   const models = new Map([["Head.mdl", boundsModel(parseMDL(cubeModel("HeadMesh", "Head")))], ["Weapon.mdl", boundsModel(parseMDL(cubeModel("Weapon", "Hand")))]]), next = random(126);
   const between = (low: number, high: number) => low + (high - low) * next(), whole = (low: number, high: number) => Math.floor(between(low, high + 1));
-  let covered = 0, cropped = 0, overlapped = 0, edges = 0, missed = 0;
+  let covered = 0, cropped = 0, overlapped = 0, apart = 0, edges = 0, missed = 0;
   for (let round = 0; round < 120; round++) {
     const fields = { CAMERA_FIELD_ROTATION: between(0, 360), CAMERA_FIELD_ANGLE_OF_ATTACK: between(280, 360), CAMERA_FIELD_TARGET_DISTANCE: between(500, 1500), CAMERA_FIELD_ZOFFSET: between(-100, 300),
       CAMERA_FIELD_FIELD_OF_VIEW: between(40, 100), CAMERA_FIELD_NEARZ: between(10, 100), CAMERA_FIELD_FARZ: 10000 };
@@ -302,8 +302,18 @@ test("[property] the in-frame raster covers a cube's projected polygon, labels i
     const frame = { x: whole(-50, 900), y: whole(-50, 500), width: crop.width, height: crop.height };
     const cropPolygon = hull([[crop.x, crop.y], [crop.x + crop.width, crop.y], [crop.x, crop.y + crop.height], [crop.x + crop.width, crop.y + crop.height]]);
     const backPolygon = intersect(hull(backCorners.map((p) => [p.x, p.y])), cropPolygon), frontPolygon = intersect(hull(frontCorners.map((p) => [p.x, p.y])), cropPolygon);
-    const portrait = (effects: DrawnPose[]) => inFrame({ scene: { camera: { x: target[0], y: target[1], fields }, effects } as unknown as RenderScene, width, height, crop, texture: { width: crop.width, height: crop.height },
-      parts: { head: ["Head"], weapon: ["Weapon"], hand: ["Hand"] } }, (path) => models.get(path), frame);
+    const portrait = (effects: DrawnPose[], parts: Record<string, string[]> = { head: ["Head"], weapon: ["Weapon"], hand: ["Hand"] }) => inFrame({ scene: { camera: { x: target[0], y: target[1], fields }, effects } as unknown as RenderScene, width, height, crop, texture: { width: crop.width, height: crop.height },
+      parts }, (path) => models.get(path), frame);
+    // The pixels whose centres the analytic polygon holds, shifted from the crop into the frame.
+    const centresBox = (polygon: readonly Point[]) => {
+      const box = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+      for (let y = crop.y; y < crop.y + crop.height; y++) for (let x = crop.x; x < crop.x + crop.width; x++) {
+        if (!polygon.every((a, i) => turnOf([x + 0.5, y + 0.5], a, polygon[(i + 1) % polygon.length] as Point) >= 0)) continue;
+        box.left = Math.min(box.left, x - crop.x + frame.x); box.right = Math.max(box.right, x + 1 - crop.x + frame.x);
+        box.top = Math.min(box.top, y - crop.y + frame.y); box.bottom = Math.max(box.bottom, y + 1 - crop.y + frame.y);
+      }
+      return box;
+    };
 
     const alone = portrait([back]), head = alone.parts.head;
     if (head === undefined) throw new Error("no head row");
@@ -318,13 +328,7 @@ test("[property] the in-frame raster covers a cube's projected polygon, labels i
     expect(alone.headHiddenByWeapon).toBe(0);
     if (backPolygon.length > 0 && area(backPolygon) > 16) {
       if (head.box === undefined) throw new Error("no head box");
-      // The pixels whose centres the analytic polygon holds, shifted from the crop into the frame.
-      const expected = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
-      for (let y = crop.y; y < crop.y + crop.height; y++) for (let x = crop.x; x < crop.x + crop.width; x++) {
-        if (!backPolygon.every((a, i) => turnOf([x + 0.5, y + 0.5], a, backPolygon[(i + 1) % backPolygon.length] as Point) >= 0)) continue;
-        expected.left = Math.min(expected.left, x - crop.x + frame.x); expected.right = Math.max(expected.right, x + 1 - crop.x + frame.x);
-        expected.top = Math.min(expected.top, y - crop.y + frame.y); expected.bottom = Math.max(expected.bottom, y + 1 - crop.y + frame.y);
-      }
+      const expected = centresBox(backPolygon);
       // Float32 posing moves a centre lying on an edge by at most one pixel, and rarely.
       for (const edge of ["left", "top", "right", "bottom"] as const) { expect(Math.abs(head.box[edge] - expected[edge])).toBeLessThanOrEqual(1); edges++; if (head.box[edge] !== expected[edge]) missed++; }
       expect(alone.crownMargin).toBe(head.box.top - frame.y);
@@ -338,12 +342,23 @@ test("[property] the in-frame raster covers a cube's projected polygon, labels i
     expect(Math.abs((both.parts.weapon?.pixels ?? 0) - area(frontPolygon))).toBeLessThanOrEqual(perimeter(frontPolygon) + 1);
     expect(Math.abs((both.parts.head?.pixels ?? 0) - (head.pixels - both.headHiddenByWeapon))).toBe(0);
     expect(both.parts.hand?.pixels).toBe(0);
+    expect(both.handGap).toBeUndefined();
+    // The back cube declared as the hand: its visible box touches the weapon's when they overlap, and is its analytic box when apart.
+    const held = portrait([front, back], { head: ["Head"], weapon: ["Weapon"], hand: ["Head"] }).handGap;
+    if (area(overlap) > 4) expect(held).toBe((both.parts.head?.pixels ?? 0) === 0 ? undefined : 0);
+    else if (area(overlap) === 0 && area(backPolygon) > 16 && area(frontPolygon) > 16) {
+      const a = centresBox(backPolygon), b = centresBox(frontPolygon);
+      const gap = Math.hypot(Math.max(0, a.left - b.right, b.left - a.right), Math.max(0, a.top - b.bottom, b.top - a.bottom));
+      expect(Math.abs((held ?? -10) - gap)).toBeLessThanOrEqual(Math.SQRT2);
+      if (gap > 2) apart++;
+    }
     if (area(overlap) > 4) overlapped++;
   }
   expect(missed).toBeLessThanOrEqual(edges * 0.02);
   expect(covered).toBeGreaterThan(60);
   expect(cropped).toBeGreaterThan(5);
   expect(overlapped).toBeGreaterThan(10);
+  expect(apart).toBeGreaterThan(5);
 });
 
 test("[property] the native silhouette's box is the drawn blob's near Wisp's box, under sub-threshold noise and a distractor", () => {
