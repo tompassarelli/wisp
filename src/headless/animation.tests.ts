@@ -11,50 +11,37 @@ const shows = (actual: { readonly sequence: number; readonly frame: number }, se
   same([actual.sequence, actual.frame], [sequenceIndex, frame], message);
 
 const sequence = (name: string, start: number, end: number, looping = true, rarity = 0): AnimationSequence => ({ name, start, end, looping, rarity });
-const MODEL = [
-  sequence("Stand Hit", 0, 500),
-  sequence("Stand - 2", 1000, 2000, true, 3),
-  sequence("Stand", 2000, 3000),
-  sequence("Stand Ready", 3000, 4000),
-  sequence("Attack Slam", 4000, 5000, false),
-  sequence("Attack - 1", 5000, 6000, false),
-  sequence("Birth", 6000, 6500, false),
-  sequence("Death", 7000, 8000, false),
-];
-
-test("animation: an effect never told what to play shows Birth once, then Stand looping; a unit shows Stand", () => {
-  const playing = (seconds: number) => ({ animation: undefined, subAnimations: [], elapsed: seconds });
-  shows(animationSample(MODEL, playing(0.25), "effect"), 6, 6250);
-
-  shows(animationSample(MODEL, playing(0.5), "effect"), 2, 2000);
-  shows(animationSample(MODEL, playing(0.75), "effect"), 2, 2250);
-  shows(animationSample(MODEL, playing(0.25), "unit"), 2, 2250);
-  const stopping = [sequence("Birth", 0, 100, false), sequence("Stand", 1000, 1100, false)];
-  shows(animationSample(stopping, playing(0.25), "effect"), 1, 1050, "an effect's Stand loops even when the model says not to");
+test("[property seed 58] animation: an effect never told what to play shows Birth once, then Stand looping; a unit shows Stand", () => {
+  let seed = 58;
+  const next = (below: number) => {
+    seed = floorMod(seed * 75 + 74, 65537);
+    return floorMod(seed, below);
+  };
+  for (let run = 0; run < 300; run++) {
+    const birthLength = next(2) === 0 ? 125 * (1 + next(12)) : 1 + next(1500);
+    const standLength = 1 + next(2500);
+    const hasBirth = next(3) !== 0;
+    const hasStand = next(5) !== 0;
+    const standLooping = next(2) === 0;
+    const model: AnimationSequence[] = [sequence("Attack", 100, 600, false), sequence("Death", 700, 1700, false)];
+    if (hasStand) model.splice(next(model.length + 1), 0, sequence("Stand", 3000, 3000 + standLength, standLooping));
+    if (hasBirth) model.splice(next(model.length + 1), 0, sequence("Birth", 9000, 9000 + birthLength, false));
+    const standIndex = hasStand ? model.findIndex((own) => own.name === "Stand") : 0;
+    const stand = model[standIndex] ?? model[0]!;
+    const birthIndex = model.findIndex((own) => own.name === "Birth");
+    // Whole 1/256 s steps keep every sample time exact in binary32; a quarter of the samples fall where Birth ends, when a step does.
+    const steps = floorMod(birthLength, 125) === 0 && next(4) === 0 ? birthLength * 32 / 125 : next(4096);
+    const ms = steps * 1000 / 256;
+    const at = `run ${run} at ${ms} ms`;
+    const standFrame = (from: number, looping: boolean) => stand.start + Math.floor(looping ? floorMod(from, stand.end - stand.start) : Math.min(from, stand.end - stand.start));
+    const effect = animationSample(model, { animation: undefined, subAnimations: [], elapsed: steps / 256 }, "effect");
+    if (hasBirth && ms < birthLength) shows(effect, birthIndex, 9000 + Math.floor(ms), `${at}: an effect's Birth`);
+    else shows(effect, standIndex, standFrame(hasBirth ? ms - birthLength : ms, true), `${at}: an effect's Stand, or its first sequence without one, loops even when the model says not to`);
+    shows(animationSample(model, { animation: undefined, subAnimations: [], elapsed: steps / 256 }, "unit"), standIndex, standFrame(ms, stand.looping), `${at}: a unit's Stand, or its first sequence without one`);
+  }
 });
 
-test("animation: a blend keeps the old pose and fades it over the blend time of animation", () => {
-  const state = freshAnimation();
-  state.animationBlendTime = 0.125;
-  selectAnimation(state, "stand");
-  selectAnimation(state, "attack slam");
-  assertTrue(state.animationBlend === undefined);
-  advanceAnimation(state, 1, 0.0625);
-  selectAnimation(state, "stand");
-  assertEquals(state.animationBlend?.from.animation, "attack slam", "an animated unit saves its pose");
-  assertEquals(state.animationBlend?.from.elapsed, 0.0625);
-  advanceAnimation(state, 0.5, 0.0625);
-  assertEquals(blendWeight(state), 0.75);
-  selectAnimation(state, "death");
-  same([state.animationBlend?.from.animation, blendWeight(state)], ["attack slam", 0.75], "a switch during a blend leaves it running");
-  advanceAnimation(state, 1, 0.09375);
-  assertTrue(state.animationBlend === undefined);
-  state.animationBlendTime = 0;
-  selectAnimation(state, "stand");
-  assertTrue(state.animationBlend === undefined);
-});
-
-test("animation: a pose settled when read matches one advanced every frame, through selections, seeks, time scales and blends", () => {
+test("animation: a pose settled when read matches one advanced every frame, and a blend keeps the old pose and fades it over the blend time, through selections, seeks, time scales and blends", () => {
   let seed = 126;
   const next = (below: number) => {
     seed = floorMod(seed * 75 + 74, 65537);
@@ -76,7 +63,20 @@ test("animation: a pose settled when read matches one advanced every frame, thro
     };
     for (let command = 0; command < 60; command++) {
       const draws = next(4) === 0 ? next(200) : next(5);
-      for (let draw = 0; draw < draws; draw++) advanceAnimation(eager, timeScale, seconds);
+      for (let draw = 0; draw < draws; draw++) {
+        const fading = eager.animationBlend;
+        const remaining = fading?.remaining ?? 0;
+        advanceAnimation(eager, timeScale, seconds);
+        const fade = f32(f32(timeScale * seconds) * 1000);
+        if (fading !== undefined && fade !== 0) {
+          assertEquals(fading.remaining, f32(remaining - fade), `run ${run} command ${command} draw ${draw} fade`);
+          assertEquals(eager.animationBlend, fading.remaining > 0 ? fading : undefined, `run ${run} command ${command} draw ${draw} blend ends`);
+        }
+        const weight = blendWeight(eager);
+        const blend = eager.animationBlend;
+        assertEquals(weight, blend === undefined || eager.animationBlendTime <= 0 ? 0 : Math.min(1, blend.remaining / (eager.animationBlendTime * 1000)), `run ${run} command ${command} weight`);
+        assertTrue(weight >= 0 && weight <= 1);
+      }
       pending += draws;
       const choice = next(7);
       if (choice <= 1) {
@@ -89,7 +89,14 @@ test("animation: a pose settled when read matches one advanced every frame, thro
         lazy.animationBlendTime = blendTime;
         const animation = next(2) === 0 ? "stand" : next(5);
         const restart = next(2) === 0;
+        const running = eager.animationBlend;
+        const [from, elapsed, drawn] = [eager.animation, eager.animationElapsed, eager.animationClock * 1000 >= 1];
         selectAnimation(eager, animation, undefined, restart);
+        const blend = eager.animationBlend;
+        const at = `run ${run} command ${command} select`;
+        if (running !== undefined) assertTrue(blend === running);
+        else if (blendTime > 0 && from !== undefined && drawn) same([blend?.from.animation, blend?.from.elapsed, blend?.remaining], [from, elapsed, f32(blendTime * 1000)], `${at}: a blend keeps the old pose`);
+        else assertEquals(blend, undefined, `${at}: no blend`);
         selectAnimation(lazy, animation, undefined, restart);
       } else if (choice === 3) {
         settle();
