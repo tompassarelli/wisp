@@ -8,6 +8,9 @@
 name: Seed farm
 
 on:
+  # MUTANT:seed-farm scratch only: this session can't dispatch, so a push here starts the 1-minute run.
+  push:
+    branches: [scratch/seed-farm-desync]
   workflow_call:
     inputs:
       command:
@@ -46,7 +49,7 @@ jobs:
       cancel-in-progress: false
     env:
       COMMAND: ${{ inputs.command || 'bun scripts/wisp/repo.ts' }}
-      MINUTES: ${{ inputs.minutes || 10 }}
+      MINUTES: ${{ inputs.minutes || (github.event_name == 'push' && 1) || 10 }}
       ARTIFACT: seed-farm-${{ github.run_id }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       GH_TOKEN: ${{ github.token }}
