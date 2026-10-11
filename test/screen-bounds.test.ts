@@ -229,7 +229,7 @@ const area = (polygon: readonly Point[]) => Math.abs(polygon.reduce((sum, p, i) 
 const perimeter = (polygon: readonly Point[]) => polygon.reduce((sum, p, i) => { const q = polygon[(i + 1) % polygon.length] as Point; return sum + Math.hypot(q[0] - p[0], q[1] - p[1]); }, 0);
 
 // The head cube is skinned to an unnamed child of the named head node, the weapon cube to the named weapon node under the named hand.
-test("[property] the in-frame raster covers a cube's projected polygon, labels it with its nearest named node, and hides the overlap of a cube in front", () => {
+test("[property] the in-frame raster covers a cube's projected polygon, labels it with its nearest named node, shows it only through texels at least half opaque, and hides the overlap of a cube in front", () => {
   const models = new Map([["Head.mdl", boundsModel(parseMDL(cubeModel("HeadMesh", "Head")))], ["Weapon.mdl", boundsModel(parseMDL(cubeModel("Weapon", "Hand")))]]), next = random(126);
   const between = (low: number, high: number) => low + (high - low) * next(), whole = (low: number, high: number) => Math.floor(between(low, high + 1));
   let covered = 0, cropped = 0, overlapped = 0, edges = 0, missed = 0;
@@ -271,6 +271,13 @@ test("[property] the in-frame raster covers a cube's projected polygon, labels i
 
     const alone = portrait([back]), head = alone.parts.head;
     if (head === undefined) throw new Error("no head row");
+    // Texels from row `cut` down under half opacity show as the crop ending at `cut`; the rows above are at least half opaque.
+    const cut = whole(1, crop.height - 1), alpha = Uint8Array.from({ length: crop.width * crop.height }, (_, texel) => texel < cut * crop.width ? whole(128, 255) : whole(0, 127));
+    const faded = inFrame({ scene: { camera: { x: target[0], y: target[1], fields }, effects: [back] } as unknown as RenderScene, width, height, crop, texture: { width: crop.width, height: crop.height, alpha },
+      parts: { head: ["Head"], weapon: ["Weapon"], hand: ["Hand"] } }, (path) => models.get(path), frame);
+    const shortened = inFrame({ scene: { camera: { x: target[0], y: target[1], fields }, effects: [back] } as unknown as RenderScene, width, height, crop: { ...crop, height: cut }, texture: { width: crop.width, height: cut },
+      parts: { head: ["Head"], weapon: ["Weapon"], hand: ["Hand"] } }, (path) => models.get(path), { ...frame, height: cut });
+    expect(faded).toEqual(shortened);
     expect(Math.abs(head.pixels - area(backPolygon))).toBeLessThanOrEqual(perimeter(backPolygon) + 1);
     expect(alone.headHiddenByWeapon).toBe(0);
     if (backPolygon.length > 0 && area(backPolygon) > 16) {

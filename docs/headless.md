@@ -661,7 +661,11 @@ wisp:test/headless-bounds.test.ts).
   to the head bone's children counts as head and a weapon under the hand
   counts as weapon only. Each screen pixel whose centre lies in the frame shows the texel at its
   place in the texture (drawn whole), and that texel shows the render pixel at
-  its centre within the crop. Per part, `inFrame.parts` counts the visible
+  its centre within the crop. A texel under half opacity (alpha below 128)
+  shows the HUD behind more than the portrait, so its pixels count toward no
+  part: a bust's faded bottom edge hides what it fades. The headless report
+  reads that alpha from the texture file (TGA or BLP); a caller of
+  `inFrame` passes it as `texture.alpha`. Per part, `inFrame.parts` counts the visible
   pixels and gives their pixel `box`; `crownMargin` is the rows between the
   frame's top row and the head's top visible row; `headHiddenByWeapon` counts
   pixels where the weapon is nearest and the head would show without it. The
@@ -669,7 +673,8 @@ wisp:test/headless-bounds.test.ts).
   Checked by a property over random cubes (wisp:test/screen-bounds.test.ts):
   coverage equals the projected polygon's area within 1 px per edge, the box
   matches the pixel centres that polygon holds, a cube skinned to a named
-  node's child counts toward that node's part, and a cube behind another
+  node's child counts toward that node's part, texels under half opacity
+  count exactly as a crop ending above them, and a cube behind another
   reports the overlap as hidden.
 - **Native silhouette.** `wisp headless silhouette SHOWN HIDDEN
   LEFT,TOP,RIGHT,BOTTOM` measures the native side of a posed box. `SHOWN` and

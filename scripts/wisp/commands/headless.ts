@@ -13,6 +13,7 @@ import { parseModelMDX } from "../models";
 import { type TextureIdentity, uiReport } from "../screen";
 import { type BoundsModel, type BoundsTextures, type Texels, boundsModel, compareEdges, inFrame, sceneBounds, silhouetteBounds, teamGlowPath, texels } from "../screenBounds";
 import { decodePng } from "../fidelity/image";
+import { decodePreviewRgba } from "../mapPreview";
 import { decodePpm } from "../frameProbe";
 import { runJourney } from "../../../src/headless/journey";
 import type { Lockstep } from "../../../src/headless/lockstep";
@@ -80,16 +81,28 @@ async function boundsImages(render: HeadlessRenderProject, scenes: readonly Rend
     if (glow !== undefined) glows.set(team, glow);
   }
   const drawnTextures: BoundsTextures = { image: (path) => images.get(path), teamGlow: (team) => glows.get(team) };
-  const textures = new Map<string, TextureIdentity>();
+  const textures = new Map<string, TextureIdentity>(), alphas = new Map<string, Uint8Array>();
   for (const path of new Set(scenes.flatMap((scene) => scene.ui.map((frame) => frame.texture)))) if (path !== "") {
     const { bytes, layer } = await read(path);
     if (bytes !== undefined && layer !== undefined) textures.set(path, { layer, sha256: new Bun.CryptoHasher("sha256").update(bytes).digest("hex") });
+    const alpha = bytes === undefined || render.portraits?.[path] === undefined ? undefined : textureAlpha(bytes);
+    if (alpha !== undefined) alphas.set(path, alpha);
   }
   return posed.map((scene) => ({ frame: scene.frame, ...(scene.matchFrame === undefined ? {} : { matchFrame: scene.matchFrame }), client: scene.client,
     ui: uiReport(scene, width, height, (path) => textures.get(path)).map((row) => {
       const portrait = row.texture === null ? undefined : render.portraits?.[row.texture];
-      return portrait === undefined ? row : { ...row, inFrame: inFrame(portrait, (path) => models.get(path), row.pixels) };
+      const alpha = row.texture === null ? undefined : alphas.get(row.texture);
+      return portrait === undefined ? row : { ...row, inFrame: inFrame(alpha?.length !== portrait.texture.width * portrait.texture.height ? portrait : { ...portrait, texture: { ...portrait.texture, alpha } }, (path) => models.get(path), row.pixels) };
     }), models: sceneBounds(scene, (path) => models.get(path), width, height, drawnTextures) }));
+}
+
+/** A TGA or BLP texture's alpha per texel, row-major from the top row; undefined when it can't be decoded, so every texel counts. */
+function textureAlpha(bytes: Uint8Array): Uint8Array | undefined {
+  let image: ReturnType<typeof decodePreviewRgba>;
+  try { image = decodePreviewRgba(bytes); } catch { return undefined; }
+  const alpha = new Uint8Array(image.width * image.height);
+  for (let texel = 0; texel < alpha.length; texel++) alpha[texel] = image.rgba[texel * 4 + 3] ?? 0;
+  return alpha;
 }
 
 export function headlessArguments(args: readonly string[]) {

@@ -342,7 +342,8 @@ export interface Portrait {
   readonly height: number;
   /** Render pixels the texture holds, origin top left, y down. */
   readonly crop: PixelRect;
-  readonly texture: { readonly width: number; readonly height: number };
+  /** The texture's size and, when it has one, its alpha per texel (0-255, row-major from the top row): a texel under half opacity shows the backdrop more than the portrait. */
+  readonly texture: { readonly width: number; readonly height: number; readonly alpha?: ArrayLike<number> };
   /** Declared part name to node names; `head` and `weapon` also give the crown margin and the head pixels the weapon hides. */
   readonly parts: Readonly<Record<string, readonly string[]>>;
 }
@@ -368,7 +369,8 @@ const EMPTY = -1, UNNAMED = -2;
  * Per declared part, what of a portrait shows inside a HUD frame drawn at `frame` (screen pixels), with the texture drawn
  * whole. The portrait's posed triangles are rasterized with a depth buffer at its render size, each pixel labelled with the
  * nearest named node at or above the node its nearest vertex weights most, so a part takes the named nodes' descendants
- * down to another named node; each frame pixel samples the texel it shows and the render pixel at that texel's centre.
+ * down to another named node; each frame pixel samples the texel it shows and the render pixel at that texel's centre,
+ * and shows the portrait only where that texel is at least half opaque.
  */
 export function inFrame(portrait: Portrait, models: (path: string) => BoundsModel | undefined, frame: PixelRect): InFrame {
   const { width, height, crop, texture, parts } = portrait;
@@ -428,6 +430,7 @@ export function inFrame(portrait: Portrait, models: (path: string) => BoundsMode
     if (y < 0 || y >= height) continue;
     for (let column = firstColumn; column < endColumn; column++) {
       const texelX = Math.min(texture.width - 1, Math.floor((column + 0.5 - frame.x) / frame.width * texture.width));
+      if (texture.alpha !== undefined && (texture.alpha[texelY * texture.width + texelX] ?? 0) < 128) continue;
       const x = Math.floor(crop.x + (texelX + 0.5) * crop.width / texture.width);
       if (x < 0 || x >= width) continue;
       const shown = label[y * width + x] ?? EMPTY;
