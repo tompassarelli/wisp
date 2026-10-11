@@ -574,6 +574,43 @@ of declared playback and preserves the event log. Music playback, stop,
 loop mode and map gain (including zero) are recorded from the actual calls;
 audible mixing and fade envelopes use Warcraft references.
 
+### Screen bounds
+
+`wisp headless [JOURNEY] --bounds DIR --frames N...` (or `--match-frames N...`,
+with `--resolution WxH` and `--graphics classic|definitive`) writes
+`DIR/bounds.json` without starting Chrome: `{ graphics, width, height, images }`,
+one image per requested frame and client with its `frame` (and `matchFrame`),
+`client`, `ui` rows and `models` rows. `--render` adds the same model rows
+to each image in `render.json` as `bounds`. Both need the map's `render.readAsset`; the
+command reads models and UI textures through `render.resolveAsset` when the
+map supplies it (wisp:scripts/wisp/commands/headless.ts, checked end to end by
+wisp:test/headless-bounds.test.ts).
+
+- **Screen size.** Rows are measured at `--resolution WxH`, the size every
+  client also reports to `BlzGetLocalClientWidth/Height`; without it, at the
+  render canvas (`render.width`/`height`, default 1280x720), while client i
+  lays out for (1920 + 640·i) × 1080.
+- **The pixel rule.** `ui` rows are `uiReport(scene, width, height, textures)`
+  (wisp:scripts/wisp/screen.ts): the 0.8 x 0.6 UI area is centred and scaled
+  by the screen height, so x = W/2 + (left − 0.4)·H/0.6 and
+  y = (0.6 − top)·H/0.6, with `outside43` when an edge leaves that area.
+- **Texture regions.** A frame's texture region is UV `[0, 0, 1, 1]`, because
+  a texture set with `BlzFrameSetTexture` is drawn whole. Its `layer` is the
+  resolved asset's selected layer (`base` from `readAsset` alone) and its
+  `sha256` hashes the bytes, so a row names exactly which picture it drew.
+- **Posed bounds.** `models` rows are `sceneBounds(sceneWithUnits(scene),
+  models, width, height)` (wisp:scripts/wisp/screenBounds.ts): every effect
+  and unit the renderer would draw, posed at its sequence, elapsed time, blend
+  and global sequences as `drawEffect` poses it, skinned on the CPU and
+  projected through the scene's camera. Each row has the model's pixel `box`
+  (origin top left, y down), `offFrame`, `behindEye`, `farCulled`, each
+  geoset's alpha, filter mode and whether it is drawn, and each posed node's
+  box and pivot. A model whose bytes are absent has no row.
+
+Not yet modelled (wisp#125 lane 5): `BlzFrameSetScale` does not scale a
+frame's size or offsets, and `GAME_UI` children are not clamped to the 4:3
+area, so a scaled or out-of-4:3 frame's rectangle can differ from native.
+
 ### Lighting, fog and sky
 
 The renderer draws each frame in the light the map last set. The headless

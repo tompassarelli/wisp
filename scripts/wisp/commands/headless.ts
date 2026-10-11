@@ -5,7 +5,13 @@ import { emitJson } from "../jsonResults";
 import { predictionLines } from "../perf";
 import { type Graphics, type Lever, parseGraphics, parseLevers } from "../graphicsProfiles";
 import { requireGpuLease } from "../gpuLease";
-import { captureScene, loadEffectDeaths, renderScenes, type RenderScene } from "../headlessRender";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import { parseMDL } from "../../../vendor/war3-model.mjs";
+import { captureScene, type HeadlessRenderProject, loadEffectDeaths, renderScenes, type RenderScene, sceneWithUnits } from "../headlessRender";
+import { parseModelMDX } from "../models";
+import { type TextureIdentity, uiReport } from "../screen";
+import { type BoundsModel, boundsModel, sceneBounds } from "../screenBounds";
 import { runJourney } from "../../../src/headless/journey";
 import type { Lockstep } from "../../../src/headless/lockstep";
 import { sceneMatchFrame } from "../../../src/runtime/scene";
@@ -43,10 +49,35 @@ const matchFrameOf = (globalPrefixes: readonly string[]) => (clients: Lockstep):
   return frame;
 };
 
+/** Per scene: its frame rows and its posed model rows at a `width` x `height` canvas, without Chrome. */
+async function boundsImages(render: HeadlessRenderProject, scenes: readonly RenderScene[], width: number, height: number, graphics: Graphics) {
+  const read = async (path: string) => {
+    if (render.resolveAsset === undefined) {
+      const bytes = await render.readAsset(path, graphics);
+      return { bytes, layer: bytes === undefined ? undefined : "base" };
+    }
+    const { bytes, selected } = await render.resolveAsset(path, graphics);
+    return { bytes, layer: selected?.layer };
+  };
+  const posed = scenes.map((scene) => sceneWithUnits(render, scene));
+  const models = new Map<string, BoundsModel>();
+  for (const path of new Set(posed.flatMap((scene) => scene.effects.map((pose) => pose.model)))) {
+    const { bytes } = await read(path);
+    if (bytes !== undefined) models.set(path, boundsModel(new TextDecoder().decode(bytes.subarray(0, 4)) === "MDLX" ? parseModelMDX(bytes.slice().buffer) : parseMDL(new TextDecoder().decode(bytes))));
+  }
+  const textures = new Map<string, TextureIdentity>();
+  for (const path of new Set(scenes.flatMap((scene) => scene.ui.map((frame) => frame.texture)))) if (path !== "") {
+    const { bytes, layer } = await read(path);
+    if (bytes !== undefined && layer !== undefined) textures.set(path, { layer, sha256: new Bun.CryptoHasher("sha256").update(bytes).digest("hex") });
+  }
+  return posed.map((scene) => ({ frame: scene.frame, ...(scene.matchFrame === undefined ? {} : { matchFrame: scene.matchFrame }), client: scene.client,
+    ui: uiReport(scene, width, height, (path) => textures.get(path)), models: sceneBounds(scene, (path) => models.get(path), width, height) }));
+}
+
 export function headlessArguments(args: readonly string[]) {
   const named: string[] = [], frames: number[] = [];
   let match = false;
-  let render: string | undefined, journey: string | undefined, sounds: string | undefined;
+  let render: string | undefined, bounds: string | undefined, journey: string | undefined, sounds: string | undefined;
   let screen: { width: number; height: number } | undefined;
   let runs = 1, stepFrames: number | undefined, musicVolume: number | undefined, graphics: Graphics = "classic", look: Lever[] = [];
   for (let index = 0; index < args.length; index++) {
@@ -56,10 +87,11 @@ export function headlessArguments(args: readonly string[]) {
       match = arg === "--match-frames";
       while (index + 1 < args.length && /^\d+(,\d+)*$/.test(args[index + 1] ?? "")) frames.push(...(args[++index] ?? "").split(",").map(Number));
       if (frames.length === 0) throw new Error(`${arg} needs one or more frame numbers`);
-    } else if (["--render", "--journey", "--sound-cues", "--music-volume", "--clients", "--runs", "--step", "--graphics", "--look", "--resolution"].includes(arg)) {
+    } else if (["--render", "--bounds", "--journey", "--sound-cues", "--music-volume", "--clients", "--runs", "--step", "--graphics", "--look", "--resolution"].includes(arg)) {
       const value = args[++index];
       if (value === undefined || value.startsWith("--")) throw new Error(`${arg} needs a value`);
       if (arg === "--render") render = value;
+      if (arg === "--bounds") bounds = value;
       if (arg === "--journey") journey = value;
       if (arg === "--sound-cues") sounds = value;
       if (arg === "--music-volume") {
@@ -83,11 +115,12 @@ export function headlessArguments(args: readonly string[]) {
     else if (arg.startsWith("--")) throw new Error(`unknown headless option: ${arg}`);
     else named.push(arg);
   }
-  if ((render === undefined) !== (frames.length === 0)) throw new Error("--render DIR and --frames N... (or --match-frames N...) are used together");
+  if ((render === undefined && bounds === undefined) !== (frames.length === 0)) throw new Error("--render DIR or --bounds DIR and --frames N... (or --match-frames N...) are used together");
   if (journey !== undefined && named.length > 0) throw new Error("--journey FILE takes the place of a named journey");
-  if (runs > 1 && render !== undefined) throw new Error("--render captures one run; use --runs for checks without rendering");
-  if ((graphics !== "classic" || look.length > 0) && render === undefined) throw new Error("--graphics and --look choose what --render draws");
-  return { named, frames: [...new Set(frames)].sort((a, b) => a - b), match, render, journey, sounds, runs, stepFrames, musicVolume, graphics, look, screen };
+  if (runs > 1 && (render !== undefined || bounds !== undefined)) throw new Error("--render and --bounds capture one run; use --runs for checks without them");
+  if (graphics !== "classic" && render === undefined && bounds === undefined) throw new Error("--graphics chooses what --render draws and --bounds measures");
+  if (look.length > 0 && render === undefined) throw new Error("--look chooses what --render draws");
+  return { named, frames: [...new Set(frames)].sort((a, b) => a - b), match, render, bounds, journey, sounds, runs, stepFrames, musicVolume, graphics, look, screen };
 }
 
 export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfProject): Command => (args) => Effect.suspend(() => {
@@ -111,7 +144,7 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
     const journey: Journey | undefined = options.journey === undefined ? (name === undefined ? undefined : project.journeys[name]) : yield* Effect.tryPromise({ try: () => Bun.file(options.journey ?? "").json(), catch: (cause) => new UsageFailure({ problem: describeCause(cause) }) }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(JourneyFile)), Effect.mapError((cause) => new UsageFailure({ problem: describeCause(cause) })));
     if (name === undefined || journey === undefined) return yield* new UsageFailure({ problem: `journeys: ${names.join(", ")}` });
     if (!options.match && options.frames.some((frame) => frame > journey.frames)) return yield* new UsageFailure({ problem: `capture frames must be within this journey's 0–${journey.frames} frames` });
-    if (options.render !== undefined && project.render === undefined) return yield* new UsageFailure({ problem: "this map must provide render.readAsset before using --render" });
+    if ((options.render !== undefined || options.bounds !== undefined) && project.render === undefined) return yield* new UsageFailure({ problem: "this map must provide render.readAsset before using --render or --bounds" });
     if (options.render !== undefined) yield* requireGpuLease();
     const entry = yield* Effect.tryPromise({
       try: () => loadMapEntry(project.entry),
@@ -155,7 +188,7 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
     const benchmark = { runs: samples.length, requestedRuns: options.runs, frames: samples.reduce((sum, sample) => sum + sample.frames, 0), failures: samples.filter((sample) => sample.problems > 0).length, elapsedMs, cpuMs: (cpu.user + cpu.system) / 1000 };
     const speedMultiple = benchmark.frames * FRAME_MS / Math.max(elapsedMs, Number.EPSILON);
     const render = project.render;
-    if (options.render !== undefined && render !== undefined && destroyedModels.size > 0) {
+    if ((options.render !== undefined || options.bounds !== undefined) && render !== undefined && destroyedModels.size > 0) {
 
       const effectDeaths = yield* Effect.tryPromise({ try: () => loadEffectDeaths(render, destroyedModels, options.graphics), catch: (cause) => new HeadlessFailure({ journey: name, problems: 1, cause }) });
       scenes = yield* Effect.try({
@@ -192,8 +225,24 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
       else yield* Console.log(`p${cue.client} frame ${cue.frame}: ${cue.kind} ${cue.event} ${cue.label ?? cue.source ?? "unknown"} loop ${cue.looping} volume ${cue.volume} effective ${cue.effectiveVolume} pitch ${cue.pitch}`);
     }
     if (options.sounds !== undefined) yield* Effect.tryPromise({ try: () => Bun.write(options.sounds ?? "", JSON.stringify(report.sounds, null, 2) + "\n"), catch: (cause) => new HeadlessFailure({ journey: name, problems: 1, cause }) });
+    const canvas = options.screen ?? { width: render?.width ?? 1280, height: render?.height ?? 720 };
+    const bounds = (options.render !== undefined || options.bounds !== undefined) && render !== undefined
+      ? yield* Effect.tryPromise({ try: () => boundsImages(render, scenes, canvas.width, canvas.height, options.graphics), catch: (cause) => new HeadlessFailure({ journey: name, problems: 1, cause }) }).pipe(step("screen bounds"))
+      : [];
+    if (options.bounds !== undefined) {
+      const directory = options.bounds;
+      yield* Effect.tryPromise({
+        try: async () => {
+          await mkdir(directory, { recursive: true });
+          await Bun.write(join(directory, "bounds.json"), JSON.stringify({ graphics: options.graphics, ...canvas, images: bounds }, null, 2) + "\n");
+        },
+        catch: (cause) => new HeadlessFailure({ journey: name, problems: 1, cause }),
+      });
+      if (json) yield* emitJson("headless", { type: "bounds", directory, images: bounds.length });
+      else yield* Console.log(`${bounds.length} frames measured to ${join(directory, "bounds.json")}`);
+    }
     if (options.render !== undefined && project.render !== undefined) {
-      const rendered = yield* renderScenes(options.screen === undefined ? project.render : { ...project.render, ...options.screen }, scenes, options.render, options.graphics, options.look).pipe(Effect.mapError((cause) => new HeadlessFailure({ journey: name, problems: 1, cause })));
+      const rendered = yield* renderScenes(options.screen === undefined ? project.render : { ...project.render, ...options.screen }, scenes, options.render, options.graphics, options.look, bounds.map((image) => image.models)).pipe(Effect.mapError((cause) => new HeadlessFailure({ journey: name, problems: 1, cause })));
       if (json) yield* emitJson("headless", { type: "render", directory: options.render, images: rendered });
       else yield* Console.log(`${rendered.length} frames rendered to ${options.render}`);
     }

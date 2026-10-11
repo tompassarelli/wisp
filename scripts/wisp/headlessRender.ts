@@ -13,6 +13,7 @@ import { decodeTerrain, shiftedBounds, worldBounds, type Terrain, type WorldBoun
 import { decodeDoodadFile, type TerrainDoodad } from "./doodads";
 import { freshAnimation } from "../../src/headless/animation";
 import { type TextureIdentity, uiReport } from "./screen";
+import type { ModelBounds } from "./screenBounds";
 
 import { GRAPHICS, type Graphics, type Lever, PROFILES, unsupportedLevers } from "./graphicsProfiles";
 export type { Graphics } from "./graphicsProfiles";
@@ -338,7 +339,7 @@ const openAnyBrowser = (project: HeadlessRenderProject, bundle: string, graphics
   return yield* attempt(false).pipe(Effect.catch(() => attempt(true)));
 });
 
-export const renderScenes = (project: HeadlessRenderProject, scenes: readonly RenderScene[], directory: string, graphics: Graphics = "classic", look: readonly Lever[] = []) => Effect.scoped(Effect.gen(function*() {
+export const renderScenes = (project: HeadlessRenderProject, scenes: readonly RenderScene[], directory: string, graphics: Graphics = "classic", look: readonly Lever[] = [], bounds: readonly (readonly ModelBounds[])[] = []) => Effect.scoped(Effect.gen(function*() {
   const unsupported = unsupportedLevers(graphics, look);
   if (unsupported.length > 0) return yield* new RenderFailure({ cause: `the look check asks for ${unsupported.join(", ")}, which Wisp does not draw in ${graphics} (wisp:docs/headless.md, "Graphics profiles")` });
   const bundle = yield* Effect.tryPromise({ try: async () => {
@@ -349,17 +350,18 @@ export const renderScenes = (project: HeadlessRenderProject, scenes: readonly Re
   const browser = yield* openAnyBrowser(project, bundle, graphics);
   const write = (run: () => Promise<unknown>) => Effect.tryPromise({ try: run, catch: (cause) => new RenderFailure({ cause }) });
   yield* write(() => mkdir(directory, { recursive: true }));
-  const images: { frame: number; matchFrame?: number; client: number; image: string; models: number; textures: number; notDrawn: string[]; popcornEmitters: PopcornEmitterPose[]; unsupportedEmitters: UnsupportedEmitterPose[]; pointLights: number; absent: readonly string[]; shadows: RenderedFrame["shadows"]; post: RenderedFrame["post"]; water: boolean; heightFog: boolean; milliseconds: number; ui: ReturnType<typeof uiReport> }[] = [];
+  const images: { frame: number; matchFrame?: number; client: number; image: string; models: number; textures: number; notDrawn: string[]; popcornEmitters: PopcornEmitterPose[]; unsupportedEmitters: UnsupportedEmitterPose[]; pointLights: number; absent: readonly string[]; shadows: RenderedFrame["shadows"]; post: RenderedFrame["post"]; water: boolean; heightFog: boolean; milliseconds: number; ui: ReturnType<typeof uiReport>; bounds?: readonly ModelBounds[] }[] = [];
   const width = project.width ?? 1280, height = project.height ?? 720;
-  for (const scene of scenes) {
+  for (const [index, scene] of scenes.entries()) {
     const started = performance.now();
+    const posed = bounds[index];
     const result = (yield* browser.devtools.evaluate(`window.renderScene(${JSON.stringify(sceneWithUnits(project, scene))})`)) as RenderedFrame;
     const name = scene.matchFrame === undefined ? `p${scene.client}-frame-${scene.frame}` : `p${scene.client}-match-${scene.matchFrame}`;
     for (const failure of result.notDrawn) console.error(`${name}: not drawn: ${failure}`);
     const image = `${name}.png`;
     yield* write(() => Bun.write(join(directory, image), Buffer.from(result.png.split(",")[1] ?? "", "base64")));
     yield* write(() => Bun.write(join(directory, `${name}.json`), JSON.stringify({ ...scene, popcornEmitters: result.popcornEmitters, unsupportedEmitters: result.unsupportedEmitters })));
-    images.push({ frame: scene.frame, ...(scene.matchFrame === undefined ? {} : { matchFrame: scene.matchFrame }), client: scene.client, image, models: result.models, textures: result.textures, notDrawn: result.notDrawn, popcornEmitters: result.popcornEmitters, unsupportedEmitters: result.unsupportedEmitters, pointLights: result.pointLights, absent: result.absent, shadows: result.shadows, post: result.post, water: result.water, heightFog: result.heightFog, milliseconds: Math.round(performance.now() - started), ui: uiReport(scene, width, height, (path) => browser.identities.get(path)) });
+    images.push({ frame: scene.frame, ...(scene.matchFrame === undefined ? {} : { matchFrame: scene.matchFrame }), client: scene.client, image, models: result.models, textures: result.textures, notDrawn: result.notDrawn, popcornEmitters: result.popcornEmitters, unsupportedEmitters: result.unsupportedEmitters, pointLights: result.pointLights, absent: result.absent, shadows: result.shadows, post: result.post, water: result.water, heightFog: result.heightFog, milliseconds: Math.round(performance.now() - started), ui: uiReport(scene, width, height, (path) => browser.identities.get(path)), ...(posed === undefined ? {} : { bounds: posed }) });
   }
   yield* write(() => Bun.write(join(directory, "render.json"), JSON.stringify({ renderer: "war3-model 4.0.1 + HD sampling precision", graphics, levers: PROFILES[graphics], look, gpu: browser.gpu, assets: [...browser.resolutions.values()], images }, null, 2) + "\n"));
   const failures = images.flatMap((image) => image.notDrawn.map((failure) => `p${image.client} ${image.matchFrame === undefined ? "frame" : "match frame"} ${image.matchFrame ?? image.frame}: ${failure}`));

@@ -162,13 +162,14 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--opponent ID` | The computer players' named opponent identity | `farm balance` |
 | `--tier TIER` | The computer players' difficulty tier | `farm balance` |
 | `--per-pair N` | How many matches each fighter pair plays | `farm` |
-| `--frames N...` | Frame count for perf or standalone play; chosen frame numbers for headless renders | `perf`, `headless`, `play --standalone` |
+| `--frames N...` | Frame count for perf or standalone play; chosen frame numbers for headless renders and bounds | `perf`, `headless`, `play --standalone` |
 | `--render DIR` | Write images from the headless match scene | `headless`, consumer pad checks |
+| `--bounds DIR` | Write `bounds.json` without Chrome: each requested frame's HUD frame rectangles and posed model screen bounds per client ([Screen bounds](headless.md#screen-bounds)) | `headless` |
 | `--journey FILE` | Read the headless journey's events from JSON | `headless` |
 | `--step N` | Advance at most N simulation frames at a time | `headless` |
 | `--runs N` | Fresh scripted starts compared with the first run | `headless` |
-| `--graphics classic\|definitive` | Draw `--render` frames in Classic or Definitive Edition: its models, textures, day/night lights and the levers its profile draws ([Graphics profiles](headless.md#graphics-profiles)); the map's `readAsset` receives the choice | `headless` |
-| `--resolution WxH` | Every headless client's screen size (`BlzGetLocalClientWidth/Height`, pixel/frame conversions) and the `--render` canvas; unset, client i is (1920 + 640·i) × 1080 and renders are the map's size ([Rendered frames](headless.md#rendered-frames-and-sound-cues)) | `headless` |
+| `--graphics classic\|definitive` | Draw `--render` frames (and measure `--bounds`) in Classic or Definitive Edition: its models, textures, day/night lights and the levers its profile draws ([Graphics profiles](headless.md#graphics-profiles)); the map's `readAsset` receives the choice | `headless` |
+| `--resolution WxH` | Every headless client's screen size (`BlzGetLocalClientWidth/Height`, pixel/frame conversions) and the `--render` and `--bounds` canvas; unset, client i is (1920 + 640·i) × 1080 and renders are the map's size ([Rendered frames](headless.md#rendered-frames-and-sound-cues)) | `headless` |
 | `--look LEVER,...` | The levers the frames' look check asks for; the render fails naming each one the graphics profile does not draw | `headless` |
 | `--sound-cues FILE` | Write the headless sound/music event log, including stops, loops and volume | `headless` |
 | `--music-volume 0..1` | The player's Options > Sound music slider (default 1): scales music cues' `effectiveVolume`; sound effects are unchanged | `headless` |
