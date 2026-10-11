@@ -13,6 +13,8 @@ export class UsageFailure extends Schema.TaggedError<UsageFailure>()("UsageFailu
 export interface CommandFailure {
   readonly _tag: string;
   readonly message: string;
+  /** The process's exit code, when it isn't 1: `wisp ci`'s 75 for an inconclusive stage. */
+  readonly exitCode?: number;
 }
 
 export type Command = (args: readonly string[]) => Effect.Effect<void, CommandFailure, Platform>;

@@ -102,7 +102,8 @@ suite CPU: 14.7 s for 238 tests; 0.062 s per test (reported, not gated)
 A test that would come near the ceiling, typically one that compiles a
 fixture to 32-bit Lua, is a farm test: declare it with `farmTest` from
 [farmTest](../scripts/wisp/farmTest.ts) (wisp:scripts/wisp/farmTest.ts)
-instead of `test`. `bun run test` skips it; CI's farm-tests job and every
+instead of `test`. `bun run test` skips it; `bun wisp ci post-merge` (CI's
+framework job, [CI command](ci-command.md#post-merge)) and every
 `bun wisp farm test` shard run it on each push, so it keeps its coverage.
 The ceilings don't apply to it. Keep its cheap Bun-side twin in the suite.
 The headless fixtures' Lua32 twins are one farm test file,

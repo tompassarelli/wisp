@@ -55,6 +55,15 @@ const EDITOR_FILE = /^(?:\..*|.*~|.*\.sw[a-p]|4913)$/;
 
 const OUTPUT_LINES = 40;
 
+/** Whether a save of `path` reaches the tests: a project file at the root, or a file under one of `sources`. `wisp ci pre-merge` reads a diff the same way. */
+export function followsSave(root: string, sources: readonly string[], path: string): boolean {
+  const local = relative(root, path);
+  if (local.startsWith("..") || EDITOR_FILE.test(basename(path)) || local.split(sep).includes("node_modules")) return false;
+  return dirname(local) === "." ? PROJECT_FILE.test(local) : sources.some((source) => local.startsWith(`${source}${sep}`));
+}
+
+export const isProjectFile = (root: string, path: string) => dirname(relative(root, path)) === ".";
+
 const cpuBudget = (limit: number | undefined) => Math.max(1, Math.floor(Math.min(availableParallelism(), limit ?? Infinity)));
 
 const seconds = (since: number) => `${((Date.now() - since) / 1000).toFixed(3).padStart(8)} s  `;
@@ -72,13 +81,11 @@ class SavedFiles {
   }
 
   follows(path: string): boolean {
-    const local = relative(this.root, path);
-    if (local.startsWith("..") || EDITOR_FILE.test(basename(path)) || local.split(sep).includes("node_modules")) return false;
-    return dirname(local) === "." ? PROJECT_FILE.test(local) : this.sources.some((source) => local.startsWith(`${source}${sep}`));
+    return followsSave(this.root, this.sources, path);
   }
 
   isProjectFile(path: string): boolean {
-    return dirname(relative(this.root, path)) === ".";
+    return isProjectFile(this.root, path);
   }
 
   changes(paths: Iterable<string>): Changes {

@@ -36,6 +36,35 @@ jobs:
       repro-paths: build/soak
 ```
 
+### Call the CI command's tiers
+
+A game that declares [`ci`](ci-command.md) runs its checks through it, so
+the workflow, a cloud worker and a laptop run the same stages. Pass
+`ci post-merge` as the template's `check` and leave `test` empty: it runs
+the type check, the whole `bun run test` and the farm tests. Pull requests
+run `ci pre-merge` in a job of their own, with the history it diffs:
+
+```yaml
+    with:
+      check: bun scripts/game.ts ci post-merge
+      test: ""
+  pre-merge:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0               # ci pre-merge diffs against the base commit
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun scripts/game.ts ci pre-merge --base ${{ github.event.pull_request.base.sha }}
+```
+
+Both exit 0, 1 or 75 (a timing test inconclusive on a busy machine), and
+`--json` gives one line per stage.
+
 Pin `uses:` and `wisp-ref` to the same full commit hash. When `wisp-ref` is
 set, the run fails unless package.json installs `wisp-<wisp-ref>.tgz`, so
 the template and the installed package can't drift apart.
@@ -131,11 +160,12 @@ only the first client creates an extra unit, with `expect-failure: true`,
 so it passes only when the journey reports the desync. Both upload their
 output as `wisp-ci-sample` and `wisp-ci-sample-failing-fixture`.
 wisp:examples/sample/test/failing-fixture.test.ts checks the same verdict
-locally. Job `framework` leaves examples/ out of its `bun run test`, so the
-sample's tests run once, in job `sample`. Wisp has no self-hosted runner, so its CI never sets
+locally. Wisp has no self-hosted runner, so its CI never sets
 `private-map-build`.
 
-The `framework` job runs Wisp's own check and full Bun suite. It installs
+The `framework` job runs `bun wisp ci post-merge` ([CI command](ci-command.md)):
+Wisp's own check, its full Bun suite (the sample's tests included, which job
+`sample` also runs through the template) and the farm tests. It installs
 Ubuntu's `libstorm-dev` and sets `STORMLIB_PREFIX=/usr` and `CC=gcc`, so the
 map packager (wisp:scripts/wisp/mapBuild.ts) and its tests
 (wisp:test/map-pack.test.ts) build against that StormLib instead of nixpkgs';

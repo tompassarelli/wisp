@@ -10,7 +10,7 @@
     "check": "bun node_modules/typescript-native/bin/tsc --build tsconfig.json tsconfig.browser.json tsconfig.game.json examples/sample/tsconfig.json examples/sample/tsconfig.map.json examples/sample/tsconfig.tests.json examples/sample/tsconfig.headless.json --noEmit && bun scripts/numberRules.ts tsconfig.game.json examples/sample/tsconfig.map.json examples/sample/tsconfig.tests.json examples/sample/tsconfig.headless.json",
     "test": "bun scripts/wisp/testRunner.ts",
     "wisp": "bun scripts/wisp/repo.ts",
-    "ci": "bun run check && bun run test",
+    "ci": "bun scripts/wisp/repo.ts ci post-merge",
     "package": "bun scripts/package.ts"
   },
   "devDependencies": {

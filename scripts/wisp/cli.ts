@@ -32,7 +32,7 @@ export const cliProgram = (program: string, commands: Readonly<Record<string, Co
     return 2;
   }
   print(failure.value.message);
-  return 1;
+  return failure.value.exitCode ?? 1;
 });
 
 export const runCli = (...args: Parameters<typeof cliProgram>): Promise<number> => Effect.runPromise(cliProgram(...args));

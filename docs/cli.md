@@ -81,6 +81,7 @@ program can register it; "game" means the consuming game defines it.
 | `pad` | Scripted virtual-pad input through the real helper | (script) | game |
 | `judge` | Retained captures against a measurement rubric | (capture folder) | game |
 | `anim` | Fighter animation quality: the measured scorecard and its judged side-by-side | `score`, `judge` | game |
+| `ci` | Every check a project runs, as one program for each tier ([CI command](ci-command.md)) | `pre-merge`, `post-merge`, `nightly`, `seeds` | Wisp services, game command |
 | `farm` | Headless work on hosted CI runners | `test` (Wisp); `balance`, `pads`, `perf`, `memory` (game) | Wisp |
 | `view` | What a player would see, and the model facts it reads | `scene`, `frame`, `models`, `strikes`, `reach`, `hurtboxes`, `motion` | game |
 | `oracle` | Melee situations against decompiled values | (session) | game |
@@ -110,6 +111,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--hot` | Reload the current map script between batch checks | `pad` |
 | `--solo` | Run each selected client in a separate single-player game | `accept` |
 | `--base BASE.w3m` | The base map a build starts from | `map build` |
+| `--base SHA` | The commit a change is measured from; Autoland's fixed interface keeps this second meaning | `ci pre-merge` |
 | `--container MAP.w3x` | The map whose contents a build keeps | `map build` |
 | `--assets DIR` | The game's private asset folder | `map build`, `view` |
 | `--summon DIR` | The game's private summon folder | `map build`, `view` |
@@ -125,10 +127,12 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--watch` | Keep running and act on every save | `hot` |
 | `--wait` | Block until a remote run ends, then print its verdict | `farm` |
 | `--once` | Print the current state and exit | `client watch` |
-| `--json` | One JSON object a line | `client watch`, `headless`, `soak`, `repro`, `accept`, `perf` |
+| `--json` | One JSON object a line | `client watch`, `headless`, `soak`, `repro`, `accept`, `perf`, `ci` |
 | `--record FILE` | Also append every event to a file | `client watch` |
 | `--seconds N` | A time limit in seconds | `client wait`, `soak` |
-| `--minutes N` | A time limit in minutes | `soak` |
+| `--minutes N` | A time limit in minutes | `soak`, `ci nightly` |
+| `--n N` | How many seeds to play | `ci seeds` |
+| `--seed S` | The seed a run's seeds derive from | `soak`, `ci seeds`, `net` |
 | `--dry-run` | Print the plan without touching clients | `accept`, `native remote` |
 | `--only ID` | Only these checks; repeatable | `accept` |
 | `--repair` | Reinstall the menu page first | `online` |
