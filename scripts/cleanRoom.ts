@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { Console, Data, Effect } from "effect";
-import { captureProcess } from "./wisp/mapBuild";
+import { captureProcess } from "./wisp/hostProcess";
 
 export const ALLOWLIST = "clean-room-allowlist.tsv";
 

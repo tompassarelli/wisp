@@ -1,19 +1,11 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { readTextOrUndefined } from "./files";
-import { pollFor } from "./hostProcess";
+import { ServiceProblem, pollFor } from "./hostProcess";
 import { stateHome } from "./xdg";
 import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
 import { BackgroundServices, CapacityAdmission, type PlatformError, ProcessTable, type ServiceOwner } from "../platform/services";
 import type { ProcessInfo } from "../warcraft/battleNet";
-
-export class ServiceProblem extends Schema.TaggedError<ServiceProblem>()("ServiceProblem", {
-  problem: Schema.String,
-}) {
-  override get message(): string {
-    return this.problem;
-  }
-}
 
 export const desktopUnit = (name: string) => `wisp-desktop-${name}.service`;
 
@@ -86,14 +78,3 @@ export const writeRun = (clientsFile: string, name: string, runDir: string) => E
   catch: (cause) => new ServiceProblem({ problem: `update ${clientsFile}: ${String(cause)}` }),
 });
 
-const run = (command: readonly string[]) => Effect.try({
-  try: () => {
-    const done = Bun.spawnSync([...command], { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
-    return { code: done.exitCode, out: done.stdout.toString().trim(), err: done.stderr.toString().trim() };
-  },
-  catch: (cause) => new ServiceProblem({ problem: `${command.slice(0, 2).join(" ")}: ${String(cause)}` }),
-});
-
-export const skillScript = (skill: string, script: string) => run(["agents", "path", skill]).pipe(
-  Effect.flatMap((done) => (done.code === 0 && done.out !== "" ? Effect.succeed(join(dirname(done.out), script)) : Effect.fail(new ServiceProblem({ problem: `agents path ${skill}: ${done.err || `exit ${done.code}`}` })))),
-);

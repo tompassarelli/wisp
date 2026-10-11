@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit } from "effect";
 import { expect, test } from "bun:test";
-import { baseMapEntryNames, runProcess, stageMap } from "../scripts/wisp/mapBuild";
+import { baseMapEntryNames } from "../scripts/wisp/mapBuild";
+import { runProcess, stageMap } from "../scripts/wisp/hostProcess";
 
 test("[property seed 85] archive replacement preserves unrelated entries and removes every case alias", () => {
   expect(baseMapEntryNames("war3mapMap.blp\nwar3map.w3i\nwar3map.mmp\n", [

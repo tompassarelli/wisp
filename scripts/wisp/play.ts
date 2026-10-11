@@ -10,7 +10,7 @@ import { type DisplaySettings, absentSettings, displayChanges, preferencesBackup
 import { SCAN_QUIET_MS, importFailures, ladderScan, sessionStart, war3LogPath } from "../warcraft/war3Log";
 import { pollFor } from "./hostProcess";
 import { step } from "./timings";
-import { type MenuSocket, hostLobby, startLobby } from "./menus";
+import { type MenuSocket, hostLobby, reportedMenus, startLobby } from "./menus";
 import { ClientWatch, unlessLost } from "./watch";
 
 export class PlayProblem extends Schema.TaggedError<PlayProblem>()("PlayProblem", {
@@ -94,8 +94,6 @@ export class PlayDesktop extends Context.Service<PlayDesktop, {
 
   readonly xWindow: (title: string, pid?: number) => Effect.Effect<XWindow | undefined, PlayProblem>;
   readonly keys: (window: XWindow, ...keys: string[]) => Effect.Effect<void, PlayProblem>;
-
-  readonly menus: (reportPort: number) => Effect.Effect<MenuSocket | undefined, never, Scope.Scope>;
 }>()("wisp/PlayDesktop") {}
 
 export interface PlayGame {
@@ -456,7 +454,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       yield* key("Escape");
       yield* until(10, clientState.pipe(Effect.map((state) => state?.kind === "menus" ? true : undefined)), () => "Results didn't return to the menus");
     }
-    const menus = yield* desktop.menus(declaration.menuReportPort);
+    const menus = yield* reportedMenus(declaration.menuReportPort).pipe(Effect.catchTag("MenuFailure", () => Effect.void));
     if (menus === undefined) {
       return yield* fail(`Warcraft III's menu page didn't report on port ${declaration.menuReportPort}. play hosts only a private game through it, never a listed one by clicks: install the page once, with the owner's agreement, with \`wisp menus install RETAIL_DIR --port ${declaration.menuReportPort}\` (wisp:docs/driving-warcraft.md)`);
     }

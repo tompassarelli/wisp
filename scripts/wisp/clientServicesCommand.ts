@@ -5,8 +5,9 @@ import * as desktop from "../warcraft/desktop";
 import type { Command } from "./command";
 import { UsageFailure } from "./command";
 import {
-  ServiceProblem, clientUnit, describeOwner, desktopCommand, desktopPid, desktopUnit, liveDesktop, ownerOf, prefixProcesses, serviceState, skillScript, startDesktop, stopService, writeRun,
+  clientUnit, describeOwner, desktopCommand, desktopPid, desktopUnit, liveDesktop, ownerOf, prefixProcesses, serviceState, startDesktop, stopService, writeRun,
 } from "./clientServices";
+import { ServiceProblem, skillScript } from "./hostProcess";
 import { ClientWatch, type WatchOptions, describeView, inState, waitFor } from "./watch";
 
 const chosenClients = (clientsFile: string, names: readonly string[]) => Effect.gen(function*() {

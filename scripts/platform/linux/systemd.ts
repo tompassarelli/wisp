@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { Effect } from "effect";
-import { ServiceProblem } from "../../wisp/clientServices";
+import { ServiceProblem } from "../../wisp/hostProcess";
 
 const run = (command: readonly string[]) => Effect.try({
   try: () => {

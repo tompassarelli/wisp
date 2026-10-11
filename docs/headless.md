@@ -632,7 +632,7 @@ wisp:test/headless-bounds.test.ts).
   LEFT,TOP,RIGHT,BOTTOM` measures the native side of a posed box. `SHOWN` and
   `HIDDEN` are two captures of the same held frame, the model shown and then
   hidden, as PNG (`decodePng`, wisp:scripts/wisp/fidelity/image.ts; RGBA keeps
-  its RGB) or 8-bit binary PPM (`decodePpm`, wisp:scripts/wisp/frameProbe.ts),
+  its RGB) or 8-bit binary PPM (`decodePpm`, wisp:scripts/platform/services.ts),
   and the box is Wisp's posed `box` for that frame in pixels.
   `silhouetteBounds(shown, hidden, near)` (wisp:scripts/wisp/screenBounds.ts)
   marks each pixel whose largest per-channel |Δ| is above 24, keeps the

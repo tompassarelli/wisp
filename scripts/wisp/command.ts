@@ -1,6 +1,7 @@
 import type { Effect } from "effect";
 import { Schema } from "effect";
 import type { Platform } from "../platform/services";
+export { describeCause } from "./hostProcess";
 
 export class UsageFailure extends Schema.TaggedError<UsageFailure>()("UsageFailure", {
   problem: Schema.String,
@@ -18,12 +19,6 @@ export interface CommandFailure {
 }
 
 export type Command = (args: readonly string[]) => Effect.Effect<void, CommandFailure, Platform>;
-
-export function describeCause(cause: unknown): string {
-  if (typeof cause === "string") return cause;
-  if (cause instanceof Error) return cause.message;
-  return String(cause);
-}
 
 /** An error's stack (or message), cut to its first `lines` lines and joined by `separator`. */
 export function describeStack(cause: unknown, lines = Number.POSITIVE_INFINITY, separator = "\n"): string {

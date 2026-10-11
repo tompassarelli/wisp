@@ -118,6 +118,32 @@ export class CapacityAdmission extends Context.Service<CapacityAdmission, {
   readonly session: (helper: string, owner: string, memoryGib?: number) => Effect.Effect<readonly string[], PlatformUnsupported>;
 }>()("wisp/platform/CapacityAdmission") {}
 
+/** A decoded capture: ScreenCapture frames are binary PPM (P6) bytes. */
+export interface Frame {
+  readonly width: number;
+  readonly height: number;
+  readonly rgb: Uint8Array;
+}
+
+const PPM_HEADER = /^P6\s+(\d+)\s+(\d+)\s+255\s/;
+
+export function decodePpm(bytes: Uint8Array): Frame | undefined {
+  const header = PPM_HEADER.exec(new TextDecoder("latin1").decode(bytes.subarray(0, 32)));
+  if (header === null) return undefined;
+  const width = Number(header[1]);
+  const height = Number(header[2]);
+  const rgb = bytes.subarray(header[0].length);
+  return rgb.length < width * height * 3 ? undefined : { width, height, rgb };
+}
+
+export function encodePpm({ width, height, rgb }: Frame): Uint8Array {
+  const header = new TextEncoder().encode(`P6\n${width} ${height}\n255\n`);
+  const bytes = new Uint8Array(header.length + width * height * 3);
+  bytes.set(header);
+  bytes.set(rgb.subarray(0, width * height * 3), header.length);
+  return bytes;
+}
+
 export class ScreenCapture extends Context.Service<ScreenCapture, {
 
   readonly frame: (client: Client, region?: Region) => Effect.Effect<Uint8Array, DesktopFailure>;

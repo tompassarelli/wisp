@@ -9,11 +9,13 @@ import { BUNDLE_MODULE } from "../../src/runtime/modules";
 import { abilityData } from "../objectData";
 import { bytesChecksum } from "./preloadRecord";
 import { writeAtomic } from "./files";
-import { describeCause } from "./command";
+import { MapBuildFailure, runProcess, stageMap, tryMapPromise, tryMapSync, captureProcess } from "./hostProcess";
 import type { Phase } from "../compiler";
 import { type SourceMapFailure, SourceErrors } from "./sourceErrors";
 import { step } from "./timings";
 import { checkUnitModels, type UnitModels, type ModelSource } from "./unitModels";
+
+export { MapBuildFailure };
 
 export interface BuildProject {
   readonly projectRoot: string;
@@ -24,16 +26,6 @@ export interface BuildProject {
   readonly toolchainLockPath: string;
   readonly packageDirectory: string;
   readonly entryGlobal?: string;
-}
-
-export class MapBuildFailure extends Schema.TaggedError<MapBuildFailure>()("MapBuildFailure", {
-  operation: Schema.String,
-  path: Schema.String,
-  cause: Schema.Unknown,
-}) {
-  override get message(): string {
-    return `${this.operation} failed for ${this.path}: ${describeCause(this.cause)}`;
-  }
 }
 
 export class CompileFailure extends Schema.TaggedError<CompileFailure>()("CompileFailure", {
@@ -310,43 +302,6 @@ export const ensureLua = (directory: string) => Effect.suspend(() => existsSync(
   yield* runProcess("link Lua compiler", directory, ["nix", "build", "--out-link", directory, "nixpkgs#lua5_3"]);
 }).pipe(step("link Lua compiler")));
 
-const tryMapPromise = <A>(operation: string, path: string, run: () => PromiseLike<A>) =>
-  Effect.tryPromise({ try: run, catch: (cause) => new MapBuildFailure({ operation, path, cause }) });
-
-const tryMapSync = <A>(operation: string, path: string, run: () => A) =>
-  Effect.try({ try: run, catch: (cause) => new MapBuildFailure({ operation, path, cause }) });
-
-export const captureProcess = (
-  operation: string,
-  path: string,
-  command: readonly string[],
-  options: { readonly env?: Record<string, string>; readonly stdout?: "pipe" | "ignore"; readonly cwd?: string } = {},
-) =>
-  Effect.acquireUseRelease(
-    tryMapSync(operation, path, () => Bun.spawn([...command], {
-      ...options, stdin: "ignore", stdout: options.stdout ?? "pipe", stderr: "pipe",
-    })),
-    (child) => tryMapPromise(operation, path, async () => {
-      const [exitCode, stdout, stderr] = await Promise.all([
-        child.exited,
-        child.stdout === null ? "" : new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-      ]);
-      return { exitCode, stdout, stderr };
-    }),
-    (child) => Effect.promise(async () => {
-      if (child.exitCode === null) child.kill("SIGKILL");
-      await child.exited;
-    }),
-  );
-
-export const runProcess = (operation: string, path: string, command: readonly string[], cwd?: string) =>
-  captureProcess(operation, path, command, { stdout: "ignore", ...(cwd === undefined ? {} : { cwd }) }).pipe(Effect.flatMap(({ exitCode, stderr }) =>
-    exitCode === 0
-      ? Effect.void
-      : Effect.fail(new MapBuildFailure({ operation, path, cause: `${command[0]} exited with ${exitCode}: ${stderr.trim()}` })),
-  ));
-
 /** One FILE<TAB>ARCHIVE_NAME line per entry, the packager's list format. */
 const entryList = (entries: readonly ArchiveEntry[]) => entries.map(({ entry, source }) => {
   if (/[\t\r\n]/.test(entry + source)) throw new Error(`${entry} or its file ${source} holds a tab or line break`);
@@ -375,18 +330,6 @@ const workDirectory = (parent: string) =>
   Effect.acquireRelease(
     tryMapSync("create work directory", parent, () => mkdtempSync(join(parent, "ts-map."))),
     (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
-  );
-
-export const stageMap = <E>(source: string, destination: string, edit: (staged: string) => Effect.Effect<void, E>) =>
-  Effect.acquireUseRelease(
-    tryMapSync("stage map", destination, () => {
-      const staged = `${destination}.${process.pid}.next`;
-      copyFileSync(source, staged);
-      chmodSync(staged, 0o644);
-      return staged;
-    }),
-    (staged) => edit(staged).pipe(Effect.andThen(tryMapSync("publish map", destination, () => renameSync(staged, destination)))),
-    (staged) => Effect.sync(() => rmSync(staged, { force: true })),
   );
 
 export interface ArchiveEntry {

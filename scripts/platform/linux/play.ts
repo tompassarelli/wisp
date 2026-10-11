@@ -9,11 +9,9 @@ import { serverDirectoryName } from "../../warcraft/battleNet";
 import { launcherProcess, listProcesses } from "./procfs";
 import { parseWords, separateInk } from "../../warcraft/desktop";
 import { describeCause } from "../../wisp/command";
-import { decodePpm } from "../../wisp/frameProbe";
-import { type Collected, collect } from "../../wisp/hostProcess";
-import { skillScript } from "../../wisp/clientServices";
+import { type Collected, collect, skillScript } from "../../wisp/hostProcess";
+import { decodePpm } from "../services";
 import { startUnit } from "./systemd";
-import { reportedMenus } from "../../wisp/menus";
 import { acquireStartLock, startLockPath } from "../../wisp/startLock";
 import { writeAtomic } from "../../wisp/files";
 import { CapacityDeferred, capacityDeferral, deferredExit, retryWhileDeferred } from "../../wisp/lan/admission";
@@ -279,8 +277,6 @@ const desktop = (run: Runner, tools: PlayTools, display: string): PlayDesktop["S
         (best === undefined || window.width * window.height > best.width * best.height ? window : best), undefined);
     }),
     keys: (_window, ...keys) => xdotool("key", "--clearmodifiers", ...keys).pipe(Effect.asVoid),
-    // @effect-diagnostics-next-line effectSucceedWithVoid:off -- an undefined result, which Effect.void's void type cannot satisfy
-    menus: (port) => reportedMenus(port).pipe(Effect.catchTag("MenuFailure", () => Effect.succeed(undefined))),
   };
 };
 

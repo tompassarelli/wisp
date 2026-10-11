@@ -5,7 +5,7 @@ import { availableParallelism } from "node:os";
 import { cacheHome } from "./xdg";
 import { join } from "node:path";
 import { Console, Effect, Schedule, Schema } from "effect";
-import { MapBuildFailure, captureProcess, runProcess } from "./mapBuild";
+import { MapBuildFailure, captureProcess, runProcess } from "./hostProcess";
 import { step } from "./timings";
 
 export const TOWARD_ZERO_HEADER = join(import.meta.dir, "../../native/toward-zero.h");
