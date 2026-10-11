@@ -1,0 +1,31 @@
+# MUTANT:seed-farm scratch only, never merged: this session's network can't reach Actions artifact
+# storage, so a hosted runner runs issue #137's replay block verbatim from a fresh clone.
+name: Seed farm replay check
+on:
+  push:
+    branches: [scratch/seed-farm-desync]
+    paths: [.github/workflows/seed-farm-replay.yml]
+permissions:
+  actions: read
+  contents: read
+  issues: read
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - name: Replay issue 137 from a fresh clone of the scratch branch
+        shell: bash
+        run: |
+          git clone -q -b scratch/seed-farm-desync "https://github.com/${{ github.repository }}" fresh
+          cd fresh
+          gh issue view 137 -R "${{ github.repository }}" --json body -q .body | awk '/^```sh$/ { on = 1; next } /^```$/ { on = 0 } on' > replay.sh
+          echo "--- the issue's replay block:"; cat replay.sh; echo "---"
+          set +e
+          bash -ex replay.sh
+          echo "replay exit: $?"
