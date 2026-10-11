@@ -1046,7 +1046,8 @@ CustomMapData at start, in the same ×128 integer form.
 
 Effect coordinates, scale, matrix scale, orientation, time scale, time and
 blend time are stored as binary32 when set; reads in the same callback see
-the write. `test/effects59/cases.ts` authors seven cases shared by Bun, Lua32
+the write. Setting yaw, pitch, roll or orientation after a matrix scale resets
+that matrix scale to 1, as Warcraft does (wisp#118). `test/effects59/cases.ts` authors seven cases shared by Bun, Lua32
 and a native measurement map. `DestroyEffect` stops later setters from
 changing the effect; position reads keep returning its last position until
 removal. The drawn effect starts Death immediately, at its last time scale;

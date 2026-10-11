@@ -1323,6 +1323,8 @@ export class HeadlessClient {
           pose.yaw = f32(yaw);
           pose.pitch = f32(pitch);
           pose.roll = f32(roll);
+          pose.matrixScale = [1, 1, 1];
+          pose.flat = false;
         }
       },
       BlzSetSpecialEffectYaw: (effect: Handle, yaw: number) => {
@@ -1335,11 +1337,19 @@ export class HeadlessClient {
       },
       BlzSetSpecialEffectPitch: (effect: Handle, pitch: number) => {
         const pose = this.liveEffect(effect);
-        if (pose !== undefined) pose.pitch = f32(pitch);
+        if (pose !== undefined) {
+          pose.pitch = f32(pitch);
+          pose.matrixScale = [1, 1, 1];
+          pose.flat = false;
+        }
       },
       BlzSetSpecialEffectRoll: (effect: Handle, roll: number) => {
         const pose = this.liveEffect(effect);
-        if (pose !== undefined) pose.roll = f32(roll);
+        if (pose !== undefined) {
+          pose.roll = f32(roll);
+          pose.matrixScale = [1, 1, 1];
+          pose.flat = false;
+        }
       },
       BlzSetSpecialEffectColor: (effect: Handle, r: number, g: number, b: number) => {
         const pose = this.liveEffect(effect);

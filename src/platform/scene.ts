@@ -86,6 +86,9 @@ function wrapNatives(state: SceneState): void {
   const setMatrixScale = BlzSetSpecialEffectMatrixScale;
   const resetMatrix = BlzResetSpecialEffectMatrix;
   const setYaw = BlzSetSpecialEffectYaw;
+  const setPitch = BlzSetSpecialEffectPitch;
+  const setRoll = BlzSetSpecialEffectRoll;
+  const setOrientation = BlzSetSpecialEffectOrientation;
   const setPosition = BlzSetSpecialEffectPosition;
   const setX = BlzSetSpecialEffectX;
   const setY = BlzSetSpecialEffectY;
@@ -131,6 +134,21 @@ function wrapNatives(state: SceneState): void {
     const effect = state.effects.get(handle);
     if (effect !== undefined) effect.flat = false;
     setYaw(handle, yaw);
+  };
+  natives.BlzSetSpecialEffectPitch = (handle: effect, pitch: number) => {
+    const effect = state.effects.get(handle);
+    if (effect !== undefined) effect.flat = false;
+    setPitch(handle, pitch);
+  };
+  natives.BlzSetSpecialEffectRoll = (handle: effect, roll: number) => {
+    const effect = state.effects.get(handle);
+    if (effect !== undefined) effect.flat = false;
+    setRoll(handle, roll);
+  };
+  natives.BlzSetSpecialEffectOrientation = (handle: effect, yaw: number, pitch: number, roll: number) => {
+    const effect = state.effects.get(handle);
+    if (effect !== undefined) effect.flat = false;
+    setOrientation(handle, yaw, pitch, roll);
   };
 
   natives.BlzSetSpecialEffectPosition = (handle: effect, x: number, y: number, z: number) => {
