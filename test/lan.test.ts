@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit, Scope } from "effect";
+import { GameLauncher } from "../scripts/platform/services";
 import { startHost } from "../scripts/wisp/lan/host";
-import { ALARM_AFTER_MS, driverVerdict, wrongUser } from "../scripts/wisp/lan/pool";
+import { ALARM_AFTER_MS, driverVerdict, installOf, prefixOf, wrongUser } from "../scripts/wisp/lan/pool";
+import { setupClient } from "../scripts/wisp/lan/setup";
+import { menuPage } from "../scripts/wisp/menus";
 import { type MapFacts, mapCopies } from "../scripts/wisp/lan/map";
 import { PACKET, Writer, encodePacket } from "../scripts/wisp/lan/w3gs";
 
@@ -38,6 +41,58 @@ describe("pool operability", () => {
     expect(driverVerdict(gone, Date.parse(goneAt) + ALARM_AFTER_MS - 1)).toEqual({ idle: `idle since ${goneAt}, driver gone`, alarm: false });
     expect(driverVerdict(gone, Date.parse(goneAt) + ALARM_AFTER_MS).alarm).toBe(true);
     expect(ALARM_AFTER_MS).toBe(600_000);
+  });
+});
+
+describe("setup without reflinks", () => {
+  test("[integration cp on tmpfs] clients copy everything outside Data, hardlink Data, leave the source's menu page alone and relink a replaced Data file on refresh", async () => {
+    const root = mkdtempSync("/dev/shm/wisp-lan-setup-");
+    const dataHome = process.env.XDG_DATA_HOME;
+    process.env.XDG_DATA_HOME = join(root, "data");
+    try {
+      const from = join(root, "Warcraft III");
+      const file = (path: string, text: string) => {
+        mkdirSync(join(from, path, ".."), { recursive: true });
+        writeFileSync(join(from, path), text);
+      };
+      file("_retail_/x86_64/Warcraft III.exe", "exe 1");
+      file("_retail_/webui/index.html", menuPage(47123));
+      file("Data/data/data.000", "archive 1");
+      const lines: string[] = [];
+      const setup = (name: string) => {
+        mkdirSync(join(installOf(name), ".."), { recursive: true });
+        writeFileSync(join(prefixOf(name), "user.reg"), "");
+        return Effect.runPromise(setupClient(name, from, 47200, (line) => lines.push(line)).pipe(
+          Effect.provideService(GameLauncher, GameLauncher.of({ inPrefix: () => Effect.die("setup made a prefix") }))));
+      };
+      const filesOf = (name: string) => readdirSync(installOf(name), { recursive: true, withFileTypes: true })
+        .filter((entry) => entry.isFile()).map((entry) => join(entry.parentPath, entry.name));
+      await setup("lan0a");
+      await setup("lan0b");
+      for (const name of ["lan0a", "lan0b"]) {
+        expect(statSync(join(installOf(name), "Data/data/data.000")).ino).toBe(statSync(join(from, "Data/data/data.000")).ino);
+        expect(filesOf(name).filter((path) => !path.includes("/Data/")).map((path) => [path, statSync(path).nlink])).toEqual(
+          ["_retail_/x86_64/Warcraft III.exe", "_retail_/webui/index.html"].map((path) => [join(installOf(name), path), 1]).sort());
+      }
+      expect(readFileSync(join(from, "_retail_/webui/index.html"), "utf8")).toBe(menuPage(47123));
+      file("_retail_/x86_64/Warcraft III.exe", "exe 22");
+      file("Data/data/data.000.next", "archive 2");
+      renameSync(join(from, "Data/data/data.000.next"), join(from, "Data/data/data.000"));
+      await setup("lan0a");
+      expect(statSync(join(installOf("lan0a"), "Data/data/data.000")).ino).toBe(statSync(join(from, "Data/data/data.000")).ino);
+      expect(readFileSync(join(installOf("lan0b"), "Data/data/data.000"), "utf8")).toBe("archive 1");
+      expect(readFileSync(join(installOf("lan0a"), "_retail_/x86_64/Warcraft III.exe"), "utf8")).toBe("exe 22");
+      expect(readFileSync(join(from, "_retail_/webui/index.html"), "utf8")).toBe(menuPage(47123));
+      expect(lines.filter((line) => line.includes("install"))).toEqual([
+        "lan0a: install linked (Data hardlinked, 0 MB copied) from " + from,
+        "lan0b: install linked (Data hardlinked, 0 MB copied) from " + from,
+        expect.stringMatching(/^lan0a: install refreshed, linked \(Data hardlinked, 0 MB copied\) \(executable was 5 bytes, .*now 6 bytes/),
+      ]);
+    } finally {
+      if (dataHome === undefined) delete process.env.XDG_DATA_HOME;
+      else process.env.XDG_DATA_HOME = dataHome;
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

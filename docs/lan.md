@@ -455,7 +455,11 @@ makes, for each client:
   Its only setting is `HKCU\Software\Blizzard Entertainment\Warcraft III` →
   `Allow Local Files` = 1, which the menu page needs;
 - a reflinked copy of the install (`cp --reflink=always`). On btrfs or xfs a
-  33 GB install costs no space until a file in it changes;
+  33 GB install costs no space until a file in it changes. Where the
+  filesystem can't clone (ext4, tmpfs), setup copies every entry outside
+  `Data/` (about 0.3 GB) and hardlinks `Data/` to the source's files
+  (`cp -al`), and a refresh relinks a changed `Data/` file instead of writing
+  into it;
 - Wisp's menu page ([driving-warcraft.md](driving-warcraft.md#1-the-menu-socket-recommended)),
   reporting to the client's own port (47200 + 2K for side a, 47201 + 2K for side b).
 
