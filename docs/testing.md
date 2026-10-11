@@ -6,6 +6,13 @@ A failure means the code is wrong, never that the machine was busy. The
 tests need Lua 5.3 built with `LUA_32BITS` (`LUA=/path/to/lua32`; see the
 [README](../README.md)).
 
+Tests follow the `testing` skill. A test stays only when it is one of five
+kinds (recorded scenario, property over a pure core, product measurement,
+external reference, or one integration check per real boundary) and kills a
+mutant no other kept test kills. Everything else is scaffolding, deleted
+before landing. Every check runs once: a failure is fixed and run once more,
+never retried to green.
+
 ## Correctness tests
 
 Every ordinary `test` checks behavior, and none depends on how fast the
@@ -41,11 +48,11 @@ lease that it takes itself, and samples `/proc/pressure/cpu` every half second.
 Other agents' batch leases can keep an exclusive lease from being admitted for
 a long time. After three minutes in the queue, the runner runs the timing tests
 without the lease, and CPU pressure alone decides whether a failure counts.
-If a timing test fails while CPU pressure (some avg10) was above
-`BUSY_PRESSURE` (30%), it reports `inconclusive: machine busy (pressure N%)`
-instead of failing. It then waits up to ten minutes for the pressure to drop
-and runs the test again, up to three runs in total. A timing test that fails
-while the machine is quiet fails the run.
+Each timing file runs once. If a timing test fails while CPU pressure (some
+avg10) was above `BUSY_PRESSURE` (30%), it reports
+`inconclusive: machine busy (pressure N%)` instead of failing, and the run
+exits 75. It isn't rerun. A timing test that fails while the machine is quiet
+fails the run.
 
 The threshold comes from measurement on the 24-core development machine. Other
 agents usually hold CPU pressure at 20–25%, and Wisp's timing tests passed at

@@ -16,10 +16,6 @@ export const BUSY_PRESSURE = 30;
 
 export const TEST_TIMEOUT_MS = 60_000;
 
-const TIMING_ATTEMPTS = 3;
-
-const QUIET_WAIT = "10 minutes";
-
 const LEASE_SECONDS = 900;
 
 const LEASE_WAIT_MINUTES = 3;
@@ -159,43 +155,28 @@ const timingPhase = (files: readonly string[], args: readonly string[], print: (
   (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
 );
 
-const quiet = pollUntil(readPressure, {
-  until: (reading) => reading === undefined || reading.avg10 <= BUSY_PRESSURE, every: "5 seconds", within: QUIET_WAIT, onTimeout: () => readPressure,
-});
-
 export type Verdict = "passed" | "failed" | "inconclusive";
 
 export const timingTests = (files: readonly string[], args: readonly string[], print: (line: string) => void) => Effect.gen(function*() {
   const verdicts = new Map<string, Verdict>();
-  let pending = [...files];
-  for (let attempt = 1; attempt <= TIMING_ATTEMPTS && pending.length > 0; attempt++) {
-    if (attempt > 1) {
-      print(`timing tests: waiting for CPU pressure to fall to ${BUSY_PRESSURE}% before rerunning ${pending.length}`);
-      const reading = yield* quiet;
-      print(`timing tests: CPU pressure ${percent(reading?.avg10)}; rerunning (attempt ${attempt} of ${TIMING_ATTEMPTS})`);
+  if (files.length === 0) return verdicts;
+  const results = yield* timingPhase(files, args, print);
+  for (const file of files) {
+    const result = results.get(file);
+    const pressure = `pressure ${percent(result?.peak)}`;
+    if (result === undefined) {
+      verdicts.set(file, "inconclusive");
+      print(`timing ${file}: inconclusive: it did not run`);
+    } else if (result.code === 0) {
+      verdicts.set(file, "passed");
+      print(`timing ${file}: passed (${pressure})`);
+    } else if (result.peak !== undefined && result.peak > BUSY_PRESSURE) {
+      verdicts.set(file, "inconclusive");
+      print(`timing ${file}: inconclusive: machine busy (${pressure})`);
+    } else {
+      verdicts.set(file, "failed");
+      print(`timing ${file}: FAILED on a quiet machine (${pressure})`);
     }
-    const results = yield* timingPhase(pending, args, print);
-    const next: string[] = [];
-    for (const file of pending) {
-      const result = results.get(file);
-      const pressure = `pressure ${percent(result?.peak)}`;
-      if (result === undefined) {
-        verdicts.set(file, "inconclusive");
-        next.push(file);
-        print(`timing ${file}: inconclusive: it did not run`);
-      } else if (result.code === 0) {
-        verdicts.set(file, "passed");
-        print(`timing ${file}: passed (${pressure})`);
-      } else if (result.peak !== undefined && result.peak > BUSY_PRESSURE) {
-        verdicts.set(file, "inconclusive");
-        next.push(file);
-        print(`timing ${file}: inconclusive: machine busy (${pressure})`);
-      } else {
-        verdicts.set(file, "failed");
-        print(`timing ${file}: FAILED on a quiet machine (${pressure})`);
-      }
-    }
-    pending = next;
   }
   return verdicts;
 });

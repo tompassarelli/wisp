@@ -39,7 +39,8 @@ and run once more. Load-bearing rules get one run of the broader check (the
 farm sweep or parity corpus), not repeats: Bun/Lua parity and determinism.
 
 Read warcraft-modding and verification for
-changes. The operator explicitly authorized extracting the existing framework;
+changes, and load testing before writing, changing or deleting a test: tests
+follow its five kinds (wisp:docs/testing.md). The operator explicitly authorized extracting the existing framework;
 the skill's earlier in-Smashcraft deferral does not apply to this extraction.
 Host tools that Bun runs (commands, runners, builds, captures, farm jobs) are
 written as Effect programs when they start processes, wait, retry, hold a
