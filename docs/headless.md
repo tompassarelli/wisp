@@ -1157,6 +1157,32 @@ The 0.405 cutoff was identified in WurstScript's Apache-2.0
 Wisp's TypeScript implementation is independently authored; no Wurst source
 was copied or adapted.
 
+### Frame scale and the 4:3 area, read from a screenshot
+
+`test/frames125/` ([#125](https://github.com/tompassarelli/wisp/issues/125))
+draws flat team-colour BACKDROPs: two at `BlzFrameSetScale` 2 placed by an
+absolute TOPLEFT and CENTER point, one at scale 2 placed relative to an
+unscaled anchor with an offset, an unscaled child of a scaled frame, two
+`GAME_UI` children at x -0.05 and 0.82, and one child of
+`ConsoleUIBackdrop`. One second after start it writes `frames125-p0.txt`
+(`ready=8` and the client's width and height). `read.ts` prints each
+colour's largest pixel box and its top-left and size in UI units under the
+4:3 rule; `expected.ts` keeps the native boxes.
+
+```sh
+bun test/frames125/build.ts BASE.w3m PRIVATE_OUT.w3x
+bun wisp lan solo PRIVATE_OUT.w3x --pair K
+bun test/frames125/read.ts CAPTURE.png
+```
+
+Measured at 800x600 on 3.0.0.24268 (11 October 2026): scale multiplies a
+frame's size and its relative-point offsets, and the scaled frame's children
+inherit it (size and offsets). An absolute point is not scaled: the frame
+grows from that point (TOPLEFT stays put, CENTER stays centred). Frames
+wholly outside x 0..0.8 are not drawn at 4:3. The 1280x720 capture, which
+decides whether `GAME_UI` children outside 0..0.8 draw on a wide screen, is
+still to be taken.
+
 ## Warcraft 3.0 natives
 
 The typed API is generated from the installed 3.0.1 build 24342 `common.j`
