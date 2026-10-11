@@ -439,8 +439,8 @@ texture, the texture's selected layer and sha256, its texture region (UV
 `outside43` when an edge leaves the 0.8 x 0.6 area of the 4:3 screen. Pixels
 follow the renderer's rule: the 4:3 area is centred and scaled by the screen
 height, so x = W/2 + (left − 0.4)·H/0.6 and y = (0.6 − top)·H/0.6. Frame
-scale and the 4:3 clamp of `GAME_UI` children are not applied yet (wisp#125
-lane 5).
+scale and the 4:3 cut of `GAME_UI` children apply as under
+[Screen bounds](#screen-bounds).
 
 Without `--resolution`, client i reports a (1920 + 640·i) × 1080 screen to
 `BlzGetLocalClientWidth/Height`, `BlzPixelToFrame*` and `BlzFrameToPixel*`,
@@ -607,9 +607,24 @@ wisp:test/headless-bounds.test.ts).
   geoset's alpha, filter mode and whether it is drawn, and each posed node's
   box and pivot. A model whose bytes are absent has no row.
 
-Not yet modelled (wisp#125 lane 5): `BlzFrameSetScale` does not scale a
-frame's size or offsets, and `GAME_UI` children are not clamped to the 4:3
-area, so a scaled or out-of-4:3 frame's rectangle can differ from native.
+- **Frame scale.** A frame's rectangle (wisp:src/headless/frames.ts) uses
+  its size times its scale, where the scale is its own `BlzFrameSetScale`
+  times every ancestor's, so children inherit it. Relative-point offsets
+  (`BlzFrameSetPoint`, template points) are scaled the same way; absolute
+  points (`BlzFrameSetAbsPoint`) are not, so the frame grows from its anchor:
+  a scale-2 TOPLEFT frame keeps its corner, a CENTER frame stays centred.
+- **The 4:3 cut.** A child of `BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, i)`
+  whose left edge is below x 0 or right edge above x 0.8 has no rectangle,
+  so `uiReport` gives it no row and it takes no clicks, at every screen
+  width: native draws nothing outside the centred 4:3 area for those
+  frames. Children of other frames, such as `ConsoleUIBackdrop`, are not
+  cut. Native was measured only for frames wholly outside; a frame crossing
+  an edge is cut by the same rule, unmeasured.
+
+Both rules reproduce every native box of
+[the frames125 fixture](#frame-scale-and-the-43-area-read-from-a-screenshot)
+at 800x600 and at 1280x720 (client area 1276x716) within 1 px
+(wisp:test/screen.test.ts, wisp#125).
 
 ### Lighting, fog and sky
 

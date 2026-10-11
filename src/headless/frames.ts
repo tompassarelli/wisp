@@ -1,4 +1,5 @@
 import type { Handle } from "./client";
+import { f32 } from "../sim/f32";
 
 export interface Frame extends Handle {
 
@@ -103,6 +104,9 @@ export interface Anchor {
 
 const NAMED_POINTS = new Map(FRAME_POINTS.map(([name, fromLeft, fromTop]) => [name.slice("FRAMEPOINT_".length), [fromLeft, fromTop] as const]));
 
+// Rounding slack for the 4:3 edges: a hundredth of a pixel at 1080 lines.
+const EDGE = f32(1e-5);
+
 // New edit boxes have the engine text limit; negative limits truncate nothing (wisp:docs/warsmash-notes.md).
 const DEFAULT_TEXT_LIMIT = -256;
 
@@ -131,6 +135,8 @@ export class Frames {
   private readonly all: Frame[] = [];
   private focused: Frame | undefined;
   private readonly templates = new Map<string, FrameTemplate>();
+  /** `BlzGetOriginFrame(ORIGIN_FRAME_GAME_UI, i)`: its children are drawn only inside the 4:3 area. */
+  readonly gameUi = new Set<Frame>();
 
   constructor(private readonly points: ReadonlyMap<unknown, readonly [number, number]>) {}
 
@@ -242,6 +248,10 @@ export class Frames {
     ancestors.add(frame);
     const corners: [number, number, number, number] = [0, 0, 0, 0];
     let found = 0;
+    // Scale multiplies size and relative offsets, not absolute points, and children inherit it (wisp#125, test/frames125).
+    let scale = 1;
+    for (let at: Frame | undefined = frame; at !== undefined; at = at.parent) scale *= at.scale;
+    const width = frame.width * scale, height = frame.height * scale;
     const placed: (readonly [readonly [number, number], { readonly x: number; readonly y: number }])[] = [];
     for (const [point, at] of frame.points) {
       const share = this.points.get(point);
@@ -253,16 +263,16 @@ export class Frames {
       const relative = this.rectangle(anchor.relative, ancestors);
       if (share === undefined || relativeShare === undefined || relative === undefined) continue;
       const [left, top, right, bottom] = relative;
-      placed.push([share, { x: left + relativeShare[0] * (right - left) + anchor.x, y: top - relativeShare[1] * (top - bottom) + anchor.y }]);
+      placed.push([share, { x: left + relativeShare[0] * (right - left) + anchor.x * scale, y: top - relativeShare[1] * (top - bottom) + anchor.y * scale }]);
     }
     for (const [share, at] of placed) {
-      const left = at.x - share[0] * frame.width;
-      const top = at.y + share[1] * frame.height;
+      const left = at.x - share[0] * width;
+      const top = at.y + share[1] * height;
       if (found === 0) {
         corners[0] = left;
         corners[1] = top;
-        corners[2] = left + frame.width;
-        corners[3] = top - frame.height;
+        corners[2] = left + width;
+        corners[3] = top - height;
       } else {
 
         if (share[0] === 0) corners[0] = at.x;
@@ -272,7 +282,10 @@ export class Frames {
       }
       found++;
     }
-    return found === 0 ? undefined : corners;
+    if (found === 0) return undefined;
+    // A GAME_UI child leaving x 0..0.8 is not drawn, even on a wide screen (wisp#125, test/frames125).
+    if (frame.parent !== undefined && this.gameUi.has(frame.parent) && (corners[0] < -EDGE || corners[2] > f32(0.8) + EDGE)) return undefined;
+    return corners;
   }
 
   at(x: number, y: number, takes: (frame: Frame) => boolean): Frame | undefined {

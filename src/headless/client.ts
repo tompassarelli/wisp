@@ -987,7 +987,11 @@ export class HeadlessClient {
       BlzTextAreaFrameSetAutoScroll: (frame: Handle, value: boolean) => { this.textAreaAutoScroll.set(frame, value); },
       BlzLoadTOCFile: () => true,
 
-      BlzGetOriginFrame: (type: unknown, index: number) => this.memoized(`origin ${describeValue(type)} ${index}`),
+      BlzGetOriginFrame: (type: unknown, index: number) => {
+        const frame = this.memoized(`origin ${describeValue(type)} ${index}`);
+        if (type === this.natives.ORIGIN_FRAME_GAME_UI) this.frames.gameUi.add(frame);
+        return frame;
+      },
       BlzGetFrameByName: (name: string, context: number) => this.frames.named(name, context) ?? this.memoized(`name ${name} ${context}`, name),
       BlzFrameGetChildrenCount: (frame: unknown) => (isFrame(frame) ? this.frames.children(frame).length : 0),
       BlzFrameGetChild: (frame: Handle, index: number) => (isFrame(frame) ? this.frames.children(frame)[index] : undefined) ?? this.memoized(`child ${frame.id} ${index}`),
