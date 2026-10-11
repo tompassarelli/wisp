@@ -49,8 +49,8 @@ const setup: Command = (args) => Effect.gen(function*() {
   if (from === undefined) return yield* new UsageFailure({ problem: "--from names an existing Warcraft III install folder (the one holding _retail_)" });
   const pairs = yield* number(args, "pairs", 1);
 
-  const chosen = flagValues(args, "pair").map(Number);
-  if (chosen.some((pair) => !Number.isInteger(pair) || pair < 0)) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
+  const chosen = flagValues(args, "pair").map((value) => wholeFlag(["--pair", value], "pair"));
+  if (!chosen.every((pair) => typeof pair === "number")) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
   for (const pair of chosen.length > 0 ? chosen : Array.from({ length: pairs }, (_, index) => index)) {
     for (const side of PAIR_SIDES) yield* setupClient(clientName(pair, side), from, reportPort(pair, side), (line) => console.log(line));
   }
@@ -180,9 +180,9 @@ const pool: Command = (args) => Effect.gen(function*() {
   const sessions: { readonly exitCode: Effect.Effect<unknown, unknown> }[] = [];
   const entries: PoolPair[] = [];
 
-  const chosen = flagValues(args, "pair").map(Number);
+  const chosen = flagValues(args, "pair").map((value) => wholeFlag(["--pair", value], "pair"));
+  if (!chosen.every((pair) => typeof pair === "number")) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
   const order = chosen.length > 0 ? chosen : Array.from({ length: pairs }, (_, index) => index);
-  if (order.some((pair) => !Number.isInteger(pair) || pair < 0)) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
   for (const [admitted, pair] of order.entries()) {
     const profile = profileOf(pair);
     const started = yield* startPair(pair, profile, launcher, capacity, waitSeconds, fps).pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed(failure)));
@@ -231,8 +231,8 @@ const SoloResult = Schema.Struct({ clients: Schema.Array(Schema.Struct({ client:
 const solo: Command = (args) => Effect.gen(function*() {
   const [map] = args.filter((arg, index) => !arg.startsWith("--") && !args[index - 1]?.startsWith("--"));
   if (map === undefined || !existsSync(map)) return yield* new UsageFailure({ problem: "solo takes a built map file (MAP.w3x)" });
-  const chosen = flagValues(args, "pair").map(Number);
-  if (chosen.some((pair) => !Number.isInteger(pair) || pair < 0)) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
+  const chosen = flagValues(args, "pair").map((value) => wholeFlag(["--pair", value], "pair"));
+  if (!chosen.every((pair) => typeof pair === "number")) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
   const pairs = chosen.length > 0 ? chosen : ((yield* readPool)?.pairs ?? []).filter(({ agentSocket: socket }) => existsSync(socket)).map(({ id }) => id);
   if (pairs.length === 0) return yield* new LanFailure({ problem: "no pool pair is running; start one with wisp lan pool" });
   const driver = yield* driverPid;
@@ -246,8 +246,9 @@ const solo: Command = (args) => Effect.gen(function*() {
 const status: Command = (args) => Effect.gen(function*() {
   const known = yield* readPool;
   if (known === undefined) return yield* new LanFailure({ problem: `no pool is running (${poolFile()} is missing); start one with wisp lan pool` });
-  const [only] = flagValues(args, "pair");
-  for (const { id } of known.pairs.filter(({ id }) => only === undefined || id === Number(only))) {
+  const only = wholeFlag(args, "pair");
+  if (only instanceof UsageFailure) return yield* only;
+  for (const { id } of known.pairs.filter(({ id }) => only === undefined || id === only)) {
     const value = yield* agent(id, "/status").pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed({ error: failure.problem })));
     yield* Console.log(JSON.stringify(value));
   }

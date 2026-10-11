@@ -166,12 +166,11 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
   let failures = 0;
   let reported = false;
   return Effect.gen(function*() {
-    const [clientsText = "2"] = flagValues(args, "clients");
+    const count = wholeFlag(args, "clients", { fallback: 2, min: 1, max: MAX_CLIENTS });
     const options = yield* Effect.try({ try: () => headlessArguments(args), catch: (cause) => new UsageFailure({ problem: describeCause(cause) }) });
     const { named } = options;
-    const count = Number(clientsText);
     const predict = args.includes("--cost");
-    if (named.length > 1 || !Number.isInteger(count) || count < 1 || count > MAX_CLIENTS || (predict && cost === undefined)) {
+    if (named.length > 1 || count instanceof UsageFailure || (predict && cost === undefined)) {
       return yield* new UsageFailure({ problem: `headless takes one journey, 1 to ${MAX_CLIENTS} clients${cost === undefined ? "" : " and --cost"}` });
     }
     const project = yield* Effect.tryPromise({ try: load, catch: (cause) => new HeadlessFailure({ journey: "loading the project", problems: 1, cause }) });
