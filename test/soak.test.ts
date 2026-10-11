@@ -59,14 +59,14 @@ test("[spec #16] each fault is found by its detector, and a lag spike's catch-up
   expect(within.typingStallsMs.every((ms) => ms === 180)).toBe(true);
   {
 
-    const catchUps = (backlog: (frame: number) => number, frames: number) => {
+    const catchUps = (backlog: (frame: number) => number, frames: number, wall = (frame: number) => (frame * 1000) / 60) => {
       let frame = 0;
       const clients = runtime.clients({ start: () => {}, install: () => {} }, [0]);
       clients.start();
       const monitor = new SoakMonitor(clients, { input: () => {}, observe: () => ({ progress: frame, over: false, backlog: backlog(frame) }) });
       for (frame = 1; frame <= frames; frame++) {
         clients.frames(1);
-        monitor.afterFrame((frame * 1000) / 60, new Set());
+        monitor.afterFrame(wall(frame), new Set());
       }
       return monitor.findings.filter(({ kind }) => kind === "catch-up").map(({ text }) => text);
     };
@@ -75,6 +75,9 @@ test("[spec #16] each fault is found by its detector, and a lag spike's catch-up
     expect(catchUps(spike, 600)).toEqual([]);
     const spiral = (frame: number) => 50 + Math.floor(frame / 10);
     expect(catchUps(spiral, 600)).toContain("catch-up spiral: input not yet played grew for 3 s to 80 frames");
+    // The host falls 2 s behind while every frame costs under budget (wisp#138): no frame of the game's explains the lag.
+    const hostStall = (frame: number) => (frame * 1000) / 60 + Math.max(0, frame - 60) * 20;
+    expect(catchUps(() => 0, 600, hostStall)).toEqual([]);
   }
 });
 

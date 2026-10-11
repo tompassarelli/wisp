@@ -457,7 +457,9 @@ export class SoakMonitor {
 
   readonly spikes = new Map<number, CostlyFrame>();
   private behindSince: number | undefined;
-  private readonly windows: { readonly lag: number; readonly backlog: number }[] = [];
+  private readonly windows: { readonly lag: number; readonly backlog: number; readonly overMs: number }[] = [];
+
+  private overMs = 0;
   private overAt: number | undefined;
 
   private readonly warmUp: number;
@@ -501,6 +503,7 @@ export class SoakMonitor {
     const { clients, driver, limits } = this;
     if (quiet.size > 0) this.quietUntil = this.frame + limits.stallFrames;
     const observations: SoakObservation[] = [];
+    let worstMs = 0;
     clients.clients.forEach((client, index) => {
       let observation: SoakObservation = { progress: undefined, over: false };
       client.run(() => {
@@ -516,6 +519,7 @@ export class SoakMonitor {
       }
 
       const typing = typingMs?.[index] ?? 0;
+      worstMs = Math.max(worstMs, ms + typing);
       if (typing > limits.frameMs) this.typingStallsMs.push(typing);
       if (typing > limits.typingMs) {
         this.find("typing", `p${client.slot}'s frame ${this.frame} has a recovery typing stall of ${typing.toFixed(1)} ms, over the ${limits.typingMs.toFixed(1)} ms budget of what its input helper may type at once`, client.slot, "typing");
@@ -525,6 +529,8 @@ export class SoakMonitor {
       this.checkGame(client);
     });
     this.checkStall(observations);
+    // The game's own work behind real time: what its slowest client's frame took past the frame's budget.
+    this.overMs += Math.max(0, worstMs - limits.frameMs);
     this.checkCatchUp(wallMs, observations, quiet.size > 0);
     if (this.frame % limits.checksumEvery === 0) this.checkDesync();
     if (this.overAt === undefined && observations.every(({ over }) => over)) this.overAt = this.frame;
@@ -620,13 +626,16 @@ export class SoakMonitor {
     } else this.behindSince = undefined;
     if (this.frame % 60 !== 0) return;
     const lag = wallMs - this.frame * limits.frameMs;
-    this.windows.push({ lag, backlog });
+    this.windows.push({ lag, backlog, overMs: this.overMs });
     const recent = this.windows.slice(-(limits.growthSeconds + 1));
     if (recent.length <= limits.growthSeconds) return;
 
     const growing = (value: (window: { readonly lag: number; readonly backlog: number }) => number, by: number) =>
       recent.every((window, index) => index === 0 || value(window) > value(recent[index - 1] ?? window) + by);
-    if (growing(({ lag }) => lag, limits.frameMs) && lag > 1000) {
+    // A lag the clients' frames don't account for is the host's (a stall, runner contention, a pause outside the frames), not the game's.
+    const first = recent[0] ?? { lag, overMs: this.overMs };
+    const explained = this.overMs - first.overMs + 1e-6 >= lag - first.lag;
+    if (growing(({ lag }) => lag, limits.frameMs) && lag > 1000 && explained) {
       this.find("catch-up", `the game fell ${(lag / 1000).toFixed(1)} s behind real time and kept falling for ${limits.growthSeconds} s (worst client frame ${this.worstFrameMs.toFixed(1)} ms measured)`);
     }
 
