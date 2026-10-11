@@ -95,9 +95,9 @@ Before #108, by file (all now inside wisp:scripts/platform/linux/):
 | Proton and `steam-run` | scripts/wisp/lan/pairAgent.ts, scripts/wisp/lan/setup.ts | linux/layer.ts (`GameLauncher`) |
 | `nsenter` | scripts/wisp/playHost.ts, scripts/wisp/commands/lan.ts | linux/play.ts, linux/layer.ts (`Namespaces`) |
 | `bwrap --unshare-net` | scripts/wisp/lan/pairSession.ts, scripts/wisp/lan/setup.ts | linux/layer.ts (`Namespaces`, `GameLauncher`) |
-| `grim` | scripts/warcraft/desktop.ts, scripts/wisp/playHost.ts, scripts/wisp/lan/pool.ts | linux/desktop.ts, linux/play.ts, linux/tools.ts |
-| `xdotool` | scripts/warcraft/desktop.ts, scripts/wisp/playHost.ts, scripts/wisp/lan/pairAgent.ts, scripts/wisp/lan/pool.ts | linux/desktop.ts, linux/play.ts, linux/tools.ts |
-| `wlrctl`, Wayland (`WAYLAND_DISPLAY`, private desktop run folders) | scripts/warcraft/desktop.ts, scripts/wisp/lan/pairAgent.ts, scripts/wisp/lan/pool.ts | linux/desktop.ts, linux/tools.ts |
+| `grim` | scripts/warcraft/desktop.ts, scripts/wisp/playHost.ts, scripts/wisp/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool), linux/play.ts |
+| `xdotool` | scripts/warcraft/desktop.ts, scripts/wisp/playHost.ts, scripts/wisp/lan/pairAgent.ts, scripts/wisp/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool), linux/play.ts |
+| `wlrctl`, Wayland (`WAYLAND_DISPLAY`, private desktop run folders) | scripts/warcraft/desktop.ts, scripts/wisp/lan/pairAgent.ts, scripts/wisp/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool) |
 | niri | scripts/wisp/playHost.ts | linux/play.ts |
 | `systemd-run --user`, `systemctl --user` | scripts/wisp/clientServices.ts | linux/systemd.ts |
 | `/run/user/<uid>`, PipeWire sinks, `dbus-run-session` | scripts/wisp/lan/pairAgent.ts | linux/layer.ts (`AudioIsolation`, `GameLauncher`) |
