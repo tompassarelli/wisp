@@ -1,16 +1,9 @@
 import type { model } from "../../vendor/war3-model.mjs";
 import type { SequenceSample } from "../../src/headless/animation";
 import type { DrawnPose, RenderScene } from "./headlessRender";
+import { cross, type Matrix, multiply, normalize, perspective } from "./browser/matrix";
 
-export type Matrix = Float32Array;
 export const identity = (): Matrix => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
-export function multiply(a: Matrix, b: Matrix): Matrix {
-  const out = new Float32Array(16);
-  for (let column = 0; column < 4; column++) for (let row = 0; row < 4; row++) {
-    for (let k = 0; k < 4; k++) out[column * 4 + row] = (out[column * 4 + row] ?? 0) + (a[k * 4 + row] ?? 0) * (b[column * 4 + k] ?? 0);
-  }
-  return out;
-}
 export function transform(pose: DrawnPose): Matrix {
   const matrix = identity();
   matrix[12] = pose.x; matrix[13] = pose.y; matrix[14] = pose.z;
@@ -24,8 +17,6 @@ export function transform(pose: DrawnPose): Matrix {
   for (let axis = 0; axis < 3; axis++) for (let row = 0; row < 4; row++) out[axis * 4 + row] = (out[axis * 4 + row] ?? 0) * pose.scale * (pose.matrixScale[axis] ?? 1);
   return out;
 }
-export const normalize = (v: readonly number[]): number[] => { const length = Math.hypot(...v); return v.map((value) => value / length); };
-const cross = (a: readonly number[], b: readonly number[]): number[] => [(a[1] ?? 0) * (b[2] ?? 0) - (a[2] ?? 0) * (b[1] ?? 0), (a[2] ?? 0) * (b[0] ?? 0) - (a[0] ?? 0) * (b[2] ?? 0), (a[0] ?? 0) * (b[1] ?? 0) - (a[1] ?? 0) * (b[0] ?? 0)];
 export function camera(scene: RenderScene, aspect: number) {
   const field = (name: string, fallback: number) => scene.camera.fields[`CAMERA_FIELD_${name}`] ?? fallback;
   const yaw = field("ROTATION", 90) * Math.PI / 180, pitch = field("ANGLE_OF_ATTACK", 350) * Math.PI / 180;
@@ -43,18 +34,12 @@ export function camera(scene: RenderScene, aspect: number) {
   }
   const tangent = Math.tan(field("FIELD_OF_VIEW", 70) * Math.PI / 360);
   const near = field("NEARZ", 10), far = field("FARZ", 10000);
-  const perspective = (to: number) => {
-    const out = new Float32Array(16);
-    out[0] = 1 / tangent; out[5] = aspect / tangent;
-    out[10] = (to + near) / (near - to); out[11] = -1; out[14] = 2 * to * near / (near - to);
-    return out;
-  };
-  const projection = perspective(far);
+  const projection = perspective(tangent, near, far, aspect);
   const rotation = yaw - Math.PI, elevation = -pitch;
   const halfYaw = rotation / 2, halfPitch = -elevation / 2;
   const quaternion: [number, number, number, number] = [-Math.sin(halfYaw) * Math.sin(halfPitch), Math.cos(halfYaw) * Math.sin(halfPitch), Math.sin(halfYaw) * Math.cos(halfPitch), Math.cos(halfYaw) * Math.cos(halfPitch)];
 
-  return { view, projection, skyProjection: perspective(SKY_FAR), eye, quaternion, near, far, shadow: { eye, right: x, up: y, back: z, tangent, aspect, near, reach: Math.min(far, distance * SHADOW_REACH) } };
+  return { view, projection, skyProjection: perspective(tangent, near, SKY_FAR, aspect), eye, quaternion, near, far, shadow: { eye, right: x, up: y, back: z, tangent, aspect, near, reach: Math.min(far, distance * SHADOW_REACH) } };
 }
 export const SKY_FAR = 1_000_000;
 

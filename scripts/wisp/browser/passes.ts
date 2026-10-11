@@ -1,19 +1,6 @@
 import { linkProgram } from "./gl";
+import { cross, dot, type Matrix, multiply, normalize, perspective } from "./matrix";
 
-type Matrix = Float32Array;
-
-export function multiply(a: Matrix, b: Matrix): Matrix {
-  const out = new Float32Array(16);
-  for (let column = 0; column < 4; column++) for (let row = 0; row < 4; row++) {
-    let sum = 0;
-    for (let k = 0; k < 4; k++) sum += (a[k * 4 + row] ?? 0) * (b[column * 4 + k] ?? 0);
-    out[column * 4 + row] = sum;
-  }
-  return out;
-}
-const normalize = (v: readonly number[]): number[] => { const length = Math.hypot(...v) || 1; return v.map((value) => value / length); };
-const cross = (a: readonly number[], b: readonly number[]): number[] => [(a[1] ?? 0) * (b[2] ?? 0) - (a[2] ?? 0) * (b[1] ?? 0), (a[2] ?? 0) * (b[0] ?? 0) - (a[0] ?? 0) * (b[2] ?? 0), (a[0] ?? 0) * (b[1] ?? 0) - (a[1] ?? 0) * (b[0] ?? 0)];
-const dot = (a: readonly number[], b: readonly number[]) => a.reduce((sum, value, i) => sum + value * (b[i] ?? 0), 0);
 
 function basis(z: readonly number[]): Matrix {
   const forward = normalize(z), up = Math.abs(forward[2] ?? 0) > 0.99 ? [0, 1, 0] : [0, 0, 1];
@@ -26,11 +13,6 @@ function orthographic(left: number, right: number, bottom: number, top: number, 
   const out = new Float32Array(16);
   out[0] = 2 / (right - left); out[5] = 2 / (top - bottom); out[10] = -2 / (far - near);
   out[12] = -(right + left) / (right - left); out[13] = -(top + bottom) / (top - bottom); out[14] = -(far + near) / (far - near); out[15] = 1;
-  return out;
-}
-function perspective(tangent: number, near: number, far: number): Matrix {
-  const out = new Float32Array(16);
-  out[0] = 1 / tangent; out[5] = 1 / tangent; out[10] = (far + near) / (near - far); out[11] = -1; out[14] = 2 * far * near / (near - far);
   return out;
 }
 

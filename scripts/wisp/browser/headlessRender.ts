@@ -12,7 +12,8 @@ import { terrainRows } from "../terrainMesh";
 import { doodadSkinRows, terrainDoodadPoses } from "../terrainDoodads";
 import { ddsTexture } from "./ddsTexture";
 import { cliffOverrideTextures, cliffTexturePath } from "../terrainCliffs";
-import { camera, identity, type Matrix, multiply, normalize, poseNodes, type Sampler, show, SKY_FAR, transform, uiPixels } from "../screen";
+import { type Matrix, multiply, normalize } from "./matrix";
+import { camera, identity, poseNodes, type Sampler, show, SKY_FAR, transform, uiPixels } from "../screen";
 
 interface Material { readonly Layers: readonly { readonly FilterMode?: number }[] }
 

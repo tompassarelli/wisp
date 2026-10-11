@@ -1,6 +1,7 @@
 import { reportedModel } from "../../src/runtime/scene";
 import { type Box, type ModelFacts, type Vector3, drawsNothing, hiddenEmitters, modelReach } from "./models";
 import type { SceneKind, SceneProblem, SceneReport } from "./scene";
+import { cross, dot } from "./browser/matrix";
 
 export interface CameraView {
 
@@ -29,8 +30,6 @@ export interface VisibilityExpectations {
 
 type Vector = readonly [number, number, number];
 const radians = (degrees: number) => (degrees * Math.PI) / 180;
-const dot = (a: Vector, b: Vector) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const cross = (a: Vector, b: Vector): Vector => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
 interface CameraFrame {
   readonly eye: Vector;

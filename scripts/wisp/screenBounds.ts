@@ -2,7 +2,8 @@ import { ModelRenderer, type model } from "../../vendor/war3-model.mjs";
 import { type AnimationSequence, animationSample, blendWeight, globalSequenceFrame } from "../../src/headless/animation";
 import { drawnPoses } from "./culling";
 import type { DrawnPose, RenderScene } from "./headlessRender";
-import { camera, multiply, type PixelRect, poseNodes, type Sampler, show, transform } from "./screen";
+import { multiply } from "./browser/matrix";
+import { camera, type PixelRect, poseNodes, type Sampler, show, transform } from "./screen";
 
 /** A parsed model with the renderer state that poses it, without GL. */
 export interface BoundsModel {
