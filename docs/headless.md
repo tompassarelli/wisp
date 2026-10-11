@@ -443,6 +443,18 @@ reached (wisp:test/headless-observations.test.ts).
 `--journey FILE.json` replaces the named journey with `{ frames, events }`;
 key events may include `down: true` and a later `down: false` to hold a key.
 
+Chrome renders hold a `gpu` machine-capacity lease. On a machine with the
+machine-capacity helper (`agents path machine-capacity`, or
+`WISP_CAPACITY_HELPER`), `--render` started outside a lease exits 1 before the
+journey runs, naming the command that reruns it inside one and waits for a free
+gpu slot: `bun HELPER run --class gpu --owner wisp-render -- ARGV...`. The
+check reads the run's cgroup, which shows a lease but not its class, so any
+capacity lease lets the render start. Without the helper, as on CI and cloud
+machines, `--render` runs as before. `runStandalone` applies the same check
+([Standalone window](play.md#standalone-window)); the refusal, the inside-lease
+start and the no-helper start are covered by wisp:test/gpu-lease.test.ts
+(wisp:scripts/wisp/gpuLease.ts).
+
 The map supplies `HeadlessProject.render.readAsset(path, graphics)`, returning the actual
 imported or stock asset bytes, or `undefined` when absent. `--graphics definitive`
 selects Definitive Edition; the default is `classic`. Layer-aware projects

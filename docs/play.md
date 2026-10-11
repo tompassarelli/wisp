@@ -227,6 +227,9 @@ four at a time so slow asset loading leaves connections available for game
 frames. Decoded sound assets are reused by resolved file path, preserving each
 handle's selected variation. Assets remain outside Wisp. Closing the window
 closes the game session.
+Like `headless --render`, `runStandalone` refuses to open Chrome outside a gpu
+machine-capacity lease where the helper is installed, naming the lease command
+to rerun it under ([Rendered frames and sound cues](headless.md#rendered-frames-and-sound-cues)).
 
 ```ts
 import { runStandalone, type StandaloneGame } from "wisp/scripts/wisp/standalone";

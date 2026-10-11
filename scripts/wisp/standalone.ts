@@ -4,19 +4,17 @@ import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Deferred, Effect, Fiber, FiberSet, Schema } from "effect";
 import { ChildProcess } from "effect/process";
-import type { HeadlessClient, SoundCue } from "../../src/headless/client";
+import type { HeadlessClient } from "../../src/headless/client";
 import type { LockstepLink } from "../../src/headless/lockstep";
 import { spawnLogged } from "./hostProcess";
+import { requireGpuLease } from "./gpuLease";
 import { joinCode, joinTarget, CODE_HASH_DIGITS } from "./net/joinCode";
 import { type NetSession, NetFailure, runNetPeer } from "./net/peer";
-import { captureScene, sceneWithUnits, RenderFailure, type HeadlessRenderProject, type RenderScene } from "./headlessRender";
+import { captureScene, sceneWithUnits, RenderFailure, type HeadlessRenderProject } from "./headlessRender";
 import { createSoundResolver } from "./standaloneSound";
+import type { StandaloneFrame, StandaloneInput } from "./standaloneFrames";
 
-export interface StandaloneInput {
-  readonly buttons: readonly string[];
-  readonly axisX: number;
-  readonly axisY: number;
-}
+export type { StandaloneFrame, StandaloneInput } from "./standaloneFrames";
 
 export interface StandaloneSession {
   readonly client: HeadlessClient;
@@ -70,18 +68,6 @@ export class MapMismatch extends Schema.TaggedError<MapMismatch>()("MapMismatch"
 export function reachableAddresses(): string[] {
   return Object.values(networkInterfaces()).flatMap((entries) => entries ?? [])
     .filter((entry) => entry.family === "IPv4" && !entry.internal).map((entry) => entry.address);
-}
-
-export interface StandaloneFrame {
-  readonly scene: RenderScene;
-  readonly sounds: readonly SoundCue[];
-  readonly frame: number;
-  readonly step: number;
-  readonly checksum?: string;
-  readonly capture: boolean;
-  readonly done: boolean;
-
-  readonly serverMs: number;
 }
 
 const framesAhead = (scripted: boolean) => (scripted ? 3 : 1);
@@ -268,6 +254,7 @@ const runNetStandalone = (game: StandaloneGame, options: StandaloneOptions, net:
 });
 
 export const runStandalone = (game: StandaloneGame, options: StandaloneOptions = {}) => Effect.scoped(Effect.gen(function*() {
+  yield* requireGpuLease();
   if (options.net !== undefined) return yield* runNetStandalone(game, options, options.net);
   const player = yield* openStandalone(game, options);
   const { closed } = yield* openWindow(game, options, player.url);

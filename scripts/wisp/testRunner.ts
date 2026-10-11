@@ -1,9 +1,10 @@
 import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { Cause, Effect, Exit, Fiber, Layer, Option, Ref, Schedule, Schema } from "effect";
+import { Cause, Effect, Exit, Fiber, Layer, Ref, Schedule, Schema } from "effect";
+import { capacityHelper } from "./gpuLease";
 import { pollUntil } from "./hostProcess";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { platformLayer } from "../platform/layer";
@@ -119,15 +120,6 @@ const runTimingFiles = (resultsFile: string, files: readonly string[], args: rea
   }
 });
 
-const capacityHelper = Effect.gen(function*() {
-  const given = process.env["WISP_CAPACITY_HELPER"];
-  if (given !== undefined) return existsSync(given) ? given : undefined;
-  const skill = yield* ChildProcessSpawner.ChildProcessSpawner.use((spawner) => spawner.string(ChildProcess.make("agents", ["path", "machine-capacity"], { stderr: "ignore" }))).pipe(
-    Effect.option,
-  );
-  const helper = Option.map(skill, (path) => join(dirname(path.trim()), "scripts/machine-capacity.mjs"));
-  return Option.isSome(helper) && existsSync(helper.value) ? helper.value : undefined;
-});
 
 const insideLease = ResourceAccounting.use((accounting) => Effect.sync(accounting.insideCapacityLease));
 

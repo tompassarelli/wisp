@@ -4,6 +4,7 @@ import { type HeadlessProject, installHeadless, loadMapEntry, playHeadless } fro
 import { emitJson } from "../jsonResults";
 import { predictionLines } from "../perf";
 import { type Graphics, type Lever, parseGraphics, parseLevers } from "../graphicsProfiles";
+import { requireGpuLease } from "../gpuLease";
 import { captureScene, loadEffectDeaths, renderScenes, type RenderScene } from "../headlessRender";
 import { runJourney } from "../../../src/headless/journey";
 import type { Lockstep } from "../../../src/headless/lockstep";
@@ -105,6 +106,7 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
     if (name === undefined || journey === undefined) return yield* new UsageFailure({ problem: `journeys: ${names.join(", ")}` });
     if (!options.match && options.frames.some((frame) => frame > journey.frames)) return yield* new UsageFailure({ problem: `capture frames must be within this journey's 0–${journey.frames} frames` });
     if (options.render !== undefined && project.render === undefined) return yield* new UsageFailure({ problem: "this map must provide render.readAsset before using --render" });
+    if (options.render !== undefined) yield* requireGpuLease();
     const entry = yield* Effect.tryPromise({
       try: () => loadMapEntry(project.entry),
       catch: (cause) => new HeadlessFailure({ journey: "loading the map entry", problems: 1, cause }),
