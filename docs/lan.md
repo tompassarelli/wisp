@@ -95,7 +95,8 @@ the pairs with `wisp lan pool` first; `lan solo` returns once every client's
 game UI is up and prints the seconds each took.
 
 The pair agent (wisp:scripts/wisp/lan/pairAgent.ts, `POST /solo`) copies MAP
-into each client's `Maps/Wisp/` and drives each client's menus
+into each client's `Maps/Wisp/`, keeping at most its newest copy
+([how a match starts](#how-a-match-starts)), and drives each client's menus
 (`playLocalGame`, wisp:scripts/wisp/menus.ts) as Single Player's Custom Game
 does, with no click, keyboard or memory write:
 
@@ -664,7 +665,16 @@ blaming settings: such a client is the one to stop or restart.
 
 `wisp lan fresh MAP --pair K` asks the pair agent for a game. The agent:
 
-1. copies MAP into each client's `Documents/Warcraft III/Maps/Wisp/`;
+1. copies MAP into each client's `Documents/Warcraft III/Maps/Wisp/`. The
+   agent keeps at most one copy it made per client, the newest: each
+   `fresh` or `solo` first removes the copy it made for the previous map,
+   and the agent's scope removes the last one when the pair stops (`lan end`,
+   the pair session ending, or the agent failing), so a failed run leaves no
+   copy behind ([mapCopies](../scripts/wisp/lan/map.ts),
+   wisp:scripts/wisp/lan/map.ts; `lan dummy` removes its copy when its run
+   ends). It removes only paths it created: a file of the same name that was
+   there first is replaced and stays. A killed agent (SIGKILL) runs no
+   finalizer, so its last copy stays and is then a file that was there first;
 2. reads the map's facts (map.ts): its size, CRC32 and SHA-1, the xoro
    checksum of its game files (Flo's, plus `war3map.w3l` after `war3map.w3q`
    on 3.0.0.24268), its playable size, and its players and forces from

@@ -1,6 +1,6 @@
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, sep } from "node:path";
+import { basename, join, sep } from "node:path";
 import { Effect } from "effect";
 import { ChildProcess } from "effect/process";
 import { collect } from "../hostProcess";
@@ -106,3 +106,30 @@ export const readMapFacts = (mapFile: string, packager: string, path = pathInGam
   }
   return yield* read(() => mapFactsFrom(new Uint8Array(readFileSync(mapFile)), path, name => entries.get(name)));
 })).pipe(Effect.mapError(cause => new LanFailure({ problem: String(cause) })));
+
+/**
+ * Copies maps into the clients' map folders, keeping only the newest copy it made in each; the scope removes that one too,
+ * so a failed or interrupted run leaves no copy behind. A file of the same name that was there first is replaced but never removed (wisp:docs/lan.md).
+ */
+export const mapCopies = (folders: readonly string[]) => Effect.acquireRelease(
+  Effect.sync(() => new Set<string>()),
+  (written) => Effect.sync(() => {
+    for (const path of written) rmSync(path, { force: true });
+  }),
+).pipe(Effect.map((written) => (mapFile: string) => Effect.try({
+  try: () => {
+    const targets = folders.map((folder) => join(folder, basename(mapFile)));
+    for (const old of written) {
+      if (targets.includes(old)) continue;
+      rmSync(old, { force: true });
+      written.delete(old);
+    }
+    for (const target of targets) {
+      mkdirSync(join(target, ".."), { recursive: true });
+      if (existsSync(target)) rmSync(target);
+      else written.add(target);
+      copyFileSync(mapFile, target);
+    }
+  },
+  catch: (cause) => new LanFailure({ problem: `copying ${mapFile} into ${folders.join(", ")}: ${String(cause)}` }),
+})));

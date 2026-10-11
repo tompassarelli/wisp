@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit, Scope } from "effect";
 import { startHost } from "../scripts/wisp/lan/host";
 import { ALARM_AFTER_MS, driverVerdict, wrongUser } from "../scripts/wisp/lan/pool";
-import type { MapFacts } from "../scripts/wisp/lan/map";
+import { type MapFacts, mapCopies } from "../scripts/wisp/lan/map";
 import { PACKET, Writer, encodePacket } from "../scripts/wisp/lan/w3gs";
 
 describe("offline check", () => {
@@ -28,6 +29,29 @@ describe("pool operability", () => {
     expect(driverVerdict(gone, Date.parse(goneAt) + ALARM_AFTER_MS - 1)).toEqual({ idle: `idle since ${goneAt}, driver gone`, alarm: false });
     expect(driverVerdict(gone, Date.parse(goneAt) + ALARM_AFTER_MS).alarm).toBe(true);
     expect(ALARM_AFTER_MS).toBe(600_000);
+  });
+});
+
+describe("map copies", () => {
+  test("a failed run leaves none of the maps it copied into the clients' Documents and keeps the files that were there", async () => {
+    const root = mkdtempSync(join(tmpdir(), "wisp-map-copies-"));
+    const [a, b] = [join(root, "a/Maps/Wisp"), join(root, "b/Maps/Wisp")];
+    mkdirSync(a, { recursive: true });
+    writeFileSync(join(a, "own.w3x"), "the player's map");
+    writeFileSync(join(a, "second.w3x"), "the player's older copy");
+    for (const name of ["first.w3x", "second.w3x"]) writeFileSync(join(root, name), name);
+    const seen: string[][] = [];
+    const exit = await Effect.runPromiseExit(Effect.scoped(Effect.gen(function*() {
+      const copy = yield* mapCopies([a, b]);
+      yield* copy(join(root, "first.w3x"));
+      yield* copy(join(root, "second.w3x"));
+      seen.push(readdirSync(a).sort(), readdirSync(b).sort());
+      return yield* Effect.fail("the match didn't start");
+    })));
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(seen).toEqual([["own.w3x", "second.w3x"], ["second.w3x"]]);
+    expect([readdirSync(a).sort(), readdirSync(b)]).toEqual([["own.w3x", "second.w3x"], []]);
+    expect(readFileSync(join(a, "own.w3x"), "utf8")).toBe("the player's map");
   });
 });
 

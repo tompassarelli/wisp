@@ -1,4 +1,4 @@
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
@@ -12,7 +12,7 @@ import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type M
 import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
-import { readMapFacts } from "./map";
+import { mapCopies, readMapFacts } from "./map";
 import { ALARM_AFTER_MS, type Driver, PAIR_SIDES, alarmLog, driverVerdict, pairFlags, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
 
@@ -100,6 +100,7 @@ const agent = Effect.gen(function*() {
   if (capacity === undefined) return yield* new LanFailure({ problem: "pairAgent requires --capacity MACHINE_CAPACITY_HELPER" });
   mkdirSync(directory, { recursive: true });
   const agentScope = yield* Effect.scope;
+  const copyMap = yield* mapCopies(clients.map(({ name }) => join(documentsOf(name), "Maps/Wisp")));
   const table = yield* ProcessTable;
   const gamePid = (name: string) => table.games(prefixOf(name)).pipe(Effect.map((games) => games[0]?.pid), Effect.orElseSucceed(() => undefined));
 
@@ -174,12 +175,7 @@ const agent = Effect.gen(function*() {
     const folder = join(directory, "games", id);
     mkdirSync(folder, { recursive: true });
     const inGame = `Maps\\Wisp\\${basename(mapFile)}`;
-    for (const client of clients) {
-      const target = join(documentsOf(client.name), "Maps/Wisp", basename(mapFile));
-      mkdirSync(join(target, ".."), { recursive: true });
-      if (existsSync(target)) rmSync(target);
-      copyFileSync(mapFile, target);
-    }
+    yield* copyMap(mapFile);
     const map = yield* readMapFacts(mapFile, packager, inGame);
     const log = join(folder, "actions.log");
     const packets = join(folder, "packets.log");
@@ -220,11 +216,8 @@ const agent = Effect.gen(function*() {
   const solo = (mapFile: string) => Effect.scoped(Effect.gen(function*() {
     yield* endGame;
     const started = Date.now();
+    yield* copyMap(mapFile);
     return yield* Effect.forEach(clients, (client) => Effect.gen(function*() {
-      const target = join(documentsOf(client.name), "Maps/Wisp", basename(mapFile));
-      mkdirSync(join(target, ".."), { recursive: true });
-      if (existsSync(target)) rmSync(target);
-      copyFileSync(mapFile, target);
       if ((yield* gamePid(client.name)) === undefined) return yield* new LanFailure({ problem: `${client.name} isn't running` });
       const menus = yield* menusOf(client.name);
       yield* playLocalGame(menus, { folder: "Wisp", file: basename(mapFile), playerName: client.name });

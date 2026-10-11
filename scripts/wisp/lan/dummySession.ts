@@ -1,4 +1,3 @@
-import { copyFileSync, mkdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
@@ -8,7 +7,7 @@ import { connectMenus, menuAddress } from "../menus";
 import { checkDummy } from "./dummy";
 import { joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
-import { readMapFacts } from "./map";
+import { mapCopies, readMapFacts } from "./map";
 import { isolatedNetworkProblem } from "./offline";
 import { clientName, documentsOf, exeOf, mapPackager, pairDirectory, reportPort } from "./pool";
 
@@ -23,11 +22,10 @@ for (const pid of [process.pid, nativePid]) {
 const name = clientName(pair, "a");
 const inGame = `Maps\\Wisp\\${basename(mapFile)}`;
 const target = join(documentsOf(name), "Maps/Wisp", basename(mapFile));
-mkdirSync(dirname(target), { recursive: true });
-if (target !== mapFile) copyFileSync(mapFile, target);
 const packager = mapPackager();
 const output = join(pairDirectory(pair), "dummy", new Date().toISOString().replace(/[:.]/g, "-"));
 BunRuntime.runMain(Effect.scoped(Effect.gen(function*() {
+  if (target !== mapFile) yield* (yield* mapCopies([dirname(target)]))(mapFile);
   const map = yield* readMapFacts(mapFile, packager, inGame);
   const lan = yield* loadLanPlugin;
   const version = lan.version(exeOf(name));

@@ -96,7 +96,9 @@ Testing in the real game without a Battle.net account? [`wisp lan`](lan.md)
 network namespace with nothing but loopback, playing LAN matches that Wisp
 hosts: `wisp lan pool --pairs N` starts them, `wisp lan fresh MAP` starts a
 match, and the host logs every turn's actions and compares every client's
-checksum each turn. Keep signed-in clients for what needs Battle.net itself.
+checksum each turn. Each client keeps at most the newest map copy the pair
+agent made in its `Maps/Wisp/`, and stopping the pair removes it
+([how a match starts](lan.md#how-a-match-starts)). Keep signed-in clients for what needs Battle.net itself.
 Run as another user, every `wisp lan` command refuses and prints the
 `sudo -u OWNER` command to run instead; `wisp lan status` marks a pair whose
 driver died without `wisp lan end`, and the pool's alarm log gets a line after
