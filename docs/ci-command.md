@@ -195,13 +195,14 @@ the recorded kind of finding ([repros](repro.md#shrinking-a-soak-failure)).
 ## Seed farm
 
 The seed farm, wisp:.github/workflows/seed-farm.yml, plays `ci nightly` on the
-newest main once an hour on a hosted `ubuntu-latest` runner (`schedule` at
-minute 17) and files every new failure as an issue. A run checks out the
+newest main on a hosted `ubuntu-latest` runner after every CI run on main
+(`workflow_run`) and once an hour (`schedule` at minute 17, which GitHub
+fires late or skips under load), and files every new failure as an issue. A run checks out the
 ref, installs Bun 1.3.13 and both Lua32 builds with ci.yml's and the farm
 tests' cache keys, and runs `COMMAND ci nightly --minutes M --json`.
 Runs never overlap: a new one cancels nothing and waits behind the running
-one, and GitHub keeps one waiting run per repository, so scheduled runs
-never stack. A run with a failing seed ends red after filing.
+one, and GitHub keeps one waiting run per repository, so runs never
+stack. A run with a failing seed ends red after filing.
 
 For each failing match, the run reads the repro file the `--json` result's
 `repros` names and titles its issue from the repro's first finding:
