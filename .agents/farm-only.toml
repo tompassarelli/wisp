@@ -1,41 +1,41 @@
 [[command]]
 pattern = ["bun", "wisp", "combos", "--advantage"]
 narrowing = ["--fighter"]
-farm = "ask the repo lead"
+farm = "rerun with --fighter NAME per fighter"
 why = "whole-roster advantage sweep, about 6 cores"
 
 [[command]]
 pattern = ["bun", "wisp", "combos"]
 narrowing = ["--fighter"]
-farm = "ask the repo lead"
+farm = "rerun with --fighter NAME per fighter"
 why = "whole-roster combo generator"
 
 [[command]]
 pattern = ["bun", "wisp", "interactions"]
 narrowing = ["--fighter"]
-farm = "ask the repo lead"
+farm = "rerun with --fighter NAME per fighter"
 why = "whole-roster interaction generator"
 
 [[command]]
 pattern = ["bun", "test"]
 narrowing = ["--test-name-pattern", "-t", "--filter"]
-farm = "bun wisp farm test"
+farm = "bun wisp farm test --ref <sha> --wait"
 why = "full Bun and emitted Lua32 suites belong on the farm"
 
 [[command]]
 pattern = ["bun", "run", "test"]
 narrowing = ["--test-name-pattern", "-t", "--filter"]
-farm = "bun wisp farm test"
+farm = "bun wisp farm test --ref <sha> --wait"
 why = "full Bun and emitted Lua32 suites belong on the farm"
 
 [[command]]
 pattern = ["bun", "scripts/cpuField.ts"]
 narrowing = ["--pair", "--pairs", "--matchups", "--fighter", "--merge"]
-farm = "ask the repo lead"
+farm = "rerun with --fighter NAME or --pair A:B per fighter or pair"
 why = "whole-roster balance field"
 
 [[command]]
 pattern = ["bun", "wisp", "soak"]
 narrowing = ["--fighter", "--pair", "--repro"]
-farm = "ask the repo lead"
+farm = "rerun with --fighter NAME or --pair A:B per fighter or pair"
 why = "soak sweep belongs on the farm"
