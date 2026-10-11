@@ -2,7 +2,7 @@ import { errorFile, FILE_IO_ABILITY } from "../runtime/gameFiles";
 import { addFloat32, addFloat32TowardZero, divideFloat32, multiplyFloat32TowardZero, roundToFloat32, subtractFloat32, subtractFloat32TowardZero } from "../sim/binary32";
 import { f32 } from "../sim/f32";
 import { steppedFrames } from "./frameCount";
-import { advanceAnimation, type AnimationBlend, type AnimationState, freshAnimation, seekAnimation, selectAnimation } from "./animation";
+import { advanceAnimation, type AnimationBlend, type AnimationState, freshAnimation, seekAnimation, selectAnimation, settleAnimation } from "./animation";
 import type { FrameTemplate } from "./frames";
 import type { NativeDeclarations } from "./declarations";
 import { FRAME_POINTS, type Frame, Frames } from "./frames";
@@ -551,6 +551,13 @@ export class HeadlessClient {
   private allPlayers: Handle | undefined;
 
   private readonly effects = new Map<Handle, EffectPose>();
+  /** Destroyed effects in destruction order, so expiry reads only the oldest. */
+  private readonly dying: EffectPose[] = [];
+  // Effect poses advance when read: each remembers how many draws it has taken,
+  // and every draw it hasn't taken since was `effectDrawSeconds` long.
+  private readonly effectSettled = new WeakMap<EffectPose, number>();
+  private effectDraws = 0;
+  private effectDrawSeconds = 0;
   private readonly effectDeaths: EffectDeaths | undefined;
   private readonly effectStepMs: number | undefined;
   private readonly musicSlider: number;
@@ -712,8 +719,10 @@ export class HeadlessClient {
 
   private effectAt(model: string, x: number, y: number): Handle {
     const handle = this.handle("effect");
-    this.effects.set(handle, { ...freshAnimation(), handle, model, created: this.frame, x: f32(x), y: f32(y), z: 0, alpha: 255, scale: 1, timeScale: 1, flat: false, queuedAnimations: [],
-      yaw: 0, pitch: 0, roll: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1] });
+    const pose: EffectPose = { ...freshAnimation(), handle, model, created: this.frame, x: f32(x), y: f32(y), z: 0, alpha: 255, scale: 1, timeScale: 1, flat: false, queuedAnimations: [],
+      yaw: 0, pitch: 0, roll: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1] };
+    this.effects.set(handle, pose);
+    this.effectSettled.set(pose, this.effectDraws);
     return handle;
   }
 
@@ -800,11 +809,21 @@ export class HeadlessClient {
     return pose?.destroyed === undefined ? pose : undefined;
   }
 
+  /** Brings the pose's animation clocks up to the last draw before anything reads them or changes how they advance. */
+  private settleEffect(pose: EffectPose): void {
+    const settled = this.effectSettled.get(pose) ?? this.effectDraws;
+    if (settled === this.effectDraws) return;
+    settleAnimation(pose, pose.timeScale, this.effectDrawSeconds, this.effectDraws - settled);
+    this.effectSettled.set(pose, this.effectDraws);
+  }
+
   private destroyEffect(effect: Handle): void {
     const pose = this.liveEffect(effect);
     if (pose === undefined) return;
     const death = this.effectDeaths?.(pose.model);
+    this.settleEffect(pose);
     pose.destroyed = this.frame;
+    this.dying.push(pose);
     pose.queuedAnimations.length = 0;
     if (death !== undefined && death > 0) {
       pose.death = death;
@@ -815,6 +834,7 @@ export class HeadlessClient {
   private playEffect(effect: Handle, animation: string | number, timeScale?: number): void {
     const pose = this.liveEffect(effect);
     if (pose === undefined) return;
+    this.settleEffect(pose);
     selectAnimation(pose, animation, undefined, true);
     if (timeScale !== undefined) pose.timeScale = f32(timeScale);
   }
@@ -1295,11 +1315,15 @@ export class HeadlessClient {
       },
       BlzSetSpecialEffectTimeScale: (effect: Handle, timeScale: number) => {
         const pose = this.liveEffect(effect);
-        if (pose !== undefined) pose.timeScale = f32(timeScale);
+        if (pose === undefined) return;
+        this.settleEffect(pose);
+        pose.timeScale = f32(timeScale);
       },
       BlzSetSpecialEffectTime: (effect: Handle, time: number) => {
         const pose = this.liveEffect(effect);
-        if (pose !== undefined) seekAnimation(pose, f32(time));
+        if (pose === undefined) return;
+        this.settleEffect(pose);
+        seekAnimation(pose, f32(time));
       },
       BlzPlaySpecialEffect: (effect: Handle, animation: string | number) => this.playEffect(effect, animation),
       BlzPlaySpecialEffectWithTimeScale: (effect: Handle, animation: string | number, timeScale: number) => this.playEffect(effect, animation, timeScale),
@@ -1412,7 +1436,10 @@ export class HeadlessClient {
 
   effectPoses(options: { readonly visibleOnly?: boolean } = {}): EffectPose[] {
     const poses: EffectPose[] = [];
-    for (const pose of this.effects.values()) if (options.visibleOnly !== true || (pose.alpha > 0 && pose.scale > 0 && !pose.flat)) poses.push({ ...pose, subAnimations: [...pose.subAnimations], animationBlend: copyBlend(pose.animationBlend), color: [...pose.color], matrixScale: [...pose.matrixScale] });
+    for (const pose of this.effects.values()) if (options.visibleOnly !== true || (pose.alpha > 0 && pose.scale > 0 && !pose.flat)) {
+      this.settleEffect(pose);
+      poses.push({ ...pose, subAnimations: [...pose.subAnimations], animationBlend: copyBlend(pose.animationBlend), color: [...pose.color], matrixScale: [...pose.matrixScale] });
+    }
     return poses;
   }
 
@@ -1481,11 +1508,9 @@ export class HeadlessClient {
     this.textTags.tick(f32(1 / FRAMES_PER_SECOND));
     if (this.effectStepMs !== undefined) this.stepEffects(this.effectStepMs);
     if (draw) this.draw(f32(1 / FRAMES_PER_SECOND));
-    const died: Handle[] = [];
-    for (const pose of this.effects.values()) {
-      if (pose.destroyed !== undefined && this.frame - pose.destroyed >= 5 * FRAMES_PER_SECOND) died.push(pose.handle);
-    }
-    for (const handle of died) this.effects.delete(handle);
+    let expired = 0;
+    while (expired < this.dying.length && this.frame - (this.dying[expired]?.destroyed ?? this.frame) >= 5 * FRAMES_PER_SECOND) expired++;
+    if (expired > 0) for (const pose of this.dying.splice(0, expired)) if (this.effects.get(pose.handle) === pose) this.effects.delete(pose.handle);
     for (const sound of this.sounds.values()) {
       if (!sound.playing || sound.looping) continue;
       sound.elapsed += sound.pitch * 1000 / FRAMES_PER_SECOND;
@@ -1499,7 +1524,14 @@ export class HeadlessClient {
   }
 
   draw(seconds: number): void {
-    if (this.effectStepMs === undefined) for (const pose of this.effects.values()) advanceAnimation(pose, pose.timeScale, f32(seconds));
+    if (this.effectStepMs === undefined) {
+      const step = f32(seconds);
+      if (step !== this.effectDrawSeconds) {
+        for (const pose of this.effects.values()) this.settleEffect(pose);
+        this.effectDrawSeconds = step;
+      }
+      this.effectDraws++;
+    }
     for (const unit of this.units.values()) advanceAnimation(unit, unit.timeScale, f32(seconds));
   }
 

@@ -1,5 +1,7 @@
+import { f32 } from "../sim/f32";
+import { floorMod } from "../sim/intMath";
 import { assertEquals, assertTrue, test } from "../runtime/testing";
-import { advanceAnimation, type AnimationSequence, animationSample, blendWeight, freshAnimation, selectAnimation } from "./animation";
+import { advanceAnimation, type AnimationSequence, type AnimationState, animationSample, blendWeight, freshAnimation, seekAnimation, selectAnimation, settleAnimation } from "./animation";
 
 function same(actual: readonly unknown[], expected: readonly unknown[], message = ""): void {
   assertEquals(actual.length, expected.length, `${message} length`);
@@ -50,4 +52,59 @@ test("animation: a blend keeps the old pose and fades it over the blend time of 
   state.animationBlendTime = 0;
   selectAnimation(state, "stand");
   assertTrue(state.animationBlend === undefined);
+});
+
+test("animation: a pose settled when read matches one advanced every frame, through selections, seeks, time scales and blends", () => {
+  let seed = 126;
+  const next = (below: number) => {
+    seed = floorMod(seed * 75 + 74, 65537);
+    return floorMod(seed, below);
+  };
+  const SCALES = [1, 0.5, 2, 0, -1, f32(1.7), f32(0.333)];
+  const STEPS = [f32(1 / 60), f32(0.025), 0.0625, f32(0.1), f32(1 / 60)];
+  const pose = (state: AnimationState) => [state.animation, state.animationElapsed, state.animationClock, state.animationRestartPending === true,
+    state.animationBlend?.remaining, state.animationBlend?.from.animation, state.animationBlend?.from.elapsed];
+  for (let run = 0; run < 200; run++) {
+    const eager = freshAnimation();
+    const lazy = freshAnimation();
+    let timeScale = SCALES[next(SCALES.length)] ?? 1;
+    let seconds = STEPS[next(STEPS.length)] ?? 0;
+    let pending = 0;
+    const settle = () => {
+      settleAnimation(lazy, timeScale, seconds, pending);
+      pending = 0;
+    };
+    for (let command = 0; command < 60; command++) {
+      const draws = next(4) === 0 ? next(200) : next(5);
+      for (let draw = 0; draw < draws; draw++) advanceAnimation(eager, timeScale, seconds);
+      pending += draws;
+      const choice = next(7);
+      if (choice <= 1) {
+        settle();
+        same(pose(lazy), pose(eager), `run ${run} command ${command}`);
+      } else if (choice === 2) {
+        settle();
+        const blendTime = [0, 0.125, 0.25, next(400) / 1000][next(4)] ?? 0;
+        eager.animationBlendTime = blendTime;
+        lazy.animationBlendTime = blendTime;
+        const animation = next(2) === 0 ? "stand" : next(5);
+        const restart = next(2) === 0;
+        selectAnimation(eager, animation, undefined, restart);
+        selectAnimation(lazy, animation, undefined, restart);
+      } else if (choice === 3) {
+        settle();
+        const at = next(3000) / 1000;
+        seekAnimation(eager, at);
+        seekAnimation(lazy, at);
+      } else if (choice === 4) {
+        settle();
+        timeScale = SCALES[next(SCALES.length)] ?? 1;
+      } else if (choice === 5) {
+        settle();
+        seconds = STEPS[next(STEPS.length)] ?? 0;
+      }
+    }
+    settle();
+    same(pose(lazy), pose(eager), `run ${run} end`);
+  }
 });

@@ -72,6 +72,36 @@ export function advanceAnimation(state: AnimationState, timeScale: number, frame
   if (blend.remaining <= 0) state.animationBlend = undefined;
 }
 
+/** `advanceAnimation` applied `times` times with the same arguments, bit for bit, writing the state once. */
+export function settleAnimation(state: AnimationState, timeScale: number, frameSeconds: number, times: number): void {
+  if (times <= 0) return;
+  if (state.animationRestartPending) {
+    state.animationElapsed = 0;
+    state.animationRestartPending = false;
+  }
+  const step = f32(timeScale * frameSeconds);
+  if (step === 0) return;
+  const fade = f32(step * 1000);
+  const blend = state.animationBlend;
+  let blending = blend !== undefined;
+  let remaining = blend === undefined ? 0 : blend.remaining;
+  let elapsed = state.animationElapsed;
+  let clock = state.animationClock;
+  for (let index = 0; index < times; index++) {
+    elapsed = f32(elapsed + step);
+    clock = f32(clock + step);
+    if (blending) {
+      remaining = f32(remaining - fade);
+      if (remaining <= 0) blending = false;
+    }
+  }
+  state.animationElapsed = elapsed;
+  state.animationClock = clock;
+  if (blend === undefined) return;
+  blend.remaining = remaining;
+  if (!blending) state.animationBlend = undefined;
+}
+
 export function blendWeight(state: AnimationState): number {
   const blend = state.animationBlend;
   if (blend === undefined || state.animationBlendTime <= 0) return 0;

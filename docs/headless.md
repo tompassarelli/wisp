@@ -1433,7 +1433,12 @@ headless effect clocks follow this rule at steady pacing, a picture every
 step: steps end every 25 ms of the headless game clock, after the callbacks
 due by then, and a selection restarts at the next step end without
 advancing. Unset, effect clocks
-advance once per frame as before, which the 3.0.1 #58 rulers pin. The
+advance once per drawn frame as before, which the 3.0.1 #58 rulers pin.
+They advance lazily: each pose takes the drawn frames it missed when the
+map changes its animation, time scale or time, or something reads it
+(`effectPoses`, renders, scenes), with the same binary32 additions per
+frame, so every read matches per-frame stepping bit for bit
+(`settleAnimation`, wisp:src/headless/animation.ts; #126). The
 reads are pinned in `test/headless-effects.test.ts` ("[native #72]").
 Which callbacks share a step is the session's phase, so a held +2 frame is
 0 ms in one phase and 25 ms in the other two.
