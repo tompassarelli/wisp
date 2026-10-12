@@ -273,7 +273,7 @@ function centreBox(polygon: readonly Point[]): PixelBox | undefined {
 const area = (polygon: readonly Point[]) => Math.abs(polygon.reduce((sum, p, i) => { const q = polygon[(i + 1) % polygon.length] as Point; return sum + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2;
 const perimeter = (polygon: readonly Point[]) => polygon.reduce((sum, p, i) => { const q = polygon[(i + 1) % polygon.length] as Point; return sum + Math.hypot(q[0] - p[0], q[1] - p[1]); }, 0);
 
-// The head cube is skinned to an unnamed child of the named head node, the weapon cube to the named weapon node under the named hand.
+// Head.mdl skins the head cube to an unnamed child of Head and carries unweighted Weapon/Hand bones; the weapon cube is skinned to Weapon under Hand.
 test("[property] the in-frame raster covers a cube's projected polygon, labels it with its nearest named node, shows it only through texels at least half opaque, and hides the overlap of a cube in front", () => {
   const headModel = cubeModel("HeadMesh", "Head").replace("NumBones 2", "NumBones 4")
     .replace("PivotPoints 2", 'Bone "Weapon" { ObjectId 2, GeosetId None, GeosetAnimId None, }\nBone "Hand" { ObjectId 3, GeosetId None, GeosetAnimId None, }\nPivotPoints 4')

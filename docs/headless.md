@@ -683,7 +683,7 @@ wisp:test/headless-bounds.test.ts).
   whose scene names a model the render project can't read fails the run,
   naming the texture and model, rather than counting 0 px: a portrait
   rendered on models the map no longer imports measures nothing. A declared
-  part node absent from all drawn portrait models also fails, naming the texture,
+  part node absent from all portrait models also fails, naming the texture,
   part, missing nodes and model paths; a node that exists but shows no pixels still measures 0. The
   rows are numbers only: the game declares the pass rules and thresholds.
   Checked by a property over random cubes (wisp:test/screen-bounds.test.ts):

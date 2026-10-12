@@ -78,6 +78,7 @@ test("[boundary] wisp headless --bounds writes frame rows with their portraits' 
     expect(effect.box.bottom - effect.box.top).toBeGreaterThan(0);
   }
   for (const [receipt, message] of [
+    [{ ...portrait, scene: { ...portrait.scene, effects: portrait.scene.effects.map((pose) => ({ ...pose, alpha: 0 })) }, parts: { head: [], weapon: ["Root"] } }, undefined],
     [{ ...portrait, scene: { ...portrait.scene, effects: portrait.scene.effects.map((pose) => ({ ...pose, model: "Missing.mdl" })) } }, "portrait receipt for Bust.blp names Missing.mdl, which the render project can't read; regenerate the portrait on the map's current models"],
     [{ ...portrait, parts: { head: ["Root"], weapon: ["MissingWeapon", "MissingTip"], hand: ["MissingHand"] } }, "portrait receipt for Bust.blp: part weapon names MissingWeapon, MissingTip; part hand names MissingHand, which none of the drawn portrait models Cube.mdl has; regenerate the portrait on the map's current models"],
   ] as const) {
@@ -91,7 +92,13 @@ test("[boundary] wisp headless --bounds writes frame rows with their portraits' 
       Effect.provide(Layer.merge(timingsLayer(() => undefined), platformLayer())),
       Effect.provideService(Console.Console, { ...console, log: () => undefined }),
     ));
-    expect(Exit.isFailure(refused)).toBe(true);
-    if (Exit.isFailure(refused)) expect(Cause.pretty(refused.cause)).toContain(message);
+    if (message === undefined) {
+      expect(Exit.isSuccess(refused)).toBe(true);
+      const hidden = JSON.parse(readFileSync(join(directory, "bounds.json"), "utf8"));
+      for (const image of hidden.images) expect(image.ui[0].inFrame.parts.weapon.pixels).toBe(0);
+    } else {
+      expect(Exit.isFailure(refused)).toBe(true);
+      if (Exit.isFailure(refused)) expect(Cause.pretty(refused.cause)).toContain(message);
+    }
   }
 });
