@@ -80,7 +80,7 @@ test("[boundary] wisp headless --bounds writes frame rows with their portraits' 
   for (const [receipt, message] of [
     [{ ...portrait, scene: { ...portrait.scene, effects: portrait.scene.effects.map((pose) => ({ ...pose, alpha: 0 })) }, parts: { head: [], weapon: ["Root"] } }, undefined],
     [{ ...portrait, scene: { ...portrait.scene, effects: portrait.scene.effects.map((pose) => ({ ...pose, model: "Missing.mdl" })) } }, "portrait receipt for Bust.blp names Missing.mdl, which the render project can't read; regenerate the portrait on the map's current models"],
-    [{ ...portrait, parts: { head: ["Root"], weapon: ["MissingWeapon", "MissingTip"], hand: ["MissingHand"] } }, "portrait receipt for Bust.blp: part weapon names MissingWeapon, MissingTip; part hand names MissingHand, which none of the drawn portrait models Cube.mdl has; regenerate the portrait on the map's current models"],
+    [{ ...portrait, parts: { head: ["Root"], weapon: ["MissingWeapon", "MissingTip"], hand: ["MissingHand"] } }, "portrait receipt for Bust.blp: part weapon names MissingWeapon, MissingTip; part hand names MissingHand, which none of the portrait models Cube.mdl has; regenerate the portrait on the map's current models"],
   ] as const) {
     const refusal = makeHeadless(async () => ({
       map: { filePrefix: "bounds", globalPrefixes: ["__bounds"] },
