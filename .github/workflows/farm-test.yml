@@ -135,9 +135,7 @@ jobs:
           set +e
           bun run test $(jq -r ".bun[${{ matrix.shard }}][] | \"./\" + ." plan.json) --reporter=junit --reporter-outfile=junit.xml
           code=$?
-          mapfile -t farm_files < <(jq -r ".bun[${{ matrix.shard }}][]" plan.json | while IFS= read -r file; do
-            if rg -q 'farmTest\(' "$file"; then echo "./$file"; fi
-          done)
+          mapfile -t farm_files < <(jq -r ".bun[${{ matrix.shard }}][]" plan.json | xargs -r -d '\n' rg -l -j1 'farmTest\(' -- | sed 's#^#./#')
           if [ "${#farm_files[@]}" -gt 0 ]; then
             bun test --timeout 120000 --preload ./scripts/wisp/testCostPreload.ts -t "farm: " "${farm_files[@]}" --reporter=junit --reporter-outfile=junit-farm.xml
             farm_code=$?
