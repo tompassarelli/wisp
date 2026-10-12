@@ -47,9 +47,9 @@ const quadCube = (bitmap: string, layer: string) => cube.replace("FilterMode Tra
     SelectionGroup 0,
 }
 Bone "Arm"`);
-const glowCube = quadCube('Image "", ReplaceableId 2,', "FilterMode Additive,"), veiledCube = quadCube('Image "Veil.blp",', "FilterMode Transparent,");
+const glowCube = quadCube('Image "", ReplaceableId 2,', "FilterMode Additive, TwoSided,"), veiledCube = quadCube('Image "Veil.blp",', "FilterMode Transparent, TwoSided,");
 
-// A square on the turning bone, wider than the cube, drawn by one layer: an alpha-keyed texture, or an additive team glow at alpha 0.75.
+// A square on the turning bone, wider than the cube, drawn by one layer: an alpha-keyed texture, one-sided or two-sided, or an additive team glow at alpha 0.75.
 const QUAD_HALF = HALF * 2, QUAD_Z = CENTRE[2] + HALF, GLOW_ALPHA = 0.75;
 const quadModel = (texture: string, layer: string) => `Version { FormatVersion 800, }
 Model "Quad" { NumGeosets 1, NumBones 1, BlendTime 150, }
@@ -71,7 +71,7 @@ Bone "Arm" { ObjectId 0, GeosetId 0, GeosetAnimId None,
 }
 PivotPoints 1 { { ${PIVOT.join(", ")} }, }
 `;
-const keyedQuad = quadModel('Image "Quad.blp",', "FilterMode Transparent, static Alpha 1,"), glowQuad = quadModel('Image "", ReplaceableId 2,', `FilterMode Additive, static Alpha ${GLOW_ALPHA},`);
+const keyedQuad = quadModel('Image "Quad.blp",', "FilterMode Transparent, static Alpha 1,"), twoSidedQuad = quadModel('Image "Quad.blp",', "FilterMode Transparent, TwoSided, static Alpha 1,"), glowQuad = quadModel('Image "", ReplaceableId 2,', `FilterMode Additive, static Alpha ${GLOW_ALPHA},`);
 const quadPoint = (u: number, v: number): Vector3 => [CENTRE[0] - QUAD_HALF + 2 * QUAD_HALF * u, CENTRE[1] - QUAD_HALF + 2 * QUAD_HALF * v, QUAD_Z];
 const TEXELS = 64;
 const texture = (rgba: (x: number, y: number) => readonly [number, number, number, number]): Texels => {
@@ -99,11 +99,11 @@ function pose(fields: Partial<DrawnPose>): DrawnPose {
     color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1], flat: false, animation: "stand", subAnimations: [], animationElapsed: 0, animationClock: 0, animationBlendTime: 0, animationBlend: undefined, ...fields };
 }
 
-test("[property] posed screen bounds of a turning cube equal the analytic projection of its corners, and of a textured quad only the texels its layer draws", () => {
-  const model = boundsModel(parseMDL(cube)), glow = boundsModel(parseMDL(glowCube)), veiled = boundsModel(parseMDL(veiledCube)), keyed = boundsModel(parseMDL(keyedQuad)), glowing = boundsModel(parseMDL(glowQuad)), next = random(125);
+test("[property] posed screen bounds of a turning cube equal the analytic projection of its corners, and of a textured quad only the texels its layer draws on the faces it doesn't cull", () => {
+  const model = boundsModel(parseMDL(cube)), glow = boundsModel(parseMDL(glowCube)), veiled = boundsModel(parseMDL(veiledCube)), keyed = boundsModel(parseMDL(keyedQuad)), twoSided = boundsModel(parseMDL(twoSidedQuad)), glowing = boundsModel(parseMDL(glowQuad)), next = random(125);
   const brightTexels = texture(() => [255, 255, 255, 255]);
   const between = (low: number, high: number) => low + (high - low) * next();
-  let compared = 0, offFrame = 0, farCulled = 0, textured = 0, brightGlow = 0, veils = 0;
+  let compared = 0, offFrame = 0, farCulled = 0, textured = 0, brightGlow = 0, veils = 0, backFaces = 0;
   for (let round = 0; round < 300; round++) {
     const fields = { CAMERA_FIELD_ROTATION: between(0, 360), CAMERA_FIELD_ANGLE_OF_ATTACK: between(280, 360), CAMERA_FIELD_TARGET_DISTANCE: between(1200, 3000), CAMERA_FIELD_ZOFFSET: between(-100, 300),
       CAMERA_FIELD_FIELD_OF_VIEW: between(40, 100), CAMERA_FIELD_NEARZ: between(10, 100), CAMERA_FIELD_FARZ: between(1500, 6000) };
@@ -187,9 +187,17 @@ test("[property] posed screen bounds of a turning cube equal the analytic projec
         for (const edge of ["left", "top", "right", "bottom"] as const) expect(Math.abs(veilRow.box[edge] - whole[edge])).toBeLessThanOrEqual(veilTextures === undefined ? 0.01 : 1);
         if (veilTextures !== undefined && (["left", "top", "right", "bottom"] as const).some((edge) => Math.abs(whole[edge] - expected[edge]) > 2)) veils++;
       }
-      if (width === 800) for (const [quad, region] of [[keyed, keyedRegion], [glowing, glowRegion]] as const) {
+      if (width === 800) for (const [quad, region] of [[keyed, keyedRegion], [twoSided, keyedRegion], [glowing, glowRegion]] as const) {
         const quadCorners = [quadPoint(0, 0), quadPoint(1, 0), quadPoint(0, 1), quadPoint(1, 1)].map(atAngle);
         if (!quadCorners.every((p) => p.depth >= fields.CAMERA_FIELD_NEARZ && p.depth <= fields.CAMERA_FIELD_FARZ)) continue;
+        // A one-sided layer draws only the face that turns counter-clockwise on screen with y up: its triangles' 0, 1, 3 order, seen from +z.
+        const [a, b, , d] = quadCorners as [ReturnType<typeof project>, ReturnType<typeof project>, unknown, ReturnType<typeof project>];
+        const back = (b.x - a.x) * (d.y - a.y) - (b.y - a.y) * (d.x - a.x) > 0;
+        if (back && quad !== twoSided) {
+          expect(sceneBounds(scene, (path) => path === "Cube.mdl" ? quad : undefined, width, height, textures)[0]?.box).toBeUndefined();
+          backFaces++;
+          continue;
+        }
         const drawn = region.map(([u, v]) => atAngle(quadPoint(u, v)));
         if (drawn.some((p) => p.x < 0 || p.y < 0 || p.x > width || p.y > height)) continue;
         const want = centreBox(hull(drawn.map((p) => [p.x, p.y])));
@@ -213,6 +221,7 @@ test("[property] posed screen bounds of a turning cube equal the analytic projec
   expect(textured).toBeGreaterThan(400);
   expect(brightGlow).toBeGreaterThan(200);
   expect(veils).toBeGreaterThan(100);
+  expect(backFaces).toBeGreaterThan(50);
   expect(offFrame).toBeGreaterThan(0);
   expect(farCulled).toBeGreaterThan(0);
 });

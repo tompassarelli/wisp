@@ -638,7 +638,11 @@ wisp:test/headless-bounds.test.ts).
   the renderer's 0.75 cut, Blend when it exceeds 24/255, Additive and
   AddAlpha when the largest channel × alpha × opacity exceeds 24/255, the
   silhouette threshold, where opacity is geoset alpha × layer alpha × the
-  pose's alpha. The team glow (`ReplaceableId` 2) is the same additive rule
+  pose's alpha. A layer without the `TwoSided` shading flag draws only
+  front faces, those whose projected corners turn counter-clockwise on
+  screen with y up, as the renderer culls back faces; on the 20e Warden's
+  one-sided cape-edge geoset this took the box from 5 of 12 to 10 of 12
+  frames within 4 px of native (wisp#125). The team glow (`ReplaceableId` 2) is the same additive rule
   on the install's `ReplaceableTextures\TeamGlow\TeamGlowNN.blp` for the
   pose's team colour, whose texels carry that colour, so a pixel counts when
   texel × layer opacity exceeds 24/255, and the row says `teamGlow:
@@ -649,8 +653,9 @@ wisp:test/headless-bounds.test.ts).
   animated texture or texture coordinates) counts the whole surface.
   Particle and ribbon emitters are not counted. Checked by a property
   (wisp:test/screen-bounds.test.ts): an alpha-keyed quad with a transparent
-  border bounds its opaque texels within 1 px, and a radial glow texture
-  bounds at its threshold radius.
+  border bounds its opaque texels within 1 px, one-sided it bounds nothing
+  when its back faces the eye, and a radial glow texture bounds at its
+  threshold radius.
 - **In-frame verdict.** A map that renders portraits into HUD textures gives
   `render.portraits` a receipt per texture path: the portrait `scene` (camera
   and effects), its render `width` and `height`, the `crop` of that render the

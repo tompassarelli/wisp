@@ -206,8 +206,21 @@ function posedMesh(pose: DrawnPose, found: BoundsModel, view: ReturnType<typeof 
   return { sampler, geosets, drawn: drawnMeshes };
 }
 
-/** A layer whose texels decide where it draws: its filter mode, opacity, texture and texture coordinates. */
-interface TexelLayer { readonly filter: number; readonly opacity: number; readonly texture: Texels; readonly wrapU: boolean; readonly wrapV: boolean; readonly uv: ArrayLike<number> }
+/** A layer whose texels decide where it draws: its filter mode, opacity, texture, texture coordinates and whether it draws back faces. */
+interface TexelLayer { readonly filter: number; readonly opacity: number; readonly texture: Texels; readonly wrapU: boolean; readonly wrapV: boolean; readonly uv: ArrayLike<number>; readonly twoSided: boolean }
+
+/** The layer shading flag that draws back faces; the renderer culls a layer's back faces without it. */
+const TWO_SIDED = 16;
+
+/** Whether a clip-space polygon (x, y, w first) winds counter-clockwise on screen, the face the renderer keeps when it culls back faces. */
+function frontFacing(polygon: readonly (readonly number[])[]): boolean {
+  let area = 0;
+  for (let i = 0; i < polygon.length; i++) {
+    const p = polygon[i] ?? [], q = polygon[(i + 1) % polygon.length] ?? [];
+    area += (p[0] ?? 0) / (p[2] ?? 1) * ((q[1] ?? 0) / (q[2] ?? 1)) - (q[0] ?? 0) / (q[2] ?? 1) * ((p[1] ?? 0) / (p[2] ?? 1));
+  }
+  return area > 0;
+}
 
 /** The smallest alpha an alpha-keyed (Transparent) layer draws, as the renderer discards below it. */
 export const ALPHA_KEY = 0.75;
@@ -245,7 +258,7 @@ function drawnLayers(data: model.Model, geoset: number, pose: DrawnPose, sampler
     if (image === "" && texture.ReplaceableId === 1) { if (draws(filter, opacity, 1, 1, 1, 1)) return "whole"; continue; }
     const texels = image !== "" ? textures?.image(image) : texture.ReplaceableId === 2 ? textures?.teamGlow(pose.teamColor) : undefined;
     if (texels === undefined) { unknown = true; continue; }
-    out.push({ filter, opacity, texture: texels, wrapU: ((texture.Flags ?? 0) & 1) !== 0, wrapV: ((texture.Flags ?? 0) & 2) !== 0, uv });
+    out.push({ filter, opacity, texture: texels, wrapU: ((texture.Flags ?? 0) & 1) !== 0, wrapV: ((texture.Flags ?? 0) & 2) !== 0, uv, twoSided: (Number(layer.Shading ?? 0) & TWO_SIDED) !== 0 });
   }
   return unknown ? "unknown" : out.length === 0 ? "nothing" : out;
 }
@@ -297,9 +310,11 @@ export function poseBounds(pose: DrawnPose, found: BoundsModel, view: ReturnType
           return [m0 * x + m4 * y + m8 * z + m12, m1 * x + m5 * y + m9 * z + m13, m3 * x + m7 * y + m11 * z + m15, corner === 0 ? 1 : 0, corner === 1 ? 1 : 0, corner === 2 ? 1 : 0];
         });
         if (polygon.some((p) => (p[2] ?? 0) < near)) polygon = clipNear(polygon, near);
+        const facing = polygon.length < 3 || frontFacing(polygon) ? layers : layers.filter((layer) => layer.twoSided);
+        if (facing.length === 0) continue;
         for (let fan = 1; fan + 1 < polygon.length; fan++) {
           coverTriangle([polygon[0], polygon[fan], polygon[fan + 1]] as number[][], width, height, far, window, (column, row, _inverse, weights) => {
-            const drawnHere = layers.some((layer) => {
+            const drawnHere = facing.some((layer) => {
               const u = weights[0] * (layer.uv[corners[0] * 2] ?? 0) + weights[1] * (layer.uv[corners[1] * 2] ?? 0) + weights[2] * (layer.uv[corners[2] * 2] ?? 0);
               const v = weights[0] * (layer.uv[corners[0] * 2 + 1] ?? 0) + weights[1] * (layer.uv[corners[1] * 2 + 1] ?? 0) + weights[2] * (layer.uv[corners[2] * 2 + 1] ?? 0);
               sample(layer, u, v, texel);
