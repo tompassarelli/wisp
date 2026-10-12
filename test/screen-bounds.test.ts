@@ -275,7 +275,10 @@ const perimeter = (polygon: readonly Point[]) => polygon.reduce((sum, p, i) => {
 
 // The head cube is skinned to an unnamed child of the named head node, the weapon cube to the named weapon node under the named hand.
 test("[property] the in-frame raster covers a cube's projected polygon, labels it with its nearest named node, shows it only through texels at least half opaque, and hides the overlap of a cube in front", () => {
-  const models = new Map([["Head.mdl", boundsModel(parseMDL(cubeModel("HeadMesh", "Head")))], ["Weapon.mdl", boundsModel(parseMDL(cubeModel("Weapon", "Hand")))]]), next = random(126);
+  const headModel = cubeModel("HeadMesh", "Head").replace("NumBones 2", "NumBones 4")
+    .replace("PivotPoints 2", 'Bone "Weapon" { ObjectId 2, GeosetId None, GeosetAnimId None, }\nBone "Hand" { ObjectId 3, GeosetId None, GeosetAnimId None, }\nPivotPoints 4')
+    .replace("{ 0, 0, 0 }, }", "{ 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 }, }");
+  const models = new Map([["Head.mdl", boundsModel(parseMDL(headModel))], ["Weapon.mdl", boundsModel(parseMDL(cubeModel("Weapon", "Hand")))]]), next = random(126);
   const between = (low: number, high: number) => low + (high - low) * next(), whole = (low: number, high: number) => Math.floor(between(low, high + 1));
   let covered = 0, cropped = 0, overlapped = 0, apart = 0, edges = 0, missed = 0;
   for (let round = 0; round < 120; round++) {

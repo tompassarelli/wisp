@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Console, Effect, Exit, Layer } from "effect";
+import { Cause, Console, Effect, Exit, Layer } from "effect";
 import { platformLayer } from "../scripts/platform/layer";
 import { makeHeadless } from "../scripts/wisp/commands/headless";
 import type { HeadlessRenderProject } from "../scripts/wisp/headlessRender";
@@ -76,5 +76,22 @@ test("[boundary] wisp headless --bounds writes frame rows with their portraits' 
     expect(effect).toMatchObject({ model: "Cube.mdl", unit: false, offFrame: false, behindEye: false, farCulled: false });
     expect(effect.box.right - effect.box.left).toBeGreaterThan(0);
     expect(effect.box.bottom - effect.box.top).toBeGreaterThan(0);
+  }
+  for (const [receipt, message] of [
+    [{ ...portrait, scene: { ...portrait.scene, effects: portrait.scene.effects.map((pose) => ({ ...pose, model: "Missing.mdl" })) } }, "portrait receipt for Bust.blp names Missing.mdl, which the render project can't read; regenerate the portrait on the map's current models"],
+    [{ ...portrait, parts: { head: ["Root"], weapon: ["MissingWeapon", "MissingTip"], hand: ["MissingHand"] } }, "portrait receipt for Bust.blp: part weapon names MissingWeapon, MissingTip; part hand names MissingHand, which none of the drawn portrait models Cube.mdl has; regenerate the portrait on the map's current models"],
+  ] as const) {
+    const refusal = makeHeadless(async () => ({
+      map: { filePrefix: "bounds", globalPrefixes: ["__bounds"] },
+      entry: join(import.meta.dir, "bounds/entry.ts"),
+      journeys: { still: { frames: 30, events: [] } },
+      render: { readAsset: async (path) => assets[path], portraits: { "Bust.blp": receipt } },
+    }));
+    const refused = await Effect.runPromiseExit(refusal(["--bounds", directory, "--frames", "1"]).pipe(
+      Effect.provide(Layer.merge(timingsLayer(() => undefined), platformLayer())),
+      Effect.provideService(Console.Console, { ...console, log: () => undefined }),
+    ));
+    expect(Exit.isFailure(refused)).toBe(true);
+    if (Exit.isFailure(refused)) expect(Cause.pretty(refused.cause)).toContain(message);
   }
 });

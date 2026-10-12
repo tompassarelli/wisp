@@ -94,7 +94,12 @@ async function boundsImages(render: HeadlessRenderProject, scenes: readonly Rend
       const alpha = row.texture === null ? undefined : alphas.get(row.texture);
       const missing = portrait?.scene.effects.map((pose) => pose.model).filter((path) => !models.has(path)) ?? [];
       if (missing.length > 0) throw new Error(`portrait receipt for ${row.texture} names ${missing.join(", ")}, which the render project can't read; regenerate the portrait on the map's current models`);
-      return portrait === undefined ? row : { ...row, inFrame: inFrame(alpha?.length !== portrait.texture.width * portrait.texture.height ? portrait : { ...portrait, texture: { ...portrait.texture, alpha } }, (path) => models.get(path), row.pixels) };
+      if (portrait === undefined) return row;
+      try {
+        return { ...row, inFrame: inFrame(alpha?.length !== portrait.texture.width * portrait.texture.height ? portrait : { ...portrait, texture: { ...portrait.texture, alpha } }, (path) => models.get(path), row.pixels) };
+      } catch (cause) {
+        throw new Error(`portrait receipt for ${row.texture}: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+      }
     }), models: sceneBounds(scene, (path) => models.get(path), width, height, drawnTextures) }));
 }
 

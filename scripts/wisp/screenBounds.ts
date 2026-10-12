@@ -409,7 +409,8 @@ export function inFrame(portrait: Portrait, models: (path: string) => BoundsMode
   const label = new Int32Array(width * height).fill(EMPTY), depth = new Float64Array(width * height);
   const under = new Int32Array(width * height).fill(EMPTY), underDepth = new Float64Array(width * height);
   const near = view.near, far = view.far;
-  for (const pose of drawnPoses(portrait.scene.effects, view.eye, far, portrait.scene.world)) {
+  const poses = drawnPoses(portrait.scene.effects, view.eye, far, portrait.scene.world);
+  for (const pose of poses) {
     const found = models(pose.model);
     if (found === undefined) continue;
     const { sampler, drawn } = posedMesh(pose, found, view);
@@ -448,6 +449,11 @@ export function inFrame(portrait: Portrait, models: (path: string) => BoundsMode
     }
   }
 
+  const missing = Object.entries(parts).flatMap(([part, nodes]) => {
+    const absent = nodes.filter((node) => !names.has(node));
+    return absent.length === 0 ? [] : [`part ${part} names ${absent.join(", ")}`];
+  });
+  if (missing.length > 0) throw new Error(`${missing.join("; ")}, which none of the drawn portrait models ${[...new Set(poses.map((pose) => pose.model))].join(", ")} has; regenerate the portrait on the map's current models`);
   const partsOf: string[][] = [...names.keys()].map((name) => Object.keys(parts).filter((part) => parts[part]?.includes(name)));
   const counts = new Map(Object.keys(parts).map((part) => [part, { pixels: 0, left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity }]));
   const head = new Set(parts.head ?? []), headLabels = new Set([...head].map((name) => names.get(name))), weaponLabels = new Set([...weapon].map((name) => names.get(name)));
