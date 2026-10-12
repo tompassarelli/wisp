@@ -300,7 +300,11 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
     return new Response(`missing map asset: ${path}`, { status: 404 });
   }})), (open) => Effect.promise(() => open.stop(true)));
   const chromeLog = join(directory, "chrome.log");
-  const chrome = yield* spawnLogged(ChildProcess.make(project.chrome ?? process.env.CHROME ?? "google-chrome-stable", ["--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--disable-sync", "--remote-debugging-port=0", `--user-data-dir=${directory}`, "--use-gl=angle", `--use-angle=${fallback ? "swiftshader" : "gl"}`, ...(fallback ? ["--enable-unsafe-swiftshader"] : []), `http://127.0.0.1:${server.port}/`]), { stdout: join(directory, "chrome.out"), stderr: chromeLog }).pipe(Effect.mapError(renderFailure));
+  const chromeStarted = performance.now();
+  const angle = fallback ? "swiftshader" : "gl";
+  console.error(`headless render: Chrome ANGLE ${angle} starting at ${new Date().toISOString()}`);
+  const chrome = yield* spawnLogged(ChildProcess.make(project.chrome ?? process.env.CHROME ?? "google-chrome-stable", ["--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--disable-sync", "--remote-debugging-port=0", `--user-data-dir=${directory}`, "--use-gl=angle", `--use-angle=${angle}`, ...(fallback ? ["--enable-unsafe-swiftshader"] : []), `http://127.0.0.1:${server.port}/`]), { stdout: join(directory, "chrome.out"), stderr: chromeLog }).pipe(Effect.mapError(renderFailure));
+  console.error(`headless render: Chrome ANGLE ${angle} spawned after ${Math.round(performance.now() - chromeStarted)} ms`);
   const port = yield* pollFor(10, "50 millis", Effect.gen(function*() {
     const active = yield* Effect.promise(() => readFile(join(directory, "DevToolsActivePort"), "utf8").catch(() => ""));
     const port = active.split("\n")[0];
@@ -315,6 +319,7 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
     const log = yield* Effect.promise(() => readFile(chromeLog, "utf8").catch(() => ""));
     return yield* new RenderFailure({ cause: `Chrome did not open its DevTools port within 10 seconds: ${log}` });
   }
+  console.error(`headless render: Chrome ANGLE ${angle} opened DevTools after ${Math.round(performance.now() - chromeStarted)} ms`);
   const pages = yield* Effect.tryPromise({ try: () => fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.text()), catch: renderFailure }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(ChromePages)),
     Effect.mapError(renderFailure),
@@ -331,13 +336,19 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
   const loaded = yield* pollFor(10, "50 millis", evaluate("typeof window.renderScene === 'function'").pipe(Effect.map((ready) => (ready ? true : undefined))));
   if (loaded === undefined) return yield* new RenderFailure({ cause: "The model renderer did not load within 10 seconds" });
   const gpu = yield* evaluate(`window.prepareRenderer(${project.width ?? 1280},${project.height ?? 720},${JSON.stringify(graphics)})`);
+  console.error(`headless render: Chrome ANGLE ${angle} prepared the renderer after ${Math.round(performance.now() - chromeStarted)} ms`);
   return { devtools, gpu, resolutions, identities };
 });
 
 const openAnyBrowser = (project: HeadlessRenderProject, bundle: string, graphics: Graphics) => Effect.gen(function*() {
   const attempt = (fallback: boolean) => Effect.gen(function*() {
+    const started = performance.now();
     const scope = yield* Scope.fork(yield* Effect.scope);
-    return yield* openBrowser(project, bundle, fallback, graphics).pipe(Scope.provide(scope), Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))));
+    return yield* openBrowser(project, bundle, fallback, graphics).pipe(
+      Scope.provide(scope),
+      Effect.tapError((cause) => Effect.sync(() => console.error(`headless render: Chrome ANGLE ${fallback ? "swiftshader" : "gl"} failed after ${Math.round(performance.now() - started)} ms at ${new Date().toISOString()}: ${String(cause)}`))),
+      Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
+    );
   });
   return yield* attempt(false).pipe(Effect.catch(() => attempt(true)));
 });
