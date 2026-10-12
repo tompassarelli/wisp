@@ -679,7 +679,10 @@ wisp:test/headless-bounds.test.ts).
   frame's top row and the head's top visible row; `headHiddenByWeapon` counts
   pixels where the weapon is nearest and the head would show without it;
   `handGap` is the pixel distance between the hand's and the weapon's boxes
-  (0 when they touch or overlap, absent unless both show). The
+  (0 when they touch or overlap, absent unless both show). A shown receipt
+  whose scene names a model the render project can't read fails the run,
+  naming the texture and model, rather than counting 0 px: a portrait
+  rendered on models the map no longer imports measures nothing. The
   rows are numbers only: the game declares the pass rules and thresholds.
   Checked by a property over random cubes (wisp:test/screen-bounds.test.ts):
   coverage equals the projected polygon's area within 1 px per edge, the box
