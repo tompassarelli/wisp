@@ -15,10 +15,9 @@ Unstable references are inconclusive; they never widen the gate's bounds.
 The laptop runs only product proofs. Drive a native
 client from inside (wisp:docs/driving-warcraft.md), never through the OS
 keyboard or chat. The frontier is online play over Wisp's own transport (M3).
-Measure the native side with exact reads before pixels: on offline 3.0.0
-clients use the engine debugger's frame-number, state, checksum and cost
-reads (wisp:docs/builds.md) and stack-trace builds, align frames by the read
-frame number, and keep screenshots for appearance only.
+Measure the native side from outside the game, as a player sees it: the
+map's own files and frame stamps, Warcraft's logs, replays, timing and
+screenshots; align frames by the map's own frame stamps.
 A native check of a TypeScript-only change hot-reloads into the running
 match (`wisp hot --watch`, wisp:docs/hot-reload.md) instead of rebuilding.
 
@@ -54,7 +53,7 @@ the installed package.
 No Smashcraft source imports or filesystem dependencies. Games supply their
 configuration, assets, map declaration and acceptance journeys. Keep proprietary
 assets and binaries outside this repository. No releases are authorized.
-Follow [the clean-room rules](docs/clean-room.md) (wisp:docs/clean-room.md, [wisp#75](https://github.com/tompassarelli/wisp/issues/75)).
+Follow [Respecting Blizzard's IP](README.md#respecting-blizzards-ip) (long form: wisp:docs/clean-room.md). If a task seems to need reading the game's memory, disassembly or Blizzard files in the repo, stop and measure from outside the game instead.
 
 Test cost: one test may run at most 280M Lua32 instructions in its Lua
 children and step at most 80,000 headless frames, each about 4 s on a farm

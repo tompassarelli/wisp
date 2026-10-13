@@ -355,6 +355,11 @@ publicly. Typing outside a match is refused by Wisp's private-desktop input
 
 ## Excluded: memory on signed-in clients
 
+Wisp never writes to a client signed in to Battle.net. That rules out
+wc3-slop-lan's activator and W3Champions' `native_tcpn` on the signed-in
+clients. The activator also finds the menus' GUID inside the running game;
+Wisp's menu page reports it instead.
+
 - Blizzard's loader watches the game's code, and changing another
   process's memory is what anti-cheat systems look for.
 - That account risk is of a different kind from a UI file.

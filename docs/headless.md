@@ -426,6 +426,15 @@ bun examples/sample/scripts/sample.ts headless ping-reload --step 1 --runs 50 --
 bun examples/sample/scripts/sample.ts headless ping-reload --runs 20 --json
 ```
 
+Compare the result clients' checksums between those commands to check stepped
+and normal execution. These are Wisp determinism and setup measurements.
+Warcraft now supplies fidelity reference captures, replayed through the
+consumer's `parity corpus`; [timer rules](warsmash-notes.md#timers-and-frame-stepping)
+and [network timing](network-model.md) describe the current references.
+This driver does not measure Warcraft's engine loop or native LAN protocol.
+Wisp never writes to or traps a native game process
+([Respecting Blizzard's IP](../README.md#respecting-blizzards-ip)).
+
 ### Rendered frames and sound cues
 
 `wisp headless [JOURNEY] --render PRIVATE_DIR --frames 64 132 206` writes
@@ -1501,12 +1510,8 @@ native frame of a Blue_Glow2-only model is captured.
 On 9 October 2026 both electric cases were retaken on the offline Classic
 pool (lan1a, 3.0.0.24268, `capture-classic`, 1280 × 720 game area), with the
 stock model, a halo-only copy (geoset 1 alpha 0, emitters off) and a
-star-only copy (geoset 0 alpha 0). A read of the map's Lua state during the
-stock run (`engine lua`) shows the shield cue's chat applied on frame 120 and
-the driver holding frames 122, 128 and 140, so the captures are exactly +2,
-+8 and +20 after the spawn frame. The engine's own frame counter
-(`frameNumberRead`) and the effect's animation time have no checked read on
-3.0.0, so the sample time below comes from the picture. Counts use the same
+star-only copy (geoset 0 alpha 0). The captures are +2, +8 and +20 frames
+after the spawn frame, and the sample time below comes from the picture. Counts use the same
 rubric at 1280 × 720, where 1,000 pixels at 1920 × 1080 is 444:
 
 | Case | Variant | Native +2/+8/+20 | Headless +2/+8/+20 |
@@ -1534,23 +1539,14 @@ halo alone (373 and 302) would fail.
 
 ### The effect clock on the 3.0.0 LAN pool
 
-- inside the spawn's callback, the map's 0.1 s seek (933);
-- at the next step, Birth restarted at its start (833): the selection
-  replaces the seek, and that step does not advance it;
-- each later step adds 25 ms × time scale (858, 883, ...).
-
-Frozen with time scale 0 in the callback k frames after the spawn, the
-clock read: +0, 0 ms (1 hold); +1, 0 ms (3 of 3); +2, 0 ms (4) and 25 ms
-(1); +3, 0 ms (1) and 25 ms (2). Native held frames therefore show the cue
-0 or 25 ms into Birth where headless had 33 ms, which is #72's sample time.
-Pictures still gate it: right after a hold, when the simulation ran
-several callbacks a few milliseconds apart, the restart and the freeze fell
-between the same two pictures and read 0 ms; in a run whose window drew few
-pictures (the capture tool read 1 of 8 held stamps), no clock moved and the
-seek stayed. So the clock advances when a picture is drawn, by the game time
-since the last one in whole 25 ms steps, and a selection restarts on the
-next picture. `frameNumberRead` stays unchecked: this reads an effect's
-clock, not Warcraft's frame number.
+`effectStepMs` models a Classic 3.0.0 effect clock that advances in whole
+25 ms steps of game time rather than once per drawn frame. Its numbers
+(the step size and a selection restarting at the next step without
+advancing) were not measured from outside the game, so they await an
+outside-the-game measurement
+([wisp#72](https://github.com/tompassarelli/wisp/issues/72);
+[Respecting Blizzard's IP](../README.md#respecting-blizzards-ip)). The
+picture comparison below is outside measurement.
 
 `effectStepMs: 25` (a `ClientOptions`/`runtime.clients` option) makes
 headless effect clocks follow this rule at steady pacing, a picture every
@@ -1563,7 +1559,7 @@ map changes its animation, time scale or time, or something reads it
 (`effectPoses`, renders, scenes), with the same binary32 additions per
 frame, so every read matches per-frame stepping bit for bit
 (`settleAnimation`, wisp:src/headless/animation.ts; #126). The
-reads are pinned in `test/headless-effects.test.ts` ("[native #72]").
+rule is pinned in `test/headless-effects.test.ts` ("[native #72]").
 Which callbacks share a step is the session's phase, so a held +2 frame is
 0 ms in one phase and 25 ms in the other two.
 
@@ -1579,8 +1575,8 @@ batch and its 1,000-pixel rubric:
 
 That is 13/14 in the 0 ms phase and 12/14 in the 25 ms phases. Electric
 hit's remaining 271 pixels over the threshold are the Blue_Glow2 halo and
-the stage-edge rows above, not the clock. The reads, the follow log and the
-capture maps are private in `~/.local/state/wisp/ref-72-clock/`.
+the stage-edge rows above, not the clock. The capture maps are private in
+`~/.local/state/wisp/ref-72-clock/`.
 
 Only measured numbers and authored code are kept here. Screenshots, stock
 models and textures stay in private local storage under the clean-room rules.

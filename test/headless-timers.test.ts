@@ -16,6 +16,8 @@ test("each timer rule's row agrees in two clients", () => {
   for (const client of clients.clients) expect(client.files.get(`timers56-p${client.slot}.txt`)).toEqual(EXPECTED);
 });
 
+// wisp#134 readings on 3.0.0.24268, awaiting an outside-the-game measurement (README, Respecting Blizzard's IP): [callback, frame] and [callback, TimerGetElapsed(128 s reference) × 65536]. From callback 3,364 native reads 1/65536 s lower in 280 of 637 readings, a TimerGetElapsed rounding the frames do not depend on.
+const NATIVE_134_FRAMES = [[1, 1], [1000, 1000], [2000, 2000], [3000, 3000], [3823, 3823], [4000, 4000]] as const;
 // Each reading's third value is headless minus native.
 const NATIVE_134_READINGS = [[1, 1092, 0], [1000, 1092254, 0], [2000, 2184504, 0], [3000, 3276754, 0], [3364, 3674332, 1], [3823, 4175675, 0], [3841, 4195335, 1], [4000, 4368963, 1]] as const;
 

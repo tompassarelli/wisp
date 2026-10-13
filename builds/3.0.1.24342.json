@@ -3,10 +3,7 @@
   "capabilities": {
     "lanPool":{"status":"unsupported","issue":"wisp#37"},
     "privateLanSwitch":{"status":"unsupported","issue":"wisp#37"},
-    "engineDebugger":{"status":"supported","issue":"wisp#76"},
-    "padDriver":{"status":"unchecked","issue":"wisp#38"},
     "menuDriving":{"status":"supported","issue":"wisp#37"},
-    "frameNumberRead":{"status":"unchecked","issue":"wisp#38"},
     "classic":{"status":"supported","issue":"wisp#86"},
     "definitive":{"status":"supported","issue":"wisp#86"}
   },

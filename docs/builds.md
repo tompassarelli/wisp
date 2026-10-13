@@ -12,11 +12,9 @@ owning the socket; LAN hosts and provider switches use that build's profile
 and protocol. Synthetic protocol checks use the registry's default build.
 `WISP_GAME_BUILD` supplies an explicit build for command checks.
 
-Private binary details live outside every checkout at
-`~/.local/share/wisp-private/builds/<version>.<build>.json`, with
-`{ id, engine, lan, notes, offsets }`. `engine` holds measured locator facts;
-`offsets` holds the debugger's unchanged offset entry; `lan` holds provider
-patch information. Public profiles hold no binary bytes or offsets.
+Profiles hold only behaviour observed from outside the game, as a player
+sees it: menus, logs, replays, pictures and timing
+([Respecting Blizzard's IP](../README.md#respecting-blizzards-ip)).
 
 ## Known builds
 
@@ -33,8 +31,12 @@ patch information. Public profiles hold no binary bytes or offsets.
 
 Blizzard rolled the live install back to the first row on 9 October 2026.
 Both sets of facts remain in the registry; the detected build selects behavior
-([wisp#100](https://github.com/tompassarelli/wisp/issues/100)). A driver or
-frame-number read without a checked result stays `unchecked`.
+([wisp#100](https://github.com/tompassarelli/wisp/issues/100)). A
+capability without a checked result stays `unchecked`.
 
 ## Unknown builds
 
+Doctor prints `unknown build` and stops. Check the new build's behaviour from
+outside the game (menus, logs, a LAN lobby, a played map), then add
+`builds/<version>.<build>.json` with each checked capability and its issue.
+Every capability not checked stays `unchecked`.

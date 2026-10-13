@@ -56,10 +56,9 @@ game. It isn't for cheating. The terms are in
 
 ## Historical 3.0.1.24342: no LAN provider
 
-**3.0.1.24342 removed the LAN provider, so pool pairs can't play a LAN
-match.** Its code has no LAN provider left for the switch (below) to select;
-the switch refuses it, and the checked build stays 3.0.0.24268. A LAN match on
-3.0.1 would need a provider written into the game, not a switch.
+**Pool pairs can't play a LAN match on 3.0.1.24342.** Its menus offer no LAN
+games in our tests, the private LAN plugin refuses the build, and the checked
+build stays 3.0.0.24268.
 Single-client games still work: see "Solo games" below.
 
 **The clients themselves start.** A pool client on 3.0.1 shows the intro

@@ -15,8 +15,8 @@ wait for client `b` to be in a match, for at most 60 seconds.
 ## Rules
 
 1. **Noun first.** A top-level name is the thing a command acts on (`map`,
-   `client`, `engine`); what it does to it is the verb after it
-   (`map rebuild`, `client watch`, `engine diff`). A noun with a single
+   `client`, `lan`); what it does to it is the verb after it
+   (`map rebuild`, `client watch`, `lan solo`). A noun with a single
    operation takes no verb (`repro FILE`, `soak`).
 2. **Sessions.** A few top-level names run one whole session and take no
    verb: `dev`, `hot`, `tune`, `fresh`, `play`, `controller`, `accept`,
@@ -69,7 +69,6 @@ program can register it; "game" means the consuming game defines it.
 | `menus` | Warcraft III's menus through Wisp's menu page | `install`, `remove`, `listen`, `host`, `join`, `start`, `leave` | Wisp |
 | `online` | Direct play over Battle.net by join code | `setup`, `host`, `join` | game |
 | `lan` | The offline LAN client pool | `setup`, `pool`, `fresh`, `status`, `end` | Wisp |
-| `engine` | Warcraft III's engine inside a client, for desyncs and offline scripted runs | `desync`, `poll`, `diff`, `trace`, `locate`, `actions`, `drive` | Wisp |
 | `fidelity` | Held-out look captures within calibration | `check` | Wisp |
 | `headless` | A journey in simulated clients | (journey name), `silhouette` ([Screen bounds](headless.md#screen-bounds)) | Wisp |
 | `soak` | Many headless matches by computers and a fuzzed controller | (session) | Wisp |
@@ -84,7 +83,7 @@ program can register it; "game" means the consuming game defines it.
 | `ci` | Every check a project runs, as one program for each tier ([CI command](ci-command.md)) | `pre-merge`, `post-merge`, `nightly`, `seeds` | Wisp services, game command |
 | `farm` | Headless work on hosted CI runners | `test` (Wisp); `balance`, `pads`, `perf`, `memory` (game) | Wisp |
 | `view` | What a player would see, and the model facts it reads | `scene`, `frame`, `models`, `strikes`, `reach`, `hurtboxes`, `motion` | game |
-| `oracle` | Melee situations against decompiled values | (session) | game |
+| `oracle` | Melee situations against reference values | (session) | game |
 | `agency` | Stretches a victim can't act in | (session) | game |
 | `interactions` | The fighters' interaction graph | (session) | game |
 | `combos` | Each fighter's true combos and openings per kill | (session) | game |
@@ -95,7 +94,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 
 | Flag | Meaning | Used by |
 | --- | --- | --- |
-| `--client NAME` | A native client by its name in the clients file; repeatable or `a,b` | `engine`, `online`, `lan` |
+| `--client NAME` | A native client by its name in the clients file; repeatable or `a,b` | `online`, `lan` |
 | `--clients N` | How many simulated clients | `headless` |
 | `--pairs N` | How many client pairs | `lan`, `pad` |
 | `--data DIR` | A running client's CustomMapData folder, once per client | `dev`, `hot`, `tune` |
@@ -235,8 +234,6 @@ Every command and verb in Wisp's sample program and Smashcraft's `bun wisp`, gro
 | `online host` | Hosts a private game, prints its join code |
 | `online join CODE` | Joins a game by code |
 | `lan pool --pairs N` | Pairs of offline throwaway clients on LAN |
-| `engine desync A B` | First differing turn and section of two Desync.logs |
-| `engine diff A.log B.log` | Aligns two clients' births |
 | `headless [JOURNEY]` | A journey in simulated clients: desyncs, errors, scene problems |
 | `soak` | Hundreds of headless matches; a repro file per finding |
 | `perf [RUN]` | Predicted Warcraft cost per frame in 32-bit Lua |
@@ -261,13 +258,12 @@ Every command and verb in Wisp's sample program and Smashcraft's `bun wisp`, gro
 | `view strikes` | Rewrites hero strike moments |
 | `view reach --assets DIR` | Rewrites how far swings draw |
 | `view hurtboxes --assets DIR --out DIR` | Side-view sheets of every fighter's hurt volumes |
-| `oracle` | Melee situations beside decompiled values |
+| `oracle` | Melee situations beside reference values |
 | `agency` | Stretches a victim can't act in, per starter |
 | `interactions` | Writes the interaction graph; `--check`, `--move` |
 | `combos` | Measures each fighter's true combos and openings per kill; `--fighter`, `--jobs` |
 | `inputs add FAMILY PATH`, `inputs check`, `inputs path` | Registers and resolves private build inputs |
 | `lan setup`, `lan fresh`, `lan solo`, `lan status`, `lan end` | Creates, starts, reads and ends offline matches; `solo` plays one client per game |
-| `engine actions` | Reads the LAN host turn log |
 | `perf budget`, `perf profile`, `perf census` | Checks frame budgets and reports costly functions |
 | `soak memory` | Measures retained match state after warm-up |
 | `farm perf`, `farm memory` | Runs frame measurements and memory soak on hosted runners |
