@@ -36,7 +36,7 @@ export const CONTENT_RULES: readonly ContentRule[] = [
   { name: "memory access", pattern: `(?i)(?:${MEMORY_CALLS.join("|")})`, minimumLines: 1, codeOnly: false, exempt: [], why: "names a call or path that reads or writes another process's memory" },
   { name: "binary address table", pattern: "(?i)\\w*(?:offset|r" + "va|addr|address|base|ptr|pointer)\\w*[\"']?\\s*[:=,]\\s*[\"']?0x[0-9a-f]{4,}", minimumLines: 3, codeOnly: false, exempt: [], why: "looks like a table of addresses or offsets inside the game binary" },
   { name: "decomp symbol", pattern: "\\b[a-zA-Z]{2,4}_80[0-9A-F]{6}\\b", minimumLines: 1, codeOnly: false, exempt: [], why: "names a decompiled function by its address" },
-  { name: "private import", pattern: "(?:import|require)\\s*\\(?[^)\\n]*wisp-" + "private|wisp-" + "private/[^\"'`\\s]*\\.(?:ts|js|mjs|cjs)\\b", minimumLines: 1, codeOnly: true, exempt: [LAN_PLUGIN_LOADER], why: `imports private code; only ${LAN_PLUGIN_LOADER} loads the private LAN plugin` },
+  { name: "private import", pattern: "(?:import|require)\\s*\\(?[^)\\n]*wisp-" + "private|\\bfrom\\s*[\"'`][^\"'`\\n]*wisp-" + "private|wisp-" + "private/[^\"'`\\s]*\\.(?:ts|js|mjs|cjs)\\b", minimumLines: 1, codeOnly: true, exempt: [LAN_PLUGIN_LOADER], why: `imports private code; only ${LAN_PLUGIN_LOADER} loads the private LAN plugin` },
 ];
 
 const CODE_EXTENSIONS = ["ts", "tsx", "js", "mjs", "cjs", "lua"];

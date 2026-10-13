@@ -15,6 +15,7 @@ const REFUSED: readonly (readonly [string, string, string])[] = [
   ["decomp symbol", "notes.md", `The landing lag comes from ft${"Co"}_800DF1C8.`],
   ["private import", "scripts/wisp/tool.ts", `const m = await import(\`\${home}/.local/share/wisp-${"private"}/engine/index.ts\`);`],
   ["private import", "scripts/wisp/tool.ts", `import { read } from "../../wisp-${"private"}/reader";`],
+  ["private import", "scripts/wisp/tool.ts", `import {\n  read,\n} from "../../wisp-${"private"}/reader";`],
 ];
 
 for (const [rule, path, text] of REFUSED) {
