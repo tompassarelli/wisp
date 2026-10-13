@@ -14,7 +14,7 @@ and protocol. Synthetic protocol checks use the registry's default build.
 
 Profiles hold only behaviour observed from outside the game, as a player
 sees it: menus, logs, replays, pictures and timing
-([Respecting Blizzard's IP](../README.md#respecting-blizzards-ip)).
+([Principles](../README.md#principles)).
 
 ## Known builds
 

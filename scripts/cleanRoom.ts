@@ -106,7 +106,7 @@ export function cleanRoomProblems(input: {
     if (allowed.has(path)) continue;
     for (const name of names) {
       const rule = CONTENT_RULES.find((candidate) => candidate.name === name);
-      problems.push(`clean room: ${path} ${rule?.why ?? name} (${name}). Wisp's behaviour comes from outside the game only; remove it (README, Respecting Blizzard's IP; wisp:docs/clean-room.md).`);
+      problems.push(`clean room: ${path} ${rule?.why ?? name} (${name}). Wisp's behaviour comes from outside the game only; remove it (README, Principles; wisp:docs/clean-room.md).`);
     }
   }
   return problems;

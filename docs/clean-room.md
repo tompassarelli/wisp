@@ -1,12 +1,11 @@
-# Clean room
-
-Wisp is an open-source, clean-room runtime for Warcraft III maps
-([wisp#75](https://github.com/tompassarelli/wisp/issues/75)). It reimplements
-the behaviour maps rely on, from scratch, and loads art at run time from the
-player's own legally owned Warcraft III install. These rules apply to every
+Wisp is an open-source toolchain and clean-room runtime for Warcraft III maps
+([wisp#75](https://github.com/tompassarelli/wisp/issues/75)). The toolchain
+builds maps for the official game. The runtime reimplements the behaviour maps
+rely on, from scratch, and loads art at run time from the player's own legally
+owned Warcraft III install. These rules apply to every
 agent and contributor, in code, tests, fixtures, docs, issues, pull requests
 and history. The short form is the README's
-[Respecting Blizzard's IP](../README.md#respecting-blizzards-ip).
+[Principles](../README.md#principles).
 
 ## Rules
 
@@ -26,16 +25,6 @@ and history. The short form is the README's
   fine.
 
 ## Do
-
-- Keep private local test tools private. The LAN switch (which lets our own
-  offline test clients offer LAN games) and the desync debugger (which
-  inspects our own clients) live under `~/.local/share/wisp-private/`,
-  outside every repository, and run only on our own machines and test
-  accounts. The LAN switch loads through wisp:scripts/wisp/lan/plugin.ts;
-  nothing else in Wisp imports private code. Their addresses, offsets,
-  dumps, byte patterns and procedures are never committed, posted in issues
-  or pull requests, or quoted in docs. Their findings may diagnose our own
-  bugs (such as a desync), never decide engine behaviour.
 
 - Load models, textures, sounds and data tables from the user's install when
   Wisp runs, through the install-asset loader. Cache extracted files only in
@@ -75,6 +64,19 @@ and history. The short form is the README's
   wisp:docs/warsmash-notes.md, and decide numbers with native fixtures.
 - Put "Warcraft" (or Blizzard art or logos) in a product name, icon or logo.
 
+## Private tools
+
+Private test tools stay private. Two local tools exist only for testing on our
+own machines and test accounts: the LAN switch that lets our own test clients
+offer LAN games, and the desync debugger that inspects our own clients. They
+live outside every repository, under `~/.local/share/wisp-private/`, and never
+feed Wisp's implementation. The LAN switch loads through
+wisp:scripts/wisp/lan/plugin.ts; nothing else in Wisp imports private code.
+Their addresses, offsets, dumps, byte patterns and procedures are never
+committed, posted in issues or pull requests, or quoted in docs. What they show
+may help diagnose our own bugs (such as a desync); it never decides how Wisp
+behaves.
+
 ## The check
 
 wisp:scripts/cleanRoom.ts runs before every push and in CI. Unless
@@ -100,3 +102,10 @@ from our own source, or load it from the install. On 13 October 2026 the
 pushed history was rewritten to remove the former engine debugger, the LAN
 switch's memory code and the docs that described them; for anything found
 later, open an issue.
+
+## Audit record
+
+2026-10-13: the full git history, issues and pull requests were reviewed.
+Material from earlier memory-reading and binary research was removed from every
+commit, branch and tag, and GitHub was asked to purge cached copies. Since then
+the clean-room check has run on every push.

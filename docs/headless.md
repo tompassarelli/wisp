@@ -433,7 +433,7 @@ consumer's `parity corpus`; [timer rules](warsmash-notes.md#timers-and-frame-ste
 and [network timing](network-model.md) describe the current references.
 This driver does not measure Warcraft's engine loop or native LAN protocol.
 Wisp never writes to or traps a native game process
-([Respecting Blizzard's IP](../README.md#respecting-blizzards-ip)).
+([Principles](../README.md#principles)).
 
 ### Rendered frames and sound cues
 
@@ -1545,7 +1545,7 @@ halo alone (373 and 302) would fail.
 advancing) were not measured from outside the game, so they await an
 outside-the-game measurement
 ([wisp#72](https://github.com/tompassarelli/wisp/issues/72);
-[Respecting Blizzard's IP](../README.md#respecting-blizzards-ip)). The
+[Principles](../README.md#principles)). The
 picture comparison below is outside measurement.
 
 `effectStepMs: 25` (a `ClientOptions`/`runtime.clients` option) makes

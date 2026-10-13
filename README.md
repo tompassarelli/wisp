@@ -6,48 +6,45 @@
 
 Modern tooling, testing, build automation, and developer experience for Warcraft III modding.
 
-Wisp compiles TypeScript into Warcraft III's Lua, applies the game's numeric
-rules, reloads code into running clients, maps Lua errors back to TypeScript,
-and runs a map in simulated clients without Warcraft. Games own their
-simulation, UI, assets and map declaration; Wisp never reads their source.
-[Smashcraft](https://github.com/tompassarelli/smashcraft) is the first
-consumer.
+Warcraft III is still a great platform for custom games, but its modding tools
+are dated and the official editor has barely changed. Wisp brings modern
+tooling to it: types, tests, hot reload, build automation and simulated
+matches. It has two parts.
 
-## Respecting Blizzard's IP
+- **The toolchain** makes maps that run in the real game: a TypeScript-to-Lua
+  compiler, the game's numeric rules, hot reload into running clients, Lua
+  errors mapped back to TypeScript, tests, and build and packaging automation.
+- **The runtime** is a from-scratch engine that runs maps without Warcraft.
+  Today it provides headless simulated clients for testing, rendered frames,
+  and, for games that opt in, a standalone browser window. It is not a
+  replacement for the game.
 
-Wisp works with your own Warcraft III install. It never copies or ships
-anything of Blizzard's.
+Games own their simulation, UI, assets and map declaration; Wisp never reads
+their source. [Smashcraft](https://github.com/tompassarelli/smashcraft) is the
+first consumer.
 
-- **Nothing of theirs in the repo.** No Blizzard code, art, models,
-  textures, sounds, music, data tables, game scripts (the bodies of
-  `common.j` and `blizzard.j`) or in-game text. Players load art from their
-  own legally owned install when Wisp runs. Native names and signatures are
-  the interface maps call, and a short quote that identifies something is
-  fine.
-- **Behaviour from the outside only.** Wisp's behaviour comes from
-  observing the game as a player sees it (pictures, sound, the logs and
-  files the game writes, replays, timing, the LAN traffic of games we host)
-  and from public documentation. Never from disassembly, decompilation,
-  decrypted or dumped executables, debugger sessions, or reading the game's
-  memory.
-- **No bypassing, no cheating.** No DRM bypass, no Battle.net sign-in
-  emulation, no cheating or anti-cheat evasion, and nothing that touches
-  other players' games or Blizzard's services.
-- **Private test tools stay private.** Two local tools exist only for
-  testing on our own machines and test accounts: the LAN switch that lets
-  our own test clients offer LAN games, and the desync debugger that
-  inspects our own clients. They live outside every repository, under
-  `~/.local/share/wisp-private/`, and never feed Wisp's implementation.
-  Their addresses, offsets, dumps, byte patterns and procedures are never
-  committed, posted in issues or pull requests, or quoted in docs. What
-  they show may help diagnose our own bugs (such as a desync); it never
-  decides how Wisp behaves.
-- **Names.** "Warcraft" stays out of product names and logos. "Works with
-  your Warcraft III install" is fine.
-- **No Warsmash code.** Warsmash is AGPL; Wisp uses none of its code.
+## Principles
 
-The long form, and the check that enforces it before every push, is
-[docs/clean-room.md](docs/clean-room.md).
+Wisp is an independent fan project, not affiliated with or endorsed by Blizzard
+Entertainment. Its toolchain works with the official game and your own install.
+Its runtime, like [OpenMW](https://openmw.org) for Morrowind, is written
+entirely from scratch and loads art at run time from a copy you own; Wisp never
+replaces or redistributes the game.
+
+- **Respect copyright and publisher IP.** Nothing of Blizzard's (code, art,
+  sound, data, game scripts or in-game text) is in this repository or ships
+  with Wisp. Art loads at run time from your own install.
+- **Learn by observation.** Wisp's behaviour is measured from the outside: what
+  the game shows, plays, logs and writes, and the traffic of LAN games we host,
+  plus public documentation. Never from disassembly, decompilation or the
+  game's memory.
+- **Play fair.** No DRM bypass, no Battle.net emulation, no cheats, and nothing
+  that touches other players or Blizzard's services.
+- **Original work.** Our own code only. No code from AGPL projects such as
+  Warsmash, and "Warcraft" stays out of our product names.
+
+The detailed rules, and the automated check that enforces them on every push,
+are in [docs/clean-room.md](docs/clean-room.md).
 
 ## Start
 
@@ -83,3 +80,6 @@ this documentation.
 
 Wisp is released under the [MIT License](LICENSE). Warcraft III and its assets
 belong to Blizzard Entertainment and are not part of this repository.
+
+<small>Warcraft and Blizzard Entertainment are trademarks or registered trademarks of Blizzard
+Entertainment, Inc.</small>

@@ -53,7 +53,7 @@ the installed package.
 No Smashcraft source imports or filesystem dependencies. Games supply their
 configuration, assets, map declaration and acceptance journeys. Keep proprietary
 assets and binaries outside this repository. No releases are authorized.
-Follow [Respecting Blizzard's IP](README.md#respecting-blizzards-ip) (long form: wisp:docs/clean-room.md). If a task seems to need reading the game's memory, disassembly or Blizzard files in the repo, stop and measure from outside the game instead.
+Follow [Principles](README.md#principles) (long form: wisp:docs/clean-room.md). If a task seems to need reading the game's memory, disassembly or Blizzard files in the repo, stop and measure from outside the game instead.
 
 Test cost: one test may run at most 280M Lua32 instructions in its Lua
 children and step at most 80,000 headless frames, each about 4 s on a farm
