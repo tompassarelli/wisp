@@ -831,12 +831,14 @@ in `test/headless-timers.test.ts`. The 8 October capture (3.0.1.24342, both
 clients) does, all 16 rows.
 
 wisp#134 measured the deadline sums directly on Classic 3.0.0.24268. A map
-started a 128 s one-shot reference with a 1/60 s and a 1/1024 s periodic
-timer, and each callback wrote `R2I(TimerGetElapsed(reference) × 65536)` to
-its own file output; since a callback reads its deadline as game time, that
-is the deadline in 1/65536 s. Two captures (timer134-a, timer134-b) gave the
-same 4,000 1/60 s readings, each step 1,092 or 1,093 units, and timer134-b's
-1,024 1/1024 s readings were exactly 64 units apart. Headless reproduces all
+started a 128 s one-shot reference and a 1/60 s periodic timer, and each
+callback wrote `R2I(TimerGetElapsed(reference) × 65536)` to its own file
+output; since a callback reads its deadline as game time, that is the
+deadline in 1/65536 s. The two captures ran different extra timers
+(timer134-a a second 1/60 s timer, timer134-b a 1/1024 s timer recording the
+same reading) and still gave the same 4,000 1/60 s readings, each step 1,092
+or 1,093 units; timer134-b's 1,024 1/1024 s readings were exactly 64 units
+apart. Headless reproduces all
 1,024 and 3,720 of the 4,000: native reads one unit lower at every fourth
 callback from 3,364 to 3,840 and at every callback from 3,841 to 4,000, as if
 its 1/60 s deadline were one binary32 spacing below the toward-zero sum from
@@ -844,7 +846,10 @@ callback 3,364 on. Round-to-nearest sums, deadlines computed as start plus
 n periods (binary32 or double), elapsed time as now minus start, and the
 65536 multiply in binary32 or double each match fewer readings, so the rule
 above stays; `test/headless-timers.test.ts` pins all readings and that
-residual.
+residual. To recapture, build `bun test/timer134/build.ts BASE.w3m OUT.w3x`,
+play it once for at least 67 game seconds and read its CustomMapData files
+`timer134-N-p0.txt` and `timer134-fast-N-p0.txt`, `callback,reading` rows in
+files of 100.
 
 ## Sound start, stop and channel limits
 

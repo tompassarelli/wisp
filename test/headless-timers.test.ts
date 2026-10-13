@@ -22,7 +22,7 @@ const nativeReadings = (): number[] => {
   return [...NATIVE_134_STEPS].flatMap(digit => [8, 4, 2, 1].map(bit => (reading += (Number.parseInt(digit, 16) & bit) === 0 ? 1092 : 1093)));
 };
 
-test("[native wisp#134, timer134-a/b, 3.0.0.24268] TimerGetElapsed inside 1/60 s and 1/1024 s callbacks reads native's deadlines", () => {
+test("[native wisp#134, timer134-a/b, 3.0.0.24268] TimerGetElapsed inside 1/60 s and 1/1024 s callbacks matches native's deadlines except a pinned 280-reading residual from callback 3,364", () => {
   let state: { readings: number[]; fastReadings: number[] } | undefined;
   const clients = runtime.clients({ install: timer134.install, start: () => { timer134.start(); state = globalThis.__timer134; } }, [0]);
   clients.start();
