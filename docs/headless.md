@@ -1537,46 +1537,37 @@ so the renderer is unchanged. Under the scaled threshold, native Classic
 passes both electric cases on its stage-edge and receipt pixels, while the
 halo alone (373 and 302) would fail.
 
-### The effect clock on the 3.0.0 LAN pool
+### The effect clock
 
-`effectStepMs` models a Classic 3.0.0 effect clock that advances in whole
-25 ms steps of game time rather than once per drawn frame. Its numbers
-(the step size and a selection restarting at the next step without
-advancing) were not measured from outside the game, so they await an
-outside-the-game measurement
-([wisp#72](https://github.com/tompassarelli/wisp/issues/72);
-[Principles](../README.md#principles)). The
-picture comparison below is outside measurement.
+Wisp models no step rule for effect clocks. They advance once per drawn
+frame, which the 3.0.1 #58 rulers pin. They advance lazily: each pose takes
+the drawn frames it missed when the map changes its animation, time scale or
+time, or something reads it (`effectPoses`, renders, scenes), with the same
+binary32 additions per frame, so every read matches per-frame stepping bit
+for bit (`settleAnimation`, wisp:src/headless/animation.ts; #126).
 
-`effectStepMs: 25` (a `ClientOptions`/`runtime.clients` option) makes
-headless effect clocks follow this rule at steady pacing, a picture every
-step: steps end every 25 ms of the headless game clock, after the callbacks
-due by then, and a selection restarts at the next step end without
-advancing. Unset, effect clocks
-advance once per drawn frame as before, which the 3.0.1 #58 rulers pin.
-They advance lazily: each pose takes the drawn frames it missed when the
-map changes its animation, time scale or time, or something reads it
-(`effectPoses`, renders, scenes), with the same binary32 additions per
-frame, so every read matches per-frame stepping bit for bit
-(`settleAnimation`, wisp:src/headless/animation.ts; #126). The
-rule is pinned in `test/headless-effects.test.ts` ("[native #72]").
-Which callbacks share a step is the session's phase, so a held +2 frame is
-0 ms in one phase and 25 ms in the other two.
+An outside measurement of a stepped clock on Classic 3.0.0.24268 was
+attempted ([wisp#72](https://github.com/tompassarelli/wisp/issues/72);
+captures `w4b-ruler-a` and `w4d-ruler-a`) and read no usable pose, so no
+step rule is kept ([Principles](../README.md#principles)).
 
-All 42 f9d0fbf3 frames, re-timed by the rule, with the 8 October native
-batch and its 1,000-pixel rubric:
+The f9d0fbf3 frames above were also graded by the 8 October native batch's
+1,000-pixel rubric against headless scenes whose +2 frame sampled each
+effect 0 ms into Birth. That sampling came from the removed step rule;
+drawn once per frame, headless samples +2 at 33 ms, as in the 9 October
+table above. The comparison stays as outside evidence of how the pictures
+differ:
 
-| Case | Native +2/+8/+20 | Headless, +2 at 0 ms | Headless, +2 at 25 ms |
-| --- | --- | --- | --- |
-| Electric hit | 889/256/0 | 1271/269/0, disagree | 3234/269/0, disagree |
-| Ice spark | 19072/0/0 | 11331/0/0, agree | 14185/0/0, agree |
-| Electric shield | 424/0/0 | 775/0/0, agree | 2339/0/0, disagree |
-| Other 11 cases | as above | agree | agree |
+| Case | Native +2/+8/+20 | Headless, +2 at 0 ms |
+| --- | --- | --- |
+| Electric hit | 889/256/0 | 1271/269/0, disagree |
+| Ice spark | 19072/0/0 | 11331/0/0, agree |
+| Electric shield | 424/0/0 | 775/0/0, agree |
+| Other 11 cases | as above | agree |
 
-That is 13/14 in the 0 ms phase and 12/14 in the 25 ms phases. Electric
-hit's remaining 271 pixels over the threshold are the Blue_Glow2 halo and
-the stage-edge rows above, not the clock. The capture maps are private in
-`~/.local/state/wisp/ref-72-clock/`.
+That is 13/14 agreeing. Electric hit's remaining 271 pixels over the
+threshold are the Blue_Glow2 halo and the stage-edge rows above. The capture
+maps are private in `~/.local/state/wisp/ref-72-clock/`.
 
 Only measured numbers and authored code are kept here. Screenshots, stock
 models and textures stay in private local storage under the clean-room rules.

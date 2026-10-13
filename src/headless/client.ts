@@ -296,8 +296,6 @@ export interface ClientOptions {
   readonly effectDeaths?: EffectDeaths;
 
   readonly musicSlider?: number;
-  /** Whole milliseconds of game time per engine step when effect clocks advance once per step (25 on the 3.0.0 offline LAN pool); unset, once per frame. */
-  readonly effectStepMs?: number;
 }
 
 export { FRAMES_PER_SECOND };
@@ -558,7 +556,6 @@ export class HeadlessClient {
   private effectDraws = 0;
   private effectDrawSeconds = 0;
   private readonly effectDeaths: EffectDeaths | undefined;
-  private readonly effectStepMs: number | undefined;
   private readonly musicSlider: number;
   private readonly units = new Map<Handle, Unit>();
 
@@ -599,7 +596,6 @@ export class HeadlessClient {
     }, options.inventory);
     this.unitStates = options.unitStates ?? {};
     this.effectDeaths = options.effectDeaths;
-    this.effectStepMs = options.effectStepMs;
     this.musicSlider = options.musicSlider ?? 1;
     this.slot = options.slot;
     this.scope = options.scope;
@@ -1509,7 +1505,6 @@ export class HeadlessClient {
     this.abilities.tick(f32(1 / FRAMES_PER_SECOND));
     this.scenery.tick(f32(1 / FRAMES_PER_SECOND));
     this.textTags.tick(f32(1 / FRAMES_PER_SECOND));
-    if (this.effectStepMs !== undefined) this.stepEffects(this.effectStepMs);
     if (draw) this.draw(f32(1 / FRAMES_PER_SECOND));
     let expired = 0;
     while (expired < this.dying.length && this.frame - (this.dying[expired]?.destroyed ?? this.frame) >= 5 * FRAMES_PER_SECOND) expired++;
@@ -1527,30 +1522,13 @@ export class HeadlessClient {
   }
 
   draw(seconds: number): void {
-    if (this.effectStepMs === undefined) {
-      const step = f32(seconds);
-      if (step !== this.effectDrawSeconds) {
-        for (const pose of this.effects.values()) this.settleEffect(pose);
-        this.effectDrawSeconds = step;
-      }
-      this.effectDraws++;
+    const step = f32(seconds);
+    if (step !== this.effectDrawSeconds) {
+      for (const pose of this.effects.values()) this.settleEffect(pose);
+      this.effectDrawSeconds = step;
     }
+    this.effectDraws++;
     for (const unit of this.units.values()) advanceAnimation(unit, unit.timeScale, f32(seconds));
-  }
-
-  /** Engine steps end every `ms` of game time, after the callbacks due by then; frame n runs those ending in [(n - 1)/60, n/60) s first. */
-  private stepEffects(ms: number): void {
-    const per = FRAMES_PER_SECOND * ms;
-    const ended = (frame: number) => Math.ceil(frame * 1000 / per);
-    for (let step = ended(this.frame - 1); step < ended(this.frame); step++) {
-      for (const pose of this.effects.values()) {
-        // 3.0.0 LAN: the step that applies a selection restarts it without advancing it.
-        if (pose.animationRestartPending === true) {
-          pose.animationElapsed = 0;
-          pose.animationRestartPending = false;
-        } else advanceAnimation(pose, pose.timeScale, f32(ms / 1000));
-      }
-    }
   }
 
   private timerElapsed(timer: Timer): number {

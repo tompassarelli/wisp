@@ -45,7 +45,6 @@ export interface LockstepOptions {
   readonly effectDeaths?: EffectDeaths;
 
   readonly musicSlider?: number;
-  readonly effectStepMs?: number;
   /** Every client's screen in pixels; unset, client i reports (1920 + 640·i) × 1080. */
   readonly screen?: { readonly width: number; readonly height: number };
 
@@ -135,7 +134,6 @@ export class Lockstep {
         ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
         ...(options.effectDeaths === undefined ? {} : { effectDeaths: options.effectDeaths }),
         ...(options.musicSlider === undefined ? {} : { musicSlider: options.musicSlider }),
-        ...(options.effectStepMs === undefined ? {} : { effectStepMs: options.effectStepMs }),
       }));
     }
     this.clients = clients;
