@@ -107,5 +107,9 @@ later, open an issue.
 
 2026-10-13: the full git history, issues and pull requests were reviewed.
 Material from earlier memory-reading and binary research was removed from every
-commit, branch and tag, and GitHub was asked to purge cached copies. Since then
-the clean-room check has run on every push.
+commit, branch and tag. The clean-room check has run on every push since then.
+
+2026-10-14: the previous repository was made private and archived as
+`wisp-dev`. A fresh public `wisp` repository keeps the clean history without
+the previous repository's pull-request refs. The cached-copy purge request was
+cancelled.
