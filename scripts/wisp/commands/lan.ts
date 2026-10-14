@@ -10,7 +10,7 @@ import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from
 import { LanFailure } from "../lan/join";
 import { lanPluginProblem } from "../lan/plugin";
 import {
-  PAIR_SIDES, PROFILES, type PoolPair, agentSocket, alive, clientName, desktopSize, pairClients, pairDirectory, poolClientsFile, poolFile, poolHolderFile, poolOwners, playtestPairRefusal, readPool, reportPort, writeJson, writePoolClients, wrongUser,
+  PAIR_SIDES, PROFILES, type PoolPair, agentSocket, alive, clientName, desktopSize, pairClients, pairCustody, pairDirectory, poolClientsFile, poolFile, poolHolderFile, poolOwners, playtestPairRefusal, readPool, reportPort, writeJson, writePoolClients, wrongUser,
 } from "../lan/pool";
 import { setupClient } from "../lan/setup";
 import { CapacityDeferred, admissionFile, capacityDeferral, deferredExit, pairAdmission, retryWhileDeferred } from "../lan/admission";
@@ -96,7 +96,7 @@ const clientsReady = (pair: number) => Effect.tryPromise({
 
 const READY = "10 minutes";
 
-const holdPair = (pair: number) => Effect.acquireRelease(
+const holdPair = (pair: number) => pairCustody(pair).pipe(Effect.andThen(Effect.acquireRelease(
   Effect.try({
     try: () => {
       const file = poolHolderFile(pair);
@@ -122,7 +122,7 @@ const holdPair = (pair: number) => Effect.acquireRelease(
 ).pipe(Effect.andThen(Effect.gen(function*() {
   const refusal = yield* playtestPairRefusal(pair);
   if (refusal !== undefined) return yield* new LanFailure({ problem: refusal });
-})));
+})))));
 
 const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, fps?: number) => {
   const directory = pairDirectory(pair);

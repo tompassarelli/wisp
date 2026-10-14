@@ -30,6 +30,35 @@ export const pairDirectory = (pair: number) => join(stateRoot(), `pair-${pair}`)
 
 export const poolHolderFile = (pair: number) => join(pairDirectory(pair), "pool.pid");
 
+export const poolLockFile = (pair: number) => join(pairDirectory(pair), "pool.lock");
+
+export const pairCustody = (pair: number) => Effect.gen(function*() {
+  yield* Effect.try({
+    try: () => mkdirSync(pairDirectory(pair), { recursive: true }),
+    catch: (cause) => new LanFailure({ problem: `create pair ${pair}: ${String(cause)}` }),
+  });
+  const child = yield* Effect.acquireRelease(
+    Effect.try({
+      try: () => Bun.spawn(["flock", "--exclusive", "--nonblock", "--no-fork", poolLockFile(pair), "sh", "-c", "echo held; exec cat >/dev/null"], { stdin: "pipe", stdout: "pipe", stderr: "pipe" }),
+      catch: (cause) => new LanFailure({ problem: `lock pair ${pair}: ${String(cause)}` }),
+    }),
+    (child) => Effect.promise(async () => {
+      child.stdin.end();
+      await child.exited;
+    }),
+  );
+  const ready = yield* Effect.tryPromise({
+    try: () => child.stdout.getReader().read(),
+    catch: (cause) => new LanFailure({ problem: `lock pair ${pair}: ${String(cause)}` }),
+  });
+  if (ready.done) {
+    const code = yield* Effect.promise(() => child.exited);
+    if (code !== 1) return yield* new LanFailure({ problem: `flock pair ${pair} exited ${code}: ${(yield* Effect.promise(() => new Response(child.stderr).text())).trim()}` });
+    const holder = yield* Effect.try(() => readFileSync(poolHolderFile(pair), "utf8").trim()).pipe(Effect.orElseSucceed(() => "taking custody"));
+    return yield* new LanFailure({ problem: `it is held by wisp lan pool ${holder}; stop that pool first` });
+  }
+});
+
 const PlaytestState = Schema.fromJsonString(Schema.Struct({ on: Schema.Boolean }));
 
 export const playtestPairRefusal = (pair: number) => Effect.gen(function*() {

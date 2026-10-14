@@ -85,9 +85,36 @@ test("[boundary] lan pool: playtest admits one pair, refuses held and racing pai
   const playtest = join(box.env.HOME, ".local/state/playtest/state.json");
   mkdirSync(join(playtest, ".."), { recursive: true });
   writeFileSync(playtest, JSON.stringify({ on: true, auto: true, since: 1791979200 }));
+  const pairDirectory = join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${poolPair}`);
+  mkdirSync(pairDirectory, { recursive: true });
+  const holder = join(pairDirectory, "pool.pid");
+  writeFileSync(holder, "2147483647\n");
+  const custody = Bun.spawn(["flock", "--exclusive", "--no-fork", join(pairDirectory, "pool.lock"), "sh", "-c", "echo held; exec cat >/dev/null"], { env: box.env, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+  try {
+    expect((await custody.stdout.getReader().read()).done).toBe(false);
+    const contenders = [pool(box, {}), pool(box, {})];
+    for (const child of contenders) {
+      const code = await Promise.race([child.exited, Bun.sleep(10_000).then(() => "still running")]);
+      if (code === "still running") {
+        child.kill("SIGTERM");
+        await child.exited;
+      }
+      expect(code).toBe(1);
+      expect(await new Response(child.stdout).text()).toContain("held by wisp lan pool");
+    }
+    expect(readFileSync(holder, "utf8")).toBe("2147483647\n");
+    expect(box.sessions()).toHaveLength(0);
+    expect(box.activeDesktops()).toEqual([]);
+  } finally {
+    custody.stdin.end();
+    expect(await custody.exited).toBe(0);
+  }
   const runner = pool(box, {});
   await until(() => existsSync(join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${poolPair}`, "clients.json")), 30, "the ready pool pair");
   expect(box.activeDesktops()).toEqual(["a", "b"]);
+  expect(readFileSync(holder, "utf8").trim()).toBe(String(runner.pid));
+  const locked = Bun.spawn(["flock", "--exclusive", "--nonblock", join(pairDirectory, "pool.lock"), "true"], { env: box.env, stdout: "pipe", stderr: "pipe" });
+  expect(await locked.exited).toBe(1);
   const second = pool(box, {});
   const secondCode = await Promise.race([second.exited, Bun.sleep(20_000).then(() => "still running")]);
   if (secondCode === "still running") second.kill("SIGKILL");
@@ -124,6 +151,9 @@ test("[boundary] lan pool: playtest admits one pair, refuses held and racing pai
   const result = await leftovers(runner, box);
   expect(result.code).not.toBe("still running");
   expect({ processes: result.processes, sessions: result.sessions, activeDesktops: box.activeDesktops() }).toEqual({ processes: 0, sessions: 0, activeDesktops: [] });
+  expect(existsSync(holder)).toBe(false);
+  const released = Bun.spawn(["flock", "--exclusive", "--nonblock", join(pairDirectory, "pool.lock"), "true"], { env: box.env, stdout: "pipe", stderr: "pipe" });
+  expect(await released.exited).toBe(0);
   writeFileSync(playtest, JSON.stringify({ on: true, auto: false }));
   const racing = [poolPair + 1, poolPair + 2].map((pair) => {
     const child = pool(box, { WISP_TEST_DESKTOPS: join(box.env.WISP_TEST_DESKTOPS, String(pair)) }, pair);
