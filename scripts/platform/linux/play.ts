@@ -81,7 +81,9 @@ export const launchCommand = (request: LaunchRequest) => {
   const restore = HOST_KEYS.flatMap((key) => (launcher.env[key] === undefined ? ["-u", key] : [`${key}=${launcher.env[key]}`]));
   const host = Object.fromEntries(HOST_KEYS.flatMap((key) => (request.host[key] === undefined ? [] : [[key, request.host[key]!] as const])));
   return {
-    command: [request.bun, request.capacity, "session", "--class", "native", "--owner", `wisp-game-${request.client}`, "--",
+    command: [...(request.client === "playtest"
+      ? ["systemd-run", "--user", "--scope", "--collect", "--slice=playtest.slice", "--"]
+      : [request.bun, request.capacity, "session", "--class", "native", "--owner", `wisp-game-${request.client}`, "--"]),
       request.env, ...restore, request.nsenter, "-t", String(launcher.pid), "-U", "-m", "--preserve-credentials", `--wd=${launcher.cwd}`, "--",
       request.wine, "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe", "--exec=launch W3"],
     env: { ...launcher.env, ...host },
@@ -92,7 +94,7 @@ const LAUNCH_WAIT_SECONDS = 1800;
 
 const launchInContainer = (run: Runner, tools: PlayTools, launcher: { readonly pid: number }, client: string) => Effect.gen(function*() {
   const failed = problem("couldn't ask Battle.net to launch Warcraft III");
-  const capacity = tools.capacity ?? (yield* skillScript("machine-capacity", "scripts/machine-capacity.mjs").pipe(Effect.mapError((cause) => failed(cause.problem))));
+  const capacity = client === "playtest" ? "" : tools.capacity ?? (yield* skillScript("machine-capacity", "scripts/machine-capacity.mjs").pipe(Effect.mapError((cause) => failed(cause.problem))));
   const request = yield* Effect.try({
     try: (): LaunchRequest => {
       const { cwd, env, runtime } = launcherProcess(launcher.pid);
@@ -261,6 +263,10 @@ const desktop = (run: Runner, tools: PlayTools, display: string): PlayDesktop["S
       if (frame === undefined) return yield* new PlayProblem({ problem: `grim's capture of ${output} isn't a PPM image` });
       const tsv = text(yield* tool(run, [tools.tesseract, "stdin", "stdout", "--psm", "11", "tsv"], {}, separateInk(frame, ink)));
       return { width: frame.width, height: frame.height, words: parseWords(tsv) };
+    }),
+    capture: (output, path) => Effect.gen(function*() {
+      yield* Effect.try({ try: () => mkdirSync(dirname(path), { recursive: true }), catch: problem("could not create the lobby capture folder") });
+      yield* tool(run, [tools.grim, "-o", output, path], {}).pipe(Effect.timeoutOrElse({ duration: "8 seconds", orElse: () => Effect.fail(new PlayProblem({ problem: "lobby screenshot timed out after 8 s" })) }));
     }),
     xWindow: (title, pid) => Effect.gen(function*() {
 

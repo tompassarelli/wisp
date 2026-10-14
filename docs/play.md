@@ -8,7 +8,7 @@ replace the owner's play declaration. Consumer-owned versioned map libraries
 can set `GameFiles.layer({ ..., preserveMaps: true })` and install diagnostics
 in a `tests/` subfolder; menu hosting accepts nested map folders.
 It reports each step on one line and stops at the first problem with a plain
-message that says what to do. Native play takes no arguments. Games may also
+message that says what to do. Native play accepts `--lobby-only [MAP.w3x]` to install the requested map and stop in a hosted Classic offline LOOP lobby. It reuses the running launchers and client, refuses an active or unreported session, never starts the lobby, and prints `LOBBY-READY MAP.w3x screenshot=PATH` only after hosting, the declared controller/readiness checks and a screenshot. Launcher or game updates have a ten-minute wait; credentials are never typed. The consumer reserves its game slice before calling this mode; the lobby launch request runs in `playtest.slice`. A running client must already use the declared graphics mode. Without this flag, native play uses its declared map and starts the match. Games may also
 declare [standalone play](#standalone-window).
 
 ```text

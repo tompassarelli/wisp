@@ -61,7 +61,7 @@ program can register it; "game" means the consuming game defines it.
 | `hot` | Hot reload into running clients | (session) | Wisp |
 | `tune` | Live tuning of declared values | (session) | Wisp |
 | `fresh` | A new match in every client | (session) | game |
-| `play` | The owner's desktop to a match | (session) | Wisp |
+| `play` | The owner's desktop to a match or hosted lobby (`--lobby-only [MAP.w3x]`) | (session) | Wisp |
 | `controller` | The always-on controller service | (session) | game |
 | `accept` | The game's declared native checks | (session) | Wisp |
 | `native` | A native run on an SSH VM, with staged inputs and downloaded evidence | `remote` | Wisp |

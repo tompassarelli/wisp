@@ -493,14 +493,18 @@ export interface LocalGameOptions {
   readonly playerName: string;
 }
 
-export const playLocalGame = (menus: MenuSocket, options: LocalGameOptions) => Effect.gen(function*() {
+export const hostLocalLobby = (menus: MenuSocket, options: LocalGameOptions) => Effect.gen(function*() {
   yield* menus.forget;
   yield* menus.send("LoginDoorClose");
   yield* menus.send("InitializeLocalNetProvider");
 
   yield* menus.expect("use the local provider", 60, (event) => (event.messageType === "OnNetProviderChanged" && record(event.payload)["providerId"] === "LOOP" ? { done: undefined } : undefined));
   yield* menus.send("SetLocalPlayerName", { playerName: options.playerName });
-  yield* hostLobby(menus, { folder: options.folder, file: options.file, gameName: "Single Player", password: "" });
+  return yield* hostLobby(menus, { folder: options.folder, file: options.file, gameName: "Single Player", password: "" });
+});
+
+export const playLocalGame = (menus: MenuSocket, options: LocalGameOptions) => Effect.gen(function*() {
+  yield* hostLocalLobby(menus, options);
   yield* startLobby(menus);
   yield* menus.expect("load the map", 300, (event) => (event.messageType === "MapLoadComplete" ? { done: undefined } : undefined));
 

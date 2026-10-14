@@ -1,3 +1,4 @@
+import { basename, resolve } from "node:path";
 import { Effect, Layer } from "effect";
 import { documentsFolder } from "../../warcraft/battleNet";
 import { type Command, type CommandFailure, UsageFailure } from "../command";
@@ -15,9 +16,13 @@ const leaveBy = (port: number | undefined, what: string, leave: (menus: MenuSock
   }));
 
 export const makePlay = <R>(declaration: PlayDeclaration<R>, layer: Layer.Layer<R>, tools: Partial<PlayTools> = {}, watch?: Layer.Layer<ClientWatch, CommandFailure>): Command => (args) => {
-  if (args.length > 0) return Effect.fail(new UsageFailure({ problem: "play takes no arguments" }));
+  const lobbyOnly = args.includes("--lobby-only");
+  const objects = args.filter((arg) => arg !== "--lobby-only");
+  const requested = objects[0];
+  if (objects.length > 1 || (requested !== undefined && (!lobbyOnly || !/\.w3x$/i.test(requested))) || objects.some((arg) => arg.startsWith("--"))) return Effect.fail(new UsageFailure({ problem: "use play [--lobby-only [MAP.w3x]]" }));
+  const selected = requested === undefined ? declaration : { ...declaration, map: { ...declaration.map, file: basename(requested), title: basename(requested, ".w3x"), source: resolve(requested) } };
   const print = (line: string) => console.log(line);
-  const hosted = play(declaration, print).pipe(Effect.provide(Layer.merge(playHostLayer(declaration.display, tools), layer)));
+  const hosted = play(selected, print, { lobbyOnly }).pipe(Effect.provide(Layer.merge(playHostLayer(declaration.display, tools), layer)));
 
   const run = watch === undefined ? hosted : hosted.pipe(Effect.provide(watch));
   if (watch === undefined) return hosted;
@@ -37,5 +42,6 @@ export const makePlay = <R>(declaration: PlayDeclaration<R>, layer: Layer.Layer<
 
   const check = doctor([target], print).pipe(Effect.provide(Layer.mergeAll(playMachineLayer(tools), Layer.succeed(DoctorHands, hands), watch)));
 
+  if (lobbyOnly) return run;
   return withDoctor(check, print, run, { attempts: 4 });
 };

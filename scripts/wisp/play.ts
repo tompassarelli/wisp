@@ -10,7 +10,7 @@ import { type DisplaySettings, absentSettings, displayChanges, preferencesBackup
 import { SCAN_QUIET_MS, importFailures, ladderScan, sessionStart, war3LogPath } from "../warcraft/war3Log";
 import { pollFor } from "./hostProcess";
 import { step } from "./timings";
-import { type MenuSocket, hostLobby, reportedMenus, startLobby } from "./menus";
+import { hostLocalLobby, hostLobby, leaveLobby, reportedMenus, startLobby } from "./menus";
 import { ClientWatch, unlessLost } from "./watch";
 
 export class PlayProblem extends Schema.TaggedError<PlayProblem>()("PlayProblem", {
@@ -91,6 +91,7 @@ export class PlayDesktop extends Context.Service<PlayDesktop, {
   readonly toggleFullscreen: (window: number) => Effect.Effect<void, PlayProblem>;
 
   readonly read: (output: string, ink: Ink) => Effect.Effect<Screen, PlayProblem>;
+  readonly capture: (output: string, path: string) => Effect.Effect<void, PlayProblem>;
 
   readonly xWindow: (title: string, pid?: number) => Effect.Effect<XWindow | undefined, PlayProblem>;
   readonly keys: (window: XWindow, ...keys: string[]) => Effect.Effect<void, PlayProblem>;
@@ -135,6 +136,7 @@ export interface PlayDeclaration<R = never> {
   readonly started: (game: PlayGame, since: number) => Effect.Effect<void, PlayProblem, R>;
 
   readonly match: (game: PlayGame) => Effect.Effect<string, PlayProblem, R>;
+  readonly lobbyReady?: (game: PlayGame) => Effect.Effect<void, PlayProblem, R>;
   readonly helper: {
 
     readonly service: (game: PlayGame) => Effect.Effect<string, PlayProblem, R>;
@@ -159,6 +161,7 @@ export const PLAY_TIMEOUTS = {
   launcherStart: 90,
   signIn: 90,
   request: 15,
+  update: 600,
   next: 10,
   gameFullscreen: 45,
   launch: 45,
@@ -212,13 +215,14 @@ export function findPhrase(words: readonly Word[], phrase: string, entry = false
 const isFullscreen = (window: DesktopWindow) =>
   window.output !== undefined && window.width === window.output.width && window.height === window.output.height;
 
-export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) => void) => Effect.gen(function*() {
+export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) => void, options: { readonly lobbyOnly?: boolean } = {}) => Effect.gen(function*() {
   const machine = yield* PlayMachine;
   const desktop = yield* PlayDesktop;
   const { prefix, display, shortcut } = declaration;
   const appId = shortcutAppId(shortcut.appId);
   const logs = launcherLogDirectory(prefix);
   const documents = documentsFolder(prefix);
+  let prepared = false;
   const serverDirectory = yield* machine.serverDirectory(prefix).pipe(Effect.mapError(({ problem }) => new PlayFailure({ step: 1, title: "Wine prefix", problem })));
 
   const status = (step: number, title: string, text: string) => Effect.sync(() => print(`${step}/${STEPS} ${title}: ${text}`));
@@ -334,14 +338,16 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     if (log === undefined) return yield* fail(`Battle.net has no log in ${logs}`);
     const path = join(logs, log);
     const offset = (yield* machine.size(path)) ?? 0;
-    yield* machine.launch(launcher, "play");
+    yield* machine.launch(launcher, options.lobbyOnly ? "playtest" : "play");
     const since = machine.read(path, offset).pipe(Effect.map((text) => text ?? ""));
-    const requested = yield* poll(PLAY_TIMEOUTS.request, since.pipe(Effect.map((text) => (launchRequested(text) || launchOutcome(text) !== undefined ? true : undefined))));
+    const requestSeconds = options.lobbyOnly ? PLAY_TIMEOUTS.update : PLAY_TIMEOUTS.request;
+    const requested = yield* poll(requestSeconds, since.pipe(Effect.map((text) => (launchRequested(text) || launchOutcome(text) !== undefined ? true : undefined))));
     if (requested === undefined) {
-      return yield* fail(`Battle.net didn't launch Warcraft III within ${PLAY_TIMEOUTS.request} s of being asked (its log: ${path}). Check that it is signed in to an account that owns Warcraft III and that the game is installed and up to date, then run play again.`);
+      return yield* fail(`Battle.net didn't launch Warcraft III within ${requestSeconds} s of being asked (launcher or game update wait timed out) (its log: ${path}). Check that it is signed in to an account that owns Warcraft III and that the game is installed and up to date, then run play again.`);
     }
-    const outcome: LaunchOutcome = (yield* poll(PLAY_TIMEOUTS.launch, since.pipe(Effect.map(launchOutcome))))
-      ?? { kind: "failed", reason: `Battle.net reported no launch within ${PLAY_TIMEOUTS.launch} s` };
+    const launchSeconds = options.lobbyOnly ? PLAY_TIMEOUTS.update : PLAY_TIMEOUTS.launch;
+    const outcome: LaunchOutcome = (yield* poll(launchSeconds, since.pipe(Effect.map(launchOutcome))))
+      ?? { kind: "failed", reason: `Battle.net reported no launch within ${launchSeconds} s; launcher or game update wait timed out` };
     return { outcome, log: path };
   });
 
@@ -364,6 +370,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     const installed = yield* machine.digest(mapPath);
     if (source === undefined) return installed === undefined ? yield* fail(`the map isn't installed: ${mapPath}`) : undefined;
     const built = yield* machine.digest(source);
+    if (built === undefined && options.lobbyOnly) return yield* fail(`the requested map build is missing: ${source}`);
     if (built === undefined) return installed === undefined ? yield* fail(`the map isn't installed (${mapPath}) and its build is missing: ${source}`) : undefined;
     if (installed === built) return;
     yield* machine.copy(source, mapPath);
@@ -404,6 +411,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   });
   const game = Effect.gen(function*() {
     yield* installMap;
+    prepared = true;
     yield* declaration.prepare(documents);
     const since = yield* Clock.currentTimeMillis;
     const running = (yield* prefixState).game;
@@ -417,6 +425,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       earlierSession = sessionStart((yield* machine.read(war3Log)) ?? "");
       let attempt = yield* launchGame;
       if (attempt.outcome.kind === "failed") {
+        if (options.lobbyOnly) return yield* fail(`${attempt.outcome.reason}; leave any update running and try again when it finishes (log: ${attempt.log})`);
         yield* status(3, "Warcraft III", `${attempt.outcome.reason}; restarting Battle.net alone, once`);
         yield* stopPrefix;
         yield* startLauncher(3, "Warcraft III");
@@ -440,6 +449,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   const host = (game: PlayGame) => Effect.scoped(Effect.gen(function*() {
     const { folder, title } = declaration.map;
     if ((yield* clientState)?.kind === "in match") {
+      if (options.lobbyOnly) return yield* fail("Warcraft III has an active match; finish it before preparing a playtest lobby");
       yield* fullscreen(game.window, "Warcraft III's window", PLAY_TIMEOUTS.gameFullscreen);
       const output = yield* outputOf(game.window, "Warcraft III's window");
       const hasText = (phrase: string) => desktop.read(output, "gold").pipe(Effect.map((screen) => findPhrase(screen.words, phrase).length > 0 ? true : undefined));
@@ -459,6 +469,10 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
       return yield* fail(`Warcraft III's menu page didn't report on port ${declaration.menuReportPort}. play hosts only a private game through it, never a listed one by clicks: install the page once, with the owner's agreement, with \`wisp menus install RETAIL_DIR --port ${declaration.menuReportPort}\` (wisp:docs/driving-warcraft.md)`);
     }
     yield* Effect.gen(function*() {
+      if (options.lobbyOnly) {
+        if ((yield* clientState)?.kind === "lobby") yield* leaveLobby(menus);
+        return yield* hostLocalLobby(menus, { folder, file: declaration.map.file, playerName: declaration.gameName });
+      }
       yield* hostLobby(menus, { folder, file: declaration.map.file, gameName: declaration.gameName, password: "" });
       const since = yield* Clock.currentTimeMillis;
       yield* startLobby(menus);
@@ -505,6 +519,10 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   });
 
   const loadMap = (game: PlayGame, since: number, earlierSession: string | undefined) => Effect.gen(function*() {
+    if (options.lobbyOnly) {
+      yield* host(game);
+      return 0;
+    }
     const { text, scanned } = yield* ladderScanned(earlierSession);
     const waited = Math.round(((yield* Clock.currentTimeMillis) - since) / 1000);
     yield* status(4, "Map", scanned
@@ -541,7 +559,19 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
   });
 
   yield* Effect.gen(function*() {
+    if (options.lobbyOnly && (yield* prefixState).game !== undefined) {
+      const state = yield* clientState;
+      if (state?.kind !== "menus" && state?.kind !== "lobby") return yield* fail(`Warcraft III is ${state?.kind ?? "not reporting its state"}; finish the current session before preparing a playtest lobby`);
+      if (declaration.graphicsMode !== undefined) {
+        const text = yield* machine.read(preferences);
+        if (text === undefined || withGraphicsMode(text, declaration.graphicsMode) !== text) return yield* fail(`Warcraft III is already running; select ${declaration.graphicsMode} graphics before preparing its playtest lobby`);
+      }
+    }
     yield* checkPrefix.pipe(inStep(1, "Wine prefix"));
+    if (options.lobbyOnly && !(yield* machine.processes).some((process) => process.name === "steam")) {
+      yield* machine.openSteam("steam://open/games");
+      yield* until(PLAY_TIMEOUTS.launcherStart, machine.processes.pipe(Effect.map((processes) => processes.some((process) => process.name === "steam") ? true : undefined)), () => "Steam did not open within 90 s");
+    }
     yield* launcher.pipe(inStep(2, "Battle.net"));
     const { game: running, since, earlierSession } = yield* game.pipe(inStep(3, "Warcraft III"));
 
@@ -549,6 +579,18 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
     const hosted = yield* watching(loadMap(running, since, earlierSession)).pipe(inStep(4, "Map"));
 
     yield* helper(running).pipe(inStep(5, "Controller helper"));
+    if (options.lobbyOnly) {
+      const use = yield* prefixState;
+      if (use.game?.pid !== running.pid || use.launcher === undefined || !(yield* machine.processes).some((process) => process.name === "steam")) return yield* fail("Steam, Battle.net and the hosted Warcraft III client must remain running for lobby readiness");
+      const windows = yield* desktop.windows;
+      if (!windows.some((window) => /battle\.net/i.test(window.title)) || !windows.some((window) => /steam/i.test(window.title))) return yield* fail("Steam and Battle.net must have open windows before lobby readiness");
+      if (declaration.lobbyReady !== undefined) yield* declaration.lobbyReady(running);
+      yield* fullscreen(running.window, "Warcraft III's window", PLAY_TIMEOUTS.gameFullscreen);
+      const screenshot = join(documents, "Logs", `wisp-lobby-${running.pid}.png`);
+      yield* desktop.capture(yield* outputOf(running.window, "Warcraft III's window"), screenshot);
+      yield* Effect.sync(() => print(`LOBBY-READY ${declaration.map.file} screenshot=${screenshot}`));
+      return;
+    }
     const match = yield* Effect.gen(function*() {
       const match = yield* watching(declaration.match(running));
 
@@ -562,7 +604,7 @@ export const play = <R>(declaration: PlayDeclaration<R>, print: (line: string) =
         () => "Warcraft III's window didn't take focus");
       yield* status(7, "Fullscreen", "Warcraft III is fullscreen and focused. Ready to fight.");
     }).pipe(inStep(7, "Fullscreen"));
-  }).pipe(Effect.onExit((exit) => (Exit.isFailure(exit)
+  }).pipe(Effect.onExit((exit) => (Exit.isFailure(exit) && (!options.lobbyOnly || prepared)
     ? declaration.cleanup(documents).pipe(Effect.ignore)
     : Effect.void)));
 });
