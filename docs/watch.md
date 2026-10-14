@@ -64,7 +64,12 @@ The sources, in the order they count:
 2. **Processes.** `/proc`, filtered to the client's Wine prefix (the folder
    above `drive_c` in its `documents`): Battle.net.exe and Warcraft III.exe.
    Run watch where it sees the host's processes; inside a separate PID
-   namespace (such as `run-bounded`) every client looks closed.
+   namespace (such as `run-bounded`) every client looks closed. When the process
+   is visible but its environment is unreadable, an owned LAN pair's document-bound
+   PID can identify its Warcraft process. A readable conflicting prefix, another
+   executable or a missing PID still rejects that association. The pair must
+   also report playing, loaded, connected and not left before chat is permitted;
+   a game-list reply alone never establishes a match.
 3. **The menus' socket.** With a menu page installed
    ([driving-warcraft.md](driving-warcraft.md)), watch connects its own socket
    to the menus and hears every message the game sends them. The page also

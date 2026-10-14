@@ -23,6 +23,38 @@ const sources = (now: number, processes: readonly ProcessInfo[], extra: Partial<
   ...extra,
 });
 
+test("[boundary] the pair owner's live Warcraft PID survives unreadable prefix metadata without admitting closed clients, other applications or a lobby", () => {
+  const now = on6Oct("20:36");
+  const game = { ...GAME, prefix: undefined };
+  const lan = { pid: GAME.pid, map: "/proof/own-map.w3x", phase: "playing", connected: true, loaded: true, left: false };
+  const observe = (processes: readonly ProcessInfo[], state = lan) => decide("a", {
+    ...sources(now, processes), prefix: prefixUse(processes, PREFIX, "", state.pid), lan: state,
+  });
+  const match = observe([game]);
+  expect(match.state.kind).toBe("in match");
+  expect(match.source).toBe("lan");
+  expect(typesIntoMatch(match)).toBe(true);
+  expect(observe([]).state.kind).toBe("closed");
+  expect(typesIntoMatch(observe([{ ...game, pid: GAME.pid + 1 }]))).toBe(false);
+  expect(typesIntoMatch(observe([{ ...game, prefix: "/clients/b/pfx" }]))).toBe(false);
+  expect(typesIntoMatch(observe([{ ...LAUNCHER, pid: GAME.pid, prefix: undefined }]))).toBe(false);
+  expect(typesIntoMatch(observe([{ ...game, args: ["C:\\unknown.exe"] }]))).toBe(false);
+  for (const state of [{ ...lan, phase: "lobby" }, { ...lan, loaded: false }, { ...lan, connected: false }, { ...lan, left: true }]) {
+    const view = observe([game], state);
+    expect(view.state.kind).toBe("running");
+    expect(typesIntoMatch(view)).toBe(false);
+  }
+  for (const state of [{ kind: "menus", screen: "MAIN_MENU" }, { kind: "lobby" }] as const) {
+    const view = decide("a", {
+      ...sources(now, [game]), prefix: prefixUse([game], PREFIX, "", lan.pid), lan: { ...lan, phase: "lobby" },
+      socket: { connected: true, last: { state, at: now, evidence: "current menu page" } },
+    });
+    expect(view.state).toEqual(state);
+    expect(typesIntoMatch(view)).toBe(false);
+  }
+  expect(prefixUse([game], PREFIX, "").game).toBeUndefined();
+});
+
 const crashFolder = "2026-10-06 13.30.33 f80136c8";
 const crash: CrashReport = {
   folder: crashFolder,

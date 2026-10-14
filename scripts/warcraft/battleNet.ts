@@ -39,10 +39,11 @@ const isGame = (process: ProcessInfo) => /\\Warcraft III\.exe(?:\s|"|$)/i.test(c
 
 export const serverDirectoryName = (device: bigint, inode: bigint) => `server-${device.toString(16)}-${inode.toString(16)}`;
 
-export function prefixUse(processes: readonly ProcessInfo[], prefix: string, serverDirectory: string): PrefixUse {
+export function prefixUse(processes: readonly ProcessInfo[], prefix: string, serverDirectory: string, ownedGamePid?: number): PrefixUse {
   const wanted = trimSlash(prefix);
   const inPrefix = processes.filter((process) =>
     (process.prefix !== undefined && trimSlash(process.prefix) === wanted)
+    || (process.prefix === undefined && process.pid === ownedGamePid && isGame(process))
     || (isRuntime(process) && process.cwd !== undefined && process.cwd.split("/").at(-1) === serverDirectory));
   const launcher = inPrefix.find(isLauncher);
   const game = inPrefix.find(isGame);

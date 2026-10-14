@@ -141,6 +141,8 @@ signed in, the menu screen, lobby, loading, in match, results, disconnected or
 crashed, plus its map's load errors and the ladder scan, each with its source.
 Run it before clicking, reading or waiting on a client; code waits on the same
 states with `waitFor`, and `unlessLost` stops any wait when a client crashes.
+Owned LAN clients remain observable when process environments are inaccessible:
+the pair's document-bound PID must identify a live Warcraft process.
 
 Tuning the feel? [`wisp tune`](tune.md) (wisp:docs/tune.md) serves a panel
 on this computer that changes declared values, such as speeds and knockback,
