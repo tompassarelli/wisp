@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { userInfo } from "node:os";
 import * as BunServices from "@effect/platform-bun/BunServices";
@@ -10,7 +10,7 @@ import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from
 import { LanFailure } from "../lan/join";
 import { lanPluginProblem } from "../lan/plugin";
 import {
-  PAIR_SIDES, PROFILES, type PoolPair, agentSocket, alive, clientName, desktopSize, pairClients, pairDirectory, poolClientsFile, poolFile, poolOwners, readPool, reportPort, writeJson, writePoolClients, wrongUser,
+  PAIR_SIDES, PROFILES, type PoolPair, agentSocket, alive, clientName, desktopSize, pairClients, pairDirectory, poolClientsFile, poolFile, poolHolderFile, poolOwners, playtestPairRefusal, readPool, reportPort, writeJson, writePoolClients, wrongUser,
 } from "../lan/pool";
 import { setupClient } from "../lan/setup";
 import { CapacityDeferred, admissionFile, capacityDeferral, deferredExit, pairAdmission, retryWhileDeferred } from "../lan/admission";
@@ -96,19 +96,33 @@ const clientsReady = (pair: number) => Effect.tryPromise({
 
 const READY = "10 minutes";
 
-const holderFile = (pair: number) => join(pairDirectory(pair), "pool.pid");
-
 const holdPair = (pair: number) => Effect.acquireRelease(
-  Effect.suspend(() => {
-    const holder = Number(existsSync(holderFile(pair)) ? readFileSync(holderFile(pair), "utf8").trim() : "");
-    if (Number.isInteger(holder) && holder > 0 && holder !== process.pid && alive(holder)) return Effect.fail(new LanFailure({ problem: `it is held by wisp lan pool ${holder}; stop that pool first` }));
-    writeJson(holderFile(pair), process.pid);
-    return Effect.void;
+  Effect.try({
+    try: () => {
+      const file = poolHolderFile(pair);
+      const known = existsSync(file);
+      const holder = Number(known ? readFileSync(file, "utf8").trim() : "");
+      if (Number.isInteger(holder) && holder > 0 && holder !== process.pid && alive(holder)) throw new LanFailure({ problem: `it is held by wisp lan pool ${holder}; stop that pool first` });
+      if (holder === process.pid) return;
+      mkdirSync(pairDirectory(pair), { recursive: true });
+      if (known) rmSync(file);
+      const next = `${file}.${process.pid}.next`;
+      writeFileSync(next, `${process.pid}\n`);
+      try {
+        linkSync(next, file);
+      } finally {
+        rmSync(next, { force: true });
+      }
+    },
+    catch: (cause) => cause instanceof LanFailure ? cause : new LanFailure({ problem: `hold pair ${pair}: ${describeCause(cause)}` }),
   }),
   () => Effect.sync(() => {
-    if (existsSync(holderFile(pair)) && readFileSync(holderFile(pair), "utf8").trim() === String(process.pid)) rmSync(holderFile(pair), { force: true });
+    if (existsSync(poolHolderFile(pair)) && readFileSync(poolHolderFile(pair), "utf8").trim() === String(process.pid)) rmSync(poolHolderFile(pair), { force: true });
   }),
-);
+).pipe(Effect.andThen(Effect.gen(function*() {
+  const refusal = yield* playtestPairRefusal(pair);
+  if (refusal !== undefined) return yield* new LanFailure({ problem: refusal });
+})));
 
 const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, fps?: number) => {
   const directory = pairDirectory(pair);

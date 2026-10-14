@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
 import { LanFailure } from "./join";
@@ -26,6 +27,37 @@ export const retailOf = (name: string) => join(installOf(name), "_retail_");
 export const exeOf = (name: string) => join(retailOf(name), "x86_64/Warcraft III.exe");
 export const documentsOf = (name: string) => documentsFolder(prefixOf(name));
 export const pairDirectory = (pair: number) => join(stateRoot(), `pair-${pair}`);
+
+export const poolHolderFile = (pair: number) => join(pairDirectory(pair), "pool.pid");
+
+const PlaytestState = Schema.fromJsonString(Schema.Struct({ on: Schema.Boolean }));
+
+export const playtestPairRefusal = (pair: number) => Effect.gen(function*() {
+  const file = process.env["PLAYTEST_STATE"] ?? join(homedir(), ".local/state/playtest/state.json");
+  if (!existsSync(file)) return undefined;
+  const state = yield* Effect.try({
+    try: () => readFileSync(file, "utf8"),
+    catch: (cause) => new LanFailure({ problem: `read ${file}: ${String(cause)}` }),
+  }).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(PlaytestState)),
+    Effect.mapError((cause) => cause instanceof LanFailure ? cause : new LanFailure({ problem: `${file}: ${cause.message}` })),
+  );
+  if (!state.on) return undefined;
+  const held = yield* Effect.try({
+    try: () => readdirSync(stateRoot()).filter((name) => /^pair-\d+$/.test(name) && name !== `pair-${pair}`).some((name) => {
+      const holder = join(stateRoot(), name, "pool.pid");
+      try {
+        const pid = Number(readFileSync(holder, "utf8").trim());
+        return Number.isInteger(pid) && pid > 0 && alive(pid);
+      } catch (cause) {
+        if ((cause as NodeJS.ErrnoException).code === "ENOENT") return false;
+        throw cause;
+      }
+    }),
+    catch: (cause) => new LanFailure({ problem: `read LAN pair holders: ${String(cause)}` }),
+  });
+  return held ? "playtest is on: the laptop LAN pool admits at most one pair; run additional work on Nexus or the Warcraft VM" : undefined;
+});
 
 export const audioSinkOf = (name: string) => `wisp-lan-${name}`;
 
