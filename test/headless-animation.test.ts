@@ -11,7 +11,7 @@ const runtime = installHeadless({ filePrefix: "animation", globalPrefixes: ["__a
 afterAll(runtime.restore);
 const effectDeaths = (model: string) => (model === RULER ? RULER_DEATH_SECONDS : undefined);
 
-test("#58 and #59 rulers draw the playback and effect lifetime rules alike in two clients", () => {
+test("the playback and effect lifetime rulers draw the same rows and files in two clients, with no divergence, errors or missing natives", () => {
   const clients = runtime.clients({ install, start }, [0, 1], { effectDeaths });
   const result = runJourney(clients, { frames: CAPTURE_FRAME, events: [] });
   expect(result.divergence).toBeUndefined();

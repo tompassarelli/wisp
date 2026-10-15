@@ -98,13 +98,13 @@ test("wisp#75 G5a: draw-extent silhouettes from shown/hidden PNG pairs return PA
     await expect(check()).rejects.toThrow("needs exactly one hidden visibility control");
   } finally { rmSync(directory,{recursive:true,force:true}); }
 });
-test(`${source}: strict half-bound spread and full-bound comparison`, () => {
+test(`${source}: reference runs spread up to half the bound still pass at a distance of exactly the bound, wider spread is INCONCLUSIVE, and a distance over the bound is FAIL`, () => {
   const scalar={name:"synthetic-luma",bound:4,distance:(a:ReturnType<typeof image>,b:ReturnType<typeof image>)=>Math.abs((a.rgb[0] ?? 0)-(b.rgb[0] ?? 0))};
   expect(measureImages(scalar,[image(0),image(2),image(0)],[image(4)],region).verdict).toBe("PASS");
   expect(measureImages(scalar,[image(0),image(3),image(0)],[image(4)],region).verdict).toBe("INCONCLUSIVE");
   expect(measureImages(scalar,[image(0),image(0),image(0)],[image(5)],region).verdict).toBe("FAIL");
 });
-test("CIEDE2000 published Sharma supplementary pair 1 and identity", () => {
+test("the CIEDE2000 distance matches the published Sharma supplementary pair 1 to four decimals, and identical images are at distance zero", () => {
   expect(deltaE00([50,2.6772,-79.7751],[50,0,-82.7485])).toBeCloseTo(2.0425,4);
   expect(colourMetric.distance(image(100),image(100),region)).toBe(0);
 });
