@@ -175,6 +175,8 @@ one after it, such as a match's first:
   instruction counts. Between callbacks it explicitly collects once the heap
   has grown 16 MB, and reports those collections' time per kilobyte
   (`collector us=... kb=...`). Profiling restores automatic collection on exit.
+  Wisp's Lua32 builds fix their table layout ([Lua32 builds](headless.md#raw-float-rounding)),
+  so one commit reports the same allocation on every run.
 - **Typed characters**: text the driver says reached the client's edit box
   before the frame (`measure.typed(slot, characters)`).
 - **Predicted native time** (`native-us`, `typing-us`): the frame's cost in

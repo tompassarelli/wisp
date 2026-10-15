@@ -353,9 +353,20 @@ and `bun node_modules/wisp/scripts/wisp/lua32.ts` the stock Lua32's; each is
 built on first use from lua.org's release tarball, committed at
 wisp:vendor/lua-5.3.6.tar.gz and checksummed before each build, with gcc and
 make (or `nix` when they are missing) and no network, into a per-user cache,
-`~/.cache/wisp/lua32/KEY/lua`, keyed by the source checksum and flags. A lock
-lets parallel worktrees share one build. `lua32(variant)` does the same in a
-host program, and `luaRounding(lua)` tells which rounding a Lua has. Wisp's
+`~/.cache/wisp/lua32/KEY/lua`, keyed by the source checksum, flags, headers
+and source edits. Both builds fix their table layout with
+wisp:native/fixed-layout.h: stock Lua seeds its string hash with the time
+and addresses, places table, function and userdata keys by address, and
+caches strings pushed from C by their address, which for `debug.getinfo`'s
+`short_src` is on the C stack and moves with the environment's size. So the
+same program's iteration order, table resizes, garbage and allocation per
+frame varied from run to run with equal instruction counts. The build seeds
+the hash with a constant, keeps a one-entry string cache that hits on
+content alone, and on Linux re-executes the interpreter once with address
+randomization off; wisp:test/fixed-layout.test.ts holds the order and
+allocation across seconds and environment sizes. A Lua named by `LUA` keeps
+its own layout. A lock lets parallel worktrees share one build.
+`lua32(variant)` does the same in a host program, and `luaRounding(lua)` tells which rounding a Lua has. Wisp's
 `bun test` sets `LUA` and `TOWARD_ZERO_LUA` to these when they are unset
 (wisp:test/lua32.preload.ts), and the CI template does the same.
 

@@ -3,12 +3,19 @@
 import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { cacheHome } from "./xdg";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { Console, Effect, Schedule, Schema } from "effect";
 import { MapBuildFailure, captureProcess, runProcess } from "./hostProcess";
 import { step } from "./timings";
 
 export const TOWARD_ZERO_HEADER = join(import.meta.dir, "../../native/toward-zero.h");
+
+const FIXED_LAYOUT_HEADER = join(import.meta.dir, "../../native/fixed-layout.h");
+
+const SOURCE_EDITS: readonly (readonly [file: string, from: string, to: string])[] = [
+  ["lstate.c", "g->seed = makeseed(L);", "g->seed = WISP_HASH_SEED; (void)makeseed;"],
+  ["lua.c", "int main (int argc, char **argv) {\n", "int main (int argc, char **argv) {\n  wisp_fixed_addresses(argv);\n"],
+];
 
 const LUA_SOURCE = join(import.meta.dir, "../../vendor/lua-5.3.6.tar.gz");
 
@@ -34,9 +41,9 @@ class LockHeld extends Schema.TaggedError<LockHeld>()("LockHeld", { path: Schema
 
 export const lua32CacheRoot = () => join(cacheHome(), "wisp/lua32");
 
-const flagsFor = (variant: Lua32Variant) => variant === "stock"
-  ? { flags: "-DLUA_32BITS", header: "" }
-  : { flags: "-DLUA_32BITS -include toward-zero.h", header: readFileSync(TOWARD_ZERO_HEADER, "utf8") };
+const headersFor = (variant: Lua32Variant) => variant === "stock"
+  ? [FIXED_LAYOUT_HEADER]
+  : [FIXED_LAYOUT_HEADER, TOWARD_ZERO_HEADER];
 
 const luaSource = trySync("read Lua source", LUA_SOURCE, () => sha256(readFileSync(LUA_SOURCE))).pipe(
   Effect.flatMap((digest) => digest === LUA_SOURCE_SHA256
@@ -76,8 +83,9 @@ const buildLock = (lock: string) => Effect.acquireRelease(
 
 export const lua32 = (variant: Lua32Variant) => Effect.gen(function*() {
   const root = lua32CacheRoot();
-  const { flags, header } = flagsFor(variant);
-  const key = sha256(`${LUA_SOURCE_SHA256}\0generic\0${flags}\0${header}`).slice(0, 16);
+  const headers = headersFor(variant).map((path) => [basename(path), readFileSync(path, "utf8")] as const);
+  const flags = ["-DLUA_32BITS", ...headers.map(([name]) => `-include ${name}`)].join(" ");
+  const key = sha256([LUA_SOURCE_SHA256, "generic", flags, ...headers.flat(), ...SOURCE_EDITS.flat()].join("\0")).slice(0, 16);
   const directory = join(root, key);
   const installed = () => [join(directory, "lua"), join(directory, "lua.exe")].find((path) => existsSync(path));
   const cached = installed();
@@ -96,7 +104,16 @@ export const lua32 = (variant: Lua32Variant) => Effect.gen(function*() {
     yield* trySync("decompress Lua source", build, () => writeFileSync(join(build, "lua-5.3.6.tar"), Bun.gunzipSync(readFileSync(source))));
     yield* runProcess("unpack Lua source", build, ["tar", "--no-same-owner", "-xf", "lua-5.3.6.tar"], build);
     const src = join(build, "lua-5.3.6/src");
-    if (header !== "") yield* trySync("write header", src, () => writeFileSync(join(src, "toward-zero.h"), header));
+    yield* trySync("write headers", src, () => {
+      for (const [name, text] of headers) writeFileSync(join(src, name), text);
+    });
+    yield* trySync("edit Lua source", src, () => {
+      for (const [file, from, to] of SOURCE_EDITS) {
+        const text = readFileSync(join(src, file), "utf8");
+        if (!text.includes(from)) throw new Error(`${file} has no ${JSON.stringify(from)}`);
+        writeFileSync(join(src, file), text.replace(from, to));
+      }
+    });
     yield* runProcess(`compile Lua32 ${variant}`, src, makeCommand(["-C", src, `-j${availableParallelism()}`, "generic", `MYCFLAGS=${flags}`]));
     const executable = existsSync(join(src, "lua.exe")) ? "lua.exe" : "lua";
     const rounding = yield* luaRounding(join(src, executable));
