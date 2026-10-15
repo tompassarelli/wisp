@@ -1,12 +1,13 @@
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { Console, Effect } from "effect";
 import { expect, test } from "bun:test";
 import { cliProgram, runCli } from "../scripts/wisp/cli";
 import { flagValues } from "../scripts/wisp/command";
 import { makeCi } from "../scripts/wisp/commands/ci";
 import { makeMenus } from "../scripts/wisp/commands/menus";
+import { TestPlan } from "../scripts/wisp/testSelection";
 
 test("[property seed 824108] command dispatch preserves value boundaries, empty values and repetition", async () => {
   const lines: string[] = [];
@@ -91,4 +92,29 @@ test("[boundary] ci pre-merge runs the type check, only the tests the diff since
     { stage: "determinism TOWARD_ZERO_LUA", verdict: "passed", selected: undefined, total: undefined, failed: undefined, reason: reaches },
   ] });
   expect(existsSync(join(root, "b-ran"))).toBe(true);
+});
+
+test("[property] a direct selection keeps the changed test and the tests that import the changed module, counts the tests that reach it only through another module as deferred, and leaves a file no test declares reading to the landing gate instead of running every test", () => {
+  const root = mkdtempSync(join(tmpdir(), "wisp-selection-"));
+  const write = (path: string, text: string) => {
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    writeFileSync(join(root, path), text);
+  };
+  write("src/core.ts", "export const core = 1;\n");
+  write("src/mid.ts", 'import { core } from "./core";\nexport const mid = core + 1;\n');
+  write("test/core.test.ts", 'import { core } from "../src/core";\nexport const seen = core;\n');
+  write("test/mid.test.ts", 'import { mid } from "../src/mid";\nexport const seen = mid;\n');
+  write("test/other.test.ts", "export const seen = 0;\n");
+  const plan = new TestPlan(root, { files: ["test/**/*.test.ts"] });
+  const select = (path: string, reach: "direct" | "transitive") => {
+    const selection = plan.select({ changed: [join(root, path)], created: [], deleted: [] }, reach);
+    return { units: selection.units.map((unit) => relative(root, unit.path)), deferred: selection.deferred };
+  };
+  expect(select("src/core.ts", "direct")).toEqual({ units: ["test/core.test.ts"], deferred: 1 });
+  expect(select("src/core.ts", "transitive")).toEqual({ units: ["test/core.test.ts", "test/mid.test.ts"], deferred: 0 });
+  expect(select("src/mid.ts", "direct")).toEqual({ units: ["test/mid.test.ts"], deferred: 0 });
+  expect(select("test/mid.test.ts", "direct")).toEqual({ units: ["test/mid.test.ts"], deferred: 0 });
+  write("notes.tsv", "a\tb\n");
+  expect(plan.select({ changed: [join(root, "notes.tsv")], created: [], deleted: [] }, "direct").unread).toEqual([join(root, "notes.tsv")]);
+  expect(plan.select({ changed: [join(root, "notes.tsv")], created: [], deleted: [] }, "transitive").full).toBe("no test declares reading notes.tsv");
 });

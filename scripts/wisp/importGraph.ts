@@ -47,6 +47,10 @@ export class ImportGraph {
     this.add(node.imports);
   }
 
+  importersOf(path: string): ReadonlySet<string> {
+    return this.importers.get(path) ?? new Set();
+  }
+
   dependents(path: string): Set<string> {
     return this.reach(path, (next) => this.importers.get(next) ?? []);
   }

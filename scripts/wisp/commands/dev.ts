@@ -1,4 +1,4 @@
-import { type FSWatcher, readFileSync, statSync, watch } from "node:fs";
+import { type FSWatcher, mkdirSync, readFileSync, renameSync, statSync, watch, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { Console, Deferred, Effect, Fiber, Layer, Queue, Result, Schema, Semaphore } from "effect";
@@ -69,6 +69,48 @@ const cpuBudget = (limit: number | undefined) => Math.max(1, Math.floor(Math.min
 const seconds = (since: number) => `${((Date.now() - since) / 1000).toFixed(3).padStart(8)} s  `;
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 const indent = (text: string) => text.split("\n").map((line) => `           ${line}`).join("\n");
+
+class SavedDurations {
+  private readonly file: string | undefined;
+  private readonly top: string = "";
+
+  constructor(root: string) {
+    const git = Bun.spawnSync(["git", "rev-parse", "--path-format=absolute", "--git-common-dir", "--show-toplevel"], { cwd: root, stderr: "ignore" });
+    const [common, top] = git.exitCode === 0 ? git.stdout.toString().trim().split("\n") : [];
+    if (common === undefined || top === undefined) return;
+    this.file = join(common, "wisp", "dev-durations.json");
+    this.top = top;
+  }
+
+  load(into: Map<string, number>): void {
+    if (this.file === undefined) return;
+    for (const [path, milliseconds] of Object.entries(this.read())) into.set(resolve(this.top, path), milliseconds);
+  }
+
+  save(durations: ReadonlyMap<string, number>): void {
+    if (this.file === undefined) return;
+    const merged = this.read();
+    for (const [path, milliseconds] of durations) if (path.startsWith(sep)) merged[relative(this.top, path)] = milliseconds;
+    try {
+      mkdirSync(dirname(this.file), { recursive: true });
+      const temporary = `${this.file}.${process.pid}`;
+      writeFileSync(temporary, JSON.stringify(merged));
+      renameSync(temporary, this.file);
+    } catch {
+      return;
+    }
+  }
+
+  private read(): Record<string, number> {
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(this.file ?? "", "utf8"));
+      if (typeof parsed !== "object" || parsed === null) return {};
+      return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1])));
+    } catch {
+      return {};
+    }
+  }
+}
 
 class SavedFiles {
   private readonly hashes = new Map<string, number | bigint>();
@@ -189,6 +231,8 @@ const loop = (project: DevProject, hot: HotSide | undefined, once?: string) => E
   const plan = new TestPlan(root, project.tests);
   const preload = (project.tests.preload ?? []).map((path) => resolve(root, path));
   const durations = new Map<string, number>();
+  const savedDurations = new SavedDurations(root);
+  savedDurations.load(durations);
   const expected = (unit: TestUnit) => durations.get(unit.path) ?? UNKNOWN_MS[unit.kind];
   const cpus = cpuBudget((yield* ResourceAccounting).cpuLimit());
 
@@ -319,8 +363,12 @@ const loop = (project: DevProject, hot: HotSide | undefined, once?: string) => E
       ? { units: plan.all(), full: "the first run" }
       : projectFiles.length > 0
         ? plan.everything(`${projectFiles.map(local).join(", ")} changed`)
-        : plan.select(changes);
+        : plan.select(changes, "direct");
     yield* Console.log(changes === undefined ? "first run" : `saved ${saved.map(local).join(", ")}`);
+    const deferred = selection.deferred ?? 0;
+    if (deferred > 0) yield* Console.log(`left to the landing gate: ${plural(deferred, "test file")} that import the saved files only through other modules`);
+    const unread = selection.unread ?? [];
+    if (unread.length > 0) yield* Console.log(`left to the landing gate: ${unread.map(local).join(", ")}, which no test declares reading`);
     if (projectFiles.some((path) => /(?:package\.json|\.lock)$/.test(path))) {
       yield* Console.log("packages changed: restart wisp dev to load them");
     }
@@ -335,6 +383,7 @@ const loop = (project: DevProject, hot: HotSide | undefined, once?: string) => E
 
     if (turns !== undefined) yield* Effect.andThen(answers, wholeCheck(savedAt));
     else yield* Effect.all([answers, wholeCheck(savedAt)], { concurrency: "unbounded", discard: true });
+    savedDurations.save(durations);
   });
 
   for (const [path, why] of plan.alwaysRun()) yield* Console.log(`runs on every save: ${local(path)}: ${why}`);

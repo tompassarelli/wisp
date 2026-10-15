@@ -48,7 +48,13 @@ export interface Selection {
 
   /** Why select chose each unit: the first changed file that reached it, or why it runs on every save. */
   readonly reasons?: ReadonlyMap<string, string>;
+
+  readonly deferred?: number;
+
+  readonly unread?: readonly string[];
 }
+
+export type Reach = "direct" | "transitive";
 
 const READS_FILES = /\b(?:readFileSync|readFile|readdirSync|readdir|Bun\.file|Bun\.Glob|sys\.readFile|createReadStream)\b/;
 
@@ -109,7 +115,7 @@ export class TestPlan {
     this.classify();
   }
 
-  select(changes: Changes): Selection {
+  select(changes: Changes, reach: Reach = "transitive"): Selection {
     const created = changes.created[0];
     if (created !== undefined) return this.everything(`${this.local(created)} is new`);
     const deleted = changes.deleted[0];
@@ -118,17 +124,25 @@ export class TestPlan {
     const reasons = new Map<string, string>();
     const because = (unit: string, why: string) => { if (!reasons.has(unit)) reasons.set(unit, why); };
     const read = new Map<string, string[]>();
+    const reached = new Set<string>();
+    const unread: string[] = [];
     for (const path of changes.changed) {
       const readers = this.readers(path);
       for (const reader of readers) read.set(reader, [...read.get(reader) ?? [], path]);
       if (!isModulePath(path) || !this.graph.owns(path)) {
-        if (readers.length === 0) return this.everything(`no test declares reading ${this.local(path)}`);
+        if (readers.length === 0 && reach === "direct") unread.push(path);
+        else if (readers.length === 0) return this.everything(`no test declares reading ${this.local(path)}`);
         continue;
       }
       if (!this.graph.has(path)) continue;
       this.graph.update(path);
       if (this.preloads.has(path)) return this.everything(`every test preloads ${this.local(path)}`);
+      const near = new Set([path, ...this.graph.importersOf(path)]);
       for (const dependent of this.graph.dependents(path)) {
+        if (reach === "direct" && !near.has(dependent)) {
+          reached.add(dependent);
+          continue;
+        }
         selected.add(dependent);
         because(dependent, dependent === path ? "changed directly" : `imports ${this.local(path)}`);
       }
@@ -142,7 +156,8 @@ export class TestPlan {
       because(reader, `reads ${paths.map((path) => this.local(path)).join(", ")}`);
     }
     for (const [path, why] of this.everySave) because(path, `runs on every save: ${why}`);
-    return { units: this.units.filter((unit) => selected.has(unit.path)), audits, reasons };
+    const deferred = this.units.filter((unit) => reached.has(unit.path) && !selected.has(unit.path)).length;
+    return { units: this.units.filter((unit) => selected.has(unit.path)), audits, reasons, deferred, unread };
   }
 
   everything(reason: string): Selection {

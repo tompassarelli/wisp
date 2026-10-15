@@ -93,8 +93,10 @@ TypeScript 6's in-process builder, which the map compiler uses, checked a
 saved Smashcraft file in 60-220 ms and an export change's importers in
 0.4-3.5 s; the TypeScript 7 server checks the saved file in 6-80 ms.
 
-**The tests the save can affect.** A test is affected when it loads the saved
-module, directly or through other modules: the loop scans each module's
+**The tests the save can affect.** A test is affected when it is the saved
+module or imports it directly; tests that load it only through other modules
+are counted (`left to the landing gate: N test files ...`) and left to
+`wisp ci pre-merge` and the landing gate, which follow every import. The loop scans each module's
 imports as Bun loads them (static imports, re-exports, literal `import()` and
 `require`; type-only imports load nothing), and rescans a saved module, so an
 edit that adds an import counts from that save on. A test that reads project
@@ -102,7 +104,8 @@ files at run time declares them in `reads`; a save of a matching file selects
 it. Every test runs when the graph can't decide:
 
 - a file was created or deleted,
-- the saved file isn't a module and no test declares reading it,
+- the saved file isn't a module and no test declares reading it (in
+  `wisp dev` that file is named and left to the landing gate instead),
 - the save changes a module every test preloads.
 
 A test that loads a module with a computed `import()`, or reads files itself
@@ -124,7 +127,8 @@ Registry modules and Bun test files run in separate processes. Registry
 processes, the journey process and each `warm` file's process start before
 a save and wait for it, so a save pays only for loading the project's code.
 The loop splits the affected unit tests across processes by their measured
-times, longest first: registry modules share processes with each other; a Bun
+times, longest first, kept between runs in the git common directory
+(`wisp/dev-durations.json`) so a fresh `--since` run packs from earlier runs: registry modules share processes with each other; a Bun
 test file shares one only with files of its `isolated` group, or with files
 in no group. A per-file audit and a `warm` file run alone.
 
