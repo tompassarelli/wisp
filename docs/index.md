@@ -76,8 +76,8 @@ controller against each other, and keeps a repro file for each problem found.
 
 Changing code? [`wisp dev`](dev.md) (wisp:docs/dev.md) answers every save
 with the saved files' type errors, the unit tests the save can affect, the
-headless journeys (its own and the affected journey tests) and the whole type
-check, each with its time since the save, and hot-reloads running clients when
+headless journeys (its own and the affected journey tests), each with its time
+since the save, and hot-reloads running clients when
 given their folders.
 
 Playtesting? [`wisp play`](play.md) (wisp:docs/play.md) goes from the

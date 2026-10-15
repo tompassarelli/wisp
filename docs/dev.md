@@ -2,15 +2,13 @@
 
 One long-running command answers every save. It keeps a TypeScript checker,
 the project's test graph, test processes and a headless journey process warm,
-and on each save prints three signals, each with its time since the save, and
-then the whole type check:
+and on each save prints three signals, each with its time since the save:
 
 ```text
 saved src/game/presentation/impactState.ts
    0.060 s  types: no errors in src/game/presentation/impactState.ts
    0.633 s  unit tests: 86 passed (18 test files of 99 affected; test/source-shapes.test.ts checked only the saved files)
    2.025 s  journeys: quick-match passed; 17 journey tests: 17 passed (8 test files of 99 affected)
-   2.793 s  types: no errors in the project
 ```
 
 - **types**: the saved files' type errors, `file:line:column TSxxxx message`.
@@ -25,6 +23,8 @@ already sending finishes first. With `--data DIR --data DIR`, each save also
 hot-reloads the map into those clients exactly as `hot --watch` does
 ([hot reload](hot-reload.md)), and in-game error reports, desyncs and each
 reload's [frame cost](frame-cost.md#after-each-hot-reload) print as they appear.
+The project's whole type check isn't part of the loop: a change that breaks a
+file importing the saved one is left to `wisp ci` and the landing gate.
 
 `wisp dev --since REF` answers once and exits: the diff since REF and the
 untracked files count as one save, the same signals print timed from the end of
@@ -62,13 +62,15 @@ export const dev = makeDev({
   lock files reruns every test and rereads the projects. A package change
   needs `wisp dev` restarted to load the new packages.
 - `typeCheck.projects` are checked file by file on each save;
-  `typeCheck.command` is the project's own whole check.
+  `typeCheck.command` is the project's own whole check, which `wisp ci` runs.
 - `tests.files` are Bun test files; `tests.registry` the modules that register
   tests with wisp:src/runtime/testing.ts, each run as its own test. A
   `registryRunners` file only runs the registry, so the loop runs its modules
   instead. `preload` is bunfig.toml's test preload. `env` applies to every
   test process. `envForFiles(absolutePaths)` replaces it for file-test
   processes, including warmed files; return `{}` to use the normal runtime.
+  `timeoutMs` is the per-test timeout passed to `bun test` (Bun's own is 5 s);
+  set it to what the project's complete run uses.
 - `tests.journeys` are the Bun test files that play journeys in simulated
   clients; they report with the project's own journey.
 - `tests.perFile` are audits that check each file they read on its own. When
@@ -88,7 +90,7 @@ export const dev = makeDev({
 compiler's API server) keeps every project open; a save takes a new snapshot
 with the saved files read again and checks only those files, in every project
 that contains them, Effect's diagnostics included. A change can also break a
-file that imports the saved one: the whole check after it reports those.
+file that imports the saved one: the whole check in `wisp ci` reports those.
 TypeScript 6's in-process builder, which the map compiler uses, checked a
 saved Smashcraft file in 60-220 ms and an export change's importers in
 0.4-3.5 s; the TypeScript 7 server checks the saved file in 6-80 ms.
@@ -109,9 +111,10 @@ it. Every test runs when the graph can't decide:
 - the save changes a module every test preloads.
 
 A test that loads a module with a computed `import()`, or reads files itself
-(it names `readFileSync`, `Bun.file`, `Bun.Glob` and the like) without a
-`reads` entry, runs on every save; the loop prints each such test when it
-starts. Only the affected tests run, so a test that failed earlier and loads
+(it names `readFileSync`, `Bun.file`, `Bun.Glob` and the like), runs on every
+save unless it has a `reads` entry; the loop prints each such test when it
+starts. A `reads` entry lists the files the test reads and the modules its
+computed `import()` loads, and an empty list says it reads no project file. Only the affected tests run, so a test that failed earlier and loads
 nothing the save touched isn't run again until a save affects it.
 
 **The journeys.** A process that has already loaded the headless runtime loads
@@ -135,16 +138,15 @@ in no group. A per-file audit and a `warm` file run alone.
 The loop sizes this from the CPUs it may use, a Linux cgroup quota included.
 With 12 CPUs or more every signal runs at once. Under a quota, work beyond it
 stalls every process the loop runs, so with fewer the signals run in deadline
-order: the saved files' check and the unit tests, then the journeys, then the
-whole check, and test processes take turns for all but one CPU. Tests and the
-whole check run at lower priority (`nice`).
+order: the saved files' check and the unit tests, then the journeys, and test
+processes take turns for all but one CPU. Tests run at lower priority (`nice`).
 
 ## On Smashcraft
 
 Ten saves of game modules on Smashcraft f3b3d39, five adding a private
 function and five an exported constant, measured in a 6-CPU cgroup quota
 (median from the save): the saved files' type errors 0.056 s, the unit tests
-0.640 s, the journeys 2.050 s, the whole check 2.653 s. The journey work is
+0.640 s, the journeys 2.050 s (the whole check, 2.653 s, was part of the loop then). The journey work is
 fixed: the quick match and the eight journey test files take about 5.7
 CPU-seconds, so in a 6-CPU quota the journeys can't end within a second of
 the save even alone, and they wait for the unit tests. Before `wisp dev`, in

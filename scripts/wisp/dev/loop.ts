@@ -50,6 +50,8 @@ class TypeCheckFailure extends Schema.TaggedError<TypeCheckFailure>()("TypeCheck
 const typeChecking = <A>(operation: string, run: () => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => new TypeCheckFailure({ operation, problem: describeCause(cause) }) });
 
+const timeoutArguments = (tests: DevProject["tests"]) => (tests.timeoutMs === undefined ? [] : ["--timeout", String(tests.timeoutMs)]);
+
 const cpuBudget = (limit: number | undefined) => Math.max(1, Math.floor(Math.min(availableParallelism(), limit ?? Infinity)));
 
 const open = (project: DevProject, now: Clock, hot: HotSide | undefined) => Effect.gen(function*() {
@@ -69,7 +71,7 @@ const open = (project: DevProject, now: Clock, hot: HotSide | undefined) => Effe
   const registry = yield* Standby.make([...behind, process.execPath, REGISTRY_RUN], root, Math.min(REGISTRY_STANDBY, unitProcesses), project.tests.env);
   const waiting = new Map<string, Standby>();
   for (const [file, modules] of Object.entries(project.tests.warm ?? {})) {
-    waiting.set(resolve(root, file), yield* Standby.make([...behind, process.execPath, "test", TEST_WAIT], root, 1, { ...(project.tests.envForFiles?.([resolve(root, file)]) ?? project.tests.env), [WARM_ENV]: JSON.stringify(modules) }));
+    waiting.set(resolve(root, file), yield* Standby.make([...behind, process.execPath, "test", ...timeoutArguments(project.tests), TEST_WAIT], root, 1, { ...(project.tests.envForFiles?.([resolve(root, file)]) ?? project.tests.env), [WARM_ENV]: JSON.stringify(modules) }));
   }
   const journeys = project.journey === undefined ? undefined : yield* Standby.make([process.execPath, JOURNEY_RUN], root, 1);
   return {
@@ -115,15 +117,6 @@ const types = (ctx: Context, changed: readonly string[], savedAt: number) => Eff
   yield* Console.log(`${seconds(savedAt)}types: ${plural(result.errors.length, "error")} in ${names}\n${result.errors.map((error) => indent(formatTypeError(root, error))).join("\n")}`);
 });
 
-const wholeCheck = (ctx: Context, savedAt: number) => Effect.gen(function*() {
-  const { exitCode, output } = yield* runProcess([...ctx.behind, ...ctx.project.typeCheck.command], ctx.root).pipe(
-    Effect.catch((failure) => Effect.succeed({ exitCode: 1, output: failure.message })),
-  );
-  if (exitCode === 0) return yield* Console.log(`${ctx.seconds(savedAt)}types: no errors in the project`);
-  yield* ctx.problem;
-  yield* Console.log(`${ctx.seconds(savedAt)}types: the project check failed\n${indent(output)}`);
-});
-
 const runRegistry = (ctx: Context, batch: TestProcess) => Effect.gen(function*() {
   const request: RegistryRequest = { preload: ctx.preload, modules: batch.units.map((unit) => unit.path) };
   const output = yield* ctx.registry.run(request);
@@ -140,7 +133,7 @@ const runFiles = (ctx: Context, batch: TestProcess, audits: ReadonlyMap<string, 
   const standby = batch.units.length === 1 && first !== undefined ? ctx.waiting.get(first.path) : undefined;
   const paths = batch.units.map((unit) => unit.path);
   const output = standby === undefined
-    ? yield* runProcess([...behind, process.execPath, "test", ...paths], root, { ...(project.tests.envForFiles?.(paths) ?? project.tests.env), ...savedFiles })
+    ? yield* runProcess([...behind, process.execPath, "test", ...timeoutArguments(project.tests), ...paths], root, { ...(project.tests.envForFiles?.(paths) ?? project.tests.env), ...savedFiles })
     : yield* standby.run({ file: first?.path ?? "", env: savedFiles } satisfies WaitingTestRequest);
   const elapsed = ctx.now() - started;
 
@@ -213,10 +206,7 @@ const run = (ctx: Context, changes: Changes | undefined, savedAt: number) => Eff
 
   const unitsDone = Deferred.makeUnsafe<void>();
   const units = unitTests(ctx, picked.selection, savedAt).pipe(Effect.ensuring(Effect.sync(() => Deferred.doneUnsafe(unitsDone, Effect.void))));
-  const answers = Effect.all([savedTypes, units, allJourneys(ctx, picked.selection, savedAt, turns === undefined ? Effect.void : Deferred.await(unitsDone))], { concurrency: "unbounded", discard: true });
-
-  if (turns !== undefined) yield* Effect.andThen(answers, wholeCheck(ctx, savedAt));
-  else yield* Effect.all([answers, wholeCheck(ctx, savedAt)], { concurrency: "unbounded", discard: true });
+  yield* Effect.all([savedTypes, units, allJourneys(ctx, picked.selection, savedAt, turns === undefined ? Effect.void : Deferred.await(unitsDone))], { concurrency: "unbounded", discard: true });
   ctx.savedDurations.save(ctx.durations);
 });
 

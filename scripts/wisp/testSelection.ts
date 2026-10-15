@@ -22,6 +22,8 @@ export interface TestDeclaration {
 
   readonly warm?: Readonly<Record<string, readonly string[]>>;
 
+  readonly timeoutMs?: number;
+
   readonly env?: Readonly<Record<string, string>>;
 
   readonly envForFiles?: (files: readonly string[]) => Readonly<Record<string, string>>;
@@ -178,12 +180,13 @@ export class TestPlan {
     const declared = new Set(this.reads.map(({ unit }) => unit));
     this.everySave = new Map();
     for (const unit of this.units) {
+      if (declared.has(unit.path)) continue;
       const computed = this.graph.computedImport(unit.path);
       if (computed !== undefined) {
-        this.everySave.set(unit.path, `${this.local(computed)} has an import() the graph can't follow`);
+        this.everySave.set(unit.path, `${this.local(computed)} has an import() the graph can't follow and it declares no reads`);
         continue;
       }
-      if (unit.kind === "file" && !declared.has(unit.path) && READS_FILES.test(readFileSync(unit.path, "utf8"))) {
+      if (unit.kind === "file" && READS_FILES.test(readFileSync(unit.path, "utf8"))) {
         this.everySave.set(unit.path, "it reads files and declares none");
       }
     }

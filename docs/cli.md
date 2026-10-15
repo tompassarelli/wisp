@@ -212,7 +212,7 @@ Every command and verb in Wisp's sample program and Smashcraft's `bun wisp`, gro
 | `map build` | Builds the TypeScript map from a base map, assets and declaration |
 | `map rebuild MAP.w3x` | Replaces only a built map's script |
 | `map preview MAP.w3x --out IMAGE.ppm` | Reads the map's lobby preview texture and selection metadata |
-| `dev` | Every save's type errors, affected tests, journeys and whole check |
+| `dev` | Every save's type errors, affected tests and journeys |
 | `hot --data DIR... [--watch]` | Hot-reloads saves into running clients |
 | `tune --data DIR...` | Panel that changes declared values in a running match |
 | `fresh MAP.w3x` | New match in every client, waits for each receipt |
