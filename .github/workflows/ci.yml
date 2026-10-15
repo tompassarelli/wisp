@@ -22,9 +22,14 @@ jobs:
   # `bun wisp ci post-merge` (wisp:docs/ci-command.md): the type check, the whole
   # `bun run test` and the tests marked farmTest (wisp:docs/testing.md "Test cost"),
   # which are too heavy for `bun run test`'s per-test ceilings.
+  # A commit Autoland landed exactly as its farm suite passed it (artifact
+  # autoland-summary-SHA, no failures) skips the tests and keeps the checks.
   framework:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -34,9 +39,26 @@ jobs:
       - run: bun scripts/cleanRoom.ts
       - run: git clone --depth 1 https://github.com/tompassarelli/north "$RUNNER_TEMP/north"
       - run: bun "$RUNNER_TEMP/north/agent-machinery/scripts/effect-kit.mjs" check
+      - id: tested
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          set +e -uo pipefail
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=autoland-summary-$SHA" --jq '[.artifacts[] | select(.expired | not)][0].workflow_run.id // empty')
+          [ -n "$run" ] && gh run download "$run" -R "$GITHUB_REPOSITORY" -n "autoland-summary-$SHA" -D tested || exit 0
+          if jq -e '.failures == [] and .problems == [] and (.bun.passed // 0) > 0' tested/summary.json > /dev/null; then
+            echo "run=$run" >> "$GITHUB_OUTPUT"
+            echo "Autoland run $run passed the full farm suite on ${SHA:0:10}: tests skipped, checks kept." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - if: steps.tested.outputs.run != ''
+        run: bun run check
       - name: Install the native archive test dependency
+        if: steps.tested.outputs.run == ''
         run: sudo apt-get update && sudo apt-get install -y libstorm-dev
-      - run: CC=gcc STORMLIB_PREFIX=/usr bun wisp ci post-merge
+      - if: steps.tested.outputs.run == ''
+        run: CC=gcc STORMLIB_PREFIX=/usr bun wisp ci post-merge
 
   # The consumer template (wisp:docs/ci.md) on the neutral sample: its checks
   # and headless journey pass, and its desync fixture fails as expected.

@@ -105,12 +105,13 @@ jobs:
     with:
       ref: ${{ needs.rebase.outputs.sha }}
 
-  # Main's failures at the base commit, from the newest farm result for it or
-  # one of its last 30 main ancestors (a previous landing's saved summary or a
-  # `bun wisp farm test` run), else from a farm run of the base itself.
+  # Main's failures at the base commit, needed only when the suite failed: from
+  # the newest farm result for it or one of its last 30 main ancestors (a
+  # previous landing's saved summary or a `bun wisp farm test` run), else from a
+  # farm run of the base itself.
   baseline:
-    needs: rebase
-    if: needs.rebase.outputs.verdict == 'test'
+    needs: [rebase, suite]
+    if: ${{ !cancelled() && needs.rebase.outputs.verdict == 'test' && needs.suite.result != 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     outputs:
@@ -173,6 +174,7 @@ jobs:
       BASE: ${{ needs.rebase.outputs.base }}
       SCRATCH: ${{ needs.rebase.outputs.scratch }}
       DETAIL: ${{ needs.rebase.outputs.detail }}
+      SUITE: ${{ needs.suite.result }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -213,6 +215,9 @@ jobs:
             check) refuse "the checks failed:" "$(printf '```\n%s\n```' "$DETAIL")" ;;
           esac
           [ -f candidate/summary.json ] || refuse "the suite run ended without a result." ""
+          if [ ! -f baseline/summary.json ] && [ "$SUITE" = success ] && jq -e '.failures == [] and .problems == []' candidate/summary.json > /dev/null; then
+            mkdir -p baseline && echo '{"failures":[],"problems":[]}' > baseline/summary.json
+          fi
           [ -f baseline/summary.json ] || refuse "main's baseline run ended without a result." ""
           # A shard that failed without naming a test is new unless main's run had one in the same suite.
           compare() {
@@ -254,16 +259,18 @@ jobs:
           done
           [ -n "$pushed" ] || refuse "pushing to main failed:" "$(cat push.log)"
           git push origin --delete "$BRANCH"
-          # Pushes made with this token start no workflows: start main's CI (main-red follows it).
-          gh workflow run ci.yml --ref main || echo "::warning::couldn't start main's CI"
           echo "Landed $BRANCH on main as ${landed:0:10}; deleted the branch." >> "$GITHUB_STEP_SUMMARY"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
           if [ "$landed" = "$SHA" ]; then echo "landed=true" >> "$GITHUB_OUTPUT"; fi
-      # The landed commit is main's next base: its result saves the next landing a baseline run.
+      # The landed commit's result: main's CI skips the tests it passed, and the next landing's baseline reads it.
       - if: steps.land.outputs.landed == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: autoland-summary-${{ env.SHA }}
           path: candidate/summary.json
           retention-days: 14
+      # Pushes made with this token start no workflows: start main's CI (main-red follows it).
+      - if: steps.land.outputs.pushed == 'true'
+        run: gh workflow run ci.yml --ref main || echo "::warning::couldn't start main's CI"
       - if: always() && env.SCRATCH != ''
         run: git push origin --delete "$SCRATCH" || true

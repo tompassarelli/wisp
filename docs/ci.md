@@ -165,7 +165,12 @@ locally. Wisp has no self-hosted runner, so its CI never sets
 
 The `framework` job runs `bun wisp ci post-merge` ([CI command](ci-command.md)):
 Wisp's own check, its full Bun suite (the sample's tests included, which job
-`sample` also runs through the template) and the farm tests. It installs
+`sample` also runs through the template) and the farm tests. On main it first
+looks for `autoland-summary-SHA` for its own commit: Autoland saves it only
+when it landed exactly the commit its farm suite tested, so when that summary
+has no failures the job runs only the checks (`bun run check`, clean room,
+`effect-kit check`). A direct push, or a landing replayed onto a main that
+moved, has no such summary and runs the whole suite. It installs
 Ubuntu's `libstorm-dev` and sets `STORMLIB_PREFIX=/usr` and `CC=gcc`, so the
 map packager (wisp:scripts/wisp/mapBuild.ts) and its tests
 (wisp:test/map-pack.test.ts) build against that StormLib instead of nixpkgs';
@@ -217,7 +222,7 @@ it locally.
 3. **Suites.** The [farm](farm.md) test workflow runs the full suite for the
    rebased commit inside the autoland run (wisp:.github/workflows/farm-test.yml
    is also a reusable workflow for this).
-4. **Compare.** At the same time, main's own failures come from the newest
+4. **Compare.** Only when the suite fails, main's own failures come from the newest
    farm result for the base or one of its last 30 main ancestors: the
    summary a previous landing saved (artifact `autoland-summary-SHA`, kept
    14 days) or a `bun wisp farm test` run's. Only when none exists does it
