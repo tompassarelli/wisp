@@ -1,6 +1,7 @@
 /*
  * Lua 5.3 whose raw float + - * / and decimal numerals round the exact result
- * toward zero, for a LUA_32BITS build:
+ * toward zero, and whose raw + - * / flush a subnormal result to zero, for a
+ * LUA_32BITS build:
  *
  *   make posix MYCFLAGS="-DLUA_32BITS -include /path/to/toward-zero.h"
  *
@@ -24,13 +25,18 @@
 #include <math.h>
 #include <stdlib.h>
 
+/* Warcraft flushes a subnormal result to zero, keeping its sign (smashcraft#25). */
+static inline float flush_subnormal(float f) {
+  return f != 0.0f && fabsf(f) < FLT_MIN ? copysignf(0.0f, f) : f;
+}
+
 static inline float toward_zero(double s, double e) {
   float f = (float)s;
   if (isinf(f) && !isinf(s)) return s > 0 ? FLT_MAX : -FLT_MAX;
   if (!isfinite(f) || f == 0.0f) return f;
   double rounded = (double)f;
   int away = rounded != s ? fabs(rounded) > fabs(s) : (s > 0 ? e < 0 : e > 0);
-  return away ? nextafterf(f, 0.0f) : f;
+  return flush_subnormal(away ? nextafterf(f, 0.0f) : f);
 }
 
 static inline float toward_zero_add(float a, float b) {
@@ -52,7 +58,7 @@ static inline float toward_zero_divide(float a, float b) {
   double remainder = (double)a - (double)q * (double)b;
   /* |q| exceeds the exact quotient when the remainder's sign opposes a's. */
   int away = remainder != 0.0 && ((remainder < 0) != (a < 0));
-  return away ? nextafterf(q, 0.0f) : q;
+  return flush_subnormal(away ? nextafterf(q, 0.0f) : q);
 }
 
 /* Numerals (and tonumber): the double strtod reads, a decimal's nearest, truncated to binary32. */

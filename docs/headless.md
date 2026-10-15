@@ -346,8 +346,20 @@ must equal the host uses Wisp's exact helpers and `f32()`, which the
 compiler emits as exact operations, and the compiler prints every
 non-integer literal as an exact hexadecimal float.
 
+Warcraft also flushes a subnormal binary32 result, one below 2^-126, to zero,
+keeping its sign. In Smashcraft 0.0.273 the match camera eased its x toward 0
+by `f32(x + f32(f32(0 - x) * rate))`; natively x stopped at
+1.1940069608864212e-37, where the step's product fell below 2^-126, while Bun
+and Lua32 kept decaying through the subnormals, so three of four native
+matches missed their replay checkpoints for a few hundred frames after each
+down smash or down air (smashcraft#25). `f32()` and the exact helpers flush
+such a result. Whether Warcraft also reads a subnormal operand as zero is not
+known.
+
 wisp:native/toward-zero.h makes a LUA_32BITS Lua 5.3.6 round its raw float
-`+ - * /` and its decimal numerals toward zero.
+`+ - * /` and its decimal numerals toward zero, and flush a subnormal raw
+`+ - * /` result to zero, so a raw operation that reaches the subnormal range
+differs from a stock Lua32 there too.
 `bun node_modules/wisp/scripts/wisp/lua32.ts toward-zero` prints its path,
 and `bun node_modules/wisp/scripts/wisp/lua32.ts` the stock Lua32's; each is
 built on first use from lua.org's release tarball, committed at

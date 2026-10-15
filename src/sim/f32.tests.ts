@@ -78,3 +78,18 @@ test("[reference] f32 literals are the binary32 nearest their decimal", () => {
   same(f32(-0.1), -0.10000000149011612);
   same(f32(1.417), 1.4170000553131104);
 });
+
+test("[reference] f32 flushes a subnormal result to zero, keeping its sign, as Warcraft does", () => {
+  // smashcraft#25: natively the camera's ease stopped at this x, where its step fell below 2^-126.
+  const stopped = 1.1940069608864212e-37;
+  const rate = 0.09000000357627869;
+  same(f32(f32(0.0 - stopped) * rate), -0.0);
+  same(f32(stopped * rate), 0.0);
+  same(f32(stopped + f32(f32(0.0 - stopped) * rate)), stopped);
+  const smallestNormal = 1.1754943508222875e-38;
+  same(f32(1.7632415262334313e-38 - smallestNormal), 0.0);
+  same(f32(smallestNormal - 1.7632415262334313e-38), -0.0);
+  same(f32(2.350988701644575e-38 / 3.0), 0.0);
+  same(f32(smallestNormal + smallestNormal), 2.350988701644575e-38);
+  same(f32(smallestNormal * 1.5), 1.7632415262334313e-38);
+});

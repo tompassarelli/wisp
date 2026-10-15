@@ -31,7 +31,8 @@ function towardZero(negative: boolean, magnitude: bigint, exponent: number): num
     kept = magnitude >> BigInt(target - exponent);
     at = target;
   }
-  const value = kept === 0n ? 0 : Number(kept) * 2 ** at;
+  const truncated = kept === 0n ? 0 : Number(kept) * 2 ** at;
+  const value = truncated < 2 ** -126 ? 0 : truncated;
   const limited = value > MAXIMUM ? MAXIMUM : value;
   return negative ? -limited : limited;
 }
