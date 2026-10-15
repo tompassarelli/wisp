@@ -107,6 +107,8 @@ const number = (value: number) => (Number.isInteger(value) ? String(value) : val
 
 const MODULE_ROWS = 5;
 
+const gated = (values: PerfValues, value: "median" | "p95" | "mean" | "top") => (value === "mean" ? values.total : values[value]);
+
 function grownModules(before: ReadonlyMap<string, ModuleAllocation> | undefined, after: ReadonlyMap<string, ModuleAllocation> | undefined): string[] {
   const grown: { readonly name: string; readonly from: number; readonly to: number }[] = [];
   for (const [name, now] of after ?? []) {
@@ -153,9 +155,9 @@ export function comparePerfRuns(a: PerfRun, b: PerfRun, threshold = DEFAULT_PERF
       const to = after[metric];
       lines.push(`p${slot} ${LABELS[metric]}: mean ${number(from.mean)} -> ${number(to.mean)} (${change(from.mean, to.mean)}), median ${number(from.median)} -> ${number(to.median)}, p95 ${number(from.p95)} -> ${number(to.p95)} (${change(from.p95, to.p95)}), max ${number(from.max)} -> ${number(to.max)} (${change(from.max, to.max)}), top 1% mean ${number(from.top)} -> ${number(to.top)} (${change(from.top, to.top)}), start ${number(from.start)} -> ${number(to.start)}`);
       for (const value of GATED[metric] ?? []) {
-        if (to[value] > from[value] * (1 + threshold)) {
+        if (gated(to, value) > gated(from, value) * (1 + threshold)) {
           const grown = metric === "alloc-kb" ? grownModules(a.modules.get(slot), b.modules.get(slot)) : [];
-          regressions.push(`p${slot} ${LABELS[metric]} ${value} ${change(from[value], to[value])}${grown.length > 0 ? ` (grew: ${grown.join(", ")})` : ""}`);
+          regressions.push(`p${slot} ${LABELS[metric]} ${value} ${change(gated(from, value), gated(to, value))}${grown.length > 0 ? ` (grew: ${grown.join(", ")})` : ""}`);
         }
       }
     }
