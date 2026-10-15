@@ -177,8 +177,13 @@ interface HotSide {
   readonly sourceDirectory: string;
 }
 
-const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Effect.gen(function*() {
+const loop = (project: DevProject, hot: HotSide | undefined, once?: string) => Effect.scoped(Effect.gen(function*() {
+  const opened = Date.now();
   const root = resolve(project.root);
+  const problems = { count: 0 };
+  const problem = Effect.sync(() => {
+    problems.count += 1;
+  });
   const local = (path: string) => relative(root, path);
   const files = new SavedFiles(root, project.sources);
   const plan = new TestPlan(root, project.tests);
@@ -204,11 +209,12 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
 
   const types = (changed: readonly string[], savedAt: number) => Effect.gen(function*() {
     const checked = yield* typeChecking("check the saved files", () => checker.check(changed)).pipe(Effect.result);
-    if (Result.isFailure(checked)) return yield* Console.log(`${seconds(savedAt)}types: ${checked.failure.message}`);
+    if (Result.isFailure(checked)) return yield* Effect.andThen(problem, Console.log(`${seconds(savedAt)}types: ${checked.failure.message}`));
     const result = checked.success;
     if (result.files.length === 0) return;
     const names = result.files.map(local).join(", ");
     if (result.errors.length === 0) return yield* Console.log(`${seconds(savedAt)}types: no errors in ${names}`);
+    yield* problem;
     yield* Console.log(`${seconds(savedAt)}types: ${plural(result.errors.length, "error")} in ${names}\n${result.errors.map((error) => indent(formatTypeError(root, error))).join("\n")}`);
   });
 
@@ -217,6 +223,7 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
       Effect.catch((failure) => Effect.succeed({ exitCode: 1, output: failure.message })),
     );
     if (exitCode === 0) return yield* Console.log(`${seconds(savedAt)}types: no errors in the project`);
+    yield* problem;
     yield* Console.log(`${seconds(savedAt)}types: the project check failed\n${indent(output)}`);
   });
 
@@ -251,7 +258,7 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
       .sort((left, right) => right.work - left.work);
     const turn = (run: Effect.Effect<ProcessResult>) => (turns === undefined ? run : Semaphore.withPermit(turns, run));
     const results = yield* Effect.forEach(processes, (process) => turn(runTests(process, audits)).pipe(Effect.tap(({ failures }) =>
-      failures.length === 0 ? Effect.void : Console.log(`${seconds(savedAt)}FAIL ${failures.join(`\n${" ".repeat(13)}FAIL `)}`))), { concurrency: "unbounded" });
+      failures.length === 0 ? Effect.void : Effect.andThen(problem, Console.log(`${seconds(savedAt)}FAIL ${failures.join(`\n${" ".repeat(13)}FAIL `)}`)))), { concurrency: "unbounded" });
     return {
       passed: results.reduce((sum, result) => sum + result.passed, 0),
       failed: results.reduce((sum, result) => sum + result.failures.length, 0),
@@ -293,6 +300,7 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
     yield* before;
     const [own, ran] = yield* Effect.all([ownJourney, tests], { concurrency: "unbounded" });
     if (own === undefined && ran === undefined) return;
+    if (own?.report !== undefined) yield* problem;
     const parts = [
       ...(own === undefined ? [] : [own.summary]),
       ...(ran === undefined ? [] : [`${plural(ran.passed + ran.failed, "journey test")}: ${counts(ran.passed, ran.failed)} (${scope(units, selection)})`]),
@@ -330,6 +338,23 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
   });
 
   for (const [path, why] of plan.alwaysRun()) yield* Console.log(`runs on every save: ${local(path)}: ${why}`);
+
+  if (once !== undefined) {
+    const git = (args: readonly string[]) => runProcess(["git", ...args], root).pipe(Effect.flatMap(({ exitCode, output }) =>
+      exitCode === 0 ? Effect.succeed(output) : Effect.fail(new UsageFailure({ problem: `git ${args.join(" ")}: ${output}` }))));
+    const top = (yield* git(["rev-parse", "--show-toplevel"])).trim();
+    const diff = yield* git(["diff", "--name-only", "--no-renames", once, "--", "."]);
+    const untracked = yield* git(["ls-files", "--others", "--exclude-standard", "--full-name", "--", "."]);
+    const paths = [...new Set(`${diff}\n${untracked}`.split("\n").filter((line) => line !== "").map((line) => resolve(top, line)))]
+      .filter((path) => files.follows(path) && statSync(path, { throwIfNoEntry: false })?.isFile() === true);
+    yield* Console.log(`ready in ${((Date.now() - opened) / 1000).toFixed(3)} s; ${plural(paths.length, "changed file")} since ${once}`);
+    if (paths.length === 0) return;
+    const savedAt = Date.now();
+    yield* run({ changed: paths, created: [], deleted: [] }, savedAt);
+    yield* Console.log(`${seconds(savedAt)}done`);
+    if (problems.count > 0) return yield* new UsageFailure({ problem: `${plural(problems.count, "problem")} since ${once}` });
+    return;
+  }
 
   const events = yield* Effect.acquireRelease(Queue.unbounded<string>(), (queue) => Queue.shutdown(queue));
   const firstEvent = { at: 0 };
@@ -371,6 +396,11 @@ const loop = (project: DevProject, hot: HotSide | undefined) => Effect.scoped(Ef
 
 export const makeDev = (project: DevProject): Command => (args) => Effect.gen(function*() {
   const data = flagValues(args, "data");
+  const [once] = flagValues(args, "since");
+  if (once !== undefined) {
+    if (data.length > 0) return yield* new UsageFailure({ problem: "dev --since takes no --data" });
+    return yield* loop(project, undefined, once);
+  }
   if (data.length === 0) return yield* loop(project, undefined);
   const hotProject = project.hot;
   if (hotProject === undefined) return yield* new UsageFailure({ problem: "this project declares no map to hot-reload" });

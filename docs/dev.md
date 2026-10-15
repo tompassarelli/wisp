@@ -26,6 +26,11 @@ hot-reloads the map into those clients exactly as `hot --watch` does
 ([hot reload](hot-reload.md)), and in-game error reports, desyncs and each
 reload's [frame cost](frame-cost.md#after-each-hot-reload) print as they appear.
 
+`wisp dev --since REF` answers once and exits: the diff since REF and the
+untracked files count as one save, the same signals print timed from the end of
+warm-up (`ready in`), and it exits non-zero when any signal found a problem. Use
+it to time the loop on a past commit (`--since COMMIT~1` at COMMIT).
+
 ## Declare it
 
 A project adds the command with `makeDev` (wisp:scripts/wisp/commands/dev.ts).
