@@ -1,5 +1,5 @@
 import { dirname, join } from "node:path";
-import { Clock, Context, Effect, Layer, Option, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { MalformedGameFile } from "./preloadRecord";
 import { GameFiles, type GameFileFailure } from "./gameFiles";
 
@@ -72,56 +72,55 @@ function missingDirectory(failure: GameFileFailure): boolean {
 
 interface Pending { readonly client: number; readonly path: string; readonly summary: DesyncSummary; readonly modified: number }
 
-export class Desyncs extends Context.Service<Desyncs, {
-
+export interface DesyncWatch {
   readonly changed: Effect.Effect<DesyncReport | undefined, GameFileFailure | MalformedGameFile>;
-}>()("wisp/Desyncs") {
-  static readonly layer = (dataDirectories: readonly string[]) => Layer.effect(Desyncs, Effect.gen(function*() {
-    const files = yield* GameFiles;
-    const directories = dataDirectories.map((directory) => join(dirname(directory), "Errors"));
-    const reports = (directory: string) => files.list(directory).pipe(
-      Effect.catchTag("GameFileFailure", (failure) => missingDirectory(failure) ? Effect.succeed([]) : Effect.fail(failure)),
-
-      Effect.map((entries) => [...entries].sort()),
-    );
-
-    const seen = yield* Effect.forEach(directories, (directory) => reports(directory).pipe(Effect.map((entries) => new Set(entries))));
-    const pending = new Map<number, Pending>();
-    let firstPending = 0;
-    return Desyncs.of({ changed: Effect.gen(function*() {
-      for (const [client, directory] of directories.entries()) {
-        if (pending.has(client)) continue;
-        for (const name of yield* reports(directory)) {
-          if (seen[client]?.has(name)) continue;
-
-          const path = join(directory, name, "Desync.txt");
-          const stored = yield* files.read(path);
-          if (stored === undefined) continue;
-
-          const summary = yield* decodeDesyncSummary(path, stored.text).pipe(Effect.tapError(() => Effect.sync(() => seen[client]?.add(name))));
-          if (summary === undefined) continue;
-          seen[client]?.add(name);
-          if (pending.size === 0) firstPending = yield* Clock.currentTimeMillis;
-          pending.set(client, { client, path, summary, modified: stored.modified });
-          break;
-        }
-      }
-      if (pending.size === 0) return undefined;
-      const now = yield* Clock.currentTimeMillis;
-      if (pending.size < directories.length && now - firstPending < PARTNER_WAIT_MILLIS) return undefined;
-      const compared = [...pending.values()].sort((a, b) => a.client - b.client);
-      pending.clear();
-      return {
-        clients: compared.map(({ client }) => client),
-        turns: compared.map(({ summary }) => summary.turn),
-        differences: compared.length < 2 ? [] : divergedValues(compared.map(({ summary }) => summary)),
-        missing: directories.flatMap((_, client) => compared.some((report) => report.client === client) ? [] : [client]),
-        paths: compared.map(({ path }) => path),
-        latency: now - Math.max(...compared.map(({ modified }) => modified)),
-      };
-    }) });
-  }));
 }
+
+export const watchDesyncs = (dataDirectories: readonly string[]) => Effect.gen(function*() {
+  const files = yield* GameFiles;
+  const directories = dataDirectories.map((directory) => join(dirname(directory), "Errors"));
+  const reports = (directory: string) => files.list(directory).pipe(
+    Effect.catchTag("GameFileFailure", (failure) => missingDirectory(failure) ? Effect.succeed([]) : Effect.fail(failure)),
+
+    Effect.map((entries) => [...entries].sort()),
+  );
+
+  const seen = yield* Effect.forEach(directories, (directory) => reports(directory).pipe(Effect.map((entries) => new Set(entries))));
+  const pending = new Map<number, Pending>();
+  let firstPending = 0;
+  return { changed: Effect.gen(function*() {
+    for (const [client, directory] of directories.entries()) {
+      if (pending.has(client)) continue;
+      for (const name of yield* reports(directory)) {
+        if (seen[client]?.has(name)) continue;
+
+        const path = join(directory, name, "Desync.txt");
+        const stored = yield* files.read(path);
+        if (stored === undefined) continue;
+
+        const summary = yield* decodeDesyncSummary(path, stored.text).pipe(Effect.tapError(() => Effect.sync(() => seen[client]?.add(name))));
+        if (summary === undefined) continue;
+        seen[client]?.add(name);
+        if (pending.size === 0) firstPending = yield* Clock.currentTimeMillis;
+        pending.set(client, { client, path, summary, modified: stored.modified });
+        break;
+      }
+    }
+    if (pending.size === 0) return undefined;
+    const now = yield* Clock.currentTimeMillis;
+    if (pending.size < directories.length && now - firstPending < PARTNER_WAIT_MILLIS) return undefined;
+    const compared = [...pending.values()].sort((a, b) => a.client - b.client);
+    pending.clear();
+    return {
+      clients: compared.map(({ client }) => client),
+      turns: compared.map(({ summary }) => summary.turn),
+      differences: compared.length < 2 ? [] : divergedValues(compared.map(({ summary }) => summary)),
+      missing: directories.flatMap((_, client) => compared.some((report) => report.client === client) ? [] : [client]),
+      paths: compared.map(({ path }) => path),
+      latency: now - Math.max(...compared.map(({ modified }) => modified)),
+    };
+  }) } satisfies DesyncWatch;
+});
 
 export function formatDesync(report: DesyncReport): string {
   const client = (index: number) => `client ${report.clients[index] ?? index}`;

@@ -4,7 +4,7 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { Console, Deferred, Effect, Fiber, Layer, Queue, Result, Schema, Semaphore } from "effect";
 import { ResourceAccounting } from "../../platform/services";
 import { type Command, type CommandFailure, UsageFailure, describeCause, flagValues } from "../command";
-import { Desyncs, formatDesync } from "../desyncs";
+import { formatDesync, watchDesyncs } from "../desyncs";
 import { FrameCosts, formatFrameCost } from "../frameCosts";
 import { type ProcessOutput, Standby, runProcess } from "../devProcesses";
 import { SAVED_FILES_ENV, WARM_ENV } from "../devResult";
@@ -457,14 +457,13 @@ export const makeDev = (project: DevProject): Command => (args) => Effect.gen(fu
   const services = HotReload.layer(directories, hotProject.filePrefix).pipe(
     Layer.provideMerge(MapBuild.layer(hotProject.project)),
     Layer.provideMerge(SourceErrors.layer({ sourceMapDirectory: hotProject.sourceMapDirectory, filePrefix: hotProject.filePrefix ?? "wisp" })),
-    Layer.merge(Desyncs.layer(directories)),
     Layer.provideMerge(FrameCosts.layer(hotProject.filePrefix)),
     Layer.provideMerge(GameFiles.layer()),
   );
   yield* Effect.gen(function*() {
     const reload = yield* HotReload;
     const sourceErrors = yield* SourceErrors;
-    const desyncs = yield* Desyncs;
+    const desyncs = yield* watchDesyncs(directories);
     const frameCosts = yield* FrameCosts;
     const loadFailures = modelFailureBridge(yield* GameFiles, hotProject.filePrefix);
 

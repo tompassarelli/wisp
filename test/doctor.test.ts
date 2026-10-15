@@ -1,11 +1,14 @@
 import { expect, test } from "bun:test";
+import { Effect, Exit, Fiber, Layer } from "effect";
+import { TestClock } from "effect/testing";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type ProcessInfo, launcherHealth, prefixUse } from "../scripts/warcraft/battleNet";
 import { ladderScan } from "../scripts/warcraft/war3Log";
 import { displayChanges, videoSettings, withDisplaySettings } from "../scripts/warcraft/preferences";
-import { diagnose, type Observation } from "../scripts/wisp/doctor";
-import { type ClientState, type ClientView } from "../scripts/wisp/watch";
+import { DoctorHands, type DoctorTarget, diagnose, doctor, type Observation } from "../scripts/wisp/doctor";
+import { PlayMachine } from "../scripts/wisp/play";
+import { ClientWatch, type ClientState, type ClientView } from "../scripts/wisp/watch";
 
 const fixture = (name: string) => readFileSync(join(import.meta.dir, "fixtures/doctor", name), "utf8");
 const PLAYED = fixture("launcher-played.log");
@@ -95,4 +98,63 @@ test("[property seed 8058] preference edits are idempotent, add a missing key to
 
     expect(videoSettings("[Gameplay]\nwindowmode=9\n[Video]\nwindowmode=2\n").windowmode).toBe("2");
   }
+});
+
+function doctorHarness(running: ProcessInfo[], stubborn: ReadonlySet<number>, preferencesText?: string) {
+  const signals: [string, number[]][] = [];
+  const writes: string[] = [];
+  const log = "battle.net-20261014T110000.1.log";
+  const machine = PlayMachine.of({
+    processes: Effect.sync(() => [...running]),
+    serverDirectory: () => Effect.succeed("server"),
+    signal: (pids, signal) => Effect.sync(() => {
+      signals.push([signal, [...pids]]);
+      const ended = pids.filter((pid) => signal === "SIGKILL" || !stubborn.has(pid));
+      running.splice(0, running.length, ...running.filter(({ pid }) => !ended.includes(pid)));
+    }),
+    launch: () => Effect.die("doctor launched a game it was told not to"),
+    openSteam: () => Effect.die("doctor opened Steam"),
+    start: () => Effect.die("doctor started a command"),
+    startService: () => Effect.die("doctor started a service"),
+    startLock: () => Effect.succeed(Effect.void),
+    read: (path) => Effect.succeed(path.endsWith(log) ? SIGNED_IN : path.endsWith("War3Preferences.txt") ? preferencesText : undefined),
+    size: () => Effect.succeed(0),
+    modified: () => Effect.succeed(0),
+    digest: () => Effect.succeed(undefined),
+    list: () => Effect.succeed([log]),
+    write: (_path, text) => Effect.sync(() => { writes.push(text); }),
+    copy: () => Effect.void,
+  });
+  const hands = DoctorHands.of({ launches: false, leaveLobby: () => Effect.void, closeScore: () => Effect.void });
+  const watch = ClientWatch.of({ view: (client) => Effect.succeed({ client: client.name, state: { kind: "menus", screen: "MAIN_MENU" }, source: "socket", evidence: "fake menu socket", at: 0, scan: "done", loadErrors: { count: 0 } }) });
+  const target = (settings?: DoctorTarget["settings"]): DoctorTarget => ({
+    client: { name: "fake", documents: `${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III` },
+    prefix: PREFIX,
+    start: { kind: "steam", appId: 1, name: "fake" },
+    ...(settings === undefined ? {} : { settings }),
+  });
+  const run = (settings?: DoctorTarget["settings"]) => Effect.gen(function*() {
+    const fiber = yield* doctor([target(settings)], () => {}).pipe(Effect.provide(Layer.mergeAll(Layer.succeed(PlayMachine, machine), Layer.succeed(DoctorHands, hands), Layer.succeed(ClientWatch, watch))), Effect.exit, Effect.forkChild);
+    yield* TestClock.adjust("60 seconds");
+    return yield* Fiber.join(fiber);
+  }).pipe(Effect.provide(TestClock.layer()), Effect.runPromise);
+  return { signals, writes, run };
+}
+
+const LAUNCHER: ProcessInfo = { pid: 40, name: "Battle.net", args: ["C:\\Program Files (x86)\\Battle.net\\Battle.net.exe"], prefix: PREFIX };
+
+test("[scenario] doctor ends a crashed game with its error dialog, kills only what ignored SIGTERM, leaves Battle.net running and reports the client ready", async () => {
+  const harness = doctorHarness([LAUNCHER, gameProcess(41), errorDialog(42)], new Set([41]));
+  const exit = await harness.run();
+  expect(Exit.isSuccess(exit) ? exit.value : exit).toEqual([{ client: "fake", state: "Battle.net signed in", recovered: ["crashed"] }]);
+  expect(harness.signals).toEqual([["SIGTERM", [41, 42]], ["SIGKILL", [41]]]);
+});
+
+test("[scenario] doctor restores changed display settings once and refuses when the same problem returns", async () => {
+  const harness = doctorHarness([], new Set(), "[Video]\nwindowwidth=800\n");
+  const exit = await harness.run({ Video: { windowwidth: "1280" } });
+  expect(Exit.isFailure(exit)).toBe(true);
+  expect(String(Exit.isFailure(exit) ? exit.cause : "")).toContain("fake: still display settings changed after restoring the display settings once");
+  expect(harness.writes).toEqual(["[Video]\nwindowwidth=1280\n"]);
+  expect(harness.signals).toEqual([]);
 });

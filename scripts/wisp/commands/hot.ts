@@ -1,7 +1,7 @@
 import { type FSWatcher, watch } from "node:fs";
 import { Console, Effect, Layer, Queue, Schema } from "effect";
 import { type Command, type CommandFailure, UsageFailure, flagValues } from "../command";
-import { Desyncs, formatDesync } from "../desyncs";
+import { formatDesync, watchDesyncs } from "../desyncs";
 import { FrameCosts, formatFrameCost } from "../frameCosts";
 import { GameFiles } from "../gameFiles";
 import { HotReload } from "../hotReload";
@@ -31,14 +31,13 @@ export const makeHot = ({ project, sourceDirectory, sourceMapDirectory, filePref
   const services = HotReload.layer(directories, filePrefix).pipe(
     Layer.provideMerge(MapBuild.layer(project)),
     Layer.provideMerge(SourceErrors.layer({ sourceMapDirectory, filePrefix })),
-    Layer.merge(Desyncs.layer(directories)),
     Layer.provideMerge(FrameCosts.layer(filePrefix)),
     Layer.provideMerge(GameFiles.layer()),
   );
   yield* Effect.gen(function*() {
     const reload = yield* HotReload;
     const sourceErrors = yield* SourceErrors;
-    const desyncs = yield* Desyncs;
+    const desyncs = yield* watchDesyncs(directories);
     const frameCosts = yield* FrameCosts;
     const loadFailures = modelFailureBridge(yield* GameFiles, filePrefix);
 
