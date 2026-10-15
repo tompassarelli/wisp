@@ -59,7 +59,11 @@ const open = (project: DevProject, now: Clock, hot: HotSide | undefined) => Effe
   const root = resolve(project.root);
   const problems = { count: 0 };
   const durations = new Map<string, number>();
-  const savedDurations = new SavedDurations(root);
+  const located = yield* runProcess(["git", "rev-parse", "--path-format=absolute", "--git-common-dir", "--show-toplevel"], root).pipe(
+    Effect.map(({ exitCode, output }) => (exitCode === 0 ? output.trim().split("\n") : [])),
+    Effect.orElseSucceed((): string[] => []),
+  );
+  const savedDurations = new SavedDurations(located[0], located[1]);
   savedDurations.load(durations);
   const cpus = cpuBudget((yield* ResourceAccounting).cpuLimit());
   const behind = Bun.which("nice") === null ? [] : ["nice", "-n", "10"];

@@ -5,9 +5,7 @@ export class SavedDurations {
   private readonly file: string | undefined;
   private readonly top: string = "";
 
-  constructor(root: string) {
-    const git = Bun.spawnSync(["git", "rev-parse", "--path-format=absolute", "--git-common-dir", "--show-toplevel"], { cwd: root, stderr: "ignore" });
-    const [common, top] = git.exitCode === 0 ? git.stdout.toString().trim().split("\n") : [];
+  constructor(common: string | undefined, top: string | undefined) {
     if (common === undefined || top === undefined) return;
     this.file = join(common, "wisp", "dev-durations.json");
     this.top = top;
