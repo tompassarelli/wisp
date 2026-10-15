@@ -7,7 +7,9 @@ import { platformLayer } from "../scripts/platform/layer";
 import { makeSoak } from "../scripts/wisp/commands/soak";
 import { installHeadless } from "../scripts/wisp/headless";
 import { RealtimeClients } from "../scripts/wisp/headlessInput";
-import { type SoakMatch, SoakMonitor, helperRecorder, playSoakMatch, readSoakRepro, soakRepro } from "../scripts/wisp/soak";
+import { SOAK_LIMITS, SoakMonitor, helperRecorder, playSoakMatch } from "../scripts/wisp/soak";
+import type { SoakMatch } from "../scripts/wisp/soak/types";
+import { readSoakRepro, soakRepro } from "../scripts/wisp/soak/file";
 import { MEASURED_BATTLE_NET, syncDelivery } from "../src/headless/syncChannel";
 import { timingsLayer } from "../scripts/wisp/timings";
 import game from "./soak/game";
@@ -79,6 +81,27 @@ test("[spec #16] each fault is found by its detector, and a lag spike's catch-up
     const hostStall = (frame: number) => (frame * 1000) / 60 + Math.max(0, frame - 60) * 20;
     expect(catchUps(() => 0, 600, hostStall)).toEqual([]);
   }
+});
+
+test("[invariant] a monitor with an injected clock finds the same cost spikes every run", () => {
+  const spikes = (stepMs: number) => {
+    let now = 0;
+    const clock = () => (now += stepMs);
+    const clients = runtime.clients(game.entry, [0, 1], { cost: clock });
+    clients.start();
+    const monitor = new SoakMonitor(clients, game.begin(clients, match(["fuzz", "fuzz"])), { ...SOAK_LIMITS, warmUpFrames: 0 });
+    for (let frame = 1; frame <= 5; frame++) {
+      clients.frames(1);
+      monitor.afterFrame((frame * 1000) / 60, new Set());
+    }
+    return { spikes: [...monitor.spikes.keys()], costMs: monitor.costMs, findings: monitor.finish(true).filter(({ kind }) => kind === "cost").map(({ text }) => text.split(";")[0]) };
+  };
+  const slow = spikes(20);
+  expect(slow.spikes).toEqual([1, 2, 3, 4, 5]);
+  expect(slow.costMs).toBeGreaterThan(0);
+  expect(slow.findings).toEqual(["5 client frames cost more than 16.7 ms"]);
+  expect(spikes(20)).toEqual(slow);
+  expect(spikes(0.001)).toMatchObject({ spikes: [], findings: [] });
 });
 
 test("[invariant] a repro file plays its match again with the same inputs, calls and findings", () => {

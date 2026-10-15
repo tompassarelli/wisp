@@ -1,16 +1,16 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
-import type { Subprocess } from "bun";
-import { Cause, Console, Effect, Exit, Result, Schema } from "effect";
+import * as BunServices from "@effect/platform-bun/BunServices";
+import { Cause, Console, Effect, Exit, FileSystem, Queue, Schema, Stream } from "effect";
+import { ChildProcess } from "effect/process";
 import { ResourceAccounting } from "../../platform/services";
 import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from "../command";
 import { installHeadless } from "../headless";
 import { writtenPreloadFile } from "../headlessInput";
-import {
-  SOAK_LIMITS, type SoakMatch, type SoakProject, type SoakReply, describeMatch, loadSoakGame, loadSoakProject, planSoak, playSoakMatch, readSoakReply,
-  readSoakRepro, soakRepro,
-} from "../soak";
+import { spawnLogged } from "../hostProcess";
+import { SOAK_LIMITS, type SoakProject, describeMatch, planSoak, playSoakMatch } from "../soak";
+import type { SoakMatch } from "../soak/types";
+import { type SoakReply, loadSoakGame, loadSoakProject, readSoakReply, readSoakRepro, soakRepro } from "../soak/file";
 import { emitJson } from "../jsonResults";
 import { shrinkSoakRepro } from "../reproShrink";
 import { step } from "../timings";
@@ -78,36 +78,6 @@ function parseRun(args: readonly string[], project: SoakProject, cpuLimit: numbe
   return { matches, seed, minutes, workers, fighters, stages, policies, out };
 }
 
-type Worker = Subprocess<"pipe", "pipe", "pipe">;
-
-function lineReader(stream: ReadableStream<Uint8Array>): () => Promise<string | undefined> {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  return async () => {
-    for (;;) {
-      const end = buffer.indexOf("\n");
-      if (end >= 0) {
-        const line = buffer.slice(0, end);
-        buffer = buffer.slice(end + 1);
-        return line;
-      }
-      const { done, value } = await reader.read();
-      if (done) return undefined;
-      buffer += decoder.decode(value, { stream: true });
-    }
-  };
-}
-
-function tail(stream: ReadableStream<Uint8Array>): () => string {
-  let text = "";
-  void (async () => {
-    const decoder = new TextDecoder();
-    for await (const chunk of stream) text = (text + decoder.decode(chunk, { stream: true })).slice(-4096);
-  })();
-  return () => text;
-}
-
 interface Pool {
   readonly replies: SoakReply[];
 
@@ -115,51 +85,52 @@ interface Pool {
   workersStarted: number;
 }
 
-const talk = <A>(what: string, run: () => Promise<A>) =>
-  Effect.tryPromise({ try: run, catch: (cause) => new SoakFailure({ problem: `a worker's ${what}`, cause }) });
+const encoder = new TextEncoder();
 
-const runWorker = (worker: string, project: string, next: () => SoakMatch | undefined, pool: Pool, report: (reply: SoakReply) => Effect.Effect<void, SoakFailure>) =>
-  Effect.acquireUseRelease(
-    Effect.sync((): Worker => {
-      pool.workersStarted++;
-      return Bun.spawn([process.execPath, worker, project], { stdin: "pipe", stdout: "pipe", stderr: "pipe" });
-    }),
-    (child) => Effect.gen(function*() {
-      const read = lineReader(child.stdout);
-      const stderr = tail(child.stderr);
-      for (let match = next(); match !== undefined; match = next()) {
-        const sent = match;
-
-        const answer = yield* talk(`answer ${describeMatch(sent)}`, async () => {
-          child.stdin.write(`${JSON.stringify(sent)}\n`);
-          await child.stdin.flush();
-          return read();
-        }).pipe(Effect.result);
-        const line = Result.isSuccess(answer) ? answer.success : undefined;
-        const broken = Result.isFailure(answer) ? ` (${answer.failure.message})` : "";
-        const reply: SoakReply = line === undefined
-          ? {
-            match: sent, frames: 0, wallMs: 0, costMs: 0, worstFrameMs: 0, typingStallsMs: [], over: false, checksums: [],
-            findings: [{ kind: "crash", frame: 0, text: `the worker process stopped${child.exitCode === null ? "" : ` with exit code ${child.exitCode}`}${broken}: ${stderr().trim().split("\n").slice(-8).join("\n    ")}` }],
-          }
-          : yield* Effect.try({ try: () => readSoakReply(line), catch: (cause) => new SoakFailure({ problem: `a worker's answer for ${describeMatch(sent)}`, cause }) });
-        pool.replies.push(reply);
-        yield* report(reply);
-        if (line === undefined) return;
+const runWorker = (worker: string, project: string, next: () => SoakMatch | undefined, pool: Pool, report: (reply: SoakReply) => Effect.Effect<void, SoakFailure, FileSystem.FileSystem>) =>
+  Effect.scoped(Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "wisp-soak-worker-" }).pipe(Effect.mapError((cause) => new SoakFailure({ problem: "making a worker's log folder", cause })));
+    const stderrFile = join(directory, "stderr");
+    const requests = yield* Queue.unbounded<Uint8Array, Cause.Done>();
+    const replies = yield* Queue.unbounded<string | undefined>();
+    pool.workersStarted++;
+    let cpuMs = 0;
+    yield* Effect.addFinalizer(() => Effect.sync(() => { pool.cpuMs += cpuMs; }));
+    const child = yield* spawnLogged(
+      ChildProcess.make(process.execPath, [worker, project], { stdin: { stream: Stream.fromQueue(requests) }, stdout: "pipe", forceKillAfter: "5 seconds" }),
+      { stderr: stderrFile },
+    ).pipe(Effect.mapError((cause) => new SoakFailure({ problem: "starting a worker", cause })));
+    yield* Effect.forkScoped(child.handle.stdout.pipe(
+      Stream.decodeText(),
+      Stream.splitLines,
+      Stream.runForEach((line) => Queue.offer(replies, line)),
+      Effect.ignore,
+      Effect.ensuring(Queue.offer(replies, undefined)),
+    ));
+    for (let match = next(); match !== undefined; match = next()) {
+      const sent = match;
+      yield* Queue.offer(requests, encoder.encode(`${JSON.stringify(sent)}\n`));
+      const line = yield* Queue.take(replies);
+      let reply: SoakReply;
+      if (line === undefined) {
+        yield* child.written.pipe(Effect.timeoutOption("1 second"));
+        const code = yield* child.handle.exitCode.pipe(Effect.timeoutOption("1 second"), Effect.map((exit) => (exit._tag === "Some" ? Number(exit.value) : undefined)), Effect.orElseSucceed(() => undefined));
+        const said = yield* fs.readFileString(stderrFile).pipe(Effect.orElseSucceed(() => ""));
+        reply = {
+          match: sent, frames: 0, wallMs: 0, costMs: 0, worstFrameMs: 0, typingStallsMs: [], over: false, checksums: [],
+          findings: [{ kind: "crash", frame: 0, text: `the worker process stopped${code === undefined ? "" : ` with exit code ${code}`}: ${said.trim().split("\n").slice(-8).join("\n    ")}` }],
+        };
+      } else {
+        reply = yield* Effect.try({ try: () => readSoakReply(line), catch: (cause) => new SoakFailure({ problem: `a worker's answer for ${describeMatch(sent)}`, cause }) });
+        cpuMs = reply.workerCpuMs ?? cpuMs;
       }
-      yield* talk("end", async () => {
-        await child.stdin.end();
-        await child.exited;
-      });
-    }),
-    (child) => Effect.promise(async () => {
-      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
-      await child.exited;
-      const usage = child.resourceUsage();
-
-      if (usage !== undefined) pool.cpuMs += (Number(usage.cpuTime.user) + Number(usage.cpuTime.system)) / 1000;
-    }),
-  );
+      pool.replies.push(reply);
+      yield* report(reply);
+      if (line === undefined) return;
+    }
+    yield* Queue.end(requests);
+  }));
 
 const plural = (count: number, noun: string, nouns = `${noun}s`) => `${count.toLocaleString("en-US")} ${count === 1 ? noun : nouns}`;
 
@@ -182,7 +153,9 @@ const loadProject = (path: string) =>
 
 const replay = (options: SoakCommandOptions, file: string, report?: (reply: SoakReply, repro?: string) => Effect.Effect<void>) => Effect.gen(function*() {
   const project = yield* loadProject(options.project);
-  const repro = yield* Effect.try({ try: () => readSoakRepro(readFileSync(file, "utf8")), catch: (cause) => new SoakFailure({ problem: `reading ${file}`, cause }) });
+  const fs = yield* FileSystem.FileSystem;
+  const text = yield* fs.readFileString(file).pipe(Effect.mapError((cause) => new SoakFailure({ problem: `reading ${file}`, cause })));
+  const repro = yield* Effect.try({ try: () => readSoakRepro(text), catch: (cause) => new SoakFailure({ problem: `reading ${file}`, cause }) });
   if (repro.project !== project.name) return yield* new SoakFailure({ problem: `${file} is a repro of ${repro.project}'s soak, not ${project.name}'s` });
   const game = yield* Effect.tryPromise({
     try: () => loadSoakGame(project.game),
@@ -246,7 +219,9 @@ export const makeSoak = (options: SoakCommandOptions): Command => (allArgs) => E
       && run.policies.every((policy) => match.policies.includes(policy));
     const plan = yield* Effect.try({ try: () => planSoak(project.roster, run.matches, run.seed, project.frames, keep), catch: (cause) => new UsageFailure({ problem: describeCause(cause) }) });
     const out = run.out ?? join(options.out, new Date().toISOString().replaceAll(":", "-").replace(/\.\d+Z$/, ""));
-    yield* Effect.try({ try: () => mkdirSync(out, { recursive: true }), catch: (cause) => new SoakFailure({ problem: `creating ${out}`, cause }) });
+    const fs = yield* FileSystem.FileSystem;
+    const write = (path: string, text: string) => fs.writeFileString(path, text).pipe(Effect.mapError((cause) => new SoakFailure({ problem: `writing ${path}`, cause })));
+    yield* fs.makeDirectory(out, { recursive: true }).pipe(Effect.mapError((cause) => new SoakFailure({ problem: `creating ${out}`, cause })));
     const workers = Math.min(run.workers, plan.length);
     if (!json) yield* Console.log(`${project.name} soak: ${plural(plan.length, "match", "matches")} in ${plural(workers, "worker")}, at most ${run.minutes} min, seed ${run.seed}; repro files in ${out}`);
     const deadline = performance.now() + run.minutes * 60_000;
@@ -268,19 +243,17 @@ export const makeSoak = (options: SoakCommandOptions): Command => (allArgs) => E
       const written = reply.inputs === undefined ? undefined : path;
       if (reply.inputs !== undefined) {
         const repro = soakRepro(project.name, { ...reply, inputs: reply.inputs });
-        yield* Effect.try({ try: () => {
-          writeFileSync(path, `${JSON.stringify(repro)}\n`);
-          if (shrinkingGame !== undefined) writeFileSync(join(out, `match-${reply.match.index}.original.json`), `${JSON.stringify(repro)}\n`);
-        }, catch: (cause) => new SoakFailure({ problem: `writing ${path}`, cause }) }).pipe(Effect.orDie);
+        yield* write(path, `${JSON.stringify(repro)}\n`).pipe(Effect.orDie);
+        if (shrinkingGame !== undefined) yield* write(join(out, `match-${reply.match.index}.original.json`), `${JSON.stringify(repro)}\n`).pipe(Effect.orDie);
         if (shrinkingGame !== undefined) {
           const shrunk = yield* Effect.try({ try: () => shrinkSoakRepro(project, shrinkingGame, repro), catch: cause => new SoakFailure({ problem: `shrinking ${path}`, cause }) });
-          yield* Effect.try({ try: () => writeFileSync(path, `${JSON.stringify(shrunk.repro)}\n`), catch: cause => new SoakFailure({ problem: `writing ${path}`, cause }) });
+          yield* write(path, `${JSON.stringify(shrunk.repro)}\n`);
           if (!json) yield* Console.log(`shrank ${path}: ${shrunk.before} -> ${shrunk.after} inputs in ${(shrunk.elapsedMs / 1000).toFixed(3)} s`);
         }
       }
       const moments = (reply.repros ?? []).map(([slot, lines]) => [join(out, `match-${reply.match.index}-p${slot}.txt`), lines] as const);
       for (const [file, lines] of moments) {
-        yield* Effect.try({ try: () => writeFileSync(file, writtenPreloadFile(lines)), catch: (cause) => new SoakFailure({ problem: `writing ${file}`, cause }) }).pipe(Effect.orDie);
+        yield* write(file, writtenPreloadFile(lines)).pipe(Effect.orDie);
       }
       if (json) yield* jsonReply(reply, written);
       else yield* Console.log([...findingLines(reply, written), ...moments.map(([file]) => `  moment: ${file} (wisp repro)`)].join("\n"));
@@ -326,5 +299,5 @@ export const makeSoak = (options: SoakCommandOptions): Command => (allArgs) => E
       yield* emitJson("soak", { type: "failure", kind: "error", frame: null, client: null, message: describeCause(Cause.squash(exit.cause)) });
     }
     yield* emitJson("soak", { type: "summary", ok: Exit.isSuccess(exit), counts: { results, failures }, elapsedMs: performance.now() - startedAt });
-  })));
+  })), Effect.provide(BunServices.layer));
 });

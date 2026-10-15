@@ -1,85 +1,17 @@
-import { Effect, Schema } from "effect";
-import { runPlatformSync } from "../platform/layer";
-import { ResourceAccounting } from "../platform/services";
 import type { ClientFiles, HeadlessClient, MapEntry } from "../../src/headless/client";
 import type { Lockstep } from "../../src/headless/lockstep";
+import { Random } from "../../src/headless/random";
 import { sceneFile } from "../../src/runtime/scene";
 import type { HeadlessMap, HeadlessRuntime } from "./headless";
 import type { TypedInput } from "./headlessInput";
-import { Random } from "../../src/headless/random";
 import { type SceneBody, type SceneExpectations, bodyProblems, readSceneLines, sceneProblems } from "./scene";
 import { type NativeCostModel, WARCRAFT_COST, nativeFrameCost } from "../../src/headless/nativeCost";
 import { MEASURED_BATTLE_NET, syncDelivery } from "../../src/headless/syncChannel";
 import { describeStack } from "./command";
 import { FRAME_MS } from "../../src/headless/frameRate";
-
-export interface SoakController {
-  readonly buttons: readonly string[];
-
-  readonly weights?: readonly number[];
-
-  readonly toggles?: readonly string[];
-  readonly axes: readonly string[];
-  readonly axisLimit: number;
-
-  readonly deadZone: number;
-}
-
-export type SoakEdge =
-  | { readonly button: number; readonly down: boolean }
-  | { readonly axis: number; readonly value: number };
-
-interface SoakInputFrame {
-
-  readonly edges: ReadonlyMap<number, readonly SoakEdge[]>;
-
-  readonly silences: ReadonlyMap<number, number>;
-
-  readonly hitchMs: number;
-
-  readonly typed: ReadonlyMap<number, readonly string[]>;
-
-  readonly files: ReadonlyMap<number, readonly (readonly [name: string, chunks: readonly string[]])[]>;
-}
-
-export interface SoakInputs {
-  readonly edges: readonly (readonly [frame: number, slot: number, edge: SoakEdge])[];
-  readonly silences: readonly (readonly [frame: number, slot: number, frames: number])[];
-  readonly hitches: readonly (readonly [frame: number, ms: number])[];
-
-  readonly slow: readonly (readonly [frame: number, ms: number])[];
-
-  readonly typed?: readonly (readonly [frame: number, slot: number, text: string])[];
-  readonly files?: readonly (readonly [frame: number, slot: number, name: string, chunks: readonly string[]])[];
-}
-
-interface FuzzOptions {
-
-  readonly rate: number;
-
-  readonly silence: number;
-
-  readonly hitch: number;
-}
-
-const SOAK_FUZZ: FuzzOptions = { rate: 1 / 8, silence: 1 / 3600, hitch: 1 / 2400 };
-
-export const FUZZ_POLICY = "fuzz";
-
-export interface SoakMatch {
-
-  readonly index: number;
-  readonly seed: number;
-
-  readonly fighters: readonly string[];
-  readonly stage: string;
-
-  readonly policies: readonly string[];
-
-  readonly frames: number;
-
-  readonly typed?: boolean;
-}
+import { type SoakClock, cpuMillis } from "./soak/clock";
+import { NO_EDGES, SOAK_FUZZ, fuzzedInputs, recordedInputs } from "./soak/inputs";
+import type { SoakController, SoakEdge, SoakInputFrame, SoakInputs, FuzzOptions, SoakMatch } from "./soak/types";
 
 export interface SoakRoster {
   readonly fighters: readonly string[];
@@ -101,206 +33,6 @@ export function planSoak(roster: SoakRoster, matches: number, seed: number, fram
   });
 }
 
-type Pattern = (readonly [delay: number, edge: SoakEdge])[];
-
-class Fuzzer {
-  private readonly held = new Set<number>();
-  private readonly axes: number[];
-  private readonly pending = new Map<number, SoakEdge[]>();
-  private readonly weights: readonly number[];
-  private readonly toggles: ReadonlySet<number>;
-
-  constructor(private readonly controller: SoakController, private readonly random: Random, private readonly rate: number) {
-    this.axes = controller.axes.map(() => 0);
-    this.toggles = new Set(controller.buttons.flatMap((name, index) => (controller.toggles?.includes(name) ? [index] : [])));
-    this.weights = controller.buttons.map((_, index) => (this.toggles.has(index) ? 0 : controller.weights?.[index] ?? 1));
-  }
-
-  private button(): number {
-    const total = this.weights.reduce((sum, weight) => sum + weight, 0);
-    let draw = this.random.next() * total;
-    for (let index = 0; index < this.weights.length; index++) {
-      draw -= this.weights[index] ?? 0;
-      if (draw <= 0 && (this.weights[index] ?? 0) > 0) return index;
-    }
-    return this.weights.findLastIndex((weight) => weight > 0);
-  }
-
-  private pattern(): Pattern {
-    const { random, controller } = this;
-    const limit = controller.axisLimit;
-    const axis = () => random.between(0, controller.axes.length - 1);
-    const rim = () => (random.chance(0.5) ? limit : -limit);
-    const choice = random.between(0, this.toggles.size > 0 ? 9 : 8);
-    if (!this.weights.some((weight) => weight > 0) && (choice < 4 || choice === 7)) return [];
-    if (controller.axes.length === 0 && choice >= 4 && choice < 8) return [];
-    switch (choice) {
-      case 0: {
-        const button = this.button();
-        return [[0, { button, down: true }], [0, { button, down: false }]];
-      }
-      case 1: {
-        const button = this.button();
-        return [[0, { button, down: true }], [random.chance(0.5) ? random.between(1, 4) : random.between(5, 90), { button, down: false }]];
-      }
-      case 2: {
-        const buttons = [...new Set([this.button(), this.button(), this.button()])].slice(0, random.between(2, 3));
-        const hold = random.between(0, 30);
-        return [...buttons.map((button) => [0, { button, down: true }] as const), ...buttons.map((button) => [hold, { button, down: false }] as const)];
-      }
-      case 3: {
-        const button = this.button();
-        const period = random.between(1, 3);
-        return Array.from({ length: random.between(4, 20) }, (_, index) => [index * period, { button, down: index % 2 === 0 }] as const)
-          .concat([[20 * period, { button, down: false }]]);
-      }
-      case 4: {
-        const index = axis();
-        return [[0, { axis: index, value: rim() }], [random.between(1, 3), { axis: index, value: 0 }]];
-      }
-      case 5: {
-        const index = axis();
-        const steps = random.between(4, 30);
-        const from = rim();
-        return Array.from({ length: steps + 1 }, (_, step) => [step, { axis: index, value: Math.round(from - (2 * from * step) / steps) }] as const)
-          .concat([[steps + random.between(0, 20), { axis: index, value: 0 }]]);
-      }
-      case 6: {
-        const index = axis();
-        const reach = Math.max(1, 2 * controller.deadZone);
-        const frames = random.between(3, 30);
-        return Array.from({ length: frames }, (_, frame) => [frame, { axis: index, value: random.between(-reach, reach) }] as const)
-          .concat([[frames, { axis: index, value: 0 }]]);
-      }
-      case 7: {
-
-        const index = axis();
-        const button = this.button();
-        const hold = random.between(1, 12);
-        return [[0, { axis: index, value: rim() }], [0, { button, down: true }], [hold, { button, down: false }], [hold + random.between(0, 6), { axis: index, value: 0 }]];
-      }
-      case 8:
-        return [
-          ...[...this.held].map((button) => [0, { button, down: false }] as const),
-          ...this.axes.flatMap((value, index) => (value === 0 ? [] : [[0, { axis: index, value: 0 }] as const])),
-        ];
-      default: {
-        const button = random.pick([...this.toggles]);
-        const gap = random.between(10, 120);
-        return [[0, { button, down: true }], [1, { button, down: false }], [gap, { button, down: true }], [gap + 1, { button, down: false }]];
-      }
-    }
-  }
-
-  frame(frame: number): SoakEdge[] {
-    if (this.random.chance(this.rate)) {
-      for (const [delay, edge] of this.pattern()) {
-        const at = frame + delay;
-        const list = this.pending.get(at) ?? [];
-        list.push(edge);
-        this.pending.set(at, list);
-      }
-    }
-    const due = this.pending.get(frame) ?? [];
-    this.pending.delete(frame);
-    const edges: SoakEdge[] = [];
-    for (const edge of due) {
-      if ("button" in edge) {
-        if (edge.down === this.held.has(edge.button)) continue;
-        if (edge.down) this.held.add(edge.button);
-        else this.held.delete(edge.button);
-      } else {
-        if (this.axes[edge.axis] === edge.value) continue;
-        this.axes[edge.axis] = edge.value;
-      }
-      edges.push(edge);
-    }
-    return edges;
-  }
-}
-
-interface SoakInputSource {
-  frame(frame: number): SoakInputFrame;
-
-  slow(frame: number, measuredMs: number): number;
-
-  recorded(): SoakInputs;
-}
-
-const NO_EDGES: ReadonlyMap<number, readonly SoakEdge[]> = new Map();
-const NO_SILENCES: ReadonlyMap<number, number> = new Map();
-const NO_TYPING: ReadonlyMap<number, readonly string[]> = new Map();
-const NO_FILES: ReadonlyMap<number, readonly (readonly [string, readonly string[]])[]> = new Map();
-
-export function fuzzedInputs(match: SoakMatch, controller: SoakController, options: FuzzOptions = SOAK_FUZZ): SoakInputSource {
-  const timing = new Random(match.seed * 31 + 7);
-  const fuzzers = new Map<number, Fuzzer>();
-  match.policies.forEach((policy, slot) => {
-    if (policy === FUZZ_POLICY) fuzzers.set(slot, new Fuzzer(controller, new Random(match.seed * 131 + slot * 7919 + 1), options.rate));
-  });
-  const record: { edges: [number, number, SoakEdge][]; silences: [number, number, number][]; hitches: [number, number][]; slow: [number, number][] } = {
-    edges: [], silences: [], hitches: [], slow: [],
-  };
-  return {
-    frame: (frame) => {
-      const edges = new Map<number, readonly SoakEdge[]>();
-      const silences = new Map<number, number>();
-      for (const [slot, fuzzer] of fuzzers) {
-        const changes = fuzzer.frame(frame);
-        if (changes.length > 0) edges.set(slot, changes);
-        for (const edge of changes) record.edges.push([frame, slot, edge]);
-        if (timing.chance(options.silence)) {
-          const frames = timing.between(15, 180);
-          silences.set(slot, frames);
-          record.silences.push([frame, slot, frames]);
-        }
-      }
-      let hitchMs = 0;
-      if (fuzzers.size > 0 && timing.chance(options.hitch)) {
-        hitchMs = timing.between(100, 2000);
-        record.hitches.push([frame, hitchMs]);
-      }
-      return { edges: edges.size > 0 ? edges : NO_EDGES, silences: silences.size > 0 ? silences : NO_SILENCES, hitchMs, typed: NO_TYPING, files: NO_FILES };
-    },
-    slow: (frame, measuredMs) => {
-      if (measuredMs > 0) record.slow.push([frame, measuredMs]);
-      return measuredMs;
-    },
-    recorded: () => record,
-  };
-}
-
-function recordedInputs(inputs: SoakInputs): SoakInputSource {
-  const edges = new Map<number, Map<number, SoakEdge[]>>();
-  for (const [frame, slot, edge] of inputs.edges) {
-    const slots = edges.get(frame) ?? new Map<number, SoakEdge[]>();
-    slots.set(slot, [...(slots.get(slot) ?? []), edge]);
-    edges.set(frame, slots);
-  }
-  const silences = new Map<number, Map<number, number>>();
-  for (const [frame, slot, frames] of inputs.silences) silences.set(frame, (silences.get(frame) ?? new Map<number, number>()).set(slot, frames));
-  const hitches = new Map(inputs.hitches.map(([frame, ms]) => [frame, ms]));
-  const slow = new Map(inputs.slow.map(([frame, ms]) => [frame, ms]));
-  const bySlot = <T>(entries: readonly (readonly [frame: number, slot: number, item: T])[]) => {
-    const frames = new Map<number, Map<number, T[]>>();
-    for (const [frame, slot, item] of entries) {
-      const slots = frames.get(frame) ?? new Map<number, T[]>();
-      slots.set(slot, [...(slots.get(slot) ?? []), item]);
-      frames.set(frame, slots);
-    }
-    return frames;
-  };
-  const typed = bySlot(inputs.typed ?? []);
-  const files = bySlot((inputs.files ?? []).map(([frame, slot, name, chunks]) => [frame, slot, [name, chunks] as const] as const));
-  return {
-    frame: (frame) => ({
-      edges: edges.get(frame) ?? NO_EDGES, silences: silences.get(frame) ?? NO_SILENCES, hitchMs: hitches.get(frame) ?? 0,
-      typed: typed.get(frame) ?? NO_TYPING, files: files.get(frame) ?? NO_FILES,
-    }),
-    slow: (frame) => slow.get(frame) ?? 0,
-    recorded: () => inputs,
-  };
-}
 
 interface SoakStep {
 
@@ -423,10 +155,6 @@ export interface SoakResult {
 
   readonly repros?: readonly (readonly [slot: number, lines: readonly string[]])[];
 }
-
-let threadClock: (() => number) | undefined;
-
-export const cpuMillis = (): number => (threadClock ??= runPlatformSync(ResourceAccounting.use((accounting) => Effect.succeed(accounting.threadCpuMillis))))();
 
 const shape = (text: string) => text.replace(/\d+(\.\d+)?/g, "#");
 
@@ -692,6 +420,8 @@ export interface SoakSetup {
   readonly fuzz?: Partial<FuzzOptions>;
 
   readonly cost?: NativeCostModel;
+
+  readonly clock?: SoakClock;
 }
 
 let framesPlayed = 0;
@@ -716,7 +446,7 @@ export function playSoakMatch(runtime: HeadlessRuntime, game: SoakGame, setup: S
 function playOnce(runtime: HeadlessRuntime, game: SoakGame, setup: SoakSetup, match: SoakMatch, inputs?: SoakInputs): Played {
   const limits = { ...SOAK_LIMITS, ...setup.limits };
   const source = inputs === undefined ? fuzzedInputs(match, setup.controller, { ...SOAK_FUZZ, ...setup.fuzz }) : recordedInputs(inputs);
-  const clients = runtime.clients(game.entry, setup.players ?? [0, 1], { delivery: syncDelivery(MEASURED_BATTLE_NET, match.seed), keepCalls: 64, cost: cpuMillis });
+  const clients = runtime.clients(game.entry, setup.players ?? [0, 1], { delivery: syncDelivery(MEASURED_BATTLE_NET, match.seed), keepCalls: 64, cost: setup.clock ?? cpuMillis });
   const model = setup.cost ?? WARCRAFT_COST;
 
   let calls: number[] = [];
@@ -813,83 +543,6 @@ export function helperRecorder(frame: () => number) {
   };
 }
 
-export interface SoakRepro {
-  readonly format: "wisp-soak-repro";
-  readonly version: 1;
-
-  readonly project: string;
-  readonly match: SoakMatch;
-  readonly findings: readonly SoakFinding[];
-  readonly checksums: readonly string[];
-  readonly inputs: SoakInputs;
-}
-
-export const soakRepro = (project: string, result: SoakResult): SoakRepro => ({
-  format: "wisp-soak-repro",
-  version: 1,
-  project,
-  match: result.match,
-  findings: result.findings,
-  checksums: result.checksums,
-  inputs: result.inputs,
-});
-
-const Whole = Schema.Int;
-const MatchSchema = Schema.Struct({
-  index: Whole, seed: Whole, fighters: Schema.Array(Schema.String), stage: Schema.String, policies: Schema.Array(Schema.String), frames: Whole,
-  typed: Schema.optionalKey(Schema.Boolean),
-});
-const FindingSchema = Schema.Struct({
-  kind: Schema.Literals(["stall", "desync", "error", "scene", "invisible", "cost", "typing", "catch-up", "unfinished", "crash", "game"]),
-  frame: Whole,
-  slot: Schema.optionalKey(Whole),
-  text: Schema.String,
-});
-const InputsSchema = Schema.Struct({
-  edges: Schema.Array(Schema.Tuple([Whole, Whole, Schema.Union([
-    Schema.Struct({ button: Whole, down: Schema.Boolean }),
-    Schema.Struct({ axis: Whole, value: Whole }),
-  ])])),
-  silences: Schema.Array(Schema.Tuple([Whole, Whole, Whole])),
-  hitches: Schema.Array(Schema.Tuple([Whole, Whole])),
-  slow: Schema.Array(Schema.Tuple([Whole, Schema.Finite])),
-  typed: Schema.optionalKey(Schema.Array(Schema.Tuple([Whole, Whole, Schema.String]))),
-  files: Schema.optionalKey(Schema.Array(Schema.Tuple([Whole, Whole, Schema.String, Schema.Array(Schema.String)]))),
-});
-const ReproFile = Schema.fromJsonString(Schema.Struct({
-  format: Schema.Literal("wisp-soak-repro"),
-  version: Schema.Literal(1),
-  project: Schema.String,
-  match: MatchSchema,
-  findings: Schema.Array(FindingSchema),
-  checksums: Schema.Array(Schema.String),
-  inputs: InputsSchema,
-}));
-
-export const readSoakRepro = (text: string): SoakRepro => Schema.decodeSync(ReproFile)(text);
-
-export const readSoakMatch = (line: string): SoakMatch => Schema.decodeSync(Schema.fromJsonString(MatchSchema))(line);
-
-export interface SoakReply extends Omit<SoakResult, "inputs"> {
-  readonly inputs?: SoakInputs;
-}
-
-const ReplySchema = Schema.fromJsonString(Schema.Struct({
-  match: MatchSchema,
-  frames: Whole,
-  wallMs: Schema.Finite,
-  costMs: Schema.Finite,
-  worstFrameMs: Schema.Finite,
-  typingStallsMs: Schema.Array(Schema.Finite),
-  over: Schema.Boolean,
-  findings: Schema.Array(FindingSchema),
-  checksums: Schema.Array(Schema.String),
-  inputs: Schema.optionalKey(InputsSchema),
-  repros: Schema.optionalKey(Schema.Array(Schema.Tuple([Whole, Schema.Array(Schema.String)]))),
-}));
-
-export const soakReply = ({ inputs, ...result }: SoakResult): SoakReply => (result.findings.length > 0 ? { ...result, inputs } : result);
-export const readSoakReply = (line: string): SoakReply => Schema.decodeSync(ReplySchema)(line);
 
 export const describeMatch = ({ index, fighters, stage, policies, seed }: SoakMatch) =>
   `match ${index}: ${fighters.join(" vs ")} on ${stage}, ${policies.join("/")}, seed ${seed}`;
@@ -906,28 +559,9 @@ export interface SoakProject extends SoakSetup {
   readonly matches: number;
 }
 
-const PROJECT = Symbol.for("wisp.soak.project");
-const GAME = Symbol.for("wisp.soak.game");
+export const SOAK_PROJECT = Symbol.for("wisp.soak.project");
+export const SOAK_GAME = Symbol.for("wisp.soak.game");
 
-export const defineSoak = (project: SoakProject): SoakProject => Object.assign({ [PROJECT]: true }, project);
-export const defineSoakGame = (game: SoakGame): SoakGame => Object.assign({ [GAME]: true }, { entry: game.entry, begin: (clients: Lockstep, match: SoakMatch) => game.begin(clients, match) });
+export const defineSoak = (project: SoakProject): SoakProject => Object.assign({ [SOAK_PROJECT]: true }, project);
+export const defineSoakGame = (game: SoakGame): SoakGame => Object.assign({ [SOAK_GAME]: true }, { entry: game.entry, begin: (clients: Lockstep, match: SoakMatch) => game.begin(clients, match) });
 
-const isSoakProject = (value: unknown): value is SoakProject => typeof value === "object" && value !== null && PROJECT in value;
-const isSoakGame = (value: unknown): value is SoakGame => typeof value === "object" && value !== null && GAME in value;
-
-async function defaultExport(path: string): Promise<unknown> {
-  const module: unknown = await import(path);
-  return typeof module === "object" && module !== null && "default" in module ? module.default : undefined;
-}
-
-export async function loadSoakProject(path: string): Promise<SoakProject> {
-  const value = await defaultExport(path);
-  if (!isSoakProject(value)) throw new Error(`${path} exports no defineSoak() declaration as its default`);
-  return value;
-}
-
-export async function loadSoakGame(path: string): Promise<SoakGame> {
-  const value = await defaultExport(path);
-  if (!isSoakGame(value)) throw new Error(`${path} exports no defineSoakGame() setup as its default`);
-  return value;
-}

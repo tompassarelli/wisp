@@ -1,5 +1,7 @@
 import { installHeadless } from "./headless";
-import { type SoakGame, type SoakInputs, type SoakProject, type SoakRepro, playSoakMatch, soakRepro } from "./soak";
+import { type SoakGame, type SoakProject, playSoakMatch } from "./soak";
+import type { SoakInputs } from "./soak/types";
+import { type SoakRepro, soakRepro } from "./soak/file";
 
 const INPUTS = ["edges", "silences", "hitches", "slow", "typed", "files"] as const;
 
