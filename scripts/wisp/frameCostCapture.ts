@@ -1,7 +1,7 @@
 import { MAX_FRAME_COST_CAPTURE } from "../../src/runtime/frameCostCapture";
 import { preloadLines } from "./preloadRecord";
 
-export interface FrameCostSample {
+interface FrameCostSample {
   readonly luaUs: number;
   readonly natives: number;
   readonly catchUp: number;

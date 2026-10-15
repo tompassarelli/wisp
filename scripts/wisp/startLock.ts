@@ -6,7 +6,7 @@ import { PlayProblem } from "./play";
 
 export const startLockPath = () => join(stateHome(), "wisp/online/client-start.lock");
 
-export const START_LOCK_SECONDS = 300;
+const START_LOCK_SECONDS = 300;
 
 export interface StartLockOptions {
   readonly path: string;

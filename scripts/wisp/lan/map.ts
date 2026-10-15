@@ -9,7 +9,7 @@ import { decodeMapInfo } from "../../mapInfo";
 import { crc32 } from "./w3gs";
 
 /** Flo's checksum step: XOR a little-endian word (or, at the end, a byte) in, then rotate left 3. */
-export function xoroUpdate(start: number, bytes: Uint8Array): number {
+function xoroUpdate(start: number, bytes: Uint8Array): number {
   let value = start >>> 0;
   const words = bytes.length - (bytes.length % 4);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -19,12 +19,12 @@ export function xoroUpdate(start: number, bytes: Uint8Array): number {
   return value;
 }
 
-export const SCRIPT_ENTRIES = ["war3map.j", "scripts\\war3map.j", "war3map.lua", "scripts\\war3map.lua"] as const;
+const SCRIPT_ENTRIES = ["war3map.j", "scripts\\war3map.j", "war3map.lua", "scripts\\war3map.lua"] as const;
 // The checked rollback checksum folds war3map.w3l after war3map.w3q (wc3-slop-lan docs/protocol.md, 'The map check').
 
-export const CHECKED_ENTRIES = ["war3map.w3e", "war3map.wpm", "war3map.doo", "war3map.w3u", "war3map.w3b", "war3map.w3d", "war3map.w3a", "war3map.w3q", "war3map.w3l"] as const;
+const CHECKED_ENTRIES = ["war3map.w3e", "war3map.wpm", "war3map.doo", "war3map.w3u", "war3map.w3b", "war3map.w3d", "war3map.w3a", "war3map.w3q", "war3map.w3l"] as const;
 
-export function mapXoro(entry: (name: string) => Uint8Array | undefined): number {
+function mapXoro(entry: (name: string) => Uint8Array | undefined): number {
   const script = SCRIPT_ENTRIES.map(entry).find((bytes) => bytes !== undefined);
   if (script === undefined) throw new Error("the map has no war3map.j or war3map.lua");
   let value = xoroUpdate(0, script);
@@ -38,7 +38,7 @@ export function mapXoro(entry: (name: string) => Uint8Array | undefined): number
   return value;
 }
 
-export interface MapPlayer {
+interface MapPlayer {
   readonly id: number;
 
   readonly controller: number;
@@ -64,14 +64,14 @@ export interface MapFacts {
 const USE_CUSTOM_FORCES = 0x40;
 const FIXED_PLAYER_SETTINGS = 0x20;
 
-export function pathInGame(file: string): string {
+function pathInGame(file: string): string {
   const parts = file.split(sep).filter((part) => part !== "");
   const maps = parts.findLastIndex((part) => part.toLowerCase() === "maps");
   if (maps < 0) throw new Error(`${file} is not under a Maps folder`);
   return ["Maps", ...parts.slice(maps + 1)].join("\\");
 }
 
-export function mapFactsFrom(file: Uint8Array, path: string, entry: (name: string) => Uint8Array | undefined): MapFacts {
+function mapFactsFrom(file: Uint8Array, path: string, entry: (name: string) => Uint8Array | undefined): MapFacts {
   const w3i = entry("war3map.w3i");
   if (w3i === undefined) throw new Error("the map has no war3map.w3i");
   const info = decodeMapInfo(w3i);

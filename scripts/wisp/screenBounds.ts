@@ -21,7 +21,7 @@ export function boundsModel(data: model.Model): BoundsModel {
 /** Pixels, origin at the top left, y down. */
 export interface PixelBox { readonly left: number; readonly top: number; readonly right: number; readonly bottom: number }
 
-export interface GeosetBounds {
+interface GeosetBounds {
   readonly index: number;
   readonly alpha: number;
   /** The first material layer's filter mode (war3-model's FilterMode: 0 None, 1 Transparent, 2 Blend, 3 Additive, ...). */
@@ -29,7 +29,7 @@ export interface GeosetBounds {
   readonly drawn: boolean;
 }
 
-export interface NodeBounds {
+interface NodeBounds {
   readonly id: number;
   readonly name: string;
   /** Box of the drawn vertices this node weights most; undefined when it weights none in front of the eye. */
@@ -99,7 +99,7 @@ interface PosedMesh {
 }
 
 /** Without the install's team-glow texture: the renderer's team glow (ReplaceableId 2) is black from this distance to the texture's centre, in texture coordinates. */
-export const GLOW_RADIUS = 1 / 2.8;
+const GLOW_RADIUS = 1 / 2.8;
 const ADDITIVE = new Set([3, 4]);
 const GLOW_SAMPLES = 256;
 
@@ -228,7 +228,7 @@ function frontFacing(polygon: readonly (readonly number[])[]): boolean {
 }
 
 /** The smallest alpha an alpha-keyed (Transparent) layer draws, as the renderer discards below it. */
-export const ALPHA_KEY = 0.75;
+const ALPHA_KEY = 0.75;
 
 /**
  * Whether a texel (RGBA from 0 to 1) of a layer with `filter` and `opacity` changes the screen by more than the silhouette
@@ -278,7 +278,7 @@ function sample(layer: TexelLayer, u: number, v: number, out: Float64Array): voi
   for (let k = 0; k < 4; k++) out[k] = (((data[a + k] ?? 0) * (1 - fx) + (data[b + k] ?? 0) * fx) * (1 - fy) + ((data[c + k] ?? 0) * (1 - fx) + (data[d + k] ?? 0) * fx) * fy) / 255;
 }
 
-export function poseBounds(pose: DrawnPose, found: BoundsModel, view: ReturnType<typeof camera>, width: number, height: number, farCulled = false, textures?: BoundsTextures): ModelBounds {
+function poseBounds(pose: DrawnPose, found: BoundsModel, view: ReturnType<typeof camera>, width: number, height: number, farCulled = false, textures?: BoundsTextures): ModelBounds {
   const { sampler, geosets, drawn } = posedMesh(pose, found, view);
   const m = multiply(multiply(view.projection, view.view), transform(pose));
   const nodes = sampler.rendererData.nodes, near = view.near, far = view.far;
@@ -381,7 +381,7 @@ export interface Portrait {
   readonly parts: Readonly<Record<string, readonly string[]>>;
 }
 
-export interface PartInFrame {
+interface PartInFrame {
   /** Screen pixels inside the frame whose nearest surface belongs to the part. */
   readonly pixels: number;
   /** Pixel edges of those pixels; undefined when there are none. */

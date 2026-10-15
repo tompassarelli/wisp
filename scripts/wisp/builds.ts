@@ -12,11 +12,11 @@ const Profile = Schema.Struct({
   quirks: Schema.Array(Schema.Struct({ description: Schema.String, issue: Schema.String })),
 });
 export type BuildProfile = typeof Profile.Type;
-export const BUILD_PROFILES = [rollback, patch].map((profile) => Schema.decodeUnknownSync(Profile)(profile));
+const BUILD_PROFILES = [rollback, patch].map((profile) => Schema.decodeUnknownSync(Profile)(profile));
 export const DEFAULT_BUILD = "3.0.0.24268";
-export const BUILD_CAPABILITIES = ["lanPool", "privateLanSwitch", "menuDriving", "classic", "definitive"] as const;
+const BUILD_CAPABILITIES = ["lanPool", "privateLanSwitch", "menuDriving", "classic", "definitive"] as const;
 export type BuildCapability = typeof BUILD_CAPABILITIES[number];
-export const BUILD_COMMANDS = {
+const BUILD_COMMANDS = {
   "lan pool": "lanPool", "lan fresh": "privateLanSwitch", "lan dummy": "lanPool",
   "lan solo": "menuDriving", "menus host": "menuDriving", "menus join": "menuDriving",
   "menus start": "menuDriving", "play": "menuDriving",
@@ -27,7 +27,7 @@ export class BuildFailure extends Schema.TaggedError<BuildFailure>()("BuildFailu
 }
 export const profileFor = (id: string) => BUILD_PROFILES.find((profile) => profile.id === id);
 
-export function capabilityProblem(id: string, capability: BuildCapability): string | undefined {
+function capabilityProblem(id: string, capability: BuildCapability): string | undefined {
   const entry = profileFor(id)?.capabilities[capability];
   if (entry === undefined || entry.status === "unchecked") return `${capability} missing for ${id}; run client doctor to check this build (wisp#100)`;
   if (entry.status === "unsupported") return `${capability} not supported on ${id} (${entry.issue})`;

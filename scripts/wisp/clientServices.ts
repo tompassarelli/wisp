@@ -11,13 +11,13 @@ export const desktopUnit = (name: string) => `wisp-desktop-${name}.service`;
 
 export const clientUnit = (name: string) => `wisp-client-${name}.service`;
 
-export const desktopLog = (name: string) => join(stateHome(), "wisp/desktops", `${name}.log`);
+const desktopLog = (name: string) => join(stateHome(), "wisp/desktops", `${name}.log`);
 
-export const DESKTOP_RESOLUTION = "1920x1080";
+const DESKTOP_RESOLUTION = "1920x1080";
 
 const problem = (failure: PlatformError) => new ServiceProblem({ problem: failure._tag === "PlatformFailure" ? failure.problem : failure.message });
 
-export const startService = (unit: string, command: readonly string[], log?: string) =>
+const startService = (unit: string, command: readonly string[], log?: string) =>
   BackgroundServices.use((services) => services.start(unit, command, log)).pipe(Effect.mapError(problem));
 
 export const serviceState = (unit: string) => BackgroundServices.use((services) => services.state(unit)).pipe(Effect.mapError(problem));

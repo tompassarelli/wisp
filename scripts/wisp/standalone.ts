@@ -45,7 +45,7 @@ export interface StandaloneGame {
   };
 }
 
-export type StandaloneNet = { readonly host: { readonly port: number } } | { readonly join: string };
+type StandaloneNet = { readonly host: { readonly port: number } } | { readonly join: string };
 
 export interface StandaloneOptions {
   readonly script?: string;
@@ -58,14 +58,14 @@ export interface StandaloneOptions {
   readonly net?: StandaloneNet;
 }
 
-export class MapMismatch extends Schema.TaggedError<MapMismatch>()("MapMismatch", { code: Schema.String, here: Schema.String }) {
+class MapMismatch extends Schema.TaggedError<MapMismatch>()("MapMismatch", { code: Schema.String, here: Schema.String }) {
   override get message(): string {
     return `the join code is for map ${this.code}, this build is map ${this.here.slice(0, CODE_HASH_DIGITS)}; both players need the same build`;
   }
 }
 
 /** This machine's IPv4 addresses other players can reach, LAN ones first. */
-export function reachableAddresses(): string[] {
+function reachableAddresses(): string[] {
   return Object.values(networkInterfaces()).flatMap((entries) => entries ?? [])
     .filter((entry) => entry.family === "IPv4" && !entry.internal).map((entry) => entry.address);
 }

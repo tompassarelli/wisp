@@ -31,7 +31,7 @@ export class PlayerViewFailure extends Schema.TaggedError<PlayerViewFailure>()("
   }
 }
 
-export class FrameFileFailure extends Schema.TaggedError<FrameFileFailure>()("FrameFileFailure", {
+class FrameFileFailure extends Schema.TaggedError<FrameFileFailure>()("FrameFileFailure", {
   operation: Schema.String,
   path: Schema.String,
   cause: Schema.Unknown,
@@ -41,7 +41,7 @@ export class FrameFileFailure extends Schema.TaggedError<FrameFileFailure>()("Fr
   }
 }
 
-export const writeFrame = (path: string, frame: Frame) =>
+const writeFrame = (path: string, frame: Frame) =>
   Effect.tryPromise({
     try: async () => {
       await mkdir(dirname(path), { recursive: true });

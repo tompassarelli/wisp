@@ -13,7 +13,7 @@ export function writtenPreloadFile(lines: readonly string[]): string {
 
 const TOOLTIP = /^\s*call BlzSetAbilityTooltip\('\$wsl', "(.*)", (\d+)\)\s*$/gm;
 
-export function fileIoChunks(text: string): string[] {
+function fileIoChunks(text: string): string[] {
   const chunks: string[] = [];
   for (const [, chunk = "", level = "0"] of text.matchAll(TOOLTIP)) chunks[Number(level)] = chunk;
   return Array.from(chunks, (chunk) => chunk ?? "");

@@ -5,6 +5,22 @@
   "license": "MIT",
   "type": "module",
   "packageManager": "bun@1.3.13",
+  "exports": {
+    "./src/sim/*": "./src/sim/*.ts",
+    "./src/runtime/*": "./src/runtime/*.ts",
+    "./src/platform/*": "./src/platform/*.ts",
+    "./src/headless/*": "./src/headless/*.ts",
+    "./src/natives/warcraft.d.ts": "./src/natives/warcraft.d.ts",
+    "./scripts/wisp/*": "./scripts/wisp/*.ts",
+    "./scripts/platform/*": "./scripts/platform/*.ts",
+    "./scripts/warcraft/*": "./scripts/warcraft/*.ts",
+    "./scripts/cleanRoom": "./scripts/cleanRoom.ts",
+    "./scripts/compiler": "./scripts/compiler.ts",
+    "./scripts/mapInfo": "./scripts/mapInfo.ts",
+    "./scripts/objectData": "./scripts/objectData.ts",
+    "./plugins/number-rules-service.cjs": "./plugins/number-rules-service.cjs",
+    "./vendor/war3-model.mjs": "./vendor/war3-model.mjs"
+  },
   "scripts": {
     "postinstall": "bun node_modules/@effect/tsgo/dist/effect-tsgo.cjs patch --typescript --typescript-package typescript-native",
     "check": "bun node_modules/typescript-native/bin/tsc --build tsconfig.json tsconfig.browser.json tsconfig.game.json examples/sample/tsconfig.json examples/sample/tsconfig.map.json examples/sample/tsconfig.tests.json examples/sample/tsconfig.headless.json --noEmit && bun scripts/numberRules.ts tsconfig.game.json examples/sample/tsconfig.map.json examples/sample/tsconfig.tests.json examples/sample/tsconfig.headless.json",

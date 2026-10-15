@@ -35,7 +35,7 @@ const runOnce = (argv: readonly string[], inherit: boolean, cwd: string | undefi
   }),
 );
 
-export const RATE_LIMITED = /rate limit|HTTP 429|abuse detection/i;
+const RATE_LIMITED = /rate limit|HTTP 429|abuse detection/i;
 
 export const run = (argv: readonly string[], inherit = false, cwd?: string) => argv[0] !== "gh" ? runOnce(argv, inherit, cwd) : runOnce(argv, inherit, cwd).pipe(
   Effect.tapError((failure) => RATE_LIMITED.test(failure.message) ? Effect.sync(() => console.error(`GitHub is rate-limiting requests; retrying ${argv.slice(0, 3).join(" ")} with backoff`)) : Effect.void),
@@ -87,7 +87,7 @@ const ScratchPages = Schema.Array(Schema.Struct({ data: Schema.Struct({ reposito
 }) }) }) }));
 const ActivePages = Schema.Array(Schema.Struct({ workflow_runs: Schema.Array(Schema.Struct({ head_branch: Schema.NullOr(Schema.String), head_sha: Schema.String, display_title: Schema.String })) }));
 
-export const sweepScratch = (repo: string) => Effect.gen(function*() {
+const sweepScratch = (repo: string) => Effect.gen(function*() {
   const [owner, name] = repo.split("/");
   const query = `query($owner:String!,$name:String!,$endCursor:String){repository(owner:$owner,name:$name){refs(refPrefix:"refs/heads/farm/",first:100,after:$endCursor){nodes{name target{oid ... on Commit{committedDate}}}pageInfo{hasNextPage endCursor}}}}`;
   const pages = yield* decoded(ScratchPages, yield* run(["gh", "api", "graphql", "--paginate", "--slurp", "-f", `query=${query}`, "-f", `owner=${owner}`, "-f", `name=${name}`]));
@@ -122,7 +122,7 @@ export const dispatch = (repo: string, workflow: string, inputs: Readonly<Record
   return yield* new FarmFailure({ problem: `no ${workflow} run named ${inputs.tag} appeared within two minutes` });
 });
 
-export const activeRun = (repo: string, workflow: string, prefix: string) => Effect.gen(function*() {
+const activeRun = (repo: string, workflow: string, prefix: string) => Effect.gen(function*() {
   for (const status of ["in_progress", "queued"]) {
     const listed = yield* run(["gh", "run", "list", "-R", repo, "--workflow", workflow, "--status", status, "-L", "50", "--json", "databaseId,displayTitle,url"]);
     const found = (yield* decoded(Runs, listed)).find((item) => item.displayTitle.startsWith(prefix));
@@ -136,7 +136,7 @@ export const activeRun = (repo: string, workflow: string, prefix: string) => Eff
 
 export const POLL = { first: 10, growth: 1.5, most: 60 } as const;
 
-export const nextPoll = (seconds: number, moved: boolean) => moved ? POLL.first : Math.min(POLL.most, Math.round(seconds * POLL.growth));
+const nextPoll = (seconds: number, moved: boolean) => moved ? POLL.first : Math.min(POLL.most, Math.round(seconds * POLL.growth));
 
 export const waitFor = (repo: string, id: number) => Effect.gen(function*() {
   let last = "";
@@ -154,13 +154,13 @@ export const waitFor = (repo: string, id: number) => Effect.gen(function*() {
   }
 });
 
-export const withArtifact = <A, E>(repo: string, id: number, name: string, use: (folder: string) => Effect.Effect<A, E>) => Effect.acquireUseRelease(
+const withArtifact = <A, E>(repo: string, id: number, name: string, use: (folder: string) => Effect.Effect<A, E>) => Effect.acquireUseRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), "wisp-farm-"))),
   (folder) => run(["gh", "run", "download", String(id), "-R", repo, "-n", name, "-D", folder]).pipe(Effect.andThen(use(folder))),
   (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
 );
 
-export function summaryLines(summary: Summary): { readonly lines: readonly string[]; readonly ok: boolean } {
+function summaryLines(summary: Summary): { readonly lines: readonly string[]; readonly ok: boolean } {
   const suite = (name: string, count: Summary["bun"]) => count.shards === 0 ? []
     : [`${name}: ${count.passed} passed, ${count.failed} failed, ${count.skipped} skipped (${count.shards} shards, slowest ${count.slowestShardSeconds.toFixed(0)} s of tests)`];
   return {

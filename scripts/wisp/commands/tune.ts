@@ -11,13 +11,13 @@ import { panelServer } from "../panelServer";
 import { type HotProject, waitForProcessStop } from "../hotReload";
 import { validateDataDirectories } from "./hot";
 
-export interface TuneProject extends HotProject {
+interface TuneProject extends HotProject {
 
   readonly root: string;
   readonly tunables: readonly Tunable[];
 }
 
-export const DEFAULT_TUNE_PORT = 7341;
+const DEFAULT_TUNE_PORT = 7341;
 
 const ApplyRequest = Schema.Struct({ name: Schema.String, value: Schema.Finite });
 const NameRequest = Schema.Struct({ name: Schema.String });

@@ -2,19 +2,19 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ArchiveEntry } from "./mapBuild";
 
-export const FRAME_TYPES = ["FRAME", "BACKDROP", "TEXT", "GLUETEXTBUTTON"] as const;
-export type FrameType = (typeof FRAME_TYPES)[number];
+const FRAME_TYPES = ["FRAME", "BACKDROP", "TEXT", "GLUETEXTBUTTON"] as const;
+type FrameType = (typeof FRAME_TYPES)[number];
 
-export const FRAME_POINTS = ["TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT"] as const;
-export type FramePoint = (typeof FRAME_POINTS)[number];
+const FRAME_POINTS = ["TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT"] as const;
+type FramePoint = (typeof FRAME_POINTS)[number];
 
-export const WARCRAFT_TEMPLATES = ["ScriptDialogButton", "EscMenuBackdrop"] as const;
+const WARCRAFT_TEMPLATES = ["ScriptDialogButton", "EscMenuBackdrop"] as const;
 const WARCRAFT_TEMPLATE_FDFS = new Map<string, string>([
   ["ScriptDialogButton", "UI\\FrameDef\\UI\\ScriptDialog.fdf"],
   ["EscMenuBackdrop", "UI\\FrameDef\\UI\\EscMenuTemplates.fdf"],
 ]);
 
-export interface FrameAnchor {
+interface FrameAnchor {
   readonly point: FramePoint;
 
   readonly relative?: string;
@@ -60,7 +60,7 @@ export interface FrameDefinition {
   readonly children: readonly FrameNode[];
 }
 
-export interface GeneratedFrames {
+interface GeneratedFrames {
 
   readonly fdfEntry: string;
   readonly tocEntry: string;
@@ -70,7 +70,7 @@ export interface GeneratedFrames {
   readonly bindings: string;
 }
 
-export class FrameDefinitionError extends Error {
+class FrameDefinitionError extends Error {
   constructor(readonly problems: readonly string[]) {
     super(`frame definition problems:\n${problems.map((problem) => `  ${problem}`).join("\n")}`);
   }
@@ -82,7 +82,7 @@ const RESERVED_KEYS = new Set(["root", "toc"]);
 const capitalize = (key: string) => key.charAt(0).toUpperCase() + key.slice(1);
 const flatten = (nodes: readonly FrameNode[]): FrameNode[] => nodes.flatMap((node) => [node, ...flatten(node.children ?? [])]);
 
-export function frameDefinitionProblems(definition: FrameDefinition): string[] {
+function frameDefinitionProblems(definition: FrameDefinition): string[] {
   const problems: string[] = [];
   if (!IDENTIFIER.test(definition.name)) problems.push(`definition name "${definition.name}" is not an identifier`);
   if (!FRAME_TYPES.includes(definition.type)) problems.push(`root: unknown frame type "${definition.type}"`);
@@ -193,7 +193,7 @@ function bindingsSource(definition: FrameDefinition, tocEntry: string): string {
   return lines.join("\n");
 }
 
-export function generateFrames(definition: FrameDefinition): GeneratedFrames {
+function generateFrames(definition: FrameDefinition): GeneratedFrames {
   const problems = frameDefinitionProblems(definition);
   if (problems.length > 0) throw new FrameDefinitionError(problems);
   const fdfEntry = `war3mapImported\\${definition.name}.fdf`;

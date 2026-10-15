@@ -105,7 +105,7 @@ export const loadClients = (path: string) =>
       }));
   });
 
-export interface TimedFrame {
+interface TimedFrame {
   readonly frame: Frame;
   readonly beforeNs: number;
   readonly afterNs: number;
@@ -177,7 +177,7 @@ export const frameWords = (client: Client, frame: Frame, ink: Ink) =>
 
 export const focus = (client: Client) => InputInjection.use((input) => input.focus(client, "Warcraft III", true));
 
-export const requireMatch = (client: Client, input: string) =>
+const requireMatch = (client: Client, input: string) =>
   Effect.gen(function*() {
     const provided = yield* Effect.serviceOption(ClientWatch);
     const view = yield* (provided._tag === "Some"
@@ -214,7 +214,7 @@ export const click = (client: Client, x: number, y: number) =>
     yield* pressAt(client, x, y);
   });
 
-export const focusWindow = (client: Client, title: string) => InputInjection.use((input) => input.focus(client, title, false));
+const focusWindow = (client: Client, title: string) => InputInjection.use((input) => input.focus(client, title, false));
 
 export const pressAt = (client: Client, x: number, y: number) => InputInjection.use((input) => input.pressAt(client, x, y));
 

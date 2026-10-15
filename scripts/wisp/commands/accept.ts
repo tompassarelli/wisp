@@ -7,7 +7,7 @@ import {
 import { type Command, type CommandFailure, UsageFailure, describeCause, flagValues } from "../command";
 import { emitJson } from "../jsonResults";
 
-export interface AcceptOptions {
+interface AcceptOptions {
   readonly suite: AcceptSuite;
 
   readonly evidenceRoot: string;
@@ -19,7 +19,7 @@ export interface AcceptOptions {
   readonly shards?: AcceptShards;
 }
 
-export interface AcceptShards {
+interface AcceptShards {
   readonly select: (args: readonly string[]) => Effect.Effect<readonly string[], CommandFailure>;
   readonly prepare?: (sessions: readonly PlannedSession[]) => Effect.Effect<void, CommandFailure>;
   readonly run: (shard: string, ids: readonly string[], directory: string) => Effect.Effect<void, CommandFailure>;

@@ -38,7 +38,7 @@ export function sunView(camera: ShadowCamera, toward: readonly number[]) {
 }
 
 export const POINT_FACE = 1024;
-export const POINT_NEAR = 5;
+const POINT_NEAR = 5;
 const FACES: readonly (readonly number[])[] = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
 
 export function pointFaces(far: number) {

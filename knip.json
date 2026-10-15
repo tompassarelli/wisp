@@ -1,0 +1,35 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "scripts/natives.ts",
+    "scripts/prePush.ts",
+    "vendor/war3-model.d.mts",
+    "test/**/*.ts",
+    "src/**/*.{test,tests}.ts",
+    "plugins/*.ts",
+    "examples/**/*.ts"
+  ],
+  "project": [
+    "src/**/*.ts",
+    "scripts/**/*.{ts,mjs}",
+    "plugins/**/*.ts",
+    "test/**/*.ts",
+    "examples/**/*.ts",
+    "vendor/*.{mjs,mts}"
+  ],
+  "typescript": {
+    "config": [
+      "tsconfig*.json",
+      "test/tsconfig*.json",
+      "examples/sample/tsconfig*.json"
+    ]
+  },
+  "ignoreDependencies": [
+    "@effect/platform-node-shared",
+    "@effect/tsgo",
+    "@effect/language-service"
+  ],
+  "ignoreBinaries": [
+    "jq"
+  ]
+}

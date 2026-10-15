@@ -129,7 +129,7 @@ export const ownerOf = (pid: number): ServiceOwner | undefined => {
   return { pid, command: commandOf(pid) };
 };
 
-export function parseCpuPressure(text: string): CpuPressure | undefined {
+function parseCpuPressure(text: string): CpuPressure | undefined {
   const some = /^some avg10=([\d.]+) avg60=[\d.]+ avg300=[\d.]+ total=(\d+)$/m.exec(text);
   return some === null ? undefined : { avg10: Number(some[1]), totalUs: Number(some[2]) };
 }

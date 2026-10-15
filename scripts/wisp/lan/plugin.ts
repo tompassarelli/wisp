@@ -7,7 +7,7 @@ import { isolatedNetworkProblem } from "./offline";
 import { requireCapability } from "../builds";
 import { describeCause } from "../command";
 
-export const LAN_PLUGIN = join(process.env["HOME"] ?? "", ".local/share/wisp-private/lan/index.ts");
+const LAN_PLUGIN = join(process.env["HOME"] ?? "", ".local/share/wisp-private/lan/index.ts");
 
 export interface LanPlugin {
 

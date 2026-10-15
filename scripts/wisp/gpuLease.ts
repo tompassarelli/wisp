@@ -16,7 +16,7 @@ export const capacityHelper = Effect.gen(function*() {
   return Option.isSome(helper) && existsSync(helper.value) ? helper.value : undefined;
 });
 
-export class GpuLeaseRequired extends Schema.TaggedError<GpuLeaseRequired>()("GpuLeaseRequired", {
+class GpuLeaseRequired extends Schema.TaggedError<GpuLeaseRequired>()("GpuLeaseRequired", {
   command: Schema.String,
 }) {
   override get message(): string {

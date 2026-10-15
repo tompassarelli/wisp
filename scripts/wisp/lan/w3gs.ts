@@ -160,7 +160,7 @@ export function splitPackets(buffer: Uint8Array): { readonly packets: Packet[]; 
 }
 
 /** The 16-byte socket address W3GS carries: family 2, port, IPv4, eight zeros; or 16 zeros. */
-export function sockAddr(writer: Writer, address?: { readonly ip: readonly number[]; readonly port: number }): Writer {
+function sockAddr(writer: Writer, address?: { readonly ip: readonly number[]; readonly port: number }): Writer {
   if (address === undefined) return writer.raw(new Array(16).fill(0));
   return writer.u16(2).u16(address.port).raw(address.ip).raw(new Array(8).fill(0));
 }
@@ -194,7 +194,7 @@ export interface SlotTable {
   readonly players: number;
 }
 
-export function encodeSlotTable(writer: Writer, table: SlotTable): Writer {
+function encodeSlotTable(writer: Writer, table: SlotTable): Writer {
   writer.u16(7 + 9 * table.slots.length).u8(table.slots.length);
   for (const slot of table.slots) {
     writer.u8(slot.playerId).u8(slot.download).u8(slot.status).u8(slot.computer ? 1 : 0).u8(slot.team).u8(slot.color).u8(slot.race).u8(slot.computerType).u8(slot.handicap);
@@ -295,7 +295,7 @@ export const DEFAULT_GAME_FLAGS = 0x00000002 | 0x00000800 | 0x00001000 | 0x00003
 
 // Stat strings encode seven bytes after an oddness mask; even bytes add one so no encoded byte is zero.
 
-export function encodeStatString(source: Uint8Array): Uint8Array {
+function encodeStatString(source: Uint8Array): Uint8Array {
   const out: number[] = [];
   for (let block = 0; block < source.length; block += 7) {
     const chunk = source.subarray(block, block + 7);
@@ -320,7 +320,7 @@ export function decodeStatString(encoded: Uint8Array): Uint8Array {
   return Uint8Array.from(out);
 }
 
-export interface GameSettings {
+interface GameSettings {
   readonly flags: number;
   readonly width: number;
   readonly height: number;
@@ -330,7 +330,7 @@ export interface GameSettings {
   readonly sha1: Uint8Array;
 }
 
-export function encodeGameSettings(settings: GameSettings): Uint8Array {
+function encodeGameSettings(settings: GameSettings): Uint8Array {
   const plain = new Writer().u32(settings.flags).u8(0).u16(settings.width).u16(settings.height).u32(settings.xoro).cstring(settings.path).cstring(settings.hostName).u8(0).raw(settings.sha1).bytes();
   return new Writer().raw(encodeStatString(plain)).u8(0).bytes();
 }

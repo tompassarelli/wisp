@@ -16,7 +16,7 @@ const POLL_SECONDS = 0.03125;
 const IDLE_POLLS = 16;
 const MAX_SLOTS = 4;
 
-export interface Reloadable {
+interface Reloadable {
   install(this: void): void;
 }
 

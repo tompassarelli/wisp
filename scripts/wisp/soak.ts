@@ -29,7 +29,7 @@ export type SoakEdge =
   | { readonly button: number; readonly down: boolean }
   | { readonly axis: number; readonly value: number };
 
-export interface SoakInputFrame {
+interface SoakInputFrame {
 
   readonly edges: ReadonlyMap<number, readonly SoakEdge[]>;
 
@@ -53,7 +53,7 @@ export interface SoakInputs {
   readonly files?: readonly (readonly [frame: number, slot: number, name: string, chunks: readonly string[]])[];
 }
 
-export interface FuzzOptions {
+interface FuzzOptions {
 
   readonly rate: number;
 
@@ -62,7 +62,7 @@ export interface FuzzOptions {
   readonly hitch: number;
 }
 
-export const SOAK_FUZZ: FuzzOptions = { rate: 1 / 8, silence: 1 / 3600, hitch: 1 / 2400 };
+const SOAK_FUZZ: FuzzOptions = { rate: 1 / 8, silence: 1 / 3600, hitch: 1 / 2400 };
 
 export const FUZZ_POLICY = "fuzz";
 
@@ -219,7 +219,7 @@ class Fuzzer {
   }
 }
 
-export interface SoakInputSource {
+interface SoakInputSource {
   frame(frame: number): SoakInputFrame;
 
   slow(frame: number, measuredMs: number): number;
@@ -270,7 +270,7 @@ export function fuzzedInputs(match: SoakMatch, controller: SoakController, optio
   };
 }
 
-export function recordedInputs(inputs: SoakInputs): SoakInputSource {
+function recordedInputs(inputs: SoakInputs): SoakInputSource {
   const edges = new Map<number, Map<number, SoakEdge[]>>();
   for (const [frame, slot, edge] of inputs.edges) {
     const slots = edges.get(frame) ?? new Map<number, SoakEdge[]>();
@@ -302,7 +302,7 @@ export function recordedInputs(inputs: SoakInputs): SoakInputSource {
   };
 }
 
-export interface SoakStep {
+interface SoakStep {
 
   readonly frame: number;
 
@@ -341,7 +341,7 @@ export interface SoakDriver {
   findings?(client: HeadlessClient): readonly SoakGameFinding[];
 }
 
-export interface SoakGameFinding {
+interface SoakGameFinding {
 
   readonly detector: string;
   readonly text: string;

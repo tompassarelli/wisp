@@ -9,8 +9,8 @@ import { cacheHome, dataHome, stateHome } from "../xdg";
 import { InputInjection } from "../../platform/services";
 import { documentsFolder } from "../../warcraft/battleNet";
 
-export const stateRoot = () => join(stateHome(), "wisp/lan");
-export const dataRoot = () => join(dataHome(), "wisp/lan");
+const stateRoot = () => join(stateHome(), "wisp/lan");
+const dataRoot = () => join(dataHome(), "wisp/lan");
 export const mapPackager = () => join(cacheHome(), "wisp/lan/map-pack");
 
 export const PAIR_SIDES = ["a", "b"] as const;
@@ -30,7 +30,7 @@ export const pairDirectory = (pair: number) => join(stateRoot(), `pair-${pair}`)
 
 export const poolHolderFile = (pair: number) => join(pairDirectory(pair), "pool.pid");
 
-export const poolLockFile = (pair: number) => join(pairDirectory(pair), "pool.lock");
+const poolLockFile = (pair: number) => join(pairDirectory(pair), "pool.lock");
 
 export const pairCustody = (pair: number) => Effect.gen(function*() {
   yield* Effect.try({
@@ -130,7 +130,7 @@ export const PROFILES: Readonly<Record<string, Profile>> = {
   "capture-classic": CAPTURE_PROFILES["capture-classic"],
 };
 
-export function poolProfile(name: string, fps?: number): Profile {
+function poolProfile(name: string, fps?: number): Profile {
   const profile = PROFILES[name];
   if (profile === undefined) throw new Error(`unknown pool profile ${name}`);
   if (fps !== undefined && (!Number.isInteger(fps) || fps < 1)) throw new Error("--fps takes a positive whole number");
@@ -146,7 +146,7 @@ export function pairFlags(argv: readonly string[]): { readonly pair: number; rea
   return { pair, profile: poolProfile(flagValues(argv, "pool-profile")[0] ?? "parity", fps) };
 }
 
-export function profileSections(profile: Profile, windowX: number): Record<string, Record<string, number>> {
+function profileSections(profile: Profile, windowX: number): Record<string, Record<string, number>> {
   const video: Record<string, number> = {
     ...profile.video,
     adapter: 0,
@@ -178,7 +178,7 @@ export function preferences(profile: Profile, windowX: number): string {
   return Object.entries(profileSections(profile, windowX)).map(([name, values]) => `[${name}]\n${Object.keys(values).sort().map((key) => `${key}=${values[key]}`).join("\n")}\n`).join("\n");
 }
 
-export const CLIENT_PROFILES = {
+const CLIENT_PROFILES = {
   minimal: { ...PARITY, name: "minimal" },
   visual: VISUAL,
   ...CAPTURE_PROFILES,

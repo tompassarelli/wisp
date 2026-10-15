@@ -4,7 +4,7 @@ import { TurnLedger, type TurnPacket } from "../../../src/headless/turnLedger";
 import { FRAME_MS } from "../../../src/headless/frameRate";
 
 export { FRAME_MS };
-export const SILENCE_MS = 3000;
+const SILENCE_MS = 3000;
 const START_LEAD_MS = 400;
 const PINGS = 8;
 const PING_SPACING_MS = 25;
@@ -17,19 +17,19 @@ export class NetFailure extends Schema.TaggedError<NetFailure>()("NetFailure", {
   }
 }
 
-export class PeerSilent extends Schema.TaggedError<PeerSilent>()("PeerSilent", { frame: Schema.Finite, silentMs: Schema.Finite }) {
+class PeerSilent extends Schema.TaggedError<PeerSilent>()("PeerSilent", { frame: Schema.Finite, silentMs: Schema.Finite }) {
   override get message(): string {
     return `the peer stopped sending: no packet for ${(this.silentMs / 1000).toFixed(1)} s, at frame ${this.frame}`;
   }
 }
 
-export class PeerLeft extends Schema.TaggedError<PeerLeft>()("PeerLeft", { frame: Schema.Finite, reason: Schema.String }) {
+class PeerLeft extends Schema.TaggedError<PeerLeft>()("PeerLeft", { frame: Schema.Finite, reason: Schema.String }) {
   override get message(): string {
     return `the peer left at frame ${this.frame}: ${this.reason}`;
   }
 }
 
-export class NetDesync extends Schema.TaggedError<NetDesync>()("NetDesync", { frame: Schema.Finite, local: Schema.String, remote: Schema.String }) {
+class NetDesync extends Schema.TaggedError<NetDesync>()("NetDesync", { frame: Schema.Finite, local: Schema.String, remote: Schema.String }) {
   override get message(): string {
     return `checksums differ after frame ${this.frame}: here ${this.local}, the peer ${this.remote}`;
   }
@@ -114,7 +114,7 @@ export function percentile(sorted: readonly number[], p: number): number {
 }
 
 /** Turns travel one way plus 4 ms for the sender's frame and timer jitter; a frame that waits longer stalls both sides briefly, and `paceShift` drops what a slow frame leaves behind. */
-export function turnDelay(rttMs: number): number {
+function turnDelay(rttMs: number): number {
   return Math.max(1, Math.ceil((rttMs / 2 + SLACK_MS) / FRAME_MS - 1e-9));
 }
 
@@ -125,7 +125,7 @@ const SLIP_FRAMES = 3;
  * drops the backlog, so a slow frame costs a stutter instead of a lasting lag; a side whose schedule is ahead
  * of the peer's estimated frame slows by up to 1 ms a frame, half the difference, so both run frames together.
  */
-export function paceShift(at: { readonly scheduleFrame: number; readonly executed: number; readonly remoteExecuted: number; readonly sinceRemoteMs: number; readonly oneWayMs: number }): number {
+function paceShift(at: { readonly scheduleFrame: number; readonly executed: number; readonly remoteExecuted: number; readonly sinceRemoteMs: number; readonly oneWayMs: number }): number {
   const backlog = at.scheduleFrame - at.executed;
   if (backlog > SLIP_FRAMES) return (backlog - 1) * FRAME_MS;
   const remoteNow = at.remoteExecuted + (Math.min(at.sinceRemoteMs, FRAME_MS) + at.oneWayMs) / FRAME_MS;

@@ -28,7 +28,7 @@ export interface MenuAddress {
   readonly recent?: readonly HeardMessage[];
 }
 
-export interface HeardMessage {
+interface HeardMessage {
   readonly messageType: string;
   readonly at: number;
   readonly screen?: string;
@@ -172,7 +172,7 @@ export const removeMenuPage = (retail: string) => Effect.try({
 const Heard = Schema.Struct({ messageType: Schema.String, at: Schema.Finite, screen: Schema.optionalKey(Schema.String), type: Schema.optionalKey(Schema.String), isHost: Schema.optionalKey(Schema.Boolean) });
 const Announcement = Schema.Struct({ port: Schema.Int, guid: Schema.String, recent: Schema.optionalKey(Schema.Array(Heard)) });
 
-export const menuAddressFile = (reportPort: number) => join(process.env["XDG_RUNTIME_DIR"] ?? tmpdir(), `wisp-menus-${reportPort}.json`);
+const menuAddressFile = (reportPort: number) => join(process.env["XDG_RUNTIME_DIR"] ?? tmpdir(), `wisp-menus-${reportPort}.json`);
 
 const ADDRESS_FRESH_MS = 6000;
 const KeptAddress = Schema.Struct({ port: Schema.Int, guid: Schema.String, recent: Schema.optionalKey(Schema.Array(Heard)), at: Schema.Finite });
@@ -359,7 +359,7 @@ const listedMaps = (payload: unknown): ListedMap[] => {
 
 const MAP_LIST_WAIT_SECONDS = 15;
 
-export const MAP_LIST_SECONDS = 90;
+const MAP_LIST_SECONDS = 90;
 const MAP_LIST_RETRY_MS = 250;
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -367,7 +367,7 @@ const separator = (path: string) => (path.includes("\\") && !path.includes("/") 
 const withSeparator = (path: string) => (/[\\/]$/.test(path) ? path : `${path}${separator(path)}`);
 const inFolder = (path: string, folder: string) => path.replaceAll("\\", "/").replace(/\/$/, "").toLowerCase().endsWith(`/${folder.replaceAll("\\", "/").toLowerCase()}`);
 
-export const findMap = (menus: MenuSocket, folder: string, file: string) => Effect.gen(function*() {
+const findMap = (menus: MenuSocket, folder: string, file: string) => Effect.gen(function*() {
   const asked = new Set<string>();
   let request: Readonly<Record<string, unknown>> = { useLastMap: true };
   let waited = 0;
@@ -451,7 +451,7 @@ export const hostLobby = (menus: MenuSocket, options: HostOptions) => Effect.gen
   return filename;
 });
 
-export const LOBBY_SETTLE_MS = profileFor(DEFAULT_BUILD)!.menus.lobbySettleMs;
+const LOBBY_SETTLE_MS = profileFor(DEFAULT_BUILD)!.menus.lobbySettleMs;
 const hostedAt = new WeakMap<MenuSocket, number>();
 
 export const joinLobby = (menus: MenuSocket, gameName: string, password: string, seconds = 20) => Effect.gen(function*() {

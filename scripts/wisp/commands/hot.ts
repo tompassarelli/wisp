@@ -77,7 +77,7 @@ function coalesced<A, E>(effect: Effect.Effect<A, E>): Effect.Effect<void, E> {
   });
 }
 
-export const runHotWatch = (
+const runHotWatch = (
   sourceDirectory: string,
   onChange: Effect.Effect<void, CommandFailure>,
   onPoll: Effect.Effect<void, CommandFailure>,

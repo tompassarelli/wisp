@@ -2,7 +2,7 @@ import { f32 } from "../sim/f32";
 import type { Handle, NativeBehavior } from "./clientTypes";
 import { after } from "./natives/triggersTimers";
 
-export interface AbilityObjectFixture {
+interface AbilityObjectFixture {
   readonly base: string;
   readonly realLevelFields: Readonly<Record<string, readonly number[]>>;
   readonly impactDelay: number;

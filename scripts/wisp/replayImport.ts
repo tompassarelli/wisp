@@ -2,7 +2,7 @@ import { ReplayParser, type Action, type BasicReplayInformation, type GameDataBl
 import { decodeActionRecords, type ActionRecord } from "./lan/actions";
 import { parseActionLog } from "./lan/actionLog";
 
-export interface ReplayCommand {
+interface ReplayCommand {
   readonly turn: number;
   readonly timeMs: number;
 

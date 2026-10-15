@@ -7,7 +7,7 @@ import type { CommandFailure } from "./command";
 import { GameFiles, dataDirectory } from "./gameFiles";
 import { ClientWatch, type ClientView, inState, waitFor } from "./watch";
 
-export interface LiveAcceptOptions<R> {
+interface LiveAcceptOptions<R> {
 
   readonly start: (map: string, session: string) => Effect.Effect<void, CommandFailure, R>;
 

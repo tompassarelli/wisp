@@ -11,7 +11,7 @@ export const UnitModels = Schema.Struct({
 export type UnitModels = typeof UnitModels.Type;
 export interface ModelSource { readonly entry: string; readonly source: string }
 
-export class UnitModelsFailure extends Schema.TaggedError<UnitModelsFailure>()("UnitModelsFailure", { problem: Schema.String }) {
+class UnitModelsFailure extends Schema.TaggedError<UnitModelsFailure>()("UnitModelsFailure", { problem: Schema.String }) {
   override get message() { return this.problem; }
 }
 
@@ -38,7 +38,7 @@ export const checkUnitModels = (declaration: UnitModels, sources: readonly Model
   if (problems.length > 0) return yield* new UnitModelsFailure({ problem: problems.join("\n") });
 });
 
-export interface UnitModelChange {
+interface UnitModelChange {
   readonly id: string;
   readonly mode: "classic" | "definitive";
   readonly field: "path" | "scale";

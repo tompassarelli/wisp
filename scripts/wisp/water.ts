@@ -18,7 +18,7 @@ export interface WaterTable {
   readonly deep: readonly [Rgba, Rgba];
 }
 
-export const SHALLOW_DEPTH = CELL / 2;
+const SHALLOW_DEPTH = CELL / 2;
 
 export function waterTable(rows: ReadonlyMap<string, Readonly<Record<string, string>>>, tileset: string): WaterTable {
   const row = rows.get(`${tileset}Sha`);
@@ -35,7 +35,7 @@ export function waterTable(rows: ReadonlyMap<string, Readonly<Record<string, str
     shallow: [rgba("Smin"), rgba("Smax")], deep: [rgba("Dmin"), rgba("Dmax")] };
 }
 
-export function waterColor(table: WaterTable, depth: number): Rgba {
+function waterColor(table: WaterTable, depth: number): Rgba {
   if (depth <= 0) return [table.shallow[0][0], table.shallow[0][1], table.shallow[0][2], 0];
   const [from, to] = depth <= SHALLOW_DEPTH ? table.shallow : table.deep;
   const t = depth <= SHALLOW_DEPTH ? depth / SHALLOW_DEPTH : Math.min(1, (depth - SHALLOW_DEPTH) / SHALLOW_DEPTH);

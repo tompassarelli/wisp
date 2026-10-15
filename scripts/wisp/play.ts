@@ -21,7 +21,7 @@ export class PlayProblem extends Schema.TaggedError<PlayProblem>()("PlayProblem"
   }
 }
 
-export class PlayFailure extends Schema.TaggedError<PlayFailure>()("PlayFailure", {
+class PlayFailure extends Schema.TaggedError<PlayFailure>()("PlayFailure", {
   step: Schema.Int,
   title: Schema.String,
   problem: Schema.String,
@@ -156,7 +156,7 @@ const STEPS = 7;
 
 const RESTORE_PREFERENCES = fileURLToPath(new URL("./restorePreferences.ts", import.meta.url));
 
-export const PLAY_TIMEOUTS = {
+const PLAY_TIMEOUTS = {
   runtimeExit: 20,
   launcherStart: 90,
   signIn: 90,
@@ -190,7 +190,7 @@ const fold = (text: string) => text.toUpperCase().replace(/[^A-Z0-9.]/g, "").rep
 
 const isIconNoise = (word: Word | undefined, line: string | undefined) => word === undefined || word.line !== line || fold(word.text).length <= 3;
 
-export function findPhrase(words: readonly Word[], phrase: string, entry = false): readonly { readonly x: number; readonly y: number }[] {
+function findPhrase(words: readonly Word[], phrase: string, entry = false): readonly { readonly x: number; readonly y: number }[] {
   const target = fold(phrase);
   const found: { x: number; y: number }[] = [];
   if (target === "") return found;

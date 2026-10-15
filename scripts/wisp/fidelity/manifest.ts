@@ -17,7 +17,7 @@ const Slice = Schema.Struct({
   controls: Schema.Array(Control), cineWindow: Schema.optionalKey(Schema.Struct({ start: Frame, end: Frame })), runs: Schema.Array(Run),
 });
 
-export const CaptureManifestSchema = Schema.Struct({
+const CaptureManifestSchema = Schema.Struct({
   version: Schema.Literal(1),
   split: Schema.Struct({ frozenAt: Text, fit: Schema.Array(Text), heldOut: Schema.Array(Text), retired: Schema.Array(Text) }),
   slices: Schema.Array(Slice),
@@ -28,14 +28,14 @@ export type CaptureIdentity = typeof Identity.Type;
 export type CaptureControl = typeof Control.Type;
 export type CaptureRun = typeof Run.Type;
 
-export class ManifestFailure extends Schema.TaggedError<ManifestFailure>()("ManifestFailure", { problem: Schema.String }) {
+class ManifestFailure extends Schema.TaggedError<ManifestFailure>()("ManifestFailure", { problem: Schema.String }) {
   override get message(): string { return this.problem; }
 }
 
 const unique = (values: readonly (string | number)[]) => new Set(values).size === values.length;
 const relativeImage = (image: string) => !isAbsolute(image) && !image.split(/[\\/]/).includes("..") && !image.includes("\\") && !/^[A-Za-z]:/.test(image);
 
-export function manifestProblems(manifest: CaptureManifest): string[] {
+function manifestProblems(manifest: CaptureManifest): string[] {
   const problems: string[] = [];
   const add = (message: string) => { problems.push(message); };
   const split = manifest.split;

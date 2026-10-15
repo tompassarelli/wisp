@@ -26,7 +26,7 @@ const inside = (child: string, parent: string) => {
   return path === "" || (!path.startsWith("..") && !isAbsolute(path));
 };
 
-export function stepProblem(step: MapBuildStep): string | undefined {
+function stepProblem(step: MapBuildStep): string | undefined {
   const env = step.env ?? process.env;
   if (env["RUNNER_ENVIRONMENT"] === "github-hosted") return "the private map build runs only on a self-hosted runner";
   if (!isAbsolute(step.store)) return `the store ${step.store} must be an absolute path`;
@@ -37,7 +37,7 @@ export function stepProblem(step: MapBuildStep): string | undefined {
   return undefined;
 }
 
-export class CiMapBuildFailure extends Schema.TaggedError<CiMapBuildFailure>()("CiMapBuildFailure", {
+class CiMapBuildFailure extends Schema.TaggedError<CiMapBuildFailure>()("CiMapBuildFailure", {
   problem: Schema.String,
 }) {
   override get message(): string {
@@ -48,7 +48,7 @@ export class CiMapBuildFailure extends Schema.TaggedError<CiMapBuildFailure>()("
 const attempt = <A>(what: string, run: () => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => new CiMapBuildFailure({ problem: `${what}: ${describeCause(cause)}` }) });
 
-export const buildMapIntoStore = (step: MapBuildStep) => Effect.gen(function*() {
+const buildMapIntoStore = (step: MapBuildStep) => Effect.gen(function*() {
   const problem = stepProblem(step);
   if (problem !== undefined) return yield* new CiMapBuildFailure({ problem });
   const store = resolve(step.store);

@@ -66,7 +66,7 @@ export interface SceneEnvironment extends Environment {
   readonly shadowCastingPointLights?: number;
 }
 
-export interface SceneFog {
+interface SceneFog {
 
   readonly style: number;
   readonly zStart: number;

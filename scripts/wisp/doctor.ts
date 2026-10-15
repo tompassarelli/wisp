@@ -49,7 +49,7 @@ export class DoctorHands extends Context.Service<DoctorHands, {
   readonly enterLogin?: (target: DoctorTarget, field: "username" | "password") => Effect.Effect<void, PlayProblem>;
 }>()("wisp/DoctorHands") {}
 
-export const DOCTOR_TIMEOUTS = {
+const DOCTOR_TIMEOUTS = {
 
   exit: 20,
   launcherStart: 90,
@@ -86,7 +86,7 @@ export interface Observation {
   readonly startupCpu?: number;
 }
 
-export type Problem =
+type Problem =
   | "two runtimes"
   | "runtime without Battle.net"
   | "connection failing"
@@ -234,11 +234,11 @@ const POLL = "1 second";
 
 const LEAVE_SECONDS = 10;
 
-export const SCORE_ESCAPES = 3;
+const SCORE_ESCAPES = 3;
 
 const LOG_START_SLACK_MS = 1000;
 
-export const doctorClient = (target: DoctorTarget, print: (line: string) => void) => {
+const doctorClient = (target: DoctorTarget, print: (line: string) => void) => {
 
   let releaseStart: Effect.Effect<void> | undefined;
   return doctorRun(target, print, (taken) => {
@@ -552,7 +552,7 @@ export const doctor = (targets: readonly DoctorTarget[], print: (line: string) =
   return results.flatMap((result) => (result._tag === "Success" ? [result.success] : []));
 });
 
-export const recoveredAny = (results: readonly DoctorResult[]) => results.some((result) => result.recovered.length > 0);
+const recoveredAny = (results: readonly DoctorResult[]) => results.some((result) => result.recovered.length > 0);
 
 export const withDoctor = <A, E, R, E2, R2>(check: Effect.Effect<readonly DoctorResult[], E2, R2>, print: (line: string) => void, run: Effect.Effect<A, E, R>, { retry = true, attempts = 2 }: { readonly retry?: boolean; readonly attempts?: number } = {}) =>
   healedRun(check, print, run, retry, attempts);

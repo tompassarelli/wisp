@@ -14,9 +14,9 @@ import {
 } from "./w3gs";
 import { describeCause } from "../command";
 
-export const CLIENT_PORTS: readonly number[] = [16000, 16001, 16002, 16003, 16004, 16005, 16006, 16007];
+const CLIENT_PORTS: readonly number[] = [16000, 16001, 16002, 16003, 16004, 16005, 16006, 16007];
 /** Flo waits this long between countdown packets; shorter waits send slow clients to the score screen. */
-export const COUNTDOWN_MS = 6000;
+const COUNTDOWN_MS = 6000;
 
 const MAX_STEP_MS = 250;
 
@@ -82,7 +82,7 @@ interface Connection {
   player: Player | undefined;
 }
 
-export interface HostStatus {
+interface HostStatus {
   readonly phase: Phase;
   readonly speed: number;
   readonly turns: number;
@@ -102,7 +102,7 @@ export interface LanHost {
   readonly setSpeed: (multiple: number) => Effect.Effect<void, LanFailure>;
 }
 
-export function slotTable(map: MapFacts, count: number, randomSeed: number, joined: (slot: number) => boolean, computers = 0): SlotTable {
+function slotTable(map: MapFacts, count: number, randomSeed: number, joined: (slot: number) => boolean, computers = 0): SlotTable {
   const users = map.players.filter(({ controller }) => controller === 1).map(({ id }) => id);
   if (users.length < count + computers) throw new Error(`the map has ${users.length} user slots; ${count} clients and ${computers} computers need as many`);
   const used = new Set(users.slice(0, count));

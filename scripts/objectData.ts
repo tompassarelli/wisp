@@ -1,6 +1,6 @@
 import { CHUNKS_PER_FILE, FILE_IO_ABILITY } from "../src/runtime/gameFiles";
 
-export type ObjectValue =
+type ObjectValue =
   | { readonly kind: "int"; readonly value: number }
   | { readonly kind: "real"; readonly value: number }
   | { readonly kind: "unreal"; readonly value: number }

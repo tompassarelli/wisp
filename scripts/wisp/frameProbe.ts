@@ -2,7 +2,7 @@ import type { SceneProblem } from "./scene";
 import type { Frame } from "../platform/services";
 export { type Frame, decodePpm, encodePpm } from "../platform/services";
 
-export interface Band {
+interface Band {
   readonly top: number;
   readonly bottom: number;
   readonly left: number;
@@ -56,7 +56,7 @@ export function pixelShare(frame: Frame, band: Band, accept: (red: number, green
   return pixels === 0 ? 0 : accepted / pixels;
 }
 
-export interface FeatureMeasurement {
+interface FeatureMeasurement {
   readonly present: boolean;
 
   readonly measured: string;

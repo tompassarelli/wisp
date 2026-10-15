@@ -79,15 +79,14 @@ export const packageProgram = (output: string) => Effect.scoped(Effect.gen(funct
   const decoded = yield* attempt(() => Bun.file(join(root, "package.json")).json()).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.Unknown))),
   );
+  const exports = yield* Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.String))(decoded.exports);
   const manifest = { ...decoded };
   delete manifest.scripts;
   delete manifest.devDependencies;
-  manifest.exports = {
-    "./src/*": { types: "./types/src/*.d.ts", tstl: "./src/*", default: "./src/*.ts" },
-    "./scripts/*": "./scripts/*.ts",
-    "./plugins/*": "./plugins/*.ts",
-    "./*": "./*",
-  };
+  manifest.exports = Object.fromEntries(Object.entries(exports).map(([path, target]) =>
+    [path, target.startsWith("./src/") && target.endsWith(".ts") && !target.endsWith(".d.ts")
+      ? { types: `./types/${target.slice(2, -3)}.d.ts`, tstl: target.slice(0, -3), default: target }
+      : target]));
   yield* attempt(async () => {
     await Bun.write(join(staging, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
     await mkdir(dirname(target), { recursive: true });

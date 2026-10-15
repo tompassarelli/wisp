@@ -15,7 +15,7 @@ import { emitJson } from "../jsonResults";
 import { shrinkSoakRepro } from "../reproShrink";
 import { step } from "../timings";
 
-export class SoakFailure extends Schema.TaggedError<SoakFailure>()("SoakFailure", {
+class SoakFailure extends Schema.TaggedError<SoakFailure>()("SoakFailure", {
   problem: Schema.String,
   cause: Schema.optional(Schema.Unknown),
 }) {
@@ -24,7 +24,7 @@ export class SoakFailure extends Schema.TaggedError<SoakFailure>()("SoakFailure"
   }
 }
 
-export const MAX_SOAK_WORKERS = 4;
+const MAX_SOAK_WORKERS = 4;
 
 export const MAX_SOAK_MINUTES = 30;
 export const DEFAULT_SOAK_MINUTES = 10;
@@ -163,7 +163,7 @@ const runWorker = (worker: string, project: string, next: () => SoakMatch | unde
 
 const plural = (count: number, noun: string, nouns = `${noun}s`) => `${count.toLocaleString("en-US")} ${count === 1 ? noun : nouns}`;
 
-export function typingStallsLine(stalls: readonly number[], budgetMs: number): string {
+function typingStallsLine(stalls: readonly number[], budgetMs: number): string {
   if (stalls.length === 0) return `recovery typing stalls: none (budget ${budgetMs.toFixed(1)} ms)`;
   const sorted = [...stalls].sort((a, b) => a - b);
   const p95 = sorted[Math.max(0, Math.ceil(0.95 * sorted.length) - 1)] ?? 0;

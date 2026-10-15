@@ -7,7 +7,7 @@ export interface RegistryRequest {
   readonly modules: readonly string[];
 }
 
-export interface RegistryFailure {
+interface RegistryFailure {
   readonly test: string;
   readonly message: string;
 }

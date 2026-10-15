@@ -128,7 +128,7 @@ export const unlessLost = <A, E, R>(client: Client, effect: Effect.Effect<A, E, 
   return yield* Effect.raceFirst(effect, lost.pipe(Effect.flatMap(() => Effect.never)));
 });
 
-export interface Observed {
+interface Observed {
   readonly state: ClientState;
   readonly at: number;
   readonly evidence: string;
@@ -282,7 +282,7 @@ export function eventLine(event: WatchEvent): string {
   }
 }
 
-export const prefixOf = (documents: string) => {
+const prefixOf = (documents: string) => {
   const at = documents.indexOf("/drive_c/");
   return at < 0 ? undefined : documents.slice(0, at);
 };
@@ -302,7 +302,7 @@ const pairStatus = (client: string, socket: string) => Effect.tryPromise({
   Effect.mapError((failure) => (failure instanceof WatchFailure ? failure : new WatchFailure({ client, operation: "read the pair agent's status", problem: failure.message }))),
 );
 
-export const lanObservation = (client: Pick<Client, "name" | "documents">) => Effect.gen(function*() {
+const lanObservation = (client: Pick<Client, "name" | "documents">) => Effect.gen(function*() {
   const { documents } = client;
   const pool = yield* readPool.pipe(Effect.mapError((failure) => new WatchFailure({ client: client.name, operation: "read the LAN pool", problem: failure.problem })));
   const pair = pool?.pairs.find((pair) => pairClients(pair.id, pair.runs).some((client) => client.documents === documents));

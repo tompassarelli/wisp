@@ -2,7 +2,7 @@ import { decodeBLP, getBLPImageData } from "../../vendor/war3-model.mjs";
 import type { MapInfo } from "../mapInfo";
 import type { Frame } from "./frameProbe";
 
-export const MINIMAP_ENTRIES = ["war3mapMap.blp", "war3mapMap.tga"] as const;
+const MINIMAP_ENTRIES = ["war3mapMap.blp", "war3mapMap.tga"] as const;
 
 export function selectMapPreview(info: Pick<MapInfo, "flags">, entries: ReadonlySet<string>) {
   if ((info.flags & 1) !== 0) throw new Error("hide-minimap preview flag needs a Warcraft 3.0.1 reference capture");

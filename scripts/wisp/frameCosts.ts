@@ -8,7 +8,7 @@ const SpreadText = Schema.String.check(Schema.isPattern(/^\d+(\.\d+)?\/\d+(\.\d+
 const LuaText = Schema.Union([Schema.Literal("none"), SpreadText]);
 const windowFields = (label: string) => `${label} frames={${label}Frames} lua={${label}Lua} natives={${label}Natives} catchup={${label}CatchUp}`;
 
-export const FrameCostReportFile = preloadRecord(
+const FrameCostReportFile = preloadRecord(
   { head: ["frame cost {version} after {previous} clock={clock}", windowFields("before"), windowFields("after")] },
   Schema.Struct({
     version: Schema.String.check(Schema.isPattern(/^v\d+$/)),
@@ -45,13 +45,13 @@ export const decodeFrameCostReport = (file: string, text: string): Effect.Effect
     after: window(fields.afterFrames, fields.afterLua, fields.afterNatives, fields.afterCatchUp),
   })));
 
-export const DEFAULT_FRAME_COST_THRESHOLD = 0.2;
+const DEFAULT_FRAME_COST_THRESHOLD = 0.2;
 
 const milliseconds = (microseconds: number) => (microseconds / 1000).toFixed(2);
 const change = (before: number, after: number) => (before === 0 ? (after === 0 ? "+0%" : "new") : `${after >= before ? "+" : ""}${Math.round((after / before - 1) * 100)}%`);
 const rose = (before: number, after: number, threshold: number) => after > before * (1 + threshold);
 
-export function frameCostRegressions({ before, after, clockStep }: FrameCostReport, threshold = DEFAULT_FRAME_COST_THRESHOLD): string[] {
+function frameCostRegressions({ before, after, clockStep }: FrameCostReport, threshold = DEFAULT_FRAME_COST_THRESHOLD): string[] {
   const regressions: string[] = [];
 
   if (before.lua !== undefined && after.lua !== undefined && rose(before.lua.mean, after.lua.mean, threshold) && after.lua.mean - before.lua.mean > clockStep / 4) {

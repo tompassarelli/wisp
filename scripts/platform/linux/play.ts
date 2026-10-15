@@ -29,9 +29,9 @@ export interface PlayTools {
   readonly capacity?: string;
 }
 
-export const PLAY_TOOLS: PlayTools = { grim: "grim", xdotool: "xdotool", tesseract: "tesseract", niri: "niri", steam: "steam", nsenter: "nsenter" };
+const PLAY_TOOLS: PlayTools = { grim: "grim", xdotool: "xdotool", tesseract: "tesseract", niri: "niri", steam: "steam", nsenter: "nsenter" };
 
-export function hostNsenter(command: string): string {
+function hostNsenter(command: string): string {
   const path = Bun.which(command);
   if (path === null) throw new Error(`couldn't find ${command} on the host PATH`);
   return path;
@@ -63,7 +63,7 @@ const startDetached = (command: readonly string[], log?: string) => Effect.tryPr
   catch: problem(`couldn't start ${basename(command[0] ?? "")}`),
 });
 
-export interface LaunchRequest {
+interface LaunchRequest {
   readonly bun: string;
   readonly capacity: string;
   readonly client: string;
@@ -76,7 +76,7 @@ export interface LaunchRequest {
 
 const HOST_KEYS = ["PATH", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"] as const;
 
-export const launchCommand = (request: LaunchRequest) => {
+const launchCommand = (request: LaunchRequest) => {
   const { launcher } = request;
   const restore = HOST_KEYS.flatMap((key) => (launcher.env[key] === undefined ? ["-u", key] : [`${key}=${launcher.env[key]}`]));
   const host = Object.fromEntries(HOST_KEYS.flatMap((key) => (request.host[key] === undefined ? [] : [[key, request.host[key]!] as const])));

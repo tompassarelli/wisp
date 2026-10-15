@@ -1,7 +1,7 @@
 import { test } from "bun:test";
 import { TEST_PHASE_ENV } from "./timingTest";
 
-export const FARM_TEST_PREFIX = "farm: ";
+const FARM_TEST_PREFIX = "farm: ";
 
 export const FARM_TEST_RUNNING = "wispFarmTestRunning";
 

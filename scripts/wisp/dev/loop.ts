@@ -38,7 +38,7 @@ export interface HotSide {
   readonly sourceDirectory: string;
 }
 
-export class TypeCheckFailure extends Schema.TaggedError<TypeCheckFailure>()("TypeCheckFailure", {
+class TypeCheckFailure extends Schema.TaggedError<TypeCheckFailure>()("TypeCheckFailure", {
   operation: Schema.String,
   problem: Schema.String,
 }) {

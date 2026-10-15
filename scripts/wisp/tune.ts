@@ -78,15 +78,15 @@ export function findLiteral(text: string, path: readonly string[]): Literal | st
   return { start, end, text: text.slice(start, end), value: (negative ? -1 : 1) * Number(literal.text) };
 }
 
-export const runValue = (kind: Tunable["kind"], value: number) => (kind === "f32" ? Math.fround(value) : value);
+const runValue = (kind: Tunable["kind"], value: number) => (kind === "f32" ? Math.fround(value) : value);
 
-export function literalText(kind: Tunable["kind"], value: number): string {
+function literalText(kind: Tunable["kind"], value: number): string {
   if (kind === "int") return String(value);
   const text = String(Math.fround(value));
   return /[.eE]/.test(text) ? text : `${text}.0`;
 }
 
-export function checkValue(tunable: Tunable, value: number): number | string {
+function checkValue(tunable: Tunable, value: number): number | string {
   if (!Number.isFinite(value)) return `${tunable.name}: ${value} is not a number`;
   if (value < tunable.min || value > tunable.max) return `${tunable.name}: ${value} is outside ${tunable.min} to ${tunable.max}`;
   if (tunable.kind === "int" && (!Number.isInteger(value) || value < -2147483648 || value > 2147483647)) return `${tunable.name}: ${value} is not a 32-bit integer`;

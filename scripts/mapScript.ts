@@ -10,7 +10,7 @@ export interface Bundle {
   readonly key: string;
 }
 
-export function loadBundle(path: string, sourceMapDirectory: string): Bundle {
+function loadBundle(path: string, sourceMapDirectory: string): Bundle {
   const bytes = readFileSync(path);
   const key = payloadKey(checksum(bytes.length, (index) => bytes[index] ?? 0));
   keepSourceMap(path, key, sourceMapDirectory);

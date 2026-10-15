@@ -3,7 +3,7 @@ import type { Image, Region } from "./image";
 import type { Metric } from "./metric";
 
 /** A `visibility: shown` capture with the same run's `visibility: hidden` capture of its frame. */
-export interface ShownImage extends Image { readonly hidden: Image }
+interface ShownImage extends Image { readonly hidden: Image }
 
 function crop(image: Image, r: Region): Image {
   const rgb = new Uint8Array(r.width * r.height * 3);
@@ -12,7 +12,7 @@ function crop(image: Image, r: Region): Image {
 }
 
 /** The pixel box, in region coordinates, of the region's pixels whose largest channel |shown − hidden| exceeds silhouetteBounds' SILHOUETTE_DELTA. */
-export function regionSilhouette(image: Image, r: Region): PixelBox | undefined {
+function regionSilhouette(image: Image, r: Region): PixelBox | undefined {
   const hidden = (image as Partial<ShownImage>).hidden;
   if (hidden === undefined) throw new Error("draw-extent needs each shown capture paired with its run's hidden capture");
   if (hidden.width !== image.width || hidden.height !== image.height) throw new Error("shown and hidden captures differ in size");

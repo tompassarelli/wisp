@@ -46,7 +46,7 @@ const desktopService = (name: string) => Effect.gen(function*() {
   return yield* startDesktop(name, yield* desktopCommand(capacity, launcher, name));
 });
 
-export const reviveDesktops = <E = never>(clientsFile: string, names: readonly string[], start: (name: string) => Effect.Effect<string, ServiceProblem | E, Platform> = desktopService) => Effect.gen(function*() {
+const reviveDesktops = <E = never>(clientsFile: string, names: readonly string[], start: (name: string) => Effect.Effect<string, ServiceProblem | E, Platform> = desktopService) => Effect.gen(function*() {
   const missing = (yield* chosenClients(clientsFile, names)).filter((entry) => !liveDesktop(entry.run));
   for (const entry of missing) {
     yield* Console.log(`${entry.name}: no live desktop at ${entry.run}; starting its private desktop as the service ${desktopUnit(entry.name)}`);

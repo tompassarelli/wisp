@@ -1,15 +1,15 @@
 export const PERF_METRICS = ["instructions", "lua-us", "natives", "alloc-kb", "typed", "native-us", "typing-us"] as const;
-export type PerfMetric = (typeof PERF_METRICS)[number];
+type PerfMetric = (typeof PERF_METRICS)[number];
 
-export const RUNTIME_METRICS = ["runtime-instructions", "runtime-alloc-kb"] as const;
-export type RuntimeMetric = (typeof RUNTIME_METRICS)[number];
+const RUNTIME_METRICS = ["runtime-instructions", "runtime-alloc-kb"] as const;
+type RuntimeMetric = (typeof RUNTIME_METRICS)[number];
 
-export interface ModuleAllocation {
+interface ModuleAllocation {
   readonly total: number;
   readonly mean: number;
 }
 
-export interface PerfValues {
+interface PerfValues {
 
   readonly start: number;
   readonly total: number;

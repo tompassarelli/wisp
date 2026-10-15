@@ -43,7 +43,7 @@ export const FRAME_POINTS: readonly (readonly [name: string, fromLeft: number, f
   ["FRAMEPOINT_BOTTOMRIGHT", 1, 1],
 ];
 
-export interface FrameTemplateNode {
+interface FrameTemplateNode {
   readonly key: string;
   readonly type: string;
   readonly width?: number;
@@ -71,10 +71,10 @@ export interface FrameTemplate {
   readonly children: readonly FrameTemplateNode[];
 }
 
-export interface TemplateFont { readonly file: string; readonly size: number; readonly flags?: number }
-export interface TemplateJustify { readonly horizontal: "LEFT" | "CENTER" | "RIGHT"; readonly vertical: "TOP" | "MIDDLE" | "BOTTOM" }
-export interface FrameFont { readonly file: string; readonly height: number; readonly flags: number }
-export interface TextAlignment { readonly vertical: "top" | "middle" | "bottom"; readonly horizontal: "left" | "center" | "right" }
+interface TemplateFont { readonly file: string; readonly size: number; readonly flags?: number }
+interface TemplateJustify { readonly horizontal: "LEFT" | "CENTER" | "RIGHT"; readonly vertical: "TOP" | "MIDDLE" | "BOTTOM" }
+interface FrameFont { readonly file: string; readonly height: number; readonly flags: number }
+interface TextAlignment { readonly vertical: "top" | "middle" | "bottom"; readonly horizontal: "left" | "center" | "right" }
 
 function textJustify(value: unknown): string {
   if (typeof value === "number") return ["top", "middle", "bottom", "left", "center", "right"][value] ?? "";
@@ -94,7 +94,7 @@ function styleText(frame: Frame, declared: { readonly font?: TemplateFont; reado
   frame.alignment = { vertical: justify.vertical, horizontal: justify.horizontal };
 }
 
-export interface Anchor {
+interface Anchor {
   readonly point: string;
   readonly relative: Frame;
   readonly relativePoint: string;

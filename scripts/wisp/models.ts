@@ -8,9 +8,9 @@ export interface Box {
   readonly max: Vector3;
 }
 
-export type EmitterKind = "particle" | "ribbon" | "model particle" | "popcorn";
+type EmitterKind = "particle" | "ribbon" | "model particle" | "popcorn";
 
-export interface EmitterFacts {
+interface EmitterFacts {
   readonly kind: EmitterKind;
   readonly name: string;
 
@@ -198,7 +198,7 @@ const usable = (min: ArrayLike<number> | undefined, max: ArrayLike<number> | und
   min !== undefined && max !== undefined && min.length >= 3 && max.length >= 3
   && [0, 1, 2].every((axis) => Math.abs(min[axis] ?? 0) < 1e6 && Math.abs(max[axis] ?? 0) < 1e6 && (min[axis] ?? 0) <= (max[axis] ?? 0));
 
-export function union(boxes: readonly Box[]): Box | undefined {
+function union(boxes: readonly Box[]): Box | undefined {
   if (boxes.length === 0) return undefined;
   const axis = (pick: (box: Box) => Vector3, choose: (...values: number[]) => number, index: 0 | 1 | 2) => choose(...boxes.map((box) => pick(box)[index]));
   return {

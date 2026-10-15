@@ -16,15 +16,15 @@ export class FidelityFailure extends Schema.TaggedError<FidelityFailure>()("Fide
   override get message(): string { return this.problem; }
 }
 export type Verdict = "PASS" | "FAIL" | "INCONCLUSIVE";
-export interface Measurement { readonly slice: string; readonly frame: number; readonly control: string; readonly region: string; readonly metric: string; readonly bound: number; readonly spread: number; readonly error: number; readonly verdict: Verdict }
-export interface FidelityResult { readonly lever: string; readonly verdict: Verdict; readonly measurements: readonly Measurement[] }
+interface Measurement { readonly slice: string; readonly frame: number; readonly control: string; readonly region: string; readonly metric: string; readonly bound: number; readonly spread: number; readonly error: number; readonly verdict: Verdict }
+interface FidelityResult { readonly lever: string; readonly verdict: Verdict; readonly measurements: readonly Measurement[] }
 const stable = (value: unknown): string => {
   if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
   if (value !== null && typeof value === "object") return `{${Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${JSON.stringify(k)}:${stable(v)}`).join(",")}}`;
   return JSON.stringify(value) ?? "undefined";
 };
 const key = (slice: CaptureSlice) => `${slice.lever}/${slice.scene}/${slice.look}`;
-export function validateComparison(reference: CaptureManifest, candidate: CaptureManifest, lever: string, liveBuild: string): readonly (readonly [CaptureSlice,CaptureSlice])[] {
+function validateComparison(reference: CaptureManifest, candidate: CaptureManifest, lever: string, liveBuild: string): readonly (readonly [CaptureSlice,CaptureSlice])[] {
   if (stable(reference.split) !== stable(candidate.split)) throw new Error("capture split differs");
   const refs = reference.slices.filter(s => s.lever === lever), candidates = candidate.slices.filter(s => s.lever === lever);
   if (refs.length === 0 || refs.length !== candidates.length) throw new Error(`missing or unequal slices for ${lever}`);
@@ -44,7 +44,7 @@ export function validateComparison(reference: CaptureManifest, candidate: Captur
     return [ref,cand] as const;
   });
 }
-export function metricsFor(lever: string, settings: Readonly<Record<string,number>>): readonly Metric[] {
+function metricsFor(lever: string, settings: Readonly<Record<string,number>>): readonly Metric[] {
   switch (lever) {
     case "sky": return sky;
     case "fog": case "height-fog-falloff": return fog;

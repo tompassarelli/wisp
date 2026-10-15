@@ -13,7 +13,7 @@ export interface Journey {
   readonly events: readonly JourneyEvent[];
 }
 
-export interface ClientResult {
+interface ClientResult {
   readonly slot: number;
   readonly calls: number;
 

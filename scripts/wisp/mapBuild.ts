@@ -36,7 +36,7 @@ export class CompileFailure extends Schema.TaggedError<CompileFailure>()("Compil
   }
 }
 
-export interface CompiledBundle extends Bundle {
+interface CompiledBundle extends Bundle {
   readonly bytes: Uint8Array;
   readonly checksum: string;
 }
@@ -144,7 +144,7 @@ function newestModification(path: string): number {
   return readdirSync(path).reduce((newest, name) => Math.max(newest, newestModification(join(path, name))), 0);
 }
 
-export function freshBundleAge(bundle: string, inputs: readonly string[], now: number): number | undefined {
+function freshBundleAge(bundle: string, inputs: readonly string[], now: number): number | undefined {
   if (!existsSync(bundle) || !existsSync(`${bundle}.map`)) return undefined;
   const compiledAt = statSync(bundle).mtimeMs;
   return inputs.every((input) => newestModification(input) < compiledAt) ? (now - compiledAt) / 1000 : undefined;
@@ -181,7 +181,7 @@ const baseMapFiles = (packager: string, base: string, replacements: readonly Arc
   return entries;
 });
 
-export const writeHeader = (map: string, header: Uint8Array) => tryMapSync("write map header", map, () => {
+const writeHeader = (map: string, header: Uint8Array) => tryMapSync("write map header", map, () => {
   const file = openSync(map, "r+");
   let magic = "";
   try {
@@ -268,7 +268,7 @@ const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compil
   yield* Console.log(`built ${out}`);
 }));
 
-export function withFileIo(objectData: readonly GeneratedFile[] = []): readonly GeneratedFile[] {
+function withFileIo(objectData: readonly GeneratedFile[] = []): readonly GeneratedFile[] {
   return objectData.some(({ entry }) => entry === "war3map.w3a") ? objectData : [...objectData, { entry: "war3map.w3a", contents: abilityData() }];
 }
 
@@ -297,7 +297,7 @@ const compilePackager = (path: string, source: string, stamp: string) => Effect.
   });
 }).pipe(step("compile map packager"));
 
-export const ensureLua = (directory: string) => Effect.suspend(() => existsSync(join(directory, "bin/luac")) ? Effect.void : Effect.gen(function*() {
+const ensureLua = (directory: string) => Effect.suspend(() => existsSync(join(directory, "bin/luac")) ? Effect.void : Effect.gen(function*() {
   yield* tryMapSync("create Lua directory", directory, () => mkdirSync(dirname(directory), { recursive: true }));
   yield* runProcess("link Lua compiler", directory, ["nix", "build", "--out-link", directory, "nixpkgs#lua5_3"]);
 }).pipe(step("link Lua compiler")));
@@ -338,7 +338,7 @@ export interface ArchiveEntry {
   readonly source: string;
 }
 
-export const packageEntries = (
+const packageEntries = (
   replaceAll: (entries: readonly ArchiveEntry[]) => Effect.Effect<void, BuildFailure>,
   assets: readonly ArchiveEntry[],
   files: readonly ArchiveEntry[],
@@ -377,7 +377,7 @@ const ProjectPackage = Schema.Struct({
 });
 const InstalledPackage = Schema.Struct({ version: Schema.String });
 
-export const verifyToolchain = (lockPath: string, packageDirectory: string) => Effect.gen(function*() {
+const verifyToolchain = (lockPath: string, packageDirectory: string) => Effect.gen(function*() {
   const text = yield* tryMapPromise("read toolchain lock", lockPath, () => Bun.file(lockPath).text());
   const lock = yield* decode(ToolchainLock, lockPath, yield* tryMapSync("parse toolchain lock", lockPath, () => Bun.TOML.parse(text)));
   const project = yield* readJson(ProjectPackage, join(packageDirectory, "package.json"));

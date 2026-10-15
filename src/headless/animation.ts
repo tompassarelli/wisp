@@ -115,7 +115,7 @@ const SECONDARY_TAGS = ["alternate", "alternateex", "berserk", "bone", "chain", 
   "rooted", "second", "severe", "slam", "small", "spiked", "spin", "swim", "talk", "third", "three", "throw", "turn", "two", "upgrade",
   "victory", "work", "wounded"];
 
-export interface AnimationTags {
+interface AnimationTags {
   readonly primary: readonly string[];
 
   readonly secondary: readonly string[];

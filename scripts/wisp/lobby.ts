@@ -65,7 +65,7 @@ export const freshMatch = ({ map, folder, filePrefix = "wisp" }: FreshMatchOptio
   yield* Effect.forEach(clients.all, (client) => unlessLost(client, startedAfter(client, start, filePrefix)), { concurrency: "unbounded", discard: true }).pipe(step("match running in every client"));
 }));
 
-export const startedAfter = (client: Client, since: number, filePrefix = "wisp") => Effect.gen(function*() {
+const startedAfter = (client: Client, since: number, filePrefix = "wisp") => Effect.gen(function*() {
   let problem: MalformedGameFile | undefined;
   const acknowledged = Effect.forEach(FILE_SLOT_NUMBERS, (slot) => readGameFile(join(dataDirectory(client.documents), ackFile(slot, filePrefix)), Acknowledgement).pipe(
     Effect.map((file) => file !== undefined && file.modified > since),

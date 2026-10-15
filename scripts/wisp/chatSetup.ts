@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { DesktopFailure, waitFor } from "../warcraft/desktop";
 
-export interface ChatEntry {
+interface ChatEntry {
   readonly available: boolean;
   readonly open: boolean;
   readonly modified: number;
@@ -20,7 +20,7 @@ export const openObservedChat = <E, R>(client: { readonly name: string }, entry:
   return yield* new DesktopFailure({ operation: "open chat entry", client: client.name, cause: "chat stayed closed after two observed Return transitions; no text sent" });
 });
 
-export interface CommandReceipt<A, E, R> {
+interface CommandReceipt<A, E, R> {
   readonly client: { readonly name: string };
   readonly read: Effect.Effect<A | undefined, E, R>;
   readonly requested: (current: A, before: A | undefined) => boolean;

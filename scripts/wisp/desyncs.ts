@@ -62,7 +62,7 @@ export interface DesyncReport {
   readonly latency: number;
 }
 
-export const PARTNER_WAIT_MILLIS = 1000;
+const PARTNER_WAIT_MILLIS = 1000;
 
 const FileFailureCode = Schema.Struct({ code: Schema.String });
 function missingDirectory(failure: GameFileFailure): boolean {
@@ -72,7 +72,7 @@ function missingDirectory(failure: GameFileFailure): boolean {
 
 interface Pending { readonly client: number; readonly path: string; readonly summary: DesyncSummary; readonly modified: number }
 
-export interface DesyncWatch {
+interface DesyncWatch {
   readonly changed: Effect.Effect<DesyncReport | undefined, GameFileFailure | MalformedGameFile>;
 }
 

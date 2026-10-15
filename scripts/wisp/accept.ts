@@ -166,21 +166,21 @@ export function suiteProblems(suite: AcceptSuite, clients?: readonly string[]): 
 const describeRegion = (region: Region | undefined) => (region === undefined ? "whole frame" : `${region.width}x${region.height}+${region.x}+${region.y}`);
 const describeCount = ({ min, max }: Count) => (min === undefined && max === undefined ? ">= 1" : max === undefined ? `>= ${min}` : min === undefined ? `<= ${max}` : min === max ? `= ${min}` : `${min}..${max}`);
 
-export function describeStep(step: Step, host: string): string {
+function describeStep(step: Step, host: string): string {
   if ("chat" in step) return `chat ${step.client ?? host}: ${step.chat}`;
   if ("keys" in step) return `keys ${step.client ?? host}: ${step.keys.join(" ")}`;
   if ("waitMs" in step) return `wait ${step.waitMs} ms`;
   return `wait for receipt ${step.client ?? host} /${step.receipt}/ (${step.seconds ?? DEFAULT_RECEIPT_SECONDS} s)`;
 }
 
-export function describeCapture(capture: Capture, host: string): string {
+function describeCapture(capture: Capture, host: string): string {
   const client = capture.client ?? host;
   if (capture.kind === "frames") return `frames ${capture.name} ${client} ${describeRegion(capture.region)} x${capture.count ?? 1}${(capture.count ?? 1) > 1 ? ` every ${capture.everyMs ?? 0} ms` : ""}`;
   if (capture.kind === "reading") return `reading ${capture.name} ${client} ${describeRegion(capture.region)}${capture.pattern === undefined ? "" : ` /${capture.pattern}/`}`;
   return `measure ${capture.name} ${client} ${capture.measure} ${describeRegion(capture.region)}`;
 }
 
-export function describeRule(rule: Rule): string {
+function describeRule(rule: Rule): string {
   const look = rule.orLook === true ? " (else look)" : "";
   if (rule.kind === "receipt") return `receipt ${rule.client ?? "every client"} /${rule.pattern}/ ${describeCount(rule)}${look}`;
   if (rule.kind === "log") return `War3Log ${rule.client ?? "every client"} /${rule.pattern}/ since ${rule.since ?? "check"} ${describeCount(rule)}${look}`;
@@ -278,7 +278,7 @@ export function cropFrame(frame: Frame, region: Region | undefined): Frame {
   return { width, height, rgb };
 }
 
-export const receiptLines = (text: string) => preloadLines(text) ?? text.split(/\r?\n/).filter((line) => line.trim() !== "");
+const receiptLines = (text: string) => preloadLines(text) ?? text.split(/\r?\n/).filter((line) => line.trim() !== "");
 
 const fileName = (value: string) => value.replace(/[^A-Za-z0-9._-]+/g, "_");
 

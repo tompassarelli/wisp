@@ -19,12 +19,12 @@ export interface DoctorDeclaration {
   readonly accounts?: Readonly<Record<string, NonNullable<DoctorTarget["account"]>>>;
 }
 
-export const profileSettings = (entry: { readonly profile?: ClientProfile | undefined; readonly displaySettings?: Readonly<Record<string, string>> | undefined }) => {
+const profileSettings = (entry: { readonly profile?: ClientProfile | undefined; readonly displaySettings?: Readonly<Record<string, string>> | undefined }) => {
   const settings = clientSettings(entry.profile ?? "minimal");
   return { ...settings, Video: { ...settings["Video"], ...entry.displaySettings } };
 };
 
-export const doctorTargets = (declaration: DoctorDeclaration, names: readonly string[] = []) => Effect.gen(function*() {
+const doctorTargets = (declaration: DoctorDeclaration, names: readonly string[] = []) => Effect.gen(function*() {
   const config = yield* desktop.readClientsFile(declaration.clientsFile).pipe(Effect.mapError((cause) => new DoctorStop({ problem: cause.message })));
   const unknown = names.filter((name) => !config.clients.some((client) => client.name === name));
   if (unknown.length > 0) return yield* new UsageFailure({ problem: `unknown client ${unknown.join(", ")}; known: ${config.clients.map(({ name }) => name).join(", ")}` });
@@ -47,7 +47,7 @@ export const doctorTargets = (declaration: DoctorDeclaration, names: readonly st
   }));
 });
 
-export const doctorLayer = (declaration: DoctorDeclaration, tools: Partial<PlayTools> = {}): Layer.Layer<PlayMachine | DoctorHands, CommandFailure, Platform> =>
+const doctorLayer = (declaration: DoctorDeclaration, tools: Partial<PlayTools> = {}): Layer.Layer<PlayMachine | DoctorHands, CommandFailure, Platform> =>
   Layer.merge(playMachineLayer(tools), privateDoctorHands(declaration.clientsFile));
 
 export const clientsDoctor = (declaration: DoctorDeclaration, names: readonly string[] = [], print: (line: string) => void = console.log, tools: Partial<PlayTools> = {}) =>

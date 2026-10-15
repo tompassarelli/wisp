@@ -1,4 +1,4 @@
-export interface LoggedAction {
+interface LoggedAction {
   readonly seconds: number;
   readonly turn: number;
   readonly client: string;
@@ -17,7 +17,7 @@ export interface ActionLog {
   readonly events: readonly { readonly seconds: number; readonly text: string }[];
 }
 
-export function headerStart(text: string): number | undefined {
+function headerStart(text: string): number | undefined {
   const match = /seconds since (\d{4}-\d\d-\d\dT[\d:.]+Z)/.exec(text.split("\n", 1)[0] ?? "");
   if (match === null) return undefined;
   const time = Date.parse(match[1] ?? "");

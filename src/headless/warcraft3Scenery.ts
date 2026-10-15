@@ -1,7 +1,7 @@
 import type { Handle, NativeBehavior } from "./clientTypes";
 import { f32 } from "../sim/f32";
 
-export interface DoodadFixture {
+interface DoodadFixture {
   readonly id: number;
   readonly x: number;
   readonly y: number;

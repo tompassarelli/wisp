@@ -246,7 +246,7 @@ export interface HeadlessReport {
   readonly sounds: readonly (SoundCue & { readonly client: number })[];
 }
 
-export interface HeadlessFinding {
+interface HeadlessFinding {
   readonly kind: "desync" | "error" | "scene" | "check-fail" | "missing-native";
   readonly frame: number | null;
   readonly client: number | null;

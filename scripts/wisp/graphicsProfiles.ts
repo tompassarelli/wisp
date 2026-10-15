@@ -4,7 +4,7 @@ export const GRAPHICS: readonly Graphics[] = ["classic", "definitive"];
 export type Lever =
   | "day-night-light" | "fog" | "height-fog-falloff" | "sky" | "cinematic-filter" | "point-lights"
   | "point-light-shadows" | "shadows" | "water" | "pbr" | "bloom" | "ambient-occlusion" | "terrain";
-export const LEVERS: readonly Lever[] = [
+const LEVERS: readonly Lever[] = [
   "day-night-light", "fog", "height-fog-falloff", "sky", "cinematic-filter", "point-lights",
   "point-light-shadows", "shadows", "water", "pbr", "bloom", "ambient-occlusion", "terrain",
 ];

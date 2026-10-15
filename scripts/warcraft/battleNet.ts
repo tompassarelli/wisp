@@ -67,7 +67,7 @@ export const prefixFromDocuments = (documents: string) => documents.endsWith(`/$
 
 export const launcherConfig = (prefix: string) => join(prefix, "drive_c/users/steamuser/AppData/Roaming/Battle.net/Battle.net.config");
 
-export function windowsPath(prefix: string, path: string): string {
+function windowsPath(prefix: string, path: string): string {
   const drive = join(prefix, "drive_c");
   if (!path.startsWith(`${drive}/`)) throw new Error(`${path} is not under ${drive}`);
   return `C:\\${path.slice(drive.length + 1).replaceAll("/", "\\")}`;
@@ -130,9 +130,9 @@ export type LauncherHealth =
 
 const LOGIN_REJECTED = /ERROR_TOKEN_NOT_FOUND/;
 
-export type LoginForm = "Login" | "LoginCredential";
+type LoginForm = "Login" | "LoginCredential";
 
-export function loginForm(lines: readonly string[]): LoginForm | undefined {
+function loginForm(lines: readonly string[]): LoginForm | undefined {
   let form: LoginForm | undefined;
   for (const line of lines) {
     const loaded = /\[UnifiedAuth\] .*UAuth: finished loading\. statusCode=200 state=(Login|LoginCredential)\s*$/.exec(line);

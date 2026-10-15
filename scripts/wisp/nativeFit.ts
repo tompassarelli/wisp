@@ -1,12 +1,12 @@
 import { type FrameWork, type NativeCostModel, nativeFrameCost } from "../../src/headless/nativeCost";
 import { type FrameCostCapture, parseFrameCostCapture } from "./frameCostCapture";
 
-export const NATIVE_TOLERANCE = 0.2;
+const NATIVE_TOLERANCE = 0.2;
 
 const WINDOW_FRAMES = 120;
 const WINDOW_STRIDE = 30;
 
-export const NATIVE_CLOCK_STEP_MS = 0.97656;
+const NATIVE_CLOCK_STEP_MS = 0.97656;
 
 export interface OverlayWindow {
   readonly median: number;
@@ -20,7 +20,7 @@ export interface NativeReadings {
   readonly clockStepMs: number;
 }
 
-export interface WindowSummary {
+interface WindowSummary {
   readonly median: number;
   readonly p95?: number;
   readonly max: number;
@@ -75,7 +75,7 @@ const rank = (values: readonly number[], share: number) => {
   return order[Math.max(0, Math.min(order.length - 1, Math.ceil(share * order.length) - 1))]!;
 };
 
-export function frameCostCaptureReadings(capture: FrameCostCapture): NativeReadings {
+function frameCostCaptureReadings(capture: FrameCostCapture): NativeReadings {
   const times = capture.samples.map(({ luaUs }) => luaUs / 1000);
   const windows: OverlayWindow[] = [];
   for (let end = WINDOW_FRAMES; end <= times.length; end += WINDOW_STRIDE) {
@@ -99,7 +99,7 @@ export function overlayWindows(frameUs: readonly number[], clockStepMs: number):
   return windows;
 }
 
-export function summarizeWindows(windows: readonly OverlayWindow[]): WindowSummary {
+function summarizeWindows(windows: readonly OverlayWindow[]): WindowSummary {
   const p95s = windows.flatMap((window) => (window.p95 === undefined ? [] : [window.p95]));
   return {
     median: median(windows.map((window) => window.median)),
@@ -109,7 +109,7 @@ export function summarizeWindows(windows: readonly OverlayWindow[]): WindowSumma
   };
 }
 
-export const predictedOverlay = (model: NativeCostModel, frames: readonly FrameWork[], clockStepMs: number) =>
+const predictedOverlay = (model: NativeCostModel, frames: readonly FrameWork[], clockStepMs: number) =>
   summarizeWindows(overlayWindows(frames.map((work) => nativeFrameCost(model, work).callbacksUs), clockStepMs));
 
 export interface NativeCase {
