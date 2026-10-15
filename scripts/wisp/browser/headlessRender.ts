@@ -3,6 +3,7 @@ import { type AnimationSequence, animationSample, blendWeight, globalSequenceFra
 import type { DrawnPose as EffectPose, PopcornEmitterPose, UnsupportedEmitterPose, RenderedFrame, RenderScene } from "../headlessRender";
 import { parsableModel } from "../models";
 import { drawnPoses } from "../culling";
+import { emitterInventory, undrawnEmitters } from "../emitterInventory";
 import { advanceEmitters, type EmitterRenderer } from "./emitters";
 import { drawTerrain } from "./terrain";
 import { drawWater } from "./water";
@@ -325,19 +326,7 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
     renderer.render(multiply(depthPass.view, placed), depthPass.projection, {});
     return;
   }
-  const emitters = [...(data.ParticleEmitterPopcorns ?? []).map((emitter) => ({ emitter, kind: "popcorn" as const })), ...data.ParticleEmitters.map((emitter) => ({ emitter, kind: "model particle" as const }))];
-  for (const { emitter, kind } of emitters) {
-    const alpha = "Alpha" in emitter ? sampler.interp.animVectorVal(emitter.Alpha, 1) : 1;
-    const visible = pose.alpha > 0 && sampler.interp.animVectorVal(emitter.Visibility, 1) > 0 && alpha > 0;
-    const node = sampler.rendererData.nodes[emitter.ObjectId];
-    if (node === undefined) throw new Error(`missing node for ${kind} emitter "${emitter.Name}"`);
-    const world = multiply(placed, node.matrix), pivot = emitter.PivotPoint ?? data.PivotPoints[emitter.ObjectId];
-    const position = [0, 1, 2].map((row) => (world[12 + row] ?? 0) + [0, 1, 2].reduce((sum, axis) => sum + (world[axis * 4 + row] ?? 0) * (pivot?.[axis] ?? 0), 0)) as [number, number, number];
-    const scale = [0, 1, 2].map((axis) => Math.hypot(world[axis * 4] ?? 0, world[axis * 4 + 1] ?? 0, world[axis * 4 + 2] ?? 0)) as [number, number, number];
-    const entry = { model: pose.model, handle: pose.handle.id, emitter: emitter.Name || `${kind}#${emitter.ObjectId}`, effect: emitter.Path ?? "", position, scale };
-    unsupportedEmitters.push({ ...entry, kind, objectId: emitter.ObjectId, visible, supported: false });
-    if (visible && kind === "popcorn") popcornEmitters.push(entry);
-  }
+  emitterInventory(pose, data, sampler, placed, popcornEmitters, unsupportedEmitters);
   const sun = shadows.sun, pointShadow = shadows.points;
   renderer.setWispEnvironment({
     linearOutput: true,
@@ -673,7 +662,7 @@ window.renderScene = async (scene, options) => {
     try { bindScene(); water = await drawWater(gl, scene.terrain, scene.frame, view.view, view.projection, fog, textureAt, asset); }
     catch (cause) { notDrawn.push(`water: ${String(cause)}`); }
   }
-  for (const emitter of unsupportedEmitters) if (emitter.visible) notDrawn.push(`${emitter.model}: undrawn ${emitter.kind === "popcorn" ? "Popcorn" : "version-1 model"} emitter "${emitter.emitter}" (${emitter.effect || "no effect path"})`);
+  notDrawn.push(...undrawnEmitters(unsupportedEmitters));
   resolve(gl, sceneBuffer);
   const post = graphics === "definitive" ? await postProcessing() : {};
   const projection = view.projection;

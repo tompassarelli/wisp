@@ -137,7 +137,7 @@ test("[boundary] lan pool: playtest admits one pair, refuses held and racing pai
   for (const on of [false, undefined]) {
     if (on === undefined) rmSync(playtest);
     else writeFileSync(playtest, JSON.stringify({ on }));
-    const additional = pool(box, { WISP_TEST_DESKTOPS: join(box.env.WISP_TEST_DESKTOPS, "additional") }, poolPair + 1);
+    const additional = pool(box, { WISP_TEST_DESKTOPS: join(box.env.WISP_TEST_DESKTOPS, "additional"), WISP_TEST_HOLDER: "quiet" }, poolPair + 1);
     const clients = join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${poolPair + 1}`, "clients.json");
     await until(() => existsSync(clients), 30, "the additional pool pair");
     expect(box.sessions()).toHaveLength(2);
@@ -156,7 +156,7 @@ test("[boundary] lan pool: playtest admits one pair, refuses held and racing pai
   expect(await released.exited).toBe(0);
   writeFileSync(playtest, JSON.stringify({ on: true, auto: false }));
   const racing = [poolPair + 1, poolPair + 2].map((pair) => {
-    const child = pool(box, { WISP_TEST_DESKTOPS: join(box.env.WISP_TEST_DESKTOPS, String(pair)) }, pair);
+    const child = pool(box, { WISP_TEST_DESKTOPS: join(box.env.WISP_TEST_DESKTOPS, String(pair)), WISP_TEST_HOLDER: "quiet" }, pair);
     let exited = false;
     void child.exited.then(() => { exited = true; });
     return { pair, child, ended: () => exited };

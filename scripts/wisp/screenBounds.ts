@@ -151,19 +151,24 @@ function glowPoints(positions: Float64Array, mains: Int32Array, uv: ArrayLike<nu
   return { positions: Float64Array.from(out), main: Int32Array.from(nodes) };
 }
 
-/** Poses and skins a model on the CPU, as drawEffect in browser/headlessRender.ts poses it. */
-function posedMesh(pose: DrawnPose, found: BoundsModel, view: ReturnType<typeof camera>): PosedMesh {
+export function posedSampler(pose: DrawnPose, found: BoundsModel): PosedMesh["sampler"] {
   const { data, renderer } = found, sampler = renderer as unknown as PosedMesh["sampler"];
   const kind = pose.unit === true ? "unit" : "effect";
   const sample = animationSample(found.sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, kind);
-  renderer.setCamera(new Float32Array(view.eye), view.quaternion);
   show(sampler, data, sample);
   data.GlobalSequences.forEach((length, index) => { sampler.rendererData.globalSequencesFrames[index] = globalSequenceFrame(pose.animationClock, length); });
   const blend = pose.animationBlend, weight = blendWeight(pose);
   const saved = blend === undefined ? undefined : animationSample(found.sequences, blend.from, kind);
   renderer.update(0);
   if (saved !== undefined && weight > 0) poseNodes(sampler, data, saved, weight);
+  return sampler;
+}
 
+/** Poses and skins a model on the CPU, as drawEffect in browser/headlessRender.ts poses it. */
+function posedMesh(pose: DrawnPose, found: BoundsModel, view: ReturnType<typeof camera>): PosedMesh {
+  const { data } = found;
+  found.renderer.setCamera(new Float32Array(view.eye), view.quaternion);
+  const sampler = posedSampler(pose, found);
   const nodes = sampler.rendererData.nodes;
   const geosets: GeosetBounds[] = [], drawnMeshes: PosedMesh["drawn"][number][] = [];
   data.Geosets.forEach((geoset, index) => {

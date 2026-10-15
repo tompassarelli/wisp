@@ -7,7 +7,7 @@ mkdir -p "$WISP_TEST_DESKTOPS"
 run=$(mktemp -d "$WISP_TEST_DESKTOPS/run.XXXXXX")
 touch "$run/lifecycle-owned" "$run/active"
 echo "Run: $run"
-env -u WISP_TEST_MARK setsid sleep 45 &
+if [ "${WISP_TEST_HOLDER:-}" = quiet ]; then env -u WISP_TEST_MARK setsid sleep 45 >/dev/null 2>&1 & else env -u WISP_TEST_MARK setsid sleep 45 & fi
 echo $! >> "$WISP_TEST_DESKTOPS/holders"
 agent=""
 if [ "$1" = -- ]; then
