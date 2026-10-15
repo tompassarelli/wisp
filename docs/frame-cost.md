@@ -169,10 +169,12 @@ one after it, such as a match's first:
   `runtime-alloc-kb`). The map's allocation is also split by bundle module
   (`pSLOT module-alloc-bytes MODULE total=... mean=...`, bytes per frame),
   and the hook's own allocation is left out of both.
-- **Allocated KB**: what the map's code allocated. The collector stops while
-  a client runs, so Lua time holds none of its work; between runs it collects
-  once the heap has grown 16 MB, and the run reports those collections' time
-  per kilobyte (`collector us=... kb=...`).
+- **Allocated KB**: what the map's code allocated. Automatic collection stays
+  stopped throughout profiling, including between client callbacks: collecting
+  interned strings between callbacks changes later allocations even with equal
+  instruction counts. Between callbacks it explicitly collects once the heap
+  has grown 16 MB, and reports those collections' time per kilobyte
+  (`collector us=... kb=...`). Profiling restores automatic collection on exit.
 - **Typed characters**: text the driver says reached the client's edit box
   before the frame (`measure.typed(slot, characters)`).
 - **Predicted native time** (`native-us`, `typing-us`): the frame's cost in

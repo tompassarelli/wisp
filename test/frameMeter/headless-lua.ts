@@ -1,5 +1,6 @@
 import { luaLockstep, readFile } from "../../src/headless/lua";
-import { runLuaPerf } from "../../src/headless/luaPerf";
+import { runLuaPerfWith } from "../../src/headless/luaPerf";
+import { journeyLines, journeyProblems, runJourney } from "../../src/headless/journey";
 import { frameCostFile } from "../../src/runtime/frameCost";
 import { frameCostCaptureFile } from "../../src/runtime/frameCostCapture";
 
@@ -33,4 +34,9 @@ for (const client of clients.clients) {
   for (const line of client.files.get(frameCostCaptureFile(client.slot, 1, MAP.filePrefix)) ?? ["no capture"]) print(`p${client.slot} capture: ${line}`);
 }
 print(`capture desync: ${clients.firstDivergence() ?? "none"}`);
-runLuaPerf(MAP, { frames: 120, events: [{ frame: 60, player: 0, chat: "-work 20" }] }, bundlePath, declarationsPath);
+runLuaPerfWith(MAP, bundlePath, declarationsPath, (measured) => {
+  const result = runJourney(measured, { frames: 120, events: [{ frame: 60, player: 0, chat: "-work 20" }] }, { checksums: false });
+  if (collectgarbage("isrunning")) throw new Error("automatic GC between measured callbacks changes allocation samples");
+  return { problems: journeyProblems(result), lines: journeyLines(result) };
+});
+if (!collectgarbage("isrunning")) throw new Error("profiling must restore automatic GC");

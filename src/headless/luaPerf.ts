@@ -219,7 +219,6 @@ export function runLuaPerfWith(
       const seconds = os.clock();
       debug.sethook();
       const kb = collectgarbage("count");
-      collectgarbage("restart");
       active = undefined;
       const cost = costs.get(client);
       if (cost === undefined) return;
@@ -271,6 +270,9 @@ export function runLuaPerfWith(
     },
   };
   let result: { readonly problems: number; readonly lines: readonly string[] };
+  collectgarbage("collect");
+  collectgarbage("stop");
+  collectedKb = collectgarbage("count");
   try {
     result = play(lockstep, measure);
   } finally {
