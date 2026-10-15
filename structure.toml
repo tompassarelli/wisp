@@ -1,0 +1,119 @@
+# wisp structure.toml (structure-architect planner, 15 Oct 2026). Lands at repo root as structure.toml.
+# Modules are the TARGET layers of wisp-design.md section 1 mapped onto today's paths; target paths are listed too so
+# moves (boxes 23-25, W-cli, W-num) only delete the old globs. First matching module wins.
+
+[thresholds]
+file_lines = 500            # hand .ts in src/scripts/plugins: p50 81, p90 334, p95 430 (209 files); 8 files over 500 are frozen
+function_lines = 80
+function_complexity = 15
+hotspot_top = 5
+
+[review]
+commits = 150
+hand_lines_added = 10000
+days = 7
+hotspot_score = 0
+
+[[module]]
+name = "tests"
+thresholds = { function_lines = 150, function_complexity = 30 }
+paths = ["test/**", "**/*.test.ts", "**/*.tests.ts", "examples/**"]
+responsibility = "Bun and Lua tests, numbered fixture maps and examples."
+may_use = ["num", "natives", "runtime", "map", "headless", "cli", "os", "build", "lan", "net", "render", "host", "commands", "plugins"]
+
+[[module]]
+name = "num"
+paths = ["src/num/**", "src/sim/**"]
+responsibility = "binary32 soft-float, f32 helpers and integer math."
+may_use = []
+
+[[module]]
+name = "natives"
+paths = ["src/natives/**"]
+responsibility = "Warcraft III native declarations."
+may_use = []
+
+[[module]]
+name = "runtime"
+paths = ["src/runtime/**"]
+responsibility = "Pure map-side helpers: lookup, record text, repro header, config, payload, module registry, frame cost, test harness."
+may_use = ["num"]
+
+[[module]]
+name = "map"
+paths = ["src/map/**", "src/platform/**"]
+responsibility = "Map-side services that call natives: Preloader file I/O, dispatch, hot reload, frame meter, native driver, scene report."
+may_use = ["runtime", "num", "natives"]
+
+[[module]]
+name = "headless"
+paths = ["src/headless/**"]
+responsibility = "Emulated Warcraft III client, lockstep, sync channel, journeys and Lua perf; knows no game."
+may_use = ["map", "runtime", "num", "natives"]
+
+[[module]]
+name = "cli"
+paths = ["host/cli/**", "scripts/wisp/cli/**", "scripts/wisp/cli.ts", "scripts/wisp/command.ts", "scripts/wisp/timings.ts", "scripts/wisp/hostProcess.ts"]
+responsibility = "Command type, CLI runner, timings and process spawning."
+may_use = []
+
+[[module]]
+name = "os"
+paths = ["host/os/**", "scripts/platform/**", "scripts/warcraft/**"]
+responsibility = "Host OS services and Warcraft client control (launcher, window, input, preferences, log)."
+may_use = ["cli"]
+
+[[module]]
+name = "build"
+paths = ["host/build/**", "scripts/wisp/build/**", "scripts/*.ts"]
+responsibility = "TSTL compile, Lua bundle, map info and script, object data, natives producer, number rules, source maps, packaging."
+may_use = ["cli", "runtime", "num"]
+
+[[module]]
+name = "lan"
+paths = ["host/lan/**", "scripts/wisp/lan/**"]
+responsibility = "Offline LAN pair pool: netns pairs, W3GS host, dummy, admission."
+may_use = ["cli", "os"]
+
+[[module]]
+name = "net"
+paths = ["host/net/**", "scripts/wisp/net/**"]
+responsibility = "UDP lockstep peer, proxy and join code."
+may_use = ["cli", "headless", "runtime", "num"]
+
+[[module]]
+name = "render"
+paths = ["host/render/**", "scripts/wisp/browser/**", "scripts/wisp/fidelity/**", "scripts/wisp/render/**"]
+responsibility = "WebGL headless and standalone renderer and fidelity metrics."
+may_use = ["cli", "os", "headless", "runtime", "num"]
+
+[[module]]
+name = "commands"
+paths = ["host/commands/**", "scripts/wisp/commands/**"]
+responsibility = "Command factories a game instantiates and Wisp's own CLI entries."
+may_use = ["host", "render", "net", "lan", "build", "os", "cli", "headless", "map", "runtime", "num"]
+
+[[module]]
+name = "host"
+paths = ["host/**", "scripts/wisp/**", "scripts/**"]
+responsibility = "Feature services: play, doctor, menus, lobby, accept, soak, farm, dev loop, test runner, models, scenes."
+may_use = ["render", "net", "lan", "build", "os", "cli", "headless", "map", "runtime", "num", "natives"]
+
+[[module]]
+name = "plugins"
+paths = ["plugins/**"]
+responsibility = "TSTL plugins and tsserver/lint plugins."
+may_use = []
+
+[[module]]
+name = "native"
+paths = ["native/**"]
+responsibility = "C map packer and the toward-zero float header."
+may_use = []
+
+[[generated]]
+paths = ["src/natives/warcraft.d.ts"]
+producer = "scripts/natives.ts"
+
+[ignore]
+paths = ["vendor/**", "node_modules/**", "builds/**", "repos/**", "**/fixtures/**"]
