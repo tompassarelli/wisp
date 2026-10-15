@@ -47,8 +47,11 @@ This clears branches left by a killed command or a manual push.
    come from the Actions cache. Each shard runs on a hosted runner or the
    farm box ([Where shards run](#where-shards-run)).
 5. **Merge.** The merge job reads every shard's result into `summary.json`,
-   which the command downloads and prints, and saves this run's measured
-   seconds as the next run's `farm-timings.json`.
+   which the command downloads and prints, and saves the next run's
+   `farm-timings.json`: a test's new estimate moves halfway to a slower
+   measurement and a fifth of the way to a faster one, so one noisy runner
+   doesn't reshuffle the next plan; a test measured for the first time takes
+   its measurement.
 
 ## Where shards run
 

@@ -119,6 +119,11 @@ export function parseLuaLines(text: string): TestResult[] {
   });
 }
 
+function smoothSeconds(previous: number | undefined, measured: number): number {
+  if (previous === undefined) return measured;
+  return measured > previous ? (measured + previous) / 2 : 0.2 * measured + 0.8 * previous;
+}
+
 export function merge(planned: Plan, results: readonly ShardResult[], previous: Timings): { readonly summary: Summary; readonly timings: Timings } {
   const failures: string[] = [];
   const problems: string[] = [];
@@ -144,7 +149,7 @@ export function merge(planned: Plan, results: readonly ShardResult[], previous: 
         problems.push(`${suite} shard ${result.shard} exited ${result.exitCode} with no failing test: a file failed to load or the runner crashed (see its log)`);
       }
     }
-    Object.assign(timings[suite], measured);
+    for (const [unit, seconds] of Object.entries(measured)) timings[suite][unit] = smoothSeconds(timings[suite][unit], seconds);
     return totals;
   };
   const bun = count("bun", planned.bun.length);

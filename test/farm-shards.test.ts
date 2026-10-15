@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { FARM_LOAD_MAX_AGE_SECONDS, type FarmLoad, placeShards } from "../scripts/wisp/farmShards";
+import { FARM_LOAD_MAX_AGE_SECONDS, type FarmLoad, merge, type Plan, placeShards, type ShardResult } from "../scripts/wisp/farmShards";
 
 test("[property] a shard goes to the farm only when it is even and the farm's load sample is fresh and fits its cores (wisp#132)", () => {
   let state = 132;
@@ -31,4 +31,30 @@ test("[property] a shard goes to the farm only when it is even and the farm's lo
     });
   }
   expect(placeShards(undefined, now, 2, "box", false)).toEqual([{ runner: "box", reason: "farm-runner input" }, { runner: "ubuntu-latest", reason: "odd shard" }]);
+});
+
+test("[property] merge moves a measured test's time halfway to a slower sample and a fifth of the way to a faster one, and keeps or adopts the rest", () => {
+  let state = 7;
+  const next = (below: number) => {
+    state = (Math.imul(state, 1103515245) + 12345) >>> 0;
+    return (state >>> 8) % below;
+  };
+  for (let run = 0; run < 500; run++) {
+    const previous: Record<string, number> = {};
+    const tests: ShardResult["tests"][number][] = [];
+    for (let index = 0; index < 6; index++) {
+      const name = `t${index}`;
+      if (next(4) !== 0) previous[name] = next(200) + 1;
+      if (next(4) !== 0) tests.push({ name, unit: name, seconds: next(200) + 1, status: "pass" });
+    }
+    const planned: Plan = { bun: [], lua: 1, luaTests: {} };
+    const { timings } = merge(planned, [{ suite: "lua", shard: 0, exitCode: 0, tests }], { bun: {}, lua: previous });
+    for (let index = 0; index < 6; index++) {
+      const name = `t${index}`;
+      const before = previous[name];
+      const sample = tests.find((test) => test.unit === name)?.seconds;
+      const expected = sample === undefined ? before : before === undefined ? sample : sample > before ? (sample + before) / 2 : 0.2 * sample + 0.8 * before;
+      expect(timings.lua[name]).toBe(expected);
+    }
+  }
 });
