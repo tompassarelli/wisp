@@ -1,4 +1,4 @@
-import type { SyncMessage } from "./client";
+import type { SyncMessage } from "./clientTypes";
 import type { SyncDelivery } from "./lockstep";
 import { Random } from "./random";
 import { f32 } from "../sim/f32";

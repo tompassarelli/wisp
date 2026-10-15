@@ -1,5 +1,5 @@
 import { f32 } from "../sim/f32";
-import type { Handle } from "./client";
+import type { Handle } from "./clientTypes";
 
 export interface LightningPose {
   readonly handle: Handle;

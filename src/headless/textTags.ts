@@ -1,5 +1,5 @@
 import { f32 } from "../sim/f32";
-import type { Handle } from "./client";
+import type { Handle } from "./clientTypes";
 
 /** TextTagSpeed2Velocity's scale: a velocity of 0.071 moves a tag 128 world units a second. */
 const WORLD_UNITS_PER_VELOCITY = 128 / f32(0.071);

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { FrameTemplate } from "../../src/headless/frames";
-import type { UnitStateFixtures } from "../../src/headless/client";
+import type { UnitStateFixtures } from "../../src/headless/clientTypes";
 import type { SceneryFixtures } from "../../src/headless/warcraft3Scenery";
 import type { Warcraft3InventoryFixtures } from "../../src/headless/warcraft3Inventory";
 import type { AbilityObjectFixtures } from "../../src/headless/warcraft3Abilities";

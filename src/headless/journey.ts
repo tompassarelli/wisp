@@ -1,5 +1,5 @@
 import type { Lockstep } from "./lockstep";
-import type { MissingNative } from "./client";
+import type { MissingNative } from "./clientTypes";
 
 export type JourneyEvent =
   | { readonly frame: number; readonly player: number; readonly chat: string }

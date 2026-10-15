@@ -1,5 +1,5 @@
 import "./headlessRender";
-import type { SoundCue } from "../../../src/headless/client";
+import type { SoundCue } from "../../../src/headless/clientTypes";
 import type { StandaloneFrame, StandaloneInput } from "../standaloneFrames";
 import type { RenderScene } from "../headlessRender";
 import { FRAME_MS } from "../../../src/headless/frameRate";

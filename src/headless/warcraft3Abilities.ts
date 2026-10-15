@@ -1,5 +1,6 @@
 import { f32 } from "../sim/f32";
-import type { Handle, NativeBehavior } from "./client";
+import type { Handle, NativeBehavior } from "./clientTypes";
+import { after } from "./natives/triggersTimers";
 
 export interface AbilityObjectFixture {
   readonly base: string;
@@ -35,6 +36,13 @@ interface UnitAbilities {
   auraUI: boolean;
 }
 
+export interface TargetOrderContext {
+  readonly missing: (this: void) => void;
+  readonly engageable: (this: void, caster: Handle, target: Handle, range: number) => boolean;
+  readonly now: (this: void) => number;
+  readonly hit: (this: void, target: Handle, due: number, damage: number) => void;
+}
+
 export class Warcraft3Abilities {
   constructor(private readonly objects: AbilityObjectFixtures = {}) {}
   private readonly units = new Map<Handle, UnitAbilities>();
@@ -52,6 +60,25 @@ export class Warcraft3Abilities {
       return { interval: value("acas"), duration: value("adur"), range: value("aran"), initial: value("Esh5"), periodic: value("Esh1"), impactDelay: object.impactDelay };
     }
     return undefined;
+  }
+
+  targetOrders({ missing, engageable, now, hit }: TargetOrderContext): Readonly<Record<string, NativeBehavior>> {
+    return {
+      IssueTargetOrder: (caster: Handle, order: string, target: Handle) => {
+        const spell = order === "shadowstrike" ? this.shadowStrike(caster) : undefined;
+        if (spell === undefined || spell.interval <= 0 || spell.duration <= 0) {
+          missing();
+          return false;
+        }
+        if (!engageable(caster, target, spell.range)) return false;
+        const impact = after(now(), spell.impactDelay);
+        hit(target, impact, spell.initial);
+        for (let elapsed = spell.interval; elapsed < spell.duration; elapsed = after(elapsed, spell.interval)) {
+          hit(target, after(impact, elapsed), spell.periodic);
+        }
+        return true;
+      },
+    };
   }
 
   state(unit: Handle): UnitAbilities {

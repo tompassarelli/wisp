@@ -1,5 +1,5 @@
 import { type AnimationSequence, type SavedAnimation, type SequenceSample, animationSample, blendWeight, globalSequenceFrame } from "../../src/headless/animation";
-import type { EffectPose, UnitPose } from "../../src/headless/client";
+import type { EffectPose, UnitPose } from "../../src/headless/clientTypes";
 import { CLIP, CLIP_SEQUENCES, CLOCK_DX, GLOBAL_LENGTH, ORIGIN_DY, RULER, RULER_SEQUENCES, RULER_UNIT, type RulerSequence, SLOTS, needleDx } from "./layout";
 
 const table = (sequences: readonly RulerSequence[]): AnimationSequence[] =>

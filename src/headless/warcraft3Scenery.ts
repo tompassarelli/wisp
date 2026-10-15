@@ -1,4 +1,4 @@
-import type { Handle, NativeBehavior } from "./client";
+import type { Handle, NativeBehavior } from "./clientTypes";
 import { f32 } from "../sim/f32";
 
 export interface DoodadFixture {

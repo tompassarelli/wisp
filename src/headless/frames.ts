@@ -1,4 +1,4 @@
-import type { Handle } from "./client";
+import type { Handle } from "./clientTypes";
 import { f32 } from "../sim/f32";
 
 export interface Frame extends Handle {

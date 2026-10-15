@@ -1,4 +1,4 @@
-import type { SoundCue } from "../../src/headless/client";
+import type { SoundCue } from "../../src/headless/clientTypes";
 
 export type SoundAssetReader = (path: string) => Promise<Uint8Array | undefined>;
 export interface SoundAsset { readonly path: string; readonly bytes: Uint8Array }

@@ -1,4 +1,4 @@
-import type { SoundCue } from "../../src/headless/client";
+import type { SoundCue } from "../../src/headless/clientTypes";
 import type { RenderScene } from "./headlessRender";
 
 /** What the standalone page sends and receives each step; the page imports only this, not the host runner (wisp:scripts/wisp/standalone.ts). */

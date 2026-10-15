@@ -1,7 +1,7 @@
 import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { Predicate } from "effect";
-import type { ClientFiles } from "../../src/headless/client";
+import type { ClientFiles } from "../../src/headless/clientTypes";
 import type { Lockstep } from "../../src/headless/lockstep";
 import { hostPath } from "./preloadRecord";
 import { FRAMES_PER_SECOND } from "../../src/headless/frameRate";
