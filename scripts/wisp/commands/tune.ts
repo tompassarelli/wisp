@@ -8,7 +8,8 @@ import { Tune, type Tunable } from "../tune";
 import { TUNE_PAGE } from "../tunePage";
 import { step } from "../timings";
 import { panelServer } from "../panelServer";
-import { type HotProject, validateDataDirectories, waitForProcessStop } from "./hot";
+import { type HotProject, waitForProcessStop } from "../hotReload";
+import { validateDataDirectories } from "./hot";
 
 export interface TuneProject extends HotProject {
 

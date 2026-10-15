@@ -90,7 +90,7 @@ everything it plays, so it declares no `reads`. `bun run ci` is
    `wisp dev` chooses them on a save (`TestPlan`,
    wisp:scripts/wisp/testSelection.ts). The changes are `git diff --name-only
    BASE` plus untracked files, keeping the paths a save would reach
-   (`followsSave` in wisp:scripts/wisp/commands/dev.ts: project files at the
+   (`followsSave` in wisp:scripts/wisp/dev/savedFiles.ts: project files at the
    root and files under `sources`). A changed project file, a preloaded
    module or a non-module file no test declares reading selects every test,
    as on a save. Files the diff creates or deletes count as changed: the plan

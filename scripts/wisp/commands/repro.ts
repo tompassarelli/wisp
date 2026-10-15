@@ -10,7 +10,7 @@ import { diffReproStates } from "../reproInspection";
 import { replaySoakRepro } from "../reproSoak";
 import { emitJson } from "../jsonResults";
 import { createReproViewer, serveReproViewer, type ReproViewerSources } from "../reproViewer";
-import { waitForProcessStop } from "./hot";
+import { waitForProcessStop } from "../hotReload";
 import { importNativeReplay, compareReplayHost, type NativeReplay } from "../replayImport";
 import { writtenPreloadFile } from "../headlessInput";
 import { reproLines } from "../../../src/runtime/repro";

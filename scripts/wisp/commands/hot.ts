@@ -4,20 +4,11 @@ import { type Command, type CommandFailure, UsageFailure, flagValues } from "../
 import { formatDesync, watchDesyncs } from "../desyncs";
 import { FrameCosts, formatFrameCost } from "../frameCosts";
 import { GameFiles } from "../gameFiles";
-import { HotReload } from "../hotReload";
+import { HotReload, type HotProject, waitForProcessStop } from "../hotReload";
 import { MapBuild, type BuildProject } from "../mapBuild";
 import { SourceErrors } from "../sourceErrors";
 import { step } from "../timings";
 import { modelFailureBridge } from "../modelFailures";
-
-export interface HotProject {
-  readonly project: BuildProject;
-  readonly sourceDirectory: string;
-  readonly sourceMapDirectory: string;
-  readonly filePrefix?: string;
-
-  readonly frameCostThreshold?: number;
-}
 
 const DataDirectories = Schema.NonEmptyArray(Schema.String.check(Schema.isMinLength(1))).check(Schema.isUnique());
 
@@ -85,16 +76,6 @@ function coalesced<A, E>(effect: Effect.Effect<A, E>): Effect.Effect<void, E> {
     })));
   });
 }
-
-export const waitForProcessStop: Effect.Effect<void> = Effect.callback<void>((resume) => {
-  const stop = () => resume(Effect.void);
-  process.once("SIGINT", stop);
-  process.once("SIGTERM", stop);
-  return Effect.sync(() => {
-    process.removeListener("SIGINT", stop);
-    process.removeListener("SIGTERM", stop);
-  });
-});
 
 export const runHotWatch = (
   sourceDirectory: string,

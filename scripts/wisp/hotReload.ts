@@ -6,9 +6,28 @@ import { ModulePublisher, type ModuleSet, type VersionFiles, moduleChunk } from 
 import type { BundledModule, BundledModules } from "../luaBundle";
 import { Acknowledgement, FILE_SLOT_NUMBERS, type MalformedGameFile, hostPath, linePreloadFile, manifestVersion, payloadFileKey, payloadPreloadFile } from "./preloadRecord";
 import { type GameFileFailure, GameFiles, prepareHotFolders, readGameFile } from "./gameFiles";
-import { type CompileFailure, MapBuild, type MapBuildFailure } from "./mapBuild";
+import { type BuildProject, type CompileFailure, MapBuild, type MapBuildFailure } from "./mapBuild";
 import { type SourceMapFailure, SourceErrors } from "./sourceErrors";
 import { step } from "./timings";
+
+export interface HotProject {
+  readonly project: BuildProject;
+  readonly sourceDirectory: string;
+  readonly sourceMapDirectory: string;
+  readonly filePrefix?: string;
+
+  readonly frameCostThreshold?: number;
+}
+
+export const waitForProcessStop: Effect.Effect<void> = Effect.callback<void>((resume) => {
+  const stop = () => resume(Effect.void);
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+  return Effect.sync(() => {
+    process.removeListener("SIGINT", stop);
+    process.removeListener("SIGTERM", stop);
+  });
+});
 
 const ACK_TIMEOUT_MS = 10_000;
 

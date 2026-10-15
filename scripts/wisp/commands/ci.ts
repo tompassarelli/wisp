@@ -13,7 +13,8 @@ import { type SoakMatch, describeMatch, loadSoakProject, planSoak, readSoakReply
 import { ImportGraph } from "../importGraph";
 import { INCONCLUSIVE_EXIT, junitFailures } from "../testRunner";
 import { type Changes, type Selection, TestPlan } from "../testSelection";
-import { type DevProject, followsSave, isProjectFile } from "./dev";
+import { followsSave, isProjectFile } from "../dev/savedFiles";
+import type { DevProject } from "../dev/project";
 import { DEFAULT_SOAK_MINUTES, MAX_SOAK_MATCHES, MAX_SOAK_MINUTES, type SoakCommandOptions, makeSoak } from "./soak";
 
 export interface CiProject extends Pick<DevProject, "root" | "sources" | "tests"> {

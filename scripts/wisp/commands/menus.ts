@@ -2,7 +2,7 @@ import { Console, Effect } from "effect";
 import { type Command, UsageFailure, flagValues, portFlag } from "../command";
 import { DEFAULT_MENU_REPORT_PORT, type MenuSocket, connectMenus, hostLobby, installMenuPage, joinLobby, leaveLobby, listenForMenus, removeMenuPage, startLobby } from "../menus";
 import { step } from "../timings";
-import { waitForProcessStop } from "./hot";
+import { waitForProcessStop } from "../hotReload";
 
 const ANNOUNCE_SECONDS = 5;
 
