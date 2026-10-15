@@ -10,7 +10,7 @@ export function describeCause(cause: unknown): string {
 }
 
 export interface LogFiles {
-  readonly stdout: string;
+  readonly stdout?: string;
   readonly stderr: string;
 }
 
@@ -20,9 +20,9 @@ export const spawnLogged = (command: ChildProcess.Command, files: LogFiles) => E
   const fs = yield* FileSystem.FileSystem;
   const childScope = yield* Scope.fork(yield* Effect.scope);
   const handle = yield* command.pipe(Scope.provide(childScope));
-  const stdout = yield* Effect.forkScoped(Stream.run(handle.stdout, fs.sink(files.stdout)));
+  const stdout = files.stdout === undefined ? undefined : yield* Effect.forkScoped(Stream.run(handle.stdout, fs.sink(files.stdout)));
   const stderr = yield* Effect.forkScoped(Stream.run(handle.stderr, fs.sink(files.stderr)));
-  const written = Effect.all([Fiber.await(stdout), Fiber.await(stderr)], { discard: true });
+  const written = Effect.all([stdout === undefined ? Effect.void : Fiber.await(stdout), Fiber.await(stderr)], { discard: true });
 
   // A descendant that left the child's process group (a session bus, a setsid'd helper) can hold its output open after it exits.
   yield* Effect.addFinalizer(() => Scope.close(childScope, Exit.void).pipe(Effect.andThen(Effect.timeoutOption(written, OUTPUT_GRACE))));

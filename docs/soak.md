@@ -17,7 +17,11 @@ scope; without `--workers` it uses the CPUs that scope allows, up to four.
 
 A project declares its soak in a module whose default export `defineSoak()`
 makes (wisp:scripts/wisp/soak.ts), and adds the command with `makeSoak`
-(wisp:scripts/wisp/commands/soak.ts):
+(wisp:scripts/wisp/commands/soak.ts). The repro and reply file formats and the
+loaders are in wisp:scripts/wisp/soak/file.ts, the fuzzed and recorded inputs
+in wisp:scripts/wisp/soak/inputs.ts, and the CPU clock a match's frame costs
+are measured with in wisp:scripts/wisp/soak/clock.ts (a project or test may
+pass its own as `clock` in the soak's setup):
 
 ```ts
 export default defineSoak({

@@ -3,7 +3,8 @@ import { dirname, join, relative, resolve } from "node:path";
 import { Effect, Schema } from "effect";
 import { installHeadless } from "./headless";
 import { describeCause } from "./command";
-import { loadSoakGame, loadSoakProject, playSoakMatch, readSoakRepro } from "./soak";
+import { playSoakMatch } from "./soak";
+import { loadSoakGame, loadSoakProject, readSoakRepro } from "./soak/file";
 import { shrinkSoakRepro, soakInputCount } from "./reproShrink";
 
 const importFrom = (directory: string, file: string) => {
