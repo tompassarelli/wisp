@@ -230,6 +230,10 @@ it locally.
    broke on main since, so before refusing on one it runs the base too. A test that fails on the branch but
    not in that result is a new failure; a shard that crashed without naming
    a test is new unless main's result also had one in that suite.
+   Beside the suite, a `code-health` job runs north's
+   `harness/code-health/cli.ts gate BASE SHA` on the rebased commit (Bun
+   1.3.13, ast-grep 0.42.1); new debt (exit 1) or a gate error (exit 2)
+   refuses the branch. The gate passes without `structure.toml`.
 5. **Land.** With no new failures, the rebased commits are pushed to main
    (a plain fast-forward) and the branch is
    deleted. Pushes made with the workflow token start no workflows, so the
@@ -238,9 +242,10 @@ it locally.
    with its own run ID. If main moved during the run, the tested commits are
    replayed onto it, as a local landing would; only a conflict sends the
    branch through again.
-6. **Refuse.** On a conflict, a failed check or new failures, the branch
-   stays and the run fails; its job summary says "Autoland didn't land" and
-   names the conflicting files, failed check or new failing tests. Autoland
+6. **Refuse.** On a conflict, a failed check, new failures or new
+   code-health debt, the branch stays and the run fails; its job summary
+   says "Autoland didn't land" and names the conflicting files, failed
+   check, new failing tests or the gate's violations. Autoland
    posts no issue comments: read outcomes with `gh run list --workflow
    autoland.yml --branch claude/NAME` and `gh run view RUN_ID`. Push a fix to
    the same branch and it tries again.

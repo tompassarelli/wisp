@@ -162,8 +162,41 @@ jobs:
           path: baseline/summary.json
           retention-days: 3
 
+  # The code-health ratchet (north harness/code-health) on the rebased commit, beside the suite: land refuses new debt.
+  code-health:
+    needs: rebase
+    if: needs.rebase.outputs.verdict == 'test'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      verdict: ${{ steps.gate.outputs.verdict }}
+      detail: ${{ steps.gate.outputs.detail }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.rebase.outputs.sha }}
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: npm i -g @ast-grep/cli@0.42.1
+      - run: git clone --depth 1 https://github.com/tompassarelli/north "$RUNNER_TEMP/north"
+      - id: gate
+        env:
+          BASE: ${{ needs.rebase.outputs.base }}
+          SHA: ${{ needs.rebase.outputs.sha }}
+        run: |
+          set +e -uo pipefail
+          bun "$RUNNER_TEMP/north/harness/code-health/cli.ts" gate "$BASE" "$SHA" > gate.log 2>&1
+          code=$?
+          cat gate.log
+          case "$code" in 0) verdict=pass ;; 1) verdict=debt ;; *) verdict=error ;; esac
+          echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
+          { echo "detail<<AUTOLAND_EOF"; tail -40 gate.log; echo "AUTOLAND_EOF"; } >> "$GITHUB_OUTPUT"
+          echo "code-health gate ${BASE:0:10}..${SHA:0:10}: $verdict" >> "$GITHUB_STEP_SUMMARY"
+
   land:
-    needs: [rebase, suite, baseline]
+    needs: [rebase, suite, baseline, code-health]
     if: ${{ !cancelled() && needs.rebase.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -175,6 +208,9 @@ jobs:
       SCRATCH: ${{ needs.rebase.outputs.scratch }}
       DETAIL: ${{ needs.rebase.outputs.detail }}
       SUITE: ${{ needs.suite.result }}
+      CODE_HEALTH: ${{ needs.code-health.result }}
+      CODE_HEALTH_VERDICT: ${{ needs.code-health.outputs.verdict }}
+      CODE_HEALTH_DETAIL: ${{ needs.code-health.outputs.detail }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -238,6 +274,12 @@ jobs:
           if [ -n "$new" ]; then
             refuse "$(grep -c . <<< "$new") failing that main's run passes:" "$(printf '%s\n' "$new" | sed 's/^/- /')"
           fi
+          case "$CODE_HEALTH:$CODE_HEALTH_VERDICT" in
+            success:pass) ;;
+            success:debt) refuse "it adds code-health debt:" "$(printf '```\n%s\n```' "$CODE_HEALTH_DETAIL")" ;;
+            success:*) refuse "the code-health gate failed to run:" "$(printf '```\n%s\n```' "$CODE_HEALTH_DETAIL")" ;;
+            *) refuse "the code-health gate ended without a result." "" ;;
+          esac
           # Main moves while the suites run: replay the tested commits onto it, as a
           # local landing would; a conflict sends the branch through again.
           git fetch -q origin "$SCRATCH"
