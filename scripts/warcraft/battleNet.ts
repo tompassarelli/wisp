@@ -12,6 +12,8 @@ export interface ProcessInfo {
   readonly prefix?: string;
   readonly display?: string;
   readonly ownerUnit?: string;
+  readonly proton?: ProtonRunner;
+  readonly runtimeDir?: string;
 
   /** The prefix's runtime process (wineserver on Linux), as the process table's layer recognises it. */
   readonly runtime?: boolean;
@@ -19,6 +21,12 @@ export interface ProcessInfo {
   readonly cwd?: string;
 
   readonly started?: number;
+}
+
+export interface ProtonRunner {
+  readonly pid: number;
+  readonly command: string;
+  readonly environment: Readonly<Record<string, string>>;
 }
 
 export interface PrefixUse {
@@ -40,21 +48,59 @@ const isGame = (process: ProcessInfo) => /\\Warcraft III\.exe(?:\s|"|$)/i.test(c
 
 export const serverDirectoryName = (device: bigint, inode: bigint) => `server-${device.toString(16)}-${inode.toString(16)}`;
 
-export function prefixUse(processes: readonly ProcessInfo[], prefix: string, serverDirectory: string, options: { readonly ownedGamePid?: number; readonly ownerUnit?: string; readonly display?: string } = {}): PrefixUse {
+const PROTON_ENVIRONMENT = new Set(["STEAM_COMPAT_DATA_PATH", "STEAM_COMPAT_CLIENT_INSTALL_PATH", "STEAM_COMPAT_APP_ID", "SteamAppId", "SteamGameId"]);
+
+const protonCommand = (process: ProcessInfo) => process.args.find((arg) => /\/proton$/i.test(arg));
+
+const protonEnvironment = (processes: readonly ProcessInfo[]) => {
+  const environment: Record<string, string> = {};
+  for (const process of processes) for (const arg of process.args) {
+    const equals = arg.indexOf("=");
+    if (equals < 1) continue;
+    const key = arg.slice(0, equals);
+    if (PROTON_ENVIRONMENT.has(key) && environment[key] === undefined) environment[key] = arg.slice(equals + 1);
+  }
+  return environment;
+};
+
+const protonRunner = (processes: readonly ProcessInfo[], ownerUnit: string): ProtonRunner | undefined => {
+  const owned = processes.filter((process) => process.ownerUnit === ownerUnit);
+  const preferred = owned.find((process) => process.name === "python3" && protonCommand(process) !== undefined)
+    ?? owned.find((process) => process.name === "pv-adverb" && protonCommand(process) !== undefined)
+    ?? owned.find((process) => protonCommand(process) !== undefined);
+  const command = preferred === undefined ? undefined : protonCommand(preferred);
+  return preferred === undefined || command === undefined ? undefined : { pid: preferred.pid, command, environment: protonEnvironment(owned) };
+};
+
+type PrefixOptions = { readonly ownedGamePid?: number; readonly ownerUnit?: string; readonly display?: string; readonly runtimeDir?: string };
+
+const serviceOwned = (process: ProcessInfo, options: PrefixOptions) =>
+  process.prefix === undefined && options.ownerUnit !== undefined && process.ownerUnit === options.ownerUnit;
+
+const belongsToPrefix = (process: ProcessInfo, prefix: string, serverDirectory: string, options: PrefixOptions) =>
+  (process.prefix !== undefined && trimSlash(process.prefix) === prefix)
+  || (process.prefix === undefined && process.pid === options.ownedGamePid && isGame(process))
+  || (isRuntime(process) && process.cwd !== undefined && process.cwd.split("/").at(-1) === serverDirectory)
+  || serviceOwned(process, options);
+
+const withClientPrefix = (process: ProcessInfo, prefix: string, options: PrefixOptions): ProcessInfo =>
+  !serviceOwned(process, options) ? process : {
+    ...process,
+    prefix,
+    ...(options.display === undefined ? {} : { display: options.display }),
+    ...(options.runtimeDir === undefined ? {} : { runtimeDir: options.runtimeDir }),
+  };
+
+const isClientAgent = (process: ProcessInfo, ownerUnit: string | undefined) =>
+  ownerUnit !== undefined && process.ownerUnit === ownerUnit && /^Agent\.exe$/i.test(process.name);
+
+export function prefixUse(processes: readonly ProcessInfo[], prefix: string, serverDirectory: string, options: PrefixOptions = {}): PrefixUse {
   const wanted = trimSlash(prefix);
-  const inPrefix = processes.flatMap((process) => {
-    const owned = process.prefix === undefined && options.ownerUnit !== undefined && process.ownerUnit === options.ownerUnit;
-    const matches = (process.prefix !== undefined && trimSlash(process.prefix) === wanted)
-      || (process.prefix === undefined && process.pid === options.ownedGamePid && isGame(process))
-      || (isRuntime(process) && process.cwd !== undefined && process.cwd.split("/").at(-1) === serverDirectory)
-      || owned;
-    if (!matches) return [];
-    return [process.prefix === undefined && owned ? { ...process, prefix: wanted, ...(options.display === undefined ? {} : { display: options.display }) } : process];
-  });
-  const launcher = inPrefix.find(isLauncher)
-    ?? (options.ownerUnit === undefined ? undefined : inPrefix.find((process) => process.ownerUnit === options.ownerUnit && /^Agent\.exe$/i.test(process.name)));
+  const inPrefix = processes.filter((process) => belongsToPrefix(process, wanted, serverDirectory, options)).map((process) => withClientPrefix(process, wanted, options));
+  const launcher = inPrefix.find(isLauncher) ?? inPrefix.find((process) => isClientAgent(process, options.ownerUnit));
   const game = inPrefix.find(isGame);
-  return { runtimes: inPrefix.filter(isRuntime), processes: inPrefix, ...(launcher === undefined ? {} : { launcher }), ...(game === undefined ? {} : { game }) };
+  const proton = options.ownerUnit === undefined ? undefined : protonRunner(inPrefix, options.ownerUnit);
+  return { runtimes: inPrefix.filter(isRuntime), processes: inPrefix, ...(launcher === undefined ? {} : { launcher: { ...launcher, ...(proton === undefined ? {} : { proton }) } }), ...(game === undefined ? {} : { game }) };
 }
 
 export const shortcutUrl = (appId: number) => `steam://rungameid/${((BigInt(appId) << 32n) | 0x02000000n).toString()}`;

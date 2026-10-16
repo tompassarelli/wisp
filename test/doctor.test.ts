@@ -40,8 +40,27 @@ test("[native] recorded launcher logs: signed in, a lost connection, a reconnect
 
 test("[scenario] a client-owned Battle.net Agent is visible when Wine hides its prefix", () => {
   const agent: ProcessInfo = { pid: 73125, name: "Agent.exe", args: ["Agent.exe"], ownerUnit: "wisp-client-clone-c.service" };
-  const use = prefixUse([agent], PREFIX, "", { ownerUnit: "wisp-client-clone-c.service", display: ":17" });
-  expect(use.launcher).toMatchObject({ pid: agent.pid, prefix: PREFIX, display: ":17" });
+  const runner: ProcessInfo = {
+    pid: 73124,
+    name: "python3",
+    args: ["/home/tom/.local/share/Steam/compatibilitytools.d/GE-Proton11-7-x86_64/proton", "waitforexitandrun"],
+    ownerUnit: "wisp-client-clone-c.service",
+  };
+  const environment: ProcessInfo = {
+    pid: 73123,
+    name: "dbus-run-session",
+    args: ["STEAM_COMPAT_APP_ID=3775098022", "SteamAppId=3775098022"],
+    ownerUnit: "wisp-client-clone-c.service",
+  };
+  const runtimeDir = "/run/user/1000/private-desktop.test/runtime";
+  const use = prefixUse([agent, runner, environment], PREFIX, "", { ownerUnit: "wisp-client-clone-c.service", display: ":17", runtimeDir });
+  expect(use.launcher).toMatchObject({
+    pid: agent.pid,
+    prefix: PREFIX,
+    display: ":17",
+    runtimeDir,
+    proton: { pid: runner.pid, command: runner.args[0], environment: { STEAM_COMPAT_APP_ID: "3775098022", SteamAppId: "3775098022" } },
+  });
   expect(use.processes).toContainEqual(expect.objectContaining({ pid: agent.pid, prefix: PREFIX }));
   expect(prefixUse([agent], PREFIX, "", { ownerUnit: "wisp-client-clone-b.service" }).launcher).toBeUndefined();
 });

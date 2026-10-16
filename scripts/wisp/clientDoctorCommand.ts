@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import type { Platform } from "../platform/services";
 import { documentsFolder, prefixFromDocuments } from "../warcraft/battleNet";
@@ -39,6 +40,7 @@ const doctorTargets = (declaration: DoctorDeclaration, names: readonly string[] 
       client: { name: entry.name, documents: entry.documents, ...(entry.menuReportPort === undefined ? {} : { menuReportPort: entry.menuReportPort }) },
       prefix,
       display,
+      runtimeDir: join(entry.run, "runtime"),
       start,
 
       ...(entry.offline === true ? {} : { settings: profileSettings(entry) }),

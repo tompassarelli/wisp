@@ -70,6 +70,7 @@ interface LaunchRequest {
   readonly env: string;
   readonly nsenter: string;
   readonly wine: string;
+  readonly wineArgs: readonly string[];
   readonly launcher: { readonly pid: number; readonly cwd: string; readonly env: Readonly<Record<string, string>> };
   readonly host: Readonly<Record<string, string | undefined>>;
 }
@@ -85,7 +86,7 @@ const launchCommand = (request: LaunchRequest) => {
       ? ["systemd-run", "--user", "--scope", "--collect", "--slice=playtest.slice", "--"]
       : [request.bun, request.capacity, "session", "--class", "native", "--owner", `wisp-game-${request.client}`, "--"]),
       request.env, ...restore, request.nsenter, "-t", String(launcher.pid), "-U", "-m", "--preserve-credentials", `--wd=${launcher.cwd}`, "--",
-      request.wine, "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe", "--exec=launch W3"],
+      request.wine, ...request.wineArgs, "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe", "--exec=launch W3"],
     env: { ...launcher.env, ...host },
   };
 };
@@ -97,13 +98,24 @@ const launchInContainer = (run: Runner, tools: PlayTools, launcher: ProcessInfo,
   const capacity = client === "playtest" ? "" : tools.capacity ?? (yield* skillScript("machine-capacity", "scripts/machine-capacity.mjs").pipe(Effect.mapError((cause) => failed(cause.problem))));
   const request = yield* Effect.try({
     try: (): LaunchRequest => {
-      const { cwd, env, runtime } = launcherProcess(launcher.pid, {
-        ...(launcher.prefix === undefined ? {} : { WINEPREFIX: launcher.prefix }),
-        ...(launcher.display === undefined ? {} : { DISPLAY: launcher.display }),
+      const proton = launcher.proton;
+      const pid = proton?.pid ?? launcher.pid;
+      const { cwd, env, runtime } = launcherProcess(pid, {
+        env: {
+          ...(proton?.environment ?? {}),
+          ...(launcher.prefix === undefined ? {} : { WINEPREFIX: launcher.prefix }),
+          ...(launcher.display === undefined ? {} : { DISPLAY: launcher.display }),
+          ...(launcher.runtimeDir === undefined ? {} : { XDG_RUNTIME_DIR: launcher.runtimeDir }),
+          ...(process.env.HOME === undefined ? {} : { HOME: process.env.HOME }),
+          ...(process.env.USER === undefined ? {} : { USER: process.env.USER }),
+          ...(process.env.PATH === undefined ? {} : { PATH: process.env.PATH }),
+        },
+        ...(proton === undefined ? {} : { cwd: "/", runtime: proton.command }),
       });
       return {
         bun: process.execPath, capacity, client, env: hostNsenter("env"), nsenter: hostNsenter(tools.nsenter), wine: runtime,
-        launcher: { pid: launcher.pid, cwd, env }, host: process.env,
+        wineArgs: proton === undefined ? [] : ["waitforexitandrun"],
+        launcher: { pid, cwd, env }, host: process.env,
       };
     },
     catch: failed,

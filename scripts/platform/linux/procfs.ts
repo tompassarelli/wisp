@@ -89,17 +89,25 @@ export function findGameProcesses(prefix: string): GameProcess[] {
   return found;
 }
 
-export function launcherProcess(pid: number, fallbackEnv: Readonly<Record<string, string>> = {}): LauncherProcess {
+export function launcherProcess(pid: number, fallback: { readonly env?: Readonly<Record<string, string>>; readonly cwd?: string; readonly runtime?: string } = {}): LauncherProcess {
   const base = `/proc/${pid}`;
-  let env = fallbackEnv;
+  let env = fallback.env ?? {};
   try {
-    env = { ...fallbackEnv, ...Object.fromEntries(readFileSync(`${base}/environ`, "utf8").split("\0").filter((entry) => entry.includes("="))
+    env = { ...env, ...Object.fromEntries(readFileSync(`${base}/environ`, "utf8").split("\0").filter((entry) => entry.includes("="))
       .map((entry) => [entry.slice(0, entry.indexOf("=")), entry.slice(entry.indexOf("=") + 1)] as const)
       .filter(([name]) => name !== "WINESERVERSOCKET" && name !== "WINELOADERNOEXEC")) };
   } catch {
 
   }
-  return { cwd: readlinkSync(`${base}/cwd`), env, runtime: resolve(dirname(readlinkSync(`${base}/exe`)), "../../../bin/wine") };
+  let cwd: string;
+  try {
+    cwd = readlinkSync(`${base}/cwd`);
+  } catch (cause) {
+    if (fallback.cwd === undefined) throw cause;
+    cwd = fallback.cwd;
+  }
+  const runtime = fallback.runtime ?? resolve(dirname(readlinkSync(`${base}/exe`)), "../../../bin/wine");
+  return { cwd, env, runtime };
 }
 
 export const alive = (pid: number) => existsSync(`/proc/${pid}`);

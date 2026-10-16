@@ -20,6 +20,8 @@ export interface DoctorTarget {
 
   readonly display?: string;
 
+  readonly runtimeDir?: string;
+
   readonly start:
     | { readonly kind: "steam"; readonly appId: number; readonly name: string }
     | { readonly kind: "command"; readonly command: readonly string[]; readonly log?: string }
@@ -276,7 +278,7 @@ const doctorRun = (target: DoctorTarget, print: (line: string) => void, holdStar
   const server = yield* machine.serverDirectory(prefix).pipe(Effect.mapError(failed));
 
   const ownerUnit = start.kind === "command" ? clientUnit(name) : undefined;
-  const prefixState = machine.processes.pipe(Effect.map((processes) => prefixUse(processes, prefix, server, { ...(ownerUnit === undefined ? {} : { ownerUnit }), ...(target.display === undefined ? {} : { display: target.display }) })), Effect.mapError(failed));
+  const prefixState = machine.processes.pipe(Effect.map((processes) => prefixUse(processes, prefix, server, { ...(ownerUnit === undefined ? {} : { ownerUnit }), ...(target.display === undefined ? {} : { display: target.display }), ...(target.runtimeDir === undefined ? {} : { runtimeDir: target.runtimeDir }) })), Effect.mapError(failed));
   const newestLog = machine.list(logs).pipe(Effect.map(newestLauncherLog), Effect.mapError(failed));
   let priorSessionLog: string | undefined;
 
@@ -526,7 +528,7 @@ export const signOut = (target: DoctorTarget, print: (line: string) => void) => 
   const failed = (cause: PlayProblem) => new DoctorStop({ problem: `${name}: ${cause.problem}` });
   const server = yield* machine.serverDirectory(target.prefix).pipe(Effect.mapError(failed));
   const ownerUnit = target.start.kind === "command" ? clientUnit(name) : undefined;
-  const programs = machine.processes.pipe(Effect.map((processes) => prefixUse(processes, target.prefix, server, { ...(ownerUnit === undefined ? {} : { ownerUnit }), ...(target.display === undefined ? {} : { display: target.display }) }).processes), Effect.mapError(failed));
+  const programs = machine.processes.pipe(Effect.map((processes) => prefixUse(processes, target.prefix, server, { ...(ownerUnit === undefined ? {} : { ownerUnit }), ...(target.display === undefined ? {} : { display: target.display }), ...(target.runtimeDir === undefined ? {} : { runtimeDir: target.runtimeDir }) }).processes), Effect.mapError(failed));
   const gone = (seconds: number) => pollFor(seconds, POLL, programs.pipe(Effect.map((left) => (left.length === 0 ? true : undefined)))).pipe(Effect.map((done) => done === true));
   const running = yield* programs;
   if (running.length > 0) {
