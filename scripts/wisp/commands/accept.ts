@@ -6,6 +6,7 @@ import {
 } from "../accept";
 import { type Command, type CommandFailure, UsageFailure, describeCause, flagValues } from "../command";
 import { emitJson } from "../jsonResults";
+import { withQuietNativeCapacity } from "../quietNativeCapacity";
 
 interface AcceptOptions {
   readonly suite: AcceptSuite;
@@ -94,9 +95,12 @@ export const makeAccept = ({ suite, evidenceRoot, driver, clients = ["host"], sh
   }
   const directory = flagValues(args, "out")[0] ?? join(evidenceRoot, runName(yield* Clock.currentTimeMillis));
   if (!json) yield* Console.log(`evidence: ${directory}`);
-  const report = shards !== undefined && split.length > 1
-    ? yield* runShards(shards, selected, split, checks, directory, json)
-    : yield* runAccept(suite, sessions, directory, (line) => json ? Effect.void : Console.log(line)).pipe(Effect.provide(driver));
+  const evidenceRun = shards !== undefined && split.length > 1
+    ? runShards(shards, selected, split, checks, directory, json)
+    : runAccept(suite, sessions, directory, (line) => json ? Effect.void : Console.log(line)).pipe(Effect.provide(driver));
+  const report = clients.some((client) => client !== "host")
+    ? yield* withQuietNativeCapacity("wisp-accept-native", evidenceRun)
+    : yield* evidenceRun;
   const failed = report.results.filter(({ verdict }) => verdict === "fail");
   if (json) {
     for (const result of report.results) yield* emitJson("accept", { type: "result", ok: result.verdict !== "fail", ...result, ...(result.verdict === "fail" ? { kind: "check-fail", frame: null, client: null, message: result.reason } : {}) });
