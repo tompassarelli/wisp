@@ -1,14 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect, Exit, Scope } from "effect";
+import * as BunServices from "@effect/platform-bun/BunServices";
+import { Cause, Effect, Exit, Scope } from "effect";
 import { GameLauncher } from "../scripts/platform/services";
 import { startHost } from "../scripts/wisp/lan/host";
 import { ALARM_AFTER_MS, type Driver, driverVerdict, idleness, installOf, prefixOf, wrongUser } from "../scripts/wisp/lan/pool";
 import { setupClient } from "../scripts/wisp/lan/setup";
 import { menuPage } from "../scripts/wisp/menus";
-import { type MapFacts, mapCopies } from "../scripts/wisp/lan/map";
+import { LanFailure } from "../scripts/wisp/lan/join";
+import { type MapFacts, mapCopies, readMapFacts } from "../scripts/wisp/lan/map";
 import { PACKET, Writer, encodePacket } from "../scripts/wisp/lan/w3gs";
 
 describe("pool operability", () => {
@@ -174,6 +176,24 @@ describe("map copies", () => {
     expect(seen).toEqual([["own.w3x", "second.w3x"], ["second.w3x"]]);
     expect([readdirSync(a).sort(), readdirSync(b)]).toEqual([["own.w3x", "second.w3x"], []]);
     expect(readFileSync(join(a, "own.w3x"), "utf8")).toBe("the player's map");
+  });
+});
+
+describe("map facts", () => {
+  test("[integration child process] an extractor the dynamic loader can't start fails as a load error naming the missing library, not as a map without war3map.w3i", async () => {
+    const root = mkdtempSync(join(tmpdir(), "wisp-map-facts-"));
+    const packager = join(root, "map-pack");
+    writeFileSync(packager, "#!/bin/sh\necho \"$0: error while loading shared libraries: libstorm.so.9: cannot open shared object file: No such file or directory\" >&2\nexit 127\n");
+    chmodSync(packager, 0o755);
+    mkdirSync(join(root, "Maps/Wisp"), { recursive: true });
+    writeFileSync(join(root, "Maps/Wisp/broken.w3x"), "a map the extractor never opens");
+    const exit = await Effect.runPromiseExit(readMapFacts(join(root, "Maps/Wisp/broken.w3x"), packager, "Maps\\Wisp\\broken.w3x").pipe(Effect.provide(BunServices.layer)));
+    rmSync(root, { recursive: true, force: true });
+    expect(Exit.isFailure(exit)).toBe(true);
+    const problem = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+    expect(problem).toBeInstanceOf(LanFailure);
+    expect((problem as LanFailure).problem).toContain(`the map packager ${packager} could not load libstorm.so.9 (exit 127)`);
+    expect((problem as LanFailure).problem).not.toContain("war3map.w3i");
   });
 });
 

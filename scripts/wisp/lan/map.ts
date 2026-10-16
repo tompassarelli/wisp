@@ -92,6 +92,12 @@ function mapFactsFrom(file: Uint8Array, path: string, entry: (name: string) => U
 
 const read = <A>(run: () => A) => Effect.try({ try: run, catch: cause => new LanFailure({ problem: String(cause) }) });
 
+function loadFailure(packager: string, exitCode: number, stderr: string): string | undefined {
+  const library = /error while loading shared libraries: ([^:\s]+)/.exec(stderr)?.[1];
+  if (exitCode !== 127 && library === undefined) return undefined;
+  return `the map packager ${packager} could not load ${library ?? "its shared libraries"} (exit ${exitCode}); rebuild it: ${stderr.trim()}`;
+}
+
 export const readMapFacts = (mapFile: string, packager: string, path = pathInGame(mapFile)) => Effect.scoped(Effect.gen(function*() {
   const scratch = yield* Effect.acquireRelease(
     read(() => mkdtempSync(join(tmpdir(), "wisp-lan-map."))),
@@ -100,7 +106,9 @@ export const readMapFacts = (mapFile: string, packager: string, path = pathInGam
   const entries = new Map<string, Uint8Array | undefined>();
   for (const name of [...SCRIPT_ENTRIES, "war3map.w3i", ...CHECKED_ENTRIES]) {
     const out = join(scratch, `${entries.size}`);
-    const run = yield* collect(ChildProcess.make(packager, ["extract", mapFile, out, name], { stdout: "ignore", stderr: "ignore" })).pipe(Effect.mapError(cause => new LanFailure({ problem: String(cause) })));
+    const run = yield* collect(ChildProcess.make(packager, ["extract", mapFile, out, name], { stdout: "ignore", stderr: "pipe" })).pipe(Effect.mapError(cause => new LanFailure({ problem: String(cause) })));
+    const unloadable = loadFailure(packager, run.exitCode, run.stderr);
+    if (unloadable !== undefined) return yield* new LanFailure({ problem: unloadable });
     const bytes = yield* read(() => run.exitCode === 0 && statSync(out, { throwIfNoEntry: false }) !== undefined ? new Uint8Array(readFileSync(out)) : undefined);
     entries.set(name, bytes);
   }
