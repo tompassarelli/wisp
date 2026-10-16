@@ -377,7 +377,13 @@ the hash with a constant, keeps a one-entry string cache that hits on
 content alone, and on Linux re-executes the interpreter once with address
 randomization off; wisp:test/fixed-layout.test.ts holds the order and
 allocation across seconds and environment sizes. A Lua named by `LUA` keeps
-its own layout. A lock lets parallel worktrees share one build.
+its own layout. Both builds also take wisp:native/requested-bytes.h, which
+adds `collectgarbage("requested")`: the bytes the program has asked for, as
+an integer that wraps, so a difference of two readings is exact. It counts
+each allocation's growth and each interned-string hit at the string's size,
+and leaves out the string table, stacks and call frames, which the collector
+resizes; [runLuaPerf](frame-cost.md) charges frames from it. A lock lets
+parallel worktrees share one build.
 `lua32(variant)` does the same in a host program, and `luaRounding(lua)` tells which rounding a Lua has. Wisp's
 `bun test` sets `LUA` and `TOWARD_ZERO_LUA` to these when they are unset
 (wisp:test/lua32.preload.ts), and the CI template does the same.

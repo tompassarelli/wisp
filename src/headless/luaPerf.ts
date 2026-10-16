@@ -13,19 +13,28 @@ const COLLECT_EVERY_KB = 16384;
 
 type Native = (this: void, ...args: unknown[]) => unknown;
 
+declare global {
+  // Wisp's Lua32 counts requested bytes in a wrapping integer (native/requested-bytes.h).
+  function collectgarbage(option: "requested"): number;
+}
+
+const requested = () => collectgarbage("requested");
+
+const kilobytes = (bytes: number) => bytes / 1024;
+
 interface ClientCost {
   readonly slot: number;
   readonly instructions: number[];
   readonly microseconds: number[];
   readonly natives: number[];
-  readonly allocatedKb: number[];
+  readonly allocatedBytes: number[];
   readonly runtimeInstructions: number[];
-  readonly runtimeKb: number[];
-  readonly moduleKb: Map<string, number[]>;
+  readonly runtimeBytes: number[];
+  readonly moduleBytes: Map<string, number[]>;
   readonly typed: number[];
   calls: number;
 
-  nativeKb: number;
+  nativeBytes: number;
 }
 
 export interface PerfMeasure {
@@ -117,30 +126,34 @@ const sum = (values: readonly number[], first: number, last: number): number => 
 
 function moduleLines(cost: ClientCost, first: number, last: number): string[] {
   const names: string[] = [];
-  for (const [name] of cost.moduleKb) names.push(name);
+  for (const [name] of cost.moduleBytes) names.push(name);
   names.sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
   const frames = Math.max(1, last - first + 1);
   return names.map((name) => {
-    const bytes = sum(cost.moduleKb.get(name) ?? [], first, last) * 1024;
+    const bytes = sum(cost.moduleBytes.get(name) ?? [], first, last);
     return `p${cost.slot} module-alloc-bytes ${name} total=${whole(bytes)} mean=${whole(bytes / frames)}`;
   });
 }
 
 function costLines(cost: ClientCost, first: number, last: number, model: NativeCostModel): string[] {
+  const allocatedKb: number[] = [];
+  const runtimeKb: number[] = [];
   const callbacks: number[] = [];
   const typing: number[] = [];
   for (let frame = 0; frame <= last; frame++) {
+    allocatedKb.push(kilobytes(cost.allocatedBytes[frame] ?? 0));
+    runtimeKb.push(kilobytes(cost.runtimeBytes[frame] ?? 0));
     const predicted = nativeFrameCost(model, {
       instructions: cost.instructions[frame] ?? 0, natives: cost.natives[frame] ?? 0,
-      allocatedKb: cost.allocatedKb[frame] ?? 0, typedCharacters: cost.typed[frame] ?? 0,
+      allocatedKb: allocatedKb[frame] ?? 0, typedCharacters: cost.typed[frame] ?? 0,
     });
     callbacks.push(predicted.callbacksUs);
     typing.push(predicted.typingUs);
   }
   const named: readonly (readonly [string, readonly number[]])[] = [
     ["instructions", cost.instructions], ["lua-us", cost.microseconds], ["natives", cost.natives],
-    ["alloc-kb", cost.allocatedKb], ["typed", cost.typed], ["native-us", callbacks], ["typing-us", typing],
-    ["runtime-instructions", cost.runtimeInstructions], ["runtime-alloc-kb", cost.runtimeKb],
+    ["alloc-kb", allocatedKb], ["typed", cost.typed], ["native-us", callbacks], ["typing-us", typing],
+    ["runtime-instructions", cost.runtimeInstructions], ["runtime-alloc-kb", runtimeKb],
   ];
   return [...named.map(([name, values]) => valueLine(cost.slot, name, values, first, last)), ...moduleLines(cost, first, last)];
 }
@@ -158,34 +171,34 @@ export function runLuaPerfWith(
   const runtimeSource = debug.getinfo(1, "S")?.source;
   const moduleOfLine = bundleModules(readFile(bundlePath));
   let active: ClientCost | undefined;
-  let lastKb = 0;
-  let lastNativeKb = 0;
+  let lastBytes = 0;
+  let lastNativeBytes = 0;
   // Level 1 is this hook, level 2 the Lua function the count interrupted.
   const count = () => {
-    const heap = collectgarbage("count");
+    const bytesNow = requested();
     const info = debug.getinfo(2, "Sl");
     const cost = active;
     if (cost !== undefined && info !== undefined) {
       const frame = clients?.frame ?? 0;
-      const kb = heap - lastKb - (cost.nativeKb - lastNativeKb);
+      const bytes = bytesNow - lastBytes - (cost.nativeBytes - lastNativeBytes);
       const source = info.source ?? "";
       if (source === runtimeSource) {
         add(cost.runtimeInstructions, frame, HOOK_STEP);
-        add(cost.runtimeKb, frame, kb);
+        add(cost.runtimeBytes, frame, bytes);
       } else {
         add(cost.instructions, frame, HOOK_STEP);
-        add(cost.allocatedKb, frame, kb);
+        add(cost.allocatedBytes, frame, bytes);
         const name = source === "=map" ? moduleOfLine[info.currentline ?? 0] ?? "(bundle)" : source;
-        let series = cost.moduleKb.get(name);
+        let series = cost.moduleBytes.get(name);
         if (series === undefined) {
           series = [];
-          cost.moduleKb.set(name, series);
+          cost.moduleBytes.set(name, series);
         }
-        add(series, frame, kb);
+        add(series, frame, bytes);
       }
-      lastNativeKb = cost.nativeKb;
+      lastNativeBytes = cost.nativeBytes;
     }
-    lastKb = collectgarbage("count");
+    lastBytes = requested();
     // Instructions run inside the hook use up the count; setting it again restarts the full step.
     debug.sethook(count, "", HOOK_STEP);
   };
@@ -210,22 +223,22 @@ export function runLuaPerfWith(
       collectgarbage("stop");
       const cost = costs.get(client);
       active = cost;
-      lastKb = collectgarbage("count");
-      lastNativeKb = cost?.nativeKb ?? 0;
+      lastBytes = requested();
+      lastNativeBytes = cost?.nativeBytes ?? 0;
       debug.sethook(count, "", HOOK_STEP);
       entered = { seconds: os.clock(), natives: nativeSeconds, calls: cost?.calls ?? 0 };
     },
     leave: (client) => {
       const seconds = os.clock();
       debug.sethook();
-      const kb = collectgarbage("count");
+      const bytes = requested();
       active = undefined;
       const cost = costs.get(client);
       if (cost === undefined) return;
       const frame = clients?.frame ?? 0;
       add(cost.microseconds, frame, (seconds - entered.seconds - (nativeSeconds - entered.natives)) * 1000000);
       add(cost.natives, frame, cost.calls - entered.calls);
-      add(cost.runtimeKb, frame, kb - lastKb - (cost.nativeKb - lastNativeKb));
+      add(cost.runtimeBytes, frame, bytes - lastBytes - (cost.nativeBytes - lastNativeBytes));
     },
   };
   const counted = (cost: ClientCost, native: Native): Native => (...args: unknown[]) => {
@@ -234,9 +247,9 @@ export function runLuaPerfWith(
     if (depth > 0) return native(...args);
     depth++;
     const started = os.clock();
-    const kb = collectgarbage("count");
+    const bytes = requested();
     const [ran, result] = coroutine.resume(thread, native, ...args);
-    cost.nativeKb += collectgarbage("count") - kb;
+    cost.nativeBytes += requested() - bytes;
     nativeSeconds += os.clock() - started;
     depth--;
     if (!ran) {
@@ -249,7 +262,7 @@ export function runLuaPerfWith(
   clients = lockstep;
   const names = parseNativeDeclarations(declarations).functions.map(([name]) => name);
   for (const client of lockstep.clients) {
-    const cost: ClientCost = { slot: client.slot, instructions: [], microseconds: [], natives: [], allocatedKb: [], runtimeInstructions: [], runtimeKb: [], moduleKb: new Map(), typed: [], calls: 0, nativeKb: 0 };
+    const cost: ClientCost = { slot: client.slot, instructions: [], microseconds: [], natives: [], allocatedBytes: [], runtimeInstructions: [], runtimeBytes: [], moduleBytes: new Map(), typed: [], calls: 0, nativeBytes: 0 };
     costs.set(client, cost);
     bySlot.set(client.slot, cost);
     for (const name of names) {
@@ -287,7 +300,7 @@ export function runLuaPerfWith(
   if (options.samples === true) {
     for (let frame = first; frame <= lockstep.frame; frame++) {
       for (const cost of costs.values()) {
-        print(`frame ${frame} p${cost.slot} instructions=${cost.instructions[frame] ?? 0} lua-us=${whole(cost.microseconds[frame] ?? 0)} natives=${cost.natives[frame] ?? 0} alloc-bytes=${whole((cost.allocatedKb[frame] ?? 0) * 1024)} typed=${cost.typed[frame] ?? 0}`);
+        print(`frame ${frame} p${cost.slot} instructions=${cost.instructions[frame] ?? 0} lua-us=${whole(cost.microseconds[frame] ?? 0)} natives=${cost.natives[frame] ?? 0} alloc-bytes=${cost.allocatedBytes[frame] ?? 0} typed=${cost.typed[frame] ?? 0}`);
       }
     }
   }

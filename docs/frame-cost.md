@@ -169,14 +169,21 @@ one after it, such as a match's first:
   `runtime-alloc-kb`). The map's allocation is also split by bundle module
   (`pSLOT module-alloc-bytes MODULE total=... mean=...`, bytes per frame),
   and the hook's own allocation is left out of both.
-- **Allocated KB**: what the map's code allocated. Automatic collection stays
-  stopped throughout profiling, including between client callbacks: collecting
-  interned strings between callbacks changes later allocations even with equal
-  instruction counts. Between callbacks it explicitly collects once the heap
-  has grown 16 MB, and reports those collections' time per kilobyte
-  (`collector us=... kb=...`). Profiling restores automatic collection on exit.
-  Wisp's Lua32 builds fix their table layout ([Lua32 builds](headless.md#raw-float-rounding)),
-  so one commit reports the same allocation on every run.
+- **Allocated KB**: the bytes the map's code asked for, which Wisp's Lua32
+  counts (`collectgarbage("requested")`, [Lua32 builds](headless.md#raw-float-rounding)):
+  each new object and each table part at its requested size, and each string
+  the code builds at its size even when an equal string is already interned.
+  It leaves out the string table, stacks and call frames, which the collector
+  shrinks and the next request regrows. So a frame's figure depends neither on
+  what else the program holds nor on when the heap was last collected: an
+  inert, never-called function moves no frame (wisp:test/requested-bytes.test.ts),
+  where a heap delta once moved single frames by up to 8 KB at equal
+  instruction counts (smashcraft#26). Automatic collection stays stopped
+  throughout profiling, including between client callbacks. Between callbacks
+  it explicitly collects once the heap has grown 16 MB, and reports those
+  collections' time per kilobyte freed (`collector us=... kb=...`). Profiling
+  restores automatic collection on exit, and needs Wisp's Lua32: another Lua
+  fails at `collectgarbage("requested")`.
 - **Typed characters**: text the driver says reached the client's edit box
   before the frame (`measure.typed(slot, characters)`).
 - **Predicted native time** (`native-us`, `typing-us`): the frame's cost in

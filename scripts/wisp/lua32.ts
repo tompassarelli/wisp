@@ -12,9 +12,22 @@ export const TOWARD_ZERO_HEADER = join(import.meta.dir, "../../native/toward-zer
 
 const FIXED_LAYOUT_HEADER = join(import.meta.dir, "../../native/fixed-layout.h");
 
+const REQUESTED_BYTES_HEADER = join(import.meta.dir, "../../native/requested-bytes.h");
+
 const SOURCE_EDITS: readonly (readonly [file: string, from: string, to: string])[] = [
   ["lstate.c", "g->seed = makeseed(L);", "g->seed = WISP_HASH_SEED; (void)makeseed;"],
   ["lua.c", "int main (int argc, char **argv) {\n", "int main (int argc, char **argv) {\n  wisp_fixed_addresses(argv);\n"],
+  ["lstate.h", "} global_State;", "  size_t requested;\n} global_State;"],
+  ["lstate.c", "  g->GCdebt = 0;\n", "  g->GCdebt = 0;\n  g->requested = 0;\n"],
+  ["lmem.c", "  g->GCdebt = (g->GCdebt + nsize) - realosize;", "  if (nsize > realosize) wisp_charge(L, nsize - realosize);\n  g->GCdebt = (g->GCdebt + nsize) - realosize;"],
+  ["lstring.c", "        changewhite(ts);  /* resurrect it */\n      return ts;", "        changewhite(ts);  /* resurrect it */\n      wisp_charge(L, sizelstring(l));\n      return ts;"],
+  ["lstring.c", "      return p[j];  /* that is it */", "      return wisp_charge(L, sizelstring(strlen(str))), p[j];"],
+  ["lstring.c", "    luaM_reallocvector(L, tb->hash, tb->size, newsize, TString *);\n    for", "    wisp_uncharged(L, luaM_reallocvector(L, tb->hash, tb->size, newsize, TString *));\n    for"],
+  ["ldo.c", "  luaM_reallocvector(L, L->stack, L->stacksize, newsize, TValue);", "  wisp_uncharged(L, luaM_reallocvector(L, L->stack, L->stacksize, newsize, TValue));"],
+  ["lstate.c", "  CallInfo *ci = luaM_new(L, CallInfo);", "  CallInfo *ci;\n  wisp_uncharged(L, ci = luaM_new(L, CallInfo));"],
+  ["lapi.c", "      res = g->gcrunning;\n      break;\n    }\n", "      res = g->gcrunning;\n      break;\n    }\n    case LUA_GCREQUESTED: {\n      res = (int)(unsigned int)g->requested;\n      break;\n    }\n"],
+  ["lbaselib.c", "\"isrunning\", NULL};", "\"isrunning\", \"requested\", NULL};"],
+  ["lbaselib.c", "    LUA_GCISRUNNING};", "    LUA_GCISRUNNING, LUA_GCREQUESTED};"],
 ];
 
 const LUA_SOURCE = join(import.meta.dir, "../../vendor/lua-5.3.6.tar.gz");
@@ -42,8 +55,8 @@ class LockHeld extends Schema.TaggedError<LockHeld>()("LockHeld", { path: Schema
 export const lua32CacheRoot = () => join(cacheHome(), "wisp/lua32");
 
 const headersFor = (variant: Lua32Variant) => variant === "stock"
-  ? [FIXED_LAYOUT_HEADER]
-  : [FIXED_LAYOUT_HEADER, TOWARD_ZERO_HEADER];
+  ? [FIXED_LAYOUT_HEADER, REQUESTED_BYTES_HEADER]
+  : [FIXED_LAYOUT_HEADER, REQUESTED_BYTES_HEADER, TOWARD_ZERO_HEADER];
 
 const luaSource = trySync("read Lua source", LUA_SOURCE, () => sha256(readFileSync(LUA_SOURCE))).pipe(
   Effect.flatMap((digest) => digest === LUA_SOURCE_SHA256
