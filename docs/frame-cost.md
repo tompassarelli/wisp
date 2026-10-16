@@ -171,8 +171,10 @@ one after it, such as a match's first:
   and the hook's own allocation is left out of both.
 - **Allocated KB**: the bytes the map's code asked for, which Wisp's Lua32
   counts (`collectgarbage("requested")`, [Lua32 builds](headless.md#raw-float-rounding)):
-  each new object and each table part at its requested size, and each string
-  the code builds at its size even when an equal string is already interned.
+  each new object at its requested size, each table resize at its parts' net
+  growth (what the new parts add over the parts they replace, as Lua's
+  collector debt counts it), and each string the code builds at its size even
+  when an equal string is already interned.
   It leaves out the string table, stacks and call frames, which the collector
   shrinks and the next request regrows. So a frame's figure depends neither on
   what else the program holds nor on when the heap was last collected: an

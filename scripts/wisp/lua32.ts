@@ -25,6 +25,8 @@ const SOURCE_EDITS: readonly (readonly [file: string, from: string, to: string])
   ["lstring.c", "    luaM_reallocvector(L, tb->hash, tb->size, newsize, TString *);\n    for", "    wisp_uncharged(L, luaM_reallocvector(L, tb->hash, tb->size, newsize, TString *));\n    for"],
   ["ldo.c", "  luaM_reallocvector(L, L->stack, L->stacksize, newsize, TValue);", "  wisp_uncharged(L, luaM_reallocvector(L, L->stack, L->stacksize, newsize, TValue));"],
   ["lstate.c", "  CallInfo *ci = luaM_new(L, CallInfo);", "  CallInfo *ci;\n  wisp_uncharged(L, ci = luaM_new(L, CallInfo));"],
+  ["ltable.c", "    luaM_reallocvector(L, t->array, oldasize, nasize, TValue);", "    luaM_reallocvector(L, t->array, oldasize, nasize, TValue);\n    wisp_credit(L, (oldasize - nasize) * sizeof(TValue));"],
+  ["ltable.c", "    luaM_freearray(L, nold, cast(size_t, oldhsize)); /* free old hash */", "    { luaM_freearray(L, nold, cast(size_t, oldhsize)); wisp_credit(L, cast(size_t, oldhsize) * sizeof(Node)); }"],
   ["lapi.c", "      res = g->gcrunning;\n      break;\n    }\n", "      res = g->gcrunning;\n      break;\n    }\n    case LUA_GCREQUESTED: {\n      res = (int)(unsigned int)g->requested;\n      break;\n    }\n"],
   ["lbaselib.c", "\"isrunning\", NULL};", "\"isrunning\", \"requested\", NULL};"],
   ["lbaselib.c", "    LUA_GCISRUNNING};", "    LUA_GCISRUNNING, LUA_GCREQUESTED};"],

@@ -380,7 +380,8 @@ allocation across seconds and environment sizes. A Lua named by `LUA` keeps
 its own layout. Both builds also take wisp:native/requested-bytes.h, which
 adds `collectgarbage("requested")`: the bytes the program has asked for, as
 an integer that wraps, so a difference of two readings is exact. It counts
-each allocation's growth and each interned-string hit at the string's size,
+each allocation's growth, each table resize at its parts' net growth, and
+each interned-string hit at the string's size,
 and leaves out the string table, stacks and call frames, which the collector
 resizes; [runLuaPerf](frame-cost.md) charges frames from it. A lock lets
 parallel worktrees share one build.
