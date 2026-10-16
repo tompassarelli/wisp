@@ -82,13 +82,17 @@ export const launchCommand = (request: LaunchRequest) => {
   const unset = HOST_KEYS.filter((key) => launcher.env[key] === undefined).flatMap((key) => ["-u", key]);
   const restore = HOST_KEYS.flatMap((key) => (launcher.env[key] === undefined ? [] : [`${key}=${launcher.env[key]}`]));
   const host = Object.fromEntries(HOST_KEYS.flatMap((key) => (request.host[key] === undefined ? [] : [[key, request.host[key]!] as const])));
+  const env = { ...launcher.env, ...host };
+  const service = ["systemd-run", "--user", "--wait", "--pipe", "--collect",
+    ...Object.keys(env).map((key) => `--setenv=${key}`),
+    ...["DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY"].filter((key) => env[key] === undefined).map((key) => `--setenv=${key}=`)];
   return {
-    command: [...(request.client === "playtest"
-      ? ["systemd-run", "--user", "--scope", "--collect", "--slice=playtest.slice", "--"]
-      : [request.bun, request.capacity, "session", "--class", "native", "--owner", `wisp-game-${request.client}`, "--"]),
+    command: [...service, ...(request.client === "playtest"
+      ? ["--slice=playtest.slice", "--"]
+      : ["--", request.bun, request.capacity, "session", "--class", "native", "--owner", `wisp-game-${request.client}`, "--"]),
       request.env, ...unset, ...restore, request.nsenter, "-t", String(launcher.pid), "-U", "-m", "--preserve-credentials", `--wdns=${launcher.cwd}`, "--",
       request.wine, ...(request.proton ? ["runinprefix"] : []), "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe", "--exec=launch W3"],
-    env: { ...launcher.env, ...host },
+    env,
   };
 };
 

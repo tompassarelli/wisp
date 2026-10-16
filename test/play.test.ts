@@ -22,6 +22,11 @@ test("a Proton launch into a clone's container unsets before it assigns, finds i
     launcher: { pid: 4242, cwd: "/home/tester", env: { PATH: "/usr/bin:/bin" } }, host: { PATH: "/host/bin" },
   };
   const { command } = launchCommand(request);
+  expect(command[0]).toBe("systemd-run");
+  expect(command).toContain("--wait");
+  expect(command).not.toContain("--scope");
+  expect(command).toContain("--setenv=DISPLAY=");
+  expect(command).toContain("--setenv=WAYLAND_DISPLAY=");
   const outer = command.slice(command.indexOf(env));
   expect(Bun.spawnSync([...outer], { stderr: "pipe" }).exitCode).toBe(0);
   expect(outer).toContain("--wdns=/home/tester");

@@ -173,6 +173,13 @@ frame-pacing runners refuse any other profile with one line
 
 ## Clients as services
 
+The request to an already-running Battle.net launcher also runs in a transient
+user service. This starts namespace entry from the host user manager rather
+than a caller's nested user namespace, where entering a clone can fail with
+`nsenter: reassociate to namespaces failed: Operation not permitted`. The
+request copies the launch environment explicitly and clears absent display
+variables instead of inheriting the user manager's desktop.
+
 A client started from a terminal or an agent's task is that process's child
 and ends with it: an agent's turn ending, or its two-hour background limit,
 took signed-in clients down mid-check on 8 October 2026. So a signed-in
