@@ -4,6 +4,7 @@ export interface MapDeclaration {
   readonly suggestedPlayers: string;
   readonly players: readonly { readonly id: number; readonly name: string }[];
   readonly forces: readonly { readonly name: string; readonly playerIds: readonly number[] }[];
+  readonly loadingScreenModel?: string;
 }
 
 interface PlayerRecord {
@@ -186,9 +187,24 @@ export function encodeMapInfo(info: MapInfo): Uint8Array {
   ]);
 }
 
+const LOADING_SCREEN_NUMBER = 5;
+const LOADING_SCREEN_MODEL = 9;
+const CUSTOM_LOADING_SCREEN = -1;
+
+export function loadingScreenModel(environment: Uint8Array): string {
+  return new TextDecoder().decode(environment.subarray(LOADING_SCREEN_MODEL, environment.indexOf(0, LOADING_SCREEN_MODEL)));
+}
+
+function withLoadingScreen(environment: Uint8Array, model: string | undefined): Uint8Array {
+  if (model === undefined) return environment;
+  const end = environment.indexOf(0, LOADING_SCREEN_MODEL);
+  return concat([environment.subarray(0, LOADING_SCREEN_NUMBER), int32Bytes(CUSTOM_LOADING_SCREEN), stringBytes(model), environment.subarray(end + 1)]);
+}
+
 export function declareMap(base: MapInfo, name: string, map: MapDeclaration): MapInfo {
   return {
     ...base,
+    environment: withLoadingScreen(base.environment, map.loadingScreenModel),
     name,
     author: map.author,
     description: map.description,
