@@ -1,5 +1,9 @@
 # Wisp feature index
 
+[Native input preflight](platforms.md) verifies the private window's focus and
+observed pointer delivery before native input; map runners then verify a fresh
+map-written key receipt.
+
 [Model load failures](hot-reload.md#model-load-failures) forwards Warcraft's
 failed model paths to existing client visuals during hot and dev watches.
 

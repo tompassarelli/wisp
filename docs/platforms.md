@@ -1,5 +1,14 @@
 # Platforms
 
+`InputInjection.preflight(client)` verifies focus on the client's private Warcraft
+window, initializes a compositor virtual pointer, observes a one-pixel XTEST
+motion and restores its position. It fails within five seconds naming the
+display and failed boundary. Headless labwc can otherwise report successful
+XTEST commands without moving its pointer until a compositor pointer exists.
+`Clients.preflight(client)` exposes the same check to native runners. Call it
+after map startup and verify a harmless key with the map's own fresh receipt;
+pointer coordinates alone do not establish keyboard delivery.
+
 Wisp is built on and for Linux. Windows and macOS consumers (map makers, and
 players running the standalone player) should fit without the Linux code
 spreading into what they run

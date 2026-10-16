@@ -48,6 +48,7 @@ export const unsupportedLayer = (platform: string): Layer.Layer<Platform> => {
       sessionEnvironment: () => ({}),
       placer: Effect.succeedNone,
       display: desktop("input injection"),
+      preflight: desktop("input preflight"),
       focus: desktop("input injection"),
       activeWindow: desktop("input injection"),
       windowRegion: desktop("input injection"),

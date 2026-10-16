@@ -175,6 +175,8 @@ export const words = (client: Client, ink: Ink = "light") =>
 export const frameWords = (client: Client, frame: Frame, ink: Ink) =>
   runTool(client.name, "read words", [client.tools.tesseract, "stdin", "stdout", "--psm", "11", "tsv"], {}, separateInk(frame, ink)).pipe(Effect.map((bytes) => parseWords(text(bytes))));
 
+export const preflight = (client: Client) => InputInjection.use((input) => input.preflight(client));
+
 export const focus = (client: Client) => InputInjection.use((input) => input.focus(client, "Warcraft III", true));
 
 const requireMatch = (client: Client, input: string) =>

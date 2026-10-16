@@ -11,6 +11,7 @@ export const clientUnit = (name: string) => `wisp-client-${name}.service`;
 export class Clients extends Context.Service<Clients, {
 
   readonly all: readonly [Client, ...Client[]];
+  readonly preflight: (client: Client) => Effect.Effect<void, desktop.DesktopFailure>;
   readonly read: (client: Client, region?: desktop.Region, ink?: desktop.Ink) => Effect.Effect<string, desktop.DesktopFailure>;
 
   readonly capture: (client: Client) => Effect.Effect<Frame, desktop.DesktopFailure>;
@@ -43,6 +44,7 @@ const connect = (path: string) => Effect.gen(function*() {
   const on = <A, E>(effect: Effect.Effect<A, E, Platform>) => effect.pipe(Effect.provideContext(platform));
   return Clients.of({
     all: [first, ...others],
+    preflight: (client) => Effect.flatMap(session(client), (value) => on(desktop.preflight(value))),
     read: (client, region, ink = "light") => Effect.flatMap(session(client), (value) => on(desktop.read(value, region, ink))),
     capture: (client) => Effect.flatMap(session(client), (value) => on(desktop.capture(value))),
     words: (client, ink = "light") => Effect.flatMap(session(client), (value) => on(desktop.words(value, ink))),

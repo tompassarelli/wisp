@@ -159,6 +159,7 @@ export class InputInjection extends Context.Service<InputInjection, {
 
   readonly placer: Effect.Effect<Option.Option<WindowPlacer>>;
   readonly display: (entry: ClientEntry) => Effect.Effect<string, DesktopFailure>;
+  readonly preflight: (client: Client) => Effect.Effect<void, DesktopFailure>;
   readonly focus: (client: Client, title: string, strict: boolean) => Effect.Effect<void, DesktopFailure>;
   readonly activeWindow: (client: Client) => Effect.Effect<string, DesktopFailure>;
   readonly windowRegion: (client: Client) => Effect.Effect<Region, DesktopFailure>;

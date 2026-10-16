@@ -5,7 +5,7 @@ import { Effect, Exit, Layer, Option } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { inputBatches, sendsChat } from "../../warcraft/inputBatch";
 import { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, runTool } from "../../warcraft/desktop";
-import { captureProcess } from "../../wisp/hostProcess";
+import { pollUntil, captureProcess } from "../../wisp/hostProcess";
 import { step } from "../../wisp/timings";
 import { InputInjection, ScreenCapture, type WindowPlacer } from "../services";
 
@@ -47,6 +47,26 @@ const focus = (client: Client, title: string, strict: boolean) =>
     yield* strict ? toplevel : toplevel.pipe(Effect.ignore);
     yield* runTool(client.name, `activate ${named} window`, [client.tools.xdotool, "windowactivate", "--sync", client.window], client.x11);
   });
+
+const preflight = (client: Client) => Effect.gen(function*() {
+  yield* focus(client, "Warcraft III", true);
+  const active = text(yield* runTool(client.name, "input preflight focus", [client.tools.xdotool, "getactivewindow"], client.x11)).trim();
+  if (active !== client.window) return yield* new DesktopFailure({ operation: "input preflight focus", client: client.name, cause: `window ${active} is active, expected ${client.window} on ${client.x11.DISPLAY}` });
+  // Headless labwc needs a compositor pointer before Xwayland can deliver XTEST motion.
+  yield* runTool(client.name, "initialize private pointer", [client.tools.wlrctl, "pointer", "move", "0", "0"], client.wayland);
+  const before = yield* pointer(client);
+  const target = { x: before.x > 0 ? before.x - 1 : 1, y: before.y };
+  yield* pollUntil(Effect.gen(function*() {
+    const from = yield* pointer(client);
+    yield* runTool(client.name, "input preflight motion", [client.tools.xdotool, "mousemove_relative", "--", String(target.x - from.x), "0"], client.x11);
+    const at = yield* pointer(client);
+    return at.x === target.x && at.y === target.y;
+  }), { until: moved => moved, every: "50 millis", within: "2 seconds", onTimeout: () => Effect.fail(new DesktopFailure({ operation: "input preflight pointer", client: client.name, cause: `XTEST motion did not reach ${client.x11.DISPLAY}; check the private compositor pointer and display pairing` })) });
+  yield* runTool(client.name, "restore preflight pointer", [client.tools.xdotool, "mousemove_relative", "--", String(before.x - target.x), "0"], client.x11);
+}).pipe(
+  Effect.mapError(cause => new DesktopFailure({ operation: "input preflight", client: client.name, cause: `${client.x11.DISPLAY}: ${cause.message}` })),
+  Effect.timeoutOrElse({ duration: "5 seconds", orElse: () => Effect.fail(new DesktopFailure({ operation: "input preflight", client: client.name, cause: `display/focus/pointer check exceeded 5 s on ${client.x11.DISPLAY}` })) }),
+);
 
 const pressAt = (client: Client, x: number, y: number) =>
   Effect.gen(function*() {
@@ -131,6 +151,7 @@ export const linuxDesktopLayer = Layer.mergeAll(
       return Option.some(place);
     }),
     display: (entry) => desktopSession(entry).pipe(Effect.map(({ x11 }) => x11.DISPLAY)),
+    preflight,
     focus,
     activeWindow: (client) => runTool(client.name, "read active window", [client.tools.xdotool, "getactivewindow"], client.x11).pipe(Effect.map((bytes) => text(bytes).trim())),
     windowRegion: (client) => runTool(client.name, "read window geometry", [client.tools.xdotool, "getwindowgeometry", "--shell", client.window], client.x11).pipe(Effect.map((bytes): Region => {
