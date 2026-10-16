@@ -98,8 +98,9 @@ export const makeAccept = ({ suite, evidenceRoot, driver, clients = ["host"], sh
   const evidenceRun = shards !== undefined && split.length > 1
     ? runShards(shards, selected, split, checks, directory, json)
     : runAccept(suite, sessions, directory, (line) => json ? Effect.void : Console.log(line)).pipe(Effect.provide(driver));
+  const pair = selected[0] ?? clients.map((client) => /^lan(\d+)[ab]$/.exec(client)?.[1]).find((value) => value !== undefined) ?? "0";
   const report = clients.some((client) => client !== "host")
-    ? yield* withQuietNativeCapacity("wisp-accept-native", evidenceRun)
+    ? yield* withQuietNativeCapacity(`wisp-accept-pair-${pair}`, evidenceRun)
     : yield* evidenceRun;
   const failed = report.results.filter(({ verdict }) => verdict === "fail");
   if (json) {
