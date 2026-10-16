@@ -79,13 +79,14 @@ const HOST_KEYS = ["PATH", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"] as con
 
 const launchCommand = (request: LaunchRequest) => {
   const { launcher } = request;
-  const restore = HOST_KEYS.flatMap((key) => (launcher.env[key] === undefined ? ["-u", key] : [`${key}=${launcher.env[key]}`]));
+  const unset = HOST_KEYS.filter((key) => launcher.env[key] === undefined).flatMap((key) => ["-u", key]);
+  const restore = HOST_KEYS.flatMap((key) => (launcher.env[key] === undefined ? [] : [`${key}=${launcher.env[key]}`]));
   const host = Object.fromEntries(HOST_KEYS.flatMap((key) => (request.host[key] === undefined ? [] : [[key, request.host[key]!] as const])));
   return {
     command: [...(request.client === "playtest"
       ? ["systemd-run", "--user", "--scope", "--collect", "--slice=playtest.slice", "--"]
       : [request.bun, request.capacity, "session", "--class", "native", "--owner", `wisp-game-${request.client}`, "--"]),
-      request.env, ...restore, request.nsenter, "-t", String(launcher.pid), "-U", "-m", "--preserve-credentials", `--wd=${launcher.cwd}`, "--",
+      request.env, ...unset, ...restore, request.nsenter, "-t", String(launcher.pid), "-U", "-m", "--preserve-credentials", `--wd=${launcher.cwd}`, "--",
       request.wine, ...request.wineArgs, "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe", "--exec=launch W3"],
     env: { ...launcher.env, ...host },
   };
