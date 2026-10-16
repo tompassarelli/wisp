@@ -53,7 +53,9 @@ export const liveAcceptDriver = <R>({ start, receipt, prepare, matchSeconds = 60
         yield* Effect.forEach(clients.all, (client) => waitFor(client, inState("in match"), { what: "the match", seconds: matchSeconds }).pipe(Effect.mapError(failure(`${client.name} in match`)), Effect.provide(watched)), { concurrency: "unbounded", discard: true });
       }).pipe(Effect.provide(context)),
       chat: (name, text) => on(name, "chat", (client) => clients.batch(client, [{ kind: "keys", keys: ["Return"] }, { kind: "text", text }, { kind: "keys", keys: ["Return"] }])),
-      keys: (name, keys) => on(name, "keys", (client) => clients.keys(client, ...keys)),
+      keys: (name, keys, holdMs) => on(name, "keys", (client) => holdMs === undefined
+        ? clients.keys(client, ...keys)
+        : clients.batch(client, [{ kind: "keys", keys, holdMillis: holdMs }])),
       capture: (name) => on(name, "capture", (client) => clients.capture(client)),
       read: (name, region, ink) => on(name, "read", (client) => clients.read(client, region, ink)),
       receipts: (name) => on(name, "receipts", (client) => Effect.gen(function*() {

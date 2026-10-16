@@ -19,7 +19,7 @@ FAIL       73-load  smashcraft#73 box 2  War3Log every client /^model creation f
 `accept --dry-run` prints the same plan, every step, capture and rule,
 without touching a client. `--only ID...` runs some checks (an id, or a
 prefix ending in `*`, such as `82-*`); `--out DIR` names the evidence folder.
-A run with a failed check exits 1.
+A run with a failed check exits 1. A held-key step is shown in dry-run output as `held N ms`.
 
 ## Declaring checks
 
@@ -31,7 +31,7 @@ profiles, its checks and any frame measurements. A check is:
 | `id`, `closes` | The check's name and the issue box it answers, such as `smashcraft#82 box 2`. |
 | `map`, `session` | The map profile whose fresh match it runs in. Checks of one map share a match unless they name different sessions. |
 | `after` | A prerequisite check id declared earlier in the same map and session. The prerequisite must pass in this run; a failed, needs-look, skipped or unselected prerequisite makes this check SKIPPED without running its steps or captures. |
-| `setup` | Steps on the clients: `{ chat }` (a chat command such as `-dev effects 12`), `{ keys }`, `{ waitMs }`, and `{ receipt }`, which waits for a receipt line written since the check began. |
+| `setup` | Steps on the clients: `{ chat }` (a chat command such as `-dev effects 12`), `{ keys }` (or `{ keys, holdMs }` to hold each key for that many milliseconds), `{ waitMs }`, and `{ receipt }`, which waits for a receipt line written since the check began. |
 | `capture` | `frames` (a region, a count and an interval; saved as PPM), `reading` (text read from a region, such as an overlay; with `pattern`, its first group, as a number when it reads as one) and `measure` (one frame measured by a suite function). Every check also keeps each client's new receipt lines and War3Log lines. |
 | `pass` | Rules: `receipt` and `log` (lines matching a pattern, counted per client, with `min`/`max`; a `log` rule can count `since: "session"`, which covers the map's load) and `reading` (a number within bounds, or text matching a pattern). |
 | `look` | What the owner looks for in the captures. A check with it is needs-look once its rules hold. |

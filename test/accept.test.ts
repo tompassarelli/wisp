@@ -50,6 +50,21 @@ test("[scenario] recorded moves failures skip dependent specials without driving
   }
 });
 
+test("[scenario] an acceptance held-key step keeps its declared duration through the driver", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "wisp-accept-hold-"));
+  directories.push(directory);
+  const fake = fakeDriver();
+  const base = await Effect.runPromise(AcceptDriver.pipe(Effect.provide(fake.layer)));
+  const driver = AcceptDriver.of({ ...base, keys: (client, keys, holdMs) => Effect.sync(() => { fake.calls.push(`keys ${client} ${keys.join(" ")} held ${holdMs} ms`); }) });
+  const suite: AcceptSuite = {
+    maps: { good: { describe: "held-key acceptance step" } },
+    checks: [{ id: "held-hop", closes: "native input timing", map: "good", setup: [{ keys: ["z"], client: "a", holdMs: 120 }], look: "the character performs a full hop" }],
+  };
+  const report = await Effect.runPromise(runAccept(suite, planSessions(suite.checks), directory).pipe(Effect.provide(Layer.succeed(AcceptDriver, driver))));
+  expect(fake.calls).toContain("keys a z held 120 ms");
+  expect(report.results[0]?.verdict).toBe("needs-look");
+});
+
 const suite: AcceptSuite = {
   maps: { broken: { describe: "a map whose session can't start" }, good: { describe: "a map that starts" } },
   checks: [

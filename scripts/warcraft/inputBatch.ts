@@ -1,5 +1,5 @@
 export type InputAction =
-  | { readonly kind: "keys"; readonly keys: readonly string[]; readonly delayMillis?: number; readonly settleMillis?: number }
+  | { readonly kind: "keys"; readonly keys: readonly string[]; readonly delayMillis?: number; readonly settleMillis?: number; readonly holdMillis?: number }
   | { readonly kind: "text"; readonly text: string; readonly delayMillis?: number }
   | { readonly kind: "click"; readonly x: number; readonly y: number; readonly settleMillis?: number; readonly holdMillis?: number }
   | { readonly kind: "wait"; readonly millis: number };
@@ -30,6 +30,10 @@ export function inputBatches(actions: readonly InputAction[], pointer: PointerPo
             current.push("keyup", "--clearmodifiers", key);
 
             wait(action.settleMillis ?? 660);
+          } else if (action.holdMillis !== undefined) {
+            current.push("keydown", "--clearmodifiers", key);
+            wait(action.holdMillis);
+            current.push("keyup", "--clearmodifiers", key);
           } else current.push("key", "--clearmodifiers", "--delay", String(action.delayMillis ?? 12), key);
         }
         break;

@@ -11,7 +11,7 @@ import { encodePpm, type Frame } from "./frameProbe";
 export type Step =
 
   | { readonly chat: string; readonly client?: string }
-  | { readonly keys: readonly string[]; readonly client?: string }
+  | { readonly keys: readonly string[]; readonly client?: string; readonly holdMs?: number }
   | { readonly waitMs: number }
 
   | { readonly receipt: string; readonly client?: string; readonly seconds?: number };
@@ -86,7 +86,7 @@ export class AcceptDriver extends Context.Service<AcceptDriver, {
 
   readonly start: (map: string, session: string) => Effect.Effect<void, AcceptFailure>;
   readonly chat: (client: string, text: string) => Effect.Effect<void, AcceptFailure>;
-  readonly keys: (client: string, keys: readonly string[]) => Effect.Effect<void, AcceptFailure>;
+  readonly keys: (client: string, keys: readonly string[], holdMs?: number) => Effect.Effect<void, AcceptFailure>;
   readonly capture: (client: string) => Effect.Effect<Frame, AcceptFailure>;
   readonly read: (client: string, region: Region | undefined, ink: Ink) => Effect.Effect<string, AcceptFailure>;
 
@@ -151,6 +151,7 @@ export function suiteProblems(suite: AcceptSuite, clients?: readonly string[]): 
     for (const step of check.setup ?? []) {
       if ("receipt" in step) pattern(id, step.receipt);
       if ("client" in step) client(id, step.client);
+      if ("keys" in step && step.holdMs !== undefined && (!Number.isFinite(step.holdMs) || step.holdMs <= 0)) problems.push(`${id}: held keys need a positive finite holdMs`);
     }
     for (const capture of check.capture ?? []) {
       client(id, capture.client);
@@ -173,7 +174,7 @@ const describeCount = ({ min, max }: Count) => (min === undefined && max === und
 
 function describeStep(step: Step, host: string): string {
   if ("chat" in step) return `chat ${step.client ?? host}: ${step.chat}`;
-  if ("keys" in step) return `keys ${step.client ?? host}: ${step.keys.join(" ")}`;
+  if ("keys" in step) return `keys ${step.client ?? host}: ${step.keys.join(" ")}${step.holdMs === undefined ? "" : ` held ${step.holdMs} ms`}`;
   if ("waitMs" in step) return `wait ${step.waitMs} ms`;
   return `wait for receipt ${step.client ?? host} /${step.receipt}/ (${step.seconds ?? DEFAULT_RECEIPT_SECONDS} s)`;
 }
@@ -322,7 +323,7 @@ export const runAccept = (suite: AcceptSuite, sessions: readonly PlannedSession[
 
       for (const step of check.setup ?? []) {
         if ("chat" in step) yield* driver.chat(step.client ?? host, step.chat);
-        else if ("keys" in step) yield* driver.keys(step.client ?? host, step.keys);
+        else if ("keys" in step) yield* driver.keys(step.client ?? host, step.keys, step.holdMs);
         else if ("waitMs" in step) yield* Effect.sleep(Duration.millis(step.waitMs));
         else {
           const client = step.client ?? host;
