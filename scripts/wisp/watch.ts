@@ -410,7 +410,7 @@ const liveWatch = (options: WatchOptions) => Effect.gen(function*() {
     const lan = yield* lanObservation(client);
     const sources: Sources = {
       now: yield* Clock.currentTimeMillis,
-      prefix: prefixUse(processes, prefix, "", { ownedGamePid: lan?.pid, ownerUnit: clientUnit(client.name) }),
+      prefix: prefixUse(processes, prefix, "", { ...(lan?.pid === undefined ? {} : { ownedGamePid: lan.pid }), ownerUnit: clientUnit(client.name) }),
       ...(log === undefined ? {} : { log }),
       crashes: crashes(client.documents, tracker.crashes),
       ...(() => {
