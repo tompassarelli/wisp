@@ -43,6 +43,10 @@ export function listProcesses(): ProcessInfo[] {
         if (variable.startsWith("WINEPREFIX=")) process.prefix = variable.slice("WINEPREFIX=".length).replace(/\/+$/, "");
         if (variable.startsWith("DISPLAY=")) process.display = variable.slice("DISPLAY=".length);
       }
+      if (process.prefix === undefined) {
+        const owner = ownerOf(process.pid);
+        if (owner !== undefined && "unit" in owner) process.ownerUnit = owner.unit;
+      }
       const stat = readText(`${base}/stat`);
       const started = startedAt(stat, bootMs);
       if (started !== undefined) process.started = started;
@@ -85,11 +89,16 @@ export function findGameProcesses(prefix: string): GameProcess[] {
   return found;
 }
 
-export function launcherProcess(pid: number): LauncherProcess {
+export function launcherProcess(pid: number, fallbackEnv: Readonly<Record<string, string>> = {}): LauncherProcess {
   const base = `/proc/${pid}`;
-  const env = Object.fromEntries(readFileSync(`${base}/environ`, "utf8").split("\0").filter((entry) => entry.includes("="))
-    .map((entry) => [entry.slice(0, entry.indexOf("=")), entry.slice(entry.indexOf("=") + 1)] as const)
-    .filter(([name]) => name !== "WINESERVERSOCKET" && name !== "WINELOADERNOEXEC"));
+  let env = fallbackEnv;
+  try {
+    env = { ...fallbackEnv, ...Object.fromEntries(readFileSync(`${base}/environ`, "utf8").split("\0").filter((entry) => entry.includes("="))
+      .map((entry) => [entry.slice(0, entry.indexOf("=")), entry.slice(entry.indexOf("=") + 1)] as const)
+      .filter(([name]) => name !== "WINESERVERSOCKET" && name !== "WINELOADERNOEXEC")) };
+  } catch {
+
+  }
   return { cwd: readlinkSync(`${base}/cwd`), env, runtime: resolve(dirname(readlinkSync(`${base}/exe`)), "../../../bin/wine") };
 }
 

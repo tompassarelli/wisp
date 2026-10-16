@@ -6,10 +6,9 @@ import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
 import { BackgroundServices, CapacityAdmission, type PlatformError, ProcessTable, type ServiceOwner } from "../platform/services";
 import type { ProcessInfo } from "../warcraft/battleNet";
+export { clientUnit } from "./clients";
 
 export const desktopUnit = (name: string) => `wisp-desktop-${name}.service`;
-
-export const clientUnit = (name: string) => `wisp-client-${name}.service`;
 
 const desktopLog = (name: string) => join(stateHome(), "wisp/desktops", `${name}.log`);
 
@@ -38,9 +37,9 @@ export const desktopPid = (run: string) => Effect.gen(function*() {
   return Number.isInteger(pid) && pid > 0 && (yield* ProcessTable.use((table) => table.alive(pid)).pipe(Effect.mapError(problem))) ? pid : undefined;
 });
 
-export const prefixProcesses = (prefix: string) => ProcessTable.use((table) => table.list).pipe(
+export const prefixProcesses = (prefix: string, ownerUnit?: string) => ProcessTable.use((table) => table.list).pipe(
   Effect.mapError(problem),
-  Effect.map((processes): readonly ProcessInfo[] => processes.filter((process) => process.prefix === prefix).sort((a, b) => Number(/battle\.net/i.test(b.args.join(" "))) - Number(/battle\.net/i.test(a.args.join(" "))))),
+  Effect.map((processes): readonly ProcessInfo[] => processes.filter((process) => process.prefix === prefix || (process.prefix === undefined && ownerUnit !== undefined && process.ownerUnit === ownerUnit)).sort((a, b) => Number(/battle\.net/i.test(b.args.join(" "))) - Number(/battle\.net/i.test(a.args.join(" "))))),
 );
 
 export const desktopCommand = (capacity: string, desktop: string, name: string) =>

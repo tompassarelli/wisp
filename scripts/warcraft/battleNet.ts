@@ -11,6 +11,7 @@ export interface ProcessInfo {
 
   readonly prefix?: string;
   readonly display?: string;
+  readonly ownerUnit?: string;
 
   /** The prefix's runtime process (wineserver on Linux), as the process table's layer recognises it. */
   readonly runtime?: boolean;
@@ -39,13 +40,19 @@ const isGame = (process: ProcessInfo) => /\\Warcraft III\.exe(?:\s|"|$)/i.test(c
 
 export const serverDirectoryName = (device: bigint, inode: bigint) => `server-${device.toString(16)}-${inode.toString(16)}`;
 
-export function prefixUse(processes: readonly ProcessInfo[], prefix: string, serverDirectory: string, ownedGamePid?: number): PrefixUse {
+export function prefixUse(processes: readonly ProcessInfo[], prefix: string, serverDirectory: string, options: { readonly ownedGamePid?: number; readonly ownerUnit?: string; readonly display?: string } = {}): PrefixUse {
   const wanted = trimSlash(prefix);
-  const inPrefix = processes.filter((process) =>
-    (process.prefix !== undefined && trimSlash(process.prefix) === wanted)
-    || (process.prefix === undefined && process.pid === ownedGamePid && isGame(process))
-    || (isRuntime(process) && process.cwd !== undefined && process.cwd.split("/").at(-1) === serverDirectory));
-  const launcher = inPrefix.find(isLauncher);
+  const inPrefix = processes.flatMap((process) => {
+    const owned = process.prefix === undefined && options.ownerUnit !== undefined && process.ownerUnit === options.ownerUnit;
+    const matches = (process.prefix !== undefined && trimSlash(process.prefix) === wanted)
+      || (process.prefix === undefined && process.pid === options.ownedGamePid && isGame(process))
+      || (isRuntime(process) && process.cwd !== undefined && process.cwd.split("/").at(-1) === serverDirectory)
+      || owned;
+    if (!matches) return [];
+    return [process.prefix === undefined && owned ? { ...process, prefix: wanted, ...(options.display === undefined ? {} : { display: options.display }) } : process];
+  });
+  const launcher = inPrefix.find(isLauncher)
+    ?? (options.ownerUnit === undefined ? undefined : inPrefix.find((process) => process.ownerUnit === options.ownerUnit && /^Agent\.exe$/i.test(process.name)));
   const game = inPrefix.find(isGame);
   return { runtimes: inPrefix.filter(isRuntime), processes: inPrefix, ...(launcher === undefined ? {} : { launcher }), ...(game === undefined ? {} : { game }) };
 }

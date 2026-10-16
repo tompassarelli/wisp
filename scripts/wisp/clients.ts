@@ -6,6 +6,8 @@ export { DesktopFailure, type Ink, type Region, type Word, type InputAction, wai
 
 export type Client = Pick<desktop.Client, "name" | "documents" | "menuReportPort">;
 
+export const clientUnit = (name: string) => `wisp-client-${name}.service`;
+
 export class Clients extends Context.Service<Clients, {
 
   readonly all: readonly [Client, ...Client[]];

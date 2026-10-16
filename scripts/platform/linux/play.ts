@@ -5,7 +5,7 @@ import { basename, dirname } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Layer, type PlatformError, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { serverDirectoryName } from "../../warcraft/battleNet";
+import { serverDirectoryName, type ProcessInfo } from "../../warcraft/battleNet";
 import { launcherProcess, listProcesses } from "./procfs";
 import { parseWords, separateInk } from "../../warcraft/desktop";
 import { describeCause } from "../../wisp/command";
@@ -92,12 +92,15 @@ const launchCommand = (request: LaunchRequest) => {
 
 const LAUNCH_WAIT_SECONDS = 1800;
 
-const launchInContainer = (run: Runner, tools: PlayTools, launcher: { readonly pid: number }, client: string) => Effect.gen(function*() {
+const launchInContainer = (run: Runner, tools: PlayTools, launcher: ProcessInfo, client: string) => Effect.gen(function*() {
   const failed = problem("couldn't ask Battle.net to launch Warcraft III");
   const capacity = client === "playtest" ? "" : tools.capacity ?? (yield* skillScript("machine-capacity", "scripts/machine-capacity.mjs").pipe(Effect.mapError((cause) => failed(cause.problem))));
   const request = yield* Effect.try({
     try: (): LaunchRequest => {
-      const { cwd, env, runtime } = launcherProcess(launcher.pid);
+      const { cwd, env, runtime } = launcherProcess(launcher.pid, {
+        ...(launcher.prefix === undefined ? {} : { WINEPREFIX: launcher.prefix }),
+        ...(launcher.display === undefined ? {} : { DISPLAY: launcher.display }),
+      });
       return {
         bun: process.execPath, capacity, client, env: hostNsenter("env"), nsenter: hostNsenter(tools.nsenter), wine: runtime,
         launcher: { pid: launcher.pid, cwd, env }, host: process.env,

@@ -6,7 +6,7 @@ import { ackFile } from "../../src/runtime/gameFiles";
 import { type PrefixUse, type ProcessInfo, prefixUse } from "../warcraft/battleNet";
 import { ProcessTable } from "../platform/services";
 import { type LadderScan, SCAN_QUIET_MS, importFailures, ladderScan, logTime, sessionMarks, sessionStart, sessionText, war3LogPath } from "../warcraft/war3Log";
-import type { Client } from "./clients";
+import { clientUnit, type Client } from "./clients";
 import { dataDirectory } from "./gameFiles";
 import { type MenuEvent, connectMenus, keptAddress, menuAddress } from "./menus";
 import { pairClients, readPool } from "./lan/pool";
@@ -410,7 +410,7 @@ const liveWatch = (options: WatchOptions) => Effect.gen(function*() {
     const lan = yield* lanObservation(client);
     const sources: Sources = {
       now: yield* Clock.currentTimeMillis,
-      prefix: prefixUse(processes, prefix, "", lan?.pid),
+      prefix: prefixUse(processes, prefix, "", { ownedGamePid: lan?.pid, ownerUnit: clientUnit(client.name) }),
       ...(log === undefined ? {} : { log }),
       crashes: crashes(client.documents, tracker.crashes),
       ...(() => {

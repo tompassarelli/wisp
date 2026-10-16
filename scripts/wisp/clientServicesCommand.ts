@@ -29,7 +29,7 @@ const statusLines = (clientsFile: string, names: readonly string[], watch: Watch
     const desktopText = !liveDesktop(entry.run) ? `no live desktop at ${entry.run}` : `${entry.run}, ${describeOwner(desktopOwner)}${desktopOwner !== undefined && "unit" in desktopOwner ? ` (${yield* unitLine(desktopOwner.unit)})` : ""}`;
     yield* Console.log(`${entry.name}: desktop: ${desktopText}`);
     const prefix = prefixFromDocuments(entry.documents);
-    const [first] = prefix === undefined ? [] : yield* prefixProcesses(prefix);
+    const [first] = prefix === undefined ? [] : yield* prefixProcesses(prefix, clientUnit(entry.name));
     const owner = first === undefined ? undefined : yield* ownerOf(first.pid);
     const battleNet = first === undefined ? "not running" : `${describeOwner(owner)}${owner !== undefined && "unit" in owner ? ` (${yield* unitLine(owner.unit)})` : ""}`;
     const client = { name: entry.name, documents: entry.documents, ...(entry.menuReportPort === undefined ? {} : { menuReportPort: entry.menuReportPort }) };
@@ -77,7 +77,7 @@ export const serviceStop = (clientsFile: string, names: readonly string[]) => Ef
   const clients = yield* chosenClients(clientsFile, names);
   for (const entry of clients) {
     const prefix = prefixFromDocuments(entry.documents);
-    const [first] = prefix === undefined ? [] : yield* prefixProcesses(prefix);
+    const [first] = prefix === undefined ? [] : yield* prefixProcesses(prefix, clientUnit(entry.name));
     const owner = first === undefined ? undefined : yield* ownerOf(first.pid);
     const pid = yield* desktopPid(entry.run);
     const desktopOwner = pid === undefined ? undefined : yield* ownerOf(pid);

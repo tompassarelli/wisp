@@ -38,6 +38,14 @@ test("[native] recorded launcher logs: signed in, a lost connection, a reconnect
   expect(launcherHealth(`${SIGNED_IN}D 2026-10-06 12:33:38.741703 [CatalogVarStorage] {Main} Setting var from catalog Client.DisableLoginCredentialUIRegionList=CN\n`).kind).toBe("signed in");
 });
 
+test("[scenario] a client-owned Battle.net Agent is visible when Wine hides its prefix", () => {
+  const agent: ProcessInfo = { pid: 73125, name: "Agent.exe", args: ["Agent.exe"], ownerUnit: "wisp-client-clone-c.service" };
+  const use = prefixUse([agent], PREFIX, "", { ownerUnit: "wisp-client-clone-c.service", display: ":17" });
+  expect(use.launcher).toMatchObject({ pid: agent.pid, prefix: PREFIX, display: ":17" });
+  expect(use.processes).toContainEqual(expect.objectContaining({ pid: agent.pid, prefix: PREFIX }));
+  expect(prefixUse([agent], PREFIX, "", { ownerUnit: "wisp-client-clone-b.service" }).launcher).toBeUndefined();
+});
+
 test("[property seed 22] diagnosis preserves ready clients and distinguishes observed faults across ages and sources", () => {
   const states: readonly ClientState[] = [
     { kind: "menus", screen: "MAIN_MENU" }, { kind: "signed in" }, { kind: "in match" },

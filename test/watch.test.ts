@@ -28,7 +28,7 @@ test("[boundary] the pair owner's live Warcraft PID survives unreadable prefix m
   const game = { ...GAME, prefix: undefined };
   const lan = { pid: GAME.pid, map: "/proof/own-map.w3x", phase: "playing", connected: true, loaded: true, left: false };
   const observe = (processes: readonly ProcessInfo[], state = lan) => decide("a", {
-    ...sources(now, processes), prefix: prefixUse(processes, PREFIX, "", state.pid), lan: state,
+    ...sources(now, processes), prefix: prefixUse(processes, PREFIX, "", { ownedGamePid: state.pid }), lan: state,
   });
   const match = observe([game]);
   expect(match.state.kind).toBe("in match");
@@ -46,7 +46,7 @@ test("[boundary] the pair owner's live Warcraft PID survives unreadable prefix m
   }
   for (const state of [{ kind: "menus", screen: "MAIN_MENU" }, { kind: "lobby" }] as const) {
     const view = decide("a", {
-      ...sources(now, [game]), prefix: prefixUse([game], PREFIX, "", lan.pid), lan: { ...lan, phase: "lobby" },
+      ...sources(now, [game]), prefix: prefixUse([game], PREFIX, "", { ownedGamePid: lan.pid }), lan: { ...lan, phase: "lobby" },
       socket: { connected: true, last: { state, at: now, evidence: "current menu page" } },
     });
     expect(view.state).toEqual(state);
