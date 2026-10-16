@@ -27,7 +27,10 @@ export const withQuietNativeCapacity = <A, E, R>(owner: string, run: Effect.Effe
     stderr: join(folder, "stderr"),
   }).pipe(Effect.mapError((cause) => new QuietLeaseFailure({ problem: `starting native quiet lease: ${String(cause)}` })));
   const reserved = yield* Effect.gen(function*() {
-    const text = yield* fs.readFileString(stdout).pipe(Effect.orElseSucceed(() => ""));
+    const text = yield* Effect.all([
+      fs.readFileString(stdout).pipe(Effect.orElseSucceed(() => "")),
+      fs.readFileString(join(folder, "stderr")).pipe(Effect.orElseSucceed(() => "")),
+    ]).pipe(Effect.map((lines) => lines.join("\n")));
     if (text.split("\n").some((line) => {
       try { return JSON.parse(line).decision === "RESERVED"; } catch { return false; }
     })) return true;
