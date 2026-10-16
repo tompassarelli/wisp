@@ -5,7 +5,7 @@ import * as desktop from "../warcraft/desktop";
 import type { Command } from "./command";
 import { UsageFailure } from "./command";
 import {
-  clientUnit, describeOwner, desktopCommand, desktopPid, desktopUnit, liveDesktop, ownerOf, prefixProcesses, serviceState, startDesktop, stopService, writeRun,
+  clientUnit, describeOwner, desktopCommand, desktopOwner, desktopPid, desktopUnit, liveDesktop, ownerOf, prefixProcesses, serviceState, startDesktop, stopService, writeRun,
 } from "./clientServices";
 import { ServiceProblem, skillScript } from "./hostProcess";
 import { ClientWatch, type WatchOptions, describeView, inState, waitFor } from "./watch";
@@ -40,17 +40,18 @@ const statusLines = (clientsFile: string, names: readonly string[], watch: Watch
 
 export const serviceStatus = (clientsFile: string, names: readonly string[], watch: WatchOptions) => statusLines(clientsFile, names, watch);
 
-const desktopService = (name: string) => Effect.gen(function*() {
+const desktopService = (name: string, owner: string) => Effect.gen(function*() {
   const capacity = yield* skillScript("machine-capacity", "scripts/machine-capacity.mjs");
   const launcher = yield* skillScript("private-desktop-development", "scripts/private-desktop.sh");
-  return yield* startDesktop(name, yield* desktopCommand(capacity, launcher, name));
+  return yield* startDesktop(name, yield* desktopCommand(capacity, launcher, name, owner), owner);
 });
 
-const reviveDesktops = <E = never>(clientsFile: string, names: readonly string[], start: (name: string) => Effect.Effect<string, ServiceProblem | E, Platform> = desktopService) => Effect.gen(function*() {
+const reviveDesktops = <E = never>(clientsFile: string, names: readonly string[], start: (name: string, owner: string) => Effect.Effect<string, ServiceProblem | E, Platform> = desktopService) => Effect.gen(function*() {
+  const owner = desktopOwner(clientsFile);
   const missing = (yield* chosenClients(clientsFile, names)).filter((entry) => !liveDesktop(entry.run));
   for (const entry of missing) {
-    yield* Console.log(`${entry.name}: no live desktop at ${entry.run}; starting its private desktop as the service ${desktopUnit(entry.name)}`);
-    const runDir = yield* start(entry.name);
+    yield* Console.log(`${entry.name}: no live desktop at ${entry.run}; starting its private desktop as the service ${desktopUnit(entry.name, owner)}`);
+    const runDir = yield* start(entry.name, owner);
     yield* writeRun(clientsFile, entry.name, runDir);
     yield* Console.log(`${entry.name}: desktop ${runDir}`);
   }
@@ -75,6 +76,7 @@ const MENU_SECONDS = 420;
 
 export const serviceStop = (clientsFile: string, names: readonly string[]) => Effect.gen(function*() {
   const clients = yield* chosenClients(clientsFile, names);
+  const owned = desktopOwner(clientsFile);
   for (const entry of clients) {
     const prefix = prefixFromDocuments(entry.documents);
     const [first] = prefix === undefined ? [] : yield* prefixProcesses(prefix, clientUnit(entry.name));
@@ -83,7 +85,7 @@ export const serviceStop = (clientsFile: string, names: readonly string[]) => Ef
     const desktopOwner = pid === undefined ? undefined : yield* ownerOf(pid);
     const units = [...new Set([
       ...(owner !== undefined && "unit" in owner ? [owner.unit] : []), clientUnit(entry.name),
-      ...(desktopOwner !== undefined && "unit" in desktopOwner ? [desktopOwner.unit] : []), desktopUnit(entry.name),
+      ...(desktopOwner !== undefined && "unit" in desktopOwner ? [desktopOwner.unit] : []), desktopUnit(entry.name, owned),
     ])];
     for (const unit of units) {
       if (!["active", "activating", "deactivating", "reloading"].includes((yield* serviceState(unit)).active)) continue;

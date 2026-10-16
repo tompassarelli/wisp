@@ -1,16 +1,22 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { readTextOrUndefined } from "./files";
 import { ServiceProblem, pollFor } from "./hostProcess";
 import { stateHome } from "./xdg";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { Effect, Schema } from "effect";
 import { BackgroundServices, CapacityAdmission, type PlatformError, ProcessTable, type ServiceOwner } from "../platform/services";
 import type { ProcessInfo } from "../warcraft/battleNet";
 export { clientUnit } from "./clients";
 
-export const desktopUnit = (name: string) => `wisp-desktop-${name}.service`;
+/** The session that owns a desktop: its clients file, so two lanes' clients named alike get separate units. */
+export const desktopOwner = (clientsFile: string) => createHash("sha256").update(resolve(clientsFile)).digest("hex").slice(0, 8);
 
-const desktopLog = (name: string) => join(stateHome(), "wisp/desktops", `${name}.log`);
+const desktopStem = (name: string, owner: string) => `wisp-desktop-${name}-${owner}`;
+
+export const desktopUnit = (name: string, owner: string) => `${desktopStem(name, owner)}.service`;
+
+const desktopLog = (name: string, owner: string) => join(stateHome(), "wisp/desktops", `${name}-${owner}.log`);
 
 const DESKTOP_RESOLUTION = "1920x1080";
 
@@ -42,21 +48,22 @@ export const prefixProcesses = (prefix: string, ownerUnit?: string) => ProcessTa
   Effect.map((processes): readonly ProcessInfo[] => processes.filter((process) => process.prefix === prefix || (process.prefix === undefined && ownerUnit !== undefined && process.ownerUnit === ownerUnit)).sort((a, b) => Number(/battle\.net/i.test(b.args.join(" "))) - Number(/battle\.net/i.test(a.args.join(" "))))),
 );
 
-export const desktopCommand = (capacity: string, desktop: string, name: string) =>
-  CapacityAdmission.use((admission) => admission.session(capacity, `wisp-desktop-${name}`, 1.5)).pipe(
+export const desktopCommand = (capacity: string, desktop: string, name: string, owner: string) =>
+  CapacityAdmission.use((admission) => admission.session(capacity, desktopStem(name, owner), 1.5)).pipe(
     Effect.mapError(problem),
     Effect.map((session) => [...session, "bash", desktop, "start", "--resolution", DESKTOP_RESOLUTION]),
   );
 
-export const startDesktop = (name: string, command: readonly string[], seconds = 60) => Effect.gen(function*() {
-  const log = desktopLog(name);
+export const startDesktop = (name: string, command: readonly string[], owner: string, seconds = 60) => Effect.gen(function*() {
+  const unit = desktopUnit(name, owner);
+  const log = desktopLog(name, owner);
   const offset = readTextOrUndefined(log)?.length ?? 0;
-  yield* startService(desktopUnit(name), command, log);
+  yield* startService(unit, command, log);
   const desktopUp = Effect.gen(function*() {
     const written = (readTextOrUndefined(log) ?? "").slice(offset);
     const runDir = /^Run: (\S+)$/m.exec(written)?.[1];
     if (runDir !== undefined && liveDesktop(runDir)) return runDir;
-    const state = yield* serviceState(desktopUnit(name));
+    const state = yield* serviceState(unit);
     if (state.active !== "active" && state.active !== "activating") {
       return yield* new ServiceProblem({ problem: `${name}: its desktop service ended before the desktop was up: ${written.trim().split("\n").slice(-3).join(" | ") || state.active} (${log})` });
     }

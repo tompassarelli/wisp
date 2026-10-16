@@ -194,8 +194,10 @@ wisp client stop [CLIENT...] --clients-file FILE
 
 - **start** gives each named client (all when none; never `offline: true`
   ones) whose `run` folder has no live desktop a new private desktop as the
-  service `wisp-desktop-CLIENT`, and writes its run folder into the clients
-  file. Then doctor brings each to a ready state, starting a closed client's
+  service `wisp-desktop-CLIENT-OWNER`, and writes its run folder into the clients
+  file. OWNER is the first 8 hex digits of the SHA-256 of the clients file's
+  absolute path, so two sessions starting client `a` from their own clients
+  files get two desktops instead of the second replacing the first. Then doctor brings each to a ready state, starting a closed client's
   Battle.net as the service `wisp-client-CLIENT`; start returns once each
   game reached its menu (or is already in a lobby or match) and prints
   status. A client already running, under any owner, is kept.

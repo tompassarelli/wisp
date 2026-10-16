@@ -209,7 +209,8 @@ The lanes' clients files are kept in `~/.local/state/wisp/online/`:
 `ad-clients.json` (clone-a + clone-d) and `bc-clients.json` (A and B, named
 `a` and `b`). A lane owner starts its clients with `bun wisp client start
 --clients-file FILE`: each client without a live desktop gets one as the user
-service `wisp-desktop-CLIENT`, its new run folder is written into the file,
+service `wisp-desktop-CLIENT-OWNER` (OWNER is named by the clients file, so
+`a` in two lanes' files gets two desktops), its new run folder is written into the file,
 and doctor starts Battle.net as `wisp-client-CLIENT` and waits for the menu.
 The services outlive the owner's turn and any task time limit;
 `client status` shows them and `client stop` ends them
