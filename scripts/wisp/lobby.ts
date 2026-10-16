@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { basename, join } from "node:path";
-import { Clock, Console, Effect, Schedule } from "effect";
+import { Clock, Console, Effect, Option, Schedule } from "effect";
 import { ackFile } from "../../src/runtime/gameFiles";
 import { Acknowledgement, FILE_SLOT_NUMBERS, type MalformedGameFile } from "./preloadRecord";
 import { type Client, Clients, type DesktopFailure, waitFor } from "./clients";
@@ -10,6 +10,18 @@ import { step } from "./timings";
 import { ClientWatch, inState, unlessLost, waitFor as waitForState } from "./watch";
 
 export const MENU_SECONDS = 180;
+
+export const leaveScoreScreen = <E, R>(client: Client, close: Effect.Effect<void, E, R>) => Effect.gen(function*() {
+  const watch = yield* ClientWatch;
+  for (let press = 0; press < 3; press++) {
+    if ((yield* watch.view(client)).state.kind !== "results") return;
+    yield* Console.log(`${client.name}: leaving the score screen (${press + 1} of 3)`);
+    yield* close;
+    const left = yield* waitForState(client, (view) => view.state.kind !== "results", { seconds: Infinity }).pipe(Effect.timeoutOption("10 seconds"));
+    if (Option.isSome(left)) return;
+  }
+  yield* waitForState(client, inState("menus"), { what: "leaving the score screen after 3 Escapes", seconds: 0 });
+});
 
 export interface FreshMatchOptions {
   readonly map: string;
@@ -41,6 +53,8 @@ export const freshMatch = ({ map, folder, filePrefix = "wisp" }: FreshMatchOptio
     yield* Effect.sleep("2 seconds");
     yield* clients.keys(client, "Escape");
     yield* Console.log(`${client.name}: waiting for the menus (up to ${MENU_SECONDS} s)`);
+    yield* waitForState(client, inState("menus", "results"), { what: "the menus or score screen", seconds: MENU_SECONDS });
+    yield* leaveScoreScreen(client, clients.keys(client, "Escape"));
     yield* waitForState(client, inState("menus"), { what: "the menus", seconds: MENU_SECONDS });
   }).pipe(step(`${client.name} at the menus`));
 

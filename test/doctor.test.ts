@@ -8,6 +8,7 @@ import { ladderScan } from "../scripts/warcraft/war3Log";
 import { displayChanges, videoSettings, withDisplaySettings } from "../scripts/warcraft/preferences";
 import { DoctorHands, type DoctorTarget, diagnose, doctor, type Observation } from "../scripts/wisp/doctor";
 import { PlayMachine } from "../scripts/wisp/play";
+import { leaveScoreScreen } from "../scripts/wisp/lobby";
 import { ClientWatch, type ClientState, type ClientView } from "../scripts/wisp/watch";
 
 const fixture = (name: string) => readFileSync(join(import.meta.dir, "fixtures/doctor", name), "utf8");
@@ -127,7 +128,7 @@ test("[property seed 8058] preference edits are idempotent, add a missing key to
   }
 });
 
-function doctorHarness(running: ProcessInfo[], stubborn: ReadonlySet<number>, preferencesText?: string) {
+function doctorHarness(running: ProcessInfo[], stubborn: ReadonlySet<number>, preferencesText?: string, score?: { presses: number }) {
   const signals: [string, number[]][] = [];
   const writes: string[] = [];
   const log = "battle.net-20261014T110000.1.log";
@@ -152,8 +153,8 @@ function doctorHarness(running: ProcessInfo[], stubborn: ReadonlySet<number>, pr
     write: (_path, text) => Effect.sync(() => { writes.push(text); }),
     copy: () => Effect.void,
   });
-  const hands = DoctorHands.of({ launches: false, leaveLobby: () => Effect.void, closeScore: () => Effect.void });
-  const watch = ClientWatch.of({ view: (client) => Effect.succeed({ client: client.name, state: { kind: "menus", screen: "MAIN_MENU" }, source: "socket", evidence: "fake menu socket", at: 0, scan: "done", loadErrors: { count: 0 } }) });
+  const hands = DoctorHands.of({ launches: false, leaveLobby: () => Effect.void, closeScore: () => Effect.sync(() => { if (score !== undefined) score.presses++; }) });
+  const watch = ClientWatch.of({ view: (client) => Effect.sync(() => ({ client: client.name, state: score !== undefined && score.presses < 2 ? { kind: "results" } : { kind: "menus", screen: "MAIN_MENU" }, source: "socket", evidence: "UpdateScoreInfo then ScreenTransitionInfo MAIN_MENU", at: 0, scan: "done", loadErrors: { count: 0 } })) });
   const target = (settings?: DoctorTarget["settings"]): DoctorTarget => ({
     client: { name: "fake", documents: `${PREFIX}/drive_c/users/steamuser/Documents/Warcraft III` },
     prefix: PREFIX,
@@ -169,6 +170,25 @@ function doctorHarness(running: ProcessInfo[], stubborn: ReadonlySet<number>, pr
 }
 
 const LAUNCHER: ProcessInfo = { pid: 40, name: "Battle.net", args: ["C:\\Program Files (x86)\\Battle.net\\Battle.net.exe"], prefix: PREFIX };
+
+test("[scenario] UpdateScore recovers to menus through doctor and fresh-match setup when the first Escape is missed", async () => {
+  const score = { presses: 0 };
+  const harness = doctorHarness([LAUNCHER, gameProcess(41)], new Set(), undefined, score);
+  const exit = await harness.run();
+  expect(Exit.isSuccess(exit) ? exit.value : exit).toEqual([{ client: "fake", state: "menus (MAIN_MENU)", recovered: ["score screen"] }]);
+  expect(score.presses).toBe(2);
+  expect(harness.signals).toEqual([]);
+  let presses = 0;
+  const client = { name: "clone-b", documents: "recorded" };
+  const program = Effect.gen(function*() {
+    const fiber = yield* leaveScoreScreen(client, Effect.sync(() => { presses++; })).pipe(Effect.forkChild);
+    yield* TestClock.adjust("30 seconds");
+    yield* Fiber.join(fiber);
+    yield* leaveScoreScreen(client, Effect.sync(() => { presses++; }));
+  }).pipe(Effect.provideService(ClientWatch, ClientWatch.of({ view: () => Effect.sync(() => ({ client: client.name, state: presses < 2 ? { kind: "results" } : { kind: "menus", screen: "MAIN_MENU" }, source: "socket", evidence: "recorded UpdateScoreInfo", at: 0 })) })), Effect.provide(TestClock.layer()));
+  await Effect.runPromise(program);
+  expect(presses).toBe(2);
+});
 
 test("[scenario] doctor ends a crashed game with its error dialog, kills only what ignored SIGTERM, leaves Battle.net running and reports the client ready", async () => {
   const harness = doctorHarness([LAUNCHER, gameProcess(41), errorDialog(42)], new Set([41]));
