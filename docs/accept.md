@@ -30,6 +30,7 @@ profiles, its checks and any frame measurements. A check is:
 | --- | --- |
 | `id`, `closes` | The check's name and the issue box it answers, such as `smashcraft#82 box 2`. |
 | `map`, `session` | The map profile whose fresh match it runs in. Checks of one map share a match unless they name different sessions. |
+| `after` | A prerequisite check id declared earlier in the same map and session. The prerequisite must pass in this run; a failed, needs-look, skipped or unselected prerequisite makes this check SKIPPED without running its steps or captures. |
 | `setup` | Steps on the clients: `{ chat }` (a chat command such as `-dev effects 12`), `{ keys }`, `{ waitMs }`, and `{ receipt }`, which waits for a receipt line written since the check began. |
 | `capture` | `frames` (a region, a count and an interval; saved as PPM), `reading` (text read from a region, such as an overlay; with `pattern`, its first group, as a number when it reads as one) and `measure` (one frame measured by a suite function). Every check also keeps each client's new receipt lines and War3Log lines. |
 | `pass` | Rules: `receipt` and `log` (lines matching a pattern, counted per client, with `min`/`max`; a `log` rule can count `since: "session"`, which covers the map's load) and `reading` (a number within bounds, or text matching a pattern). |
@@ -51,9 +52,13 @@ fresh-match command and waits until `watch` reports every client in the
 match. Without a ClientWatch service the live driver skips both watch steps
 and the game's start alone decides that the match runs. For each check it marks again, runs the setup, takes the captures in
 order, collects the receipt and log lines written since its marks, and
-judges the rules. A session that can't start fails each of its checks with
+judges the rules. A session that can't start fails its independent checks with
 the reason and every client's watched state; the run goes on to the next
-session.
+session. Dependent checks are SKIPPED with the prerequisite named, including
+when the session fails to start. The summary counts skipped separately from
+failed and needs-look. `report.json` includes these totals in `counts`, keyed
+by `pass`, `fail`, `needs-look` and `skipped`; each skipped result has verdict
+`skipped` and a reason such as `gate-moves did not pass`.
 
 Each run's folder (mode 0700) holds `report.txt` and `report.json`, and one
 folder per check with its frames, readings, `receipts-CLIENT.txt`,

@@ -1,0 +1,30 @@
+[
+  {
+    "run": "smoke-467-native-3/report.json",
+    "reason": "moves gate training: move pointer failed for a: pointer at 660,380, wanted 953,116"
+  },
+  {
+    "run": "smoke-2/native-2/hazards-1/accept/report.json",
+    "reason": "moves gate hazards: the stage screen does not read \"Hazards: Off\" after 3 tries"
+  },
+  {
+    "run": "session-slope-release-20261016/accept/report.json",
+    "reason": "moves gate menu: no STAGE journal phase within 15 s"
+  },
+  {
+    "run": "session-slope-current-debug-20261016/accept/report.json",
+    "reason": "moves gate replay: no replay written after match 1"
+  },
+  {
+    "run": "session-slope-final-20261016/accept/report.json",
+    "reason": "moves gate replay: no replay written after match 1"
+  },
+  {
+    "run": "session-slope-gate-run-2-20261016/accept/report.json",
+    "reason": "moves gate menu: no STAGE journal phase within 15 s"
+  },
+  {
+    "run": "session-slope-gate-run-3-20261016/accept/report.json",
+    "reason": "moves gate menu: no STAGE journal phase within 15 s"
+  }
+]

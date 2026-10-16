@@ -3,11 +3,51 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
-import { AcceptDriver, AcceptFailure, type AcceptReport, type AcceptSuite, type ReceiptFile, planSessions, runAccept } from "../scripts/wisp/accept";
+import { AcceptDriver, AcceptFailure, type AcceptReport, type AcceptSuite, type ReceiptFile, planSessions, runAccept, summaryLine, mergeReports, suiteProblems } from "../scripts/wisp/accept";
+import cascades from "./fixtures/accept-cascade.json";
 
 const directories: string[] = [];
 afterEach(() => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+});
+
+test("[scenario] recorded moves failures skip dependent specials without driving them and preserve separate report counts", async () => {
+  const checks: AcceptSuite = {
+    maps: { good: { describe: "recorded gate-moves cascade" } },
+    checks: [
+      { id: "gate-moves", closes: "native cascade", map: "good", session: "gate-moves", setup: [{ chat: "-moves" }], pass: [{ kind: "receipt", pattern: "hello ok", client: "host" }] },
+      { id: "gate-specials-spot", after: "gate-moves", closes: "native cascade", map: "good", session: "gate-moves", setup: [{ chat: "-specials" }], pass: [{ kind: "receipt", pattern: "hello ok", client: "host" }] },
+    ],
+  };
+  expect(suiteProblems(checks)).toEqual([]);
+  for (const row of [...cascades, { run: "session-start", reason: "session refused" }, { run: "receipt-failure", reason: "missing receipt" }, { run: "unselected-prerequisite", reason: "not selected" }, { run: "success", reason: "" }]) {
+    const directory = mkdtempSync(join(tmpdir(), "wisp-cascade-"));
+    directories.push(directory);
+    const fake = fakeDriver();
+    const base = await Effect.runPromise(AcceptDriver.pipe(Effect.provide(fake.layer)));
+    const failure = Effect.fail(new AcceptFailure({ operation: "moves gate", problem: row.reason }));
+    const driver = AcceptDriver.of({ ...base,
+      start: row.run === "session-start" ? () => failure : base.start,
+      chat: (client, text) => text === "-moves" && row.reason !== ""
+        ? row.run === "receipt-failure" ? Effect.void : failure
+        : base.chat(client, text),
+    });
+    const selected = row.run === "unselected-prerequisite" ? checks.checks.slice(1) : checks.checks;
+    const report = await Effect.runPromise(runAccept(checks, planSessions(selected), directory).pipe(Effect.provide(Layer.succeed(AcceptDriver, driver))));
+    const special = report.results.find(({ id }) => id === "gate-specials-spot");
+    expect(special?.verdict).toBe(row.reason === "" ? "pass" : "skipped");
+    if (row.reason !== "") {
+      expect(special?.reason).toBe("gate-moves did not pass");
+      expect(fake.calls).not.toContain("chat host -specials");
+      expect(report.counts.skipped).toBe(1);
+      expect(report.counts.fail).toBe(row.run === "unselected-prerequisite" ? 0 : 1);
+      expect(summaryLine(report.results)).toContain("1 skipped");
+    } else expect(fake.calls).toContain("chat host -specials");
+    const saved = JSON.parse(readFileSync(join(directory, "report.json"), "utf8")) as AcceptReport;
+    expect(saved.counts).toEqual(report.counts);
+    const merged = mergeReports(directory, selected, [saved], 0, 1, () => { throw new Error("missing result"); });
+    expect(merged.counts).toEqual(report.counts);
+  }
 });
 
 const suite: AcceptSuite = {

@@ -32,12 +32,13 @@ const ShardReport = Schema.fromJsonString(Schema.Struct({
   directory: Schema.String,
   started: Schema.Finite,
   finished: Schema.Finite,
+  counts: Schema.Struct({ pass: Schema.Finite, fail: Schema.Finite, "needs-look": Schema.Finite, skipped: Schema.Finite }),
   results: Schema.Array(Schema.Struct({
     id: Schema.String,
     closes: Schema.String,
     map: Schema.String,
     session: Schema.String,
-    verdict: Schema.Literals(["pass", "fail", "needs-look"]),
+    verdict: Schema.Literals(["pass", "fail", "needs-look", "skipped"]),
     reason: Schema.String,
     evidence: Schema.String,
     rules: Schema.Array(Schema.Struct({ rule: Schema.String, holds: Schema.Boolean, observed: Schema.String, orLook: Schema.Boolean })),
@@ -105,7 +106,7 @@ export const makeAccept = ({ suite, evidenceRoot, driver, clients = ["host"], sh
   const failed = report.results.filter(({ verdict }) => verdict === "fail");
   if (json) {
     for (const result of report.results) yield* emitJson("accept", { type: "result", ok: result.verdict !== "fail", ...result, ...(result.verdict === "fail" ? { kind: "check-fail", frame: null, client: null, message: result.reason } : {}) });
-    yield* emitJson("accept", { type: "summary", ok: failed.length === 0, counts: { results: report.results.length, failures: failed.length, passed: report.results.filter(({ verdict }) => verdict === "pass").length, needsLook: report.results.filter(({ verdict }) => verdict === "needs-look").length }, elapsedMs: performance.now() - started, evidence: directory });
+    yield* emitJson("accept", { type: "summary", ok: failed.length === 0, counts: { results: report.results.length, failures: failed.length, passed: report.results.filter(({ verdict }) => verdict === "pass").length, skipped: report.counts.skipped, needsLook: report.results.filter(({ verdict }) => verdict === "needs-look").length }, elapsedMs: performance.now() - started, evidence: directory });
   } else yield* Console.log(summaryLine(report.results));
   if (failed.length > 0) return yield* new AcceptFailure({ operation: "accept", problem: `${failed.length} failed: ${failed.map(({ id }) => id).join(", ")}; report ${join(directory, "report.txt")}` });
 });

@@ -112,9 +112,9 @@ Wisp's host protocol checks use simulated players without Wine. The dummy
 does not execute the map.
 
 Checking on the signed-in clients? [`wisp accept`](accept.md)
-(wisp:docs/accept.md) runs every native check a game declares, next to the
+(wisp:docs/accept.md) supports same-session prerequisites (`after`) and runs every native check a game declares, next to the
 issue each closes, in as few fresh matches as their maps allow, and prints
-pass, fail or needs-look per check with its evidence folder.
+pass, fail, needs-look or skipped per check with its evidence folder and separate counts.
 
 Many scripted native checks? Never start a new game per check: in
 Smashcraft (7 Oct 2026) a new game cost 42 to 64 s against about 24 s for

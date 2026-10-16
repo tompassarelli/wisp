@@ -46,6 +46,7 @@ export interface NativeCheck {
   readonly map: string;
 
   readonly session?: string;
+  readonly after?: string;
   readonly setup?: readonly Step[];
   readonly capture?: readonly Capture[];
   readonly pass?: readonly Rule[];
@@ -142,6 +143,10 @@ export function suiteProblems(suite: AcceptSuite, clients?: readonly string[]): 
     if (seen.has(id)) problems.push(`${id}: declared twice`);
     seen.add(id);
     if (!(check.map in suite.maps)) problems.push(`${id}: unknown map profile ${check.map}`);
+    if (check.after !== undefined) {
+      const prerequisite = suite.checks.find((candidate) => candidate.id === check.after);
+      if (prerequisite === undefined || prerequisite.map !== check.map || (prerequisite.session ?? DEFAULT_SESSION) !== (check.session ?? DEFAULT_SESSION) || !seen.has(check.after) || check.after === id) problems.push(`${id}: prerequisite ${check.after} must precede it in the same session`);
+    }
     const readings = new Set<string>();
     for (const step of check.setup ?? []) {
       if ("receipt" in step) pattern(id, step.receipt);
@@ -204,7 +209,7 @@ export function describePlan(suite: AcceptSuite, sessions: readonly PlannedSessi
   return lines;
 }
 
-export type Verdict = "pass" | "fail" | "needs-look";
+export type Verdict = "pass" | "fail" | "needs-look" | "skipped";
 
 export interface RuleResult {
   readonly rule: string;
@@ -232,6 +237,7 @@ export interface AcceptReport {
   readonly started: number;
   readonly finished: number;
   readonly results: readonly CheckResult[];
+  readonly counts: Readonly<Record<Verdict, number>>;
 }
 
 const DEFAULT_RECEIPT_SECONDS = 10;
@@ -392,6 +398,12 @@ export const runAccept = (suite: AcceptSuite, sessions: readonly PlannedSession[
       yield* print(resultLine(result));
     });
 
+    const blocked = (check: NativeCheck, session: PlannedSession) => check.after !== undefined && !results.some((result) => result.id === check.after && result.map === session.map && result.session === session.session && result.verdict === "pass");
+    const recordSkipped = (check: NativeCheck, session: PlannedSession) => Effect.gen(function*() {
+      const evidence = yield* privateDirectory(join(directory, fileName(check.id)));
+      yield* record(check, session, { verdict: "skipped", reason: `${check.after} did not pass`, evidence, rules: [], readings: {}, files: [] });
+    });
+
     for (const [index, session] of sessions.entries()) {
       yield* print(`session ${index + 1}/${sessions.length}: ${session.map} (${session.session}), ${session.checks.length} check${session.checks.length === 1 ? "" : "s"}`);
 
@@ -404,19 +416,21 @@ export const runAccept = (suite: AcceptSuite, sessions: readonly PlannedSession[
       if (begun._tag === "Failure") {
         const states = yield* Effect.forEach(driver.clients, (client) => driver.state(client).pipe(Effect.map((state) => `${client}: ${state}`), Effect.orElseSucceed(() => `${client}: unknown`)));
         for (const check of session.checks) {
+          if (blocked(check, session)) { yield* recordSkipped(check, session); continue; }
           const evidence = yield* privateDirectory(join(directory, fileName(check.id)));
           yield* record(check, session, { verdict: "fail", reason: `session did not start: ${begun.failure.message} (${states.join("; ")})`, evidence, rules: [], readings: {}, files: [] });
         }
         continue;
       }
       for (const check of session.checks) {
+        if (blocked(check, session)) { yield* recordSkipped(check, session); continue; }
         const outcome = yield* runCheck(check, session, begun.success).pipe(Effect.result);
         if (outcome._tag === "Success") yield* record(check, session, outcome.success);
         else yield* record(check, session, { verdict: "fail", reason: outcome.failure.message, evidence: join(directory, fileName(check.id)), rules: [], readings: {}, files: [] });
       }
     }
 
-    const report: AcceptReport = { directory, started, finished: yield* Clock.currentTimeMillis, results };
+    const report: AcceptReport = { directory, started, finished: yield* Clock.currentTimeMillis, results, counts: verdictCounts(results) };
     yield* save(join(directory, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
     yield* save(join(directory, "report.txt"), `${[...results.map(resultLine), summaryLine(results)].join("\n")}\n`);
     return report;
@@ -442,13 +456,17 @@ function judge(rule: Rule, observed: Observed, readings: Readonly<Record<string,
   return { rule: text, holds, observed: counts.map(({ client, count, first }) => `${client} ${count}${first === undefined ? "" : ` (first: ${first})`}`).join(", "), orLook };
 }
 
-const VERDICT_LABEL: Record<Verdict, string> = { "pass": "PASS      ", "fail": "FAIL      ", "needs-look": "NEEDS-LOOK" };
+const VERDICT_LABEL: Record<Verdict, string> = { "pass": "PASS      ", "fail": "FAIL      ", "needs-look": "NEEDS-LOOK", "skipped": "SKIPPED   " };
 
 export const resultLine = (result: CheckResult) => `${VERDICT_LABEL[result.verdict]} ${result.id}  ${result.closes}  ${result.reason}  ${result.evidence}`;
 
+export function verdictCounts(results: readonly CheckResult[]): Readonly<Record<Verdict, number>> {
+  return { pass: results.filter((r) => r.verdict === "pass").length, fail: results.filter((r) => r.verdict === "fail").length, "needs-look": results.filter((r) => r.verdict === "needs-look").length, skipped: results.filter((r) => r.verdict === "skipped").length };
+}
+
 export function summaryLine(results: readonly CheckResult[]): string {
-  const count = (verdict: Verdict) => results.filter((result) => result.verdict === verdict).length;
-  return `${results.length} checks: ${count("pass")} pass, ${count("fail")} fail, ${count("needs-look")} needs-look`;
+  const counts = verdictCounts(results);
+  return `${results.length} checks: ${counts.pass} pass, ${counts.fail} fail, ${counts["needs-look"]} needs-look, ${counts.skipped} skipped`;
 }
 
 const sessionWeight = (session: PlannedSession) => 4 + session.checks.length;
@@ -466,5 +484,15 @@ export function shardSessions(sessions: readonly PlannedSession[], count: number
 
 export function mergeReports(directory: string, checks: readonly NativeCheck[], reports: readonly AcceptReport[], started: number, finished: number, missing: (check: NativeCheck) => CheckResult): AcceptReport {
   const byId = new Map(reports.flatMap(({ results }) => results.map((result) => [result.id, result] as const)));
-  return { directory, started, finished, results: checks.map((check) => byId.get(check.id) ?? missing(check)) };
+  const results: CheckResult[] = [];
+  for (const check of checks) {
+    const found = byId.get(check.id);
+    if (found !== undefined) { results.push(found); continue; }
+    const result = missing(check);
+    const prerequisite = results.find((candidate) => candidate.id === check.after && candidate.map === check.map && candidate.session === (check.session ?? DEFAULT_SESSION));
+    results.push(check.after !== undefined && prerequisite?.verdict !== "pass"
+      ? { ...result, verdict: "skipped", reason: `${check.after} did not pass` }
+      : result);
+  }
+  return { directory, started, finished, results, counts: verdictCounts(results) };
 }
