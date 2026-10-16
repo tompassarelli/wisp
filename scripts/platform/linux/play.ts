@@ -63,21 +63,21 @@ const startDetached = (command: readonly string[], log?: string) => Effect.tryPr
   catch: problem(`couldn't start ${basename(command[0] ?? "")}`),
 });
 
-interface LaunchRequest {
+export interface LaunchRequest {
   readonly bun: string;
   readonly capacity: string;
   readonly client: string;
   readonly env: string;
   readonly nsenter: string;
   readonly wine: string;
-  readonly wineArgs: readonly string[];
+  readonly proton: boolean;
   readonly launcher: { readonly pid: number; readonly cwd: string; readonly env: Readonly<Record<string, string>> };
   readonly host: Readonly<Record<string, string | undefined>>;
 }
 
 const HOST_KEYS = ["PATH", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"] as const;
 
-const launchCommand = (request: LaunchRequest) => {
+export const launchCommand = (request: LaunchRequest) => {
   const { launcher } = request;
   const unset = HOST_KEYS.filter((key) => launcher.env[key] === undefined).flatMap((key) => ["-u", key]);
   const restore = HOST_KEYS.flatMap((key) => (launcher.env[key] === undefined ? [] : [`${key}=${launcher.env[key]}`]));
@@ -86,8 +86,8 @@ const launchCommand = (request: LaunchRequest) => {
     command: [...(request.client === "playtest"
       ? ["systemd-run", "--user", "--scope", "--collect", "--slice=playtest.slice", "--"]
       : [request.bun, request.capacity, "session", "--class", "native", "--owner", `wisp-game-${request.client}`, "--"]),
-      request.env, ...unset, ...restore, request.nsenter, "-t", String(launcher.pid), "-U", "-m", "--preserve-credentials", `--wd=${launcher.cwd}`, "--",
-      request.wine, ...request.wineArgs, "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe", "--exec=launch W3"],
+      request.env, ...unset, ...restore, request.nsenter, "-t", String(launcher.pid), "-U", "-m", "--preserve-credentials", `--wdns=${launcher.cwd}`, "--",
+      request.wine, ...(request.proton ? ["runinprefix"] : []), "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe", "--exec=launch W3"],
     env: { ...launcher.env, ...host },
   };
 };
@@ -115,7 +115,7 @@ const launchInContainer = (run: Runner, tools: PlayTools, launcher: ProcessInfo,
       });
       return {
         bun: process.execPath, capacity, client, env: hostNsenter("env"), nsenter: hostNsenter(tools.nsenter), wine: runtime,
-        wineArgs: proton === undefined ? [] : ["waitforexitandrun"],
+        proton: proton !== undefined,
         launcher: { pid, cwd, env }, host: process.env,
       };
     },
