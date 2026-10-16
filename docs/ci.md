@@ -274,7 +274,18 @@ the open "Weekly Effect upgrade" issue with the branch to fix.
 ## Runner capacity and waiting
 
 The account runs at most 40 jobs at once across all of its repositories
-(GitHub Pro), and further jobs wait in one first-come queue. Workflows keep
+(GitHub Pro), and further jobs wait in one first-come queue. Smashcraft's
+Balance plan measures running hosted jobs across recently active public
+repositories and leaves a reserve equal to the time-weighted p90 concurrent
+hosted jobs in the latest ten completed Autoland runs per repository. It prints
+`40 - busy - reserve`, refuses a nonpositive admission and uses the remaining
+slots for its matrices. Completed job start/end intervals, excluding
+self-hosted jobs and jobs with no assigned runner, determine the reserve;
+short planner-only runs contribute their running time rather than one equal
+vote per run. Historical per-unit CPU times pack work into four-core jobs
+with at most 15 predicted minutes, splitting longer panels and probes while
+preserving every match and seed. This is a point-in-time admission: a later
+unrelated workflow can still consume free account capacity. Other workflows keep
 their share bounded so a new run's first job starts within a minute: a large
 matrix sets `max-parallel` and packs enough work in each job that setup stays
 a small part of it, and CI runs once per ref (a newer push replaces the queued
