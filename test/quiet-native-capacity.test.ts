@@ -8,7 +8,7 @@ import { quietNativeSessionArgs, withQuietNativeCapacity } from "../scripts/wisp
 test("native evidence leases request quiet capacity while keeping a live native session [k2 property]", () => {
   const args = quietNativeSessionArgs("/capacity.mjs", "wisp-accept-pair-0");
   expect(args).toContain("--quiet");
-  expect(args.slice(0, 9)).toEqual(["/capacity.mjs", "session", "--class", "native", "--quiet", "--memory-gib", "1", "--owner", "wisp-accept-pair-0"]);
+  expect(args.slice(0, 11)).toEqual(["/capacity.mjs", "session", "--class", "native", "--new-clients", "0", "--quiet", "--memory-gib", "1", "--owner", "wisp-accept-pair-0"]);
   expect(args.at(-2)).toBe("-e");
 });
 

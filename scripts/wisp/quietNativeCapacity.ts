@@ -12,7 +12,7 @@ class QuietLeaseFailure extends Schema.TaggedError<QuietLeaseFailure>()("QuietLe
 }
 
 export const quietNativeSessionArgs = (helper: string, owner: string) => [
-  helper, "session", "--class", "native", "--quiet", "--memory-gib", "1", "--owner", owner,
+  helper, "session", "--class", "native", "--new-clients", "0", "--quiet", "--memory-gib", "1", "--owner", owner,
   "--", process.execPath, "-e", "setInterval(() => {}, 60_000)",
 ] as const;
 
