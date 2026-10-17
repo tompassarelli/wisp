@@ -97,7 +97,7 @@ Before #108, by file (all now inside wisp:scripts/platform/linux/):
 | `/proc` process table, cmdline, environ, stat, cwd, exe | scripts/warcraft/processes.ts, scripts/wisp/lan/processes.ts, scripts/wisp/playHost.ts, scripts/wisp/clientServices.ts | linux/procfs.ts |
 | `/proc/<pid>/status`, `/proc/<pid>/net/dev` | scripts/wisp/lan/dummy.ts, scripts/wisp/lan/offline.ts | linux/procfs.ts |
 | `/proc/pressure/cpu` (and `/proc/self/stat`, which the test-cost preload stopped reading in 0d3dd85) | scripts/wisp/testRunner.ts, scripts/wisp/testCostPreload.ts | linux/procfs.ts |
-| cgroups (`/proc/<pid>/cgroup`, `/sys/fs/cgroup/.../cpu.max`, `cgroup.procs`) | scripts/wisp/clientServices.ts, scripts/wisp/dev/loop.ts, scripts/wisp/commands/soak.ts, scripts/wisp/testRunner.ts | linux/procfs.ts |
+| cgroups (`/proc/<pid>/cgroup`, `/sys/fs/cgroup/.../cpu.max`, `cgroup.procs`) | scripts/wisp/clientServices.ts, scripts/wisp/dev/context.ts, scripts/wisp/commands/soak.ts, scripts/wisp/testRunner.ts | linux/procfs.ts |
 | libc `clock_gettime` thread clock and the only `process.platform` branch | scripts/wisp/soak/clock.ts | linux/procfs.ts, layer.ts |
 | Wine (`wine`, `wineserver`, `WINEPREFIX`) | scripts/wisp/playHost.ts, scripts/warcraft/processes.ts | linux/play.ts, linux/procfs.ts |
 | Wine's runtime recognised by its `wineserver` name | scripts/warcraft/battleNet.ts (`prefixUse`) | linux/procfs.ts sets `ProcessInfo.runtime`; `prefixUse` reads the flag |
