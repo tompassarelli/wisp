@@ -1,7 +1,7 @@
 import { ModelRenderer, decodeBLP, getBLPImageData, type model } from "../../vendor/war3-model.mjs";
 import { type AnimationSequence, animationSample, blendWeight, globalSequenceFrame } from "../../src/headless/animation";
 import { drawnPoses } from "./culling";
-export type { PixelBox } from "./boundsTypes";
+export type { ModelBounds, PixelBox, PixelRect, Portrait } from "./boundsTypes";
 import type { GeosetBounds, ModelBounds, NodeBounds, PixelBox, PixelRect, Portrait } from "./boundsTypes";
 import type { DrawnPose, RenderScene } from "./renderScene";
 import { multiply } from "../browser/matrix";
