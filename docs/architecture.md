@@ -38,7 +38,7 @@ A module may import only the modules in its "may use" column. `src/` never impor
 | Compile, bundle, package | `scripts/compiler.ts`, `scripts/luaBundle.ts`, `scripts/package.ts` | `host/build/` in box 25 |
 | Soak, dev loop | `scripts/wisp/soak.ts`, `scripts/wisp/watch.ts` | `host/soak/`, `host/dev/` in boxes 21, 22, 24 |
 | Test cost ceilings | `scripts/wisp/testCost.ts` | `host/testing/` in box 24 |
-| What consumers may import | `package.json` (no `exports` yet) | declared `exports` in box 18 |
+| What consumers may import | `package.json` `exports`, one subpath per module; a change is listed in `CHANGELOG.md` | the target layout's subpaths as modules move |
 | A feature's documentation | `docs/<feature>.md`, linked from `docs/index.md` | one doc per export |
 | Tests | `test/`, colocated `src/**/*.tests.ts` | stays |
 

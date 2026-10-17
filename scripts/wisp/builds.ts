@@ -11,7 +11,6 @@ const Profile = Schema.Struct({
   menus: Schema.Struct({ lobbySettleMs: Schema.Finite, scoreClose: Schema.Literals(["Escape", "ScoreScreenClose"]), lobbyBack: Schema.Struct({ x: Schema.Finite, y: Schema.Finite }) }),
   quirks: Schema.Array(Schema.Struct({ description: Schema.String, issue: Schema.String })),
 });
-export type BuildProfile = typeof Profile.Type;
 const BUILD_PROFILES = [rollback, patch].map((profile) => Schema.decodeUnknownSync(Profile)(profile));
 export const DEFAULT_BUILD = "3.0.0.24268";
 const BUILD_CAPABILITIES = ["lanPool", "privateLanSwitch", "menuDriving", "classic", "definitive"] as const;
@@ -37,7 +36,6 @@ export const requireCapability = (id: string, capability: BuildCapability) => Ef
   const problem = capabilityProblem(id, capability);
   return problem === undefined ? Effect.succeed(profileFor(id)!) : Effect.fail(new BuildFailure({ problem }));
 });
-export const requireBuildCommand = (id: string, command: keyof typeof BUILD_COMMANDS) => requireCapability(id, BUILD_COMMANDS[command]);
 export const buildProfileLines = (id: string) => {
   const profile = profileFor(id);
   return profile === undefined ? [`unknown build ${id}; discovery needed (wisp#100)`]

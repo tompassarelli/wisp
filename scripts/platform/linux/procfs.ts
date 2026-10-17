@@ -114,7 +114,7 @@ export const alive = (pid: number) => existsSync(`/proc/${pid}`);
 
 export const residentKiB = (pid: number) => Number(/^VmRSS:\s+(\d+)/m.exec(readFileSync(`/proc/${pid}/status`, "utf8"))?.[1] ?? 0);
 
-export function interfaces(netDev: string): string[] {
+function interfaces(netDev: string): string[] {
   return netDev.split("\n").slice(2).map((line) => line.split(":")[0]?.trim() ?? "").filter((name) => name !== "");
 }
 

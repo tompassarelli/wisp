@@ -14,7 +14,7 @@ class PackageFailure extends Schema.TaggedError<PackageFailure>()("PackageFailur
 const attempt = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: cause => new PackageFailure({ cause }) }).pipe(Effect.uninterruptible);
 
 const root = resolve(import.meta.dir, "..");
-const packagePaths = ["scripts", "plugins", "src", "native", "docs", "builds", "vendor", "README.md", "LICENSE", "AGENTS.md", "typescript-toolchain.lock", "tsconfig.library.json"];
+const packagePaths = ["scripts", "plugins", "src", "native", "docs", "builds", "vendor", "README.md", "CHANGELOG.md", "LICENSE", "AGENTS.md", "typescript-toolchain.lock", "tsconfig.library.json"];
 
 async function copyTree(source: string, destination: string): Promise<void> {
   await mkdir(destination, { recursive: true });

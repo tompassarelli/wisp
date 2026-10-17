@@ -24,9 +24,7 @@ const CaptureManifestSchema = Schema.Struct({
 });
 export type CaptureManifest = typeof CaptureManifestSchema.Type;
 export type CaptureSlice = typeof Slice.Type;
-export type CaptureIdentity = typeof Identity.Type;
 export type CaptureControl = typeof Control.Type;
-export type CaptureRun = typeof Run.Type;
 
 class ManifestFailure extends Schema.TaggedError<ManifestFailure>()("ManifestFailure", { problem: Schema.String }) {
   override get message(): string { return this.problem; }

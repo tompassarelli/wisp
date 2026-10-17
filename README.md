@@ -68,7 +68,8 @@ A game records an immutable Wisp commit and installs the package generated
 from it through Bun; no registry release is needed. Generate that package
 from a checkout with `bun scripts/package.ts /absolute/path/to/wisp.tgz`.
 It contains the authored TypeScript, its emitted Lua and declarations, and
-this documentation.
+this documentation. Import only the subpaths its `exports` declares; their
+changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## Where to look next
 

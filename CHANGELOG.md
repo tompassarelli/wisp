@@ -1,0 +1,13 @@
+# Changelog
+
+Changes to what consumers may import: the subpaths `package.json` `exports`
+declares (wisp:docs/architecture.md, "Where things live").
+
+## Unreleased
+
+- `exports` lists each importable module by name instead of the `./src/*`
+  and `./scripts/*` directory wildcards: every subpath a consumer, the sample
+  or a doc imports, plus `wisp/scripts/wisp/devResult` (`savedFiles()`) and
+  `wisp/scripts/wisp/unitModels` (`compareUnitModels`). Any other module is
+  internal, so knip reports what nothing uses. Scripts run by path
+  (`bun node_modules/wisp/scripts/...`) are unaffected.

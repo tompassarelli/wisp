@@ -24,8 +24,6 @@ function headerStart(text: string): number | undefined {
   return Number.isFinite(time) ? time : undefined;
 }
 
-export const isActionLog = (text: string) => text.startsWith("# wisp lan host");
-
 const ACTION = /^(\d+(?:\.\d+)?) turn (\d+) (\S+) p(\d+) (\S+) ?(.*)$/;
 const MARK = /^(\d+(?:\.\d+)?) mark turn (\d+)/;
 

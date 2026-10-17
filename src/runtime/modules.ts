@@ -15,8 +15,8 @@ export interface ModuleSet {
 
 // A module chunk's head stays one line so source-map line positions match the bundle.
 
-export const MODULE_HEAD = "local require = ... return function(...) \n";
-export const MODULE_TAIL = " end\n";
+const MODULE_HEAD = "local require = ... return function(...) \n";
+const MODULE_TAIL = " end\n";
 export const moduleChunk = (code: string) => `${MODULE_HEAD}${code}${MODULE_TAIL}`;
 
 export const BUNDLE_MODULE = "bundle";

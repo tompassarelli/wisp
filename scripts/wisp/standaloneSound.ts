@@ -89,7 +89,3 @@ export function createSoundResolver(readAsset: SoundAssetReader): (cue: SoundCue
     return undefined;
   };
 }
-
-export function soundAsset(cue: SoundCue, readAsset: SoundAssetReader): Promise<SoundAsset | undefined> {
-  return createSoundResolver(readAsset)(cue);
-}

@@ -81,7 +81,7 @@ function textJustify(value: unknown): string {
   return typeof value === "string" ? (value.startsWith("TEXT_JUSTIFY_") ? value.slice("TEXT_JUSTIFY_".length) : value).toLowerCase() : "";
 }
 
-export function textAlignment(alignment: Frame["alignment"]): TextAlignment | undefined {
+function textAlignment(alignment: Frame["alignment"]): TextAlignment | undefined {
   if (alignment === undefined) return undefined;
   const vertical = textJustify(alignment.vertical), horizontal = textJustify(alignment.horizontal);
   return { vertical: vertical === "middle" || vertical === "bottom" ? vertical : "top", horizontal: horizontal === "center" || horizontal === "right" ? horizontal : "left" };

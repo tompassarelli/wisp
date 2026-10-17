@@ -172,7 +172,6 @@ export const SLOT_CLOSED = 1;
 export const SLOT_OCCUPIED = 2;
 
 export const RACE_RANDOM_SELECTABLE = 0x60;
-export const RACE_HUMAN = 0x01;
 
 export interface Slot {
   readonly playerId: number;
@@ -200,23 +199,6 @@ function encodeSlotTable(writer: Writer, table: SlotTable): Writer {
     writer.u8(slot.playerId).u8(slot.download).u8(slot.status).u8(slot.computer ? 1 : 0).u8(slot.team).u8(slot.color).u8(slot.race).u8(slot.computerType).u8(slot.handicap);
   }
   return writer.u32(table.randomSeed).u8(table.layout).u8(table.players);
-}
-
-export function decodeSlotTable(reader: Reader): SlotTable {
-  reader.u16();
-  const count = reader.u8();
-  const slots = Array.from({ length: count }, (): Slot => ({
-    playerId: reader.u8(),
-    download: reader.u8(),
-    status: reader.u8(),
-    computer: reader.u8() !== 0,
-    team: reader.u8(),
-    color: reader.u8(),
-    race: reader.u8(),
-    computerType: reader.u8(),
-    handicap: reader.u8(),
-  }));
-  return { slots, randomSeed: reader.u32(), layout: reader.u8(), players: reader.u8() };
 }
 
 export const slotInfo = (table: SlotTable) => encodePacket(PACKET.SlotInfo, encodeSlotTable(new Writer(), table).bytes());
@@ -310,16 +292,6 @@ function encodeStatString(source: Uint8Array): Uint8Array {
   return Uint8Array.from(out);
 }
 
-export function decodeStatString(encoded: Uint8Array): Uint8Array {
-  const out: number[] = [];
-  let mask = 0;
-  encoded.forEach((byte, index) => {
-    if (index % 8 === 0) mask = byte;
-    else out.push((mask & (1 << (index % 8))) === 0 ? (byte - 1) & 0xff : byte);
-  });
-  return Uint8Array.from(out);
-}
-
 interface GameSettings {
   readonly flags: number;
   readonly width: number;
@@ -382,20 +354,6 @@ export function incomingAction(milliseconds: number, actions: readonly PlayerAct
   return encodePacket(PACKET.IncomingAction, writer.u16(crc32(bytes) & 0xffff).raw(bytes).bytes());
 }
 
-export function decodeIncomingAction(payload: Uint8Array): { readonly milliseconds: number; readonly actions: PlayerAction[] } {
-  const reader = new Reader(payload);
-  const milliseconds = reader.u16();
-  const actions: PlayerAction[] = [];
-  if (reader.remaining === 0) return { milliseconds, actions };
-  const crc = reader.u16();
-  if ((crc32(payload.subarray(4)) & 0xffff) !== crc) throw new Error("IncomingAction CRC16 mismatch");
-  while (reader.remaining > 0) {
-    const playerId = reader.u8();
-    actions.push({ playerId, data: reader.take(reader.u16()) });
-  }
-  return { milliseconds, actions };
-}
-
 export function decodeOutgoingAction(payload: Uint8Array): Uint8Array {
   const reader = new Reader(payload);
   const crc = reader.u32();
@@ -403,8 +361,6 @@ export function decodeOutgoingAction(payload: Uint8Array): Uint8Array {
   if (crc32(data) !== crc) throw new Error("OutgoingAction CRC32 mismatch");
   return data;
 }
-
-export const outgoingAction = (data: Uint8Array) => encodePacket(PACKET.OutgoingAction, new Writer().u32(crc32(data)).raw(data).bytes());
 
 export function decodeKeepAlive(payload: Uint8Array): number {
   const reader = new Reader(payload);

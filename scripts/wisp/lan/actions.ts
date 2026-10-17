@@ -24,7 +24,7 @@ const fourcc = (value: number) => {
 const tag = (reader: Reader) => `${reader.u32().toString(16)}:${reader.u32().toString(16)}`;
 const point = (reader: Reader) => `${reader.f32().toFixed(1)},${reader.f32().toFixed(1)}`;
 
-export const quote = (text: string) => JSON.stringify(text);
+const quote = (text: string) => JSON.stringify(text);
 const latin1 = (bytes: Uint8Array) => Buffer.from(bytes).toString("latin1");
 
 function order(reader: Reader, id: number): string {

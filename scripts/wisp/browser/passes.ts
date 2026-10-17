@@ -1,5 +1,5 @@
 import { linkProgram } from "./gl";
-import { cross, dot, type Matrix, multiply, normalize, perspective } from "./matrix";
+import { cross, type Matrix, multiply, normalize, perspective } from "./matrix";
 
 
 function basis(z: readonly number[]): Matrix {
@@ -307,4 +307,3 @@ export function invert(m: Matrix): Matrix {
   ]);
   return out;
 }
-export { dot };
