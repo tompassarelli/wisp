@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { installHeadless } from "../scripts/wisp/headless/headless";
+import { installHeadless } from "../host/headless/headless";
 import { runJourney } from "../src/headless/journey";
 
 const runtime = installHeadless({ filePrefix: "observations", globalPrefixes: ["__observations"], frames: [{

@@ -2,8 +2,8 @@ import { expect } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { transpileProject } from "typescript-to-lua";
-import { report } from "../scripts/compiler";
-import { farmTest } from "../scripts/wisp/farm/farmTest";
+import { report } from "../host/toolchain/compiler";
+import { farmTest } from "../host/farm/farmTest";
 
 const names = (count: number, prefix: string) => Array.from({ length: count }, (_, index) => `${prefix}${index}`);
 

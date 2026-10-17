@@ -25,3 +25,14 @@ declares (wisp:docs/architecture.md, "Where things live").
   file. Scripts run by path move with them:
   `scripts/wisp/compile/lua32.ts`, `scripts/wisp/compile/ciMapBuild.ts` and
   `scripts/wisp/testing/testRunner.ts`.
+- The host library moves from `scripts/` to `host/`, and the package ships
+  `host/` instead of `scripts/`: `scripts/wisp/<dir>/` is `host/<dir>/`,
+  `scripts/platform/` and `scripts/warcraft/` are `host/os/`, the compile
+  chain (`compiler`, `luaBundle`, `mapInfo`, `mapScript`, `natives`,
+  `numberRules`, `objectData`, `package`, `sourceMaps`, `handleWarnings`) is
+  `host/toolchain/`, and `cleanRoom`, `mainRed` and `prePush` are
+  `host/checks/`. Every `wisp/scripts/...` subpath, `wisp/scripts/wisp/cli`
+  among them, still resolves, to the module's file under `host/`. Scripts
+  run by path move with them: `host/compile/lua32.ts`,
+  `host/compile/ciMapBuild.ts`, `host/testing/testRunner.ts` and
+  `host/toolchain/numberRules.ts`.

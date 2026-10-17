@@ -53,49 +53,49 @@ may_use = ["map", "runtime", "num", "natives"]
 
 [[module]]
 name = "cli"
-paths = ["host/cli/**", "scripts/wisp/cli/**"]
+paths = ["host/cli/**"]
 responsibility = "Command type, CLI runner, timings, process spawning, JSON results and the panel server."
 may_use = []
 
 [[module]]
 name = "os"
-paths = ["host/os/**", "scripts/platform/**", "scripts/warcraft/**"]
+paths = ["host/os/**"]
 responsibility = "Host OS services and Warcraft client control (launcher, window, input, preferences, log)."
 may_use = ["cli"]
 
 [[module]]
 name = "build"
-paths = ["host/build/**", "scripts/wisp/build/**", "scripts/*.ts"]
+paths = ["host/toolchain/**"]
 responsibility = "TSTL compile, Lua bundle, map info and script, object data, natives producer, number rules, source maps, packaging."
 may_use = ["cli", "runtime", "num"]
 
 [[module]]
 name = "lan"
-paths = ["host/lan/**", "scripts/wisp/lan/**"]
+paths = ["host/lan/**"]
 responsibility = "Offline LAN pair pool: netns pairs, W3GS host, dummy, admission."
 may_use = ["cli", "os"]
 
 [[module]]
 name = "net"
-paths = ["host/net/**", "scripts/wisp/net/**"]
+paths = ["host/net/**"]
 responsibility = "UDP lockstep peer, proxy and join code."
 may_use = ["cli", "headless", "runtime", "num"]
 
 [[module]]
 name = "render"
-paths = ["host/render/**", "scripts/wisp/browser/**", "scripts/wisp/fidelity/**", "scripts/wisp/render/**", "scripts/wisp/models/**", "scripts/wisp/terrain/**"]
+paths = ["host/render/**", "host/browser/**", "host/fidelity/**", "host/models/**", "host/terrain/**"]
 responsibility = "WebGL headless and standalone renderer, models, terrain, GPU lease and fidelity metrics."
 may_use = ["cli", "os", "headless", "runtime", "num"]
 
 [[module]]
 name = "commands"
-paths = ["host/commands/**", "scripts/wisp/commands/**"]
+paths = ["host/commands/**"]
 responsibility = "Command factories a game instantiates and Wisp's own CLI entries."
 may_use = ["host", "render", "net", "lan", "build", "os", "cli", "headless", "map", "runtime", "num"]
 
 [[module]]
 name = "host"
-paths = ["host/**", "scripts/wisp/**", "scripts/**"]
+paths = ["host/**"]
 responsibility = "Feature services: play, doctor, menus, lobby, accept, soak, farm, dev loop, test runner, models, scenes."
 may_use = ["render", "net", "lan", "build", "os", "cli", "headless", "map", "runtime", "num", "natives"]
 
@@ -113,7 +113,7 @@ may_use = []
 
 [[generated]]
 paths = ["src/natives/warcraft.d.ts"]
-producer = "scripts/natives.ts"
+producer = "host/toolchain/natives.ts"
 
 [ignore]
 paths = ["vendor/**", "node_modules/**", "builds/**", "repos/**", "**/fixtures/**"]

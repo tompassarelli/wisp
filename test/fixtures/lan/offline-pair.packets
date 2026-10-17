@@ -1,4 +1,4 @@
-# Packets two offline Warcraft III 3.0.0.24268 clients sent Wisp's LAN host (scripts/wisp/lan/host.ts), 7 Oct 2026: pair 0 of a pool, a Smashcraft map, '-dev quick' typed on lan0b. Every packet but keepalives and pongs, plus each client's first 100 keepalives. SECONDS in CLIENT HEX (#N: a connection before it joined).
+# Packets two offline Warcraft III 3.0.0.24268 clients sent Wisp's LAN host (host/lan/host.ts), 7 Oct 2026: pair 0 of a pool, a Smashcraft map, '-dev quick' typed on lan0b. Every packet but keepalives and pongs, plus each client's first 100 keepalives. SECONDS in CLIENT HEX (#N: a connection before it joined).
 8.359 in #1 f71e2700010000000000000000803e0100000000020000020083df7f0000010000000000000000
 9.372 in lan0a f7420d000100000001222da104
 9.398 in lan0a f7590b0004020000000801

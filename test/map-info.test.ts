@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type MapInfo, declareMap, loadingScreenModel } from "../scripts/mapInfo";
+import { type MapInfo, declareMap, loadingScreenModel } from "../host/toolchain/mapInfo";
 
 const text = (value: string) => new TextEncoder().encode(`${value}\0`);
 const int = (value: number) => { const bytes = new Uint8Array(4); new DataView(bytes.buffer).setInt32(0, value, true); return bytes; };

@@ -3,11 +3,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { Console, Effect } from "effect";
 import { expect, test } from "bun:test";
-import { cliProgram, runCli } from "../scripts/wisp/cli/cli";
-import { flagValues } from "../scripts/wisp/cli/command";
-import { makeCi } from "../scripts/wisp/commands/ci";
-import { makeMenus } from "../scripts/wisp/commands/menus";
-import { TestPlan } from "../scripts/wisp/dev/testSelection";
+import { cliProgram, runCli } from "../host/cli/cli";
+import { flagValues } from "../host/cli/command";
+import { makeCi } from "../host/commands/ci";
+import { makeMenus } from "../host/commands/menus";
+import { TestPlan } from "../host/dev/testSelection";
 
 test("[property seed 824108] command dispatch preserves value boundaries, empty values and repetition", async () => {
   const lines: string[] = [];
@@ -36,7 +36,7 @@ test("[boundary] ci pre-merge runs the type check, only the tests the diff since
     mkdirSync(dirname(join(root, path)), { recursive: true });
     writeFileSync(join(root, path), text);
   };
-  write("package.json", JSON.stringify({ name: "ci-boundary", private: true, scripts: { test: `bun ${join(import.meta.dir, "../scripts/wisp/testing/testRunner.ts")}` } }));
+  write("package.json", JSON.stringify({ name: "ci-boundary", private: true, scripts: { test: `bun ${join(import.meta.dir, "../host/testing/testRunner.ts")}` } }));
   write("src/a.ts", "export const a = 1;\n");
   write("src/b.ts", "export const b = 1;\n");
   write("notes.md", "notes\n");

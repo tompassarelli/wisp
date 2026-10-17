@@ -1,8 +1,8 @@
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
-import { farmTest } from "../scripts/wisp/farm/farmTest";
-import { mapCompiler, report } from "../scripts/compiler";
+import { farmTest } from "../host/farm/farmTest";
+import { mapCompiler, report } from "../host/toolchain/compiler";
 import { moduleChunk, moduleHashText, moduleIndex, modulePayload, textChecksum } from "../src/runtime/modules";
 
 const root = join(import.meta.dir, "..");

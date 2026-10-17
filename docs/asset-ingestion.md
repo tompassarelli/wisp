@@ -5,7 +5,7 @@ into the map archive, what that costs, and what Wisp optimizes.
 
 ## How it works
 
-`MapBuild.build` (wisp:scripts/wisp/compile/mapBuild.ts) copies the game's container
+`MapBuild.build` (wisp:host/compile/mapBuild.ts) copies the game's container
 (or base) map, then hands every declared import, every base map file and the
 generated files to the native packager (wisp:native/map-pack.c) as one list:
 

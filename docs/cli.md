@@ -50,7 +50,7 @@ smashcraft:AGENTS.md.
 
 ## Nouns
 
-"Wisp" means the command factory ships in wisp:scripts/wisp/commands/ and any
+"Wisp" means the command factory ships in wisp:host/commands/ and any
 program can register it; "game" means the consuming game defines it.
 
 | Noun | What it acts on | Verbs | Defined by |

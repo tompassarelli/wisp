@@ -3,11 +3,11 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Console, Effect, Exit, Layer } from "effect";
-import { platformLayer } from "../scripts/platform/layer";
-import type { Command } from "../scripts/wisp/cli/command";
-import { makeHeadless } from "../scripts/wisp/commands/headless";
-import { makeSoak } from "../scripts/wisp/commands/soak";
-import { timingsLayer } from "../scripts/wisp/cli/timings";
+import { platformLayer } from "../host/os/platform/layer";
+import type { Command } from "../host/cli/command";
+import { makeHeadless } from "../host/commands/headless";
+import { makeSoak } from "../host/commands/soak";
+import { timingsLayer } from "../host/cli/timings";
 
 async function capture(command: Command, args: readonly string[]) {
   const lines: string[] = [];

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
-import { ResourceAccounting } from "../scripts/platform/services";
-import { requireGpuLease } from "../scripts/wisp/render/gpuLease";
+import { ResourceAccounting } from "../host/os/platform/services";
+import { requireGpuLease } from "../host/render/gpuLease";
 
 // The shell is the reference for quoting: it must read the named command back as the helper, the gpu class and every argument.
 test("[property seed 474] renders start only inside a gpu lease or without a capacity helper, and the named lease command gives the shell back every argument (docs/headless.md)", async () => {

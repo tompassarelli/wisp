@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { selectRun, type SelectablePlan } from "../scripts/wisp/dev/select";
-import { elapsedLabel } from "../scripts/wisp/dev/summary";
-import type { Changes, Selection, TestUnit } from "../scripts/wisp/dev/testSelection";
+import { selectRun, type SelectablePlan } from "../host/dev/select";
+import { elapsedLabel } from "../host/dev/summary";
+import type { Changes, Selection, TestUnit } from "../host/dev/testSelection";
 
 const ROOT = "/project";
 const UNITS: readonly TestUnit[] = [{ path: "/project/a.test.ts", kind: "file" }, { path: "/project/b.test.ts", kind: "registry" }];

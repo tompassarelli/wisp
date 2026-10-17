@@ -150,9 +150,9 @@ command that clears them.
 
 ## Declare it
 
-The game declares its playtest (wisp:scripts/wisp/play/play.ts,
+The game declares its playtest (wisp:host/play/play.ts,
 `PlayDeclaration`) and adds the command with `makePlay`
-(wisp:scripts/wisp/commands/play.ts); its own steps may use services that
+(wisp:host/commands/play.ts); its own steps may use services that
 `layer` provides:
 
 ```ts
@@ -300,7 +300,7 @@ bun wisp play --standalone --join ADDRESS:PORT
 The host prints a join code such as `R2M6-WDYR-7MQC-S0ZA` as soon as its UDP
 socket is bound, then each direct address and port. The code packs the host's
 LAN IPv4 address, its UDP port and the first 8 hex digits of the map hash
-(wisp:scripts/wisp/net/joinCode.ts). A player on another network joins by
+(wisp:host/net/joinCode.ts). A player on another network joins by
 direct address after the host forwards that UDP port; Wisp does no hole
 punching and runs no relay.
 

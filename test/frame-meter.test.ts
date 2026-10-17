@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { mapCompiler, report } from "../scripts/compiler";
-import { decodeFrameCostReport } from "../scripts/wisp/perf/frameCosts";
-import { writtenPreloadFile } from "../scripts/wisp/headless/headlessInput";
-import { PERF_METRICS, type PerfRun, comparePerfRuns, parsePerfRun } from "../scripts/wisp/perf/perf";
-import { farmTest } from "../scripts/wisp/farm/farmTest";
+import { mapCompiler, report } from "../host/toolchain/compiler";
+import { decodeFrameCostReport } from "../host/perf/frameCosts";
+import { writtenPreloadFile } from "../host/headless/headlessInput";
+import { PERF_METRICS, type PerfRun, comparePerfRuns, parsePerfRun } from "../host/perf/perf";
+import { farmTest } from "../host/farm/farmTest";
 
 const root = join(import.meta.dir, "..");
 

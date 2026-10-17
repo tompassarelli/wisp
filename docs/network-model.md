@@ -93,7 +93,7 @@ hosts, regions and hosting services are unmeasured.
 Two processes, one client each, play one match over UDP: the host is slot 0
 and listens; the joiner is slot 1 and sends to the host's address and port
 (LAN or a direct address; no relay, no Battle.net message, no W3GS).
-wisp:src/headless/turnLedger.ts is the pure core; wisp:scripts/wisp/net/peer.ts
+wisp:src/headless/turnLedger.ts is the pure core; wisp:host/net/peer.ts
 (`runNetPeer`) is the Effect shell that owns the socket, the frame clock and
 the handshake.
 
@@ -147,7 +147,7 @@ says goodbye.
 ### Run it
 
 A game exposes the command with `makeNet(load, name, gameFlags)`
-(wisp:scripts/wisp/commands/net.ts); `load` returns a `NetGame` whose `create`
+(wisp:host/commands/net.ts); `load` returns a `NetGame` whose `create`
 builds a session for one slot from the link. The sample's is
 wisp:examples/sample/test/net.ts, which types `-ping` every two seconds per
 player:

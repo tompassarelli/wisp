@@ -82,7 +82,7 @@ there is no file output or sorting during the sample. Report generation is
 outside the sample and should not share a timing-sensitive subsequent trial.
 
 The host's `parseFrameCostCapture(text)` and `captureDistribution(capture)`
-(wisp:scripts/wisp/perf/frameCostCapture.ts) return full-run median, p95, p99 and worst
+(wisp:host/perf/frameCostCapture.ts) return full-run median, p95, p99 and worst
 callback cost in microseconds. Percentiles use nearest rank; an even sample's
 median is the mean of its two middle values. The parser rejects incomplete or
 reordered samples, unavailable clocks and captures that crossed a hot reload.
@@ -128,7 +128,7 @@ after frames=120 lua=510/530.2/3400 natives=340/350.1/520 catchup=1/1/1
 
 Lua values are microseconds; each value is median/mean/max per frame.
 `wisp hot --watch` and `wisp dev --data` read the reports
-([FrameCosts](../scripts/wisp/perf/frameCosts.ts), wisp:scripts/wisp/perf/frameCosts.ts)
+([FrameCosts](../host/perf/frameCosts.ts), wisp:host/perf/frameCosts.ts)
 and print one line per client about two seconds after the reload:
 
 ```text
@@ -214,7 +214,7 @@ With `samples`, it also prints every client's every frame
 from which a model is fitted.
 
 A game adds `perf` to its program with `makePerf`
-(wisp:scripts/wisp/commands/perf.ts), naming the tsconfig and bundle of its
+(wisp:host/commands/perf.ts), naming the tsconfig and bundle of its
 map, a Lua program that calls `runLuaPerf` or `runLuaPerfWith` with
 `arg[1]` and `arg[2]`, the name of its default run and its other runs, each
 with the map it measures. The program gets the run's name, the frames to
@@ -261,7 +261,7 @@ Smashcraft's 0.0.48 four-fighter match against 0.0.49's fails it on
 allocation, its mean up 273% and its 95th percentile 501%: 0.0.48's binary32
 arithmetic still allocated.
 
-`wisp headless --cost` (wisp:scripts/wisp/commands/headless.ts) plays the
+`wisp headless --cost` (wisp:host/commands/headless.ts) plays the
 journey in Bun as usual, then the perf program's run of the same name, and
 prints the predicted native cost per frame too.
 
@@ -310,7 +310,7 @@ inflated; calibrate on a quiet machine.
 
 ### Checking against Warcraft
 
-[nativeFit](../scripts/wisp/perf/nativeFit.ts) (wisp:scripts/wisp/perf/nativeFit.ts)
+[nativeFit](../host/perf/nativeFit.ts) (wisp:host/perf/nativeFit.ts)
 compares a prediction with the overlay of a native run of the same build.
 It replays the headless run's frames (`perf --samples`) through the
 overlay's windows (120 frames, read every 30) and reads each frame's

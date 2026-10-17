@@ -4,6 +4,6 @@
     "lib": ["ESNext", "DOM"],
     "tsBuildInfoFile": "build/typecheck-browser.tsbuildinfo"
   },
-  "include": ["scripts/wisp/browser/**/*.ts"],
+  "include": ["host/browser/**/*.ts"],
   "exclude": []
 }

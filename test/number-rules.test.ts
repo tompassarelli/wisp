@@ -5,8 +5,8 @@ import { join, relative } from "node:path";
 import ts from "typescript";
 import { parseConfigFileWithSystem, transpileFiles } from "typescript-to-lua";
 import { NUMBER_RULE_CODE } from "../plugins/number-rules";
-import { numberRuleReport } from "../scripts/numberRules";
-import { farmTest } from "../scripts/wisp/farm/farmTest";
+import { numberRuleReport } from "../host/toolchain/numberRules";
+import { farmTest } from "../host/farm/farmTest";
 
 const root = join(import.meta.dir, "..");
 

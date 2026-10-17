@@ -1,17 +1,17 @@
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
-import { farmTest } from "../scripts/wisp/farm/farmTest";
+import { farmTest } from "../host/farm/farmTest";
 import { Effect, Layer } from "effect";
-import { mapCompiler, report } from "../scripts/compiler";
-import { servePanel } from "../scripts/wisp/commands/tune";
-import { GameFiles } from "../scripts/wisp/io/gameFiles";
-import { HotReload } from "../scripts/wisp/dev/hotReload";
-import { MapBuild } from "../scripts/wisp/compile/mapBuild";
-import { SourceErrors } from "../scripts/wisp/compile/sourceErrors";
-import { Tune, type Tunable, findLiteral, lineDiff, replaceSpans } from "../scripts/wisp/tune/tune";
+import { mapCompiler, report } from "../host/toolchain/compiler";
+import { servePanel } from "../host/commands/tune";
+import { GameFiles } from "../host/io/gameFiles";
+import { HotReload } from "../host/dev/hotReload";
+import { MapBuild } from "../host/compile/mapBuild";
+import { SourceErrors } from "../host/compile/sourceErrors";
+import { Tune, type Tunable, findLiteral, lineDiff, replaceSpans } from "../host/tune/tune";
 import { moduleChunk, moduleHashText, moduleIndex, modulePayload, textChecksum } from "../src/runtime/modules";
-import type { BundledModules } from "../scripts/luaBundle";
+import type { BundledModules } from "../host/toolchain/luaBundle";
 
 const root = join(import.meta.dir, "..");
 
@@ -191,7 +191,7 @@ test("[spec docs/tune.md] the panel refuses another site's requests: a different
     const replacements = new Map<string, string>();
     const project = {
       projectRoot: directory, configPath: join(directory, "tsconfig.json"), bundlePath: join(directory, "map.lua"), compileInputs: [join(directory, "src")],
-      packager: join(root, "scripts/package.ts"), toolchainLockPath: join(root, "typescript-toolchain.lock"), packageDirectory: join(directory, "package"),
+      packager: join(root, "host/toolchain/package.ts"), toolchainLockPath: join(root, "typescript-toolchain.lock"), packageDirectory: join(directory, "package"),
     };
     const layer = Tune.layer(directory, TUNABLES, replacements).pipe(
       Layer.provideMerge(HotReload.layer([join(directory, "data")])),

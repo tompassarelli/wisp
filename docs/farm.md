@@ -34,7 +34,7 @@ This clears branches left by a killed command or a manual push.
 3. **Plan.** The plan job restores the newest `farm-timings.json` from the
    Actions cache and splits the test files (Bun) and tests (Lua) over the
    shards, slowest first, each to the shard with the least time so far
-   (wisp:scripts/wisp/farm/farmShards.ts). A file or test never measured counts
+   (wisp:host/farm/farmShards.ts). A file or test never measured counts
    as the median measured one; a Lua test never measured runs on the shard
    its name hashes to. Test files under `repos/` (vendored repositories,
    which bunfig.toml's `pathIgnorePatterns` keeps out of every run) get no shard.
@@ -43,7 +43,7 @@ This clears branches left by a killed command or a manual push.
    process per core, each writing a line per test with its status and
    seconds. `bun install`'s download cache and the pinned 32-bit Lua build
    (5.3.6 with `LUA_32BITS`, from the checksum-pinned source, plus the
-   round-toward-zero build, wisp:scripts/wisp/compile/lua32.ts's ~/.cache/wisp/lua32)
+   round-toward-zero build, wisp:host/compile/lua32.ts's ~/.cache/wisp/lua32)
    come from the Actions cache. Each shard runs on a hosted runner or the
    farm box ([Where shards run](#where-shards-run)).
 5. **Merge.** The merge job reads every shard's result into `summary.json`,
@@ -71,7 +71,7 @@ main, so every branch's plan job restores the newest sample (`restore-keys:
 farm-load-`), the same way it restores `farm-timings.json`. Without
 `FARM_RUNNER` the probe is skipped.
 
-`placeShards` in wisp:scripts/wisp/farm/farmShards.ts (`farmShards.ts place`)
+`placeShards` in wisp:host/farm/farmShards.ts (`farmShards.ts place`)
 decides each shard. An even shard goes to the farm label only when a sample
 exists, it is at most 900 s old, and `load1 <= cores`. Otherwise it goes to
 `ubuntu-latest` with the reason `missing`, `stale AGEs` (a box too busy to
@@ -100,7 +100,7 @@ each shard uploads its `result.json` as `farm-test-result-SUITE-K`.
 Smashcraft's smashcraft:.github/workflows/farm-test.yml adds the Lua jobs.
 
 A game adds its own farm jobs (Smashcraft's `farm balance`, `farm pads`,
-`farm perf`, `farm memory`) from the same pieces in wisp:scripts/wisp/farm/farm.ts:
+`farm perf`, `farm memory`) from the same pieces in wisp:host/farm/farm.ts:
 `resolveRef` (run it inside `Effect.scoped`: closing the scope deletes the
 scratch branch, whatever ended the run), `dispatch`, `waitFor` and
 `withArtifact`.

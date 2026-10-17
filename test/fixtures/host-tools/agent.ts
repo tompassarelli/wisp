@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { agentSocket, clientName, pairDirectory } from "../../../scripts/wisp/lan/pool";
+import { agentSocket, clientName, pairDirectory } from "../../../host/lan/pool";
 
 const pair = Number(process.argv[process.argv.indexOf("--pair") + 1]);
 const clients = ["a", "b"].map((side) => ({ name: clientName(pair, side as "a" | "b"), child: spawn("sleep", ["600"], { detached: true, stdio: "ignore" }) }));

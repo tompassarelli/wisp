@@ -79,7 +79,7 @@ the template and the installed package can't drift apart.
 | `test` | `bun test` | Unit tests; `LUA` and `TOWARD_ZERO_LUA` name the pinned Lua32s, for the emitted-Lua and numeric tests. Empty skips. |
 | `headless` | empty | The game's [headless](headless.md) journey command. |
 | `soak` | empty | The game's [soak](soak.md) command; keep it bounded with `--minutes`. |
-| `lua` | `true` | Build Lua 5.3.6 with `LUA_32BITS` (from the checksummed source in wisp:vendor/lua-5.3.6.tar.gz) and its toward-zero twin ([raw float rounding](headless.md#raw-float-rounding)) with wisp:scripts/wisp/compile/lua32.ts, the builder every test run uses. |
+| `lua` | `true` | Build Lua 5.3.6 with `LUA_32BITS` (from the checksummed source in wisp:vendor/lua-5.3.6.tar.gz) and its toward-zero twin ([raw float rounding](headless.md#raw-float-rounding)) with wisp:host/compile/lua32.ts, the builder every test run uses. |
 | `timeout-minutes` | 20 | Per job. |
 | `expect-failure` | `false` | The run passes only if a command fails: for a deliberately broken fixture. |
 | `diagnostics` | `true` | Upload each command's output and `repro-paths` as the Actions artifact `artifact-name`, kept 14 days. |
@@ -105,7 +105,7 @@ paths or content.
 With `private-map-build: true`, after the headless job passes, the
 `private-map` job runs on the runner `private-runner` names. It checks out the
 commit, installs, and runs
-`bun node_modules/wisp/scripts/wisp/compile/ciMapBuild.ts` (wisp:scripts/wisp/compile/ciMapBuild.ts),
+`bun node_modules/wisp/host/compile/ciMapBuild.ts` (wisp:host/compile/ciMapBuild.ts),
 which:
 
 1. refuses a GitHub-hosted runner, a store inside the checkout, and a map
@@ -130,7 +130,7 @@ deliberate, manual act; there is no automatic release or deployment.
    also require approval for workflows from outside collaborators, so a
    fork's pull request can't run on it.
 2. Install Bun and `nix` on it (the map packager compiles on first use; see
-   [MapBuild](../scripts/wisp/compile/mapBuild.ts)).
+   [MapBuild](../host/compile/mapBuild.ts)).
 3. Put the base map and assets in a folder on the runner, outside any
    checkout, and point the build at it through the runner's environment, for
    example `WISP_BASE_MAP` in the runner's `.env` file.
@@ -146,7 +146,7 @@ deliberate, manual act; there is no automatic release or deployment.
 The step runs locally the same way:
 
 ```sh
-bun node_modules/wisp/scripts/wisp/compile/ciMapBuild.ts --store ~/maps --name mygame --revision "$(git rev-parse HEAD)" \
+bun node_modules/wisp/host/compile/ciMapBuild.ts --store ~/maps --name mygame --revision "$(git rev-parse HEAD)" \
   -- bash -c 'bun scripts/game.ts map build --base "$WISP_BASE_MAP" --out "$WISP_MAP_OUT"'
 ```
 
@@ -172,7 +172,7 @@ has no failures the job runs only the checks (`bun run check`, clean room,
 `effect-kit check`). A direct push, or a landing replayed onto a main that
 moved, has no such summary and runs the whole suite. It installs
 Ubuntu's `libstorm-dev` and sets `STORMLIB_PREFIX=/usr` and `CC=gcc`, so the
-map packager (wisp:scripts/wisp/compile/mapBuild.ts) and its tests
+map packager (wisp:host/compile/mapBuild.ts) and its tests
 (wisp:test/map-pack.test.ts) build against that StormLib instead of nixpkgs';
 without those two variables they use `nix`.
 
@@ -185,7 +185,7 @@ or over the box's cores ([Where shards run](farm.md#where-shards-run)).
 
 Each finished CI run on `main` opens, updates or closes one issue titled
 "main is red" (wisp:.github/workflows/main-red.yml, which runs
-wisp:scripts/mainRed.ts). A failed run lists each failing test (Bun's
+wisp:host/checks/mainRed.ts). A failed run lists each failing test (Bun's
 `(fail)` lines; a failed step with none, such as the type check, by its step
 name), the first failing commit since the last green run and the compare link
 from that green commit. A later failed run rewrites the list; a green run
@@ -203,7 +203,7 @@ Every push prints the open issue's failing tests in one line and never blocks:
 pre-push: main is red (#71 https://github.com/tompassarelli/wisp/issues/71), 2 failing: perf --json plays …; the overlay shows …
 ```
 
-That is wisp:.githooks/pre-push running wisp:scripts/prePush.ts; enable it
+That is wisp:.githooks/pre-push running wisp:host/checks/prePush.ts; enable it
 once per clone with `git config core.hooksPath .githooks` (safe-push runs it).
 A red main is not "already failing": before landing, check whether your
 change touches a listed test, and if your commit broke main, fix it first.
@@ -266,7 +266,7 @@ normal `safe-push`.
 Every push runs `effect-kit check` (north:agent-machinery/scripts/effect-kit.mjs):
 it fails when repos/effect differs from the locked `effect` version, on any
 Effect language-service diagnostic, or on a raw process, wait, promise or
-fetch outside Effect under `scripts/`. On Mondays `effect-upgrade.yml` bumps
+fetch outside Effect under `host/`. On Mondays `effect-upgrade.yml` bumps
 `effect` and `@effect/*` to the latest stable, syncs repos/effect, and runs the
 check: a clean upgrade goes to a `claude/` branch for Autoland; findings go to
 the open "Weekly Effect upgrade" issue with the branch to fix.
@@ -292,7 +292,7 @@ a small part of it, and CI runs once per ref (a newer push replaces the queued
 run). Autoland's group holds only Autoland runs; farm runs have no group, so
 landings never hold them back.
 
-`bun wisp farm ... --wait` (`waitFor` in wisp:scripts/wisp/farm/farm.ts) polls the
+`bun wisp farm ... --wait` (`waitFor` in wisp:host/farm/farm.ts) polls the
 run with one `gh run view` (two API calls). It polls 10 s after the dispatch,
 then waits 1.5 times longer after each poll that shows no change, up to 60 s,
 and goes back to 10 s whenever a job starts or finishes. A run's jobs move a
@@ -308,7 +308,7 @@ other agents ran their own `gh run view` loops; GitHub then answers "HTTP 403:
 API rate limit exceeded" until the hour resets. `gh api rate_limit` showed
 5,000 left throughout, and some requests reported a fuller budget than others,
 so neither shows the refusal coming. Every `gh` call the farm makes (`run` in
-wisp:scripts/wisp/farm/farm.ts) retries a rate-limit refusal (this one, or a
+wisp:host/farm/farm.ts) retries a rate-limit refusal (this one, or a
 secondary limit on bursts) after 30 s, then twice as long each time up to 5
 minutes, with jitter, for up to 65 minutes, and says so on stderr. Wait on a
 run with `bun wisp farm ... --wait` rather than a `gh run view` loop. To read the real budget, look at a real

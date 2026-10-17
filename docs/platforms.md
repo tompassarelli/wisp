@@ -19,8 +19,8 @@ Linux assumption found, and says where the boundary sits.
 ## The boundary
 
 Platform-specific work sits behind Effect services
-(wisp:scripts/platform/services.ts). Each is a `Context.Service` tag with a
-Linux layer under wisp:scripts/platform/linux/. Nothing outside that folder
+(wisp:host/os/platform/services.ts). Each is a `Context.Service` tag with a
+Linux layer under wisp:host/os/platform/linux/. Nothing outside that folder
 reads `/proc`, cgroup files or runs `nsenter`, `wine`, `grim`, `xdotool`,
 `wlrctl`, `systemd-run`, `systemctl`, `steam-run`, `bwrap`, `xdg-open`, PipeWire
 or niri.
@@ -40,8 +40,8 @@ or niri.
 | `PageOpener` | opening a local page in the owner's browser ([`wisp repro --view`](repro.md)) | `xdg-open` |
 
 Layers are composed at the application boundary. `cliProgram`
-(wisp:scripts/wisp/cli/cli.ts) provides `platformLayer()`
-(wisp:scripts/platform/layer.ts) to every command, so a `Command` may require
+(wisp:host/cli/cli.ts) provides `platformLayer()`
+(wisp:host/os/platform/layer.ts) to every command, so a `Command` may require
 any platform service. Standalone programs (`pairAgent`, `pairSession`,
 `dummySession`, the test runner) provide it in their `runMain`, and the
 synchronous boundaries that can't (soak's thread clock and the LAN plugin's
@@ -56,7 +56,7 @@ nothing instead: no CPU pressure, no CPU limit, no lease, and thread CPU from
 `process.cpuUsage()`.
 
 wisp:test/platform-boundary.test.ts holds the boundary: it fails on any new
-direct use outside wisp:scripts/platform/linux/, checks that it catches a
+direct use outside wisp:host/os/platform/linux/, checks that it catches a
 planted one, and runs each service and a command against the Windows layer
 for the named error.
 
@@ -67,49 +67,49 @@ The core should run anywhere Bun runs. Only the native side is per platform.
 | Module | Side |
 | --- | --- |
 | wisp:src/ (headless runtime, simulation, natives, Lua runtime, renderer pieces) | core |
-| wisp:scripts/compiler.ts, `lua.ts`, `luaBundle.ts`, `mapScript.ts`, `objectData.ts`, `natives.ts`, `numberRules.ts`, `sourceMaps.ts`, `cleanRoom.ts`, `package.ts` | core |
-| wisp:scripts/wisp/ map build, headless, Lua32, hot reload, dev, test runner, soak, repro, tune, terrain, render and replay modules | core; the test runner and soak read `ResourceAccounting` |
-| wisp:scripts/wisp/net/ (Wisp's own transport) and the LAN protocol in wisp:scripts/wisp/lan/ (`host`, `w3gs`, `join`, `actions`, `actionLog`, `map`) | core |
-| wisp:scripts/warcraft/ (`battleNet`, `war3Log`, `preferences`, `inputBatch`, `desktop`) | core logic over services; `desktop.ts` drives clients through `ScreenCapture` and `InputInjection` |
-| wisp:scripts/wisp/dev/watch.ts, `clients.ts`, `accept.ts`, `doctor.ts`, `play.ts` | core logic over `ProcessTable`, `InputInjection`, `PlayMachine` and `PlayDesktop` |
-| wisp:scripts/platform/services.ts, `layer.ts`, `play.ts` | the boundary |
-| wisp:scripts/platform/linux/ | Linux layers |
+| wisp:host/toolchain/compiler.ts, `lua.ts`, `luaBundle.ts`, `mapScript.ts`, `objectData.ts`, `natives.ts`, `numberRules.ts`, `sourceMaps.ts`, `package.ts`, wisp:host/checks/cleanRoom.ts | core |
+| wisp:host/ map build, headless, Lua32, hot reload, dev, test runner, soak, repro, tune, terrain, render and replay modules | core; the test runner and soak read `ResourceAccounting` |
+| wisp:host/net/ (Wisp's own transport) and the LAN protocol in wisp:host/lan/ (`host`, `w3gs`, `join`, `actions`, `actionLog`, `map`) | core |
+| wisp:host/os/warcraft/ (`battleNet`, `war3Log`, `preferences`, `inputBatch`, `desktop`) | core logic over services; `desktop.ts` drives clients through `ScreenCapture` and `InputInjection` |
+| wisp:host/dev/watch.ts, `clients.ts`, `accept.ts`, `doctor.ts`, `play.ts` | core logic over `ProcessTable`, `InputInjection`, `PlayMachine` and `PlayDesktop` |
+| wisp:host/os/platform/services.ts, `layer.ts`, `play.ts` | the boundary |
+| wisp:host/os/platform/linux/ | Linux layers |
 
 Linux-only tooling stays out of the consumer path. It goes through the same
 services but only has a Linux layer, so elsewhere it stops at its first
 platform call with the named error:
 
-- the offline LAN pool: wisp:scripts/wisp/lan/ `pool`, `pairSession`,
+- the offline LAN pool: wisp:host/lan/ `pool`, `pairSession`,
   `pairAgent`, `setup`, `dummy`, `dummySession`, `offline`, `admission`,
-  `plugin` and `wisp lan` (wisp:scripts/wisp/commands/lan.ts);
-- signed-in client services: wisp:scripts/wisp/client/clientServices.ts,
+  `plugin` and `wisp lan` (wisp:host/commands/lan.ts);
+- signed-in client services: wisp:host/client/clientServices.ts,
   `clientServicesCommand.ts`, `doctorHost.ts`, `clientDoctorCommand.ts`;
-- playing on the owner's desktop: wisp:scripts/platform/play.ts selects
-  wisp:scripts/platform/linux/play.ts, or a layer that refuses on other
+- playing on the owner's desktop: wisp:host/os/platform/play.ts selects
+  wisp:host/os/platform/linux/play.ts, or a layer that refuses on other
   platforms.
 
 ## Linux assumptions found
 
-Before #108, by file (all now inside wisp:scripts/platform/linux/):
+Before #108, by file (all now inside wisp:host/os/platform/linux/):
 
 | Assumption | Where it was | Where it is |
 | --- | --- | --- |
-| `/proc` process table, cmdline, environ, stat, cwd, exe | scripts/warcraft/processes.ts, scripts/wisp/lan/processes.ts, scripts/wisp/playHost.ts, scripts/wisp/client/clientServices.ts | linux/procfs.ts |
-| `/proc/<pid>/status`, `/proc/<pid>/net/dev` | scripts/wisp/lan/dummy.ts, scripts/wisp/lan/offline.ts | linux/procfs.ts |
-| `/proc/pressure/cpu` (and `/proc/self/stat`, which the test-cost preload stopped reading in 0d3dd85) | scripts/wisp/testing/testRunner.ts, scripts/wisp/testing/testCostPreload.ts | linux/procfs.ts |
-| cgroups (`/proc/<pid>/cgroup`, `/sys/fs/cgroup/.../cpu.max`, `cgroup.procs`) | scripts/wisp/client/clientServices.ts, scripts/wisp/dev/context.ts, scripts/wisp/commands/soak.ts, scripts/wisp/testing/testRunner.ts | linux/procfs.ts |
-| libc `clock_gettime` thread clock and the only `process.platform` branch | scripts/wisp/soak/clock.ts | linux/procfs.ts, layer.ts |
-| Wine (`wine`, `wineserver`, `WINEPREFIX`) | scripts/wisp/playHost.ts, scripts/warcraft/processes.ts | linux/play.ts, linux/procfs.ts |
-| Wine's runtime recognised by its `wineserver` name | scripts/warcraft/battleNet.ts (`prefixUse`) | linux/procfs.ts sets `ProcessInfo.runtime`; `prefixUse` reads the flag |
-| Proton and `steam-run` | scripts/wisp/lan/pairAgent.ts, scripts/wisp/lan/setup.ts | linux/layer.ts (`GameLauncher`) |
-| `nsenter` | scripts/wisp/playHost.ts, scripts/wisp/commands/lan.ts | linux/play.ts, linux/layer.ts (`Namespaces`) |
-| `bwrap --unshare-net` | scripts/wisp/lan/pairSession.ts, scripts/wisp/lan/setup.ts | linux/layer.ts (`Namespaces`, `GameLauncher`) |
-| `grim` | scripts/warcraft/desktop.ts, scripts/wisp/playHost.ts, scripts/wisp/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool), linux/play.ts |
-| `xdotool` | scripts/warcraft/desktop.ts, scripts/wisp/playHost.ts, scripts/wisp/lan/pairAgent.ts, scripts/wisp/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool), linux/play.ts |
-| `wlrctl`, Wayland (`WAYLAND_DISPLAY`, private desktop run folders) | scripts/warcraft/desktop.ts, scripts/wisp/lan/pairAgent.ts, scripts/wisp/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool) |
+| `/proc` process table, cmdline, environ, stat, cwd, exe | host/os/warcraft/processes.ts, host/lan/processes.ts, scripts/wisp/playHost.ts, host/client/clientServices.ts | linux/procfs.ts |
+| `/proc/<pid>/status`, `/proc/<pid>/net/dev` | host/lan/dummy.ts, host/lan/offline.ts | linux/procfs.ts |
+| `/proc/pressure/cpu` (and `/proc/self/stat`, which the test-cost preload stopped reading in 0d3dd85) | host/testing/testRunner.ts, host/testing/testCostPreload.ts | linux/procfs.ts |
+| cgroups (`/proc/<pid>/cgroup`, `/sys/fs/cgroup/.../cpu.max`, `cgroup.procs`) | host/client/clientServices.ts, host/dev/context.ts, host/commands/soak.ts, host/testing/testRunner.ts | linux/procfs.ts |
+| libc `clock_gettime` thread clock and the only `process.platform` branch | host/soak/clock.ts | linux/procfs.ts, layer.ts |
+| Wine (`wine`, `wineserver`, `WINEPREFIX`) | scripts/wisp/playHost.ts, host/os/warcraft/processes.ts | linux/play.ts, linux/procfs.ts |
+| Wine's runtime recognised by its `wineserver` name | host/os/warcraft/battleNet.ts (`prefixUse`) | linux/procfs.ts sets `ProcessInfo.runtime`; `prefixUse` reads the flag |
+| Proton and `steam-run` | host/lan/pairAgent.ts, host/lan/setup.ts | linux/layer.ts (`GameLauncher`) |
+| `nsenter` | scripts/wisp/playHost.ts, host/commands/lan.ts | linux/play.ts, linux/layer.ts (`Namespaces`) |
+| `bwrap --unshare-net` | host/lan/pairSession.ts, host/lan/setup.ts | linux/layer.ts (`Namespaces`, `GameLauncher`) |
+| `grim` | host/os/warcraft/desktop.ts, scripts/wisp/playHost.ts, host/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool), linux/play.ts |
+| `xdotool` | host/os/warcraft/desktop.ts, scripts/wisp/playHost.ts, host/lan/pairAgent.ts, host/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool), linux/play.ts |
+| `wlrctl`, Wayland (`WAYLAND_DISPLAY`, private desktop run folders) | host/os/warcraft/desktop.ts, host/lan/pairAgent.ts, host/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool) |
 | niri | scripts/wisp/playHost.ts | linux/play.ts |
-| `systemd-run --user`, `systemctl --user` | scripts/wisp/client/clientServices.ts | linux/systemd.ts |
-| `/run/user/<uid>`, PipeWire sinks, `dbus-run-session` | scripts/wisp/lan/pairAgent.ts | linux/layer.ts (`AudioIsolation`, `GameLauncher`) |
+| `systemd-run --user`, `systemctl --user` | host/client/clientServices.ts | linux/systemd.ts |
+| `/run/user/<uid>`, PipeWire sinks, `dbus-run-session` | host/lan/pairAgent.ts | linux/layer.ts (`AudioIsolation`, `GameLauncher`) |
 
 ## Windows CI
 
@@ -125,5 +125,5 @@ shows on the commit without opening the "main is red" issue
 
 Not done here: Windows or macOS layers for the native side (game launch,
 capture, input, accounting), and macOS CI. A Windows or macOS layer is a new
-folder beside wisp:scripts/platform/linux/ that `platformLayer` selects; it
+folder beside wisp:host/os/platform/linux/ that `platformLayer` selects; it
 needs a real machine of that kind to write and check.

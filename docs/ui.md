@@ -8,7 +8,7 @@ uses Warcraft's own frame system; there is no virtual DOM, renderer or
 reactive layer.
 
 Entry points: `generateFrames(definition)` and `writeFrames(definition,
-importDir, bindingsFile)` in wisp:scripts/wisp/compile/frames.ts. A real panel's
+importDir, bindingsFile)` in wisp:host/compile/frames.ts. A real panel's
 definition is in wisp:test/fixtures/frames/opponentSettings.ts.
 
 ## Ways to author Warcraft frames
@@ -78,7 +78,7 @@ hide and change text per client as before.
 
 `writeFrames` writes the FDF and TOC into an import folder and the bindings
 to a file of the map's source, and returns the archive entries a
-[MapBuild](../scripts/wisp/compile/mapBuild.ts)'s `imports` take. Run it from the
+[MapBuild](../host/compile/mapBuild.ts)'s `imports` take. Run it from the
 game's build before the map compiles, so the bindings exist when it does.
 
 ## Headless clients

@@ -1,7 +1,7 @@
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Console, Effect } from "effect";
-import { installHeadless } from "../../scripts/wisp/headless/headless";
-import { captureScene, renderScenes } from "../../scripts/wisp/render/headlessRender";
+import { installHeadless } from "../../host/headless/headless";
+import { captureScene, renderScenes } from "../../host/render/headlessRender";
 import { ANIMATION_NOOPS } from "./cases";
 import { CAPTURE_FRAME, RULER, RULER_DEATH_SECONDS, RULER_UNIT } from "./layout";
 import { install, start } from "./main";

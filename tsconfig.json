@@ -33,11 +33,11 @@
   },
   "include": [
     "src/**/*.ts",
-    "scripts/**/*.ts",
+    "host/**/*.ts",
     "plugins/**/*.ts"
   ],
   "exclude": [
-    "scripts/wisp/browser/**",
+    "host/browser/**",
     "src/map/**",
     "src/natives/**",
     "src/headless/lua.ts",

@@ -61,9 +61,9 @@ a map that saves during play spreads that work over frames.
 ## Replaying: `wisp repro FILE [--test NAME]`
 
 A project adds the command with `makeRepro`
-(wisp:scripts/wisp/commands/repro.ts). The command parses its arguments with
+(wisp:host/commands/repro.ts). The command parses its arguments with
 the pure `parseReproArgs`; reading, replaying and reporting a repro live in
-wisp:scripts/wisp/repro/replay.ts, and `--view` opens its page through the
+wisp:host/repro/replay.ts, and `--view` opens its page through the
 platform's `PageOpener` (wisp:docs/platforms.md):
 
 ```ts
@@ -115,7 +115,7 @@ The project adds `soak` to its `makeRepro` declaration:
 
 ```ts
 soak: {
-  project: join(sourceDirectory, "scripts/wisp/soak/soak.ts"),
+  project: join(sourceDirectory, "host/soak/soak.ts"),
   tests: join(sourceDirectory, "test/repros"),
 },
 ```

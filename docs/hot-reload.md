@@ -35,7 +35,7 @@ call `startHotReload()` once to create its timer and trigger; a client looks
 for files only twice a second until it has seen a host
 ([what polling costs](#what-polling-costs)).
 It also acknowledges version 0, the map's own bundle, which tells host tools
-such as the [fresh match](../scripts/wisp/play/lobby.ts) (wisp:scripts/wisp/play/lobby.ts)
+such as the [fresh match](../host/play/lobby.ts) (wisp:host/play/lobby.ts)
 that the match is running in that client. Keep module scope free of Warcraft
 natives and synchronized state: each client evaluates every module of a new
 version as soon as its own files arrive, on its own frame. A map built with an older
@@ -45,8 +45,8 @@ match before relying on a reloader change.
 The map reads each payload through the tooltips of FileIO's ability ('$wsl'),
 so the map's war3map.w3a must declare it. MapBuild adds a war3map.w3a holding
 only that ability when the build supplies none; a map that generates its own
-writes it with `abilityData()` from [object data](../scripts/objectData.ts)
-(wisp:scripts/objectData.ts).
+writes it with `abilityData()` from [object data](../host/toolchain/objectData.ts)
+(wisp:host/toolchain/objectData.ts).
 
 Put state that must survive in globals. Each reload creates fresh module locals.
 If the state shape changes, migrate it deliberately or start a fresh match.
@@ -71,8 +71,8 @@ applied` messages are always displayed; a build players run should not
 
 ## Host integration
 
-Compose [makeHot](../scripts/wisp/commands/hot.ts)
-(wisp:scripts/wisp/commands/hot.ts) with the consuming project's
+Compose [makeHot](../host/commands/hot.ts)
+(wisp:host/commands/hot.ts) with the consuming project's
 `BuildProject`, source directory, retained-source-map directory and matching
 file prefix. Its command takes one `--data` CustomMapData directory per client;
 `--watch` publishes saved changes and prints new error and [desync](#desync-reports) reports
@@ -83,9 +83,9 @@ The consumer owns the program and command name; the
 
 The host first creates the `<file prefix>-hot` folder of each CustomMapData
 directory with the host marker `host.pld` in it
-([prepareHotFolders](../scripts/wisp/io/gameFiles.ts), wisp:scripts/wisp/io/gameFiles.ts).
-`wisp hot` does so when it starts and a [fresh match](../scripts/wisp/play/lobby.ts)
-(wisp:scripts/wisp/play/lobby.ts) before it installs the map, so the folder exists
+([prepareHotFolders](../host/io/gameFiles.ts), wisp:host/io/gameFiles.ts).
+`wisp hot` does so when it starts and a [fresh match](../host/play/lobby.ts)
+(wisp:host/play/lobby.ts) before it installs the map, so the folder exists
 before the match does; a map's own commands that start a match or publish
 reloads must do the same. The marker's content never changes, which the
 Preloader rule needs, and an existing marker is left alone. The host then
@@ -105,9 +105,9 @@ at the time from save to every client's acknowledgement.
 
 The incremental compiler rebuilds the Lua bundle and its source map from each
 unchanged module's cached text, mappings and resolved requires; the result
-equals a full TypeScriptToLua compile (see [compiler](../scripts/compiler.ts)
-and [bundle](../scripts/luaBundle.ts), wisp:scripts/compiler.ts and
-wisp:scripts/luaBundle.ts). Plugins' `beforeEmit` and `afterEmit` run on its emit plan as they do
+equals a full TypeScriptToLua compile (see [compiler](../host/toolchain/compiler.ts)
+and [bundle](../host/toolchain/luaBundle.ts), wisp:host/toolchain/compiler.ts and
+wisp:host/toolchain/luaBundle.ts). Plugins' `beforeEmit` and `afterEmit` run on its emit plan as they do
 in a full compile. A plugin's visitors run only on the modules a compile
 transpiles, so a visitor whose output depends on other files keeps an
 unchanged module's old text. The number rules scan only changed files again.
@@ -154,8 +154,8 @@ was 0.841 s with whole bundles; the sample's tiny bundle, 0.298 s, is about the
 client-side floor of polling and synchronized answers.
 
 See [runtime](../src/map/hotReload.ts) and
-[host service](../scripts/wisp/dev/hotReload.ts)
-(wisp:src/map/hotReload.ts, wisp:scripts/wisp/dev/hotReload.ts).
+[host service](../host/dev/hotReload.ts)
+(wisp:src/map/hotReload.ts, wisp:host/dev/hotReload.ts).
 
 ## What polling costs
 
@@ -202,7 +202,7 @@ and lists the engine's checksums and handle counters, such as
 5 October 2026 native desync (build 24268) wrote theirs 2 ms apart.
 
 `--watch` compares the clients' new reports with
-[Desyncs](../scripts/wisp/dev/desyncs.ts) (wisp:scripts/wisp/dev/desyncs.ts)
+[Desyncs](../host/dev/desyncs.ts) (wisp:host/dev/desyncs.ts)
 and prints each desync once, numbering clients in `--data` order:
 
 ```text

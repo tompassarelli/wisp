@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { SceneReportFile } from "../scripts/wisp/scene/playerView";
-import { mapCompiler, report } from "../scripts/compiler";
-import { type SceneExpectations, sceneProblems } from "../scripts/wisp/scene/scene";
+import { SceneReportFile } from "../host/scene/playerView";
+import { mapCompiler, report } from "../host/toolchain/compiler";
+import { type SceneExpectations, sceneProblems } from "../host/scene/scene";
 
 const root = join(import.meta.dir, "..");
 

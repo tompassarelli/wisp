@@ -14,18 +14,18 @@ Effect's own pieces. Four rules:
    failure, interruption, and SIGINT or SIGTERM. Hold sockets, servers,
    watchers and timers the same way, with `Effect.acquireRelease` or
    `Effect.forkScoped`. To write a child's output to files, use `spawnLogged`
-   (wisp:scripts/wisp/cli/hostProcess.ts); its scope waits at most 5 s for the
+   (wisp:host/cli/hostProcess.ts); its scope waits at most 5 s for the
    output to close, since a descendant outside the process group (a session
    bus, a `setsid` helper) can hold it open forever.
 2. **The entry point runs under `runMain`.** A project's `bun` entry calls
-   `runMainCli` (wisp:scripts/wisp/cli/cli.ts), and a standalone script calls
+   `runMainCli` (wisp:host/cli/cli.ts), and a standalone script calls
    `BunRuntime.runMain` (`@effect/platform-bun/BunRuntime`). Ctrl-C or a kill
    signal then interrupts the program and runs its cleanup before it exits.
    Don't add `process.on("SIGTERM")` handlers or call `process.exit` from
    inside a program.
 3. **Waits and retries use `Schedule` with a deadline.** Poll with
    `pollUntil(check, { until, every, within, onTimeout })`
-   (wisp:scripts/wisp/cli/hostProcess.ts), or `pollFor` when the check returns
+   (wisp:host/cli/hostProcess.ts), or `pollFor` when the check returns
    `undefined` until it is done; leave out `within` only for a wait that ends
    by interruption or by its `until`.
    Retry only failures that can recover, with `Effect.retry({ schedule,
@@ -37,7 +37,7 @@ Effect's own pieces. Four rules:
    `Error`s. A wait that times out says it timed out.
 
 `effect-kit check` enforces the boundary in CI (wisp:effect-kit.json): under
-`scripts/`, except browser pages, every `Bun.spawn`, `Bun.spawnSync`,
+`host/`, except browser pages, every `Bun.spawn`, `Bun.spawnSync`,
 `Bun.sleep`, `setTimeout`, `fetch` or `new Promise` must sit inside an `Effect.*` call, whether or
 not the file imports Effect. There is no exemption list.
 
@@ -51,21 +51,21 @@ inline in a host tool.
 
 ## Examples
 
-- wisp:scripts/wisp/lan/pairAgent.ts: a whole agent as one `runMain`
+- wisp:host/lan/pairAgent.ts: a whole agent as one `runMain`
   program. Each game launcher, the menu listeners, the socket server and
   each game's host are in its scope. Request bodies are decoded with
   `Schema`, and HTTP handlers run through `FiberSet.makeRuntimePromise`.
-- wisp:scripts/wisp/commands/lan.ts (`startPair`): a capacity session in its
+- wisp:host/commands/lan.ts (`startPair`): a capacity session in its
   own child scope (`Scope.fork`), closed when that attempt fails and held by
   the pool otherwise. Readiness is polled under `Effect.timeoutOrElse`, and
   deferrals are retried every 45 s within `--wait`.
-- wisp:scripts/wisp/dev/watch.ts (`lanObservation`, `waitFor`): a 3 s timeout
+- wisp:host/dev/watch.ts (`lanObservation`, `waitFor`): a 3 s timeout
   with one retry, reported as a `WatchFailure`, and a `pollUntil` poll
   under a deadline.
-- wisp:scripts/wisp/lan/host.ts (`startHost`): the caller's scope holds the
+- wisp:host/lan/host.ts (`startHost`): the caller's scope holds the
   TCP listener and turn fibers; a child scope closes UDP discovery when the
   lobby ends. `Schedule.fixed` keeps the turn cadence when work takes time.
-- wisp:scripts/wisp/lan/dummy.ts (`checkDummy`): the native join runs in the
+- wisp:host/lan/dummy.ts (`checkDummy`): the native join runs in the
   same fiber as the check. Each dummy is a scoped Bun subprocess because its
   CPU report needs Bun's `resourceUsage`; cleanup stops and reaps it.
 

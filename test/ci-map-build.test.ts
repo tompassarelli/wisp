@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildIntoStore } from "../scripts/wisp/compile/ciMapBuild";
+import { buildIntoStore } from "../host/compile/ciMapBuild";
 
 const checkout = join(import.meta.dir, "..");
 const revision = "0123456789abcdef0123456789abcdef01234567";

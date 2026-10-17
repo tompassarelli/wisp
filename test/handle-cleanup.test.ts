@@ -3,9 +3,9 @@ import { join } from "node:path";
 import { expect, test } from "bun:test";
 import ts from "typescript";
 import { Console, Effect, Layer } from "effect";
-import { MapBuild } from "../scripts/wisp/compile/mapBuild";
-import { SourceErrors } from "../scripts/wisp/compile/sourceErrors";
-import { GameFiles } from "../scripts/wisp/io/gameFiles";
+import { MapBuild } from "../host/compile/mapBuild";
+import { SourceErrors } from "../host/compile/sourceErrors";
+import { GameFiles } from "../host/io/gameFiles";
 
 test("[spec #95] map build compilation prints file:line warnings and matching cleanup prints none", async () => {
   mkdirSync(join(import.meta.dir, "../build"), { recursive: true });

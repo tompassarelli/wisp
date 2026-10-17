@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { type ProcessInfo, prefixUse } from "../scripts/warcraft/battleNet";
-import { sessionStart } from "../scripts/warcraft/war3Log";
-import { type ClientState, type CrashReport, type SocketState, type Sources, changes, crashSummary, decide, eventLine, socketEvent, typesIntoMatch } from "../scripts/wisp/dev/watch";
+import { type ProcessInfo, prefixUse } from "../host/os/warcraft/battleNet";
+import { sessionStart } from "../host/os/warcraft/war3Log";
+import { type ClientState, type CrashReport, type SocketState, type Sources, changes, crashSummary, decide, eventLine, socketEvent, typesIntoMatch } from "../host/dev/watch";
 
 const fixture = (path: string) => readFileSync(join(import.meta.dir, "fixtures", path), "utf8");
 const PREFIX = "/clients/a/pfx";

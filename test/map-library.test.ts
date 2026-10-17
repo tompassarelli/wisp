@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { GameFiles } from "../scripts/wisp/io/gameFiles";
+import { GameFiles } from "../host/io/gameFiles";
 
 test("[boundary] installing a test map preserves other tests and the owner's playable map", async () => {
   const root = mkdtempSync(join(tmpdir(), "wisp-map-library-"));

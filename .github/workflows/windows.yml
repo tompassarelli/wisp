@@ -31,8 +31,8 @@ jobs:
       - run: bun run check
       - name: Lua32 runner
         run: |
-          stock=$(bun scripts/wisp/compile/lua32.ts stock)
-          toward_zero=$(bun scripts/wisp/compile/lua32.ts toward-zero)
+          stock=$(bun host/compile/lua32.ts stock)
+          toward_zero=$(bun host/compile/lua32.ts toward-zero)
           echo "LUA=$stock" >> "$GITHUB_ENV"
           echo "TOWARD_ZERO_LUA=$toward_zero" >> "$GITHUB_ENV"
       - name: wisp test

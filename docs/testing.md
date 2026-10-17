@@ -1,7 +1,7 @@
 # Testing
 
 `bun run test` runs the whole suite through
-[testRunner](../scripts/wisp/testing/testRunner.ts) (wisp:scripts/wisp/testing/testRunner.ts).
+[testRunner](../host/testing/testRunner.ts) (wisp:host/testing/testRunner.ts).
 A failure means the code is wrong, never that the machine was busy. The
 tests need Lua 5.3 built with `LUA_32BITS` (`LUA=/path/to/lua32`; see the
 [README](../README.md)).
@@ -26,11 +26,11 @@ a quiet machine. They run first, under whatever load the machine has.
 
 A test that asserts speed, such as a duration, a frame rate or a perf
 budget, is a timing test. Declare it with `timingTest` from
-[timingTest](../scripts/wisp/testing/timingTest.ts) (wisp:scripts/wisp/testing/timingTest.ts)
+[timingTest](../host/testing/timingTest.ts) (wisp:host/testing/timingTest.ts)
 instead of `test`:
 
 ```ts
-import { timingTest } from "../scripts/wisp/testing/timingTest";
+import { timingTest } from "../host/testing/timingTest";
 
 timingTest("twelve unit state cases complete within two seconds", () => {
   const before = performance.now();
@@ -70,12 +70,12 @@ A plain `bun test` still runs timing tests like any other test.
 ## Test cost
 
 A test's cost is counted in deterministic quantities, never CPU seconds
-([testCost](../scripts/wisp/testing/testCost.ts), wisp:scripts/wisp/testing/testCost.ts):
+([testCost](../host/testing/testCost.ts), wisp:host/testing/testCost.ts):
 
 - Lua32 instructions its Lua children run, at most 280M per test (4 s at the
   reference runner's 70M per second). The runner preloads
-  [testCostPreload](../scripts/wisp/testing/testCostPreload.ts)
-  (wisp:scripts/wisp/testing/testCostPreload.ts), which points `LUA` and
+  [testCostPreload](../host/testing/testCostPreload.ts)
+  (wisp:host/testing/testCostPreload.ts), which points `LUA` and
   `TOWARD_ZERO_LUA` at wrappers that count instructions in millions with a
   count hook. A child that sets its own hook stops its count.
 - Headless client frames it steps, at most 80,000 per test (about 4 s on a
@@ -83,7 +83,7 @@ A test's cost is counted in deterministic quantities, never CPU seconds
 - TypeScript compilation has no deterministic counter: GitHub's farm runners
   refuse `perf_event_open` (perf_event_paranoid 4), so compile-heavy tests
   are bounded only by the 60 s hang timeout (`TEST_TIMEOUT_MS` in
-  wisp:scripts/wisp/testing/testRunner.ts).
+  wisp:host/testing/testRunner.ts).
 
 Time outside tests (loading, `beforeAll`) is charged to the file.
 
@@ -101,7 +101,7 @@ suite CPU: 14.7 s for 238 tests; 0.062 s per test (reported, not gated)
 
 A test that would come near the ceiling, typically one that compiles a
 fixture to 32-bit Lua, is a farm test: declare it with `farmTest` from
-[farmTest](../scripts/wisp/farm/farmTest.ts) (wisp:scripts/wisp/farm/farmTest.ts)
+[farmTest](../host/farm/farmTest.ts) (wisp:host/farm/farmTest.ts)
 instead of `test`. `bun run test` skips it; `bun wisp ci post-merge` (CI's
 framework job, [CI command](ci-command.md#post-merge)) and every
 `bun wisp farm test` shard run it on each push, so it keeps its coverage.
@@ -110,7 +110,7 @@ The headless fixtures' Lua32 twins are one farm test file,
 `test/lua32-fixtures.test.ts`, which runs every fixture in one Lua32 process
 and reports each fixture's rows against its Bun rows.
 Each farm shard runs the suite files with `bun run test`,
-then its farm tests with `bun test --preload ./scripts/wisp/testing/testCostPreload.ts`.
+then its farm tests with `bun test --preload ./host/testing/testCostPreload.ts`.
 Farm tests keep their coverage outside the suite's ceiling.
 
 ## The last line
@@ -128,7 +128,7 @@ got quiet.
 ## In a consuming project
 
 A game uses the same runner from its own root, for example
-`"test": "bun node_modules/wisp/scripts/wisp/testing/testRunner.ts"`, and marks its
+`"test": "bun node_modules/wisp/host/testing/testRunner.ts"`, and marks its
 timing tests with `timingTest` from `wisp/scripts/wisp/timingTest`. Arguments
 pass through to `bun test`, so path filters also select timing files.
 

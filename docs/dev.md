@@ -33,7 +33,7 @@ it to time the loop on a past commit (`--since COMMIT~1` at COMMIT).
 
 ## Declare it
 
-A project adds the command with `makeDev` (wisp:scripts/wisp/commands/dev.ts).
+A project adds the command with `makeDev` (wisp:host/commands/dev.ts).
 Paths and globs are relative to `root`:
 
 ```ts
@@ -75,7 +75,7 @@ export const dev = makeDev({
   clients; they report with the project's own journey.
 - `tests.perFile` are audits that check each file they read on its own. When
   only files they read brought them in, they run with those files in
-  `WISP_DEV_FILES`: `savedFiles()` (wisp:scripts/wisp/dev/devResult.ts) returns
+  `WISP_DEV_FILES`: `savedFiles()` (wisp:host/dev/devResult.ts) returns
   them, or undefined when the audit should check everything, as in CI.
 - `tests.warm` gives a Bun test file a process of its own, started before the
   save, that has already loaded the installed modules listed, such as the

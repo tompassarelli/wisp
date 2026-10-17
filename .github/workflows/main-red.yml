@@ -1,7 +1,7 @@
 name: Main is red
 
 # Each finished CI run on main opens, updates or closes the one "main is red"
-# issue (wisp:scripts/mainRed.ts). Dispatch with a run ID to report
+# issue (wisp:host/checks/mainRed.ts). Dispatch with a run ID to report
 # any branch's run, as "BRANCH is red".
 on:
   workflow_run:
@@ -41,7 +41,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-      - run: bun scripts/mainRed.ts "${{ inputs.run || github.event.workflow_run.id }}"
+      - run: bun host/checks/mainRed.ts "${{ inputs.run || github.event.workflow_run.id }}"
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

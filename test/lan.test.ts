@@ -4,14 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Cause, Effect, Exit, Scope } from "effect";
-import { GameLauncher } from "../scripts/platform/services";
-import { startHost } from "../scripts/wisp/lan/host";
-import { ALARM_AFTER_MS, type Driver, driverVerdict, idleness, installOf, prefixOf, wrongUser } from "../scripts/wisp/lan/pool";
-import { setupClient } from "../scripts/wisp/lan/setup";
-import { menuPage } from "../scripts/wisp/play/menus";
-import { LanFailure } from "../scripts/wisp/lan/join";
-import { type MapFacts, mapCopies, readMapFacts } from "../scripts/wisp/lan/map";
-import { PACKET, Writer, encodePacket } from "../scripts/wisp/lan/w3gs";
+import { GameLauncher } from "../host/os/platform/services";
+import { startHost } from "../host/lan/host";
+import { ALARM_AFTER_MS, type Driver, driverVerdict, idleness, installOf, prefixOf, wrongUser } from "../host/lan/pool";
+import { setupClient } from "../host/lan/setup";
+import { menuPage } from "../host/play/menus";
+import { LanFailure } from "../host/lan/join";
+import { type MapFacts, mapCopies, readMapFacts } from "../host/lan/map";
+import { PACKET, Writer, encodePacket } from "../host/lan/w3gs";
 
 describe("pool operability", () => {
   test("[reference POSIX sh] a run as another user than a live pool's owners is refused with a command that sh reads back as that owner's sudo and this exact command line", () => {

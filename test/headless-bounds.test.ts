@@ -3,10 +3,10 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Cause, Console, Effect, Exit, Layer } from "effect";
-import { platformLayer } from "../scripts/platform/layer";
-import { makeHeadless } from "../scripts/wisp/commands/headless";
-import type { HeadlessRenderProject } from "../scripts/wisp/render/headlessRender";
-import { timingsLayer } from "../scripts/wisp/cli/timings";
+import { platformLayer } from "../host/os/platform/layer";
+import { makeHeadless } from "../host/commands/headless";
+import type { HeadlessRenderProject } from "../host/render/headlessRender";
+import { timingsLayer } from "../host/cli/timings";
 
 const cube = `Version { FormatVersion 800, }
 Model "Cube" { NumGeosets 1, NumBones 1, BlendTime 150, }

@@ -5,10 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect } from "effect";
-import { checkFidelity, measureImages } from "../scripts/wisp/fidelity/check";
-import { deltaE00 } from "../scripts/wisp/fidelity/colour";
-import { colourMetric } from "../scripts/wisp/fidelity/metric";
-import type { CaptureManifest } from "../scripts/wisp/fidelity/manifest";
+import { checkFidelity, measureImages } from "../host/fidelity/check";
+import { deltaE00 } from "../host/fidelity/colour";
+import { colourMetric } from "../host/fidelity/metric";
+import type { CaptureManifest } from "../host/fidelity/manifest";
 
 const region = { id:"body",x:0,y:0,width:9,height:9,critical:true };
 const image = (value: number) => ({width:9,height:9,rgb:new Uint8Array(9*9*3).fill(value)});

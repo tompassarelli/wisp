@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ladderScan } from "../scripts/warcraft/war3Log";
+import { ladderScan } from "../host/os/warcraft/war3Log";
 
 const fixture = (name: string) => readFileSync(join(import.meta.dir, "fixtures/war3log", name), "utf8");
 

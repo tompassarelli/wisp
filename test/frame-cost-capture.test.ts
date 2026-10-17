@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { captureDistribution, parseFrameCostCapture } from "../scripts/wisp/perf/frameCostCapture";
-import { writtenPreloadFile } from "../scripts/wisp/headless/headlessInput";
+import { captureDistribution, parseFrameCostCapture } from "../host/perf/frameCostCapture";
+import { writtenPreloadFile } from "../host/headless/headlessInput";
 import { frameCostCaptureHeading, frameCostCaptureSample } from "../src/runtime/frameCostCapture";
 
 const recording = (times: readonly number[], changed = false) => writtenPreloadFile([

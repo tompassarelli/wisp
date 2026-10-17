@@ -1,4 +1,4 @@
 import { Effect } from "effect";
-import { provideLua32Env } from "../scripts/wisp/compile/lua32";
+import { provideLua32Env } from "../host/compile/lua32";
 
 await Effect.runPromise(provideLua32Env);

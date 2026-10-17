@@ -1,10 +1,10 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Effect, Layer } from "effect";
-import { UnitObject, encodeObjectData } from "../../scripts/objectData";
-import { MapBuild } from "../../scripts/wisp/compile/mapBuild";
-import { SourceErrors } from "../../scripts/wisp/compile/sourceErrors";
-import { GameFiles } from "../../scripts/wisp/io/gameFiles";
+import { UnitObject, encodeObjectData } from "../../host/toolchain/objectData";
+import { MapBuild } from "../../host/compile/mapBuild";
+import { SourceErrors } from "../../host/compile/sourceErrors";
+import { GameFiles } from "../../host/io/gameFiles";
 import { RULER, RULER_UNIT } from "./layout";
 import { fixtureModels } from "./models";
 

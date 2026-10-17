@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { join } from "node:path";
 import { Effect } from "effect";
 import { generateMDX, parseMDL, parseMDX } from "../vendor/war3-model.mjs";
-import { ensurePackager } from "../scripts/wisp/compile/mapBuild";
+import { ensurePackager } from "../host/compile/mapBuild";
 
 const build = join(import.meta.dir, "../build");
 mkdirSync(build, { recursive: true });

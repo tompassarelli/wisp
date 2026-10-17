@@ -1,8 +1,8 @@
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, FileSystem } from "effect";
-import { decodeTerrain } from "../scripts/wisp/terrain/terrain";
-import { terrainLine, terrainRectFill } from "../scripts/wisp/terrain/terrainAuthor";
+import { decodeTerrain } from "../host/terrain/terrain";
+import { terrainLine, terrainRectFill } from "../host/terrain/terrainAuthor";
 
 /** Original synthetic grid; BASE and PATH have no installed art. */
 export function syntheticTerrain(version = 11): Uint8Array {

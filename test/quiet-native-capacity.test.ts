@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { quietNativeSessionArgs, withQuietNativeCapacity } from "../scripts/wisp/client/quietNativeCapacity";
+import { quietNativeSessionArgs, withQuietNativeCapacity } from "../host/client/quietNativeCapacity";
 
 test("native evidence leases request quiet capacity while keeping a live native session [k2 property]", () => {
   const args = quietNativeSessionArgs("/capacity.mjs", "wisp-accept-pair-0");

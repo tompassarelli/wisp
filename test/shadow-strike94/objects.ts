@@ -1,4 +1,4 @@
-import { abilityData, encodeObjectData, type Modification, type ObjectDefinition, UnitObject } from "../../scripts/objectData";
+import { abilityData, encodeObjectData, type Modification, type ObjectDefinition, UnitObject } from "../../host/toolchain/objectData";
 import { SHADOW_CONFIGS, SUBJECT_ID } from "./configs";
 
 const field = (id: string, value: number, level = 1, dataColumn = 0): Modification => ({

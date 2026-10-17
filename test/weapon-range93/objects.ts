@@ -1,4 +1,4 @@
-import { encodeObjectData, type Modification, type ObjectDefinition } from "../../scripts/objectData";
+import { encodeObjectData, type Modification, type ObjectDefinition } from "../../host/toolchain/objectData";
 import { ATTACKER_TYPES, TARGET_TYPE, OLD_RANGE } from "./cases";
 
 const int = (field: string, value: number): Modification => ({ field, value: { kind: "int", value } });

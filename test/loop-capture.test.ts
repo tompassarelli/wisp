@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { transpileProject } from "typescript-to-lua";
-import { mapCompiler, report } from "../scripts/compiler";
-import { farmTest } from "../scripts/wisp/farm/farmTest";
+import { mapCompiler, report } from "../host/toolchain/compiler";
+import { farmTest } from "../host/farm/farmTest";
 
 const source = `
 export function run(): string {

@@ -1,7 +1,7 @@
 import { expect } from "bun:test";
 import { join } from "node:path";
-import { mapCompiler, report } from "../scripts/compiler";
-import { farmTest } from "../scripts/wisp/farm/farmTest";
+import { mapCompiler, report } from "../host/toolchain/compiler";
+import { farmTest } from "../host/farm/farmTest";
 import { parseNativeDeclarations } from "../src/headless/declarations";
 import { EXPECTED as ANIMATION, EXPECTED_FILE as ANIMATION_FILE } from "./animation58/expected";
 import { DEATH_TIMELINE, EXPECTED as EFFECTS } from "./effects59/expected";

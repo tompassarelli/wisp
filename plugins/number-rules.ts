@@ -20,7 +20,7 @@
 //
 // The compiler plugin (wisp:plugins/warcraft-numbers.ts), the editor plugin
 // (wisp:plugins/number-rules-service.ts) and the check command
-// (wisp:scripts/numberRules.ts) all run scanNumberRules. Each supplies its
+// (wisp:host/toolchain/numberRules.ts) all run scanNumberRules. Each supplies its
 // TypeScript's syntax module and says where an identifier is declared, so
 // TypeScript 6's language service and TypeScript 7's API share these rules.
 // The length and truthiness rules also need a node's type, which each asks its checker for.

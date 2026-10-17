@@ -3,8 +3,8 @@ import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pollFor } from "../scripts/wisp/cli/hostProcess";
-import { acquireStartLock } from "../scripts/wisp/client/startLock";
+import { pollFor } from "../host/cli/hostProcess";
+import { acquireStartLock } from "../host/client/startLock";
 
 const lockFile = () => join(mkdtempSync(join(tmpdir(), "wisp-start-lock-")), "client-start.lock");
 

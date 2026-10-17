@@ -41,7 +41,7 @@ export const TUNABLES: readonly Tunable[] = [
 - `group` is the panel's heading.
 
 The project composes the command with
-[makeTune](../scripts/wisp/commands/tune.ts) (wisp:scripts/wisp/commands/tune.ts),
+[makeTune](../host/commands/tune.ts) (wisp:host/commands/tune.ts),
 as it does `hot`, plus the directory the files are relative to:
 
 ```ts
@@ -54,10 +54,10 @@ default.
 
 ## How a change reaches the match
 
-The [Tune service](../scripts/wisp/tune/tune.ts) (wisp:scripts/wisp/tune/tune.ts)
+The [Tune service](../host/tune/tune.ts) (wisp:host/tune/tune.ts)
 keeps the value each tunable runs. A change replaces the literals that differ
 from the file's in a copy of the file's text, and the
-[map compiler](../scripts/compiler.ts) compiles that text in place of the
+[map compiler](../host/toolchain/compiler.ts) compiles that text in place of the
 file. Such a compile writes nothing, so the bundle on disk is always the
 source's and a later map build never packages a value nobody kept. The
 compile changes only the declaration's module, and

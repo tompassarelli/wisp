@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { mapCompiler, report } from "../scripts/compiler";
+import { mapCompiler, report } from "../host/toolchain/compiler";
 
 const root = join(import.meta.dir, "..");
 const build = join(root, "build/requested-bytes");

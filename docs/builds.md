@@ -1,7 +1,7 @@
 # Build profiles
 
 `builds/<version>.<build>.json` records capabilities checked on that game
-build. Host tools read it through `scripts/wisp/client/builds.ts`. A capability is
+build. Host tools read it through `host/client/builds.ts`. A capability is
 `supported`, `unsupported`, or `unchecked`; unchecked stops a dependent command
 with the capability name and build. The registry supports Classic and
 Definitive Edition.

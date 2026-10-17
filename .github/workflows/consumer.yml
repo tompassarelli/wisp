@@ -110,8 +110,8 @@ jobs:
       - name: Build Warcraft's numeric Lua runtimes
         if: inputs.lua
         run: |
-          lua32=scripts/wisp/compile/lua32.ts
-          [ -f node_modules/wisp/scripts/wisp/compile/lua32.ts ] && lua32=node_modules/wisp/scripts/wisp/compile/lua32.ts
+          lua32=host/compile/lua32.ts
+          [ -f node_modules/wisp/host/compile/lua32.ts ] && lua32=node_modules/wisp/host/compile/lua32.ts
           stock=$(bun "$lua32" stock)
           toward_zero=$(bun "$lua32" toward-zero)
           echo "LUA=$stock" >> "$GITHUB_ENV"
@@ -183,6 +183,6 @@ jobs:
           MAP_NAME: ${{ inputs.map-name }}
           MAP_STORE: ${{ inputs.map-store }}
         run: |
-          script=scripts/wisp/compile/ciMapBuild.ts
-          [ -f node_modules/wisp/scripts/wisp/compile/ciMapBuild.ts ] && script=node_modules/wisp/scripts/wisp/compile/ciMapBuild.ts
+          script=host/compile/ciMapBuild.ts
+          [ -f node_modules/wisp/host/compile/ciMapBuild.ts ] && script=node_modules/wisp/host/compile/ciMapBuild.ts
           bun "$script" --store "${MAP_STORE:-$HOME/.local/state/wisp/ci-maps}" --name "$MAP_NAME" --revision "$GITHUB_SHA" -- bash -c "$MAP_BUILD"

@@ -9,14 +9,14 @@
   ],
   "hostTools": {
     "include": [
-      "scripts/**/*.ts"
+      "host/**/*.ts"
     ],
     "exclude": [
       "**/*.test.ts",
       "**/*.tests.ts",
-      "scripts/wisp/browser/**",
-      "scripts/wisp/repro/reproViewerPage.ts",
-      "scripts/wisp/tune/tunePage.ts"
+      "host/browser/**",
+      "host/repro/reproViewerPage.ts",
+      "host/tune/tunePage.ts"
     ]
   }
 }

@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { transpileProject } from "typescript-to-lua";
-import { report } from "../scripts/compiler";
-import { producePackage } from "../scripts/package";
-import { farmTest } from "../scripts/wisp/farm/farmTest";
+import { report } from "../host/toolchain/compiler";
+import { producePackage } from "../host/toolchain/package";
+import { farmTest } from "../host/farm/farmTest";
 
 farmTest("[invariant] installed package resolves bare imports and preserves Lua32 numeric/reload behavior", async () => {
   const root = join(import.meta.dir, "..");

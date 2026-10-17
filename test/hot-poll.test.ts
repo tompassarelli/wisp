@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { installHeadless } from "../scripts/wisp/headless/headless";
+import { installHeadless } from "../host/headless/headless";
 import type { Lockstep } from "../src/headless/lockstep";
 import { installDispatch } from "../src/map/dispatch";
 import { installHotReload, startHotReload } from "../src/map/hotReload";

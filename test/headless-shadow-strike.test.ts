@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { installHeadless } from "../scripts/wisp/headless/headless";
+import { installHeadless } from "../host/headless/headless";
 import { SHADOW_CONFIGS, SHADOW_JOURNEY } from "./shadow-strike94/configs";
 import { SHADOW_HEADLESS } from "./shadow-strike94/headless-config";
 import { NATIVE_ROWS } from "./shadow-strike94/native-rows";

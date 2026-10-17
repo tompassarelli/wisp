@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import { lua32, luaRounding } from "../scripts/wisp/compile/lua32";
+import { lua32, luaRounding } from "../host/compile/lua32";
 
 const lua = process.env.TOWARD_ZERO_LUA ?? await Effect.runPromise(lua32("toward-zero"));
 

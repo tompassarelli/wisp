@@ -17,12 +17,12 @@ bun wisp ci seeds --n N [--seed S]   # N soak seeds, or N seeds from S
 Add `--json` to any tier for one JSON line per stage (`type: "result"`,
 `stage`, `verdict`, `seconds` and the stage's counts) and a last
 `type: "summary"` line, with `schema: 1` and `command: "ci"`
-(wisp:scripts/wisp/cli/jsonResults.ts); the stages' own output then goes to
+(wisp:host/cli/jsonResults.ts); the stages' own output then goes to
 stderr. A stage that ran tests and had any fail adds `failed`, the failing
 tests as `file > test name` (describe blocks between), read from bun test's
 junit report: the stage passes `--reporter=junit` and a scratch
 `--reporter-outfile` to its runner, and the timing phase writes one report
-beside it per file (`junitFailures` in wisp:scripts/wisp/testing/testRunner.ts). A
+beside it per file (`junitFailures` in wisp:host/testing/testRunner.ts). A
 seed stage that fails (determinism, `seeds`, `nightly`) adds `failed` as the
 failing matches' names (`match 3: a vs b on stage, policy/policy, seed N`).
 Nothing failed, or no tests run, leaves `failed` out:
@@ -47,13 +47,13 @@ changed files)`) and its JSON line has `verdict: "skipped"`, `ok: true` and a
 
 The run exits 0 when every stage passed or was skipped, 1 when one failed, and 75 when
 none failed but one was inconclusive: the timing tests' busy-machine verdict
-(wisp:scripts/wisp/testing/testRunner.ts, [Testing](testing.md#timing-tests)). A
+(wisp:host/testing/testRunner.ts, [Testing](testing.md#timing-tests)). A
 usage problem exits 2. Every stage runs even after one fails, so one run
 names every failing stage.
 
 ## Declaring it
 
-A game declares `ci` with `makeCi` (wisp:scripts/wisp/commands/ci.ts) next to
+A game declares `ci` with `makeCi` (wisp:host/commands/ci.ts) next to
 `makeDev`, from the same declarations, and adds it to its command list:
 
 ```ts
@@ -77,7 +77,7 @@ and `nightly` and `seeds` refuse. The failing-seed replay command is the
 game's own `repro` command, so a game with a soak declares `repro` with the
 same soak ([repros](repro.md#shrinking-a-soak-failure)).
 
-Wisp declares its own in wisp:scripts/wisp/commands/repo.ts: its `bun run check`, its
+Wisp declares its own in wisp:host/commands/repo.ts: its `bun run check`, its
 test files, and the soak test's map with fault-free policies
 (wisp:test/soak/ci-project.ts), with `repro` beside it. That soak imports
 everything it plays, so it declares no `reads`. `bun run ci` is
@@ -88,9 +88,9 @@ everything it plays, so it declares no `reads`. `bun run ci` is
 1. **type check**: `typeCheck.command` in `root`.
 2. **tests**: the tests the changes since `--base` can affect, chosen the way
    `wisp dev` chooses them on a save (`TestPlan`,
-   wisp:scripts/wisp/dev/testSelection.ts). The changes are `git diff --name-only
+   wisp:host/dev/testSelection.ts). The changes are `git diff --name-only
    BASE` plus untracked files, keeping the paths a save would reach
-   (`followsSave` in wisp:scripts/wisp/dev/savedFiles.ts: project files at the
+   (`followsSave` in wisp:host/dev/savedFiles.ts: project files at the
    root and files under `sources`). A changed project file, a preloaded
    module or a non-module file no test declares reading selects every test,
    as on a save. Files the diff creates or deletes count as changed: the plan
@@ -120,7 +120,7 @@ everything it plays, so it declares no `reads`. `bun run ci` is
    `"determinism":{"runs":false,"reason":"..."}` in the plan line.
 3. **determinism LUA** and **determinism TOWARD_ZERO_LUA**, when a change
    since `--base` can reach the soak. The soak's inputs are the import
-   closure (wisp:scripts/wisp/dev/importGraph.ts, as `TestPlan` follows it) of
+   closure (wisp:host/dev/importGraph.ts, as `TestPlan` follows it) of
    the soak's project, the `game` it names and the soak worker, plus the
    files `soak.reads` matches. The changes are every path `git diff
    --name-only BASE` and the untracked files name, wherever they are. The
@@ -138,9 +138,9 @@ everything it plays, so it declares no `reads`. `bun run ci` is
 
    It plays the soak's
    first 8 matches from seed 1, each capped at 600 frames, in a soak worker
-   process (wisp:scripts/wisp/soak/soakWorker.ts), once with the stock Lua32 as
+   process (wisp:host/soak/soakWorker.ts), once with the stock Lua32 as
    `LUA` and once with the toward-zero Lua32 as `LUA`
-   (wisp:scripts/wisp/compile/lua32.ts); `TOWARD_ZERO_LUA` names the toward-zero one in
+   (wisp:host/compile/lua32.ts); `TOWARD_ZERO_LUA` names the toward-zero one in
    both. Each seed prints as the stage starts. A match passes with no finding
    but `unfinished` (the cap), and the two runs must end every match with the
    same native call checksums. The soak's matches run in the headless
@@ -185,7 +185,7 @@ the failing stage, the findings and the replay command, which also prints:
 ```text
 seeds: seed 385148257 (match 5) failed:
   desync: native calls differ after frame 120, call 10 differs between slot 0 and slot 1:
-  replay: bun scripts/wisp/commands/repo.ts repro build/soak/2026-10-11T14-23-13/match-5.json
+  replay: bun host/commands/repo.ts repro build/soak/2026-10-11T14-23-13/match-5.json
   issue: build/soak/2026-10-11T14-23-13/match-5.issue.md
 ```
 
@@ -224,7 +224,7 @@ Replaying from a fresh clone, as the issue prints it:
 ```sh
 git clone https://github.com/OWNER/REPO && cd REPO
 gh run download RUN_ID -R OWNER/REPO -n seed-farm-RUN_ID   # build/soak/…/match-N.json
-git checkout COMMIT && bun install --frozen-lockfile && bun scripts/wisp/commands/repo.ts repro build/soak/…/match-N.json
+git checkout COMMIT && bun install --frozen-lockfile && bun host/commands/repo.ts repro build/soak/…/match-N.json
 ```
 
 `build/` is ignored, so the checkout keeps the downloaded repro. The replay
@@ -246,7 +246,7 @@ jobs:
   seed-farm:
     uses: tompassarelli/wisp/.github/workflows/seed-farm.yml@WISP_COMMIT
     with:
-      command: bun scripts/game.ts   # default: bun scripts/wisp/commands/repo.ts
+      command: bun scripts/game.ts   # default: bun host/commands/repo.ts
       minutes: 10                    # default 10, at most 30
 ```
 

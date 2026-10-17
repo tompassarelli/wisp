@@ -5,7 +5,7 @@
 // `project` names the map's tsconfig when the editor's project also holds host
 // code; the rules then apply only to files that config includes.
 // TypeScript 7's language server loads no plugins; the check command
-// (wisp:scripts/numberRules.ts) reports the same rules there.
+// (wisp:host/toolchain/numberRules.ts) reports the same rules there.
 import { resolve } from "node:path";
 import type * as ts from "typescript";
 import { programNumberRules } from "./number-rules";

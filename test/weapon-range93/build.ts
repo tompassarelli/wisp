@@ -1,8 +1,8 @@
 import { join, resolve } from "node:path";
 import { Effect, Layer } from "effect";
-import { MapBuild } from "../../scripts/wisp/compile/mapBuild";
-import { SourceErrors } from "../../scripts/wisp/compile/sourceErrors";
-import { GameFiles } from "../../scripts/wisp/io/gameFiles";
+import { MapBuild } from "../../host/compile/mapBuild";
+import { SourceErrors } from "../../host/compile/sourceErrors";
+import { GameFiles } from "../../host/io/gameFiles";
 
 import { weaponRangeObjects } from "./objects";
 

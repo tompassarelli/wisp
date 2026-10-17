@@ -93,10 +93,10 @@ single-client checks and engine tools, not checksums between clients. Start
 the pairs with `wisp lan pool` first; `lan solo` returns once every client's
 game UI is up and prints the seconds each took.
 
-The pair agent (wisp:scripts/wisp/lan/pairAgent.ts, `POST /solo`) copies MAP
+The pair agent (wisp:host/lan/pairAgent.ts, `POST /solo`) copies MAP
 into each client's `Maps/Wisp/`, keeping at most its newest copy
 ([how a match starts](#how-a-match-starts)), and drives each client's menus
-(`playLocalGame`, wisp:scripts/wisp/play/menus.ts) as Single Player's Custom Game
+(`playLocalGame`, wisp:host/play/menus.ts) as Single Player's Custom Game
 does, with no click, keyboard or memory write:
 
 1. `LoginDoorClose`. A client that never signed in sits at its login doors
@@ -194,7 +194,7 @@ clone-c: `launch.sh d RUN_DIR`, no yielding to Tom. Sign it in once with
 `wc3-login-field RUN d username|password` as in step 2 of a full session.
 Clone-a and clone-d make the second two-client lane. Its clients file names
 them `clone-a` and `clone-d`, so doctor starts each through `launch.sh`
-(smashcraft:ts/scripts/wisp/doctor/doctor.ts) and types no account:
+(smashcraft:ts/host/doctor/doctor.ts) and types no account:
 
 ```json
 { "clients": [
@@ -369,7 +369,7 @@ so. Ten minutes later the agent appends one line to
 ```
 
 Each driver raises the alarm once. The decision is `driverVerdict`
-(wisp:scripts/wisp/lan/pool.ts).
+(wisp:host/lan/pool.ts).
 
 Every pair's `wisp lan status` line also says whether it is idle and for how
 long: `state` is `"dead"`, with the names in `down`, while a client has no
@@ -486,9 +486,9 @@ Each client has its own private desktop (the private-desktop-development
 launcher), so each display has exactly one game window, as on clients A and
 B. Tools that find "the" Warcraft window on a display work unchanged, and so
 do controller helpers that type into it. A pair's session
-(wisp:scripts/wisp/lan/pairSession.ts) starts client b's desktop, then client
+(wisp:host/lan/pairSession.ts) starts client b's desktop, then client
 a's. Client a's desktop runs the pair's `bwrap --dev-bind / / --unshare-net`
-namespace, and the pair agent (wisp:scripts/wisp/lan/pairAgent.ts) runs inside
+namespace, and the pair agent (wisp:host/lan/pairAgent.ts) runs inside
 it. The agent:
 
 - writes each client's `War3Preferences.txt` for the profile;
@@ -542,7 +542,7 @@ after the other, then ran 51 turns behind, so the host kept pausing the game.
 With the windows apart, both kept within a few turns at 1:1 game time. Two
 controller helpers typing on one display would also take each other's focus.
 
-**Profiles** (wisp:scripts/wisp/lan/pool.ts `PROFILES`). Each one writes the
+**Profiles** (wisp:host/lan/pool.ts `PROFILES`). Each one writes the
 client's War3Preferences `[Video]`, `[Misc]` and `[Sound]` at launch:
 
 - `parity` (the default) is for checksum and input runs, which need no pixels
@@ -688,8 +688,8 @@ blaming settings: such a client is the one to stop or restart.
    `fresh` or `solo` first removes the copy it made for the previous map,
    and the agent's scope removes the last one when the pair stops (`lan end`,
    the pair session ending, or the agent failing), so a failed run leaves no
-   copy behind ([mapCopies](../scripts/wisp/lan/map.ts),
-   wisp:scripts/wisp/lan/map.ts; `lan dummy` removes its copy when its run
+   copy behind ([mapCopies](../host/lan/map.ts),
+   wisp:host/lan/map.ts; `lan dummy` removes its copy when its run
    ends). It removes only paths it created: a file of the same name that was
    there first is replaced and stays. A killed agent (SIGKILL) runs no
    finalizer, so its last copy stays and is then a file that was there first;
@@ -726,7 +726,7 @@ the loopback one. Before each join, the agent briefly switches the client to
 the LAN provider and puts it back within a fraction of a second. That code reads
 and patches the running game, so it isn't in this repository
 (wisp:docs/clean-room.md): Wisp loads it from Wisp's private LAN plugin at
-`~/.local/share/wisp-private/lan/` (wisp:scripts/wisp/lan/plugin.ts) when
+`~/.local/share/wisp-private/lan/` (wisp:host/lan/plugin.ts) when
 the owner has it. Without the plugin, `wisp lan pool` stops and says the plugin
 is missing.
 
@@ -757,7 +757,7 @@ Wisp's implementation changes its existing timer; no FLO code is copied.
 A pair's clients and host talk only over the loopback of the pair's own
 network namespace, so `wisp lan netem --pair K --rtt 60 --loss 1` puts a
 Linux `netem` queueing discipline on that loopback
-(wisp:scripts/wisp/commands/lan.ts, `netem`). Every loopback send is delayed
+(wisp:host/commands/lan.ts, `netem`). Every loopback send is delayed
 once, so each send waits half the round trip (30 ms here) and each send is
 dropped with the given percentage, in both directions. Running it again
 replaces the setting; `wisp lan netem off --pair K` removes it. The pair keeps

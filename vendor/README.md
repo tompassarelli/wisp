@@ -97,7 +97,7 @@ Version-1800 SKIN records store four bone IDs and four weights as little-endian
 UINT16 elements; the count names elements, not bytes. Wisp decodes each element
 into the renderer's byte palette before uploading it. Weights still total 255.
 The adjacent patch keeps this parser change in its upstream TypeScript form.
-`scripts/wisp/models/models.ts` exports `parseModelMDX` for host silhouette and motion
+`host/models/models.ts` exports `parseModelMDX` for host silhouette and motion
 readers, skipping camera/light records those readers do not use.
 
 # Lua 5.3.6 source
@@ -105,7 +105,7 @@ readers, skipping camera/light records those readers do not use.
 `lua-5.3.6.tar.gz` is lua.org's release tarball,
 <https://www.lua.org/ftp/lua-5.3.6.tar.gz>, byte for byte (SHA-256
 `fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60`).
-wisp:scripts/wisp/compile/lua32.ts checks that checksum and builds the 32-bit Luas
+wisp:host/compile/lua32.ts checks that checksum and builds the 32-bit Luas
 tests run in from it, so a build needs no network: cloud sessions can't reach
 lua.org.
 

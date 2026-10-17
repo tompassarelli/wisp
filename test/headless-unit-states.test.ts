@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { installHeadless } from "../scripts/wisp/headless/headless";
+import { installHeadless } from "../host/headless/headless";
 import { runJourney } from "../src/headless/journey";
 import { install, start } from "./unit-states/main";
 import { UNIT_FIXTURE } from "./unit-states/cases";

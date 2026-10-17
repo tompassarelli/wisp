@@ -1,7 +1,7 @@
 # Fidelity capture format
 
 Each reference or candidate directory contains `manifest.json`. The public
-validator in `scripts/wisp/fidelity/manifest.ts` exports `readManifest(directory)`
+validator in `host/fidelity/manifest.ts` exports `readManifest(directory)`
 and `decodeManifest(unknown)` as Effect programs. Provide `BunServices.layer` when
 reading files. `bun wisp fidelity check` validates both directories before any
 comparison. The file-format acceptance check runs with

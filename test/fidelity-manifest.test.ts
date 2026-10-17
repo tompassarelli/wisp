@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import { decodeManifest, type CaptureControl } from "../scripts/wisp/fidelity/manifest";
+import { decodeManifest, type CaptureControl } from "../host/fidelity/manifest";
 
 const controls = [
   { id: "stock", mode: "stock", fog: false, bloom: false, dof: 0, cine: false },

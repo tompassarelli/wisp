@@ -3,9 +3,9 @@ import { Effect } from "effect";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { modelFailureBridge } from "../scripts/wisp/dev/modelFailures";
-import { GameFiles } from "../scripts/wisp/io/gameFiles";
-import { hostPath, preloadLines } from "../scripts/wisp/io/preloadRecord";
+import { modelFailureBridge } from "../host/dev/modelFailures";
+import { GameFiles } from "../host/io/gameFiles";
+import { hostPath, preloadLines } from "../host/io/preloadRecord";
 import { modelFailureFile } from "../src/runtime/gameFiles";
 
 test("native model failure lines reach the requesting map, including stock paths and later failures [spec smashcraft#365]", async () => {
