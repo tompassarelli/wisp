@@ -1,9 +1,10 @@
-import { addFloat32TowardZero, divideFloat32, roundToFloat32, subtractFloat32TowardZero } from "../../sim/binary32";
+import { divideFloat32, roundToFloat32, subtractFloat32TowardZero } from "../../sim/binary32";
 import { f32 } from "../../sim/f32";
 import type { Handle, HandleFactory, NativeBehavior, SyncMessage } from "../clientTypes";
 import type { Frame } from "../frames";
 import { FRAMES_PER_SECOND } from "../frameRate";
 import { isFrame } from "./frames";
+import { after } from "./timerDeadline";
 import type { Unit, Units } from "./units";
 
 type Callback = (this: void) => void;
@@ -55,12 +56,6 @@ const MIN_PERIOD = f32(0.0001);
 const MIN_ONE_SHOT = 0.0009765625;
 
 const frameEnd = (frame: number): number => divideFloat32(frame, FRAMES_PER_SECOND);
-// Warcraft timer deadlines add toward zero; sub-resolution repeats advance one resolution to avoid stalling.
-
-export const after = (at: number, length: number): number => {
-  const due = addFloat32TowardZero(at, length);
-  return due > at ? due : addFloat32TowardZero(at, at * 1.1920928955078125e-7);
-};
 
 // Sync data is capped at 255 characters, preserving whole UTF-8 characters (wisp:docs/warsmash-notes.md).
 const SYNC_DATA_LIMIT = 255;

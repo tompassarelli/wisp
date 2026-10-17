@@ -1,7 +1,8 @@
 import { f32 } from "../sim/f32";
 import { mixCall } from "./callHash";
-import type { CameraPose, CineFilterPose, ClientFiles, ClientOptions, ClientScope, EffectPose, Handle, LocalNatives, MissingNative, NativeBehavior, NativeCall, SoundCue, SyncMessage, UnitPose } from "./clientTypes";
-import { FRAME_POINTS, type Frame, Frames } from "./frames";
+import type { CameraPose, CineFilterPose, ClientFiles, EffectDeaths, EffectPose, Handle, IntentionalNoops, LocalNatives, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, SyncMessage, UnitPose, UnitStateFixtures } from "./clientTypes";
+import type { NativeDeclarations } from "./declarations";
+import { FRAME_POINTS, type Frame, type FrameTemplate, Frames } from "./frames";
 import { FRAMES_PER_SECOND, steppedFrames } from "./frameRate";
 import { describeNumber } from "./jassFormat";
 import { Lightnings } from "./lightnings";
@@ -14,15 +15,50 @@ import { Sounds } from "./natives/sound";
 import { TriggersTimers } from "./natives/triggersTimers";
 import { type Unit, Units } from "./natives/units";
 import { TextTags } from "./textTags";
-import { Warcraft3Abilities } from "./warcraft3Abilities";
-import { Warcraft3Inventory } from "./warcraft3Inventory";
+import { type AbilityObjectFixtures, Warcraft3Abilities } from "./warcraft3Abilities";
+import { Warcraft3Inventory, type Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 import { WARCRAFT3_ENUM_VALUES } from "./warcraft3Natives";
-import { Scenery } from "./warcraft3Scenery";
+import { Scenery, type SceneryFixtures } from "./warcraft3Scenery";
 
-export type { CameraPose, CineFilterPose, ClientFiles, ClientOptions, ClientScope, EffectDeaths, EffectPose, Handle, IntentionalNoops, LocalNatives, MapEntry, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, SyncMessage, UnitPose, UnitStateFixture, UnitStateFixtures } from "./clientTypes";
+export type { CameraPose, CineFilterPose, ClientFiles, EffectDeaths, EffectPose, Handle, IntentionalNoops, LocalNatives, MapEntry, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, SyncMessage, UnitPose, UnitStateFixture, UnitStateFixtures } from "./clientTypes";
 export { describeCall, describeNumber, describeValue, sameCall } from "./jassFormat";
 export { assertSoundCue } from "./natives/sound";
 export { FRAMES_PER_SECOND };
+
+export interface ClientScope {
+  enter(this: void, client: HeadlessClient): void;
+  leave(this: void, client: HeadlessClient): void;
+}
+
+export interface ClientOptions {
+  readonly abilityObjects?: AbilityObjectFixtures;
+  readonly unitStates?: UnitStateFixtures;
+  readonly scenery?: SceneryFixtures;
+  readonly inventory?: Warcraft3InventoryFixtures;
+  readonly slot: number;
+
+  readonly filePrefix: string;
+
+  readonly humans: readonly number[];
+
+  readonly playerNames?: Readonly<Record<number, string>>;
+  readonly declarations: NativeDeclarations;
+  readonly localNatives: LocalNatives;
+  readonly intentionalNoops?: IntentionalNoops;
+  readonly network: SyncMessage[];
+  /** Pixels `BlzGetLocalClientWidth/Height`, `BlzPixelToFrame*` and `BlzFrameToPixel*` read. */
+  readonly screen: { readonly width: number; readonly height: number };
+  readonly scope?: ClientScope;
+
+  readonly natives?: (this: void, client: HeadlessClient) => NativeBehaviors;
+  readonly files?: ClientFiles;
+
+  readonly frames?: readonly FrameTemplate[];
+
+  readonly effectDeaths?: EffectDeaths;
+
+  readonly musicSlider?: number;
+}
 
 export const WISP_LOCAL_NATIVES: LocalNatives = {
   GetLocalPlayer: "identifies the client; every local branch starts here",

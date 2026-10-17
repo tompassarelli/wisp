@@ -1,10 +1,4 @@
 import type { AnimationState } from "./animation";
-import type { HeadlessClient } from "./client";
-import type { NativeDeclarations } from "./declarations";
-import type { FrameTemplate } from "./frames";
-import type { AbilityObjectFixtures } from "./warcraft3Abilities";
-import type { Warcraft3InventoryFixtures } from "./warcraft3Inventory";
-import type { SceneryFixtures } from "./warcraft3Scenery";
 
 export type Handle = { readonly kind: string; readonly id: number };
 
@@ -133,39 +127,4 @@ export interface ClientFiles {
   written(this: void, name: string, lines: readonly string[]): void;
 
   read(this: void, name: string): readonly string[] | undefined;
-}
-
-export interface ClientScope {
-  enter(this: void, client: HeadlessClient): void;
-  leave(this: void, client: HeadlessClient): void;
-}
-
-export interface ClientOptions {
-  readonly abilityObjects?: AbilityObjectFixtures;
-  readonly unitStates?: UnitStateFixtures;
-  readonly scenery?: SceneryFixtures;
-  readonly inventory?: Warcraft3InventoryFixtures;
-  readonly slot: number;
-
-  readonly filePrefix: string;
-
-  readonly humans: readonly number[];
-
-  readonly playerNames?: Readonly<Record<number, string>>;
-  readonly declarations: NativeDeclarations;
-  readonly localNatives: LocalNatives;
-  readonly intentionalNoops?: IntentionalNoops;
-  readonly network: SyncMessage[];
-  /** Pixels `BlzGetLocalClientWidth/Height`, `BlzPixelToFrame*` and `BlzFrameToPixel*` read. */
-  readonly screen: { readonly width: number; readonly height: number };
-  readonly scope?: ClientScope;
-
-  readonly natives?: (this: void, client: HeadlessClient) => NativeBehaviors;
-  readonly files?: ClientFiles;
-
-  readonly frames?: readonly FrameTemplate[];
-
-  readonly effectDeaths?: EffectDeaths;
-
-  readonly musicSlider?: number;
 }

@@ -1,6 +1,6 @@
 import { f32 } from "../sim/f32";
 import type { Handle, NativeBehavior } from "./clientTypes";
-import { after } from "./natives/triggersTimers";
+import { after } from "./natives/timerDeadline";
 
 export interface AbilityObjectFixture {
   readonly base: string;
