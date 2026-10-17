@@ -1,7 +1,7 @@
 import { parseArgs } from "node:util";
 import { Effect } from "effect";
-import { type Command, UsageFailure, describeCause } from "../command";
-import { farmTest } from "../farm";
+import { type Command, UsageFailure, describeCause } from "../cli/command";
+import { farmTest } from "../farm/farm";
 
 export const farm: Command = (args) => Effect.gen(function*() {
   const { values, positionals } = yield* Effect.try({

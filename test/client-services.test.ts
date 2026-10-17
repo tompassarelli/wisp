@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import { BackgroundServices } from "../scripts/platform/services";
-import { desktopOwner, startDesktop } from "../scripts/wisp/clientServices";
+import { desktopOwner, startDesktop } from "../scripts/wisp/client/clientServices";
 
 test("[scenario] two sessions starting a desktop for client a keep two desktop units", async () => {
   const root = mkdtempSync(join(tmpdir(), "wisp-desktop-units-"));

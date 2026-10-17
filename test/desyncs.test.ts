@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect, Exit } from "effect";
-import { decodeDesyncSummary, divergedValues } from "../scripts/wisp/desyncs";
+import { decodeDesyncSummary, divergedValues } from "../scripts/wisp/dev/desyncs";
 
 // The observed Desync.txt grammar, without the machine description around it.
 

@@ -6,7 +6,7 @@ import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Schema } from "effect";
 import { ChildProcess } from "effect/process";
-import { collect } from "./wisp/hostProcess";
+import { collect } from "./wisp/cli/hostProcess";
 
 class PackageFailure extends Schema.TaggedError<PackageFailure>()("PackageFailure", { cause: Schema.Unknown }) {
   override get message() { return String(this.cause); }

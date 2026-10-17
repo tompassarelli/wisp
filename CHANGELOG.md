@@ -17,3 +17,11 @@ declares (wisp:docs/architecture.md, "Where things live").
   `wisp/src/platform/<module>` subpaths still resolve to them; import
   `wisp/src/map/<module>` in new code. The package ships their Lua under
   `src/map/`.
+- `scripts/wisp/` groups its files into one directory per responsibility
+  (`cli`, `io`, `compile`, `render`, `models`, `terrain`, `scene`, `headless`,
+  `dev`, `testing`, `farm`, `client`, `play`, `accept`, `doctor`, `perf`,
+  `repro`, `soak`, `tune`; Wisp's own program is `commands/repo.ts`). Every
+  `wisp/scripts/wisp/<module>` subpath still resolves, to the module's new
+  file. Scripts run by path move with them:
+  `scripts/wisp/compile/lua32.ts`, `scripts/wisp/compile/ciMapBuild.ts` and
+  `scripts/wisp/testing/testRunner.ts`.

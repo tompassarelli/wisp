@@ -54,7 +54,7 @@ default.
 
 ## How a change reaches the match
 
-The [Tune service](../scripts/wisp/tune.ts) (wisp:scripts/wisp/tune.ts)
+The [Tune service](../scripts/wisp/tune/tune.ts) (wisp:scripts/wisp/tune/tune.ts)
 keeps the value each tunable runs. A change replaces the literals that differ
 from the file's in a copy of the file's text, and the
 [map compiler](../scripts/compiler.ts) compiles that text in place of the

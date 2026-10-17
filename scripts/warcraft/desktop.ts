@@ -1,10 +1,10 @@
 import { Effect, Schema } from "effect";
-import { pollFor } from "../wisp/hostProcess";
-import { describeCause } from "../wisp/command";
-import { type Frame, decodePpm } from "../wisp/frameProbe";
+import { pollFor } from "../wisp/cli/hostProcess";
+import { describeCause } from "../wisp/cli/command";
+import { type Frame, decodePpm } from "../wisp/scene/frameProbe";
 import { InputInjection, ScreenCapture } from "../platform/services";
-import { step } from "../wisp/timings";
-import { ClientWatch, describeView, typesIntoMatch } from "../wisp/watch";
+import { step } from "../wisp/cli/timings";
+import { ClientWatch, describeView, typesIntoMatch } from "../wisp/dev/watch";
 import { CLIENT_PROFILE_NAMES } from "../wisp/lan/pool";
 import { sendsChat, type InputAction } from "./inputBatch";
 export type { InputAction } from "./inputBatch";

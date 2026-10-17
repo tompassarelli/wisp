@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect, Exit } from "effect";
-import { resolveRenderAsset, type AssetLayer } from "../scripts/wisp/renderAssets";
+import { resolveRenderAsset, type AssetLayer } from "../scripts/wisp/render/renderAssets";
 
 const encoded = (text: string) => new TextEncoder().encode(text);
 const LAYERS: readonly AssetLayer[] = ["_de.w3mod", "_hd.w3mod", "base"];

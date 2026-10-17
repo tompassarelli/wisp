@@ -57,7 +57,7 @@ Follow [Principles](README.md#principles) (long form: wisp:docs/clean-room.md). 
 
 Test cost: one test may run at most 280M Lua32 instructions in its Lua
 children and step at most 80,000 headless frames, each about 4 s on a farm
-runner (wisp:scripts/wisp/testCost.ts). Compilation is bounded only by the
+runner (wisp:scripts/wisp/testing/testCost.ts). Compilation is bounded only by the
 60 s hang timeout: farm runners expose no instruction counter. Only Tom raises
 the ceilings. `bun run test` fails a test over one, naming the file and
 "shrink it or move it to the farm", and prints CPU without gating it. CI cost

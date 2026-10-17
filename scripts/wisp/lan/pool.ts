@@ -3,9 +3,9 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
 import { LanFailure } from "./join";
-import { UsageFailure, flagValues, wholeFlag } from "../command";
-import { writeAtomic } from "../files";
-import { cacheHome, dataHome, stateHome } from "../xdg";
+import { UsageFailure, flagValues, wholeFlag } from "../cli/command";
+import { writeAtomic } from "../io/files";
+import { cacheHome, dataHome, stateHome } from "../io/xdg";
 import { InputInjection } from "../../platform/services";
 import { documentsFolder } from "../../warcraft/battleNet";
 

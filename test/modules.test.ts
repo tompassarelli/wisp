@@ -1,7 +1,7 @@
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
-import { farmTest } from "../scripts/wisp/farmTest";
+import { farmTest } from "../scripts/wisp/farm/farmTest";
 import { mapCompiler, report } from "../scripts/compiler";
 import { moduleChunk, moduleHashText, moduleIndex, modulePayload, textChecksum } from "../src/runtime/modules";
 

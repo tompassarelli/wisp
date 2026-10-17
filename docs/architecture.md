@@ -14,12 +14,12 @@ A module may import only the modules in its "may use" column. `src/` never impor
 | runtime | `src/runtime/` | Pure map-side helpers: lookup, record text, config, payload, modules, test harness | num |
 | map | `src/map/` | Map-side services calling natives: file I/O, dispatch, hot reload, frame meter, native driver, scene | runtime, num, natives |
 | headless | `src/headless/` | Emulated Warcraft client: natives, lockstep, sync channel, journeys, Lua perf | map, runtime, num, natives |
-| cli | `scripts/wisp/{cli,command,timings,hostProcess}.ts` | Command type, CLI runner, timings, process spawning | none |
+| cli | `scripts/wisp/cli/` | Command type, CLI runner, timings, process spawning, JSON results, panel server | none |
 | os | `scripts/platform/`, `scripts/warcraft/` | Host OS, desktop, Battle.net launcher, Warcraft window and input | cli |
 | compiler | `scripts/*.ts` | TSTL compile, Lua bundle, map script, object data, natives producer, package | cli, runtime, num |
 | lan, net | `scripts/wisp/lan/`, `scripts/wisp/net/` | Offline LAN pair pool; UDP lockstep peer, proxy, join code | cli, os; cli, headless |
-| render | `scripts/wisp/browser/`, `scripts/wisp/fidelity/` | WebGL renderer, fidelity metrics | cli, os, headless, runtime, num |
-| host | rest of `scripts/wisp/` | Feature services: play, doctor, menus, accept, soak, farm, dev loop, test runner | everything above |
+| render | `scripts/wisp/{browser,fidelity,render,models,terrain}/` | WebGL renderer, models, terrain, fidelity metrics | cli, os, headless, runtime, num |
+| host | the other `scripts/wisp/` directories, one per responsibility: `accept`, `client`, `compile`, `dev`, `doctor`, `farm`, `headless`, `io`, `perf`, `play`, `repro`, `scene`, `soak`, `testing`, `tune` | Feature services: play, doctor, menus, accept, soak, farm, dev loop, test runner | everything above |
 | commands | `scripts/wisp/commands/` | `makeX` command factories a game instantiates, plus Wisp's CLI entries | host and below |
 | plugins | `plugins/` | TSTL, tsserver and lint plugins | none |
 
@@ -32,12 +32,12 @@ A module may import only the modules in its "may use" column. `src/` never impor
 | Float or integer math | `src/sim/f32.ts`, `src/sim/intMath.ts`, `src/sim/binary32.ts` | `src/num/` in W-num |
 | Map-side file I/O, hot reload, frame meter | `src/map/fileio.ts`, `src/map/hotReload.ts`, `src/map/frameMeter.ts` | stays |
 | Pure map helper | `src/runtime/` | stays |
-| A command a game instantiates | `scripts/wisp/commands/<verb>.ts` | `host/commands/` in box 25 |
-| CLI runner, process spawning | `scripts/wisp/cli.ts`, `scripts/wisp/hostProcess.ts` | `host/cli/` in W-cli |
+| A command a game instantiates | `scripts/wisp/commands/<verb>.ts` (Wisp's own program: `scripts/wisp/commands/repo.ts`) | `host/commands/` in box 25 |
+| CLI runner, process spawning | `scripts/wisp/cli/cli.ts`, `scripts/wisp/cli/hostProcess.ts` | `host/cli/` in box 25 |
 | Warcraft window, launcher, input | `scripts/warcraft/`, `scripts/platform/` | `host/os/` in box 25 |
 | Compile, bundle, package | `scripts/compiler.ts`, `scripts/luaBundle.ts`, `scripts/package.ts` | `host/build/` in box 25 |
-| Soak, dev loop | `scripts/wisp/soak.ts`, `scripts/wisp/watch.ts` | `host/soak/`, `host/dev/` in boxes 21, 22, 24 |
-| Test cost ceilings | `scripts/wisp/testCost.ts` | `host/testing/` in box 24 |
+| Soak, dev loop | `scripts/wisp/soak/soak.ts`, `scripts/wisp/dev/watch.ts` | `host/soak/`, `host/dev/` in box 25 |
+| Test cost ceilings | `scripts/wisp/testing/testCost.ts` | `host/testing/` in box 25 |
 | What consumers may import | `package.json` `exports`, one subpath per module; a change is listed in `CHANGELOG.md` | the target layout's subpaths as modules move |
 | A feature's documentation | `docs/<feature>.md`, linked from `docs/index.md` | one doc per export |
 | Tests | `test/`, colocated `src/**/*.tests.ts` | stays |

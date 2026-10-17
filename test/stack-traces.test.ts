@@ -1,7 +1,7 @@
 import { expect } from "bun:test";
 import { join } from "node:path";
 import { mapCompiler, report } from "../scripts/compiler";
-import { farmTest } from "../scripts/wisp/farmTest";
+import { farmTest } from "../scripts/wisp/farm/farmTest";
 
 farmTest("[spec docs/stack-traces.md] Warcraft errors retain TypeScript frames and Lua return/unwind semantics without debug", () => {
   const diagnostics = mapCompiler(join(import.meta.dir, "tsconfig.stack.json"))();

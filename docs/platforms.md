@@ -40,7 +40,7 @@ or niri.
 | `PageOpener` | opening a local page in the owner's browser ([`wisp repro --view`](repro.md)) | `xdg-open` |
 
 Layers are composed at the application boundary. `cliProgram`
-(wisp:scripts/wisp/cli.ts) provides `platformLayer()`
+(wisp:scripts/wisp/cli/cli.ts) provides `platformLayer()`
 (wisp:scripts/platform/layer.ts) to every command, so a `Command` may require
 any platform service. Standalone programs (`pairAgent`, `pairSession`,
 `dummySession`, the test runner) provide it in their `runMain`, and the
@@ -71,7 +71,7 @@ The core should run anywhere Bun runs. Only the native side is per platform.
 | wisp:scripts/wisp/ map build, headless, Lua32, hot reload, dev, test runner, soak, repro, tune, terrain, render and replay modules | core; the test runner and soak read `ResourceAccounting` |
 | wisp:scripts/wisp/net/ (Wisp's own transport) and the LAN protocol in wisp:scripts/wisp/lan/ (`host`, `w3gs`, `join`, `actions`, `actionLog`, `map`) | core |
 | wisp:scripts/warcraft/ (`battleNet`, `war3Log`, `preferences`, `inputBatch`, `desktop`) | core logic over services; `desktop.ts` drives clients through `ScreenCapture` and `InputInjection` |
-| wisp:scripts/wisp/watch.ts, `clients.ts`, `accept.ts`, `doctor.ts`, `play.ts` | core logic over `ProcessTable`, `InputInjection`, `PlayMachine` and `PlayDesktop` |
+| wisp:scripts/wisp/dev/watch.ts, `clients.ts`, `accept.ts`, `doctor.ts`, `play.ts` | core logic over `ProcessTable`, `InputInjection`, `PlayMachine` and `PlayDesktop` |
 | wisp:scripts/platform/services.ts, `layer.ts`, `play.ts` | the boundary |
 | wisp:scripts/platform/linux/ | Linux layers |
 
@@ -82,7 +82,7 @@ platform call with the named error:
 - the offline LAN pool: wisp:scripts/wisp/lan/ `pool`, `pairSession`,
   `pairAgent`, `setup`, `dummy`, `dummySession`, `offline`, `admission`,
   `plugin` and `wisp lan` (wisp:scripts/wisp/commands/lan.ts);
-- signed-in client services: wisp:scripts/wisp/clientServices.ts,
+- signed-in client services: wisp:scripts/wisp/client/clientServices.ts,
   `clientServicesCommand.ts`, `doctorHost.ts`, `clientDoctorCommand.ts`;
 - playing on the owner's desktop: wisp:scripts/platform/play.ts selects
   wisp:scripts/platform/linux/play.ts, or a layer that refuses on other
@@ -94,10 +94,10 @@ Before #108, by file (all now inside wisp:scripts/platform/linux/):
 
 | Assumption | Where it was | Where it is |
 | --- | --- | --- |
-| `/proc` process table, cmdline, environ, stat, cwd, exe | scripts/warcraft/processes.ts, scripts/wisp/lan/processes.ts, scripts/wisp/playHost.ts, scripts/wisp/clientServices.ts | linux/procfs.ts |
+| `/proc` process table, cmdline, environ, stat, cwd, exe | scripts/warcraft/processes.ts, scripts/wisp/lan/processes.ts, scripts/wisp/playHost.ts, scripts/wisp/client/clientServices.ts | linux/procfs.ts |
 | `/proc/<pid>/status`, `/proc/<pid>/net/dev` | scripts/wisp/lan/dummy.ts, scripts/wisp/lan/offline.ts | linux/procfs.ts |
-| `/proc/pressure/cpu` (and `/proc/self/stat`, which the test-cost preload stopped reading in 0d3dd85) | scripts/wisp/testRunner.ts, scripts/wisp/testCostPreload.ts | linux/procfs.ts |
-| cgroups (`/proc/<pid>/cgroup`, `/sys/fs/cgroup/.../cpu.max`, `cgroup.procs`) | scripts/wisp/clientServices.ts, scripts/wisp/dev/context.ts, scripts/wisp/commands/soak.ts, scripts/wisp/testRunner.ts | linux/procfs.ts |
+| `/proc/pressure/cpu` (and `/proc/self/stat`, which the test-cost preload stopped reading in 0d3dd85) | scripts/wisp/testing/testRunner.ts, scripts/wisp/testing/testCostPreload.ts | linux/procfs.ts |
+| cgroups (`/proc/<pid>/cgroup`, `/sys/fs/cgroup/.../cpu.max`, `cgroup.procs`) | scripts/wisp/client/clientServices.ts, scripts/wisp/dev/context.ts, scripts/wisp/commands/soak.ts, scripts/wisp/testing/testRunner.ts | linux/procfs.ts |
 | libc `clock_gettime` thread clock and the only `process.platform` branch | scripts/wisp/soak/clock.ts | linux/procfs.ts, layer.ts |
 | Wine (`wine`, `wineserver`, `WINEPREFIX`) | scripts/wisp/playHost.ts, scripts/warcraft/processes.ts | linux/play.ts, linux/procfs.ts |
 | Wine's runtime recognised by its `wineserver` name | scripts/warcraft/battleNet.ts (`prefixUse`) | linux/procfs.ts sets `ProcessInfo.runtime`; `prefixUse` reads the flag |
@@ -108,7 +108,7 @@ Before #108, by file (all now inside wisp:scripts/platform/linux/):
 | `xdotool` | scripts/warcraft/desktop.ts, scripts/wisp/playHost.ts, scripts/wisp/lan/pairAgent.ts, scripts/wisp/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool), linux/play.ts |
 | `wlrctl`, Wayland (`WAYLAND_DISPLAY`, private desktop run folders) | scripts/warcraft/desktop.ts, scripts/wisp/lan/pairAgent.ts, scripts/wisp/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool) |
 | niri | scripts/wisp/playHost.ts | linux/play.ts |
-| `systemd-run --user`, `systemctl --user` | scripts/wisp/clientServices.ts | linux/systemd.ts |
+| `systemd-run --user`, `systemctl --user` | scripts/wisp/client/clientServices.ts | linux/systemd.ts |
 | `/run/user/<uid>`, PipeWire sinks, `dbus-run-session` | scripts/wisp/lan/pairAgent.ts | linux/layer.ts (`AudioIsolation`, `GameLauncher`) |
 
 ## Windows CI

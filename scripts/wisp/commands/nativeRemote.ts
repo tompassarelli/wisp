@@ -4,7 +4,7 @@ import { basename, posix, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { Console, Effect, FileSystem, Schema } from "effect";
 import { ChildProcess } from "effect/process";
-import { type Command, UsageFailure, describeCause } from "../command";
+import { type Command, UsageFailure, describeCause } from "../cli/command";
 
 export class NativeRemoteFailure extends Schema.TaggedError<NativeRemoteFailure>()("NativeRemoteFailure", {
   problem: Schema.String,

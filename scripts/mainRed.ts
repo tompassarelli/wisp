@@ -1,6 +1,6 @@
 import { appendFileSync } from "node:fs";
 import { Console, Effect, Schema } from "effect";
-import { captureProcess } from "./wisp/hostProcess";
+import { captureProcess } from "./wisp/cli/hostProcess";
 
 class MainRedFailure extends Schema.TaggedError<MainRedFailure>()("MainRedFailure", { command: Schema.String, problem: Schema.String }) {
   override get message(): string {

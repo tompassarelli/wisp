@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import { lua32 } from "../scripts/wisp/lua32";
+import { lua32 } from "../scripts/wisp/compile/lua32";
 
 const LAYOUT = `collectgarbage("stop")
 local t = {}

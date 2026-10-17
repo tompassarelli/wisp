@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { parseMDL } from "../vendor/war3-model.mjs";
-import type { DrawnPose, RenderScene } from "../scripts/wisp/headlessRender";
-import { boundsModel, compareEdges, inFrame, sceneBounds, silhouetteBounds, SILHOUETTE_DELTA, type PixelBox, type Texels } from "../scripts/wisp/screenBounds";
-import { NATIVE_RISE, NATIVE_SPREAD } from "../scripts/wisp/screen";
+import type { DrawnPose, RenderScene } from "../scripts/wisp/render/headlessRender";
+import { boundsModel, compareEdges, inFrame, sceneBounds, silhouetteBounds, SILHOUETTE_DELTA, type PixelBox, type Texels } from "../scripts/wisp/render/screenBounds";
+import { NATIVE_RISE, NATIVE_SPREAD } from "../scripts/wisp/render/screen";
 
 type Vector3 = readonly [number, number, number];
 

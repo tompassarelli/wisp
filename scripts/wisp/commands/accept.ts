@@ -3,10 +3,10 @@ import { join } from "node:path";
 import { Clock, Console, Effect, type Layer, Option, Result, Schema } from "effect";
 import {
   AcceptDriver, AcceptFailure, type AcceptReport, type AcceptSuite, type PlannedSession, describePlan, mergeReports, planSessions, privateDirectory, resultLine, runAccept, selectChecks, shardSessions, suiteProblems, summaryLine,
-} from "../accept";
-import { type Command, type CommandFailure, UsageFailure, describeCause, flagValues } from "../command";
-import { emitJson } from "../jsonResults";
-import { withQuietNativeCapacity } from "../quietNativeCapacity";
+} from "../accept/accept";
+import { type Command, type CommandFailure, UsageFailure, describeCause, flagValues } from "../cli/command";
+import { emitJson } from "../cli/jsonResults";
+import { withQuietNativeCapacity } from "../client/quietNativeCapacity";
 
 interface AcceptOptions {
   readonly suite: AcceptSuite;

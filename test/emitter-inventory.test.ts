@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { freshAnimation } from "../src/headless/animation";
-import type { DrawnPose, PopcornEmitterPose, UnsupportedEmitterPose } from "../scripts/wisp/headlessRender";
-import { emitterInventory, undrawnEmitters } from "../scripts/wisp/emitterInventory";
-import { boundsModel, posedSampler } from "../scripts/wisp/screenBounds";
-import { transform } from "../scripts/wisp/screen";
+import type { DrawnPose, PopcornEmitterPose, UnsupportedEmitterPose } from "../scripts/wisp/render/headlessRender";
+import { emitterInventory, undrawnEmitters } from "../scripts/wisp/render/emitterInventory";
+import { boundsModel, posedSampler } from "../scripts/wisp/render/screenBounds";
+import { transform } from "../scripts/wisp/render/screen";
 import { generateMDX, ModelRenderer, parseMDL, parseMDX } from "../vendor/war3-model.mjs";
 
 test("[scenario wisp#121 provisional] a ribbon's Death visibility key leaves Birth and Stand visible and hides Death", () => {

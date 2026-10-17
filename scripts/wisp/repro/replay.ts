@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { Effect, Schema } from "effect";
 import { type Repro, type ReproInspector, type ReproInspection, type ReproReplay, type ReproResult, parseRepro } from "../../../src/runtime/repro";
-import { describeCause } from "../command";
-import { type HeadlessMap, installHeadless } from "../headless";
-import { preloadRecord } from "../preloadRecord";
+import { describeCause } from "../cli/command";
+import { type HeadlessMap, installHeadless } from "../headless/headless";
+import { preloadRecord } from "../io/preloadRecord";
 
 export class ReproFailure extends Schema.TaggedError<ReproFailure>()("ReproFailure", {
   file: Schema.String,

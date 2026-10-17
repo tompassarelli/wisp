@@ -4,7 +4,7 @@ import { expect, test } from "bun:test";
 import { SourceMapConsumer } from "source-map";
 import { transpileProject } from "typescript-to-lua";
 import { mapCompiler, report } from "../scripts/compiler";
-import { farmTest } from "../scripts/wisp/farmTest";
+import { farmTest } from "../scripts/wisp/farm/farmTest";
 
 farmTest("[invariant] cached module requires keep the same bundle and source map as full compilation", () => {
   const build = join(import.meta.dir, "../build");

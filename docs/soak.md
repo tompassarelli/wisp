@@ -16,7 +16,7 @@ scope; without `--workers` it uses the CPUs that scope allows, up to four.
 ## A game's soak
 
 A project declares its soak in a module whose default export `defineSoak()`
-makes (wisp:scripts/wisp/soak.ts), and adds the command with `makeSoak`
+makes (wisp:scripts/wisp/soak/soak.ts), and adds the command with `makeSoak`
 (wisp:scripts/wisp/commands/soak.ts). The repro and reply file formats and the
 loaders are in wisp:scripts/wisp/soak/file.ts, the fuzzed and recorded inputs
 in wisp:scripts/wisp/soak/inputs.ts, and the CPU clock a match's frame costs
@@ -108,7 +108,7 @@ replay runs on the same clock whatever the replaying machine measures.
 | `desync` | The clients' native calls differ (the headless desync guard), or their confirmed states differ at the same confirmed frame. |
 | `error` | A client writes an error report, with the TypeScript stack the host kept. |
 | `scene` | A client's scene report shows a [player view](player-view.md) problem: no stage, an effect without a model, one lingering past its lifetime, hidden effects still showing particles or parked where a camera sees them. |
-| `invisible` | Two scene reports in a row show nothing drawn with geometry for a body the game says is in play (`bodyProblems`, wisp:scripts/wisp/scene.ts): no effect of its models drawn, or only models whose facts have no triangles. |
+| `invisible` | Two scene reports in a row show nothing drawn with geometry for a body the game says is in play (`bodyProblems`, wisp:scripts/wisp/scene/scene.ts): no effect of its models drawn, or only models whose facts have no triangles. |
 | `cost` | A client frame's own work costs more than 1/60 s, as predicted natively (CPU time times `costScale` and native calls), and costs that much again at the same frame when the soak replays the match on the same clock: a collection or a compile that lands on a frame doesn't count. A worker's first 1200 frames, which compile the map's code, don't count either. |
 | `typing` | A recovery typing stall, a client frame that stops longer than 1/60 s taking typed text (by the model's edit-box stall for the characters typed before it), is over its budget, `typingMs`: 1/60 s unless the game declares the bound its input helper types within. |
 | `catch-up` | The wall clock runs more than 1 s ahead of the game and the gap grows for 3 s in a row, and the clients' frames explain it: over those 3 s, what the slowest client's frames cost past the frame's budget adds up to at least the gap's growth, so a host stall or a busy runner finds nothing; or, while no input source is quiet, input not yet played grows for 3 s while past 60 frames, or stays past 60 frames for 3 s. |

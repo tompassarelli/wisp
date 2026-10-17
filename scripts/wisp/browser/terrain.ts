@@ -1,8 +1,8 @@
 import { parseMDX } from "../../../vendor/war3-model.mjs";
-import { CELL, type Terrain } from "../terrain";
-import { terrainCells, terrainRows, type TerrainCell } from "../terrainMesh";
-import { terrainTileLayers, terrainTileUV, terrainBlightPath } from "../terrainTiles";
-import { cliffGround, cliffShape } from "../terrainCliffs";
+import { CELL, type Terrain } from "../terrain/terrain";
+import { terrainCells, terrainRows, type TerrainCell } from "../terrain/terrainMesh";
+import { terrainTileLayers, terrainTileUV, terrainBlightPath } from "../terrain/terrainTiles";
+import { cliffGround, cliffShape } from "../terrain/terrainCliffs";
 import { linkProgram } from "./gl";
 
 type TextureReader = (path: string) => Promise<HTMLCanvasElement>;

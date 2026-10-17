@@ -82,7 +82,7 @@ there is no file output or sorting during the sample. Report generation is
 outside the sample and should not share a timing-sensitive subsequent trial.
 
 The host's `parseFrameCostCapture(text)` and `captureDistribution(capture)`
-(wisp:scripts/wisp/frameCostCapture.ts) return full-run median, p95, p99 and worst
+(wisp:scripts/wisp/perf/frameCostCapture.ts) return full-run median, p95, p99 and worst
 callback cost in microseconds. Percentiles use nearest rank; an even sample's
 median is the mean of its two middle values. The parser rejects incomplete or
 reordered samples, unavailable clocks and captures that crossed a hot reload.
@@ -128,7 +128,7 @@ after frames=120 lua=510/530.2/3400 natives=340/350.1/520 catchup=1/1/1
 
 Lua values are microseconds; each value is median/mean/max per frame.
 `wisp hot --watch` and `wisp dev --data` read the reports
-([FrameCosts](../scripts/wisp/frameCosts.ts), wisp:scripts/wisp/frameCosts.ts)
+([FrameCosts](../scripts/wisp/perf/frameCosts.ts), wisp:scripts/wisp/perf/frameCosts.ts)
 and print one line per client about two seconds after the reload:
 
 ```text
@@ -310,7 +310,7 @@ inflated; calibrate on a quiet machine.
 
 ### Checking against Warcraft
 
-[nativeFit](../scripts/wisp/nativeFit.ts) (wisp:scripts/wisp/nativeFit.ts)
+[nativeFit](../scripts/wisp/perf/nativeFit.ts) (wisp:scripts/wisp/perf/nativeFit.ts)
 compares a prediction with the overlay of a native run of the same build.
 It replays the headless run's frames (`perf --samples`) through the
 overlay's windows (120 frames, read every 30) and reads each frame's

@@ -6,15 +6,15 @@ import { join, relative, resolve, sep } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Console, Effect, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from "../command";
-import { emitJson } from "../jsonResults";
-import { lua32 } from "../lua32";
-import { describeMatch, planSoak } from "../soak";
+import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from "../cli/command";
+import { emitJson } from "../cli/jsonResults";
+import { lua32 } from "../compile/lua32";
+import { describeMatch, planSoak } from "../soak/soak";
 import type { SoakMatch } from "../soak/types";
 import { loadSoakProject, readSoakReply } from "../soak/file";
-import { ImportGraph } from "../importGraph";
-import { INCONCLUSIVE_EXIT, junitFailures } from "../testRunner";
-import { type Changes, type Selection, TestPlan } from "../testSelection";
+import { ImportGraph } from "../dev/importGraph";
+import { INCONCLUSIVE_EXIT, junitFailures } from "../testing/testRunner";
+import { type Changes, type Selection, TestPlan } from "../dev/testSelection";
 import { followsSave, isProjectFile } from "../dev/savedFiles";
 import type { DevProject } from "../dev/project";
 import { DEFAULT_SOAK_MINUTES, MAX_SOAK_MATCHES, MAX_SOAK_MINUTES, type SoakCommandOptions, makeSoak } from "./soak";
@@ -44,11 +44,11 @@ export class CiFailure extends Schema.TaggedError<CiFailure>()("CiFailure", {
 export const DETERMINISM_MATCHES = 8;
 export const DETERMINISM_FRAMES = 600;
 
-const TEST_COST_PRELOAD = join(import.meta.dir, "../testCostPreload.ts");
-const SOAK_WORKER = join(import.meta.dir, "../soakWorker.ts");
+const TEST_COST_PRELOAD = join(import.meta.dir, "../testing/testCostPreload.ts");
+const SOAK_WORKER = join(import.meta.dir, "../soak/soakWorker.ts");
 /** Wisp's own scripts: their import() calls load the soak's project and game, or paths no soak plays. */
 const WISP_SCRIPTS = resolve(import.meta.dir, "../..");
-/** farmTest's name prefix (wisp:scripts/wisp/farmTest.ts, which imports bun:test and can't load here). */
+/** farmTest's name prefix (wisp:scripts/wisp/farm/farmTest.ts, which imports bun:test and can't load here). */
 const FARM_TEST_PREFIX = "farm: ";
 const FARM_TEST_TIMEOUT_MS = 120_000;
 const MAX_SEED = 2147483646;
@@ -142,7 +142,7 @@ export const makeCi = (project: CiProject): Command => (allArgs) => Effect.gen(f
   };
 
   // A test stage runs with bun test's junit reporter into a scratch folder, and names its failing tests from the
-  // reports there (the timing phase writes one beside it per file, wisp:scripts/wisp/testRunner.ts).
+  // reports there (the timing phase writes one beside it per file, wisp:scripts/wisp/testing/testRunner.ts).
   const withFailures = (command: (reporter: readonly string[]) => readonly string[], env: Readonly<Record<string, string>> | undefined) => Effect.acquireUseRelease(
     Effect.sync(() => mkdtempSync(join(tmpdir(), "wisp-ci-junit-"))),
     (directory) => Effect.gen(function*() {

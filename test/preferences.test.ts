@@ -11,7 +11,7 @@ test("[boundary] the restore helper waits for the game's process, then puts the 
   writeFileSync(preferencesBackupPath(documents), fixture("private-desktop.txt"));
   writeFileSync(preferencesPath(documents), fixture("main-display.txt"));
   const game = Bun.spawn(["sleep", "600"]);
-  const helper = Bun.spawn([process.execPath, join(import.meta.dir, "../scripts/wisp/restorePreferences.ts"), String(game.pid), documents], { stdout: "pipe" });
+  const helper = Bun.spawn([process.execPath, join(import.meta.dir, "../scripts/wisp/client/restorePreferences.ts"), String(game.pid), documents], { stdout: "pipe" });
   const output = helper.stdout.pipeThrough(new TextDecoderStream()).getReader();
 
   let seen = "";

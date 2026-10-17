@@ -1,15 +1,15 @@
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
-import { farmTest } from "../scripts/wisp/farmTest";
+import { farmTest } from "../scripts/wisp/farm/farmTest";
 import { Effect, Layer } from "effect";
 import { mapCompiler, report } from "../scripts/compiler";
 import { servePanel } from "../scripts/wisp/commands/tune";
-import { GameFiles } from "../scripts/wisp/gameFiles";
-import { HotReload } from "../scripts/wisp/hotReload";
-import { MapBuild } from "../scripts/wisp/mapBuild";
-import { SourceErrors } from "../scripts/wisp/sourceErrors";
-import { Tune, type Tunable, findLiteral, lineDiff, replaceSpans } from "../scripts/wisp/tune";
+import { GameFiles } from "../scripts/wisp/io/gameFiles";
+import { HotReload } from "../scripts/wisp/dev/hotReload";
+import { MapBuild } from "../scripts/wisp/compile/mapBuild";
+import { SourceErrors } from "../scripts/wisp/compile/sourceErrors";
+import { Tune, type Tunable, findLiteral, lineDiff, replaceSpans } from "../scripts/wisp/tune/tune";
 import { moduleChunk, moduleHashText, moduleIndex, modulePayload, textChecksum } from "../src/runtime/modules";
 import type { BundledModules } from "../scripts/luaBundle";
 

@@ -8,7 +8,7 @@ import { GameLauncher } from "../scripts/platform/services";
 import { startHost } from "../scripts/wisp/lan/host";
 import { ALARM_AFTER_MS, type Driver, driverVerdict, idleness, installOf, prefixOf, wrongUser } from "../scripts/wisp/lan/pool";
 import { setupClient } from "../scripts/wisp/lan/setup";
-import { menuPage } from "../scripts/wisp/menus";
+import { menuPage } from "../scripts/wisp/play/menus";
 import { LanFailure } from "../scripts/wisp/lan/join";
 import { type MapFacts, mapCopies, readMapFacts } from "../scripts/wisp/lan/map";
 import { PACKET, Writer, encodePacket } from "../scripts/wisp/lan/w3gs";

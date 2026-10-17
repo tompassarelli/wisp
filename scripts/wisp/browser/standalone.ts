@@ -1,7 +1,7 @@
 import "./headlessRender";
 import type { SoundCue } from "../../../src/headless/clientTypes";
-import type { StandaloneFrame, StandaloneInput } from "../standaloneFrames";
-import type { RenderScene } from "../headlessRender";
+import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
+import type { RenderScene } from "../render/headlessRender";
 import { FRAME_MS } from "../../../src/headless/frameRate";
 
 const held = new Set<string>();

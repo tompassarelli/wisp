@@ -1,5 +1,5 @@
-import type { HotProject } from "../hotReload";
-import type { TestDeclaration } from "../testSelection";
+import type { HotProject } from "./hotReload";
+import type { TestDeclaration } from "./testSelection";
 
 export interface DevProject {
 

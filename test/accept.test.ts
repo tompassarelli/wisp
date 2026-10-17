@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
-import { AcceptDriver, AcceptFailure, type AcceptReport, type AcceptSuite, type ReceiptFile, planSessions, runAccept, summaryLine, mergeReports, suiteProblems } from "../scripts/wisp/accept";
+import { AcceptDriver, AcceptFailure, type AcceptReport, type AcceptSuite, type ReceiptFile, planSessions, runAccept, summaryLine, mergeReports, suiteProblems } from "../scripts/wisp/accept/accept";
 import cascades from "./fixtures/accept-cascade.json";
 
 const directories: string[] = [];

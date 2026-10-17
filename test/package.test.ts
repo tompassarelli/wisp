@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { transpileProject } from "typescript-to-lua";
 import { report } from "../scripts/compiler";
 import { producePackage } from "../scripts/package";
-import { farmTest } from "../scripts/wisp/farmTest";
+import { farmTest } from "../scripts/wisp/farm/farmTest";
 
 farmTest("[invariant] installed package resolves bare imports and preserves Lua32 numeric/reload behavior", async () => {
   const root = join(import.meta.dir, "..");

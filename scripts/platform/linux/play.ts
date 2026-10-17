@@ -8,14 +8,14 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { serverDirectoryName, type ProcessInfo } from "../../warcraft/battleNet";
 import { launcherProcess, listProcesses } from "./procfs";
 import { parseWords, separateInk } from "../../warcraft/desktop";
-import { describeCause } from "../../wisp/command";
-import { type Collected, collect, skillScript } from "../../wisp/hostProcess";
+import { describeCause } from "../../wisp/cli/command";
+import { type Collected, collect, skillScript } from "../../wisp/cli/hostProcess";
 import { decodePpm } from "../services";
 import { startUnit } from "./systemd";
-import { acquireStartLock, startLockPath } from "../../wisp/startLock";
-import { writeAtomic } from "../../wisp/files";
+import { acquireStartLock, startLockPath } from "../../wisp/client/startLock";
+import { writeAtomic } from "../../wisp/io/files";
 import { CapacityDeferred, capacityDeferral, deferredExit, retryWhileDeferred } from "../../wisp/lan/admission";
-import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow } from "../../wisp/play";
+import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow } from "../../wisp/play/play";
 
 export interface PlayTools {
   readonly grim: string;

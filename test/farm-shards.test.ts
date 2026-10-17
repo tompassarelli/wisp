@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { FARM_LOAD_MAX_AGE_SECONDS, type FarmLoad, merge, type Plan, placeShards, type ShardResult } from "../scripts/wisp/farmShards";
+import { FARM_LOAD_MAX_AGE_SECONDS, type FarmLoad, merge, type Plan, placeShards, type ShardResult } from "../scripts/wisp/farm/farmShards";
 
 test("[property] a shard goes to the farm only when it is even and the farm's load sample is fresh and fits its cores (wisp#132)", () => {
   let state = 132;

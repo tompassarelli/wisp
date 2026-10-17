@@ -1,14 +1,14 @@
 import { type FSWatcher, watch } from "node:fs";
 import { Console, Effect, Layer, Queue, Schema } from "effect";
-import { type Command, type CommandFailure, UsageFailure, flagValues } from "../command";
-import { formatDesync, watchDesyncs } from "../desyncs";
-import { FrameCosts, formatFrameCost } from "../frameCosts";
-import { GameFiles } from "../gameFiles";
-import { HotReload, type HotProject, waitForProcessStop } from "../hotReload";
-import { MapBuild, type BuildProject } from "../mapBuild";
-import { SourceErrors } from "../sourceErrors";
-import { step } from "../timings";
-import { modelFailureBridge } from "../modelFailures";
+import { type Command, type CommandFailure, UsageFailure, flagValues } from "../cli/command";
+import { formatDesync, watchDesyncs } from "../dev/desyncs";
+import { FrameCosts, formatFrameCost } from "../perf/frameCosts";
+import { GameFiles } from "../io/gameFiles";
+import { HotReload, type HotProject, waitForProcessStop } from "../dev/hotReload";
+import { MapBuild, type BuildProject } from "../compile/mapBuild";
+import { SourceErrors } from "../compile/sourceErrors";
+import { step } from "../cli/timings";
+import { modelFailureBridge } from "../dev/modelFailures";
 
 const DataDirectories = Schema.NonEmptyArray(Schema.String.check(Schema.isMinLength(1))).check(Schema.isUnique());
 

@@ -1,12 +1,12 @@
 import { join } from "node:path";
 import { Cause, Clock, Console, Effect, Exit, Option, Schema } from "effect";
 import { mapCompiler, report } from "../../compiler";
-import { type Command, UsageFailure, describeCause, flagValues } from "../command";
-import { DEFAULT_PERF_THRESHOLD, comparePerfRuns, parsePerfRun, predictionLines } from "../perf";
-import { lua32 } from "../lua32";
-import { step } from "../timings";
-import { emitJson } from "../jsonResults";
-import { type NativeCase, checkNative, fitNativeCost, nativeCheckLines, parseNativeReadings, parsePerfSamples } from "../nativeFit";
+import { type Command, UsageFailure, describeCause, flagValues } from "../cli/command";
+import { DEFAULT_PERF_THRESHOLD, comparePerfRuns, parsePerfRun, predictionLines } from "../perf/perf";
+import { lua32 } from "../compile/lua32";
+import { step } from "../cli/timings";
+import { emitJson } from "../cli/jsonResults";
+import { type NativeCase, checkNative, fitNativeCost, nativeCheckLines, parseNativeReadings, parsePerfSamples } from "../perf/nativeFit";
 import { type NativeCostModel, WARCRAFT_COST } from "../../../src/headless/nativeCost";
 
 export interface LuaBuild {

@@ -6,9 +6,9 @@ import { Cause, Duration, Effect, Exit, Fiber, FiberSet, Layer, Option, Schema, 
 import { platformLayer, runPlatformSync } from "../../platform/layer";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { AudioIsolation, GameLauncher, InputInjection, ProcessTable } from "../../platform/services";
-import { UsageFailure, flagValues, wholeFlag } from "../command";
-import { pollUntil, spawnLogged } from "../hostProcess";
-import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports, playLocalGame } from "../menus";
+import { UsageFailure, flagValues, wholeFlag } from "../cli/command";
+import { pollUntil, spawnLogged } from "../cli/hostProcess";
+import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports, playLocalGame } from "../play/menus";
 import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";

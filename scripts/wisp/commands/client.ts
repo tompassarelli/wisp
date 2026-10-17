@@ -1,10 +1,10 @@
 import { Console, Effect, Layer } from "effect";
-import { Clients, type Ink } from "../clients";
-import { type Command, UsageFailure, flagValues } from "../command";
-import { step } from "../timings";
-import { ClientWatch, FAIL_ON, STATE_KINDS, type StateKind, type WatchOptions, describeView, inState, waitFor } from "../watch";
-import { makeWatch, selectClients, watchedClients } from "../clientWatchCommand";
-import { serviceDoctor, serviceStart, serviceStatus, serviceStop } from "../clientServicesCommand";
+import { Clients, type Ink } from "../client/clients";
+import { type Command, UsageFailure, flagValues } from "../cli/command";
+import { step } from "../cli/timings";
+import { ClientWatch, FAIL_ON, STATE_KINDS, type StateKind, type WatchOptions, describeView, inState, waitFor } from "../dev/watch";
+import { makeWatch, selectClients, watchedClients } from "../client/clientWatchCommand";
+import { serviceDoctor, serviceStart, serviceStatus, serviceStop } from "../client/clientServicesCommand";
 
 const numbers = (values: readonly string[], count: number) => {
   const parsed = values.slice(0, count).map(Number);

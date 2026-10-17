@@ -67,8 +67,8 @@ displays the error message and writes the detailed report to CustomMapData.
 The consumer's hot watcher prints that report. Compiler-recorded frames already
 contain TypeScript positions; ordinary `map-KEY:LINE` and `hot-KEY:LINE` Lua
 positions use retained source maps through
-[SourceErrors](../scripts/wisp/sourceErrors.ts)
-(wisp:scripts/wisp/sourceErrors.ts). Keep maps for bundles that can still
+[SourceErrors](../scripts/wisp/compile/sourceErrors.ts)
+(wisp:scripts/wisp/compile/sourceErrors.ts). Keep maps for bundles that can still
 run so old reports remain resolvable.
 
 ## Cost and scope

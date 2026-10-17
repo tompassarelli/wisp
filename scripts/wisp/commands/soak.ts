@@ -4,16 +4,16 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Cause, Console, Effect, Exit, FileSystem, Queue, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import { ResourceAccounting } from "../../platform/services";
-import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from "../command";
-import { installHeadless } from "../headless";
-import { writtenPreloadFile } from "../headlessInput";
-import { spawnLogged } from "../hostProcess";
-import { SOAK_LIMITS, type SoakProject, describeMatch, planSoak, playSoakMatch } from "../soak";
+import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from "../cli/command";
+import { installHeadless } from "../headless/headless";
+import { writtenPreloadFile } from "../headless/headlessInput";
+import { spawnLogged } from "../cli/hostProcess";
+import { SOAK_LIMITS, type SoakProject, describeMatch, planSoak, playSoakMatch } from "../soak/soak";
 import type { SoakMatch } from "../soak/types";
 import { type SoakReply, loadSoakGame, loadSoakProject, readSoakReply, readSoakRepro, soakRepro } from "../soak/file";
-import { emitJson } from "../jsonResults";
-import { shrinkSoakRepro } from "../reproShrink";
-import { step } from "../timings";
+import { emitJson } from "../cli/jsonResults";
+import { shrinkSoakRepro } from "../repro/reproShrink";
+import { step } from "../cli/timings";
 
 class SoakFailure extends Schema.TaggedError<SoakFailure>()("SoakFailure", {
   problem: Schema.String,
@@ -230,7 +230,7 @@ export const makeSoak = (options: SoakCommandOptions): Command => (allArgs) => E
     const pool: Pool = { replies: [], cpuMs: 0, workersStarted: 0 };
     const started = performance.now();
     const cpuBefore = process.cpuUsage();
-    const worker = join(import.meta.dir, "../soakWorker.ts");
+    const worker = join(import.meta.dir, "../soak/soakWorker.ts");
     const shrinkingGame = args.includes("--no-shrink") ? undefined : yield* Effect.tryPromise({
       try: () => loadSoakGame(project.game), catch: cause => new SoakFailure({ problem: "loading the shrink replay", cause }),
     });

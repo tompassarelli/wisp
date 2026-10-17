@@ -2,8 +2,8 @@ import { expect } from "bun:test";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { mapCompiler, report } from "../scripts/compiler";
-import { lua32 } from "../scripts/wisp/lua32";
-import { farmTest } from "../scripts/wisp/farmTest";
+import { lua32 } from "../scripts/wisp/compile/lua32";
+import { farmTest } from "../scripts/wisp/farm/farmTest";
 
 const root = join(import.meta.dir, "..");
 

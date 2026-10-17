@@ -96,7 +96,7 @@ game UI is up and prints the seconds each took.
 The pair agent (wisp:scripts/wisp/lan/pairAgent.ts, `POST /solo`) copies MAP
 into each client's `Maps/Wisp/`, keeping at most its newest copy
 ([how a match starts](#how-a-match-starts)), and drives each client's menus
-(`playLocalGame`, wisp:scripts/wisp/menus.ts) as Single Player's Custom Game
+(`playLocalGame`, wisp:scripts/wisp/play/menus.ts) as Single Player's Custom Game
 does, with no click, keyboard or memory write:
 
 1. `LoginDoorClose`. A client that never signed in sits at its login doors
@@ -194,7 +194,7 @@ clone-c: `launch.sh d RUN_DIR`, no yielding to Tom. Sign it in once with
 `wc3-login-field RUN d username|password` as in step 2 of a full session.
 Clone-a and clone-d make the second two-client lane. Its clients file names
 them `clone-a` and `clone-d`, so doctor starts each through `launch.sh`
-(smashcraft:ts/scripts/wisp/doctor.ts) and types no account:
+(smashcraft:ts/scripts/wisp/doctor/doctor.ts) and types no account:
 
 ```json
 { "clients": [

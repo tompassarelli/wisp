@@ -3,14 +3,14 @@ import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Layer, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { collect } from "../../wisp/hostProcess";
+import { collect } from "../../wisp/cli/hostProcess";
 import {
   AudioIsolation, BackgroundServices, CapacityAdmission, GameLauncher, Namespaces, PageOpener, PlatformFailure, ProcessTable, ResourceAccounting,
 } from "../services";
 import { linuxDesktopLayer } from "./desktop";
 import * as procfs from "./procfs";
 import { startUnit, stopUnit, unitState } from "./systemd";
-import { describeCause } from "../../wisp/command";
+import { describeCause } from "../../wisp/cli/command";
 
 const failure = (capability: string) => (cause: unknown) =>
   new PlatformFailure({ capability, problem: typeof cause === "object" && cause !== null && "problem" in cause ? String(cause.problem) : describeCause(cause) });

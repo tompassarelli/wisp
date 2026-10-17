@@ -1,5 +1,5 @@
 import { Effect, Layer } from "effect";
-import { PlayDesktop, PlayMachine, PlayProblem } from "../wisp/play";
+import { PlayDesktop, PlayMachine, PlayProblem } from "../wisp/play/play";
 import { hostPlatform } from "./layer";
 import { linuxPlayHostLayer, linuxPlayMachineLayer, type PlayTools } from "./linux/play";
 import { PlatformUnsupported } from "./services";

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, join, sep } from "node:path";
 import { Effect } from "effect";
 import { ChildProcess } from "effect/process";
-import { collect } from "../hostProcess";
+import { collect } from "../cli/hostProcess";
 import { LanFailure } from "./join";
 import { decodeMapInfo } from "../../mapInfo";
 import { crc32 } from "./w3gs";

@@ -48,7 +48,7 @@ signed-in clients still require their own Battle.net start declaration.
 ## What it reads
 
 Nothing from the screen. Each client's state comes from
-[`wisp client watch`](../scripts/wisp/watch.ts) (wisp:scripts/wisp/watch.ts): the
+[`wisp client watch`](../scripts/wisp/dev/watch.ts) (wisp:scripts/wisp/dev/watch.ts): the
 menus' socket, Warcraft III's own log, the map's receipts and the processes.
 Doctor adds the client's Wine prefix:
 
@@ -234,12 +234,12 @@ start lock, `~/.local/state/wisp/online/client-start.lock`, and holds it until
 that client reaches its menus or doctor stops, or 300 s pass. A second start
 waits, printing who holds the lock; a client already running is unaffected.
 On 8 October clone-a crashed 1.8 s after clone-d's game started beside it
-(wisp:scripts/wisp/startLock.ts, wisp:test/startLock.test.ts).
+(wisp:scripts/wisp/client/startLock.ts, wisp:test/startLock.test.ts).
 
 ## Declare it
 
 The game adds the command with `makeDoctor`
-(wisp:scripts/wisp/clientDoctorCommand.ts):
+(wisp:scripts/wisp/client/clientDoctorCommand.ts):
 
 ```ts
 export const doctor = makeDoctor({
@@ -268,14 +268,14 @@ owned by `wisp-game-<client>`, never a click in its window.
 - **Bot sessions and other runs on the clients:** `clientsDoctor(declaration,
   names, print)` runs it as a library call (with the caller's ClientWatch),
   and `withDoctor(check, print, run, { retry })`
-  (wisp:scripts/wisp/doctor.ts) runs `check` (a doctor run), then `run`; when
+  (wisp:scripts/wisp/doctor/doctor.ts) runs `check` (a doctor run), then `run`; when
   `run` fails it runs `check` once more and, only if that recovered
   something, `run` once more. A failure doctor can't explain stands. A run
   that can't repeat, such as a capture into its own folder, passes
   `retry: false`: its clients are healed for the next run and its failure
   stands.
 - **`wisp accept`:** pass `clientsDoctor(...)` as the live driver's
-  `prepare` (wisp:scripts/wisp/acceptLive.ts).
+  `prepare` (wisp:scripts/wisp/accept/acceptLive.ts).
 - **`wisp play`:** checks its prefix with doctor before step 1 and once after
   a failure, without launching the game itself (`DoctorHands.launches`
   false): play's own steps start Battle.net and launch it.

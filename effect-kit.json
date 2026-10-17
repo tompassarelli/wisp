@@ -15,8 +15,8 @@
       "**/*.test.ts",
       "**/*.tests.ts",
       "scripts/wisp/browser/**",
-      "scripts/wisp/reproViewerPage.ts",
-      "scripts/wisp/tunePage.ts"
+      "scripts/wisp/repro/reproViewerPage.ts",
+      "scripts/wisp/tune/tunePage.ts"
     ]
   }
 }

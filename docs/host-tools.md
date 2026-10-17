@@ -14,18 +14,18 @@ Effect's own pieces. Four rules:
    failure, interruption, and SIGINT or SIGTERM. Hold sockets, servers,
    watchers and timers the same way, with `Effect.acquireRelease` or
    `Effect.forkScoped`. To write a child's output to files, use `spawnLogged`
-   (wisp:scripts/wisp/hostProcess.ts); its scope waits at most 5 s for the
+   (wisp:scripts/wisp/cli/hostProcess.ts); its scope waits at most 5 s for the
    output to close, since a descendant outside the process group (a session
    bus, a `setsid` helper) can hold it open forever.
 2. **The entry point runs under `runMain`.** A project's `bun` entry calls
-   `runMainCli` (wisp:scripts/wisp/cli.ts), and a standalone script calls
+   `runMainCli` (wisp:scripts/wisp/cli/cli.ts), and a standalone script calls
    `BunRuntime.runMain` (`@effect/platform-bun/BunRuntime`). Ctrl-C or a kill
    signal then interrupts the program and runs its cleanup before it exits.
    Don't add `process.on("SIGTERM")` handlers or call `process.exit` from
    inside a program.
 3. **Waits and retries use `Schedule` with a deadline.** Poll with
    `pollUntil(check, { until, every, within, onTimeout })`
-   (wisp:scripts/wisp/hostProcess.ts), or `pollFor` when the check returns
+   (wisp:scripts/wisp/cli/hostProcess.ts), or `pollFor` when the check returns
    `undefined` until it is done; leave out `within` only for a wait that ends
    by interruption or by its `until`.
    Retry only failures that can recover, with `Effect.retry({ schedule,
@@ -59,7 +59,7 @@ inline in a host tool.
   own child scope (`Scope.fork`), closed when that attempt fails and held by
   the pool otherwise. Readiness is polled under `Effect.timeoutOrElse`, and
   deferrals are retried every 45 s within `--wait`.
-- wisp:scripts/wisp/watch.ts (`lanObservation`, `waitFor`): a 3 s timeout
+- wisp:scripts/wisp/dev/watch.ts (`lanObservation`, `waitFor`): a 3 s timeout
   with one retry, reported as a `WatchFailure`, and a `pollUntil` poll
   under a deadline.
 - wisp:scripts/wisp/lan/host.ts (`startHost`): the caller's scope holds the

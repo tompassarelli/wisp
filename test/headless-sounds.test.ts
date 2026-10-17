@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { installHeadless } from "../scripts/wisp/headless";
+import { installHeadless } from "../scripts/wisp/headless/headless";
 import { runJourney } from "../src/headless/journey";
 import { install, start } from "./sounds60/main";
 import { SOUND_NATIVES } from "./sounds60/cases";

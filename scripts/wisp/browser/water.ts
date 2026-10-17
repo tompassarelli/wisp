@@ -1,6 +1,6 @@
-import type { Terrain } from "../terrain";
-import { terrainRows } from "../terrainMesh";
-import { waterMesh, waterTable, waterTexture, type WaterTable } from "../water";
+import type { Terrain } from "../terrain/terrain";
+import { terrainRows } from "../terrain/terrainMesh";
+import { waterMesh, waterTable, waterTexture, type WaterTable } from "../terrain/water";
 import { linkProgram } from "./gl";
 
 type TextureReader = (path: string) => Promise<HTMLCanvasElement>;

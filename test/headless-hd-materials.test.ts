@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { freshAnimation } from "../src/headless/animation";
-import { renderScenes, type DrawnPose, type RenderScene } from "../scripts/wisp/headlessRender";
-import { farmTest } from "../scripts/wisp/farmTest";
+import { renderScenes, type DrawnPose, type RenderScene } from "../scripts/wisp/render/headlessRender";
+import { farmTest } from "../scripts/wisp/farm/farmTest";
 import { generateMDX, parseMDL } from "../vendor/war3-model.mjs";
 
 const plate = parseMDL(`Version { FormatVersion 800, }

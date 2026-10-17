@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { installHeadless } from "../scripts/wisp/headless";
+import { installHeadless } from "../scripts/wisp/headless/headless";
 import { runJourney } from "../src/headless/journey";
 import { ANIMATION_NOOPS } from "./animation58/cases";
 import { EXPECTED, EXPECTED_FILE } from "./animation58/expected";

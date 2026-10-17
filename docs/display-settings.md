@@ -39,7 +39,7 @@ with its declared settings.
 
 Before `wisp play` starts Warcraft III it saves `War3Preferences.txt` as
 `War3Preferences-before-play.txt` beside it, and starts a detached helper
-(wisp:scripts/wisp/restorePreferences.ts) that waits for the game's process to
+(wisp:scripts/wisp/client/restorePreferences.ts) that waits for the game's process to
 exit and then puts the saved file back and removes the backup. The helper
 outlives `play`, which returns while the game runs. Main-display play so
 never leaves the shared prefix's settings changed, with or without a

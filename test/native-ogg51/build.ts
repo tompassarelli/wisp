@@ -1,8 +1,8 @@
 import { join, resolve } from "node:path";
 import { Effect, Layer } from "effect";
-import { MapBuild } from "../../scripts/wisp/mapBuild";
-import { SourceErrors } from "../../scripts/wisp/sourceErrors";
-import { GameFiles } from "../../scripts/wisp/gameFiles";
+import { MapBuild } from "../../scripts/wisp/compile/mapBuild";
+import { SourceErrors } from "../../scripts/wisp/compile/sourceErrors";
+import { GameFiles } from "../../scripts/wisp/io/gameFiles";
 
 const [base, cue, out] = process.argv.slice(2);
 if (base === undefined || cue === undefined || out === undefined) throw new Error("usage: bun test/native-ogg51/build.ts BASE.w3m RiflemanWarcry1.ogg OUT.w3x");

@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { Random } from "../src/headless/random";
-import { installHeadless } from "../scripts/wisp/headless";
-import { playSoakMatch } from "../scripts/wisp/soak";
+import { installHeadless } from "../scripts/wisp/headless/headless";
+import { playSoakMatch } from "../scripts/wisp/soak/soak";
 import type { SoakInputs } from "../scripts/wisp/soak/types";
 import { soakRepro } from "../scripts/wisp/soak/file";
-import { assertSoakReproFixed, shrinkSoakRepro } from "../scripts/wisp/reproShrink";
+import { assertSoakReproFixed, shrinkSoakRepro } from "../scripts/wisp/repro/reproShrink";
 import game from "./soak/shrinkGame";
 import project from "./soak/shrinkProject";
 

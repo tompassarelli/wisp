@@ -5,14 +5,14 @@ import { Deferred, Effect, Exit, Fiber, Schedule, Scope, Semaphore } from "effec
 import { decodeActions } from "./actions";
 import { LanFailure } from "./join";
 import type { MapFacts } from "./map";
-import { DEFAULT_BUILD, requireCapability } from "../builds";
+import { DEFAULT_BUILD, requireCapability } from "../client/builds";
 import {
   CHAT, DEFAULT_GAME_FLAGS, LEAVE_REASONS, PACKET, PRODUCT, PROTOBUF, RACE_RANDOM_SELECTABLE, SLOT_CLOSED, SLOT_OCCUPIED, SLOT_OPEN,
   type Chat, type PlayerAction, type Slot, type SlotTable,
   chatFromHost, countDownEnd, countDownStart, decodeChat, decodeKeepAlive, decodeLeaveReq, decodeMapSize, decodeOutgoingAction, decodeReqJoin, decodeSearchGame,
   gameInfo, incomingAction, leaveAck, mapCheck, pingFromHost, playerInfo, playerLeft, playerLoaded, playerProfile, playerSkins, protobufType, rejectJoin, slotInfo, slotInfoJoin, splitPackets,
 } from "./w3gs";
-import { describeCause } from "../command";
+import { describeCause } from "../cli/command";
 
 const CLIENT_PORTS: readonly number[] = [16000, 16001, 16002, 16003, 16004, 16005, 16006, 16007];
 /** Flo waits this long between countdown packets; shorter waits send slow clients to the score screen. */

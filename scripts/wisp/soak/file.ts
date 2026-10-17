@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { SOAK_GAME, SOAK_PROJECT, type SoakFinding, type SoakGame, type SoakProject, type SoakResult } from "../soak";
+import { SOAK_GAME, SOAK_PROJECT, type SoakFinding, type SoakGame, type SoakProject, type SoakResult } from "./soak";
 import type { SoakInputs, SoakMatch } from "./types";
 
 export interface SoakRepro {

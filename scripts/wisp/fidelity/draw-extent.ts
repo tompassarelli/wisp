@@ -1,4 +1,4 @@
-import { EDGE_TOLERANCE, compareEdges, silhouetteBounds, type PixelBox } from "../screenBounds";
+import { EDGE_TOLERANCE, compareEdges, silhouetteBounds, type PixelBox } from "../render/screenBounds";
 import type { Image, Region } from "./image";
 import type { Metric } from "./metric";
 

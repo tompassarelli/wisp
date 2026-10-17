@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { transpileProject } from "typescript-to-lua";
 import { report } from "../scripts/compiler";
-import { farmTest } from "../scripts/wisp/farmTest";
+import { farmTest } from "../scripts/wisp/farm/farmTest";
 
 const names = (count: number, prefix: string) => Array.from({ length: count }, (_, index) => `${prefix}${index}`);
 

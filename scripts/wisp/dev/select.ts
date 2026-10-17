@@ -1,5 +1,5 @@
 import { relative } from "node:path";
-import type { Changes, Reach, Selection, TestUnit } from "../testSelection";
+import type { Changes, Reach, Selection, TestUnit } from "./testSelection";
 import { isProjectFile } from "./savedFiles";
 import { plural } from "./summary";
 

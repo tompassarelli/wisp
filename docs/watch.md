@@ -26,7 +26,7 @@ A line looks like this:
 ```
 
 The project composes the command with `makeWatch(clientsFile, { filePrefix })`
-(wisp:scripts/wisp/clientWatchCommand.ts). The clients file is the same one
+(wisp:scripts/wisp/client/clientWatchCommand.ts). The clients file is the same one
 `wisp client` reads; watching needs each client's `documents` and, for menu
 screens, its `menuReportPort`. It doesn't need the client's private desktop.
 
@@ -109,7 +109,7 @@ Provide `ClientWatch.layer({ filePrefix })` once per program. `unlessLost`
 needs no ClientWatch: without one, the wait runs as before, so tests with fake
 clients are unchanged. `play`, `freshMatch` and the `client wait` action use
 them. The accept runner provides an already built watch with
-`Layer.succeed(ClientWatch, ...)` (wisp:scripts/wisp/acceptLive.ts); no test
+`Layer.succeed(ClientWatch, ...)` (wisp:scripts/wisp/accept/acceptLive.ts); no test
 substitutes the service.
 
 ## Typing only into a match
@@ -136,7 +136,7 @@ run, the crashed `play --menus` run and client B's silent log.
 ## Confirmed chat setup
 
 Native runners use `openObservedChat` and `confirmedCommand`
-(wisp:scripts/wisp/chatSetup.ts) with their map's existing receipts. Wait for
+(wisp:scripts/wisp/client/chatSetup.ts) with their map's existing receipts. Wait for
 the selected pair's fresh binding-ready files first. `openObservedChat` observes
 a publication after Return rather than trusting an earlier game's open file;
 if the first Return is missed or closes an already-open entry, it tries Return

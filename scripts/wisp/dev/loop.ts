@@ -1,11 +1,11 @@
 import { type FSWatcher, statSync, watch } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { Console, Deferred, Effect, Fiber, Queue, Result } from "effect";
-import { UsageFailure } from "../command";
-import { runProcess } from "../devProcesses";
-import { waitForProcessStop } from "../hotReload";
-import type { Changes } from "../testSelection";
-import { formatTypeError } from "../typeCheck";
+import { UsageFailure } from "../cli/command";
+import { runProcess } from "./devProcesses";
+import { waitForProcessStop } from "./hotReload";
+import type { Changes } from "./testSelection";
+import { formatTypeError } from "./typeCheck";
 import { type Clock, type Context, type HotSide, open, typeChecking } from "./context";
 import type { DevProject } from "./project";
 import { selectRun } from "./select";

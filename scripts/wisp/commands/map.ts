@@ -4,11 +4,11 @@ import { ChildProcess } from "effect/process";
 import { resolve, join } from "node:path";
 import { parseArgs } from "node:util";
 import { decodeMapInfo } from "../../mapInfo";
-import { type Command, UsageFailure, describeCause } from "../command";
-import { encodePpm } from "../frameProbe";
-import { collect } from "../hostProcess";
-import { ensurePackager } from "../mapBuild";
-import { decodePreviewTexture, decodePreviewRgba, decodeMinimapMarkers, drawStartMarkers, selectMapPreview } from "../mapPreview";
+import { type Command, UsageFailure, describeCause } from "../cli/command";
+import { encodePpm } from "../scene/frameProbe";
+import { collect } from "../cli/hostProcess";
+import { ensurePackager } from "../compile/mapBuild";
+import { decodePreviewTexture, decodePreviewRgba, decodeMinimapMarkers, drawStartMarkers, selectMapPreview } from "../scene/mapPreview";
 
 export class MapPreviewFailure extends Schema.TaggedError<MapPreviewFailure>()("MapPreviewFailure", { problem: Schema.String }) {
   override get message() { return this.problem; }

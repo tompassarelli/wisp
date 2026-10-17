@@ -1,12 +1,12 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Cause, Effect } from "effect";
-import { pollUntil } from "../hostProcess";
+import { pollUntil } from "../cli/hostProcess";
 import { ProcessTable } from "../../platform/services";
 import { startHost, type LanHost } from "./host";
 import { LanFailure } from "./join";
 import type { MapFacts } from "./map";
-import { describeCause } from "../command";
+import { describeCause } from "../cli/command";
 
 interface DummyOptions<E, R> {
   readonly program: string;

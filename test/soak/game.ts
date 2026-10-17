@@ -1,4 +1,4 @@
-import { defineSoakGame } from "../../scripts/wisp/soak";
+import { defineSoakGame } from "../../scripts/wisp/soak/soak";
 import { reproLines } from "../../src/runtime/repro";
 import { LAST_TICK, install, start, state } from "./map";
 

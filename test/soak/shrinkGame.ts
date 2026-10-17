@@ -1,4 +1,4 @@
-import { defineSoakGame } from "../../scripts/wisp/soak";
+import { defineSoakGame } from "../../scripts/wisp/soak/soak";
 import game from "./game";
 
 export default defineSoakGame({

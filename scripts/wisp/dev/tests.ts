@@ -1,11 +1,11 @@
 import { resolve } from "node:path";
 import { Console, Effect, Result, Semaphore } from "effect";
-import { runProcess } from "../devProcesses";
-import { SAVED_FILES_ENV } from "../devResult";
-import type { JourneyRequest } from "../journeyRun";
-import type { RegistryRequest } from "../registryRun";
-import type { WaitingTestRequest } from "../testWait";
-import { type Selection, type TestProcess, type TestUnit, packTests } from "../testSelection";
+import { runProcess } from "./devProcesses";
+import { SAVED_FILES_ENV } from "./devResult";
+import type { JourneyRequest } from "../testing/journeyRun";
+import type { RegistryRequest } from "../testing/registryRun";
+import type { WaitingTestRequest } from "../testing/testWait";
+import { type Selection, type TestProcess, type TestUnit, packTests } from "./testSelection";
 import { type Context, UNKNOWN_MS, expected, timeoutArguments } from "./context";
 import { type ProcessResult, counts, fileResult, indent, isRegistryResult, journeySummary, plural, registryResult, scope } from "./summary";
 

@@ -34,7 +34,7 @@ nonzero. Nonfinite errors are printed as strings.
 | `dof` | Mean absolute adjacent-pixel luma gradient in each declared depth band within 15% |
 | `bloom` | Nine equally spaced horizontal luma samples through each region's middle row within 10%; count of pixels above calibrated `thresholdLuma` within 20% |
 | `day-night-light`, `point-lights`, `pbr` | Region mean L* within 3 |
-| `draw-extent` | Silhouette box within 4 px on each edge. The silhouette is the region's pixels whose largest channel \|shown − hidden\| is over 24 (`silhouetteBounds`' rule in wisp:scripts/wisp/screenBounds.ts), from each run's `visibility: shown` and `hidden` captures of a frame; the distance is the largest of the four edge differences. An empty silhouette is an infinite distance, so an empty reference silhouette returns `INCONCLUSIVE`, as does a run-to-run spread over 2 px |
+| `draw-extent` | Silhouette box within 4 px on each edge. The silhouette is the region's pixels whose largest channel \|shown − hidden\| is over 24 (`silhouetteBounds`' rule in wisp:scripts/wisp/render/screenBounds.ts), from each run's `visibility: shown` and `hidden` captures of a frame; the distance is the largest of the four edge differences. An empty silhouette is an infinite distance, so an empty reference silhouette returns `INCONCLUSIVE`, as does a run-to-run spread over 2 px |
 
 Relative distances use the reference measurement as denominator. A zero
 reference matches only zero. Unknown levers and levers without decided

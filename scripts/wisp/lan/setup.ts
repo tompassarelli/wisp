@@ -4,8 +4,8 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect } from "effect";
 import { ChildProcess } from "effect/process";
 import { GameLauncher } from "../../platform/services";
-import { collect } from "../hostProcess";
-import { installMenuPage } from "../menus";
+import { collect } from "../cli/hostProcess";
+import { installMenuPage } from "../play/menus";
 import { LanFailure } from "./join";
 import { clientRoot, installOf, prefixOf, retailOf } from "./pool";
 

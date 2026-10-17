@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { decodeDoodads } from "../scripts/wisp/doodads";
-import { sceneWithUnits, type RenderScene } from "../scripts/wisp/headlessRender";
+import { decodeDoodads } from "../scripts/wisp/terrain/doodads";
+import { sceneWithUnits, type RenderScene } from "../scripts/wisp/render/headlessRender";
 
 // Fixture placements use WC3MapSpecification/Doodads/8_11.md.
 function placements(skinIds = true, visible = true): Uint8Array {

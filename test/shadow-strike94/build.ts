@@ -1,9 +1,9 @@
 import { join, resolve } from "node:path";
 import { Effect, Layer } from "effect";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
-import { MapBuild } from "../../scripts/wisp/mapBuild";
-import { SourceErrors } from "../../scripts/wisp/sourceErrors";
-import { GameFiles } from "../../scripts/wisp/gameFiles";
+import { MapBuild } from "../../scripts/wisp/compile/mapBuild";
+import { SourceErrors } from "../../scripts/wisp/compile/sourceErrors";
+import { GameFiles } from "../../scripts/wisp/io/gameFiles";
 import { shadowStrikeObjects } from "./objects";
 
 const [base, out] = process.argv.slice(2);

@@ -1,14 +1,14 @@
 import { resolve } from "node:path";
 import { Console, Effect, Layer } from "effect";
-import type { CommandFailure } from "../command";
-import { formatDesync, watchDesyncs } from "../desyncs";
-import { FrameCosts, formatFrameCost } from "../frameCosts";
-import { GameFiles } from "../gameFiles";
-import { HotReload, type HotProject } from "../hotReload";
-import { MapBuild } from "../mapBuild";
-import { modelFailureBridge } from "../modelFailures";
-import { SourceErrors } from "../sourceErrors";
-import { step } from "../timings";
+import type { CommandFailure } from "../cli/command";
+import { formatDesync, watchDesyncs } from "./desyncs";
+import { FrameCosts, formatFrameCost } from "../perf/frameCosts";
+import { GameFiles } from "../io/gameFiles";
+import { HotReload, type HotProject } from "./hotReload";
+import { MapBuild } from "../compile/mapBuild";
+import { modelFailureBridge } from "./modelFailures";
+import { SourceErrors } from "../compile/sourceErrors";
+import { step } from "../cli/timings";
 import type { HotSide } from "./context";
 import { elapsedLabel, plural } from "./summary";
 

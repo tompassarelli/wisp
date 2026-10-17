@@ -2,19 +2,19 @@ import { availableParallelism } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { Effect, Schema, Semaphore } from "effect";
 import { ResourceAccounting } from "../../platform/services";
-import { describeCause } from "../command";
-import { Standby, runProcess } from "../devProcesses";
-import { WARM_ENV } from "../devResult";
-import { TestPlan, type TestUnit } from "../testSelection";
-import { TypeChecker } from "../typeCheck";
+import { describeCause } from "../cli/command";
+import { Standby, runProcess } from "./devProcesses";
+import { WARM_ENV } from "./devResult";
+import { TestPlan, type TestUnit } from "./testSelection";
+import { TypeChecker } from "./typeCheck";
 import type { DevProject } from "./project";
 import { SavedDurations } from "./savedDurations";
 import { SavedFiles } from "./savedFiles";
 import { elapsedLabel } from "./summary";
 
-const REGISTRY_RUN = join(import.meta.dir, "../registryRun.ts");
-const JOURNEY_RUN = join(import.meta.dir, "../journeyRun.ts");
-const TEST_WAIT = join(import.meta.dir, "../testWait.ts");
+const REGISTRY_RUN = join(import.meta.dir, "../testing/registryRun.ts");
+const JOURNEY_RUN = join(import.meta.dir, "../testing/journeyRun.ts");
+const TEST_WAIT = join(import.meta.dir, "../testing/testWait.ts");
 
 const REGISTRY_STANDBY = 6;
 

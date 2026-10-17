@@ -150,7 +150,7 @@ command that clears them.
 
 ## Declare it
 
-The game declares its playtest (wisp:scripts/wisp/play.ts,
+The game declares its playtest (wisp:scripts/wisp/play/play.ts,
 `PlayDeclaration`) and adds the command with `makePlay`
 (wisp:scripts/wisp/commands/play.ts); its own steps may use services that
 `layer` provides:

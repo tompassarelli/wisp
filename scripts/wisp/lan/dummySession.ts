@@ -3,7 +3,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Effect, Layer } from "effect";
 import { platformLayer } from "../../platform/layer";
-import { connectMenus, menuAddress } from "../menus";
+import { connectMenus, menuAddress } from "../play/menus";
 import { checkDummy } from "./dummy";
 import { joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";

@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { readNativeDeclarations } from "../scripts/wisp/headless";
+import { readNativeDeclarations } from "../scripts/wisp/headless/headless";
 import { multiply } from "../scripts/wisp/browser/matrix";
-import type { RenderScene } from "../scripts/wisp/headlessRender";
-import { camera, uiPixels, uiReport } from "../scripts/wisp/screen";
+import type { RenderScene } from "../scripts/wisp/render/headlessRender";
+import { camera, uiPixels, uiReport } from "../scripts/wisp/render/screen";
 import { HeadlessClient } from "../src/headless/client";
 import { MEASURED_1280X720, MEASURED_800X600 } from "./frames125/expected";
 import { PLACEMENTS } from "./frames125/layout";

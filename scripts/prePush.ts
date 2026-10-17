@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { Console, Effect, Schema } from "effect";
-import { captureProcess } from "./wisp/hostProcess";
+import { captureProcess } from "./wisp/cli/hostProcess";
 import { issueTests, redTitle } from "./mainRed";
 
 const root = join(import.meta.dir, "..");

@@ -5,8 +5,8 @@ import { Effect, Exit, Layer, Option } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { inputBatches, sendsChat } from "../../warcraft/inputBatch";
 import { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, runTool } from "../../warcraft/desktop";
-import { pollUntil, captureProcess } from "../../wisp/hostProcess";
-import { step } from "../../wisp/timings";
+import { pollUntil, captureProcess } from "../../wisp/cli/hostProcess";
+import { step } from "../../wisp/cli/timings";
 import { InputInjection, ScreenCapture, type WindowPlacer } from "../services";
 
 const fail = (operation: string, client: string) => (cause: unknown) => new DesktopFailure({ operation, client, cause });

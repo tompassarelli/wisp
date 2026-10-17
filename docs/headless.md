@@ -12,7 +12,7 @@ run in real time, typed into and read by a game's own input helper.
 It runs the map two ways, from one plain TypeScript implementation
 (wisp:src/headless/):
 
-- **Bun** runs the map's TypeScript modules (wisp:scripts/wisp/headless.ts).
+- **Bun** runs the map's TypeScript modules (wisp:scripts/wisp/headless/headless.ts).
   Tests and `wisp headless` use it.
 - **32-bit Lua** runs the map's compiled bundle, each client in its own Lua
   environment (wisp:src/headless/lua.ts). The runtime itself is compiled with
@@ -151,7 +151,7 @@ clicker. It returns false when no frame there takes clicks.
 ## Input from another program
 
 A game's input helper, such as one that reads controllers, types into
-Warcraft and reads the files the map writes. wisp:scripts/wisp/headlessInput.ts
+Warcraft and reads the files the map writes. wisp:scripts/wisp/headless/headlessInput.ts
 lets the same program drive headless clients:
 
 - `customMapData(directory)` is a client's CustomMapData as a real folder:
@@ -360,8 +360,8 @@ wisp:native/toward-zero.h makes a LUA_32BITS Lua 5.3.6 round its raw float
 `+ - * /` and its decimal numerals toward zero, and flush a subnormal raw
 `+ - * /` result to zero, so a raw operation that reaches the subnormal range
 differs from a stock Lua32 there too.
-`bun node_modules/wisp/scripts/wisp/lua32.ts toward-zero` prints its path,
-and `bun node_modules/wisp/scripts/wisp/lua32.ts` the stock Lua32's; each is
+`bun node_modules/wisp/scripts/wisp/compile/lua32.ts toward-zero` prints its path,
+and `bun node_modules/wisp/scripts/wisp/compile/lua32.ts` the stock Lua32's; each is
 built on first use from lua.org's release tarball, committed at
 wisp:vendor/lua-5.3.6.tar.gz and checksummed before each build, with gcc and
 make (or `nix` when they are missing) and no network, into a per-user cache,
@@ -473,7 +473,7 @@ scene JSON, and `render.json` naming the GPU, counts of models and textures,
 and each asset's attempted and selected location.
 Each image in `render.json` also lists `ui`: one row per drawn frame, in
 drawing order, from `uiReport(scene, width, height)` in
-wisp:scripts/wisp/screen.ts. A row names the frame, its type, level and
+wisp:scripts/wisp/render/screen.ts. A row names the frame, its type, level and
 texture, the texture's selected layer and sha256, its texture region (UV
 `[0, 0, 1, 1]`: a texture set with `BlzFrameSetTexture` is drawn whole), its
 `[left, top, right, bottom]` in UI units, its pixel rectangle, and
@@ -512,13 +512,13 @@ capacity lease lets the render start. Without the helper, as on CI and cloud
 machines, `--render` runs as before. `runStandalone` applies the same check
 ([Standalone window](play.md#standalone-window)); the refusal, the inside-lease
 start and the no-helper start are covered by wisp:test/gpu-lease.test.ts
-(wisp:scripts/wisp/gpuLease.ts).
+(wisp:scripts/wisp/render/gpuLease.ts).
 
 The map supplies `HeadlessProject.render.readAsset(path, graphics)`, returning the actual
 imported or stock asset bytes, or `undefined` when absent. `--graphics definitive`
 selects Definitive Edition; the default is `classic`. Layer-aware projects
 also supply `resolveAsset(path, graphics, body)`, returning `resolveRenderAsset` from
-`scripts/wisp/renderAssets.ts` through their Effect runtime. Its two readers
+`scripts/wisp/render/renderAssets.ts` through their Effect runtime. Its two readers
 read map imports and stock files separately. Definitive tries `_de.w3mod`,
 `_hd.w3mod`, then base imports, followed by the same stock layers. Classic
 tries only base files. `war3mapImported` paths stay within the map. A reader
@@ -555,7 +555,7 @@ omni-light count. Keep these assets and
 the output outside public repositories. MDX and MDL models, BLP1, TGA and PNG
 textures are supported, including raw version-1800 Definitive SKIN records
 with four UINT16 bone IDs and four UINT16 weights per vertex. Host silhouette
-and motion readers use `parseModelMDX` from `scripts/wisp/models.ts` to read
+and motion readers use `parseModelMDX` from `scripts/wisp/models/models.ts` to read
 the same skin. A resolver can return decoded PNG bytes for a stock
 BLP path backed by DDS or BLP2. Missing visible assets fail the render. The
 Maps drawing units also supply `render.unitModels`, mapping object type IDs to
@@ -631,7 +631,7 @@ wisp:test/headless-bounds.test.ts).
   client also reports to `BlzGetLocalClientWidth/Height`; without it, at the
   render canvas (`render.width`/`height`, default 1280x720), while client i
   lays out for (1920 + 640·i) × 1080.
-- **Projection.** `camera(scene, aspect)` (wisp:scripts/wisp/screen.ts),
+- **Projection.** `camera(scene, aspect)` (wisp:scripts/wisp/render/screen.ts),
   which the renderer and posed bounds share, spreads the camera FOV across the
   full width and then widens the half-tangent by 1.0472 and raises the picture
   by 0.00633 of the half-height, because native draws the world at a uniform
@@ -647,7 +647,7 @@ wisp:test/headless-bounds.test.ts).
   "[reference wisp#125] world projection matches native at 1920x1080",
   wisp:test/screen.test.ts).
 - **The pixel rule.** `ui` rows are `uiReport(scene, width, height, textures)`
-  (wisp:scripts/wisp/screen.ts): the 0.8 x 0.6 UI area is centred and scaled
+  (wisp:scripts/wisp/render/screen.ts): the 0.8 x 0.6 UI area is centred and scaled
   by the screen height, so x = W/2 + (left − 0.4)·H/0.6 and
   y = (0.6 − top)·H/0.6, with `outside43` when an edge leaves that area.
 - **Texture regions.** A frame's texture region is UV `[0, 0, 1, 1]`, because
@@ -655,7 +655,7 @@ wisp:test/headless-bounds.test.ts).
   resolved asset's selected layer (`base` from `readAsset` alone) and its
   `sha256` hashes the bytes, so a row names exactly which picture it drew.
 - **Posed bounds.** `models` rows are `sceneBounds(sceneWithUnits(scene),
-  models, width, height)` (wisp:scripts/wisp/screenBounds.ts): every effect
+  models, width, height)` (wisp:scripts/wisp/render/screenBounds.ts): every effect
   and unit the renderer would draw, posed at its sequence, elapsed time, blend
   and global sequences as `drawEffect` poses it, skinned on the CPU and
   projected through the scene's camera. Each row has the model's pixel `box`
@@ -701,7 +701,7 @@ wisp:test/headless-bounds.test.ts).
   texture holds, the `texture` size, and `parts`, mapping the game's part names
   (head, face, weapon, gripping hand) to node names. Each `ui` row whose
   texture has a receipt gets `inFrame`, from `inFrame(portrait, models,
-  row.pixels)` (wisp:scripts/wisp/screenBounds.ts). It poses the portrait as
+  row.pixels)` (wisp:scripts/wisp/render/screenBounds.ts). It poses the portrait as
   posed bounds do and rasterizes its triangles with a depth buffer at the
   render size, labelling each pixel with the nearest named node at or above
   the node its nearest vertex weights most: a part takes its named nodes and
@@ -738,7 +738,7 @@ wisp:test/headless-bounds.test.ts).
   hidden, as PNG (`decodePng`, wisp:scripts/wisp/fidelity/image.ts; RGBA keeps
   its RGB) or 8-bit binary PPM (`decodePpm`, wisp:scripts/platform/services.ts),
   and the box is Wisp's posed `box` for that frame in pixels.
-  `silhouetteBounds(shown, hidden, near)` (wisp:scripts/wisp/screenBounds.ts)
+  `silhouetteBounds(shown, hidden, near)` (wisp:scripts/wisp/render/screenBounds.ts)
   marks each pixel whose largest per-channel |Δ| is above 24, keeps the
   8-connected regions with a pixel overlapping `near` (the command passes
   Wisp's box grown by 20 px), and returns their box in pixel edges, or none.
@@ -861,7 +861,7 @@ saves them as the scene's `environment`.
   on), an effect whose origin lies outside the world bounds is not drawn;
   units are not culled this way. The bounds run from the terrain's first
   point to its last: `columns - 1` and `rows - 1` cells of 128 from its
-  origin, read from w3e versions 11 and 12 (wisp:scripts/wisp/terrain.ts).
+  origin, read from w3e versions 11 and 12 (wisp:scripts/wisp/terrain/terrain.ts).
   Native Classic, Smashcraft 56fb5249 on a base ending at y 4,096, Stratholme
   near view (8 Oct): the ruined cathedral at map y 5,944, 7,948 from the eye
   and in frame, isn't drawn, nor are Tomb's Temple of Tides and waterfall
@@ -894,7 +894,7 @@ saves them as the scene's `environment`.
   `texDir\\texFile` (keeping the suffix) of the map's first cliff type whose
   `CliffTypes.slk` `overrideTexture` names `CliffN`, so a Definitive cave
   draws its tileset's cliff diffuse, normal and ORM maps
-  (wisp:scripts/wisp/terrainCliffs.ts).
+  (wisp:scripts/wisp/terrain/terrainCliffs.ts).
   The record layout follows the [current HiveWE format documentation](https://github.com/stijnherfst/HiveWE/wiki/war3map.doo-Doodads).
   Terrain replacement under their footprint and matching native height and
   rotation references are still pending in #82.
@@ -1030,7 +1030,7 @@ after the run; no new input simulator is required.
 
 `--graphics classic` (the default) and `--graphics definitive` are named
 profiles of Warcraft III 3.0.1's `[Misc] hd=0` and `hd=2`
-(wisp:scripts/wisp/graphicsProfiles.ts). Reforged (`hd=1`) is not a profile
+(wisp:scripts/wisp/render/graphicsProfiles.ts). Reforged (`hd=1`) is not a profile
 (Tom, 9 Oct). Each profile says, per lever, whether Wisp draws it as that
 mode does, whether that mode draws nothing for it either (absent), or
 whether Warcraft draws it and Wisp does not (unsupported):

@@ -1,14 +1,14 @@
 import { Console, Effect, Layer, Schema } from "effect";
-import { type Command, UsageFailure, flagValues, portFlag } from "../command";
-import { GameFiles } from "../gameFiles";
-import { HotReload } from "../hotReload";
-import { MapBuild } from "../mapBuild";
-import { SourceErrors } from "../sourceErrors";
-import { Tune, type Tunable } from "../tune";
-import { TUNE_PAGE } from "../tunePage";
-import { step } from "../timings";
-import { panelServer } from "../panelServer";
-import { type HotProject, waitForProcessStop } from "../hotReload";
+import { type Command, UsageFailure, flagValues, portFlag } from "../cli/command";
+import { GameFiles } from "../io/gameFiles";
+import { HotReload } from "../dev/hotReload";
+import { MapBuild } from "../compile/mapBuild";
+import { SourceErrors } from "../compile/sourceErrors";
+import { Tune, type Tunable } from "../tune/tune";
+import { TUNE_PAGE } from "../tune/tunePage";
+import { step } from "../cli/timings";
+import { panelServer } from "../cli/panelServer";
+import { type HotProject, waitForProcessStop } from "../dev/hotReload";
 import { validateDataDirectories } from "./hot";
 
 interface TuneProject extends HotProject {

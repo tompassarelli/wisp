@@ -6,8 +6,8 @@ import { Deferred, Effect, Exit, Fiber, FileSystem, Layer, Scope, Stream } from 
 import { platformLayer } from "../../platform/layer";
 import { Namespaces } from "../../platform/services";
 import { ChildProcess } from "effect/process";
-import { flagValues } from "../command";
-import { pollUntil, spawnLogged } from "../hostProcess";
+import { flagValues } from "../cli/command";
+import { pollUntil, spawnLogged } from "../cli/hostProcess";
 import { LanFailure } from "./join";
 import { alive, desktopSize, pairDirectory, pairFlags } from "./pool";
 

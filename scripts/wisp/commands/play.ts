@@ -1,12 +1,12 @@
 import { basename, resolve } from "node:path";
 import { Effect, Layer } from "effect";
 import { documentsFolder } from "../../warcraft/battleNet";
-import { type Command, type CommandFailure, UsageFailure } from "../command";
-import { DoctorHands, type DoctorTarget, doctor, withDoctor } from "../doctor";
-import { type MenuFailure, type MenuSocket, leaveLobby, reportedMenus } from "../menus";
-import { type PlayDeclaration, PlayProblem, leaveScoreScreen, play } from "../play";
+import { type Command, type CommandFailure, UsageFailure } from "../cli/command";
+import { DoctorHands, type DoctorTarget, doctor, withDoctor } from "../doctor/doctor";
+import { type MenuFailure, type MenuSocket, leaveLobby, reportedMenus } from "../play/menus";
+import { type PlayDeclaration, PlayProblem, leaveScoreScreen, play } from "../play/play";
 import { type PlayTools, playHostLayer, playMachineLayer } from "../../platform/play";
-import type { ClientWatch } from "../watch";
+import type { ClientWatch } from "../dev/watch";
 
 const leaveBy = (port: number | undefined, what: string, leave: (menus: MenuSocket) => Effect.Effect<void, MenuFailure>) =>
   Effect.scoped(Effect.gen(function*() {

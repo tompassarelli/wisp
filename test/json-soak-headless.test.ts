@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Console, Effect, Exit, Layer } from "effect";
 import { platformLayer } from "../scripts/platform/layer";
-import type { Command } from "../scripts/wisp/command";
+import type { Command } from "../scripts/wisp/cli/command";
 import { makeHeadless } from "../scripts/wisp/commands/headless";
 import { makeSoak } from "../scripts/wisp/commands/soak";
-import { timingsLayer } from "../scripts/wisp/timings";
+import { timingsLayer } from "../scripts/wisp/cli/timings";
 
 async function capture(command: Command, args: readonly string[]) {
   const lines: string[] = [];

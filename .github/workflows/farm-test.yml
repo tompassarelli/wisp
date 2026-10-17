@@ -66,12 +66,12 @@ jobs:
           FARM_INPUT: ${{ inputs.farm-runner }}
         run: |
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          bun scripts/wisp/farmShards.ts plan --timings farm-timings.json --bun "$BUN_SHARDS" $(git ls-files '*.test.ts') > plan.json
+          bun scripts/wisp/farm/farmShards.ts plan --timings farm-timings.json --bun "$BUN_SHARDS" $(git ls-files '*.test.ts') > plan.json
           # Even shard jobs go to FARM_RUNNER while its load sample is fresh and fits its cores, odd ones to hosted
           # runners, so both pools run at once. A farm-runner input skips the load check.
           load=(--load farm-load.json)
           if [ -n "$FARM_INPUT" ]; then load=(); fi
-          bun scripts/wisp/farmShards.ts place --shards "$(jq '.bun | length' plan.json)" --farm "$FARM" "${load[@]}" > placement.json
+          bun scripts/wisp/farm/farmShards.ts place --shards "$(jq '.bun | length' plan.json)" --farm "$FARM" "${load[@]}" > placement.json
           echo "bun=$(jq -c '[range(.bun | length)]' plan.json)" >> "$GITHUB_OUTPUT"
           echo "bun-runners=$(jq -c 'map(.runner)' placement.json)" >> "$GITHUB_OUTPUT"
           jq -r 'to_entries[] | "- bun \(.key): \(.value.runner) (\(.value.reason))"' placement.json >> "$GITHUB_STEP_SUMMARY"
@@ -126,7 +126,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/wisp/lua32
-          key: wisp-lua32-${{ runner.environment }}-${{ hashFiles('scripts/wisp/lua32.ts', 'native/toward-zero.h') }}
+          key: wisp-lua32-${{ runner.environment }}-${{ hashFiles('scripts/wisp/compile/lua32.ts', 'native/toward-zero.h') }}
       - uses: actions/download-artifact@v4
         with:
           name: farm-test-plan
@@ -137,11 +137,11 @@ jobs:
           code=$?
           mapfile -t farm_files < <(jq -r ".bun[${{ matrix.shard }}][]" plan.json | xargs -r -d '\n' rg -l -j1 'farmTest\(' -- | sed 's#^#./#')
           if [ "${#farm_files[@]}" -gt 0 ]; then
-            bun test --timeout 120000 --preload ./scripts/wisp/testCostPreload.ts -t "farm: " "${farm_files[@]}" --reporter=junit --reporter-outfile=junit-farm.xml
+            bun test --timeout 120000 --preload ./scripts/wisp/testing/testCostPreload.ts -t "farm: " "${farm_files[@]}" --reporter=junit --reporter-outfile=junit-farm.xml
             farm_code=$?
             if [ "$farm_code" -ne 0 ]; then code=$farm_code; fi
           fi
-          bun scripts/wisp/farmShards.ts junit --shard ${{ matrix.shard }} --exit-code "$code" junit*.xml > result.json
+          bun scripts/wisp/farm/farmShards.ts junit --shard ${{ matrix.shard }} --exit-code "$code" junit*.xml > result.json
           exit "$code"
         env:
           CC: gcc
@@ -174,7 +174,7 @@ jobs:
           cat > "$scratch/frames.test.ts" <<'EOF'
           import { test } from "bun:test";
           import { steppedFrames } from "../src/headless/frameRate";
-          import { TEST_CEILING_FRAMES } from "../scripts/wisp/testCost";
+          import { TEST_CEILING_FRAMES } from "../scripts/wisp/testing/testCost";
           test("[spec #65] scratch test steps one frame over the ceiling", () => {
             steppedFrames.count += TEST_CEILING_FRAMES + 1;
           });
@@ -214,7 +214,7 @@ jobs:
         with:
           pattern: farm-test-*
           path: farm
-      - run: bun scripts/wisp/farmShards.ts merge --plan farm/farm-test-plan/plan.json --timings farm-timings.json --out summary.json farm/farm-test-result-*/result.json
+      - run: bun scripts/wisp/farm/farmShards.ts merge --plan farm/farm-test-plan/plan.json --timings farm-timings.json --out summary.json farm/farm-test-result-*/result.json
       - uses: actions/upload-artifact@v4
         with:
           name: farm-test-summary

@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { installHeadless } from "../scripts/wisp/headless";
+import { installHeadless } from "../scripts/wisp/headless/headless";
 import { installDispatch, on, trampoline } from "../src/map/dispatch";
 import { installNativeDriver, publishNativeDriverStatus, serviceNativeDriver, startNativeDriver } from "../src/map/nativeDriver";
 import { configureRuntime } from "../src/runtime/config";

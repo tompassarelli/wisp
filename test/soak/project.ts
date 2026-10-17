@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { defineSoak } from "../../scripts/wisp/soak";
+import { defineSoak } from "../../scripts/wisp/soak/soak";
 
 export default defineSoak({
   name: "soak test",

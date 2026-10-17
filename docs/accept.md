@@ -23,7 +23,7 @@ A run with a failed check exits 1. A held-key step is shown in dry-run output as
 
 ## Declaring checks
 
-A suite (`AcceptSuite`, wisp:scripts/wisp/accept.ts) names its map
+A suite (`AcceptSuite`, wisp:scripts/wisp/accept/accept.ts) names its map
 profiles, its checks and any frame measurements. A check is:
 
 | Field | Meaning |

@@ -1,20 +1,20 @@
 import { ModelRenderer, decodeBLP, getBLPImageData, parseMDL, parseMDX, type model } from "../../../vendor/war3-model.mjs";
 import { type AnimationSequence, animationSample, blendWeight, globalSequenceFrame, type SequenceSample } from "../../../src/headless/animation";
-import type { DrawnPose as EffectPose, PopcornEmitterPose, UnsupportedEmitterPose, RenderedFrame, RenderScene } from "../headlessRender";
-import { parsableModel } from "../models";
-import { drawnPoses } from "../culling";
-import { emitterInventory, undrawnEmitters } from "../emitterInventory";
+import type { DrawnPose as EffectPose, PopcornEmitterPose, UnsupportedEmitterPose, RenderedFrame, RenderScene } from "../render/headlessRender";
+import { parsableModel } from "../models/models";
+import { drawnPoses } from "../render/culling";
+import { emitterInventory, undrawnEmitters } from "../render/emitterInventory";
 import { advanceEmitters, type EmitterRenderer } from "./emitters";
 import { drawTerrain } from "./terrain";
 import { drawWater } from "./water";
 import { linkProgram } from "./gl";
 import { depthTarget, type DepthTarget, invert, parsePostProcessing, POINT_FACE, pointFaces, postProcessor, type PostSettings, postSettings, resolve, sceneTarget, type SceneTarget, SUN_MAP, sunView } from "./passes";
-import { terrainRows } from "../terrainMesh";
-import { doodadSkinRows, terrainDoodadPoses } from "../terrainDoodads";
+import { terrainRows } from "../terrain/terrainMesh";
+import { doodadSkinRows, terrainDoodadPoses } from "../terrain/terrainDoodads";
 import { ddsTexture } from "./ddsTexture";
-import { cliffOverrideTextures, cliffTexturePath } from "../terrainCliffs";
+import { cliffOverrideTextures, cliffTexturePath } from "../terrain/terrainCliffs";
 import { type Matrix, multiply, normalize } from "./matrix";
-import { camera, identity, poseNodes, type Sampler, show, SKY_FAR, transform, uiPixels } from "../screen";
+import { camera, identity, poseNodes, type Sampler, show, SKY_FAR, transform, uiPixels } from "../render/screen";
 
 interface Material { readonly Layers: readonly { readonly FilterMode?: number }[] }
 

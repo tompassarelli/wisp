@@ -1,4 +1,4 @@
-import type { FrameDefinition, FrameNode } from "../../../scripts/wisp/frames";
+import type { FrameDefinition, FrameNode } from "../../../scripts/wisp/compile/frames";
 
 const FONT = "Fonts\\FRIZQT__.TTF";
 const label = (key: string, x: number, y: number, width: number, height: number, size: number): FrameNode =>

@@ -1,7 +1,7 @@
-import type { ProcessOutput } from "../devProcesses";
-import type { JourneyOutcome } from "../journeyRun";
-import type { RegistryResult } from "../registryRun";
-import type { Selection, TestUnit } from "../testSelection";
+import type { ProcessOutput } from "./devProcesses";
+import type { JourneyOutcome } from "../testing/journeyRun";
+import type { RegistryResult } from "../testing/registryRun";
+import type { Selection, TestUnit } from "./testSelection";
 
 export interface ProcessResult {
   readonly passed: number;

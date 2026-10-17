@@ -1,6 +1,6 @@
 import { readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
-import type { Changes } from "../testSelection";
+import type { Changes } from "./testSelection";
 
 const PROJECT_FILE = /^(?:tsconfig[^/]*\.json|package\.json|bunfig\.toml|[^/]*\.lock)$/;
 

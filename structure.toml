@@ -53,8 +53,8 @@ may_use = ["map", "runtime", "num", "natives"]
 
 [[module]]
 name = "cli"
-paths = ["host/cli/**", "scripts/wisp/cli/**", "scripts/wisp/cli.ts", "scripts/wisp/command.ts", "scripts/wisp/timings.ts", "scripts/wisp/hostProcess.ts"]
-responsibility = "Command type, CLI runner, timings and process spawning."
+paths = ["host/cli/**", "scripts/wisp/cli/**"]
+responsibility = "Command type, CLI runner, timings, process spawning, JSON results and the panel server."
 may_use = []
 
 [[module]]
@@ -83,8 +83,8 @@ may_use = ["cli", "headless", "runtime", "num"]
 
 [[module]]
 name = "render"
-paths = ["host/render/**", "scripts/wisp/browser/**", "scripts/wisp/fidelity/**", "scripts/wisp/render/**"]
-responsibility = "WebGL headless and standalone renderer and fidelity metrics."
+paths = ["host/render/**", "scripts/wisp/browser/**", "scripts/wisp/fidelity/**", "scripts/wisp/render/**", "scripts/wisp/models/**", "scripts/wisp/terrain/**"]
+responsibility = "WebGL headless and standalone renderer, models, terrain, GPU lease and fidelity metrics."
 may_use = ["cli", "os", "headless", "runtime", "num"]
 
 [[module]]

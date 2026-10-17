@@ -6,7 +6,7 @@ import ts from "typescript";
 import { parseConfigFileWithSystem, transpileFiles } from "typescript-to-lua";
 import { NUMBER_RULE_CODE } from "../plugins/number-rules";
 import { numberRuleReport } from "../scripts/numberRules";
-import { farmTest } from "../scripts/wisp/farmTest";
+import { farmTest } from "../scripts/wisp/farm/farmTest";
 
 const root = join(import.meta.dir, "..");
 

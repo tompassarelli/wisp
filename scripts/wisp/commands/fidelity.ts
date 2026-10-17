@@ -1,6 +1,6 @@
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Console, Effect } from "effect";
-import { type Command, flagValues, UsageFailure } from "../command";
+import { type Command, flagValues, UsageFailure } from "../cli/command";
 import { checkFidelity, FidelityFailure } from "../fidelity/check";
 
 /** Blizzard's patch CDN lists each region's current build of a product; Warcraft III is `w3`. */

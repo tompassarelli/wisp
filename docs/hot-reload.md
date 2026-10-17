@@ -35,7 +35,7 @@ call `startHotReload()` once to create its timer and trigger; a client looks
 for files only twice a second until it has seen a host
 ([what polling costs](#what-polling-costs)).
 It also acknowledges version 0, the map's own bundle, which tells host tools
-such as the [fresh match](../scripts/wisp/lobby.ts) (wisp:scripts/wisp/lobby.ts)
+such as the [fresh match](../scripts/wisp/play/lobby.ts) (wisp:scripts/wisp/play/lobby.ts)
 that the match is running in that client. Keep module scope free of Warcraft
 natives and synchronized state: each client evaluates every module of a new
 version as soon as its own files arrive, on its own frame. A map built with an older
@@ -83,9 +83,9 @@ The consumer owns the program and command name; the
 
 The host first creates the `<file prefix>-hot` folder of each CustomMapData
 directory with the host marker `host.pld` in it
-([prepareHotFolders](../scripts/wisp/gameFiles.ts), wisp:scripts/wisp/gameFiles.ts).
-`wisp hot` does so when it starts and a [fresh match](../scripts/wisp/lobby.ts)
-(wisp:scripts/wisp/lobby.ts) before it installs the map, so the folder exists
+([prepareHotFolders](../scripts/wisp/io/gameFiles.ts), wisp:scripts/wisp/io/gameFiles.ts).
+`wisp hot` does so when it starts and a [fresh match](../scripts/wisp/play/lobby.ts)
+(wisp:scripts/wisp/play/lobby.ts) before it installs the map, so the folder exists
 before the match does; a map's own commands that start a match or publish
 reloads must do the same. The marker's content never changes, which the
 Preloader rule needs, and an existing marker is left alone. The host then
@@ -154,8 +154,8 @@ was 0.841 s with whole bundles; the sample's tiny bundle, 0.298 s, is about the
 client-side floor of polling and synchronized answers.
 
 See [runtime](../src/map/hotReload.ts) and
-[host service](../scripts/wisp/hotReload.ts)
-(wisp:src/map/hotReload.ts, wisp:scripts/wisp/hotReload.ts).
+[host service](../scripts/wisp/dev/hotReload.ts)
+(wisp:src/map/hotReload.ts, wisp:scripts/wisp/dev/hotReload.ts).
 
 ## What polling costs
 
@@ -202,7 +202,7 @@ and lists the engine's checksums and handle counters, such as
 5 October 2026 native desync (build 24268) wrote theirs 2 ms apart.
 
 `--watch` compares the clients' new reports with
-[Desyncs](../scripts/wisp/desyncs.ts) (wisp:scripts/wisp/desyncs.ts)
+[Desyncs](../scripts/wisp/dev/desyncs.ts) (wisp:scripts/wisp/dev/desyncs.ts)
 and prints each desync once, numbering clients in `--data` order:
 
 ```text

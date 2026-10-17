@@ -1,11 +1,11 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Schedule } from "effect";
-import type { MenuSocket } from "../menus";
+import type { MenuSocket } from "../play/menus";
 import { LanFailure } from "./join";
 import { isolatedNetworkProblem } from "./offline";
-import { requireCapability } from "../builds";
-import { describeCause } from "../command";
+import { requireCapability } from "../client/builds";
+import { describeCause } from "../cli/command";
 
 const LAN_PLUGIN = join(process.env["HOME"] ?? "", ".local/share/wisp-private/lan/index.ts");
 

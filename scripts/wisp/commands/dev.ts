@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { type Command, UsageFailure, flagValues } from "../command";
+import { type Command, UsageFailure, flagValues } from "../cli/command";
 import { hotServices, hotSide } from "../dev/hot";
 import { loop } from "../dev/loop";
 import type { DevProject } from "../dev/project";

@@ -115,7 +115,7 @@ The project adds `soak` to its `makeRepro` declaration:
 
 ```ts
 soak: {
-  project: join(sourceDirectory, "scripts/wisp/soak.ts"),
+  project: join(sourceDirectory, "scripts/wisp/soak/soak.ts"),
   tests: join(sourceDirectory, "test/repros"),
 },
 ```

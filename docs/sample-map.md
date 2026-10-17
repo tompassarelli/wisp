@@ -42,7 +42,7 @@ bun examples/sample/scripts/sample.ts map build --base BASE.w3m --out OUT_DIR/wi
 `bun examples/sample/scripts/sample.ts headless [--clients N]` plays the
 headless journey and prints each client's native calls and checksum and any
 problem. `LUA`, when set, must be Lua 5.3 built with `LUA_32BITS`; unset, the
-tests build and cache the pinned one (wisp:scripts/wisp/lua32.ts). The output must be outside the
+tests build and cache the pinned one (wisp:scripts/wisp/compile/lua32.ts). The output must be outside the
 checkout. The build also needs `nix` on first use: it links nixpkgs `lua5_3`,
 which checks the script's syntax, into wisp:build/tools/lua and compiles the map
 packager from wisp:native/map-pack.c against nixpkgs StormLib into

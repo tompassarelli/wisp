@@ -12,7 +12,7 @@ independent ways, both opt-in for development and diagnostic builds:
   on disk and measures pixels in it against features the game declares, such
   as its stage in a band of the screen.
 
-`checkPlayerView` (wisp:scripts/wisp/playerView.ts) runs both in every
+`checkPlayerView` (wisp:scripts/wisp/scene/playerView.ts) runs both in every
 signed-in client once a match runs, and fails with what a player would see
 wrong in each client.
 
@@ -92,7 +92,7 @@ many were destroyed in view, where Warcraft plays their death animation.
 
 The game declares, in host code, each kind of effect it draws: a name a player
 would use, its model paths and the most frames one may stay in view
-(`SceneKind`, wisp:scripts/wisp/scene.ts). One kind is the stage, with the
+(`SceneKind`, wisp:scripts/wisp/scene/scene.ts). One kind is the stage, with the
 number of pieces a match must show. Take model paths from the game's own
 constants where it exports them: an empty constant then names its kind in the
 empty-model problem, and a path no kind lists fails as undeclared. Declare
@@ -112,7 +112,7 @@ a body none of whose effects is drawn with triangles, by the models' facts,
 is invisible. The [soak](soak.md) asks the game for its bodies with every
 report.
 
-wisp:scripts/wisp/scene.ts and wisp:scripts/wisp/frameProbe.ts are plain
+wisp:scripts/wisp/scene/scene.ts and wisp:scripts/wisp/scene/frameProbe.ts are plain
 functions: a game's tests can check the lines its recorder wrote with
 `readSceneLines` and `sceneProblems` without loading Effect.
 
@@ -139,7 +139,7 @@ Measure acquisition intervals before choosing a sample rate. This API makes no
 frame-rate guarantee and cannot identify the game's responding object: the
 consumer must detect actual game pixels, separately from diagnostic markers.
 
-wisp:scripts/wisp/frameProbe.ts measures a frame; it never needs the image
+wisp:scripts/wisp/scene/frameProbe.ts measures a frame; it never needs the image
 viewed. Bands are fractions of the frame's width and height, so one
 declaration fits the 2560x1440 private-desktop capture and a downscaled
 recording alike. `colorRows` counts the rows of a band that hold an unbroken
@@ -159,7 +159,7 @@ threshold and its measured margin beside the declaration.
 The scene report says which effects the game hides; what a player still sees
 of them depends on their models. Give `SceneExpectations` a `visibility`
 declaration and `sceneProblems` also reports what a player could see that the
-game considers hidden or gone (wisp:scripts/wisp/visibility.ts):
+game considers hidden or gone (wisp:scripts/wisp/scene/visibility.ts):
 
 - a model a kind names that is empty, has no facts, or has no triangles,
   particles or light, so nothing is drawn where the game expects it;
@@ -169,7 +169,7 @@ game considers hidden or gone (wisp:scripts/wisp/visibility.ts):
   reach into a declared camera's frame from a declared parking place;
 - effects destroyed in view whose death animation emits particles there.
 
-`modelFacts` (wisp:scripts/wisp/models.ts) reads an MDX file into what the
+`modelFacts` (wisp:scripts/wisp/models/models.ts) reads an MDX file into what the
 check needs: geosets, triangles, lights, the mesh's box over every sequence,
 and per particle, ribbon, model or popcorn emitter whether it runs while shown
 and in death, whether its particles can show, its rate, lifespan and reach.

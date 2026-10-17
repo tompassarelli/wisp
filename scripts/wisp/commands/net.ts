@@ -1,8 +1,8 @@
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Fiber, Option, Schema } from "effect";
 import { ChildProcess } from "effect/process";
-import { type Command, UsageFailure, flagValues, wholeFlag } from "../command";
-import { collect } from "../hostProcess";
+import { type Command, UsageFailure, flagValues, wholeFlag } from "../cli/command";
+import { collect } from "../cli/hostProcess";
 import { type NetGame, type NetPeerOptions, type NetReport, NetFailure, runNetPeer } from "../net/peer";
 import { runProxy } from "../net/proxy";
 

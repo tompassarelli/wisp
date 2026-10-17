@@ -6,10 +6,10 @@ import { join } from "node:path";
 import { type ProcessInfo, launcherHealth, prefixUse } from "../scripts/warcraft/battleNet";
 import { ladderScan } from "../scripts/warcraft/war3Log";
 import { displayChanges, videoSettings, withDisplaySettings } from "../scripts/warcraft/preferences";
-import { DoctorHands, type DoctorTarget, diagnose, doctor, type Observation } from "../scripts/wisp/doctor";
-import { PlayMachine } from "../scripts/wisp/play";
-import { leaveScoreScreen } from "../scripts/wisp/lobby";
-import { ClientWatch, type ClientState, type ClientView } from "../scripts/wisp/watch";
+import { DoctorHands, type DoctorTarget, diagnose, doctor, type Observation } from "../scripts/wisp/doctor/doctor";
+import { PlayMachine } from "../scripts/wisp/play/play";
+import { leaveScoreScreen } from "../scripts/wisp/play/lobby";
+import { ClientWatch, type ClientState, type ClientView } from "../scripts/wisp/dev/watch";
 
 const fixture = (name: string) => readFileSync(join(import.meta.dir, "fixtures/doctor", name), "utf8");
 const PLAYED = fixture("launcher-played.log");

@@ -25,7 +25,7 @@ and what Wisp hasn't observed itself. W3Champions' code is in
 
 ## The steps to replace
 
-| Step | `wisp play` today | Bot sessions before the menu socket (wisp:scripts/wisp/lobby.ts `freshMatch` now uses the socket) |
+| Step | `wisp play` today | Bot sessions before the menu socket (wisp:scripts/wisp/play/lobby.ts `freshMatch` now uses the socket) |
 | --- | --- | --- |
 | Start the game | Battle.net's Play, clicked on the launcher's page | Clients stay running |
 | Load the map | The menu socket only, once the game's ladder scan is over ([play.md](play.md)) | Create Game → first map → name → Create, by clicks |
@@ -89,7 +89,7 @@ two ways:
 A third way, not tried, is to capture the browser's handshake on the loopback
 interface at launch. That needs root and sees other loopback traffic.
 
-**Wisp's page** (wisp:scripts/wisp/menus.ts `menuPage`) is that skeleton:
+**Wisp's page** (wisp:scripts/wisp/play/menus.ts `menuPage`) is that skeleton:
 
 - `#root` and `#portal`, with the game's own `GlueManager.js` from its data.
   Nothing of Blizzard's is copied.
@@ -230,7 +230,7 @@ decision.
 - **`wisp play`.** It hosts through the page on the game's `menuReportPort`
   and stops when the page doesn't report, instead of clicking the menus. It
   also allows rematches in the running game instead of a new Play per match.
-- **Bot sessions.** `freshMatch` (wisp:scripts/wisp/lobby.ts) hosts a
+- **Bot sessions.** `freshMatch` (wisp:scripts/wisp/play/lobby.ts) hosts a
   private game, joins it by name and password, starts it and leaves a lobby
   or match through each client's page, and the score screen with Escape. It
   refuses a client without a reporting page: a game created by clicks is
@@ -247,7 +247,7 @@ decision.
 | W3Champions launcher, `~/code/resources/w3champions/launcher` | `src/update-handling/WindowsLauncher.ts` and `MacLauncher.ts` set `Allow Local Files`; `src/update-handling/LauncherStrategy.ts` unpacks W3Champions' page into `_retail_`; `src/game/ingame-bridge.ts` and `game.types.ts` are the bridge between that page and the launcher on `127.0.0.1:38123`, the launcher's own messages, not the game's. Deprecated; its successor (w3champions/launcher-e-release) is closed. | No licence: read only, nothing copied. |
 | [kgallimore/wc3MultiTool](https://github.com/kgallimore/wc3MultiTool) | `packages/main/src/globals/gameSocket.ts` (request and event names, `CreateLobby` payload); `buildResources/webui.html`, `index.js` (a page that takes the GUID from its URL) | No licence: read only. |
 | [Promises/wc3-slop-lan](https://github.com/Promises/wc3-slop-lan) | `harness/webui/index.html` (host, join, LAN join and start sequences); `activator/src/menus.rs`, `harness/webui/bridge.py` (an outside socket client); `docs/porting.md` §2.2 (the Windows build) | No licence: read only. |
-| Wisp | wisp:scripts/wisp/menus.ts, wisp:scripts/wisp/commands/menus.ts, wisp:test/menus.test.ts | MIT. Written from the observed protocol: message names and JSON shapes are the interface, not copied code. |
+| Wisp | wisp:scripts/wisp/play/menus.ts, wisp:scripts/wisp/commands/menus.ts, wisp:test/menus.test.ts | MIT. Written from the observed protocol: message names and JSON shapes are the interface, not copied code. |
 
 ## 2. LAN hosting: offline clients and Wisp's host
 
