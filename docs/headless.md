@@ -127,11 +127,16 @@ export const JOURNEY: Journey = {
     { frame: 30, player: 0, chat: "-ping" },
     { frame: 60, reload: true },
     { frame: 90, player: 1, key: 0x54, meta: 2 },
+    { frame: 100, player: 0, mouse: { x: 640, y: 360, left: true } },
   ],
 };
 ```
 
 A key event is a press and a release with its modifiers (2 is Ctrl).
+A mouse event moves that player's pointer to screen pixel `x`, `y`
+(`BlzGetMouseScreenPosX/Y`) on their client only, and `left` holds or
+releases the left button (`BlzIsMouseButtonPressed`); it stays where the last
+event left it, so a drag is a press, moves and a release.
 `runJourney` starts the map in every client, plays the events and returns each
 client's call count, checksum and error reports, the first divergence and any
 reload not running.
@@ -489,6 +494,13 @@ and frames render at the map's `render.width`/`height` (default 1280x720).
 `--resolution WxH` gives every client and the render canvas that size, so a
 map's layout and its picture agree, such as `--resolution 800x600` for a 4:3
 Classic pool client.
+`--focus MODEL` frames one body: in every captured scene, the one drawn effect
+or unit whose model path contains `MODEL` (at nonzero alpha, so a hidden
+fighter doesn't count) takes the camera, which keeps its rotation, angle of
+attack and field of view and moves until the model's declared extent is
+centred and spans three quarters of the frame; `--render` and `--bounds` both
+see the focused camera. A scene with no match or more than one fails, naming
+the count, so hide or move the others first.
 Unit and effect alpha fades opaque material layers in both Classic and
 Definitive; alpha 140 blends the body with the background, as in a roll.
 Frame numbers are headless client frames after that frame's journey events.

@@ -1,9 +1,11 @@
 import type { Lockstep } from "./lockstep";
 import type { MissingNative } from "./clientTypes";
+import { point } from "./pointer";
 
 export type JourneyEvent =
   | { readonly frame: number; readonly player: number; readonly chat: string }
   | { readonly frame: number; readonly player: number; readonly key: number; readonly meta: number; readonly down?: boolean }
+  | { readonly frame: number; readonly player: number; readonly mouse: { readonly x: number; readonly y: number; readonly left?: boolean } }
   | { readonly frame: number; readonly reload: true };
 
 export interface Journey {
@@ -85,6 +87,7 @@ export function runJourney(clients: Lockstep, journey: Journey, options: Journey
       if (event.down === undefined) clients.press(event.player, event.key, event.meta);
       else clients.key(event.player, event.key, event.meta, event.down);
     }
+    else if ("mouse" in event) point(clients.client(event.player), event.mouse.x, event.mouse.y, event.mouse.left);
     else clients.reload();
   }
   capture();

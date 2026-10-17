@@ -11,6 +11,7 @@ import { parseMDL } from "../../vendor/war3-model.mjs";
 import { captureScene, type HeadlessRenderProject, loadEffectDeaths, renderScenes, type RenderScene, sceneWithUnits } from "../render/headlessRender";
 import { parseModelMDX } from "../models/models";
 import { type TextureIdentity, uiReport } from "../render/screen";
+import { focusMatches, focusScene } from "../render/focus";
 import { type BoundsModel, type BoundsTextures, type Texels, boundsModel, compareEdges, inFrame, sceneBounds, silhouetteBounds, teamGlowPath, texels } from "../render/screenBounds";
 import { decodePng } from "../fidelity/image";
 import { decodePreviewRgba } from "../scene/mapPreview";
@@ -42,6 +43,7 @@ const JourneyFile = Schema.Struct({
   events: Schema.Array(Schema.Union([
     Schema.Struct({ frame: Schema.Finite, player: Schema.Finite, chat: Schema.String }),
     Schema.Struct({ frame: Schema.Finite, player: Schema.Finite, key: Schema.Finite, meta: Schema.Finite, down: Schema.optionalKey(Schema.Boolean) }),
+    Schema.Struct({ frame: Schema.Finite, player: Schema.Finite, mouse: Schema.Struct({ x: Schema.Finite, y: Schema.Finite, left: Schema.optionalKey(Schema.Boolean) }) }),
     Schema.Struct({ frame: Schema.Finite, reload: Schema.Literal(true) }),
   ])),
 });
@@ -53,21 +55,44 @@ const matchFrameOf = (globalPrefixes: readonly string[]) => (clients: Lockstep):
 };
 
 /** Per scene: its frame rows (with the in-frame verdict of a frame showing a portrait) and its posed model rows at a `width` x `height` canvas, without Chrome. */
-async function boundsImages(render: HeadlessRenderProject, scenes: readonly RenderScene[], width: number, height: number, graphics: Graphics) {
-  const read = async (path: string) => {
-    if (render.resolveAsset === undefined) {
-      const bytes = await render.readAsset(path, graphics);
-      return { bytes, layer: bytes === undefined ? undefined : "base" };
+async function readLayered(render: HeadlessRenderProject, path: string, graphics: Graphics) {
+  if (render.resolveAsset === undefined) {
+    const bytes = await render.readAsset(path, graphics);
+    return { bytes, layer: bytes === undefined ? undefined : "base" };
+  }
+  const { bytes, selected } = await render.resolveAsset(path, graphics);
+  return { bytes, layer: selected?.layer };
+}
+
+const parseModel = (bytes: Uint8Array) => new TextDecoder().decode(bytes.subarray(0, 4)) === "MDLX" ? parseModelMDX(bytes.slice().buffer) : parseMDL(new TextDecoder().decode(bytes));
+
+async function focusedScenes(render: HeadlessRenderProject, scenes: readonly RenderScene[], model: string, aspect: number, graphics: Graphics): Promise<RenderScene[]> {
+  const extents = new Map<string, { minimum: Float32Array; maximum: Float32Array }>();
+  const focused: RenderScene[] = [];
+  for (const scene of scenes) {
+    const matches = focusMatches(scene, model);
+    const [pose] = matches;
+    if (pose === undefined || matches.length > 1) throw new Error(`--focus ${model} matches ${matches.length} drawn models on p${scene.client} frame ${scene.frame}; hide or move the others`);
+    if (!extents.has(pose.model)) {
+      const { bytes } = await readLayered(render, pose.model, graphics);
+      if (bytes === undefined) throw new Error(`--focus ${model}: the render project can't read ${pose.model}`);
+      const info = parseModel(bytes).Info;
+      extents.set(pose.model, { minimum: info.MinimumExtent, maximum: info.MaximumExtent });
     }
-    const { bytes, selected } = await render.resolveAsset(path, graphics);
-    return { bytes, layer: selected?.layer };
-  };
+    const extent = extents.get(pose.model);
+    focused.push(extent === undefined ? scene : focusScene(scene, pose, extent, aspect));
+  }
+  return focused;
+}
+
+async function boundsImages(render: HeadlessRenderProject, scenes: readonly RenderScene[], width: number, height: number, graphics: Graphics) {
+  const read = (path: string) => readLayered(render, path, graphics);
   const posed = scenes.map((scene) => sceneWithUnits(render, scene));
   const models = new Map<string, BoundsModel>();
   const portraits = Object.values(render.portraits ?? {});
   for (const path of new Set([...posed, ...portraits.map((portrait) => portrait.scene)].flatMap((scene) => scene.effects.map((pose) => pose.model)))) {
     const { bytes } = await read(path);
-    if (bytes !== undefined) models.set(path, boundsModel(new TextDecoder().decode(bytes.subarray(0, 4)) === "MDLX" ? parseModelMDX(bytes.slice().buffer) : parseMDL(new TextDecoder().decode(bytes))));
+    if (bytes !== undefined) models.set(path, boundsModel(parseModel(bytes)));
   }
   const images = new Map<string, Texels>(), glows = new Map<number, Texels>();
   // A texture the bounds can't decode (DDS, palette PNG) leaves its geoset bounded by its whole surface.
@@ -115,7 +140,7 @@ function textureAlpha(bytes: Uint8Array): Uint8Array | undefined {
 export function headlessArguments(args: readonly string[]) {
   const named: string[] = [], frames: number[] = [];
   let match = false;
-  let render: string | undefined, bounds: string | undefined, journey: string | undefined, sounds: string | undefined;
+  let render: string | undefined, bounds: string | undefined, journey: string | undefined, sounds: string | undefined, focus: string | undefined;
   let screen: { width: number; height: number } | undefined;
   let runs = 1, stepFrames: number | undefined, musicVolume: number | undefined, graphics: Graphics = "classic", look: Lever[] = [];
   for (let index = 0; index < args.length; index++) {
@@ -125,13 +150,14 @@ export function headlessArguments(args: readonly string[]) {
       match = arg === "--match-frames";
       while (index + 1 < args.length && /^\d+(,\d+)*$/.test(args[index + 1] ?? "")) frames.push(...(args[++index] ?? "").split(",").map(Number));
       if (frames.length === 0) throw new Error(`${arg} needs one or more frame numbers`);
-    } else if (["--render", "--bounds", "--journey", "--sound-cues", "--music-volume", "--clients", "--runs", "--step", "--graphics", "--look", "--resolution"].includes(arg)) {
+    } else if (["--render", "--bounds", "--journey", "--sound-cues", "--music-volume", "--clients", "--runs", "--step", "--graphics", "--look", "--resolution", "--focus"].includes(arg)) {
       const value = args[++index];
       if (value === undefined || value.startsWith("--")) throw new Error(`${arg} needs a value`);
       if (arg === "--render") render = value;
       if (arg === "--bounds") bounds = value;
       if (arg === "--journey") journey = value;
       if (arg === "--sound-cues") sounds = value;
+      if (arg === "--focus") focus = value;
       if (arg === "--music-volume") {
         musicVolume = Number(value);
         if (!(musicVolume >= 0 && musicVolume <= 1)) throw new Error("--music-volume needs a number from 0 to 1");
@@ -158,7 +184,8 @@ export function headlessArguments(args: readonly string[]) {
   if (runs > 1 && (render !== undefined || bounds !== undefined)) throw new Error("--render and --bounds capture one run; use --runs for checks without them");
   if (graphics !== "classic" && render === undefined && bounds === undefined) throw new Error("--graphics chooses what --render draws and --bounds measures");
   if (look.length > 0 && render === undefined) throw new Error("--look chooses what --render draws");
-  return { named, frames: [...new Set(frames)].sort((a, b) => a - b), match, render, bounds, journey, sounds, runs, stepFrames, musicVolume, graphics, look, screen };
+  if (focus !== undefined && render === undefined && bounds === undefined) throw new Error("--focus aims what --render draws and --bounds measures");
+  return { named, focus, frames: [...new Set(frames)].sort((a, b) => a - b), match, render, bounds, journey, sounds, runs, stepFrames, musicVolume, graphics, look, screen };
 }
 
 /** Wisp's posed box is grown by this much to find the native silhouette near it (wisp#125, box 3). */
@@ -293,6 +320,8 @@ export const makeHeadless = (load: () => Promise<HeadlessProject>, cost?: PerfPr
     }
     if (options.sounds !== undefined) yield* Effect.tryPromise({ try: () => Bun.write(options.sounds ?? "", JSON.stringify(report.sounds, null, 2) + "\n"), catch: (cause) => new HeadlessFailure({ journey: name, problems: 1, cause }) });
     const canvas = options.screen ?? { width: render?.width ?? 1280, height: render?.height ?? 720 };
+    const focus = options.focus;
+    if (focus !== undefined && render !== undefined) scenes = yield* Effect.tryPromise({ try: () => focusedScenes(render, scenes, focus, canvas.width / canvas.height, options.graphics), catch: (cause) => new HeadlessFailure({ journey: name, problems: 1, cause }) });
     const bounds = (options.render !== undefined || options.bounds !== undefined) && render !== undefined
       ? yield* Effect.tryPromise({ try: () => boundsImages(render, scenes, canvas.width, canvas.height, options.graphics), catch: (cause) => new HeadlessFailure({ journey: name, problems: 1, cause }) }).pipe(step("screen bounds"))
       : [];
