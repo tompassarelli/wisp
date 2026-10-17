@@ -71,6 +71,13 @@ share, and their product joins the linear fog (wisp:docs/headless.md,
 `setInstanceColor` multiplies unit/effect RGB into that geoset tint before
 light and fog. Its default is white; particles and ribbons retain emitter colours.
 
+A Version 1100 and later HD material reads its normal, ORM and reflection
+textures from the base layer's own `NormalTextureID`, `ORMTextureID` and
+`ReflectionsTextureID` whenever the layer declares them, whatever its
+`ShaderTypeId` (stock Doodads\Cinematic\FrozenThrone\FrozenThrone.mdx has
+single-layer type 0 and 24 materials that do); only a layer without them falls
+back to layer slots 1, 2 and 5 (wisp#13).
+
 Three more built-file changes keep a live frame inside 16.7 ms (wisp#48).
 Model, particle and ribbon renderers share one linked program per WebGL
 context and shader pair and never delete it; compiling and linking stalled

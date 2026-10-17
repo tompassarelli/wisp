@@ -7840,11 +7840,11 @@ var ModelRenderer = class {
 					const envTextres = this.rendererData.materialLayerReflectionTextureID[materialID];
 					const diffuseTextureID = textures[0];
 					const diffuseTexture = this.model.Textures[diffuseTextureID];
-					const normalTextureID = baseLayer?.ShaderTypeId === 1 ? normalTextres[0] : textures[1];
+					const normalTextureID = normalTextres[0] ?? textures[1];
 					const normalTexture = this.model.Textures[normalTextureID];
-					const ormTextureID = baseLayer?.ShaderTypeId === 1 ? ormTextres[0] : textures[2];
+					const ormTextureID = ormTextres[0] ?? textures[2];
 					const ormTexture = this.model.Textures[ormTextureID];
-					const envTextureID = baseLayer?.ShaderTypeId === 1 ? envTextres[0] : textures[5];
+					const envTextureID = envTextres[0] ?? textures[5];
 					const envTextureImage = this.model.Textures[envTextureID]?.Image;
 					const irradianceMap = this.rendererData.gpuIrradianceMap[envTextureImage];
 					const prefilteredEnv = this.rendererData.gpuPrefilteredEnvMap[envTextureImage];
@@ -10066,9 +10066,9 @@ var ModelRenderer = class {
 		const ormTextres = this.rendererData.materialLayerOrmTextureID[materialID];
 		const diffuseTextureID = textures[0];
 		const diffuseTexture = this.model.Textures[diffuseTextureID];
-		const normalTextureID = baseLayer?.ShaderTypeId === 1 ? normalTextres[0] : textures[1];
+		const normalTextureID = normalTextres[0] ?? textures[1];
 		const normalTexture = this.model.Textures[normalTextureID];
-		const ormTextureID = baseLayer?.ShaderTypeId === 1 ? ormTextres[0] : textures[2];
+		const ormTextureID = ormTextres[0] ?? textures[2];
 		const ormTexture = this.model.Textures[ormTextureID];
 		this.setWispLayer(baseLayer);
 		if (baseLayer.Shading & LayerShading.TwoSided) this.gl.disable(this.gl.CULL_FACE);
