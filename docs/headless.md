@@ -906,18 +906,18 @@ saves them as the scene's `environment`.
   model rotation and scale. Emitters whose sampled visibility or alpha is zero
   are omitted, as are models culled by the renderer. The external effect's
   particle reach is unknown; an emitter with visible tracks is reported even
-  when its current emission rate is zero. Wisp does not simulate these effects:
-  every listed emitter produces an `undrawn Popcorn emitter` failure naming
-  the model, emitter and effect file. The failure preserves the scene JSON so
-  the missing element can be traced.
+  when its current emission rate is zero. Wisp does not simulate these effects
+  or decode the external file: a visible Popcorn emitter is reported present at
+  its world position and scale and is no render failure. Its appearance is a
+  native spot check.
   Each frame in `render.json` also carries `popcornEmitters` and an
   `unsupportedEmitters` inventory of every Popcorn and version-1 model
   particle emitter in the drawn models, including hidden emitters. Entries
-  record `kind`, node `objectId`, sampled `visible`, `supported: false`,
-  model, handle, name, external path, position and scale. An empty MDX name
-  uses its kind and node ID. Visible version-1 model emitters also fail by
-  name; hidden entries remain inventory only. No external particle file is
-  decoded, and these records assert neither particle presence nor fidelity.
+  record `kind`, node `objectId`, sampled `visible`, `supported` (true for Popcorn presence, false for
+  version-1 model particles), model, handle, name, external path, position and scale. An empty MDX name
+  uses its kind and node ID. Visible version-1 model emitters still fail by
+  name; hidden entries remain inventory only. A Popcorn record asserts
+  presence and position, never fidelity.
 - **Omni lights.** In Definitive every drawn model's omni lights (MDX light
   type 0, such as a light-only model a map places) light the other models:
   colour × intensity × N·L, sampled at the model's pose, full out to the

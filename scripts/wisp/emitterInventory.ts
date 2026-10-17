@@ -14,10 +14,10 @@ export function emitterInventory(pose: DrawnPose, data: model.Model, sampler: Sa
     const position = [0, 1, 2].map((row) => (world[12 + row] ?? 0) + [0, 1, 2].reduce((sum, axis) => sum + (world[axis * 4 + row] ?? 0) * (pivot?.[axis] ?? 0), 0)) as [number, number, number];
     const scale = [0, 1, 2].map((axis) => Math.hypot(world[axis * 4] ?? 0, world[axis * 4 + 1] ?? 0, world[axis * 4 + 2] ?? 0)) as [number, number, number];
     const entry = { model: pose.model, handle: pose.handle.id, emitter: emitter.Name || `${kind}#${emitter.ObjectId}`, effect: emitter.Path ?? "", position, scale };
-    unsupportedEmitters.push({ ...entry, kind, objectId: emitter.ObjectId, visible, supported: false });
+    unsupportedEmitters.push({ ...entry, kind, objectId: emitter.ObjectId, visible, supported: kind === "popcorn" });
     if (visible && kind === "popcorn") popcornEmitters.push(entry);
   }
 }
 
 export const undrawnEmitters = (unsupportedEmitters: readonly UnsupportedEmitterPose[]): string[] =>
-  unsupportedEmitters.filter((emitter) => emitter.visible).map((emitter) => `${emitter.model}: undrawn ${emitter.kind === "popcorn" ? "Popcorn" : "version-1 model"} emitter "${emitter.emitter}" (${emitter.effect || "no effect path"})`);
+  unsupportedEmitters.filter((emitter) => emitter.visible && !emitter.supported).map((emitter) => `${emitter.model}: undrawn version-1 model emitter "${emitter.emitter}" (${emitter.effect || "no effect path"})`);

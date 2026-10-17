@@ -112,7 +112,7 @@ export interface UnsupportedEmitterPose extends PopcornEmitterPose {
   readonly kind: "popcorn" | "model particle";
   readonly objectId: number;
   readonly visible: boolean;
-  readonly supported: false;
+  readonly supported: boolean;
 }
 
 export interface RenderedFrame {
