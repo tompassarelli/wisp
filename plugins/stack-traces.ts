@@ -16,7 +16,7 @@ const set = (left: lua.AssignmentLeftHandSideExpression, right: lua.Expression) 
 const call = (name: string, args: lua.Expression[]) => lua.createCallExpression(id(name), args);
 const plus = (left: lua.Expression, right: lua.Expression) => lua.createBinaryExpression(left, right, lua.SyntaxKind.AdditionOperator);
 const slot = () => plus(id("____wispBase"), num(1));
-const reporters = new Set(["errors", "dispatch"].map((name) => resolve(import.meta.dir, `../src/platform/${name}.ts`)));
+const reporters = new Set(["errors", "dispatch"].map((name) => resolve(import.meta.dir, `../src/map/${name}.ts`)));
 
 /** Shared across modules and hot reloads; frame strings are compiler constants. */
 function prelude(): lua.Statement[] {

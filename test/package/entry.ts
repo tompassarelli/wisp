@@ -1,7 +1,7 @@
 import { configureRuntime } from "wisp/src/runtime/config";
-import { installDispatch, on, trampoline } from "wisp/src/platform/dispatch";
-import { reportError } from "wisp/src/platform/errors";
-import { installHotReload, startHotReload } from "wisp/src/platform/hotReload";
+import { installDispatch, on, trampoline } from "wisp/src/map/dispatch";
+import { reportError } from "wisp/src/map/errors";
+import { installHotReload, startHotReload } from "wisp/src/map/hotReload";
 import { assertEquals } from "wisp/src/runtime/testing";
 import { floorDiv, idiv, imod } from "wisp/src/sim/intMath";
 import { f32 } from "wisp/src/sim/f32";

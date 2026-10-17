@@ -1,5 +1,5 @@
 import { configureRuntime } from "../../src/runtime/config";
-import { installDispatch, on, trampoline } from "../../src/platform/dispatch";
+import { installDispatch, on, trampoline } from "../../src/map/dispatch";
 
 interface SoakTestState {
   tick: number;

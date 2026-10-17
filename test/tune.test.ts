@@ -74,8 +74,8 @@ test("[reference] a kept value's diff is its line with three lines of context, a
 });
 
 const MAIN = `import { configureRuntime } from "../../../src/runtime/config";
-import { installDispatch, on, trampoline } from "../../../src/platform/dispatch";
-import { installHotReload, startHotReload } from "../../../src/platform/hotReload";
+import { installDispatch, on, trampoline } from "../../../src/map/dispatch";
+import { installHotReload, startHotReload } from "../../../src/map/hotReload";
 import { f32 } from "../../../src/sim/f32";
 import { TUNING } from "./tuning";
 

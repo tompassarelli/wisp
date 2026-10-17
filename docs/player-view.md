@@ -22,7 +22,7 @@ Start the recorder from the entry of each build that should report, after
 `configureRuntime`, and register its handler in that entry's `install`:
 
 ```ts
-import { installSceneReport, startSceneReport } from "wisp/src/platform/scene";
+import { installSceneReport, startSceneReport } from "wisp/src/map/scene";
 
 export function install(this: void): void {
   installMap();
@@ -35,7 +35,7 @@ export function start(this: void): void {
 }
 ```
 
-The recorder (wisp:src/platform/scene.ts) wraps `AddSpecialEffect`,
+The recorder (wisp:src/map/scene.ts) wraps `AddSpecialEffect`,
 `AddSpecialEffectLoc`, `AddSpecialEffectTarget`, `DestroyEffect`,
 `BlzSetSpecialEffectAlpha`, `BlzSetSpecialEffectScale`,
 `BlzSetSpecialEffectMatrixScale`, `BlzResetSpecialEffectMatrix` and the

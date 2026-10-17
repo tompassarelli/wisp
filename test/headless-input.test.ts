@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { linePreloadFile } from "../scripts/wisp/preloadRecord";
 import { installHeadless } from "../scripts/wisp/headless";
 import { customMapData, writtenPreloadFile } from "../scripts/wisp/headlessInput";
-import { installDispatch, on, trampoline } from "../src/platform/dispatch";
-import { readChunk, writeLines } from "../src/platform/fileio";
+import { installDispatch, on, trampoline } from "../src/map/dispatch";
+import { readChunk, writeLines } from "../src/map/fileio";
 import { configureRuntime } from "../src/runtime/config";
 
 declare global {

@@ -1,5 +1,5 @@
 import { configureRuntime } from "../../src/runtime/config";
-import { writeLines } from "../../src/platform/fileio";
+import { writeLines } from "../../src/map/fileio";
 
 export const TIMER134_CALLBACKS = 4000;
 export const TIMER134_FAST_CALLBACKS = 1024;

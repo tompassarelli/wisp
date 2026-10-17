@@ -28,7 +28,7 @@ covers updating fields on retained handles without rehosting.
 
 Bind engine callbacks once with `trampoline(name)` and register their current
 behavior with `on(name, handler)` from
-[dispatch](../src/platform/dispatch.ts) (wisp:src/platform/dispatch.ts).
+[dispatch](../src/map/dispatch.ts) (wisp:src/map/dispatch.ts).
 The bundle exports `install()`; each installation calls `installDispatch()`,
 re-registers handlers and calls `installHotReload()`. At initial match startup,
 call `startHotReload()` once to create its timer and trigger; a client looks
@@ -153,9 +153,9 @@ compiler's reused requires and number-rule scans. The 2-client native median
 was 0.841 s with whole bundles; the sample's tiny bundle, 0.298 s, is about the
 client-side floor of polling and synchronized answers.
 
-See [runtime](../src/platform/hotReload.ts) and
+See [runtime](../src/map/hotReload.ts) and
 [host service](../scripts/wisp/hotReload.ts)
-(wisp:src/platform/hotReload.ts, wisp:scripts/wisp/hotReload.ts).
+(wisp:src/map/hotReload.ts, wisp:scripts/wisp/hotReload.ts).
 
 ## What polling costs
 
@@ -165,7 +165,7 @@ hold it, and when that folder is missing too, its parent. Smashcraft 0.0.44
 measured one lookup at 32-35 ms in a CustomMapData of 94,057 files with no hot
 folder; 32 lookups a second asked for about 1.1 s of work per second of game,
 and Warcraft stalled for minutes. The reloader bounds that
-([runtime](../src/platform/hotReload.ts), wisp:src/platform/hotReload.ts):
+([runtime](../src/map/hotReload.ts), wisp:src/map/hotReload.ts):
 
 | Client has seen | Lookups | Worst case at 35 ms per whole-CustomMapData lookup |
 | --- | --- | --- |

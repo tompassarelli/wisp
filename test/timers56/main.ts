@@ -1,5 +1,5 @@
 import { configureRuntime } from "../../src/runtime/config";
-import { writeLines } from "../../src/platform/fileio";
+import { writeLines } from "../../src/map/fileio";
 
 export const TIMER_RULES_SECONDS = 1.25;
 

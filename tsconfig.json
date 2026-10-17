@@ -38,7 +38,7 @@
   ],
   "exclude": [
     "scripts/wisp/browser/**",
-    "src/platform/**",
+    "src/map/**",
     "src/natives/**",
     "src/headless/lua.ts",
     "src/headless/luaPerf.ts",

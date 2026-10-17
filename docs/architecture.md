@@ -12,7 +12,7 @@ A module may import only the modules in its "may use" column. `src/` never impor
 | num | `src/sim/` | binary32 soft-float, f32 helpers, intMath | none |
 | natives | `src/natives/warcraft.d.ts` | Warcraft native declarations (generated) | none |
 | runtime | `src/runtime/` | Pure map-side helpers: lookup, record text, config, payload, modules, test harness | num |
-| map | `src/platform/` | Map-side services calling natives: file I/O, dispatch, hot reload, frame meter, native driver, scene | runtime, num, natives |
+| map | `src/map/` | Map-side services calling natives: file I/O, dispatch, hot reload, frame meter, native driver, scene | runtime, num, natives |
 | headless | `src/headless/` | Emulated Warcraft client: natives, lockstep, sync channel, journeys, Lua perf | map, runtime, num, natives |
 | cli | `scripts/wisp/{cli,command,timings,hostProcess}.ts` | Command type, CLI runner, timings, process spawning | none |
 | os | `scripts/platform/`, `scripts/warcraft/` | Host OS, desktop, Battle.net launcher, Warcraft window and input | cli |
@@ -30,7 +30,7 @@ A module may import only the modules in its "may use" column. `src/` never impor
 | A headless native's behaviour | `src/headless/client.ts` (Warcraft 3 families: `src/headless/warcraft3Natives.ts`) | `src/headless/natives/<family>.ts` in box 19 |
 | A native declaration | producer `scripts/natives.ts` (writes `src/natives/warcraft.d.ts`) | stays |
 | Float or integer math | `src/sim/f32.ts`, `src/sim/intMath.ts`, `src/sim/binary32.ts` | `src/num/` in W-num |
-| Map-side file I/O, hot reload, frame meter | `src/platform/fileio.ts`, `src/platform/hotReload.ts`, `src/platform/frameMeter.ts` | `src/map/` in box 23 |
+| Map-side file I/O, hot reload, frame meter | `src/map/fileio.ts`, `src/map/hotReload.ts`, `src/map/frameMeter.ts` | stays |
 | Pure map helper | `src/runtime/` | stays |
 | A command a game instantiates | `scripts/wisp/commands/<verb>.ts` | `host/commands/` in box 25 |
 | CLI runner, process spawning | `scripts/wisp/cli.ts`, `scripts/wisp/hostProcess.ts` | `host/cli/` in W-cli |

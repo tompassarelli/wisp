@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import { installHeadless } from "../scripts/wisp/headless";
-import { installDispatch, on, trampoline } from "../src/platform/dispatch";
+import { installDispatch, on, trampoline } from "../src/map/dispatch";
 import { configureRuntime } from "../src/runtime/config";
 import { MEASURED_BATTLE_NET, syncDelivery } from "../src/headless/syncChannel";
 

@@ -8,11 +8,11 @@ measured.
 
 ## The frame meter
 
-[The frame meter](../src/platform/frameMeter.ts) (wisp:src/platform/frameMeter.ts)
+[The frame meter](../src/map/frameMeter.ts) (wisp:src/map/frameMeter.ts)
 measures every frame of a running map:
 
 - **Lua time**: Lua's `os.clock` around each callback that runs through
-  [dispatch](../src/platform/dispatch.ts), summed per frame. It includes the
+  [dispatch](../src/map/dispatch.ts), summed per frame. It includes the
   natives a callback calls, so it is the time the game's frame spends in the
   map's code. Without `os.clock` the meter reports no time.
 - **Natives**: calls of every global function whose name starts with a
@@ -45,7 +45,7 @@ Only development and diagnostic entries import the meter, so a build players
 run carries none of it:
 
 ```ts
-import { installFrameMeter, startFrameMeter } from "wisp/src/platform/frameMeter";
+import { installFrameMeter, startFrameMeter } from "wisp/src/map/frameMeter";
 
 export function install(this: void): void {
   installGame(); // configureRuntime, installDispatch, handlers, installHotReload

@@ -1,6 +1,6 @@
 import { configureRuntime } from "../../src/runtime/config";
-import { installDispatch } from "../../src/platform/dispatch";
-import { startSceneReport } from "../../src/platform/scene";
+import { installDispatch } from "../../src/map/dispatch";
+import { startSceneReport } from "../../src/map/scene";
 
 declare global {
   var __fixtureFrame: number | undefined;

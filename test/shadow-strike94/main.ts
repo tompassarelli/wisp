@@ -1,5 +1,5 @@
 import { configureRuntime } from "../../src/runtime/config";
-import { writeLines } from "../../src/platform/fileio";
+import { writeLines } from "../../src/map/fileio";
 import { SHADOW_CONFIGS, SUBJECT_ID } from "./configs";
 
 export function install(this: void): void {

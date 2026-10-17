@@ -1,5 +1,5 @@
 import { configureRuntime } from "../../src/runtime/config";
-import { writeLines } from "../../src/platform/fileio";
+import { writeLines } from "../../src/map/fileio";
 import { PLACEMENTS, READY_FILE, type Parent } from "./layout";
 
 function parentFrame(this: void, parent: Parent, created: Map<string, framehandle>): framehandle {

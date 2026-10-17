@@ -1,7 +1,7 @@
 import { configureRuntime } from "../../src/runtime/config";
-import { installDispatch, on, trampoline } from "../../src/platform/dispatch";
-import { reportError } from "../../src/platform/errors";
-import { installHotReload, startHotReload } from "../../src/platform/hotReload";
+import { installDispatch, on, trampoline } from "../../src/map/dispatch";
+import { reportError } from "../../src/map/errors";
+import { installHotReload, startHotReload } from "../../src/map/hotReload";
 
 declare global {
   var __fixtureTicks: number | undefined;

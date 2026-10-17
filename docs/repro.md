@@ -13,7 +13,7 @@ how it restores its state and how it runs the saved frames.
 ## The file
 
 The map writes a Preload file in the player's CustomMapData with
-`writeRepro(filename, header, lines)` (wisp:src/platform/repro.ts), named by
+`writeRepro(filename, header, lines)` (wisp:src/map/repro.ts), named by
 `reproFile(slot, frame, serial, prefix)` so no two repros of a session share a
 name: Preloader runs the first content it read from a name for the rest of the
 session. The file holds:

@@ -91,7 +91,7 @@ until the game's `install()` puts the new one there. `install()` runs on the
 same frame in every client, so the game reapplies such records there, as it
 reapplies [object data](hot-reload.md). Smashcraft gives every fighter its
 authored tuning again, in the confirmed match, the speculative match and its
-rollback history (smashcraft:ts/src/platform/shell/tuning.ts).
+rollback history (smashcraft:ts/src/map/shell/tuning.ts).
 
 A match started with a tuned value can't be replayed from its inputs alone:
 the inputs don't record the change.

@@ -3,12 +3,12 @@
 // Timers and triggers made in start() keep calling them through trampolines.
 import { configureRuntime } from "wisp/src/runtime/config";
 import { at } from "wisp/src/runtime/lookup";
-import { installDispatch, on, trampoline } from "wisp/src/platform/dispatch";
-import { installHotReload, startHotReload } from "wisp/src/platform/hotReload";
+import { installDispatch, on, trampoline } from "wisp/src/map/dispatch";
+import { installHotReload, startHotReload } from "wisp/src/map/hotReload";
 import { f32 } from "wisp/src/sim/f32";
 import { pathPoint } from "./path";
 import { WALKER_ID, SNOW_ID } from "./objectIds";
-import { writeLines } from "wisp/src/platform/fileio";
+import { writeLines } from "wisp/src/map/fileio";
 
 const PLAYERS = 2;
 

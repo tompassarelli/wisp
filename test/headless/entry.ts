@@ -1,5 +1,5 @@
-import { installDispatch, on, trampoline } from "../../src/platform/dispatch";
-import { installHotReload, startHotReload } from "../../src/platform/hotReload";
+import { installDispatch, on, trampoline } from "../../src/map/dispatch";
+import { installHotReload, startHotReload } from "../../src/map/hotReload";
 import { configureRuntime } from "../../src/runtime/config";
 
 export function install(this: void): void {

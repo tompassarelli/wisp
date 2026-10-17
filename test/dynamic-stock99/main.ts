@@ -1,5 +1,5 @@
 import { configureRuntime } from "../../src/runtime/config";
-import { writeLines } from "../../src/platform/fileio";
+import { writeLines } from "../../src/map/fileio";
 
 export function install(this: void): void {
   configureRuntime({ filePrefix: "dynamic-stock99", readyPrefix: "DS99_HRR", globalPrefix: "__dynamicStock99" });

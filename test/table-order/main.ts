@@ -1,7 +1,7 @@
 import { configureRuntime } from "../../src/runtime/config";
-import { installDispatch } from "../../src/platform/dispatch";
-import { installHotReload, startHotReload } from "../../src/platform/hotReload";
-import { writeLines } from "../../src/platform/fileio";
+import { installDispatch } from "../../src/map/dispatch";
+import { installHotReload, startHotReload } from "../../src/map/hotReload";
+import { writeLines } from "../../src/map/fileio";
 import { floorMod } from "../../src/sim/intMath";
 
 function order(table: Record<string | number, number>, kind: string): string[] {

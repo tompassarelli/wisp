@@ -1,6 +1,6 @@
 import { configureRuntime } from "../../src/runtime/config";
-import { installDispatch, on, trampoline } from "../../src/platform/dispatch";
-import { restoreStack, stackDepth, traceback } from "../../src/platform/errors";
+import { installDispatch, on, trampoline } from "../../src/map/dispatch";
+import { restoreStack, stackDepth, traceback } from "../../src/map/errors";
 
 function deepest(): never {
   throw new Error("original failure");

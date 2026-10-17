@@ -1,7 +1,7 @@
 import { configureRuntime } from "../../src/runtime/config";
-import { installDispatch, on, trampoline } from "../../src/platform/dispatch";
-import { installFrameMeter, startFrameMeter, startFrameCostCapture } from "../../src/platform/frameMeter";
-import { installHotReload, startHotReload } from "../../src/platform/hotReload";
+import { installDispatch, on, trampoline } from "../../src/map/dispatch";
+import { installFrameMeter, startFrameMeter, startFrameCostCapture } from "../../src/map/frameMeter";
+import { installHotReload, startHotReload } from "../../src/map/hotReload";
 
 interface FixtureState {
   readonly unit: unit;

@@ -5,7 +5,7 @@ import { parseNativeDeclarations } from "./declarations";
 import { type Journey, journeyLines, journeyProblems, runJourney } from "./journey";
 import { Lockstep } from "./lockstep";
 import { bundleModules } from "../runtime/modules";
-import { stringChecksum } from "../platform/payloadChecksum";
+import { stringChecksum } from "../map/payloadChecksum";
 import type { SceneryFixtures } from "./warcraft3Scenery";
 import type { Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 import type { AbilityObjectFixtures } from "./warcraft3Abilities";

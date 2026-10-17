@@ -90,5 +90,5 @@ stack survives hot reload; suspended coroutines are outside the synchronous
 callback contract.
 
 Implementation: [compiler plugin](../plugins/stack-traces.ts) and
-[runtime reporter](../src/platform/errors.ts)
-(wisp:plugins/stack-traces.ts, wisp:src/platform/errors.ts).
+[runtime reporter](../src/map/errors.ts)
+(wisp:plugins/stack-traces.ts, wisp:src/map/errors.ts).

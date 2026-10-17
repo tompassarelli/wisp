@@ -8,8 +8,8 @@ import { moduleChunk, moduleHashText, moduleIndex, modulePayload, textChecksum }
 const root = join(import.meta.dir, "..");
 
 const MAIN = (labelModule: string) => `import { configureRuntime } from "../../../src/runtime/config";
-import { installDispatch, on, trampoline } from "../../../src/platform/dispatch";
-import { installHotReload, startHotReload } from "../../../src/platform/hotReload";
+import { installDispatch, on, trampoline } from "../../../src/map/dispatch";
+import { installHotReload, startHotReload } from "../../../src/map/hotReload";
 import { step } from "./counter";
 import { label } from "./${labelModule}";
 

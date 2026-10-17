@@ -1,8 +1,8 @@
 import { afterAll, expect, test } from "bun:test";
 import { installHeadless } from "../scripts/wisp/headless";
 import type { Lockstep } from "../src/headless/lockstep";
-import { installDispatch } from "../src/platform/dispatch";
-import { installHotReload, startHotReload } from "../src/platform/hotReload";
+import { installDispatch } from "../src/map/dispatch";
+import { installHotReload, startHotReload } from "../src/map/hotReload";
 import { configureRuntime } from "../src/runtime/config";
 
 const runtime = installHeadless({ filePrefix: "fixture", globalPrefixes: ["__fixture"] });
