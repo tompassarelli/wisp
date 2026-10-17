@@ -10,8 +10,9 @@ import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from
 import { LanFailure } from "../lan/join";
 import { lanPluginProblem } from "../lan/plugin";
 import {
-  PAIR_SIDES, PROFILES, type PoolPair, agentSocket, alive, clientName, desktopSize, pairClients, pairCustody, pairDirectory, poolClientsFile, poolFile, poolHolderFile, poolOwners, playtestPairRefusal, readPool, reportPort, writeJson, writePoolClients, wrongUser,
+  PAIR_SIDES, type PoolPair, agentSocket, alive, clientName, pairClients, pairCustody, pairDirectory, poolClientsFile, poolFile, poolHolderFile, poolOwners, playtestPairRefusal, readPool, reportPort, writeJson, writePoolClients, wrongUser,
 } from "../lan/pool";
+import { PROFILES, desktopSize } from "../os/warcraft/clientProfiles";
 import { setupClient } from "../lan/setup";
 import { CapacityDeferred, admissionFile, capacityDeferral, deferredExit, pairAdmission, retryWhileDeferred } from "../lan/admission";
 

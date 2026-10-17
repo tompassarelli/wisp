@@ -13,7 +13,8 @@ import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { mapCopies, readMapFacts } from "./map";
-import { ALARM_AFTER_MS, type Driver, alive, PAIR_SIDES, alarmLog, driverVerdict, idleness, pairFlags, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, preferences, prefixOf, reportPort } from "./pool";
+import { ALARM_AFTER_MS, type Driver, alive, PAIR_SIDES, alarmLog, driverVerdict, idleness, pairFlags, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
+import { preferences } from "../os/warcraft/clientProfiles";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
 
 const argument = (name: string) => flagValues(process.argv, name)[0];

@@ -1,5 +1,5 @@
 import { Effect, Layer } from "effect";
-import { DesktopFailure } from "../warcraft/desktop";
+import { DesktopFailure } from "../warcraft/desktopClient";
 import { linuxLayer } from "./linux/layer";
 import {
   AudioIsolation, BackgroundServices, CapacityAdmission, GameLauncher, InputInjection, Namespaces, PageOpener, type Platform, PlatformUnsupported, ProcessTable,

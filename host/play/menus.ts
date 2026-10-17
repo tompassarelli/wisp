@@ -8,17 +8,10 @@ import { writeAtomic } from "../io/files";
 import { DEFAULT_BUILD, profileFor, requireCapability } from "../client/builds";
 import { loadLanPlugin, lanPluginProblem } from "../lan/plugin";
 import { describeCause } from "../cli/command";
+import { MenuFailure, type MenuEvent, type MenuSocket, type Outcome } from "../os/warcraft/menuSocket";
+export { MenuFailure, type MenuEvent, type MenuSocket, type Outcome } from "../os/warcraft/menuSocket";
 
 export const DEFAULT_MENU_REPORT_PORT = 47123;
-
-export class MenuFailure extends Schema.TaggedError<MenuFailure>()("MenuFailure", {
-  operation: Schema.String,
-  problem: Schema.String,
-}) {
-  override get message(): string {
-    return `${this.operation}: ${this.problem}`;
-  }
-}
 
 export interface MenuAddress {
   readonly buildId?: string;
@@ -39,11 +32,6 @@ interface HeardMessage {
 export interface SentMessage {
   readonly message: string;
   readonly payload?: unknown;
-}
-
-export interface MenuEvent {
-  readonly messageType: string;
-  readonly payload: unknown;
 }
 
 const PAGE_MARK = `<meta name="wisp" content="menu page" />`;
@@ -267,18 +255,6 @@ export const listenForMenus = (reportPort = DEFAULT_MENU_REPORT_PORT, onSent: (s
     sent: Effect.sync(() => [...sent]),
   };
 });
-
-export type Outcome<A> = { readonly done: A } | { readonly failed: string } | undefined;
-
-export interface MenuSocket {
-  readonly buildId?: string;
-
-  readonly send: (message: string, payload?: Readonly<Record<string, unknown>>) => Effect.Effect<void, MenuFailure>;
-
-  readonly expect: <A>(what: string, seconds: number, decide: (event: MenuEvent) => Outcome<A>) => Effect.Effect<A, MenuFailure>;
-
-  readonly forget: Effect.Effect<void>;
-}
 
 const CLOSED: MenuEvent = { messageType: "", payload: undefined };
 

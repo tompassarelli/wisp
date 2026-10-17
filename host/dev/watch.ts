@@ -6,7 +6,7 @@ import { ackFile } from "../../src/runtime/gameFiles";
 import { type PrefixUse, type ProcessInfo, prefixUse } from "../os/warcraft/battleNet";
 import { ProcessTable } from "../os/platform/services";
 import { type LadderScan, SCAN_QUIET_MS, importFailures, ladderScan, logTime, sessionMarks, sessionStart, sessionText, war3LogPath } from "../os/warcraft/war3Log";
-import { clientUnit, type Client } from "../client/clients";
+import { type Client, clientUnit } from "../client/client";
 import { dataDirectory } from "../io/gameFiles";
 import { type MenuEvent, connectMenus, keptAddress, menuAddress } from "../play/menus";
 import { pairClients, readPool } from "../lan/pool";

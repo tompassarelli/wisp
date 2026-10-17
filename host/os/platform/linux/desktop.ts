@@ -4,7 +4,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Exit, Layer, Option } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { inputBatches, sendsChat } from "../../warcraft/inputBatch";
-import { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, runTool } from "../../warcraft/desktop";
+import { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, runTool } from "../../warcraft/desktopClient";
 import { pollUntil, captureProcess } from "../../../cli/hostProcess";
 import { step } from "../../../cli/timings";
 import { InputInjection, ScreenCapture, type WindowPlacer } from "../services";

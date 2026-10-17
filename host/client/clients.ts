@@ -2,11 +2,9 @@ import { Context, Effect, Layer } from "effect";
 import type { Platform } from "../os/platform/services";
 import * as desktop from "../os/warcraft/desktop";
 import type { Frame } from "../scene/frameProbe";
+import type { Client } from "./client";
+export { type Client, clientUnit } from "./client";
 export { DesktopFailure, type Ink, type Region, type Word, type InputAction, waitFor } from "../os/warcraft/desktop";
-
-export type Client = Pick<desktop.Client, "name" | "documents" | "menuReportPort">;
-
-export const clientUnit = (name: string) => `wisp-client-${name}.service`;
 
 export class Clients extends Context.Service<Clients, {
 

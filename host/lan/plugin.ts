@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Schedule } from "effect";
-import type { MenuSocket } from "../play/menus";
+import type { MenuSocket } from "../os/warcraft/menuSocket";
 import { LanFailure } from "./join";
 import { isolatedNetworkProblem } from "./offline";
 import { requireCapability } from "../client/builds";

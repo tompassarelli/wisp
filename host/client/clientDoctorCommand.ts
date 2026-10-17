@@ -4,7 +4,7 @@ import type { Platform } from "../os/platform/services";
 import { documentsFolder, prefixFromDocuments } from "../os/warcraft/battleNet";
 import * as desktop from "../os/warcraft/desktop";
 import { type Command, type CommandFailure, UsageFailure } from "../cli/command";
-import { type ClientProfile, clientSettings } from "../lan/pool";
+import { type ClientProfile, clientSettings } from "../os/warcraft/clientProfiles";
 import { DoctorHands, DoctorStop, type DoctorTarget, doctor, signOut } from "../doctor/doctor";
 import { privateDoctorHands } from "../doctor/doctorHost";
 import { PlayMachine } from "../play/play";

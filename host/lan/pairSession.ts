@@ -9,7 +9,8 @@ import { ChildProcess } from "effect/process";
 import { flagValues } from "../cli/command";
 import { pollUntil, spawnLogged } from "../cli/hostProcess";
 import { LanFailure } from "./join";
-import { alive, desktopSize, pairDirectory, pairFlags } from "./pool";
+import { alive, pairDirectory, pairFlags } from "./pool";
+import { desktopSize } from "../os/warcraft/clientProfiles";
 
 const argument = (name: string) => flagValues(process.argv, name)[0];
 const { pair, profile } = pairFlags(process.argv);
