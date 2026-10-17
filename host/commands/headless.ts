@@ -8,10 +8,10 @@ import { requireGpuLease } from "../render/gpuLease";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { parseMDL } from "../../vendor/war3-model.mjs";
-import { captureScene, type HeadlessRenderProject, loadEffectDeaths, renderScenes, type RenderScene, sceneWithUnits } from "../render/headlessRender";
+import { captureScene, type DrawnPose, type HeadlessRenderProject, loadEffectDeaths, renderScenes, type RenderScene, sceneWithUnits } from "../render/headlessRender";
 import { parseModelMDX } from "../models/models";
-import { type TextureIdentity, uiReport } from "../render/screen";
-import { focusMatches, focusScene } from "../render/focus";
+import { camera, type TextureIdentity, uiReport } from "../render/screen";
+import { type Extent, focusMatches, focusScene, posedExtent, unionExtent } from "../render/focus";
 import { type BoundsModel, type BoundsTextures, type Texels, boundsModel, compareEdges, inFrame, sceneBounds, silhouetteBounds, teamGlowPath, texels } from "../render/screenBounds";
 import { decodePng } from "../fidelity/image";
 import { decodePreviewRgba } from "../scene/mapPreview";
@@ -67,22 +67,24 @@ async function readLayered(render: HeadlessRenderProject, path: string, graphics
 const parseModel = (bytes: Uint8Array) => new TextDecoder().decode(bytes.subarray(0, 4)) === "MDLX" ? parseModelMDX(bytes.slice().buffer) : parseMDL(new TextDecoder().decode(bytes));
 
 async function focusedScenes(render: HeadlessRenderProject, scenes: readonly RenderScene[], model: string, aspect: number, graphics: Graphics): Promise<RenderScene[]> {
-  const extents = new Map<string, { minimum: Float32Array; maximum: Float32Array }>();
-  const focused: RenderScene[] = [];
+  const models = new Map<string, BoundsModel>();
+  const posed: { scene: RenderScene; pose: DrawnPose; extent: Extent | undefined }[] = [];
   for (const scene of scenes) {
-    const matches = focusMatches(scene, model);
+    const matches = focusMatches(sceneWithUnits(render, scene), model);
     const [pose] = matches;
     if (pose === undefined || matches.length > 1) throw new Error(`--focus ${model} matches ${matches.length} drawn models on p${scene.client} frame ${scene.frame}; hide or move the others`);
-    if (!extents.has(pose.model)) {
+    let found = models.get(pose.model);
+    if (found === undefined) {
       const { bytes } = await readLayered(render, pose.model, graphics);
       if (bytes === undefined) throw new Error(`--focus ${model}: the render project can't read ${pose.model}`);
-      const info = parseModel(bytes).Info;
-      extents.set(pose.model, { minimum: info.MinimumExtent, maximum: info.MaximumExtent });
+      models.set(pose.model, found = boundsModel(parseModel(bytes)));
     }
-    const extent = extents.get(pose.model);
-    focused.push(extent === undefined ? scene : focusScene(scene, pose, extent, aspect));
+    posed.push({ scene, pose, extent: posedExtent(pose, found, camera(scene, aspect)) });
   }
-  return focused;
+  const extents = posed.flatMap(({ extent }) => extent === undefined ? [] : [extent]);
+  if (extents.length === 0) throw new Error(`--focus ${model}: no drawn geoset in any captured frame`);
+  const extent = unionExtent(extents);
+  return posed.map(({ scene, pose }) => focusScene(scene, pose, extent, aspect));
 }
 
 async function boundsImages(render: HeadlessRenderProject, scenes: readonly RenderScene[], width: number, height: number, graphics: Graphics) {

@@ -497,8 +497,9 @@ Classic pool client.
 `--focus MODEL` frames one body: in every captured scene, the one drawn effect
 or unit whose model path contains `MODEL` (at nonzero alpha, so a hidden
 fighter doesn't count) takes the camera, which keeps its rotation, angle of
-attack and field of view and moves until the model's declared extent is
-centred and spans three quarters of the frame; `--render` and `--bounds` both
+attack and field of view and moves until the box its drawn vertices span
+over every focused frame is centred and spans three quarters of the frame,
+so a strip keeps one zoom; `--render` and `--bounds` both
 see the focused camera. A scene with no match or more than one fails, naming
 the count, so hide or move the others first.
 Unit and effect alpha fades opaque material layers in both Classic and

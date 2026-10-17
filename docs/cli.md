@@ -171,7 +171,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--render DIR` | Write images from the headless match scene | `headless`, consumer pad checks |
 | `--bounds DIR` | Write `bounds.json` without Chrome: each requested frame's HUD frame rectangles and posed model screen bounds per client ([Screen bounds](headless.md#screen-bounds)) | `headless` |
 | `--journey FILE` | Read the headless journey's events (chat, key, mouse, reload) from JSON | `headless` |
-| `--focus MODEL` | Aim `--render` and `--bounds` at the one drawn model whose path contains MODEL, its extent centred over three quarters of the frame ([Rendered frames](headless.md#rendered-frames-and-sound-cues)) | `headless` |
+| `--focus MODEL` | Aim `--render` and `--bounds` at the one drawn model whose path contains MODEL, its drawn box over the focused frames centred across three quarters of the frame ([Rendered frames](headless.md#rendered-frames-and-sound-cues)) | `headless` |
 | `--step N` | Advance at most N simulation frames at a time | `headless` |
 | `--runs N` | Fresh scripted starts compared with the first run | `headless` |
 | `--graphics classic\|definitive` | Draw `--render` frames (and measure `--bounds`) in Classic or Definitive Edition: its models, textures, day/night lights and the levers its profile draws ([Graphics profiles](headless.md#graphics-profiles)); the map's `readAsset` receives the choice | `headless` |

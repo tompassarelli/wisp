@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import type { DrawnPose, RenderScene } from "../host/render/headlessRender";
-import { type Extent, focusMatches, focusScene } from "../host/render/focus";
+import { type Extent, focusMatches, focusScene, posedExtent } from "../host/render/focus";
+import { boundsModel } from "../host/render/screenBounds";
+import { parseMDL } from "../vendor/war3-model.mjs";
 import { multiply } from "../host/browser/matrix";
 import { camera, transform } from "../host/render/screen";
 
@@ -41,5 +43,41 @@ test("[property] a focused scene centres the one matching body and fits its exte
     expect(Math.abs((box.left + box.right) / 2)).toBeLessThan(0.1);
     expect(Math.abs((box.bottom + box.top) / 2)).toBeLessThan(0.1);
     for (const field of ["CAMERA_FIELD_ROTATION", "CAMERA_FIELD_ANGLE_OF_ATTACK", "CAMERA_FIELD_FIELD_OF_VIEW"] as const) expect(focused.camera.fields[field]).toBe(fields[field]);
+  }
+});
+
+const cubeModel = (centre: readonly number[], half: readonly number[]) => {
+  const corners = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => [0, 1, 2].map((axis) => (centre[axis] ?? 0) + ((i >> axis) & 1 ? 1 : -1) * (half[axis] ?? 0)));
+  return `Version { FormatVersion 800, }
+Model "Cube" { NumGeosets 1, NumBones 1, BlendTime 150, MinimumExtent { -5000, -5000, -5000 }, MaximumExtent { 5000, 5000, 5000 }, }
+Sequences 1 { Anim "Stand" { Interval { 0, 1000 }, } }
+Textures 1 { Bitmap { Image "", ReplaceableId 1, } }
+Materials 1 { Material { Layer { FilterMode None, static TextureID 0, static Alpha 1, } } }
+Geoset {
+    Vertices 8 { ${corners.map((c) => `{ ${c.join(", ")} },`).join(" ")} }
+    Normals 8 { ${corners.map(() => "{ 0, 0, 1 },").join(" ")} }
+    TVertices 8 { ${corners.map(() => "{ 0, 0 },").join(" ")} }
+    VertexGroup { ${corners.map(() => "0,").join(" ")} }
+    Faces 1 36 { Triangles { { 0, 1, 3, 0, 3, 2, 4, 6, 7, 4, 7, 5, 0, 4, 5, 0, 5, 1, 2, 3, 7, 2, 7, 6, 0, 2, 6, 0, 6, 4, 1, 5, 7, 1, 7, 3 }, } }
+    Groups 1 1 { Matrices { 0 }, }
+    MaterialID 0,
+    SelectionGroup 0,
+}
+Bone "Root" { ObjectId 0, GeosetId 0, GeosetAnimId None, }
+PivotPoints 1 { { 0, 0, 0 }, }
+`;
+};
+
+test("[property] a posed body's extent is its drawn vertices' box, not the model's declared extent", () => {
+  const next = random(35), between = (low: number, high: number) => low + (high - low) * next();
+  for (let round = 0; round < 40; round++) {
+    const centre = [between(-100, 100), between(-100, 100), between(0, 200)], half = [between(10, 80), between(10, 80), between(10, 120)];
+    const found = boundsModel(parseMDL(cubeModel(centre, half)));
+    const scene = { frame: 0, client: 0, camera: { x: 0, y: 0, fields: {} }, effects: [] } as unknown as RenderScene;
+    const extent = posedExtent(pose({ model: "Cube.mdl" }), found, camera(scene, 16 / 9));
+    for (let axis = 0; axis < 3; axis++) {
+      expect(extent?.minimum[axis]).toBeCloseTo((centre[axis] ?? 0) - (half[axis] ?? 0), 3);
+      expect(extent?.maximum[axis]).toBeCloseTo((centre[axis] ?? 0) + (half[axis] ?? 0), 3);
+    }
   }
 });

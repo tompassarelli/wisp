@@ -165,7 +165,7 @@ export function posedSampler(pose: DrawnPose, found: BoundsModel): PosedMesh["sa
 }
 
 /** Poses and skins a model on the CPU, as drawEffect in browser/headlessRender.ts poses it. */
-function posedMesh(pose: DrawnPose, found: BoundsModel, view: ReturnType<typeof camera>): PosedMesh {
+export function posedMesh(pose: DrawnPose, found: BoundsModel, view: ReturnType<typeof camera>): PosedMesh {
   const { data } = found;
   found.renderer.setCamera(new Float32Array(view.eye), view.quaternion);
   const sampler = posedSampler(pose, found);

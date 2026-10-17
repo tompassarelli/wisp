@@ -2,6 +2,7 @@ import { drawnPoses } from "./culling";
 import type { DrawnPose, RenderScene } from "./headlessRender";
 import { multiply } from "../browser/matrix";
 import { camera, transform } from "./screen";
+import { type BoundsModel, posedMesh } from "./screenBounds";
 
 export interface Extent {
   readonly minimum: ArrayLike<number>;
@@ -69,4 +70,21 @@ export function focusScene(scene: RenderScene, pose: DrawnPose, extent: Extent, 
   }
   const distance = Math.sqrt(closer * farther);
   return aimed(scene, at(distance).target, distance);
+}
+
+export function posedExtent(pose: DrawnPose, found: BoundsModel, view: ReturnType<typeof camera>): Extent | undefined {
+  const minimum = [Infinity, Infinity, Infinity], maximum = [-Infinity, -Infinity, -Infinity];
+  for (const { positions } of posedMesh(pose, found, view).drawn) for (let index = 0; index < positions.length; index++) {
+    const axis = index % 3, value = positions[index] ?? 0;
+    minimum[axis] = Math.min(minimum[axis] ?? Infinity, value);
+    maximum[axis] = Math.max(maximum[axis] ?? -Infinity, value);
+  }
+  return (minimum[0] ?? Infinity) <= (maximum[0] ?? -Infinity) ? { minimum, maximum } : undefined;
+}
+
+export function unionExtent(extents: readonly Extent[]): Extent {
+  return {
+    minimum: [0, 1, 2].map((axis) => Math.min(...extents.map((extent) => extent.minimum[axis] ?? Infinity))),
+    maximum: [0, 1, 2].map((axis) => Math.max(...extents.map((extent) => extent.maximum[axis] ?? -Infinity))),
+  };
 }
