@@ -17,6 +17,7 @@ import type { DrawnPose, RenderScene, SceneEnvironment } from "./renderScene";
 
 import { GRAPHICS, type Graphics, type Lever, PROFILES, unsupportedLevers } from "./graphicsProfiles";
 export type { Graphics } from "./graphicsProfiles";
+export type { UiRow } from "./screen";
 export type { DrawnPose, RenderScene, SceneEnvironment } from "./renderScene";
 
 export interface HeadlessRenderProject {
