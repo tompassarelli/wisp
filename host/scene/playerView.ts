@@ -7,7 +7,8 @@ import { type Client, Clients, type DesktopFailure, waitFor } from "../client/cl
 import { describeCause } from "../cli/command";
 import { type Frame, type FrameFeature, decodePpm, encodePpm, frameProblems, measureFrame } from "./frameProbe";
 import { dataDirectory, readGameFile } from "../io/gameFiles";
-import { type SceneExpectations, type SceneProblem, type SceneReport, describeScene, readSceneLines, sceneProblems } from "./scene";
+import { type SceneExpectations, describeScene, readSceneLines, sceneProblems } from "./scene";
+import type { SceneProblem, SceneReport } from "./sceneTypes";
 import { step } from "../cli/timings";
 
 const SceneLines = preloadRecord({ rest: "lines" }, Schema.Struct({ lines: Schema.Array(Schema.String) }));

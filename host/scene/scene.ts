@@ -1,15 +1,7 @@
-import { type SceneModel, reportedModel } from "../../src/runtime/scene";
+import { reportedModel, type SceneModel } from "../../src/runtime/scene";
 import type { ModelFacts } from "../models/models";
+import type { SceneKind, SceneProblem, SceneReport } from "./sceneTypes";
 import { type VisibilityExpectations, visibilityProblems } from "./visibility";
-
-export interface SceneReport {
-  readonly serial: number;
-
-  readonly frame: number;
-
-  readonly effects: number;
-  readonly models: readonly SceneModel[];
-}
 
 const NUMBER = "(\\d+)(?:\\.0)?";
 const HEADING = new RegExp(`^scene ${NUMBER} frame ${NUMBER} effects ${NUMBER}$`);
@@ -44,15 +36,6 @@ export function readSceneLines(lines: readonly string[]): SceneReport | Malforme
   return { serial: Number(head[1]), frame: Number(head[2]), effects: Number(head[3]), models };
 }
 
-export interface SceneKind {
-
-  readonly name: string;
-
-  readonly models: readonly string[];
-
-  readonly lifetime?: number;
-}
-
 export interface SceneExpectations {
   readonly kinds: readonly SceneKind[];
 
@@ -61,13 +44,6 @@ export interface SceneExpectations {
   readonly framesPerSecond: number;
 
   readonly visibility?: VisibilityExpectations;
-}
-
-export interface SceneProblem {
-
-  readonly seen: string;
-
-  readonly evidence: string;
 }
 
 const names = (kinds: readonly SceneKind[]) => [...new Set(kinds.map(({ name }) => name))].join(", ");

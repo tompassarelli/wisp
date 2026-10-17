@@ -1,10 +1,12 @@
 import { ModelRenderer, decodeBLP, getBLPImageData, type model } from "../../vendor/war3-model.mjs";
 import { type AnimationSequence, animationSample, blendWeight, globalSequenceFrame } from "../../src/headless/animation";
 import { drawnPoses } from "./culling";
-import type { DrawnPose, RenderScene } from "./headlessRender";
+export type { PixelBox } from "./boundsTypes";
+import type { GeosetBounds, ModelBounds, NodeBounds, PixelBox, PixelRect, Portrait } from "./boundsTypes";
+import type { DrawnPose, RenderScene } from "./renderScene";
 import { multiply } from "../browser/matrix";
 import { decodePngRgba } from "../fidelity/image";
-import { camera, type PixelRect, poseNodes, type Sampler, show, transform } from "./screen";
+import { camera, poseNodes, type Sampler, show, transform } from "./screen";
 
 /** A parsed model with the renderer state that poses it, without GL. */
 export interface BoundsModel {
@@ -17,44 +19,6 @@ export function boundsModel(data: model.Model): BoundsModel {
   const sequences = data.Sequences.map((sequence) => ({ name: sequence.Name, start: sequence.Interval[0] ?? 0, end: sequence.Interval[1] ?? 0, looping: !sequence.NonLooping, rarity: sequence.Rarity }));
   return { data, renderer: new ModelRenderer(data), sequences };
 }
-
-/** Pixels, origin at the top left, y down. */
-export interface PixelBox { readonly left: number; readonly top: number; readonly right: number; readonly bottom: number }
-
-interface GeosetBounds {
-  readonly index: number;
-  readonly alpha: number;
-  /** The first material layer's filter mode (war3-model's FilterMode: 0 None, 1 Transparent, 2 Blend, 3 Additive, ...). */
-  readonly filterMode: number;
-  readonly drawn: boolean;
-}
-
-interface NodeBounds {
-  readonly id: number;
-  readonly name: string;
-  /** Box of the drawn vertices this node weights most; undefined when it weights none in front of the eye. */
-  readonly box: PixelBox | undefined;
-  readonly pivot: { readonly x: number; readonly y: number; readonly behindEye: boolean };
-}
-
-export interface ModelBounds {
-  readonly handle: number;
-  readonly model: string;
-  readonly unit: boolean;
-  /** Box of every drawn vertex between the near and far planes; undefined when none is. */
-  readonly box: PixelBox | undefined;
-  readonly offFrame: boolean;
-  readonly behindEye: boolean;
-  readonly farCulled: boolean;
-  readonly geosets: readonly GeosetBounds[];
-  readonly nodes: readonly NodeBounds[];
-  /** How drawn team-glow geosets were bounded: by the install's team-glow texture, or by the disc rule without it. */
-  readonly teamGlow?: "texture" | "disc";
-  /** Box of the drawn pixels of every geoset with an opaque (filter mode None) layer; absent when none draws. */
-  readonly body?: PixelBox;
-}
-
-/** RGBA texels, 4 bytes each, rows from the image's top. */
 export interface Texels { readonly width: number; readonly height: number; readonly data: ArrayLike<number> }
 
 /** Textures the bounds sample, read from the install the caller points to: a model texture by path, and the team glow (ReplaceableId 2) by team colour index. */
@@ -368,18 +332,6 @@ function poseBounds(pose: DrawnPose, found: BoundsModel, view: ReturnType<typeof
   };
 }
 
-/** A portrait texture's receipt: the scene it was rendered from at `width` x `height`, the crop of that render the texture holds, and the game's parts. */
-export interface Portrait {
-  readonly scene: Pick<RenderScene, "camera" | "effects" | "world">;
-  readonly width: number;
-  readonly height: number;
-  /** Render pixels the texture holds, origin top left, y down. */
-  readonly crop: PixelRect;
-  /** The texture's size and, when it has one, its alpha per texel (0-255, row-major from the top row): a texel under half opacity shows the backdrop more than the portrait. */
-  readonly texture: { readonly width: number; readonly height: number; readonly alpha?: ArrayLike<number> };
-  /** Declared part name to node names; `head` and `weapon` also give the crown margin and the head pixels the weapon hides. */
-  readonly parts: Readonly<Record<string, readonly string[]>>;
-}
 
 interface PartInFrame {
   /** Screen pixels inside the frame whose nearest surface belongs to the part. */

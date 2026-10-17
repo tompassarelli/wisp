@@ -1,4 +1,4 @@
-import type { SceneProblem } from "./scene";
+import type { SceneProblem } from "./sceneTypes";
 import type { Frame } from "../os/platform/services";
 export { type Frame, decodePpm, encodePpm } from "../os/platform/services";
 

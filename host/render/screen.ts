@@ -1,6 +1,7 @@
 import type { model } from "../../vendor/war3-model.mjs";
 import type { SequenceSample } from "../../src/headless/animation";
-import type { DrawnPose, RenderScene } from "./headlessRender";
+import type { PixelRect, TextureIdentity } from "./boundsTypes";
+import type { DrawnPose, RenderScene } from "./renderScene";
 import { cross, type Matrix, multiply, normalize, perspective } from "../browser/matrix";
 
 export const identity = (): Matrix => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -105,15 +106,12 @@ export function poseNodes(sampler: Sampler, data: model.Model, saved: SequenceSa
   finally { interp.vec3 = vec3; interp.quat = quat; sampler.updateNode = updateNode; node = undefined; }
 }
 
-export interface PixelRect { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
 /** UI units are 0.8 x 0.6 at 4:3, scaled by the screen height and centred horizontally. */
 export function uiPixels(rect: readonly [left: number, top: number, right: number, bottom: number], width: number, height: number): PixelRect {
   const [left, top, right, bottom] = rect, scale = height / 0.6;
   return { x: width / 2 + (left - 0.4) * scale, y: (0.6 - top) * scale, width: (right - left) * scale, height: (top - bottom) * scale };
 }
 
-/** Where a UI texture came from: the asset layer that supplied it and the sha256 of its bytes. */
-export interface TextureIdentity { readonly layer: string; readonly sha256: string }
 export interface UiRow {
   readonly name: string;
   readonly type: string;

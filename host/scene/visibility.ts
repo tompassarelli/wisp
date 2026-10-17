@@ -1,6 +1,6 @@
 import { reportedModel } from "../../src/runtime/scene";
 import { type Box, type ModelFacts, type Vector3, drawsNothing, hiddenEmitters, modelReach } from "../models/models";
-import type { SceneKind, SceneProblem, SceneReport } from "./scene";
+import type { SceneKind, SceneProblem, SceneReport } from "./sceneTypes";
 import { cross, dot } from "../browser/matrix";
 
 export interface CameraView {
