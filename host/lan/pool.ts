@@ -10,7 +10,7 @@ import { InputInjection } from "../os/platform/services";
 import { documentsFolder } from "../os/warcraft/battleNet";
 import { PROFILES, type Profile } from "../os/warcraft/clientProfiles";
 export {
-  CLIENT_PROFILE_NAMES, type ClientProfile, PROFILES, type Profile, clientSettings, desktopSize, measurementRefusal, preferences, profileOf, profilesLine,
+  CLIENT_PROFILE_NAMES, type ClientProfile, PROFILES, type Profile, clientSettings, desktopSize, preferences,
 } from "../os/warcraft/clientProfiles";
 
 const stateRoot = () => join(stateHome(), "wisp/lan");

@@ -167,9 +167,7 @@ first launch the client with it; the entry's `displaySettings` override its
 | `player` | Tom's own settings, read from his prefix's War3Preferences.txt on 8 Oct: Reforged, lighting high, every other quality setting lowest, sound and music on; 1920×1080 (the desktop) at 60 fps focused or not | Every performance or frame-pacing measurement |
 
 `player` starts from the owner's file rather than the game's default preset:
-it is what a player of this machine actually runs. Performance and
-frame-pacing runners refuse any other profile with one line
-(`measurementRefusal`) and print each client's profile (`profilesLine`).
+it is what a player of this machine actually runs.
 
 ## Clients as services
 

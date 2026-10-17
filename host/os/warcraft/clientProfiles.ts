@@ -77,17 +77,6 @@ const CLIENT_PROFILES = {
 export type ClientProfile = keyof typeof CLIENT_PROFILES;
 export const CLIENT_PROFILE_NAMES = Object.keys(CLIENT_PROFILES) as readonly ClientProfile[];
 
-export const profileOf = (client: { readonly profile?: ClientProfile | undefined; readonly offline?: boolean | undefined }) =>
-  client.offline === true ? "pool" : client.profile ?? "minimal";
-
-export const profilesLine = (clients: readonly { readonly name: string; readonly profile?: ClientProfile | undefined; readonly offline?: boolean | undefined }[]) =>
-  `graphics profiles: ${clients.map((client) => `${client.name}=${profileOf(client)}`).join(" ")}`;
-
-export const measurementRefusal = (clients: readonly { readonly name: string; readonly profile?: ClientProfile | undefined; readonly offline?: boolean | undefined }[]) => {
-  const others = clients.filter((client) => profileOf(client) !== "player");
-  return others.length === 0 ? undefined : `performance and frame-pacing measurements run under the player graphics profile, and ${others.map((client) => `${client.name} runs ${profileOf(client)}`).join(", ")}: set "profile": "player" in the clients file and restart the client`;
-};
-
 export const clientSettings = (profile: ClientProfile): Record<string, Record<string, string>> =>
   Object.fromEntries(Object.entries(profileSections(CLIENT_PROFILES[profile], 0)).map(([section, values]) => [section, Object.fromEntries(Object.entries(values).map(([key, value]) => [key, String(value)]))]));
 
