@@ -13,7 +13,7 @@ const Profile = Schema.Struct({
 });
 const BUILD_PROFILES = [rollback, patch].map((profile) => Schema.decodeUnknownSync(Profile)(profile));
 export const DEFAULT_BUILD = "3.0.0.24268";
-const BUILD_CAPABILITIES = ["lanPool", "privateLanSwitch", "menuDriving", "classic", "definitive"] as const;
+const BUILD_CAPABILITIES = ["lanPool", "privateLanSwitch", "menuDriving", "classic"] as const;
 export type BuildCapability = typeof BUILD_CAPABILITIES[number];
 const BUILD_COMMANDS = {
   "lan pool": "lanPool", "lan fresh": "privateLanSwitch", "lan dummy": "lanPool",

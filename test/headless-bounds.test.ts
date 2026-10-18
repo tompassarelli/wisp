@@ -45,26 +45,26 @@ test("[boundary] wisp headless --bounds writes frame rows with their portraits' 
       readAsset: async () => { throw new Error("--bounds reads through resolveAsset"); },
       resolveAsset: async (path, graphics) => {
         const bytes = assets[path];
-        const selected = bytes === undefined ? undefined : { source: "map" as const, layer: "_de.w3mod" as const, path };
+        const selected = bytes === undefined ? undefined : { source: "map" as const, layer: "base" as const, path };
         return { requested: path, graphics, attempts: selected === undefined ? [] : [selected], selected, bytes };
       },
       chrome: "/nonexistent/chrome",
       portraits: { "Bust.blp": portrait },
     },
   }));
-  const exit = await Effect.runPromiseExit(command(["--bounds", directory, "--frames", "1", "30", "--resolution", "800x600", "--graphics", "definitive"]).pipe(
+  const exit = await Effect.runPromiseExit(command(["--bounds", directory, "--frames", "1", "30", "--resolution", "800x600", "--graphics", "classic"]).pipe(
     Effect.provide(Layer.merge(timingsLayer(() => undefined), platformLayer())),
     Effect.provideService(Console.Console, { ...console, log: () => undefined }),
   ));
   expect(Exit.isSuccess(exit)).toBe(true);
   const report = JSON.parse(readFileSync(join(directory, "bounds.json"), "utf8"));
-  expect(report).toMatchObject({ graphics: "definitive", width: 800, height: 600 });
+  expect(report).toMatchObject({ graphics: "classic", width: 800, height: 600 });
   expect(report.images.map((image: { client: number; frame: number }) => `${image.client}@${image.frame}`).sort()).toEqual(["0@1", "0@30", "1@1", "1@30"]);
   const sha256 = new Bun.CryptoHasher("sha256").update(assets["Bust.blp"] ?? new Uint8Array()).digest("hex");
   for (const image of report.images) {
     const [frame, ...others] = image.ui;
     expect(others).toEqual([]);
-    expect(frame).toMatchObject({ name: "bust", type: "BACKDROP", texture: "Bust.blp", layer: "_de.w3mod", sha256, region: [0, 0, 1, 1], outside43: false });
+    expect(frame).toMatchObject({ name: "bust", type: "BACKDROP", texture: "Bust.blp", layer: "base", sha256, region: [0, 0, 1, 1], outside43: false });
     expect(frame.inFrame.headHiddenByWeapon).toBe(0);
     expect(frame.inFrame.parts.head.pixels).toBeGreaterThan(100);
     expect(frame.inFrame.parts.head.box.left).toBeGreaterThanOrEqual(26);

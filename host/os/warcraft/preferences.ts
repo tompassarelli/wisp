@@ -102,6 +102,6 @@ export const alive = (pid: number) => {
   }
 };
 
-export function withGraphicsMode(text: string, mode: "classic" | "reforged" | "definitive"): string {
-  return withDisplaySettings(text, { hd: String({ classic: 0, reforged: 1, definitive: 2 }[mode]) }, "Misc");
+export function withGraphicsMode(text: string, mode: "classic" | "reforged"): string {
+  return withDisplaySettings(text, { hd: String({ classic: 0, reforged: 1 }[mode]) }, "Misc");
 }

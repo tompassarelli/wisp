@@ -562,17 +562,15 @@ client's War3Preferences `[Video]`, `[Misc]` and `[Sound]` at launch:
 client draws Classic models whatever `[Misc] hd` says. On 9 October 2026
 (3.0.0.24268) a Rifleman stand frame on lan0a at `hd=0` and at `hd=2` differed
 in 5 of 16,800 pixels, and still did with `settingsversion=3` and
-`mostRecentlySeenGraphicsMode=2` added; the same map on signed-in clone-c at
-`hd=2` drew the Definitive Rifleman and Illidan (2,277 of 16,800 pixels
-differ). Reforged and Definitive checks run on signed-in clones b, c and d
-with the `capture-reforged` or `capture-definitive` clients file profile
+`mostRecentlySeenGraphicsMode=2` added. Reforged checks run on signed-in clones b, c and d
+with the `capture-reforged` clients file profile
 ([doctor.md](doctor.md#graphics-profiles)), set before launch.
 
 Warcraft **3.0.1.24342**'s installed `webui/GlueManager.js` maps
-`PREF_GENERAL_HD` to SD=0, HD=1 and DE=2; the saved preferences store that
+`PREF_GENERAL_HD` to SD=0 and HD=1; the saved preferences store that
 choice as `[Misc] hd`. The pool profiles all write Classic (`hd=0`); a signed-in client's `visual`
-writes Reforged (`hd=1`) and `capture-definitive` writes Definitive Edition (`hd=2`). Audio checks therefore use Classic
-sounds; Definitive Edition also uses Classic sounds. The capture profiles set Ambient Occlusion on (`assao=1`); the other profiles set it off (`assao=0`). All omit
+writes Reforged (`hd=1`). Audio checks therefore use Classic
+sounds. The capture profiles set Ambient Occlusion on (`assao=1`); the other profiles set it off (`assao=0`). All omit
 `bloom`, `portraitBloom`, `particles` and `spellfilter`. Smashcraft play explicitly chooses Reforged (`hd=1`) and Ambient Occlusion off too.
 
 The others cap the game at 60 frames a second, focused or not. A cap below

@@ -4,8 +4,7 @@
     "lanPool":{"status":"unsupported","issue":"wisp#37"},
     "privateLanSwitch":{"status":"unsupported","issue":"wisp#37"},
     "menuDriving":{"status":"supported","issue":"wisp#37"},
-    "classic":{"status":"supported","issue":"wisp#86"},
-    "definitive":{"status":"supported","issue":"wisp#86"}
+    "classic":{"status":"supported","issue":"wisp#86"}
   },
   "protocolVersion":null,
   "natives":{"naming":"3.0 equipment natives use Blz names","added":["BlzUnitHeal","BlzRemoveEffect","BlzResetUnitTalents","BlzSetCameraAllowsHotkeyTargetLock"]},
@@ -13,8 +12,7 @@
   "quirks":[
     {"description":"The native LAN provider is absent; offline clients can start solo games.","issue":"wisp#37"},
     {"description":"Equipment native declarations were renamed to Blz; 145 added native declarations are modeled headlessly.","issue":"wisp#51"},
-    {"description":"Classic and Definitive pause/resume captures supply the drawn-frame reference.","issue":"wisp#86"},
-    {"description":"Definitive models use HD paths and require their matching textures.","issue":"wisp#84"},
+    {"description":"Classic pause/resume captures supply the drawn-frame reference.","issue":"wisp#86"},
     {"description":"Ambient Occlusion returned to graphics settings.","issue":"smashcraft#287"}
   ]
 }

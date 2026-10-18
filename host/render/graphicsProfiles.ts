@@ -1,5 +1,5 @@
-export type Graphics = "classic" | "definitive";
-export const GRAPHICS: readonly Graphics[] = ["classic", "definitive"];
+export type Graphics = "classic";
+export const GRAPHICS: readonly Graphics[] = ["classic"];
 
 export type Lever =
   | "day-night-light" | "fog" | "height-fog-falloff" | "sky" | "cinematic-filter" | "point-lights"
@@ -17,11 +17,6 @@ export const PROFILES: Readonly<Record<Graphics, Readonly<Record<Lever, LeverSup
 
     "height-fog-falloff": "absent", "point-lights": "absent", "point-light-shadows": "absent", pbr: "absent", bloom: "absent", "ambient-occlusion": "absent",
     shadows: "drawn", water: "drawn", terrain: "unsupported",
-  },
-  definitive: {
-    "day-night-light": "drawn", fog: "drawn", "height-fog-falloff": "drawn", sky: "drawn", "cinematic-filter": "drawn",
-    "point-lights": "drawn", pbr: "drawn",
-    "point-light-shadows": "drawn", shadows: "drawn", water: "drawn", bloom: "drawn", "ambient-occlusion": "drawn", terrain: "unsupported",
   },
 };
 

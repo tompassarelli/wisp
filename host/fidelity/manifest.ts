@@ -11,7 +11,7 @@ const Run = Schema.Struct({ id: Text, captures: Schema.Array(Schema.Struct({ fra
 const Slice = Schema.Struct({
   lever: Text, scene: Text, kind: Schema.Literals(["lever", "stage"]), split: Schema.Literals(["fit", "held-out", "retired"]),
   pad: Text, frames: Schema.Array(Frame), camera: Schema.Struct({ position: Vector, target: Vector, fov: Schema.Finite }),
-  look: Schema.Literals(["classic", "definitive"]), identity: Identity,
+  look: Schema.Literals(["classic"]), identity: Identity,
   settings: Schema.Record(Text, Schema.Finite), calibratedRanges: Schema.Record(Text, Schema.Struct({ min: Schema.Finite, max: Schema.Finite })),
   regions: Schema.Array(Schema.Struct({ id: Text, x: Frame, y: Frame, width: Size, height: Size, critical: Schema.Boolean })),
   controls: Schema.Array(Control), cineWindow: Schema.optionalKey(Schema.Struct({ start: Frame, end: Frame })), runs: Schema.Array(Run),
@@ -64,14 +64,13 @@ function manifestProblems(manifest: CaptureManifest): string[] {
     if (slice.kind === "stage" || ["fog", "height-fog-falloff", "sky", "water", "day-night-light", "point-lights", "pbr"].includes(slice.lever)) {
       for (const mode of ["stock", "mask", "stage"]) if (!slice.controls.some((control) => control.mode === mode)) fail(`missing ${mode} control`);
     }
-    const toggle = slice.lever === "cinematic-filter" ? "cine" : ["fog", "height-fog-falloff"].includes(slice.lever) ? "fog" : slice.lever === "bloom" && slice.look === "definitive" ? "bloom" : undefined;
+    const toggle = slice.lever === "cinematic-filter" ? "cine" : ["fog", "height-fog-falloff"].includes(slice.lever) ? "fog" : undefined;
     if (toggle !== undefined) for (const enabled of [false, true]) {
       if (!slice.controls.some((control) => control[toggle] === enabled)) fail(`missing ${toggle} ${enabled ? "on" : "off"} control`);
     }
     if (slice.lever === "draw-extent") for (const visibility of ["shown", "hidden"]) {
       if (slice.controls.filter((control) => control.visibility === visibility).length !== 1) fail(`needs exactly one ${visibility} visibility control`);
     }
-    if (slice.lever === "dof" && slice.look === "definitive" && new Set(slice.controls.flatMap((control) => control.dof === undefined ? [] : [control.dof])).size < 3) fail("DOF sweep requires at least three values");
     const window = slice.cineWindow;
     if (slice.lever === "cinematic-filter" && window === undefined) fail("cine window is required");
     if (window !== undefined) {

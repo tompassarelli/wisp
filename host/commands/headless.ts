@@ -185,7 +185,6 @@ export function headlessArguments(args: readonly string[]) {
   if ((render === undefined && bounds === undefined) !== (frames.length === 0)) throw new Error("--render DIR or --bounds DIR and --frames N... (or --match-frames N...) are used together");
   if (journey !== undefined && named.length > 0) throw new Error("--journey FILE takes the place of a named journey");
   if (runs > 1 && (render !== undefined || bounds !== undefined)) throw new Error("--render and --bounds capture one run; use --runs for checks without them");
-  if (graphics !== "classic" && render === undefined && bounds === undefined) throw new Error("--graphics chooses what --render draws and --bounds measures");
   if (look.length > 0 && render === undefined) throw new Error("--look chooses what --render draws");
   if (focus !== undefined && render === undefined && bounds === undefined) throw new Error("--focus aims what --render draws and --bounds measures");
   return { named, focus, frames: [...new Set(frames)].sort((a, b) => a - b), match, render, bounds, journey, sounds, runs, stepFrames, musicVolume, graphics, look, screen };

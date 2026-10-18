@@ -8,7 +8,7 @@ import { advanceEmitters, type EmitterRenderer } from "./emitters";
 import { drawTerrain } from "./terrain";
 import { drawWater } from "./water";
 import { linkProgram } from "./gl";
-import { depthTarget, type DepthTarget, invert, parsePostProcessing, POINT_FACE, pointFaces, postProcessor, type PostSettings, postSettings, resolve, sceneTarget, type SceneTarget, SUN_MAP, sunView } from "./passes";
+import { depthTarget, type DepthTarget, postProcessor, resolve, sceneTarget, type SceneTarget, SUN_MAP, sunView } from "./passes";
 import { terrainRows } from "../terrain/terrainMesh";
 import { doodadSkinRows, terrainDoodadPoses } from "../terrain/terrainDoodads";
 import { ddsTexture } from "./ddsTexture";
@@ -41,7 +41,7 @@ async function scenePoses(scene: RenderScene): Promise<readonly EffectPose[]> {
     const rows = new Map(terrainRows(new Uint8Array(await asset("Doodads\\Doodads.slk"))));
     try {
       for (const [id, skin] of doodadSkinRows(new Uint8Array(await asset("Doodads\\DoodadSkins.txt")))) rows.set(id, { ...rows.get(id), ...skin });
-    } catch (cause) { if (!(cause instanceof AbsentAsset)) throw cause; }
+    } catch (cause) { if (!(cause instanceof MissingAsset)) throw cause; }
     return rows;
   })();
   const special = terrainDoodadPoses(scene.terrainDoodads.placements, scene.terrain, await installedDoodads, scene.frame, scene.terrainDoodads.models);
@@ -133,9 +133,7 @@ function sceneFog(scene: RenderScene, view: ReturnType<typeof camera>, sky: bool
   if (fog === undefined || (sky && fog.drawOverSky !== true)) return undefined;
   const height = fog.style === 3;
   const start = height ? fog.linearStart ?? fog.zStart : fog.zStart, end = height ? fog.linearEnd ?? fog.zEnd : fog.zEnd;
-  const falloff = height && graphics === "definitive" && fog.heightStart !== undefined && fog.heightEnd !== undefined && !sky
-    ? { bottom: fog.heightStart, top: fog.heightEnd, start: fog.zStart, end: fog.zEnd } : undefined;
-  return { color: fog.color, start, end, near: view.near, far: sky ? SKY_FAR : view.far, max: fog.maxLinearDensity ?? 1, ...(falloff === undefined ? {} : { height: falloff }) };
+  return { color: fog.color, start, end, near: view.near, far: sky ? SKY_FAR : view.far, max: fog.maxLinearDensity ?? 1 };
 }
 
 const canvas = document.createElement("canvas");
@@ -152,8 +150,7 @@ document.body.append(display);
 let gl: WebGL2RenderingContext;
 let sceneBuffer: SceneTarget;
 let compose: ReturnType<typeof postProcessor>;
-let sunMap: DepthTarget | undefined, pointMap: DepthTarget | undefined;
-let graphics = "classic";
+let sunMap: DepthTarget | undefined;
 const models = new Map<string, Promise<model.Model>>();
 const textures = new Map<string, Promise<HTMLCanvasElement>>();
 const tinted = new Map<string, HTMLCanvasElement>();
@@ -163,11 +160,10 @@ let sceneDraw = 0;
 const instances = new Map<number, ModelInstance>();
 const preparedModels = new Map<string, ModelInstance>();
 
-class AbsentAsset extends Error {}
-async function asset(path: string, body?: string): Promise<ArrayBuffer> {
-  const response = await fetch(`/asset?path=${encodeURIComponent(path)}${body === undefined ? "" : `&body=${encodeURIComponent(body)}`}`);
-  if (response.status === 410) throw new AbsentAsset(`absent in ${graphics}: ${path}`);
-  if (!response.ok) throw new Error(`missing map asset: ${path}`);
+class MissingAsset extends Error {}
+async function asset(path: string): Promise<ArrayBuffer> {
+  const response = await fetch(`/asset?path=${encodeURIComponent(path)}`);
+  if (!response.ok) throw new MissingAsset(`missing map asset: ${path}`);
   return response.arrayBuffer();
 }
 async function modelAt(path: string): Promise<model.Model> {
@@ -195,11 +191,10 @@ function tga(bytes: ArrayBuffer): ImageData {
   }
   return out;
 }
-function textureAt(path: string, body?: string): Promise<HTMLCanvasElement> {
-  const cacheKey = `${body ?? ""}:${path}`;
-  let result = textures.get(cacheKey);
+function textureAt(path: string): Promise<HTMLCanvasElement> {
+  let result = textures.get(path);
   if (result === undefined) {
-    result = asset(path, body).then(async (bytes) => {
+    result = asset(path).then(async (bytes) => {
       const texture = document.createElement("canvas"), context = texture.getContext("2d");
       if (context === null) throw new Error("no 2D texture context");
       const magic = new Uint8Array(bytes, 0, Math.min(4, bytes.byteLength));
@@ -212,7 +207,7 @@ function textureAt(path: string, body?: string): Promise<HTMLCanvasElement> {
         context.putImageData(new ImageData(new Uint8ClampedArray(decoded.data), decoded.width, decoded.height), 0, 0);
       }
       return texture;
-    }); textures.set(cacheKey, result);
+    }); textures.set(path, result);
   }
   return result;
 }
@@ -249,12 +244,11 @@ async function prepareInstance(pose: EffectPose) {
 }
 const pixels = new Map<string, Promise<ImageData | undefined>>();
 
-function texturePixels(path: string, body: string): Promise<ImageData | undefined> {
-  const cacheKey = `${body}:${path}`;
-  let result = pixels.get(cacheKey);
+function texturePixels(path: string): Promise<ImageData | undefined> {
+  let result = pixels.get(path);
   if (result === undefined) {
-    result = textureAt(path, body).then((bitmap) => bitmap.getContext("2d")?.getImageData(0, 0, bitmap.width, bitmap.height));
-    pixels.set(cacheKey, result);
+    result = textureAt(path).then((bitmap) => bitmap.getContext("2d")?.getImageData(0, 0, bitmap.width, bitmap.height));
+    pixels.set(path, result);
   }
   return result;
 }
@@ -278,7 +272,7 @@ function liveInstance(pose: EffectPose): ModelInstance | undefined {
 async function createInstance(path: string): Promise<ModelInstance> {
   const data = await modelAt(path);
 
-  const images = await Promise.all(data.Textures.map((texture) => texture.Image === "" ? undefined : texturePixels(cliffTexturePath(texture.Image, cliffOverrides), path)));
+  const images = await Promise.all(data.Textures.map((texture) => texture.Image === "" ? undefined : texturePixels(cliffTexturePath(texture.Image, cliffOverrides))));
   const renderer = new ModelRenderer(data); renderer.initGL(gl);
   data.Textures.forEach((texture, index) => {
     const image = images[index];
@@ -290,8 +284,8 @@ async function createInstance(path: string): Promise<ModelInstance> {
 
 interface DepthPass { readonly view: Matrix; readonly projection: Matrix }
 
-interface Shadows { readonly sun?: { readonly map: WebGLTexture; readonly viewProjection: Matrix; readonly bias: number; readonly texel: number }; readonly points?: { readonly map: WebGLTexture; readonly matrices: Float32Array; readonly far: number } }
-async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, light: WorldLight | undefined, fog: ReturnType<typeof sceneFog>, points: readonly PointLight[], popcornEmitters: PopcornEmitterPose[], shadows: Shadows = {}, depthPass?: DepthPass, unsupportedEmitters: UnsupportedEmitterPose[] = []) {
+interface Shadows { readonly sun?: { readonly map: WebGLTexture; readonly viewProjection: Matrix; readonly bias: number; readonly texel: number } }
+async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, light: WorldLight | undefined, fog: ReturnType<typeof sceneFog>, popcornEmitters: PopcornEmitterPose[], shadows: Shadows = {}, depthPass?: DepthPass, unsupportedEmitters: UnsupportedEmitterPose[] = []) {
   const instance = await prepareInstance(pose);
   const { renderer, model: data } = instance;
   renderer.setInstanceAlpha(pose.alpha / 255);
@@ -327,71 +321,17 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
     return;
   }
   emitterInventory(pose, data, sampler, placed, popcornEmitters, unsupportedEmitters);
-  const sun = shadows.sun, pointShadow = shadows.points;
+  const sun = shadows.sun;
   renderer.setWispEnvironment({
     linearOutput: true,
-    ...(light === undefined ? {} : { light: { direction: modelDirection(placed, light.toward), key: light.key, ambient: light.ambient, linear: light.linear, overbright: graphics === "definitive" } }), ...(fog === undefined ? {} : { fog: fog.height === undefined ? fog : { ...fog, height: { ...fog.height, model: placed } } }),
-    ...(points.length === 0 ? {} : { points: { model: placed, normal: normalMatrix(placed), lights: nearest(points, placed) } }),
+    ...(light === undefined ? {} : { light: { direction: modelDirection(placed, light.toward), key: light.key, ambient: light.ambient, linear: light.linear, overbright: false } }), ...(fog === undefined ? {} : { fog }),
     ...(sun === undefined ? {} : { shadow: { map: sun.map, matrix: multiply(sun.viewProjection, placed), bias: sun.bias, texel: sun.texel } }),
-    ...(pointShadow === undefined ? {} : { pointShadow: { map: pointShadow.map, matrices: pointShadow.matrices, near: POINT_NEAR_PLANE, far: pointShadow.far, texel: 1 / POINT_FACE } }),
   });
 
   bindScene();
   renderer.render(multiply(view.view, placed), view.projection, {});
 }
 
-interface PointLight { readonly position: readonly number[]; readonly color: readonly number[]; readonly start: number; readonly end: number; readonly casts: boolean; shadowSlot?: number }
-const MAX_POINT_LIGHTS = 8;
-const lightModels = new Map<string, Promise<model.Model | undefined>>();
-
-async function pointLights(poses: readonly EffectPose[]): Promise<PointLight[]> {
-  const lights: PointLight[] = [];
-  for (const pose of poses) {
-    let loading = lightModels.get(pose.model);
-    if (loading === undefined) lightModels.set(pose.model, loading = asset(pose.model).then((bytes) => {
-      if (new TextDecoder().decode(bytes.slice(0, 4)) !== "MDLX") return parseMDL(new TextDecoder().decode(bytes));
-
-      const kept = parsableModel(new Uint8Array(bytes), true);
-      return kept.lights > 0 ? parseMDX(kept.bytes.slice().buffer) : undefined;
-    }));
-    const data = await loading;
-    if (data === undefined || data.Lights.length === 0) continue;
-    const instance = instances.get(pose.handle.id);
-    const kind = pose.unit === true ? "unit" : "effect";
-    const { frame } = animationSample(instance?.sequences ?? [], { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, kind);
-    const placed = transform(pose), scale = Math.cbrt(Math.abs(determinant(placed)));
-    for (const light of data.Lights) {
-      if (light.LightType !== 0 || (sample(light.Visibility, frame, [1])[0] ?? 1) <= 0) continue;
-      const [blue = 1, green = 1, red = 1] = sample(light.Color, frame, [1, 1, 1]), intensity = sample(light.Intensity, frame, [1])[0] ?? 1;
-      if (intensity <= 0) continue;
-      const pivot = Array.from(data.PivotPoints[light.ObjectId] ?? [0, 0, 0]);
-      const position = [0, 1, 2].map((row) => (placed[row] ?? 0) * (pivot[0] ?? 0) + (placed[4 + row] ?? 0) * (pivot[1] ?? 0) + (placed[8 + row] ?? 0) * (pivot[2] ?? 0) + (placed[12 + row] ?? 0));
-      lights.push({ position, color: [red * intensity, green * intensity, blue * intensity], start: (sample(light.AttenuationStart, frame, [0])[0] ?? 0) * scale, end: (sample(light.AttenuationEnd, frame, [0])[0] ?? 0) * scale, casts: ((light as { ShadowCasting?: number }).ShadowCasting ?? 0) !== 0 });
-    }
-  }
-  return lights;
-}
-function determinant(m: Matrix): number {
-  const a = (row: number, column: number) => m[column * 4 + row] ?? 0;
-  return a(0, 0) * (a(1, 1) * a(2, 2) - a(1, 2) * a(2, 1)) - a(0, 1) * (a(1, 0) * a(2, 2) - a(1, 2) * a(2, 0)) + a(0, 2) * (a(1, 0) * a(2, 1) - a(1, 1) * a(2, 0));
-}
-
-function normalMatrix(m: Matrix): Float32Array {
-  const a = (row: number, column: number) => m[column * 4 + row] ?? 0;
-  const det = determinant(m) || 1, out = new Float32Array(9);
-  for (let row = 0; row < 3; row++) for (let column = 0; column < 3; column++) {
-    const r1 = (row + 1) % 3, r2 = (row + 2) % 3, c1 = (column + 1) % 3, c2 = (column + 2) % 3;
-
-    out[column * 3 + row] = (a(r1, c1) * a(r2, c2) - a(r1, c2) * a(r2, c1)) / det;
-  }
-  return out;
-}
-
-function nearest(points: readonly PointLight[], placed: Matrix): PointLight[] {
-  const origin = [placed[12] ?? 0, placed[13] ?? 0, placed[14] ?? 0];
-  const gap = (light: PointLight) => Math.hypot(...light.position.map((value, i) => value - (origin[i] ?? 0))) - light.end;
-  return [...points].sort((a, b) => gap(a) - gap(b)).slice(0, MAX_POINT_LIGHTS);
-}
 const skies = new Map<string, Promise<ModelInstance>>();
 
 async function drawSky(scene: RenderScene, view: ReturnType<typeof camera>) {
@@ -534,11 +474,9 @@ async function uiTexture(path: string, color: number): Promise<HTMLCanvasElement
   return result;
 }
 
-const POINT_NEAR_PLANE = 5;
-
 function bindScene(): void { gl.bindFramebuffer(gl.FRAMEBUFFER, sceneBuffer.framebuffer); gl.viewport(0, 0, canvas.width, canvas.height); }
 
-interface DepthView extends DepthPass { readonly viewport: readonly [number, number, number, number]; readonly near?: { readonly position: readonly number[]; readonly reach: number } }
+interface DepthView extends DepthPass { readonly viewport: readonly [number, number, number, number] }
 
 async function depthPass(target: DepthTarget, poses: readonly EffectPose[], view: ReturnType<typeof camera>, views: readonly DepthView[]): Promise<void> {
   gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer); gl.viewport(0, 0, target.width, target.height);
@@ -547,35 +485,20 @@ async function depthPass(target: DepthTarget, poses: readonly EffectPose[], view
   gl.activeTexture(gl.TEXTURE0);
   for (const depth of views) for (const pose of poses) {
 
-    if (depth.near !== undefined && Math.hypot(pose.x - (depth.near.position[0] ?? 0), pose.y - (depth.near.position[1] ?? 0), pose.z - (depth.near.position[2] ?? 0)) > depth.near.reach + 1500) continue;
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer); gl.viewport(...depth.viewport);
-    try { await drawEffect(pose, view, undefined, undefined, [], [], {}, depth); } catch {                              }
+    try { await drawEffect(pose, view, undefined, undefined, [], {}, depth); } catch {                              }
   }
 }
 
-function shadowCasters(points: readonly PointLight[], minimum: number, focus: readonly number[]): PointLight[] {
-  const gap = (light: PointLight) => Math.hypot(...light.position.map((value, i) => value - (focus[i] ?? 0)));
-  const byGap = [...points].sort((a, b) => gap(a) - gap(b));
-  const flagged = byGap.filter((light) => light.casts), others = byGap.filter((light) => !light.casts);
-  return [...flagged, ...others.slice(0, Math.max(0, minimum - flagged.length))].slice(0, 2);
-}
-let postConfig: Promise<PostSettings> | undefined;
-
-function postProcessing(): Promise<PostSettings> {
-  const text = (path: string) => asset(path).then((bytes) => new TextDecoder().decode(bytes), () => "");
-  postConfig ??= Promise.all([text("PostProcessingConfig.txt"), text("war3mapPostProcessing.txt")]).then(([stock, map]) => postSettings(parsePostProcessing(stock, map)));
-  return postConfig;
-}
 
 declare global {
   interface Window {
-    prepareRenderer: (width: number, height: number, graphics?: string) => string;
+    prepareRenderer: (width: number, height: number) => string;
     prepareScene: (scene: RenderScene, models?: readonly string[], progress?: (completed: number, total: number) => void) => Promise<{ models: number; instances: number; textures: number }>;
     renderScene: (scene: RenderScene, options?: { capture?: boolean }) => Promise<RenderedFrame>;
   }
 }
-window.prepareRenderer = (width, height, mode = "classic") => {
-  graphics = mode;
+window.prepareRenderer = (width, height) => {
   canvas.width = output.width = overlay.width = width; canvas.height = output.height = overlay.height = height;
 
   const context = canvas.getContext("webgl2", { antialias: false, alpha: false });
@@ -604,7 +527,7 @@ window.prepareScene = async (scene, extraModels = [], progress) => {
 window.renderScene = async (scene, options) => {
   bindScene(); gl.depthMask(true); gl.clearColor(0.04 / 12.92, ((0.06 + 0.055) / 1.055) ** 2.4, ((0.09 + 0.055) / 1.055) ** 2.4, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
   const view = camera(scene, canvas.width / canvas.height);
-  const visible: EffectPose[] = [], notDrawn: string[] = [], absent = new Set<string>(), popcornEmitters: PopcornEmitterPose[] = [], unsupportedEmitters: UnsupportedEmitterPose[] = [];
+  const visible: EffectPose[] = [], notDrawn: string[] = [], popcornEmitters: PopcornEmitterPose[] = [], unsupportedEmitters: UnsupportedEmitterPose[] = [];
   let poses: readonly EffectPose[] = scene.effects;
   try { await bindCliffTextures(scene); poses = await scenePoses(scene); } catch (cause) { notDrawn.push(`terrain doodads: ${String(cause)}`); }
   releaseAbsent(poses);
@@ -616,7 +539,7 @@ window.renderScene = async (scene, options) => {
       else if (liveInstance(pose) === undefined) continue;
       visible.push(pose);
     } catch (cause) {
-      if (cause instanceof AbsentAsset) absent.add(pose.model); else notDrawn.push(`${pose.model}: ${String(cause)}`);
+      notDrawn.push(`${pose.model}: ${String(cause)}`);
     }
   }
   await drawSky(scene, view);
@@ -627,9 +550,8 @@ window.renderScene = async (scene, options) => {
   const light = scene.environment === undefined ? undefined : await dayNightLight(scene.environment.dayNight.unit, scene.environment.timeOfDay);
   const fog = sceneFog(scene, view, false);
 
-  const points = graphics === "classic" ? [] : await pointLights(visible);
   const ordered = orderDrawnModels(visible, (pose) => instances.get(pose.handle.id)?.model.Materials ?? []);
-  const shadows: { sun?: NonNullable<Shadows["sun"]>; points?: NonNullable<Shadows["points"]> } = {};
+  const shadows: { sun?: NonNullable<Shadows["sun"]> } = {};
 
   if (light !== undefined && light.key.some((value) => value > 0)) {
     const sun = sunView(view.shadow, light.toward);
@@ -638,24 +560,9 @@ window.renderScene = async (scene, options) => {
     shadows.sun = { map: sunMap.texture, viewProjection: sun.viewProjection, bias: sun.bias, texel: sun.texel };
   }
 
-  const casters = shadowCasters(points, scene.environment?.shadowCastingPointLights ?? 0, [scene.camera.x, scene.camera.y, view.shadow.eye[2] ?? 0]);
-  if (casters.length > 0) {
-    const far = Math.max(...casters.map((light) => light.end)), faces = pointFaces(far), passes: DepthView[] = [];
-    pointMap ??= depthTarget(gl, 3 * POINT_FACE, 4 * POINT_FACE);
-    casters.forEach((light, slot) => {
-      light.shadowSlot = slot;
-      const toLight = identity(); toLight[12] = -(light.position[0] ?? 0); toLight[13] = -(light.position[1] ?? 0); toLight[14] = -(light.position[2] ?? 0);
-      faces.forEach((face, index) => passes.push({ view: multiply(face.view, toLight), projection: face.projection, viewport: [(index % 3) * POINT_FACE, (Math.floor(index / 3) + 2 * slot) * POINT_FACE, POINT_FACE, POINT_FACE], near: { position: light.position, reach: light.end } }));
-    });
-    await depthPass(pointMap, ordered, view, passes);
-    const matrices = new Float32Array(16 * 6);
-    faces.forEach((face, index) => matrices.set(face.viewProjection, index * 16));
-    shadows.points = { map: pointMap.texture, matrices, far };
-  }
   for (const pose of ordered) {
-    try { await drawEffect(pose, view, light, fog, points, popcornEmitters, shadows, undefined, unsupportedEmitters); } catch (cause) { notDrawn.push(`${pose.model}: ${String(cause)}`); }
+    try { await drawEffect(pose, view, light, fog, popcornEmitters, shadows, undefined, unsupportedEmitters); } catch (cause) { notDrawn.push(`${pose.model}: ${String(cause)}`); }
   }
-  for (const light of points) delete light.shadowSlot;
 
   let water = false;
   if (scene.environment.terrainVisible && scene.terrain !== undefined) {
@@ -664,9 +571,7 @@ window.renderScene = async (scene, options) => {
   }
   notDrawn.push(...undrawnEmitters(unsupportedEmitters));
   resolve(gl, sceneBuffer);
-  const post = graphics === "definitive" ? await postProcessing() : {};
-  const projection = view.projection;
-  compose(post, invert(projection), [(projection[0] ?? 1) * canvas.width / 2, (projection[5] ?? 1) * canvas.height / 2], graphics === "definitive");
+  compose();
   gl.viewport(0, 0, canvas.width, canvas.height);
   if (scene.filter !== undefined) await drawFilter(scene.filter, options?.capture === false);
   const live = options?.capture === false;
@@ -718,5 +623,5 @@ window.renderScene = async (scene, options) => {
     }
   }
   context.globalAlpha = 1;
-  return { png: options?.capture === false ? "" : output.toDataURL("image/png"), models: visible.length, textures: textures.size, notDrawn: [...new Set(notDrawn)], pointLights: points.length, absent: [...absent].sort(), popcornEmitters, unsupportedEmitters, shadows: { sun: shadows.sun !== undefined, pointCasters: casters.length }, post: { ambientOcclusion: post.occlusion !== undefined, bloom: post.bloom !== undefined }, water, heightFog: fog?.height !== undefined };
+  return { png: options?.capture === false ? "" : output.toDataURL("image/png"), models: visible.length, textures: textures.size, notDrawn: [...new Set(notDrawn)], popcornEmitters, unsupportedEmitters, shadows: { sun: shadows.sun !== undefined }, water };
 };

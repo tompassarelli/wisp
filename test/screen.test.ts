@@ -31,7 +31,7 @@ test("[reference smashcraft#363] a BACKDROP bust reports its native rectangle an
   };
   frame("bust");
   call("BlzFrameSetVisible", frame("hidden"), false);
-  const identity = { layer: "_de.w3mod", sha256: "ab".repeat(32) };
+  const identity = { layer: "base", sha256: "ab".repeat(32) };
   for (const [width, height, x, y, size] of [[1280, 720, 191.5, 597.6, 96], [800, 600, 26.25, 498, 80]] as const) {
     const [row, ...rest] = uiReport({ ui: client.frames.snapshot() }, width, height, (path) => (path === "Bust.blp" ? identity : undefined));
     expect(rest).toEqual([]);

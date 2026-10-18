@@ -188,7 +188,7 @@ const pool: Command = (args) => Effect.gen(function*() {
 
   const [profileText = "parity"] = flagValues(args, "pool-profile");
   const profiles = profileText.split(",");
-  if (profiles.some((name) => PROFILES[name] === undefined)) return yield* new UsageFailure({ problem: `--pool-profile takes ${Object.keys(PROFILES).join(" or ")}, or one per pair separated by commas; pool clients never sign in and draw only Classic, so Reforged and Definitive need a signed-in client` });
+  if (profiles.some((name) => PROFILES[name] === undefined)) return yield* new UsageFailure({ problem: `--pool-profile takes ${Object.keys(PROFILES).join(" or ")}, or one per pair separated by commas; pool clients never sign in and draw only Classic, so Reforged needs a signed-in client` });
   const profileOf = (pair: number) => profiles[pair] ?? profiles.at(-1) ?? "parity";
   const launcher = yield* desktopLauncher(args);
   const capacity = yield* capacityHelper(args);

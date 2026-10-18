@@ -199,20 +199,20 @@ clock. A consumer's pad check must retain the native pause capture's helper
 acknowledgments and use this draw observation with its actual map and helper;
 callback pose equality alone cannot decide visible pose equality (#86).
 
-The native #86 reference is the Classic + Definitive capture of Smashcraft
+The native #86 reference is the Classic capture of Smashcraft
 `0911b5dac` on Warcraft 3.0.1.24342, retained privately at
 `~/.local/state/wisp/ref-86-pause/` and linked from
 [the native result](https://github.com/tompassarelli/wisp/issues/86#issuecomment-6066025581).
 Its producer and helper monotonic stamps give these measured intervals:
 
-| Interval | Classic (helper 0) | Definitive (helper 1) |
-| --- | ---: | ---: |
-| Start injection → PAUSE_COMMIT | 584.670528 ms | 588.480869 ms |
-| PAUSE_COMMIT → RESUME | 2538.985246 ms | 2536.219687 ms |
-| Resume Start injection → RESUME | 123.680774 ms | 124.725556 ms |
-| Helper PREPARE / PAUSE / RESUME frame | 168 / 168 / 168 | 187 / 168 / 168 |
+| Interval | Classic (helper 0) |
+| --- | ---: |
+| Start injection → PAUSE_COMMIT | 584.670528 ms |
+| PAUSE_COMMIT → RESUME | 2538.985246 ms |
+| Resume Start injection → RESUME | 123.680774 ms |
+| Helper PREPARE / PAUSE / RESUME frame | 168 / 168 / 168 |
 
-The two map traces acknowledge PREPARE at callback 196, PAUSE at 205 and
+The map trace acknowledges PREPARE at callback 196, PAUSE at 205 and
 RESUME at 356. During the pause, callbacks 240 and 300 still run with
 simulation frame 168; native map pause therefore freezes presentation and
 simulation through the map's own state, rather than calling
@@ -220,11 +220,10 @@ simulation through the map's own state, rather than calling
 committed pause interval to check that the local clock and timer callbacks
 continue while a fighter with time scale zero stays frozen.
 
-The videos contain every drawn picture under the capture's load. Classic
-frames 498 and 647, and Definitive frames 408 and 532, have zero changed
-fighter pixels across resume. Movement begins on the next changed pictures,
-649 and 535 respectively. These video indices are pictures, not callback
-numbers; the recordings do not identify the exact callback of each picture.
+The video contains every drawn picture under the capture's load. Classic
+frames 498 and 647 have zero changed fighter pixels across resume. Movement
+begins on the next changed picture, 649. These video indices are pictures, not callback
+numbers; the recording does not identify the exact callback of each picture.
 
 The existing real-helper headless run at
 `~/.local/state/smashcraft/wisp-pause86-current-helper/` matches PAUSE/RESUME
@@ -502,8 +501,7 @@ over every focused frame is centred and spans three quarters of the frame,
 so a strip keeps one zoom; `--render` and `--bounds` both
 see the focused camera. A scene with no match or more than one fails, naming
 the count, so hide or move the others first.
-Unit and effect alpha fades opaque material layers in both Classic and
-Definitive; alpha 140 blends the body with the background, as in a roll.
+Unit and effect alpha fades opaque material layers; alpha 140 blends the body with the background, as in a roll.
 Frame numbers are headless client frames after that frame's journey events.
 `--match-frames N...` in place of `--frames` names the map's own match frame
 instead: the frame its scene report's `frame()` returns (Smashcraft's
@@ -528,45 +526,21 @@ start and the no-helper start are covered by wisp:test/gpu-lease.test.ts
 (wisp:host/render/gpuLease.ts).
 
 The map supplies `HeadlessProject.render.readAsset(path, graphics)`, returning the actual
-imported or stock asset bytes, or `undefined` when absent. `--graphics definitive`
-selects Definitive Edition; the default is `classic`. Layer-aware projects
-also supply `resolveAsset(path, graphics, body)`, returning `resolveRenderAsset` from
-`host/render/renderAssets.ts` through their Effect runtime. Its two readers
-read map imports and stock files separately. Definitive tries `_de.w3mod`,
-`_hd.w3mod`, then base imports, followed by the same stock layers. Classic
-tries only base files. `war3mapImported` paths stay within the map. A reader
-returns `undefined` for a missing layer so the next one can supply the asset.
-For model textures, `body` is the selected model's `AssetLocation`; pass it to
-`resolveRenderAsset(readers, path, graphics, body)`. Texture rows record
-`requested`, `bodyAlias`, `selectedPath` (null if absent), and
-`suffixConversion`; stock TIF/BLP/TGA reads in HD/DE use DDS. All of a model's
-nonreplaceable DDS textures decode their top image directly (DXT1, DXT3,
-DXT5 and ATI2), including DDS bytes supplied under a model's TIF path.
-PNG conversion by the project's asset reader is optional. All of a model's
-nonreplaceable textures are requested before a missing texture refuses the
-model. Explicit HD DDS imports match the
-[native reference](https://github.com/tompassarelli/smashcraft/issues/334#issuecomment-6071233652).
-Imported body textures keep the selected body alias for stock reads; map imports
-in that alias or base still override stock. Installed stock bodies can also read
-lower stock layers: DE skies name `ReplaceableTextures/Weather/RaysOfLight.tif`,
-whose same-path DDS is shared in base. The old imported HD candidate
-cannot borrow DE textures. The earlier pilot used `presentation="native"`
-(script stamp `2889775-3234403`), selecting stock units despite carrying HD
-imports; its stock DE body resolves DE textures.
+imported or stock asset bytes, or `undefined` when absent. `--graphics classic`
+is the only graphics mode and the default. Projects that read map imports and
+stock files separately also supply `resolveAsset(path, graphics)`, returning
+`resolveRenderAsset` from `host/render/renderAssets.ts` through their Effect
+runtime. It tries the map's import, then the stock file; `war3mapImported`
+paths stay within the map. All of a model's nonreplaceable DDS textures
+decode their top image directly (DXT1, DXT3, DXT5 and ATI2), including DDS
+bytes supplied under a model's TIF path. PNG conversion by the project's
+asset reader is optional. All of a model's nonreplaceable textures are
+requested before a missing texture refuses the model.
 The selected source, layer and path and every attempted location appear in
 `render.json`; byte-only readers record the supplied project path.
-The [earlier one-alias captures](https://github.com/tompassarelli/smashcraft/issues/334#issuecomment-6069629530)
-showed Cairne in Definitive, but their script selected stock units; archive
-alias presence alone did not establish imported-body selection. Both raw map
-aliases remain supported; DE-first precedence preserves the existing choice.
-The renderer draws HD materials with their PBR shader ([Graphics
-profiles](#graphics-profiles)). A path that only the other mode has (a
-Definitive-only prop in a Classic frame) draws nothing, as Warcraft draws
-nothing for it, and `render.json` lists it under the frame's `absent`.
-`render.json` also records the mode, its profile's levers and each frame's
-omni-light count. Keep these assets and
+`render.json` also records the mode and its profile's levers. Keep these assets and
 the output outside public repositories. MDX and MDL models, BLP1, TGA and PNG
-textures are supported, including raw version-1800 Definitive SKIN records
+textures are supported, including raw version-1800 SKIN records
 with four UINT16 bone IDs and four UINT16 weights per vertex. Host silhouette
 and motion readers use `parseModelMDX` from `host/models/models.ts` to read
 the same skin. A resolver can return decoded PNG bytes for a stock
@@ -631,7 +605,7 @@ audible mixing and fade envelopes use Warcraft references.
 ### Screen bounds
 
 `wisp headless [JOURNEY] --bounds DIR --frames N...` (or `--match-frames N...`,
-with `--resolution WxH` and `--graphics classic|definitive`) writes
+with `--resolution WxH` and `--graphics classic`) writes
 `DIR/bounds.json` without starting Chrome: `{ graphics, width, height, images }`,
 one image per requested frame and client with its `frame` (and `matchFrame`),
 `client`, `ui` rows and `models` rows. `--render` adds the same model rows
@@ -803,34 +777,16 @@ saves them as the scene's `environment`.
   colour and effect colour multiply that tint and team colour; white leaves
   the model unchanged. Particles and ribbons retain their emitter colours. Lights are
   parsed from the whole file, including the 1200, 1300 and 1600 light fields.
-  Definitive's day/night lights carry no ambient (intensity 0 or below); under
-  one the fill is the stock `ReplaceableTextures\EnvironmentMap`'s mean linear
+  A day/night light with no ambient (intensity 0 or below) fills instead
+  with the stock `ReplaceableTextures\EnvironmentMap`'s mean linear
   radiance (rows weighted by solid angle), and Classic materials then light
   in linear colour, texture × clamp(ambient + key × max(N·L, 0))^(1/2.2).
-  Definitive does not clamp that light at 1: Classic materials take
-  texture × max(ambient + key × max(N·L, 0), 0), so a stage light whose
-  ambient or key passes 1 brightens a fighter past its texture colour. Native
-  Definitive fighters rose from L* 25.2 under stock light to 54.5 under
-  Naxxramas' ambient 0.7 × intensity 2 (wisp#79, clone-d, 9 Oct), where
-  Classic's clamp holds them near their texture; clamped, Wisp drew 35.0, and
-  unclamped 43.0.
   The headless clock does not advance the time of day. Before the map sets
   day/night models, models draw unlit, as before.
 - **Fog.** Linear fog by eye depth from `zStart` to `zEnd` in the fog colour.
   A height fog (style 3) draws its linear range, `linearStart` to
   `linearEnd`, capped at its maximum linear density. Additive layers fade to
   black, and Unfogged layers skip fog. Exponential styles are drawn as linear.
-- **Height-fog falloff.** Definitive adds a height fog's falloff to models
-  and terrain water: a fragment's height share is 1 at or below
-  `heightStart`, 0 at or above `heightEnd` and linear between (world Z), and
-  its reach share runs linearly from 0 at eye depth `zStart` to 1 at `zEnd`.
-  Their product joins the linear part as `1 - (1 - linear) × (1 - height ×
-  reach)`. `density` is not drawn, and the falloff never draws over the sky.
-  Classic draws only the linear range. Wisp's model, unmeasured: the native
-  Definitive Tomb of Sargeras frames on smashcraft#298 (fog on, 9 Oct) leave
-  near props below the deck unfogged, as this does, and the fog-off frame
-  that would separate the fog from the sky is still to come.
-  `render.json` records `heightFog` per frame.
 - **Sky.** The sky model around the eye, behind everything else, unlit, and
   fogged only when the fog draws over the sky. `BlzShowSkyBox(false)` hides it.
 - **Far cull.** A model whose origin lies farther from the eye than the
@@ -888,31 +844,29 @@ saves them as the scene's `environment`.
   keyed by four-character object or skin ID. Each value is a model path or
   an array indexed by the placement's variation. Resolve these paths from
   the map's object data and the user's installed data tables. Version 8/11
-  placements draw in Classic and Definitive with their stored height,
+  placements draw with their stored height,
   rotation, three-axis scale and visibility; `render.terrain.origin` shifts
   their X/Y coordinates. They use the same world-bounds and far cull as
   effects. Skin IDs are present by default; set `skinIds: false` for the
   older layout without skin fields. Missing model entries fail by name. Format fields follow the
   [doodad specification](https://github.com/ChiefOfGxBxL/WC3MapSpecification/blob/master/Doodads/8_11.md).
 - **Special terrain doodads.** The trailing `war3map.doo` records draw their
-  installed models in Classic and Definitive when `render.terrain.w3e` is
+  installed models when `render.terrain.w3e` is
   supplied. Their integer X/Y cells start at the terrain's south-west corner;
   the supporting point supplies height. Model fields come from the user's
   `Doodads\\Doodads.slk` and `Doodads\\DoodadSkins.txt`, with explicit
   `render.doodads.models` entries overriding paths. Stored variations select
   model suffixes, and installed fixed rotation and scale position the model.
   The shared effect world-bounds and far cull apply after shifting the origin.
-  A model texture named `ReplaceableTextures\\Cliff\\CliffN` or, in
-  Definitive, `Doodads\\Terrain\\#ignore_Cliffs\\CliffN_Suffix` draws the
-  `texDir\\texFile` (keeping the suffix) of the map's first cliff type whose
-  `CliffTypes.slk` `overrideTexture` names `CliffN`, so a Definitive cave
-  draws its tileset's cliff diffuse, normal and ORM maps
+  A model texture named `ReplaceableTextures\\Cliff\\CliffN` draws the
+  `texDir\\texFile` of the map's first cliff type whose
+  `CliffTypes.slk` `overrideTexture` names `CliffN`
   (wisp:host/terrain/terrainCliffs.ts).
   The record layout follows the [current HiveWE format documentation](https://github.com/stijnherfst/HiveWE/wiki/war3map.doo-Doodads).
   Terrain replacement under their footprint and matching native height and
   rotation references are still pending in #82.
 - **Popcorn emitters.** External `.pkb`/`.pkfx` particle effects are recognized
-  in either supported graphics mode, including Definitive assets. Each saved
+  in Classic. Each saved
   frame's scene JSON has `popcornEmitters`: model path, model handle, emitter
   name, external `effect` path, world `position` and three-axis `scale`. These
   use the renderer's sampled node pose, including parents, pivots, animation,
@@ -931,14 +885,8 @@ saves them as the scene's `environment`.
   uses its kind and node ID. Visible version-1 model emitters still fail by
   name; hidden entries remain inventory only. A Popcorn record asserts
   presence and position, never fidelity.
-- **Omni lights.** In Definitive every drawn model's omni lights (MDX light
-  type 0, such as a light-only model a map places) light the other models:
-  colour × intensity × N·L, sampled at the model's pose, full out to the
-  attenuation start and fading linearly to zero at the attenuation end
-  (scaled with the model), up to eight per draw, nearest first. Node
-  animation of a light is not followed. Classic draws none.
-- **Terrain.** Supply `render.terrain.w3e` to draw the map's ground grid in
-  Classic and Definitive. W3E corner heights and the map origin position the
+- **Terrain.** Supply `render.terrain.w3e` to draw the map's ground grid.
+  W3E corner heights and the map origin position the
   triangles; the last row and column stop at the map's world bounds. The
   camera projection clips these triangles, including ground outside camera
   bounds. `BlzShowTerrain(false)` hides them. The shared standalone renderer
@@ -970,58 +918,31 @@ saves them as the scene's `environment`.
   draws when any corner has the water flag (4); each corner's surface stands
   at its stored water level (low 14 bits of the second word, 0x2000 as zero,
   four steps a unit) plus the tileset's `height` in cells from
-  `TerrainArt\\Water.slk` (row `{tileset}Sha`, from the install; Definitive
-  reads `_de.w3mod`'s copy with its own colours). Its colour and alpha by depth
+  `TerrainArt\\Water.slk` (row `{tileset}Sha`, from the install). Its colour and alpha by depth
   over ground run from `Smin` to `Smax` up to 64 units deep, then `Dmin` to
   `Dmax` at 128 (thresholds unmeasured), and dry corners are clear. Its
   texture is `{texFile}NN`, frame `floor(match frame × texRate / 60) mod
   numTex`, so a frame always draws the same one, repeating every `cells`
-  cells. Fog and Definitive's height falloff apply. Not drawn: shorelines,
-  lighting, `SetWaterBaseColor`, per-tileset texture folders and
-  Definitive's normal-mapped reflection (`Water_Normal`, `water_ibl`).
+  cells. Fog applies. Not drawn: shorelines,
+  lighting, `SetWaterBaseColor` and per-tileset texture folders.
   `render.json` records `water` per frame, and `milliseconds` each frame took.
   No native terrain-water reference exists yet; Smashcraft hides terrain and
   draws its sea as a model.
-- **Sun shadows.** In both modes the day/night key light casts shadows: every
+- **Sun shadows.** The day/night key light casts shadows: every
   drawn model's depth from the sun, an orthographic 4096² map over the
   camera's view out to 2.5 target distances and reaching 6,000 units toward
   the sun beyond it, sampled 3 × 3 with a two-texel bias. A shadowed fragment
-  loses only the key light; ambient and omni light stay. Layers that write no
-  depth (blended, additive, particles, ribbons) cast none.
-- **Omni-light shadows.** In Definitive at most two omni lights cast shadows:
-  those whose light record sets shadow casting, then the nearest to the
-  camera's target up to the map's `BlzSetMinShadowCastingPointLightCount`.
-  Each draws a six-face 1024² depth cube out to its attenuation end; a
-  shadowed fragment loses that light. `render.json` records `shadows.sun` and
-  `shadows.pointCasters` per frame.
-- **Colour pipeline, ambient occlusion and bloom.** Scene colour, resolve,
-  and post-process targets are linear `RGBA16F`; WebGL2 requires
-  `EXT_color_buffer_float` and a shared colour/depth multisample count.
-  Model, sky, terrain and water colours enter this buffer decoded from sRGB;
-  HD shaders emit linear radiance without local tone mapping or gamma encoding.
-  SD lighting keeps its existing material terms, with its result decoded before
-  fog and blending; P6 owns the lighting equations. Bloom extracts
-  `max(linearRGB - BloomThreshold, 0)` per channel, without normalizing by
-  `1 - BloomThreshold` or clipping HDR highlights. Blur and additive bloom
-  composition run in linear HDR. After composition Definitive's neutral shoulder leaves
-  channels through 0.8 unchanged and maps larger channels with
-  `0.8 + 0.2 * (c - 0.8) / (c - 0.8 + 0.2)`, then the piecewise sRGB
-  transfer encodes the output once. Classic uses an identity tone map with
-  display-range clipping. UI and cinematic filters overlay this
-  display output. Definitive reads the install's
-  `PostProcessingConfig.txt` with the map's `war3mapPostProcessing.txt` over
-  it, key by key. `[ASSAO]` with `Enabled` above 0 draws screen-space
-  occlusion from the frame's depth: `Radius` in world units, obscurance
-  scaled by `ShadowMultiplier` × 4.3 / 15, clamped to `ShadowClamp`, raised
-  to `ShadowPower`, ignoring occluders below `HorizonAngleThreshold`, faded
-  in by eye depth from `FadeOutFrom` to `FadeOutTo`, and blurred
-  `BlurPassCount` times. `[Bloom]` with `Enabled` above 0 adds the part of
-  each colour above `BloomThreshold`, blurred at half resolution (a Gaussian
-  of `BlurAmount` texels on a 1080-line screen, `BlurSampleCount` taps), by
-  `BloomIntensity` and `BloomSaturation` over the scene scaled by
-  `BaseIntensity` and `BaseSaturation`. Classic draws neither. `render.json`
-  records `post.ambientOcclusion` and `post.bloom` per frame. The map supplies
-  its file through `readAsset("war3mapPostProcessing.txt")`.
+  loses only the key light; ambient light stays. Layers that write no
+  depth (blended, additive, particles, ribbons) cast none. `render.json`
+  records `shadows.sun` per frame.
+- **Colour pipeline.** Scene colour and resolve targets are linear
+  `RGBA16F`; WebGL2 requires `EXT_color_buffer_float` and a shared
+  colour/depth multisample count. Model, sky, terrain and water colours
+  enter this buffer decoded from sRGB; SD lighting keeps its existing
+  material terms, with its result decoded before fog and blending; P6 owns
+  the lighting equations. The piecewise sRGB transfer then encodes the
+  output once, with display-range clipping. UI and cinematic filters overlay
+  this display output.
 - **Not drawn.** Terrain lighting; `--look terrain` fails
   ([Graphics profiles](#graphics-profiles)).
 
@@ -1041,33 +962,32 @@ after the run; no new input simulator is required.
 
 ### Graphics profiles
 
-`--graphics classic` (the default) and `--graphics definitive` are named
-profiles of Warcraft III 3.0.1's `[Misc] hd=0` and `hd=2`
-(wisp:host/render/graphicsProfiles.ts). Reforged (`hd=1`) is not a profile
-(Tom, 9 Oct). Each profile says, per lever, whether Wisp draws it as that
+`--graphics classic` (the default and only mode) is the named profile of
+Warcraft III 3.0.1's `[Misc] hd=0` (wisp:host/render/graphicsProfiles.ts).
+Reforged (`hd=1`) is not a profile (Tom, 9 Oct). The profile says, per lever, whether Wisp draws it as that
 mode does, whether that mode draws nothing for it either (absent), or
 whether Warcraft draws it and Wisp does not (unsupported):
 
-| Lever | Classic | Definitive |
-| --- | --- | --- |
-| `day-night-light` | drawn | drawn (no-ambient light: environment-map fill) |
-| `fog` (linear range, density cap, over sky) | drawn | drawn |
-| `height-fog-falloff` | absent | drawn (height × reach share) |
-| `sky` | drawn | drawn |
-| `cinematic-filter` | drawn | drawn |
-| `point-lights` (model omni lights) | absent | drawn |
-| `pbr` (HD materials) | absent | drawn |
-| `point-light-shadows` | absent | drawn (two casters) |
-| `bloom` | absent | drawn (map's `[Bloom]`) |
-| `ambient-occlusion` | absent | drawn (map's `[ASSAO]`) |
-| `shadows` | drawn (sun shadow map) | drawn (sun shadow map) |
-| `water` | drawn (terrain water, Water.slk) | drawn (`_de` Water.slk, no reflection) |
-| `terrain` | unsupported | unsupported |
+| Lever | Classic |
+| --- | --- |
+| `day-night-light` | drawn |
+| `fog` (linear range, density cap, over sky) | drawn |
+| `height-fog-falloff` | absent |
+| `sky` | drawn |
+| `cinematic-filter` | drawn |
+| `point-lights` (model omni lights) | absent |
+| `pbr` (HD materials) | absent |
+| `point-light-shadows` | absent |
+| `bloom` | absent |
+| `ambient-occlusion` | absent |
+| `shadows` | drawn (sun shadow map) |
+| `water` | drawn (terrain water, Water.slk) |
+| `terrain` | unsupported |
 
 `--look LEVER,...` names the levers a frame's look check asks for. A render
 asking for an unsupported lever fails before drawing, naming each one
-("the look check asks for bloom, ambient-occlusion, which Wisp does not
-draw in definitive"), so a check can't pass on a frame that lacks what it
+("the look check asks for terrain, which Wisp does not draw in
+classic"), so a check can't pass on a frame that lacks what it
 judges. `render.json` records the profile's levers and the `--look` list.
 
 #### Smashcraft's stage matrix
@@ -1075,22 +995,22 @@ judges. `render.json` records the profile's levers and the `--look` list.
 The levers Smashcraft's stage plan asks for per stage
 (smashcraft:docs/design/visual-quality.md, "3.0.1 and Forsaken Kingdom"),
 plus its #170 rubric's day/night light, fog and sky and "record any change
-to shadows", for each of its 11 stages in both modes. Drawn levers are
+to shadows", for each of its 11 stages. Drawn levers are
 listed first, then absent ones, then unsupported ones in bold:
 
-| Stage | Classic | Definitive |
-| --- | --- | --- |
-| 0 Sky Deck | light, fog, sky, shadows; AO absent | light, fog, sky, AO, shadows |
-| 2 Frozen Throne | light, fog (height fog's linear range, cap, over sky), sky, shadows; falloff, bloom absent | light, fog, sky, bloom, shadows, height-fog falloff |
-| 3 Durotar | light, fog, sky, shadows; falloff, bloom absent | light, fog, sky, bloom, shadows, height-fog falloff |
-| 4 Naxxramas | light, fog, sky, shadows; omni light, point-light shadow absent; NaxxDeco0 absent | light, fog, sky, omni light, point-light shadow, NaxxDeco0, shadows |
-| 6 Stratholme | light, fog, sky, shadows; omni lights absent; 2 models naming the missing `TerrainArt\Misc\misc_CharredEarth.blp` not drawn | light, fog, sky, omni lights, point-light shadow, shadows; the same 2 models not drawn |
-| 7 Tomb of Sargeras | light, fog, sky, ordinary waterfall, shadows; falloff absent (HD water skipped: terrain hidden) | light, fog, sky, `_de` WaterfallNoMist, shadows, height-fog falloff |
-| 10 Nordrassil | light, fog, sky, shadows; bloom, falloff absent | light, fog, sky, bloom, shadows, height-fog falloff |
-| 11 Gryphon Aerie | light, fog (GA-4 linear range, over sky), sky, shadows; falloff absent | light, fog, sky, shadows, height-fog falloff |
-| 12 Blackrock | light, fog, sky, shadows; omni lights, bloom, AO absent | light, fog, sky, omni lights, point-light shadow, bloom, AO, shadows |
-| 13 Ahn'Qiraj | light, fog, sky, shadows; falloff absent | light, fog, sky, shadows, height-fog falloff |
-| 14 Hellfire | light, fog, sky, shadows; omni lights, bloom absent | light, fog, sky, omni lights, point-light shadow, bloom, shadows |
+| Stage | Classic |
+| --- | --- |
+| 0 Sky Deck | light, fog, sky, shadows; AO absent |
+| 2 Frozen Throne | light, fog (height fog's linear range, cap, over sky), sky, shadows; falloff, bloom absent |
+| 3 Durotar | light, fog, sky, shadows; falloff, bloom absent |
+| 4 Naxxramas | light, fog, sky, shadows; omni light, point-light shadow absent; NaxxDeco0 absent |
+| 6 Stratholme | light, fog, sky, shadows; omni lights absent; 2 models naming the missing `TerrainArt\Misc\misc_CharredEarth.blp` not drawn |
+| 7 Tomb of Sargeras | light, fog, sky, ordinary waterfall, shadows; falloff absent (HD water skipped: terrain hidden) |
+| 10 Nordrassil | light, fog, sky, shadows; bloom, falloff absent |
+| 11 Gryphon Aerie | light, fog (GA-4 linear range, over sky), sky, shadows; falloff absent |
+| 12 Blackrock | light, fog, sky, shadows; omni lights, bloom, AO absent |
+| 13 Ahn'Qiraj | light, fog, sky, shadows; falloff absent |
+| 14 Hellfire | light, fog, sky, shadows; omni lights, bloom absent |
 
 #### Measured against Warcraft
 
@@ -1107,47 +1027,39 @@ references: Warcraft 3.0.1.24342, Classic (`hd=0`), 8 Oct, client clone-a
 Absolute values differ (other fighters, camera build and lighting
 renderer); the verdict is what is compared.
 
-| Stage | Classic native abs ΔL, ΔE00 stock → stage | verdict | Classic Wisp | verdict | Definitive Wisp | verdict |
-| --- | --- | --- | --- | --- | --- | --- |
-| 0 Sky Deck | no reference | — | 0.6, 10.7 → 4.0, 11.4 | pass | 1.6, 11.6 → 7.3, 13.2 | pass |
-| 2 Frozen Throne | 3.9, 3.8 → 5.0, 5.5 | pass | 3.1, 7.9 → 4.8, 8.4 | pass | 4.6, 8.6 → 9.2, 10.9 | pass |
-| 3 Durotar | 7.6, 11.9 → 6.4, 11.7 | fail | 1.7, 31.5 → 5.0, 31.2 | fail | 3.2, 30.5 → 2.3, 30.2 | fail |
-| 4 Naxxramas | 5.6, 21.1 → 16.1, 23.7 | pass | 10.0, 16.8 → 12.4, 17.7 | pass | 8.9, 14.4 → 13.7, 16.7 | pass |
-| 6 Stratholme | no reference | — | 0.1, 13.6 → 2.3, 12.9 (2 models not drawn) | fail | 15.9, 26.3 → 20.1, 28.3 (2 not drawn) | pass |
-| 7 Tomb of Sargeras | no reference | — | 8.7, 24.1 → 12.2, 24.6 | pass | 10.5, 20.7 → 15.9, 22.7 | pass |
-| 10 Nordrassil | no reference | — | 15.6, 32.0 → 19.2, 32.3 | pass | 19.9, 27.7 → 25.8, 29.6 | pass |
-| 11 Gryphon Aerie | 0.7, 7.3 → 0.7, 7.3 | pass | 1.5, 17.6 → 9.5, 20.1 | pass | 1.9, 17.5 → 0.1, 17.3 | fail |
-| 12 Blackrock | 4.9, 9.6 → 5.0, 10.2 | pass | 14.2, 26.4 → 17.2, 26.6 | pass | 12.8, 24.9 → 17.8, 26.2 | pass |
-| 13 Ahn'Qiraj | 10.4, 14.5 → 9.9, 14.2 | fail | 1.7, 30.2 → 1.5, 28.7 | fail | 3.8, 29.9 → 5.2, 29.2 | fail |
-| 14 Hellfire | no reference | — | 12.3, 32.8 → 15.1, 32.6 | fail | 21.6, 30.0 → 26.7, 32.5 | pass |
+| Stage | Classic native abs ΔL, ΔE00 stock → stage | verdict | Classic Wisp | verdict |
+| --- | --- | --- | --- | --- |
+| 0 Sky Deck | no reference | — | 0.6, 10.7 → 4.0, 11.4 | pass |
+| 2 Frozen Throne | 3.9, 3.8 → 5.0, 5.5 | pass | 3.1, 7.9 → 4.8, 8.4 | pass |
+| 3 Durotar | 7.6, 11.9 → 6.4, 11.7 | fail | 1.7, 31.5 → 5.0, 31.2 | fail |
+| 4 Naxxramas | 5.6, 21.1 → 16.1, 23.7 | pass | 10.0, 16.8 → 12.4, 17.7 | pass |
+| 6 Stratholme | no reference | — | 0.1, 13.6 → 2.3, 12.9 (2 models not drawn) | fail |
+| 7 Tomb of Sargeras | no reference | — | 8.7, 24.1 → 12.2, 24.6 | pass |
+| 10 Nordrassil | no reference | — | 15.6, 32.0 → 19.2, 32.3 | pass |
+| 11 Gryphon Aerie | 0.7, 7.3 → 0.7, 7.3 | pass | 1.5, 17.6 → 9.5, 20.1 | pass |
+| 12 Blackrock | 4.9, 9.6 → 5.0, 10.2 | pass | 14.2, 26.4 → 17.2, 26.6 | pass |
+| 13 Ahn'Qiraj | 10.4, 14.5 → 9.9, 14.2 | fail | 1.7, 30.2 → 1.5, 28.7 | fail |
+| 14 Hellfire | no reference | — | 12.3, 32.8 → 15.1, 32.6 | fail |
 
-With sun shadows, omni-light shadows, ambient occlusion and bloom (wisp#79,
+With sun shadows (wisp#79,
 9 Oct; Smashcraft b859da4f with this Wisp, the same journeys and frame 410),
 the Classic triples on the six stages with a native reference, abs ΔL, ΔE00
 stock → stage: 2 Frozen Throne 2.0, 7.6 → 4.3, 8.2 pass; 3 Durotar 1.2, 31.6
 → 4.5, 31.3 fail; 4 Naxxramas 10.4, 16.9 → 13.1, 17.6 pass; 11 Gryphon Aerie
 2.2, 19.4 → 9.4, 21.7 pass; 12 Blackrock 10.8, 26.1 → 14.5, 26.1 pass; 13
 Ahn'Qiraj 1.5, 30.2 → 1.2, 28.8 fail. **6 of 6 agree with native, 0
-disagree.** Definitive Blackrock with every lever on (`--look
-shadows,point-light-shadows,bloom,ambient-occlusion`: sun shadow, one
-shadow-casting omni light, the map's `[ASSAO]` and `[Bloom]`): 11.4, 26.3 →
-14.5, 26.7, pass. No Definitive stage has a native reference yet, so no
-Definitive verdict is confirmed. The frames that would confirm the rest are
-native stock / mask / stage triples with the capture profile (shadows,
-point-light shadows and AO on) for Classic stages 0, 6, 7, 10 and 14 and
-Definitive stages 0, 2, 3, 4, 6, 7, 10, 11, 12, 13 and 14.
+disagree.** The frames that would confirm the rest are
+native stock / mask / stage triples with the capture profile (shadows on)
+for Classic stages 0, 6, 7, 10 and 14.
 
 Classic: Wisp's verdict agrees with Warcraft's on 6 of the 6 stages that
 have a native reference (2, 3, 4, 11, 12, 13), 0 disagreements. Drawing the
 three frames at different match frames instead (one run, 60 frames apart)
 flipped Blackrock to a false fail: its lava and platforms move between the
-frames, so same-frame triples are the method. Missing references (16 of
-22): Classic 0, 6, 7, 10 and 14; Definitive all eleven (the 8 Oct
-Definitive batch never reached a match). Stratholme (6) draws without the 2
+frames, so same-frame triples are the method. Missing references (5 of
+11): Classic 0, 6, 7, 10 and 14. Stratholme (6) draws without the 2
 models that use its missing texture (`notDrawn`), so its verdicts are
-provisional. In Definitive, Naxxramas draws 2 omni lights, Blackrock 3,
-Stratholme 3 and Hellfire 3 in their frames (the stage lights plus a fighter
-effect's own); Classic draws none.
+provisional.
 
 ## Unit states
 

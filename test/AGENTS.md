@@ -6,7 +6,7 @@
   triple-slash directives; those are compiler inputs, not narration to prune.
 - Engine observations come from the recorded rows and sessions named in
   `docs/warsmash-notes.md`; renderer checks exercise authored models in Classic
-  and Definitive and retain their measured pixel rules.
+  and retain their measured pixel rules.
 - Keep unconfirmed engine expectations marked provisional. Headless agreement
   alone never changes their status to a native reference.
 - A consumer's supplied game, replay inspector or asset source is input to Wisp.

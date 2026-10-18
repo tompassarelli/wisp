@@ -16,7 +16,7 @@ and retired slices. The validator checks the recorded partition; its owner must
 preserve the original frozen split outside the capture directory.
 
 A slice identifies a `lever`, `scene`, `kind` (`lever` or `stage`), `pad`, `look`
-(`classic` or `definitive`), unique integer `frames`, and a camera with
+(`classic`), unique integer `frames`, and a camera with
 `position`, `target` and degree `fov`. Its `identity` records the native `build`,
 ordered `assetLayers`, `mapHash`, `settingsFile`, pixel `resolution` (width and
 height), and `gpu`. The gate refuses a slice whose `build` isn't the live build,
@@ -38,19 +38,16 @@ Each control has a unique `id` and only the fields its lever uses: `mode`
 or `visibility` (`shown` or `hidden`).
 A slice carries its own lever's controls per look, rather than all levers:
 
-- A KO-window `cinematic-filter` slice needs cine on/off in both looks, plus
+- A KO-window `cinematic-filter` slice needs cine on/off, plus
   `cineWindow` inclusive start/end frames. Every window frame must be listed.
 - Tomb `fog` and `height-fog-falloff` slices need stock/mask/stage controls and
-  fog on/off in both looks. They require no bloom, DOF or cine controls.
+  fog on/off. They require no bloom, DOF or cine controls.
 - Stage slices and `sky`, `water`, `day-night-light`, `point-lights` and `pbr`
   slices need stock/mask/stage controls.
 - A `draw-extent` slice needs exactly one `visibility: shown` and one
   `visibility: hidden` control: the same held frame with the measured
   drawing shown and hidden. The gate measures each run's shown capture
   against that run's hidden capture, never the hidden control alone.
-- Definitive `bloom` needs bloom on/off; Definitive `dof` needs at least three
-  distinct finite DOF values. These controls are not required in Classic,
-  which does not draw those levers.
 
 Ruler-scene controls follow their selected P4.3 lever. If a non-cine slice
 supplies a `cineWindow`, its frame inventory is still checked. Use matched

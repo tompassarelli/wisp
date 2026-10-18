@@ -39,7 +39,7 @@ export function cliffOverrideTextures(cliffTiles: readonly string[], rows: Reado
 }
 
 export function cliffTexturePath(path: string, overrides: ReadonlyMap<string, string>): string {
-  const match = /^(?:ReplaceableTextures[\\/]Cliff|Doodads[\\/]Terrain[\\/]#ignore_Cliffs)[\\/](Cliff\d+)((?:_[A-Za-z]+)?\.[A-Za-z]+)$/i.exec(path);
+  const match = /^ReplaceableTextures[\\/]Cliff[\\/](Cliff\d+)(\.[A-Za-z]+)$/i.exec(path);
   const base = match?.[1] === undefined ? undefined : overrides.get(match[1].toLowerCase());
   return base === undefined ? path : `${base}${match?.[2] ?? ""}`;
 }

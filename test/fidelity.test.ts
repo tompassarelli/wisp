@@ -21,7 +21,7 @@ function fixture(): CaptureManifest {
   ];
   return {version:1,split:{frozenAt:"2026-10-10T00:00:00Z",fit:["fit-scene"],heldOut:["held-scene"],retired:[]},slices:[{
     lever:"water",scene:"held-scene",kind:"lever",split:"held-out",pad:"synthetic.pad",frames:[227],
-    camera:{position:[0,0,10],target:[0,0,0],fov:45},look:"definitive",
+    camera:{position:[0,0,10],target:[0,0,0],fov:45},look:"classic",
     identity:{build:"3.0.0.24268",assetLayers:["synthetic"],mapHash:"synthetic",settingsFile:"synthetic",resolution:{width:9,height:9},gpu:"synthetic"},
     settings:{density:1},calibratedRanges:{density:{min:0,max:2}},regions:[region],controls,cineWindow:{start:227,end:227},
     runs:[0,1,2].map(run=>({id:String(run),captures:controls.map(control=>({frame:227,frameSource:"journal" as const,control:control.id,image:`${run}-${control.id}.png`}))})),
@@ -50,7 +50,7 @@ test(`${source}: synthetic PNG capture boundary returns PASS, FAIL, INCONCLUSIVE
     await write(ref,[100,100,100]);await write(cand,[101,101,101]);
     const check=(live="3.0.0.24268")=>Effect.runPromise(checkFidelity("water",ref,cand,live).pipe(Effect.provide(BunServices.layer)));
     expect((await check()).verdict).toBe("PASS");
-    await expect(check("3.0.1.24342")).rejects.toThrow("water/held-scene/definitive was recorded on build 3.0.0.24268, not the live 3.0.1.24342: record again on 3.0.1.24342");
+    await expect(check("3.0.1.24342")).rejects.toThrow("water/held-scene/classic was recorded on build 3.0.0.24268, not the live 3.0.1.24342: record again on 3.0.1.24342");
     await write(cand,[220,220,220]);expect((await check()).verdict).toBe("FAIL");
     await write(ref,[100,150,100]);expect((await check()).verdict).toBe("INCONCLUSIVE");
     const candidate=fixture();candidate.slices[0]!.identity.build="different";

@@ -4,8 +4,7 @@
     "lanPool": {"status":"supported","issue":"wisp#37"},
     "privateLanSwitch": {"status":"supported","issue":"wisp#37"},
     "menuDriving": {"status":"supported","issue":"smashcraft#119"},
-    "classic": {"status":"supported","issue":"wisp#37"},
-    "definitive": {"status":"supported","issue":"wisp#84"}
+    "classic": {"status":"supported","issue":"wisp#37"}
   },
   "protocolVersion": 10200,
   "natives": {"naming":"3.0 equipment natives use unprefixed names","added":[]},

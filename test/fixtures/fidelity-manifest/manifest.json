@@ -34,7 +34,7 @@
         ],
         "fov": 60
       },
-      "look": "definitive",
+      "look": "classic",
       "identity": {
         "build": "synthetic-build",
         "assetLayers": [

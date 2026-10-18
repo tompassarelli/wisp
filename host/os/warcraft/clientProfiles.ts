@@ -6,7 +6,7 @@ export interface Profile {
 
   readonly video: Readonly<Record<string, number>>;
 
-  readonly graphicsMode: "classic" | "reforged" | "definitive";
+  readonly graphicsMode: "classic" | "reforged";
 
   readonly sound: boolean;
 
@@ -25,7 +25,6 @@ const captureProfile = (graphicsMode: Profile["graphicsMode"]): Profile => ({ ..
 const CAPTURE_PROFILES = {
   "capture-classic": captureProfile("classic"),
   "capture-reforged": captureProfile("reforged"),
-  "capture-definitive": captureProfile("definitive"),
 };
 export const PROFILES: Readonly<Record<string, Profile>> = {
   parity: PARITY,
@@ -59,7 +58,7 @@ function profileSections(profile: Profile, windowX: number): Record<string, Reco
   const sound = profile.sound ? 1 : 0;
   return {
     Video: video,
-    Misc: { hd: { classic: 0, reforged: 1, definitive: 2 }[profile.graphicsMode] },
+    Misc: { hd: { classic: 0, reforged: 1 }[profile.graphicsMode] },
     Sound: { ambient: sound, environmental: sound, movement: sound, music: profile.music ? 1 : 0, positional: sound, sfx: sound, unit: sound, nosoundwarn: 1 },
   };
 }

@@ -1,12 +1,11 @@
 import { Effect, Schema } from "effect";
 
-const ModeModel = Schema.Struct({
-  path: Schema.String,
-  scale: Schema.Finite.check(Schema.isGreaterThan(0)),
-});
 export const UnitModels = Schema.Struct({
-  scaleTolerance: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
-  units: Schema.Array(Schema.Struct({ id: Schema.String, classic: ModeModel, definitive: ModeModel })),
+  units: Schema.Array(Schema.Struct({
+    id: Schema.String,
+    path: Schema.String,
+    scale: Schema.Finite.check(Schema.isGreaterThan(0)),
+  })),
 });
 export type UnitModels = typeof UnitModels.Type;
 export interface ModelSource { readonly entry: string; readonly source: string }
@@ -24,23 +23,18 @@ export const checkUnitModels = (declaration: UnitModels, sources: readonly Model
   const paths = new Map(sources.map((source) => [modelKey(source.entry), source.source]));
   const problems: string[] = [];
   for (const unit of decoded.units) {
-    for (const mode of ["classic", "definitive"] as const) {
-      const model = unit[mode], source = paths.get(modelKey(model.path));
-      const exists = source === undefined ? false : yield* Effect.tryPromise({
-        try: () => Bun.file(source).exists(),
-        catch: (cause) => new UnitModelsFailure({ problem: `unit ${unit.id} ${mode}: cannot read ${model.path}: ${String(cause)}` }),
-      });
-      if (!exists) problems.push(`unit ${unit.id} ${mode}: unresolved model ${model.path}`);
-    }
-    const difference = Math.abs(unit.classic.scale - unit.definitive.scale);
-    if (difference > decoded.scaleTolerance) problems.push(`unit ${unit.id}: classic scale ${unit.classic.scale}, definitive scale ${unit.definitive.scale}, difference ${difference} exceeds tolerance ${decoded.scaleTolerance}`);
+    const source = paths.get(modelKey(unit.path));
+    const exists = source === undefined ? false : yield* Effect.tryPromise({
+      try: () => Bun.file(source).exists(),
+      catch: (cause) => new UnitModelsFailure({ problem: `unit ${unit.id}: cannot read ${unit.path}: ${String(cause)}` }),
+    });
+    if (!exists) problems.push(`unit ${unit.id}: unresolved model ${unit.path}`);
   }
   if (problems.length > 0) return yield* new UnitModelsFailure({ problem: problems.join("\n") });
 });
 
 interface UnitModelChange {
   readonly id: string;
-  readonly mode: "classic" | "definitive";
   readonly field: "path" | "scale";
   readonly before: string | number | undefined;
   readonly after: string | number | undefined;
@@ -51,11 +45,9 @@ export function compareUnitModels(before: UnitModels, after: UnitModels): readon
   const old = new Map(before.units.map((unit) => [unit.id, unit]));
   const next = new Map(after.units.map((unit) => [unit.id, unit]));
   for (const id of new Set([...old.keys(), ...next.keys()])) {
-    for (const mode of ["classic", "definitive"] as const) {
-      for (const field of ["path", "scale"] as const) {
-        const a = old.get(id)?.[mode][field], b = next.get(id)?.[mode][field];
-        if (a !== b) changes.push({ id, mode, field, before: a, after: b });
-      }
+    for (const field of ["path", "scale"] as const) {
+      const a = old.get(id)?.[field], b = next.get(id)?.[field];
+      if (a !== b) changes.push({ id, field, before: a, after: b });
     }
   }
   return changes;

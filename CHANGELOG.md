@@ -5,6 +5,15 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## Unreleased
 
+- Classic is the only graphics mode. `Graphics` is `"classic"`, `AssetLayer`
+  is `"base"`, `resolveRenderAsset(readers, path, graphics)` tries the map's
+  import then the stock file and its result has no `bodyAlias`,
+  `suffixConversion` or `selectedPath`, and `resolveAsset(path, graphics)`
+  takes no body location. `RenderedFrame` drops `pointLights`, `absent`,
+  `shadows.pointCasters`, `post` and `heightFog`. `withGraphicsMode` and
+  `graphicsMode` take `"classic"` or `"reforged"`; the `capture-classic` and
+  `capture-reforged` client profiles remain. `UnitModels` units are
+  `{ id, path, scale }` with no `scaleTolerance`.
 - `exports` lists each importable module by name instead of the `./src/*`
   and `./scripts/*` directory wildcards: every subpath a consumer, the sample
   or a doc imports, plus `wisp/scripts/wisp/devResult` (`savedFiles()`) and

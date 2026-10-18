@@ -12,7 +12,7 @@ const fixture = {
   version: 1, split: { frozenAt: "2026-10-10T00:00:00Z", fit: ["synthetic-fit"], heldOut: ["synthetic-ruler"], retired: [] },
   slices: [{
     lever: "fog", scene: "synthetic-ruler", kind: "lever", split: "held-out", pad: "synthetic.pad", frames: [0, 1],
-    camera: { position: [0, -10, 5], target: [0, 0, 0], fov: 60 }, look: "definitive",
+    camera: { position: [0, -10, 5], target: [0, 0, 0], fov: 60 }, look: "classic",
     identity: { build: "synthetic-build", assetLayers: ["synthetic-assets"], mapHash: "synthetic-map-hash", settingsFile: "synthetic-settings.json", resolution: { width: 4, height: 4 }, gpu: "synthetic-gpu" },
     settings: { density: 0.5 }, calibratedRanges: { density: { min: 0, max: 1 } },
     regions: [{ id: "critical", x: 0, y: 0, width: 4, height: 4, critical: true }], controls, cineWindow: { start: 0, end: 1 },
@@ -37,7 +37,7 @@ function omit(value: unknown, path: readonly (string | number)[]): void {
   delete (cursor as Record<string | number, unknown>)[last];
 }
 
-function makeManifest(lever: string, look: "classic" | "definitive", controls: readonly CaptureControl[]) {
+function makeManifest(lever: string, look: "classic", controls: readonly CaptureControl[]) {
   const original = fixture.slices[0];
   if (!original) throw new Error("missing capture fixture");
   const { cineWindow, ...slice } = original;
@@ -59,7 +59,7 @@ test("[wisp#75 P4.2 and P1.3] public capture file boundary accepts a complete sl
     { id: "stock", mode: "stock", fog: false }, { id: "mask", mode: "mask", fog: false },
     { id: "stage", mode: "stage", fog: false }, { id: "fog-on", mode: "stage", fog: true },
   ];
-  for (const complete of [ko, debuggerKO, ...(["classic", "definitive"] as const).map((look) => makeManifest("fog", look, tombControls))]) expect(await accepted(complete)).toBe(true);
+  for (const complete of [ko, debuggerKO, makeManifest("fog", "classic", tombControls)]) expect(await accepted(complete)).toBe(true);
   await expect(Effect.runPromise(decodeManifest(makeManifest("cinematic-filter", "classic", [{ id: "cine-off", cine: false }])))).rejects.toThrow("missing cine on control");
   const paths = fieldPaths(fixture).filter((path) => path.join(".") !== "slices.0.cineWindow" && !(path[2] === "controls" && path.length === 5 && path[4] !== "id"));
   for (const path of paths) {
@@ -94,7 +94,7 @@ test("[wisp#75 P4.2 and P1.3] public capture file boundary accepts a complete sl
     fault(incomplete);
     expect(await Effect.runPromise(decodeManifest(incomplete).pipe(Effect.isSuccess)), `fault ${index}`).toBe(false);
   }
-  for (const look of ["classic", "definitive"] as const) {
+  for (const look of ["classic"] as const) {
     expect(await accepted(makeManifest("fog", look, tombControls.filter((control) => control.fog !== true))), `${look} without fog on`).toBe(false);
     expect(await accepted(makeManifest("fog", look, tombControls.filter((control) => control.mode !== "mask"))), `${look} without mask`).toBe(false);
   }

@@ -125,7 +125,7 @@ export interface PlayDeclaration<R = never> {
 
   readonly displaySettings?: DisplaySettings;
 
-  readonly graphicsMode?: "classic" | "reforged" | "definitive";
+  readonly graphicsMode?: "classic" | "reforged";
 
   readonly recommendedSettings?: DisplaySettings;
 

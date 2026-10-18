@@ -3,8 +3,7 @@
 `builds/<version>.<build>.json` records capabilities checked on that game
 build. Host tools read it through `host/client/builds.ts`. A capability is
 `supported`, `unsupported`, or `unchecked`; unchecked stops a dependent command
-with the capability name and build. The registry supports Classic and
-Definitive Edition.
+with the capability name and build. The registry supports Classic.
 
 `wisp client doctor` reads the executable version through the private plugin
 and prints its profile before recovery. Menu connections identify the game
@@ -24,8 +23,7 @@ sees it: menus, logs, replays, pictures and timing
 | Game protocol | Checked version 10200 | No working LAN protocol checked | [wisp#37](https://github.com/tompassarelli/wisp/issues/37) |
 | Equipment native names | Unprefixed 3.0 names | `Blz` names; heal, effect removal, talent reset and camera hotkey-lock declarations | [wisp#51](https://github.com/tompassarelli/wisp/issues/51) |
 | Menu driving | Checked; wait 2500 ms after confirming a hosted lobby; Escape leaves results | Solo menu flow checked; same wait and Escape method until measured separately | [smashcraft#119](https://github.com/tompassarelli/smashcraft/issues/119), [wisp#37](https://github.com/tompassarelli/wisp/issues/37) |
-| Classic and Definitive | Both supported | Both have pause/resume picture references | [wisp#84](https://github.com/tompassarelli/wisp/issues/84), [wisp#86](https://github.com/tompassarelli/wisp/issues/86) |
-| Definitive assets | Stock model families | HD model paths need matching body textures | [wisp#84](https://github.com/tompassarelli/wisp/issues/84) |
+| Classic | Supported | Has pause/resume picture references | $1|
 | Ambient Occlusion | Removed from settings | Restored to settings | [smashcraft#287](https://github.com/tompassarelli/smashcraft/issues/287) |
 | Terrain | `groundtile` supplies ground and blight | Newer terrain captures remain separate reference work | [wisp#82](https://github.com/tompassarelli/wisp/issues/82) |
 

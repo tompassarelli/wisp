@@ -11,7 +11,6 @@ export interface WaterFog {
   readonly start: number;
   readonly end: number;
   readonly max: number;
-  readonly height?: { readonly bottom: number; readonly top: number; readonly start: number; readonly end: number };
 }
 interface Prepared { program: WebGLProgram; vao: WebGLVertexArrayObject; buffer: WebGLBuffer; count: number; table: WaterTable }
 const prepared = new Map<string, Promise<Prepared | undefined>>();
@@ -23,23 +22,18 @@ layout(location=0) in vec3 position;
 layout(location=1) in vec2 uv;
 layout(location=2) in vec4 tint;
 uniform mat4 view, projection;
-out vec2 texcoord; out vec4 shade; out float depth; out float height;
-void main(){vec4 eye=view*vec4(position,1.0);texcoord=uv;shade=tint;depth=-eye.z;height=position.z;gl_Position=projection*eye;}`, `#version 300 es
+out vec2 texcoord; out vec4 shade; out float depth;
+void main(){vec4 eye=view*vec4(position,1.0);texcoord=uv;shade=tint;depth=-eye.z;gl_Position=projection*eye;}`, `#version 300 es
 precision highp float;
-in vec2 texcoord; in vec4 shade; in float depth; in float height;
+in vec2 texcoord; in vec4 shade; in float depth;
 uniform sampler2D surface;
-uniform vec4 fogColor; uniform vec3 fogRange; uniform vec4 heightFog; uniform float heightFogOn;
+uniform vec4 fogColor; uniform vec3 fogRange;
 out vec4 color;
 void main(){
   color=texture(surface,texcoord)*shade;
   color.rgb=mix(pow((max(color.rgb,0.0)+0.055)/1.055,vec3(2.4)),color.rgb/12.92,lessThanEqual(color.rgb,vec3(0.04045)));
   if(fogColor.w>0.5){
     float fog=clamp((depth-fogRange.x)/max(fogRange.y-fogRange.x,1.0),0.0,fogRange.z);
-    if(heightFogOn>0.5){
-      float below=clamp((heightFog.y-height)/max(heightFog.y-heightFog.x,1.0),0.0,1.0);
-      float reach=clamp((depth-heightFog.z)/max(heightFog.w-heightFog.z,1.0),0.0,1.0);
-      fog=1.0-(1.0-fog)*(1.0-below*reach);
-    }
     vec3 fogLinear=mix(pow((max(fogColor.rgb,0.0)+0.055)/1.055,vec3(2.4)),fogColor.rgb/12.92,lessThanEqual(fogColor.rgb,vec3(0.04045)));
     color.rgb=mix(color.rgb,fogLinear,fog);
   }
@@ -86,8 +80,6 @@ export async function drawWater(gl: WebGL2RenderingContext, terrain: Terrain, fr
   gl.uniform1i(at("surface"), 0);
   gl.uniform4f(at("fogColor"), fog?.color[0] ?? 0, fog?.color[1] ?? 0, fog?.color[2] ?? 0, fog === undefined ? 0 : 1);
   gl.uniform3f(at("fogRange"), fog?.start ?? 0, fog?.end ?? 1, fog?.max ?? 1);
-  gl.uniform1f(at("heightFogOn"), fog?.height === undefined ? 0 : 1);
-  gl.uniform4f(at("heightFog"), fog?.height?.bottom ?? 0, fog?.height?.top ?? 1, fog?.height?.start ?? 0, fog?.height?.end ?? 1);
   gl.disable(gl.CULL_FACE); gl.enable(gl.DEPTH_TEST); gl.depthMask(false); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.drawArrays(gl.TRIANGLES, 0, scene.count);

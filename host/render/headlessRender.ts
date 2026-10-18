@@ -7,7 +7,7 @@ import { ChildProcess } from "effect/process";
 import type { EffectDeaths, HeadlessClient } from "../../src/headless/client";
 import { pollFor, spawnLogged } from "../cli/hostProcess";
 import { deathSeconds } from "../models/models";
-import type { AssetLocation, RenderAssetResolution, ResolvedRenderAsset } from "./renderAssets";
+import type { RenderAssetResolution, ResolvedRenderAsset } from "./renderAssets";
 import { decodeTerrain, shiftedBounds, worldBounds, type Terrain, type WorldBounds } from "../terrain/terrain";
 import { decodeDoodadFile } from "../terrain/doodads";
 import { freshAnimation } from "../../src/headless/animation";
@@ -15,7 +15,7 @@ import { uiReport } from "./screen";
 import type { ModelBounds, Portrait, TextureIdentity } from "./boundsTypes";
 import type { DrawnPose, RenderScene, SceneEnvironment } from "./renderScene";
 
-import { GRAPHICS, type Graphics, type Lever, PROFILES, unsupportedLevers } from "./graphicsProfiles";
+import { type Graphics, type Lever, PROFILES, unsupportedLevers } from "./graphicsProfiles";
 export type { Graphics } from "./graphicsProfiles";
 export type { UiRow } from "./screen";
 export type { DrawnPose, RenderScene, SceneEnvironment } from "./renderScene";
@@ -24,7 +24,7 @@ export interface HeadlessRenderProject {
 
   readonly readAsset: (path: string, graphics?: Graphics) => Promise<Uint8Array | undefined>;
 
-  readonly resolveAsset?: (path: string, graphics: Graphics, body?: AssetLocation) => Promise<ResolvedRenderAsset>;
+  readonly resolveAsset?: (path: string, graphics: Graphics) => Promise<ResolvedRenderAsset>;
 
   readonly unitModels?: Readonly<Record<number, string>>;
   readonly width?: number;
@@ -74,17 +74,12 @@ export interface RenderedFrame {
   readonly models: number;
   readonly textures: number;
   readonly notDrawn: string[];
-  readonly pointLights: number;
-  readonly absent: string[];
   readonly popcornEmitters: PopcornEmitterPose[];
   readonly unsupportedEmitters: UnsupportedEmitterPose[];
 
-  readonly shadows: { readonly sun: boolean; readonly pointCasters: number };
-
-  readonly post: { readonly ambientOcclusion: boolean; readonly bloom: boolean };
+  readonly shadows: { readonly sun: boolean };
 
   readonly water: boolean;
-  readonly heightFog: boolean;
 }
 
 export const captureScene = (client: HeadlessClient, options: { readonly visibleOnly?: boolean; readonly matchFrame?: number } = {}): RenderScene => ({
@@ -219,20 +214,19 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
   const identify = (path: string, layer: string | undefined, bytes: Uint8Array | undefined) => {
     if (layer !== undefined && bytes !== undefined) identities.set(path, { layer, sha256: new Bun.CryptoHasher("sha256").update(bytes).digest("hex") });
   };
-  const read = (path: string, mode: Graphics, body?: AssetLocation) => {
-    const cacheKey = `${mode}:${body?.source ?? ""}:${body?.layer ?? ""}:${path}`;
-    let pending = assets.get(cacheKey);
-    if (pending === undefined) assets.set(cacheKey, pending = (async () => {
+  const read = (path: string) => {
+    let pending = assets.get(path);
+    if (pending === undefined) assets.set(path, pending = (async () => {
       if (project.resolveAsset !== undefined) {
-        const { bytes, ...resolution } = await project.resolveAsset(path, mode, body);
-        if (mode === graphics) resolutions.set(`${body?.layer ?? ""}:${path}`, resolution);
-        if (mode === graphics && body === undefined) identify(path, resolution.selected?.layer, bytes);
+        const { bytes, ...resolution } = await project.resolveAsset(path, graphics);
+        resolutions.set(path, resolution);
+        identify(path, resolution.selected?.layer, bytes);
         return bytes;
       }
-      const bytes = await project.readAsset(path, mode);
+      const bytes = await project.readAsset(path, graphics);
       const location = { source: "project", layer: "base", path } as const;
-      if (mode === graphics) resolutions.set(path, { requested: path, graphics, attempts: [location], selected: bytes === undefined ? undefined : location });
-      if (mode === graphics && body === undefined) identify(path, location.layer, bytes);
+      resolutions.set(path, { requested: path, graphics, attempts: [location], selected: bytes === undefined ? undefined : location });
+      identify(path, location.layer, bytes);
       return bytes;
     })());
     return pending;
@@ -244,13 +238,8 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
     if (url.pathname === "/renderer.js") return new Response(bundle, { headers: { "content-type": "text/javascript" } });
     if (url.pathname !== "/asset") return new Response("not found", { status: 404 });
     const path = url.searchParams.get("path") ?? "";
-    const bodyPath = url.searchParams.get("body");
-    if (bodyPath !== null) await read(bodyPath, graphics);
-    const body = bodyPath === null ? undefined : resolutions.get(`:${bodyPath}`)?.selected;
-    const data = await read(path, graphics, body);
+    const data = await read(path);
     if (data !== undefined) return new Response(new Uint8Array(data));
-
-    for (const other of GRAPHICS) if (bodyPath === null && other !== graphics && (await read(path, other)) !== undefined) return new Response(`absent in ${graphics}: ${path}`, { status: 410 });
     return new Response(`missing map asset: ${path}`, { status: 404 });
   }})), (open) => Effect.promise(() => open.stop(true)));
   const chromeLog = join(directory, "chrome.log");
@@ -289,7 +278,7 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
   const evaluate = (expression: string) => devtools.evaluate(expression);
   const loaded = yield* pollFor(10, "50 millis", evaluate("typeof window.renderScene === 'function'").pipe(Effect.map((ready) => (ready ? true : undefined))));
   if (loaded === undefined) return yield* new RenderFailure({ cause: "The model renderer did not load within 10 seconds" });
-  const gpu = yield* evaluate(`window.prepareRenderer(${project.width ?? 1280},${project.height ?? 720},${JSON.stringify(graphics)})`);
+  const gpu = yield* evaluate(`window.prepareRenderer(${project.width ?? 1280},${project.height ?? 720})`);
   console.error(`headless render: Chrome ANGLE ${angle} prepared the renderer after ${Math.round(performance.now() - chromeStarted)} ms`);
   return { devtools, gpu, resolutions, identities };
 });
@@ -318,7 +307,7 @@ export const renderScenes = (project: HeadlessRenderProject, scenes: readonly Re
   const browser = yield* openAnyBrowser(project, bundle, graphics);
   const write = (run: () => Promise<unknown>) => Effect.tryPromise({ try: run, catch: (cause) => new RenderFailure({ cause }) });
   yield* write(() => mkdir(directory, { recursive: true }));
-  const images: { frame: number; matchFrame?: number; client: number; image: string; models: number; textures: number; notDrawn: string[]; popcornEmitters: PopcornEmitterPose[]; unsupportedEmitters: UnsupportedEmitterPose[]; pointLights: number; absent: readonly string[]; shadows: RenderedFrame["shadows"]; post: RenderedFrame["post"]; water: boolean; heightFog: boolean; milliseconds: number; ui: ReturnType<typeof uiReport>; bounds?: readonly ModelBounds[] }[] = [];
+  const images: { frame: number; matchFrame?: number; client: number; image: string; models: number; textures: number; notDrawn: string[]; popcornEmitters: PopcornEmitterPose[]; unsupportedEmitters: UnsupportedEmitterPose[]; shadows: RenderedFrame["shadows"]; water: boolean; milliseconds: number; ui: ReturnType<typeof uiReport>; bounds?: readonly ModelBounds[] }[] = [];
   const width = project.width ?? 1280, height = project.height ?? 720;
   for (const [index, scene] of scenes.entries()) {
     const started = performance.now();
@@ -329,7 +318,7 @@ export const renderScenes = (project: HeadlessRenderProject, scenes: readonly Re
     const image = `${name}.png`;
     yield* write(() => Bun.write(join(directory, image), Buffer.from(result.png.split(",")[1] ?? "", "base64")));
     yield* write(() => Bun.write(join(directory, `${name}.json`), JSON.stringify({ ...scene, popcornEmitters: result.popcornEmitters, unsupportedEmitters: result.unsupportedEmitters })));
-    images.push({ frame: scene.frame, ...(scene.matchFrame === undefined ? {} : { matchFrame: scene.matchFrame }), client: scene.client, image, models: result.models, textures: result.textures, notDrawn: result.notDrawn, popcornEmitters: result.popcornEmitters, unsupportedEmitters: result.unsupportedEmitters, pointLights: result.pointLights, absent: result.absent, shadows: result.shadows, post: result.post, water: result.water, heightFog: result.heightFog, milliseconds: Math.round(performance.now() - started), ui: uiReport(scene, width, height, (path) => browser.identities.get(path)), ...(posed === undefined ? {} : { bounds: posed }) });
+    images.push({ frame: scene.frame, ...(scene.matchFrame === undefined ? {} : { matchFrame: scene.matchFrame }), client: scene.client, image, models: result.models, textures: result.textures, notDrawn: result.notDrawn, popcornEmitters: result.popcornEmitters, unsupportedEmitters: result.unsupportedEmitters, shadows: result.shadows, water: result.water, milliseconds: Math.round(performance.now() - started), ui: uiReport(scene, width, height, (path) => browser.identities.get(path)), ...(posed === undefined ? {} : { bounds: posed }) });
   }
   yield* write(() => Bun.write(join(directory, "render.json"), JSON.stringify({ renderer: "war3-model 4.0.1 + HD sampling precision", graphics, levers: PROFILES[graphics], look, gpu: browser.gpu, assets: [...browser.resolutions.values()], images }, null, 2) + "\n"));
   const failures = images.flatMap((image) => image.notDrawn.map((failure) => `p${image.client} ${image.matchFrame === undefined ? "frame" : "match frame"} ${image.matchFrame ?? image.frame}: ${failure}`));
