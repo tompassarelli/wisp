@@ -8,6 +8,7 @@ import { step } from "../cli/timings";
 import { emitJson } from "../cli/jsonResults";
 import { type NativeCase, checkNative, fitNativeCost, nativeCheckLines, parseNativeReadings, parsePerfSamples } from "../perf/nativeFit";
 import { type NativeCostModel, WARCRAFT_COST } from "../../src/headless/nativeCost";
+import { PERF_COLLECTOR_VARIABLE } from "../../src/headless/perfCollector";
 
 export interface LuaBuild {
   readonly config: string;
@@ -80,7 +81,7 @@ const DEFAULT_FRAMES = 1800;
 
 const projectRuns = (project: PerfProject): Readonly<Record<string, LuaBuild>> => ({ [project.defaultRun ?? "journey"]: project.map, ...project.runs });
 
-export const measureRun = (project: PerfProject, name: string, frames: number, samples: boolean) => Effect.gen(function*() {
+export const measureRun = (project: PerfProject, name: string, frames: number, samples: boolean, incremental = false) => Effect.gen(function*() {
   const map = projectRuns(project)[name];
   if (map === undefined) return yield* new PerfFailure({ problem: `no perf run named ${name}` });
   yield* compile(map).pipe(step("compile map"));
@@ -88,7 +89,7 @@ export const measureRun = (project: PerfProject, name: string, frames: number, s
   const declarations = project.declarations ?? join(import.meta.dir, "../../src/natives/warcraft.d.ts");
   const lua = process.env.LUA ?? (yield* lua32("stock").pipe(Effect.mapError((failure) => new PerfFailure({ problem: failure.message }))));
   const run = yield* Effect.try({
-    try: () => Bun.spawnSync([lua, project.program.bundle, map.bundle, declarations, name, String(frames), ...(samples ? ["samples"] : [])], { stdout: "pipe", stderr: "pipe" }),
+    try: () => Bun.spawnSync([lua, project.program.bundle, map.bundle, declarations, name, String(frames), ...(samples ? ["samples"] : [])], { stdout: "pipe", stderr: "pipe", env: incremental ? { ...process.env, [PERF_COLLECTOR_VARIABLE]: "incremental" } : process.env }),
     catch: (cause) => new PerfFailure({ problem: `running ${lua}: ${describeCause(cause)}` }),
   }).pipe(step(`${name} in 32-bit Lua`));
   const output = run.stdout.toString();
@@ -168,9 +169,9 @@ const perf = (project: PerfProject, output: PerfOutput): Command => (args) => Ef
   const name = named[0] ?? project.defaultRun ?? "journey";
   const frames = Number(framesText);
   if (named.length > 1 || runs[name] === undefined || !Number.isInteger(frames) || frames < 1) {
-    return yield* new UsageFailure({ problem: `perf takes one run (${Object.keys(runs).join(", ")}), --frames N, --samples and --out FILE; or compare A B; native READINGS [RUN]; fit SAMPLES=READINGS ...` });
+    return yield* new UsageFailure({ problem: `perf takes one run (${Object.keys(runs).join(", ")}), --frames N, --samples, --incremental-gc and --out FILE; or compare A B; native READINGS [RUN]; fit SAMPLES=READINGS ...` });
   }
-  const { output: stdout, summary, measured } = yield* measureRun(project, name, frames, args.includes("--samples"));
+  const { output: stdout, summary, measured } = yield* measureRun(project, name, frames, args.includes("--samples"), args.includes("--incremental-gc"));
   if (out !== undefined) yield* Effect.tryPromise({ try: () => Bun.write(out, stdout), catch: (cause) => new PerfFailure({ problem: `writing ${out}: ${describeCause(cause)}` }) });
   if (output.json) yield* output.result({ name, ...runData(measured) });
   else {

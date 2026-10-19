@@ -6,6 +6,7 @@ import { type LuaHeadlessMap, luaLockstep, readFile } from "./lua";
 import { type NativeCostModel, WARCRAFT_COST, nativeFrameCost } from "./nativeCost";
 import { f32 } from "../sim/f32";
 import { floorDiv, floorMod } from "../sim/intMath";
+import { PERF_COLLECTOR_VARIABLE, type PerfCollector } from "./perfCollector";
 
 export const HOOK_STEP = 100;
 
@@ -16,6 +17,7 @@ type Native = (this: void, ...args: unknown[]) => unknown;
 declare global {
   // Wisp's Lua32 counts requested bytes in a wrapping integer (native/requested-bytes.h).
   function collectgarbage(option: "requested"): number;
+  function collectgarbage(option: "step", size: number): boolean;
 }
 
 const requested = () => collectgarbage("requested");
@@ -26,6 +28,7 @@ interface ClientCost {
   readonly slot: number;
   readonly instructions: number[];
   readonly microseconds: number[];
+  readonly callbacks: number[];
   readonly natives: number[];
   readonly allocatedBytes: number[];
   readonly runtimeInstructions: number[];
@@ -51,6 +54,35 @@ export interface LuaPerfOptions {
   readonly samples?: boolean;
 
   readonly delivery?: SyncDelivery;
+
+  readonly collector?: PerfCollector;
+}
+
+const collectorFromEnvironment = (): PerfCollector => (os.getenv(PERF_COLLECTOR_VARIABLE) === "incremental" ? "incremental" : "stopped");
+
+function callbackLine(cost: ClientCost): string {
+  const sorted = [...cost.callbacks].sort((left, right) => left - right);
+  let over = 0;
+  for (const value of sorted) if (value >= 100000) over++;
+  return `callback p${cost.slot} count=${sorted.length} median-us=${whole(rank(sorted, f32(0.5)))} p99-us=${whole(rank(sorted, f32(0.99)))} max-us=${whole(rank(sorted, 1))} over-100ms=${over}`;
+}
+
+function cycleLine(): string {
+  collectgarbage("collect");
+  const heap = collectgarbage("count");
+  collectgarbage("stop");
+  const steps: number[] = [];
+  let total = 0;
+  let done = false;
+  while (!done && steps.length < 1000000) {
+    const started = os.clock();
+    done = collectgarbage("step", 0);
+    const us = (os.clock() - started) * 1000000;
+    steps.push(us);
+    total += us;
+  }
+  const sorted = [...steps].sort((left, right) => left - right);
+  return `cycle kb=${whole(heap)} steps=${steps.length} us=${whole(total)} step-median-us=${whole(rank(sorted, f32(0.5)))} step-max-us=${whole(rank(sorted, 1))}`;
 }
 
 // Varargs retain nil arguments; tail calls keep the native coroutine one frame deep.
@@ -166,6 +198,7 @@ export function runLuaPerfWith(
   options: LuaPerfOptions = {},
 ): number {
   const declarations = readFile(declarationsPath);
+  const incremental = (options.collector ?? collectorFromEnvironment()) === "incremental";
   const costs = new Map<HeadlessClient, ClientCost>();
   const bySlot = new Map<number, ClientCost>();
   const runtimeSource = debug.getinfo(1, "S")?.source;
@@ -212,6 +245,14 @@ export function runLuaPerfWith(
   let clients: Lockstep | undefined;
   const scope: ClientScope = {
     enter: (client) => {
+      if (incremental) {
+        const cost = costs.get(client);
+        active = cost;
+        lastBytes = requested();
+        lastNativeBytes = cost?.nativeBytes ?? 0;
+        entered = { seconds: os.clock(), natives: nativeSeconds, calls: cost?.calls ?? 0 };
+        return;
+      }
       const heap = collectgarbage("count");
       if (heap > collectedKb + COLLECT_EVERY_KB) {
         const started = os.clock();
@@ -237,6 +278,12 @@ export function runLuaPerfWith(
       if (cost === undefined) return;
       const frame = clients?.frame ?? 0;
       add(cost.microseconds, frame, (seconds - entered.seconds - (nativeSeconds - entered.natives)) * 1000000);
+      if (incremental) {
+        cost.callbacks.push((seconds - entered.seconds) * 1000000);
+        add(cost.allocatedBytes, frame, bytes - lastBytes - (cost.nativeBytes - lastNativeBytes));
+        add(cost.natives, frame, cost.calls - entered.calls);
+        return;
+      }
       add(cost.natives, frame, cost.calls - entered.calls);
       add(cost.runtimeBytes, frame, bytes - lastBytes - (cost.nativeBytes - lastNativeBytes));
     },
@@ -262,7 +309,7 @@ export function runLuaPerfWith(
   clients = lockstep;
   const names = parseNativeDeclarations(declarations).functions.map(([name]) => name);
   for (const client of lockstep.clients) {
-    const cost: ClientCost = { slot: client.slot, instructions: [], microseconds: [], natives: [], allocatedBytes: [], runtimeInstructions: [], runtimeBytes: [], moduleBytes: new Map(), typed: [], calls: 0, nativeBytes: 0 };
+    const cost: ClientCost = { slot: client.slot, instructions: [], microseconds: [], callbacks: [], natives: [], allocatedBytes: [], runtimeInstructions: [], runtimeBytes: [], moduleBytes: new Map(), typed: [], calls: 0, nativeBytes: 0 };
     costs.set(client, cost);
     bySlot.set(client.slot, cost);
     for (const name of names) {
@@ -284,7 +331,8 @@ export function runLuaPerfWith(
   };
   let result: { readonly problems: number; readonly lines: readonly string[] };
   collectgarbage("collect");
-  collectgarbage("stop");
+  if (incremental) collectgarbage("restart");
+  else collectgarbage("stop");
   collectedKb = collectgarbage("count");
   try {
     result = play(lockstep, measure);
@@ -295,6 +343,11 @@ export function runLuaPerfWith(
   print(`frames ${lockstep.frame - first + 1} step ${HOOK_STEP} problems ${result.problems}`);
 
   print(`collector us=${whole(collector.us)} kb=${whole(collector.kb)}`);
+  if (incremental) {
+    for (const cost of costs.values()) print(callbackLine(cost));
+    print(cycleLine());
+    collectgarbage("restart");
+  }
   const model = options.model ?? WARCRAFT_COST;
   for (const cost of costs.values()) for (const line of costLines(cost, first, lockstep.frame, model)) print(line);
   if (options.samples === true) {

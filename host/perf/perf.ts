@@ -53,7 +53,7 @@ export function parsePerfRun(text: string): PerfRun {
   const modules = new Map<number, Map<string, ModuleAllocation>>();
   let collector = { us: 0, kb: 0 };
   for (const line of lines.slice(1)) {
-    if (line.startsWith("journey: ") || line.startsWith("frame ")) continue;
+    if (line.startsWith("journey: ") || line.startsWith("frame ") || line.startsWith("callback ") || line.startsWith("cycle ")) continue;
     const collected = COLLECTOR.exec(line);
     if (collected !== null) {
       collector = { us: Number(collected[1]), kb: Number(collected[2]) };

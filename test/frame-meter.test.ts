@@ -29,7 +29,13 @@ farmTest("[invariant] both clients measure the same frames: no desync, equal rep
   const reports = await Promise.all([0, 1].map((slot) =>
     Effect.runPromise(decodeFrameCostReport(`meter-perf-p${slot}.txt`, writtenPreloadFile(after(lines, `p${slot} report: `))))));
   expect(reports[1]?.before.natives).toEqual(reports[0]?.before.natives);
-  const run = parsePerfRun(lines.slice(lines.findIndex((line) => line.startsWith("frames "))).join("\n"));
+  const incremental = lines.indexOf("incremental collector");
+  const run = parsePerfRun(lines.slice(lines.findIndex((line) => line.startsWith("frames ")), incremental).join("\n"));
+  const timed = parsePerfRun(lines.slice(incremental + 1).join("\n"));
+  expect(timed.clients.get(0)?.["lua-us"].total).toBeGreaterThan(0);
+  const callbacks = lines.slice(incremental + 1).filter((line) => line.startsWith("callback p"));
+  expect(callbacks.map((line) => Number(/^callback p\d count=(\d+) /.exec(line)?.[1]) > timed.frames)).toEqual([true, true]);
+  expect(lines.slice(incremental + 1).some((line) => /^cycle kb=\d+ steps=[1-9]\d* us=\d+ step-median-us=\d+ step-max-us=\d+$/.test(line))).toBe(true);
   const [p0, p1] = [run.clients.get(0), run.clients.get(1)];
   expect(run.runtime.get(0)?.["runtime-instructions"]?.total).toBeGreaterThan(0);
   expect(run.modules.get(0)?.has("src.map.dispatch")).toBe(true);

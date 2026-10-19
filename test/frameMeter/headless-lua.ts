@@ -40,3 +40,10 @@ runLuaPerfWith(MAP, bundlePath, declarationsPath, (measured) => {
   return { problems: journeyProblems(result), lines: journeyLines(result) };
 });
 if (!collectgarbage("isrunning")) throw new Error("profiling must restore automatic GC");
+print("incremental collector");
+runLuaPerfWith(MAP, bundlePath, declarationsPath, (measured) => {
+  const result = runJourney(measured, { frames: 120, events: [{ frame: 60, player: 0, chat: "-work 20" }] }, { checksums: false });
+  if (!collectgarbage("isrunning")) throw new Error("the incremental collector must run between and inside measured callbacks");
+  return { problems: journeyProblems(result), lines: journeyLines(result) };
+}, { collector: "incremental" });
+if (!collectgarbage("isrunning")) throw new Error("profiling must restore automatic GC");

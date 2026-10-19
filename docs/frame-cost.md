@@ -230,6 +230,18 @@ play and `samples` as its next arguments.
   p0 predicted native per frame: 4.89 ms p50, 20.17 ms p95, 57.94 ms worst; typing stall 1.80 ms worst
   ```
 
+- `perf RUN --incremental-gc` (`collector: "incremental"` in the options, or
+  `WISP_PERF_COLLECTOR=incremental` for the program) leaves Lua's collector
+  in its normal incremental mode, as Warcraft runs it, with no count hook and
+  no explicit collections, so a callback's time includes whatever collector
+  steps and atomic phases its allocations triggered. Instructions read zero;
+  Lua time, natives and allocated KB still print. It adds each client's
+  callback times, natives and collector work included
+  (`callback pSLOT count=... median-us=... p99-us=... max-us=... over-100ms=...`),
+  and one timed collection cycle of the final heap in default-size steps
+  (`cycle kb=... steps=... us=... step-median-us=... step-max-us=...`); the
+  longest step holds the atomic phase.
+
 - `perf compare A B [--threshold SHARE]` compares two runs per client and
   fails when, beyond the threshold (5% by default), B's instructions rise at
   their mean or top 1% mean, its native calls at their mean, its allocation at
