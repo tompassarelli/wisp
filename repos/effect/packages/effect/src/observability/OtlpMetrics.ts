@@ -12,7 +12,6 @@
  * @stability unstable
  * @since 4.0.0
  */
-import * as Arr from "../Array.ts"
 import { Clock } from "../Clock.ts"
 import * as Config from "../Config.ts"
 import * as Duration from "../Duration.ts"
@@ -228,27 +227,24 @@ export const make: (options: {
           break
         }
         case "Histogram": {
-          const size = state.state.buckets.length
           const currentBuckets = {
-            boundaries: Arr.allocate(size - 1) as Array<number>,
-            counts: Arr.allocate(size) as Array<number>
+            boundaries: [] as Array<number>,
+            counts: [] as Array<number>
           }
-          let idx = 0
           let prev = 0
           for (const [boundary, value] of state.state.buckets) {
-            if (idx < size - 1) {
-              currentBuckets.boundaries[idx] = boundary
-            }
-            currentBuckets.counts[idx] = value - prev
+            if (boundary === Number.POSITIVE_INFINITY) break
+            currentBuckets.boundaries.push(boundary)
+            currentBuckets.counts.push(value - prev)
             prev = value
-            idx++
           }
+          // Derive overflow from the total count, whether or not boundaries include Infinity.
+          currentBuckets.counts.push(state.state.count - prev)
 
           let reportCount = state.state.count
           let reportSum = state.state.sum
           let reportBucketCounts = currentBuckets.counts
-          const reportMin = state.state.min
-          const reportMax = state.state.max
+          let reportExtrema = true
 
           if (isDelta) {
             const previousState = previousHistogramState.get(metricKey)
@@ -258,17 +254,13 @@ export const make: (options: {
               reportBucketCounts = currentBuckets.counts.map((c, i) =>
                 Math.max(0, c - (previousState.bucketCounts[i] ?? 0))
               )
-              // For delta, min/max represent the interval's min/max
-              // We can't compute these from cumulative state, so we use current values
-              // Note: This is a limitation - true delta min/max would require tracking
-              // observations within each interval
+              // Cumulative extrema cannot describe a later delta interval.
+              reportExtrema = false
             }
             nextHistogramState.set(metricKey, {
               count: state.state.count,
               sum: state.state.sum,
-              bucketCounts: currentBuckets.counts.slice(),
-              min: state.state.min,
-              max: state.state.max
+              bucketCounts: currentBuckets.counts.slice()
             })
           }
 
@@ -277,8 +269,7 @@ export const make: (options: {
             startTimeUnixNano: intervalStartTime,
             timeUnixNano: nowTime,
             count: reportCount,
-            min: reportMin,
-            max: reportMax,
+            ...(reportExtrema ? { min: state.state.min, max: state.state.max } : undefined),
             sum: reportSum,
             bucketCounts: reportBucketCounts,
             explicitBounds: currentBuckets.boundaries
@@ -519,8 +510,6 @@ interface PreviousHistogramState {
   readonly count: number
   readonly sum: number
   readonly bucketCounts: Array<number>
-  readonly min: number
-  readonly max: number
 }
 
 /** Properties of an InstrumentationScope. */

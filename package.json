@@ -150,10 +150,10 @@
     "lua-types": "2.14.1"
   },
   "dependencies": {
-    "@effect/platform-bun": "4.0.2",
-    "@effect/platform-node-shared": "4.0.2",
+    "@effect/platform-bun": "4.0.3",
+    "@effect/platform-node-shared": "4.0.3",
     "dds-parser": "1.0.1",
-    "effect": "4.0.2",
+    "effect": "4.0.3",
     "gl-matrix": "3.3.0",
     "source-map": "0.7.6",
     "typescript": "6.0.2",
