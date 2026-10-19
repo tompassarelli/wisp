@@ -15,6 +15,7 @@ import type { EmitFile, ProcessedFile } from "typescript-to-lua/dist/transpilati
 import { normalizeSlashes } from "typescript-to-lua/dist/utils";
 import { type BundledModules, LuaBundler } from "./luaBundle";
 import { handleWarnings } from "./handleWarnings";
+import { type CompileCache, compileCache } from "./compileCache";
 export { reportHandleWarnings } from "./handleWarnings";
 
 export type Phase = <A>(name: string, run: () => A) => A;
@@ -138,6 +139,14 @@ class IncrementalTranspiler extends Transpiler {
     return { resolved, diagnostics };
   }
 
+  restore(files: readonly ProcessedFile[]): void {
+    for (const file of files) if (!this.modules.has(file.fileName)) this.modules.set(file.fileName, cacheModule(file));
+  }
+
+  get cachedFiles(): readonly ProcessedFile[] {
+    return [...this.modules.values()].map((module) => module.file);
+  }
+
   compile(program: ts.Program, affected: readonly ts.SourceFile[], phase: Phase, write: boolean): readonly ts.Diagnostic[] {
     const writeFile: ts.WriteFileCallback = write ? this.emitHost.writeFile : () => {};
     const transpiled = phase("transpile", () => {
@@ -219,7 +228,7 @@ export interface MapCompiler {
 
 const noReplacements = (): ReadonlyMap<string, string> => new Map();
 
-export function mapCompiler(configPath: string, sources: () => ReadonlyMap<string, string> = noReplacements): MapCompiler {
+export function mapCompiler(configPath: string, sources: () => ReadonlyMap<string, string> = noReplacements, cacheDirectory?: string): MapCompiler {
 
   const absolute = resolve(configPath);
   const transpiler = new IncrementalTranspiler();
@@ -233,56 +242,103 @@ export function mapCompiler(configPath: string, sources: () => ReadonlyMap<strin
     if (config.errors.length > 0) return config.errors;
     config.options.declaration = true;
     const replaced = sources();
+    const cache = cacheDirectory === undefined || replaced.size > 0 ? undefined : persistentCache(cacheDirectory, absolute, config);
     const host = cachingHost(config.options, parsed, replaced);
-    const current = phase("create program", () => ts.createEmitAndSemanticDiagnosticsBuilderProgram(config.fileNames, config.options, host, builder));
+    const restored = cache !== undefined && builder === undefined ? phase("restore compile cache", () => restoreBuilder(cache, config, host)) : undefined;
+    const current = phase("create program", () => ts.createEmitAndSemanticDiagnosticsBuilderProgram(config.fileNames, config.options, host, builder ?? restored?.builder));
     builder = current;
     const program = current.getProgram();
     warnings = phase("handle cleanup", () => handleWarnings(program));
     const global = [...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
     if (global.length > 0) return global;
-    const { affected, diagnostics } = phase("type-check", () => {
-      const affected: ts.SourceFile[] = [];
-      const diagnostics: ts.Diagnostic[] = [];
-      for (let next = current.getSemanticDiagnosticsOfNextAffectedFile(); next !== undefined; next = current.getSemanticDiagnosticsOfNextAffectedFile()) {
-
-        const files = "fileName" in next.affected ? [next.affected] : next.affected.getSourceFiles();
-        for (const file of files) {
-          if (file.isDeclarationFile) continue;
-          affected.push(file);
-          diagnostics.push(...program.getSyntacticDiagnostics(file));
-        }
-        diagnostics.push(...next.result);
-      }
-      return { affected, diagnostics };
-    });
+    const { affected, diagnostics } = phase("type-check", () => checkAffected(current, program));
+    if (restored !== undefined) {
+      transpiler.restore(restored.modules(program));
+      signaturesPrimed = true;
+    }
+    const buildInfo = buildInfoRecorder();
     if (!signaturesPrimed) {
       phase("declaration signatures", () => {
-        const declarations = current.emit(undefined, () => {}, undefined, true);
+        const declarations = current.emit(undefined, buildInfo.write, undefined, true);
         diagnostics.push(...declarations.diagnostics);
         signaturesPrimed = declarations.diagnostics.length === 0 && diagnostics.length === 0;
       });
     }
     if (diagnostics.length > 0) return diagnostics;
 
-    const declarationDiagnostics = program.getDeclarationDiagnostics;
-    const incrementalDeclarations = current.getDeclarationDiagnostics;
-    let checkingDeclarations = false;
-    program.getDeclarationDiagnostics = (file, cancellationToken) => {
-      if (file !== undefined || checkingDeclarations) return declarationDiagnostics(file, cancellationToken);
-      checkingDeclarations = true;
-      try {
-        return incrementalDeclarations(undefined, cancellationToken);
-      } finally {
-        checkingDeclarations = false;
-      }
-    };
-    try {
-      return transpiler.compile(program, affected, phase, replaced.size === 0);
-    } finally {
-      program.getDeclarationDiagnostics = declarationDiagnostics;
-    }
+    const compiled = transpileAffected(transpiler, current, affected, phase, replaced.size === 0);
+    if (cache !== undefined && compiled.length === 0) phase("save compile cache", () => saveCache(cache, buildInfo, current, transpiler));
+    return compiled;
   };
   return Object.assign(compile, { modules: () => transpiler.bundled, warnings: () => warnings });
+}
+
+function checkAffected(current: ts.EmitAndSemanticDiagnosticsBuilderProgram, program: ts.Program) {
+  const affected: ts.SourceFile[] = [];
+  const diagnostics: ts.Diagnostic[] = [];
+  for (let next = current.getSemanticDiagnosticsOfNextAffectedFile(); next !== undefined; next = current.getSemanticDiagnosticsOfNextAffectedFile()) {
+
+    const files = "fileName" in next.affected ? [next.affected] : next.affected.getSourceFiles();
+    for (const file of files) {
+      if (file.isDeclarationFile) continue;
+      affected.push(file);
+      diagnostics.push(...program.getSyntacticDiagnostics(file));
+    }
+    diagnostics.push(...next.result);
+  }
+  return { affected, diagnostics };
+}
+
+function transpileAffected(transpiler: IncrementalTranspiler, current: ts.EmitAndSemanticDiagnosticsBuilderProgram, affected: readonly ts.SourceFile[], phase: Phase, write: boolean): readonly ts.Diagnostic[] {
+  const program = current.getProgram();
+  const declarationDiagnostics = program.getDeclarationDiagnostics;
+  const incrementalDeclarations = current.getDeclarationDiagnostics;
+  let checkingDeclarations = false;
+  program.getDeclarationDiagnostics = (file, cancellationToken) => {
+    if (file !== undefined || checkingDeclarations) return declarationDiagnostics(file, cancellationToken);
+    checkingDeclarations = true;
+    try {
+      return incrementalDeclarations(undefined, cancellationToken);
+    } finally {
+      checkingDeclarations = false;
+    }
+  };
+  try {
+    return transpiler.compile(program, affected, phase, write);
+  } finally {
+    program.getDeclarationDiagnostics = declarationDiagnostics;
+  }
+}
+
+function saveCache(cache: CompileCache, buildInfo: ReturnType<typeof buildInfoRecorder>, current: ts.EmitAndSemanticDiagnosticsBuilderProgram, transpiler: IncrementalTranspiler): void {
+  if (buildInfo.text() === undefined) (current as BuildInfoEmitter).emitBuildInfo(buildInfo.write);
+  const text = buildInfo.text();
+  if (text !== undefined) cache.save(text, transpiler.cachedFiles);
+}
+
+function buildInfoRecorder() {
+  let text: string | undefined;
+  const write: ts.WriteFileCallback = (name, contents) => {
+    if (name.endsWith(".tsbuildinfo")) text = contents;
+  };
+  return { write, text: () => text };
+}
+
+type BuildInfoEmitter = ts.EmitAndSemanticDiagnosticsBuilderProgram & { readonly emitBuildInfo: (writeFile: ts.WriteFileCallback) => ts.EmitResult };
+
+function persistentCache(directory: string, configPath: string, config: ts.ParsedCommandLine): CompileCache {
+  const cache = compileCache(directory, configPath, config.options, config.fileNames);
+  config.options.incremental = true;
+  config.options.tsBuildInfoFile = cache.buildInfoFile;
+  return cache;
+}
+
+function restoreBuilder(cache: CompileCache, config: ts.ParsedCommandLine, host: ts.CompilerHost) {
+  const stored = cache.restore();
+  if (stored === undefined) return undefined;
+  const readFile = host.readFile.bind(host);
+  const builder = ts.readBuilderProgram(config.options, { ...host, readFile: (name) => name === cache.buildInfoFile ? stored.buildInfo : readFile(name) });
+  return builder === undefined ? undefined : { builder: builder as ts.EmitAndSemanticDiagnosticsBuilderProgram, modules: stored.modules };
 }
 
 export function report(diagnostics: readonly ts.Diagnostic[]): string {

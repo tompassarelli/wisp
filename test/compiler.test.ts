@@ -47,6 +47,36 @@ farmTest("[invariant] cached module requires keep the same bundle and source map
   }
 });
 
+farmTest("[invariant] a compile restored from another checkout's disk cache keeps the bundle and source map of full compilation", () => {
+  const build = join(import.meta.dir, "../build");
+  mkdirSync(build, { recursive: true });
+  const cache = mkdtempSync(join(build, "compile-cache-"));
+  const checkout = (value: number, offset: number) => {
+    const directory = mkdtempSync(join(build, "compiler-cached-"));
+    mkdirSync(join(directory, "src"));
+    writeFileSync(join(directory, "src/value.ts"), `export const value = ${value};\nexport function twice(n: number): number {\n  return n * 2;\n}\n`);
+    writeFileSync(join(directory, "src/main.ts"), `import { twice, value } from "./value";\nexport const result = twice(value) + ${offset};\n`);
+    writeFileSync(join(directory, "tsconfig.json"), JSON.stringify({
+      compilerOptions: {
+        target: "ESNext", lib: ["ES2015"], module: "ESNext", moduleResolution: "Bundler", strict: true,
+        types: [], skipLibCheck: true, rootDir: "src", outDir: "out", sourceMap: true,
+      },
+      include: ["src/**/*.ts"],
+      tstl: { luaTarget: "5.3", luaBundle: "map.lua", luaBundleEntry: "src/main.ts", noHeader: true },
+    }));
+    const bundle = join(directory, "out/map.lua");
+    return { config: join(directory, "tsconfig.json"), output: () => [readFileSync(bundle, "utf8"), readFileSync(`${bundle}.map`, "utf8")] };
+  };
+  expect(report(mapCompiler(checkout(5, 1).config, undefined, cache)())).toBe("");
+  for (const [value, offset] of [[5, 22], [7, 22], [7, 333]] as const) {
+    const next = checkout(value, offset);
+    expect(report(mapCompiler(next.config, undefined, cache)())).toBe("");
+    const cached = next.output();
+    expect(report(transpileProject(next.config).diagnostics)).toBe("");
+    expect(next.output()).toEqual(cached);
+  }
+});
+
 test("[invariant] each module's hot-reload chunk is its bundle code and maps its lines as the bundle maps them", async () => {
   const build = join(import.meta.dir, "../build");
   mkdirSync(build, { recursive: true });

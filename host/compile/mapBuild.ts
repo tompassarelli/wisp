@@ -1,5 +1,6 @@
-import { chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
+import { chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, utimesSync, writeFileSync, writeSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import { homedir } from "node:os";
 import { Console, Context, Effect, Layer, Schema } from "effect";
 import { payloadKey } from "../../src/runtime/gameFiles";
 import { decodeMapInfo, declareMap, encodeMapInfo, mapConfig, mapHeader, type MapDeclaration } from "../toolchain/mapInfo";
@@ -66,6 +67,8 @@ export interface BuildOptions {
 export type BuildFailure = MapBuildFailure | CompileFailure | SourceMapFailure;
 type CompilerModule = typeof import("../toolchain/compiler");
 
+const compileCacheDirectory = () => process.env.WISP_COMPILE_CACHE || join(homedir(), ".cache/wisp/compile");
+
 export class MapBuild extends Context.Service<MapBuild, {
 
   readonly compile: Effect.Effect<BundledModules, BuildFailure>;
@@ -81,7 +84,7 @@ export class MapBuild extends Context.Service<MapBuild, {
       const sourceErrors = yield* SourceErrors;
 
       let compiler: Promise<{ readonly run: ReturnType<CompilerModule["mapCompiler"]>; readonly report: CompilerModule["report"]; readonly reportHandleWarnings: CompilerModule["reportHandleWarnings"] }> | undefined;
-      const warmCompiler = () => (compiler ??= import("../toolchain/compiler").then(({ mapCompiler, report, reportHandleWarnings }) => ({ run: mapCompiler(configPath, sources), report, reportHandleWarnings })));
+      const warmCompiler = () => (compiler ??= import("../toolchain/compiler").then(({ mapCompiler, report, reportHandleWarnings }) => ({ run: mapCompiler(configPath, sources, compileCacheDirectory()), report, reportHandleWarnings })));
 
       const compiled = Effect.gen(function*() {
         const bytes = yield* tryMapPromise("read map bundle", bundlePath, () => Bun.file(bundlePath).bytes());
@@ -126,7 +129,6 @@ export class MapBuild extends Context.Service<MapBuild, {
       const currentBundle = Effect.gen(function*() {
         const age = yield* tryMapSync("check compiled bundle", bundlePath, () => freshBundleAge(bundlePath, compileInputs, Date.now()));
         if (age === undefined) return yield* compileBundle(true);
-        yield* runCompiler(false);
         return yield* compiled.pipe(step(`script reused (compiled ${age.toFixed(0)} s ago)`));
       });
       return MapBuild.of({
@@ -251,9 +253,10 @@ const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compil
     return { generated, files, assets };
   }).pipe(step("generate"));
 
-  yield* stageMap(options.container ?? options.base, out, (staged) => Effect.gen(function*() {
+  const archive = yield* assetArchive(packager, options.container ?? options.base, assets, work).pipe(step("asset archive"));
+  yield* stageMap(archive, out, (staged) => Effect.gen(function*() {
     yield* Effect.gen(function*() {
-      yield* packageEntries((entries) => pack.replaceAll(staged, entries, join(work, "package-entries")), assets, files);
+      yield* pack.replaceAll(staged, files, join(work, "package-entries"));
       yield* writeHeader(staged, generated.header);
     }).pipe(step("package"));
     yield* Effect.gen(function*() {
@@ -261,8 +264,9 @@ const buildTypescriptMap = (project: BuildProject, options: BuildOptions, compil
       if (Buffer.compare(header, generated.header) !== 0) {
         return yield* new MapBuildFailure({ operation: "verify map header", path: staged, cause: "header differs from the generated one" });
       }
-      yield* verifyArchive(packager, staged, [...files, ...assets], work);
-    }).pipe(step(`verify ${files.length + assets.length} entries`));
+      yield* verifyArchive(packager, staged, files, work);
+      yield* verifyListed(packager, staged, assets, work);
+    }).pipe(step(`verify ${files.length} entries, ${assets.length} listed`));
   }));
   yield* tryMapPromise("keep base script for rebuilds", `${out}.base.lua`, () => Bun.write(`${out}.base.lua`, generated.base));
   yield* Console.log(`built ${out}`);
@@ -341,11 +345,42 @@ export interface ArchiveEntry {
   readonly source: string;
 }
 
-const packageEntries = (
-  replaceAll: (entries: readonly ArchiveEntry[]) => Effect.Effect<void, BuildFailure>,
-  assets: readonly ArchiveEntry[],
-  files: readonly ArchiveEntry[],
-) => replaceAll([...assets, ...files]);
+export const assetArchiveKey = (container: string, assets: readonly ArchiveEntry[]) => {
+  const hash = new Bun.CryptoHasher("sha256");
+  hash.update(readFileSync(container));
+  for (const { entry, source } of assets) hash.update(`\0${entry}\0`).update(readFileSync(source));
+  return hash.digest("hex");
+};
+
+const ASSET_ARCHIVES_KEPT = 3;
+
+const assetArchive = (packager: string, container: string, assets: readonly ArchiveEntry[], work: string) => Effect.gen(function*() {
+  const directory = join(compileCacheDirectory(), "archives");
+  const key = yield* tryMapSync("hash map assets", container, () => assetArchiveKey(container, assets));
+  const archive = join(directory, `${key}.w3x`);
+  if (existsSync(archive)) {
+    yield* tryMapSync("touch asset archive", archive, () => utimesSync(archive, new Date(), new Date()));
+    return archive;
+  }
+  yield* tryMapSync("create asset archive directory", directory, () => mkdirSync(directory, { recursive: true }));
+  yield* stageMap(container, archive, (staged) => mapPack(packager).replaceAll(staged, assets, join(work, "asset-entries")).pipe(
+    Effect.andThen(verifyArchive(packager, staged, assets, work)),
+  ));
+  yield* tryMapSync("prune asset archives", directory, () => {
+    const kept = readdirSync(directory).filter((name) => name.endsWith(".w3x")).map((name) => join(directory, name))
+      .sort((left, right) => statSync(right).mtimeMs - statSync(left).mtimeMs);
+    for (const old of kept.slice(ASSET_ARCHIVES_KEPT)) rmSync(old, { force: true });
+  });
+  return archive;
+});
+
+const verifyListed = (packager: string, archive: string, entries: readonly ArchiveEntry[], scratch: string) => Effect.gen(function*() {
+  const listPath = join(scratch, "verify-listfile");
+  yield* mapPack(packager).extract(archive, listPath, "(listfile)");
+  const listed = new Set((yield* tryMapPromise("read archive file list", archive, () => Bun.file(listPath).text())).split(/\r?\n/).map((name) => name.toLowerCase()));
+  const missing = entries.filter(({ entry }) => !listed.has(entry.toLowerCase()));
+  if (missing.length > 0) return yield* new MapBuildFailure({ operation: "verify archive entries", path: archive, cause: `missing ${missing.slice(0, 3).map(({ entry }) => entry).join(", ")}` });
+});
 
 const verifyArchive = (packager: string, archive: string, entries: readonly ArchiveEntry[], scratch: string) => Effect.gen(function*() {
   const extracted = entries.map(({ entry }, index): ArchiveEntry => ({ entry, source: join(scratch, `verify-${index}`) }));

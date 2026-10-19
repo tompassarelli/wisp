@@ -1,7 +1,8 @@
 # Handle cleanup
 
 Normal `map build` and `map rebuild` print advisory cleanup warnings for
-source-owned TypeScript maps, including when reusing a compiled script.
+source-owned TypeScript maps when they compile; a reused compiled script
+printed its warnings when it was compiled and does not print them again.
 Each warning names the source `file:line:column` and the missing cleanup.
 Warnings do not stop the build.
 
