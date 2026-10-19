@@ -7,3 +7,5 @@ export function refused(cooldown: number, charge: number, frame: number, label: 
   if (label) return ready + slot + reach; // the same rule as an `if` condition
   return cooldown > 0 || charge > 0 ? 1 : 0; // booleans: neither reports
 }
+
+export const pattern = /^[a-z]+$/; // smashcraft runs 38890506862, 39131342098 and 39137573264: specialCues.tests.ts, stageRules.ts

@@ -47,6 +47,7 @@ farmTest("[spec #129] the check command reports every number-rule error the Lua3
     ["5,22", "`%` truncates"],
     ["6,17", "10.6 isn't a binary32 value"],
     ["7,7", "an `if` condition tests a number or string"],
+    ["11,24", "Unsupported node kind RegularExpressionLiteral"],
   ];
   const { options } = parseConfigFileWithSystem(join(cwd, "tsconfig.json"));
   const compiled = transpileFiles([join(cwd, "inputs.ts")], { ...options, noEmitOnError: false }, () => {}).diagnostics
@@ -54,6 +55,11 @@ farmTest("[spec #129] the check command reports every number-rule error the Lua3
     .map((diagnostic) => `${line(diagnostic, cwd).replace(/ Error /, " error ")}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`);
   const checked = await numberRuleReport(["tsconfig.json"], { cwd, cachePath: join(root, "build/number-rules-refused.json") });
   expect(checked).toEqual(compiled);
+  const unsupported = transpileFiles([join(cwd, "inputs.ts")], { ...options, noEmitOnError: false }, () => {}).diagnostics
+    .filter((diagnostic) => diagnostic.source === "typescript-to-lua" && diagnostic.code === 100013)
+    .map((diagnostic) => `${line(diagnostic, cwd).replace(/: Error TS\d+$/, "")}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`);
+  expect(unsupported).toEqual(["inputs.ts(11,24): Unsupported node kind RegularExpressionLiteral"]);
+  expect(checked.filter((report) => report.includes("Unsupported node kind")).map((report) => report.replace("error TS9300: ", "").replace(/(Literal):.*$/, "$1"))).toEqual(unsupported);
   expect(checked.map((report, index) => {
     const [, at, message] = /^inputs\.ts\((\d+,\d+)\): error TS9300: (.*)$/.exec(report) ?? [];
     return [at, message?.slice(0, refused[index]?.[1]?.length)];

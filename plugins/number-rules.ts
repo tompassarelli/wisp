@@ -49,6 +49,7 @@ export interface RuleSyntax<N extends RuleNode<N>> {
     readonly SlashToken: number;
     readonly MinusToken: number;
     readonly AnyKeyword: number;
+    readonly RegularExpressionLiteral: number;
     readonly UnknownKeyword: number;
     readonly ExclamationToken: number;
     readonly BarBarToken: number;
@@ -232,6 +233,8 @@ export function scanNumberRules<N extends RuleNode<N>>(syntax: RuleSyntax<N>, fi
       if (service !== undefined && !syntax.isTypeReferenceNode(node.parent)) {
         findings.push({ node, message: service, condition: { identifier: node, test: "standardLibrary" } });
       }
+    } else if (node.kind === kind.RegularExpressionLiteral) {
+      reject(node, "Unsupported node kind RegularExpressionLiteral: TypeScriptToLua has no regular expressions; match with string methods");
     } else if (!isTest) {
       if (syntax.isNonNullExpression(node)) reject(node, "non-null `!` asserts what the code should check; handle the absent case");
       else if (node.kind === kind.AnyKeyword) reject(node, "`any` turns off type checking; name the type");
