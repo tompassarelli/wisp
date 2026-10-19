@@ -75,7 +75,7 @@ const resolvedImport = (specifier: string, from: string): string | undefined => 
   }
 };
 
-export const importClosure = (entries: readonly string[], label: (file: string) => string): string[] => {
+const importClosure = (entries: readonly string[], label: (file: string) => string): string[] => {
   const scanner = new Bun.Transpiler({ loader: "ts" });
   const seen = new Set<string>();
   const pending = entries.filter((entry) => existsSync(entry));
