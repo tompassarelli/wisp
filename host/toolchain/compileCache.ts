@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { SourceNode } from "source-map";
 import ts from "typescript";
 import type { ProcessedFile } from "typescript-to-lua/dist/transpilation/utils";
@@ -48,17 +48,57 @@ export interface CompileCache {
   readonly save: (buildInfo: string, modules: readonly ProcessedFile[]) => void;
 }
 
-const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+const sha = (text: string | Uint8Array) => createHash("sha256").update(text).digest("hex");
 
-const sourceTexts = (directory: string): string[] => existsSync(directory)
-  ? readdirSync(directory, { recursive: true, encoding: "utf8" }).filter((name) => name.endsWith(".ts")).sort().map((name) => `${name}\n${readFileSync(join(directory, name), "utf8")}`)
-  : [];
+const LOCKFILES = ["bun.lock", "bun.lockb", "package-lock.json", "yarn.lock", "pnpm-lock.yaml"];
 
-const pluginTexts = (options: ts.CompilerOptions, root: string): string[] => {
+const lockfileTexts = (root: string): string[] => {
+  for (let directory = root; ; directory = dirname(directory)) {
+    const found = LOCKFILES.map((name) => join(directory, name)).filter((file) => existsSync(file));
+    if (found.length > 0) return found.map((file) => `${basename(file)}\n${sha(readFileSync(file))}`);
+    if (dirname(directory) === directory) return [];
+  }
+};
+
+const packageRoot = (file: string): string => {
+  for (let directory = dirname(file); ; directory = dirname(directory)) {
+    if (existsSync(join(directory, "package.json"))) return directory;
+    if (dirname(directory) === directory) return dirname(file);
+  }
+};
+
+const resolvedImport = (specifier: string, from: string): string | undefined => {
+  try {
+    return Bun.resolveSync(specifier, dirname(from));
+  } catch {
+    return undefined;
+  }
+};
+
+export const importClosure = (entries: readonly string[], label: (file: string) => string): string[] => {
+  const scanner = new Bun.Transpiler({ loader: "ts" });
+  const seen = new Set<string>();
+  const pending = entries.filter((entry) => existsSync(entry));
+  while (pending.length > 0) {
+    const file = pending.pop() as string;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+    const owner = packageRoot(file);
+    for (const { path: specifier } of scanner.scanImports(readFileSync(file, "utf8"))) {
+      const target = resolvedImport(specifier, file);
+      if (target !== undefined && existsSync(target) && packageRoot(target) === owner) pending.push(target);
+    }
+  }
+  return [...seen].map((file) => `${label(file)}\n${readFileSync(file, "utf8")}`).sort();
+};
+
+const pluginFiles = (options: ts.CompilerOptions, root: string): string[] => {
   const plugins = (options as { readonly luaPlugins?: readonly { readonly name?: string }[] }).luaPlugins ?? [];
-  return plugins.map(({ name }) => {
-    const path = name === undefined ? undefined : isAbsolute(name) ? name : resolve(root, name);
-    return `${name}\n${path !== undefined && existsSync(path) ? readFileSync(path, "utf8") : ""}`;
+  return plugins.flatMap(({ name }) => {
+    if (name === undefined) return [];
+    const path = isAbsolute(name) || name.startsWith(".") ? resolve(root, name) : resolvedImport(name, join(root, "tsconfig.json"));
+    return path === undefined ? [] : [path];
   });
 };
 
@@ -100,9 +140,8 @@ const storeKey = (root: string, configPath: string, options: ts.CompilerOptions,
     rootText(relative(root, configPath)),
     rootText(JSON.stringify(options)),
     fileNames.map((name) => toStored(resolve(name))),
-    sourceTexts(import.meta.dir),
-    sourceTexts(join(import.meta.dir, "../../plugins")),
-    pluginTexts(options, root),
+    importClosure([join(import.meta.dir, "compiler.ts"), ...readdirSync(join(import.meta.dir, "../../plugins")).filter((name) => name.endsWith(".ts")).map((name) => join(import.meta.dir, "../../plugins", name)), ...pluginFiles(options, root)], (file) => file === root || file.startsWith(`${root}/`) ? toStored(file) : relative(packageRoot(file), file)),
+    lockfileTexts(root),
   ]));
 };
 

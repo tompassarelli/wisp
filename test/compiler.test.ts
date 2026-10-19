@@ -77,6 +77,43 @@ farmTest("[invariant] a compile restored from another checkout's disk cache keep
   }
 });
 
+farmTest("[invariant] a disk cache is not reused when a project plugin's imported helper changes", () => {
+  const build = join(import.meta.dir, "../build");
+  mkdirSync(build, { recursive: true });
+  const cache = mkdtempSync(join(build, "compile-cache-plugin-"));
+  const checkout = (stamp: string) => {
+    const directory = mkdtempSync(join(build, "compiler-plugin-"));
+    mkdirSync(join(directory, "src"));
+    mkdirSync(join(directory, "plugins"));
+    writeFileSync(join(directory, "plugins/stampText.ts"), `export const STAMP = "${stamp}";\n`);
+    writeFileSync(join(directory, "plugins/stamp.ts"), [
+      'import ts from "typescript";',
+      'import * as tstl from "typescript-to-lua";',
+      'import { STAMP } from "./stampText";',
+      "const plugin: tstl.Plugin = { visitors: { [ts.SyntaxKind.StringLiteral]: (node) => tstl.createStringLiteral(STAMP, node) } };",
+      "export default plugin;",
+      "",
+    ].join("\n"));
+    writeFileSync(join(directory, "src/main.ts"), 'export const label = "source";\n');
+    writeFileSync(join(directory, "tsconfig.json"), JSON.stringify({
+      compilerOptions: {
+        target: "ESNext", lib: ["ES2015"], module: "ESNext", moduleResolution: "Bundler", strict: true,
+        types: [], skipLibCheck: true, rootDir: "src", outDir: "out", sourceMap: true,
+      },
+      include: ["src/**/*.ts"],
+      tstl: { luaTarget: "5.3", luaBundle: "map.lua", luaBundleEntry: "src/main.ts", noHeader: true, luaPlugins: [{ name: "./plugins/stamp.ts" }] },
+    }));
+    return { config: join(directory, "tsconfig.json"), bundle: () => readFileSync(join(directory, "out/map.lua"), "utf8") };
+  };
+  const first = checkout("first");
+  expect(report(mapCompiler(first.config, undefined, cache)())).toBe("");
+  expect(first.bundle()).toContain('"first"');
+  const second = checkout("second");
+  expect(report(mapCompiler(second.config, undefined, cache)())).toBe("");
+  expect(second.bundle()).toContain('"second"');
+  expect(second.bundle()).not.toContain('"first"');
+});
+
 test("[invariant] each module's hot-reload chunk is its bundle code and maps its lines as the bundle maps them", async () => {
   const build = join(import.meta.dir, "../build");
   mkdirSync(build, { recursive: true });
