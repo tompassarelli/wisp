@@ -1,0 +1,15 @@
+{
+  "id":"3.0.1.24370", "version":"3.0.1", "build":24370,
+  "capabilities": {
+    "lanPool":{"status":"unchecked","issue":"wisp#37"},
+    "privateLanSwitch":{"status":"unchecked","issue":"wisp#37"},
+    "menuDriving":{"status":"unchecked","issue":"wisp#100"},
+    "classic":{"status":"unchecked","issue":"wisp#100"}
+  },
+  "protocolVersion":null,
+  "natives":{"naming":"unchecked on 24370","added":[]},
+  "menus":{"lobbySettleMs":2500,"scoreClose":"Escape","lobbyBack":{"x":155,"y":1389}},
+  "quirks":[
+    {"description":"Startup can hang before War3Log opens: no window, under 3% CPU, 9 threads, about 300 MB. On 20 October 2026 clone-a hung on all 6 launches whose Battle.net ran as a client service and on a second launch from the same Battle.net; 3 of 4 first launches, clicked Play in a Battle.net started from a shell, reached the menu. A 16 MiB stack limit and fsync off did not prevent it. Doctor reports a hung startup; the cause is open.","issue":"wisp#100"}
+  ]
+}
