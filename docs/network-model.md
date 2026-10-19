@@ -24,7 +24,7 @@ a run repeat exactly; change it to sample other delays.
 
 | Part | Model | Measured |
 | --- | --- | --- |
-| Callback cadence | Every client runs its timer callbacks 60 times a game second, at the same game times. | 16.66 game-ms between callbacks, identical on both clients, across every callback of #26 r7 and r8. |
+| Callback cadence | Every client runs its timer callbacks 60 times a game second, at the same game times; with `turnBursts()`, in wall-time bursts of one or two per 25 ms turn ([Turn-burst callbacks](#turn-burst-callbacks)). | 16.66 game-ms between callbacks, identical on both clients, across every callback of #26 r7 and r8. |
 | Turns | A message reaches every client at the same synchronized turn; turns are 25 game-ms apart. | Echo times fall on a 24.87–24.99 ms grid. |
 | Latency | 80 ms after the send, rounded up to the next turn, plus 0, 1, 2, … further turns with probabilities 0.4, then each 0.6 of the one before (the ninth bucket holds the rest). | Own-echo ages p10/p25/p50/p75/p90/p95 86/95/115/137/194/212 ms; the model gives 83/92/117/150/192/225. |
 | Order | Each sender's messages arrive in the order it sent them; arrivals land before that frame's callbacks. | |
@@ -40,6 +40,42 @@ created on signed-in client A and found by client B through the Custom Games
 search), not on a LAN, so the fit describes Battle.net-hosted turns. Offline
 pool games are relayed by Wisp's own LAN host, whose turn period is
 `lan fresh --turn-ms` (default 30 ms); their echo ages are not yet measured.
+
+## Turn-burst callbacks
+
+Warcraft runs a turn's callbacks together when the turn arrives, so on
+Battle.net the 60 Hz callbacks come in wall-time bursts of one or two,
+about 40 a second. `turnBursts()` gives a `Lockstep` (its `callbacks`
+option) that wall clock: each client's `os.clock()` reads the wall time of
+the turn its callback belongs to, and a synchronized message lands on the
+first callback of a turn, never between two callbacks of one burst.
+The timing's `wallMs(frame)` says when a callback runs, so a harness can
+sample a player's keyboard at the burst, as a native client does. Without
+`callbacks` (or with `EVEN_CALLBACKS`) callbacks stay 16.7 ms apart.
+
+```ts
+import { MEASURED_TURN_BURSTS, syncDelivery, turnBursts } from "wisp/src/headless/syncChannel";
+
+const clients = headless.clients(entry, [0, 1], { delivery: syncDelivery(), callbacks: turnBursts(MEASURED_TURN_BURSTS, 7) });
+```
+
+The model: turn k (25 ms) runs at k·25 ms plus a jitter drawn uniformly
+from 0–12 ms, plus, for 0.5% of turns, a hitch drawn from an exponential
+with a 30 ms mean; a turn never runs before the one before it, so a hitch
+merges the turns behind it into one longer burst. A fixed offset keeps the
+mean wall time on game time. Callback n belongs to turn ⌈n·16.7 / 25⌉.
+
+It is fitted to the largest callback gap of each second (`cbgap`, from
+`os.clock`) in 1,520 seconds of Smashcraft's Battle.net rates lines with
+55–65 callbacks (playable-0047, matches 793–801, 19 October 2026):
+
+| Longest gap in a second | p1 | p10 | p25 | p50 | p75 | p90 | p95 | p99 | 30–45 ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Recorded | 31.0 | 33.2 | 34.2 | 35.9 | 37.1 | 43.9 | 79.1 | 119.9 | 90% |
+| Model (seeds 1–3) | 31.2–32.0 | 33.1–33.3 | 34.0–34.2 | 35.0–35.1 | 35.9–36.0 | 42.7–45.4 | 57.8–63.3 | 111–127 | 90–91% |
+
+The recorded p95 tail (stalls of 50–130 ms) is heavier than the model's;
+whether it is turn delivery or the map's own slow callbacks is not measured.
 
 ## Replayed arrivals
 

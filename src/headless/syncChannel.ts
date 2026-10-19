@@ -2,7 +2,9 @@ import type { SyncMessage } from "./clientTypes";
 import type { SyncDelivery } from "./lockstep";
 import { Random } from "./random";
 import { f32 } from "../sim/f32";
-import { FRAME_MS } from "./frameRate";
+import { type CallbackTiming, FRAME_MS } from "./frameRate";
+
+export { type CallbackTiming, EVEN_CALLBACKS } from "./frameRate";
 
 export interface SyncLatency {
 
@@ -82,4 +84,41 @@ export function replayedDelivery(arrivals: (this: void) => readonly ReplayedArri
       return arrival;
     },
   };
+}
+
+export interface TurnBurstModel {
+
+  readonly turnMs: number;
+
+  readonly jitterMs: number;
+
+  readonly hitchChance: number;
+
+  readonly hitchMeanMs: number;
+}
+
+// Turn jitter and hitches use the rates fit in wisp:docs/network-model.md.
+
+export const MEASURED_TURN_BURSTS: TurnBurstModel = { turnMs: 25, jitterMs: 12, hitchChance: f32(0.005), hitchMeanMs: 30 };
+
+export function turnBursts(model: TurnBurstModel = MEASURED_TURN_BURSTS, seed = 1): CallbackTiming {
+  if (!(model.turnMs >= CALLBACK_MS) || !(model.jitterMs >= 0) || !(model.hitchChance >= 0 && model.hitchChance < 1) || !(model.hitchMeanMs >= 0)) {
+    throw new Error("a turn must last at least one callback, and jitter, hitch chance and hitch length must not be negative");
+  }
+  const turnOf = (frame: number) => Math.max(1, Math.ceil((frame * CALLBACK_MS) / model.turnMs - f32(1e-9)));
+  let lag = 0;
+  const cycle = 6000;
+  for (let frame = 1; frame <= cycle; frame++) lag += turnOf(frame) * model.turnMs - frame * CALLBACK_MS;
+  const offset = lag / cycle + model.jitterMs / 2 + model.hitchChance * model.hitchMeanMs;
+  const random = new Random(seed * 7919 + 15485863);
+  const walls: number[] = [];
+  const turnWall = (turn: number): number => {
+    while (walls.length < turn) {
+      let jitter = random.next() * model.jitterMs;
+      if (random.chance(model.hitchChance)) jitter -= model.hitchMeanMs * Math.log(1 - random.next());
+      walls.push(Math.max(walls.at(-1) ?? 0, (walls.length + 1) * model.turnMs + jitter - offset));
+    }
+    return walls[turn - 1] ?? 0;
+  };
+  return { wallMs: (frame) => (frame <= 0 ? frame * CALLBACK_MS : turnWall(turnOf(frame))) };
 }

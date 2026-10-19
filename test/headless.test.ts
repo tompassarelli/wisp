@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { installHeadless } from "../host/headless/headless";
 import { installDispatch, on, trampoline } from "../src/map/dispatch";
 import { configureRuntime } from "../src/runtime/config";
-import { MEASURED_BATTLE_NET, syncDelivery } from "../src/headless/syncChannel";
+import { MEASURED_BATTLE_NET, MEASURED_TURN_BURSTS, syncDelivery, turnBursts } from "../src/headless/syncChannel";
 
 const FIXTURE = { filePrefix: "fixture", globalPrefixes: ["__fixture"], localNatives: { BlzFrameSetText: "shows text on this client" } };
 const runtime = installHeadless(FIXTURE);
@@ -113,4 +113,39 @@ test("[property seed 66] every client receives each sync message on the frame it
     const sent = sends.map(({ sender, frame }) => `${sender}:${frame}@${frame}`);
     expect(received()).toEqual([sent, sent]);
   }
+});
+
+test("[invariant] with turn-burst callbacks each callback reads its turn's wall time from os.clock and a sync message lands only on a turn's first callback", () => {
+  const timing = turnBursts(MEASURED_TURN_BURSTS, 5);
+  const clocks: number[][] = [[], []];
+  const landed: number[][] = [[], []];
+  const clients = runtime.clients({
+    start: () => {
+      configure();
+      installDispatch();
+      globalThis.__fixtureFrame = 0;
+      on("fixture.frame", () => {
+        globalThis.__fixtureFrame = (globalThis.__fixtureFrame ?? 0) + 1;
+        const slot = GetPlayerId(GetLocalPlayer());
+        clocks[slot]?.push(os.clock());
+        BlzSendSyncData("FX_SYNC", `${globalThis.__fixtureFrame}`);
+      });
+      on("fixture.sync", () => {
+        landed[GetPlayerId(GetLocalPlayer())]?.push((globalThis.__fixtureFrame ?? 0) + 1);
+      });
+      const trigger = CreateTrigger();
+      for (const sender of [0, 1]) BlzTriggerRegisterPlayerSyncEvent(trigger, Player(sender), "FX_SYNC", false);
+      TriggerAddAction(trigger, trampoline("fixture.sync"));
+      TimerStart(CreateTimer(), 1 / 60, true, trampoline("fixture.frame"));
+    },
+    install: () => {},
+  }, [0, 1], { delivery: syncDelivery(MEASURED_BATTLE_NET, 5), callbacks: timing });
+  clients.start();
+  clients.frames(600);
+  expect(clients.firstDivergence()).toBeUndefined();
+  const expected = Array.from({ length: 600 }, (_, index) => timing.wallMs(index + 1) / 1000);
+  expect(clocks).toEqual([expected, expected]);
+  expect(landed[0]).toEqual(landed[1] ?? []);
+  expect((landed[0] ?? []).length).toBeGreaterThan(900);
+  for (const frame of landed[0] ?? []) expect(timing.wallMs(frame)).toBeGreaterThan(timing.wallMs(frame - 1));
 });

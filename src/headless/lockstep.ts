@@ -8,6 +8,7 @@ import type { IntentionalNoops } from "./clientTypes";
 import type { SceneryFixtures } from "./warcraft3Scenery";
 import type { Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 import type { AbilityObjectFixtures } from "./warcraft3Abilities";
+import { type CallbackTiming, stampWallTime, turnStart } from "./frameRate";
 
 export interface LockstepOptions {
   readonly abilityObjects?: AbilityObjectFixtures;
@@ -37,6 +38,8 @@ export interface LockstepOptions {
   readonly scope?: ClientScope;
 
   readonly delivery?: SyncDelivery;
+
+  readonly callbacks?: CallbackTiming;
 
   readonly files?: (this: void, slot: number) => ClientFiles | undefined;
 
@@ -164,7 +167,7 @@ export class Lockstep {
     const delivery = this.options.delivery;
     if (delivery !== undefined) {
       for (let message = this.network.shift(); message !== undefined; message = this.network.shift()) {
-        const arrival = delivery.arrivalFrame(message.sender, this.frame, message);
+        const arrival = turnStart(this.options.callbacks, delivery.arrivalFrame(message.sender, this.frame, message));
         if (arrival <= this.frame) throw new Error(`a message sent during frame ${this.frame} arrives at frame ${arrival}`);
         let index = this.inFlight.length;
         while (index > 0 && (this.inFlight[index - 1]?.arrival ?? 0) > arrival) index--;
@@ -224,6 +227,7 @@ export class Lockstep {
     for (let frame = 0; frame < count; frame++) {
       this.frame++;
       this.inFrame = true;
+      stampWallTime(this.options.callbacks, this.clients, this.frame);
       for (let index = 0; index < this.clients.length; index++) this.costs[index] = 0;
       this.arrive();
       for (let index = 0; index < this.clients.length; index++) {
