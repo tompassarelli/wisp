@@ -367,3 +367,60 @@ export function runLuaPerf(map: LuaHeadlessMap, journey: Journey, bundlePath: st
     return { problems: journeyProblems(result), lines: journeyLines(result) };
   }, options);
 }
+
+export const OUTSIDE_MAP = -1;
+
+export interface AllocationSampler {
+
+  start(this: void, into: Map<number, [self: number, inclusive: number]>): void;
+
+  stop(this: void): void;
+}
+
+export function allocationSampler(source = "=map"): AllocationSampler {
+  let into: Map<number, [number, number]> | undefined;
+  let mark = 0;
+  const charge = (line: number, bytes: number, self: boolean) => {
+    if (into === undefined || bytes === 0) return;
+    let entry = into.get(line);
+    if (entry === undefined) {
+      entry = [0, 0];
+      into.set(line, entry);
+    }
+    if (self) entry[0] += bytes;
+    entry[1] += bytes;
+  };
+  // A count hook every instruction runs before the next one, so level 2 is the function whose instruction just allocated.
+  const sample = () => {
+    const bytes = requested() - mark;
+    if (bytes !== 0) {
+      const top = debug.getinfo(2, "S");
+      if (top === undefined || top.source !== source) charge(OUTSIDE_MAP, bytes, true);
+      else {
+        const seen = new Set<number>();
+        for (let level = 2; ; level++) {
+          const info = debug.getinfo(level, "S");
+          if (info === undefined) break;
+          if (info.source !== source) continue;
+          const line = info.linedefined ?? 0;
+          if (seen.has(line)) continue;
+          charge(line, bytes, seen.size === 0);
+          seen.add(line);
+        }
+      }
+    }
+    mark = requested();
+  };
+  return {
+    start: (target) => {
+      into = target;
+      mark = requested();
+      debug.sethook(sample, "", 1);
+    },
+    stop: () => {
+      debug.sethook();
+      charge(OUTSIDE_MAP, requested() - mark, true);
+      into = undefined;
+    },
+  };
+}

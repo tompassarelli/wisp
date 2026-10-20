@@ -197,7 +197,24 @@ one after it, such as a match's first:
   Wisp's headless runtime, which prints as its own rows (`runtime-instructions`,
   `runtime-alloc-kb`). The map's allocation is also split by bundle module
   (`pSLOT module-alloc-bytes MODULE total=... mean=...`, bytes per frame),
-  and the hook's own allocation is left out of both.
+  and the hook's own allocation is left out of both: Wisp's Lua32 charges
+  nothing while a hook runs, including the event name string Lua pushes
+  before calling it, which counted 30 B per hook call (0.30 B per instruction
+  at a step of 100) until Wisp 0.0.x of 20 October 2026. Allocation-free code
+  requests 0 B under a hook every 1, 100 or 1000 instructions, in a coroutine
+  too, and 1000 new tables request 1000 times one table
+  (wisp:test/requested-bytes.test.ts).
+- **Allocation by function**: `allocationSampler()` (wisp:src/headless/luaPerf.ts)
+  hooks every instruction between a `ClientScope`'s `enter` and `leave` and
+  charges each instruction's requested bytes to the map function that ran
+  it (self) and to every distinct map function on its stack (inclusive),
+  keyed by the line the function is defined on. Bytes requested in Wisp's
+  headless runtime, emulated natives included, go to `OUTSIDE_MAP` (-1),
+  never to the map function that called the native. A fixture charging 50
+  tables a frame is charged exactly 50 tables a frame, its caller nothing of
+  its own, and an allocation-free function nothing (wisp:test/alloc-profile.test.ts).
+  A game's profiler maps the lines to names, as Smashcraft's
+  `perf profile RUN --alloc` does.
 - **Allocated KB**: the bytes the map's code asked for, which Wisp's Lua32
   counts (`collectgarbage("requested")`, [Lua32 builds](headless.md#raw-float-rounding)):
   each new object at its requested size, each table resize at its parts' net
@@ -330,7 +347,7 @@ every run and every machine. `WARCRAFT_COST` holds the measured constants:
 | Host 32-bit Lua | 18.2 µs per 1000 instructions | Smashcraft's four-fighter bot match on the development host (6 October 2026) |
 | Lua speed factor | 1.17 | Smashcraft's 4096-frame workload, Warcraft against the same host's Lua32 (smashcraft:evidence/native-frame-cost-20261005) |
 | Native call | 2 µs | fitted to Smashcraft 0.0.49's four-fighter overlay |
-| Collector | 2 µs per KB | fitted to the same; the host's own full collections cost 7 µs per KB |
+| Collector | 2 µs per KB | fitted to the same, on allocation counts that still included the hook's 30 B per 100 instructions (about 16 times the map's real median frame allocation); the host's own full collections cost 7 µs per KB |
 | Typing | 0.5 µs per character squared | 608 characters held a client about 180 ms (smashcraft#48) |
 
 Checked against the frame meter's overlay in the native bot session's

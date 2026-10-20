@@ -51,3 +51,38 @@ test("[invariant] a table grown key by key charges what one presized to the same
   expect(presized).toBeGreaterThan(512 * 8);
   expect(grown).toBe(presized);
 });
+
+const HOOKED = `collectgarbage("stop")
+local step = tonumber(arg[1])
+local hooks = 0
+local function count()
+  local info = debug.getinfo(2, "Sl")
+  hooks = hooks + (info and 1 or 0)
+  debug.sethook(count, "", step)
+end
+local sink
+local function idle(n) local x = 0 for i = 1, n do x = x + i * 2 end return x end
+local function tables(n) for i = 1, n do sink = {} end end
+local function measure(f, n, hooked)
+  local before = collectgarbage("requested")
+  if hooked then debug.sethook(count, "", step) end
+  f(n)
+  debug.sethook()
+  return collectgarbage("requested") - before
+end
+measure(idle, 1, true)
+local one = measure(tables, 1, false)
+local inCoroutine = coroutine.wrap(function() return measure(idle, 10000, true) end)()
+io.write(measure(idle, 10000, true), " ", inCoroutine, " ", measure(tables, 1000, true), " ", one, " ", hooks)`;
+
+for (const step of [1, 100, 1000]) {
+  test(`[invariant] a count hook every ${step} instructions charges none of its own allocation: allocation-free code requests 0 bytes and 1000 new tables request 1000 times one table's bytes`, () => {
+    const run = Bun.spawnSync([process.env.LUA ?? "lua", "-", String(step)], { stdin: new TextEncoder().encode(HOOKED), stdout: "pipe", stderr: "pipe" });
+    expect(run.stderr.toString()).toBe("");
+    const [idle, inCoroutine, tables, one, hooks] = run.stdout.toString().split(" ").map(Number);
+    expect(hooks).toBeGreaterThan(40_000 / step);
+    expect({ idle, inCoroutine }).toEqual({ idle: 0, inCoroutine: 0 });
+    expect(one).toBeGreaterThan(0);
+    expect(tables).toBe(1000 * (one ?? 0));
+  });
+}
