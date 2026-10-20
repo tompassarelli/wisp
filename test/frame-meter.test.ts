@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { mapCompiler, report } from "../host/toolchain/compiler";
 import { decodeFrameCostReport } from "../host/perf/frameCosts";
+import { captureReceipt, parseFrameCostCapture } from "../host/perf/frameCostCapture";
 import { writtenPreloadFile } from "../host/headless/headlessInput";
 import { PERF_METRICS, type PerfRun, comparePerfRuns, parsePerfRun } from "../host/perf/perf";
 import { farmTest } from "../host/farm/farmTest";
@@ -22,7 +23,7 @@ function play(): string[] {
 
 const after = (lines: readonly string[], prefix: string) => lines.filter((line) => line.startsWith(prefix)).map((line) => line.slice(prefix.length));
 
-farmTest("[invariant] both clients measure the same frames: no desync, equal reports, natives and instructions", async () => {
+farmTest("[invariant] both clients measure the same frames: no desync, equal reports, natives and instructions; a capture's sections fit inside its Lua time", async () => {
   const lines = play();
   expect(after(lines, "desync: ")).toEqual(["none"]);
   expect(lines.filter((line) => line.includes(" error: "))).toEqual([]);
@@ -44,6 +45,9 @@ farmTest("[invariant] both clients measure the same frames: no desync, equal rep
   expect(frameInstructions(p0)).toEqual(frameInstructions(p1));
   expect(p0?.natives).toEqual(p1?.natives ?? {});
   expect(after(lines, "capture desync: ")).toEqual(["none"]);
+  const capture = parseFrameCostCapture(captureReceipt(lines.join("\n"), 0));
+  expect(capture.sections).toEqual(["work"]);
+  expect(capture.samples.filter(({ luaUs, gcKb, sectionsUs: [work = -1] }) => !(work >= 0 && work <= luaUs && gcKb !== undefined))).toEqual([]);
 }, 120_000);
 
 test("[spec smashcraft#394] perf compare holds instructions at their top 1% mean: one frame's spike moves no verdict, a rise across the worst frames fails", () => {

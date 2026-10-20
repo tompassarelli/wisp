@@ -8,6 +8,7 @@ import { step } from "../cli/timings";
 import { emitJson } from "../cli/jsonResults";
 import { type NativeCase, checkNative, fitNativeCost, nativeCheckLines, parseNativeReadings, parsePerfSamples } from "../perf/nativeFit";
 import { type NativeCostModel, WARCRAFT_COST } from "../../src/headless/nativeCost";
+import { captureReceipt, parseFrameCostCapture, sectionTable, sectionTableLines } from "../perf/frameCostCapture";
 import { PERF_COLLECTOR_VARIABLE } from "../../src/headless/perfCollector";
 
 export interface LuaBuild {
@@ -158,10 +159,25 @@ const fit = (output: PerfOutput): Command => (args) => Effect.gen(function*() {
   if (!output.json) yield* Console.log(lines.join("\n"));
 });
 
+const sections = (output: PerfOutput): Command => (args) => Effect.gen(function*() {
+  const [slotText = "0"] = flagValues(args, "slot");
+  const paths = args.filter((arg, index) => !arg.startsWith("--") && args[index - 1] !== "--slot");
+  const [path] = paths;
+  if (path === undefined || paths.length !== 1) return yield* new UsageFailure({ problem: "perf sections takes one frame capture receipt, or a perf run's output with capture lines, and an optional --slot N" });
+  const text = yield* readText(path);
+  const table = yield* Effect.try({
+    try: () => sectionTable(parseFrameCostCapture(captureReceipt(text, Number(slotText)))),
+    catch: (cause) => new PerfFailure({ problem: `${path}: ${describeCause(cause)}` }),
+  });
+  if (output.json) yield* output.result({ ...table });
+  else yield* Console.log(sectionTableLines(table).join("\n"));
+});
+
 const perf = (project: PerfProject, output: PerfOutput): Command => (args) => Effect.gen(function*() {
   if (args[0] === "compare") return yield* compare(output)(args.slice(1));
   if (args[0] === "native") return yield* native(project, output)(args.slice(1));
   if (args[0] === "fit") return yield* fit(output)(args.slice(1));
+  if (args[0] === "sections") return yield* sections(output)(args.slice(1));
   const [out] = flagValues(args, "out");
   const [framesText = String(DEFAULT_FRAMES)] = flagValues(args, "frames");
   const named = args.filter((arg, index) => !arg.startsWith("--") && args[index - 1] !== "--out" && args[index - 1] !== "--frames");
@@ -169,7 +185,7 @@ const perf = (project: PerfProject, output: PerfOutput): Command => (args) => Ef
   const name = named[0] ?? project.defaultRun ?? "journey";
   const frames = Number(framesText);
   if (named.length > 1 || runs[name] === undefined || !Number.isInteger(frames) || frames < 1) {
-    return yield* new UsageFailure({ problem: `perf takes one run (${Object.keys(runs).join(", ")}), --frames N, --samples, --incremental-gc and --out FILE; or compare A B; native READINGS [RUN]; fit SAMPLES=READINGS ...` });
+    return yield* new UsageFailure({ problem: `perf takes one run (${Object.keys(runs).join(", ")}), --frames N, --samples, --incremental-gc and --out FILE; or compare A B; native READINGS [RUN]; fit SAMPLES=READINGS ...; sections RECEIPT` });
   }
   const { output: stdout, summary, measured } = yield* measureRun(project, name, frames, args.includes("--samples"), args.includes("--incremental-gc"));
   if (out !== undefined) yield* Effect.tryPromise({ try: () => Bun.write(out, stdout), catch: (cause) => new PerfFailure({ problem: `writing ${out}: ${describeCause(cause)}` }) });
@@ -187,7 +203,7 @@ const perf = (project: PerfProject, output: PerfOutput): Command => (args) => Ef
 export const makePerf = (project: PerfProject): Command => (args) => Effect.gen(function*() {
   const json = args.includes("--json");
   const clean = args.filter((arg) => arg !== "--json");
-  const command = ["compare", "native", "fit"].includes(clean[0] ?? "") ? `perf ${clean[0]}` : "perf";
+  const command = ["compare", "native", "fit", "sections"].includes(clean[0] ?? "") ? `perf ${clean[0]}` : "perf";
   const started = yield* Clock.currentTimeMillis;
   let results = 0;
   const output: PerfOutput = {

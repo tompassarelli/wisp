@@ -76,9 +76,13 @@ about elapsed time. Starting another capture while one runs is an error.
 After the last measured callback, every client writes
 `<prefix>-perf-capture-p<slot>-run<run>.txt` using the filename and line format in
 wisp:src/runtime/frameCostCapture.ts. The receipt contains the clock step,
-elapsed time, code version, and every callback's Lua microseconds, native count
-and simulation catch-up. It retains the complete sample in three bounded arrays;
-there is no file output or sorting during the sample. Report generation is
+elapsed time, code version, the section names, and every callback's Lua
+microseconds, native count, simulation catch-up, Lua heap change in KB
+(`collectgarbage("count")` after minus before each measured callback, so
+negative when the collector freed more than the frame allocated; `none`
+without `collectgarbage`) and each section's microseconds. It retains the
+complete sample in bounded arrays; there is no file output or sorting during
+the sample. Report generation is
 outside the sample and should not share a timing-sensitive subsequent trial.
 
 The host's `parseFrameCostCapture(text)` and `captureDistribution(capture)`
@@ -88,6 +92,31 @@ median is the mean of its two middle values. The parser rejects incomplete or
 reordered samples, unavailable clocks and captures that crossed a hot reload.
 Native session tooling must additionally reject crashes, desyncs, early results
 and the wrong gameplay phase, as with any native measurement.
+
+### Frame sections
+
+`startFrameMeter({ ..., sections: ["reconcile", "step", "render"] })` names
+the frame's sections (lowercase letters, digits and hyphens, unique).
+Game code brackets each with `beginFrameSection(index)` and
+`endFrameSection(index)` from wisp:src/map/frameSections.ts, where `index` is
+the name's position. The calls add `os.clock` time to the section's total for
+the frame; a section may run several times a frame and its times add up.
+Sections are flat: don't nest one inside another, or the parent counts the
+child too. Time outside every section is the table's `other` row.
+
+The module has no imports, so a build without the meter can keep the calls:
+with no meter, or no capture running, a call reads one module local and one
+field and returns. It allocates nothing and builds no strings; only a
+running capture reads the clock in them. Measure what they add with
+`perf compare` on runs before and after the calls.
+
+`wisp perf sections RECEIPT` prints, per section, the median, p95, p99 and
+worst milliseconds, and its share of the Lua time of the worst 1% of frames
+(ranked by total Lua time), followed by `other`, `total` and the heap change
+in KB. RECEIPT is a native `<prefix>-perf-capture-p<slot>-run<run>.txt` or a
+headless perf run's output whose lines read `p<slot> capture: <receipt line>`
+(`--slot N`, default 0). `--json` prints the same table as one result. The
+host functions are `sectionTable(capture)` and `sectionTableLines(table)`.
 
 `perf native CAPTURE.txt RUN --samples HEADLESS.perf` accepts the raw receipt
 directly. It constructs the same 120-frame windows, every 30 frames, from

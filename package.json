@@ -106,6 +106,7 @@
     "./src/map/errors": "./src/map/errors.ts",
     "./src/map/fileio": "./src/map/fileio.ts",
     "./src/map/frameMeter": "./src/map/frameMeter.ts",
+    "./src/map/frameSections": "./src/map/frameSections.ts",
     "./src/map/hotReload": "./src/map/hotReload.ts",
     "./src/map/modelFailures": "./src/map/modelFailures.ts",
     "./src/map/nativeDriver": "./src/map/nativeDriver.ts",

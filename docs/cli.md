@@ -72,7 +72,7 @@ program can register it; "game" means the consuming game defines it.
 | `fidelity` | Held-out look captures within calibration | `check` | Wisp |
 | `headless` | A journey in simulated clients | (journey name), `silhouette` ([Screen bounds](headless.md#screen-bounds)) | Wisp |
 | `soak` | Many headless matches by computers and a fuzzed controller | (session) | Wisp |
-| `perf` | Predicted frame cost | (run name), `compare`, `native`, `fit`, `budget`, `profile`, `census` | Wisp |
+| `perf` | Predicted frame cost | (run name), `compare`, `native`, `fit`, `sections`, `budget`, `profile`, `census` | Wisp |
 | `repro` | A saved moment of play or native replay actions | (file), `import` | Wisp |
 | `replay` | A full-match replay | (file) | game |
 | `parity` | Bun against 32-bit Lua on the same numbers | `numeric`, `tapes`, `corpus` | game |
@@ -180,6 +180,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--sound-cues FILE` | Write the headless sound/music event log, including stops, loops and volume | `headless` |
 | `--music-volume 0..1` | The player's Options > Sound music slider (default 1): scales music cues' `effectiveVolume`; sound effects are unchanged | `headless` |
 | `--samples` | Also print each frame's sample | `perf` |
+| `--slot N` | Which client's capture or readings to read (default 0) | `perf native`, `perf fit`, `perf sections` |
 | `--threshold SHARE` | The rise that fails a comparison | `perf compare` |
 | `--cost` | Also print predicted Warcraft cost per frame | `headless` |
 | `--pool-profile NAME` | Offline pool display settings: parity, checks, hfr, visual or capture-classic (all Classic) | `lan pool` |
@@ -241,6 +242,7 @@ Every command and verb in Wisp's sample program and Smashcraft's `bun wisp`, gro
 | `perf compare A B` | Fails on a rise in predicted cost |
 | `perf native READINGS` | Holds the prediction to native overlay readings |
 | `perf fit` | Fits the cost model to native readings |
+| `perf sections RECEIPT` | Per-section median, p95, p99, worst and worst-1% share of a frame capture |
 | `repro FILE` | Replays a saved moment to its recorded checksum |
 | `replay FILE` | Replays a full match in Bun and 32-bit Lua |
 | `parity numeric` | Numeric corpus in Bun and both 32-bit Luas |

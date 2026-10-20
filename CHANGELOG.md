@@ -5,6 +5,14 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## Unreleased
 
+- `wisp/src/map/frameSections` exports `beginFrameSection(index)` and
+  `endFrameSection(index)`, and `startFrameMeter` takes `sections`. Frame
+  capture receipts gain `sections=` in the heading and `gc-kb=` and
+  `sections-us=` in each sample: `frameCostCaptureHeading` takes the section
+  names, `frameCostCaptureSample` the heap change and section times, and
+  `parseFrameCostCapture` returns `sections` and each sample's `gcKb` and
+  `sectionsUs`. `wisp/scripts/wisp/frameCostCapture` adds `captureReceipt`,
+  `sectionTable` and `sectionTableLines`.
 - Classic is the only graphics mode. `Graphics` is `"classic"`, `AssetLayer`
   is `"base"`, `resolveRenderAsset(readers, path, graphics)` tries the map's
   import then the stock file and its result has no `bodyAlias`,

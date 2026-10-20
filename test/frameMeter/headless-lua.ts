@@ -9,7 +9,7 @@ declare const arg: Readonly<Record<number, string | undefined>>;
 const bundlePath = arg[1];
 const declarationsPath = arg[2];
 if (bundlePath === undefined || declarationsPath === undefined) throw new Error("usage: lua meter.lua MAP_LUA WARCRAFT_D_TS");
-const MAP = { filePrefix: "meter" };
+const MAP = { filePrefix: "meter", natives: () => ({ os: { clock: os.clock } }) };
 
 const clients = luaLockstep(MAP, readFile(bundlePath), readFile(declarationsPath));
 clients.start();

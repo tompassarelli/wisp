@@ -1,6 +1,7 @@
 import { configureRuntime } from "../../src/runtime/config";
 import { installDispatch, on, trampoline } from "../../src/map/dispatch";
 import { installFrameMeter, startFrameMeter, startFrameCostCapture } from "../../src/map/frameMeter";
+import { beginFrameSection, endFrameSection } from "../../src/map/frameSections";
 import { installHotReload, startHotReload } from "../../src/map/hotReload";
 
 interface FixtureState {
@@ -22,7 +23,9 @@ function state(): FixtureState {
 
 function frame(): void {
   const fixture = state();
+  beginFrameSection(0);
   for (let call = 0; call < fixture.work; call++) GetUnitX(fixture.unit);
+  endFrameSection(0);
   fixture.simulation += fixture.catchUp;
   fixture.catchUp = 1;
 }
@@ -56,5 +59,5 @@ export function start(this: void): void {
   }
   TriggerAddAction(chat, trampoline("fixture.command"));
   startHotReload();
-  startFrameMeter({ frame: "fixture.frame", simulationFrame: () => state().simulation, toggle: "-perf" });
+  startFrameMeter({ frame: "fixture.frame", simulationFrame: () => state().simulation, toggle: "-perf", sections: ["work"] });
 }

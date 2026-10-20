@@ -3,6 +3,7 @@ import { runtimeConfiguration } from "../runtime/config";
 import { type FrameWindow, frameCostFile, frameCostHeading, frameWindowLine, reportNumber, spread } from "../runtime/frameCost";
 import { MAX_FRAME_COST_CAPTURE, frameCostCaptureFile, frameCostCaptureHeading, frameCostCaptureSample } from "../runtime/frameCostCapture";
 import { f32 } from "../sim/f32";
+import { type FrameSectionTimes, attachFrameSections } from "./frameSections";
 import { floorMod } from "../sim/intMath";
 import { on, trampoline } from "./dispatch";
 
@@ -22,6 +23,8 @@ export interface FrameMeterOptions {
   readonly simulationFrame?: (this: void) => number;
 
   readonly toggle: string;
+
+  readonly sections?: readonly string[];
 }
 
 type Run = (this: void, name: string) => void;
@@ -50,6 +53,8 @@ interface Capture {
   readonly lua: number[];
   readonly natives: number[];
   readonly catchUp: number[];
+  readonly gc: number[];
+  readonly sections: number[];
 
   skip: boolean;
   changed: boolean;
@@ -60,6 +65,9 @@ interface MeterState {
   readonly clock: ((this: void) => number) | undefined;
 
   readonly step: number;
+  readonly heap: ((this: void) => number) | undefined;
+  readonly sections: readonly string[];
+  readonly times: FrameSectionTimes;
 
   plain: Run | undefined;
   measured: Run | undefined;
@@ -69,6 +77,7 @@ interface MeterState {
   frameCalls: number;
 
   lua: number;
+  gcKb: number;
   simulation: number;
 
   readonly recent: Window;
@@ -145,7 +154,17 @@ function findClock(): { clock: ((this: void) => number) | undefined; step: numbe
   return changes < 2 ? { clock: undefined, step: 0 } : { clock, step };
 }
 
-const milliseconds = (microseconds: number) => reportNumber(microseconds / 1000);
+function sectionName(name: string): boolean {
+  if (name.length === 0) return false;
+  for (let index = 0; index < name.length; index++) {
+    const code = name.charCodeAt(index);
+    const letter = code >= 97 && code <= 122;
+    if (!letter && (index === 0 || !(code === 45 || (code >= 48 && code <= 57)))) return false;
+  }
+  return true;
+}
+
+const milliseconds =(microseconds: number) => reportNumber(microseconds / 1000);
 
 function ninetyFifth(source: Ring): number {
   const sorted: number[] = [];
@@ -184,9 +203,31 @@ export function startFrameCostCapture(frames: number): number {
   state.captureRuns = run;
   state.capture = {
     run, limit: frames, version: installedVersion(), started: state.clock?.() ?? 0,
-    lua: [], natives: [], catchUp: [], skip: true, changed: false,
+    lua: [], natives: [], catchUp: [], gc: [], sections: [], skip: true, changed: false,
   };
+  state.times.clock = state.clock;
   return run;
+}
+
+function resetSections(state: MeterState): void {
+  const totals = state.times.totals;
+  for (let index = 0; index < state.sections.length; index++) totals[index] = 0;
+  state.gcKb = 0;
+}
+
+function writeCapture(state: MeterState, capture: Capture): void {
+  const count = state.sections.length;
+  const elapsed = state.clock === undefined ? 0 : state.clock() - capture.started;
+  PreloadGenClear();
+  PreloadGenStart();
+  Preload(frameCostCaptureHeading(capture.run, capture.limit, capture.version, state.step * 1000000, elapsed * 1000, capture.changed, state.sections));
+  for (let index = 0; index < capture.limit; index++) {
+    const sections: number[] = [];
+    for (let section = 0; section < count; section++) sections.push((capture.sections[index * count + section] ?? 0) * 1000000);
+    Preload(frameCostCaptureSample(index + 1, state.clock === undefined ? undefined : (capture.lua[index] ?? 0) * 1000000, capture.natives[index] ?? 0, capture.catchUp[index] ?? 0,
+      state.heap === undefined ? undefined : capture.gc[index] ?? 0, sections));
+  }
+  PreloadGenEnd(frameCostCaptureFile(GetPlayerId(GetLocalPlayer()), capture.run, runtimeConfiguration().filePrefix));
 }
 
 function captureFrame(state: MeterState, calls: number, catchUp: number, version: number): void {
@@ -194,23 +235,22 @@ function captureFrame(state: MeterState, calls: number, catchUp: number, version
   if (capture === undefined) return;
   if (capture.skip) {
     capture.skip = false;
+    resetSections(state);
     return;
   }
   capture.changed ||= version !== capture.version;
   capture.lua.push(state.lua);
   capture.natives.push(calls);
   capture.catchUp.push(catchUp);
+  capture.gc.push(state.gcKb);
+  const totals = state.times.totals;
+  for (let index = 0; index < state.sections.length; index++) capture.sections.push(totals[index] ?? 0);
+  resetSections(state);
   if (capture.lua.length < capture.limit) return;
 
   state.capture = undefined;
-  const elapsed = state.clock === undefined ? 0 : state.clock() - capture.started;
-  PreloadGenClear();
-  PreloadGenStart();
-  Preload(frameCostCaptureHeading(capture.run, capture.limit, capture.version, state.step * 1000000, elapsed * 1000, capture.changed));
-  for (let index = 0; index < capture.limit; index++) {
-    Preload(frameCostCaptureSample(index + 1, state.clock === undefined ? undefined : (capture.lua[index] ?? 0) * 1000000, capture.natives[index] ?? 0, capture.catchUp[index] ?? 0));
-  }
-  PreloadGenEnd(frameCostCaptureFile(GetPlayerId(GetLocalPlayer()), capture.run, runtimeConfiguration().filePrefix));
+  state.times.clock = undefined;
+  writeCapture(state, capture);
 }
 
 function endFrame(state: MeterState): void {
@@ -250,12 +290,15 @@ function measure(state: MeterState, name: string): void {
   const run = state.plain;
   if (run === undefined) return;
   const clock = state.clock;
+  const heap = state.capture === undefined ? undefined : state.heap;
+  const heapBefore = heap === undefined ? 0 : heap();
   if (clock === undefined) run(name);
   else {
     const started = clock();
     run(name);
     state.lua += clock() - started;
   }
+  if (heap !== undefined) state.gcKb += heap() - heapBefore;
   if (name === state.options.frame) endFrame(state);
 }
 
@@ -310,6 +353,7 @@ export function installFrameMeter(): void {
   const measured: Run = (name) => measure(state, name);
   state.measured = measured;
   table.run = measured;
+  attachFrameSections(state.times);
   on(TOGGLE, toggle);
 }
 
@@ -318,10 +362,17 @@ export function startFrameMeter(options: FrameMeterOptions): void {
   const globals = globalThis as Record<`${string}FrameMeter`, MeterState | undefined>;
   const key = `${configuration.globalPrefix}FrameMeter` as const;
   if (globals[key] !== undefined) return;
+  const sections = options.sections ?? [];
+  sections.forEach((name, index) => {
+    if (!sectionName(name) || sections.indexOf(name) !== index) throw new Error(`frame section ${name} needs a unique lowercase name of letters, digits and hyphens`);
+  });
   const { clock, step } = findClock();
   const read = options.simulationFrame;
+  const collect = (globalThis as Record<string, unknown>).collectgarbage;
+  const heap = typeof collect === "function" ? () => (collect as (this: void, option: "count") => number)("count") : undefined;
   const state: MeterState = {
-    options, clock, step, plain: undefined, measured: undefined, calls: 0, frameCalls: 0, lua: 0,
+    options, clock, step, heap, sections, times: { clock: undefined, started: sections.map(() => 0), totals: sections.map(() => 0) },
+    plain: undefined, measured: undefined, calls: 0, frameCalls: 0, lua: 0, gcKb: 0,
     simulation: read === undefined ? 0 : read(), recent: emptyWindow(), current: emptyWindow(), version: installedVersion(),
     before: undefined, overlay: createOverlay(), shown: false, frames: 0, capture: undefined, captureRuns: 0,
   };
