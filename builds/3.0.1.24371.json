@@ -1,0 +1,16 @@
+{
+  "id":"3.0.1.24371", "version":"3.0.1", "build":24371,
+  "capabilities": {
+    "lanPool":{"status":"unchecked","issue":"wisp#37"},
+    "privateLanSwitch":{"status":"unchecked","issue":"wisp#37"},
+    "menuDriving":{"status":"supported","issue":"wisp#100"},
+    "classic":{"status":"unchecked","issue":"wisp#100"}
+  },
+  "protocolVersion":null,
+  "natives":{"naming":"unchecked on 24371","added":[]},
+  "menus":{"lobbySettleMs":2500,"scoreClose":"Escape","lobbyBack":{"x":155,"y":1389}},
+  "quirks":[
+    {"description":"Startup can still hang before War3Log opens. On 20 October 2026 clone-a's first launch from a client-service Battle.net reached the menu; each of two doctor recoveries after a crash passed through one hung startup before reaching the menu.","issue":"wisp#100"},
+    {"description":"Moving ORIGIN_FRAME_CHAT_MSG with BlzFrameClearAllPoints and BlzFrameSetAbsPoint crashed the game about 20 s into a four-fighter match in both runs that moved it (ACCESS_VIOLATION); the same map without the move played two minutes.","issue":"smashcraft#28"}
+  ]
+}

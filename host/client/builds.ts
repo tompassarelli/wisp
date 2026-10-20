@@ -2,6 +2,7 @@ import { Effect, Schema } from "effect";
 import rollback from "../../builds/3.0.0.24268.json";
 import patch from "../../builds/3.0.1.24342.json";
 import hotfix from "../../builds/3.0.1.24370.json";
+import live from "../../builds/3.0.1.24371.json";
 
 const Capability = Schema.Struct({ status: Schema.Literals(["supported", "unsupported", "unchecked"]), issue: Schema.String });
 const Profile = Schema.Struct({
@@ -12,7 +13,7 @@ const Profile = Schema.Struct({
   menus: Schema.Struct({ lobbySettleMs: Schema.Finite, scoreClose: Schema.Literals(["Escape", "ScoreScreenClose"]), lobbyBack: Schema.Struct({ x: Schema.Finite, y: Schema.Finite }) }),
   quirks: Schema.Array(Schema.Struct({ description: Schema.String, issue: Schema.String })),
 });
-const BUILD_PROFILES = [rollback, patch, hotfix].map((profile) => Schema.decodeUnknownSync(Profile)(profile));
+const BUILD_PROFILES = [rollback, patch, hotfix, live].map((profile) => Schema.decodeUnknownSync(Profile)(profile));
 export const DEFAULT_BUILD = "3.0.0.24268";
 const BUILD_CAPABILITIES = ["lanPool", "privateLanSwitch", "menuDriving", "classic"] as const;
 export type BuildCapability = typeof BUILD_CAPABILITIES[number];
