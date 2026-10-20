@@ -408,6 +408,7 @@ export function subtractFloat32(a: number, b: number, tiesTowardZero = false): n
 export function addFloat32TowardZero(a: number, b: number): number {
   if (a === 0) return b;
   if (b === 0) return a;
+  if (a - a + (b - b) !== 0) return a + b;
   split(a);
   let large = splitSignificand;
   let exponent = splitExponent;
@@ -431,6 +432,7 @@ export function addFloat32TowardZero(a: number, b: number): number {
 
 export function subtractFloat32TowardZero(a: number, b: number): number {
   if (b === 0) return a;
+  if (a - a + (b - b) !== 0) return a - b;
   if (a === b) return 0.0;
   split(a);
   const large = splitSignificand;

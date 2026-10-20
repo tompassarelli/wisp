@@ -1,5 +1,5 @@
 import { assertEquals, test } from "../runtime/testing";
-import { addFloat32, divideFloat32, multiplyFloat32, subtractFloat32 } from "./binary32";
+import { addFloat32, addFloat32TowardZero, divideFloat32, multiplyFloat32, multiplyFloat32TowardZero, subtractFloat32, subtractFloat32TowardZero } from "./binary32";
 import { exactDifference, exactProduct, exactQuotient, exactSum, f32 } from "./f32";
 import { floorDiv, floorMod } from "./intMath";
 
@@ -229,6 +229,9 @@ test("[property] f32 helpers equal their previous cached implementation bit for 
         identical(divideFloat32(a, b), a / b, `divideFloat32(${a}, ${b})`, false);
         identical(addFloat32(a, b), a + b, `addFloat32(${a}, ${b})`, false);
         identical(subtractFloat32(a, b), a - b, `subtractFloat32(${a}, ${b})`, false);
+        identical(addFloat32TowardZero(a, b), a + b, `addFloat32TowardZero(${a}, ${b})`, false);
+        identical(subtractFloat32TowardZero(a, b), a - b, `subtractFloat32TowardZero(${a}, ${b})`, false);
+        identical(multiplyFloat32TowardZero(a, b), a * b, `multiplyFloat32TowardZero(${a}, ${b})`, false);
       }
     }
   }
