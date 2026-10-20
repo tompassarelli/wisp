@@ -108,8 +108,8 @@ const sweepScratch = (repo: string) => Effect.gen(function*() {
 
 export const runTag = () => randomBytes(4).toString("hex");
 
-export const dispatch = (repo: string, workflow: string, inputs: Readonly<Record<string, string>> & { readonly tag: string }) => Effect.gen(function*() {
-  yield* run(["gh", "workflow", "run", workflow, "-R", repo, "--ref", "main", ...Object.entries(inputs).flatMap(([name, value]) => ["-f", `${name}=${value}`])]);
+export const dispatch = (repo: string, workflow: string, inputs: Readonly<Record<string, string>> & { readonly tag: string }, workflowRef = "main") => Effect.gen(function*() {
+  yield* run(["gh", "workflow", "run", workflow, "-R", repo, "--ref", workflowRef, ...Object.entries(inputs).flatMap(([name, value]) => ["-f", `${name}=${value}`])]);
   for (let tries = 0; tries < 24; tries++) {
     const listed = yield* run(["gh", "run", "list", "-R", repo, "--workflow", workflow, "--event", "workflow_dispatch", "-L", "20", "--json", "databaseId,displayTitle,url"]);
     const found = (yield* decoded(Runs, listed)).find((item) => item.displayTitle.endsWith(` ${inputs.tag}`));
@@ -178,7 +178,7 @@ export const farmTest = (options: { readonly ref: string | undefined; readonly w
   if (joined !== undefined && !options.wait) return;
   const { ref, found } = joined !== undefined ? { ref: sha, found: joined } : yield* Effect.gen(function*() {
     const { ref, scratch } = yield* resolveRef(options.ref, repo);
-    const found = yield* dispatch(repo, "farm-test.yml", { ref, tag: runTag() });
+    const found = yield* dispatch(repo, "farm-test.yml", { ref, tag: runTag() }, scratch);
     return { ref, found: !options.wait && scratch === undefined ? undefined : found };
   });
   if (found === undefined) return;

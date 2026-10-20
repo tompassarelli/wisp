@@ -26,7 +26,9 @@ This clears branches left by a killed command or a manual push.
    branch `farm/COMMIT` (CI ignores `farm/**`), waits for the run whatever
    `--wait` says, and deletes the branch afterwards.
 2. **Dispatch.** The command starts the repository's
-   `.github/workflows/farm-test.yml` on main with the commit and a random tag,
+   `.github/workflows/farm-test.yml` with the commit and a random tag, from
+   main for a commit main holds and from the scratch branch otherwise, so a
+   candidate that changes the workflow runs its own copy,
    finds the run by the tag at the end of its name, and polls its jobs
    (from every 10 s backing off to every 60 s while nothing moves; a commit
    that already has a queued or running farm test joins that run instead;
