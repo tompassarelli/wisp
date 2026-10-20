@@ -347,8 +347,18 @@ every run and every machine. `WARCRAFT_COST` holds the measured constants:
 | Host 32-bit Lua | 18.2 µs per 1000 instructions | Smashcraft's four-fighter bot match on the development host (6 October 2026) |
 | Lua speed factor | 1.17 | Smashcraft's 4096-frame workload, Warcraft against the same host's Lua32 (smashcraft:evidence/native-frame-cost-20261005) |
 | Native call | 2 µs | fitted to Smashcraft 0.0.49's four-fighter overlay |
-| Collector | 2 µs per KB | fitted to the same, on allocation counts that still included the hook's 30 B per 100 instructions (about 16 times the map's real median frame allocation); the host's own full collections cost 7 µs per KB |
+| Collector | 2 µs per KB | fitted to the same, on allocation counts that still included the hook's 30 B per 100 instructions (Smashcraft's rollback-four median frame read 84 KB with it and reads 16 KB without); the host's own full collections cost 7 µs per KB |
 | Typing | 0.5 µs per character squared | 608 characters held a client about 180 ms (smashcraft#48) |
+
+The collector term is not refitted yet. Against the native collector
+alone, Smashcraft's four-fighter rollback match collects for 10–16 ms
+about once a minute while each client requests a mean 20 KB a frame
+(72 MB a minute at 60 frames a second): about 0.2 µs per KB amortized,
+a tenth of the fitted 2 µs. But Warcraft pays that cost in one frame, not
+spread over the frames that allocated it, so the per-frame term can't model
+those pauses at any value, and `perf fit` refits it only from the
+retained #19 native readings with their headless samples regenerated under
+hook-free counts, which the [acceptance below](#wisp-only-acceptance) then rechecks.
 
 Checked against the frame meter's overlay in the native bot session's
 four-fighter rematch (median and maximum of every 120 frames), with the
