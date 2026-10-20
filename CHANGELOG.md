@@ -5,6 +5,10 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## Unreleased
 
+- `wisp/src/runtime/recordText` exports `TokenLines`, `createTokenLines`,
+  `openTokenLines`, `addToken`, `writeFieldTokens`, `addWrittenToken`,
+  `addWrittenTokens` and `endTokenLine`, which write record text lines
+  without a table or string per token (wisp:docs/repro.md).
 - `wisp/src/map/frameSections` exports `beginFrameSection(index)` and
   `endFrameSection(index)`, and `startFrameMeter` takes `sections`. Frame
   capture receipts gain `sections=` in the heading and `gc-kb=` and

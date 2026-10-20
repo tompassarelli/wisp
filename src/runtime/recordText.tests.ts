@@ -1,4 +1,4 @@
-import { lineTokens, parseRecord, recordTokens, tokenLines } from "./recordText";
+import { addToken, addWrittenToken, addWrittenTokens, createTokenLines, endTokenLine, lineTokens, parseRecord, recordTokens, tokenLines, writeFieldTokens } from "./recordText";
 import { assertDefined, assertEquals, test } from "./testing";
 
 function withGaps(): (number | undefined)[] {
@@ -55,4 +55,48 @@ test("[invariant] record text: values, kinds and nesting survive a round trip ex
   const keyed = assertDefined(recordTokens(numberKeyedKit(), NUMBER_KEYED), "keyed tokens");
   const keyedBack = assertDefined(parseRecord(lineTokens(tokenLines(keyed, 40))), "keyed record");
   assertEquals(sorted(assertDefined(recordTokens(keyedBack, NUMBER_KEYED), "keyed tokens again")), sorted(keyed));
+});
+
+function packed(tokens: readonly string[], prefix: string, width: number): string[] {
+  const lines: string[] = [];
+  let line = "";
+  let length = -1;
+  for (const token of tokens) {
+    if (length >= 0 && length + 1 + token.length > width) {
+      lines.push(`${prefix}${line}`);
+      line = "";
+      length = -1;
+    }
+    line = length < 0 ? token : `${line} ${token}`;
+    length += 1 + token.length;
+  }
+  if (length >= 0) lines.push(`${prefix}${line}`);
+  return lines;
+}
+
+test("[invariant] record text: fields written into reused line buffers give the lines of their packed recordTokens", () => {
+  for (const [record, keyedByInteger] of [[sample(), []], [numberKeyedKit(), NUMBER_KEYED]] as const) {
+    for (const width of [12, 40]) {
+      const tokens: string[] = [];
+      const sink = createTokenLines("state ", width);
+      for (const key in record) {
+        const value = record[key];
+        if (value === undefined) continue;
+        const field: Record<string, unknown> = {};
+        field[key] = value;
+        for (const token of assertDefined(recordTokens(field, keyedByInteger), key)) tokens.push(token);
+        addWrittenTokens(sink, assertDefined(writeFieldTokens(key, value, keyedByInteger), key));
+        const first = assertDefined(writeFieldTokens(key, value, keyedByInteger), key);
+        if (first > 0) {
+          const token = assertDefined(recordTokens(field, keyedByInteger)?.[0], key);
+          tokens.push(`7${token.substring(key.length)}`);
+          addWrittenToken(sink, 0, "7");
+        }
+        tokens.push("|");
+        addToken(sink, "|");
+      }
+      endTokenLine(sink);
+      assertEquals(sink.lines.join("\n"), packed(tokens, "state ", width).join("\n"), `width ${width}`);
+    }
+  }
 });

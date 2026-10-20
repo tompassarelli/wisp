@@ -44,6 +44,16 @@ out, as Lua leaves them out, so restore into records the game creates and copy
 the parsed ones over them with the game's own copy functions. `tokenLines`
 packs tokens into lines of a width; `lineTokens` splits them again.
 
+To write lines without a string per token, `createTokenLines(prefix, width)`
+(or `openTokenLines` on one kept from before) starts lines of that width after
+a prefix, `addToken` adds one token, `writeFieldTokens(name, value, keyed)`
+writes the tokens `recordTokens` gives a record holding only that field into a
+reused buffer and returns their count (undefined when it can't), and
+`addWrittenTokens` or `addWrittenToken(index, name)` (that token with its
+name replaced) adds them; `endTokenLine` ends the last line. The lines are
+byte for byte the prefixed lines of `tokenLines` over the same tokens. The
+buffer holds one field at a time: add its tokens before writing the next.
+
 A record keyed by integers (`{ readonly [action: number]: Move }`, a mapped
 type over a numeric enum) is the same Lua table as an array, so Lua can't tell
 which one TypeScript means. Name every field that holds one:

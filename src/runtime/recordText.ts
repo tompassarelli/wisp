@@ -126,10 +126,15 @@ function parseString(text: string): string | undefined {
   return value;
 }
 
+function numberText(value: number): string {
+  const text = `${value}`;
+  return isDecimal(text) && value >= SMALLEST_INTEGER && value <= LARGEST_INTEGER ? text : realText(value);
+}
+
 function valueText(value: unknown): string | undefined {
   if (value === true) return "T";
   if (value === false) return "F";
-  if (typeof value === "number") return isInteger(value) ? `${value}` : realText(value);
+  if (typeof value === "number") return numberText(value);
   if (typeof value === "string") return stringText(value);
   return undefined;
 }
@@ -161,9 +166,55 @@ function integerKey(key: string): number | undefined {
 export class IntegerKeysUndeclared extends Error {}
 
 interface Writer {
-  readonly tokens: string[];
-  readonly keyed: Readonly<Record<string, boolean>>;
+  readonly parts: string[];
+  count: number;
+  keyed: Readonly<Record<string, boolean>>;
+  keyedFrom: readonly string[] | undefined;
   readonly path: string[];
+}
+
+const writer: Writer = { parts: [], count: 0, keyed: {}, keyedFrom: undefined, path: [] };
+
+function token(name: string, mark: string, text: string): void {
+  const { parts } = writer;
+  const at = writer.count * 3;
+  parts[at] = name;
+  parts[at + 1] = mark;
+  parts[at + 2] = text;
+  writer.count++;
+}
+
+const NAMES: string[] = [];
+
+function indexName(index: number): string {
+  if (index < 0 || index >= 4096) return `${index}`;
+  const known = NAMES[index];
+  if (known !== undefined) return known;
+  const name = `${index}`;
+  NAMES[index] = name;
+  return name;
+}
+
+function keyedName(key: string): string {
+  const index = integerKey(key);
+  return index === undefined ? `${index}` : indexName(index);
+}
+
+function begin(keyedByInteger: readonly string[]): void {
+  writer.count = 0;
+  writer.path.length = 0;
+  if (writer.keyedFrom === keyedByInteger) return;
+  const keyed: Record<string, boolean> = {};
+  for (const name of keyedByInteger) keyed[name] = true;
+  writer.keyed = keyed;
+  writer.keyedFrom = keyedByInteger;
+}
+
+function writtenTokens(): string[] {
+  const { parts } = writer;
+  const tokens: string[] = [];
+  for (let index = 0; index < writer.count; index++) tokens.push(`${parts[index * 3]}${parts[index * 3 + 1]}${parts[index * 3 + 2]}`);
+  return tokens;
 }
 
 function undeclared(writer: Writer, why: string): never {
@@ -201,32 +252,31 @@ function isKeyed(value: Fields): boolean {
 
 function writeValue(writer: Writer, name: string, value: unknown, depth: number): boolean {
   if (value === undefined) return true;
-  const { tokens } = writer;
   if (!isFields(value)) {
     const text = valueText(value);
     if (text === undefined) return false;
-    tokens.push(`${name}=${text}`);
+    token(name, "=", text);
     return true;
   }
   if (depth >= MAX_DEPTH) return false;
   writer.path.push(name);
   if (writer.keyed[name] === true) {
     if (!isKeyed(value)) undeclared(writer, "is declared keyed by integers but has other keys or is an array");
-    tokens.push(`${name}#`);
-    for (const key in value) if (!writeValue(writer, `${integerKey(key)}`, value[key], depth + 1)) return false;
-    tokens.push("}");
+    token(name, "#", "");
+    for (const key in value) if (!writeValue(writer, keyedName(key), value[key], depth + 1)) return false;
+    token("", "}", "");
   } else {
     const length = arrayLength(value);
     if (length === false) undeclared(writer, "is keyed by integers but not declared so in recordTokens, or mixes integer and named keys");
     const items: unknown = value;
     if (isList(items, length)) {
-      tokens.push(`${name}[`);
-      for (let index = 0; index < (length ?? 0); index++) if (!writeValue(writer, `${index}`, items[index], depth + 1)) return false;
-      tokens.push("]");
+      token(name, "[", "");
+      for (let index = 0; index < (length ?? 0); index++) if (!writeValue(writer, indexName(index), items[index], depth + 1)) return false;
+      token("", "]", "");
     } else {
-      tokens.push(`${name}{`);
+      token(name, "{", "");
       if (!writeFields(writer, value, depth + 1)) return false;
-      tokens.push("}");
+      token("", "}", "");
     }
   }
   writer.path.pop();
@@ -242,12 +292,80 @@ function writeFields(writer: Writer, record: Fields, depth: number): boolean {
 
 // Lua cannot distinguish arrays from integer-keyed records; declare keyed fields to preserve keys on round trips.
 
-export function recordTokens(record: object, keyedByInteger: readonly string[] = []): string[] | undefined {
+const NO_KEYED: readonly string[] = [];
+
+export function recordTokens(record: object, keyedByInteger: readonly string[] = NO_KEYED): string[] | undefined {
   if (!isFields(record) || arrayLength(record) !== undefined) return undefined;
-  const keyed: Record<string, boolean> = {};
-  for (const name of keyedByInteger) keyed[name] = true;
-  const writer: Writer = { tokens: [], keyed, path: [] };
-  return writeFields(writer, record, 0) ? writer.tokens : undefined;
+  begin(keyedByInteger);
+  return writeFields(writer, record, 0) ? writtenTokens() : undefined;
+}
+
+export function writeFieldTokens(name: string, value: unknown, keyedByInteger: readonly string[] = NO_KEYED): number | undefined {
+  if (!isFieldName(name)) return undefined;
+  begin(keyedByInteger);
+  return writeValue(writer, name, value, 0) ? writer.count : undefined;
+}
+
+export interface TokenLines {
+  width: number;
+  prefix: string;
+  lines: string[];
+  readonly parts: string[];
+  size: number;
+  tokens: number;
+  length: number;
+}
+
+export function createTokenLines(prefix: string, width: number, lines: string[] = []): TokenLines {
+  return { width, prefix, lines, parts: [prefix], size: 1, tokens: 0, length: -1 };
+}
+
+export function openTokenLines(sink: TokenLines, prefix: string, width: number, lines: string[]): void {
+  sink.width = width;
+  sink.prefix = prefix;
+  sink.lines = lines;
+  sink.parts[0] = prefix;
+  sink.size = 1;
+  sink.tokens = 0;
+  sink.length = -1;
+}
+
+function makeRoom(sink: TokenLines, size: number): void {
+  if (sink.tokens > 0 && sink.length + 1 + size > sink.width) endTokenLine(sink);
+  if (sink.tokens > 0) sink.parts[sink.size++] = " ";
+  sink.tokens++;
+  sink.length += 1 + size;
+}
+
+export function addToken(sink: TokenLines, text: string): void {
+  makeRoom(sink, text.length);
+  sink.parts[sink.size++] = text;
+}
+
+export function addWrittenToken(sink: TokenLines, index: number, name?: string): void {
+  const { parts } = writer;
+  const first = name ?? parts[index * 3] ?? "";
+  const mark = parts[index * 3 + 1] ?? "";
+  const text = parts[index * 3 + 2] ?? "";
+  makeRoom(sink, first.length + mark.length + text.length);
+  const line = sink.parts;
+  line[sink.size++] = first;
+  line[sink.size++] = mark;
+  line[sink.size++] = text;
+}
+
+export function addWrittenTokens(sink: TokenLines, count: number): void {
+  for (let index = 0; index < count; index++) addWrittenToken(sink, index);
+}
+
+export function endTokenLine(sink: TokenLines): void {
+  if (sink.tokens === 0) return;
+  const { parts } = sink;
+  parts.length = sink.size;
+  sink.lines.push(parts.join(""));
+  sink.size = 1;
+  sink.tokens = 0;
+  sink.length = -1;
 }
 
 interface Open {
@@ -306,21 +424,10 @@ export function parseRecord(tokens: readonly string[]): Record<string, unknown> 
 }
 
 export function tokenLines(tokens: readonly string[], width: number): string[] {
-  const lines: string[] = [];
-
-  let line: string[] = [];
-  let length = -1;
-  for (const token of tokens) {
-    if (line.length > 0 && length + 1 + token.length > width) {
-      lines.push(line.join(" "));
-      line = [];
-      length = -1;
-    }
-    line.push(token);
-    length += 1 + token.length;
-  }
-  if (line.length > 0) lines.push(line.join(" "));
-  return lines;
+  const sink = createTokenLines("", width);
+  for (const text of tokens) addToken(sink, text);
+  endTokenLine(sink);
+  return sink.lines;
 }
 
 export function lineTokens(lines: readonly string[]): string[] {
