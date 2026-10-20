@@ -17,37 +17,39 @@ const SMALLEST_NORMAL = 1.1754943508222875e-38;
 
 const flushSubnormal = (value: number) => value < SMALLEST_NORMAL && value > -SMALLEST_NORMAL ? value * 0.0 : value;
 
-const cachedLeft: number[] = [];
-const cachedRight: number[] = [];
-const cachedOperation: number[] = [];
-const cachedResult: number[] = [];
+const cachedLeft: Record<number, number> = {};
+const cachedRight: Record<number, number> = {};
+const cachedOperation: Record<number, number> = {};
+const cachedResult: Record<number, number> = {};
 for (let i = 0; i < 8192; i++) {
-  cachedLeft.push(0);
-  cachedRight.push(0);
-  cachedOperation.push(0);
-  cachedResult.push(0);
+  cachedLeft[i] = 0;
+  cachedRight[i] = 0;
+  cachedOperation[i] = 0;
+  cachedResult[i] = 0;
+}
+
+function uncachedFloat32(left: number, right: number, operation: number): number {
+  return flushSubnormal(operation === MULTIPLY ? multiplyFloat32(left, right)
+    : operation === DIVIDE ? divideFloat32(left, right)
+    : operation === SUBTRACT ? subtractFloat32(left, right) : addFloat32(left, right));
 }
 
 function slowFloat32(left: number, right: number, operation: number): number {
-  // Zero signs and nonfinite values bypass equality cache keys.
+  // Callers pass nonzero operands; nonfinite values fail the range check and bypass equality cache keys.
   // Power-of-two scaling and bounded integer arithmetic keep the hash exact in Lua32.
-  let index = -1;
-  if (left !== 0 && right !== 0 && left >= -32768 && left <= 32768 && right >= -32768 && right <= 32768) {
-    index = (floorDiv(left * 256.0, 1) ^ (floorDiv(right * 256.0, 1) * 31) ^ (operation * 131)) & 8191;
+  if (left >= -32768 && left <= 32768 && right >= -32768 && right <= 32768) {
+    const index = (floorDiv(left * 256.0, 1) ^ (floorDiv(right * 256.0, 1) * 31) ^ (operation * 131)) & 8191;
     if (cachedLeft[index] === left && cachedRight[index] === right && cachedOperation[index] === operation) {
       return cachedResult[index] ?? 0;
     }
-  }
-  const result = flushSubnormal(operation === MULTIPLY ? multiplyFloat32(left, right)
-    : operation === DIVIDE ? divideFloat32(left, right)
-    : operation === SUBTRACT ? subtractFloat32(left, right) : addFloat32(left, right));
-  if (index >= 0) {
+    const result = uncachedFloat32(left, right, operation);
     cachedLeft[index] = left;
     cachedRight[index] = right;
     cachedOperation[index] = operation;
     cachedResult[index] = result;
+    return result;
   }
-  return result;
+  return uncachedFloat32(left, right, operation);
 }
 
 function outsideSumRange(value: number, right: number, operation: number): number {
@@ -240,7 +242,7 @@ function sum(value: number, addend: number, operation: number): number {
   const scaledBig = big * up;
   const scaledSmall = small * up;
 
-  if (scaledSmall < 0.25) return negative ? -(scaledBig * down) : scaledBig * down;
+  if (!(scaledSmall >= 0.25)) return small !== small ? small : negative ? -(scaledBig * down) : scaledBig * down;
   const whole = floorDiv(scaledSmall, 1);
   const fraction = scaledSmall - whole;
   const bigUnits = scaledBig | 0;
@@ -297,7 +299,14 @@ export function exactDifference(value: number, right: number): number {
 export function exactProduct(value: number, right: number): number {
   // Zeros keep their IEEE signs; small integers keep Lua's integer type.
   if (value === 0 || right === 0) return value * right;
-  if (value === floorDiv(value, 1) && right === floorDiv(right, 1) && value >= -4096 && value <= 4096 && right >= -4096 && right <= 4096) return value * right;
+  if (value === floorDiv(value, 1) && right === floorDiv(right, 1)) {
+    if (value >= -4096 && value <= 4096 && right >= -4096 && right <= 4096) return value * right;
+    // An integer product below 2^24 is exact under any rounding; * 1.0 avoids Lua32 integer overflow.
+    if (value >= -EXACT_INTEGERS && value <= EXACT_INTEGERS && right >= -EXACT_INTEGERS && right <= EXACT_INTEGERS) {
+      const product = value * 1.0 * right;
+      if (product > -EXACT_INTEGERS && product < EXACT_INTEGERS) return product;
+    }
+  }
   // A product with ±1 is exact; * 1.0 keeps the float the helper would return.
   if (right === 1 || right === -1 || value === 1 || value === -1) return value * right * 1.0;
   return slowFloat32(value, right, MULTIPLY);

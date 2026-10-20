@@ -6,8 +6,9 @@
 
 import { at } from "../runtime/lookup";
 import { floorDiv, floorMod } from "./intMath";
+import { addLimbs, bitLength, lessThan, type Limbs, TWO_POWERS as LIMB_POWERS, shiftRightJam, subtractLimbs } from "./limbs";
 
-const TWO_POWERS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728, 268435456, 536870912, 1073741824];
+const TWO_POWERS = LIMB_POWERS;
 
 export function toInt(value: number): number {
   return value < 0 ? Math.ceil(value) : Math.floor(value);
@@ -117,6 +118,10 @@ function split(value: number): void {
       exponent += 1;
     }
   } else if (normalized < 1) {
+    if (normalized < SMALLEST_NORMAL) {
+      normalized *= 16777216;
+      exponent -= 24;
+    }
     while (normalized < 0.0000152587890625) {
       normalized *= 65536;
       exponent -= 16;
@@ -527,9 +532,7 @@ export function fusedMultiplyAddFloat32(a: number, b: number, c: number): number
 }
 
 export function divideFloat32(numerator: number, denominator: number): number {
-  if (denominator === 0) {
-    return INFINITY - INFINITY;
-  }
+  if (denominator === 0 || numerator - numerator + (denominator - denominator) !== 0) return numerator / denominator;
   if (numerator === 0) return numerator;
   split(numerator);
   let remainder = splitSignificand;
@@ -660,96 +663,6 @@ function scaleByPowerOfTwo(value: number, scale: number): number {
   return result;
 }
 
-// Three base-2^24 limbs; each limb's arithmetic stays within signed 32 bits.
-interface Limbs {
-  high: number;
-  middle: number;
-  low: number;
-}
-
-function shiftRightJam(value: Limbs, count: number): Limbs {
-  if (count >= 72) {
-    return { high: 0, middle: 0, low: value.high !== 0 || value.middle !== 0 || value.low !== 0 ? 1 : 0 };
-  }
-  let high = value.high;
-  let middle = value.middle;
-  let low = value.low;
-  let remaining = count;
-  while (remaining >= 24) {
-    const lost = low !== 0;
-    low = middle;
-    middle = high;
-    high = 0;
-    if (lost && floorMod(low, 2) === 0) low += 1;
-    remaining -= 24;
-  }
-  if (remaining > 0) {
-    const divisor = at(TWO_POWERS, remaining);
-    const carry = at(TWO_POWERS, 24 - remaining);
-    const lost = floorMod(low, divisor) !== 0;
-    low = floorDiv(low, divisor) + floorMod(middle, divisor) * carry;
-    middle = floorDiv(middle, divisor) + floorMod(high, divisor) * carry;
-    high = floorDiv(high, divisor);
-    if (lost && floorMod(low, 2) === 0) low += 1;
-  }
-  return { high, middle, low };
-}
-
-function addLimbs(a: Limbs, b: Limbs): Limbs {
-  const lowSum = a.low + b.low;
-  const middleSum = a.middle + b.middle + floorDiv(lowSum, 16777216);
-  return {
-    high: a.high + b.high + floorDiv(middleSum, 16777216),
-    middle: floorMod(middleSum, 16777216),
-    low: floorMod(lowSum, 16777216),
-  };
-}
-
-function lessThan(a: Limbs, b: Limbs): boolean {
-  return a.high < b.high || (a.high === b.high && (a.middle < b.middle || (a.middle === b.middle && a.low < b.low)));
-}
-
-function subtractLimbs(a: Limbs, b: Limbs): Limbs {
-  let low = a.low - b.low;
-  let middle = a.middle - b.middle;
-  let high = a.high - b.high;
-  if (low < 0) {
-    low += 16777216;
-    middle -= 1;
-  }
-  if (middle < 0) {
-    middle += 16777216;
-    high -= 1;
-  }
-  return { high, middle, low };
-}
-
-function bitLength(value: number): number {
-  let remaining = value;
-  let result = 0;
-  if (remaining >= 65536) {
-    remaining = floorDiv(remaining, 65536);
-    result += 16;
-  }
-  if (remaining >= 256) {
-    remaining = floorDiv(remaining, 256);
-    result += 8;
-  }
-  if (remaining >= 16) {
-    remaining = floorDiv(remaining, 16);
-    result += 4;
-  }
-  if (remaining >= 4) {
-    remaining = floorDiv(remaining, 4);
-    result += 2;
-  }
-  if (remaining >= 2) {
-    remaining = floorDiv(remaining, 2);
-    result += 1;
-  }
-  return result + remaining;
-}
-
 function roundLimbs(value: Limbs, scale: number, negative: boolean): number {
   const bits =
     value.high !== 0
@@ -779,7 +692,8 @@ function roundLimbs(value: Limbs, scale: number, negative: boolean): number {
 }
 
 function limbFusedMultiplyAdd(a: number, b: number, c: number): number {
-  if (a === 0 || b === 0) return a * b + c;
+  if (a === 0 || b === 0 || a - a + (b - b) !== 0) return a * b + c;
+  if (c - c !== 0) return c;
   split(a);
   const leftSignificand = splitSignificand;
   const leftExponent = splitExponent;
