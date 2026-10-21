@@ -7,21 +7,33 @@
 Modern tooling, testing, build automation, and developer experience for Warcraft III modding.
 
 Warcraft III is still a great platform for custom games, but its modding tools
-are dated and the official editor has barely changed. Wisp brings modern
-tooling to it: types, tests, hot reload, build automation and simulated
-matches. It has two parts.
+are dated and the official editor has barely changed. Wisp lets you write a map
+in TypeScript and gives it modern tooling. The map still runs in the real game.
 
-- **The toolchain** makes maps that run in the real game: a TypeScript-to-Lua
-  compiler, the game's numeric rules, hot reload into running clients, Lua
-  errors mapped back to TypeScript, tests, and build and packaging automation.
-- **The runtime** is a from-scratch engine that runs maps without Warcraft.
-  Today it provides headless simulated clients for testing, rendered frames,
-  and, for games that opt in, a standalone browser window. It is not a
-  replacement for the game.
+What it does for any map:
 
-Games own their simulation, UI, assets and map declaration; Wisp never reads
-their source. [Smashcraft](https://github.com/tompassarelli/smashcraft) is the
-first consumer.
+- **Write in TypeScript.** Wisp compiles it to the Lua that Warcraft runs.
+  Warcraft API types catch mistakes before the map loads, and a Lua error in
+  the game points back to your TypeScript line.
+- **Hot reload.** Save a file and the running match picks up the code change,
+  with no rebuild or rehost. New art and object data still need a rebuilt map.
+- **Build without World Editor.** Define units and abilities in code; one
+  command packs the map.
+- **Test without Warcraft.** Simulated players run your map in seconds and
+  report errors, desyncs and what a player would see wrong. `wisp dev` reruns
+  them on every save.
+- **Automate playtests.** Host a match from the desktop in one command, or run
+  offline LAN matches with no Battle.net account.
+
+The simulator is the runtime: Wisp's own from-scratch implementation of the
+game's rules. It exists for fast testing and, for games that opt in, a
+standalone browser player. It does not replace Warcraft III.
+
+Wisp runs on Linux today; Windows and macOS support is tracked in
+[wisp#108](https://github.com/tompassarelli/wisp/issues/108). Games own their
+simulation, UI, assets and map declaration; Wisp never reads their source.
+[Smashcraft](https://github.com/tompassarelli/smashcraft) is the first game
+built on it.
 
 ## Principles
 
