@@ -1,0 +1,21 @@
+name: Install apt packages
+description: Installs apt packages with each apt-get call bounded and retried, so a stalled mirror or lock fails in minutes instead of holding the job until its limit.
+inputs:
+  packages:
+    description: Space-separated package names.
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+      run: |
+        set -uo pipefail
+        apt=(-q -o Acquire::Retries=2 -o DPkg::Lock::Timeout=60)
+        for attempt in 1 2 3; do
+          sudo timeout -k 10 120 apt-get "${apt[@]}" update && sudo timeout -k 10 180 apt-get "${apt[@]}" install -y $PACKAGES && exit 0
+          echo "::warning::apt-get attempt $attempt of 3 for $PACKAGES stalled or failed"
+          [ "$attempt" -lt 3 ] && sudo timeout -k 10 60 dpkg --configure -a && sleep 10
+        done
+        exit 1
