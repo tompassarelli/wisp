@@ -240,6 +240,7 @@ export function mapCompiler(configPath: string, sources: () => ReadonlyMap<strin
 
     const config = phase("read config", () => parseConfigFileWithSystem(absolute));
     if (config.errors.length > 0) return config.errors;
+    const declarations = config.options.declaration === true || config.options.composite === true;
     config.options.declaration = true;
     const replaced = sources();
     const cache = cacheDirectory === undefined || replaced.size > 0 ? undefined : persistentCache(cacheDirectory, absolute, config);
@@ -266,7 +267,7 @@ export function mapCompiler(configPath: string, sources: () => ReadonlyMap<strin
     }
     if (diagnostics.length > 0) return diagnostics;
 
-    const compiled = transpileAffected(transpiler, current, affected, phase, replaced.size === 0);
+    const compiled = transpileAffected(transpiler, current, affected, phase, replaced.size === 0, declarations);
     if (cache !== undefined && compiled.length === 0) phase("save compile cache", () => saveCache(cache, buildInfo, current, transpiler));
     return compiled;
   };
@@ -289,12 +290,13 @@ function checkAffected(current: ts.EmitAndSemanticDiagnosticsBuilderProgram, pro
   return { affected, diagnostics };
 }
 
-function transpileAffected(transpiler: IncrementalTranspiler, current: ts.EmitAndSemanticDiagnosticsBuilderProgram, affected: readonly ts.SourceFile[], phase: Phase, write: boolean): readonly ts.Diagnostic[] {
+function transpileAffected(transpiler: IncrementalTranspiler, current: ts.EmitAndSemanticDiagnosticsBuilderProgram, affected: readonly ts.SourceFile[], phase: Phase, write: boolean, declarations: boolean): readonly ts.Diagnostic[] {
   const program = current.getProgram();
   const declarationDiagnostics = program.getDeclarationDiagnostics;
   const incrementalDeclarations = current.getDeclarationDiagnostics;
   let checkingDeclarations = false;
   program.getDeclarationDiagnostics = (file, cancellationToken) => {
+    if (!declarations) return [];
     if (file !== undefined || checkingDeclarations) return declarationDiagnostics(file, cancellationToken);
     checkingDeclarations = true;
     try {
