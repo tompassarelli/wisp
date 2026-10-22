@@ -470,6 +470,17 @@ provider or emulating Battle.net is outside this tool's scope.
   window either. A stop SIGKILLs a game still running 20 s later and says
   so in the agent log. Without xdotool, or when xdotool can't reach the
   desktop's display, the agent cannot see windows and keeps the launch it has.
+- **Ready after the intro.** A fresh 3.0.1 client plays its intro cinematic
+  for about 2.5 minutes over whatever runs underneath: a solo game started
+  during it played and ended unseen, and every capture frame showed the
+  cinematic (22 October 2026). The client reports `LOGIN_DOORS` when the
+  intro ends (151 s after the pool started, the doors on screen). The agent
+  counts a client as ready only once it has reported `LOGIN_DOORS`
+  (`reachedMenus`, wisp:host/lan/pool.ts), waiting at most `MENUS_DEADLINE`
+  (5 minutes) and then going on, so `lan pool` reports a pair running after
+  its intros. Its menu listeners start before the games launch, so a 3.0.0
+  client, which reaches its doors within seconds, is never missed; a client
+  that never loads Wisp's menu page costs the whole 5 minutes.
 - **Declared clients only.** `wisp lan` works on the clients it created. `wisp
   engine actions` accepts only a pair from the pool's clients file.
 - **Checked builds only.** The switch (Wisp's private LAN plugin) refuses

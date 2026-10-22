@@ -8,12 +8,12 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { AudioIsolation, GameLauncher, InputInjection, ProcessTable } from "../os/platform/services";
 import { UsageFailure, flagValues, wholeFlag } from "../cli/command";
 import { pollUntil, spawnLogged } from "../cli/hostProcess";
-import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports, playLocalGame } from "../play/menus";
+import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports, playLocalGame, type SentMessage } from "../play/menus";
 import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { mapCopies, readMapFacts } from "./map";
-import { ALARM_AFTER_MS, type Driver, WINDOW_DEADLINE, WINDOW_RELAUNCHES, alive, launchUntilShown, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
+import { ALARM_AFTER_MS, type Driver, MENUS_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, alive, launchUntilShown, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
 import { preferences } from "../os/warcraft/clientProfiles";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
 
@@ -97,6 +97,14 @@ const agent = Effect.gen(function*() {
   const table = yield* ProcessTable;
   const gamePid = (name: string) => table.games(prefixOf(name)).pipe(Effect.map((games) => games[0]?.pid), Effect.orElseSucceed(() => undefined));
 
+  const reports = new Map<string, MenuReports>();
+  for (const client of clients) {
+    const sentLog = join(directory, `${client.name}-menus.log`);
+    const onSent = (sent: SentMessage) =>
+      appendFileSync(sentLog, `${new Date().toISOString()} ${sent.payload === undefined ? sent.message : `${sent.message} ${JSON.stringify(sent.payload)}`}\n`);
+    reports.set(client.name, yield* listenForMenus(client.port, onSent));
+  }
+
   const windows = yield* (yield* InputInjection).windowTools;
   const start = (client: PoolClient) => Option.isNone(windows) ? launch(capacity, client) : launchUntilShown({
     launch: launch(capacity, client),
@@ -130,13 +138,10 @@ const agent = Effect.gen(function*() {
     yield* Effect.forkScoped(pollUntil(placeWindows, { every: "3 seconds" }));
   }
 
-  const reports = new Map<string, MenuReports>();
-  for (const client of clients) {
-    const sentLog = join(directory, `${client.name}-menus.log`);
-    const onSent = (sent: { readonly message: string; readonly payload?: unknown }) =>
-      appendFileSync(sentLog, `${new Date().toISOString()} ${sent.payload === undefined ? sent.message : `${sent.message} ${JSON.stringify(sent.payload)}`}\n`);
-    reports.set(client.name, yield* listenForMenus(client.port, onSent));
-  }
+  yield* Effect.forEach([...reports], ([name, report]) => Effect.gen(function*() {
+    const reached = yield* pollUntil(report.sent.pipe(Effect.map(reachedMenus)), { until: (reached) => reached, every: "1 second", within: MENUS_DEADLINE, onTimeout: () => Effect.succeed(false) });
+    say(reached ? `${name} reached its login doors` : `${name} showed no login doors within ${MENUS_DEADLINE}; going on`);
+  }), { concurrency: "unbounded", discard: true });
 
   const menusOf = (name: string): Effect.Effect<MenuSocket, LanFailure | MenuFailure, Scope.Scope> => Effect.gen(function*() {
     const report = reports.get(name);

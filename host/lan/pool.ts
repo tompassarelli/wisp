@@ -23,6 +23,10 @@ export const pairSides = (network: boolean): readonly Side[] => (network ? ["a"]
 
 export const WINDOW_DEADLINE = "30 seconds";
 export const WINDOW_RELAUNCHES = 3;
+export const MENUS_DEADLINE = "5 minutes";
+
+export const reachedMenus = (sent: readonly { readonly message: string; readonly payload?: unknown }[]) =>
+  sent.some(({ message, payload }) => message === "ScreenTransitionInfo" && typeof payload === "object" && payload !== null && "screen" in payload && payload.screen === "LOGIN_DOORS");
 
 export const launchUntilShown = <A, E, R>(start: {
   readonly launch: Effect.Effect<A, E, R>;
