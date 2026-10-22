@@ -450,10 +450,12 @@ provider or emulating Battle.net is outside this tool's scope.
   `bwrap --unshare-net`, so Battle.net is out of reach, and no client has a
   saved account to sign in with. A client with any other network is refused.
 - **Network for one solo pair, by request.** 3.0.1.24371 hangs before its
-  window opens when it starts without network (8 of 8 launches on 22 October
-  2026; the same command with network opened its window in 12 s and played
-  its intro). `wisp lan pool --pair K --network` starts that one pair's agent
-  and games outside the loopback-only namespace, for `lan solo` only: it
+  window opens when it starts without network (0 of 10 launches started on
+  22 October 2026). Network is needed but not enough: with it, lan16a started
+  6 of 6 times (window in 12 s, intro playing) while lan16b started 1 of 6,
+  alone or as side b, also on a copy of lan16a's prefix; the cause is open.
+  `wisp lan pool --pair K --network` starts that one pair's agent and games
+  outside the loopback-only namespace, for `lan solo` only: it
   requires exactly one `--pair K`, every other pair stays offline, and the
   networked pair refuses `lan fresh`, `lan dummy` and `lan netem`
   (`lanPlayRefusal`, wisp:host/lan/pool.ts). Its clients still never sign in.
