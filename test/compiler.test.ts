@@ -47,6 +47,39 @@ farmTest("[invariant] cached module requires keep the same bundle and source map
   }
 });
 
+farmTest("[invariant] an edited file's declaration error is reported on every compile until fixed and never publishes", () => {
+  const build = join(import.meta.dir, "../build");
+  mkdirSync(build, { recursive: true });
+  const directory = mkdtempSync(join(build, "compiler-declaration-"));
+  mkdirSync(join(directory, "src"));
+  const config = join(directory, "tsconfig.json");
+  const entry = join(directory, "src/main.ts");
+  writeFileSync(join(directory, "src/value.ts"), "export const value = 5;\n");
+  writeFileSync(config, JSON.stringify({
+    compilerOptions: {
+      target: "ESNext", lib: ["ES2015"], module: "ESNext", moduleResolution: "Bundler", strict: true,
+      types: [], skipLibCheck: true, rootDir: "src", outDir: "out", sourceMap: true, noEmitOnError: true,
+    },
+    include: ["src/**/*.ts"],
+    tstl: { luaTarget: "5.3", luaBundle: "map.lua", luaBundleEntry: "src/main.ts", noHeader: true },
+  }));
+  const valid = "import { value } from \"./value\";\nexport const result = value + 1;\n";
+  writeFileSync(entry, valid);
+  const compile = mapCompiler(config);
+  const bundle = join(directory, "out/map.lua");
+  expect(report(compile())).toBe("");
+  const published = readFileSync(bundle, "utf8");
+
+  writeFileSync(entry, `${valid}export const probe = class { private hidden = 1; };\n`);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    expect(compile().map((diagnostic) => diagnostic.code)).toContain(4094);
+    expect(readFileSync(bundle, "utf8")).toBe(published);
+  }
+  writeFileSync(entry, valid);
+  expect(report(compile())).toBe("");
+  expect(readFileSync(bundle, "utf8")).toBe(published);
+});
+
 farmTest("[invariant] a compile restored from another checkout's disk cache keeps the bundle and source map of full compilation", () => {
   const build = join(import.meta.dir, "../build");
   mkdirSync(build, { recursive: true });
