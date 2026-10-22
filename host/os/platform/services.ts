@@ -150,7 +150,10 @@ export class ScreenCapture extends Context.Service<ScreenCapture, {
   readonly frame: (client: Client, region?: Region) => Effect.Effect<Uint8Array, DesktopFailure>;
 }>()("wisp/platform/ScreenCapture") {}
 
-export type WindowPlacer = (env: Readonly<Record<string, string>>, title: string, place: Region) => Effect.Effect<number>;
+export interface WindowTools {
+  readonly place: (env: Readonly<Record<string, string>>, title: string, place: Region) => Effect.Effect<number>;
+  readonly shown: (env: Readonly<Record<string, string>>, title: string) => Effect.Effect<boolean, DesktopFailure>;
+}
 
 export class InputInjection extends Context.Service<InputInjection, {
   readonly tools: Effect.Effect<Client["tools"], PlatformUnsupported>;
@@ -158,7 +161,7 @@ export class InputInjection extends Context.Service<InputInjection, {
 
   readonly sessionEnvironment: (run: string) => Readonly<Record<string, string>>;
 
-  readonly placer: Effect.Effect<Option.Option<WindowPlacer>>;
+  readonly windowTools: Effect.Effect<Option.Option<WindowTools>>;
   readonly display: (entry: ClientEntry) => Effect.Effect<string, DesktopFailure>;
   readonly preflight: (client: Client) => Effect.Effect<void, DesktopFailure>;
   readonly focus: (client: Client, title: string, strict: boolean) => Effect.Effect<void, DesktopFailure>;

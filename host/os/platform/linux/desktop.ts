@@ -7,7 +7,7 @@ import { inputBatches, sendsChat } from "../../warcraft/inputBatch";
 import { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, runTool } from "../../warcraft/desktopClient";
 import { pollUntil, captureProcess } from "../../../cli/hostProcess";
 import { step } from "../../../cli/timings";
-import { InputInjection, ScreenCapture, type WindowPlacer } from "../services";
+import { InputInjection, ScreenCapture, type WindowTools } from "../services";
 
 const fail = (operation: string, client: string) => (cause: unknown) => new DesktopFailure({ operation, client, cause });
 
@@ -127,7 +127,7 @@ export const linuxDesktopLayer = Layer.mergeAll(
       const read = (file: string) => (existsSync(join(run, file)) ? readFileSync(join(run, file), "utf8").trim() : "");
       return { DISPLAY: read("display"), WAYLAND_DISPLAY: read("wayland-display"), XAUTHORITY: read("xauthority"), XDG_RUNTIME_DIR: join(run, "runtime") };
     },
-    placer: Effect.gen(function*() {
+    windowTools: Effect.gen(function*() {
       const output = (command: string, args: readonly string[], env: Readonly<Record<string, string>>) =>
         ChildProcessSpawner.ChildProcessSpawner.use((spawner) => spawner.string(ChildProcess.make(command, args, { env, extendEnv: true, stderr: "ignore" }))).pipe(
           Effect.timeout("5 seconds"),
@@ -138,7 +138,7 @@ export const linuxDesktopLayer = Layer.mergeAll(
         Effect.map((built) => (built.trim() === "" ? undefined : join(built.trim().split("\n")[0] ?? "", "bin/xdotool"))),
       ));
       if (xdotool === undefined) return Option.none();
-      const place: WindowPlacer = (env, title, region) => Effect.gen(function*() {
+      const place: WindowTools["place"] = (env, title, region) => Effect.gen(function*() {
         let placed = 0;
         for (const window of (yield* output(xdotool, ["search", "--name", `^${escapeTitle(title)}$`], env)).split("\n").filter((id) => id !== "")) {
           const geometry = yield* output(xdotool, ["getwindowgeometry", window], env);
@@ -148,7 +148,12 @@ export const linuxDesktopLayer = Layer.mergeAll(
         }
         return placed;
       });
-      return Option.some(place);
+      const shown: WindowTools["shown"] = (env, title) => Effect.gen(function*() {
+        if ((yield* output(xdotool, ["search", "--name", `^${escapeTitle(title)}$`], env)).trim() !== "") return true;
+        if ((yield* output(xdotool, ["getdisplaygeometry"], env)).trim() !== "") return false;
+        return yield* new DesktopFailure({ operation: `look for the ${title} window`, client: env["DISPLAY"] ?? process.env["DISPLAY"] ?? "no display", cause: "xdotool can't reach the display" });
+      });
+      return Option.some({ place, shown });
     }),
     display: (entry) => desktopSession(entry).pipe(Effect.map(({ x11 }) => x11.DISPLAY)),
     preflight,

@@ -13,7 +13,7 @@ import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { mapCopies, readMapFacts } from "./map";
-import { ALARM_AFTER_MS, type Driver, alive, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
+import { ALARM_AFTER_MS, type Driver, WINDOW_DEADLINE, WINDOW_RELAUNCHES, alive, launchUntilShown, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
 import { preferences } from "../os/warcraft/clientProfiles";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
 
@@ -97,14 +97,34 @@ const agent = Effect.gen(function*() {
   const table = yield* ProcessTable;
   const gamePid = (name: string) => table.games(prefixOf(name)).pipe(Effect.map((games) => games[0]?.pid), Effect.orElseSucceed(() => undefined));
 
+  const windows = yield* (yield* InputInjection).windowTools;
+  const start = (client: PoolClient) => Option.isNone(windows) ? launch(capacity, client) : launchUntilShown({
+    launch: launch(capacity, client),
+    shown: () => pollUntil(windows.value.shown(client.env, "Warcraft III"), { until: (shown) => shown, every: "1 second", within: WINDOW_DEADLINE, onTimeout: () => Effect.succeed(false) }).pipe(
+      Effect.catchTag("DesktopFailure", (failure) => Effect.sync(() => {
+        say(`${client.name}: can't look for its window (${String(failure.cause)}); keeping this launch`);
+        return true;
+      })),
+    ),
+    stop: (handle) => Effect.gen(function*() {
+      const gone = until(table.games(prefixOf(client.name)).pipe(Effect.map((games) => games.length === 0)), "20 seconds");
+      yield* handle.kill({ forceKillAfter: "10 seconds" }).pipe(Effect.timeoutOption("20 seconds"), Effect.ignore);
+      if (yield* gone) return;
+      const left = yield* table.games(prefixOf(client.name));
+      say(`${client.name} outlived its stop (pid ${left.map(({ pid }) => pid).join(", ")}); killing it`);
+      for (const { pid } of left) yield* Effect.try(() => process.kill(pid, "SIGKILL")).pipe(Effect.ignore);
+      yield* gone;
+    }),
+    relaunching: (launches) => Effect.sync(() => say(`${client.name} showed no window within ${WINDOW_DEADLINE}; relaunching (${launches}/${WINDOW_RELAUNCHES})`)),
+    exhausted: (launches) => new LanFailure({ problem: `${client.name} showed no window within ${WINDOW_DEADLINE} in ${launches} launches` }),
+  });
   const games: { readonly isRunning: Effect.Effect<boolean, unknown> }[] = [];
-  yield* Effect.forEach(clients, (client) => launch(capacity, client).pipe(Effect.map((handle) => { games.push(handle); })), { discard: true });
+  yield* Effect.forEach(clients, (client) => start(client).pipe(Effect.map((handle) => { games.push(handle); })), { discard: true });
 
-  const placer = yield* (yield* InputInjection).placer;
-  if (Option.isNone(placer)) say("no window placement: game windows keep the size and place the desktop gives them");
+  if (Option.isNone(windows)) say("no window placement: game windows keep the size and place the desktop gives them");
   else {
     const placeWindows = Effect.forEach(clients, (client) => Effect.gen(function*() {
-      const placed = yield* placer.value(client.env, "Warcraft III", { x: client.windowX, y: 0, width: profile.width, height: profile.height });
+      const placed = yield* windows.value.place(client.env, "Warcraft III", { x: client.windowX, y: 0, width: profile.width, height: profile.height });
       for (let window = 0; window < placed; window++) say(`placed ${client.name}'s window at ${client.windowX},0, ${profile.width}x${profile.height}`);
     }), { discard: true });
     yield* Effect.forkScoped(pollUntil(placeWindows, { every: "3 seconds" }));

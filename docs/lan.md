@@ -461,6 +461,15 @@ provider or emulating Battle.net is outside this tool's scope.
   requires exactly one `--pair K`, every other pair stays offline, and the
   networked pair refuses `lan fresh`, `lan dummy` and `lan netem`
   (`lanPlayRefusal`). Its client still never signs in.
+- **Relaunch on a startup hang.** In one unchanged context lan16a started 7
+  of 10 times, opening its window 2-3 s after launch, and hung 3 of 10 times
+  with no window (22 October 2026). The agent waits `WINDOW_DEADLINE` (30 s)
+  for each client's `Warcraft III` window, then stops that game and launches
+  it again, at most `WINDOW_RELAUNCHES` (3) times (`launchUntilShown`,
+  wisp:host/lan/pool.ts); the pair fails if the fourth launch shows no
+  window either. A stop SIGKILLs a game still running 20 s later and says
+  so in the agent log. Without xdotool, or when xdotool can't reach the
+  desktop's display, the agent cannot see windows and keeps the launch it has.
 - **Declared clients only.** `wisp lan` works on the clients it created. `wisp
   engine actions` accepts only a pair from the pool's clients file.
 - **Checked builds only.** The switch (Wisp's private LAN plugin) refuses
@@ -507,7 +516,8 @@ it. The agent:
 - writes each client's `War3Preferences.txt` for the profile;
 - launches both games with `-launch -windowmode windowed -nowfpause`, through
   steam-run, Steam Linux Runtime 4 and GE-Proton 11-7, as the signed-in
-  clients run. Both share the namespace, and client b draws on its own
+  clients run, and relaunches a game that shows no window in time (see
+  Guardrails). Both share the namespace, and client b draws on its own
   desktop;
 - sets each window to the profile's size at its desktop's top left. The game
   can open a window larger than its settings ask;

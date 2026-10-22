@@ -21,6 +21,27 @@ export const PAIR_SIDES = ["a", "b"] as const;
 export type Side = (typeof PAIR_SIDES)[number];
 export const pairSides = (network: boolean): readonly Side[] => (network ? ["a"] : PAIR_SIDES);
 
+export const WINDOW_DEADLINE = "30 seconds";
+export const WINDOW_RELAUNCHES = 3;
+
+export const launchUntilShown = <A, E, R>(start: {
+  readonly launch: Effect.Effect<A, E, R>;
+  readonly shown: (launched: A) => Effect.Effect<boolean, E, R>;
+  readonly stop: (launched: A) => Effect.Effect<void, E, R>;
+  readonly relaunching: (launches: number) => Effect.Effect<void, E, R>;
+  readonly exhausted: (launches: number) => E;
+}): Effect.Effect<A, E, R> => {
+  const attempt = (launches: number): Effect.Effect<A, E, R> => Effect.gen(function*() {
+    const launched = yield* start.launch;
+    if (yield* start.shown(launched)) return launched;
+    yield* start.stop(launched);
+    if (launches > WINDOW_RELAUNCHES) return yield* Effect.fail(start.exhausted(launches));
+    yield* start.relaunching(launches);
+    return yield* attempt(launches + 1);
+  });
+  return attempt(1);
+};
+
 export const clientName = (pair: number, side: Side) => `lan${pair}${side}`;
 
 export const reportPort = (pair: number, side: Side) => 47200 + pair * 2 + PAIR_SIDES.indexOf(side);

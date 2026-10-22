@@ -46,7 +46,7 @@ export const unsupportedLayer = (platform: string): Layer.Layer<Platform> => {
       tools: refuse("desktop tools"),
       windows: (_config, entry) => desktop("input injection")(entry),
       sessionEnvironment: () => ({}),
-      placer: Effect.succeedNone,
+      windowTools: Effect.succeedNone,
       display: desktop("input injection"),
       preflight: desktop("input preflight"),
       focus: desktop("input injection"),
