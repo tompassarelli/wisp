@@ -9,7 +9,7 @@ import { ChildProcess } from "effect/process";
 import { flagValues } from "../cli/command";
 import { pollUntil, spawnLogged } from "../cli/hostProcess";
 import { LanFailure } from "./join";
-import { alive, pairDirectory, pairFlags } from "./pool";
+import { alive, pairDirectory, pairFlags, pairSides } from "./pool";
 import { desktopSize } from "../os/warcraft/clientProfiles";
 
 const argument = (name: string) => flagValues(process.argv, name)[0];
@@ -45,7 +45,7 @@ const stopAgent = Effect.suspend(() => {
   return pollUntil(Effect.sync(() => !alive(pid)), { until: (gone) => gone, every: "250 millis", within: "45 seconds", onTimeout: () => Effect.void });
 });
 
-const session = Effect.gen(function*() {
+const startDesktopB = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const ready = yield* Deferred.make<string, LanFailure>();
   const desktopBScope = yield* Scope.fork(yield* Effect.scope);
@@ -61,14 +61,19 @@ const session = Effect.gen(function*() {
   const runB = yield* Deferred.await(ready).pipe(Effect.timeoutOrElse({ duration: "120 seconds", orElse: () => Effect.fail(new LanFailure({ problem: "client b's desktop didn't report its Run line within 120 seconds" })) }));
   if (!existsSync(join(runB, "active"))) return yield* new LanFailure({ problem: `client b's desktop isn't active: ${runB}` });
   yield* Effect.tryPromise({ try: () => Bun.write(join(directory, "desktop-b.run"), runB), catch: (cause) => new LanFailure({ problem: String(cause) }) });
+  return { runB, exitCode: desktopB.exitCode };
+});
+
+const session = Effect.gen(function*() {
+  const desktopB = pairSides(network).includes("b") ? yield* startDesktopB : undefined;
   const command = [
-    process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", argument("pool-profile") ?? "parity", "--run-b", runB, "--session-pid", String(process.pid), "--capacity", capacity, ...flagValues(process.argv, "fps").flatMap((fps) => ["--fps", fps]), ...(network ? ["--network"] : [])];
+    process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", argument("pool-profile") ?? "parity", ...(desktopB === undefined ? [] : ["--run-b", desktopB.runB]), "--session-pid", String(process.pid), "--capacity", capacity, ...flagValues(process.argv, "fps").flatMap((fps) => ["--fps", fps]), ...(network ? ["--network"] : [])];
   const agent = network ? command : yield* Namespaces.use((namespaces) => namespaces.offline(command));
   const desktopA = yield* spawnLogged(ChildProcess.make(launcher, ["start", "--resolution", size, "--", ...agent], {
     stdin: "ignore", forceKillAfter: "15 seconds",
   }), { stdout: join(directory, "desktop-a.out"), stderr: join(directory, "desktop-a.err") });
   yield* Effect.addFinalizer(() => stopAgent);
-  yield* Effect.raceFirst(desktopA.handle.exitCode, desktopB.exitCode);
+  yield* desktopB === undefined ? desktopA.handle.exitCode : Effect.raceFirst(desktopA.handle.exitCode, desktopB.exitCode);
 });
 
 BunRuntime.runMain(Effect.scoped(session).pipe(Effect.provide(Layer.merge(BunServices.layer, platformLayer()))));

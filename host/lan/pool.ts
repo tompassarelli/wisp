@@ -19,6 +19,7 @@ export const mapPackager = () => join(cacheHome(), "wisp/lan/map-pack");
 
 export const PAIR_SIDES = ["a", "b"] as const;
 export type Side = (typeof PAIR_SIDES)[number];
+export const pairSides = (network: boolean): readonly Side[] => (network ? ["a"] : PAIR_SIDES);
 
 export const clientName = (pair: number, side: Side) => `lan${pair}${side}`;
 
@@ -137,6 +138,7 @@ export interface PoolPair {
 
   readonly runs: Readonly<Partial<Record<Side, string>>>;
   readonly appIds: Readonly<Record<Side, string>>;
+  readonly network?: boolean;
 }
 
 export interface PoolFile {
@@ -152,8 +154,8 @@ export const poolClientsFile = () => join(stateRoot(), "clients.json");
 /** One line per pair whose driver died without `wisp lan end` and stayed gone for ALARM_AFTER_MS, for the owner's tick to read. */
 export const alarmLog = () => join(stateRoot(), "alarms.log");
 
-export function pairClients(pair: number, runs: Readonly<Partial<Record<Side, string>>>): PoolClient[] {
-  return PAIR_SIDES.map((side) => {
+export function pairClients(pair: number, runs: Readonly<Partial<Record<Side, string>>>, sides: readonly Side[]): PoolClient[] {
+  return sides.map((side) => {
     const run = runs[side];
     return { name: clientName(pair, side), documents: documentsOf(clientName(pair, side)), menuReportPort: reportPort(pair, side), pair, offline: true as const, ...(run === undefined ? {} : { run }) };
   });
@@ -180,6 +182,7 @@ const PoolFileJson = Schema.fromJsonString(Schema.Struct({
     runs: Schema.Struct({ a: Schema.optionalKey(Schema.String), b: Schema.optionalKey(Schema.String) }),
     appIds: Schema.Struct({ a: Schema.String, b: Schema.String }),
     profile: Schema.optionalKey(Schema.String),
+    network: Schema.optionalKey(Schema.Boolean),
   })),
 }));
 

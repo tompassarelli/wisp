@@ -13,7 +13,7 @@ import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { mapCopies, readMapFacts } from "./map";
-import { ALARM_AFTER_MS, type Driver, alive, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
+import { ALARM_AFTER_MS, type Driver, alive, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
 import { preferences } from "../os/warcraft/clientProfiles";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
 
@@ -31,7 +31,7 @@ const displayOf = (run: string | undefined): Record<string, string> => {
   if (run === undefined) return {};
   return { ...runPlatformSync(InputInjection.use((input) => Effect.succeed(input.sessionEnvironment(run)))), PRIVATE_DESKTOP_RUN: run };
 };
-const clients = PAIR_SIDES.map((side) => ({ side, name: clientName(pair, side), port: reportPort(pair, side), windowX: 0, env: side === "b" ? displayOf(runB) : {} }));
+const clients = pairSides(network).map((side) => ({ side, name: clientName(pair, side), port: reportPort(pair, side), windowX: 0, env: side === "b" ? displayOf(runB) : {} }));
 type PoolClient = (typeof clients)[number];
 
 const until = <E, R>(check: Effect.Effect<boolean, E, R>, limit: `${number} seconds`) =>

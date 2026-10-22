@@ -9,7 +9,7 @@ import { type LadderScan, SCAN_QUIET_MS, importFailures, ladderScan, logTime, se
 import { type Client, clientUnit } from "../client/client";
 import { dataDirectory } from "../io/gameFiles";
 import { type MenuEvent, connectMenus, keptAddress, menuAddress } from "../play/menus";
-import { pairClients, readPool } from "../lan/pool";
+import { pairClients, pairSides, readPool } from "../lan/pool";
 import { describeCause } from "../cli/command";
 import { pollUntil } from "../cli/hostProcess";
 
@@ -305,7 +305,7 @@ const pairStatus = (client: string, socket: string) => Effect.tryPromise({
 const lanObservation = (client: Pick<Client, "name" | "documents">) => Effect.gen(function*() {
   const { documents } = client;
   const pool = yield* readPool.pipe(Effect.mapError((failure) => new WatchFailure({ client: client.name, operation: "read the LAN pool", problem: failure.problem })));
-  const pair = pool?.pairs.find((pair) => pairClients(pair.id, pair.runs).some((client) => client.documents === documents));
+  const pair = pool?.pairs.find((pair) => pairClients(pair.id, pair.runs, pairSides(pair.network === true)).some((client) => client.documents === documents));
   if (pair === undefined) return undefined;
   const status = yield* pairStatus(client.name, pair.agentSocket);
   const known = status.clients.find((client) => client.documents === documents);

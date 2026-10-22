@@ -6,7 +6,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Cause, Effect, Exit, Scope } from "effect";
 import { GameLauncher } from "../host/os/platform/services";
 import { startHost } from "../host/lan/host";
-import { ALARM_AFTER_MS, type Driver, driverVerdict, idleness, installOf, lanPlayRefusal, networkFlagProblem, pairFlags, prefixOf, wrongUser } from "../host/lan/pool";
+import { ALARM_AFTER_MS, type Driver, driverVerdict, idleness, installOf, lanPlayRefusal, networkFlagProblem, pairClients, pairFlags, pairSides, prefixOf, wrongUser } from "../host/lan/pool";
 import { setupClient } from "../host/lan/setup";
 import { menuPage } from "../host/play/menus";
 import { LanFailure } from "../host/lan/join";
@@ -46,6 +46,13 @@ describe("pool operability", () => {
       expect(lanPlayRefusal(16, true, command)).toContain(`lan ${command} runs only on an offline pair`);
       expect(lanPlayRefusal(16, false, command)).toBeUndefined();
     }
+  });
+
+  test("[spec docs/lan.md] a networked pair launches and lists only its side a client, and an offline pair keeps both sides", () => {
+    expect(pairSides(true)).toEqual(["a"]);
+    expect(pairSides(false)).toEqual(["a", "b"]);
+    expect(pairClients(16, { a: "/run/a" }, pairSides(true)).map(({ name, run }) => ({ name, run }))).toEqual([{ name: "lan16a", run: "/run/a" }]);
+    expect(pairClients(16, { a: "/run/a", b: "/run/b" }, pairSides(false)).map(({ name }) => name)).toEqual(["lan16a", "lan16b"]);
   });
 
   test("[spec docs/lan.md] a pair whose driver died is idle at once and raises its alarm after the owner's ten minutes, a pair with a client down is dead, a pair playing a game is busy, and every pair counts whole idle seconds from its last start, end or dead driver", () => {

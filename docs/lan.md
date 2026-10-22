@@ -309,7 +309,7 @@ Tom's `system.reg`, `user.reg`, `Warcraft III/.build.info` and Battle.net
 | Command | What it does |
 | --- | --- |
 | `wisp lan setup --from INSTALL [--pairs N \| --pair K...]` | Creates the pool's clients from an existing Warcraft III install folder (the one holding `_retail_`): pairs 0..N-1, or only the pairs named, leaving clients other runners use alone. See "Setting up". |
-| `wisp lan pool [--pairs N \| --pair K...] [--pool-profile parity\|visual\|hfr[,...]] [--fps N] [--seconds S] [--network]` | Runs up to N pairs, each admitted by the machine-capacity helper. `--network` with exactly one `--pair K` starts that pair with network for solo games (see Guardrails). It stays in the foreground; Ctrl-C or SIGTERM stops the pool: each pair session stops its agent, which stops its games, before the desktops close. A pair another live pool holds (`pair-K/pool.pid`) is refused with that pool's PID. |
+| `wisp lan pool [--pairs N \| --pair K...] [--pool-profile parity\|visual\|hfr[,...]] [--fps N] [--seconds S] [--network]` | Runs up to N pairs, each admitted by the machine-capacity helper. `--network` with exactly one `--pair K` starts that pair with network and only its side a client, for solo games (see Guardrails). It stays in the foreground; Ctrl-C or SIGTERM stops the pool: each pair session stops its agent, which stops its games, before the desktops close. A pair another live pool holds (`pair-K/pool.pid`) is refused with that pool's PID. |
 | `wisp lan fresh MAP [--pair K] [--computers N] [--turn-ms MS]` | Hosts MAP on pair K, switches both clients to LAN, joins them, and returns once the match plays. It prints the game's action log. |
 | `wisp lan dummy MAP --program W3GSCLIENT [--pair K] [--count N]` | Joins side a to a lobby, then runs N dummy joins, handicap changes and leaves (default 20). The pair must have no active game. |
 | `wisp lan solo MAP [--pair K...]` | Each client of the named running pairs (default: all) plays MAP alone, as a local game on the loopback provider; returns once every client's game UI is up. Works on 3.0.1. See "Solo games". |
@@ -454,11 +454,13 @@ provider or emulating Battle.net is outside this tool's scope.
   22 October 2026). Network is needed but not enough: with it, lan16a started
   6 of 6 times (window in 12 s, intro playing) while lan16b started 1 of 6,
   alone or as side b, also on a copy of lan16a's prefix; the cause is open.
-  `wisp lan pool --pair K --network` starts that one pair's agent and games
-  outside the loopback-only namespace, for `lan solo` only: it
+  `wisp lan pool --pair K --network` starts that one pair's agent outside the
+  loopback-only namespace and launches only its side a client (`pairSides`,
+  wisp:host/lan/pool.ts): no side b desktop or game, so `lan status`, `lan
+  solo` and the clients files list one client. It is for `lan solo` only: it
   requires exactly one `--pair K`, every other pair stays offline, and the
   networked pair refuses `lan fresh`, `lan dummy` and `lan netem`
-  (`lanPlayRefusal`, wisp:host/lan/pool.ts). Its clients still never sign in.
+  (`lanPlayRefusal`). Its client still never signs in.
 - **Declared clients only.** `wisp lan` works on the clients it created. `wisp
   engine actions` accepts only a pair from the pool's clients file.
 - **Checked builds only.** The switch (Wisp's private LAN plugin) refuses
@@ -499,7 +501,7 @@ B. Tools that find "the" Warcraft window on a display work unchanged, and so
 do controller helpers that type into it. A pair's session
 (wisp:host/lan/pairSession.ts) starts client b's desktop, then client
 a's. Client a's desktop runs the pair's `bwrap --dev-bind / / --unshare-net`
-namespace (none for a `--network` pair), and the pair agent (wisp:host/lan/pairAgent.ts) runs inside
+namespace (none for a `--network` pair, which also has no side b), and the pair agent (wisp:host/lan/pairAgent.ts) runs inside
 it. The agent:
 
 - writes each client's `War3Preferences.txt` for the profile;

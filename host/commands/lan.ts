@@ -10,7 +10,7 @@ import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from
 import { LanFailure } from "../lan/join";
 import { lanPluginProblem } from "../lan/plugin";
 import {
-  PAIR_SIDES, type PoolPair, agentSocket, alive, clientName, lanPlayRefusal, networkFlagProblem, pairClients, pairCustody, pairDirectory, poolClientsFile, poolFile, poolHolderFile, poolOwners, playtestPairRefusal, readPool, reportPort, writeJson, writePoolClients, wrongUser,
+  PAIR_SIDES, type PoolPair, agentSocket, alive, clientName, lanPlayRefusal, networkFlagProblem, pairClients, pairSides, pairCustody, pairDirectory, poolClientsFile, poolFile, poolHolderFile, poolOwners, playtestPairRefusal, readPool, reportPort, writeJson, writePoolClients, wrongUser,
 } from "../lan/pool";
 import { PROFILES, desktopSize } from "../os/warcraft/clientProfiles";
 import { setupClient } from "../lan/setup";
@@ -86,12 +86,12 @@ const readJson = <A>(file: string, schema: Schema.Decoder<A>) => Effect.try({
   Effect.mapError((failure) => (failure instanceof LanFailure ? failure : new LanFailure({ problem: `${file}: ${failure.message}` }))),
 );
 
-const clientsReady = (pair: number) => Effect.tryPromise({
+const clientsReady = (pair: number, network: boolean) => Effect.tryPromise({
   try: () => fetch("http://pair/status", { unix: agentSocket(pair) }).then((response) => response.json()),
   catch: () => undefined,
 }).pipe(
   Effect.flatMap(Schema.decodeUnknownEffect(AgentStatus)),
-  Effect.map((status) => status.clients.length === 2 && status.clients.every(({ pid }) => pid !== undefined)),
+  Effect.map((status) => status.clients.length === pairSides(network).length && status.clients.every(({ pid }) => pid !== undefined)),
   Effect.orElseSucceed(() => false),
 );
 
@@ -153,7 +153,7 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
           if (deferred?.cpuSomeAvg10 === undefined) return yield* new LanFailure({ problem: `the capacity helper refused: ${said.trim().split("\n").slice(-2).join(" | ")}` });
           return yield* new CapacityDeferred({ reason: `${deferred.reason}, CPU pressure ${deferred.cpuSomeAvg10}%` });
         }
-        return yield* clientsReady(pair);
+        return yield* clientsReady(pair, network);
       });
       yield* pollUntil(step, {
         until: (ready) => ready, every: "1 second", within: READY,
@@ -174,7 +174,7 @@ const registerPairs = (mine: readonly PoolPair[], profile: string, fps: number |
   const others = ((yield* readPool)?.pairs ?? []).filter(({ id, agentSocket: socket }) => !ids.has(id) && existsSync(socket));
   const pairs = [...others, ...mine].sort((left, right) => left.id - right.id);
   writeJson(poolFile(), { profile, ...(fps === undefined ? {} : { fps }), owner: { uid: process.getuid?.() ?? 0, user: userInfo().username }, pairs });
-  yield* writePoolClients(poolClientsFile(), pairs.flatMap(({ id, runs }) => pairClients(id, runs)));
+  yield* writePoolClients(poolClientsFile(), pairs.flatMap(({ id, runs, network }) => pairClients(id, runs, pairSides(network === true))));
 });
 
 const pool: Command = (args) => Effect.gen(function*() {
@@ -222,10 +222,12 @@ const pool: Command = (args) => Effect.gen(function*() {
     const status = yield* agent(pair, "/status").pipe(Effect.flatMap(Schema.decodeUnknownEffect(AgentStatus)), Effect.orElseSucceed(() => ({ clients: [] })));
     const pids = new Map(status.clients.map(({ name, pid }) => [name, pid]));
     const clientsPath = join(pairDirectory(pair), "clients.json");
-    yield* writePoolClients(clientsPath, pairClients(pair, runs).map((client) => ({ ...client, name: client.name.endsWith("a") ? "a" : "b", poolName: client.name, pid: pids.get(client.name) })));
-    entries.push({ id: pair, clients: clientsPath, agentSocket: agentSocket(pair), runs, appIds: { a: `steam_app_${3516115600 + pair * 2}`, b: `steam_app_${3516115601 + pair * 2}` } });
+    yield* writePoolClients(clientsPath, pairClients(pair, runs, pairSides(network)).map((client) => ({ ...client, name: client.name.endsWith("a") ? "a" : "b", poolName: client.name, pid: pids.get(client.name) })));
+    entries.push({ id: pair, clients: clientsPath, agentSocket: agentSocket(pair), runs, appIds: { a: `steam_app_${3516115600 + pair * 2}`, b: `steam_app_${3516115601 + pair * 2}` }, ...(network ? { network } : {}) });
     yield* registerPairs(entries.map((entry) => ({ ...entry, profile: profileOf(entry.id) })), profileText, fps);
-    yield* Console.log(`pair ${pair}: ${clientName(pair, "a")} and ${clientName(pair, "b")} running (${profile}${fps === undefined ? "" : `, ${fps} fps`}${network ? ", with network for solo games" : ""}); desktops ${runs.a ?? "?"} and ${runs.b ?? "?"}`);
+    yield* Console.log(network
+      ? `pair ${pair}: ${clientName(pair, "a")} running alone with network for solo games (${profile}${fps === undefined ? "" : `, ${fps} fps`}); desktop ${runs.a ?? "?"}`
+      : `pair ${pair}: ${clientName(pair, "a")} and ${clientName(pair, "b")} running (${profile}${fps === undefined ? "" : `, ${fps} fps`}); desktops ${runs.a ?? "?"} and ${runs.b ?? "?"}`);
   }
   yield* Console.log(`pool: ${poolFile()}; clients: ${poolClientsFile()}. Ctrl-C stops it.`);
 
