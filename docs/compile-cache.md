@@ -17,10 +17,16 @@ the saved state and type-checks and transpiles only the files it marks
 affected, the same set the in-process incremental compiler uses, and every
 other module comes from disk. Paths are stored relative to the configuration's
 directory, so another checkout of the project at another commit reuses the
-cache. The key covers the compiler options, the root files, the TypeScript,
-TypeScriptToLua and source-map versions, Wisp's toolchain and plugin sources
-and the project's plugin files; any change starts a new cache. Only modules
-that changed are written again, and the eight most recently used caches stay.
+cache. The key covers the compiler options, the root files, the bytes of every
+module the compiler, Wisp's plugins and the project's plugins import, followed
+into other packages, and of the data files TypeScriptToLua and source-map read
+at run time (the lualib and the source-map wasm); any change starts a new
+cache. Plugins resolve as TypeScriptToLua resolves them. The lockfile is
+not part of it, so a Wisp bump that changes only files the compiler never
+loads keeps the cache: on Smashcraft (23 Oct 2026) a bump touching only the
+LAN pool built in 9.2 s instead of 30.8 s, and a bump touching a compiler file
+still compiled cold. Only modules that changed are written again, and the
+eight most recently used caches stay.
 
 The result equals a full TypeScriptToLua compile byte for byte, bundle and
 source map (wisp:test/compiler.test.ts). On Smashcraft (950 modules, 19 Oct

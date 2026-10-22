@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { SourceNode } from "source-map";
 import ts from "typescript";
 import type { ProcessedFile } from "typescript-to-lua/dist/transpilation/utils";
@@ -50,16 +51,6 @@ export interface CompileCache {
 
 const sha = (text: string | Uint8Array) => createHash("sha256").update(text).digest("hex");
 
-const LOCKFILES = ["bun.lock", "bun.lockb", "package-lock.json", "yarn.lock", "pnpm-lock.yaml"];
-
-const lockfileTexts = (root: string): string[] => {
-  for (let directory = root; ; directory = dirname(directory)) {
-    const found = LOCKFILES.map((name) => join(directory, name)).filter((file) => existsSync(file));
-    if (found.length > 0) return found.map((file) => `${basename(file)}\n${sha(readFileSync(file))}`);
-    if (dirname(directory) === directory) return [];
-  }
-};
-
 const packageRoot = (file: string): string => {
   for (let directory = dirname(file); ; directory = dirname(directory)) {
     if (existsSync(join(directory, "package.json"))) return directory;
@@ -67,47 +58,92 @@ const packageRoot = (file: string): string => {
   }
 };
 
-const resolvedImport = (specifier: string, from: string): string | undefined => {
+const resolvedImport = (specifier: string, from: string, kind: Bun.ImportKind): string | undefined => {
   try {
-    return Bun.resolveSync(specifier, dirname(from));
+    return kind === "require-call" || kind === "require-resolve" ? createRequire(from).resolve(specifier) : Bun.resolveSync(specifier, dirname(from));
   } catch {
     return undefined;
   }
 };
 
+const LOADERS: Readonly<Record<string, Bun.JavaScriptLoader>> = { ".ts": "ts", ".mts": "ts", ".cts": "ts", ".tsx": "tsx", ".js": "jsx", ".jsx": "jsx", ".mjs": "js", ".cjs": "js" };
+
+const scanners = new Map<Bun.JavaScriptLoader, Bun.Transpiler>();
+
+const scanner = (loader: Bun.JavaScriptLoader) => {
+  const known = scanners.get(loader);
+  if (known !== undefined) return known;
+  const created = new Bun.Transpiler({ loader });
+  scanners.set(loader, created);
+  return created;
+};
+
+const scannedImports = (file: string, text: string): Bun.Import[] => {
+  const loader = LOADERS[extname(file)];
+  if (loader === undefined) return [];
+  try {
+    return scanner(loader).scanImports(text);
+  } catch {
+    return [];
+  }
+};
+
+const RUNTIME_DATA: Readonly<Record<string, string>> = { "typescript-to-lua": "dist/lualib", "source-map": "lib/mappings.wasm" };
+
+const filesUnder = (path: string): string[] => statSync(path).isDirectory() ? readdirSync(path).flatMap((name) => filesUnder(join(path, name))) : [path];
+
+const runtimeData = (root: string): string[] => {
+  const manifest = join(root, "package.json");
+  if (!existsSync(manifest)) return [];
+  const data = RUNTIME_DATA[String((JSON.parse(readFileSync(manifest, "utf8")) as { name?: unknown }).name)];
+  return data === undefined || !existsSync(join(root, data)) ? [] : filesUnder(join(root, data));
+};
+
+interface LoadedModule {
+  readonly digest: string;
+  readonly imports: readonly string[];
+}
+
+const loadedModules = new Map<string, LoadedModule>();
+
+const loadedModule = (file: string): LoadedModule => {
+  const known = loadedModules.get(file);
+  if (known !== undefined) return known;
+  const bytes = readFileSync(file);
+  const imports = scannedImports(file, bytes.toString()).flatMap(({ path: specifier, kind }) => {
+    const target = resolvedImport(specifier, file, kind);
+    return target !== undefined && isAbsolute(target) && existsSync(target) ? [target] : [];
+  });
+  const loaded = { digest: sha(bytes), imports };
+  loadedModules.set(file, loaded);
+  return loaded;
+};
+
 const importClosure = (entries: readonly string[], label: (file: string) => string): string[] => {
-  const scanner = new Bun.Transpiler({ loader: "ts" });
   const seen = new Set<string>();
   const pending = entries.filter((entry) => existsSync(entry));
   while (pending.length > 0) {
     const file = pending.pop() as string;
     if (seen.has(file)) continue;
     seen.add(file);
-    if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
-    const owner = packageRoot(file);
-    for (const { path: specifier } of scanner.scanImports(readFileSync(file, "utf8"))) {
-      const target = resolvedImport(specifier, file);
-      if (target !== undefined && existsSync(target) && packageRoot(target) === owner) pending.push(target);
-    }
+    pending.push(...loadedModule(file).imports);
   }
-  return [...seen].map((file) => `${label(file)}\n${readFileSync(file, "utf8")}`).sort();
+  const data = [...new Set([...seen].map(packageRoot))].flatMap(runtimeData);
+  return [...seen, ...data].map((file) => `${label(file)}\n${loadedModule(file).digest}`).sort();
 };
+
+const tstlResolve = createRequire(require.resolve("typescript-to-lua"))("resolve") as { readonly sync: (id: string, options: { readonly basedir: string; readonly extensions: readonly string[] }) => string };
 
 const pluginFiles = (options: ts.CompilerOptions, root: string): string[] => {
   const plugins = (options as { readonly luaPlugins?: readonly { readonly name?: string }[] }).luaPlugins ?? [];
   return plugins.flatMap(({ name }) => {
     if (name === undefined) return [];
-    const path = isAbsolute(name) || name.startsWith(".") ? resolve(root, name) : resolvedImport(name, join(root, "tsconfig.json"));
-    return path === undefined ? [] : [path];
+    try {
+      return [tstlResolve.sync(name, { basedir: root, extensions: [".js", ".ts", ".tsx"] })];
+    } catch {
+      return [];
+    }
   });
-};
-
-const packageVersion = (name: string) => {
-  try {
-    return String((JSON.parse(readFileSync(require.resolve(`${name}/package.json`), "utf8")) as { version?: unknown }).version);
-  } catch {
-    return "unknown";
-  }
 };
 
 type Rebase = (path: string) => string;
@@ -134,14 +170,10 @@ const storeKey = (root: string, configPath: string, options: ts.CompilerOptions,
   const rootText = (text: string) => text.replaceAll(root, "<root>");
   return sha(JSON.stringify([
     STORE_VERSION,
-    ts.version,
-    packageVersion("typescript-to-lua"),
-    packageVersion("source-map"),
     rootText(relative(root, configPath)),
     rootText(JSON.stringify(options)),
     fileNames.map((name) => toStored(resolve(name))),
     importClosure([join(import.meta.dir, "compiler.ts"), ...readdirSync(join(import.meta.dir, "../../plugins")).filter((name) => name.endsWith(".ts")).map((name) => join(import.meta.dir, "../../plugins", name)), ...pluginFiles(options, root)], (file) => file === root || file.startsWith(`${root}/`) ? toStored(file) : relative(packageRoot(file), file)),
-    lockfileTexts(root),
   ]));
 };
 
