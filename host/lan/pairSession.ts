@@ -13,7 +13,7 @@ import { alive, pairDirectory, pairFlags } from "./pool";
 import { desktopSize } from "../os/warcraft/clientProfiles";
 
 const argument = (name: string) => flagValues(process.argv, name)[0];
-const { pair, profile } = pairFlags(process.argv);
+const { pair, profile, network } = pairFlags(process.argv);
 const launcher = argument("launcher");
 const capacity = argument("capacity");
 if (capacity === undefined) throw new Error("pairSession requires --capacity MACHINE_CAPACITY_HELPER");
@@ -61,8 +61,9 @@ const session = Effect.gen(function*() {
   const runB = yield* Deferred.await(ready).pipe(Effect.timeoutOrElse({ duration: "120 seconds", orElse: () => Effect.fail(new LanFailure({ problem: "client b's desktop didn't report its Run line within 120 seconds" })) }));
   if (!existsSync(join(runB, "active"))) return yield* new LanFailure({ problem: `client b's desktop isn't active: ${runB}` });
   yield* Effect.tryPromise({ try: () => Bun.write(join(directory, "desktop-b.run"), runB), catch: (cause) => new LanFailure({ problem: String(cause) }) });
-  const agent = yield* Namespaces.use((namespaces) => namespaces.offline([
-    process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", argument("pool-profile") ?? "parity", "--run-b", runB, "--session-pid", String(process.pid), "--capacity", capacity, ...flagValues(process.argv, "fps").flatMap((fps) => ["--fps", fps])]));
+  const command = [
+    process.execPath, join(import.meta.dir, "pairAgent.ts"), "--pair", String(pair), "--pool-profile", argument("pool-profile") ?? "parity", "--run-b", runB, "--session-pid", String(process.pid), "--capacity", capacity, ...flagValues(process.argv, "fps").flatMap((fps) => ["--fps", fps]), ...(network ? ["--network"] : [])];
+  const agent = network ? command : yield* Namespaces.use((namespaces) => namespaces.offline(command));
   const desktopA = yield* spawnLogged(ChildProcess.make(launcher, ["start", "--resolution", size, "--", ...agent], {
     stdin: "ignore", forceKillAfter: "15 seconds",
   }), { stdout: join(directory, "desktop-a.out"), stderr: join(directory, "desktop-a.err") });

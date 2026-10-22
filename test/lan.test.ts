@@ -6,7 +6,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Cause, Effect, Exit, Scope } from "effect";
 import { GameLauncher } from "../host/os/platform/services";
 import { startHost } from "../host/lan/host";
-import { ALARM_AFTER_MS, type Driver, driverVerdict, idleness, installOf, prefixOf, wrongUser } from "../host/lan/pool";
+import { ALARM_AFTER_MS, type Driver, driverVerdict, idleness, installOf, lanPlayRefusal, networkFlagProblem, pairFlags, prefixOf, wrongUser } from "../host/lan/pool";
 import { setupClient } from "../host/lan/setup";
 import { menuPage } from "../host/play/menus";
 import { LanFailure } from "../host/lan/join";
@@ -33,6 +33,18 @@ describe("pool operability", () => {
       expect(run.stdout.toString().split("\0").slice(0, -1), JSON.stringify(command)).toEqual(["-u", owner!.user, "env", ...("home" in owner! ? [`HOME=${owner.home}`] : []), `XDG_RUNTIME_DIR=/run/user/${owner!.uid}`, ...command]);
       expect(wrongUser(owners[next(2)]!.uid, owners, command)).toBeUndefined();
       expect(wrongUser(0, [], command)).toBeUndefined();
+    }
+  });
+
+  test("[spec docs/lan.md] --network opens exactly one named pair for solo games, every other start stays offline, and a networked pair refuses each LAN play command", () => {
+    expect(networkFlagProblem(["--pair", "16", "--network"])).toBeUndefined();
+    expect(networkFlagProblem(["--pairs", "2"])).toBeUndefined();
+    for (const args of [["--network"], ["--pairs", "2", "--network"], ["--pair", "1", "--pair", "2", "--network"]]) expect(networkFlagProblem(args)).toContain("exactly one --pair K");
+    expect(pairFlags(["--pair", "16", "--network"]).network).toBe(true);
+    expect(pairFlags(["--pair", "16"]).network).toBe(false);
+    for (const command of ["fresh", "dummy", "netem"] as const) {
+      expect(lanPlayRefusal(16, true, command)).toContain(`lan ${command} runs only on an offline pair`);
+      expect(lanPlayRefusal(16, false, command)).toBeUndefined();
     }
   });
 

@@ -13,12 +13,12 @@ import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { mapCopies, readMapFacts } from "./map";
-import { ALARM_AFTER_MS, type Driver, alive, PAIR_SIDES, alarmLog, driverVerdict, idleness, pairFlags, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
+import { ALARM_AFTER_MS, type Driver, alive, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
 import { preferences } from "../os/warcraft/clientProfiles";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
 
 const argument = (name: string) => flagValues(process.argv, name)[0];
-const { pair, profile } = pairFlags(process.argv);
+const { pair, profile, network } = pairFlags(process.argv);
 const packager = argument("packager") ?? mapPackager();
 const directory = pairDirectory(pair);
 const agentLog = join(directory, "agent.log");
@@ -240,6 +240,7 @@ const agent = Effect.gen(function*() {
         pair,
         profile: profile.name,
         fps: profile.maxFps,
+        network,
         clients: running,
         game: game === undefined ? undefined : { id: game.id, log: game.log, map: game.map, ...status },
         driver,
@@ -248,6 +249,8 @@ const agent = Effect.gen(function*() {
       });
     }
     if (url.pathname === "/fresh" && request.method === "POST") {
+      const refusal = lanPlayRefusal(pair, network, "fresh");
+      if (refusal !== undefined) return Response.json({ error: refusal }, { status: 400 });
       const body = yield* decode(FreshRequest, request);
       if (!existsSync(body.map)) return Response.json({ error: `no map at ${body.map}` }, { status: 400 });
       yield* drive(body.driver);
@@ -286,7 +289,7 @@ const agent = Effect.gen(function*() {
     (server) => Effect.promise(() => server.stop(true)),
   );
   yield* Effect.addFinalizer(() => endGame);
-  writeFileSync(join(directory, "agent.json"), `${JSON.stringify({ pid: process.pid, socket: agentSocket(pair), profile: profile.name, fps: profile.maxFps, runs })}\n`);
+  writeFileSync(join(directory, "agent.json"), `${JSON.stringify({ pid: process.pid, socket: agentSocket(pair), profile: profile.name, fps: profile.maxFps, network, runs })}\n`);
   say(`agent on ${agentSocket(pair)}`);
 
   const sessionPid = wholeFlag(process.argv, "session-pid", { fallback: 0 });

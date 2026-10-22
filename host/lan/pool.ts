@@ -104,13 +104,22 @@ function poolProfile(name: string, fps?: number): Profile {
 }
 
 /** The pair and pool profile (`--pair K --pool-profile NAME [--fps N]`) that `wisp lan pool` starts a pair's session and agent with. */
-export function pairFlags(argv: readonly string[]): { readonly pair: number; readonly profile: Profile } {
+export function pairFlags(argv: readonly string[]): { readonly pair: number; readonly profile: Profile; readonly network: boolean } {
   const pair = wholeFlag(argv, "pair", { fallback: 0 });
   const fps = wholeFlag(argv, "fps", { min: 1 });
   if (pair instanceof UsageFailure) throw pair;
   if (fps instanceof UsageFailure) throw fps;
-  return { pair, profile: poolProfile(flagValues(argv, "pool-profile")[0] ?? "parity", fps) };
+  return { pair, profile: poolProfile(flagValues(argv, "pool-profile")[0] ?? "parity", fps), network: argv.includes("--network") };
 }
+
+export function networkFlagProblem(args: readonly string[]): string | undefined {
+  if (!args.includes("--network")) return undefined;
+  if (flagValues(args, "pairs").length > 0 || flagValues(args, "pair").length !== 1) return "--network opens one pair's network for solo games; name exactly one --pair K";
+  return undefined;
+}
+
+export const lanPlayRefusal = (pair: number, network: boolean, command: "fresh" | "dummy" | "netem") =>
+  network ? `pair ${pair} was started with --network for solo games; lan ${command} runs only on an offline pair` : undefined;
 
 export interface PoolClient {
   readonly name: string;
