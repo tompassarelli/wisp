@@ -10,7 +10,7 @@ import { PERF_COLLECTOR_VARIABLE, type PerfCollector } from "./perfCollector";
 
 export const HOOK_STEP = 100;
 
-const COLLECT_EVERY_KB = 16384;
+const COLLECT_AT_LEAST_KB = 16384;
 
 type Native = (this: void, ...args: unknown[]) => unknown;
 
@@ -254,7 +254,7 @@ export function runLuaPerfWith(
         return;
       }
       const heap = collectgarbage("count");
-      if (heap > collectedKb + COLLECT_EVERY_KB) {
+      if (heap > collectedKb + Math.max(COLLECT_AT_LEAST_KB, collectedKb)) {
         const started = os.clock();
         collectgarbage("collect");
         collectedKb = collectgarbage("count");

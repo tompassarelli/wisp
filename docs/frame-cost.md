@@ -228,7 +228,9 @@ one after it, such as a match's first:
   where a heap delta once moved single frames by up to 8 KB at equal
   instruction counts (smashcraft#26). Automatic collection stays stopped
   throughout profiling, including between client callbacks. Between callbacks
-  it explicitly collects once the heap has grown 16 MB, and reports those
+  it explicitly collects once the heap has doubled since the last collection,
+  or grown 16 MB if that is more, so collection time follows allocation
+  rather than allocation times the live heap, and reports those
   collections' time per kilobyte freed (`collector us=... kb=...`). Profiling
   restores automatic collection on exit, and needs Wisp's Lua32: another Lua
   fails at `collectgarbage("requested")`.
