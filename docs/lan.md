@@ -467,8 +467,11 @@ provider or emulating Battle.net is outside this tool's scope.
   for each client's `Warcraft III` window, then stops that game and launches
   it again, at most `WINDOW_RELAUNCHES` (3) times (`launchUntilShown`,
   wisp:host/lan/pool.ts); the pair fails if the fourth launch shows no
-  window either. A stop SIGKILLs a game still running 20 s later and says
-  so in the agent log. Without xdotool, or when xdotool can't reach the
+  window either. Every stop of a client, a relaunch's or the pool's
+  (`stopGame`, wisp:host/lan/pool.ts), sends its native capacity session
+  SIGTERM and, if the session or its game still runs `STOP_GRACE` (10 s)
+  later, SIGKILLs both and says so in the agent log, so a client hung before
+  its window no longer outlives the pool's stop. Without xdotool, or when xdotool can't reach the
   desktop's display, the agent cannot see windows and keeps the launch it has.
 - **Ready after the intro.** A fresh 3.0.1 client plays its intro cinematic
   for about 2.5 minutes over whatever runs underneath: a solo game started

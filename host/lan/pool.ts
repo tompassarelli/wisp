@@ -1,9 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { Effect, Schema } from "effect";
+import { Duration, Effect, Schema } from "effect";
 import { LanFailure } from "./join";
 import { UsageFailure, flagValues, wholeFlag } from "../cli/command";
+import { pollUntil } from "../cli/hostProcess";
 import { writeAtomic } from "../io/files";
 import { cacheHome, dataHome, stateHome } from "../io/xdg";
 import { InputInjection } from "../os/platform/services";
@@ -293,3 +294,23 @@ export function idleness(started: string, ended: string | undefined, driver: Dri
 export function pairOf(pool: PoolFile, names: readonly string[]): PoolPair | undefined {
   return pool.pairs.find(({ id }) => names.every((name) => PAIR_SIDES.some((side) => clientName(id, side) === name)));
 }
+
+export const STOP_GRACE = "10 seconds";
+
+export const stopGame = (stop: {
+  readonly terminate: Effect.Effect<void>;
+  readonly survivors: Effect.Effect<readonly number[]>;
+  readonly kill: (pids: readonly number[]) => Effect.Effect<void>;
+  readonly outlived: (pids: readonly number[]) => Effect.Effect<void>;
+  readonly grace: Duration.Input;
+}): Effect.Effect<void> => {
+  const gone = pollUntil(stop.survivors, { until: (left) => left.length === 0, every: "250 millis", within: stop.grace, onTimeout: () => stop.survivors });
+  return Effect.gen(function*() {
+    yield* stop.terminate;
+    const left = yield* gone;
+    if (left.length === 0) return;
+    yield* stop.outlived(left);
+    yield* stop.kill(left);
+    yield* pollUntil(stop.survivors, { until: (rest) => rest.length === 0, every: "250 millis", within: "3 seconds", onTimeout: () => Effect.succeed([]) });
+  });
+};

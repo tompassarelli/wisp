@@ -13,7 +13,7 @@ import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { mapCopies, readMapFacts } from "./map";
-import { ALARM_AFTER_MS, type Driver, MENUS_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, alive, launchUntilShown, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
+import { ALARM_AFTER_MS, type Driver, MENUS_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, STOP_GRACE, alive, launchUntilShown, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, stopGame, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
 import { preferences } from "../os/warcraft/clientProfiles";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
 
@@ -36,6 +36,20 @@ type PoolClient = (typeof clients)[number];
 
 const until = <E, R>(check: Effect.Effect<boolean, E, R>, limit: `${number} seconds`) =>
   pollUntil(check, { until: (held) => held, every: "250 millis", within: limit, onTimeout: () => Effect.succeed(false) });
+
+const stopClient = (client: PoolClient, session: { readonly pid: number; readonly isRunning: Effect.Effect<boolean, unknown> }) => Effect.gen(function*() {
+  const table = yield* ProcessTable;
+  const signal = (pids: readonly number[], name: "SIGTERM" | "SIGKILL") => Effect.sync(() => { for (const pid of pids) try { process.kill(pid, name); } catch {} });
+  const games = table.games(prefixOf(client.name)).pipe(Effect.map((running) => running.map(({ pid }) => pid)), Effect.orElseSucceed((): number[] => []));
+  const running = session.isRunning.pipe(Effect.orElseSucceed(() => false));
+  yield* stopGame({
+    terminate: running.pipe(Effect.flatMap((up) => (up ? signal([session.pid], "SIGTERM") : Effect.void))),
+    survivors: Effect.all([running, games]).pipe(Effect.map(([up, pids]) => (up ? [session.pid, ...pids] : pids))),
+    kill: (pids) => signal(pids, "SIGKILL"),
+    outlived: (pids) => Effect.sync(() => say(`${client.name} outlived its stop (pid ${pids.join(", ")}); killing it`)),
+    grace: STOP_GRACE,
+  });
+});
 
 const launch = (capacity: string, client: PoolClient) => Effect.gen(function*() {
   // A second runtime on a live prefix joins its wineserver and dies: a game left from before must be stopped first.
@@ -60,6 +74,7 @@ const launch = (capacity: string, client: PoolClient) => Effect.gen(function*() 
   const game = yield* spawnLogged(ChildProcess.make(command, [...native, ...launched.command], {
     env, extendEnv: true, stdin: "ignore", forceKillAfter: "15 seconds",
   }), { stdout: join(directory, `${client.name}.out`), stderr: errFile });
+  yield* Effect.addFinalizer(() => stopClient(client, game.handle));
   const early = yield* game.handle.exitCode.pipe(Effect.map(Number), Effect.orElseSucceed(() => -1), Effect.timeoutOption("5 seconds"));
   if (Option.isSome(early)) {
     yield* game.written;
@@ -114,15 +129,7 @@ const agent = Effect.gen(function*() {
         return true;
       })),
     ),
-    stop: (handle) => Effect.gen(function*() {
-      const gone = until(table.games(prefixOf(client.name)).pipe(Effect.map((games) => games.length === 0)), "20 seconds");
-      yield* handle.kill({ forceKillAfter: "10 seconds" }).pipe(Effect.timeoutOption("20 seconds"), Effect.ignore);
-      if (yield* gone) return;
-      const left = yield* table.games(prefixOf(client.name));
-      say(`${client.name} outlived its stop (pid ${left.map(({ pid }) => pid).join(", ")}); killing it`);
-      for (const { pid } of left) yield* Effect.try(() => process.kill(pid, "SIGKILL")).pipe(Effect.ignore);
-      yield* gone;
-    }),
+    stop: (handle) => stopClient(client, handle),
     relaunching: (launches) => Effect.sync(() => say(`${client.name} showed no window within ${WINDOW_DEADLINE}; relaunching (${launches}/${WINDOW_RELAUNCHES})`)),
     exhausted: (launches) => new LanFailure({ problem: `${client.name} showed no window within ${WINDOW_DEADLINE} in ${launches} launches` }),
   });
