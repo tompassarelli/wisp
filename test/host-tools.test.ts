@@ -80,7 +80,15 @@ const pool = (box: ReturnType<typeof sandbox>, extra: Record<string, string>, pa
   });
 };
 
-test("[boundary] lan pool: playtest admits one pair, refuses held and racing pairs before launch, off and remote admission stay available, and SIGTERM cleans owned processes", async () => {
+const poolIds = (box: ReturnType<typeof sandbox>) => {
+  try {
+    return (JSON.parse(readFileSync(join(box.env.XDG_STATE_HOME, "wisp/lan/pool.json"), "utf8")) as { pairs: { id: number }[] }).pairs.map(({ id }) => id);
+  } catch {
+    return [];
+  }
+};
+
+test("[boundary] lan pool: playtest admits one pair, refuses held and racing pairs before launch, off and remote admission stay available, pool.json lists every running pair, and lan stop and SIGTERM clean owned processes", async () => {
   const box = sandbox();
   const playtest = join(box.env.HOME, ".local/state/playtest/state.json");
   mkdirSync(join(playtest, ".."), { recursive: true });
@@ -139,12 +147,15 @@ test("[boundary] lan pool: playtest admits one pair, refuses held and racing pai
     else writeFileSync(playtest, JSON.stringify({ on }));
     const additional = pool(box, { WISP_TEST_DESKTOPS: join(box.env.WISP_TEST_DESKTOPS, "additional"), WISP_TEST_HOLDER: "quiet" }, poolPair + 1);
     const clients = join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${poolPair + 1}`, "clients.json");
-    await until(() => existsSync(clients), 30, "the additional pool pair");
+    await until(() => existsSync(clients) && poolIds(box).length === 2, 30, "the additional pool pair");
+    expect(poolIds(box)).toEqual([poolPair, poolPair + 1]);
     expect(box.sessions()).toHaveLength(2);
-    additional.kill("SIGTERM");
+    const stop = Bun.spawn([process.execPath, join(root, "examples/sample/scripts/sample.ts"), "lan", "stop", "--pair", String(poolPair + 1)], { env: box.env, stdout: "pipe", stderr: "pipe" });
+    expect({ code: await stop.exited, out: (await new Response(stop.stdout).text()).trim() }).toEqual({ code: 0, out: `pair ${poolPair + 1}: pool ${additional.pid} stopped; none of its games run` });
     await additional.exited;
     rmSync(clients);
     expect(box.sessions()).toHaveLength(1);
+    expect(poolIds(box)).toEqual([poolPair]);
     expect(box.activeDesktops()).toEqual(["a", "b"]);
   }
   runner.kill("SIGTERM");

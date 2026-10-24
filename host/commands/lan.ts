@@ -4,7 +4,7 @@ import { userInfo } from "node:os";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Console, Effect, Exit, Schema, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { Namespaces } from "../os/platform/services";
+import { Namespaces, ProcessTable } from "../os/platform/services";
 import { collect, pollUntil, spawnLogged } from "../cli/hostProcess";
 import { type Command, UsageFailure, describeCause, flagValues, portFlag, wholeFlag } from "../cli/command";
 import { CLEAR, type Impairment, clearedAlready, impairCommands, impairmentSummary } from "../lan/netem";
@@ -12,7 +12,7 @@ import { LanFailure } from "../lan/join";
 import { lanPluginProblem } from "../lan/plugin";
 import { ensurePackager } from "../compile/mapBuild";
 import {
-  PAIR_SIDES, type PoolPair, agentSocket, alive, clientName, lanPlayRefusal, mapPackager, networkFlagProblem, pairClients, pairSides, pairCustody, pairDirectory, poolClientsFile, poolFile, poolHolderFile, poolOwners, playtestPairRefusal, readPool, reportPort, writeJson, writePoolClients, wrongUser,
+  PAIR_SIDES, agentFile, agentSocket, alive, clientName, lanPlayRefusal, mapPackager, networkFlagProblem, pairClients, pairSides, pairCustody, pairDirectory, pairEntryFile, pairsHeldBy, livePairs, poolClientsFile, poolFile, poolHolder, poolHolderFile, poolOwners, playtestPairRefusal, prefixOf, readPool, reportPort, stopAgent, writeJson, writePoolClients, wrongUser,
 } from "../lan/pool";
 import { PROFILES, desktopSize } from "../os/warcraft/clientProfiles";
 import { DEFAULT_BUILD } from "../client/builds";
@@ -133,6 +133,7 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
   const attempt = Effect.gen(function*() {
     mkdirSync(directory, { recursive: true });
     rmSync(agentSocket(pair), { force: true });
+    rmSync(agentFile(pair), { force: true });
     const waiting = yield* pairAdmission(capacity);
     if (waiting !== undefined) return yield* new CapacityDeferred({ reason: waiting });
     rmSync(admissionFile(directory), { force: true });
@@ -144,6 +145,7 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
         stdout: join(directory, "session.out"),
         stderr: join(directory, "session.err"),
       });
+      yield* Effect.addFinalizer(() => stopAgent(pair));
       const step = Effect.gen(function*() {
         if (existsSync(admissionFile(directory))) return yield* new CapacityDeferred({ reason: (yield* readJson(admissionFile(directory), AdmissionRefusal)).reason });
         if (!(yield* session.handle.isRunning.pipe(Effect.orElseSucceed(() => false)))) {
@@ -172,12 +174,17 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
   })), Effect.mapError((failure) => new LanFailure({ problem: `pair ${pair}: ${failure.message}` })));
 };
 
-const registerPairs = (mine: readonly PoolPair[], profile: string, fps: number | undefined) => Effect.gen(function*() {
-  const ids = new Set(mine.map(({ id }) => id));
-  const others = ((yield* readPool)?.pairs ?? []).filter(({ id, agentSocket: socket }) => !ids.has(id) && existsSync(socket));
-  const pairs = [...others, ...mine].sort((left, right) => left.id - right.id);
-  writeJson(poolFile(), { profile, ...(fps === undefined ? {} : { fps }), owner: { uid: process.getuid?.() ?? 0, user: userInfo().username }, pairs });
-  yield* writePoolClients(poolClientsFile(), pairs.flatMap(({ id, runs, network }) => pairClients(id, runs, pairSides(network === true))));
+const PUBLISH_ROUNDS = 5;
+
+const publishPool = (profile: string, fps: number | undefined) => Effect.gen(function*() {
+  let pairs = livePairs();
+  for (let round = 0; round < PUBLISH_ROUNDS; round++) {
+    writeJson(poolFile(), { profile, ...(fps === undefined ? {} : { fps }), owner: { uid: process.getuid?.() ?? 0, user: userInfo().username }, pairs });
+    yield* writePoolClients(poolClientsFile(), pairs.flatMap(({ id, runs, network }) => pairClients(id, runs, pairSides(network === true))));
+    const now = livePairs();
+    if (JSON.stringify(now) === JSON.stringify(pairs)) return;
+    pairs = now;
+  }
 });
 
 const pool: Command = (args) => Effect.gen(function*() {
@@ -200,7 +207,6 @@ const pool: Command = (args) => Effect.gen(function*() {
   const capacity = yield* capacityHelper(args);
   yield* ensurePackager(mapPackager());
   const sessions:{ readonly exitCode: Effect.Effect<unknown, unknown> }[] = [];
-  const entries: PoolPair[] = [];
 
   const chosen = flagValues(args, "pair").map((value) => wholeFlag(["--pair", value], "pair"));
   if (!chosen.every((pair) => typeof pair === "number")) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
@@ -222,13 +228,14 @@ const pool: Command = (args) => Effect.gen(function*() {
       for (const run of [runs.a, runs.b]) {
         if (run !== undefined && basename(run).startsWith("private-desktop.") && existsSync(join(run, "lifecycle-owned"))) rmSync(join(run, "active"), { force: true });
       }
-    }))));
+      rmSync(pairEntryFile(pair), { force: true });
+    })), Effect.andThen(publishPool(profileText, fps)), Effect.ignore));
     const status = yield* agent(pair, "/status").pipe(Effect.flatMap(Schema.decodeUnknownEffect(AgentStatus)), Effect.orElseSucceed(() => ({ clients: [] })));
     const pids = new Map(status.clients.map(({ name, pid }) => [name, pid]));
     const clientsPath = join(pairDirectory(pair), "clients.json");
     yield* writePoolClients(clientsPath, pairClients(pair, runs, pairSides(network)).map((client) => ({ ...client, name: client.name.endsWith("a") ? "a" : "b", poolName: client.name, pid: pids.get(client.name) })));
-    entries.push({ id: pair, clients: clientsPath, agentSocket: agentSocket(pair), runs, appIds: { a: `steam_app_${3516115600 + pair * 2}`, b: `steam_app_${3516115601 + pair * 2}` }, ...(network ? { network } : {}) });
-    yield* registerPairs(entries.map((entry) => ({ ...entry, profile: profileOf(entry.id) })), profileText, fps);
+    writeJson(pairEntryFile(pair), { id: pair, clients: clientsPath, agentSocket: agentSocket(pair), runs, appIds: { a: `steam_app_${3516115600 + pair * 2}`, b: `steam_app_${3516115601 + pair * 2}` }, profile, ...(network ? { network } : {}) });
+    yield* publishPool(profileText, fps);
     yield* Console.log(network
       ? `pair ${pair}: ${clientName(pair, "a")} running alone with network for solo games (${profile}${fps === undefined ? "" : `, ${fps} fps`}); desktop ${runs.a ?? "?"}`
       : `pair ${pair}: ${clientName(pair, "a")} and ${clientName(pair, "b")} running (${profile}${fps === undefined ? "" : `, ${fps} fps`}); desktops ${runs.a ?? "?"} and ${runs.b ?? "?"}`);
@@ -278,6 +285,24 @@ const status: Command = (args) => Effect.gen(function*() {
     const value = yield* agent(id, "/status").pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed({ error: failure.problem })));
     yield* Console.log(JSON.stringify(value));
   }
+});
+
+const POOL_STOP = "90 seconds";
+
+const stop: Command = (args) => Effect.gen(function*() {
+  const pair = yield* number(args, "pair", undefined);
+  const holder = poolHolder(pair);
+  if (holder === undefined || !alive(holder)) return yield* new LanFailure({ problem: `pair ${pair} has no running pool` });
+  const shared = pairsHeldBy(holder).filter((id) => id !== pair);
+  if (shared.length > 0) return yield* new LanFailure({ problem: `pair ${pair}'s pool ${holder} also runs pair${shared.length === 1 ? "" : "s"} ${shared.join(", ")}; stop that pool itself to stop them together` });
+  yield* Effect.try({ try: () => process.kill(holder, "SIGTERM"), catch: (cause) => new LanFailure({ problem: `signal pool ${holder}: ${describeCause(cause)}` }) });
+  const gone = yield* pollUntil(Effect.sync(() => !alive(holder)), { until: (ended) => ended, every: "250 millis", within: POOL_STOP, onTimeout: () => Effect.succeed(false) });
+  if (!gone) return yield* new LanFailure({ problem: `pair ${pair}'s pool ${holder} still runs ${POOL_STOP} after SIGTERM` });
+  const table = yield* ProcessTable;
+  const left = yield* Effect.forEach(PAIR_SIDES, (side) => table.games(prefixOf(clientName(pair, side))).pipe(Effect.orElseSucceed(() => [])));
+  const pids = left.flat().map(({ pid }) => pid);
+  if (pids.length > 0) return yield* new LanFailure({ problem: `pair ${pair}'s pool ${holder} stopped, but its games still run (pid ${pids.join(", ")})` });
+  yield* Console.log(`pair ${pair}: pool ${holder} stopped; none of its games run`);
 });
 
 const end: Command = (args) => Effect.gen(function*() {
@@ -370,7 +395,7 @@ const netem: Command = (args) => Effect.gen(function*() {
   }
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--port N] | netem off --pair K | status [--pair K] | end --pair K";
+export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--port N] | netem off --pair K | status [--pair K] | end --pair K | stop --pair K";
 
 const ownerCheck = poolOwners.pipe(Effect.flatMap((owners) => {
   const refusal = wrongUser(process.getuid?.() ?? 0, owners, ["bun", ...process.argv.slice(1)]);
@@ -390,6 +415,7 @@ const subcommand: Command = ([sub, ...args]) => {
     case "speed": return speed(args);
     case "netem": return netem(args);
     case "end": return end(args);
+    case "stop": return stop(args);
     default: return Effect.fail(new UsageFailure({ problem: `lan takes ${LAN_USAGE}` }));
   }
 };

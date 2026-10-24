@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { Duration, Effect, Schema } from "effect";
+import { Duration, Effect, Option, Schema } from "effect";
 import { LanFailure } from "./join";
 import { UsageFailure, flagValues, wholeFlag } from "../cli/command";
 import { pollUntil } from "../cli/hostProcess";
@@ -60,6 +60,35 @@ export const documentsOf = (name: string) => documentsFolder(prefixOf(name));
 export const pairDirectory = (pair: number) => join(stateRoot(), `pair-${pair}`);
 
 export const poolHolderFile = (pair: number) => join(pairDirectory(pair), "pool.pid");
+
+export const agentFile = (pair: number) => join(pairDirectory(pair), "agent.json");
+
+export const pairEntryFile = (pair: number) => join(pairDirectory(pair), "pair.json");
+
+const pidIn = (file: string, read: (text: string) => unknown) => {
+  try {
+    const pid = read(readFileSync(file, "utf8"));
+    return typeof pid === "number" && Number.isInteger(pid) && pid > 0 ? pid : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+export const poolHolder = (pair: number) => pidIn(poolHolderFile(pair), (text) => Number(text.trim()));
+
+export const AGENT_STOP = "45 seconds";
+
+/** Stops pair K's agent and waits for it to exit; the agent stops its games on the way out, which it can only finish while its desktop still runs. */
+export const stopAgent = (pair: number) => Effect.suspend(() => {
+  const pid = pidIn(agentFile(pair), (text) => (JSON.parse(text) as { pid?: unknown }).pid);
+  if (pid === undefined || !alive(pid)) return Effect.void;
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch {
+    return Effect.void;
+  }
+  return pollUntil(Effect.sync(() => !alive(pid)), { until: (gone) => gone, every: "250 millis", within: AGENT_STOP, onTimeout: () => Effect.void });
+});
 
 const poolLockFile = (pair: number) => join(pairDirectory(pair), "pool.lock");
 
@@ -197,20 +226,42 @@ export const writePoolClients = (path: string, clients: readonly PoolClient[]) =
   writeJson(path, { tools, clients });
 });
 
+const PoolPairJson = Schema.Struct({
+  id: Schema.Int,
+  clients: Schema.String,
+  agentSocket: Schema.String,
+  runs: Schema.Struct({ a: Schema.optionalKey(Schema.String), b: Schema.optionalKey(Schema.String) }),
+  appIds: Schema.Struct({ a: Schema.String, b: Schema.String }),
+  profile: Schema.optionalKey(Schema.String),
+  network: Schema.optionalKey(Schema.Boolean),
+});
+
 const PoolFileJson = Schema.fromJsonString(Schema.Struct({
   profile: Schema.String,
   fps: Schema.optionalKey(Schema.Finite),
   owner: Schema.optionalKey(Schema.Struct({ uid: Schema.Int, user: Schema.String })),
-  pairs: Schema.Array(Schema.Struct({
-    id: Schema.Int,
-    clients: Schema.String,
-    agentSocket: Schema.String,
-    runs: Schema.Struct({ a: Schema.optionalKey(Schema.String), b: Schema.optionalKey(Schema.String) }),
-    appIds: Schema.Struct({ a: Schema.String, b: Schema.String }),
-    profile: Schema.optionalKey(Schema.String),
-    network: Schema.optionalKey(Schema.Boolean),
-  })),
+  pairs: Schema.Array(PoolPairJson),
 }));
+
+const decodePairEntry = Schema.decodeUnknownOption(Schema.fromJsonString(PoolPairJson));
+
+/** Every pair a live `wisp lan pool` holds (its `pool.pid`) and has registered (its `pair.json`), whichever pool started it. */
+export const livePairs = (): PoolPair[] => {
+  const root = stateRoot();
+  if (!existsSync(root)) return [];
+  return readdirSync(root).flatMap((name) => {
+    const pair = /^pair-(\d+)$/.exec(name)?.[1];
+    if (pair === undefined) return [];
+    const holder = poolHolder(Number(pair));
+    if (holder === undefined || !alive(holder)) return [];
+    try {
+      const entry = decodePairEntry(readFileSync(pairEntryFile(Number(pair)), "utf8"));
+      return Option.isSome(entry) && entry.value.id === Number(pair) ? [entry.value] : [];
+    } catch {
+      return [];
+    }
+  }).sort((left, right) => left.id - right.id);
+};
 
 const readPoolAt = (file: string): Effect.Effect<PoolFile | undefined, LanFailure> => Effect.suspend(() => {
   // @effect-diagnostics-next-line effectSucceedWithVoid:off -- an undefined result, which Effect.void's void type cannot satisfy
@@ -313,4 +364,13 @@ export const stopGame = (stop: {
     yield* stop.kill(left);
     yield* pollUntil(stop.survivors, { until: (rest) => rest.length === 0, every: "250 millis", within: "3 seconds", onTimeout: () => Effect.succeed([]) });
   });
+};
+
+export const pairsHeldBy = (pid: number): number[] => {
+  const root = stateRoot();
+  if (!existsSync(root)) return [];
+  return readdirSync(root).flatMap((name) => {
+    const pair = /^pair-(\d+)$/.exec(name)?.[1];
+    return pair !== undefined && poolHolder(Number(pair)) === pid ? [Number(pair)] : [];
+  }).sort((left, right) => left - right);
 };

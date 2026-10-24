@@ -325,7 +325,7 @@ Tom's `system.reg`, `user.reg`, `Warcraft III/.build.info` and Battle.net
 | Command | What it does |
 | --- | --- |
 | `wisp lan setup --from INSTALL [--pairs N \| --pair K...]` | Creates the pool's clients from an existing Warcraft III install folder (the one holding `_retail_`): pairs 0..N-1, or only the pairs named, leaving clients other runners use alone. See "Setting up". |
-| `wisp lan pool [--pairs N \| --pair K...] [--pool-profile parity\|visual\|hfr[,...]] [--fps N] [--seconds S] [--network]` | Runs up to N pairs, each admitted by the machine-capacity helper. `--network` with exactly one `--pair K` starts that pair with network and only its side a client, for solo games (see Guardrails). It stays in the foreground; Ctrl-C or SIGTERM stops the pool: each pair session stops its agent, which stops its games, before the desktops close. A pair another live pool holds (`pair-K/pool.pid`) is refused with that pool's PID. |
+| `wisp lan pool [--pairs N \| --pair K...] [--pool-profile parity\|visual\|hfr[,...]] [--fps N] [--seconds S] [--network]` | Runs up to N pairs, each admitted by the machine-capacity helper. `--network` with exactly one `--pair K` starts that pair with network and only its side a client, for solo games (see Guardrails). It stays in the foreground; Ctrl-C, SIGTERM or `lan stop` stops the pool: it stops each pair's agent, which stops its games, and waits for it before it closes the pair's capacity session. Closing that session stops its whole scope, desktop launchers included, and a desktop launcher SIGKILLs its agent through `bwrap --die-with-parent`, so an agent stopped any later leaves its games running (wisp#19, wisp#42). A pair another live pool holds (`pair-K/pool.pid`) is refused with that pool's PID. |
 | `wisp lan fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]]` | Hosts MAP on pair K, switches both clients to LAN, joins them, and returns once the match plays. It prints the game's action log. `--turn-ms` is one turn length (default 25, Battle.net's measured grid) or a repeating cycle: `--turn-ms 17,17,16` sends one turn per 1/60 s, so each turn carries exactly one 60 Hz callback. See [Turn pacing](#turn-pacing). |
 | `wisp lan dummy MAP --program W3GSCLIENT [--pair K] [--count N]` | Joins side a to a lobby, then runs N dummy joins, handicap changes and leaves (default 20). The pair must have no active game. |
 | `wisp lan solo MAP [--pair K...]` | Each client of the named running pairs (default: all) plays MAP alone, as a local game on the loopback provider; returns once every client's game UI is up. Works on 3.0.1. See "Solo games". |
@@ -333,11 +333,12 @@ Tom's `system.reg`, `user.reg`, `Warcraft III/.build.info` and Battle.net
 | `wisp lan speed N --pair K` | Diagnostic turn delivery at 1–16 times real time; 1 restores normal delivery. Measure client frame progress to establish actual game speed. |
 | `wisp lan netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--port N]`, `wisp lan netem off --pair K` | Adds round-trip delay, jitter and independent or bursty packet loss to pair K's loopback, or to UDP on one port of it, or removes it, and prints the loopback's queueing disciplines and filters. See "Simulated latency and loss". |
 | `wisp lan end --pair K` | Ends pair K's game. The clients go back to their menus. |
+| `wisp lan stop --pair K` | Stops the pool holding pair K (`pair-K/pool.pid`) with SIGTERM, waits up to 90 s for it to exit, and fails if a game of pair K still runs. It refuses a pool that also holds other pairs. |
 
 Pool clients are named `lan<K>a` and `lan<K>b`. The pool writes three files
 under `$XDG_STATE_HOME/wisp/lan/` (default `~/.local/state/wisp/lan/`):
 
-- `pool.json`: its pairs, their agent sockets and desktops;
+- `pool.json`: every pair a live pool holds, their agent sockets and desktops, whichever pool started them;
 - `clients.json`: every pool client in the clients-file schema
   (`WISP_CLIENTS=~/.local/state/wisp/lan/clients.json`);
 - `pair-K/clients.json`: one pair's clients, named `a` and `b`, for tools
@@ -593,9 +594,12 @@ stopped, or when its pair's session ends.
 - If the helper defers either game's native scope, the pair agent stops any
   game already started for that pair. `lan pool` retries the whole pair.
   Direct pair-session and agent entry points require the capacity helper too.
-- Several pools may run at once, each on its own pairs (one per agent). A
-  pool merges its pairs into `pool.json` and `clients.json`, keeping every
-  other pair whose agent socket exists, so starting pair 5 never unlists pair 3.
+- Several pools may run at once, each on its own pairs (one per agent). Each
+  pool writes its pair's entry to `pair-K/pair.json` and rebuilds `pool.json`
+  and `clients.json` from the entries of every pair whose `pool.pid` holder
+  lives, on start and on stop, writing again until a fresh scan matches. So
+  starting pair 5 never unlists pair 3, and a stopped pair leaves the list
+  even though its agent socket file stays behind.
 - `--profile` takes one profile, or one per pair separated by commas; the last
   one repeats.
 

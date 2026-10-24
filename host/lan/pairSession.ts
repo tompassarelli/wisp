@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
@@ -7,9 +7,9 @@ import { platformLayer } from "../os/platform/layer";
 import { Namespaces } from "../os/platform/services";
 import { ChildProcess } from "effect/process";
 import { flagValues } from "../cli/command";
-import { pollUntil, spawnLogged } from "../cli/hostProcess";
+import { spawnLogged } from "../cli/hostProcess";
 import { LanFailure } from "./join";
-import { alive, pairDirectory, pairFlags, pairSides } from "./pool";
+import { agentFile, pairDirectory, pairFlags, pairSides, stopAgent } from "./pool";
 import { desktopSize } from "../os/warcraft/clientProfiles";
 
 const argument = (name: string) => flagValues(process.argv, name)[0];
@@ -21,29 +21,7 @@ if (launcher === undefined) throw new Error("pairSession takes --pair K --pool-p
 const directory = pairDirectory(pair);
 mkdirSync(directory, { recursive: true });
 const size = desktopSize(profile);
-const agentFile = join(directory, "agent.json");
-rmSync(agentFile, { force: true });
-
-const agentPid = () => {
-  try {
-    const { pid } = JSON.parse(readFileSync(agentFile, "utf8")) as { pid?: unknown };
-    return typeof pid === "number" && Number.isInteger(pid) && pid > 0 ? pid : undefined;
-  } catch {
-    return undefined;
-  }
-};
-
-// The desktop's launcher SIGKILLs its command (bwrap --die-with-parent), so the agent must stop its games before desktop A stops.
-const stopAgent = Effect.suspend(() => {
-  const pid = agentPid();
-  if (pid === undefined || !alive(pid)) return Effect.void;
-  try {
-    process.kill(pid, "SIGTERM");
-  } catch {
-    return Effect.void;
-  }
-  return pollUntil(Effect.sync(() => !alive(pid)), { until: (gone) => gone, every: "250 millis", within: "45 seconds", onTimeout: () => Effect.void });
-});
+rmSync(agentFile(pair), { force: true });
 
 const startDesktopB = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
@@ -72,7 +50,7 @@ const session = Effect.gen(function*() {
   const desktopA = yield* spawnLogged(ChildProcess.make(launcher, ["start", "--resolution", size, "--", ...agent], {
     stdin: "ignore", forceKillAfter: "15 seconds",
   }), { stdout: join(directory, "desktop-a.out"), stderr: join(directory, "desktop-a.err") });
-  yield* Effect.addFinalizer(() => stopAgent);
+  yield* Effect.addFinalizer(() => stopAgent(pair));
   yield* desktopB === undefined ? desktopA.handle.exitCode : Effect.raceFirst(desktopA.handle.exitCode, desktopB.exitCode);
 });
 
