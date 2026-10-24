@@ -18,7 +18,7 @@ const CLIENT_PORTS: readonly number[] = [16000, 16001, 16002, 16003, 16004, 1600
 /** Flo waits this long between countdown packets; shorter waits send slow clients to the score screen. */
 const COUNTDOWN_MS = 6000;
 
-const MAX_STEP_MS = 250;
+const DEFAULT_TURN_STEPS = [25];
 
 const SYNC_LIMIT = 50;
 
@@ -38,7 +38,7 @@ export interface HostOptions {
 
   readonly clients: readonly string[];
 
-  readonly turnMs?: number;
+  readonly turnSteps?: readonly number[];
 
   readonly port?: number;
   readonly announcePorts?: readonly number[];
@@ -125,6 +125,20 @@ function slotTable(map: MapFacts, count: number, randomSeed: number, joined: (sl
   return { slots, randomSeed, layout: map.layout, players: map.players.length };
 }
 
+export interface TurnClock {
+  readonly now: () => number;
+  readonly sleep: (ms: number) => Effect.Effect<void>;
+}
+
+export const pacedTurns = <E, R>(steps: readonly number[], clock: TurnClock, turn: Effect.Effect<void, E, R>) => Effect.suspend(() => {
+  let deadline = clock.now();
+  let next = 0;
+  return Effect.forever(Effect.suspend(() => {
+    deadline += steps[next++ % steps.length]!;
+    return clock.sleep(Math.max(0, deadline - clock.now()));
+  }).pipe(Effect.andThen(turn)));
+});
+
 export const startHost = (options: HostOptions) => Effect.gen(function*() {
   const profile = yield* requireCapability(options.buildId ?? process.env["WISP_GAME_BUILD"] ?? DEFAULT_BUILD, "lanPool").pipe(Effect.mapError((cause) => new LanFailure({ problem: cause.message })));
   const protocolVersion = profile.protocolVersion;
@@ -134,7 +148,7 @@ export const startHost = (options: HostOptions) => Effect.gen(function*() {
   const lobbyScope = yield* Scope.fork(scope);
   const lobbyEnded = yield* Deferred.make<void>();
   const now = options.now ?? (() => performance.now());
-  const turnMs = options.turnMs ?? 30;
+  const turnSteps = options.turnSteps ?? DEFAULT_TURN_STEPS;
   const started = now();
   const seconds = () => ((now() - started) / 1000).toFixed(3);
   const line = (text: string) => options.log(`${seconds()} ${text}`);
@@ -152,7 +166,6 @@ export const startHost = (options: HostOptions) => Effect.gen(function*() {
   let countdownAt = 0;
   let turns = 0;
   let gameMs = 0;
-  let lastTurn = 0;
   let speed = 1;
   let waiting = false;
   let desyncs = 0;
@@ -389,20 +402,17 @@ export const startHost = (options: HostOptions) => Effect.gen(function*() {
       broadcast(countDownEnd());
       setPhase("loading");
     } else if (phase === "loading" && players.filter((player) => !player.left).every((player) => player.loaded)) {
-      lastTurn = at;
       setPhase("playing");
     } else if (phase === "playing") {
       const behind = Math.max(0, ...players.filter((player) => !player.left).map((player) => turns - player.checksums.length));
       if (behind > SYNC_LIMIT) {
         if (!waiting) line(`waiting: a client is ${behind} turns behind`);
         waiting = true;
-        lastTurn = at;
         return;
       }
       if (waiting) line("caught up");
       waiting = false;
-      const step = speed === 1 ? Math.min(MAX_STEP_MS, Math.round(at - lastTurn)) : turnMs;
-      lastTurn = at;
+      const step = turnSteps[turns % turnSteps.length]!;
       const actions = pending;
       pending = [];
       broadcast(incomingAction(step, actions));
@@ -421,9 +431,9 @@ export const startHost = (options: HostOptions) => Effect.gen(function*() {
   const sendTurn = Effect.sync(() => {
     if (phase === "playing") tick();
   });
-  const turnLoop = () => sendTurn.pipe(Effect.repeat(Schedule.fixed(turnMs / speed)), Effect.delay(turnMs / speed));
+  const turnLoop = () => pacedTurns(turnSteps.map((step) => step / speed), { now, sleep: (ms) => Effect.sleep(ms) }, sendTurn);
   let turnFiber = yield* Effect.forkScoped(turnLoop());
-  line(`host ${JSON.stringify(options.gameName)} map ${options.map.path} on 127.0.0.1:${listener.port}, turns of ${turnMs} ms, clients ${options.clients.join(", ")}`);
+  line(`host ${JSON.stringify(options.gameName)} map ${options.map.path} on 127.0.0.1:${listener.port}, turns of ${turnSteps.join("/")} ms, clients ${options.clients.join(", ")}`);
 
   return {
     port: listener.port,
@@ -447,7 +457,6 @@ export const startHost = (options: HostOptions) => Effect.gen(function*() {
       if (!Number.isFinite(multiple) || multiple < 1 || multiple > 16) return yield* new LanFailure({ problem: "LAN speed must be between 1 and 16" });
       yield* Fiber.interrupt(turnFiber);
       speed = multiple;
-      lastTurn = now();
       turnFiber = yield* Effect.forkIn(turnLoop(), scope);
       line(`speed ${speed}`);
     }).pipe(speedLock.withPermit),

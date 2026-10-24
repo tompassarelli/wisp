@@ -98,7 +98,7 @@ interface Game {
   readonly scope: Scope.Closeable;
 }
 
-const FreshRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, turnMs: Schema.optionalKey(Schema.Finite), computers: Schema.optionalKey(Schema.Finite), driver: Schema.optionalKey(Schema.Int) }));
+const FreshRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, turnSteps: Schema.optionalKey(Schema.Array(Schema.Int)), computers: Schema.optionalKey(Schema.Finite), driver: Schema.optionalKey(Schema.Int) }));
 const SoloRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, driver: Schema.optionalKey(Schema.Int) }));
 const SpeedRequest = Schema.fromJsonString(Schema.Struct({ speed: Schema.Finite }));
 
@@ -198,7 +198,7 @@ const agent = Effect.gen(function*() {
     return Scope.close(ending.scope, Exit.void).pipe(Effect.andThen(Effect.sync(() => say(`ended ${ending.id}`))));
   });
 
-  const fresh = (mapFile: string, turnMs: number | undefined, computers: number | undefined) => Effect.scoped(Effect.gen(function*() {
+  const fresh = (mapFile: string, turnSteps: readonly number[] | undefined, computers: number | undefined) => Effect.scoped(Effect.gen(function*() {
     yield* endGame;
     const id = new Date().toISOString().replace(/[:.]/g, "-");
     const folder = join(directory, "games", id);
@@ -216,7 +216,7 @@ const agent = Effect.gen(function*() {
       map,
       gameName: `wisp-${pair}-${id.slice(11, 19)}`,
       clients: clients.map(({ name }) => name),
-      ...(turnMs === undefined ? {} : { turnMs }),
+      ...(turnSteps === undefined ? {} : { turnSteps }),
       ...(computers === undefined ? {} : { computers }),
       log: (line) => appendFileSync(log, `${line}\n`),
       onPacket: (direction, label, bytes) => {
@@ -286,7 +286,7 @@ const agent = Effect.gen(function*() {
       const body = yield* decode(FreshRequest, request);
       if (!existsSync(body.map)) return Response.json({ error: `no map at ${body.map}` }, { status: 400 });
       yield* drive(body.driver);
-      const exit = yield* Effect.exit(fresh(body.map, body.turnMs, body.computers));
+      const exit = yield* Effect.exit(fresh(body.map, body.turnSteps, body.computers));
       if (Exit.isSuccess(exit)) return Response.json(exit.value);
       say(`fresh failed: ${String(exit.cause)}`);
       return Response.json({ error: String(exit.cause) }, { status: 500 });

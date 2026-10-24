@@ -39,7 +39,7 @@ Hosting: r7 and r8 ran as a Battle.net Custom Game (`[TEST] sc-integrity-r7`/`-r
 created on signed-in client A and found by client B through the Custom Games
 search), not on a LAN, so the fit describes Battle.net-hosted turns. Offline
 pool games are relayed by Wisp's own LAN host, whose turn period is
-`lan fresh --turn-ms` (default 30 ms); their echo ages are not yet measured.
+`lan fresh --turn-ms` (default 25 ms, matching the Battle.net grid above) or a repeating cycle such as `--turn-ms 17,17,16`; their echo ages are not yet measured.
 
 ## Turn-burst callbacks
 

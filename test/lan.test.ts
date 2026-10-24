@@ -244,7 +244,7 @@ describe("host, replaying two recorded offline clients", () => {
       error: () => { discoveryClosed = true; announcements.close(); },
     } });
     const scope = await Effect.runPromise(Scope.make());
-    const host = await Effect.runPromise(startHost({ map: MAP, gameName: "t", clients: ["lan0a", "lan0b"], turnMs: 5, countdownMs: 0, settleMs: 0, log: (line) => lines.push(line), announcePorts: [announcements.port] }).pipe(Scope.provide(scope)));
+    const host = await Effect.runPromise(startHost({ map: MAP, gameName: "t", clients: ["lan0a", "lan0b"], turnSteps: [5], countdownMs: 0, settleMs: 0, log: (line) => lines.push(line), announcePorts: [announcements.port] }).pipe(Scope.provide(scope)));
     try {
       await until(() => discoveryPort !== undefined, "a lobby announcement");
       const sockets = await Promise.all([0, 1].map(() => Bun.connect({ hostname: "127.0.0.1", port: host.port, socket: { data: () => {} } })));

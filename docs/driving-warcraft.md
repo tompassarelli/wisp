@@ -278,7 +278,7 @@ decision.
 - To join, a client's provider is switched to `TCPN` for one rebuild, the
   W3Champions way.
 - Wisp's own TypeScript host lists the game to the clients' LAN ports, takes
-  their joins and relays the match in 30 ms turns.
+  their joins and relays the match in 25 ms turns (`lan fresh --turn-ms`).
 
 Prior art: W3Champions' Flo (`~/code/resources/w3champions/flo-2022`;
 current source github.com/BogdanW3/W3C-Flo, MPL-2.0), gowarcraft3 (MPL-2.0)

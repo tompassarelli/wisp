@@ -243,9 +243,11 @@ const fresh: Command = (args) => Effect.gen(function*() {
   if (map === undefined || !existsSync(map)) return yield* new UsageFailure({ problem: "fresh takes a built map file (MAP.w3x or --map MAP.w3x)" });
   const pair = yield* number(args, "pair", 0);
   const [turnText] = flagValues(args, "turn-ms");
+  const turnSteps = turnText?.split(",").map(Number);
+  if (turnSteps?.some((step) => !Number.isInteger(step) || step < 1)) return yield* new UsageFailure({ problem: "--turn-ms takes whole milliseconds: one period (25) or a repeating cycle (17,17,16)" });
   const computers = yield* number(args, "computers", 0);
   const started = Date.now();
-  const result = yield* agent(pair, "/fresh", { map, computers, driver: yield* driverPid, ...(turnText === undefined ? {} : { turnMs: Number(turnText) }) });
+  const result = yield* agent(pair, "/fresh", { map, computers, driver: yield* driverPid, ...(turnSteps === undefined ? {} : { turnSteps }) });
   yield* Console.log(`pair ${pair}: playing ${map} after ${((Date.now() - started) / 1000).toFixed(1)} s; action log ${String(result["log"])}`);
 });
 
@@ -343,7 +345,7 @@ const netem: Command = (args) => Effect.gen(function*() {
   yield* Console.log(`pair ${pair}: ${shown.stdout}`);
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] | fresh MAP [--pair K] [--computers N] [--turn-ms MS] | solo MAP [--pair K...] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] | netem off --pair K | status [--pair K] | end --pair K";
+export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] | netem off --pair K | status [--pair K] | end --pair K";
 
 const ownerCheck = poolOwners.pipe(Effect.flatMap((owners) => {
   const refusal = wrongUser(process.getuid?.() ?? 0, owners, ["bun", ...process.argv.slice(1)]);

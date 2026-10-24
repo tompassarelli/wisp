@@ -326,7 +326,7 @@ Tom's `system.reg`, `user.reg`, `Warcraft III/.build.info` and Battle.net
 | --- | --- |
 | `wisp lan setup --from INSTALL [--pairs N \| --pair K...]` | Creates the pool's clients from an existing Warcraft III install folder (the one holding `_retail_`): pairs 0..N-1, or only the pairs named, leaving clients other runners use alone. See "Setting up". |
 | `wisp lan pool [--pairs N \| --pair K...] [--pool-profile parity\|visual\|hfr[,...]] [--fps N] [--seconds S] [--network]` | Runs up to N pairs, each admitted by the machine-capacity helper. `--network` with exactly one `--pair K` starts that pair with network and only its side a client, for solo games (see Guardrails). It stays in the foreground; Ctrl-C or SIGTERM stops the pool: each pair session stops its agent, which stops its games, before the desktops close. A pair another live pool holds (`pair-K/pool.pid`) is refused with that pool's PID. |
-| `wisp lan fresh MAP [--pair K] [--computers N] [--turn-ms MS]` | Hosts MAP on pair K, switches both clients to LAN, joins them, and returns once the match plays. It prints the game's action log. |
+| `wisp lan fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]]` | Hosts MAP on pair K, switches both clients to LAN, joins them, and returns once the match plays. It prints the game's action log. `--turn-ms` is one turn length (default 25, Battle.net's measured grid) or a repeating cycle: `--turn-ms 17,17,16` sends one turn per 1/60 s, so each turn carries exactly one 60 Hz callback. See [Turn pacing](#turn-pacing). |
 | `wisp lan dummy MAP --program W3GSCLIENT [--pair K] [--count N]` | Joins side a to a lobby, then runs N dummy joins, handicap changes and leaves (default 20). The pair must have no active game. |
 | `wisp lan solo MAP [--pair K...]` | Each client of the named running pairs (default: all) plays MAP alone, as a local game on the loopback provider; returns once every client's game UI is up. Works on 3.0.1. See "Solo games". |
 | `wisp lan status [--pair K]` | Each pair's clients and processes, and its game: phase, turns, desyncs, players. |
@@ -637,7 +637,7 @@ sounds. The capture profiles set Ambient Occlusion on (`assao=1`); the other pro
 `bloom`, `portraitBloom`, `particles` and `spellfilter`. Smashcraft play explicitly chooses Reforged (`hd=1`) and Ambient Occlusion off too.
 
 The others cap the game at 60 frames a second, focused or not. A cap below
-the turn rate (33 turns a second at 30 ms) is untested.
+the turn rate (40 turns a second at 25 ms) is untested.
 
 `wisp lan pool --pair K --pool-profile parity --fps N` overrides both
 foreground and background caps while holding the profile's resolution,
@@ -793,6 +793,26 @@ is missing.
 
 ## The action log
 
+### Turn pacing
+
+The host sends turn n when the wall clock reaches the sum of the first n
+steps of the `--turn-ms` cycle (wisp:host/lan/host.ts, `pacedTurns`), and
+gives that turn the cycle's nth step as its game time. Each turn waits for an
+absolute deadline, so a late wake shortens the next wait instead of shifting
+every later turn, and game time stays on wall time. Effect 4.0.3's
+`Schedule.fixed` is not used for turns: with a fractional period such as
+16.6667 ms it fired 107 times a second instead of 60 (24 October 2026), and
+the game ran at 1.54 times wall speed. wisp:test/lanPacing.test.ts drives the pacer on a
+virtual clock whose wakes run 0–9 ms late and checks that every turn of a
+17/17/16 cycle still goes out within one wake of its 1/60 s deadline.
+
+Measured on 24 October 2026 (Smashcraft integrity build, 3.0.0.24268, LAN
+pair 0), the default ran 39.94 turns a second of exactly 25 ms at game pace
+0.998, and `--turn-ms 17,17,16` ran 60.00 turns a second at game pace 1.000
+with one callback per turn, light and heavy input alike, with no desync
+(smashcraft:docs/warcraft-api-netcode-findings.md, "Input sampling against the
+LAN host's turn interval").
+
 ### Faster turn delivery
 
 `wisp lan speed 4 --pair K` asks the existing host to deliver four game-time
@@ -838,7 +858,7 @@ process as loaded, connected and playing. Lobby, loading, ended and stale
 process observations permit no chat. Helpers use the client's Steam window
 ID (`steam_app_3516115600` and up) to verify private-desktop focus.
 
-Every `turn-ms` (30 by default) the host sends each client the actions
+Every `turn-ms` (25 by default, the turn period measured on Battle.net-hosted games) the host sends each client the actions
 collected since the last turn (IncomingAction, with a CRC16). Each client
 answers every turn with a checksum of its game state (OutgoingKeepAlive). The
 host compares the Nth answer of every client, and holds the game while a
