@@ -162,12 +162,18 @@ passworded Smashcraft game, and `archer-neutral.pad` passed parity there.
 They run GE-Proton11-7 (wine-staging 11.0) and Steam Linux Runtime 4, as the
 pool does.
 
-| Client | Prefix | Account | Menu page port |
-| --- | --- | --- | --- |
-| A | `~/.local/share/wisp/online/clone-c` | c | 47135 |
-| B | `~/.local/share/wisp/online/clone-b` | b | 47133 |
-| third client | `~/.local/share/wisp/online/clone-a` | a (Tom's) | 47137 |
-| fourth client | `~/.local/share/wisp/online/clone-d` | d (BattleTag tompaslab2) | 47139 |
+| Client | Host | Prefix | Account | Menu page port |
+| --- | --- | --- | --- | --- |
+| A | gex45 | `~/.local/share/wisp/online/clone-c` | c | 47135 |
+| B | gex45 | `~/.local/share/wisp/online/clone-b` | b | 47133 |
+| third client | laptop | `~/.local/share/wisp/online/clone-a` | a (Tom's) | 47137 |
+| fourth client | gex45 | `~/.local/share/wisp/online/clone-d` | d (BattleTag tompaslab2) | 47139 |
+
+Since 24 October 2026 clones b, c and d are signed in only on gex45 (copied
+from the laptop, whose c and d copies were then signed out), so A and B pair
+on gex45 with clone-d as a spare, and the laptop keeps only clone-a. A clone
+whose folder holds a `held-by` file naming another host never starts here:
+`launch.sh` exits 5, because Battle.net allows one session per account.
 
 ### Clone-a: Tom's account, only while he isn't playing
 
@@ -195,14 +201,15 @@ stopped clone-a within 10 s (wisp:docs/doctor.md, "Clients as services"). In a d
 `a` or `b`: doctor maps those names to its own prefixes and to accounts c and
 b, and would start the wrong launcher or type the wrong account.
 
-### Clone-d: account d, paired with clone-a
+### Clone-d: account d, on gex45
 
 Clone-d is a fourth client, made on 8 October with all three steps below, for
 Tom's test account d (BattleTag tompaslab2, `d` in
 nixos-config:secrets/bnet.yaml). It runs as a plain clone like clone-b and
 clone-c: `launch.sh d RUN_DIR`, no yielding to Tom. Sign it in once with
 `wc3-login-field RUN d username|password` as in step 2 of a full session.
-Clone-a and clone-d make the second two-client lane. Its clients file names
+Clone-a and clone-d made the second two-client lane until clone-d moved to
+gex45 (24 October). Its clients file named
 them `clone-a` and `clone-d`, so doctor starts each through `launch.sh`
 (smashcraft:ts/host/doctor/doctor.ts) and types no account:
 
