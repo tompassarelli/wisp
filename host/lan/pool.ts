@@ -245,21 +245,29 @@ const PoolFileJson = Schema.fromJsonString(Schema.Struct({
 
 const decodePairEntry = Schema.decodeUnknownOption(Schema.fromJsonString(PoolPairJson));
 
-/** Every pair a live `wisp lan pool` holds (its `pool.pid`) and has registered (its `pair.json`), whichever pool started it. */
+const decodePoolFile = Schema.decodeUnknownOption(PoolFileJson);
+
+/** Every pair a live `wisp lan pool` holds (its `pool.pid`) and has registered: its `pair.json`, or else, for another process's pool that writes no `pair.json`, its entry in `pool.json`. */
 export const livePairs = (): PoolPair[] => {
   const root = stateRoot();
   if (!existsSync(root)) return [];
-  return readdirSync(root).flatMap((name) => {
-    const pair = /^pair-(\d+)$/.exec(name)?.[1];
-    if (pair === undefined) return [];
-    const holder = poolHolder(Number(pair));
-    if (holder === undefined || !alive(holder)) return [];
+  const read = (file: string) => {
     try {
-      const entry = decodePairEntry(readFileSync(pairEntryFile(Number(pair)), "utf8"));
-      return Option.isSome(entry) && entry.value.id === Number(pair) ? [entry.value] : [];
+      return readFileSync(file, "utf8");
     } catch {
-      return [];
+      return undefined;
     }
+  };
+  const listed = Option.match(decodePoolFile(read(poolFile())), { onNone: (): readonly PoolPair[] => [], onSome: ({ pairs }) => pairs });
+  return readdirSync(root).flatMap((name) => {
+    const text = /^pair-(\d+)$/.exec(name)?.[1];
+    if (text === undefined) return [];
+    const pair = Number(text);
+    const holder = poolHolder(pair);
+    if (holder === undefined || !alive(holder)) return [];
+    const entry = decodePairEntry(read(pairEntryFile(pair)));
+    const known = Option.isSome(entry) ? entry.value : holder === process.pid ? undefined : listed.find(({ id }) => id === pair);
+    return known?.id === pair ? [known] : [];
   }).sort((left, right) => left.id - right.id);
 };
 
