@@ -116,8 +116,8 @@ impl<'a> AgentHost<'a> {
                 break;
             }
             self.lobby(now)?;
-            if let Some(c) = self.client.as_mut() {
-                c.flush()?;
+            if let Some(Err(e)) = self.client.as_mut().map(Client::flush) {
+                self.client_gone(e)?;
             }
             if self.game.as_ref().is_some_and(|g| g.phase() == Phase::Over) {
                 break;
@@ -150,22 +150,27 @@ impl<'a> AgentHost<'a> {
         }
     }
 
+    fn client_gone(&mut self, cause: io::Error) -> io::Result<()> {
+        if !matches!(cause.kind(), ErrorKind::UnexpectedEof | ErrorKind::BrokenPipe | ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted) {
+            return Err(cause);
+        }
+        self.client = None;
+        if let Some(game) = self.game.as_mut() {
+            let out = game.closed();
+            self.apply(out);
+        }
+        (self.log)(format!("client closed ({})", cause.kind()));
+        Ok(())
+    }
+
     fn read_client(&mut self) -> io::Result<()> {
         let Some(client) = self.client.as_mut() else { return Ok(()) };
         let mut buf = [0u8; 8192];
         let packets = match client.stream.read(&mut buf) {
-            Ok(0) => {
-                self.client = None;
-                if let Some(game) = self.game.as_mut() {
-                    let out = game.closed();
-                    self.apply(out);
-                }
-                (self.log)("client closed".into());
-                return Ok(());
-            }
+            Ok(0) => return self.client_gone(io::Error::from(ErrorKind::UnexpectedEof)),
             Ok(n) => client.splitter.push(&buf[..n]).map_err(|e| io::Error::new(ErrorKind::InvalidData, e.to_string()))?,
             Err(e) if e.kind() == ErrorKind::WouldBlock => return Ok(()),
-            Err(e) => return Err(e),
+            Err(e) => return self.client_gone(e),
         };
         let address = client.address;
         for packet in packets {
