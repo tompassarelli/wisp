@@ -12,8 +12,9 @@ const VNC_KEYS: Readonly<Record<string, string>> = {
   escape: "esc", backspace: "bsp", insert: "ins", prior: "pgup", page_up: "pgup", next: "pgdn", page_down: "pgdn",
   control: "ctrl", control_l: "lctrl", control_r: "rctrl", shift_l: "lshift", shift_r: "rshift",
   alt_l: "lalt", alt_r: "ralt", super_l: "lsuper", super_r: "rsuper", meta_l: "lmeta", meta_r: "rmeta",
-  caps_lock: "caplk", num_lock: "numlk", scroll_lock: "scrlk", print: "sysrq", backslash: "bslash",
-  "-": "minus", "/": "slash", "\\": "bslash", " ": "space", "\n": "return", "\t": "tab",
+  caps_lock: "caplk", num_lock: "numlk", scroll_lock: "scrlk", print: "sysrq", backslash: "bslash", slash: "fslash",
+  // vncdotool maps "slash" to BackSlash; "fslash" is the forward slash.
+  "-": "minus", "/": "fslash", "\\": "bslash", " ": "space", "\n": "return", "\t": "tab",
 };
 
 export const vncKey = (name: string) => name.split("+").map((part) => VNC_KEYS[part.toLowerCase()] ?? VNC_KEYS[part] ?? (part.length === 1 ? part : part.toLowerCase())).join("-");
