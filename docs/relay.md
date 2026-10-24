@@ -26,11 +26,14 @@ Measured facts, each with its source:
   the LAN host's turn interval").
 - **Turn length still sets a latency floor.** The host forwards an action at
   the next turn, so a turn of T ms adds 0 to T ms (T/2 on average) before any
-  other player receives it: 12.5 ms at 25 ms, 8.3 ms at 17/17/16. Tom asked on
-  24 October for the shortest turn Warcraft handles cleanly, with even pacing
-  too. 17/17/16 is one turn per 60 Hz frame and ran with no desync and
-  normal CPU; 10 and 8 ms are not yet measured (box R2). The relay is not
-  the pool, so it takes the lower floor.
+  other player receives it: 12.5 ms at 25 ms, 8.3 ms at 17/17/16, 4 ms at
+  8 ms. Tom asked on 24 October for the shortest turn Warcraft handles
+  cleanly, with even pacing too. In one gex45 pool session (box R2), 8 ms
+  turns ran 125 a second at game pace 1.000 with no desync, no host wait,
+  every tap seen and no more CPU than 17/17/16, and a light-input press
+  reached the host in 5 ms at the median against 13–15 ms at 17/17/16
+  (smashcraft:docs/warcraft-api-netcode-findings.md, "Shorter turns"). The
+  relay is not the pool, so it takes the lower floor.
 - **Smashcraft's delay and rollback budget.** Smashcraft sets one input delay
   for every player from its own sync-message echoes
   (smashcraft:ts/src/host/loop/netDelay.ts), and those echoes will pass
@@ -92,18 +95,23 @@ That last fact splits the plan in two:
 ## Turn cadence (boxes R1, R2)
 
 - The relay paces turns against absolute deadlines: turn k is due at
-  start + k × 50/3 ms, and its game step is 17, 17 or 16 ms so three turns
-  are exactly 50 ms. A late tick never shortens the next step and never
+  start plus the sum of the first k steps (k × 8 ms at the default; a
+  17/17/16 cycle makes three turns exactly 50 ms), and its game step is its
+  own step. A late tick never shortens the next step and never
   takes its step from the wall clock. That was the old pool pacer's fault,
   which ran 43.7 turns a second at a 25 ms setting. Effect's `Schedule.fixed`
   at a fractional period fires about 107 times a second, so the relay uses
   no periodic timer, only deadlines.
-- Default: 17/17/16. R2 measures 10 ms and 8 ms turns. A shorter turn
-  becomes the default only if, against 17/17/16 measured in the same session,
-  it keeps zero desyncs and game pace 1.000 ± 0.002, loses no more taps, and
-  adds at most 0.2 cores across both clients. A turn shorter than a frame
-  carries no callback some of the time, so its only gain is the lower
-  forwarding floor (5 ms or 4 ms mean). Buffer depth and lag limits are kept
+- Default: 8 ms, the shortest clean turn R2 measured. The rule: a turn
+  shorter than 17/17/16 becomes the default only if, against 17/17/16
+  measured in the same session, it keeps zero desyncs and game pace
+  1.000 ± 0.002, loses no more taps, and adds at most 0.2 cores across both
+  clients. On gex45 (24 October, one pool session, light and heavy input,
+  80 s each) 8 ms met it: 0 desyncs, pace 1.000, 0 lost taps against 0 light
+  and 5 heavy at 17/17/16, and 1.08 and 1.24 cores against 1.26 and 1.20.
+  10 ms lost one more tap than 17/17/16 with light input. A turn shorter
+  than a frame carries no callback some of the time, so its gain is the
+  lower forwarding floor (4 ms mean). Buffer depth and lag limits are kept
   in milliseconds, so they hold whatever the turn length.
 - After the relay stops its clock (lag, below), the next turn's deadline is
   rebased to the restart time, so no backlog of turns fires at once.
@@ -131,12 +139,12 @@ it emits after the action arrives, and acknowledges it in the next turn.
 **Why it is enough.** With feed times anchored to the relay's clock (Jitter
 buffer, below), a turn is fed late only if every packet carrying it before
 its feed time is lost: at depth D, D + 1 packets. With independent loss p,
-the late rate per turn is p^(D+1). At 60 turns a second the plan's bar, one
-underrun per 10 minutes, is 2.8 × 10⁻⁵ per turn.
+the late rate per turn is p^(D+1). At 125 turns a second (8 ms) the plan's
+bar, one underrun per 10 minutes, is 1.3 × 10⁻⁵ per turn.
 
-- At 5% loss, D = 2 gives 1.25 × 10⁻⁴ (an underrun every 2.2 minutes) and
-  D = 3 gives 6.3 × 10⁻⁶ (one every 44 minutes). So 5% loss needs D = 3,
-  50 ms.
+- At 5% loss, D = 2 gives 1.25 × 10⁻⁴ (an underrun about every minute) and
+  D = 3 gives 6.3 × 10⁻⁶ (one every 21 minutes). So 5% loss needs D = 3,
+  24 ms.
 - At 1% loss, D = 2 gives 10⁻⁶.
 - Real loss comes in bursts (Wi-Fi, cellular), which needs more depth. The
   bench (R6) runs Gilbert-Elliott burst models and loss traces recorded on a
@@ -148,7 +156,7 @@ underrun per 10 minutes, is 2.8 × 10⁻⁵ per turn.
 - *Streams* deliver in order. Recovery (RFC 9002) declares a packet lost
   after three later packets are acknowledged or 9/8 of an RTT, so the
   retransmission lands at least one RTT after the original would have. At
-  200 ms RTT that is about 15 turns, and a buffer deep enough to hide it
+  200 ms RTT that is about 28 turns, and a buffer deep enough to hide it
   costs 250 ms of latency. Streams are out.
 - *Unreliable datagrams* (RFC 9221) would need the same redundancy as raw
   UDP. They add about 25–30 bytes a packet, a TLS handshake and encryption.
@@ -171,7 +179,7 @@ verifies it, so it can't be used to amplify an attack.
 - **NAT rebinding.** A NAT that changes the port mid-match gives a new,
   unverified address. While the cookie round trip completes, the relay keeps
   sending every turn there, trimming each packet's history to fit the
-  three-times budget (the agent sends about 60 packets a second, so a turn or
+  three-times budget (the agent sends about 125 packets a second, so a turn or
   two of history fits). A rebind costs at most one RTT of thinner
   redundancy, not a stall. R10 measures it.
 - **Limits.** Rooms close when a match ends or after 10 idle minutes, and
@@ -189,8 +197,8 @@ The agent writes turn k to the game at its feed time
 feed(k) = anchor + relayTime(k) + depth
 ```
 
-where relayTime(k) is the sum of the steps before turn k (k × 50/3 ms at
-17/17/16), depth is in milliseconds (D turns of the current turn length),
+where relayTime(k) is the sum of the steps before turn k (k × 8 ms at the
+default), depth is in milliseconds (D turns of the current turn length),
 and anchor is the agent's estimate of when turn 0 would arrive on its fastest
 path. The anchor comes from the arrivals themselves: it is a low percentile
 (the 5th) of arrival(k) − relayTime(k) over the last 10 s, so jitter and loss
@@ -214,11 +222,11 @@ makes the late rate p^(D+1) rather than about p.
   like the one the relay's lag stop ends with. R9 measures it with an
   injected blackout.
 - **Drift.** The 1 ms-a-turn slew (as Wisp's transport's `paceShift`) is
-  only for clock drift between relay and agent (100 ppm is about four turns
-  over 10 minutes) and for returning from D + 1 to D after 30 s without an
-  underrun. Game steps stay the relay's, so game time follows the relay,
+  only for clock drift between relay and agent (100 ppm is 60 ms, about
+  eight turns, over 10 minutes) and for returning from D + 1 to D after
+  30 s without an underrun. Game steps stay the relay's, so game time follows the relay,
   not the slew.
-- **Ceiling.** If the chosen D would exceed 6 turns (100 ms), the client
+- **Ceiling.** If the chosen depth would exceed 100 ms (12 turns), the client
   reports the link as too poor before the match. Turns are never dropped.
 - **Timers.** The agent needs millisecond deadlines. On Windows it uses a
   high-resolution waitable timer, because default sleeps are 15.6 ms
@@ -233,12 +241,12 @@ row at its stamp, rolling back when the row arrives late
 - **Opponent's view.** Player A's simulation runs about
   one-way-down(A) + D_A turns behind the relay clock. A row A stamps at frame
   f reaches the relay one-way-up(A) later and goes into the next turn. B runs
-  that turn at frame k, where k − f ≈ RTT(A)/16.7 + D_A + the turn wait. So
-  A's link and A's buffer set how far B must roll back for A's inputs.
-  Smashcraft's own input delay subtracts from that depth. At 100 ms RTT and
-  D = 2 that is about 8.5 frames before delay; at 200 ms and D = 3 about
-  15.5. Smashcraft's echo-measured delay absorbs most of it, and the rest
-  must fit the rollback budget (6 in a duel, 8 for groups). Box S1 reruns
+  that turn at frame k, where k − f ≈ (RTT(A) + D_A × 8 ms + the turn
+  wait)/16.7 ms. So A's link and A's buffer set how far B must roll back for
+  A's inputs. Smashcraft's own input delay subtracts from that depth. At
+  100 ms RTT and D = 2 that is about 7 frames before delay; at 200 ms and
+  D = 3 about 13.5. Smashcraft's echo-measured delay absorbs most of it,
+  and the rest must fit the rollback budget (6 in a duel, 8 for groups). Box S1 reruns
   Smashcraft's rollback-budget sweep under the relay's paced delivery to
   set those budgets.
 - **Upstream jitter** moves a row into a later turn. The stamp keeps it on
@@ -392,7 +400,7 @@ model is TypeScript in wisp:src/headless/syncChannel.ts beside
 - **Public port (Tom).** R10 asks before opening the relay's UDP port on
   Nexus or gex45.
 - **Settled here.** Raw UDP with redundancy, no QUIC, per Tom's direction.
-  Deadline pacing; 17/17/16 until R2 says otherwise. A jitter buffer in the
+  Deadline pacing at 8 ms turns (R2). A jitter buffer in the
   agent with time-anchored feed times and depth chosen before the match.
   Rust in `wisp:relay/`. Players keyed by session token.
 
