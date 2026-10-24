@@ -77,18 +77,19 @@ That last fact splits the plan in two:
 
 ## Baseline: Wisp's TCP host on a lossy path (box R4)
 
-Status: method set, numbers pending. The table below is a gex45 trial run
-at 75–85% host CPU pressure on 24 October, so it does not count as the
-baseline; the cells are to be rerun on the laptop's LAN pool (wisp#33).
+Status: measured on the laptop's LAN pool on 25 October 2026 (wisp#33). The
+gex45 trial of 24 October ran at 75–85% host CPU pressure and is replaced.
 
 What the relay must beat: Wisp's own TCP host reached over an internet-like
-path, as FLO's single TCP stream reaches a player. Measured 24 October 2026
-on gex45 pool pair 2 (Warcraft III 3.0.0.24268, offline LAN, 60 fps cap),
-one pool session, its first match thrown away.
+path, as FLO's single TCP stream reaches a player. Measured 25 October 2026
+on the laptop's pool pair 1 (Warcraft III 3.0.0.24268, offline LAN, 60 fps
+cap). Each run had a pool session of its own, started fresh and stopped
+with SIGINT, and the run was that session's first match: the standing
+5-minute limit on native sessions leaves no room for a throwaway match.
 
 - **Host.** Wisp's deadline-paced LAN host (wisp#30) at
-  `--turn-ms 17,17,16`, from wisp 1eb2706 plus the port scope of cda8718.
-- **Path.** `wisp lan netem --pair 2 ... --tcp-port PORT` on the port
+  `--turn-ms 17,17,16`, from wisp 8820f59e.
+- **Path.** `wisp lan netem --pair 1 ... --tcp-port PORT` on the port
   `lan fresh` hosts on, applied as soon as the host writes it and before the
   first client joins, so lobby, load and play all cross the impaired path
   and nothing else on the loopback does (wisp:docs/lan.md, "Simulated
@@ -98,18 +99,20 @@ one pool session, its first match thrown away.
 - **Map and probe.** Smashcraft's integrity build of 59824cc9b (the R3 map),
   Rifleman quick match, and the turn-rate sweep's probe
   (smashcraft:docs/warcraft-api-netcode-findings.md, "Input sampling against
-  the LAN host's turn interval"): `-dev callback-clock 4800` stamps every
+  the LAN host's turn interval"): `-dev callback-clock 3600` stamps every
   60 Hz callback with `os.clock` and the raw `BlzIsKeyPressed` state of `c`;
   a host-side driver taps `c` on both clients every 280–520 ms for 50–90 ms
   through private-desktop XTEST (seed 7); heavy input adds a random tap of
-  `[ ] ; ' t v 1 2` every 30–80 ms. 80 s of callbacks per run.
-- **Host load.** A run started only with at most 6 live Warcraft clients on
-  gex45 and machine-capacity's `protectedCpuSomeAvg10` under 20. Each row
-  gives the most clients live during the run, the mean and peak of
-  `protectedCpuSomeAvg10` and the mean of the agent's system
-  `/proc/pressure/cpu` some avg10, sampled every second. Runs taken earlier
-  that day with more than 6 live clients, or with netem switched on
-  mid-match, are discarded, as is the closing heavy control (8 clients).
+  `[ ] ; ' t v 1 2` every 30–80 ms. 60 s of callbacks per run: a pool takes
+  about 160 s to bring both clients to their menus and the match about 45 s
+  to start, so 60 s is what fits in a 5-minute session.
+- **Host load.** A run's pool started only with at most 6 live Warcraft
+  clients on the laptop and both machine-capacity's
+  `protectedCpuSomeAvg10` and the system `/proc/pressure/cpu` some avg10
+  under 20. Each row gives the most clients live during the run, the mean
+  and peak of `protectedCpuSomeAvg10` and the mean of the system some avg10,
+  sampled every second, both values when the probe started, and the other
+  laptop pairs whose clients were live then.
 
 Columns: callback gap p50/p99/max over both clients (ms); taps seen, the
 probe presses the raw key state reported down, per client; press-to-sample
@@ -122,51 +125,78 @@ ms; desyncs from the host's checksum compare; pace, game seconds per wall
 second over the host's last 140 marks; callbacks/s, the slower client's
 callbacks per wall second; load average at the run's start and end.
 
-| Path | Input | Run | Callback gap p50/p99/max ms | Taps seen (a, b) | Press-to-sample spread ms (frames p5–p95) | Rollbacks/min (a, b) | Deepest rollback | Longest stall ms | Host waits (longest ms) | Desyncs | Pace | Callbacks/s | Load avg before–after | Live clients (max) | protectedCpuSomeAvg10 mean (max) | System CPU some avg10 mean |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| none, first | light | `r0-light` | 16.1/32.0/106 | 176/187, 177/192 | 82, 63 (3, 2) | 243, 248 | 19 | 178 | 0 (0) | 0 | 1.000 | 60.0 | 24.39–12.15 | 5 | 1.4 (max 2.2) | 69.0 |
-| none, first | heavy | `r0-heavy` | 15.9/30.0/58 | 185/187, 188/189 | 45, 47 (2, 2) | 584, 584 | 14 | 58 | 0 (0) | 0 | 1.000 | 60.0 | 10.00–8.14 | 5 | 1.5 (max 2.3) | 75.3 |
-| none, last | light | `r0-light-end` | 15.1/32.2/168 | 187/187, 187/192 | 53, 58 (1, 2) | 249, 246 | 20 | 237 | 3 (25) | 0 | 1.000 | 59.9 | 15.55–22.07 | 6 | 7.2 (max 9.8) | 67.8 |
-| 120 ms, 2% | light | `r120-l2-light` | 14.2/35.9/166 | 184/187, 181/192 | 73, 58 (1, 2) | 245, 232 | 24 | 192 | 0 (0) | 0 | 1.000 | 60.0 | 8.75–7.51 | 5 | 0.8 (max 1.6) | 71.4 |
-| 120 ms, 2% | heavy | `r120-l2-heavy` | 13.9/43.0/285 | 172/187, 165/189 | 70, 74 (2, 2) | 539, 548 | 24 | 285 | 0 (0) | 0 | 1.000 | 60.0 | 7.57–7.05 | 5 | 0.1 (max 0.8) | 12.2 |
-| 120 ms, 5% | light | `r120-l5-light` | 12.9/133.1/319 | 169/187, 169/192 | 82, 67 (2, 2) | 234, 220 | 24 | 319 | 0 (0) | 0 | 1.000 | 59.9 | 7.40–7.61 | 5 | 2.3 (max 4.2) | 84.4 |
-| 120 ms, 5% | heavy | `r120-l5-heavy` | 12.9/138.9/330 | 161/187, 161/189 | 74, 74 (4, 3) | 473, 487 | 24 | 330 | 0 (0) | 0 | 1.000 | 60.0 | 7.45–6.96 | 5 | 0.7 (max 1.4) | 52.3 |
-| 200 ms, 2% | light | `r200-l2-light` | 12.2/78.9/476 | 172/187, 167/192 | 66, 68 (2, 2) | 228, 220 | 24 | 476 | 0 (0) | 0 | 1.000 | 60.0 | 7.78–5.72 | 5 | 0.0 (max 0.1) | 0.1 |
-| 200 ms, 2% | heavy | `r200-l2-heavy` | 13.9/54.0/489 | 165/187, 168/189 | 60, 77 (2, 3) | 485, 487 | 24 | 489 | 0 (0) | 0 | 1.000 | 60.0 | 6.18–9.36 | 5 | 0.3 (max 1.2) | 0.6 |
-| 200 ms, 5% | light | `r200-l5-light-b` | 11.7/190.9/353 | 157/187, 157/192 | 88, 77 (4, 4) | 201, 206 | 24 | 361 | 1 (16) | 0 | 1.000 | 60.0 | 20.57–14.68 | 6 | 2.5 (max 4.6) | 3.6 |
-| 200 ms, 5% | heavy | `r200-l5-heavy-b` | 12.2/189.9/526 | 131/187, 154/189 | 81, 90 (4, 5) | 399, 412 | 24 | 526 | 0 (0) | 0 | 1.000 | 60.0 | 11.02–12.57 | 6 | 2.3 (max 5.0) | 3.4 |
-| 120 ms, 2%, jitter 20 ms | light | `r120-l2-j20-light` | 14.2/62.0/273 | 179/187, 176/192 | 73, 73 (2, 3) | 238, 243 | 24 | 273 | 0 (0) | 0 | 1.000 | 60.0 | 29.86–18.77 | 6 | 2.1 (max 5.5) | 11.5 |
-| 120 ms, 2%, jitter 20 ms | heavy | `r120-l2-j20-heavy` | 14.9/53.0/270 | 163/187, 161/189 | 83, 81 (3, 4) | 524, 538 | 24 | 270 | 0 (0) | 0 | 1.000 | 60.0 | 19.03–16.61 | 6 | 4.8 (max 6.4) | 6.5 |
-| 120 ms, 2%, bursts | light | `r120-l2-burst-light` | 14.2/34.9/245 | 179/187, 185/192 | 61, 64 (1, 2) | 249, 231 | 24 | 245 | 0 (0) | 0 | 1.000 | 60.0 | 17.05–12.17 | 6 | 2.0 (max 5.1) | 3.5 |
-| 120 ms, 2%, bursts | heavy | `r120-l2-burst-heavy` | 15.1/48.1/395 | 169/187, 172/189 | 77, 86 (3, 3) | 533, 530 | 24 | 395 | 0 (0) | 0 | 1.000 | 60.0 | 15.50–15.11 | 6 | 6.0 (max 14.3) | 8.4 |
+| Path | Input | Run | Callback gap p50/p99/max ms | Taps seen (a, b) | Press-to-sample spread ms (frames p5–p95) | Rollbacks/min (a, b) | Deepest rollback | Longest stall ms | Host waits (longest ms) | Desyncs | Pace | Callbacks/s | Load avg before–after | Live clients (max) | protectedCpuSomeAvg10 mean (max) | System CPU some avg10 mean | At start: protectedCpuSomeAvg10, /proc/pressure/cpu some avg10 | Other laptop pairs running |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| none | light | `r0-light` | 20.0/29.0/40 | 138/138, 138/139 | 26, 29 (1, 1) | 248, 243 | 8 | 40 | 0 (0) | 0 | 1.000 | 60.0 | 9.59–8.37 | 2 | 0.0 (max 0.0) | 0.1 | 0.04, 0.32 | none |
+| none | heavy | `r0-heavy` | 18.0/29.0/38 | 138/138, 141/141 | 38, 37 (2, 2) | 578, 581 | 12 | 38 | 0 (0) | 0 | 1.000 | 60.0 | 4.71–4.66 | 2 | 0.0 (max 0.0) | 0.1 | 0, 0.18 | none |
+| 120 ms, 2% | light | `r120-l2-light` | 17.0/55.0/1791 | 127/138, 127/139 | 77, 57 (1, 2) | 236, 232 | 24 | 1883 | 2 (1151) | 0 | 0.985 | 58.8 | 5.31–5.57 | 2 | 0.0 (max 0.1) | 0.2 | 0.09, 0.40 | none |
+| 120 ms, 2% | light | `r120-l2-light-b` | 17.0/77.0/178 | 129/138, 134/139 | 79, 62 (1, 1) | 237, 224 | 24 | 178 | 0 (0) | 0 | 1.000 | 60.0 | 3.79–3.85 | 2 | 0.0 (max 0.0) | 0.2 | 0, 0.20 | none |
+| 120 ms, 2% | heavy | `r120-l2-heavy` | 15.0/48.0/179 | 133/138, 134/141 | 57, 79 (2, 2) | 537, 529 | 24 | 215 | 0 (0) | 0 | 1.000 | 60.0 | 5.10–5.29 | 2 | 0.0 (max 0.0) | 0.1 | 0, 0.18 | none |
+| 120 ms, 5% | light | `r120-l5-light` | 12.0/147.0/344 | 131/138, 123/139 | 68, 65 (2, 2) | 236, 233 | 24 | 344 | 0 (0) | 0 | 1.000 | 60.0 | 5.94–5.32 | 2 | 0.0 (max 0.0) | 0.1 | 0, 0.20 | none |
+| 120 ms, 5% | heavy | `r120-l5-heavy` | 12.0/145.0/542 | 129/138, 122/141 | 89, 66 (2, 2) | 493, 495 | 24 | 542 | 0 (0) | 0 | 1.000 | 60.0 | 5.78–6.98 | 2 | 0.0 (max 0.2) | 0.3 | 0, 0.34 | none |
+| 200 ms, 2% | light | `r200-l2-light` | 15.0/58.0/443 | 125/138, 127/139 | 58, 50 (1, 2) | 221, 216 | 24 | 443 | 1 (48) | 0 | 0.999 | 59.9 | 7.94–6.12 | 2 | 0.0 (max 0.0) | 0.3 | 0.02, 0.34 | none |
+| 200 ms, 2% | heavy | `r200-l2-heavy` | 13.0/61.0/323 | 123/138, 124/141 | 63, 51 (2, 2) | 495, 500 | 24 | 323 | 0 (0) | 0 | 1.000 | 60.0 | 5.07–5.59 | 2 | 0.0 (max 0.0) | 0.1 | 0, 0.35 | none |
+| 200 ms, 5% | light | `r200-l5-light` | 8.0/225.0/596 | 104/138, 108/139 | 77, 64 (2, 3) | 193, 199 | 24 | 596 | 4 (201) | 0 | 0.995 | 59.9 | 4.69–4.47 | 2 | 0.0 (max 0.0) | 0.1 | 0, 0.31 | none |
+| 200 ms, 5% | heavy | `r200-l5-heavy` | 10.0/219.0/535 | 113/138, 97/141 | 80, 68 (3, 5) | 388, 396 | 24 | 535 | 2 (100) | 0 | 0.998 | 59.7 | 3.99–7.55 | 2 | 0.3 (max 1.2) | 0.9 | 0, 0.18 | none |
+| 120 ms, 2%, jitter 20 ms | light | `r120-l2-j20-light` | 16.0/84.0/357 | 133/138, 129/139 | 78, 52 (1, 1) | 231, 248 | 24 | 357 | 0 (0) | 0 | 1.000 | 60.0 | 5.22–6.53 | 2 | 0.0 (max 0.4) | 0.1 | 0, 0.17 | none |
+| 120 ms, 2%, jitter 20 ms | heavy | `r120-l2-j20-heavy` | 14.0/67.0/334 | 129/138, 132/141 | 78, 62 (2, 2) | 535, 523 | 24 | 334 | 0 (0) | 0 | 1.000 | 60.0 | 5.46–5.30 | 2 | 0.0 (max 0.0) | 0.0 | 0, 0.21 | none |
+| 120 ms, 2%, bursts | light | `r120-l2-burst-light` | 18.0/35.0/175 | 133/138, 133/139 | 85, 42 (1, 0) | 246, 239 | 22 | 175 | 0 (0) | 0 | 1.000 | 60.0 | 5.42–4.60 | 2 | 0.0 (max 0.0) | 0.1 | 0, 0.18 | none |
+| 120 ms, 2%, bursts | heavy | `r120-l2-burst-heavy` | 15.0/53.0/410 | 133/138, 129/141 | 76, 62 (2, 2) | 535, 529 | 24 | 410 | 0 (0) | 0 | 1.000 | 60.0 | 4.92–4.31 | 2 | 0.0 (max 0.0) | 0.1 | 0, 0.18 | none |
 
-Output directories are `~/.local/state/smashcraft/wisp-33/runs/CELL` on
-gex45, one per row (`r120-l2-light` is RTT 120, loss 2%, light input;
-`-j20` jitter; `-burst` bursts; `r0-*` no impairment), each with the
-callback clocks, the stimulus record, the action log, the netem setting,
-the gate record and the per-second host samples.
+Notes:
 
-What the gex45 trial showed, pending the laptop rerun:
+- **Pool sessions**, start to stop, in seconds (pool ready at, then
+  stopped at): `r0-light` 156.3, 272.4; `r0-heavy` 155.2, 270.6;
+  `r120-l2-light` 154.5, 270.0; `r120-l2-light-b` 153.4, 268.9;
+  `r120-l2-heavy` 154.6, 269.5; `r120-l5-light` 153.5, 268.9;
+  `r120-l5-heavy` 155.1, 270.0; `r200-l2-light` 154.2, 270.2;
+  `r200-l2-heavy` 155.6, 271.5; `r200-l5-light` 152.4, 267.8;
+  `r200-l5-heavy` 154.5, 270.0; `r120-l2-j20-light` 152.5, 268.5;
+  `r120-l2-j20-heavy` 152.5, 269.5; `r120-l2-burst-light` 155.1, 270.5;
+  `r120-l2-burst-heavy` 153.5, 269.5. The driver cuts a run at 290 s and
+  skips one whose pool is ready after 170 s. Two sessions were cut and
+  discarded: an 80 s `r0-light` (stopped at 295.0 s), and the first
+  `r200-l2-heavy`, whose pool relaunched a client with no window and was
+  ready only at 194.2 s (stopped at 295.3 s).
+- **`r120-l2-light` stalled on the host's disk, not the path.** Its 1.8 s
+  stall and 1151 ms host wait at 71 s sit on the only second of the run
+  where `/proc/pressure/io` full rose, to 371 and 255 ms a second against
+  about 3 elsewhere, with CPU pressure at 0. `r120-l2-light-b` reran the
+  cell: 60.0 callbacks/s, pace 1.000, no host wait.
 
-- **Game time held.** In every cell the paced host kept pace 1.000 and both
-  clients 60 callbacks a second, with at most one host wait (16 ms) and no
-  desync. TCP retransmission never stalled a client the 50 turns (about
-  850 ms) that make the host wait.
-- **Cadence and taps paid.** Loss shows up in the callbacks: p99 gap 30–32 ms
-  without impairment, 35–79 ms at 2% loss (with or without jitter or
-  bursts) and 133–191 ms at 5%, with single gaps of 166–526 ms against
-  58–168 ms. Raw taps seen fell from 176–188 per client to 161–185 at 2% and
-  131–169 at 5%, and the press-to-sample spread widened from 1–3 frames to
-  2–5 at 5%. Every impaired run reached a 24-frame rollback, against 14–20
-  without impairment. RTT on its own costs little: 200 ms at 2% sits close to
-  120 ms at 2%.
-- **Jitter and bursts at 2%** cost about what plain 2% does here: p99 gap
-  35–62 ms against 36–79 ms.
-- **The 5% rows would set the relay's yardstick** (box R9): p99 callback gaps
-  near 190 ms, half-second single gaps and up to 56 taps in 190 lost at
-  200 ms, 5%, the cell where W3Champions claims no lag spikes.
+Output directories are `~/.local/state/wisp-33/laptop-runs/runs/CELL` on
+the laptop, one per row (`r120-l2-light` is RTT 120, loss 2%, light input;
+`-j20` jitter; `-burst` bursts; `r0-*` no impairment; `-b` a rerun), each
+with the callback clocks, the stimulus record, the action log, the netem
+setting, the gate record, the pool session's timings and the per-second
+host samples.
 
-Two findings from the runs that do not count:
+What the relay must beat, read from the table:
+
+- **Game time held.** Apart from the disk stall above, every cell kept pace
+  0.995 or better and both clients at 59.7 callbacks a second or more, with
+  no desync. Host waits came only at 200 ms: one of 48 ms at 2% and 2–4 of
+  at most 201 ms at 5%. TCP retransmission never put the host behind for
+  long.
+- **Cadence and taps paid.** Without impairment the p99 callback gap is
+  29 ms, the longest single gap 38–40 ms, every probe tap is seen and the
+  deepest rollback is 8–12 frames. At 2% loss the p99 gap is 48–77 ms with
+  single gaps of 178–443 ms, and 123–134 of 138–141 taps are seen; at 5% it
+  is 145–147 ms at 120 ms RTT and 219–225 ms at 200 ms, with single gaps of
+  344–596 ms and as few as 97 taps seen. Every impaired run but one reached
+  a 24-frame rollback, and the press-to-sample spread widened from 1–2
+  frames to up to 5.
+- **RTT costs most at 5%.** At 2%, 200 ms sits near 120 ms (p99 58–61 against
+  48–77 ms); at 5% it adds about 75 ms to the p99 gap and costs another
+  15–30 taps per client.
+- **Jitter at 2%** raised the p99 gap to 67–84 ms; **bursts at 2%** cost no
+  more than plain 2% (35–53 ms).
+- **The yardstick for the relay** (box R9) is the 200 ms, 5% cell, where
+  W3Champions claims no lag spikes: a p99 callback gap near 220 ms, single
+  gaps near 600 ms and up to 44 taps in 141 lost.
+
+Two findings from the earlier gex45 runs, which do not count
+(`~/.local/state/smashcraft/wisp-33/` on gex45):
 
 - **Host load, not the path, made the big stalls.** The same cells taken
   earlier with up to 14 live clients on gex45 gave 18–441 host waits, pace
@@ -177,6 +207,7 @@ Two findings from the runs that do not count:
   0xC00000E5) in 2 of 4 lossy runs (`runs-whole-loopback`,
   `runs-tcp-midmatch`). None of the 26 lossy runs with the path impaired from
   the host's start crashed.
+
 
 ## Shape
 
@@ -1036,7 +1067,7 @@ wisp (epic wisp#28):
 - **R3** Whether held-key reads wait for the turn echo, at 0/100/200 ms RTT
   (wisp#32).
 - **R4** Baseline: Wisp's TCP host under jitter and loss, as a FLO-like path
-  is (wisp#33); method and gex45 trial in Baseline, above.
+  is (wisp#33); measured on the laptop pool in Baseline, above.
 - **R5** `wisp lan netem` gains jitter, burst loss and port scoping
   (wisp#34).
 - **R6** Relay protocol core, jitter buffer and simulated-network bench in
