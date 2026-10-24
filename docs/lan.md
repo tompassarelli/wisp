@@ -630,6 +630,12 @@ client's War3Preferences `[Video]`, `[Misc]` and `[Sound]` at launch:
 - `capture-classic-1080` is `capture-classic` in a 1920×1080 window, the
   resolution native silhouette captures compare at (wisp#2).
 
+A profile's size is the game's client area. The window is 4 px wider and
+taller, because Wine draws a 2 px frame on each side, so a pool client's game
+pixels start at (2,2) of its window (`windowSize`). On 24 October 2026 a
+1920×1080 window left the game 1916×1076; the 1924×1084 window gives exactly
+1920×1080.
+
 **The pool draws only Classic.** Its clients never sign in, and an unsigned
 client draws Classic models whatever `[Misc] hd` says. On 9 October 2026
 (3.0.0.24268) a Rifleman stand frame on lan0a at `hd=0` and at `hd=2` differed

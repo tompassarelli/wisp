@@ -15,7 +15,7 @@ import { loadLanPlugin } from "./plugin";
 import { mapCopies, mapFactsLine, readMapFacts } from "./map";
 import { relayedStatus } from "./relayedStatus";
 import { ALARM_AFTER_MS, agentPidFile, type Driver, MENUS_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, STOP_GRACE, alive, launchUntilShown, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, stopGame, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
-import { preferences } from "../os/warcraft/clientProfiles";
+import { preferences, windowSize } from "../os/warcraft/clientProfiles";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
 
 const argument = (name: string) => flagValues(process.argv, name)[0];
@@ -142,8 +142,8 @@ const agent = Effect.gen(function*() {
   if (Option.isNone(windows)) say("no window placement: game windows keep the size and place the desktop gives them");
   else {
     const placeWindows = Effect.forEach(clients, (client) => Effect.gen(function*() {
-      const placed = yield* windows.value.place(client.env, "Warcraft III", { x: client.windowX, y: 0, width: profile.width, height: profile.height });
-      for (let window = 0; window < placed; window++) say(`placed ${client.name}'s window at ${client.windowX},0, ${profile.width}x${profile.height}`);
+      const placed = yield* windows.value.place(client.env, "Warcraft III", { x: client.windowX, y: 0, ...windowSize(profile) });
+      for (let window = 0; window < placed; window++) say(`placed ${client.name}'s window at ${client.windowX},0, ${windowSize(profile).width}x${windowSize(profile).height}`);
     }), { discard: true });
     yield* Effect.forkScoped(pollUntil(placeWindows, { every: "3 seconds" }));
   }

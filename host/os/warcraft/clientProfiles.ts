@@ -51,8 +51,8 @@ function profileSections(profile: Profile, windowX: number): Record<string, Reco
     resheight: profile.height,
     supersampling: 100,
     windowmode: 0,
-    windowwidth: profile.width,
-    windowheight: profile.height,
+    windowwidth: windowSize(profile).width,
+    windowheight: windowSize(profile).height,
     windowx: windowX,
     windowy: 0,
   };
@@ -79,5 +79,8 @@ export const CLIENT_PROFILE_NAMES = Object.keys(CLIENT_PROFILES) as readonly Cli
 
 export const clientSettings = (profile: ClientProfile): Record<string, Record<string, string>> =>
   Object.fromEntries(Object.entries(profileSections(CLIENT_PROFILES[profile], 0)).map(([section, values]) => [section, Object.fromEntries(Object.entries(values).map(([key, value]) => [key, String(value)]))]));
+
+const WINDOW_FRAME = 2;
+export const windowSize = (profile: Profile) => ({ width: profile.width + 2 * WINDOW_FRAME, height: profile.height + 2 * WINDOW_FRAME });
 
 export const desktopSize = (profile: Profile) => `${profile.width + 40}x${profile.height + 40}`;
