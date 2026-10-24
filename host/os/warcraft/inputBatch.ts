@@ -23,7 +23,7 @@ const PLAIN = new Set([..."abcdefghijklmnopqrstuvwxyz0123456789 `-=[]\\;',./\n\t
 
 export const untypable = (text: string) => [...text].find((character) => !SHIFTED.has(character) && !PLAIN.has(character));
 
-export const TEXT_DELAY_MILLIS = 80;
+const TEXT_DELAY_MILLIS = 80;
 
 const pauseFor = (millis: number): readonly string[] => (millis > 0 ? ["pause", String(millis / 1000)] : []);
 
