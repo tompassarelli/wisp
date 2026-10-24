@@ -116,3 +116,33 @@ The new measured work is [dummy lobby clients #46](https://github.com/tompassare
 and [retail replay import #47](https://github.com/tompassarelli/wisp/issues/47).
 Each useful verdict above names one of these destinations. The owning research
 issue is [#42](https://github.com/tompassarelli/wisp/issues/42).
+
+## The relay agent's game host (wisp#37)
+
+Checked 24 October 2026, before the relay agent ported Wisp's LAN host to
+Rust (wisp:docs/relay.md, "Lobby and game on the agent").
+
+- **Source and revision:** W3C-Flo, github.com/BogdanW3/W3C-Flo at
+  `6db3a4010fab0b0b29824a61f2c9c956f97fd211`; read in `crates/client/src/lan/game`
+  (`lobby.rs`, `proxy.rs`, `slot.rs`), `crates/lan` and `crates/w3gs`.
+- **Licence and covered scope:** the root `LICENSE` at that revision is MIT
+  (Copyright (c) 2023 W3Champions). No file under `crates/client`, `crates/lan`
+  or `crates/w3gs` carries its own licence header at that revision; the one
+  MPL-2.0 file header in the tree is `crates/blp/src/lib.rs`, which nothing
+  here reads. Earlier FLO revisions were MPL-2.0, which is why
+  host/lan/host.ts, w3gs.ts and actions.ts name MPL-2.0 in their first lines;
+  the MIT declaration is not applied to those older files.
+- **Reused scope:** protocol facts only: which W3GS packets the host sends a
+  joining player and in what order (slot info for the joiner, slot table,
+  each other player's info, skins and profile, then the map check), their
+  field layouts, the countdown wait, and action and checksum framing. These
+  facts reached Wisp through host.ts, w3gs.ts and actions.ts, Wisp's own MIT
+  TypeScript. The Rust crate `relay-agent` is ported from those Wisp files
+  and replays a lobby transcript recorded from host.ts; no FLO code was
+  copied, translated or adapted, and FLO was not a build or test dependency.
+- **wc3-slop-lan** (github.com/Promises/wc3-slop-lan) has no licence and is
+  read for facts only, as docs/driving-warcraft.md records; the agent reuses
+  nothing from it beyond the map-check fold host/lan/map.ts already names.
+- **Obligations:** none for facts. Copying FLO expression later would carry the
+  MIT notice for files at this revision and a separate check of any file's
+  history before 2023.
