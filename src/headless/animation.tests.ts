@@ -33,12 +33,26 @@ test("[property seed 58] animation: an effect never told what to play shows Birt
     const steps = floorMod(birthLength, 125) === 0 && next(4) === 0 ? birthLength * 32 / 125 : next(4096);
     const ms = steps * 1000 / 256;
     const at = `run ${run} at ${ms} ms`;
-    const standFrame = (from: number, looping: boolean) => stand.start + Math.floor(looping ? floorMod(from, stand.end - stand.start) : Math.min(from, stand.end - stand.start));
+    const below = (clock: number) => Math.max(0, Math.ceil(clock) - 1);
+    const standFrame = (from: number, looping: boolean) => stand.start + (looping ? floorMod(below(from), stand.end - stand.start) : Math.min(below(from), stand.end - stand.start));
     const effect = animationSample(model, { animation: undefined, subAnimations: [], elapsed: steps / 256 }, "effect");
-    if (hasBirth && ms < birthLength) shows(effect, birthIndex, 9000 + Math.floor(ms), `${at}: an effect's Birth`);
+    if (hasBirth && ms < birthLength) shows(effect, birthIndex, 9000 + below(ms), `${at}: an effect's Birth`);
     else shows(effect, standIndex, standFrame(hasBirth ? ms - birthLength : ms, true), `${at}: an effect's Stand, or its first sequence without one, loops even when the model says not to`);
     shows(animationSample(model, { animation: undefined, subAnimations: [], elapsed: steps / 256 }, "unit"), standIndex, standFrame(ms, stand.looping), `${at}: a unit's Stand, or its first sequence without one`);
   }
+});
+
+test("[spec wisp#2] animation: a clock on an exact millisecond draws the millisecond before it and a fractional clock its whole millisecond; zero draws the start, a lap's end the lap's last millisecond, and a held sequence its end", () => {
+  const model = [sequence("Stand", 0, 244669), sequence("Attack", 3000, 3500, false), sequence("Walk", 1000, 2000)];
+  const at = (animation: string, elapsed: number) => animationSample(model, { animation, subAnimations: [], elapsed }, "effect");
+  shows(at("Stand", f32(237.585)), 0, 237584, "a timeline seek to 237.585 s");
+  shows(at("Stand", f32(237.60167)), 0, 237601, "a timeline seek to 237.60167 s");
+  shows(at("Walk", f32(0.4)), 2, 1399, "a seek to 0.4 s");
+  shows(at("Walk", f32(0.4005)), 2, 1400, "a seek to 0.4005 s");
+  shows(at("Walk", 0), 2, 1000, "a seek to 0");
+  shows(at("Walk", 1), 2, 1999, "one whole lap");
+  shows(at("Attack", f32(0.25)), 1, 3249, "a seek to 0.25 s");
+  shows(at("Attack", 2), 1, 3500, "past a non-looping end");
 });
 
 test("animation: a pose settled when read matches one advanced every frame, and a blend keeps the old pose and fades it over the blend time, through selections, seeks, time scales and blends", () => {

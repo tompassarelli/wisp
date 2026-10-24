@@ -201,11 +201,13 @@ export function selectSequence(sequences: readonly AnimationSequence[], animatio
 }
 
 // Looping MDX sequences keep overshoot; non-looping sequences hold the interval end.
+// Native draws the whole millisecond below the clock, so a clock on an exact millisecond draws the one before it.
 
 export function sequenceFrame(sequence: AnimationSequence, ms: number, looping = sequence.looping): number {
   const length = sequence.end - sequence.start;
   if (length <= 0) return sequence.start;
-  return sequence.start + Math.floor(looping ? floorMod(ms, length) : Math.min(ms, length));
+  const whole = Math.max(0, Math.ceil(ms) - 1);
+  return sequence.start + (looping ? floorMod(whole, length) : Math.min(whole, length));
 }
 
 export interface SequenceSample {

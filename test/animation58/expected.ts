@@ -3,17 +3,17 @@ export const EXPECTED = [
   "unit-stand=0,24,0",
   "unit-stand-hit=0,12,0",
 
-  "birth-during=250,48,125",
+  "birth-during=249,48,125",
   "birth-after=499,24,500",
 
   "global-frozen=0,24,0",
 
-  "global-kept=875,36,300",
+  "global-kept=874,36,300",
 
   "index-out-of-range=0,24,0",
 
-  "clip-shown=400,24,0",
-  "clip-second-seek=400,24,0",
+  "clip-shown=399,24,0",
+  "clip-second-seek=399,24,0",
 
   "select-freeze-seek=0,36,500",
   "freeze-then-select-seek=0,36,250",
@@ -23,7 +23,7 @@ export const EXPECTED = [
 
   "nonloop-held=1100,60,250",
 
-  "loop-seek-past-end=498,36,250",
+  "loop-seek-past-end=497,36,250",
   "nonloop-seek-past-end=1100,60,250",
 
   "blend-150=350,28,275",
@@ -42,9 +42,9 @@ export const EXPECTED = [
 
   "teardown-hidden=gone",
 
-  "matrix-scale-once=250,24,140",
-  "matrix-scale-twice=500,24,320",
-  "matrix-scale-reset=250,24,140",
+  "matrix-scale-once=248,24,140",
+  "matrix-scale-twice=496,24,320",
+  "matrix-scale-reset=248,24,140",
 ];
 
 export const EXPECTED_FILE = [
