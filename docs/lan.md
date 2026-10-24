@@ -39,6 +39,15 @@ bun wisp lan pool --pair 0 --pair 1 --pool-profile parity
 bun wisp lan fresh MAP.w3x --pair 0
 ```
 
+`lan pool` and `lan dummy` compile the map packager into
+`~/.cache/wisp/lan/map-pack` when it is missing or older than
+wisp:native/map-pack.c. They do it before entering the pair's network
+namespace, where `nix` could not fetch StormLib, so a new host needs `nix`
+and nothing built by hand.
+When the private LAN plugin fails to load (a missing data directory, for
+instance), the next `fresh` loads it again instead of keeping the failure
+until the pool restarts.
+
 On 9 October, two pairs played pad scripts concurrently with every native
 checksum, row and fighter line equal to headless. A pair ran 70 s after
 `lan pool` started and entered its match 36 s after `pad` requested it.

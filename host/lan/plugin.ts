@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { Effect, Schedule } from "effect";
 import type { MenuSocket } from "../os/warcraft/menuSocket";
 import { LanFailure } from "./join";
@@ -22,6 +22,12 @@ export const lanPluginProblem = (path = LAN_PLUGIN) => (existsSync(path) ? undef
 
 let loaded: LanPlugin | undefined;
 
+// Bun keeps a module whose evaluation threw as uninitialized, so a retry must first drop the plugin directory's module records.
+const forgetPluginModules = () => {
+  const directory = `${dirname(LAN_PLUGIN)}${sep}`;
+  for (const key of Object.keys(require.cache)) if (key.startsWith(directory)) delete require.cache[key];
+};
+
 export const loadLanPlugin: Effect.Effect<LanPlugin, LanFailure> = Effect.suspend(() => {
   if (loaded !== undefined) return Effect.succeed(loaded);
   const problem = lanPluginProblem();
@@ -40,6 +46,9 @@ export const loadLanPlugin: Effect.Effect<LanPlugin, LanFailure> = Effect.suspen
       };
       return loaded;
     },
-    catch: (cause) => new LanFailure({ problem: `the LAN plugin at ${LAN_PLUGIN} didn't load: ${describeCause(cause)}` }),
+    catch: (cause) => {
+      forgetPluginModules();
+      return new LanFailure({ problem: `the LAN plugin at ${LAN_PLUGIN} didn't load: ${describeCause(cause)}` });
+    },
   });
 });
