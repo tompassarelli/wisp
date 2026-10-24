@@ -41,6 +41,7 @@ permissions:
 
 jobs:
   farm:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 50
     # One run at a time per repository: a new run cancels nothing and waits
