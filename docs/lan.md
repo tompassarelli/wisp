@@ -803,15 +803,18 @@ is missing.
 ### Turn pacing
 
 The host sends turn n when the wall clock reaches the sum of the first n
-steps of the `--turn-ms` cycle (wisp:host/lan/host.ts, `pacedTurns`), and
-gives that turn the cycle's nth step as its game time. Each turn waits for an
+steps of the `--turn-ms` cycle divided by the speed (wisp:host/lan/host.ts,
+`pacedTurns`), and gives that turn the step the pacer handed it as its game
+time, so the deadline keeps every fraction of a millisecond a speed leaves and
+summed game time never drops a remainder. Each turn waits for an
 absolute deadline, so a late wake shortens the next wait instead of shifting
 every later turn, and game time stays on wall time. Effect 4.0.3's
 `Schedule.fixed` is not used for turns: with a fractional period such as
 16.6667 ms it fired 107 times a second instead of 60 (24 October 2026), and
 the game ran at 1.54 times wall speed. wisp:test/lanPacing.test.ts drives the pacer on a
-virtual clock whose wakes run 0–9 ms late and checks that every turn of a
-17/17/16 cycle still goes out within one wake of its 1/60 s deadline.
+virtual clock whose wakes run late by up to 0.9 of a turn, for 25, 30 and
+17/17/16 cycles at speeds 1 to 16, and checks that every turn goes out within
+one wake of the wall time its summed game milliseconds reach.
 
 Measured on 24 October 2026 (Smashcraft integrity build, 3.0.0.24268, LAN
 pair 0), the default ran 39.94 turns a second of exactly 25 ms at game pace

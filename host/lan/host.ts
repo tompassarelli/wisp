@@ -130,13 +130,15 @@ export interface TurnClock {
   readonly sleep: (ms: number) => Effect.Effect<void>;
 }
 
-export const pacedTurns = <E, R>(steps: readonly number[], clock: TurnClock, turn: Effect.Effect<void, E, R>) => Effect.suspend(() => {
-  let deadline = clock.now();
+export const pacedTurns = <E, R>(steps: readonly number[], speed: number, clock: TurnClock, turn: (step: number) => Effect.Effect<void, E, R>) => Effect.suspend(() => {
+  const start = clock.now();
+  let gameMs = 0;
   let next = 0;
   return Effect.forever(Effect.suspend(() => {
-    deadline += steps[next++ % steps.length]!;
-    return clock.sleep(Math.max(0, deadline - clock.now()));
-  }).pipe(Effect.andThen(turn)));
+    const step = steps[next++ % steps.length]!;
+    gameMs += step;
+    return clock.sleep(Math.max(0, start + gameMs / speed - clock.now())).pipe(Effect.andThen(turn(step)));
+  }));
 });
 
 export const startHost = (options: HostOptions) => Effect.gen(function*() {
@@ -403,7 +405,10 @@ export const startHost = (options: HostOptions) => Effect.gen(function*() {
       setPhase("loading");
     } else if (phase === "loading" && players.filter((player) => !player.left).every((player) => player.loaded)) {
       setPhase("playing");
-    } else if (phase === "playing") {
+    }
+  };
+  const playTurn = (step: number) => {
+    if (phase === "playing") {
       const behind = Math.max(0, ...players.filter((player) => !player.left).map((player) => turns - player.checksums.length));
       if (behind > SYNC_LIMIT) {
         if (!waiting) line(`waiting: a client is ${behind} turns behind`);
@@ -412,7 +417,6 @@ export const startHost = (options: HostOptions) => Effect.gen(function*() {
       }
       if (waiting) line("caught up");
       waiting = false;
-      const step = turnSteps[turns % turnSteps.length]!;
       const actions = pending;
       pending = [];
       broadcast(incomingAction(step, actions));
@@ -428,10 +432,7 @@ export const startHost = (options: HostOptions) => Effect.gen(function*() {
   yield* Effect.forkScoped(Effect.sync(() => {
     if (phase !== "playing") tick();
   }).pipe(Effect.repeat(Schedule.fixed("250 millis")), Effect.delay("250 millis")));
-  const sendTurn = Effect.sync(() => {
-    if (phase === "playing") tick();
-  });
-  const turnLoop = () => pacedTurns(turnSteps.map((step) => step / speed), { now, sleep: (ms) => Effect.sleep(ms) }, sendTurn);
+  const turnLoop = () => pacedTurns(turnSteps, speed, { now, sleep: (ms) => Effect.sleep(ms) }, (step) => Effect.sync(() => playTurn(step)));
   let turnFiber = yield* Effect.forkScoped(turnLoop());
   line(`host ${JSON.stringify(options.gameName)} map ${options.map.path} on 127.0.0.1:${listener.port}, turns of ${turnSteps.join("/")} ms, clients ${options.clients.join(", ")}`);
 
