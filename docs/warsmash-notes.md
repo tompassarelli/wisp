@@ -966,8 +966,8 @@ emitter, BlizParticle06: tail only, ModelSpace and Unshaded, additive,
 Speed 160, Latitude 0, TailLength 1, LifeSpan 0.7 s, EmissionRate 50,
 Width and Length 60, scaling 25.8, 14.7 and 0.4, Clouds8x8 cell 0 for its
 whole tail, and its pivot 47 units above the model's origin. Smashcraft's
-full-bar aura places it at scale 1.34 on Jaina, 18 units above her feet
-(the Rifleman's at 1.18 and 13 units).
+full-bar aura at c703df30e places it at scale 1, 2 units above each
+fighter's feet.
 
 The reference is native Classic running, not paused: build 3.0.0.24268,
 Ahn'Qiraj, 1280x720, both fighters' auras on, 263 distinct frames over
@@ -1000,21 +1000,29 @@ measured earlier (94 above, 4 below) were not the running effect.
   ([tail geometry](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/mdx/GeometryEmitterFuncs.java#L133-L170)).
   A newborn particle's tail reaches about 130 units below the feet, which
   is why running flames hang down the deck's front face in both renderers.
-- **Placement (measured, cause open).** With both fixes, headless flames
-  still reach about 199 pixels above Jaina's feet against native's 121.
-  Native matches the whole effect drawn at scale 1 with its origin at the
-  feet: Jaina then measures 121 above, 118 below, x 239-400, and the
-  Rifleman 119 above and 116 below against native's 125 and 107. Scale 1
-  alone gives 153 above and 84 below; at scale 1, dropping the lift moves
-  the top and bottom down together by 20-30 pixels. Drawing only the particles at scale 1
-  leaves the geosets' floor glow about 1.3 times as wide as in the
-  whole-effect render, which matches native, so the scale native drops is
-  the effect's, not just its particles'. Which call Classic
-  doesn't apply (`BlzSetSpecialEffectScale`, the Z of
-  `BlzSetSpecialEffectPosition`, or both after
-  `BlzSetSpecialEffectAnimation`) is not yet measured; the map re-places the
-  effect with its lift every frame
-  ([wisp#46](https://github.com/tompassarelli/wisp/issues/46)).
+- **Placement (native-confirmed).** Classic draws an effect at the scale
+  and position its map last set: `BlzSetSpecialEffectScale` scales the
+  whole model about its origin, and the Z of `BlzSetSpecialEffectPosition`
+  places that origin, after `BlzSetSpecialEffectAnimation` and a time seek
+  as before them. The renderer already does this for every effect
+  (`transform` in `host/render/screen.ts`). The reference above ran
+  Smashcraft c703df30e, which shows the aura at scale 1, 2 units above the
+  feet; the headless frames compared with it came from a later Smashcraft
+  that sizes the aura to the fighter (scale 1.34 and an 18-unit lift on
+  Jaina), which made it look as if Classic dropped both. Changing one
+  call per build of c703df30e, same native method, ROI clipped above the
+  HUD (2026-10-24, wisp#46):
+
+  | Build (pixels above / below the feet) | Native Jaina | Headless Jaina | Native Rifleman | Headless Rifleman |
+  | --- | --- | --- | --- | --- |
+  | Scale 1, 2 units up (c703df30e) | 127 / 107 | 127 / 113 | 124 / 108 | 128 / 110 |
+  | Scale 2 | 242 / past the HUD | 273 / past the HUD | 244 / past the HUD | 267 / past the HUD |
+  | Lift 40 more | 176 / 56 | 181 / 61 | 177 / 59 | 183 / 59 |
+
+  Doubling the scale doubles native's height above the feet (127 to 242),
+  so Classic scales the effect proportionally about its origin. Raising it 40
+  units moves the top up about 50 pixels and the bottom up about 50, so
+  Classic applies the Z. Headless is within 13% in every cell.
 
 ## Browser player: asset readiness and pacing for #48
 

@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { readNativeDeclarations } from "../host/headless/headless";
 import { multiply } from "../host/browser/matrix";
-import type { RenderScene } from "../host/render/headlessRender";
-import { camera, uiPixels, uiReport } from "../host/render/screen";
+import type { DrawnPose, RenderScene } from "../host/render/headlessRender";
+import { camera, transform, uiPixels, uiReport } from "../host/render/screen";
 import { HeadlessClient } from "../src/headless/client";
 import { MEASURED_1280X720, MEASURED_800X600 } from "./frames125/expected";
 import { PLACEMENTS } from "./frames125/layout";
@@ -108,4 +108,12 @@ test("[reference wisp#125] world projection matches native at 1920x1080", () => 
     const edges = { top: [pixel(0, DECK_Y, DECK_Z)[1], top], left: [cornerAt(-DECK_X, left[0]), left[1]], ...(right === null ? {} : { right: [cornerAt(DECK_X, right[0]), right[1]] }) };
     for (const [edge, [wisp, native]] of Object.entries(edges)) expect({ fixture, frame, edge, within1px: Math.abs((wisp ?? NaN) - (native ?? NaN)) <= 1 }).toEqual({ fixture, frame, edge, within1px: true });
   }
+});
+
+test("[reference wisp#46] an effect draws at the scale and position its map set: scale about its origin, Z as given", () => {
+  const pose = { x: -240, y: -12, z: 1842, yaw: 0, pitch: 0, roll: 0, scale: 2, matrixScale: [1, 1, 1] } as unknown as DrawnPose;
+  const placed = transform(pose);
+  const at = (point: readonly [number, number, number]) => [0, 1, 2].map((row) => (placed[row] ?? 0) * point[0] + (placed[4 + row] ?? 0) * point[1] + (placed[8 + row] ?? 0) * point[2] + (placed[12 + row] ?? 0));
+  expect(at([0, 0, 0])).toEqual([-240, -12, 1842]);
+  expect(at([30, 0, 47])).toEqual([-180, -12, 1936]);
 });
