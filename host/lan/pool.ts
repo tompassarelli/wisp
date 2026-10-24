@@ -63,6 +63,8 @@ export const poolHolderFile = (pair: number) => join(pairDirectory(pair), "pool.
 
 export const agentFile = (pair: number) => join(pairDirectory(pair), "agent.json");
 
+export const agentPidFile = (pair: number) => join(pairDirectory(pair), "agent.pid");
+
 export const pairEntryFile = (pair: number) => join(pairDirectory(pair), "pair.json");
 
 const pidIn = (file: string, read: (text: string) => unknown) => {
@@ -78,9 +80,9 @@ export const poolHolder = (pair: number) => pidIn(poolHolderFile(pair), (text) =
 
 export const AGENT_STOP = "45 seconds";
 
-/** Stops pair K's agent and waits for it to exit; the agent stops its games on the way out, which it can only finish while its desktop still runs. */
+/** Stops pair K's agent, from its start on, and waits for it to exit; the agent stops its games on the way out, which it can only finish while its desktop still runs. */
 export const stopAgent = (pair: number) => Effect.suspend(() => {
-  const pid = pidIn(agentFile(pair), (text) => (JSON.parse(text) as { pid?: unknown }).pid);
+  const pid = pidIn(agentPidFile(pair), (text) => Number(text.trim()));
   if (pid === undefined || !alive(pid)) return Effect.void;
   try {
     process.kill(pid, "SIGTERM");
