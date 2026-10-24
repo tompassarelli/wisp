@@ -307,7 +307,7 @@ impl Agent {
         if let (Some(_), Some(_)) = (self.base, &self.choice) {
             match self.buffer.front() {
                 Some(Some(_)) => wake = wake.min(self.due()),
-                _ if !self.waiting => wake = wake.min(self.scheduled(self.next_feed)),
+                _ if self.awaits_deadline() => wake = wake.min(self.scheduled(self.next_feed)),
                 _ => {}
             }
         }
@@ -357,6 +357,10 @@ impl Agent {
         self.received_through = self.next_feed + i as u32;
     }
 
+    fn awaits_deadline(&self) -> bool {
+        !self.waiting && self.next_feed != 1
+    }
+
     fn nominal(&self, index: u32) -> Micros {
         self.base.unwrap_or(0)
             + self.cfg.cadence.relay_time(index)
@@ -384,7 +388,7 @@ impl Agent {
         loop {
             let index = self.next_feed;
             if !matches!(self.buffer.front(), Some(Some(_))) {
-                if !self.waiting && now >= self.scheduled(index) {
+                if self.awaits_deadline() && now >= self.scheduled(index) {
                     self.waiting = true;
                     self.stats.underrun_at.push(now);
                 }
