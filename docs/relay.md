@@ -580,9 +580,18 @@ row at its stamp, rolling back when the row arrives late
   A's inputs. Smashcraft's own input delay subtracts from that depth. At
   100 ms RTT and D = 2 that is about 7 frames before delay; at 200 ms and
   D = 3 about 13.5. Smashcraft's echo-measured delay absorbs most of it,
-  and the rest must fit the rollback budget (6 in a duel, 8 for groups). Box S1 reruns
-  Smashcraft's rollback-budget sweep under the relay's paced delivery to
-  set those budgets.
+  and the rest must fit the rollback budget. Depth is not cover beside the
+  budget: every turn of D adds 8 ms to the age the budget must absorb.
+- **Shared budget (25 October 2026).** Smashcraft's rollback budget R is 6
+  on Battle.net. Relayed matches get R 7 (smashcraft#240), measured by
+  smashcraft#219 on `relayDelivery` with `MEASURED_RELAY`: 8 ms turns, 2 ms
+  jitter, 2% loss, D = 4 turns (32 ms) on every link, with D added on each
+  message's age after upstream and the turn wait. So R 7 holds for D ≤ 32 ms.
+  The relay's depth bar allows up to 66.7 ms, and its bench picks 48–64 ms on
+  burst cells, about 2 frames more age at D = 8. smashcraft#240's headless
+  box measures D = 4 and D = 8 and records the deepest D where R 7 holds;
+  the map uses R 7 only up to that depth. wisp#53's choice for spiky paths
+  is judged against the same model.
 - **Upstream jitter** moves a row into a later turn. The stamp keeps it on
   the right frame, so the cost is a deeper rollback, not a wrong frame.
 - **Downstream jitter** is what the buffer removes. Even turns give even
