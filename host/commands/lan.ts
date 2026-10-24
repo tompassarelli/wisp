@@ -14,6 +14,7 @@ import {
   PAIR_SIDES, type PoolPair, agentSocket, alive, clientName, lanPlayRefusal, mapPackager, networkFlagProblem, pairClients, pairSides, pairCustody, pairDirectory, poolClientsFile, poolFile, poolHolderFile, poolOwners, playtestPairRefusal, readPool, reportPort, writeJson, writePoolClients, wrongUser,
 } from "../lan/pool";
 import { PROFILES, desktopSize } from "../os/warcraft/clientProfiles";
+import { DEFAULT_BUILD } from "../client/builds";
 import { setupClient } from "../lan/setup";
 import { CapacityDeferred, admissionFile, capacityDeferral, deferredExit, pairAdmission, retryWhileDeferred } from "../lan/admission";
 
@@ -54,7 +55,7 @@ const setup: Command = (args) => Effect.gen(function*() {
   const chosen = flagValues(args, "pair").map((value) => wholeFlag(["--pair", value], "pair"));
   if (!chosen.every((pair) => typeof pair === "number")) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
   for (const pair of chosen.length > 0 ? chosen : Array.from({ length: pairs }, (_, index) => index)) {
-    for (const side of PAIR_SIDES) yield* setupClient(clientName(pair, side), from, reportPort(pair, side), (line) => console.log(line));
+    for (const side of PAIR_SIDES) yield* setupClient(clientName(pair, side), from, DEFAULT_BUILD, reportPort(pair, side), (line) => console.log(line));
   }
 });
 
