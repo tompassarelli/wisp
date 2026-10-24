@@ -108,7 +108,7 @@ fn two_games_join_load_and_play_through_agents_and_the_relay() {
     let server_addr: SocketAddr = socket.local_addr().unwrap();
     let relay = thread::spawn(move || {
         let timing = LobbyTiming { settle_us: 50_000, countdown_us: 100_000 };
-        let mut server = Server::new(Config { lobby_us: 0, game_timing: timing, ..Config::default() });
+        let mut server = Server::new(Config { game_timing: timing, ..Config::default() });
         udp::serve(&socket, &mut server, true, 30_000_000).unwrap();
         server.stats().clone()
     });

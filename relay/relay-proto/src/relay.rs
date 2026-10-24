@@ -45,6 +45,7 @@ pub struct Relay {
     pending: VecDeque<Pending>,
     stopped: Option<Micros>,
     stops: u32,
+    running_since: Option<Micros>,
     compared: u32,
     desync: Option<u32>,
 }
@@ -86,6 +87,7 @@ impl Relay {
             pending: VecDeque::new(),
             stopped: None,
             stops: 0,
+            running_since: None,
             compared: 0,
             desync: None,
         }
@@ -103,6 +105,10 @@ impl Relay {
 
     pub fn stops(&self) -> u32 {
         self.stops
+    }
+
+    pub fn running_since(&self) -> Option<Micros> {
+        self.running_since
     }
 
     pub fn stopped(&self) -> bool {
@@ -212,16 +218,22 @@ impl Relay {
         if self.main_wake() > now {
             return out;
         }
-        if self.stopped.is_some() && !self.lagging() {
+        if self.stopped.is_some() && !self.lagging() && !self.awaiting_first_turn() {
             self.stopped = None;
             self.base = Some(now - self.cadence.relay_time(self.next_turn));
         }
         while self.base.is_some() && self.stopped.is_none() && self.main_wake() <= now {
-            if self.lagging() {
+            if self.awaiting_first_turn() {
+                self.stopped = Some(now);
+                self.next_probe = 0;
+            } else if self.lagging() {
                 self.stopped = Some(now);
                 self.next_probe = 0;
                 self.stops += 1;
             } else {
+                if self.next_turn == 1 {
+                    self.running_since = self.base;
+                }
                 self.emit_turn();
             }
         }
@@ -283,6 +295,10 @@ impl Relay {
         let (bytes, _) = wire::encode_cover(p.token, p.packet_seq, from, &turns, MAX_PACKET);
         self.players[index].packet_seq = p.packet_seq.wrapping_add(1);
         Some(bytes)
+    }
+
+    fn awaiting_first_turn(&self) -> bool {
+        self.next_turn > 0 && self.players.iter().any(|p| p.checksum_count == 0)
     }
 
     fn lagging(&self) -> bool {

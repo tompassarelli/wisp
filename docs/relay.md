@@ -222,6 +222,13 @@ Two findings from the runs that do not count:
   in milliseconds, so they hold whatever the turn length.
 - After the relay stops its clock (lag, below), the next turn's deadline is
   rebased to the restart time, so no backlog of turns fires at once.
+- The clock starts when every client has run the first turn. A
+  3.0.0.24268 client starts running turns about 2 s after it reports
+  loaded, so the relay sends turn 0 and holds there (not counted as a stop)
+  until each player has returned turn 0's checksum, then rebases. The
+  room's summary measures pace from that moment. Before this hold, the
+  first native relayed match (laptop pair 0, 25 October) began with two lag
+  stops, and its pace never recovered from that 2 s deficit (0.962 at 55 s).
 - R1 is the pool host's own change: deadline pacing and `--turn-ms 17,17,16`
   in host.ts. turnrate-sweep built it (wisp lane `lan-turn-25`).
 

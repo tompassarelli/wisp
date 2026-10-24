@@ -29,7 +29,7 @@ fn create(s: &mut Server, now: Micros, from: SocketAddr, request: u64) -> Contro
     control::decode(&out[0].1).unwrap()
 }
 
-fn up(token: u64) -> Vec<u8> {
+fn up(token: u64, checksums: Vec<u32>) -> Vec<u8> {
     wire::encode(&Packet::Up(Up {
         token,
         seq: 0,
@@ -38,7 +38,7 @@ fn up(token: u64) -> Vec<u8> {
         cover: 0,
         cover_turns: 0,
         checksum_from: 0,
-        checksums: vec![],
+        checksums,
         action_from: 0,
         actions: vec![],
     }))
@@ -135,7 +135,7 @@ fn the_cookie_verifies_only_its_own_address_and_expires() {
     ));
 }
 
-fn full_room(s: &mut Server, a: SocketAddr, b: SocketAddr) -> u64 {
+fn full_room(s: &mut Server, a: SocketAddr, b: SocketAddr) -> (u64, u64) {
     let Control::Room { room, token, .. } = create(s, 0, a, 1) else {
         panic!();
     };
@@ -150,11 +150,10 @@ fn full_room(s: &mut Server, a: SocketAddr, b: SocketAddr) -> u64 {
             room,
         },
     );
-    assert!(matches!(
-        control::decode(&out[0].1),
-        Ok(Control::Room { .. })
-    ));
-    token
+    let Ok(Control::Room { token: joiner, .. }) = control::decode(&out[0].1) else {
+        panic!();
+    };
+    (token, joiner)
 }
 
 #[test]
@@ -164,13 +163,17 @@ fn an_unverified_address_gets_at_most_three_times_its_bytes_with_turns_trimmed_t
         ..Config::default()
     });
     let (a, b, rebound) = (addr(1, 1000), addr(2, 1000), addr(1, 2000));
-    let token = full_room(&mut s, a, b);
+    let (token, joiner) = full_room(&mut s, a, b);
 
     let period = 8_000;
     let mut now = 0;
     let mut out = Vec::new();
     for _ in 0..75 {
         s.poll(now, &mut out);
+        if now == 0 {
+            s.on_datagram(now, a, &up(token, vec![0]), &mut out);
+            s.on_datagram(now, b, &up(joiner, vec![0]), &mut out);
+        }
         now += period;
     }
     assert!(downs(&out, a).iter().any(|d| d.turns.len() >= 70));
@@ -184,7 +187,7 @@ fn an_unverified_address_gets_at_most_three_times_its_bytes_with_turns_trimmed_t
     };
     for tick in 0..30 {
         let mut out = Vec::new();
-        let bytes = up(token);
+        let bytes = up(token, vec![]);
         received += bytes.len() as u64;
         s.on_datagram(now, rebound, &bytes, &mut out);
         if tick == 10 {
@@ -286,7 +289,7 @@ fn rooms_close_when_every_player_leaves_or_after_the_idle_limit() {
     say(&mut s, 1, addr(3, 1), &Control::Leave { token: joiner });
     assert_eq!(s.rooms(), 1);
     let mut out = Vec::new();
-    s.on_datagram(idle - 1, addr(1, 1), &up(token), &mut out);
+    s.on_datagram(idle - 1, addr(1, 1), &up(token, vec![]), &mut out);
     s.poll(2 * idle - 2, &mut out);
     assert_eq!(s.rooms(), 1);
     s.poll(2 * idle - 1, &mut out);

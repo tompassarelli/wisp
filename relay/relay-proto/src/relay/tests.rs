@@ -47,6 +47,9 @@ fn turn_of(r: &Relay, player: u8, data: u8) -> usize {
 fn started() -> Relay {
     let mut r = Relay::new(Cadence::default(), &[1, 2], 0);
     r.start(0);
+    r.poll(0);
+    r.on_packet(&up(1, 0, 0, vec![5], 0, vec![])).unwrap();
+    r.on_packet(&up(2, 0, 0, vec![5], 0, vec![])).unwrap();
     r.poll(Cadence::default().relay_time(9));
     r
 }
@@ -70,6 +73,7 @@ fn turns_are_due_on_absolute_deadlines() {
     let mut r = Relay::new(Cadence::new(&[17, 17, 16]), &[1], 0);
     r.start(1_000);
     assert_eq!(r.poll(1_000).len(), 1);
+    r.on_packet(&up(1, 1, 0, vec![0], 0, vec![])).unwrap();
     assert!(r.poll(17_999).is_empty());
     r.poll(1_000 + 51_000);
     assert_eq!(r.turns_emitted(), 4);
@@ -82,6 +86,8 @@ fn requested_cover_sends_the_newest_turns_between_turns() {
     let period = cadence.period_us();
     let mut r = Relay::new(cadence.clone(), &[1], 0);
     r.start(0);
+    r.poll(0);
+    r.on_packet(&up(1, 0, 0, vec![0], 0, vec![])).unwrap();
     r.poll(cadence.relay_time(9));
     let mut ask = Up {
         token: 1,
@@ -230,25 +236,58 @@ fn a_player_a_second_behind_stops_the_clock_and_the_restart_is_rebased() {
     let cadence = Cadence::default();
     let mut r = Relay::new(cadence.clone(), &[1], 0);
     r.start(0);
-    let stop_at = cadence.relay_time(126);
+    r.poll(0);
+    r.on_packet(&up(1, 1, 0, vec![0], 0, vec![])).unwrap();
+    let stop_at = cadence.relay_time(127);
     r.poll(stop_at);
-    assert_eq!((r.turns_emitted(), r.stops()), (126, 1));
+    assert_eq!((r.turns_emitted(), r.stops()), (127, 1));
     let probes = r.poll(stop_at + 500_000);
-    assert_eq!(r.turns_emitted(), 126);
+    assert_eq!(r.turns_emitted(), 127);
     assert!(!probes.is_empty());
 
     let restart = r.next_wake();
-    r.on_packet(&up(1, 126, 0, vec![0; 64], 0, vec![])).unwrap();
-    r.on_packet(&up(1, 126, 64, vec![0; 62], 0, vec![]))
+    r.on_packet(&up(1, 127, 1, vec![0; 64], 0, vec![])).unwrap();
+    r.on_packet(&up(1, 127, 65, vec![0; 62], 0, vec![]))
         .unwrap();
     let resumed = r.poll(restart);
-    assert_eq!(r.turns_emitted(), 127);
+    assert_eq!(r.turns_emitted(), 128);
     assert_eq!(r.next_wake(), restart + cadence.period_us());
-    let base = restart - cadence.relay_time(126);
+    let base = restart - cadence.relay_time(127);
     match decode(&resumed[0].1).unwrap() {
         Packet::Down(d) => assert_eq!(d.base_us, base as u64),
         other => panic!("{other:?}"),
     }
     r.poll(restart + 10 * cadence.period_us());
-    assert_eq!((r.turns_emitted(), r.stops()), (137, 1));
+    assert_eq!((r.turns_emitted(), r.stops()), (138, 1));
+}
+
+#[test]
+fn the_clock_holds_after_the_first_turn_until_every_player_has_run_it_without_a_stop() {
+    let cadence = Cadence::default();
+    let mut r = Relay::new(cadence.clone(), &[1, 2], 0);
+    r.start(0);
+    r.poll(3_000_000);
+    assert_eq!((r.turns_emitted(), r.stops(), r.running_since()), (1, 0, None));
+    r.on_packet(&up(1, 1, 0, vec![0], 0, vec![])).unwrap();
+    r.poll(3_100_000);
+    assert_eq!((r.turns_emitted(), r.running_since()), (1, None));
+
+    r.on_packet(&up(2, 1, 0, vec![0], 0, vec![])).unwrap();
+    let release = r.next_wake();
+    r.poll(release);
+    let since = release - cadence.relay_time(1);
+    assert_eq!((r.turns_emitted(), r.stops(), r.running_since()), (2, 0, Some(since)));
+    r.poll(since + cadence.relay_time(100));
+    assert_eq!((r.turns_emitted(), r.stops()), (101, 0));
+}
+
+#[test]
+fn players_who_run_the_first_turn_on_time_start_the_clock_at_the_start() {
+    let cadence = Cadence::default();
+    let mut r = Relay::new(cadence.clone(), &[1], 500);
+    r.start(500);
+    r.poll(500);
+    r.on_packet(&up(1, 1, 0, vec![0], 0, vec![])).unwrap();
+    r.poll(500 + cadence.relay_time(10));
+    assert_eq!((r.turns_emitted(), r.running_since()), (11, Some(500)));
 }

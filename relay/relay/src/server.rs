@@ -75,7 +75,6 @@ struct Room {
     slots: Vec<Slot>,
     full_at: Option<Micros>,
     started: bool,
-    started_at: Micros,
     game: GameRoom,
     next_report: Micros,
     heard: Micros,
@@ -102,7 +101,6 @@ impl Room {
         if !self.started && ready {
             self.relay.start(now);
             self.started = true;
-            self.started_at = now;
             log.push(format!("room {id:016x} playing"));
         }
         for (index, bytes) in self.game.poll(now) {
@@ -120,7 +118,7 @@ impl Room {
     fn report(&self, id: u64, now: Micros, cadence: &Cadence) -> String {
         let turns = self.relay.turns_emitted();
         let game_us = cadence.relay_time(turns);
-        let wall_us = now - self.started_at;
+        let wall_us = self.relay.running_since().map_or(0, |since| now - since);
         let pace = if wall_us > 0 { game_us as f64 / wall_us as f64 } else { 0.0 };
         format!(
             "room {id:016x} summary: turns {turns} game {:.3} s wall {:.3} s pace {pace:.4} checksums compared {} desyncs {} stops {}",
@@ -346,7 +344,6 @@ impl Server {
         let seed = self.fresh_id() as u32 & 0x7fff_ffff;
         let room = Room {
             relay: Relay::new(self.cadence.clone(), &tokens, now),
-            started_at: 0,
             game: GameRoom::new(seed, &tokens, self.cfg.game_timing),
             next_report: 0,
             full_at: (players == 1).then_some(now),
