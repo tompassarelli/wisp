@@ -3,6 +3,8 @@ use crate::Micros;
 pub const UNDERRUN_EVERY_US: Micros = 600_000_000;
 pub const MAX_DEPTH_US: Micros = 100_000;
 pub const OUTAGE_PACKETS: u64 = 64;
+pub const MEASURE_US: Micros = 1_000_000;
+const MAX_CHAIN: i32 = 8;
 
 pub fn underrun_bar(period_us: Micros) -> f64 {
     period_us as f64 / UNDERRUN_EVERY_US as f64
@@ -10,6 +12,10 @@ pub fn underrun_bar(period_us: Micros) -> f64 {
 
 pub fn max_turns(period_us: Micros) -> u32 {
     (MAX_DEPTH_US / period_us).max(1) as u32
+}
+
+pub fn min_packets(period_us: Micros) -> usize {
+    (MEASURE_US / period_us).max(1) as usize
 }
 
 #[derive(Clone, Debug, Default)]
@@ -125,6 +131,13 @@ pub struct LinkEstimate {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct TcpStalls {
+    pub packets: usize,
+    pub holds_us: Vec<Micros>,
+    pub jitter_mean_us: f64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct DepthChoice {
     pub turns: u32,
     pub predicted_late: f64,
@@ -147,6 +160,10 @@ impl LinkSample {
             self.received[i] = true;
             self.offsets.push(offset_us);
         }
+    }
+
+    pub fn packets(&self) -> usize {
+        self.offsets.len()
     }
 
     pub fn estimate(&self) -> LinkEstimate {
@@ -221,28 +238,107 @@ impl LinkSample {
         }
         let mut sorted = self.offsets.clone();
         sorted.sort_unstable();
-        let mut best = None;
-        for d in 1..=max_turns {
-            let late = predicted_late_with_cover(&link, &sorted, period_us, d, cover);
-            if late <= bar {
-                return DepthChoice {
-                    turns: d,
-                    predicted_late: late,
-                    too_poor: false,
-                    link,
-                    cover,
-                };
+        smallest(link, bar, max_turns, cover, |link, d| {
+            predicted_late_with_cover(link, &sorted, period_us, d, cover)
+        })
+    }
+
+    pub fn stalls(&self, anchor_us: Micros, period_us: Micros) -> TcpStalls {
+        let jump = 2 * period_us;
+        let mut holds_us = Vec::new();
+        let mut prev = 0;
+        let (mut quiet_sum, mut quiet) = (0i128, 0usize);
+        for &o in &self.offsets {
+            let excess = o - anchor_us;
+            if excess - prev > jump {
+                holds_us.push(excess);
             }
-            best = Some((d, late));
+            if excess <= jump {
+                quiet_sum += excess.max(0) as i128;
+                quiet += 1;
+            }
+            prev = excess;
         }
-        let (turns, predicted_late) = best.unwrap_or((max_turns, 1.0));
-        DepthChoice {
-            turns,
-            predicted_late,
-            too_poor: true,
-            link,
-            cover,
+        TcpStalls {
+            packets: self.offsets.len(),
+            holds_us,
+            jitter_mean_us: quiet_sum as f64 / quiet.max(1) as f64,
         }
+    }
+
+    pub fn choose_tcp(
+        &self,
+        period_us: Micros,
+        bar: f64,
+        max_turns: u32,
+        margin_quantile: Option<f64>,
+    ) -> DepthChoice {
+        let link = self.estimate_with_margin(margin_quantile);
+        let stalls = self.stalls(link.anchor_us, period_us);
+        smallest(link, bar, max_turns, 0, |link, d| {
+            stalls.predicted_late(link.margin_us + d as Micros * period_us)
+        })
+    }
+}
+
+impl TcpStalls {
+    pub fn stall_rate(&self) -> f64 {
+        let m = self.holds_us.len() as f64;
+        (m + 1.0 + 2.0 * (m + 1.0).sqrt()) / (self.packets as f64 + 2.0)
+    }
+
+    pub fn predicted_late(&self, slack_us: Micros) -> f64 {
+        let q = self.stall_rate();
+        let mut late = if self.jitter_mean_us > 0.0 {
+            (-(slack_us as f64) / self.jitter_mean_us).exp()
+        } else {
+            f64::from(slack_us <= 0)
+        };
+        for k in 1..=MAX_CHAIN {
+            let over = if self.holds_us.is_empty() {
+                1.0
+            } else {
+                let n = self
+                    .holds_us
+                    .iter()
+                    .filter(|&&h| k as Micros * h > slack_us)
+                    .count();
+                n as f64 / self.holds_us.len() as f64
+            };
+            late += q.powi(k) * over;
+        }
+        late.min(1.0)
+    }
+}
+
+fn smallest(
+    link: LinkEstimate,
+    bar: f64,
+    max_turns: u32,
+    cover: u8,
+    late_at: impl Fn(&LinkEstimate, u32) -> f64,
+) -> DepthChoice {
+    let mut best = None;
+    for d in 1..=max_turns {
+        let late = late_at(&link, d);
+        if late <= bar {
+            return DepthChoice {
+                turns: d,
+                predicted_late: late,
+                too_poor: false,
+                link,
+                cover,
+            };
+        }
+        best = Some((d, late));
+    }
+    let (turns, predicted_late) = best.unwrap_or((max_turns, 1.0));
+    DepthChoice {
+        turns,
+        predicted_late,
+        too_poor: true,
+        link,
+        cover,
     }
 }
 
@@ -290,120 +386,4 @@ pub fn predicted_late_with_cover(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::rng::Rng;
-
-    const PERIOD: Micros = 16_666;
-
-    impl LinkSample {
-        fn pick(&self, margin: Option<f64>) -> DepthChoice {
-            self.choose_with_margin(PERIOD, underrun_bar(PERIOD), max_turns(PERIOD), margin)
-        }
-    }
-
-    fn sample(n: u32, loss: f64, jitter_mean: f64, seed: u64) -> LinkSample {
-        let mut rng = Rng::new(seed);
-        let mut s = LinkSample::default();
-        for seq in 0..n {
-            if !rng.chance(loss) {
-                s.record(seq, 40_000 + rng.exp(jitter_mean) as Micros);
-            }
-        }
-        s
-    }
-
-    #[test]
-    fn clean_link_takes_two_turns() {
-        let c = sample(1200, 0.0, 2000.0, 1).pick(None);
-        assert_eq!((c.turns, c.too_poor), (2, false));
-    }
-
-    #[test]
-    fn more_loss_never_takes_less_depth() {
-        let mut last = 0;
-        for loss in [0.0, 0.01, 0.03, 0.05, 0.10] {
-            let c = sample(1200, loss, 2000.0, 2).pick(None);
-            assert!(
-                c.turns >= last,
-                "loss {loss} chose {} after {last}",
-                c.turns
-            );
-            last = c.turns;
-        }
-    }
-
-    #[test]
-    fn a_jitter_margin_lets_the_newest_copy_count() {
-        let s = sample(1200, 0.05, 2000.0, 4);
-        let plain = s.pick(None);
-        let margin = s.pick(Some(0.95));
-        assert!(margin.link.margin_us > 0 && margin.link.margin_us < PERIOD);
-        assert_eq!(margin.turns + 1, plain.turns);
-    }
-
-    fn bursty(n: u32, every: u32, burst: u32) -> LinkSample {
-        let mut s = LinkSample::default();
-        for seq in 0..n {
-            if seq % every >= burst {
-                s.record(seq, 40_000 + (seq % 7) as Micros * 500);
-            }
-        }
-        s
-    }
-
-    #[test]
-    fn cover_packets_shorten_the_depth_a_burst_needs() {
-        let period = 8_000;
-        let s = bursty(2500, 100, 4);
-        let bar = underrun_bar(period);
-        let plain = s.choose(period, bar, max_turns(period));
-        let covered = s.choose_with_cover(period, bar, max_turns(period), None, 4);
-        assert!(plain.too_poor || plain.turns > 8, "{plain:?}");
-        assert!(!covered.too_poor && covered.turns <= 8, "{covered:?}");
-        assert_eq!(covered.cover, 4);
-        let e = s.estimate();
-        let sorted = s.sorted_offsets();
-        assert_eq!(
-            predicted_late(&e, &sorted, period, 5),
-            predicted_late_with_cover(&e, &sorted, period, 5, 0)
-        );
-    }
-
-    #[test]
-    fn the_counter_forgives_reordering_and_counts_runs_once_they_age_out() {
-        let mut c = LossCounter::default();
-        for seq in [0, 2, 1, 4, 3, 5, 9, 10] {
-            c.record(seq);
-        }
-        for seq in 11..200 {
-            c.record(seq);
-        }
-        let n = c.counts();
-        assert_eq!((n.lost, n.pairs, n.both), (3, 3, 2));
-        assert_eq!(n.total, 200 - 64);
-        for seq in 300..400 {
-            c.record(seq);
-        }
-        assert_eq!(c.counts().lost, 3);
-    }
-
-    #[test]
-    fn hopeless_link_reports_too_poor_at_the_ceiling() {
-        let c = sample(1200, 0.5, 2000.0, 3).pick(None);
-        assert!(c.too_poor);
-        assert_eq!(c.turns, max_turns(PERIOD));
-    }
-
-    #[test]
-    fn duplicates_and_stale_sequence_numbers_are_ignored() {
-        let mut s = LinkSample::default();
-        s.record(10, 5);
-        s.record(10, 1);
-        s.record(9, 1);
-        s.record(12, 7);
-        let e = s.estimate();
-        assert_eq!(e.packets, 3);
-        assert_eq!(e.anchor_us, 5);
-    }
-}
+mod tests;

@@ -29,7 +29,7 @@ impl Bench {
             let bytes = down(i, sent, NOT_STARTED, 0, &[]);
             agent.on_packet(sent + DELAY, &bytes).unwrap();
         }
-        let choice = agent.choose_depth();
+        let choice = agent.choose_depth().unwrap();
         assert!(!choice.too_poor);
         Bench {
             agent,
@@ -238,7 +238,7 @@ fn up_of(agent: &mut Agent, now: Micros) -> Up {
 #[test]
 fn a_bursty_lobby_asks_for_cover_and_an_independent_one_does_not() {
     let mut bursty = lobby_agent(|i| i % 100 < 4);
-    let choice = bursty.choose_depth();
+    let choice = bursty.choose_depth().unwrap();
     assert!(choice.cover > 0 && !choice.too_poor, "{choice:?}");
     assert!(choice.turns as Micros * 8_000 <= 66_667);
     let u = up_of(&mut bursty, 30_000_000);
@@ -248,7 +248,7 @@ fn a_bursty_lobby_asks_for_cover_and_an_independent_one_does_not() {
     );
 
     let mut plain = lobby_agent(|i| i % 25 == 0);
-    let choice = plain.choose_depth();
+    let choice = plain.choose_depth().unwrap();
     assert_eq!(choice.cover, 0);
     let u = up_of(&mut plain, 30_000_000);
     assert_eq!((u.cover, u.cover_turns), (0, 0));
@@ -257,7 +257,7 @@ fn a_bursty_lobby_asks_for_cover_and_an_independent_one_does_not() {
 #[test]
 fn cover_packets_fill_the_buffer_and_bursts_seen_in_the_match_raise_cover() {
     let mut agent = lobby_agent(|i| i % 25 == 0);
-    assert_eq!(agent.choose_depth().cover, 0);
+    assert_eq!(agent.choose_depth().unwrap().cover, 0);
     let turns: Vec<Turn> = (0..3)
         .map(|_| Turn {
             step_ms: 8,

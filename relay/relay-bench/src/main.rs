@@ -67,6 +67,7 @@ struct Options {
     steps: Vec<u8>,
     margin: Option<f64>,
     cover: bool,
+    max_depth_us: Option<Micros>,
 }
 
 struct Cell {
@@ -120,6 +121,7 @@ fn scenario(cell: &Cell, o: &Options, match_us: Micros) -> (Scenario, Vec<(Micro
         keep_turns: false,
         margin_quantile: o.margin,
         cover: o.cover,
+        max_depth_us: o.max_depth_us,
     };
     (s, blackouts)
 }
@@ -304,12 +306,17 @@ fn options(args: &[String]) -> Option<Options> {
         None => None,
     };
     let cover = !args.iter().any(|a| a == "--no-cover");
+    let max_depth_us = match value(args, "--max-depth-ms") {
+        Some(ms) => Some(ms.parse::<Micros>().ok().filter(|&ms| ms > 0)? * 1000),
+        None => None,
+    };
     Some(Options {
         minutes,
         rtts_ms,
         steps,
         margin,
         cover,
+        max_depth_us,
     })
 }
 
@@ -317,7 +324,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(o) = options(&args) else {
         eprintln!(
-            "usage: relay-bench --grid [--minutes N] [--rtts MS,...] [--steps 8|17,17,16] [--margin QUANTILE] [--no-cover]"
+            "usage: relay-bench --grid [--minutes N] [--rtts MS,...] [--steps 8|17,17,16] [--margin QUANTILE] [--no-cover] [--max-depth-ms MS]"
         );
         std::process::exit(2);
     };

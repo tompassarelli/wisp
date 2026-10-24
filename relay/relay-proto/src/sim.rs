@@ -3,7 +3,7 @@ use std::collections::BinaryHeap;
 
 use crate::agent::{Agent, AgentConfig, AgentStats, Fed};
 use crate::cadence::Cadence;
-use crate::depth::{DepthChoice, LinkSample};
+use crate::depth::{self, DepthChoice, LinkSample};
 pub use crate::histogram::Histogram;
 use crate::relay::Relay;
 use crate::net::{Clock, Link, Stream};
@@ -37,6 +37,7 @@ pub struct Scenario {
     pub keep_turns: bool,
     pub margin_quantile: Option<f64>,
     pub cover: bool,
+    pub max_depth_us: Option<Micros>,
 }
 
 #[derive(Clone, Debug)]
@@ -136,6 +137,9 @@ fn node(s: &Scenario, index: usize, token: u64, rng: &mut Rng) -> Node {
     let cfg = AgentConfig {
         margin_quantile: s.margin_quantile,
         max_cover: if s.cover { defaults.max_cover } else { 0 },
+        max_depth: s.max_depth_us.map_or(depth::max_turns(s.cadence.period_us()), |d| {
+            (d / s.cadence.period_us()).max(1) as u32
+        }),
         ..defaults
     };
     Node {
@@ -240,7 +244,7 @@ impl Sim<'_> {
         let quiet = now >= self.s.lobby_us + self.s.match_us;
         if !self.started && now >= self.s.lobby_us {
             for n in &mut self.nodes {
-                n.out.choice = n.agent.choose_depth();
+                n.agent.choose_depth();
             }
             self.relay.start(now);
             self.started = true;
@@ -367,6 +371,9 @@ impl Sim<'_> {
                 .nodes
                 .into_iter()
                 .map(|mut n| {
+                    if let Some(c) = n.agent.choice() {
+                        n.out.choice = c.clone();
+                    }
                     n.out.stats = n.agent.stats().clone();
                     n.out.unacked_at_end = n.agent.unacked_actions();
                     n.out.transport = n.agent.transport();

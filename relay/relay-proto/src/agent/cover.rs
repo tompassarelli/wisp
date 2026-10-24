@@ -1,7 +1,38 @@
 use super::Agent;
-use crate::depth::{self, LinkEstimate};
+use crate::depth::{self, DepthChoice, LinkEstimate};
+use crate::Micros;
 
 impl Agent {
+    pub(super) fn choose_covered(&self) -> DepthChoice {
+        let pick = |cover: u8| {
+            self.lobby.choose_with_cover(
+                self.period,
+                self.cfg.bar,
+                self.cfg.max_depth,
+                self.cfg.margin_quantile,
+                cover,
+            )
+        };
+        let depth_of = |c: &DepthChoice| c.turns as Micros * self.period + c.link.margin_us;
+        let fits = |c: &DepthChoice| !c.too_poor && depth_of(c) <= self.cfg.cover_from_us;
+        let choice = pick(0);
+        if self.cfg.max_cover == 0 || choice.link.loss_after_loss <= self.cfg.bursty {
+            return choice;
+        }
+        let cap = (self.cfg.cover_cap_us / self.period).max(1) as u32;
+        (1..=self.cfg.max_cover)
+            .map(pick)
+            .find(fits)
+            .unwrap_or_else(|| {
+                let mut c = pick(self.cfg.max_cover);
+                if c.turns > cap {
+                    c.turns = cap;
+                    c.too_poor = false;
+                }
+                c
+            })
+    }
+
     pub(super) fn count(&mut self, seq: u32) {
         if self.choice.is_none() {
             return;

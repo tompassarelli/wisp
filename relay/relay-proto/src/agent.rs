@@ -92,6 +92,7 @@ pub struct Agent {
     lobby_offsets: Vec<Micros>,
     match_loss: LossCounter,
     next_review: u64,
+    choice_pending: bool,
     depth_us: Micros,
     window: VecDeque<(Micros, Micros)>,
     since_anchor: u32,
@@ -132,6 +133,7 @@ impl Agent {
             lobby_offsets: Vec::new(),
             match_loss: LossCounter::default(),
             next_review: 0,
+            choice_pending: false,
             depth_us: 0,
             window: VecDeque::new(),
             since_anchor: 0,
@@ -196,33 +198,25 @@ impl Agent {
         self.actions.len()
     }
 
-    pub fn choose_depth(&mut self) -> DepthChoice {
-        let pick = |cover: u8| {
-            self.lobby.choose_with_cover(
+    pub fn choose_depth(&mut self) -> Option<DepthChoice> {
+        if self.choice.is_none() && self.lobby.packets() < depth::min_packets(self.period) {
+            self.choice_pending = true;
+            return None;
+        }
+        Some(self.decide())
+    }
+
+    fn decide(&mut self) -> DepthChoice {
+        self.choice_pending = false;
+        let choice = match self.transport {
+            Transport::Udp => self.choose_covered(),
+            Transport::Tcp => self.lobby.choose_tcp(
                 self.period,
                 self.cfg.bar,
                 self.cfg.max_depth,
                 self.cfg.margin_quantile,
-                cover,
-            )
+            ),
         };
-        let depth_of = |c: &DepthChoice| c.turns as Micros * self.period + c.link.margin_us;
-        let fits = |c: &DepthChoice| !c.too_poor && depth_of(c) <= self.cfg.cover_from_us;
-        let mut choice = pick(0);
-        if self.cfg.max_cover > 0 && choice.link.loss_after_loss > self.cfg.bursty {
-            let cap = (self.cfg.cover_cap_us / self.period).max(1) as u32;
-            choice = (1..=self.cfg.max_cover)
-                .map(pick)
-                .find(fits)
-                .unwrap_or_else(|| {
-                    let mut c = pick(self.cfg.max_cover);
-                    if c.turns > cap {
-                        c.turns = cap;
-                        c.too_poor = false;
-                    }
-                    c
-                });
-        }
         self.cover = choice.cover;
         self.lobby_counts = self.lobby.counts();
         self.lobby_offsets = self.lobby.sorted_offsets();
@@ -261,6 +255,12 @@ impl Agent {
         if down.base_us != NOT_STARTED {
             let base = down.base_us as Micros;
             self.base = Some(self.base.map_or(base, |b| b.max(base)));
+        }
+        if self.choice_pending && self.lobby.packets() >= depth::min_packets(self.period) {
+            self.decide();
+            if self.base.is_some() {
+                self.extra_us = (now - self.nominal(self.next_feed)).max(0);
+            }
         }
         while self.action_base < down.action_ack && self.actions.pop_front().is_some() {
             self.action_base += 1;

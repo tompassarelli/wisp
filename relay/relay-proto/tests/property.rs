@@ -1,4 +1,5 @@
 use relay_proto::cadence::Cadence;
+use relay_proto::depth;
 use relay_proto::rng::Rng;
 use relay_proto::sim::{run, AgentOutcome, AgentSpec, Loss, Outcome, Path, Scenario};
 use relay_proto::transport::{self, Transport};
@@ -66,6 +67,7 @@ fn scenario(seed: u64) -> Scenario {
         keep_turns: true,
         margin_quantile: if rng.chance(0.5) { Some(0.95) } else { None },
         cover: rng.chance(0.5),
+        max_depth_us: None,
     }
 }
 
@@ -244,6 +246,7 @@ fn turns_over_the_packet_ceiling_split_across_turns() {
         keep_turns: true,
         margin_quantile: None,
         cover: true,
+        max_depth_us: None,
     };
     let o = run(&s);
     check(99, &s, &o);
@@ -331,4 +334,103 @@ fn packets_round_trip_and_damaged_bytes_never_panic() {
         let noise: Vec<u8> = (0..rng.below(1300)).map(|_| rng.next_u64() as u8).collect();
         let _ = wire::decode(&noise);
     }
+}
+
+fn steady(one_way_us: Micros, loss: f64, udp_blocked: bool) -> AgentSpec {
+    let path = Path {
+        one_way_us,
+        jitter_mean_us: 2_000.0,
+        loss: Loss::Independent(loss),
+    };
+    AgentSpec {
+        down: path,
+        up: path,
+        drift_ppb: 100_000,
+        clock_offset_us: 7 * SECOND,
+        actions_hz: 4.0,
+        action_bytes: (4, 24),
+        releases: 0.5,
+        udp_blocked,
+    }
+}
+
+fn steady_room(lobby_us: Micros, agents: Vec<AgentSpec>) -> Scenario {
+    Scenario {
+        seed: 5,
+        cadence: Cadence::default(),
+        agents,
+        lobby_us,
+        match_us: 20 * SECOND,
+        tail_us: 5 * SECOND,
+        outages: Vec::new(),
+        keep_turns: true,
+        margin_quantile: None,
+        max_depth_us: None,
+        cover: true,
+    }
+}
+
+fn lobby_before_any_packet() -> Vec<(Scenario, Outcome)> {
+    [false, true]
+        .into_iter()
+        .map(|blocked| {
+            let s = steady_room(0, vec![steady(20_000, 0.0, blocked); 2]);
+            let o = run(&s);
+            check(5, &s, &o);
+            check_transports(5, &s, &o);
+            (s, o)
+        })
+        .collect()
+}
+
+#[test]
+fn an_agent_whose_lobby_ends_before_its_first_packet_measures_before_choosing() {
+    for (s, o) in lobby_before_any_packet() {
+        let need = depth::min_packets(s.cadence.period_us());
+        let blocked = s.agents[0].udp_blocked;
+        for (i, a) in o.agents.iter().enumerate() {
+            assert!(
+                a.choice.link.packets >= need,
+                "udp blocked {blocked}: agent {i} chose from {} packets",
+                a.choice.link.packets
+            );
+            assert!(
+                a.fed_count > 2000,
+                "udp blocked {blocked}: agent {i} fed {} turns",
+                a.fed_count
+            );
+            if !blocked {
+                assert!(!a.choice.too_poor, "agent {i} chose {:?}", a.choice);
+                assert!(a.underruns.is_empty(), "agent {i} underran");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_late_depth_choice_drains_the_waiting_turns_instead_of_feeding_them_at_once() {
+    for (s, o) in lobby_before_any_packet() {
+        for (i, a) in o.agents.iter().enumerate() {
+            assert!(
+                a.fed.windows(2).all(|w| w[1].at > w[0].at),
+                "udp blocked {}: agent {i} fed two turns at once",
+                s.agents[0].udp_blocked
+            );
+        }
+    }
+}
+
+#[test]
+fn over_tcp_the_agent_chooses_depth_from_the_tcp_loss_model() {
+    let s = steady_room(
+        20 * SECOND,
+        vec![steady(50_000, 0.01, false), steady(50_000, 0.01, true)],
+    );
+    let o = run(&s);
+    check(5, &s, &o);
+    check_transports(5, &s, &o);
+    let ceiling = depth::max_turns(s.cadence.period_us());
+    let (udp, tcp) = (&o.agents[0].choice, &o.agents[1].choice);
+    assert!(!udp.too_poor && udp.turns < ceiling, "udp chose {udp:?}");
+    assert!(tcp.too_poor && tcp.turns == ceiling, "tcp chose {tcp:?}");
 }

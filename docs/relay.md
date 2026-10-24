@@ -331,7 +331,10 @@ verifies it, so it can't be used to amplify an attack.
   token per slot at Create and hands them out by Join; Room carries the
   token. The lobby (relay probes every turn period) starts when every slot
   has joined and turns start after the lobby time (20 s by default,
-  `--lobby-ms`). The agent picks its depth at the first packet with a base.
+  `--lobby-ms`). The agent picks its depth at the first packet with a base,
+  once it has measured at least one second of packets
+  (`depth::min_packets`, 125 at 8 ms); a lobby that ends sooner leaves the
+  choice pending until then (TCP fallback, below).
 - **Amplification and rebind.** The address that joined is verified by the
   cookie it echoed. An up packet with a known token from another address
   moves the player there unverified: its actions and acknowledgements count,
@@ -408,22 +411,52 @@ TCP from then on.
   agent ends on TCP and feeds the same turn sequence byte for byte (each
   fed turn as encoded on the wire), with the checks above. 16 scenarios run
   with every second agent blocked, in one room with UDP agents.
-- **Measured** (bench, one hour, 8 ms turns, 25 October 2026):
+- **TCP depth rule (wisp#47).** Over TCP nothing shows as a missing
+  sequence number: a lost segment shows as a stall, a packet whose delay
+  jumps more than two turns above the one before it, holding every later
+  packet behind it. The agent counts the lobby's stalls and records each
+  stall's hold (its delay above the anchor, about one RTT plus three turns).
+  The stall rate per packet takes the same upper bound as UDP's loss,
+  (stalls + 1 + 2√(stalls + 1)) / (packets + 2). A retransmission is lost
+  as often as the original, so k losses in a row hold the stream k times as
+  long. At slack S (depth plus margin) the predicted late rate is
+  exp(−S / jitter) + Σₖ qᵏ × (share of holds h with k·h > S), k = 1..8,
+  where the jitter is the mean delay above the anchor of packets outside
+  stalls. With no stall seen the holds are unknown and every stall counts
+  as late. The smallest D that meets the bar is chosen, under the same
+  100 ms ceiling; UDP's rule is unchanged (the UDP cells of the grid are
+  identical).
+- **Lobby before the first packet.** A lobby that ends before the agent
+  has heard from the relay (an agent still waiting out the 2 s fallback,
+  say) used to choose from no packets: too poor, an anchor of 0, and turns
+  fed far off schedule for the rest of the match. The agent now keeps the
+  choice pending until it has measured `depth::min_packets` (one second of
+  turn periods), and the turns already due then drain at 4 ms a turn
+  through the catch-up instead of feeding at once. Property tests run rooms
+  of UDP agents and of UDP-blocked agents whose lobby ends at 0.
+- **Measured** (bench, one hour, 8 ms turns, 24 October 2026). The first
+  row is `--grid` as shipped; the others lift the ceiling
+  (`--max-depth-ms 400`, and `--margin 0.95`) to measure what the rule needs:
 
-| RTT | Loss | D (A/B), depth | Max depth | Underruns per 10 min (A/B) | Delivery p50/p99/p99.9 | Bytes/s down/up |
-|---|---|---|---|---|---|---|
-| 100 ms | UDP blocked, 1% over TCP | 6/6, 48.0 ms | 255.2 ms | 732.83/762.00 | 51.9/174.5/229.3 ms | 6459/5797 |
+| RTT | Loss | D (A/B), depth | Max depth | Underruns per 10 min (A/B) | Delivery p50/p99/p99.9 | Own echo p50/p99 | Bytes/s down/up |
+|---|---|---|---|---|---|---|---|
+| 100 ms | UDP blocked, 1% over TCP | 12!/12!, 96.0 ms | 255.2 ms | 732.83/762.00 | 51.9/174.5/229.3 ms | 209.8/333.3 ms | 6459/5797 |
+| 100 ms | same, ceiling 400 ms | 33/33, 264.0 ms | 264.0 ms | 0.00/0.00 | 51.9/174.5/229.3 ms | 371.6/493.8 ms | 6459/5797 |
+| 100 ms | same, ceiling 400 ms, margin 0.95 | 21/21, 261.7 ms | 261.7 ms | 0.00/0.00 | 51.9/174.5/229.3 ms | 368.2/490.7 ms | 6459/5797 |
 
-- **Reading it.** Delivery p99 is 174.5 ms against 59.4 ms over UDP at
-  the same RTT and loss: a lost segment holds the stream for one RTT plus
-  three turns. The depth rule assumes D + 1 copies of each turn, but TCP
-  sends one, so it chooses 48 ms and underruns about 1.2 times a second.
-  With `--margin 0.99` (depth from the lobby's 99th-percentile delay) the
-  agents choose 140.3 ms and see 8.33/8.00 underruns per 10 minutes, past
-  the 100 ms ceiling and the bar. So TCP keeps a player on a UDP-blocked
-  network in the match but plays far worse than UDP does at 5% loss, and
-  UDP stays the default. Bytes include the 2-byte prefix and are about half
-  UDP's, because nothing is repeated. The TCP depth rule is open.
+- **Why no depth within the ceiling meets the bar.** The bar at 8 ms is
+  1.3 × 10⁻⁵ underruns per turn. Below one hold (100 ms RTT + 24 ms ≈
+  124 ms) every lost segment stalls the feed once, about p × 125 a second:
+  the cell sees the same 733/762 underruns at 96 ms as #41's rule did at
+  48 ms. Covering one hold leaves the lost retransmissions, p² per packet,
+  7.5 per 10 minutes at 1%; #41's `--margin 0.99` run (140.3 ms, 8.33/8.00)
+  measured that. Only depth past two holds, about 250 ms, leaves p³
+  (0.08 per 10 minutes), which is what the rule picks with the ceiling
+  lifted and meets with 0 underruns. That is 2.5 times the 100 ms ceiling,
+  so the ceiling stays and a UDP-blocked player at 1% loss and 100 ms RTT is
+  reported too poor at 12 turns (96 ms). The depth bar stays in
+  milliseconds (66.7 ms at 5%, proxy 25 October 2026). Bytes include the
+  2-byte prefix and are about half UDP's, because nothing is repeated.
 
 ## Jitter buffer (boxes R6, R9, C2)
 
@@ -580,6 +613,7 @@ rustc 1.97.0 by `relay/rust-toolchain.toml`, with no dependencies. CI job
     turn the product runs over the (c + 1)D + 1 packets that carry a turn
     before its feed time, each with T/(c + 1) less slack than the one
     before, and every packet after the first lost with the loss after loss.
+    Over TCP it uses the TCP depth rule instead (TCP fallback, below).
   - `sim`: a seeded event simulator with per-direction delay, exponential
     jitter, independent or Gilbert-Elliott loss, blackouts, agent clock
     drift and per-agent blocked UDP with the TCP fallback. Its
