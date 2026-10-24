@@ -50,7 +50,7 @@ Measured facts, each with its source:
   until the retransmission, then releases them together: the burst the pool
   showed costs taps. W3Champions announced (October 2026) no packet-loss lag
   spikes at 5% loss and 200 ms ping; their current code is not public, so how
-  is unknown. Box R4 measured Wisp's own TCP host on such a path
+  is unknown. Box R4 measures Wisp's own TCP host on such a path
   (Baseline, below).
 - **Battle.net's own timing.** Turns on a 25 ms grid, own-echo p50 about
   115 ms, p95 about 212 ms (wisp:docs/network-model.md).
@@ -75,6 +75,10 @@ That last fact splits the plan in two:
    Tom's decision (Decisions, below).
 
 ## Baseline: Wisp's TCP host on a lossy path (box R4)
+
+Status: method set, numbers pending. The table below is a gex45 trial run
+at 75–85% host CPU pressure on 24 October, so it does not count as the
+baseline; the cells are to be rerun on the laptop's LAN pool (wisp#33).
 
 What the relay must beat: Wisp's own TCP host reached over an internet-like
 path, as FLO's single TCP stream reaches a player. Measured 24 October 2026
@@ -141,7 +145,7 @@ gex45, one per row (`r120-l2-light` is RTT 120, loss 2%, light input;
 callback clocks, the stimulus record, the action log, the netem setting,
 the gate record and the per-second host samples.
 
-What the relay must beat, read from the table:
+What the gex45 trial showed, pending the laptop rerun:
 
 - **Game time held.** In every cell the paced host kept pace 1.000 and both
   clients 60 callbacks a second, with at most one host wait (16 ms) and no
@@ -157,7 +161,7 @@ What the relay must beat, read from the table:
   120 ms at 2%.
 - **Jitter and bursts at 2%** cost about what plain 2% does here: p99 gap
   35–62 ms against 36–79 ms.
-- **The yardstick for the relay** (box R9) is the 5% rows: p99 callback gaps
+- **The 5% rows would set the relay's yardstick** (box R9): p99 callback gaps
   near 190 ms, half-second single gaps and up to 56 taps in 190 lost at
   200 ms, 5%, the cell where W3Champions claims no lag spikes.
 
@@ -861,7 +865,7 @@ wisp (epic wisp#28):
 - **R3** Whether held-key reads wait for the turn echo, at 0/100/200 ms RTT
   (wisp#32).
 - **R4** Baseline: Wisp's TCP host under jitter and loss, as a FLO-like path
-  is (wisp#33); measured in Baseline, above.
+  is (wisp#33); method and gex45 trial in Baseline, above.
 - **R5** `wisp lan netem` gains jitter, burst loss and port scoping
   (wisp#34).
 - **R6** Relay protocol core, jitter buffer and simulated-network bench in
