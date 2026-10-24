@@ -412,8 +412,25 @@ clock through the `room opened` line; a run's smallest arrival minus send
 time must equal netem's floor (RTT/2 − jitter/2), which checks that mapping.
 `DIR/summary.txt` holds the relay's counters, its CPU over the match in
 percent of one core, and per agent the chosen and maximum depth, underruns
-and their times, and delivery p50/p99/p99.9. The cells are not yet measured
-on a host with CPU pressure below 20 (wisp#36).
+and their times, and delivery p50/p99/p99.9.
+
+The grid ran on gex45 on 2026-10-24 in its own `unshare -rn` namespace with
+the qdisc `impairCommands` builds for `--udp-port 7457`, jitter 20 ms and
+`--match-s 270`, on relay cc7adbb. A cell counts only if
+protectedCpuSomeAvg10 and `/proc/pressure/cpu` some avg10, sampled every
+10 s, both stay below 20 from start to finish; five attempts above it were
+discarded and rerun. Every cell's `min_one_way_ms` equals RTT/2 − 10, and
+none underran; each p99 is within 4% of the bench's (70.1, 72.0, 110.1 and
+111.9 ms). One discarded 200 ms / 2% attempt, at host pressure 92, underran
+once in both agents at the same 179.166 s: a shared host stall, not loss.
+Directories are under `~/.local/state/wisp/relay-w36/20261024T221811Z-quiet/`.
+
+| Cell | Depth (a/b) | Max depth | Underruns | Delivery p50/p99/p99.9 | Relay CPU | Max pressure (protected, host) | DIR |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 120 ms, 2% per send | 6/5, 48.0 ms | 48.0 ms | 0/0 | 60.8/71.6/77.5 ms | 0.8% | 9.7, 13.6 | `rtt120-loss2-a2` |
+| 120 ms, 5% per send | 6/6, 48.0 ms | 48.0 ms | 0/0 | 61.0/74.4/79.7 ms | 0.9% | 9.8, 19.7 | `rtt120-loss5-a2` |
+| 200 ms, 2% per send | 5/5, 40.0 ms | 40.0 ms | 0/0 | 100.6/111.1/117.6 ms | 0.7% | 2.5, 3.4 | `rtt200-loss2-a4` |
+| 200 ms, 5% per send | 6/6, 48.0 ms | 48.0 ms | 0/0 | 100.9/114.2/119.2 ms | 0.7% | 6.2, 8.5 | `rtt200-loss5-a1` |
 
 **TCP fallback (wisp#41).** Some networks (hotels, schools, offices) block
 outbound UDP; W3Champions falls back from QUIC to TCP for the same reason.
