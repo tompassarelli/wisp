@@ -64,6 +64,10 @@ impl Lobby {
         self.seats[player].left
     }
 
+    pub fn lowest_present(&self) -> Option<usize> {
+        (0..self.pids.len()).find(|&p| !self.seats[p].left)
+    }
+
     pub fn welcome(&self, player: usize) -> Vec<FromRelay> {
         let mut out = vec![FromRelay::Room(RoomFacts { you: self.pids[player], ..self.facts.clone() })];
         for (i, seat) in self.seats.iter().enumerate() {
@@ -166,5 +170,22 @@ mod tests {
         assert_eq!(lobby.poll(2_500_000).len(), 2);
         assert!(lobby.poll(8_499_999).is_empty());
         assert_eq!(lobby.poll(8_500_000), vec![(0, FromRelay::CountdownEnd), (1, FromRelay::CountdownEnd)]);
+    }
+
+    #[test]
+    fn the_lowest_present_seat_skips_a_player_who_left_while_loading() {
+        let mut lobby = Lobby::new(map(), 42, 2, 0, HOST_TIMING);
+        for player in [0, 1] {
+            lobby.on_message(0, player, FromAgent::Joined { name: vec![b'a' + player as u8] });
+            lobby.on_message(0, player, FromAgent::Ready);
+        }
+        lobby.poll(HOST_TIMING.settle_us);
+        lobby.poll(HOST_TIMING.settle_us + HOST_TIMING.countdown_us);
+        assert_eq!((lobby.phase(), lobby.lowest_present()), (LobbyPhase::Loading, Some(0)));
+        lobby.on_message(0, 0, FromAgent::Left(1));
+        lobby.on_message(0, 1, FromAgent::Loaded);
+        assert_eq!((lobby.phase(), lobby.lowest_present()), (LobbyPhase::Playing, Some(1)));
+        lobby.on_message(0, 1, FromAgent::Left(1));
+        assert_eq!(lobby.lowest_present(), None);
     }
 }

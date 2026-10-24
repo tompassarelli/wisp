@@ -9,6 +9,7 @@ import type { SceneryFixtures } from "./warcraft3Scenery";
 import type { Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 import type { AbilityObjectFixtures } from "./warcraft3Abilities";
 import { type CallbackTiming, stampWallTime, turnStart } from "./frameRate";
+import { type SyncOpening, openingFlights } from "./syncOpening";
 
 export interface LockstepOptions {
   readonly abilityObjects?: AbilityObjectFixtures;
@@ -56,7 +57,7 @@ export interface LockstepOptions {
   readonly frames?: readonly FrameTemplate[];
 }
 
-export interface SyncDelivery {
+export interface SyncDelivery extends SyncOpening {
 
   arrivalFrame(this: void, sender: number, frame: number, message: SyncMessage): number;
 }
@@ -149,6 +150,7 @@ export class Lockstep {
       client.run(() => entry(client).start());
     }
     this.flush();
+    this.inFlight.unshift(...openingFlights(this.options, this.clients.map((client) => client.slot)));
   }
 
   everywhere(body: (this: void) => void): void {

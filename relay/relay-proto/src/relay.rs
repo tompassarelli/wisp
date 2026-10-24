@@ -4,7 +4,7 @@ use crate::cadence::Cadence;
 use crate::transport::{Route, Transport};
 use crate::wire::{
     self, Action, Down, Packet, Turn, WireError, MAX_PACKET, MAX_PACKETS_PER_TICK, MAX_TURN,
-    NOT_STARTED, TURN_HEADER,
+    NOT_STARTED,
 };
 use crate::Micros;
 
@@ -43,6 +43,7 @@ pub struct Relay {
     log: VecDeque<Turn>,
     log_from: u32,
     pending: VecDeque<Pending>,
+    lead: Option<Action>,
     stopped: Option<Micros>,
     stops: u32,
     running_since: Option<Micros>,
@@ -85,6 +86,7 @@ impl Relay {
             log: VecDeque::new(),
             log_from: 0,
             pending: VecDeque::new(),
+            lead: None,
             stopped: None,
             stops: 0,
             running_since: None,
@@ -96,6 +98,12 @@ impl Relay {
     pub fn start(&mut self, now: Micros) {
         if self.base.is_none() {
             self.base = Some(now);
+        }
+    }
+
+    pub fn lead(&mut self, action: Action) {
+        if self.next_turn == 0 {
+            self.lead = Some(action);
         }
     }
 
@@ -249,10 +257,10 @@ impl Relay {
     fn emit_turn(&mut self) {
         let mut turn = Turn {
             step_ms: self.cadence.step_ms(self.next_turn),
-            actions: Vec::new(),
+            actions: self.lead.take().into_iter().collect(),
         };
         let index = self.next_turn;
-        let mut size = TURN_HEADER;
+        let mut size = turn.wire_len();
         let mut held = vec![false; self.players.len()];
         let mut i = 0;
         while let Some(p) = self.pending.get(i) {

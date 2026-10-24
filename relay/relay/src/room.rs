@@ -48,6 +48,9 @@ impl Room {
     pub(crate) fn poll_game(&mut self, id: u64, now: Micros, lobby_us: Micros, cadence: &Cadence, out: &mut Out, log: &mut Vec<String>) {
         let ready = if self.game.hosted() { self.game.playing() } else { self.full_at.is_some_and(|t| now >= t + lobby_us) };
         if !self.started && ready {
+            if let Some(mark) = self.game.mark() {
+                self.relay.lead(mark);
+            }
             self.relay.start(now);
             self.started = true;
             log.push(format!("room {id:016x} playing"));

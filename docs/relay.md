@@ -980,6 +980,24 @@ and the lobby of remote players. No FLO code is copied.
   game time (host.ts allows 50 turns), makes the relay stop the clock, and
   agents show Warcraft's lag screen. A player who stays away for 30 s is
   dropped as having left. The clock then restarts from a rebased deadline.
+- **Relay mark.** Once every game in a hosted room has loaded, the relay
+  leads the first turn it emits with one synchronized action, the same bytes
+  for every agent, so a map can latch that its match runs through the relay:
+  a `BlzSendSyncData` action (0x77) with the prefix `WISP_RLY`, the relay
+  protocol version as decimal text for data (relay-proto `wire::VERSION`,
+  now `1`) and a zero sender word. The lowest occupied slot owns it: the
+  lowest relay slot whose player has not left (relay-proto
+  `Lobby::lowest_present`), normally slot 0, the room's creator, which every
+  room has. Every agent maps that slot to the same player id, so the action
+  is identical on every client. It takes no player's action sequence, and
+  rooms without a hosted game (synthetic and bench rooms) get no mark. The
+  agent frames it with the other actions through `w3gs::incoming_action`;
+  lobby bytes up to the first turn are unchanged (wisp#52). A map latches
+  it by registering `BlzTriggerRegisterPlayerSyncEvent` for the prefix
+  `WISP_RLY` on every player at map init and setting a flag when it fires;
+  the mark runs ahead of every player action in turn 0, so every client holds
+  the flag before the match's first input, and a Battle.net match never sets
+  it. Maps must not send the prefix themselves.
 - **Conformance.** host.ts's `onPacket` hook records a pool session's bytes.
   The agent must produce the same lobby bytes for the same room. That
   transcript test keeps the two hosts from drifting.

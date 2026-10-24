@@ -5,6 +5,11 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## Unreleased
 
+- `relayDelivery()` leads the first turn with the relay mark, a sync message
+  from the lowest slot with prefix `WISP_RLY` and the relay protocol version
+  as data; `wisp/src/headless/syncChannel` exports `RELAY_MARK_PREFIX` and
+  `RELAY_PROTOCOL_VERSION`, and `SyncDelivery` gains an optional `opening`
+  (wisp:docs/network-model.md, "Relay delivery").
 - `wisp/src/headless/syncChannel` exports `relayDelivery`, `relayCallbacks`,
   `MEASURED_RELAY`, `RELAY_LAG_STOP_MS`, `RELAY_CATCH_UP_STEP_MS`,
   `RELAY_SLEW_HOLD_MS` and the types `RelayTiming`, `RelayLink`,

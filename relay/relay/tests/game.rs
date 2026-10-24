@@ -10,6 +10,7 @@ use relay_agent::keys::{KEY_DOWN_EVENT, KEY_UP_EVENT};
 use relay_agent::w3gs::{self, Reader, Splitter, Writer};
 use relay_agent::Link;
 use relay_proto::lobby::LobbyTiming;
+use relay_proto::mark::{mark_data, MARK_PREFIX};
 use relay_proto::room::MapFacts;
 
 const MAP: &str = "path=Maps\\Wisp\\t.w3x size=4096 crc32=1 sha1=00112233445566778899aabbccddeeff00112233 xoro=2 width=52 height=52 layout=1 forces=15 players=0:1:1,1:1:1";
@@ -35,6 +36,7 @@ fn join_packets(name: &[u8]) -> Vec<u8> {
 struct Seen {
     turns: u32,
     keys: Vec<(u32, u8, u32)>,
+    marks: Vec<(u32, u8, Vec<u8>)>,
 }
 
 impl Seen {
@@ -47,7 +49,11 @@ impl Seen {
         while r.remaining() > 0 {
             let pid = r.u8().unwrap();
             let len = r.u16().unwrap() as usize;
-            for k in relay_agent::keys::key_events(r.take(len).unwrap()) {
+            let block = r.take(len).unwrap();
+            if block.get(1..1 + MARK_PREFIX.len()) == Some(MARK_PREFIX) {
+                self.marks.push((self.turns, pid, block.to_vec()));
+            }
+            for k in relay_agent::keys::key_events(block) {
                 self.keys.push((self.turns, pid, if k.down { KEY_DOWN_EVENT } else { KEY_UP_EVENT }));
             }
         }
@@ -135,4 +141,7 @@ fn two_games_join_load_and_play_through_agents_and_the_relay() {
         assert!(up.0 > down.0, "the release lands a turn after its press: {:?}", seen.keys);
     }
     assert_eq!((stats.rooms_closed, stats.desyncs), (1, 0));
+    for seen in [&seen_a, &seen_b] {
+        assert_eq!(seen.marks, [(0, 1, mark_data())], "only the first turn carries the relay's mark, from the lowest slot's player");
+    }
 }
