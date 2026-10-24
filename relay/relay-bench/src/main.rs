@@ -1,3 +1,5 @@
+mod trace_cell;
+
 use std::thread;
 
 use relay_proto::cadence::Cadence;
@@ -30,6 +32,7 @@ enum Kind {
     Burst(f64, f64),
     Blackout(f64),
     UdpBlocked(f64),
+    Trace(bool),
 }
 
 impl Kind {
@@ -40,12 +43,14 @@ impl Kind {
             Kind::Burst(p, b) => format!("{}% bursts of {b}", p * 100.0),
             Kind::Blackout(p) => format!("{}% + 1 s blackout / 5 min", p * 100.0),
             Kind::UdpBlocked(p) => format!("UDP blocked, {}% over TCP", p * 100.0),
+            Kind::Trace(false) => "laptop Wi-Fi trace, whole".into(),
+            Kind::Trace(true) => "laptop Wi-Fi trace, rescans cut".into(),
         }
     }
 
     fn loss(self) -> Loss {
         match self {
-            Kind::Clean => Loss::None,
+            Kind::Clean | Kind::Trace(_) => Loss::None,
             Kind::Independent(p) | Kind::Blackout(p) | Kind::UdpBlocked(p) => Loss::Independent(p),
             Kind::Burst(loss, mean_burst) => Loss::Burst { loss, mean_burst },
         }
@@ -55,7 +60,9 @@ impl Kind {
         match self {
             Kind::Clean => Some(50_000),
             Kind::Independent(p) | Kind::Blackout(p) if p <= 0.01 => Some(50_000),
-            Kind::Independent(_) | Kind::Blackout(_) | Kind::Burst(..) => Some(66_667),
+            Kind::Independent(_) | Kind::Blackout(_) | Kind::Burst(..) | Kind::Trace(_) => {
+                Some(66_667)
+            }
             Kind::UdpBlocked(_) => None,
         }
     }
@@ -68,6 +75,7 @@ struct Options {
     margin: Option<f64>,
     cover: bool,
     max_depth_us: Option<Micros>,
+    trace: Option<String>,
 }
 
 struct Cell {
@@ -101,6 +109,8 @@ fn scenario(cell: &Cell, o: &Options, match_us: Micros) -> (Scenario, Vec<(Micro
         action_bytes: (4, 24),
         releases: 0.5,
         udp_blocked: matches!(cell.kind, Kind::UdpBlocked(_)),
+        down_replay: None,
+        up_replay: None,
     };
     let blackouts: Vec<(Micros, Micros)> = match cell.kind {
         Kind::Blackout(_) => (1..)
@@ -280,7 +290,8 @@ fn value<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
 }
 
 fn options(args: &[String]) -> Option<Options> {
-    if !args.iter().any(|a| a == "--grid") {
+    let trace = value(args, "--trace").map(str::to_string);
+    if trace.is_none() && !args.iter().any(|a| a == "--grid") {
         return None;
     }
     let minutes = match value(args, "--minutes") {
@@ -317,6 +328,7 @@ fn options(args: &[String]) -> Option<Options> {
         margin,
         cover,
         max_depth_us,
+        trace,
     })
 }
 
@@ -324,11 +336,15 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(o) = options(&args) else {
         eprintln!(
-            "usage: relay-bench --grid [--minutes N] [--rtts MS,...] [--steps 8|17,17,16] [--margin QUANTILE] [--no-cover] [--max-depth-ms MS]"
+            "usage: relay-bench --grid|--trace FILE [--minutes N] [--rtts MS,...] [--steps 8|17,17,16] [--margin QUANTILE] [--no-cover] [--max-depth-ms MS]"
         );
         std::process::exit(2);
     };
     let period_us = Cadence::new(&o.steps).period_us();
+    if let Some(name) = &o.trace {
+        trace_cell::main(&o, name, period_us);
+        return;
+    }
     let mut cells = Vec::new();
     for (r, &rtt_ms) in o.rtts_ms.iter().enumerate() {
         for (k, kind) in KINDS.into_iter().enumerate() {

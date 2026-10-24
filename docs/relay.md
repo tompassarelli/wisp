@@ -684,8 +684,9 @@ rustc 1.97.0 by `relay/rust-toolchain.toml`, with no dependencies. CI job
 - **Bench** (`cargo run --release -p relay-bench -- --grid`, about 5 s for
   the grid on gex45; `--steps 17,17,16` and `--margin 0.95` select the other
   cadence and depth rule, `--rtts 120` other round trips, whose cells take
-  the seeds of the grid's first round trip, and `--no-cover` turns burst
-  cover off): two agents, each cell an hour of play (450,000 turns at 8 ms)
+  the seeds of the grid's first round trip, `--no-cover` turns burst
+  cover off, and `--trace FILE` replays a recorded path instead; see "Recorded
+  trace cell", below): two agents, each cell an hour of play (450,000 turns at 8 ms)
   after a 20 s lobby. Delay is RTT / 2 each way plus
   exponential jitter of 2 ms mean. The agents' clocks drift +100 and
   −100 ppm, and each sends 4 actions a second of 9–29 bytes, half of them
@@ -879,6 +880,73 @@ and still saw up to 5.5 underruns per 10 minutes, and bursts of 4 at 1% and
   line through each 10 s window's smallest delay, which removes the two
   clocks' drift. `relay-synthetic --trace FILE` records one from a
   one-player room; a replay takes the RTT's half as the base one-way delay.
+
+### Recorded trace cell (wisp#45)
+
+Built 25 October 2026: `cargo run --release -p relay-bench -- --trace
+traces/laptop-wifi-to-nexus-2026-10-25.trace` (a path relative to the
+working directory or to `relay/relay-bench`; under a second) replays
+wisp#39's trace of the laptop's Wi-Fi path to Nexus as a cell at 8 ms turns.
+`relay-bench` is now the package's default binary, since `relay-native`
+made `cargo run -p relay-bench` ambiguous.
+
+- **How the cell uses the trace.** Agent A is the laptop. A packet to or
+  from it sent at time t takes the delay of the trace's slot ⌊(t − match start) /
+  8 ms⌋, or is lost where the slot is `-`, on top of the RTT's half
+  (22.0 ms) each way; the sim's jitter and loss draws are off for it. Slots
+  wrap, so the match runs the trace's 74,738 slots (597.9 s) once and the
+  20 s lobby replays its last 20 s. Every packet sent within one slot (a
+  down packet and any cover packets) takes that slot's delay, so a stall
+  lasts the time it lasted on the path, not a number of packets.
+- **Upstream.** The trace is downstream only. Upstream replays the same
+  trace at the same time, with no offset: a rescan takes the radio off its
+  channel both ways at once, so the laptop's actions, acknowledgements and
+  checksums stall with its turns. An offset would put upstream stalls
+  between downstream ones, which a rescan doesn't do. Upstream delay causes
+  no underruns; it moves own echo, the acknowledgements that bound the
+  bytes down, and the checksums that can stop the clock. Agent B, the other
+  side of #39's match, is the bench's path at the same 44 ms RTT: 2 ms mean
+  jitter, no loss.
+- **Rescan windows.** The trace doesn't mark them, so the bench finds them
+  by shape and period: at least 15 rises above 80 ms, each within 0.5 s of
+  the last (3 where a rescan is clipped by the trace's start or end), from
+  the first rise until the delay falls below 10 ms. That finds 16 windows,
+  at 0.0 (clipped), 37.0, 76.8, … 555.4 and 595.1 s (clipped): median
+  39.87 s start to start, 2.7–7.9 s long, 14,407 packets (115.3 s). Nothing
+  else meets the rule; the 254.8 ms spike at 20.7 s and the 3 s cluster of
+  up to 214 ms at 375–379 s stay in. The second row replays the trace with
+  those windows cut out and the rest joined (60,331 slots, 482.6 s). Its
+  delay above the floor is p50/p99/p99.9/max 2.7/39.3/112.7/254.8 ms, with
+  0.70% of packets more than 48 ms late (#39's 77.3 ms p99 and 1.8% came
+  from its own window bounds).
+- **Rows.** The bytes column is compared with the bench's independent-loss
+  cells at the trace's 44 ms RTT, run for the same 597.9 s with seeds
+  `0x5eed_7002`–`7005` (largest 9,774 down and 9,200 up); the trace cells
+  take `0x5eed_7000` and `7001`.
+
+| RTT | Loss | D (A/B), depth | Max depth | Underruns per 10 min (A/B) | Catch-up after blackout | Delivery p50/p99/p99.9 | Own echo p50/p99 | Bytes/s down/up | Clock stops | Desync | Bar |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 44 ms | laptop Wi-Fi trace, whole | 5/3, 40.0 ms | 254.1 ms | 661.31/0.00 | – | 25.1/119.6/164.1 ms | 98.8/195.1 ms | 10542/10056 | 0 | none | fail (underruns) |
+| 44 ms | laptop Wi-Fi trace, rescans cut | 4/3, 32.0 ms | 254.1 ms | 220.04/0.00 | – | 24.7/60.6/134.6 ms | 90.8/139.6 ms | 10108/9517 | 0 | none | fail (underruns) |
+
+- **Bar.** Both rows miss the underrun bar; depth and bytes meet it. The
+  whole trace chose D = 5 (40 ms) and gave the laptop 661 underruns per
+  10 minutes, against 580 per 10 minutes (290 in 5) at 48 ms in #39's live
+  match. Bytes are 1.08 times down and 1.09 up of the largest 44 ms
+  independent-loss cell. With the rescans cut, the lobby chose D = 4
+  (32 ms) and the laptop still had 220 underruns per 10 minutes, at 1.03
+  times the bytes both ways. B had none in either row; no clock stop, no
+  desync.
+- **Cause.** Fixing firn#37 leaves the depth rule missing the bar on this
+  path. Outside the rescans the trace still crosses 32 ms 291 times per
+  10 minutes, 48 ms 121 times, 66.7 ms 58 times and 100 ms 20 times, all
+  delay with no loss. No depth up to the bar's 66.7 ms covers spikes that
+  pass it 58 times in 10 minutes, so no depth rule can meet the bar here.
+  This one did worse: its 20 s lobby showed too few of them and it picked
+  32 ms. The trace answers "What the bench can't say": this path's bursts
+  are stalls fixed in time, not lost packets. The lobby saw no loss, so the
+  agent asked for no cover, and cover wouldn't help, because every copy in
+  a slot waits out the same stall. The depth rule is unchanged in this box.
 
 ## Lobby and game on the agent (box R8)
 
