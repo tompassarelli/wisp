@@ -33,7 +33,7 @@ export const PROFILES: Readonly<Record<string, Profile>> = {
   hfr: { name: "hfr", width: 800, height: 600, maxFps: 144, video: LOWEST, graphicsMode: "classic", sound: false, music: false },
   visual: { ...VISUAL, graphicsMode: "classic" },
   "capture-classic": CAPTURE_PROFILES["capture-classic"],
-  "capture-classic-1080": { ...CAPTURE_PROFILES["capture-classic"], name: "capture-classic-1080", width: 1920, height: 1080 },
+  "capture-classic-1080": { ...CAPTURE_PROFILES["capture-classic"], name: "capture-classic-1080", width: 1920, height: 1080, video: { ...LOWEST, lightingquality: 2 } },
 };
 
 function profileSections(profile: Profile, windowX: number): Record<string, Record<string, number>> {
