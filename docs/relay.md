@@ -546,6 +546,44 @@ and the lobby of remote players. No FLO code is copied.
   The agent must produce the same lobby bytes for the same room. That
   transcript test keeps the two hosts from drifting.
 
+Built for wisp#37 (code box), in `relay/`:
+
+- relay-proto `room` carries the room between relay and agents: the map
+  facts, the relay's seed, each agent's player id, joins, map sizes, ready,
+  loaded, chat, handicaps and leaves. `stream` sends those messages as wire
+  kind 10, beside the turn packets and #36's control kinds, and each side
+  resends every 50 ms until the other acknowledges. `lobby` is the relay's
+  side: it starts the countdown 1.5 s after the last join once every agent
+  reports its game has the map and its skins, ends it 6 s later, and forwards
+  loads, as host.ts times them. Map facts travel as one `key=value` line
+  (`MapFacts::parse`), the form the fixture's header uses.
+- In the relay, a room's first agent sends the map facts it read from its
+  own copy; the room then picks one seed and runs the lobby, and its turn
+  clock starts when every game has loaded instead of a fixed lobby time. A
+  started room prints a summary every 5 s and when it closes: turns, game
+  and wall seconds, pace, checksums compared, desyncs and stops.
+- relay-agent `game` is host.ts's lobby and turn loop for one local game, with
+  the remote players coming from the relay. `host` runs it over #36's link:
+  once the room has arrived, a loopback TCP listener with `TCP_NODELAY`, LAN announcements to the client ports every
+  250 ms, pings every 3 s before play, and each relay turn written as one
+  IncomingAction when the jitter buffer feeds it. `keys` reads the game's
+  key actions (0x79) and marks an action that releases a key whose press the
+  relay has not yet acknowledged, so the relay places it a turn later
+  (smashcraft#218).
+- `cargo test -p relay-agent` replays
+  `relay-agent/tests/fixtures/pool-lobby.packets`, a two-client pool lobby
+  host.ts hosted on 24 October 2026, through two agents and the relay's
+  lobby, and requires each client's received bytes up to the first turn to
+  equal host.ts's, except the joiner's own address in slot-info-join and the
+  ping ticks.
+- `cargo test -p relay --test game` plays two scripted games through two
+  agents and the relay over loopback sockets: both join, load and answer 200
+  turns, a press and release sent together arrive in different turns, and no
+  checksum differs.
+- `wisp lan relayed MAP --relay-bin DIR --pair K` starts the relay and one
+  agent per client inside the pair's namespace and joins each client to its
+  own agent's game; logs land in the pair's `games/relayed-*` folder.
+
 ## Where the relay runs, NAT, and who can join (boxes R10, C1)
 
 - **Host.** One relay on a public address. Nexus, the always-on server, is

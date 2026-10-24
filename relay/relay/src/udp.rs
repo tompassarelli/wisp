@@ -29,6 +29,9 @@ pub fn serve(
         let t = now();
         server.poll(t, &mut out);
         flush(socket, &mut out);
+        for line in server.take_log() {
+            println!("{:.3} {line}", t as f64 / 1e6);
+        }
         if once && server.rooms() == 0 && (server.stats().rooms_closed > 0 || t >= idle_us) {
             return Ok(());
         }

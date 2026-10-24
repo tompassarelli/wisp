@@ -6,10 +6,16 @@ use std::net::{IpAddr, SocketAddr};
 use relay_proto::cadence::Cadence;
 use relay_proto::control::{self, Control, Refusal};
 use relay_proto::relay::Relay;
-use relay_proto::wire::{self, Down, Packet, DOWN_HEADER, KIND_UP, MAX_PACKET};
+use relay_proto::lobby::{LobbyTiming, HOST_TIMING};
+use relay_proto::stream::KIND_STREAM;
+use relay_proto::wire::KIND_UP;
 use relay_proto::Micros;
 
-pub const AMPLIFICATION: u64 = 3;
+use crate::game_room::GameRoom;
+use crate::path::{send_down, Delivery, Path};
+
+pub use crate::path::{Out, AMPLIFICATION};
+pub const REPORT_US: Micros = 5_000_000;
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -21,6 +27,7 @@ pub struct Config {
     pub cookie_epoch_us: Micros,
     pub challenge_gap_us: Micros,
     pub max_players: u8,
+    pub game_timing: LobbyTiming,
 }
 
 impl Default for Config {
@@ -34,6 +41,7 @@ impl Default for Config {
             cookie_epoch_us: 10_000_000,
             challenge_gap_us: 20_000,
             max_players: 24,
+            game_timing: HOST_TIMING,
         }
     }
 }
@@ -52,41 +60,6 @@ pub struct Stats {
     pub stops: u64,
 }
 
-#[derive(Debug)]
-struct Path {
-    addr: SocketAddr,
-    verified: bool,
-    received: u64,
-    sent: u64,
-    last_challenge: Option<Micros>,
-}
-
-impl Path {
-    fn verified(addr: SocketAddr) -> Self {
-        Path {
-            addr,
-            verified: true,
-            received: 0,
-            sent: 0,
-            last_challenge: None,
-        }
-    }
-
-    fn budget(&self) -> u64 {
-        (AMPLIFICATION * self.received).saturating_sub(self.sent)
-    }
-
-    fn send(&mut self, bytes: Vec<u8>, out: &mut Vec<(SocketAddr, Vec<u8>)>) -> bool {
-        if !self.verified {
-            if bytes.len() as u64 > self.budget() {
-                return false;
-            }
-            self.sent += bytes.len() as u64;
-        }
-        out.push((self.addr, bytes));
-        true
-    }
-}
 
 #[derive(Debug)]
 struct Slot {
@@ -102,6 +75,9 @@ struct Room {
     slots: Vec<Slot>,
     full_at: Option<Micros>,
     started: bool,
+    started_at: Micros,
+    game: GameRoom,
+    next_report: Micros,
     heard: Micros,
 }
 
@@ -120,9 +96,42 @@ impl Room {
     fn done(&self) -> bool {
         self.slots.iter().all(|s| s.left)
     }
-}
 
-pub type Out = Vec<(SocketAddr, Vec<u8>)>;
+    fn poll_game(&mut self, id: u64, now: Micros, lobby_us: Micros, cadence: &Cadence, out: &mut Out, log: &mut Vec<String>) {
+        let ready = if self.game.hosted() { self.game.playing() } else { self.full_at.is_some_and(|t| now >= t + lobby_us) };
+        if !self.started && ready {
+            self.relay.start(now);
+            self.started = true;
+            self.started_at = now;
+            log.push(format!("room {id:016x} playing"));
+        }
+        for (index, bytes) in self.game.poll(now) {
+            if let Some(path) = &mut self.slots[index].path {
+                path.send(bytes, out);
+            }
+        }
+        log.extend(self.game.take_log().into_iter().map(|line| format!("room {id:016x} {line}")));
+        if self.started && now >= self.next_report {
+            self.next_report = now + REPORT_US;
+            log.push(self.report(id, now, cadence));
+        }
+    }
+
+    fn report(&self, id: u64, now: Micros, cadence: &Cadence) -> String {
+        let turns = self.relay.turns_emitted();
+        let game_us = cadence.relay_time(turns);
+        let wall_us = now - self.started_at;
+        let pace = if wall_us > 0 { game_us as f64 / wall_us as f64 } else { 0.0 };
+        format!(
+            "room {id:016x} summary: turns {turns} game {:.3} s wall {:.3} s pace {pace:.4} checksums compared {} desyncs {} stops {}",
+            game_us as f64 / 1e6,
+            wall_us as f64 / 1e6,
+            self.relay.checksums_compared(),
+            u32::from(self.relay.desync().is_some()),
+            self.relay.stops(),
+        )
+    }
+}
 
 #[derive(Debug)]
 pub struct Server {
@@ -134,6 +143,7 @@ pub struct Server {
     tokens: HashMap<u64, (u64, usize)>,
     creations: HashMap<IpAddr, (Micros, u32)>,
     stats: Stats,
+    log: Vec<String>,
 }
 
 impl Server {
@@ -147,6 +157,7 @@ impl Server {
             tokens: HashMap::new(),
             creations: HashMap::new(),
             stats: Stats::default(),
+            log: Vec::new(),
         }
     }
 
@@ -156,6 +167,10 @@ impl Server {
 
     pub fn rooms(&self) -> usize {
         self.rooms.len()
+    }
+
+    pub fn take_log(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.log)
     }
 
     pub fn cookie(&self, addr: SocketAddr, now: Micros) -> u64 {
@@ -202,12 +217,15 @@ impl Server {
                 (false, Some(full)) => r.relay.next_wake().min(full + self.cfg.lobby_us),
                 _ => r.relay.next_wake(),
             })
+            .zip(self.rooms.values().map(|r| r.game.next_wake()))
+            .map(|(a, b)| a.min(b))
             .min()
     }
 
     pub fn on_datagram(&mut self, now: Micros, from: SocketAddr, bytes: &[u8], out: &mut Out) {
         match control::kind(bytes) {
             Some(KIND_UP) => self.on_up(now, from, bytes, out),
+            Some(KIND_STREAM) => self.on_stream(now, from, bytes),
             Some(k) if k > KIND_UP => {
                 if let Ok(c) = control::decode(bytes) {
                     self.on_control(now, from, c, out);
@@ -275,7 +293,7 @@ impl Server {
                 let room = self.rooms.get_mut(&id).unwrap();
                 room.slots[slot].left = true;
                 if room.done() {
-                    self.close(id);
+                    self.close(id, now);
                 }
             }
             _ => {}
@@ -325,8 +343,12 @@ impl Server {
         let tokens: Vec<u64> = slots.iter().map(|s| s.token).collect();
         slots[0].path = Some(Path::verified(from));
         slots[0].joined_by = Some((from, request));
+        let seed = self.fresh_id() as u32 & 0x7fff_ffff;
         let room = Room {
             relay: Relay::new(self.cadence.clone(), &tokens, now),
+            started_at: 0,
+            game: GameRoom::new(seed, &tokens, self.cfg.game_timing),
+            next_report: 0,
             full_at: (players == 1).then_some(now),
             slots,
             started: false,
@@ -360,6 +382,18 @@ impl Server {
             room.full_at = Some(now);
         }
         room.reply(id, i, request, &steps)
+    }
+
+    fn on_stream(&mut self, now: Micros, from: SocketAddr, bytes: &[u8]) {
+        let Some(&(id, index)) = control::token(bytes).and_then(|t| self.tokens.get(&t)) else {
+            return;
+        };
+        let room = self.rooms.get_mut(&id).unwrap();
+        if room.slots[index].path.as_ref().is_none_or(|p| p.addr != from) || room.slots[index].left {
+            return;
+        }
+        room.heard = now;
+        room.game.on_stream(now, index, bytes);
     }
 
     fn on_up(&mut self, now: Micros, from: SocketAddr, bytes: &[u8], out: &mut Out) {
@@ -406,10 +440,7 @@ impl Server {
     pub fn poll(&mut self, now: Micros, out: &mut Out) {
         let mut closing = Vec::new();
         for (&id, room) in &mut self.rooms {
-            if !room.started && room.full_at.is_some_and(|t| now >= t + self.cfg.lobby_us) {
-                room.relay.start(now);
-                room.started = true;
-            }
+            room.poll_game(id, now, self.cfg.lobby_us, &self.cadence, out, &mut self.log);
             if room.relay.next_wake() <= now {
                 for (index, bytes) in room.relay.poll(now) {
                     let slot = &mut room.slots[index];
@@ -417,7 +448,11 @@ impl Server {
                         continue;
                     }
                     if let Some(path) = &mut slot.path {
-                        send_down(path, bytes, out, &mut self.stats);
+                        match send_down(path, bytes, out) {
+                            Delivery::Sent | Delivery::Undecodable => {}
+                            Delivery::Trimmed => self.stats.trimmed += 1,
+                            Delivery::Withheld => self.stats.withheld += 1,
+                        }
                     }
                 }
             }
@@ -426,19 +461,22 @@ impl Server {
             }
         }
         for id in closing {
-            self.close(id);
+            self.close(id, now);
         }
         let window = self.cfg.rate_window_us;
         self.creations
             .retain(|_, &mut (start, _)| now - start < window);
     }
 
-    fn close(&mut self, id: u64) {
+    fn close(&mut self, id: u64, now: Micros) {
         let Some(room) = self.rooms.remove(&id) else {
             return;
         };
         for slot in &room.slots {
             self.tokens.remove(&slot.token);
+        }
+        if room.started {
+            self.log.push(room.report(id, now, &self.cadence));
         }
         self.stats.rooms_closed += 1;
         self.stats.stops += room.relay.stops() as u64;
@@ -448,24 +486,3 @@ impl Server {
     }
 }
 
-fn send_down(path: &mut Path, bytes: Vec<u8>, out: &mut Out, stats: &mut Stats) {
-    if path.verified || bytes.len() as u64 <= path.budget() {
-        path.send(bytes, out);
-        return;
-    }
-    let budget = path.budget().min(MAX_PACKET as u64) as usize;
-    let Ok(Packet::Down(down)) = wire::decode(&bytes) else {
-        return;
-    };
-    if budget < DOWN_HEADER {
-        stats.withheld += 1;
-        return;
-    }
-    let head = Down {
-        turns: Vec::new(),
-        ..down.clone()
-    };
-    let (trimmed, _) = wire::encode_down(&head, &down.turns, budget);
-    stats.trimmed += 1;
-    path.send(trimmed, out);
-}

@@ -141,3 +141,9 @@ export const mapCopies = (folders: readonly string[]) => Effect.acquireRelease(
   },
   catch: (cause) => new LanFailure({ problem: `copying ${mapFile} into ${folders.join(", ")}: ${String(cause)}` }),
 })));
+
+export const mapFactsLine = (map: MapFacts) => [
+  `path=${map.path}`, `size=${map.size}`, `crc32=${map.crc32}`, `sha1=${Buffer.from(map.sha1).toString("hex")}`, `xoro=${map.xoro}`,
+  `width=${map.width}`, `height=${map.height}`, `layout=${map.layout}`, `forces=${map.forces.join(",")}`,
+  `players=${map.players.map(({ id, controller, race }) => `${id}:${controller}:${race}`).join(",")}`,
+].join(" ");

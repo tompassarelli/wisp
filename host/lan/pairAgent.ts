@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { basename, join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { Cause, Duration, Effect, Exit, Fiber, FiberSet, Layer, Option, Schema, Scope } from "effect";
+import { Cause, Duration, Effect, Exit, Fiber, FiberSet, FileSystem, Layer, Option, Schema, Scope } from "effect";
 import { platformLayer, runPlatformSync } from "../os/platform/layer";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { AudioIsolation, GameLauncher, InputInjection, ProcessTable } from "../os/platform/services";
@@ -12,7 +12,7 @@ import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type M
 import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
-import { mapCopies, readMapFacts } from "./map";
+import { mapCopies, mapFactsLine, readMapFacts } from "./map";
 import { ALARM_AFTER_MS, agentPidFile, type Driver, MENUS_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, STOP_GRACE, alive, launchUntilShown, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, stopGame, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
 import { preferences } from "../os/warcraft/clientProfiles";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
@@ -101,6 +101,7 @@ interface Game {
 const FreshRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, turnSteps: Schema.optionalKey(Schema.Array(Schema.Int)), computers: Schema.optionalKey(Schema.Finite), driver: Schema.optionalKey(Schema.Int) }));
 const SoloRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, driver: Schema.optionalKey(Schema.Int) }));
 const SpeedRequest = Schema.fromJsonString(Schema.Struct({ speed: Schema.Finite }));
+const RelayedRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, relay: Schema.String, agent: Schema.String, turnMs: Schema.Int, driver: Schema.optionalKey(Schema.Int) }));
 
 
 const agent = Effect.gen(function*() {
@@ -243,6 +244,51 @@ const agent = Effect.gen(function*() {
     return yield* new LanFailure({ problem: `the match didn't start: ${JSON.stringify(host.status())}` });
   }));
 
+  const fileSystem = yield* FileSystem.FileSystem;
+  let relayed: { readonly folder: string; readonly scope: Scope.Closeable } | undefined;
+  const endRelayed = Effect.suspend(() => {
+    const ending = relayed;
+    relayed = undefined;
+    return ending === undefined ? Effect.void : Scope.close(ending.scope, Exit.void).pipe(Effect.andThen(Effect.sync(() => say(`ended relayed ${ending.folder}`))));
+  });
+
+  const relayedMatch = (mapFile: string, relayBin: string, agentBin: string, turnMs: number) => Effect.scoped(Effect.gen(function*() {
+    yield* endGame;
+    yield* endRelayed;
+    const id = new Date().toISOString().replace(/[:.]/g, "-");
+    const folder = join(directory, "games", `relayed-${id}`);
+    mkdirSync(folder, { recursive: true });
+    yield* copyMap(mapFile);
+    const map = yield* readMapFacts(mapFile, packager, `Maps\\Wisp\\${basename(mapFile)}`);
+    const scope = yield* Scope.fork(agentScope);
+    relayed = { folder, scope };
+    const spawn = (name: string, command: string, args: readonly string[]) =>
+      spawnLogged(ChildProcess.make(command, args, { stdin: "ignore", forceKillAfter: "5 seconds" }), { stdout: join(folder, `${name}.log`), stderr: join(folder, `${name}.err`) }).pipe(Scope.provide(scope), Effect.provideService(FileSystem.FileSystem, fileSystem));
+    const relayAddress = `127.0.0.1:${17000 + pair}`;
+    yield* spawn("relay", relayBin, ["--bind", relayAddress, "--steps", String(turnMs)]);
+    const names = clients.map(({ side }) => `wisp-${pair}${side}-${id.slice(11, 19)}`);
+    const [host, ...guests] = clients;
+    if (host === undefined) return yield* new LanFailure({ problem: "the pair has no clients" });
+    yield* spawn(`agent-${host.side}`, agentBin, ["--relay", relayAddress, "--name", names[0]!, "--create", String(clients.length), "--map", mapFactsLine(map)]);
+    const hostLog = join(folder, `agent-${host.side}.log`);
+    let room: string | undefined;
+    const created = yield* until(Effect.sync(() => (room = existsSync(hostLog) ? /^\S+ room ([0-9a-f]{16}) slot 0$/m.exec(readFileSync(hostLog, "utf8"))?.[1] : undefined) !== undefined), "20 seconds");
+    if (!created || room === undefined) return yield* new LanFailure({ problem: `the host agent made no room; see ${folder}` });
+    yield* Effect.forEach(guests, (guest, index) => spawn(`agent-${guest.side}`, agentBin, ["--relay", relayAddress, "--name", names[index + 1]!, "--join", room!]), { discard: true });
+    say(`relayed ${folder}: relay on ${relayAddress}, games ${names.join(", ")}`);
+    for (const [index, client] of clients.entries()) {
+      const pid = yield* gamePid(client.name);
+      if (pid === undefined) return yield* new LanFailure({ problem: `${client.name} isn't running` });
+      const menus = yield* menusOf(client.name);
+      yield* (yield* loadLanPlugin).enableLan(pid, exeOf(client.name), menus, say);
+      yield* joinLanGame(menus, names[index]!);
+    }
+    const relayLog = join(folder, "relay.log");
+    const playing = yield* until(Effect.sync(() => existsSync(relayLog) && readFileSync(relayLog, "utf8").includes(" playing")), "120 seconds");
+    if (!playing) return yield* new LanFailure({ problem: `the relayed match didn't start; see ${folder}` });
+    return { folder, games: names };
+  }));
+
   const solo = (mapFile: string) => Effect.scoped(Effect.gen(function*() {
     yield* endGame;
     const started = Date.now();
@@ -292,6 +338,18 @@ const agent = Effect.gen(function*() {
       say(`fresh failed: ${String(exit.cause)}`);
       return Response.json({ error: String(exit.cause) }, { status: 500 });
     }
+    if (url.pathname === "/relayed" && request.method === "POST") {
+      const refusal = lanPlayRefusal(pair, network, "relayed");
+      if (refusal !== undefined) return Response.json({ error: refusal }, { status: 400 });
+      const body = yield* decode(RelayedRequest, request);
+      const missing = [body.map, body.relay, body.agent].find((path) => !existsSync(path));
+      if (missing !== undefined) return Response.json({ error: `no file at ${missing}` }, { status: 400 });
+      yield* drive(body.driver);
+      const exit = yield* Effect.exit(relayedMatch(body.map, body.relay, body.agent, body.turnMs));
+      if (Exit.isSuccess(exit)) return Response.json(exit.value);
+      say(`relayed failed: ${String(exit.cause)}`);
+      return Response.json({ error: String(exit.cause) }, { status: 500 });
+    }
     if (url.pathname === "/solo" && request.method === "POST") {
       const body = yield* decode(SoloRequest, request);
       if (!existsSync(body.map)) return Response.json({ error: `no map at ${body.map}` }, { status: 400 });
@@ -304,6 +362,7 @@ const agent = Effect.gen(function*() {
     if (url.pathname === "/end" && request.method === "POST") {
       yield* release;
       yield* endGame;
+      yield* endRelayed;
       return Response.json({ ended: true });
     }
     if (url.pathname === "/speed" && request.method === "POST") {
@@ -322,6 +381,7 @@ const agent = Effect.gen(function*() {
     (server) => Effect.promise(() => server.stop(true)),
   );
   yield* Effect.addFinalizer(() => endGame);
+  yield* Effect.addFinalizer(() => endRelayed);
   writeFileSync(join(directory, "agent.json"), `${JSON.stringify({ pid: process.pid, socket: agentSocket(pair), profile: profile.name, fps: profile.maxFps, network, runs })}\n`);
   say(`agent on ${agentSocket(pair)}`);
 

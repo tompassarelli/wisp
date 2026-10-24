@@ -1,5 +1,5 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::net::{SocketAddr, UdpSocket};
 use std::process::{Command, Stdio};
 use std::thread::{self, JoinHandle};
@@ -167,8 +167,9 @@ fn the_relay_binary_serves_a_match_to_agent_links() {
     let (players, _) = play(server, 250, None);
     check_feeds(&players, 250);
     assert!(child.wait().unwrap().success());
-    line.clear();
-    out.read_line(&mut line).unwrap();
-    assert!(line.contains("rooms_closed: 1"), "{line}");
-    assert!(line.contains("desyncs: 0"), "{line}");
+    let mut rest = String::new();
+    out.read_to_string(&mut rest).unwrap();
+    let line = rest.lines().last().unwrap_or_default();
+    assert!(line.contains("rooms_closed: 1"), "{rest}");
+    assert!(line.contains("desyncs: 0"), "{rest}");
 }

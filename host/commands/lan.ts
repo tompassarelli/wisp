@@ -260,6 +260,18 @@ const fresh: Command = (args) => Effect.gen(function*() {
   yield* Console.log(`pair ${pair}: playing ${map} after ${((Date.now() - started) / 1000).toFixed(1)} s; action log ${String(result["log"])}`);
 });
 
+const relayed: Command = (args) => Effect.gen(function*() {
+  const [map] = args.filter((arg, index) => !arg.startsWith("--") && !args[index - 1]?.startsWith("--"));
+  if (map === undefined || !existsSync(map)) return yield* new UsageFailure({ problem: "relayed takes a built map file (MAP.w3x)" });
+  const pair = yield* number(args, "pair", 0);
+  const turnMs = yield* number(args, "turn-ms", 8);
+  const [bin] = flagValues(args, "relay-bin");
+  if (bin === undefined) return yield* new UsageFailure({ problem: "relayed takes --relay-bin DIR, the folder holding the relay and relay-agent binaries" });
+  const started = Date.now();
+  const result = yield* agent(pair, "/relayed", { map: resolve(map), relay: resolve(bin, "relay"), agent: resolve(bin, "relay-agent"), turnMs, driver: yield* driverPid });
+  yield* Console.log(`pair ${pair}: playing ${map} through a relay after ${((Date.now() - started) / 1000).toFixed(1)} s; logs ${String(result["folder"])}`);
+});
+
 const SoloResult = Schema.Struct({ clients: Schema.Array(Schema.Struct({ client: Schema.String, seconds: Schema.Finite })) });
 
 const solo: Command = (args) => Effect.gen(function*() {
@@ -399,7 +411,7 @@ const netem: Command = (args) => Effect.gen(function*() {
   }
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--udp-port N | --tcp-port N] | netem off --pair K | status [--pair K] | end --pair K | stop --pair K";
+export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | relayed MAP --relay-bin DIR [--pair K] [--turn-ms MS] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--udp-port N | --tcp-port N] | netem off --pair K | status [--pair K] | end --pair K | stop --pair K";
 
 const ownerCheck = poolOwners.pipe(Effect.flatMap((owners) => {
   const refusal = wrongUser(process.getuid?.() ?? 0, owners, ["bun", ...process.argv.slice(1)]);
@@ -414,6 +426,7 @@ const subcommand: Command = ([sub, ...args]) => {
     case "pool": return pool(args);
     case "fresh": return fresh(args);
     case "solo": return solo(args);
+    case "relayed": return relayed(args);
     case "dummy": return dummy(args);
     case "status": return status(args);
     case "speed": return speed(args);

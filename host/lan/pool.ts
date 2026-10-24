@@ -176,7 +176,7 @@ export function networkFlagProblem(args: readonly string[]): string | undefined 
   return undefined;
 }
 
-export const lanPlayRefusal = (pair: number, network: boolean, command: "fresh" | "dummy" | "netem") =>
+export const lanPlayRefusal = (pair: number, network: boolean, command: "fresh" | "relayed" | "dummy" | "netem") =>
   network ? `pair ${pair} was started with --network for solo games; lan ${command} runs only on an offline pair` : undefined;
 
 export interface PoolClient {
