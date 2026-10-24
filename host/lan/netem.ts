@@ -6,7 +6,7 @@ export interface Impairment {
   readonly port?: number;
 }
 
-export const BURST_RECOVERY = 25;
+const BURST_RECOVERY = 25;
 
 const decimal = (value: number) => String(Number(value.toFixed(4)));
 

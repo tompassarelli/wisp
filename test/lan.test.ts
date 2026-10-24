@@ -141,7 +141,7 @@ describe("setup without reflinks", () => {
       const lines: string[] = [];
       const setup = (name: string) => {
         mkdirSync(join(installOf(name), ".."), { recursive: true });
-        writeFileSync(join(prefixOf(name), "user.reg"), "");
+        writeFileSync(join(prefixOf(name), "user.reg"), "\"Allow Local Files\"=dword:00000001\n");
         return Effect.runPromise(setupClient(name, from, "3.0.0.24268", 47200, (line) => lines.push(line)).pipe(
           Effect.provideService(GameLauncher, GameLauncher.of({ inPrefix: () => Effect.die("setup made a prefix") }))));
       };
