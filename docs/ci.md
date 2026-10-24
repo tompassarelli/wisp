@@ -215,6 +215,12 @@ lands it on main by itself when it passes
 (wisp:.github/workflows/autoland.yml); nobody has to fetch, rebase or test
 it locally.
 
+0. **Deny-list attestation.** The branch tip needs a `denylist` commit status
+   of success, posted by a machine outside this repository, before anything
+   runs (wisp:host/checks/denylist.ts): on failure Autoland sets its `autoland`
+   status to failure and refuses the tip; while missing or pending it sets
+   `autoland` to pending and waits for a later dispatch, and the land step
+   checks the attestation again before pushing to main.
 1. **Rebase.** The branch's commits are rebased onto main. A conflict stops
    the run and names the conflicting files.
 2. **Checks.** `bun run check` on the rebased commit, which is then pushed

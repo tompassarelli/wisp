@@ -19,6 +19,7 @@ run-name: Autoland ${{ inputs.branch || format('{0} (push)', github.ref_name) }}
 permissions:
   contents: write
   actions: write
+  statuses: write
 
 # One landing at a time; up to 100 branches wait their turn in order. A push
 # only queues the branch, so it never waits here itself.
@@ -47,6 +48,9 @@ jobs:
     timeout-minutes: 15
     outputs:
       verdict: ${{ steps.rebase.outputs.verdict }}
+      tip: ${{ steps.rebase.outputs.tip }}
+      status-state: ${{ steps.rebase.outputs.status-state }}
+      status-description: ${{ steps.rebase.outputs.status-description }}
       sha: ${{ steps.rebase.outputs.sha }}
       base: ${{ steps.rebase.outputs.base }}
       scratch: ${{ steps.rebase.outputs.scratch }}
@@ -60,7 +64,7 @@ jobs:
         with:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile
-      # verdict: test (rebased and checked), conflict, check, empty (main holds it) or gone.
+      # verdict: test (rebased and checked), conflict, check, empty (main holds it), gone, refuse or hold.
       - id: rebase
         run: |
           set +e -uo pipefail
@@ -72,6 +76,15 @@ jobs:
           base=$(git rev-parse origin/main)
           out base "$base"
           if [ -z "$(git rev-list "origin/main..origin/$BRANCH")" ]; then out verdict empty; exit 0; fi
+          tip=$(git rev-parse "origin/$BRANCH")
+          out tip "$tip"
+          IFS=$'\t' read -r action state description <<< "$(bun host/checks/denylist.ts "$(gh api "repos/$GH_REPO/commits/$tip/status")")"
+          if [ "$action" != test ]; then
+            out verdict "${action:-hold}"
+            out status-state "${state:-pending}"
+            out status-description "${description:-waiting for the deny-list attestation}"
+            exit 0
+          fi
           git checkout -q -B autoland "origin/$BRANCH"
           if ! git rebase -q origin/main > rebase.log 2>&1; then
             files=$(git diff --name-only --diff-filter=U)
@@ -204,6 +217,9 @@ jobs:
       VERDICT: ${{ needs.rebase.outputs.verdict }}
       BASELINE_FROM: ${{ needs.baseline.outputs.from }}
       SHA: ${{ needs.rebase.outputs.sha }}
+      TIP: ${{ needs.rebase.outputs.tip }}
+      STATUS_STATE: ${{ needs.rebase.outputs.status-state }}
+      STATUS_DESCRIPTION: ${{ needs.rebase.outputs.status-description }}
       BASE: ${{ needs.rebase.outputs.base }}
       SCRATCH: ${{ needs.rebase.outputs.scratch }}
       DETAIL: ${{ needs.rebase.outputs.detail }}
@@ -244,11 +260,14 @@ jobs:
             echo "::error title=Autoland didn't land::$BRANCH${SHA:+ ($short)}: $1"
             exit 1
           }
+          post_status() { gh api -X POST "repos/$GH_REPO/statuses/$TIP" -f state="$STATUS_STATE" -f context=autoland -f description="$STATUS_DESCRIPTION" > /dev/null; }
           case "$VERDICT" in
             gone) echo "$BRANCH no longer exists"; exit 0 ;;
             empty) git push origin --delete "$BRANCH"; echo "main already holds $BRANCH: deleted it" >> "$GITHUB_STEP_SUMMARY"; exit 0 ;;
             conflict) refuse "rebasing onto main conflicts in these files:" "$DETAIL" ;;
             check) refuse "the checks failed:" "$(printf '```\n%s\n```' "$DETAIL")" ;;
+            refuse) post_status; refuse "$STATUS_DESCRIPTION." "" ;;
+            hold) post_status; echo "$BRANCH (${TIP:0:10}): $STATUS_DESCRIPTION; a later dispatch tries it again" >> "$GITHUB_STEP_SUMMARY"; exit 0 ;;
           esac
           [ -f candidate/summary.json ] || refuse "the suite run ended without a result." ""
           if [ ! -f baseline/summary.json ] && [ "$SUITE" = success ] && jq -e '.failures == [] and .problems == []' candidate/summary.json > /dev/null; then
@@ -280,6 +299,7 @@ jobs:
             success:*) refuse "the code-health gate failed to run:" "$(printf '```\n%s\n```' "$CODE_HEALTH_DETAIL")" ;;
             *) refuse "the code-health gate ended without a result." "" ;;
           esac
+          [ "$(bun host/checks/denylist.ts "$(gh api "repos/$GH_REPO/commits/$TIP/status")")" = test ] || refuse "${TIP:0:10} no longer carries a denylist success." ""
           # Main moves while the suites run: replay the tested commits onto it, as a
           # local landing would; a conflict sends the branch through again.
           git fetch -q origin "$SCRATCH"
