@@ -745,8 +745,16 @@ Built for wisp#37 (code box), in `relay/`:
 - **Host.** One relay on a public address. Nexus, the always-on server, is
   recommended. gex45 runs the native pool, whose load would show up as relay
   jitter, so it keeps the test relays inside pool namespaces. Opening a public
-  UDP port on either server widens access, so R10 asks Tom first. A second
-  region waits until measured player RTTs call for one.
+  UDP port on either server widens access, so R10 asks Tom first; he approved
+  Nexus's on 25 October 2026. A second region waits until measured player
+  RTTs call for one.
+- **Port.** The public relay listens on UDP 7457, the binary's default
+  `--bind` port, and nothing else. It runs on Nexus as a sandboxed systemd
+  service: a dynamic user, a read-only filesystem, no capabilities, and a
+  socket bind allowed only on UDP 7457, which is the one port its firewall
+  rule opens. The `relay` binary has no TCP listener yet, so the TCP
+  fallback (Transport, above) reaches the public relay only once it gains
+  one on TCP 7457 (tompassarelli/wisp#49).
 - **NAT.** Every agent sends first, to the relay's public address, so no hole
   punching, STUN or port forwarding is needed. CGNAT works. Traffic every
   turn period keeps NAT mappings open; in the lobby the agent sends at least
