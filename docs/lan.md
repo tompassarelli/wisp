@@ -331,7 +331,7 @@ Tom's `system.reg`, `user.reg`, `Warcraft III/.build.info` and Battle.net
 | `wisp lan solo MAP [--pair K...]` | Each client of the named running pairs (default: all) plays MAP alone, as a local game on the loopback provider; returns once every client's game UI is up. Works on 3.0.1. See "Solo games". |
 | `wisp lan status [--pair K]` | Each pair's clients and processes, and its game: phase, turns, desyncs, players. |
 | `wisp lan speed N --pair K` | Diagnostic turn delivery at 1–16 times real time; 1 restores normal delivery. Measure client frame progress to establish actual game speed. |
-| `wisp lan netem --pair K --rtt MS [--loss PERCENT]`, `wisp lan netem off --pair K` | Adds round-trip delay and packet loss to pair K's loopback, or removes it, and prints the loopback's queueing discipline. See "Simulated latency and loss". |
+| `wisp lan netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--port N]`, `wisp lan netem off --pair K` | Adds round-trip delay, jitter and independent or bursty packet loss to pair K's loopback, or to UDP on one port of it, or removes it, and prints the loopback's queueing disciplines and filters. See "Simulated latency and loss". |
 | `wisp lan end --pair K` | Ends pair K's game. The clients go back to their menus. |
 
 Pool clients are named `lan<K>a` and `lan<K>b`. The pool writes three files
@@ -838,11 +838,31 @@ Wisp's implementation changes its existing timer; no FLO code is copied.
 A pair's clients and host talk only over the loopback of the pair's own
 network namespace, so `wisp lan netem --pair K --rtt 60 --loss 1` puts a
 Linux `netem` queueing discipline on that loopback
-(wisp:host/commands/lan.ts, `netem`). Every loopback send is delayed
-once, so each send waits half the round trip (30 ms here) and each send is
-dropped with the given percentage, in both directions. Running it again
-replaces the setting; `wisp lan netem off --pair K` removes it. The pair keeps
-it until it is removed or the pair stops.
+(wisp:host/lan/netem.ts builds the `tc` command lines). Every loopback send
+is delayed once, so each send waits half the round trip (30 ms here).
+`--loss` is the round trip's loss: each send is dropped with
+1 − √(1 − loss), about 0.5% here, so a request and its answer together are
+lost 1% of the time.
+
+- `--jitter MS` varies each send's delay uniformly by half of MS, so the
+  round trip varies by up to MS around `--rtt`. Netem then delivers packets
+  out of order, as the internet sometimes does. MS may not exceed `--rtt`.
+- `--burst` makes the loss bursty with netem's two-state Gilbert model
+  (`loss gemodel p r 100% 0%`): a send in the good state always arrives, one
+  in the bad state is always lost, the bad state is left with
+  probability r = 25% (a mean burst of four sends) and entered with
+  p = l·r / (100 − l), so the long-run per-send loss l is the same as
+  without `--burst`. The command prints p, r and l.
+- `--port N` impairs only UDP to or from port N: a two-band `prio` root
+  sends every packet to its plain first band, and two `u32` filters
+  (IPv4, protocol 17, destination or source port N) send that port's
+  packets to the second band, where the netem sits. Warcraft's loopback
+  connection to its agent stays unimpaired.
+
+Each run first removes the loopback's root queueing discipline and then adds
+the new setting, so running it again replaces it; `wisp lan netem off --pair
+K` removes it. The pair keeps it until it is removed or the pair stops. The
+command prints `tc qdisc show`, and with `--port` also `tc filter show`.
 
 The namespace belongs to the pair agent's user namespace (bwrap
 `--unshare-net`), so Wisp enters both with `nsenter --user --net

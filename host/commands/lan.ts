@@ -6,7 +6,8 @@ import { Console, Effect, Exit, Schema, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { Namespaces } from "../os/platform/services";
 import { collect, pollUntil, spawnLogged } from "../cli/hostProcess";
-import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from "../cli/command";
+import { type Command, UsageFailure, describeCause, flagValues, portFlag, wholeFlag } from "../cli/command";
+import { CLEAR, type Impairment, clearedAlready, impairCommands, impairmentSummary } from "../lan/netem";
 import { LanFailure } from "../lan/join";
 import { lanPluginProblem } from "../lan/plugin";
 import { ensurePackager } from "../compile/mapBuild";
@@ -327,25 +328,49 @@ const inPairNetwork = (pair: number, command: readonly string[]) => Effect.gen(f
   return { exitCode: Number(result.exitCode), stdout: new TextDecoder().decode(result.stdout).trim(), stderr: result.stderr.trim() };
 });
 
+const NETEM_USAGE = "netem takes --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--port N], or off --pair K";
+
+const netemImpairment = (args: readonly string[]): Impairment | UsageFailure => {
+  const [rttText] = flagValues(args, "rtt");
+  const [lossText = "0"] = flagValues(args, "loss");
+  const [jitterText = "0"] = flagValues(args, "jitter");
+  const rtt = Number(rttText);
+  const loss = Number(lossText);
+  const jitter = Number(jitterText);
+  const burst = args.includes("--burst");
+  if (rttText === undefined || !Number.isFinite(rtt) || rtt < 0) return new UsageFailure({ problem: NETEM_USAGE });
+  if (!Number.isFinite(loss) || loss < 0 || loss > 100 || (burst && loss === 100)) return new UsageFailure({ problem: `--loss takes a round-trip percentage from 0 to 100${burst ? ", below 100 with --burst" : ""}` });
+  if (!Number.isFinite(jitter) || jitter < 0 || jitter > rtt) return new UsageFailure({ problem: "--jitter takes milliseconds from 0 to the --rtt" });
+  if (!args.includes("--port")) return { rtt, loss, jitter, burst };
+  const port = portFlag(args, 0);
+  return port instanceof UsageFailure ? port : { rtt, loss, jitter, burst, port };
+};
+
 const netem: Command = (args) => Effect.gen(function*() {
   const pair = yield* number(args, "pair", undefined);
-  if (args[0] === "off") {
-    const cleared = yield* inPairNetwork(pair, ["tc", "qdisc", "del", "dev", "lo", "root"]);
-    if (cleared.exitCode !== 0 && !/No such file|handle of zero/.test(cleared.stderr)) return yield* new LanFailure({ problem: `pair ${pair}: tc qdisc del: ${cleared.stderr}` });
-  } else {
-    const [rttText] = flagValues(args, "rtt");
-    const [lossText = "0"] = flagValues(args, "loss");
-    const rtt = Number(rttText);
-    const loss = Number(lossText);
-    if (rttText === undefined || !Number.isFinite(rtt) || rtt < 0 || !Number.isFinite(loss) || loss < 0 || loss > 100) return yield* new UsageFailure({ problem: "netem takes --pair K --rtt MS [--loss PERCENT], or off --pair K" });
-    const set = yield* inPairNetwork(pair, ["tc", "qdisc", "replace", "dev", "lo", "root", "netem", "delay", `${rtt / 2}ms`, "loss", `${loss}%`]);
-    if (set.exitCode !== 0) return yield* new LanFailure({ problem: `pair ${pair}: tc qdisc replace: ${set.stderr}` });
+  const impairment = args[0] === "off" ? undefined : netemImpairment(args);
+  if (impairment instanceof UsageFailure) return yield* impairment;
+  const cleared = yield* inPairNetwork(pair, CLEAR);
+  if (cleared.exitCode !== 0 && !clearedAlready(cleared.stderr)) return yield* new LanFailure({ problem: `pair ${pair}: tc qdisc del: ${cleared.stderr}` });
+  if (impairment !== undefined) {
+    for (const command of impairCommands(impairment)) {
+      const set = yield* inPairNetwork(pair, command);
+      if (set.exitCode !== 0) {
+        yield* inPairNetwork(pair, CLEAR);
+        return yield* new LanFailure({ problem: `pair ${pair}: ${command.join(" ")}: ${set.stderr}` });
+      }
+    }
+    yield* Console.log(`pair ${pair}: ${impairmentSummary(impairment)}`);
   }
-  const shown = yield* inPairNetwork(pair, ["tc", "qdisc", "show", "dev", "lo"]);
-  yield* Console.log(`pair ${pair}: ${shown.stdout}`);
+  const qdiscs = yield* inPairNetwork(pair, ["tc", "qdisc", "show", "dev", "lo"]);
+  yield* Console.log(`pair ${pair}: ${qdiscs.stdout}`);
+  if (impairment?.port !== undefined) {
+    const filters = yield* inPairNetwork(pair, ["tc", "filter", "show", "dev", "lo"]);
+    yield* Console.log(filters.stdout);
+  }
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] | netem off --pair K | status [--pair K] | end --pair K";
+export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--port N] | netem off --pair K | status [--pair K] | end --pair K";
 
 const ownerCheck = poolOwners.pipe(Effect.flatMap((owners) => {
   const refusal = wrongUser(process.getuid?.() ?? 0, owners, ["bun", ...process.argv.slice(1)]);
