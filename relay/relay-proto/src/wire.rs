@@ -422,3 +422,20 @@ pub fn unframe(stream: &[u8]) -> Option<(&[u8], usize)> {
 
 #[cfg(test)]
 mod tests;
+
+pub fn digest_turn(prev: u64, index: u32, turn: &Turn) -> u64 {
+    let mut h = prev ^ 0xcbf2_9ce4_8422_2325;
+    let mut mix = |b: u8| {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    };
+    index.to_le_bytes().into_iter().for_each(&mut mix);
+    mix(turn.step_ms);
+    for a in &turn.actions {
+        mix(a.player);
+        a.seq.to_le_bytes().into_iter().for_each(&mut mix);
+        a.data.iter().copied().for_each(&mut mix);
+        mix(0xff);
+    }
+    h
+}

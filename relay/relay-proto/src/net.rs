@@ -1,4 +1,5 @@
 use crate::rng::Rng;
+use crate::trace::Replay;
 use crate::transport::Deframer;
 use crate::Micros;
 
@@ -22,21 +23,23 @@ pub struct Path {
 
 pub(crate) struct Link {
     path: Path,
+    replay: Option<Replay>,
     rng: Rng,
     bad: bool,
 }
 
 impl Link {
-    pub(crate) fn new(path: Path, rng: Rng) -> Self {
+    pub(crate) fn new(path: Path, replay: Option<Replay>, rng: Rng) -> Self {
         Link {
             path,
+            replay,
             rng,
             bad: false,
         }
     }
 
     pub(crate) fn send(&mut self, now: Micros, quiet: bool, outages: &[(Micros, Micros)]) -> Option<Micros> {
-        let (lost, jitter) = self.draw();
+        let (lost, jitter) = self.draw(now);
         if quiet {
             return Some(now + self.path.one_way_us + jitter);
         }
@@ -61,7 +64,7 @@ impl Link {
             Loss::Burst { loss, .. } => loss,
         };
         resume.resize(outages.len(), None);
-        let (mut lost, mut jitter) = self.draw();
+        let (mut lost, mut jitter) = self.draw(now);
         let mut t = now;
         loop {
             if quiet {
@@ -95,7 +98,11 @@ impl Link {
         t
     }
 
-    fn draw(&mut self) -> (bool, Micros) {
+    fn draw(&mut self, now: Micros) -> (bool, Micros) {
+        if let Some(r) = &self.replay {
+            let delay = r.at(now);
+            return (delay.is_none(), delay.unwrap_or(0));
+        }
         let lost = match self.path.loss {
             Loss::None => false,
             Loss::Independent(p) => self.rng.chance(p),

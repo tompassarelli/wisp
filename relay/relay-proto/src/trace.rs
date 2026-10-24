@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::Micros;
 
 pub const FORMAT: &str = "relay path trace v1";
@@ -114,5 +116,31 @@ impl Trace {
             rtt_us,
             delays_us,
         })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Replay {
+    pub period_us: Micros,
+    pub origin_us: Micros,
+    pub delays_us: Arc<[Option<Micros>]>,
+}
+
+impl Replay {
+    pub fn new(trace: &Trace, origin_us: Micros) -> Replay {
+        Replay {
+            period_us: trace.period_us,
+            origin_us,
+            delays_us: trace.delays_us.clone().into(),
+        }
+    }
+
+    pub fn len_us(&self) -> Micros {
+        self.delays_us.len() as Micros * self.period_us
+    }
+
+    pub fn at(&self, t: Micros) -> Option<Micros> {
+        let slot = (t - self.origin_us).div_euclid(self.period_us);
+        self.delays_us[slot.rem_euclid(self.delays_us.len() as Micros) as usize]
     }
 }

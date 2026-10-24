@@ -1,8 +1,11 @@
+use relay_proto::cadence::Cadence;
 use relay_proto::rng::Rng;
-use relay_proto::trace::Trace;
+use relay_proto::sim::{run, AgentSpec, Loss, Path, Scenario};
+use relay_proto::trace::{Replay, Trace};
 use relay_proto::Micros;
 
 const PERIOD_US: Micros = 8_000;
+const SECOND: Micros = 1_000_000;
 
 #[test]
 fn arrivals_become_delays_above_the_drift_corrected_floor() {
@@ -64,4 +67,66 @@ fn a_trace_renders_and_parses_back() {
         assert_eq!(Trace::parse(&trace.render()), Ok(trace), "seed {seed}");
     }
     assert!(Trace::parse("relay path trace v2\n").is_err());
+}
+
+fn replaying(down: Option<Replay>) -> AgentSpec {
+    let path = Path {
+        one_way_us: 20_000,
+        jitter_mean_us: 2_000.0,
+        loss: Loss::None,
+    };
+    AgentSpec {
+        down: path,
+        up: path,
+        drift_ppb: 0,
+        clock_offset_us: 0,
+        actions_hz: 4.0,
+        action_bytes: (4, 24),
+        releases: 0.5,
+        udp_blocked: false,
+        down_replay: down,
+        up_replay: None,
+    }
+}
+
+#[test]
+fn a_replayed_trace_arrives_with_its_delays_and_losses() {
+    for seed in 0..4 {
+        let mut rng = Rng::new(seed);
+        let n = 3_000;
+        let trace = Trace {
+            period_us: PERIOD_US,
+            rtt_us: 40_000,
+            delays_us: (0..n)
+                .map(|i| match i % 100 {
+                    0 | 99 => Some(0),
+                    _ if rng.chance(0.05) => None,
+                    _ => Some(rng.range(0, 150_000)),
+                })
+                .collect(),
+        };
+        let lobby_us = 2 * SECOND;
+        let s = Scenario {
+            seed,
+            cadence: Cadence::default(),
+            agents: vec![replaying(Some(Replay::new(&trace, lobby_us))), replaying(None)],
+            lobby_us,
+            match_us: n as Micros * PERIOD_US + SECOND,
+            tail_us: SECOND,
+            outages: Vec::new(),
+            keep_turns: true,
+            margin_quantile: None,
+            cover: false,
+            max_depth_us: None,
+        };
+        let first = (lobby_us / PERIOD_US) as u32;
+        let arrivals: Vec<(u32, Micros)> = run(&s).agents[0]
+            .down_arrivals
+            .iter()
+            .copied()
+            .filter(|&(seq, _)| seq >= first && seq < first + n as u32)
+            .collect();
+
+        assert_eq!(Trace::from_arrivals(PERIOD_US, 40_000, &arrivals), trace, "seed {seed}");
+    }
 }

@@ -9,8 +9,9 @@ use crate::relay::Relay;
 use crate::net::{Clock, Link, Stream};
 pub use crate::net::{Loss, Path};
 use crate::rng::Rng;
+use crate::trace::Replay;
 use crate::transport::Transport;
-use crate::wire::{self, Packet, Turn, UpAction};
+use crate::wire::{self, digest_turn, Packet, UpAction};
 use crate::Micros;
 
 #[derive(Clone, Debug)]
@@ -23,6 +24,8 @@ pub struct AgentSpec {
     pub action_bytes: (usize, usize),
     pub releases: f64,
     pub udp_blocked: bool,
+    pub down_replay: Option<Replay>,
+    pub up_replay: Option<Replay>,
 }
 
 #[derive(Clone, Debug)]
@@ -58,6 +61,7 @@ pub struct AgentOutcome {
     pub bytes_up: u64,
     pub transport: Transport,
     pub cover: u8,
+    pub down_arrivals: Vec<(u32, Micros)>,
 }
 
 
@@ -95,23 +99,6 @@ struct Node {
     out: AgentOutcome,
 }
 
-pub fn digest_turn(prev: u64, index: u32, turn: &Turn) -> u64 {
-    let mut h = prev ^ 0xcbf2_9ce4_8422_2325;
-    let mut mix = |b: u8| {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x0100_0000_01b3);
-    };
-    index.to_le_bytes().into_iter().for_each(&mut mix);
-    mix(turn.step_ms);
-    for a in &turn.actions {
-        mix(a.player);
-        a.seq.to_le_bytes().into_iter().for_each(&mut mix);
-        a.data.iter().copied().for_each(&mut mix);
-        mix(0xff);
-    }
-    h
-}
-
 struct Sim<'a> {
     s: &'a Scenario,
     relay: Relay,
@@ -146,8 +133,8 @@ fn node(s: &Scenario, index: usize, token: u64, rng: &mut Rng) -> Node {
         index,
         agent: Agent::new(cfg, clock.local(0)),
         clock,
-        down: Link::new(spec.down, rng.fork()),
-        up: Link::new(spec.up, rng.fork()),
+        down: Link::new(spec.down, spec.down_replay.clone(), rng.fork()),
+        up: Link::new(spec.up, spec.up_replay.clone(), rng.fork()),
         tcp_down: Stream::default(),
         tcp_up: Stream::default(),
         rtt_us: spec.down.one_way_us + spec.up.one_way_us,
@@ -179,6 +166,7 @@ fn node(s: &Scenario, index: usize, token: u64, rng: &mut Rng) -> Node {
             bytes_up: 0,
             transport: Transport::Udp,
             cover: 0,
+            down_arrivals: Vec::new(),
         },
     }
 }
@@ -350,10 +338,12 @@ impl Sim<'_> {
                         let _ = self.relay.on_packet_via(&f, Transport::Tcp);
                     }
                 }
-                Event::ToAgent(i, bytes, Transport::Udp) => self.nodes[i].receive(self.now, &bytes),
+                Event::ToAgent(i, bytes, Transport::Udp) => {
+                    self.nodes[i].receive(self.now, &bytes, self.s.keep_turns)
+                }
                 Event::ToAgent(i, bytes, Transport::Tcp) => {
                     for f in self.nodes[i].tcp_down.frames(&bytes) {
-                        self.nodes[i].receive(self.now, &f);
+                        self.nodes[i].receive(self.now, &f, self.s.keep_turns);
                     }
                 }
             }
@@ -391,15 +381,20 @@ impl Sim<'_> {
 }
 
 impl Node {
-    fn receive(&mut self, now: Micros, bytes: &[u8]) {
-        self.note_arrivals(now, bytes);
+    fn receive(&mut self, now: Micros, bytes: &[u8], keep: bool) {
+        self.note_arrivals(now, bytes, keep);
         let local = self.clock.local(now);
         let _ = self.agent.on_packet(local, bytes);
     }
 
-    fn note_arrivals(&mut self, now: Micros, bytes: &[u8]) {
+    fn note_arrivals(&mut self, now: Micros, bytes: &[u8], keep: bool) {
         let (from, count) = match wire::decode(bytes) {
-            Ok(Packet::Down(d)) => (d.turn_from as usize, d.turns.len()),
+            Ok(Packet::Down(d)) => {
+                if keep {
+                    self.out.down_arrivals.push((d.seq, now - d.sent_us as Micros));
+                }
+                (d.turn_from as usize, d.turns.len())
+            }
             Ok(Packet::Cover(c)) => (c.turn_from as usize, c.turns.len()),
             _ => return,
         };
