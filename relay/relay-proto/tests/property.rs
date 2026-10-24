@@ -1,0 +1,224 @@
+use relay_proto::cadence::Cadence;
+use relay_proto::rng::Rng;
+use relay_proto::sim::{run, AgentSpec, Loss, Outcome, Path, Scenario};
+use relay_proto::wire::{self, Action, Down, Packet, Turn, Up};
+use relay_proto::Micros;
+
+const SECOND: Micros = 1_000_000;
+
+fn path(rng: &mut Rng) -> Path {
+    let loss = match rng.below(3) {
+        0 => Loss::None,
+        1 => Loss::Independent(rng.unit() * 0.3),
+        _ => Loss::Burst {
+            loss: rng.unit() * 0.2,
+            mean_burst: 1.0 + rng.unit() * 7.0,
+        },
+    };
+    Path {
+        one_way_us: rng.range(0, 150_000),
+        jitter_mean_us: rng.unit() * 40_000.0,
+        loss,
+    }
+}
+
+fn scenario(seed: u64) -> Scenario {
+    let mut rng = Rng::new(seed);
+    let players = rng.range(2, 4) as usize;
+    let lobby_us = rng.range(2, 5) * SECOND;
+    let match_us = rng.range(10, 20) * SECOND;
+    let agents = (0..players)
+        .map(|_| AgentSpec {
+            down: path(&mut rng),
+            up: path(&mut rng),
+            drift_ppb: rng.range(-500_000, 500_000),
+            clock_offset_us: rng.range(-100 * SECOND, 100 * SECOND),
+            actions_hz: if rng.chance(0.1) {
+                0.0
+            } else {
+                rng.unit() * 40.0
+            },
+            action_bytes: (0, rng.range(0, 300) as usize),
+        })
+        .collect();
+    let outages = (0..rng.below(4))
+        .map(|_| {
+            let start = lobby_us + rng.range(0, match_us);
+            (start, start + rng.range(10_000, 3 * SECOND))
+        })
+        .collect();
+    let steps: &[u8] = if rng.chance(0.5) {
+        &[17, 17, 16]
+    } else {
+        &[25]
+    };
+    Scenario {
+        seed,
+        cadence: Cadence::new(steps),
+        agents,
+        lobby_us,
+        match_us,
+        tail_us: 15 * SECOND,
+        outages,
+        keep_turns: true,
+        margin_quantile: if rng.chance(0.5) { Some(0.95) } else { None },
+    }
+}
+
+fn check(seed: u64, s: &Scenario, o: &Outcome) {
+    assert_eq!(o.desync, None, "seed {seed}: relay saw a desync");
+    assert!(
+        o.checksums_compared > 0,
+        "seed {seed}: no checksums compared"
+    );
+    let longest = o.agents.iter().max_by_key(|a| a.fed.len()).unwrap();
+    for (i, a) in o.agents.iter().enumerate() {
+        for (n, f) in a.fed.iter().enumerate() {
+            assert_eq!(
+                f.index as usize, n,
+                "seed {seed}: agent {i} fed out of order"
+            );
+            assert_eq!(
+                f.turn, longest.fed[n].turn,
+                "seed {seed}: agent {i} turn {n} differs"
+            );
+            assert_eq!(
+                f.turn.step_ms,
+                s.cadence.step_ms(f.index),
+                "seed {seed}: step of turn {n}"
+            );
+        }
+        assert_eq!(
+            a.unacked_at_end, 0,
+            "seed {seed}: agent {i} still holds unacknowledged actions"
+        );
+    }
+    for (i, a) in o.agents.iter().enumerate() {
+        let actions: Vec<&Action> = a.fed.iter().flat_map(|f| &f.turn.actions).collect();
+        for (sender, spec) in o.agents.iter().enumerate() {
+            let got: Vec<&Action> = actions
+                .iter()
+                .copied()
+                .filter(|x| x.player as usize == sender)
+                .collect();
+            assert_eq!(
+                got.len(),
+                spec.sent.len(),
+                "seed {seed}: agent {i} fed {} of agent {sender}'s {} actions",
+                got.len(),
+                spec.sent.len()
+            );
+            for (n, (x, sent)) in got.iter().zip(&spec.sent).enumerate() {
+                assert_eq!(x.seq as usize, n, "seed {seed}: action order");
+                assert_eq!(&x.data, sent, "seed {seed}: action {n} of agent {sender}");
+            }
+        }
+    }
+}
+
+#[test]
+fn every_agent_feeds_the_same_turns_and_every_action_once() {
+    for seed in 0..128u64 {
+        let s = scenario(seed);
+        let o = run(&s);
+        check(seed, &s, &o);
+    }
+}
+
+#[test]
+fn turns_over_the_packet_ceiling_split_across_turns() {
+    let path = Path {
+        one_way_us: 30_000,
+        jitter_mean_us: 5_000.0,
+        loss: Loss::Independent(0.1),
+    };
+    let spec = AgentSpec {
+        down: path,
+        up: path,
+        drift_ppb: 0,
+        clock_offset_us: 0,
+        actions_hz: 400.0,
+        action_bytes: (200, 500),
+    };
+    let s = Scenario {
+        seed: 99,
+        cadence: Cadence::standard(),
+        agents: vec![spec.clone(), spec.clone(), spec],
+        lobby_us: 2 * SECOND,
+        match_us: 3 * SECOND,
+        tail_us: 30 * SECOND,
+        outages: vec![(3 * SECOND, 4 * SECOND)],
+        keep_turns: true,
+        margin_quantile: None,
+    };
+    let o = run(&s);
+    check(99, &s, &o);
+    assert!(o.agents[0]
+        .fed
+        .iter()
+        .all(|f| f.turn.wire_len() <= wire::MAX_TURN));
+    assert!(o.agents[0].sent.len() > 1000);
+}
+
+fn random_packet(rng: &mut Rng) -> Packet {
+    let bytes = |rng: &mut Rng, max: u64| {
+        (0..rng.below(max))
+            .map(|_| rng.next_u64() as u8)
+            .collect::<Vec<u8>>()
+    };
+    if rng.chance(0.5) {
+        let turns = (0..rng.below(6))
+            .map(|_| Turn {
+                step_ms: rng.next_u64() as u8,
+                actions: (0..rng.below(4))
+                    .map(|_| Action {
+                        player: rng.next_u64() as u8,
+                        seq: rng.next_u64() as u32,
+                        data: bytes(rng, 40),
+                    })
+                    .collect(),
+            })
+            .collect();
+        Packet::Down(Down {
+            token: rng.next_u64(),
+            seq: rng.next_u64() as u32,
+            sent_us: rng.next_u64(),
+            base_us: rng.next_u64(),
+            action_ack: rng.next_u64() as u32,
+            checksum_ack: rng.next_u64() as u32,
+            turn_from: rng.next_u64() as u32,
+            turns,
+        })
+    } else {
+        Packet::Up(Up {
+            token: rng.next_u64(),
+            seq: rng.next_u64() as u32,
+            sent_us: rng.next_u64(),
+            turn_ack: rng.next_u64() as u32,
+            checksum_from: rng.next_u64() as u32,
+            checksums: (0..rng.below(10)).map(|_| rng.next_u64() as u32).collect(),
+            action_from: rng.next_u64() as u32,
+            actions: (0..rng.below(8)).map(|_| bytes(rng, 60)).collect(),
+        })
+    }
+}
+
+#[test]
+fn packets_round_trip_and_damaged_bytes_never_panic() {
+    let mut rng = Rng::new(7);
+    for _ in 0..5000 {
+        let p = random_packet(&mut rng);
+        let bytes = wire::encode(&p).unwrap();
+        assert!(bytes.len() <= wire::MAX_PACKET);
+        assert_eq!(wire::decode(&bytes), Ok(p));
+        let mut damaged = bytes.clone();
+        for _ in 0..1 + rng.below(4) {
+            let i = rng.below(damaged.len() as u64) as usize;
+            damaged[i] = rng.next_u64() as u8;
+        }
+        damaged.truncate(rng.below(damaged.len() as u64 + 1) as usize);
+        let _ = wire::decode(&damaged);
+        let noise: Vec<u8> = (0..rng.below(1300)).map(|_| rng.next_u64() as u8).collect();
+        let _ = wire::decode(&noise);
+    }
+}

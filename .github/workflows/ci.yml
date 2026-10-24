@@ -95,6 +95,16 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bunx knip@6.38.0
 
+  relay-proto:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: relay
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test --locked -p relay-proto
+
   # New structural debt (import cycle, layer violation, oversize file or function, rising hotspot) against structure.toml (north:harness/code-health).
   code-health:
     if: github.event_name != 'workflow_dispatch' || github.ref != 'refs/heads/main'
@@ -120,7 +130,7 @@ jobs:
   # Autoland dispatches this workflow after a landing, and a dispatched run
   # starts no workflow_run, so it hands its own result to "Main is red".
   main-red:
-    needs: [framework, sample, sample-failing-fixture]
+    needs: [framework, sample, sample-failing-fixture, relay-proto]
     if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5

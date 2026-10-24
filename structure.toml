@@ -106,6 +106,12 @@ responsibility = "TSTL plugins and tsserver/lint plugins."
 may_use = []
 
 [[module]]
+name = "relay"
+paths = ["relay/**"]
+responsibility = "Rust relay workspace: wire format, relay and agent cores, seeded network simulator and bench."
+may_use = []
+
+[[module]]
 name = "native"
 paths = ["native/**"]
 responsibility = "C map packer and the toward-zero float header."
