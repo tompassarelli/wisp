@@ -50,7 +50,8 @@ Measured facts, each with its source:
   until the retransmission, then releases them together: the burst the pool
   showed costs taps. W3Champions announced (October 2026) no packet-loss lag
   spikes at 5% loss and 200 ms ping; their current code is not public, so how
-  is unknown.
+  is unknown. Box R4 measured Wisp's own TCP host on such a path
+  (Baseline, below).
 - **Battle.net's own timing.** Turns on a 25 ms grid, own-echo p50 about
   115 ms, p95 about 212 ms (wisp:docs/network-model.md).
 - **Warcraft joins only games it can see.** Patch 3.0.0 removed LAN from the
@@ -72,6 +73,105 @@ That last fact splits the plan in two:
    live client joins a game the agent hosts. Box R0 found none from outside
    the game on 3.0.1.24371 (Reaching players, below), so shipping waits on
    Tom's decision (Decisions, below).
+
+## Baseline: Wisp's TCP host on a lossy path (box R4)
+
+What the relay must beat: Wisp's own TCP host reached over an internet-like
+path, as FLO's single TCP stream reaches a player. Measured 24 October 2026
+on gex45 pool pair 2 (Warcraft III 3.0.0.24268, offline LAN, 60 fps cap),
+one pool session, its first match thrown away.
+
+- **Host.** Wisp's deadline-paced LAN host (wisp#30) at
+  `--turn-ms 17,17,16`, from wisp 1eb2706 plus the port scope of cda8718.
+- **Path.** `wisp lan netem --pair 2 ... --tcp-port PORT` on the port
+  `lan fresh` hosts on, applied as soon as the host writes it and before the
+  first client joins, so lobby, load and play all cross the impaired path
+  and nothing else on the loopback does (wisp:docs/lan.md, "Simulated
+  latency and loss"). RTT and loss are round-trip figures; jitter 20 ms
+  varies each send by ±10 ms and reorders packets; "bursts" is netem's
+  Gilbert model with a mean burst of four sends at the same long-run loss.
+- **Map and probe.** Smashcraft's integrity build of 59824cc9b (the R3 map),
+  Rifleman quick match, and the turn-rate sweep's probe
+  (smashcraft:docs/warcraft-api-netcode-findings.md, "Input sampling against
+  the LAN host's turn interval"): `-dev callback-clock 4800` stamps every
+  60 Hz callback with `os.clock` and the raw `BlzIsKeyPressed` state of `c`;
+  a host-side driver taps `c` on both clients every 280–520 ms for 50–90 ms
+  through private-desktop XTEST (seed 7); heavy input adds a random tap of
+  `[ ] ; ' t v 1 2` every 30–80 ms. 80 s of callbacks per run.
+- **Host load.** A run started only with at most 6 live Warcraft clients on
+  gex45 and machine-capacity's `protectedCpuSomeAvg10` under 20. Each row
+  gives the most clients live during the run, the mean and peak of
+  `protectedCpuSomeAvg10` and the mean of the agent's system
+  `/proc/pressure/cpu` some avg10, sampled every second. Runs taken earlier
+  that day with more than 6 live clients, or with netem switched on
+  mid-match, are discarded, as is the closing heavy control (8 clients).
+
+Columns: callback gap p50/p99/max over both clients (ms); taps seen, the
+probe presses the raw key state reported down, per client; press-to-sample
+spread, max minus min over the matched presses in ms, and in frames from
+p5 to p95; rollbacks per minute and the deepest rollback in frames, from
+Smashcraft's counters; longest stall, the longest run of consecutive
+callback gaps over two frames (33 ms) summed; host waits, how often the host
+held turns for a client more than 50 turns behind, with the longest hold in
+ms; desyncs from the host's checksum compare; pace, game seconds per wall
+second over the host's last 140 marks; callbacks/s, the slower client's
+callbacks per wall second; load average at the run's start and end.
+
+| Path | Input | Run | Callback gap p50/p99/max ms | Taps seen (a, b) | Press-to-sample spread ms (frames p5–p95) | Rollbacks/min (a, b) | Deepest rollback | Longest stall ms | Host waits (longest ms) | Desyncs | Pace | Callbacks/s | Load avg before–after | Live clients (max) | protectedCpuSomeAvg10 mean (max) | System CPU some avg10 mean |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| none, first | light | `r0-light` | 16.1/32.0/106 | 176/187, 177/192 | 82, 63 (3, 2) | 243, 248 | 19 | 178 | 0 (0) | 0 | 1.000 | 60.0 | 24.39–12.15 | 5 | 1.4 (max 2.2) | 69.0 |
+| none, first | heavy | `r0-heavy` | 15.9/30.0/58 | 185/187, 188/189 | 45, 47 (2, 2) | 584, 584 | 14 | 58 | 0 (0) | 0 | 1.000 | 60.0 | 10.00–8.14 | 5 | 1.5 (max 2.3) | 75.3 |
+| none, last | light | `r0-light-end` | 15.1/32.2/168 | 187/187, 187/192 | 53, 58 (1, 2) | 249, 246 | 20 | 237 | 3 (25) | 0 | 1.000 | 59.9 | 15.55–22.07 | 6 | 7.2 (max 9.8) | 67.8 |
+| 120 ms, 2% | light | `r120-l2-light` | 14.2/35.9/166 | 184/187, 181/192 | 73, 58 (1, 2) | 245, 232 | 24 | 192 | 0 (0) | 0 | 1.000 | 60.0 | 8.75–7.51 | 5 | 0.8 (max 1.6) | 71.4 |
+| 120 ms, 2% | heavy | `r120-l2-heavy` | 13.9/43.0/285 | 172/187, 165/189 | 70, 74 (2, 2) | 539, 548 | 24 | 285 | 0 (0) | 0 | 1.000 | 60.0 | 7.57–7.05 | 5 | 0.1 (max 0.8) | 12.2 |
+| 120 ms, 5% | light | `r120-l5-light` | 12.9/133.1/319 | 169/187, 169/192 | 82, 67 (2, 2) | 234, 220 | 24 | 319 | 0 (0) | 0 | 1.000 | 59.9 | 7.40–7.61 | 5 | 2.3 (max 4.2) | 84.4 |
+| 120 ms, 5% | heavy | `r120-l5-heavy` | 12.9/138.9/330 | 161/187, 161/189 | 74, 74 (4, 3) | 473, 487 | 24 | 330 | 0 (0) | 0 | 1.000 | 60.0 | 7.45–6.96 | 5 | 0.7 (max 1.4) | 52.3 |
+| 200 ms, 2% | light | `r200-l2-light` | 12.2/78.9/476 | 172/187, 167/192 | 66, 68 (2, 2) | 228, 220 | 24 | 476 | 0 (0) | 0 | 1.000 | 60.0 | 7.78–5.72 | 5 | 0.0 (max 0.1) | 0.1 |
+| 200 ms, 2% | heavy | `r200-l2-heavy` | 13.9/54.0/489 | 165/187, 168/189 | 60, 77 (2, 3) | 485, 487 | 24 | 489 | 0 (0) | 0 | 1.000 | 60.0 | 6.18–9.36 | 5 | 0.3 (max 1.2) | 0.6 |
+| 200 ms, 5% | light | `r200-l5-light-b` | 11.7/190.9/353 | 157/187, 157/192 | 88, 77 (4, 4) | 201, 206 | 24 | 361 | 1 (16) | 0 | 1.000 | 60.0 | 20.57–14.68 | 6 | 2.5 (max 4.6) | 3.6 |
+| 200 ms, 5% | heavy | `r200-l5-heavy-b` | 12.2/189.9/526 | 131/187, 154/189 | 81, 90 (4, 5) | 399, 412 | 24 | 526 | 0 (0) | 0 | 1.000 | 60.0 | 11.02–12.57 | 6 | 2.3 (max 5.0) | 3.4 |
+| 120 ms, 2%, jitter 20 ms | light | `r120-l2-j20-light` | 14.2/62.0/273 | 179/187, 176/192 | 73, 73 (2, 3) | 238, 243 | 24 | 273 | 0 (0) | 0 | 1.000 | 60.0 | 29.86–18.77 | 6 | 2.1 (max 5.5) | 11.5 |
+| 120 ms, 2%, jitter 20 ms | heavy | `r120-l2-j20-heavy` | 14.9/53.0/270 | 163/187, 161/189 | 83, 81 (3, 4) | 524, 538 | 24 | 270 | 0 (0) | 0 | 1.000 | 60.0 | 19.03–16.61 | 6 | 4.8 (max 6.4) | 6.5 |
+| 120 ms, 2%, bursts | light | `r120-l2-burst-light` | 14.2/34.9/245 | 179/187, 185/192 | 61, 64 (1, 2) | 249, 231 | 24 | 245 | 0 (0) | 0 | 1.000 | 60.0 | 17.05–12.17 | 6 | 2.0 (max 5.1) | 3.5 |
+| 120 ms, 2%, bursts | heavy | `r120-l2-burst-heavy` | 15.1/48.1/395 | 169/187, 172/189 | 77, 86 (3, 3) | 533, 530 | 24 | 395 | 0 (0) | 0 | 1.000 | 60.0 | 15.50–15.11 | 6 | 6.0 (max 14.3) | 8.4 |
+
+Output directories are `~/.local/state/smashcraft/wisp-33/runs/CELL` on
+gex45, one per row (`r120-l2-light` is RTT 120, loss 2%, light input;
+`-j20` jitter; `-burst` bursts; `r0-*` no impairment), each with the
+callback clocks, the stimulus record, the action log, the netem setting,
+the gate record and the per-second host samples.
+
+What the relay must beat, read from the table:
+
+- **Game time held.** In every cell the paced host kept pace 1.000 and both
+  clients 60 callbacks a second, with at most one host wait (16 ms) and no
+  desync. TCP retransmission never stalled a client the 50 turns (about
+  850 ms) that make the host wait.
+- **Cadence and taps paid.** Loss shows up in the callbacks: p99 gap 30–32 ms
+  without impairment, 35–79 ms at 2% loss (with or without jitter or
+  bursts) and 133–191 ms at 5%, with single gaps of 166–526 ms against
+  58–168 ms. Raw taps seen fell from 176–188 per client to 161–185 at 2% and
+  131–169 at 5%, and the press-to-sample spread widened from 1–3 frames to
+  2–5 at 5%. Every impaired run reached a 24-frame rollback, against 14–20
+  without impairment. RTT on its own costs little: 200 ms at 2% sits close to
+  120 ms at 2%.
+- **Jitter and bursts at 2%** cost about what plain 2% does here: p99 gap
+  35–62 ms against 36–79 ms.
+- **The yardstick for the relay** (box R9) is the 5% rows: p99 callback gaps
+  near 190 ms, half-second single gaps and up to 56 taps in 190 lost at
+  200 ms, 5%, the cell where W3Champions claims no lag spikes.
+
+Two findings from the runs that do not count:
+
+- **Host load, not the path, made the big stalls.** The same cells taken
+  earlier with up to 14 live clients on gex45 gave 18–441 host waits, pace
+  0.645–0.976 and stalls of 0.8–6.6 s (`runs-discarded-clients`). Rerun with
+  at most 6 clients, the same cells held pace 1.000.
+- **Switching loss on mid-match crashed a client.** With netem turned on
+  2–3 s before the probe started, client a wrote a crash report (exception
+  0xC00000E5) in 2 of 4 lossy runs (`runs-whole-loopback`,
+  `runs-tcp-midmatch`). None of the 26 lossy runs with the path impaired from
+  the host's start crashed.
 
 ## Shape
 
@@ -761,7 +861,7 @@ wisp (epic wisp#28):
 - **R3** Whether held-key reads wait for the turn echo, at 0/100/200 ms RTT
   (wisp#32).
 - **R4** Baseline: Wisp's TCP host under jitter and loss, as a FLO-like path
-  is (wisp#33).
+  is (wisp#33); measured in Baseline, above.
 - **R5** `wisp lan netem` gains jitter, burst loss and port scoping
   (wisp#34).
 - **R6** Relay protocol core, jitter buffer and simulated-network bench in
