@@ -77,6 +77,57 @@ It is fitted to the largest callback gap of each second (`cbgap`, from
 The recorded p95 tail (stalls of 50–130 ms) is heavier than the model's;
 whether it is turn delivery or the map's own slow callbacks is not measured.
 
+## Relay delivery
+
+`relayDelivery()` and `relayCallbacks()` (wisp:src/headless/syncChannel.ts)
+give headless clients the paced turns of Wisp's planned online relay
+(wisp:docs/relay.md), so a map test meets relay timing as it meets
+Battle.net's with `syncDelivery()`.
+
+```ts
+import { MEASURED_RELAY, relayCallbacks, relayDelivery } from "wisp/src/headless/syncChannel";
+
+const relay = { ...MEASURED_RELAY, outage: { atMs: 10000, lengthMs: 1000 } };
+const clients = headless.clients(entry, [0, 1], { delivery: relayDelivery(relay, 7), callbacks: relayCallbacks(relay) });
+```
+
+A `RelayTiming` gives the turn steps (`[8]`, or a cycle such as
+`[17, 17, 16]`), the mean one-way jitter, one link per player (round trip,
+independent loss and depth D in turns; players past the list take the last
+link) and an optional outage. `MEASURED_RELAY` is the relay bench's 120 ms,
+2% independent-loss cell at 8 ms turns: 2 ms of jitter and D = 4 for every
+player.
+
+| Part | Model | Bench (120 ms, 2%) |
+| --- | --- | --- |
+| Turns | Turn k runs at game time relayTime(k), the sum of the steps before it, on every client: an even grid that never bursts. | 8 ms steps. |
+| Latency | A message sent at game time g leaves the sender at its feed lag, its one-way down (RTT / 2 plus the jitter's 5th percentile, the agent's anchor) plus D turns. Its upstream packet takes RTT / 2 plus exponential jitter; each loss resends it one turn later. It lands in the first turn after it reaches the relay. So the age is up + the wait for the next turn + down + D. | Own echo p50/p99 158.5/168.3 ms; the model gives 157.3/167.3 (seed 1). |
+| Loss | Nothing is dropped: a lost packet only delays its message by one turn per loss, as the next packet repeats it. | No turn lost in the hour. |
+| Order | Each sender's messages arrive in the order it sent them. | |
+| Callbacks | `relayCallbacks()` runs callbacks 16.7 ms apart, as the agent's even feed does. | |
+
+**Outage.** An outage blacks out both directions for `lengthMs` from relay
+time `atMs`. Messages whose packets fall inside it leave when it ends. The
+relay stops its clock once a player's checksums trail by 1 s (the trail at
+the outage's start is taken as the worst link's RTT + D), and the next turn
+after the restart is rebased to it, so that game time is never run. On the
+clients the game freezes after the turn due at `atMs` until the backlog
+arrives, `lengthMs` − D later (D of the shallowest link); a backlog more than
+D + 2 turns deep then runs at 4 ms of wall time a turn back to D + 1, holds
+there 30 s, and slews back to D at 1 ms a turn. The bench's 120 ms, 1% loss
+and 1 s blackout cell (D = 3) catches up in 897 ms from the blackout's end;
+the model takes 886 ms.
+
+The defaults come from `cargo run --release -p relay-bench -- --grid --rtts 120`
+(wisp:relay/relay-bench), 25 October 2026; wisp:src/headless/syncChannel.test.ts
+checks the model's own-echo p50 and p99 against that cell within 5%, and
+its catch-up within 5% of the blackout cell's. Provenance: the 5% match;
+origin none (relay plan); pointer wisp:docs/relay.md, "Protocol core and
+bench"; rationale not recorded; revisit if the bench and model disagree by
+design; soft. The model has no underruns, no clock drift, no burst loss and
+no saturation, and the bench is a simulation: fitting it to native relay
+traces waits for wisp#38.
+
 ## Replayed arrivals
 
 `replayedDelivery(arrivals, fallback, nowMs)` replays the arrival times a

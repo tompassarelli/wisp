@@ -27,6 +27,7 @@
     "src/headless/*.ts"
   ],
   "exclude": [
-    "src/sim/*.test.ts"
+    "src/sim/*.test.ts",
+    "src/headless/*.test.ts"
   ]
 }

@@ -4,6 +4,7 @@ use std::collections::BinaryHeap;
 use crate::agent::{Agent, AgentConfig, AgentStats, Fed};
 use crate::cadence::Cadence;
 use crate::depth::{DepthChoice, LinkSample};
+pub use crate::histogram::Histogram;
 use crate::relay::Relay;
 use crate::rng::Rng;
 use crate::wire::{self, Packet, Turn, UpAction};
@@ -60,41 +61,11 @@ pub struct AgentOutcome {
     pub uneven_feeds: u64,
     pub unacked_at_end: usize,
     pub delivery: Histogram,
+    pub echo: Histogram,
     pub bytes_down: u64,
     pub bytes_up: u64,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct Histogram {
-    buckets: Vec<u64>,
-    count: u64,
-}
-
-impl Histogram {
-    pub const BUCKET_US: Micros = 100;
-    const BUCKETS: usize = 50_000;
-
-    pub fn add(&mut self, us: Micros) {
-        if self.buckets.is_empty() {
-            self.buckets = vec![0; Self::BUCKETS];
-        }
-        let i = (us.max(0) / Self::BUCKET_US) as usize;
-        self.buckets[i.min(Self::BUCKETS - 1)] += 1;
-        self.count += 1;
-    }
-
-    pub fn quantile(&self, q: f64) -> Micros {
-        let rank = ((self.count as f64 * q).ceil() as u64).clamp(1, self.count.max(1));
-        let mut seen = 0;
-        for (i, &n) in self.buckets.iter().enumerate() {
-            seen += n;
-            if seen >= rank {
-                return (i as Micros + 1) * Self::BUCKET_US;
-            }
-        }
-        0
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct Outcome {
@@ -187,6 +158,7 @@ struct Node {
     action_count: u32,
     last_feed: Option<Micros>,
     arrived: Vec<Micros>,
+    sent_at: Vec<Micros>,
     out: AgentOutcome,
 }
 
@@ -247,6 +219,7 @@ fn node(s: &Scenario, index: usize, token: u64, rng: &mut Rng) -> Node {
         action_count: 0,
         last_feed: None,
         arrived: Vec::new(),
+        sent_at: Vec::new(),
         out: AgentOutcome {
             choice: LinkSample::default().choose(1, 0.0, 0),
             fed_count: 0,
@@ -259,6 +232,7 @@ fn node(s: &Scenario, index: usize, token: u64, rng: &mut Rng) -> Node {
             uneven_feeds: 0,
             unacked_at_end: 0,
             delivery: Histogram::default(),
+            echo: Histogram::default(),
             bytes_down: 0,
             bytes_up: 0,
         },
@@ -448,6 +422,7 @@ impl Node {
                 .range(spec.action_bytes.0 as i64, spec.action_bytes.1 as i64) as usize;
         data.extend((0..extra).map(|_| self.rng.next_u64() as u8));
         self.action_count += 1;
+        self.sent_at.push(now);
         let action = UpAction {
             release: self.rng.chance(spec.releases),
             data,
@@ -476,6 +451,14 @@ impl Node {
             }
         }
         self.last_feed = Some(now);
+        for a in &f.turn.actions {
+            if a.player as usize == self.index && a.data.len() >= 5 {
+                let count = u32::from_le_bytes([a.data[1], a.data[2], a.data[3], a.data[4]]);
+                if let Some(&sent) = self.sent_at.get(count as usize) {
+                    self.out.echo.add(now - sent);
+                }
+            }
+        }
         let period = self.agent.period_us();
         for (k, &(_, outage_end)) in s.outages.iter().enumerate() {
             if self.out.drains[k].is_none()

@@ -2,6 +2,7 @@ import type { SyncMessage } from "./clientTypes";
 import type { SyncDelivery } from "./lockstep";
 import { Random } from "./random";
 import { f32 } from "../sim/f32";
+import { floorMod } from "../sim/intMath";
 import { type CallbackTiming, FRAME_MS } from "./frameRate";
 
 export { type CallbackTiming, EVEN_CALLBACKS } from "./frameRate";
@@ -121,4 +122,122 @@ export function turnBursts(model: TurnBurstModel = MEASURED_TURN_BURSTS, seed = 
     return walls[turn - 1] ?? 0;
   };
   return { wallMs: (frame) => (frame <= 0 ? frame * CALLBACK_MS : turnWall(turnOf(frame))) };
+}
+
+export interface RelayLink {
+
+  readonly rttMs: number;
+
+  readonly loss: number;
+
+  readonly depthTurns: number;
+}
+
+export interface RelayOutage {
+
+  readonly atMs: number;
+
+  readonly lengthMs: number;
+}
+
+export interface RelayTiming {
+
+  readonly steps: readonly number[];
+
+  readonly jitterMs: number;
+
+  readonly links: readonly RelayLink[];
+
+  readonly outage?: RelayOutage;
+}
+
+export const MEASURED_RELAY: RelayTiming = { steps: [8], jitterMs: 2, links: [{ rttMs: 120, loss: f32(0.02), depthTurns: 4 }] };
+
+export const RELAY_LAG_STOP_MS = 1000;
+export const RELAY_CATCH_UP_STEP_MS = 4;
+export const RELAY_SLEW_HOLD_MS = 30000;
+
+export interface RelayDelivery extends SyncDelivery {
+
+  ageMs(this: void, sender: number, frame: number): number;
+}
+
+function checkRelay(timing: RelayTiming): void {
+  if (timing.steps.length === 0 || !timing.steps.every((step) => step > RELAY_CATCH_UP_STEP_MS) || !(timing.jitterMs >= 0) || timing.links.length === 0) {
+    throw new Error(`relay turns must be longer than ${RELAY_CATCH_UP_STEP_MS} ms, jitter not negative, and at least one link given`);
+  }
+  for (const link of timing.links) {
+    if (!(link.rttMs >= 0) || !(link.loss >= 0 && link.loss < 1) || !Number.isInteger(link.depthTurns) || link.depthTurns < 0) {
+      throw new Error("a relay link needs a round trip not negative, loss in [0, 1) and a whole depth not negative");
+    }
+  }
+  if (timing.outage !== undefined && (!(timing.outage.atMs >= 0) || !(timing.outage.lengthMs >= 0))) throw new Error("an outage must start and last at least 0 ms");
+}
+
+function relayShape(timing: RelayTiming) {
+  const period = timing.steps.reduce((sum, step) => sum + step, 0);
+  const meanStep = period / timing.steps.length;
+  const ends = timing.steps.map((_, index) => timing.steps.slice(0, index + 1).reduce((sum, step) => sum + step, 0));
+  const turnAfter = (relayMs: number): number => {
+    const within = floorMod(relayMs, period);
+    return relayMs - within + (ends.find((end) => end > within) ?? period);
+  };
+  const linkOf = (sender: number): RelayLink => timing.links[sender] ?? timing.links.at(-1) ?? { rttMs: 0, loss: 0, depthTurns: 0 };
+  const depthMs = (link: RelayLink) => link.depthTurns * meanStep;
+  const outage = timing.outage;
+  const trailMs = Math.max(...timing.links.map((link) => link.rttMs + depthMs(link)));
+  const shallowMs = Math.min(...timing.links.map((link) => depthMs(link)));
+  const stopMs = outage === undefined ? 0 : Math.min(outage.atMs + outage.lengthMs, outage.atMs + Math.max(0, RELAY_LAG_STOP_MS - trailMs));
+  const gapMs = outage === undefined ? 0 : outage.atMs + outage.lengthMs - stopMs;
+  const extraMs = outage === undefined ? 0 : outage.lengthMs - shallowMs - gapMs;
+  const drainMs = extraMs > 2 * meanStep ? ((extraMs - meanStep) * meanStep) / (meanStep - RELAY_CATCH_UP_STEP_MS) : 0;
+  const settledMs = extraMs > 2 * meanStep ? meanStep : extraMs;
+  const wallMs = (gameMs: number): number => {
+    if (outage === undefined || gameMs <= outage.atMs || outage.lengthMs <= shallowMs) return gameMs;
+    const since = gameMs - outage.atMs;
+    let extra: number;
+    if (since < drainMs) extra = extraMs - (since * (meanStep - RELAY_CATCH_UP_STEP_MS)) / meanStep;
+    else if (since < drainMs + RELAY_SLEW_HOLD_MS) extra = settledMs;
+    else extra = Math.max(0, settledMs - (since - drainMs - RELAY_SLEW_HOLD_MS) / meanStep);
+    return gameMs + gapMs + extra;
+  };
+  return { meanStep, turnAfter, linkOf, depthMs, outage, stopMs, gapMs, wallMs };
+}
+
+export function relayDelivery(timing: RelayTiming = MEASURED_RELAY, seed = 1): RelayDelivery {
+  checkRelay(timing);
+  const shape = relayShape(timing);
+  const anchorFraction = -Math.log(f32(0.95));
+  const senders = new Map<number, { readonly random: Random; lastArrivalMs: number }>();
+  const ageMs = (sender: number, frame: number): number => {
+    let state = senders.get(sender);
+    if (state === undefined) {
+      state = { random: new Random(seed * 7919 + sender * 104729 + 3), lastArrivalMs: 0 };
+      senders.set(sender, state);
+    }
+    const link = shape.linkOf(sender);
+    const sentMs = frame * CALLBACK_MS;
+    let upMs = shape.wallMs(sentMs) + link.rttMs / 2 + timing.jitterMs * anchorFraction + shape.depthMs(link);
+    for (;;) {
+      if (shape.outage !== undefined && upMs >= shape.outage.atMs && upMs < shape.outage.atMs + shape.outage.lengthMs) upMs = shape.outage.atMs + shape.outage.lengthMs;
+      else if (state.random.chance(link.loss)) upMs += shape.meanStep;
+      else break;
+    }
+    upMs += link.rttMs / 2 - timing.jitterMs * Math.log(1 - state.random.next());
+    let relayMs = upMs;
+    if (shape.outage !== undefined && upMs >= shape.stopMs) relayMs = upMs < shape.outage.atMs + shape.outage.lengthMs ? shape.stopMs : upMs - shape.gapMs;
+    const arrivalMs = Math.max(state.lastArrivalMs, shape.turnAfter(relayMs));
+    state.lastArrivalMs = arrivalMs;
+    return arrivalMs - sentMs;
+  };
+  return {
+    ageMs: (sender: number, frame: number) => ageMs(sender, frame),
+    arrivalFrame: (sender: number, frame: number, _message: SyncMessage) => Math.max(frame + 1, Math.ceil(frame + ageMs(sender, frame) / CALLBACK_MS - f32(1e-9))),
+  };
+}
+
+export function relayCallbacks(timing: RelayTiming = MEASURED_RELAY): CallbackTiming {
+  checkRelay(timing);
+  const shape = relayShape(timing);
+  return { wallMs: (frame) => (frame <= 0 ? frame * CALLBACK_MS : shape.wallMs(frame * CALLBACK_MS)) };
 }

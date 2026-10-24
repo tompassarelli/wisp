@@ -402,7 +402,8 @@ rustc 1.97.0 by `relay/rust-toolchain.toml`, with no dependencies. CI job
   to 500 bytes) through a 1 s outage.
 - **Bench** (`cargo run --release -p relay-bench -- --grid`, about 5 s for
   the grid on gex45; `--steps 17,17,16` and `--margin 0.95` select the other
-  cadence and depth rule): two agents, each cell an hour of play (450,000
+  cadence and depth rule, and `--rtts 120` other round trips, whose cells
+  take the seeds of the grid's first round trip): two agents, each cell an hour of play (450,000
   turns at 8 ms) after a 20 s lobby. Delay is RTT / 2 each way plus
   exponential jitter of 2 ms mean. The agents' clocks drift +100 and
   −100 ppm, and each sends 4 actions a second of 9–29 bytes, half of them
@@ -412,7 +413,10 @@ rustc 1.97.0 by `relay/rust-toolchain.toml`, with no dependencies. CI job
   most it reached with added depth. "Catch-up after blackout" is the longest
   time from a blackout's end until the agent is back to D + 1. "Delivery" is
   the time from the relay emitting a turn to the agent first holding it, at
-  the worse agent's p50, p99 and p99.9. Bytes a second are the UDP
+  the worse agent's p50, p99 and p99.9. "Own echo" is the time from an agent
+  sending an action to that agent feeding the turn that carries it, at the
+  worse agent's p50 and p99: one way up, the wait for the next turn, one way
+  down and the depth. Bytes a second are the UDP
   payloads of every packet sent during the match, lost or not, for the
   worse agent; IPv4 and UDP headers add 28 bytes a packet, 3.5 kB/s each
   way at 125 packets a second. The bar:
@@ -421,38 +425,38 @@ rustc 1.97.0 by `relay/rust-toolchain.toml`, with no dependencies. CI job
   drained within 2 s, no desync. Burst cells are measured only. Results at
   8 ms turns, 25 October 2026:
 
-| RTT | Loss | D (A/B), depth | Max depth | Underruns per 10 min (A/B) | Catch-up after blackout | Delivery p50/p99/p99.9 | Bytes/s down/up | Clock stops | Desync | Bar |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 100 ms | no loss | 3/3, 24.0 ms | 24.0 ms | 0.00/0.00 | – | 51.4/58.6/61.0 ms | 13784/13317 | 0 | none | pass (≤ 50.0 ms) |
-| 100 ms | 0.5% independent | 3/3, 24.0 ms | 24.0 ms | 0.00/0.00 | – | 51.4/59.0/62.2 ms | 13780/13329 | 0 | none | pass (≤ 50.0 ms) |
-| 100 ms | 1% independent | 3/3, 24.0 ms | 27.7 ms | 0.50/0.33 | – | 51.5/59.4/63.1 ms | 13771/13316 | 0 | none | pass (≤ 50.0 ms) |
-| 100 ms | 2% independent | 4/4, 32.0 ms | 32.0 ms | 0.00/0.00 | – | 51.5/60.1/65.2 ms | 13848/13365 | 0 | none | pass (≤ 66.7 ms) |
-| 100 ms | 5% independent | 4/5, 40.0 ms | 41.1 ms | 0.83/0.17 | – | 51.5/62.0/68.5 ms | 13859/13384 | 0 | none | pass (≤ 66.7 ms) |
-| 100 ms | 1% bursts of 2 | 12!/8, 96.0 ms | 138.3 ms | 0.17/2.33 | – | 51.5/59.8/83.5 ms | 13803/13345 | 0 | none | measured |
-| 100 ms | 1% bursts of 4 | 12!/6, 96.0 ms | 216.7 ms | 8.17/35.33 | – | 51.5/60.4/123.2 ms | 13805/13352 | 0 | none | measured |
-| 100 ms | 3% bursts of 2 | 11/10, 88.0 ms | 113.2 ms | 1.00/2.83 | – | 51.5/68.4/96.9 ms | 13816/13372 | 0 | none | measured |
-| 100 ms | 3% bursts of 4 | 12!/12!, 96.0 ms | 329.1 ms | 22.33/20.67 | – | 51.5/87.8/156.0 ms | 13924/13471 | 0 | none | measured |
-| 100 ms | 1% + 1 s blackout / 5 min | 3/3, 24.0 ms | 1007.3 ms | 0.17/0.00 | 906 ms | 51.5/59.9/730.3 ms | 13881/13365 | 11 | none | pass (≤ 50.0 ms) |
-| 150 ms | no loss | 3/3, 24.0 ms | 24.0 ms | 0.00/0.00 | – | 76.4/83.7/86.0 ms | 17420/17044 | 0 | none | pass (≤ 50.0 ms) |
-| 150 ms | 0.5% independent | 3/3, 24.0 ms | 24.6 ms | 0.17/0.00 | – | 76.4/84.0/87.1 ms | 17462/17070 | 0 | none | pass (≤ 50.0 ms) |
-| 150 ms | 1% independent | 4/3, 32.0 ms | 32.0 ms | 0.00/0.00 | – | 76.5/84.4/88.2 ms | 17419/17053 | 0 | none | pass (≤ 50.0 ms) |
-| 150 ms | 2% independent | 4/4, 32.0 ms | 32.0 ms | 0.00/0.00 | – | 76.5/85.1/90.6 ms | 17415/17063 | 0 | none | pass (≤ 66.7 ms) |
-| 150 ms | 5% independent | 5/5, 40.0 ms | 41.9 ms | 0.17/0.00 | – | 76.5/86.8/93.4 ms | 17443/17091 | 0 | none | pass (≤ 66.7 ms) |
-| 150 ms | 1% bursts of 2 | 12!/7, 96.0 ms | 97.3 ms | 0.17/5.50 | – | 76.5/85.0/108.7 ms | 17507/17102 | 0 | none | measured |
-| 150 ms | 1% bursts of 4 | 3/12!, 96.0 ms | 276.0 ms | 79.00/7.17 | – | 76.5/85.5/147.2 ms | 17446/17084 | 0 | none | measured |
-| 150 ms | 3% bursts of 2 | 12/12, 96.0 ms | 152.7 ms | 0.17/0.50 | – | 76.5/93.3/120.4 ms | 17513/17139 | 0 | none | measured |
-| 150 ms | 3% bursts of 4 | 12!/12!, 96.0 ms | 275.3 ms | 20.67/17.67 | – | 76.5/110.4/174.5 ms | 17548/17185 | 0 | none | measured |
-| 150 ms | 1% + 1 s blackout / 5 min | 3/4, 32.0 ms | 1007.7 ms | 0.17/0.00 | 870 ms | 76.5/84.8/756.0 ms | 17524/17127 | 11 | none | pass (≤ 50.0 ms) |
-| 200 ms | no loss | 3/3, 24.0 ms | 24.0 ms | 0.00/0.00 | – | 101.4/108.7/111.0 ms | 21042/20806 | 0 | none | pass (≤ 50.0 ms) |
-| 200 ms | 0.5% independent | 3/3, 24.0 ms | 24.0 ms | 0.00/0.00 | – | 101.4/109.0/112.1 ms | 21032/20794 | 0 | none | pass (≤ 50.0 ms) |
-| 200 ms | 1% independent | 3/3, 24.0 ms | 27.1 ms | 0.33/0.00 | – | 101.5/109.4/113.2 ms | 21068/20790 | 0 | none | pass (≤ 50.0 ms) |
-| 200 ms | 2% independent | 4/4, 32.0 ms | 32.0 ms | 0.00/0.00 | – | 101.5/110.1/115.1 ms | 21089/20813 | 0 | none | pass (≤ 66.7 ms) |
-| 200 ms | 5% independent | 5/5, 40.0 ms | 40.0 ms | 0.00/0.00 | – | 101.5/111.9/118.5 ms | 21120/20835 | 0 | none | pass (≤ 66.7 ms) |
-| 200 ms | 1% bursts of 2 | 8/9, 72.0 ms | 105.9 ms | 2.17/0.83 | – | 101.5/109.9/133.1 ms | 21131/20843 | 0 | none | measured |
-| 200 ms | 1% bursts of 4 | 12!/11, 96.0 ms | 216.1 ms | 8.33/9.67 | – | 101.5/110.6/173.4 ms | 21138/20857 | 0 | none | measured |
-| 200 ms | 3% bursts of 2 | 11/12, 96.0 ms | 114.6 ms | 1.00/0.50 | – | 101.5/118.6/148.3 ms | 21161/20878 | 0 | none | measured |
-| 200 ms | 3% bursts of 4 | 12!/12!, 96.0 ms | 263.5 ms | 18.33/20.50 | – | 101.5/137.1/201.2 ms | 21176/20922 | 0 | none | measured |
-| 200 ms | 1% + 1 s blackout / 5 min | 3/3, 24.0 ms | 1008.0 ms | 0.17/0.17 | 858 ms | 101.5/109.8/780.3 ms | 21147/20833 | 11 | none | pass (≤ 50.0 ms) |
+| RTT | Loss | D (A/B), depth | Max depth | Underruns per 10 min (A/B) | Catch-up after blackout | Delivery p50/p99/p99.9 | Own echo p50/p99 | Bytes/s down/up | Clock stops | Desync | Bar |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 100 ms | no loss | 3/3, 24.0 ms | 24.0 ms | 0.00/0.00 | – | 51.4/58.6/61.0 ms | 130.5/138.8 ms | 13784/13317 | 0 | none | pass (≤ 50.0 ms) |
+| 100 ms | 0.5% independent | 3/3, 24.0 ms | 24.0 ms | 0.00/0.00 | – | 51.4/59.0/62.2 ms | 130.5/139.4 ms | 13780/13329 | 0 | none | pass (≤ 50.0 ms) |
+| 100 ms | 1% independent | 3/3, 24.0 ms | 27.7 ms | 0.50/0.33 | – | 51.5/59.4/63.1 ms | 130.5/139.8 ms | 13771/13316 | 0 | none | pass (≤ 50.0 ms) |
+| 100 ms | 2% independent | 4/4, 32.0 ms | 32.0 ms | 0.00/0.00 | – | 51.5/60.1/65.2 ms | 138.6/148.2 ms | 13848/13365 | 0 | none | pass (≤ 66.7 ms) |
+| 100 ms | 5% independent | 4/5, 40.0 ms | 41.1 ms | 0.83/0.17 | – | 51.5/62.0/68.5 ms | 146.7/157.5 ms | 13859/13384 | 0 | none | pass (≤ 66.7 ms) |
+| 100 ms | 1% bursts of 2 | 12!/8, 96.0 ms | 138.3 ms | 0.17/2.33 | – | 51.5/59.8/83.5 ms | 201.5/211.1 ms | 13803/13345 | 0 | none | measured |
+| 100 ms | 1% bursts of 4 | 12!/6, 96.0 ms | 216.7 ms | 8.17/35.33 | – | 51.5/60.4/123.2 ms | 203.2/217.1 ms | 13805/13352 | 0 | none | measured |
+| 100 ms | 3% bursts of 2 | 11/10, 88.0 ms | 113.2 ms | 1.00/2.83 | – | 51.5/68.4/96.9 ms | 193.8/212.5 ms | 13816/13372 | 0 | none | measured |
+| 100 ms | 3% bursts of 4 | 12!/12!, 96.0 ms | 329.1 ms | 22.33/20.67 | – | 51.5/87.8/156.0 ms | 206.8/248.5 ms | 13924/13471 | 0 | none | measured |
+| 100 ms | 1% + 1 s blackout / 5 min | 3/3, 24.0 ms | 1007.3 ms | 0.17/0.00 | 906 ms | 51.5/59.9/730.3 ms | 130.9/144.0 ms | 13881/13365 | 11 | none | pass (≤ 50.0 ms) |
+| 150 ms | no loss | 3/3, 24.0 ms | 24.0 ms | 0.00/0.00 | – | 76.4/83.7/86.0 ms | 180.4/188.8 ms | 17420/17044 | 0 | none | pass (≤ 50.0 ms) |
+| 150 ms | 0.5% independent | 3/3, 24.0 ms | 24.6 ms | 0.17/0.00 | – | 76.4/84.0/87.1 ms | 180.5/189.1 ms | 17462/17070 | 0 | none | pass (≤ 50.0 ms) |
+| 150 ms | 1% independent | 4/3, 32.0 ms | 32.0 ms | 0.00/0.00 | – | 76.5/84.4/88.2 ms | 187.5/196.5 ms | 17419/17053 | 0 | none | pass (≤ 50.0 ms) |
+| 150 ms | 2% independent | 4/4, 32.0 ms | 32.0 ms | 0.00/0.00 | – | 76.5/85.1/90.6 ms | 188.6/198.5 ms | 17415/17063 | 0 | none | pass (≤ 66.7 ms) |
+| 150 ms | 5% independent | 5/5, 40.0 ms | 41.9 ms | 0.17/0.00 | – | 76.5/86.8/93.4 ms | 196.7/207.5 ms | 17443/17091 | 0 | none | pass (≤ 66.7 ms) |
+| 150 ms | 1% bursts of 2 | 12!/7, 96.0 ms | 97.3 ms | 0.17/5.50 | – | 76.5/85.0/108.7 ms | 251.6/261.4 ms | 17507/17102 | 0 | none | measured |
+| 150 ms | 1% bursts of 4 | 3/12!, 96.0 ms | 276.0 ms | 79.00/7.17 | – | 76.5/85.5/147.2 ms | 253.7/267.4 ms | 17446/17084 | 0 | none | measured |
+| 150 ms | 3% bursts of 2 | 12/12, 96.0 ms | 152.7 ms | 0.17/0.50 | – | 76.5/93.3/120.4 ms | 252.7/268.9 ms | 17513/17139 | 0 | none | measured |
+| 150 ms | 3% bursts of 4 | 12!/12!, 96.0 ms | 275.3 ms | 20.67/17.67 | – | 76.5/110.4/174.5 ms | 256.3/291.1 ms | 17548/17185 | 0 | none | measured |
+| 150 ms | 1% + 1 s blackout / 5 min | 3/4, 32.0 ms | 1007.7 ms | 0.17/0.00 | 870 ms | 76.5/84.8/756.0 ms | 188.9/200.8 ms | 17524/17127 | 11 | none | pass (≤ 50.0 ms) |
+| 200 ms | no loss | 3/3, 24.0 ms | 24.0 ms | 0.00/0.00 | – | 101.4/108.7/111.0 ms | 230.5/238.7 ms | 21042/20806 | 0 | none | pass (≤ 50.0 ms) |
+| 200 ms | 0.5% independent | 3/3, 24.0 ms | 24.0 ms | 0.00/0.00 | – | 101.4/109.0/112.1 ms | 230.4/239.1 ms | 21032/20794 | 0 | none | pass (≤ 50.0 ms) |
+| 200 ms | 1% independent | 3/3, 24.0 ms | 27.1 ms | 0.33/0.00 | – | 101.5/109.4/113.2 ms | 230.5/239.7 ms | 21068/20790 | 0 | none | pass (≤ 50.0 ms) |
+| 200 ms | 2% independent | 4/4, 32.0 ms | 32.0 ms | 0.00/0.00 | – | 101.5/110.1/115.1 ms | 238.6/248.2 ms | 21089/20813 | 0 | none | pass (≤ 66.7 ms) |
+| 200 ms | 5% independent | 5/5, 40.0 ms | 40.0 ms | 0.00/0.00 | – | 101.5/111.9/118.5 ms | 246.7/257.5 ms | 21120/20835 | 0 | none | pass (≤ 66.7 ms) |
+| 200 ms | 1% bursts of 2 | 8/9, 72.0 ms | 105.9 ms | 2.17/0.83 | – | 101.5/109.9/133.1 ms | 278.7/290.2 ms | 21131/20843 | 0 | none | measured |
+| 200 ms | 1% bursts of 4 | 12!/11, 96.0 ms | 216.1 ms | 8.33/9.67 | – | 101.5/110.6/173.4 ms | 303.1/317.4 ms | 21138/20857 | 0 | none | measured |
+| 200 ms | 3% bursts of 2 | 11/12, 96.0 ms | 114.6 ms | 1.00/0.50 | – | 101.5/118.6/148.3 ms | 302.7/320.7 ms | 21161/20878 | 0 | none | measured |
+| 200 ms | 3% bursts of 4 | 12!/12!, 96.0 ms | 263.5 ms | 18.33/20.50 | – | 101.5/137.1/201.2 ms | 306.6/344.4 ms | 21176/20922 | 0 | none | measured |
+| 200 ms | 1% + 1 s blackout / 5 min | 3/3, 24.0 ms | 1008.0 ms | 0.17/0.17 | 858 ms | 101.5/109.8/780.3 ms | 230.9/243.3 ms | 21147/20833 | 11 | none | pass (≤ 50.0 ms) |
 
 - **Bar.** Met in every judged cell: depth 24–32 ms up to 1% loss (D = 3,
   one agent D = 4 at 150 ms), 32 ms at 2% and 40 ms at 5% (D = 4–5),
@@ -468,6 +472,25 @@ rustc 1.97.0 by `relay/rust-toolchain.toml`, with no dependencies. CI job
   17/17/16 turns, and held here in milliseconds because depth is kept in
   milliseconds whatever the turn length (Turn cadence, above); pointer this
   section; revisit after wisp#38's native cells.
+- **120 ms** (`--grid --rtts 120`, the round trip wisp:docs/network-model.md's
+  relay delivery defaults to):
+
+  | RTT | Loss | D (A/B), depth | Max depth | Underruns per 10 min (A/B) | Catch-up after blackout | Delivery p50/p99/p99.9 | Own echo p50/p99 | Bytes/s down/up | Clock stops | Desync | Bar |
+  |---|---|---|---|---|---|---|---|---|---|---|---|
+  | 120 ms | no loss | 3/3, 24.0 ms | 24.0 ms | 0.00/0.00 | – | 61.4/68.6/71.0 ms | 150.5/158.9 ms | 15243/14813 | 0 | none | pass (≤ 50.0 ms) |
+  | 120 ms | 0.5% independent | 3/3, 24.0 ms | 24.0 ms | 0.00/0.00 | – | 61.4/69.0/72.2 ms | 150.5/159.5 ms | 15237/14827 | 0 | none | pass (≤ 50.0 ms) |
+  | 120 ms | 1% independent | 3/3, 24.0 ms | 27.7 ms | 0.50/0.33 | – | 61.5/69.4/73.1 ms | 150.6/159.8 ms | 15229/14811 | 0 | none | pass (≤ 50.0 ms) |
+  | 120 ms | 2% independent | 4/4, 32.0 ms | 32.0 ms | 0.00/0.00 | – | 61.5/70.1/75.2 ms | 158.5/168.3 ms | 15313/14867 | 0 | none | pass (≤ 66.7 ms) |
+  | 120 ms | 5% independent | 4/5, 40.0 ms | 41.1 ms | 0.83/0.17 | – | 61.5/72.0/78.5 ms | 166.7/177.4 ms | 15319/14879 | 0 | none | pass (≤ 66.7 ms) |
+  | 120 ms | 1% bursts of 2 | 12!/8, 96.0 ms | 138.3 ms | 0.17/2.33 | – | 61.5/69.8/93.5 ms | 221.6/231.1 ms | 15264/14844 | 0 | none | measured |
+  | 120 ms | 1% bursts of 4 | 12!/6, 96.0 ms | 216.7 ms | 8.17/35.33 | – | 61.5/70.4/133.2 ms | 223.2/236.8 ms | 15262/14847 | 0 | none | measured |
+  | 120 ms | 3% bursts of 2 | 11/10, 88.0 ms | 113.2 ms | 1.00/2.83 | – | 61.5/78.4/106.9 ms | 213.7/233.0 ms | 15267/14865 | 0 | none | measured |
+  | 120 ms | 3% bursts of 4 | 12!/12!, 96.0 ms | 329.1 ms | 22.33/20.67 | – | 61.5/97.8/166.0 ms | 226.8/269.7 ms | 15379/14970 | 0 | none | measured |
+  | 120 ms | 1% + 1 s blackout / 5 min | 3/3, 24.0 ms | 1007.3 ms | 0.17/0.00 | 897 ms | 61.5/69.9/740.3 ms | 151.0/163.5 ms | 15341/14864 | 11 | none | pass (≤ 50.0 ms) |
+
+  The 2% cell gives that model D = 4 and its own echo of 158.5/168.3 ms; the
+  model reproduces it within 1% (wisp:docs/network-model.md, "Relay
+  delivery").
 - **8 ms against 17/17/16.** The same grid at 17/17/16 chooses D = 2–5
   (33.3–83.3 ms): 50 ms up to 1% loss (66.7 ms for one agent at 150 ms), and
   66.7–83.3 ms at 5%, which misses the bar at 1% and 5% for 150 ms and at

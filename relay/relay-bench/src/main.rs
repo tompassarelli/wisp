@@ -60,6 +60,7 @@ impl Kind {
 
 struct Options {
     minutes: f64,
+    rtts_ms: Vec<i64>,
     steps: Vec<u8>,
     margin: Option<f64>,
 }
@@ -190,6 +191,11 @@ fn delivery(row: &Row) -> String {
     format!("{}/{}/{} ms", q(0.5), q(0.99), q(0.999))
 }
 
+fn echo(row: &Row) -> String {
+    let q = |q: f64| ms(worst(row, |a| a.echo.quantile(q)));
+    format!("{}/{} ms", q(0.5), q(0.99))
+}
+
 fn rate(row: &Row, f: impl Fn(&sim::AgentOutcome) -> u64) -> u64 {
     let seconds = row.minutes * 60.0;
     row.outcome
@@ -223,7 +229,7 @@ fn render_row(row: &Row) -> String {
     let max_depth = worst(row, |a| chosen_depth(row, a) + a.stats.max_extra_us);
     let per10_text: Vec<String> = per10.iter().map(|u| format!("{u:.2}")).collect();
     format!(
-        "| {} ms | {} | {}, {} ms | {} ms | {} | {} | {} | {}/{} | {} | {} | {} |\n",
+        "| {} ms | {} | {}, {} ms | {} ms | {} | {} | {} | {} | {}/{} | {} | {} | {} |\n",
         row.rtt_ms,
         row.kind.label(),
         depths.join("/"),
@@ -232,6 +238,7 @@ fn render_row(row: &Row) -> String {
         per10_text.join("/"),
         worst_drain(&drains),
         delivery(row),
+        echo(row),
         rate(row, |a| a.bytes_down),
         rate(row, |a| a.bytes_up),
         row.outcome.stops,
@@ -244,7 +251,7 @@ fn render_row(row: &Row) -> String {
 
 fn render(rows: &[Row]) -> String {
     let mut out = String::from(
-        "| RTT | Loss | D (A/B), depth | Max depth | Underruns per 10 min (A/B) | Catch-up after blackout | Delivery p50/p99/p99.9 | Bytes/s down/up | Clock stops | Desync | Bar |\n|---|---|---|---|---|---|---|---|---|---|---|\n",
+        "| RTT | Loss | D (A/B), depth | Max depth | Underruns per 10 min (A/B) | Catch-up after blackout | Delivery p50/p99/p99.9 | Own echo p50/p99 | Bytes/s down/up | Clock stops | Desync | Bar |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n",
     );
     for row in rows {
         out.push_str(&render_row(row));
@@ -267,6 +274,13 @@ fn options(args: &[String]) -> Option<Options> {
         Some(m) => m.parse().ok()?,
         None => 60.0,
     };
+    let rtts_ms = match value(args, "--rtts") {
+        Some(s) => s
+            .split(',')
+            .map(|x| x.parse().ok().filter(|&ms: &i64| ms >= 0))
+            .collect::<Option<Vec<i64>>>()?,
+        None => RTTS_MS.to_vec(),
+    };
     let steps = match value(args, "--steps") {
         Some(s) => s
             .split(',')
@@ -280,6 +294,7 @@ fn options(args: &[String]) -> Option<Options> {
     };
     Some(Options {
         minutes,
+        rtts_ms,
         steps,
         margin,
     })
@@ -289,13 +304,13 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(o) = options(&args) else {
         eprintln!(
-            "usage: relay-bench --grid [--minutes N] [--steps 8|17,17,16] [--margin QUANTILE]"
+            "usage: relay-bench --grid [--minutes N] [--rtts MS,...] [--steps 8|17,17,16] [--margin QUANTILE]"
         );
         std::process::exit(2);
     };
     let period_us = Cadence::new(&o.steps).period_us();
     let mut cells = Vec::new();
-    for (r, rtt_ms) in RTTS_MS.into_iter().enumerate() {
+    for (r, &rtt_ms) in o.rtts_ms.iter().enumerate() {
         for (k, kind) in KINDS.into_iter().enumerate() {
             cells.push(Cell {
                 rtt_ms,

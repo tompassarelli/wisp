@@ -5,6 +5,11 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## Unreleased
 
+- `wisp/src/headless/syncChannel` exports `relayDelivery`, `relayCallbacks`,
+  `MEASURED_RELAY`, `RELAY_LAG_STOP_MS`, `RELAY_CATCH_UP_STEP_MS`,
+  `RELAY_SLEW_HOLD_MS` and the types `RelayTiming`, `RelayLink`,
+  `RelayOutage` and `RelayDelivery` (wisp:docs/network-model.md, "Relay
+  delivery").
 - `wisp/src/runtime/recordText` exports `TokenLines`, `createTokenLines`,
   `openTokenLines`, `addToken`, `writeFieldTokens`, `addWrittenToken`,
   `addWrittenTokens` and `endTokenLine`, which write record text lines
