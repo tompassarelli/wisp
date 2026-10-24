@@ -331,7 +331,7 @@ Tom's `system.reg`, `user.reg`, `Warcraft III/.build.info` and Battle.net
 | `wisp lan solo MAP [--pair K...]` | Each client of the named running pairs (default: all) plays MAP alone, as a local game on the loopback provider; returns once every client's game UI is up. Works on 3.0.1. See "Solo games". |
 | `wisp lan status [--pair K]` | Each pair's clients and processes, and its game: phase, turns, desyncs, players. |
 | `wisp lan speed N --pair K` | Diagnostic turn delivery at 1–16 times real time; 1 restores normal delivery. Measure client frame progress to establish actual game speed. |
-| `wisp lan netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--port N]`, `wisp lan netem off --pair K` | Adds round-trip delay, jitter and independent or bursty packet loss to pair K's loopback, or to UDP on one port of it, or removes it, and prints the loopback's queueing disciplines and filters. See "Simulated latency and loss". |
+| `wisp lan netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--udp-port N \| --tcp-port N]`, `wisp lan netem off --pair K` | Adds round-trip delay, jitter and independent or bursty packet loss to pair K's loopback, or to UDP or TCP on one port of it, or removes it, and prints the loopback's queueing disciplines and filters. See "Simulated latency and loss". |
 | `wisp lan end --pair K` | Ends pair K's game. The clients go back to their menus. |
 | `wisp lan stop --pair K` | Stops the pool holding pair K (`pair-K/pool.pid`) with SIGTERM, waits up to 90 s for it to exit, and fails if a game of pair K still runs. It refuses a pool that also holds other pairs. |
 
@@ -863,16 +863,22 @@ lost 1% of the time.
   probability r = 25% (a mean burst of four sends) and entered with
   p = l·r / (100 − l), so the long-run per-send loss l is the same as
   without `--burst`. The command prints p, r and l.
-- `--port N` impairs only UDP to or from port N: a two-band `prio` root
-  sends every packet to its plain first band, and two `u32` filters
-  (IPv4, protocol 17, destination or source port N) send that port's
-  packets to the second band, where the netem sits. Warcraft's loopback
-  connection to its agent stays unimpaired.
+- `--udp-port N` impairs only UDP to or from port N, and `--tcp-port N`
+  only TCP: a two-band `prio` root sends every packet to its plain first
+  band, and two `u32` filters (IPv4, protocol 17 or 6, destination or
+  source port N) send that port's packets to the second band, where the
+  netem sits. Without a port, netem also delays and drops each client's own
+  loopback connections: Wine's internal socket pairs, Warcraft's link to
+  its browser process and its menu socket. On 24 October 2026 a client
+  crashed 2 s after 5% loss went on that way, so put an internet path on
+  the game's own connection only: `--tcp-port` with the port `lan fresh`
+  hosts on (the action log's first line, `on 127.0.0.1:PORT`) for Wisp's
+  TCP host, `--udp-port` for a UDP relay.
 
 Each run first removes the loopback's root queueing discipline and then adds
 the new setting, so running it again replaces it; `wisp lan netem off --pair
 K` removes it. The pair keeps it until it is removed or the pair stops. The
-command prints `tc qdisc show`, and with `--port` also `tc filter show`.
+command prints `tc qdisc show`, and with a port also `tc filter show`.
 
 The namespace belongs to the pair agent's user namespace (bwrap
 `--unshare-net`), so Wisp enters both with `nsenter --user --net

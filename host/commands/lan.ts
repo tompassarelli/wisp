@@ -354,7 +354,7 @@ const inPairNetwork = (pair: number, command: readonly string[]) => Effect.gen(f
   return { exitCode: Number(result.exitCode), stdout: new TextDecoder().decode(result.stdout).trim(), stderr: result.stderr.trim() };
 });
 
-const NETEM_USAGE = "netem takes --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--port N], or off --pair K";
+const NETEM_USAGE = "netem takes --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--udp-port N | --tcp-port N], or off --pair K";
 
 const netemImpairment = (args: readonly string[]): Impairment | UsageFailure => {
   const [rttText] = flagValues(args, "rtt");
@@ -367,9 +367,12 @@ const netemImpairment = (args: readonly string[]): Impairment | UsageFailure => 
   if (rttText === undefined || !Number.isFinite(rtt) || rtt < 0) return new UsageFailure({ problem: NETEM_USAGE });
   if (!Number.isFinite(loss) || loss < 0 || loss > 100 || (burst && loss === 100)) return new UsageFailure({ problem: `--loss takes a round-trip percentage from 0 to 100${burst ? ", below 100 with --burst" : ""}` });
   if (!Number.isFinite(jitter) || jitter < 0 || jitter > rtt) return new UsageFailure({ problem: "--jitter takes milliseconds from 0 to the --rtt" });
-  if (!args.includes("--port")) return { rtt, loss, jitter, burst };
-  const port = portFlag(args, 0);
-  return port instanceof UsageFailure ? port : { rtt, loss, jitter, burst, port };
+  const scoped = (["udp", "tcp"] as const).filter((protocol) => args.includes(`--${protocol}-port`));
+  if (scoped.length > 1) return new UsageFailure({ problem: "netem takes --udp-port or --tcp-port, not both" });
+  const [protocol] = scoped;
+  if (protocol === undefined) return { rtt, loss, jitter, burst };
+  const port = portFlag(args, 0, { name: `${protocol}-port` });
+  return port instanceof UsageFailure ? port : { rtt, loss, jitter, burst, scope: { protocol, port } };
 };
 
 const netem: Command = (args) => Effect.gen(function*() {
@@ -390,13 +393,13 @@ const netem: Command = (args) => Effect.gen(function*() {
   }
   const qdiscs = yield* inPairNetwork(pair, ["tc", "qdisc", "show", "dev", "lo"]);
   yield* Console.log(`pair ${pair}: ${qdiscs.stdout}`);
-  if (impairment?.port !== undefined) {
+  if (impairment?.scope !== undefined) {
     const filters = yield* inPairNetwork(pair, ["tc", "filter", "show", "dev", "lo"]);
     yield* Console.log(filters.stdout);
   }
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--port N] | netem off --pair K | status [--pair K] | end --pair K | stop --pair K";
+export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--udp-port N | --tcp-port N] | netem off --pair K | status [--pair K] | end --pair K | stop --pair K";
 
 const ownerCheck = poolOwners.pipe(Effect.flatMap((owners) => {
   const refusal = wrongUser(process.getuid?.() ?? 0, owners, ["bun", ...process.argv.slice(1)]);

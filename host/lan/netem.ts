@@ -3,8 +3,15 @@ export interface Impairment {
   readonly loss: number;
   readonly jitter: number;
   readonly burst: boolean;
-  readonly port?: number;
+  readonly scope?: PortScope;
 }
+
+export interface PortScope {
+  readonly protocol: "udp" | "tcp";
+  readonly port: number;
+}
+
+const PROTOCOL_NUMBERS = { udp: "17", tcp: "6" } as const;
 
 const BURST_RECOVERY = 25;
 
@@ -31,23 +38,23 @@ export const CLEAR = ["tc", "qdisc", "del", "dev", "lo", "root"] as const;
 
 export const clearedAlready = (stderr: string) => /No such file|handle of zero/.test(stderr);
 
-const portFilter = (direction: "sport" | "dport", port: number) => [
+const portFilter = (direction: "sport" | "dport", { protocol, port }: PortScope) => [
   "tc", "filter", "add", "dev", "lo", "parent", "1:", "protocol", "ip", "prio", "1", "u32",
-  "match", "ip", "protocol", "17", "0xff", "match", "ip", direction, String(port), "0xffff", "flowid", "1:2",
+  "match", "ip", "protocol", PROTOCOL_NUMBERS[protocol], "0xff", "match", "ip", direction, String(port), "0xffff", "flowid", "1:2",
 ];
 
-export const impairCommands = (impairment: Impairment): string[][] => impairment.port === undefined
+export const impairCommands = (impairment: Impairment): string[][] => impairment.scope === undefined
   ? [["tc", "qdisc", "add", "dev", "lo", "root", ...netemArguments(impairment)]]
   : [
     ["tc", "qdisc", "add", "dev", "lo", "root", "handle", "1:", "prio", "bands", "2", "priomap", ...Array.from({ length: 16 }, () => "0")],
     ["tc", "qdisc", "add", "dev", "lo", "parent", "1:2", "handle", "20:", ...netemArguments(impairment)],
-    portFilter("dport", impairment.port),
-    portFilter("sport", impairment.port),
+    portFilter("dport", impairment.scope),
+    portFilter("sport", impairment.scope),
   ];
 
 export const impairmentSummary = (impairment: Impairment) => {
   const perSend = perSendLoss(impairment.loss);
-  const scope = impairment.port === undefined ? "all loopback traffic" : `UDP to or from port ${impairment.port} only`;
+  const scope = impairment.scope === undefined ? "all loopback traffic" : `${impairment.scope.protocol.toUpperCase()} to or from port ${impairment.scope.port} only`;
   const delay = `${decimal(impairment.rtt / 2)} ms${impairment.jitter > 0 ? ` ± ${decimal(impairment.jitter / 2)} ms` : ""} per send`;
   if (!impairment.burst) return `${scope}: ${delay}, ${decimal(perSend)}% of sends lost independently`;
   const { enter, leave } = burstModel(perSend);

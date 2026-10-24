@@ -122,6 +122,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--password TEXT` | A hosted game's password | `menus host`, `menus join` |
 | `--start` | Start the game once hosted | `menus host` |
 | `--port N` | A local TCP port | `tune`, `menus` |
+| `--udp-port N`, `--tcp-port N` | Limit an impairment to one port's UDP or TCP | `lan netem` |
 | `--rebuild` | Replace the map's script first | `fresh` |
 | `--no-quick` | Don't send the quick-match chat command | `fresh` |
 | `--watch` | Keep running and act on every save | `hot` |
