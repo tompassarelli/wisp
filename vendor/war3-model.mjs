@@ -6132,8 +6132,8 @@ var ParticlesController = class {
 		const variation = this.interp.animVectorVal(emitter.props.Variation, 0);
 		const latitude = degToRad(this.interp.animVectorVal(emitter.props.Latitude, 0));
 		particle.emitter = emitter;
-		particle.pos[0] = emitter.props.PivotPoint[0] + rand(-width, width);
-		particle.pos[1] = emitter.props.PivotPoint[1] + rand(-length, length);
+		particle.pos[0] = emitter.props.PivotPoint[0] + rand(-width / 2, width / 2);
+		particle.pos[1] = emitter.props.PivotPoint[1] + rand(-length / 2, length / 2);
 		particle.pos[2] = emitter.props.PivotPoint[2];
 		transformMat4(particle.pos, particle.pos, emitterMatrix);
 		if (variation > 0) speedScale *= 1 + rand(-variation, variation);

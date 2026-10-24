@@ -959,6 +959,63 @@ reproducing a captured pose, not infer it from the simulation step count.
 [configuration](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/parsers/jass/Jass2.java#L9394-L9403),
 [render and simulation timing](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/w3x/War3MapViewer.java#L1140-L1207).
 
+## ParticleEmitter2 emission area and blending (wisp#22)
+
+`Abilities\Spells\Other\ImmolationRed\ImmolationRedTarget.mdx` carries one
+emitter, BlizParticle06: tail only, ModelSpace and Unshaded, additive,
+Speed 160, Latitude 0, TailLength 1, LifeSpan 0.7 s, EmissionRate 50,
+Width and Length 60, scaling 25.8, 14.7 and 0.4, Clouds8x8 cell 0 for its
+whole tail, and its pivot 47 units above the model's origin. Smashcraft's
+full-bar aura places it at scale 1.34 on Jaina, 18 units above her feet
+(the Rifleman's at 1.18 and 13 units).
+
+The reference is native Classic running, not paused: build 3.0.0.24268,
+Ahn'Qiraj, 1280x720, both fighters' auras on, 263 distinct frames over
+8 s and aura-off frames of the same spot. The headless frames are pad
+frames 120-220 of the same setup and camera; the boots land within 3
+pixels of native. One method measures both: a pixel is flame when its
+red rises at least 40 over the brightest aura-off frame, its RGB sum at
+least 60, its hue is 0-60 degrees and its saturation at least 0.3, and a
+row counts with 3 such pixels. Native Jaina: median 121 pixels above her
+lowest boot pixel, 107 below, flame pixels spanning x 241-403 (5th-95th
+percentile), cores clipped to 255,255,178 in every frame, and the brightest
+pixel with saturation at least 0.5 at 255,255,126. The held captures
+measured earlier (94 above, 4 below) were not the running effect.
+
+- **Blending (confirmed).** Classic adds particles in display (sRGB-encoded)
+  colour. With display-colour blending every headless frame clips to
+  native's 255,255,178 and 255,255,123-127; blending in linear light and
+  encoding afterwards never reaches green 255 (202-237).
+- **Emission area (source-researched and confirmed).** Warsmash takes
+  Width and Length as the full sides of the emission rectangle
+  ([particle birth](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/mdx/Particle2.java#L42-L62)).
+  The vendored renderer used them as half sides. Full sides spread the
+  flames to x 227-403 and put 2121 flame pixels in the band 0-20 pixels
+  below the feet; half sides give x 239-400 and 1468, against native's
+  241-403 and 1378.
+- **Tail (source-researched).** Warsmash and the vendored renderer both
+  draw a tail from the particle back along its velocity, TailLength ×
+  velocity long, as wide as the particle's current scale, with the texture
+  cell's columns along its length
+  ([tail geometry](https://github.com/Retera/WarsmashModEngine/blob/f9e0aeed4be372d6016519d0e97b384aa873f374/core/src/com/etheller/warsmash/viewer5/handlers/mdx/GeometryEmitterFuncs.java#L133-L170)).
+  A newborn particle's tail reaches about 130 units below the feet, which
+  is why running flames hang down the deck's front face in both renderers.
+- **Placement (measured, cause open).** With both fixes, headless flames
+  still reach about 199 pixels above Jaina's feet against native's 121.
+  Native matches the whole effect drawn at scale 1 with its origin at the
+  feet: Jaina then measures 121 above, 118 below, x 239-400, and the
+  Rifleman 119 above and 116 below against native's 125 and 107. Scale 1
+  alone gives 153 above and 84 below; at scale 1, dropping the lift moves
+  the top and bottom down together by 20-30 pixels. Drawing only the particles at scale 1
+  leaves the geosets' floor glow about 1.3 times as wide as in the
+  whole-effect render, which matches native, so the scale native drops is
+  the effect's, not just its particles'. Which call Classic
+  doesn't apply (`BlzSetSpecialEffectScale`, the Z of
+  `BlzSetSpecialEffectPosition`, or both after
+  `BlzSetSpecialEffectAnimation`) is not yet measured; the map re-places the
+  effect with its lift every frame
+  ([wisp#46](https://github.com/tompassarelli/wisp/issues/46)).
+
 ## Browser player: asset readiness and pacing for #48
 
 The browser-focused [ErikSom HTML fork](https://github.com/ErikSom/WarsmashModEngine/tree/d69e772b4dede6fd3569f9949a3180cdfea4635b)

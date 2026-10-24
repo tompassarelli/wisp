@@ -323,7 +323,6 @@ async function drawEffect(pose: EffectPose, view: ReturnType<typeof camera>, lig
   emitterInventory(pose, data, sampler, placed, popcornEmitters, unsupportedEmitters);
   const sun = shadows.sun;
   renderer.setWispEnvironment({
-    linearOutput: true,
     ...(light === undefined ? {} : { light: { direction: modelDirection(placed, light.toward), key: light.key, ambient: light.ambient, linear: light.linear, overbright: false } }), ...(fog === undefined ? {} : { fog }),
     ...(sun === undefined ? {} : { shadow: { map: sun.map, matrix: multiply(sun.viewProjection, placed), bias: sun.bias, texel: sun.texel } }),
   });
@@ -346,7 +345,7 @@ async function drawSky(scene: RenderScene, view: ReturnType<typeof camera>) {
   if (data.Sequences.length > 0) { renderer.setSequence(0); show(renderer as unknown as Sampler, data, { sequence: 0, frame: data.Sequences[0]?.Interval[0] ?? 0 }); }
   renderer.update(0);
   const fog = sceneFog(scene, view, true);
-  renderer.setWispEnvironment({ linearOutput: true, ...(fog === undefined ? {} : { fog }) });
+  renderer.setWispEnvironment(fog === undefined ? {} : { fog });
   bindScene();
   renderer.render(multiply(view.view, placed), view.skyProjection, {});
 
@@ -525,7 +524,7 @@ window.prepareScene = async (scene, extraModels = [], progress) => {
   return { models: models.size, instances: instances.size + preparedModels.size, textures: textures.size };
 };
 window.renderScene = async (scene, options) => {
-  bindScene(); gl.depthMask(true); gl.clearColor(0.04 / 12.92, ((0.06 + 0.055) / 1.055) ** 2.4, ((0.09 + 0.055) / 1.055) ** 2.4, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
+  bindScene(); gl.depthMask(true); gl.clearColor(0.04, 0.06, 0.09, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
   const view = camera(scene, canvas.width / canvas.height);
   const visible: EffectPose[] = [], notDrawn: string[] = [], popcornEmitters: PopcornEmitterPose[] = [], unsupportedEmitters: UnsupportedEmitterPose[] = [];
   let poses: readonly EffectPose[] = scene.effects;

@@ -62,11 +62,11 @@ function colorTexture(gl: WebGL2RenderingContext, width: number, height: number)
   return texture;
 }
 export function sceneTarget(gl: WebGL2RenderingContext, width: number, height: number): SceneTarget {
-  if (gl.getExtension("EXT_color_buffer_float") === null) throw new Error("linear HDR requires EXT_color_buffer_float");
+  if (gl.getExtension("EXT_color_buffer_float") === null) throw new Error("the scene target requires EXT_color_buffer_float");
   const colorSamples = Array.from(gl.getInternalformatParameter(gl.RENDERBUFFER, gl.RGBA16F, gl.SAMPLES) as Int32Array);
   const depthSamples = Array.from(gl.getInternalformatParameter(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, gl.SAMPLES) as Int32Array);
   const samples = Math.min(4, ...colorSamples.filter(value => depthSamples.includes(value)));
-  if (!Number.isFinite(samples)) throw new Error("linear HDR requires multisampled RGBA16F colour and depth");
+  if (!Number.isFinite(samples)) throw new Error("the scene target requires multisampled RGBA16F colour and depth");
   const framebuffer = gl.createFramebuffer(), colorBuffer = gl.createRenderbuffer(), depthBuffer = gl.createRenderbuffer();
   gl.bindRenderbuffer(gl.RENDERBUFFER, colorBuffer); gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.RGBA16F, width, height);
   gl.bindRenderbuffer(gl.RENDERBUFFER, depthBuffer); gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH_COMPONENT24, width, height);
@@ -104,9 +104,7 @@ precision highp float;
 in vec2 uv; out vec4 fragment;
 uniform sampler2D scene;
 void main() {
-  vec3 base = max(texture(scene, uv).rgb, 0.0);
-  vec3 encoded = mix(1.055 * pow(base, vec3(1.0 / 2.4)) - 0.055, 12.92 * base, lessThanEqual(base, vec3(0.0031308)));
-  fragment = vec4(encoded, 1.0);
+  fragment = vec4(clamp(texture(scene, uv).rgb, 0.0, 1.0), 1.0);
 }`;
 
 export function postProcessor(gl: WebGL2RenderingContext, target: SceneTarget) {

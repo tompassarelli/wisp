@@ -935,13 +935,15 @@ saves them as the scene's `environment`.
   loses only the key light; ambient light stays. Layers that write no
   depth (blended, additive, particles, ribbons) cast none. `render.json`
   records `shadows.sun` per frame.
-- **Colour pipeline.** Scene colour and resolve targets are linear
-  `RGBA16F`; WebGL2 requires `EXT_color_buffer_float` and a shared
-  colour/depth multisample count. Model, sky, terrain and water colours
-  enter this buffer decoded from sRGB; SD lighting keeps its existing
-  material terms, with its result decoded before fog and blending; P6 owns
-  the lighting equations. The piecewise sRGB transfer then encodes the
-  output once, with display-range clipping. UI and cinematic filters overlay
+- **Colour pipeline.** Scene colour and resolve targets are `RGBA16F`;
+  WebGL2 requires `EXT_color_buffer_float` and a shared colour/depth
+  multisample count. Colours stay in display (sRGB-encoded) values from
+  texture to output, so fog mixes, alpha blending and additive layers combine
+  display values as Classic does; the output pass only clips to the display
+  range. Running Classic flames confirm it
+  ([wisp#22](https://github.com/tompassarelli/wisp/issues/22),
+  wisp:docs/warsmash-notes.md, "ParticleEmitter2 emission area and
+  blending"). UI and cinematic filters overlay
   this display output.
 - **Not drawn.** Terrain lighting; `--look terrain` fails
   ([Graphics profiles](#graphics-profiles)).

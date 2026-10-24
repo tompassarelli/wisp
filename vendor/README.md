@@ -31,7 +31,9 @@ alpha (`setInstanceAlpha`, an effect's alpha) into the fragment alpha, and
 additive layers blend with (source alpha, one), as the MDX filter mode tables
 describe. `layerOpacity` and `layerBlendFactors` export those rules. Particle texture cells run row by row and repeat past
 the grid's last cell. A squirt emitter fires only on a time step that reaches
-its key, never on a zero-length pose refresh.
+its key, never on a zero-length pose refresh. ParticleEmitter2 Width and Length are the
+full sides of the emission rectangle, as Warsmash reads them (wisp#22); this
+edit is made in the vendored build only.
 
 Opaque SD and HD layers enable source-alpha blending when the model's
 instance alpha is below one, keeping their depth test and depth writes.
