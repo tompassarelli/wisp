@@ -8,6 +8,7 @@ use relay_proto::control::{self, Control, Refusal};
 use relay_proto::relay::Relay;
 use relay_proto::lobby::{LobbyTiming, HOST_TIMING};
 use relay_proto::stream::KIND_STREAM;
+use relay_proto::transport::Transport;
 use relay_proto::wire::{KIND_UP, KIND_UP_COVER};
 use relay_proto::Micros;
 
@@ -15,7 +16,7 @@ use crate::game_room::GameRoom;
 use crate::path::{send_down, Delivery, Path};
 use crate::room::{Room, Slot};
 
-pub use crate::path::{Out, AMPLIFICATION};
+pub use crate::path::{Out, Peer, AMPLIFICATION};
 pub use crate::room::REPORT_US;
 
 #[derive(Clone, Debug)]
@@ -103,28 +104,36 @@ impl Server {
         self.rooms.len()
     }
 
+    pub fn holds(&self, peer: Peer) -> bool {
+        self.rooms
+            .values()
+            .flat_map(|r| &r.slots)
+            .any(|s| !s.left && s.path.as_ref().is_some_and(|p| p.addr == peer))
+    }
+
     pub fn take_log(&mut self) -> Vec<String> {
         std::mem::take(&mut self.log)
     }
 
-    pub fn cookie(&self, addr: SocketAddr, now: Micros) -> u64 {
-        self.cookie_at(addr, now.div_euclid(self.cfg.cookie_epoch_us))
+    pub fn cookie(&self, peer: impl Into<Peer>, now: Micros) -> u64 {
+        self.cookie_at(peer.into(), now.div_euclid(self.cfg.cookie_epoch_us))
     }
 
-    fn cookie_at(&self, addr: SocketAddr, epoch: Micros) -> u64 {
+    fn cookie_at(&self, peer: Peer, epoch: Micros) -> u64 {
         let mut h = self.key.build_hasher();
         epoch.hash(&mut h);
-        addr.hash(&mut h);
+        peer.addr.hash(&mut h);
+        (peer.via == Transport::Tcp).hash(&mut h);
         h.finish() | 1
     }
 
-    fn cookie_ok(&self, addr: SocketAddr, cookie: u64, now: Micros) -> bool {
+    fn cookie_ok(&self, addr: Peer, cookie: u64, now: Micros) -> bool {
         let epoch = now.div_euclid(self.cfg.cookie_epoch_us);
         cookie != 0
             && (cookie == self.cookie_at(addr, epoch) || cookie == self.cookie_at(addr, epoch - 1))
     }
 
-    fn challenge(&mut self, addr: SocketAddr, now: Micros) -> Vec<u8> {
+    fn challenge(&mut self, addr: Peer, now: Micros) -> Vec<u8> {
         self.stats.challenges += 1;
         control::encode(&Control::Challenge {
             cookie: self.cookie(addr, now),
@@ -157,6 +166,10 @@ impl Server {
     }
 
     pub fn on_datagram(&mut self, now: Micros, from: SocketAddr, bytes: &[u8], out: &mut Out) {
+        self.on_packet(now, from.into(), bytes, out);
+    }
+
+    pub fn on_packet(&mut self, now: Micros, from: Peer, bytes: &[u8], out: &mut Out) {
         match control::kind(bytes) {
             Some(KIND_UP | KIND_UP_COVER) => self.on_up(now, from, bytes, out),
             Some(KIND_STREAM) => self.on_stream(now, from, bytes),
@@ -169,7 +182,7 @@ impl Server {
         }
     }
 
-    fn on_control(&mut self, now: Micros, from: SocketAddr, c: Control, out: &mut Out) {
+    fn on_control(&mut self, now: Micros, from: Peer, c: Control, out: &mut Out) {
         match c {
             Control::Create {
                 cookie,
@@ -243,7 +256,7 @@ impl Server {
         control::encode(&Control::Refused { request, reason })
     }
 
-    fn create(&mut self, now: Micros, from: SocketAddr, request: u64, players: u8) -> Vec<u8> {
+    fn create(&mut self, now: Micros, from: Peer, request: u64, players: u8) -> Vec<u8> {
         let steps = self.cfg.steps_ms.clone();
         if let Some((&id, room)) = self
             .rooms
@@ -259,7 +272,7 @@ impl Server {
             return self.refuse(request, Refusal::Busy);
         }
         let window = self.cfg.rate_window_us;
-        let entry = self.creations.entry(from.ip()).or_insert((now, 0));
+        let entry = self.creations.entry(from.addr.ip()).or_insert((now, 0));
         if now - entry.0 >= window {
             *entry = (now, 0);
         }
@@ -300,7 +313,7 @@ impl Server {
         reply
     }
 
-    fn join(&mut self, now: Micros, from: SocketAddr, request: u64, id: u64) -> Vec<u8> {
+    fn join(&mut self, now: Micros, from: Peer, request: u64, id: u64) -> Vec<u8> {
         let steps = self.cfg.steps_ms.clone();
         let Some(room) = self.rooms.get_mut(&id) else {
             return self.refuse(request, Refusal::NoRoom);
@@ -324,7 +337,7 @@ impl Server {
         room.reply(id, i, request, &steps)
     }
 
-    fn on_stream(&mut self, now: Micros, from: SocketAddr, bytes: &[u8]) {
+    fn on_stream(&mut self, now: Micros, from: Peer, bytes: &[u8]) {
         let Some(&(id, index)) = control::token(bytes).and_then(|t| self.tokens.get(&t)) else {
             return;
         };
@@ -336,7 +349,7 @@ impl Server {
         room.game.on_stream(now, index, bytes);
     }
 
-    fn on_up(&mut self, now: Micros, from: SocketAddr, bytes: &[u8], out: &mut Out) {
+    fn on_up(&mut self, now: Micros, from: Peer, bytes: &[u8], out: &mut Out) {
         let Some(&(id, index)) = control::token(bytes).and_then(|t| self.tokens.get(&t)) else {
             return;
         };
@@ -363,7 +376,7 @@ impl Server {
         if !path.verified {
             path.received += bytes.len() as u64;
         }
-        let _ = room.relay.on_packet(bytes);
+        let _ = room.relay.on_packet_via(bytes, from.via);
         if !path.verified
             && path
                 .last_challenge

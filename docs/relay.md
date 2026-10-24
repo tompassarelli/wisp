@@ -440,6 +440,18 @@ TCP from then on.
   is recovered by one retransmission timer per connection, RTT + 200 ms
   doubling up to 120 s, after which the queued segments flow again. The
   connection opens one RTT after the switch.
+- **Relay binary (wisp#49).** `relay --bind ADDR` binds TCP on the UDP
+  socket's address and port. One thread reads UDP, one accepts TCP, and each
+  connection has a reader and a writer thread; all feed one bounded queue
+  that the server loop drains, and replies to a TCP player go out on its
+  connection. A TCP peer is a different address from a UDP peer on the same
+  IP and port, cookie included. Limits are in "Where the relay runs" below;
+  `--tcp-idle-ms` sets the idle limit. `relay/tests/tcp.rs` runs the binary
+  with one `relay-agent` UDP link and one framed TCP agent for 250 turns
+  (same turns in order, each side's actions land once and in order, no
+  desync) and checks the ninth connection from one address, an oversized
+  frame, a silent connection and a chatty one that holds no room slot are
+  each closed.
 - **Property test** (`relay-proto/tests/property.rs`): the first 48 of the
   128 scenarios rerun with UDP dropped entirely for every agent (the lobby
   and outages moved 3 s later so the lobby outlasts the fallback). Every
@@ -950,13 +962,21 @@ Built for wisp#37 (code box), in `relay/`:
   UDP port on either server widens access, so R10 asks Tom first; he approved
   Nexus's on 25 October 2026. A second region waits until measured player
   RTTs call for one.
-- **Port.** The public relay listens on UDP 7457, the binary's default
-  `--bind` port, and nothing else. It runs on Nexus as a sandboxed systemd
-  service: a dynamic user, a read-only filesystem, no capabilities, and a
-  socket bind allowed only on UDP 7457, which is the one port its firewall
-  rule opens. The `relay` binary has no TCP listener yet, so the TCP
-  fallback (Transport, above) reaches the public relay only once it gains
-  one on TCP 7457 (tompassarelli/wisp#49).
+- **Ports.** The relay binary listens on two ports at its `--bind` address:
+  UDP 7457, the default, and TCP 7457 for the agent's fallback (Transport,
+  above). The public relay on Nexus runs as a sandboxed systemd service: a
+  dynamic user, a read-only filesystem, no capabilities, and a socket bind
+  allowed only on UDP 7457, which is the one port its firewall rule opens.
+  TCP 7457 is the second port; it is a separate opening, so the service's
+  `SocketBindAllow=tcp:7457` and the firewall rules for it wait on their own
+  approval after a security review of the listener (tompassarelli/wisp#49),
+  and until then the fallback cannot reach the public relay. The TCP
+  listener holds at most 8 connections per address (per /64 for IPv6) and
+  256 in all, counted from accept, refuses a frame over 1200 bytes, closes a
+  connection that sends no frame for 15 s or holds no room slot 15 s after
+  opening, and drops one that falls 128 packets behind. TCP events take at
+  most half of the shared queue and are dropped beyond it, so a TCP flood
+  never stalls the UDP reader.
 - **NAT.** Every agent sends first, to the relay's public address, so no hole
   punching, STUN or port forwarding is needed. CGNAT works. Traffic every
   turn period keeps NAT mappings open; in the lobby the agent sends at least

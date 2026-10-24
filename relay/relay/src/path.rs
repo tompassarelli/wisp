@@ -1,11 +1,42 @@
 use std::net::SocketAddr;
 
+use relay_proto::transport::Transport;
 use relay_proto::wire::{self, Down, Packet, DOWN_HEADER, MAX_PACKET};
 use relay_proto::Micros;
 
 pub const AMPLIFICATION: u64 = 3;
 
-pub type Out = Vec<(SocketAddr, Vec<u8>)>;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Peer {
+    pub addr: SocketAddr,
+    pub via: Transport,
+}
+
+impl Peer {
+    pub fn tcp(addr: SocketAddr) -> Self {
+        Peer {
+            addr,
+            via: Transport::Tcp,
+        }
+    }
+}
+
+impl From<SocketAddr> for Peer {
+    fn from(addr: SocketAddr) -> Self {
+        Peer {
+            addr,
+            via: Transport::Udp,
+        }
+    }
+}
+
+impl PartialEq<SocketAddr> for Peer {
+    fn eq(&self, other: &SocketAddr) -> bool {
+        *self == Peer::from(*other)
+    }
+}
+
+pub type Out = Vec<(Peer, Vec<u8>)>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Delivery {
@@ -17,7 +48,7 @@ pub(crate) enum Delivery {
 
 #[derive(Debug)]
 pub(crate) struct Path {
-    pub(crate) addr: SocketAddr,
+    pub(crate) addr: Peer,
     pub(crate) verified: bool,
     pub(crate) received: u64,
     pub(crate) sent: u64,
@@ -25,7 +56,7 @@ pub(crate) struct Path {
 }
 
 impl Path {
-    pub(crate) fn verified(addr: SocketAddr) -> Self {
+    pub(crate) fn verified(addr: Peer) -> Self {
         Path {
             addr,
             verified: true,
@@ -39,7 +70,7 @@ impl Path {
         (AMPLIFICATION * self.received).saturating_sub(self.sent)
     }
 
-    pub(crate) fn send(&mut self, bytes: Vec<u8>, out: &mut Vec<(SocketAddr, Vec<u8>)>) -> bool {
+    pub(crate) fn send(&mut self, bytes: Vec<u8>, out: &mut Out) -> bool {
         if !self.verified {
             if bytes.len() as u64 > self.budget() {
                 return false;

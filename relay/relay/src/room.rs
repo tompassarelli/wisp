@@ -1,4 +1,3 @@
-use std::net::SocketAddr;
 
 use relay_proto::cadence::Cadence;
 use relay_proto::control::{self, Control};
@@ -6,7 +5,7 @@ use relay_proto::relay::Relay;
 use relay_proto::Micros;
 
 use crate::game_room::GameRoom;
-use crate::path::{Out, Path};
+use crate::path::{Out, Path, Peer};
 
 pub const REPORT_US: Micros = 5_000_000;
 
@@ -14,7 +13,7 @@ pub const REPORT_US: Micros = 5_000_000;
 pub(crate) struct Slot {
     pub(crate) token: u64,
     pub(crate) path: Option<Path>,
-    pub(crate) joined_by: Option<(SocketAddr, u64)>,
+    pub(crate) joined_by: Option<(Peer, u64)>,
     pub(crate) left: bool,
 }
 
