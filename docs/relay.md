@@ -1,6 +1,6 @@
 # Wisp's online relay (plan)
 
-Status: planned, 24 October 2026. Epic: wisp#EPIC. Nothing here is built
+Status: planned, 24 October 2026. Epic: wisp#28. Nothing here is built
 yet; each section names the box that builds or measures it.
 
 Smashcraft's online matches run on Battle.net's turns today. On 24 October
@@ -15,10 +15,13 @@ Measured facts, each with its source:
 
 - **Steady turns matter most.** On the offline LAN pool (3.0.0.24268, gex45,
   24 October), a client runs one 60 Hz callback per rendered frame whatever
-  the turn length. With turns paced against deadlines, 25 ms and 17/17/16 ms
-  turns both saw every tap with a one-frame press-to-sample spread, as a solo
-  game does. With the earlier pacer, whose steps jittered, 7–11% of taps were
-  lost and spreads reached 2–5 frames
+  the turn length. With turns paced against deadlines and light input, 25 ms
+  and 17/17/16 ms turns lost at most 2 of about 190 taps per client, with a
+  one-frame press-to-sample spread, as a solo game does. Heavy input at
+  17/17/16 spread over 2 frames. The sweep found no sampling gain from
+  17/17/16 over a paced 25 ms and kept Wisp's pool default at 25 ms, the grid
+  Battle.net players get. With the earlier pacer, whose steps jittered,
+  7–11% of taps were lost and spreads reached 2–5 frames
   (smashcraft:docs/warcraft-api-netcode-findings.md, "Input sampling against
   the LAN host's turn interval").
 - **Turn length still sets a latency floor.** The host forwards an action at
@@ -26,7 +29,16 @@ Measured facts, each with its source:
   other player receives it: 12.5 ms at 25 ms, 8.3 ms at 17/17/16. Tom asked on
   24 October for the shortest turn Warcraft handles cleanly, with even pacing
   too. 17/17/16 is one turn per 60 Hz frame and ran with no desync and
-  normal CPU; 10 and 8 ms are not yet measured (box R2).
+  normal CPU; 10 and 8 ms are not yet measured (box R2). The relay is not
+  the pool, so it takes the lower floor.
+- **Smashcraft's delay and rollback budget.** Smashcraft sets one input delay
+  for every player from its own sync-message echoes
+  (smashcraft:ts/src/host/loop/netDelay.ts), and those echoes will pass
+  through the relay and the agents' buffers. The delay and the rollback
+  budget (6 frames in a duel, 8 with three or more humans,
+  smashcraft:ts/src/game/netcode/delayPolicy.ts) change only outside a match.
+  So the agent's buffer depth must settle before a match starts, and depth
+  added mid-match turns into rollback past the budget.
 - **The internet path is where turns get uneven.** W3Champions' FLO forwards
   turns over one TCP stream (crates/net/src/stream.rs) and its client passes
   them to Warcraft as they arrive. A lost TCP segment holds every later turn
@@ -71,8 +83,9 @@ That last fact splits the plan in two:
   host its own Warcraft III sees: it runs the lobby (slots, the other
   players, the map check, countdown and loading) and then writes turns to the
   game. It sends the game's actions, checksums, chat and leave to the relay.
-  Between relay and game sits the jitter buffer, which writes one turn to the
-  game every turn period, a fixed depth behind the newest turn received.
+  Between relay and game sits the jitter buffer, which writes each turn to
+  the game at a feed time anchored to the relay's clock (Jitter buffer,
+  below).
 - **Wisp's LAN host** (wisp:host/lan/host.ts) stays the pool's host and is
   the reference the agent's lobby is ported from.
 
@@ -86,10 +99,14 @@ That last fact splits the plan in two:
   at a fractional period fires about 107 times a second, so the relay uses
   no periodic timer, only deadlines.
 - Default: 17/17/16. R2 measures 10 ms and 8 ms turns. A shorter turn
-  becomes the default only if it keeps zero desyncs, game pace 1.000, every
-  tap seen and client CPU within 10% of 17/17/16's. A turn shorter than a
-  frame carries no callback some of the time, so its only gain is the lower
-  forwarding floor (5 ms or 4 ms mean).
+  becomes the default only if, against 17/17/16 measured in the same session,
+  it keeps zero desyncs and game pace 1.000 ± 0.002, loses no more taps, and
+  adds at most 0.2 cores across both clients. A turn shorter than a frame
+  carries no callback some of the time, so its only gain is the lower
+  forwarding floor (5 ms or 4 ms mean). Buffer depth and lag limits are kept
+  in milliseconds, so they hold whatever the turn length.
+- After the relay stops its clock (lag, below), the next turn's deadline is
+  rebased to the restart time, so no backlog of turns fires at once.
 - R1 is the pool host's own change: deadline pacing and `--turn-ms 17,17,16`
   in host.ts. turnrate-sweep built it (wisp lane `lan-turn-25`).
 
@@ -99,11 +116,11 @@ Tom set the direction on 24 October: the fastest, lowest-overhead protocol
 that meets the goals. Raw UDP with redundant turn history is the default.
 Anything more is added only when a measurement shows a need.
 
-**Downstream (relay to agent).** Each packet carries the newest turn and
-every earlier turn the agent hasn't acknowledged, up to 1,200 bytes. A lost
-packet is repaired by the next one, one turn period later, with no timer and
-no retransmission. Wisp's own transport already works this way
-(wisp:docs/network-model.md, "Packets").
+**Downstream (relay to agent).** Each packet carries every turn the agent
+hasn't acknowledged, oldest first, up to 1,200 bytes; the oldest is due
+soonest. A lost packet is repaired by the next one, one turn period later,
+with no timer and no retransmission. Wisp's own transport already works this
+way (wisp:docs/network-model.md, "Packets").
 
 **Upstream (agent to relay).** The agent sends a packet as soon as the game
 hands it an action, and then one each turn period. Each packet carries every
@@ -111,11 +128,20 @@ action the relay hasn't acknowledged, plus the agent's acknowledgement of
 turns and its newest checksums. The relay puts each action in the first turn
 it emits after the action arrives, and acknowledges it in the next turn.
 
-**Why it is enough.** A turn reaches the agent late only if every packet that
-carries it before its feed time is lost. At depth D that is D + 1 packets.
-With independent loss p, the late rate is p^(D+1): at 5% loss, 1.3 × 10⁻⁴
-for D = 2 and 6 × 10⁻⁶ for D = 3; at 1% loss, 10⁻⁶ for D = 2. Bursty loss
-and delay jitter need more depth, and the bench (R6) measures how much.
+**Why it is enough.** With feed times anchored to the relay's clock (Jitter
+buffer, below), a turn is fed late only if every packet carrying it before
+its feed time is lost: at depth D, D + 1 packets. With independent loss p,
+the late rate per turn is p^(D+1). At 60 turns a second the plan's bar, one
+underrun per 10 minutes, is 2.8 × 10⁻⁵ per turn.
+
+- At 5% loss, D = 2 gives 1.25 × 10⁻⁴ (an underrun every 2.2 minutes) and
+  D = 3 gives 6.3 × 10⁻⁶ (one every 44 minutes). So 5% loss needs D = 3,
+  50 ms.
+- At 1% loss, D = 2 gives 10⁻⁶.
+- Real loss comes in bursts (Wi-Fi, cellular), which needs more depth. The
+  bench (R6) runs Gilbert-Elliott burst models and loss traces recorded on a
+  real path (R10), and the bar is judged there: a 5-minute native run sees
+  the bar's rate too rarely to test it.
 
 **Compared with QUIC (RFC 9000, 9002, 9221).**
 
@@ -137,36 +163,67 @@ and delay jitter need more depth, and the bench (R6) measures how much.
   QUIC but drop other UDP (`Target-debt` record below).
 
 **Packets.** Every packet starts with the player's 64-bit session token, so
-the relay keys a player by token, not by address. A NAT that rebinds the port
-mid-match costs nothing. The relay answers an unverified address with no
-more bytes than it received (a stateless cookie on the first exchange), so it
-can't be used to amplify an attack. Rooms close when a match ends or after
-10 idle minutes, and room creation is rate-limited per address. Nothing is
-encrypted: a match's actions are public in its replay anyway. An attacker on
-the path can still forge actions, and the first version accepts that.
+the relay keys a player by token, not by address. The relay sends an
+unverified address at most three times the bytes it received from it, as
+QUIC does (RFC 9000, section 8), until a stateless cookie round trip
+verifies it, so it can't be used to amplify an attack.
+
+- **NAT rebinding.** A NAT that changes the port mid-match gives a new,
+  unverified address. While the cookie round trip completes, the relay keeps
+  sending every turn there, trimming each packet's history to fit the
+  three-times budget (the agent sends about 60 packets a second, so a turn or
+  two of history fits). A rebind costs at most one RTT of thinner
+  redundancy, not a stall. R10 measures it.
+- **Limits.** Rooms close when a match ends or after 10 idle minutes, and
+  room creation is rate-limited per address.
+- **Not defended.** Nothing is encrypted, because a match's actions are
+  public in its replay anyway. The token travels in the clear, so an attacker
+  on the path can forge actions or take over a player's stream. The first
+  version accepts that (Deferred, below).
 
 ## Jitter buffer (boxes R6, R9, C2)
 
-The agent holds turns and writes one to the game per turn period on its own
-deadline clock, D turns behind the newest turn it has. D starts at 2
-(33 ms).
+The agent writes turn k to the game at its feed time
 
-- **Underrun.** When the next turn hasn't arrived at its feed time, the agent
-  waits. Warcraft simply runs no turn, and the wait adds a turn of depth,
-  which the agent keeps.
-- **Shrink and drift.** The agent watches the slack, how early turns arrive
-  before their feed time. After 30 s with no underrun and the minimum slack
-  above one turn, it shortens feed intervals by at most 1 ms a turn until one
-  turn of depth is gone. The same slew of up to 1 ms a turn keeps the depth
-  steady against clock drift between relay and agent (100 ppm is about four
-  turns over 10 minutes). Wisp's transport already slews this way
-  (`paceShift`). Game steps stay the relay's 17/17/16 ms, so game time
-  follows the relay, not the agent's slew.
-- **Ceiling.** D is at most 6 (100 ms). Beyond that the link is reported as
-  too poor; turns are not dropped.
+```text
+feed(k) = anchor + relayTime(k) + depth
+```
+
+where relayTime(k) is the sum of the steps before turn k (k × 50/3 ms at
+17/17/16), depth is in milliseconds (D turns of the current turn length),
+and anchor is the agent's estimate of when turn 0 would arrive on its fastest
+path. The anchor comes from the arrivals themselves: it is a low percentile
+(the 5th) of arrival(k) − relayTime(k) over the last 10 s, so jitter and loss
+don't move it. Anchoring to time, not to the newest turn received, is what
+makes the late rate p^(D+1) rather than about p.
+
+- **Choosing depth before the match.** Smashcraft fixes its input delay and
+  rollback budget for a whole match, so depth must settle before turns
+  start. During the lobby and loading, the relay and agent exchange packets
+  every turn period, and the agent measures loss, burst length and the
+  spread of arrival(k) − relayTime(k). It picks the smallest D whose
+  predicted late rate meets the bar: D = 2 on a clean link, 3 at around 5%
+  loss. Smashcraft's echo then measures the delay players actually get.
+- **Underrun.** When turn k hasn't arrived by feed(k), the agent waits.
+  Warcraft runs no turn. The agent keeps the depth the wait added, up to one
+  turn more than the chosen D.
+- **Catch-up.** After an outage, such as a blackout of a second, the backlog
+  is far deeper than D, and draining it at 1 ms a turn would take tens of
+  seconds of deep rollback. When depth exceeds D + 2 turns, the agent feeds
+  turns every 4 ms until it is back to D + 1 turns, a burst of fast game time
+  like the one the relay's lag stop ends with. R9 measures it with an
+  injected blackout.
+- **Drift.** The 1 ms-a-turn slew (as Wisp's transport's `paceShift`) is
+  only for clock drift between relay and agent (100 ppm is about four turns
+  over 10 minutes) and for returning from D + 1 to D after 30 s without an
+  underrun. Game steps stay the relay's, so game time follows the relay,
+  not the slew.
+- **Ceiling.** If the chosen D would exceed 6 turns (100 ms), the client
+  reports the link as too poor before the match. Turns are never dropped.
 - **Timers.** The agent needs millisecond deadlines. On Windows it uses a
   high-resolution waitable timer, because default sleeps are 15.6 ms
-  granular. C2 checks the feed schedule on Windows and Linux.
+  granular. C2 checks the feed schedule on Windows and Linux. The loopback
+  TCP to the game sets `TCP_NODELAY`.
 
 **How it meets Smashcraft's frame-stamped inputs and rollback.** Smashcraft
 stamps each input row with the frame it was sampled on and applies a remote
@@ -178,7 +235,12 @@ row at its stamp, rolling back when the row arrives late
   f reaches the relay one-way-up(A) later and goes into the next turn. B runs
   that turn at frame k, where k − f ≈ RTT(A)/16.7 + D_A + the turn wait. So
   A's link and A's buffer set how far B must roll back for A's inputs.
-  Smashcraft's own input delay subtracts from that depth.
+  Smashcraft's own input delay subtracts from that depth. At 100 ms RTT and
+  D = 2 that is about 8.5 frames before delay; at 200 ms and D = 3 about
+  15.5. Smashcraft's echo-measured delay absorbs most of it, and the rest
+  must fit the rollback budget (6 in a duel, 8 for groups). Box S1 reruns
+  Smashcraft's rollback-budget sweep under the relay's paced delivery to
+  set those budgets.
 - **Upstream jitter** moves a row into a later turn. The stamp keeps it on
   the right frame, so the cost is a deeper rollback, not a wrong frame.
 - **Downstream jitter** is what the buffer removes. Even turns give even
@@ -188,35 +250,51 @@ row at its stamp, rolling back when the row arrives late
   events in 8 of 10 client-runs. If a press only reads as held once its key
   event returns through the host, then RTT + D adds directly to the player's
   own input delay, and D must stay as small as the late rate allows. R3
-  measures this on the pool with netem.
-- **Taps.** Smashcraft#218 loses a tap when a stalled client sends its
-  press and release in one turn. Immediate upstream sends keep the two edges
-  in separate packets. A client stall is the game's own, and R9 counts
-  whether even feeding reduces it.
+  measures this on the pool with netem at 0, 100 and 200 ms. If reads wait
+  for the echo, the relay still evens turns and removes loss stalls, but its
+  latency counts in full: R9 then judges each cell by press-to-sample delay
+  as well as spread, and the relay's placement (one region near both
+  players) matters more than its depth.
+- **Taps.** Smashcraft#218 loses a tap when its press and release reach the
+  host in one turn. Separate packets don't prevent that: two packets less
+  than a turn apart land in the same turn, and a stalled client sends both
+  edges at once. The agent decodes its game's actions (as wisp:host/lan/actions.ts
+  does) and marks a key release whose press is still unacknowledged; the
+  relay puts a marked release at least one turn after its press. R8 builds
+  it and R9 counts taps.
 
 ## Lobby and game on the agent (box R8)
 
-The agent ports host.ts's lobby and game loop to Rust, from our own MIT code.
-W3Champions' FLO client (github.com/BogdanW3/W3C-Flo at `6db3a401`, MIT
-declared at that revision; earlier files were MPL-2.0, so no file's licence is
-assumed: wisp:docs/prior-art.md) is read for facts only, chiefly
-`crates/lan` and `crates/client`: how a remote node is shown to Warcraft as a
-local game, and the lobby of remote players. No FLO code is copied.
+The agent ports host.ts's lobby and game loop to Rust. host.ts is Wisp's
+own MIT code, but its first line says its join and game-loop layouts follow
+FLO's (then MPL-2.0) and wc3-slop-lan's notes. So R8 starts with a licence
+check under the external-code rules: it confirms the port carries protocol
+facts (message order and fields), not FLO's expression, and records that in
+wisp:docs/prior-art.md. W3Champions' FLO client (github.com/BogdanW3/W3C-Flo
+at `6db3a401`, MIT declared at that revision; earlier files were MPL-2.0, so
+no file's licence is assumed) is read for facts only, chiefly `crates/lan`
+and `crates/client`: how a remote node is shown to Warcraft as a local game,
+and the lobby of remote players. No FLO code is copied.
 
-- **Lobby.** The relay tells each agent the room: slots, players, map SHA-1
-  and size. Each agent shows the remote players to its game as joined players
-  (player info, skins, profiles, slot table) and runs the map check locally.
-  A player whose map differs is refused before the countdown, with both
-  hashes named.
+- **Lobby.** The relay tells each agent the room: slots, players, the map's
+  facts (size, SHA-1 and the game-files checksum, wisp:host/lan/map.ts) and
+  the random seed. The relay picks the seed once for the room, because a seed
+  per agent would desync the match at its start. Each agent shows the remote
+  players to its game as joined players (player info, skins, profiles, slot
+  table). It reads its own copy of the map, as host.ts's map facts do, and
+  the relay refuses a player whose facts differ before the countdown, naming
+  both SHA-1s.
 - **Start.** The relay starts the countdown for every agent at once. Each
   agent forwards its game's "loaded" to the relay. Agents show each remote
   player as loaded when the relay says so. Turns start when every player is
   loaded.
 - **Play.** Each relay turn becomes one W3GS turn with the relay's step.
-  Actions, checksums, chat and leave go to the relay. When a player falls
-  more than 3 s of turns behind, the relay stops the clock and agents show
-  Warcraft's lag screen. A player who stays away for 30 s is dropped as
-  having left.
+  Actions, checksums, chat and leave go to the relay. "Behind" is measured
+  as host.ts measures it, by checksums: a player whose agent has forwarded
+  checksums for fewer turns than the relay has emitted, by more than 1 s of
+  game time (host.ts allows 50 turns), makes the relay stop the clock, and
+  agents show Warcraft's lag screen. A player who stays away for 30 s is
+  dropped as having left. The clock then restarts from a rebased deadline.
 - **Conformance.** host.ts's `onPacket` hook records a pool session's bytes.
   The agent must produce the same lobby bytes for the same room. That
   transcript test keeps the two hosts from drifting.
@@ -244,83 +322,107 @@ local game, and the lobby of remote players. No FLO code is copied.
 
 ## Boxes
 
-wisp (epic wisp#EPIC):
+Each box is its own issue with its Done when; the epic tracks them.
+
+wisp (epic wisp#28):
 
 - **R0** Find a route from outside the game for an unmodified, signed-in
-  3.0.1.24371 client to join a game hosted on 127.0.0.1, or record that none
-  exists (wisp#R0).
+  3.0.1.24371 client to join a game hosted on 127.0.0.1, or list every
+  route tried and its refusal (wisp#29).
 - **R1** Pool host deadline pacing and `--turn-ms 17,17,16` land
-  (wisp#R1).
+  (wisp#30).
 - **R2** 10 ms and 8 ms turns on gex45 set the shortest clean turn
-  (wisp#R2).
-- **R3** Whether held-key reads wait for the turn echo, at 0/60/120 ms RTT
-  (wisp#R3).
+  (wisp#31).
+- **R3** Whether held-key reads wait for the turn echo, at 0/100/200 ms RTT
+  (wisp#32).
 - **R4** Baseline: Wisp's TCP host under jitter and loss, as a FLO-like path
-  is (wisp#R4).
+  is (wisp#33).
 - **R5** `wisp lan netem` gains jitter, burst loss and port scoping
-  (wisp#R5).
+  (wisp#34).
 - **R6** Relay protocol core, jitter buffer and simulated-network bench in
-  Rust (wisp#R6).
+  Rust (wisp#35).
 - **R7** Relay server and agent link on real sockets under netem
-  (wisp#R7).
+  (wisp#36).
 - **R8** Agent hosts the local game; two pool clients play through relay and
-  agents (wisp#R8).
-- **R9** Native proof under internet conditions: even feed, taps, rollbacks
-  (wisp#R9).
-- **R10** Public relay deployment with NAT and abuse limits (wisp#R10).
+  agents (wisp#37).
+- **R9** Native proof under internet conditions: even feed, taps, rollbacks,
+  blackout catch-up (wisp#38).
+- **R10** Public relay deployment with NAT and abuse limits, and a recorded
+  real-path loss trace (wisp#39).
+- **R11** Headless delivery model for the relay's paced turns, so map tests
+  meet relay timing as they meet Battle.net's today (wisp#40).
 
-smashcraft-client (epic smashcraft-client#CEPIC):
+smashcraft (Tom asked for it on 25 October):
+
+- **S1** Rerun the rollback-budget correction-pop sweep under the relay's
+  paced delivery, raise the duel budget to 7 or the group budget to 9–10 if
+  they pass, and record why groups tolerate a larger budget than duels
+  (smashcraft#219).
+
+smashcraft-client (epic smashcraft-client#25):
 
 - **C1** Host and join a relay match from the client by code
-  (smashcraft-client#C1).
+  (smashcraft-client#26).
 - **C2** The agent's feed schedule holds on Windows and Linux runners
-  (smashcraft-client#C2).
+  (smashcraft-client#27).
 
 Order: R0, R1, R5 and R6 start now. R2 and R3 follow R1; R4 follows R1 and
-R5; R7 follows R5 and R6; R8 follows R1 and R6; R9 follows R4, R7 and R8;
-R10 follows R7 and Tom's approval of the port; C1 follows R8, R10 and either
-an R0 route or Tom's decision; C2 follows R6.
+R5; R7 follows R5 and R6; R8 follows R1 and R6; R9 follows R3, R4, R7 and
+R8; R10 follows R7 and Tom's approval of the port; R11 follows R6; S1 follows
+R11; C1 follows R8, R10 and either an R0 route or Tom's decision; C2 follows
+R6.
 
 Code placement: the relay is map-agnostic, so it lives in Wisp as a Rust
 workspace at `relay/` with crates `relay-proto` (wire format and pure relay
 and agent cores), `relay` (server), `relay-agent` (sockets, W3GS host,
 pacer) and `relay-bench`. smashcraft-client depends on `relay-agent` at a
 pinned revision. Rust is used because the agent ships inside the Rust client
-on players' Windows and Linux machines, with no Bun runtime.
+on players' Windows and Linux machines, with no Bun runtime. R11's headless
+model is TypeScript in wisp:src/headless/syncChannel.ts beside
+`syncDelivery()`, because the headless runtime is TypeScript.
 
 ## Decisions
 
 - **Players on the live build (Tom).** Without an R0 route, the relay
-  reaches only our 3.0.0.24268 pool. Gate opened 24 October with three
-  options: keep clean-room and ship to players only when a clean route exists,
-  meanwhile carrying Wisp's standalone window online through the relay;
-  allow W3Champions' in-game switch in the shipped client; or stop the relay.
+  reaches only our 3.0.0.24268 pool. Gate 41, opened 24 October, offers three
+  options: keep clean-room and ship to players only when a clean route
+  exists, meanwhile carrying Wisp's standalone window online through the
+  relay; allow W3Champions' in-game switch in the shipped client; or stop
+  the relay.
 - **Public port (Tom).** R10 asks before opening the relay's UDP port on
   Nexus or gex45.
 - **Settled here.** Raw UDP with redundancy, no QUIC, per Tom's direction.
-  Deadline pacing; 17/17/16 until R2 says otherwise. Jitter buffer in the
-  agent, not in the map. Rust in `wisp:relay/`. Relay keyed by session token.
+  Deadline pacing; 17/17/16 until R2 says otherwise. A jitter buffer in the
+  agent with time-anchored feed times and depth chosen before the match.
+  Rust in `wisp:relay/`. Players keyed by session token.
 
 ## Deferred
 
 - Target-debt: QUIC datagram arm; measured: none (not built); owner: R6/R7
-  worker; revisit: R6 or R7 shows raw UDP failing for a reason QUIC addresses.
+  worker; revisit: R6 or R7 shows raw UDP failing for a reason QUIC
+  addresses.
+- Target-debt: authenticated packets (a key exchange and a MAC per packet)
+  against an attacker on the path; measured: none; owner: wisp lead;
+  revisit: C1 ships to players, or any report of a hijacked match.
 - Target-debt: replacing host.ts with relay and agents on loopback, so the
   pool runs the same host as players; measured: none; owner: wisp lead;
   revisit: R8 lands and the conformance transcript passes on the pool.
 - Target-debt: reconnecting a dropped player; measured: none; owner: wisp
   lead; revisit: players report drops after C1 ships.
 
-Provenance: late-turn bar of one underrun per 10 minutes at RTT up to 200 ms
-and loss up to 5% with D ≤ 3; origin prior-art (W3Champions' October 2026
-announcement); pointer this page, "What decides the design"; rationale not
-recorded; revisit when R6's bench reports burst-loss cells.
+Provenance: at most one underrun per 10 minutes (2.8 × 10⁻⁵ per turn) at
+RTT up to 200 ms and loss up to 5%, with D ≤ 3, judged in R6's bench on
+independent, burst and recorded loss; origin prior-art (W3Champions'
+October 2026 announcement of no loss spikes at 5% loss and 200 ms ping);
+pointer this page, "Transport"; rationale not recorded; revisit when R6
+reports its burst-loss cells.
 
 ## Sources
 
 - smashcraft:docs/warcraft-api-netcode-findings.md, input sampling against
   the LAN host's turn interval (24 October 2026).
-- smashcraft:docs/high-refresh.md, smashcraft:docs/design/client.md.
+- smashcraft:docs/high-refresh.md, smashcraft:docs/design/client.md, and
+  smashcraft `e1ba7b0825` (rollback budget picked from correction pop).
 - wisp:docs/lan.md, wisp:docs/network-model.md, wisp:docs/play.md,
   wisp:docs/driving-warcraft.md, wisp:docs/prior-art.md, wisp#21.
 - FLO: github.com/BogdanW3/W3C-Flo at
