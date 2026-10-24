@@ -8,7 +8,7 @@ use relay_proto::control::{self, Control, Refusal};
 use relay_proto::relay::Relay;
 use relay_proto::lobby::{LobbyTiming, HOST_TIMING};
 use relay_proto::stream::KIND_STREAM;
-use relay_proto::wire::KIND_UP;
+use relay_proto::wire::{KIND_UP, KIND_UP_COVER};
 use relay_proto::Micros;
 
 use crate::game_room::GameRoom;
@@ -224,7 +224,7 @@ impl Server {
 
     pub fn on_datagram(&mut self, now: Micros, from: SocketAddr, bytes: &[u8], out: &mut Out) {
         match control::kind(bytes) {
-            Some(KIND_UP) => self.on_up(now, from, bytes, out),
+            Some(KIND_UP | KIND_UP_COVER) => self.on_up(now, from, bytes, out),
             Some(KIND_STREAM) => self.on_stream(now, from, bytes),
             Some(k) if k > KIND_UP => {
                 if let Ok(c) = control::decode(bytes) {

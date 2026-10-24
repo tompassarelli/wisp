@@ -2,6 +2,7 @@ use crate::Micros;
 
 pub const UNDERRUN_EVERY_US: Micros = 600_000_000;
 pub const MAX_DEPTH_US: Micros = 100_000;
+pub const OUTAGE_PACKETS: u64 = 64;
 
 pub fn underrun_bar(period_us: Micros) -> f64 {
     period_us as f64 / UNDERRUN_EVERY_US as f64
@@ -16,6 +17,101 @@ pub struct LinkSample {
     first_seq: Option<u32>,
     received: Vec<bool>,
     offsets: Vec<Micros>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LossCounts {
+    pub total: u64,
+    pub lost: u64,
+    pub pairs: u64,
+    pub both: u64,
+}
+
+impl LossCounts {
+    pub fn rates(&self) -> (f64, f64) {
+        let lost = self.lost as f64;
+        let loss = (lost + 1.0 + 2.0 * (lost + 1.0).sqrt()) / (self.total as f64 + 2.0);
+        let loss_after_loss =
+            ((self.both as f64 + 2.0 * loss) / (self.pairs as f64 + 2.0)).max(loss);
+        (loss, loss_after_loss)
+    }
+
+    pub fn add(&self, other: &LossCounts) -> LossCounts {
+        LossCounts {
+            total: self.total + other.total,
+            lost: self.lost + other.lost,
+            pairs: self.pairs + other.pairs,
+            both: self.both + other.both,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct LossCounter {
+    high: Option<u32>,
+    seen: u64,
+    filled: u32,
+    run: u64,
+    counts: LossCounts,
+}
+
+impl LossCounter {
+    pub fn counts(&self) -> LossCounts {
+        self.counts
+    }
+
+    pub fn record(&mut self, seq: u32) {
+        let Some(high) = self.high else {
+            self.high = Some(seq);
+            self.seen = 1;
+            self.filled = 1;
+            return;
+        };
+        if seq <= high {
+            if high - seq < 64 {
+                self.seen |= 1 << (high - seq);
+            }
+            return;
+        }
+        let d = seq - high;
+        for i in (64u32.saturating_sub(d)..64).rev() {
+            if i < self.filled {
+                self.finalize(self.seen >> i & 1 == 1);
+            }
+        }
+        if d >= 64 {
+            for _ in 0..d - 64 {
+                self.finalize(false);
+            }
+            self.seen = 1;
+            self.filled = 64;
+        } else {
+            self.seen = self.seen << d | 1;
+            self.filled = (self.filled + d).min(64);
+        }
+        self.high = Some(seq);
+    }
+
+    fn finalize(&mut self, received: bool) {
+        let c = &mut self.counts;
+        c.total += 1;
+        c.lost += u64::from(!received);
+        if self.run > 0 {
+            c.pairs += 1;
+            c.both += u64::from(!received);
+        }
+        if !received {
+            self.run += 1;
+            return;
+        }
+        if self.run > OUTAGE_PACKETS {
+            c.total -= self.run;
+            c.lost -= self.run;
+            c.pairs -= self.run;
+            c.both -= self.run - 1;
+        }
+        self.run = 0;
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -34,6 +130,7 @@ pub struct DepthChoice {
     pub predicted_late: f64,
     pub too_poor: bool,
     pub link: LinkEstimate,
+    pub cover: u8,
 }
 
 impl LinkSample {
@@ -56,19 +153,30 @@ impl LinkSample {
         self.estimate_with_margin(None)
     }
 
-    pub fn estimate_with_margin(&self, margin_quantile: Option<f64>) -> LinkEstimate {
-        let total = self.received.len();
-        let lost = self.received.iter().filter(|r| !**r).count();
-        let loss = (lost as f64 + 1.0 + 2.0 * (lost as f64 + 1.0).sqrt()) / (total as f64 + 2.0);
-        let mut pairs = 0usize;
-        let mut both = 0usize;
+    pub fn counts(&self) -> LossCounts {
+        let mut c = LossCounts {
+            total: self.received.len() as u64,
+            lost: self.received.iter().filter(|r| !**r).count() as u64,
+            ..LossCounts::default()
+        };
         for w in self.received.windows(2) {
             if !w[0] {
-                pairs += 1;
-                both += usize::from(!w[1]);
+                c.pairs += 1;
+                c.both += u64::from(!w[1]);
             }
         }
-        let loss_after_loss = ((both as f64 + 2.0 * loss) / (pairs as f64 + 2.0)).max(loss);
+        c
+    }
+
+    pub fn sorted_offsets(&self) -> Vec<Micros> {
+        let mut sorted = self.offsets.clone();
+        sorted.sort_unstable();
+        sorted
+    }
+
+    pub fn estimate_with_margin(&self, margin_quantile: Option<f64>) -> LinkEstimate {
+        let (loss, loss_after_loss) = self.counts().rates();
+        let total = self.received.len();
         let mut sorted = self.offsets.clone();
         sorted.sort_unstable();
         let anchor_us = percentile(&sorted, 0.05);
@@ -94,18 +202,35 @@ impl LinkSample {
         max_turns: u32,
         margin_quantile: Option<f64>,
     ) -> DepthChoice {
-        let link = self.estimate_with_margin(margin_quantile);
+        self.choose_with_cover(period_us, bar, max_turns, margin_quantile, 0)
+    }
+
+    pub fn choose_with_cover(
+        &self,
+        period_us: Micros,
+        bar: f64,
+        max_turns: u32,
+        margin_quantile: Option<f64>,
+        cover: u8,
+    ) -> DepthChoice {
+        let mut link = self.estimate_with_margin(margin_quantile);
+        if cover > 0 {
+            let pairs = self.counts().pairs as f64;
+            let lal = link.loss_after_loss;
+            link.loss_after_loss = (lal + (lal * (1.0 - lal) / (pairs + 2.0)).sqrt()).min(1.0);
+        }
         let mut sorted = self.offsets.clone();
         sorted.sort_unstable();
         let mut best = None;
         for d in 1..=max_turns {
-            let late = predicted_late(&link, &sorted, period_us, d);
+            let late = predicted_late_with_cover(&link, &sorted, period_us, d, cover);
             if late <= bar {
                 return DepthChoice {
                     turns: d,
                     predicted_late: late,
                     too_poor: false,
                     link,
+                    cover,
                 };
             }
             best = Some((d, late));
@@ -116,6 +241,7 @@ impl LinkSample {
             predicted_late,
             too_poor: true,
             link,
+            cover,
         }
     }
 }
@@ -138,17 +264,29 @@ pub fn predicted_late(
     period_us: Micros,
     depth: u32,
 ) -> f64 {
-    (0..=depth)
-        .map(|i| {
-            let lost = if i == 0 {
-                link.loss
-            } else {
-                link.loss_after_loss
-            };
-            let slack = link.anchor_us + link.margin_us + (depth - i) as Micros * period_us;
-            1.0 - (1.0 - lost) * fraction_within(sorted, slack)
-        })
-        .product()
+    predicted_late_with_cover(link, sorted, period_us, depth, 0)
+}
+
+pub fn predicted_late_with_cover(
+    link: &LinkEstimate,
+    sorted: &[Micros],
+    period_us: Micros,
+    depth: u32,
+    cover: u8,
+) -> f64 {
+    let slots = cover as u32 + 1;
+    let mut late = 1.0;
+    for j in 0..=depth * slots {
+        let lost = if j == 0 {
+            link.loss
+        } else {
+            link.loss_after_loss
+        };
+        let slack = link.anchor_us + link.margin_us + depth as Micros * period_us
+            - j as Micros * period_us / slots as Micros;
+        late *= 1.0 - (1.0 - lost) * fraction_within(sorted, slack);
+    }
+    late
 }
 
 #[cfg(test)]
@@ -202,6 +340,52 @@ mod tests {
         let margin = s.pick(Some(0.95));
         assert!(margin.link.margin_us > 0 && margin.link.margin_us < PERIOD);
         assert_eq!(margin.turns + 1, plain.turns);
+    }
+
+    fn bursty(n: u32, every: u32, burst: u32) -> LinkSample {
+        let mut s = LinkSample::default();
+        for seq in 0..n {
+            if seq % every >= burst {
+                s.record(seq, 40_000 + (seq % 7) as Micros * 500);
+            }
+        }
+        s
+    }
+
+    #[test]
+    fn cover_packets_shorten_the_depth_a_burst_needs() {
+        let period = 8_000;
+        let s = bursty(2500, 100, 4);
+        let bar = underrun_bar(period);
+        let plain = s.choose(period, bar, max_turns(period));
+        let covered = s.choose_with_cover(period, bar, max_turns(period), None, 4);
+        assert!(plain.too_poor || plain.turns > 8, "{plain:?}");
+        assert!(!covered.too_poor && covered.turns <= 8, "{covered:?}");
+        assert_eq!(covered.cover, 4);
+        let e = s.estimate();
+        let sorted = s.sorted_offsets();
+        assert_eq!(
+            predicted_late(&e, &sorted, period, 5),
+            predicted_late_with_cover(&e, &sorted, period, 5, 0)
+        );
+    }
+
+    #[test]
+    fn the_counter_forgives_reordering_and_counts_runs_once_they_age_out() {
+        let mut c = LossCounter::default();
+        for seq in [0, 2, 1, 4, 3, 5, 9, 10] {
+            c.record(seq);
+        }
+        for seq in 11..200 {
+            c.record(seq);
+        }
+        let n = c.counts();
+        assert_eq!((n.lost, n.pairs, n.both), (3, 3, 2));
+        assert_eq!(n.total, 200 - 64);
+        for seq in 300..400 {
+            c.record(seq);
+        }
+        assert_eq!(c.counts().lost, 3);
     }
 
     #[test]

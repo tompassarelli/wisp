@@ -36,6 +36,7 @@ pub struct Scenario {
     pub outages: Vec<(Micros, Micros)>,
     pub keep_turns: bool,
     pub margin_quantile: Option<f64>,
+    pub cover: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -55,6 +56,7 @@ pub struct AgentOutcome {
     pub bytes_down: u64,
     pub bytes_up: u64,
     pub transport: Transport,
+    pub cover: u8,
 }
 
 
@@ -130,9 +132,11 @@ fn node(s: &Scenario, index: usize, token: u64, rng: &mut Rng) -> Node {
     };
     let mut rng = rng.fork();
     let first = s.lobby_us + rng.exp(1e6 / spec.actions_hz.max(1e-9)) as Micros;
+    let defaults = AgentConfig::new(token, s.cadence.clone());
     let cfg = AgentConfig {
         margin_quantile: s.margin_quantile,
-        ..AgentConfig::new(token, s.cadence.clone())
+        max_cover: if s.cover { defaults.max_cover } else { 0 },
+        ..defaults
     };
     Node {
         index,
@@ -170,6 +174,7 @@ fn node(s: &Scenario, index: usize, token: u64, rng: &mut Rng) -> Node {
             bytes_down: 0,
             bytes_up: 0,
             transport: Transport::Udp,
+            cover: 0,
         },
     }
 }
@@ -365,6 +370,7 @@ impl Sim<'_> {
                     n.out.stats = n.agent.stats().clone();
                     n.out.unacked_at_end = n.agent.unacked_actions();
                     n.out.transport = n.agent.transport();
+                    n.out.cover = n.agent.cover();
                     for (&sent, &got) in self.emitted_at.iter().zip(&n.arrived) {
                         if sent != Micros::MIN && got != Micros::MIN {
                             n.out.delivery.add(got - sent);
@@ -385,14 +391,16 @@ impl Node {
     }
 
     fn note_arrivals(&mut self, now: Micros, bytes: &[u8]) {
-        let Ok(Packet::Down(d)) = wire::decode(bytes) else {
-            return;
+        let (from, count) = match wire::decode(bytes) {
+            Ok(Packet::Down(d)) => (d.turn_from as usize, d.turns.len()),
+            Ok(Packet::Cover(c)) => (c.turn_from as usize, c.turns.len()),
+            _ => return,
         };
-        let end = d.turn_from as usize + d.turns.len();
+        let end = from + count;
         if end > self.arrived.len() {
             self.arrived.resize(end, Micros::MIN);
         }
-        for got in &mut self.arrived[d.turn_from as usize..end] {
+        for got in &mut self.arrived[from..end] {
             if *got == Micros::MIN {
                 *got = now;
             }

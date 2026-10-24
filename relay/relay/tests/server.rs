@@ -35,6 +35,8 @@ fn up(token: u64) -> Vec<u8> {
         seq: 0,
         sent_us: 0,
         turn_ack: 0,
+        cover: 0,
+        cover_turns: 0,
         checksum_from: 0,
         checksums: vec![],
         action_from: 0,

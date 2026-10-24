@@ -2,7 +2,7 @@ use relay_proto::cadence::Cadence;
 use relay_proto::rng::Rng;
 use relay_proto::sim::{run, AgentOutcome, AgentSpec, Loss, Outcome, Path, Scenario};
 use relay_proto::transport::{self, Transport};
-use relay_proto::wire::{self, Action, Down, Packet, Turn, Up, UpAction};
+use relay_proto::wire::{self, Action, Cover, Down, Packet, Turn, Up, UpAction};
 use relay_proto::Micros;
 
 const SECOND: Micros = 1_000_000;
@@ -65,6 +65,7 @@ fn scenario(seed: u64) -> Scenario {
         outages,
         keep_turns: true,
         margin_quantile: if rng.chance(0.5) { Some(0.95) } else { None },
+        cover: rng.chance(0.5),
     }
 }
 
@@ -242,6 +243,7 @@ fn turns_over_the_packet_ceiling_split_across_turns() {
         outages: vec![(3 * SECOND, 4 * SECOND)],
         keep_turns: true,
         margin_quantile: None,
+        cover: true,
     };
     let o = run(&s);
     check(99, &s, &o);
@@ -258,8 +260,9 @@ fn random_packet(rng: &mut Rng) -> Packet {
             .map(|_| rng.next_u64() as u8)
             .collect::<Vec<u8>>()
     };
-    if rng.chance(0.5) {
-        let turns = (0..rng.below(6))
+    let kind = rng.below(3);
+    if kind != 1 {
+        let turns: Vec<Turn> = (0..rng.below(6))
             .map(|_| Turn {
                 step_ms: rng.next_u64() as u8,
                 actions: (0..rng.below(4))
@@ -271,6 +274,14 @@ fn random_packet(rng: &mut Rng) -> Packet {
                     .collect(),
             })
             .collect();
+        if kind == 2 {
+            return Packet::Cover(Cover {
+                token: rng.next_u64(),
+                seq: rng.next_u64() as u32,
+                turn_from: rng.next_u64() as u32,
+                turns,
+            });
+        }
         Packet::Down(Down {
             token: rng.next_u64(),
             seq: rng.next_u64() as u32,
@@ -287,6 +298,8 @@ fn random_packet(rng: &mut Rng) -> Packet {
             seq: rng.next_u64() as u32,
             sent_us: rng.next_u64(),
             turn_ack: rng.next_u64() as u32,
+            cover: rng.below(2) as u8 * rng.next_u64() as u8,
+            cover_turns: rng.next_u64() as u8,
             checksum_from: rng.next_u64() as u32,
             checksums: (0..rng.below(10)).map(|_| rng.next_u64() as u32).collect(),
             action_from: rng.next_u64() as u32,

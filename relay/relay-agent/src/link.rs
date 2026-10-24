@@ -8,7 +8,7 @@ use relay_proto::agent::{Agent, AgentConfig, AgentError, Fed};
 use relay_proto::cadence::Cadence;
 use relay_proto::control::{self, Control, KIND_CHALLENGE};
 use relay_proto::stream::{self, RoomStream, KIND_STREAM};
-use relay_proto::wire::{UpAction, KIND_DOWN, MAX_PACKET};
+use relay_proto::wire::{UpAction, KIND_COVER, KIND_DOWN, MAX_PACKET};
 use relay_proto::Micros;
 
 pub const HANDSHAKE_TRIES: u32 = 20;
@@ -251,7 +251,7 @@ impl Link {
 
     fn on_datagram(&mut self, bytes: &[u8]) -> io::Result<()> {
         match control::kind(bytes) {
-            Some(KIND_DOWN) => {
+            Some(KIND_DOWN | KIND_COVER) => {
                 let now = self.now();
                 if self.agent.on_packet(now, bytes).is_ok()
                     && self.agent.choice().is_none()

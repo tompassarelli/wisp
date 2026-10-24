@@ -1,7 +1,9 @@
 use std::collections::VecDeque;
 
+mod cover;
+
 use crate::cadence::Cadence;
-use crate::depth::{self, DepthChoice, LinkSample};
+use crate::depth::{self, DepthChoice, LinkSample, LossCounter, LossCounts};
 use crate::transport::{Transport, FALLBACK_US};
 use crate::wire::{
     self, Packet, Turn, Up, UpAction, WireError, MAX_ACTION, MAX_PACKET, MAX_PACKETS_PER_TICK,
@@ -21,6 +23,11 @@ pub struct AgentConfig {
     pub window_us: Micros,
     pub anchor_every: u32,
     pub margin_quantile: Option<f64>,
+    pub max_cover: u8,
+    pub cover_from_us: Micros,
+    pub cover_cap_us: Micros,
+    pub cover_every: u64,
+    pub bursty: f64,
 }
 
 impl AgentConfig {
@@ -37,6 +44,11 @@ impl AgentConfig {
             window_us: 10_000_000,
             anchor_every: 30,
             margin_quantile: None,
+            max_cover: crate::relay::MAX_COVER,
+            cover_from_us: 48_000,
+            cover_cap_us: 66_667,
+            cover_every: 1_000,
+            bursty: 0.2,
         }
     }
 }
@@ -75,6 +87,11 @@ pub struct Agent {
     received_through: u32,
     lobby: LinkSample,
     choice: Option<DepthChoice>,
+    cover: u8,
+    lobby_counts: LossCounts,
+    lobby_offsets: Vec<Micros>,
+    match_loss: LossCounter,
+    next_review: u64,
     depth_us: Micros,
     window: VecDeque<(Micros, Micros)>,
     since_anchor: u32,
@@ -110,6 +127,11 @@ impl Agent {
             received_through: 0,
             lobby: LinkSample::default(),
             choice: None,
+            cover: 0,
+            lobby_counts: LossCounts::default(),
+            lobby_offsets: Vec::new(),
+            match_loss: LossCounter::default(),
+            next_review: 0,
             depth_us: 0,
             window: VecDeque::new(),
             since_anchor: 0,
@@ -150,6 +172,10 @@ impl Agent {
         &self.stats
     }
 
+    pub fn cover(&self) -> u8 {
+        self.cover
+    }
+
     pub fn extra_us(&self) -> Micros {
         self.extra_us
     }
@@ -171,12 +197,36 @@ impl Agent {
     }
 
     pub fn choose_depth(&mut self) -> DepthChoice {
-        let choice = self.lobby.choose_with_margin(
-            self.period,
-            self.cfg.bar,
-            self.cfg.max_depth,
-            self.cfg.margin_quantile,
-        );
+        let pick = |cover: u8| {
+            self.lobby.choose_with_cover(
+                self.period,
+                self.cfg.bar,
+                self.cfg.max_depth,
+                self.cfg.margin_quantile,
+                cover,
+            )
+        };
+        let depth_of = |c: &DepthChoice| c.turns as Micros * self.period + c.link.margin_us;
+        let fits = |c: &DepthChoice| !c.too_poor && depth_of(c) <= self.cfg.cover_from_us;
+        let mut choice = pick(0);
+        if self.cfg.max_cover > 0 && choice.link.loss_after_loss > self.cfg.bursty {
+            let cap = (self.cfg.cover_cap_us / self.period).max(1) as u32;
+            choice = (1..=self.cfg.max_cover)
+                .map(pick)
+                .find(fits)
+                .unwrap_or_else(|| {
+                    let mut c = pick(self.cfg.max_cover);
+                    if c.turns > cap {
+                        c.turns = cap;
+                        c.too_poor = false;
+                    }
+                    c
+                });
+        }
+        self.cover = choice.cover;
+        self.lobby_counts = self.lobby.counts();
+        self.lobby_offsets = self.lobby.sorted_offsets();
+        self.next_review = self.cfg.cover_every;
         self.depth_us = choice.turns as Micros * self.period + choice.link.margin_us;
         self.anchor_target = choice.link.anchor_us;
         self.anchor_applied = choice.link.anchor_us;
@@ -188,6 +238,14 @@ impl Agent {
         let down = match wire::decode(bytes).map_err(AgentError::Wire)? {
             Packet::Down(d) => d,
             Packet::Up(_) => return Err(AgentError::NotDown),
+            Packet::Cover(c) => {
+                if c.token != self.cfg.token {
+                    return Err(AgentError::WrongToken);
+                }
+                self.count(c.seq);
+                self.store(c.turn_from, c.turns);
+                return Ok(());
+            }
         };
         if down.token != self.cfg.token {
             return Err(AgentError::WrongToken);
@@ -196,6 +254,8 @@ impl Agent {
         let offset = now - down.sent_us as Micros;
         if self.choice.is_none() {
             self.lobby.record(down.seq, offset);
+        } else {
+            self.count(down.seq);
         }
         self.observe_offset(now, offset);
         if down.base_us != NOT_STARTED {
@@ -208,8 +268,13 @@ impl Agent {
         while self.checksum_base < down.checksum_ack && self.checksums.pop_front().is_some() {
             self.checksum_base += 1;
         }
-        for (i, turn) in down.turns.into_iter().enumerate() {
-            let index = down.turn_from.wrapping_add(i as u32);
+        self.store(down.turn_from, down.turns);
+        Ok(())
+    }
+
+    fn store(&mut self, turn_from: u32, turns: Vec<Turn>) {
+        for (i, turn) in turns.into_iter().enumerate() {
+            let index = turn_from.wrapping_add(i as u32);
             if index < self.next_feed {
                 continue;
             }
@@ -222,7 +287,6 @@ impl Agent {
             }
         }
         self.advance_received();
-        Ok(())
     }
 
     pub fn send_action(&mut self, now: Micros, action: UpAction) -> Result<(), AgentError> {
@@ -371,6 +435,10 @@ impl Agent {
     }
 
     fn upstream(&mut self, now: Micros) -> Vec<Vec<u8>> {
+        let (cover, cover_turns) = match (&self.choice, self.cover, self.transport) {
+            (Some(c), 1.., Transport::Udp) => (self.cover, (c.turns + 1).min(u8::MAX as u32) as u8),
+            _ => (0, 0),
+        };
         self.next_send = now + self.period;
         let checksums = self.checksums.make_contiguous();
         let actions = self.actions.make_contiguous();
@@ -390,6 +458,8 @@ impl Agent {
                 seq: self.up_seq,
                 sent_us: now as u64,
                 turn_ack: self.received_through,
+                cover,
+                cover_turns,
                 checksum_from: self.checksum_base + sums_sent as u32,
                 checksums: Vec::new(),
                 action_from: self.action_base + actions_sent as u32,

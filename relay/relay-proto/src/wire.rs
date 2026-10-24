@@ -8,6 +8,8 @@ pub const NOT_STARTED: u64 = u64::MAX;
 
 pub const KIND_DOWN: u8 = 1;
 pub const KIND_UP: u8 = 2;
+pub const KIND_COVER: u8 = 11;
+pub const KIND_UP_COVER: u8 = 12;
 
 pub const DOWN_HEADER: usize = 3 + 8 + 4 + 8 + 8 + 4 + 4 + 4 + 2;
 pub const UP_HEADER: usize = 3 + 8 + 4 + 8 + 4 + 4 + 2 + 4 + 2;
@@ -71,6 +73,8 @@ pub struct Up {
     pub seq: u32,
     pub sent_us: u64,
     pub turn_ack: u32,
+    pub cover: u8,
+    pub cover_turns: u8,
     pub checksum_from: u32,
     pub checksums: Vec<u32>,
     pub action_from: u32,
@@ -78,9 +82,18 @@ pub struct Up {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Cover {
+    pub token: u64,
+    pub seq: u32,
+    pub turn_from: u32,
+    pub turns: Vec<Turn>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Packet {
     Down(Down),
     Up(Up),
+    Cover(Cover),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -123,6 +136,16 @@ impl Writer {
     fn bytes(&mut self, b: &[u8]) {
         self.0.extend_from_slice(b);
     }
+    fn turn(&mut self, turn: &Turn) {
+        self.u8(turn.step_ms);
+        self.u16(turn.actions.len() as u16);
+        for a in &turn.actions {
+            self.u8(a.player);
+            self.u32(a.seq);
+            self.u16(a.data.len() as u16);
+            self.bytes(&a.data);
+        }
+    }
 }
 
 struct Reader<'a> {
@@ -152,6 +175,22 @@ impl<'a> Reader<'a> {
     fn u64(&mut self) -> Result<u64, WireError> {
         Ok(u64::from_le_bytes(self.take(8)?.try_into().unwrap()))
     }
+    fn turn(&mut self) -> Result<Turn, WireError> {
+        let step_ms = self.u8()?;
+        let n = self.u16()?;
+        let mut actions = Vec::with_capacity(self.room(n, ACTION_HEADER));
+        for _ in 0..n {
+            let player = self.u8()?;
+            let seq = self.u32()?;
+            let len = self.u16()? as usize;
+            actions.push(Action {
+                player,
+                seq,
+                data: self.take(len)?.to_vec(),
+            });
+        }
+        Ok(Turn { step_ms, actions })
+    }
 }
 
 pub fn encode_down(head: &Down, turns: &[Turn], budget: usize) -> (Vec<u8>, usize) {
@@ -169,17 +208,34 @@ pub fn encode_down(head: &Down, turns: &[Turn], budget: usize) -> (Vec<u8>, usiz
         if w.0.len() + turn.wire_len() > budget || n == u16::MAX as usize {
             break;
         }
-        w.u8(turn.step_ms);
-        w.u16(turn.actions.len() as u16);
-        for a in &turn.actions {
-            w.u8(a.player);
-            w.u32(a.seq);
-            w.u16(a.data.len() as u16);
-            w.bytes(&a.data);
-        }
+        w.turn(turn);
         n += 1;
     }
     w.patch_u16(count_at, n as u16);
+    (w.0, n)
+}
+
+pub fn encode_cover(
+    token: u64,
+    seq: u32,
+    turn_from: u32,
+    turns: &[Turn],
+    budget: usize,
+) -> (Vec<u8>, usize) {
+    let mut w = Writer::head(KIND_COVER, token);
+    w.u32(seq);
+    w.u32(turn_from);
+    let count_at = w.0.len();
+    w.u8(0);
+    let mut n = 0;
+    for turn in turns {
+        if w.0.len() + turn.wire_len() > budget || n == u8::MAX as usize {
+            break;
+        }
+        w.turn(turn);
+        n += 1;
+    }
+    w.0[count_at] = n as u8;
     (w.0, n)
 }
 
@@ -189,15 +245,21 @@ pub fn encode_up(
     actions: &[UpAction],
     budget: usize,
 ) -> (Vec<u8>, usize, usize) {
-    let mut w = Writer::head(KIND_UP, head.token);
+    let covered = head.cover > 0 || head.cover_turns > 0;
+    let kind = if covered { KIND_UP_COVER } else { KIND_UP };
+    let mut w = Writer::head(kind, head.token);
     w.u32(head.seq);
     w.u64(head.sent_us);
     w.u32(head.turn_ack);
+    if covered {
+        w.u8(head.cover);
+        w.u8(head.cover_turns);
+    }
     w.u32(head.checksum_from);
     let sums = checksums
         .len()
         .min(MAX_CHECKSUMS)
-        .min(budget.saturating_sub(UP_HEADER) / 4);
+        .min(budget.saturating_sub(w.0.len() + 8) / 4);
     w.u16(sums as u16);
     for &c in &checksums[..sums] {
         w.u32(c);
@@ -229,6 +291,10 @@ pub fn encode(packet: &Packet) -> Result<Vec<u8>, WireError> {
             let (b, s, n) = encode_up(u, &u.checksums, &u.actions, MAX_PACKET);
             (b, s == u.checksums.len() && n == u.actions.len())
         }
+        Packet::Cover(c) => {
+            let (b, n) = encode_cover(c.token, c.seq, c.turn_from, &c.turns, MAX_PACKET);
+            (b, n == c.turns.len())
+        }
     };
     if complete {
         Ok(bytes)
@@ -252,7 +318,23 @@ pub fn decode(buf: &[u8]) -> Result<Packet, WireError> {
     let token = r.u64()?;
     let packet = match kind {
         KIND_DOWN => Packet::Down(decode_down(&mut r, token)?),
-        KIND_UP => Packet::Up(decode_up(&mut r, token)?),
+        KIND_UP => Packet::Up(decode_up(&mut r, token, false)?),
+        KIND_UP_COVER => Packet::Up(decode_up(&mut r, token, true)?),
+        KIND_COVER => {
+            let seq = r.u32()?;
+            let turn_from = r.u32()?;
+            let count = r.u8()?;
+            let mut turns = Vec::with_capacity(r.room(count as u16, TURN_HEADER));
+            for _ in 0..count {
+                turns.push(r.turn()?);
+            }
+            Packet::Cover(Cover {
+                token,
+                seq,
+                turn_from,
+                turns,
+            })
+        }
         _ => return Err(WireError::Kind),
     };
     if r.at != buf.len() {
@@ -271,20 +353,7 @@ fn decode_down(r: &mut Reader, token: u64) -> Result<Down, WireError> {
     let count = r.u16()?;
     let mut turns = Vec::with_capacity(r.room(count, TURN_HEADER));
     for _ in 0..count {
-        let step_ms = r.u8()?;
-        let n = r.u16()?;
-        let mut actions = Vec::with_capacity(r.room(n, ACTION_HEADER));
-        for _ in 0..n {
-            let player = r.u8()?;
-            let seq = r.u32()?;
-            let len = r.u16()? as usize;
-            actions.push(Action {
-                player,
-                seq,
-                data: r.take(len)?.to_vec(),
-            });
-        }
-        turns.push(Turn { step_ms, actions });
+        turns.push(r.turn()?);
     }
     Ok(Down {
         token,
@@ -298,10 +367,11 @@ fn decode_down(r: &mut Reader, token: u64) -> Result<Down, WireError> {
     })
 }
 
-fn decode_up(r: &mut Reader, token: u64) -> Result<Up, WireError> {
+fn decode_up(r: &mut Reader, token: u64, covered: bool) -> Result<Up, WireError> {
     let seq = r.u32()?;
     let sent_us = r.u64()?;
     let turn_ack = r.u32()?;
+    let (cover, cover_turns) = if covered { (r.u8()?, r.u8()?) } else { (0, 0) };
     let checksum_from = r.u32()?;
     let sums = r.u16()?;
     let mut checksums = Vec::with_capacity(r.room(sums, 4));
@@ -328,6 +398,8 @@ fn decode_up(r: &mut Reader, token: u64) -> Result<Up, WireError> {
         seq,
         sent_us,
         turn_ack,
+        cover,
+        cover_turns,
         checksum_from,
         checksums,
         action_from,
@@ -349,131 +421,4 @@ pub fn unframe(stream: &[u8]) -> Option<(&[u8], usize)> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn sample_down() -> Down {
-        Down {
-            token: 0x0123_4567_89ab_cdef,
-            seq: 7,
-            sent_us: 1_000_000,
-            base_us: 20_000_000,
-            action_ack: 3,
-            checksum_ack: 9,
-            turn_from: 41,
-            turns: vec![
-                Turn {
-                    step_ms: 17,
-                    actions: vec![],
-                },
-                Turn {
-                    step_ms: 16,
-                    actions: vec![Action {
-                        player: 1,
-                        seq: 2,
-                        data: vec![9, 8, 7],
-                    }],
-                },
-            ],
-        }
-    }
-
-    #[test]
-    fn down_round_trips() {
-        let d = sample_down();
-        let bytes = encode(&Packet::Down(d.clone())).unwrap();
-        assert_eq!(
-            bytes.len(),
-            DOWN_HEADER + d.turns.iter().map(Turn::wire_len).sum::<usize>()
-        );
-        assert_eq!(decode(&bytes), Ok(Packet::Down(d)));
-    }
-
-    #[test]
-    fn up_round_trips() {
-        let u = Up {
-            token: 5,
-            seq: 1,
-            sent_us: 2,
-            turn_ack: 3,
-            checksum_from: 4,
-            checksums: vec![10, 11],
-            action_from: 6,
-            actions: [(false, vec![1]), (true, vec![]), (true, vec![2, 3])]
-                .into_iter()
-                .map(|(release, data)| UpAction { release, data })
-                .collect(),
-        };
-        let bytes = encode(&Packet::Up(u.clone())).unwrap();
-        assert_eq!(bytes.len(), UP_HEADER + 8 + 3 * UP_ACTION_HEADER + 3);
-        assert_eq!(decode(&bytes), Ok(Packet::Up(u)));
-    }
-
-    #[test]
-    fn an_unknown_action_flag_is_refused() {
-        let u = Up {
-            token: 5,
-            seq: 1,
-            sent_us: 2,
-            turn_ack: 3,
-            checksum_from: 4,
-            checksums: vec![],
-            action_from: 6,
-            actions: vec![UpAction {
-                release: true,
-                data: vec![7],
-            }],
-        };
-        let mut bytes = encode(&Packet::Up(u)).unwrap();
-        let flag = bytes.len() - 1 - 2 - 1;
-        bytes[flag] = 2;
-        assert_eq!(decode(&bytes), Err(WireError::Flags));
-    }
-
-    #[test]
-    fn down_keeps_oldest_turns_within_budget() {
-        let mut d = sample_down();
-        let big = Turn {
-            step_ms: 17,
-            actions: vec![Action {
-                player: 0,
-                seq: 0,
-                data: vec![0; 400],
-            }],
-        };
-        d.turns = vec![big.clone(), big.clone(), big.clone(), big];
-        let (bytes, n) = encode_down(&d, &d.turns, MAX_PACKET);
-        assert_eq!(n, 2);
-        assert!(bytes.len() <= MAX_PACKET);
-        match decode(&bytes).unwrap() {
-            Packet::Down(got) => assert_eq!(got.turns, d.turns[..2].to_vec()),
-            other => panic!("{other:?}"),
-        }
-    }
-
-    #[test]
-    fn every_truncation_is_refused() {
-        let bytes = encode(&Packet::Down(sample_down())).unwrap();
-        for len in 0..bytes.len() {
-            assert!(
-                decode(&bytes[..len]).is_err(),
-                "prefix of {len} bytes decoded"
-            );
-        }
-        let mut long = bytes.clone();
-        long.push(0);
-        assert_eq!(decode(&long), Err(WireError::Trailing));
-    }
-
-    #[test]
-    fn frames_carry_packets_on_a_stream() {
-        let a = encode(&Packet::Down(sample_down())).unwrap();
-        let mut stream = frame(&a);
-        stream.extend(frame(&a));
-        let (first, used) = unframe(&stream).unwrap();
-        assert_eq!(decode(first), decode(&a));
-        let (second, _) = unframe(&stream[used..]).unwrap();
-        assert_eq!(second, &a[..]);
-        assert!(unframe(&stream[..3]).is_none());
-    }
-}
+mod tests;

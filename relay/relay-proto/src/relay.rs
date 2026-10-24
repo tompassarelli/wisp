@@ -9,6 +9,7 @@ use crate::wire::{
 use crate::Micros;
 
 pub const LAG_LIMIT_US: Micros = 1_000_000;
+pub const MAX_COVER: u8 = 4;
 
 #[derive(Debug)]
 struct Player {
@@ -20,6 +21,9 @@ struct Player {
     packet_seq: u32,
     last_turn: Option<u32>,
     route: Route,
+    cover: u8,
+    cover_turns: u8,
+    covers_sent: u8,
 }
 
 #[derive(Debug)]
@@ -68,6 +72,9 @@ impl Relay {
                     packet_seq: 0,
                     last_turn: None,
                     route: Route::default(),
+                    cover: 0,
+                    cover_turns: 0,
+                    covers_sent: 0,
                 })
                 .collect(),
             origin,
@@ -111,6 +118,29 @@ impl Relay {
     }
 
     pub fn next_wake(&self) -> Micros {
+        let main = self.main_wake();
+        self.players
+            .iter()
+            .filter_map(|p| self.cover_due(p))
+            .fold(main, Micros::min)
+    }
+
+    fn cover_due(&self, p: &Player) -> Option<Micros> {
+        let base = self.base?;
+        if self.stopped.is_some()
+            || self.next_turn == 0
+            || p.covers_sent >= p.cover
+            || p.route.transport() == Transport::Tcp
+        {
+            return None;
+        }
+        let last = self.next_turn - 1;
+        let step = self.cadence.step_ms(last) as Micros * 1000;
+        let slots = p.cover as Micros + 1;
+        Some(base + self.cadence.relay_time(last) + step * (p.covers_sent as Micros + 1) / slots)
+    }
+
+    fn main_wake(&self) -> Micros {
         let period = self.cadence.period_us();
         match (self.base, self.stopped) {
             (Some(_), Some(at)) => at + self.next_probe as Micros * period,
@@ -130,7 +160,7 @@ impl Relay {
     pub fn on_packet_via(&mut self, bytes: &[u8], via: Transport) -> Result<usize, RelayError> {
         let up = match wire::decode(bytes).map_err(RelayError::Wire)? {
             Packet::Up(up) => up,
-            Packet::Down(_) => return Err(RelayError::NotUp),
+            _ => return Err(RelayError::NotUp),
         };
         let index = self
             .players
@@ -141,6 +171,8 @@ impl Relay {
         let player = &mut self.players[index];
         player.route.hear(via, player.turn_ack);
         player.turn_ack = player.turn_ack.max(up.turn_ack.min(emitted));
+        player.cover = up.cover.min(MAX_COVER);
+        player.cover_turns = up.cover_turns;
         for (i, sent) in up.actions.into_iter().enumerate() {
             if up.action_from.wrapping_add(i as u32) == player.next_action
                 && sent.data.len() <= wire::MAX_ACTION
@@ -170,14 +202,21 @@ impl Relay {
     }
 
     pub fn poll(&mut self, now: Micros) -> Vec<(usize, Vec<u8>)> {
-        if self.next_wake() > now {
-            return Vec::new();
+        let mut out = Vec::new();
+        for i in 0..self.players.len() {
+            while self.cover_due(&self.players[i]).is_some_and(|t| t <= now) {
+                self.players[i].covers_sent += 1;
+                out.extend(self.cover_for(i).map(|b| (i, b)));
+            }
+        }
+        if self.main_wake() > now {
+            return out;
         }
         if self.stopped.is_some() && !self.lagging() {
             self.stopped = None;
             self.base = Some(now - self.cadence.relay_time(self.next_turn));
         }
-        while self.base.is_some() && self.stopped.is_none() && self.next_wake() <= now {
+        while self.base.is_some() && self.stopped.is_none() && self.main_wake() <= now {
             if self.lagging() {
                 self.stopped = Some(now);
                 self.next_probe = 0;
@@ -186,10 +225,9 @@ impl Relay {
                 self.emit_turn();
             }
         }
-        while self.next_wake() <= now {
+        while self.main_wake() <= now {
             self.next_probe += 1;
         }
-        let mut out = Vec::new();
         for i in 0..self.players.len() {
             out.extend(self.packets_for(i, now).into_iter().map(|b| (i, b)));
         }
@@ -221,6 +259,30 @@ impl Relay {
         }
         self.log.push_back(turn);
         self.next_turn += 1;
+        for p in &mut self.players {
+            p.covers_sent = 0;
+        }
+    }
+
+    fn cover_for(&mut self, index: usize) -> Option<Vec<u8>> {
+        let p = &self.players[index];
+        let from = p
+            .turn_ack
+            .max(self.log_from)
+            .max(self.next_turn.saturating_sub(p.cover_turns as u32));
+        if from >= self.next_turn {
+            return None;
+        }
+        let (a, b) = self.log.as_slices();
+        let turns: Vec<Turn> = a
+            .iter()
+            .chain(b)
+            .skip((from - self.log_from) as usize)
+            .cloned()
+            .collect();
+        let (bytes, _) = wire::encode_cover(p.token, p.packet_seq, from, &turns, MAX_PACKET);
+        self.players[index].packet_seq = p.packet_seq.wrapping_add(1);
+        Some(bytes)
     }
 
     fn lagging(&self) -> bool {
@@ -288,208 +350,4 @@ impl Relay {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::wire::{decode, encode, Up, UpAction};
-
-    fn up(
-        token: u64,
-        turn_ack: u32,
-        checksum_from: u32,
-        checksums: Vec<u32>,
-        action_from: u32,
-        actions: Vec<UpAction>,
-    ) -> Vec<u8> {
-        encode(&Packet::Up(Up {
-            token,
-            seq: 0,
-            sent_us: 0,
-            turn_ack,
-            checksum_from,
-            checksums,
-            action_from,
-            actions,
-        }))
-        .unwrap()
-    }
-
-    fn acts(data: &[u8]) -> Vec<UpAction> {
-        data.iter()
-            .map(|&b| UpAction {
-                release: false,
-                data: vec![b],
-            })
-            .collect()
-    }
-
-    fn turn_of(r: &Relay, player: u8, data: u8) -> usize {
-        r.log
-            .iter()
-            .position(|t| {
-                t.actions
-                    .iter()
-                    .any(|a| a.player == player && a.data == [data])
-            })
-            .unwrap()
-    }
-
-    fn started() -> Relay {
-        let mut r = Relay::new(Cadence::default(), &[1, 2], 0);
-        r.start(0);
-        r.poll(Cadence::default().relay_time(9));
-        r
-    }
-
-    #[test]
-    fn a_player_heard_over_tcp_is_answered_over_tcp_in_the_same_room() {
-        let mut r = started();
-        r.on_packet(&up(1, 0, 0, vec![], 0, acts(&[1]))).unwrap();
-        r.on_packet_via(&up(2, 0, 0, vec![], 0, acts(&[2])), Transport::Tcp)
-            .unwrap();
-        r.on_packet_via(&up(2, 0, 0, vec![], 1, vec![]), Transport::Udp)
-            .unwrap();
-        assert_eq!(r.transport(0), Transport::Udp);
-        assert_eq!(r.transport(1), Transport::Tcp);
-        r.poll(Cadence::default().relay_time(10));
-        assert_eq!(turn_of(&r, 0, 1), turn_of(&r, 1, 2));
-    }
-
-    #[test]
-    fn turns_are_due_on_absolute_deadlines() {
-        let mut r = Relay::new(Cadence::new(&[17, 17, 16]), &[1], 0);
-        r.start(1_000);
-        assert_eq!(r.poll(1_000).len(), 1);
-        assert!(r.poll(17_999).is_empty());
-        r.poll(1_000 + 51_000);
-        assert_eq!(r.turns_emitted(), 4);
-        assert_eq!(r.next_wake(), 1_000 + 67_000);
-    }
-
-    #[test]
-    fn repeated_and_early_actions_enter_one_turn_once() {
-        let mut r = started();
-        r.on_packet(&up(1, 0, 0, vec![], 1, acts(&[9]))).unwrap();
-        r.on_packet(&up(1, 0, 0, vec![], 0, acts(&[8, 9]))).unwrap();
-        r.on_packet(&up(1, 0, 0, vec![], 0, acts(&[8, 9]))).unwrap();
-        r.poll(Cadence::default().relay_time(10));
-        let actions: Vec<_> = r.log.iter().flat_map(|t| t.actions.clone()).collect();
-        assert_eq!(
-            actions,
-            vec![
-                Action {
-                    player: 0,
-                    seq: 0,
-                    data: vec![8]
-                },
-                Action {
-                    player: 0,
-                    seq: 1,
-                    data: vec![9]
-                }
-            ]
-        );
-        assert_eq!(r.log.back().unwrap().actions.len(), 2);
-    }
-
-    #[test]
-    fn the_first_differing_checksum_is_reported() {
-        let mut r = started();
-        r.on_packet(&up(1, 0, 0, vec![5, 6, 7], 0, vec![])).unwrap();
-        r.on_packet(&up(2, 0, 0, vec![5, 6, 0], 0, vec![])).unwrap();
-        assert_eq!(r.desync(), Some(2));
-        assert_eq!(r.checksums_compared(), 3);
-    }
-
-    #[test]
-    fn foreign_and_malformed_packets_are_refused() {
-        let mut r = started();
-        assert_eq!(
-            r.on_packet(&up(3, 0, 0, vec![], 0, vec![])),
-            Err(RelayError::UnknownToken)
-        );
-        assert_eq!(
-            r.on_packet(&[0x57]),
-            Err(RelayError::Wire(WireError::Short))
-        );
-    }
-
-    #[test]
-    fn acknowledged_turns_leave_the_log() {
-        let mut r = started();
-        r.on_packet(&up(1, 6, 0, vec![], 0, vec![])).unwrap();
-        assert_eq!(r.log_from, 0);
-        r.on_packet(&up(2, 4, 0, vec![], 0, vec![])).unwrap();
-        assert_eq!(r.log_from, 4);
-        r.on_packet(&up(2, 99, 0, vec![], 0, vec![])).unwrap();
-        assert_eq!(r.log_from, 6);
-    }
-
-    #[test]
-    fn a_marked_release_lands_a_turn_after_its_press_without_holding_others() {
-        let mut r = started();
-        let press_release = vec![
-            UpAction {
-                release: false,
-                data: vec![1],
-            },
-            UpAction {
-                release: true,
-                data: vec![2],
-            },
-            UpAction {
-                release: false,
-                data: vec![3],
-            },
-        ];
-        r.on_packet(&up(1, 0, 0, vec![], 0, press_release)).unwrap();
-        r.on_packet(&up(2, 0, 0, vec![], 0, acts(&[4]))).unwrap();
-        r.poll(Cadence::default().relay_time(11));
-        let press = turn_of(&r, 0, 1);
-        assert_eq!(turn_of(&r, 1, 4), press);
-        assert_eq!(turn_of(&r, 0, 2), press + 1);
-        assert_eq!(turn_of(&r, 0, 3), press + 1);
-
-        r.on_packet(&up(
-            1,
-            0,
-            0,
-            vec![],
-            3,
-            vec![UpAction {
-                release: true,
-                data: vec![5],
-            }],
-        ))
-        .unwrap();
-        r.poll(Cadence::default().relay_time(12));
-        assert_eq!(turn_of(&r, 0, 5), press + 2);
-    }
-
-    #[test]
-    fn a_player_a_second_behind_stops_the_clock_and_the_restart_is_rebased() {
-        let cadence = Cadence::default();
-        let mut r = Relay::new(cadence.clone(), &[1], 0);
-        r.start(0);
-        let stop_at = cadence.relay_time(126);
-        r.poll(stop_at);
-        assert_eq!((r.turns_emitted(), r.stops()), (126, 1));
-        let probes = r.poll(stop_at + 500_000);
-        assert_eq!(r.turns_emitted(), 126);
-        assert!(!probes.is_empty());
-
-        let restart = r.next_wake();
-        r.on_packet(&up(1, 126, 0, vec![0; 64], 0, vec![])).unwrap();
-        r.on_packet(&up(1, 126, 64, vec![0; 62], 0, vec![]))
-            .unwrap();
-        let resumed = r.poll(restart);
-        assert_eq!(r.turns_emitted(), 127);
-        assert_eq!(r.next_wake(), restart + cadence.period_us());
-        let base = restart - cadence.relay_time(126);
-        match decode(&resumed[0].1).unwrap() {
-            Packet::Down(d) => assert_eq!(d.base_us, base as u64),
-            other => panic!("{other:?}"),
-        }
-        r.poll(restart + 10 * cadence.period_us());
-        assert_eq!((r.turns_emitted(), r.stops()), (137, 1));
-    }
-}
+mod tests;

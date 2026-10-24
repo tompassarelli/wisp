@@ -1,6 +1,8 @@
-use relay_proto::agent::{Agent, AgentConfig, Fed};
+use relay_proto::agent::{Agent, AgentConfig, AgentError, Fed};
 use relay_proto::cadence::Cadence;
-use relay_proto::wire::{encode_down, Down, Turn, MAX_PACKET, NOT_STARTED};
+use relay_proto::wire::{
+    decode, encode, encode_down, Cover, Down, Packet, Turn, Up, MAX_PACKET, NOT_STARTED,
+};
 use relay_proto::Micros;
 
 const TOKEN: u64 = 42;
@@ -208,4 +210,84 @@ fn a_rebased_relay_clock_moves_the_feed_schedule_without_a_catch_up() {
     for f in &b.fed[100..] {
         assert_eq!(f.at, b.nominal(f.index), "turn {}", f.index);
     }
+}
+
+fn lobby_agent(lost: impl Fn(u32) -> bool) -> Agent {
+    let cadence = Cadence::default();
+    let period = cadence.period_us();
+    let mut agent = Agent::new(AgentConfig::new(TOKEN, cadence), 0);
+    for i in 0..2500 {
+        if !lost(i) {
+            let sent = i as Micros * period;
+            agent
+                .on_packet(sent + DELAY, &down(i, sent, NOT_STARTED, 0, &[]))
+                .unwrap();
+        }
+    }
+    agent
+}
+
+fn up_of(agent: &mut Agent, now: Micros) -> Up {
+    let (_, packets) = agent.poll(now);
+    match decode(&packets[0]).unwrap() {
+        Packet::Up(u) => u,
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn a_bursty_lobby_asks_for_cover_and_an_independent_one_does_not() {
+    let mut bursty = lobby_agent(|i| i % 100 < 4);
+    let choice = bursty.choose_depth();
+    assert!(choice.cover > 0 && !choice.too_poor, "{choice:?}");
+    assert!(choice.turns as Micros * 8_000 <= 66_667);
+    let u = up_of(&mut bursty, 30_000_000);
+    assert_eq!(
+        (u.cover, u.cover_turns),
+        (choice.cover, choice.turns as u8 + 1)
+    );
+
+    let mut plain = lobby_agent(|i| i % 25 == 0);
+    let choice = plain.choose_depth();
+    assert_eq!(choice.cover, 0);
+    let u = up_of(&mut plain, 30_000_000);
+    assert_eq!((u.cover, u.cover_turns), (0, 0));
+}
+
+#[test]
+fn cover_packets_fill_the_buffer_and_bursts_seen_in_the_match_raise_cover() {
+    let mut agent = lobby_agent(|i| i % 25 == 0);
+    assert_eq!(agent.choose_depth().cover, 0);
+    let turns: Vec<Turn> = (0..3)
+        .map(|_| Turn {
+            step_ms: 8,
+            actions: vec![],
+        })
+        .collect();
+    let mut seq = 2500;
+    for k in 0..3000u32 {
+        if k % 50 >= 6 {
+            let cover = Cover {
+                token: TOKEN,
+                seq,
+                turn_from: k,
+                turns: turns[..1].to_vec(),
+            };
+            agent
+                .on_packet(BASE, &encode(&Packet::Cover(cover)).unwrap())
+                .unwrap();
+        }
+        seq += 1;
+    }
+    assert!(agent.cover() > 0);
+    let cover = Cover {
+        token: TOKEN + 1,
+        seq,
+        turn_from: 0,
+        turns,
+    };
+    assert_eq!(
+        agent.on_packet(BASE, &encode(&Packet::Cover(cover)).unwrap()),
+        Err(AgentError::WrongToken)
+    );
 }

@@ -55,8 +55,8 @@ impl Kind {
         match self {
             Kind::Clean => Some(50_000),
             Kind::Independent(p) | Kind::Blackout(p) if p <= 0.01 => Some(50_000),
-            Kind::Independent(_) | Kind::Blackout(_) => Some(66_667),
-            Kind::Burst(..) | Kind::UdpBlocked(_) => None,
+            Kind::Independent(_) | Kind::Blackout(_) | Kind::Burst(..) => Some(66_667),
+            Kind::UdpBlocked(_) => None,
         }
     }
 }
@@ -66,6 +66,7 @@ struct Options {
     rtts_ms: Vec<i64>,
     steps: Vec<u8>,
     margin: Option<f64>,
+    cover: bool,
 }
 
 struct Cell {
@@ -118,6 +119,7 @@ fn scenario(cell: &Cell, o: &Options, match_us: Micros) -> (Scenario, Vec<(Micro
         outages: blackouts.clone(),
         keep_turns: false,
         margin_quantile: o.margin,
+        cover: o.cover,
     };
     (s, blackouts)
 }
@@ -219,8 +221,13 @@ fn render_row(row: &Row) -> String {
         .iter()
         .map(|a| {
             format!(
-                "{}{}",
+                "{}{}{}",
                 a.choice.turns,
+                if a.cover > 0 {
+                    format!("+{}", a.cover)
+                } else {
+                    String::new()
+                },
                 if a.choice.too_poor { "!" } else { "" }
             )
         })
@@ -296,11 +303,13 @@ fn options(args: &[String]) -> Option<Options> {
         Some(q) => Some(q.parse().ok().filter(|q: &f64| (0.05..1.0).contains(q))?),
         None => None,
     };
+    let cover = !args.iter().any(|a| a == "--no-cover");
     Some(Options {
         minutes,
         rtts_ms,
         steps,
         margin,
+        cover,
     })
 }
 
@@ -308,7 +317,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(o) = options(&args) else {
         eprintln!(
-            "usage: relay-bench --grid [--minutes N] [--rtts MS,...] [--steps 8|17,17,16] [--margin QUANTILE]"
+            "usage: relay-bench --grid [--minutes N] [--rtts MS,...] [--steps 8|17,17,16] [--margin QUANTILE] [--no-cover]"
         );
         std::process::exit(2);
     };
