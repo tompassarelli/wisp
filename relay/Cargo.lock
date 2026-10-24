@@ -21,6 +21,7 @@ dependencies = [
 name = "relay-bench"
 version = "0.1.0"
 dependencies = [
+ "relay-agent",
  "relay-proto",
 ]
 

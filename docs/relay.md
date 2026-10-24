@@ -348,6 +348,25 @@ verifies it, so it can't be used to amplify an attack.
   (`--bind 127.0.0.1:0 --once`) with two links for 250 turns.
   `relay-agent`'s own tests check the handshake's cookie echo, the Verify
   after a rebind and a refusal, against a bare socket.
+- **Room clock.** A room's wire times count from its creation on the serve
+  loop's clock, which the server logs as `room ID opened at T us`.
+
+**Native netem driver (R7's native box, wisp#36).** `relay-native` (crate
+`relay-bench`, `--relay PATH --port N --match-s S --out DIR`) starts the
+`relay` binary on UDP 127.0.0.1:N and plays two `relay-agent` links through
+it: the 20 s lobby, then S seconds of match at 8 ms turns, each agent sending
+4 actions a second of 9–29 bytes (half marked releases) and a checksum per
+fed turn, as the bench's agents do. It is meant to run inside a pair's
+network namespace under `wisp lan netem --udp-port N`, whose `--loss` is the
+round trip's: `--loss 3.96` and `9.75` drop 2% and 5% per send, the loss the
+bench's cells drop each way. Delivery is the time from a turn's deadline on
+the relay's clock to the agent first holding it, mapped onto the agents'
+clock through the `room opened` line; a run's smallest arrival minus send
+time must equal netem's floor (RTT/2 − jitter/2), which checks that mapping.
+`DIR/summary.txt` holds the relay's counters, its CPU over the match in
+percent of one core, and per agent the chosen and maximum depth, underruns
+and their times, and delivery p50/p99/p99.9. The cells are not yet measured
+on a host with CPU pressure below 20 (wisp#36).
 
 **TCP fallback (wisp#41).** Some networks (hotels, schools, offices) block
 outbound UDP; W3Champions falls back from QUIC to TCP for the same reason.

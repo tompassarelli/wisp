@@ -7,3 +7,4 @@ publish.workspace = true
 
 [dependencies]
 relay-proto = { path = "../relay-proto" }
+relay-agent = { path = "../relay-agent" }

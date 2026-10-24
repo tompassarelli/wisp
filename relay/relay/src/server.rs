@@ -357,6 +357,7 @@ impl Server {
         let reply = room.reply(id, 0, request, &steps);
         self.rooms.insert(id, room);
         self.stats.rooms_created += 1;
+        self.log.push(format!("room {id:016x} opened at {now} us"));
         reply
     }
 

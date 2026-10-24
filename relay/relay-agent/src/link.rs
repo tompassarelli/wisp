@@ -168,6 +168,10 @@ impl Link {
         self.socket.local_addr()
     }
 
+    pub fn origin(&self) -> Instant {
+        self.origin
+    }
+
     pub fn now(&self) -> Micros {
         self.origin.elapsed().as_micros() as Micros
     }
@@ -210,6 +214,14 @@ impl Link {
     }
 
     pub fn step(&mut self, until: Instant) -> io::Result<Vec<Fed>> {
+        self.step_tapped(until, |_, _| {})
+    }
+
+    pub fn step_tapped(
+        &mut self,
+        until: Instant,
+        mut tap: impl FnMut(Micros, &[u8]),
+    ) -> io::Result<Vec<Fed>> {
         let mut fed = Vec::new();
         let mut buf = [0u8; MAX_PACKET + 1];
         loop {
@@ -230,6 +242,7 @@ impl Link {
             let wait = wake.min(until).saturating_duration_since(now);
             if let Some((n, from)) = recv(&self.socket, wait, &mut buf)? {
                 if from == self.server {
+                    tap(self.now(), &buf[..n]);
                     self.on_datagram(&buf[..n])?;
                 }
             }
