@@ -859,6 +859,14 @@ and still saw up to 5.5 underruns per 10 minutes, and bursts of 4 at 1% and
   extra packets don't shorten them, and no design that keeps depth at
   66.7 ms covers a burst longer than that. R10's recorded trace
   (wisp#39) decides which holds; wisp#45's second box replays it.
+- **Recorded path traces.** `relay/relay-bench/traces/` holds traces of real
+  paths in `relay path trace v1` (wisp:relay/relay-proto/src/trace.rs): a
+  header with the turn period and the path's median action-acknowledgement
+  RTT, then one line per downstream packet in sequence, its one-way delay in
+  microseconds above the path's floor, or `-` when it was lost. The floor is a
+  line through each 10 s window's smallest delay, which removes the two
+  clocks' drift. `relay-synthetic --trace FILE` records one from a
+  one-player room; a replay takes the RTT's half as the base one-way delay.
 
 ## Lobby and game on the agent (box R8)
 
@@ -954,6 +962,31 @@ Built for wisp#37 (code box), in `relay/`:
   turn period keeps NAT mappings open; in the lobby the agent sends at least
   once a second. A network that blocks UDP reaches the relay over TCP on the
   same port (Transport, above).
+- **Measured through the public relay (wisp#39, 25 October 2026).** Nexus ran
+  the relay at wisp d56c10cf; both agents were `relay-synthetic` built from
+  ecc7dccb (sha256 d2a5a9a6…e05c2), the laptop on home Wi-Fi behind its NAT
+  and gex45 in Hetzner's network. In a 5-minute match the laptop measured a
+  38 ms handshake round trip and action acknowledgements at p50/p99
+  45/154 ms, chose depth 6 turns (48 ms) and had 290 underruns; gex45
+  measured 185/195 ms, chose 2 turns and had 2, neither near one of its own
+  late wakes. The laptop's port change at 150 s cost one underrun: its
+  downstream went silent for 57 ms (one RTT plus a turn) and the first
+  Challenge and Verify restored it with no stop or desync. A capture on the
+  laptop showed the relay sending a handshake's unverified address 11 bytes
+  for 20, and the rebound port 1204 bytes for 1339 before its Verify landed
+  (at most 1.48× when counting only up packets sent a round trip before
+  each reply).
+- **The laptop's Wi-Fi path.** A 10-minute one-player trace
+  (`relay/relay-bench/traces/laptop-wifi-to-nexus-2026-10-25.trace`) lost
+  none of 74,738 packets, but its delay above the floor was p50/p99/max
+  3.1/98.4/254.8 ms. The desktop bar ran `nmcli dev wifi` every 40 s, which
+  starts a 7.8 s rescan when the last is over 30 s old; during a rescan the
+  radio leaves the channel for about 100 ms every 210 ms. 89% of the match
+  host's underruns and 83% of the trace agent's fell inside those rescans.
+  Outside them the trace was p50/p99 2.7/77.3 ms, with 1.8% of packets
+  more than 48 ms late. Real bursts on this path are fixed-time stalls with
+  no loss, which no depth under the 100 ms ceiling covers (Protocol core and
+  bench, "What the bench can't say").
 - **Joining.** The host's client asks the relay for a room and shows a code;
   the joiner types it, as Smashcraft's Battle.net join codes work today
   (smashcraft:docs/design/client.md, "Direct play"). The code names the relay
