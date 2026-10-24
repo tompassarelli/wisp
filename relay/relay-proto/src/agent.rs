@@ -1,9 +1,10 @@
 use std::collections::VecDeque;
 
 use crate::cadence::Cadence;
-use crate::depth::{self, DepthChoice, LinkSample, MAX_DEPTH, UNDERRUN_BAR};
+use crate::depth::{self, DepthChoice, LinkSample};
 use crate::wire::{
-    self, Packet, Turn, Up, WireError, MAX_ACTION, MAX_PACKET, MAX_PACKETS_PER_TICK, NOT_STARTED,
+    self, Packet, Turn, Up, UpAction, WireError, MAX_ACTION, MAX_PACKET, MAX_PACKETS_PER_TICK,
+    NOT_STARTED,
 };
 use crate::Micros;
 
@@ -23,11 +24,12 @@ pub struct AgentConfig {
 
 impl AgentConfig {
     pub fn new(token: u64, cadence: Cadence) -> Self {
+        let period = cadence.period_us();
         AgentConfig {
             token,
             cadence,
-            bar: UNDERRUN_BAR,
-            max_depth: MAX_DEPTH,
+            bar: depth::underrun_bar(period),
+            max_depth: depth::max_turns(period),
             catch_up_gap_us: 4_000,
             slew_us: 1_000,
             settle_us: 30_000_000,
@@ -82,7 +84,7 @@ pub struct Agent {
     last_feed: Micros,
     last_underrun: Micros,
     waiting: bool,
-    actions: VecDeque<Vec<u8>>,
+    actions: VecDeque<UpAction>,
     action_base: u32,
     checksums: VecDeque<u32>,
     checksum_base: u32,
@@ -179,7 +181,8 @@ impl Agent {
         }
         self.observe_offset(now, offset);
         if down.base_us != NOT_STARTED {
-            self.base.get_or_insert(down.base_us as Micros);
+            let base = down.base_us as Micros;
+            self.base = Some(self.base.map_or(base, |b| b.max(base)));
         }
         while self.action_base < down.action_ack && self.actions.pop_front().is_some() {
             self.action_base += 1;
@@ -204,11 +207,11 @@ impl Agent {
         Ok(())
     }
 
-    pub fn send_action(&mut self, now: Micros, data: Vec<u8>) -> Result<(), AgentError> {
-        if data.len() > MAX_ACTION {
+    pub fn send_action(&mut self, now: Micros, action: UpAction) -> Result<(), AgentError> {
+        if action.data.len() > MAX_ACTION {
             return Err(AgentError::ActionTooLong);
         }
-        self.actions.push_back(data);
+        self.actions.push_back(action);
         self.next_send = self.next_send.min(now);
         Ok(())
     }
@@ -302,7 +305,7 @@ impl Agent {
                 break;
             }
             if self.waiting {
-                self.extra_us += now - self.scheduled(index);
+                self.extra_us += (now - self.scheduled(index)).max(0);
                 self.waiting = false;
                 self.last_underrun = now;
             }

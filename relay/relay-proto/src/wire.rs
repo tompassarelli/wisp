@@ -13,6 +13,7 @@ pub const DOWN_HEADER: usize = 3 + 8 + 4 + 8 + 8 + 4 + 4 + 4 + 2;
 pub const UP_HEADER: usize = 3 + 8 + 4 + 8 + 4 + 4 + 2 + 4 + 2;
 pub const TURN_HEADER: usize = 3;
 pub const ACTION_HEADER: usize = 7;
+pub const UP_ACTION_HEADER: usize = 3;
 pub const MAX_TURN: usize = MAX_PACKET - DOWN_HEADER;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -25,6 +26,18 @@ pub struct Action {
 impl Action {
     pub fn wire_len(&self) -> usize {
         ACTION_HEADER + self.data.len()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UpAction {
+    pub release: bool,
+    pub data: Vec<u8>,
+}
+
+impl UpAction {
+    pub fn wire_len(&self) -> usize {
+        UP_ACTION_HEADER + self.data.len()
     }
 }
 
@@ -61,7 +74,7 @@ pub struct Up {
     pub checksum_from: u32,
     pub checksums: Vec<u32>,
     pub action_from: u32,
-    pub actions: Vec<Vec<u8>>,
+    pub actions: Vec<UpAction>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -78,6 +91,7 @@ pub enum WireError {
     Kind,
     Trailing,
     TooLong,
+    Flags,
 }
 
 struct Writer(Vec<u8>);
@@ -117,6 +131,9 @@ struct Reader<'a> {
 }
 
 impl<'a> Reader<'a> {
+    fn room(&self, count: u16, size: usize) -> usize {
+        (count as usize).min((self.buf.len() - self.at) / size)
+    }
     fn take(&mut self, n: usize) -> Result<&'a [u8], WireError> {
         let end = self.at.checked_add(n).ok_or(WireError::Short)?;
         let s = self.buf.get(self.at..end).ok_or(WireError::Short)?;
@@ -169,7 +186,7 @@ pub fn encode_down(head: &Down, turns: &[Turn], budget: usize) -> (Vec<u8>, usiz
 pub fn encode_up(
     head: &Up,
     checksums: &[u32],
-    actions: &[Vec<u8>],
+    actions: &[UpAction],
     budget: usize,
 ) -> (Vec<u8>, usize, usize) {
     let mut w = Writer::head(KIND_UP, head.token);
@@ -190,11 +207,12 @@ pub fn encode_up(
     w.u16(0);
     let mut n = 0;
     for a in actions {
-        if w.0.len() + 2 + a.len() > budget || n == u16::MAX as usize {
+        if w.0.len() + a.wire_len() > budget || n == u16::MAX as usize {
             break;
         }
-        w.u16(a.len() as u16);
-        w.bytes(a);
+        w.u8(u8::from(a.release));
+        w.u16(a.data.len() as u16);
+        w.bytes(&a.data);
         n += 1;
     }
     w.patch_u16(count_at, n as u16);
@@ -251,11 +269,11 @@ fn decode_down(r: &mut Reader, token: u64) -> Result<Down, WireError> {
     let checksum_ack = r.u32()?;
     let turn_from = r.u32()?;
     let count = r.u16()?;
-    let mut turns = Vec::with_capacity(count as usize);
+    let mut turns = Vec::with_capacity(r.room(count, TURN_HEADER));
     for _ in 0..count {
         let step_ms = r.u8()?;
         let n = r.u16()?;
-        let mut actions = Vec::with_capacity(n as usize);
+        let mut actions = Vec::with_capacity(r.room(n, ACTION_HEADER));
         for _ in 0..n {
             let player = r.u8()?;
             let seq = r.u32()?;
@@ -286,16 +304,24 @@ fn decode_up(r: &mut Reader, token: u64) -> Result<Up, WireError> {
     let turn_ack = r.u32()?;
     let checksum_from = r.u32()?;
     let sums = r.u16()?;
-    let mut checksums = Vec::with_capacity(sums as usize);
+    let mut checksums = Vec::with_capacity(r.room(sums, 4));
     for _ in 0..sums {
         checksums.push(r.u32()?);
     }
     let action_from = r.u32()?;
     let n = r.u16()?;
-    let mut actions = Vec::with_capacity(n as usize);
+    let mut actions = Vec::with_capacity(r.room(n, UP_ACTION_HEADER));
     for _ in 0..n {
+        let release = match r.u8()? {
+            0 => false,
+            1 => true,
+            _ => return Err(WireError::Flags),
+        };
         let len = r.u16()? as usize;
-        actions.push(r.take(len)?.to_vec());
+        actions.push(UpAction {
+            release,
+            data: r.take(len)?.to_vec(),
+        });
     }
     Ok(Up {
         token,
@@ -373,11 +399,35 @@ mod tests {
             checksum_from: 4,
             checksums: vec![10, 11],
             action_from: 6,
-            actions: vec![vec![1], vec![], vec![2, 3]],
+            actions: [(false, vec![1]), (true, vec![]), (true, vec![2, 3])]
+                .into_iter()
+                .map(|(release, data)| UpAction { release, data })
+                .collect(),
         };
         let bytes = encode(&Packet::Up(u.clone())).unwrap();
-        assert_eq!(bytes.len(), UP_HEADER + 8 + 2 * 3 + 3);
+        assert_eq!(bytes.len(), UP_HEADER + 8 + 3 * UP_ACTION_HEADER + 3);
         assert_eq!(decode(&bytes), Ok(Packet::Up(u)));
+    }
+
+    #[test]
+    fn an_unknown_action_flag_is_refused() {
+        let u = Up {
+            token: 5,
+            seq: 1,
+            sent_us: 2,
+            turn_ack: 3,
+            checksum_from: 4,
+            checksums: vec![],
+            action_from: 6,
+            actions: vec![UpAction {
+                release: true,
+                data: vec![7],
+            }],
+        };
+        let mut bytes = encode(&Packet::Up(u)).unwrap();
+        let flag = bytes.len() - 1 - 2 - 1;
+        bytes[flag] = 2;
+        assert_eq!(decode(&bytes), Err(WireError::Flags));
     }
 
     #[test]

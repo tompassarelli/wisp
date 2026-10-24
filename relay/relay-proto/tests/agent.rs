@@ -11,6 +11,7 @@ const BASE: Micros = 30_000_000;
 struct Bench {
     agent: Agent,
     cadence: Cadence,
+    base: Micros,
     seq: u32,
     now: Micros,
     fed: Vec<Fed>,
@@ -18,7 +19,7 @@ struct Bench {
 
 impl Bench {
     fn new() -> Self {
-        let cadence = Cadence::standard();
+        let cadence = Cadence::new(&[17, 17, 16]);
         let mut agent = Agent::new(AgentConfig::new(TOKEN, cadence.clone()), 0);
         let period = cadence.period_us();
         for i in 0..LOBBY_PACKETS {
@@ -31,6 +32,7 @@ impl Bench {
         Bench {
             agent,
             cadence,
+            base: BASE,
             seq: LOBBY_PACKETS,
             now: 0,
             fed: Vec::new(),
@@ -48,8 +50,8 @@ impl Bench {
 
     fn deliver(&mut self, at: Micros, from: u32, to: u32) {
         let turns = self.turns(from, to);
-        let sent = BASE + self.cadence.relay_time(to - 1);
-        let bytes = down(self.seq, sent, BASE as u64, from, &turns);
+        let sent = self.base + self.cadence.relay_time(to - 1);
+        let bytes = down(self.seq, sent, self.base as u64, from, &turns);
         self.seq += 1;
         self.run_until(at);
         self.now = at;
@@ -74,7 +76,7 @@ impl Bench {
     }
 
     fn nominal(&self, k: u32) -> Micros {
-        BASE + self.cadence.relay_time(k) + DELAY + self.depth()
+        self.base + self.cadence.relay_time(k) + DELAY + self.depth()
     }
 }
 
@@ -96,7 +98,7 @@ fn down(seq: u32, sent: Micros, base: u64, from: u32, turns: &[Turn]) -> Vec<u8>
 
 fn on_time(b: &mut Bench, from: u32, to: u32) {
     for k in from..to {
-        b.deliver(BASE + b.cadence.relay_time(k) + DELAY, k, k + 1);
+        b.deliver(b.base + b.cadence.relay_time(k) + DELAY, k, k + 1);
     }
 }
 
@@ -192,4 +194,18 @@ fn a_blackout_backlog_drains_at_four_milliseconds_a_turn() {
     );
     assert!(!b.agent.catching_up());
     assert!(b.fed.windows(2).all(|w| w[1].index == w[0].index + 1));
+}
+
+#[test]
+fn a_rebased_relay_clock_moves_the_feed_schedule_without_a_catch_up() {
+    let mut b = Bench::new();
+    on_time(&mut b, 0, 100);
+    b.base += 500_000;
+    on_time(&mut b, 100, 200);
+    b.run_until(b.nominal(199));
+    assert_eq!(b.fed.len(), 200);
+    assert_eq!(b.agent.stats().catch_ups, 0);
+    for f in &b.fed[100..] {
+        assert_eq!(f.at, b.nominal(f.index), "turn {}", f.index);
+    }
 }

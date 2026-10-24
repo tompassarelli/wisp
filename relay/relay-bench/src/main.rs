@@ -8,6 +8,19 @@ const SECOND: Micros = 1_000_000;
 const JITTER_MEAN_US: f64 = 2_000.0;
 const BLACKOUT_EVERY: Micros = 300 * SECOND;
 const BLACKOUT_LEN: Micros = SECOND;
+const RTTS_MS: [i64; 3] = [100, 150, 200];
+const KINDS: [Kind; 10] = [
+    Kind::Clean,
+    Kind::Independent(0.005),
+    Kind::Independent(0.01),
+    Kind::Independent(0.02),
+    Kind::Independent(0.05),
+    Kind::Burst(0.01, 2.0),
+    Kind::Burst(0.01, 4.0),
+    Kind::Burst(0.03, 2.0),
+    Kind::Burst(0.03, 4.0),
+    Kind::Blackout(0.01),
+];
 
 #[derive(Clone, Copy)]
 enum Kind {
@@ -35,28 +48,38 @@ impl Kind {
         }
     }
 
-    fn judged(self) -> bool {
-        !matches!(self, Kind::Burst(..))
+    fn depth_bar_us(self) -> Option<Micros> {
+        match self {
+            Kind::Clean => Some(50_000),
+            Kind::Independent(p) | Kind::Blackout(p) if p <= 0.01 => Some(50_000),
+            Kind::Independent(_) | Kind::Blackout(_) => Some(66_667),
+            Kind::Burst(..) => None,
+        }
     }
+}
+
+struct Options {
+    minutes: f64,
+    steps: Vec<u8>,
+    margin: Option<f64>,
 }
 
 struct Cell {
     rtt_ms: i64,
     kind: Kind,
-    margin: Option<f64>,
     seed: u64,
 }
 
 struct Row {
-    margin: Option<f64>,
     rtt_ms: i64,
     kind: Kind,
     minutes: f64,
+    period_us: Micros,
     outcome: Outcome,
     blackouts: Vec<(Micros, Micros)>,
 }
 
-fn scenario(cell: &Cell, match_us: Micros) -> (Scenario, Vec<(Micros, Micros)>) {
+fn scenario(cell: &Cell, o: &Options, match_us: Micros) -> (Scenario, Vec<(Micros, Micros)>) {
     let lobby_us = 20 * SECOND;
     let path = Path {
         one_way_us: cell.rtt_ms * 500,
@@ -70,6 +93,7 @@ fn scenario(cell: &Cell, match_us: Micros) -> (Scenario, Vec<(Micros, Micros)>) 
         clock_offset_us,
         actions_hz: 4.0,
         action_bytes: (4, 24),
+        releases: 0.5,
     };
     let blackouts: Vec<(Micros, Micros)> = match cell.kind {
         Kind::Blackout(_) => (1..)
@@ -81,14 +105,14 @@ fn scenario(cell: &Cell, match_us: Micros) -> (Scenario, Vec<(Micros, Micros)>) 
     };
     let s = Scenario {
         seed: cell.seed,
-        cadence: Cadence::standard(),
+        cadence: Cadence::new(&o.steps),
         agents: vec![agent(100_000, 7 * SECOND), agent(-100_000, -3 * SECOND)],
         lobby_us,
         match_us,
         tail_us: 5 * SECOND,
         outages: blackouts.clone(),
         keep_turns: false,
-        margin_quantile: cell.margin,
+        margin_quantile: o.margin,
     };
     (s, blackouts)
 }
@@ -119,34 +143,61 @@ fn worst_drain(drains: &[Option<Micros>]) -> String {
 }
 
 fn verdict(row: &Row, per10: &[f64], drains: &[Option<Micros>]) -> String {
-    if !row.kind.judged() {
+    let Some(bar) = row.kind.depth_bar_us() else {
         return "measured".to_string();
-    }
+    };
     let agents = &row.outcome.agents;
     let checks = [
-        (per10.iter().all(|&u| u <= 1.0), "underruns"),
+        (per10.iter().all(|&u| u <= 1.0), "underruns".to_string()),
         (
             agents
                 .iter()
-                .all(|a| a.choice.turns <= 3 && !a.choice.too_poor),
-            "D > 3",
+                .all(|a| chosen_depth(row, a) <= bar && !a.choice.too_poor),
+            format!("depth > {} ms", ms(bar)),
         ),
         (
             drains.iter().all(|d| d.is_some_and(|d| d <= 2 * SECOND)),
-            "drain",
+            "drain".to_string(),
         ),
-        (row.outcome.desync.is_none(), "desync"),
+        (row.outcome.desync.is_none(), "desync".to_string()),
     ];
-    let why: Vec<&str> = checks.iter().filter(|c| !c.0).map(|c| c.1).collect();
+    let why: Vec<&str> = checks
+        .iter()
+        .filter(|c| !c.0)
+        .map(|c| c.1.as_str())
+        .collect();
     if why.is_empty() {
-        "pass".to_string()
+        format!("pass (≤ {} ms)", ms(bar))
     } else {
         format!("fail ({})", why.join(", "))
     }
 }
 
-fn worst(row: &Row, f: impl Fn(&sim::AgentOutcome) -> f64) -> f64 {
-    row.outcome.agents.iter().map(f).fold(0.0, f64::max)
+fn chosen_depth(row: &Row, a: &sim::AgentOutcome) -> Micros {
+    a.choice.turns as Micros * row.period_us + a.choice.link.margin_us
+}
+
+fn worst(row: &Row, f: impl Fn(&sim::AgentOutcome) -> Micros) -> Micros {
+    row.outcome.agents.iter().map(f).max().unwrap_or(0)
+}
+
+fn ms(us: Micros) -> String {
+    format!("{:.1}", us as f64 / 1000.0)
+}
+
+fn delivery(row: &Row) -> String {
+    let q = |q: f64| ms(worst(row, |a| a.delivery.quantile(q)));
+    format!("{}/{}/{} ms", q(0.5), q(0.99), q(0.999))
+}
+
+fn rate(row: &Row, f: impl Fn(&sim::AgentOutcome) -> u64) -> u64 {
+    let seconds = row.minutes * 60.0;
+    row.outcome
+        .agents
+        .iter()
+        .map(|a| (f(a) as f64 / seconds).round() as u64)
+        .max()
+        .unwrap_or(0)
 }
 
 fn render_row(row: &Row) -> String {
@@ -168,23 +219,22 @@ fn render_row(row: &Row) -> String {
         .iter()
         .flat_map(|a| a.drains.iter().copied())
         .collect();
-    let arm = row.margin.map_or("D turns".to_string(), |q| {
-        format!("D turns + p{:.0}−p5 margin", q * 100.0)
-    });
+    let depth = worst(row, |a| chosen_depth(row, a));
+    let max_depth = worst(row, |a| chosen_depth(row, a) + a.stats.max_extra_us);
     let per10_text: Vec<String> = per10.iter().map(|u| format!("{u:.2}")).collect();
     format!(
-        "| {} | {} ms | {} | {} | {:.1e} | {} | {:.1} ms | {:.3}% | {} | {} | {} |\n",
-        arm,
+        "| {} ms | {} | {}, {} ms | {} ms | {} | {} | {} | {}/{} | {} | {} | {} |\n",
         row.rtt_ms,
         row.kind.label(),
         depths.join("/"),
-        worst(row, |a| a.choice.predicted_late),
+        ms(depth),
+        ms(max_depth),
         per10_text.join("/"),
-        worst(row, |a| a.stats.buffer_sum_us as f64
-            / a.stats.fed.max(1) as f64
-            / 1000.0),
-        worst(row, |a| a.uneven_feeds as f64 / a.fed_count.max(1) as f64) * 100.0,
         worst_drain(&drains),
+        delivery(row),
+        rate(row, |a| a.bytes_down),
+        rate(row, |a| a.bytes_up),
+        row.outcome.stops,
         row.outcome
             .desync
             .map_or("none".to_string(), |t| format!("turn {t}")),
@@ -194,7 +244,7 @@ fn render_row(row: &Row) -> String {
 
 fn render(rows: &[Row]) -> String {
     let mut out = String::from(
-        "| Depth | RTT | Loss | D (A/B) | Predicted late/turn | Underruns per 10 min (A/B) | Mean buffer | Uneven feeds | Worst drain | Desync | Bar |\n|---|---|---|---|---|---|---|---|---|---|---|\n",
+        "| RTT | Loss | D (A/B), depth | Max depth | Underruns per 10 min (A/B) | Catch-up after blackout | Delivery p50/p99/p99.9 | Bytes/s down/up | Clock stops | Desync | Bar |\n|---|---|---|---|---|---|---|---|---|---|---|\n",
     );
     for row in rows {
         out.push_str(&render_row(row));
@@ -202,56 +252,78 @@ fn render(rows: &[Row]) -> String {
     out
 }
 
+fn value<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
+    args.iter()
+        .position(|a| a == flag)
+        .and_then(|i| args.get(i + 1))
+        .map(String::as_str)
+}
+
+fn options(args: &[String]) -> Option<Options> {
+    if !args.iter().any(|a| a == "--grid") {
+        return None;
+    }
+    let minutes = match value(args, "--minutes") {
+        Some(m) => m.parse().ok()?,
+        None => 60.0,
+    };
+    let steps = match value(args, "--steps") {
+        Some(s) => s
+            .split(',')
+            .map(|x| x.parse().ok().filter(|&ms: &u8| ms > 0))
+            .collect::<Option<Vec<u8>>>()?,
+        None => vec![8],
+    };
+    let margin = match value(args, "--margin") {
+        Some(q) => Some(q.parse().ok().filter(|q: &f64| (0.05..1.0).contains(q))?),
+        None => None,
+    };
+    Some(Options {
+        minutes,
+        steps,
+        margin,
+    })
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let minutes: f64 = args
-        .iter()
-        .position(|a| a == "--minutes")
-        .and_then(|i| args.get(i + 1))
-        .and_then(|m| m.parse().ok())
-        .unwrap_or(60.0);
-    if !args.iter().any(|a| a == "--grid") {
-        eprintln!("usage: relay-bench --grid [--minutes N]");
+    let Some(o) = options(&args) else {
+        eprintln!(
+            "usage: relay-bench --grid [--minutes N] [--steps 8|17,17,16] [--margin QUANTILE]"
+        );
         std::process::exit(2);
-    }
-    let kinds = [
-        Kind::Clean,
-        Kind::Independent(0.01),
-        Kind::Independent(0.05),
-        Kind::Burst(0.01, 2.0),
-        Kind::Burst(0.05, 3.0),
-        Kind::Blackout(0.01),
-    ];
+    };
+    let period_us = Cadence::new(&o.steps).period_us();
     let mut cells = Vec::new();
-    for margin in [None, Some(0.95)] {
-        for (r, rtt_ms) in [20, 100, 200].into_iter().enumerate() {
-            for (k, kind) in kinds.into_iter().enumerate() {
-                cells.push(Cell {
-                    rtt_ms,
-                    kind,
-                    margin,
-                    seed: 0x5eed_0000 + (r * 16 + k) as u64,
-                });
-            }
+    for (r, rtt_ms) in RTTS_MS.into_iter().enumerate() {
+        for (k, kind) in KINDS.into_iter().enumerate() {
+            cells.push(Cell {
+                rtt_ms,
+                kind,
+                seed: 0x5eed_0000 + (r * 16 + k) as u64,
+            });
         }
     }
-    let match_us = (minutes * 60.0 * SECOND as f64) as Micros;
-    let handles: Vec<_> = cells
-        .into_iter()
-        .map(|cell| {
-            thread::spawn(move || {
-                let (s, blackouts) = scenario(&cell, match_us);
-                Row {
-                    margin: cell.margin,
-                    rtt_ms: cell.rtt_ms,
-                    kind: cell.kind,
-                    minutes,
-                    outcome: sim::run(&s),
-                    blackouts,
-                }
+    let match_us = (o.minutes * 60.0 * SECOND as f64) as Micros;
+    let rows: Vec<Row> = thread::scope(|scope| {
+        let handles: Vec<_> = cells
+            .iter()
+            .map(|cell| {
+                let o = &o;
+                scope.spawn(move || {
+                    let (s, blackouts) = scenario(cell, o, match_us);
+                    Row {
+                        rtt_ms: cell.rtt_ms,
+                        kind: cell.kind,
+                        minutes: o.minutes,
+                        period_us,
+                        outcome: sim::run(&s),
+                        blackouts,
+                    }
+                })
             })
-        })
-        .collect();
-    let rows: Vec<Row> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
     print!("{}", render(&rows));
 }

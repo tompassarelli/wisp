@@ -1,7 +1,7 @@
 use relay_proto::cadence::Cadence;
 use relay_proto::rng::Rng;
 use relay_proto::sim::{run, AgentSpec, Loss, Outcome, Path, Scenario};
-use relay_proto::wire::{self, Action, Down, Packet, Turn, Up};
+use relay_proto::wire::{self, Action, Down, Packet, Turn, Up, UpAction};
 use relay_proto::Micros;
 
 const SECOND: Micros = 1_000_000;
@@ -39,6 +39,7 @@ fn scenario(seed: u64) -> Scenario {
                 rng.unit() * 40.0
             },
             action_bytes: (0, rng.range(0, 300) as usize),
+            releases: rng.unit(),
         })
         .collect();
     let outages = (0..rng.below(4))
@@ -47,10 +48,10 @@ fn scenario(seed: u64) -> Scenario {
             (start, start + rng.range(10_000, 3 * SECOND))
         })
         .collect();
-    let steps: &[u8] = if rng.chance(0.5) {
-        &[17, 17, 16]
-    } else {
-        &[25]
+    let steps: &[u8] = match rng.below(3) {
+        0 => &[8],
+        1 => &[17, 17, 16],
+        _ => &[25],
     };
     Scenario {
         seed,
@@ -94,13 +95,17 @@ fn check(seed: u64, s: &Scenario, o: &Outcome) {
         );
     }
     for (i, a) in o.agents.iter().enumerate() {
-        let actions: Vec<&Action> = a.fed.iter().flat_map(|f| &f.turn.actions).collect();
+        let actions: Vec<(u32, &Action)> = a
+            .fed
+            .iter()
+            .flat_map(|f| f.turn.actions.iter().map(|x| (f.index, x)))
+            .collect();
         for (sender, spec) in o.agents.iter().enumerate() {
-            let got: Vec<&Action> = actions
+            let (turns, got): (Vec<u32>, Vec<&Action>) = actions
                 .iter()
                 .copied()
-                .filter(|x| x.player as usize == sender)
-                .collect();
+                .filter(|(_, x)| x.player as usize == sender)
+                .unzip();
             assert_eq!(
                 got.len(),
                 spec.sent.len(),
@@ -110,7 +115,17 @@ fn check(seed: u64, s: &Scenario, o: &Outcome) {
             );
             for (n, (x, sent)) in got.iter().zip(&spec.sent).enumerate() {
                 assert_eq!(x.seq as usize, n, "seed {seed}: action order");
-                assert_eq!(&x.data, sent, "seed {seed}: action {n} of agent {sender}");
+                assert_eq!(
+                    &x.data, &sent.data,
+                    "seed {seed}: action {n} of agent {sender}"
+                );
+                if sent.release && n > 0 {
+                    assert!(
+                        turns[n] > turns[n - 1],
+                        "seed {seed}: release {n} of agent {sender} shares turn {} with the action before it",
+                        turns[n]
+                    );
+                }
             }
         }
     }
@@ -139,10 +154,11 @@ fn turns_over_the_packet_ceiling_split_across_turns() {
         clock_offset_us: 0,
         actions_hz: 400.0,
         action_bytes: (200, 500),
+        releases: 0.5,
     };
     let s = Scenario {
         seed: 99,
-        cadence: Cadence::standard(),
+        cadence: Cadence::default(),
         agents: vec![spec.clone(), spec.clone(), spec],
         lobby_us: 2 * SECOND,
         match_us: 3 * SECOND,
@@ -198,7 +214,12 @@ fn random_packet(rng: &mut Rng) -> Packet {
             checksum_from: rng.next_u64() as u32,
             checksums: (0..rng.below(10)).map(|_| rng.next_u64() as u32).collect(),
             action_from: rng.next_u64() as u32,
-            actions: (0..rng.below(8)).map(|_| bytes(rng, 60)).collect(),
+            actions: (0..rng.below(8))
+                .map(|_| UpAction {
+                    release: rng.chance(0.5),
+                    data: bytes(rng, 60),
+                })
+                .collect(),
         })
     }
 }

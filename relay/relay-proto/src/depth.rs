@@ -1,7 +1,15 @@
 use crate::Micros;
 
-pub const UNDERRUN_BAR: f64 = 1.0 / (10.0 * 60.0 * 60.0);
-pub const MAX_DEPTH: u32 = 6;
+pub const UNDERRUN_EVERY_US: Micros = 600_000_000;
+pub const MAX_DEPTH_US: Micros = 100_000;
+
+pub fn underrun_bar(period_us: Micros) -> f64 {
+    period_us as f64 / UNDERRUN_EVERY_US as f64
+}
+
+pub fn max_turns(period_us: Micros) -> u32 {
+    (MAX_DEPTH_US / period_us).max(1) as u32
+}
 
 #[derive(Clone, Debug, Default)]
 pub struct LinkSample {
@@ -148,6 +156,14 @@ mod tests {
     use super::*;
     use crate::rng::Rng;
 
+    const PERIOD: Micros = 16_666;
+
+    impl LinkSample {
+        fn pick(&self, margin: Option<f64>) -> DepthChoice {
+            self.choose_with_margin(PERIOD, underrun_bar(PERIOD), max_turns(PERIOD), margin)
+        }
+    }
+
     fn sample(n: u32, loss: f64, jitter_mean: f64, seed: u64) -> LinkSample {
         let mut rng = Rng::new(seed);
         let mut s = LinkSample::default();
@@ -161,7 +177,7 @@ mod tests {
 
     #[test]
     fn clean_link_takes_two_turns() {
-        let c = sample(1200, 0.0, 2000.0, 1).choose(16_667, UNDERRUN_BAR, MAX_DEPTH);
+        let c = sample(1200, 0.0, 2000.0, 1).pick(None);
         assert_eq!((c.turns, c.too_poor), (2, false));
     }
 
@@ -169,7 +185,7 @@ mod tests {
     fn more_loss_never_takes_less_depth() {
         let mut last = 0;
         for loss in [0.0, 0.01, 0.03, 0.05, 0.10] {
-            let c = sample(1200, loss, 2000.0, 2).choose(16_667, UNDERRUN_BAR, MAX_DEPTH);
+            let c = sample(1200, loss, 2000.0, 2).pick(None);
             assert!(
                 c.turns >= last,
                 "loss {loss} chose {} after {last}",
@@ -182,24 +198,24 @@ mod tests {
     #[test]
     fn a_jitter_margin_lets_the_newest_copy_count() {
         let s = sample(1200, 0.05, 2000.0, 4);
-        let plain = s.choose(16_667, UNDERRUN_BAR, MAX_DEPTH);
-        let margin = s.choose_with_margin(16_667, UNDERRUN_BAR, MAX_DEPTH, Some(0.95));
-        assert!(margin.link.margin_us > 0 && margin.link.margin_us < 16_667);
+        let plain = s.pick(None);
+        let margin = s.pick(Some(0.95));
+        assert!(margin.link.margin_us > 0 && margin.link.margin_us < PERIOD);
         assert_eq!(margin.turns + 1, plain.turns);
     }
 
     #[test]
     fn hopeless_link_reports_too_poor_at_the_ceiling() {
-        let c = sample(1200, 0.5, 2000.0, 3).choose(16_667, UNDERRUN_BAR, MAX_DEPTH);
+        let c = sample(1200, 0.5, 2000.0, 3).pick(None);
         assert!(c.too_poor);
-        assert_eq!(c.turns, MAX_DEPTH);
+        assert_eq!(c.turns, max_turns(PERIOD));
     }
 
     #[test]
     fn duplicates_and_stale_sequence_numbers_are_ignored() {
         let mut s = LinkSample::default();
         s.record(10, 5);
-        s.record(10, 9);
+        s.record(10, 1);
         s.record(9, 1);
         s.record(12, 7);
         let e = s.estimate();

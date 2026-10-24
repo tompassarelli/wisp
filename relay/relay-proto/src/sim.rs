@@ -6,7 +6,7 @@ use crate::cadence::Cadence;
 use crate::depth::{DepthChoice, LinkSample};
 use crate::relay::Relay;
 use crate::rng::Rng;
-use crate::wire::Turn;
+use crate::wire::{self, Packet, Turn, UpAction};
 use crate::Micros;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -31,6 +31,7 @@ pub struct AgentSpec {
     pub clock_offset_us: Micros,
     pub actions_hz: f64,
     pub action_bytes: (usize, usize),
+    pub releases: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -52,12 +53,47 @@ pub struct AgentOutcome {
     pub fed_count: u64,
     pub fed_digest: u64,
     pub fed: Vec<Fed>,
-    pub sent: Vec<Vec<u8>>,
+    pub sent: Vec<UpAction>,
     pub stats: AgentStats,
     pub underruns: Vec<Micros>,
     pub drains: Vec<Option<Micros>>,
     pub uneven_feeds: u64,
     pub unacked_at_end: usize,
+    pub delivery: Histogram,
+    pub bytes_down: u64,
+    pub bytes_up: u64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Histogram {
+    buckets: Vec<u64>,
+    count: u64,
+}
+
+impl Histogram {
+    pub const BUCKET_US: Micros = 100;
+    const BUCKETS: usize = 50_000;
+
+    pub fn add(&mut self, us: Micros) {
+        if self.buckets.is_empty() {
+            self.buckets = vec![0; Self::BUCKETS];
+        }
+        let i = (us.max(0) / Self::BUCKET_US) as usize;
+        self.buckets[i.min(Self::BUCKETS - 1)] += 1;
+        self.count += 1;
+    }
+
+    pub fn quantile(&self, q: f64) -> Micros {
+        let rank = ((self.count as f64 * q).ceil() as u64).clamp(1, self.count.max(1));
+        let mut seen = 0;
+        for (i, &n) in self.buckets.iter().enumerate() {
+            seen += n;
+            if seen >= rank {
+                return (i as Micros + 1) * Self::BUCKET_US;
+            }
+        }
+        0
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -65,6 +101,7 @@ pub struct Outcome {
     pub agents: Vec<AgentOutcome>,
     pub turns_emitted: u32,
     pub desync: Option<u32>,
+    pub stops: u32,
     pub checksums_compared: u32,
     pub match_start: Micros,
 }
@@ -149,6 +186,7 @@ struct Node {
     next_action: Micros,
     action_count: u32,
     last_feed: Option<Micros>,
+    arrived: Vec<Micros>,
     out: AgentOutcome,
 }
 
@@ -175,6 +213,9 @@ struct Sim<'a> {
     nodes: Vec<Node>,
     heap: BinaryHeap<Reverse<(Micros, u64, usize)>>,
     events: Vec<Option<Event>>,
+    free: Vec<usize>,
+    pushed: u64,
+    emitted_at: Vec<Micros>,
     started: bool,
     now: Micros,
 }
@@ -205,6 +246,7 @@ fn node(s: &Scenario, index: usize, token: u64, rng: &mut Rng) -> Node {
         },
         action_count: 0,
         last_feed: None,
+        arrived: Vec::new(),
         out: AgentOutcome {
             choice: LinkSample::default().choose(1, 0.0, 0),
             fed_count: 0,
@@ -216,6 +258,9 @@ fn node(s: &Scenario, index: usize, token: u64, rng: &mut Rng) -> Node {
             drains: vec![None; s.outages.len()],
             uneven_feeds: 0,
             unacked_at_end: 0,
+            delivery: Histogram::default(),
+            bytes_down: 0,
+            bytes_up: 0,
         },
     }
 }
@@ -232,6 +277,9 @@ pub fn run(s: &Scenario) -> Outcome {
         nodes,
         heap: BinaryHeap::new(),
         events: Vec::new(),
+        free: Vec::new(),
+        pushed: 0,
+        emitted_at: Vec::new(),
         started: false,
         now: 0,
     };
@@ -264,9 +312,13 @@ impl Sim<'_> {
     }
 
     fn push(&mut self, at: Micros, event: Event) {
-        self.heap
-            .push(Reverse((at, self.events.len() as u64, self.events.len())));
-        self.events.push(Some(event));
+        let slot = self.free.pop().unwrap_or_else(|| {
+            self.events.push(None);
+            self.events.len() - 1
+        });
+        self.events[slot] = Some(event);
+        self.heap.push(Reverse((at, self.pushed, slot)));
+        self.pushed += 1;
     }
 
     fn step(&mut self) {
@@ -280,20 +332,34 @@ impl Sim<'_> {
             self.started = true;
         }
         self.deliver();
-        for (i, bytes) in self.relay.poll(now) {
+        let playing = self.started && !quiet;
+        let emitted = self.relay.turns_emitted();
+        let packets = self.relay.poll(now);
+        self.emitted_at
+            .extend((emitted..self.relay.turns_emitted()).map(|_| {
+                if playing {
+                    now
+                } else {
+                    Micros::MIN
+                }
+            }));
+        for (i, bytes) in packets {
+            if playing {
+                self.nodes[i].out.bytes_down += bytes.len() as u64;
+            }
             if let Some(at) = self.nodes[i].down.send(now, quiet, &self.s.outages) {
                 self.push(at, Event::ToAgent(i, bytes));
             }
         }
         for i in 0..self.nodes.len() {
             for bytes in self.nodes[i].step(now, self.s) {
+                if playing {
+                    self.nodes[i].out.bytes_up += bytes.len() as u64;
+                }
                 if let Some(at) = self.nodes[i].up.send(now, quiet, &self.s.outages) {
                     self.push(at, Event::ToRelay(bytes));
                 }
             }
-        }
-        if self.events.len() > 1 << 16 && self.heap.is_empty() {
-            self.events.clear();
         }
     }
 
@@ -303,11 +369,13 @@ impl Sim<'_> {
                 break;
             }
             self.heap.pop();
+            self.free.push(slot);
             match self.events[slot].take().unwrap() {
                 Event::ToRelay(bytes) => {
                     let _ = self.relay.on_packet(&bytes);
                 }
                 Event::ToAgent(i, bytes) => {
+                    self.nodes[i].note_arrivals(self.now, &bytes);
                     let local = self.nodes[i].clock.local(self.now);
                     let _ = self.nodes[i].agent.on_packet(local, &bytes);
                 }
@@ -319,6 +387,7 @@ impl Sim<'_> {
         Outcome {
             turns_emitted: self.relay.turns_emitted(),
             desync: self.relay.desync(),
+            stops: self.relay.stops(),
             checksums_compared: self.relay.checksums_compared(),
             match_start: self.s.lobby_us,
             agents: self
@@ -327,6 +396,11 @@ impl Sim<'_> {
                 .map(|mut n| {
                     n.out.stats = n.agent.stats().clone();
                     n.out.unacked_at_end = n.agent.unacked_actions();
+                    for (&sent, &got) in self.emitted_at.iter().zip(&n.arrived) {
+                        if sent != Micros::MIN && got != Micros::MIN {
+                            n.out.delivery.add(got - sent);
+                        }
+                    }
                     n.out
                 })
                 .collect(),
@@ -335,6 +409,21 @@ impl Sim<'_> {
 }
 
 impl Node {
+    fn note_arrivals(&mut self, now: Micros, bytes: &[u8]) {
+        let Ok(Packet::Down(d)) = wire::decode(bytes) else {
+            return;
+        };
+        let end = d.turn_from as usize + d.turns.len();
+        if end > self.arrived.len() {
+            self.arrived.resize(end, Micros::MIN);
+        }
+        for got in &mut self.arrived[d.turn_from as usize..end] {
+            if *got == Micros::MIN {
+                *got = now;
+            }
+        }
+    }
+
     fn step(&mut self, now: Micros, s: &Scenario) -> Vec<Vec<u8>> {
         if now >= self.next_action {
             self.act(now, s);
@@ -359,10 +448,14 @@ impl Node {
                 .range(spec.action_bytes.0 as i64, spec.action_bytes.1 as i64) as usize;
         data.extend((0..extra).map(|_| self.rng.next_u64() as u8));
         self.action_count += 1;
+        let action = UpAction {
+            release: self.rng.chance(spec.releases),
+            data,
+        };
         if s.keep_turns {
-            self.out.sent.push(data.clone());
+            self.out.sent.push(action.clone());
         }
-        let _ = self.agent.send_action(self.clock.local(now), data);
+        let _ = self.agent.send_action(self.clock.local(now), action);
         let gap = self.rng.exp(1e6 / spec.actions_hz) as Micros;
         let actions_end = s.lobby_us + s.match_us;
         self.next_action = if now + gap < actions_end {

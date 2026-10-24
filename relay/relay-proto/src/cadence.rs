@@ -7,6 +7,12 @@ pub struct Cadence {
     cycle_us: Micros,
 }
 
+impl Default for Cadence {
+    fn default() -> Self {
+        Cadence::new(&[8])
+    }
+}
+
 impl Cadence {
     pub fn new(steps_ms: &[u8]) -> Self {
         assert!(!steps_ms.is_empty() && steps_ms.iter().all(|&s| s > 0));
@@ -21,10 +27,6 @@ impl Cadence {
             prefix_us,
             cycle_us: total,
         }
-    }
-
-    pub fn standard() -> Self {
-        Cadence::new(&[17, 17, 16])
     }
 
     pub fn step_ms(&self, turn: u32) -> u8 {

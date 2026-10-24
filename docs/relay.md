@@ -139,26 +139,25 @@ it emits after the action arrives, and acknowledges it in the next turn.
 
 **Why it is enough.** With feed times anchored to the relay's clock (Jitter
 buffer, below), a turn is fed late only if every packet carrying it before
-its feed time is lost: at depth D, D + 1 packets. With independent loss p,
-the late rate per turn is p^(D+1). At 125 turns a second (8 ms) the plan's
-bar, one underrun per 10 minutes, is 1.3 × 10⁻⁵ per turn.
+its feed time is lost or late. At depth D the relay sends D + 1 such
+packets, one a turn apart, but the newest reaches the agent by feed(k) only
+when its delay is at or below the anchor, the 5th percentile: about 5% of
+the time. So with independent loss p the late rate per turn is about p^D,
+not p^(D+1), as R6 measured. At 125 turns a second (8 ms) the plan's bar,
+one underrun per 10 minutes, is 1.3 × 10⁻⁵ per turn.
 
-- At 5% loss, D = 2 gives 1.25 × 10⁻⁴ (an underrun about every minute) and
-  D = 3 gives 6.3 × 10⁻⁶ (one every 21 minutes). So 5% loss needs D = 3,
-  24 ms.
-- At 1% loss, D = 2 gives 10⁻⁶.
-- Real loss comes in bursts (Wi-Fi, cellular), which needs more depth. The
-  bench (R6) runs Gilbert-Elliott burst models and loss traces recorded on a
-  real path (R10), and the bar is judged there: a 5-minute native run sees
-  the bar's rate too rarely to test it.
-- **Measured (R6): the newest copy rarely counts.** The copy of turn k sent
-  D turns after the first reaches the agent by feed(k) only if its delay is
-  at or below the anchor, the 5th percentile, so about 5% of the time. The
-  late rate is therefore about p^D, not p^(D+1), and the bench shows 1% loss
-  needs D = 3 and 5% needs D = 4 (66.7 ms) with depth in whole turns. Adding
-  the lobby's p95 − p5 delay spread to the depth (about 6.5 ms here) makes the
-  newest copy count, and then 5% picks D = 3 for some agents and D = 4 for
-  others (Protocol core and bench, below).
+- Measured (R6, 8 ms turns, Protocol core and bench, below): D = 3 (24 ms)
+  on a clean link and up to 1% loss, with one agent at D = 4 at 150 ms;
+  D = 4 (32 ms) at 2%; D = 4–5 (32–40 ms) at 5%. Each met the bar.
+- With 2 ms of mean jitter the second-newest copy, 8 ms ahead of its feed
+  time, also misses about 2% of the time, so 8 ms turns need more turns of
+  depth than 17/17/16 but fewer milliseconds: 17/17/16 needs D = 4–5
+  (66.7–83.3 ms) at 5%.
+- Real loss comes in bursts (Wi-Fi, cellular), which copies one turn apart
+  don't cover: a burst takes out every copy at once. The bench runs
+  Gilbert-Elliott burst models, and burst cover is wisp#45. Loss traces
+  recorded on a real path (R10) are judged there too: a 5-minute native run
+  sees the bar's rate too rarely to test it.
 
 **Compared with QUIC (RFC 9000, 9002, 9221).**
 
@@ -212,15 +211,16 @@ and anchor is the agent's estimate of when turn 0 would arrive on its fastest
 path. The anchor comes from the arrivals themselves: it is a low percentile
 (the 5th) of arrival(k) − relayTime(k) over the last 10 s, so jitter and loss
 don't move it. Anchoring to time, not to the newest turn received, is what
-makes the late rate p^(D+1) rather than about p.
+makes the late rate about p^D rather than about p.
 
 - **Choosing depth before the match.** Smashcraft fixes its input delay and
   rollback budget for a whole match, so depth must settle before turns
   start. During the lobby and loading, the relay and agent exchange packets
   every turn period, and the agent measures loss, burst length and the
   spread of arrival(k) − relayTime(k). It picks the smallest D whose
-  predicted late rate meets the bar: D = 2 on a clean link, 3 at around 5%
-  loss. Smashcraft's echo then measures the delay players actually get.
+  predicted late rate meets the bar: at 8 ms, D = 3 on a clean link and 5
+  at 5% loss (Protocol core and bench, below). Smashcraft's echo then
+  measures the delay players actually get.
 - **Underrun.** When turn k hasn't arrived by feed(k), the agent waits.
   Warcraft runs no turn. The agent keeps the depth the wait added, up to one
   turn more than the chosen D.
@@ -279,8 +279,9 @@ row at its stamp, rolling back when the row arrives late
   than a turn apart land in the same turn, and a stalled client sends both
   edges at once. The agent decodes its game's actions (as wisp:host/lan/actions.ts
   does) and marks a key release whose press is still unacknowledged; the
-  relay puts a marked release at least one turn after its press. R8 builds
-  it and R9 counts taps.
+  relay puts a marked release at least one turn after its press. R6 built
+  the mark and the relay's placement (Protocol core and bench, below); R8
+  builds the agent's decoding and R9 counts taps.
 
 ## Protocol core and bench (box R6)
 
@@ -290,6 +291,8 @@ rustc 1.97.0 by `relay/rust-toolchain.toml`, with no dependencies. CI job
 
 - **`relay-proto`** holds pure state machines with no I/O and no clock of
   their own. The caller passes every time in microseconds.
+  - `cadence`: the turn steps. The default is 8 ms (Turn cadence, above);
+    any repeating pattern such as 17/17/16 is an option.
   - `wire`: little-endian packets of at most 1,200 bytes. They start with
     magic `0x57`, version 1, kind and the 64-bit session token. A down packet
     (45-byte header) carries the packet's sequence number, send time, match
@@ -297,28 +300,39 @@ rustc 1.97.0 by `relay/rust-toolchain.toml`, with no dependencies. CI job
     `turn_from` on, oldest first. Each turn is 3 bytes plus 7 per action and
     the action's bytes. An up packet (39-byte header) carries the turn
     acknowledgement, checksums from `checksum_from` and actions from
-    `action_from`. Decoding refuses short, trailing or unknown bytes. A
-    packet doesn't depend on datagram boundaries, so `wire::frame` (a u16
-    length prefix) is all the TCP fallback (wisp#41) needs.
+    `action_from`, each action 3 bytes (a flags byte whose only bit is the
+    release mark, and a length) plus its bytes. Decoding refuses short,
+    trailing or unknown bytes, including unknown flags. A packet doesn't
+    depend on datagram boundaries, so `wire::frame` (a u16 length prefix) is
+    all the TCP fallback (wisp#41) needs.
   - `relay`: the turn clock on absolute deadlines (probes every turn period
     in the lobby, then turn k at base + relayTime(k)). It takes each player's
     next action in sequence exactly once, caps a turn at what fits one
     packet (later actions wait for the next turn) and compares checksums,
     reporting the first desync. It drops turns every player has
-    acknowledged.
+    acknowledged. A marked release goes at least one turn after the same
+    player's previous action, so after its press; that player's later
+    actions wait with it, and other players' actions don't. When a player's
+    checksums trail the emitted turns by more than 1 s of game time, the
+    clock stops and the relay keeps probing every turn period. Once every
+    player is back within 1 s, the base is rebased so the next turn is due
+    at the restart, and the new base reaches agents in every packet.
   - `agent`: the jitter buffer as specified in Jitter buffer, above. The
     anchor is the 5th percentile of arrival − send time over 10 s and moves
     1 ms a turn. Underruns keep up to one turn of added depth, a backlog
     deeper than D + 2 drains at 4 ms a turn to D + 1, and the added depth
-    slews back at 1 ms a turn after 30 s without an underrun.
+    slews back at 1 ms a turn after 30 s without an underrun. The agent
+    takes the latest base the relay sends, so a rebased clock moves its
+    feed schedule instead of starting a catch-up.
   - `depth`: the choice before the match. From the lobby's packets it takes
     an upper bound on loss, (lost + 1 + 2√(lost + 1)) / (sent + 2), because
-    20 s of lobby holds only about 12 losses at 1% and the point estimate
+    20 s of lobby holds only about 25 losses at 1% and the point estimate
     under-picked D. It also takes loss after loss (no lower than that bound)
     and the empirical delay spread. The predicted late rate is the product
-    over the D + 1 copies of P(lost or later than its slack). The smallest D
-    that meets the bar is chosen; past 6 turns the link is too poor (`!` in
-    the table).
+    over the D + 1 copies of P(lost or later than its slack), and the bar is
+    one underrun per 10 minutes of play at the cadence's turn length. The
+    smallest D that meets the bar is chosen; past 100 ms of depth (12 turns
+    at 8 ms) the link is too poor (`!` in the table).
   - `sim`: a seeded event simulator with per-direction delay, exponential
     jitter, independent or Gilbert-Elliott loss, blackouts and agent clock
     drift.
@@ -330,79 +344,99 @@ rustc 1.97.0 by `relay/rust-toolchain.toml`, with no dependencies. CI job
 - **Property test** (`relay-proto/tests/property.rs`): across 128 seeded
   scenarios (2 to 4 agents, 0–150 ms each way, jitter up to 40 ms mean, loss
   up to 30% independent or 20% in bursts, up to three outages of up to 3 s,
-  ±500 ppm drift, 17/17/16 or 25 ms turns, both depth rules), every agent
-  feeds the same turns in order with the relay's steps. Every action an agent
-  sent appears exactly once, in order, in every agent's feed. The relay sees
-  no desync. A separate case overfills turns (3 agents at 400 actions a
-  second of up to 500 bytes) through a 1 s outage.
-- **Bench** (`cargo run --release -p relay-bench -- --grid`, about 10 s for
-  the grid): two agents, each cell an hour of play after a 20 s lobby. Delay
-  is RTT / 2 each way plus exponential jitter of 2 ms mean. The agents'
-  clocks drift +100 and −100 ppm, and each sends 4 actions a second of 9–29
-  bytes. Blackout cells drop every packet for 1 s every 5 minutes. Their
-  underruns from a blackout start until 1 s after it drains are not counted,
-  and "worst drain" is the longest time from a blackout's end until the
-  agent is back to D + 1. "Uneven feeds" are feeds more than 2 ms off the
-  relay's step. The bar: independent-loss cells at most 1 underrun per
-  10 minutes with D ≤ 3, blackouts drained within 2 s, no desync. Burst
-  cells are measured only. Results, 25 October 2026:
+  ±500 ppm drift, 8 ms, 17/17/16 or 25 ms turns, both depth rules, a random
+  share of actions marked as releases), every agent feeds the same turns in
+  order with the relay's steps. Every action an agent sent appears exactly
+  once, in order, in every agent's feed, and every marked release lands in
+  a later turn than its player's previous action. The relay sees no desync.
+  A separate case overfills turns (3 agents at 400 actions a second of up
+  to 500 bytes) through a 1 s outage.
+- **Bench** (`cargo run --release -p relay-bench -- --grid`, about 5 s for
+  the grid on gex45; `--steps 17,17,16` and `--margin 0.95` select the other
+  cadence and depth rule): two agents, each cell an hour of play (450,000
+  turns at 8 ms) after a 20 s lobby. Delay is RTT / 2 each way plus
+  exponential jitter of 2 ms mean. The agents' clocks drift +100 and
+  −100 ppm, and each sends 4 actions a second of 9–29 bytes, half of them
+  marked releases. Blackout cells drop every packet for 1 s every 5 minutes.
+  Their underruns from a blackout start until 1 s after it drains are not
+  counted. "Depth" is the worse agent's chosen depth and "max depth" the
+  most it reached with added depth. "Catch-up after blackout" is the longest
+  time from a blackout's end until the agent is back to D + 1. "Delivery" is
+  the time from the relay emitting a turn to the agent first holding it, at
+  the worse agent's p50, p99 and p99.9. Bytes a second are the UDP
+  payloads of every packet sent during the match, lost or not, for the
+  worse agent; IPv4 and UDP headers add 28 bytes a packet, 3.5 kB/s each
+  way at 125 packets a second. The bar:
+  independent-loss and blackout cells at most 1 underrun per 10 minutes,
+  depth at most 50 ms up to 1% loss and 66.7 ms at 2% and 5%, blackouts
+  drained within 2 s, no desync. Burst cells are measured only. Results at
+  8 ms turns, 25 October 2026:
 
-| Depth | RTT | Loss | D (A/B) | Predicted late/turn | Underruns per 10 min (A/B) | Mean buffer | Uneven feeds | Worst drain | Desync | Bar |
+| RTT | Loss | D (A/B), depth | Max depth | Underruns per 10 min (A/B) | Catch-up after blackout | Delivery p50/p99/p99.9 | Bytes/s down/up | Clock stops | Desync | Bar |
 |---|---|---|---|---|---|---|---|---|---|---|
-| D turns | 20 ms | no loss | 2/2 | 1.3e-5 | 0.00/0.00 | 33.3 ms | 0.000% | – | none | pass |
-| D turns | 20 ms | 1% independent | 3/3 | 7.6e-6 | 0.17/0.00 | 50.0 ms | 0.000% | – | none | pass |
-| D turns | 20 ms | 5% independent | 4/4 | 2.1e-5 | 0.00/0.00 | 66.7 ms | 0.000% | – | none | fail (D > 3) |
-| D turns | 20 ms | 1% bursts of 2 | 5/6! | 2.0e-4 | 8.50/4.67 | 102.2 ms | 0.041% | – | none | measured |
-| D turns | 20 ms | 5% bursts of 3 | 6!/6! | 1.4e-2 | 53.67/51.83 | 112.3 ms | 0.547% | – | none | measured |
-| D turns | 20 ms | 1% + 1 s blackout / 5 min | 3/3 | 1.2e-5 | 0.00/0.00 | 53.0 ms | 0.383% | 317 ms | none | pass |
-| D turns | 100 ms | no loss | 2/2 | 1.6e-5 | 0.00/0.00 | 33.3 ms | 0.000% | – | none | pass |
-| D turns | 100 ms | 1% independent | 3/3 | 1.0e-5 | 0.00/0.00 | 50.0 ms | 0.000% | – | none | pass |
-| D turns | 100 ms | 5% independent | 4/5 | 1.3e-5 | 0.17/0.17 | 83.3 ms | 0.000% | – | none | fail (D > 3) |
-| D turns | 100 ms | 1% bursts of 2 | 6!/6! | 6.9e-4 | 5.17/4.67 | 101.9 ms | 0.028% | – | none | measured |
-| D turns | 100 ms | 5% bursts of 3 | 6!/6! | 8.9e-3 | 56.17/52.17 | 112.1 ms | 0.660% | – | none | measured |
-| D turns | 100 ms | 1% + 1 s blackout / 5 min | 3/3 | 1.0e-5 | 0.00/0.00 | 53.1 ms | 0.382% | 354 ms | none | pass |
-| D turns | 200 ms | no loss | 2/2 | 1.3e-5 | 0.00/0.00 | 33.3 ms | 0.000% | – | none | pass |
-| D turns | 200 ms | 1% independent | 3/3 | 5.3e-6 | 0.00/0.00 | 50.0 ms | 0.000% | – | none | pass |
-| D turns | 200 ms | 5% independent | 4/4 | 1.7e-5 | 0.33/0.33 | 66.7 ms | 0.000% | – | none | fail (D > 3) |
-| D turns | 200 ms | 1% bursts of 2 | 6!/6! | 2.0e-4 | 6.33/3.50 | 102.6 ms | 0.030% | – | none | measured |
-| D turns | 200 ms | 5% bursts of 3 | 6!/6! | 7.3e-3 | 56.00/54.83 | 112.4 ms | 0.612% | – | none | measured |
-| D turns | 200 ms | 1% + 1 s blackout / 5 min | 3/3 | 1.0e-5 | 0.00/0.00 | 53.0 ms | 0.382% | 407 ms | none | pass |
-| D turns + p95−p5 margin | 20 ms | no loss | 2/2 | 5.9e-7 | 0.00/0.00 | 40.1 ms | 0.000% | – | none | pass |
-| D turns + p95−p5 margin | 20 ms | 1% independent | 2/2 | 2.7e-5 | 0.67/0.00 | 39.8 ms | 0.001% | – | none | pass |
-| D turns + p95−p5 margin | 20 ms | 5% independent | 3/4 | 2.3e-5 | 0.00/0.00 | 73.3 ms | 0.000% | – | none | fail (D > 3) |
-| D turns + p95−p5 margin | 20 ms | 1% bursts of 2 | 4/6! | 8.6e-5 | 9.00/2.83 | 107.9 ms | 0.050% | – | none | measured |
-| D turns + p95−p5 margin | 20 ms | 5% bursts of 3 | 6!/6! | 1.1e-2 | 42.17/43.83 | 118.1 ms | 0.447% | – | none | measured |
-| D turns + p95−p5 margin | 20 ms | 1% + 1 s blackout / 5 min | 2/3 | 1.3e-5 | 0.00/0.00 | 58.8 ms | 0.387% | 321 ms | none | pass |
-| D turns + p95−p5 margin | 100 ms | no loss | 2/2 | 5.9e-7 | 0.00/0.00 | 39.7 ms | 0.000% | – | none | pass |
-| D turns + p95−p5 margin | 100 ms | 1% independent | 3/2 | 2.4e-5 | 0.00/0.00 | 56.5 ms | 0.000% | – | none | pass |
-| D turns + p95−p5 margin | 100 ms | 5% independent | 3/4 | 2.4e-5 | 0.33/0.17 | 72.7 ms | 0.001% | – | none | fail (D > 3) |
-| D turns + p95−p5 margin | 100 ms | 1% bursts of 2 | 6!/6! | 3.7e-4 | 2.50/2.83 | 107.7 ms | 0.021% | – | none | measured |
-| D turns + p95−p5 margin | 100 ms | 5% bursts of 3 | 6!/6! | 6.2e-3 | 46.67/42.00 | 118.7 ms | 0.534% | – | none | measured |
-| D turns + p95−p5 margin | 100 ms | 1% + 1 s blackout / 5 min | 3/2 | 1.3e-5 | 0.00/0.67 | 59.4 ms | 0.387% | 354 ms | none | pass |
-| D turns + p95−p5 margin | 200 ms | no loss | 2/2 | 6.0e-7 | 0.00/0.00 | 39.7 ms | 0.000% | – | none | pass |
-| D turns + p95−p5 margin | 200 ms | 1% independent | 2/2 | 2.1e-5 | 0.33/0.17 | 39.8 ms | 0.000% | – | none | pass |
-| D turns + p95−p5 margin | 200 ms | 5% independent | 3/4 | 2.1e-5 | 0.50/0.00 | 72.9 ms | 0.001% | – | none | fail (D > 3) |
-| D turns + p95−p5 margin | 200 ms | 1% bursts of 2 | 6/6! | 9.1e-5 | 3.83/2.67 | 108.3 ms | 0.019% | – | none | measured |
-| D turns + p95−p5 margin | 200 ms | 5% bursts of 3 | 6!/6! | 5.1e-3 | 43.67/45.33 | 118.5 ms | 0.509% | – | none | measured |
-| D turns + p95−p5 margin | 200 ms | 1% + 1 s blackout / 5 min | 2/3 | 1.6e-5 | 0.17/0.00 | 58.5 ms | 0.388% | 411 ms | none | pass |
+| 100 ms | no loss | 3/3, 24.0 ms | 24.0 ms | 0.00/0.00 | – | 51.4/58.6/61.0 ms | 13784/13317 | 0 | none | pass (≤ 50.0 ms) |
+| 100 ms | 0.5% independent | 3/3, 24.0 ms | 24.0 ms | 0.00/0.00 | – | 51.4/59.0/62.2 ms | 13780/13329 | 0 | none | pass (≤ 50.0 ms) |
+| 100 ms | 1% independent | 3/3, 24.0 ms | 27.7 ms | 0.50/0.33 | – | 51.5/59.4/63.1 ms | 13771/13316 | 0 | none | pass (≤ 50.0 ms) |
+| 100 ms | 2% independent | 4/4, 32.0 ms | 32.0 ms | 0.00/0.00 | – | 51.5/60.1/65.2 ms | 13848/13365 | 0 | none | pass (≤ 66.7 ms) |
+| 100 ms | 5% independent | 4/5, 40.0 ms | 41.1 ms | 0.83/0.17 | – | 51.5/62.0/68.5 ms | 13859/13384 | 0 | none | pass (≤ 66.7 ms) |
+| 100 ms | 1% bursts of 2 | 12!/8, 96.0 ms | 138.3 ms | 0.17/2.33 | – | 51.5/59.8/83.5 ms | 13803/13345 | 0 | none | measured |
+| 100 ms | 1% bursts of 4 | 12!/6, 96.0 ms | 216.7 ms | 8.17/35.33 | – | 51.5/60.4/123.2 ms | 13805/13352 | 0 | none | measured |
+| 100 ms | 3% bursts of 2 | 11/10, 88.0 ms | 113.2 ms | 1.00/2.83 | – | 51.5/68.4/96.9 ms | 13816/13372 | 0 | none | measured |
+| 100 ms | 3% bursts of 4 | 12!/12!, 96.0 ms | 329.1 ms | 22.33/20.67 | – | 51.5/87.8/156.0 ms | 13924/13471 | 0 | none | measured |
+| 100 ms | 1% + 1 s blackout / 5 min | 3/3, 24.0 ms | 1007.3 ms | 0.17/0.00 | 906 ms | 51.5/59.9/730.3 ms | 13881/13365 | 11 | none | pass (≤ 50.0 ms) |
+| 150 ms | no loss | 3/3, 24.0 ms | 24.0 ms | 0.00/0.00 | – | 76.4/83.7/86.0 ms | 17420/17044 | 0 | none | pass (≤ 50.0 ms) |
+| 150 ms | 0.5% independent | 3/3, 24.0 ms | 24.6 ms | 0.17/0.00 | – | 76.4/84.0/87.1 ms | 17462/17070 | 0 | none | pass (≤ 50.0 ms) |
+| 150 ms | 1% independent | 4/3, 32.0 ms | 32.0 ms | 0.00/0.00 | – | 76.5/84.4/88.2 ms | 17419/17053 | 0 | none | pass (≤ 50.0 ms) |
+| 150 ms | 2% independent | 4/4, 32.0 ms | 32.0 ms | 0.00/0.00 | – | 76.5/85.1/90.6 ms | 17415/17063 | 0 | none | pass (≤ 66.7 ms) |
+| 150 ms | 5% independent | 5/5, 40.0 ms | 41.9 ms | 0.17/0.00 | – | 76.5/86.8/93.4 ms | 17443/17091 | 0 | none | pass (≤ 66.7 ms) |
+| 150 ms | 1% bursts of 2 | 12!/7, 96.0 ms | 97.3 ms | 0.17/5.50 | – | 76.5/85.0/108.7 ms | 17507/17102 | 0 | none | measured |
+| 150 ms | 1% bursts of 4 | 3/12!, 96.0 ms | 276.0 ms | 79.00/7.17 | – | 76.5/85.5/147.2 ms | 17446/17084 | 0 | none | measured |
+| 150 ms | 3% bursts of 2 | 12/12, 96.0 ms | 152.7 ms | 0.17/0.50 | – | 76.5/93.3/120.4 ms | 17513/17139 | 0 | none | measured |
+| 150 ms | 3% bursts of 4 | 12!/12!, 96.0 ms | 275.3 ms | 20.67/17.67 | – | 76.5/110.4/174.5 ms | 17548/17185 | 0 | none | measured |
+| 150 ms | 1% + 1 s blackout / 5 min | 3/4, 32.0 ms | 1007.7 ms | 0.17/0.00 | 870 ms | 76.5/84.8/756.0 ms | 17524/17127 | 11 | none | pass (≤ 50.0 ms) |
+| 200 ms | no loss | 3/3, 24.0 ms | 24.0 ms | 0.00/0.00 | – | 101.4/108.7/111.0 ms | 21042/20806 | 0 | none | pass (≤ 50.0 ms) |
+| 200 ms | 0.5% independent | 3/3, 24.0 ms | 24.0 ms | 0.00/0.00 | – | 101.4/109.0/112.1 ms | 21032/20794 | 0 | none | pass (≤ 50.0 ms) |
+| 200 ms | 1% independent | 3/3, 24.0 ms | 27.1 ms | 0.33/0.00 | – | 101.5/109.4/113.2 ms | 21068/20790 | 0 | none | pass (≤ 50.0 ms) |
+| 200 ms | 2% independent | 4/4, 32.0 ms | 32.0 ms | 0.00/0.00 | – | 101.5/110.1/115.1 ms | 21089/20813 | 0 | none | pass (≤ 66.7 ms) |
+| 200 ms | 5% independent | 5/5, 40.0 ms | 40.0 ms | 0.00/0.00 | – | 101.5/111.9/118.5 ms | 21120/20835 | 0 | none | pass (≤ 66.7 ms) |
+| 200 ms | 1% bursts of 2 | 8/9, 72.0 ms | 105.9 ms | 2.17/0.83 | – | 101.5/109.9/133.1 ms | 21131/20843 | 0 | none | measured |
+| 200 ms | 1% bursts of 4 | 12!/11, 96.0 ms | 216.1 ms | 8.33/9.67 | – | 101.5/110.6/173.4 ms | 21138/20857 | 0 | none | measured |
+| 200 ms | 3% bursts of 2 | 11/12, 96.0 ms | 114.6 ms | 1.00/0.50 | – | 101.5/118.6/148.3 ms | 21161/20878 | 0 | none | measured |
+| 200 ms | 3% bursts of 4 | 12!/12!, 96.0 ms | 263.5 ms | 18.33/20.50 | – | 101.5/137.1/201.2 ms | 21176/20922 | 0 | none | measured |
+| 200 ms | 1% + 1 s blackout / 5 min | 3/3, 24.0 ms | 1008.0 ms | 0.17/0.17 | 858 ms | 101.5/109.8/780.3 ms | 21147/20833 | 11 | none | pass (≤ 50.0 ms) |
 
-- **Bar.** Met at no loss and 1% independent loss at every RTT, and with
-  blackouts (drained in 317–411 ms). Not met at 5% independent loss: at most
-  0.33 underruns per 10 minutes, but with D = 4 (66.7 ms), or D = 5 for one
-  agent at 100 ms, on whole-turn depth. With the p95 − p5 margin (6.4–6.8 ms,
-  the no-loss rows' buffer less 33.3 ms), 5% picks D = 3 for one agent (about
-  57 ms, at most 0.5 underruns per 10 minutes) and D = 4 for the other,
-  because 20 s of lobby leaves the estimate on the edge.
-- **Burst loss.** Redundancy one packet a turn apart can't cover bursts: at
-  1% in bursts of 2 the agents choose 4–6 turns, or report the link too poor,
-  and still see 2.5–9 underruns per 10 minutes. 5% in bursts of 3 is too poor
-  everywhere (42–56 underruns per 10 minutes at D = 6). Before burst loss
-  meets the bar, the redundant copies must be spread further apart in time;
-  R10's recorded trace says how bursty real paths are.
-- **Decision for the lead.** For 5% loss, either accept D = 4 at 5%, or
-  adopt the p95 − p5 margin (about 6.5 ms here) with a longer lobby
-  measurement so D = 3 is chosen reliably. The provenance line's D ≤ 3 at 5%
-  holds only with the margin.
+- **Bar.** Met in every judged cell: depth 24–32 ms up to 1% loss (D = 3,
+  one agent D = 4 at 150 ms), 32 ms at 2% and 40 ms at 5% (D = 4–5),
+  with at most 0.83 underruns per 10 minutes. Every blackout stopped the
+  clock once (11 an hour), drained in 858–906 ms and caused no desync.
+  Each cell is one seed and one hour, so a rate near the bar is a handful
+  of underruns (0.83 per 10 minutes at 100 ms and 5% is 5 in the hour)
+  and another seed can land on either side of 1.
+  Provenance: at most one underrun per 10 minutes with depth at most
+  50 ms up to 1% loss and 66.7 ms at 5%; origin the proxy's decision of
+  25 October 2026 to accept D = 4 at 5% after R6's first grid measured the
+  late rate as p^D, stated there as D ≤ 3 up to 1% and D ≤ 4 at 5% in
+  17/17/16 turns, and held here in milliseconds because depth is kept in
+  milliseconds whatever the turn length (Turn cadence, above); pointer this
+  section; revisit after wisp#38's native cells.
+- **8 ms against 17/17/16.** The same grid at 17/17/16 chooses D = 2–5
+  (33.3–83.3 ms): 50 ms up to 1% loss (66.7 ms for one agent at 150 ms), and
+  66.7–83.3 ms at 5%, which misses the bar at 1% and 5% for 150 ms and at
+  5% for 200 ms. 8 ms needs
+  more turns but less depth everywhere, and its 5% depth is 40 ms against
+  66.7–83.3 ms. It costs bytes: 13.8–21.2 kB/s down and 13.3–20.9 kB/s up
+  per agent against 5.5–7.9 and 4.9–7.0 kB/s, because twice as many packets
+  each carry about twice as many unacknowledged turns and checksums. A
+  blackout drains in 858–906 ms against 327–345 ms, since catch-up at 4 ms a
+  turn runs 2× at 8 ms and about 4× at 17/17/16.
+- **Burst loss.** Copies one turn apart can't cover bursts. At 1% in bursts
+  of 2, agents choose 7–12 turns (56–96 ms) or report the link too poor and
+  see up to 5.5 underruns per 10 minutes; at 3% in bursts of 2, 10–12 turns
+  and up to 2.83; bursts of 4 at 1% and 3% see 7.2–79 underruns per
+  10 minutes, mostly at the 100 ms ceiling, and worst for an agent whose
+  lobby saw no burst and chose D = 3. wisp#45 covers bursts, for example with
+  copies spread further apart in time or parity; R10's recorded trace says
+  how bursty real paths are.
 
 ## Lobby and game on the agent (box R8)
 
@@ -624,9 +658,10 @@ model is TypeScript in wisp:src/headless/syncChannel.ts beside
   Deadline pacing at 8 ms turns (R2). A jitter buffer in the
   agent with time-anchored feed times and depth chosen before the match.
   Rust in `wisp:relay/`. Players keyed by session token.
-- **Depth rule at 5% loss (lead).** Whole turns need D = 4 at 5%
-  independent loss. A p95 − p5 margin reaches D = 3 for some agents (Protocol
-  core and bench).
+- **Depth rule at 5% loss (proxy, 25 October 2026).** Depth stays whole
+  turns without the p95 − p5 margin, and the bar accepts 66.7 ms at 5%
+  independent loss; at 8 ms that is D = 4–5, 40 ms (Protocol core and
+  bench). Revisit after wisp#38's native cells.
 
 ## Deferred
 
@@ -642,14 +677,16 @@ model is TypeScript in wisp:src/headless/syncChannel.ts beside
 - Target-debt: reconnecting a dropped player; measured: none; owner: wisp
   lead; revisit: players report drops after C1 ships.
 
-Provenance: at most one underrun per 10 minutes (2.8 × 10⁻⁵ per turn) at
-RTT up to 200 ms and loss up to 5%, with D ≤ 3, judged in R6's bench on
-independent, burst and recorded loss; origin prior-art (W3Champions'
+Provenance: at most one underrun per 10 minutes (1.3 × 10⁻⁵ per turn at
+8 ms) at RTT up to 200 ms and loss up to 5%, with D ≤ 3, judged in R6's
+bench on independent, burst and recorded loss; origin prior-art (W3Champions'
 October 2026 announcement of no loss spikes at 5% loss and 200 ms ping);
 pointer this page, "Transport"; rationale not recorded; revisit when R6
 reports its burst-loss cells. R6 reported them on 25 October 2026 (Protocol
-core and bench): burst cells miss the bar at every depth up to 6, and 5%
-independent loss needs D = 4 unless the depth adds a jitter margin.
+core and bench): burst cells miss the bar at every depth up to the 100 ms
+ceiling, now wisp#45, and independent loss meets it with depth up to 50 ms
+at 1% and 66.7 ms at 5% (the proxy's bar of 25 October 2026, recorded
+there).
 
 ## Sources
 

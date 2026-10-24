@@ -7,6 +7,8 @@ use crate::wire::{
 };
 use crate::Micros;
 
+pub const LAG_LIMIT_US: Micros = 1_000_000;
+
 #[derive(Debug)]
 struct Player {
     token: u64,
@@ -15,6 +17,13 @@ struct Player {
     checksums: VecDeque<u32>,
     checksum_count: u32,
     packet_seq: u32,
+    last_turn: Option<u32>,
+}
+
+#[derive(Debug)]
+struct Pending {
+    action: Action,
+    release: bool,
 }
 
 #[derive(Debug)]
@@ -27,7 +36,9 @@ pub struct Relay {
     next_turn: u32,
     log: VecDeque<Turn>,
     log_from: u32,
-    pending: VecDeque<Action>,
+    pending: VecDeque<Pending>,
+    stopped: Option<Micros>,
+    stops: u32,
     compared: u32,
     desync: Option<u32>,
 }
@@ -41,7 +52,7 @@ pub enum RelayError {
 
 impl Relay {
     pub fn new(cadence: Cadence, tokens: &[u64], origin: Micros) -> Self {
-        assert!(tokens.len() <= u8::MAX as usize);
+        assert!(!tokens.is_empty() && tokens.len() <= u8::MAX as usize);
         Relay {
             cadence,
             players: tokens
@@ -53,6 +64,7 @@ impl Relay {
                     checksums: VecDeque::new(),
                     checksum_count: 0,
                     packet_seq: 0,
+                    last_turn: None,
                 })
                 .collect(),
             origin,
@@ -62,6 +74,8 @@ impl Relay {
             log: VecDeque::new(),
             log_from: 0,
             pending: VecDeque::new(),
+            stopped: None,
+            stops: 0,
             compared: 0,
             desync: None,
         }
@@ -77,6 +91,14 @@ impl Relay {
         self.next_turn
     }
 
+    pub fn stops(&self) -> u32 {
+        self.stops
+    }
+
+    pub fn stopped(&self) -> bool {
+        self.stopped.is_some()
+    }
+
     pub fn desync(&self) -> Option<u32> {
         self.desync
     }
@@ -86,9 +108,11 @@ impl Relay {
     }
 
     pub fn next_wake(&self) -> Micros {
-        match self.base {
-            Some(base) => base + self.cadence.relay_time(self.next_turn),
-            None => self.origin + self.next_probe as Micros * self.cadence.period_us(),
+        let period = self.cadence.period_us();
+        match (self.base, self.stopped) {
+            (Some(_), Some(at)) => at + self.next_probe as Micros * period,
+            (Some(base), None) => base + self.cadence.relay_time(self.next_turn),
+            (None, _) => self.origin + self.next_probe as Micros * period,
         }
     }
 
@@ -105,14 +129,17 @@ impl Relay {
         let emitted = self.next_turn;
         let player = &mut self.players[index];
         player.turn_ack = player.turn_ack.max(up.turn_ack.min(emitted));
-        for (i, data) in up.actions.into_iter().enumerate() {
+        for (i, sent) in up.actions.into_iter().enumerate() {
             if up.action_from.wrapping_add(i as u32) == player.next_action
-                && data.len() <= wire::MAX_ACTION
+                && sent.data.len() <= wire::MAX_ACTION
             {
-                self.pending.push_back(Action {
-                    player: index as u8,
-                    seq: player.next_action,
-                    data,
+                self.pending.push_back(Pending {
+                    action: Action {
+                        player: index as u8,
+                        seq: player.next_action,
+                        data: sent.data,
+                    },
+                    release: sent.release,
                 });
                 player.next_action += 1;
             }
@@ -131,16 +158,24 @@ impl Relay {
     }
 
     pub fn poll(&mut self, now: Micros) -> Vec<(usize, Vec<u8>)> {
-        let mut due = false;
-        while self.next_wake() <= now {
-            due = true;
-            match self.base {
-                Some(_) => self.emit_turn(),
-                None => self.next_probe += 1,
+        if self.next_wake() > now {
+            return Vec::new();
+        }
+        if self.stopped.is_some() && !self.lagging() {
+            self.stopped = None;
+            self.base = Some(now - self.cadence.relay_time(self.next_turn));
+        }
+        while self.base.is_some() && self.stopped.is_none() && self.next_wake() <= now {
+            if self.lagging() {
+                self.stopped = Some(now);
+                self.next_probe = 0;
+                self.stops += 1;
+            } else {
+                self.emit_turn();
             }
         }
-        if !due {
-            return Vec::new();
+        while self.next_wake() <= now {
+            self.next_probe += 1;
         }
         let mut out = Vec::new();
         for i in 0..self.players.len() {
@@ -154,16 +189,33 @@ impl Relay {
             step_ms: self.cadence.step_ms(self.next_turn),
             actions: Vec::new(),
         };
+        let index = self.next_turn;
         let mut size = TURN_HEADER;
-        while let Some(a) = self.pending.front() {
-            if size + a.wire_len() > MAX_TURN {
+        let mut held = vec![false; self.players.len()];
+        let mut i = 0;
+        while let Some(p) = self.pending.get(i) {
+            let player = p.action.player as usize;
+            if held[player] || (p.release && self.players[player].last_turn == Some(index)) {
+                held[player] = true;
+                i += 1;
+                continue;
+            }
+            if size + p.action.wire_len() > MAX_TURN {
                 break;
             }
-            size += a.wire_len();
-            turn.actions.push(self.pending.pop_front().unwrap());
+            size += p.action.wire_len();
+            self.players[player].last_turn = Some(index);
+            turn.actions.push(self.pending.remove(i).unwrap().action);
         }
         self.log.push_back(turn);
         self.next_turn += 1;
+    }
+
+    fn lagging(&self) -> bool {
+        let emitted = self.cadence.relay_time(self.next_turn);
+        self.players
+            .iter()
+            .any(|p| emitted - self.cadence.relay_time(p.checksum_count) > LAG_LIMIT_US)
     }
 
     fn packets_for(&mut self, index: usize, now: Micros) -> Vec<Vec<u8>> {
@@ -225,7 +277,7 @@ impl Relay {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wire::{encode, Up};
+    use crate::wire::{decode, encode, Up, UpAction};
 
     fn up(
         token: u64,
@@ -233,7 +285,7 @@ mod tests {
         checksum_from: u32,
         checksums: Vec<u32>,
         action_from: u32,
-        actions: Vec<Vec<u8>>,
+        actions: Vec<UpAction>,
     ) -> Vec<u8> {
         encode(&Packet::Up(Up {
             token,
@@ -248,16 +300,36 @@ mod tests {
         .unwrap()
     }
 
+    fn acts(data: &[u8]) -> Vec<UpAction> {
+        data.iter()
+            .map(|&b| UpAction {
+                release: false,
+                data: vec![b],
+            })
+            .collect()
+    }
+
+    fn turn_of(r: &Relay, player: u8, data: u8) -> usize {
+        r.log
+            .iter()
+            .position(|t| {
+                t.actions
+                    .iter()
+                    .any(|a| a.player == player && a.data == [data])
+            })
+            .unwrap()
+    }
+
     fn started() -> Relay {
-        let mut r = Relay::new(Cadence::standard(), &[1, 2], 0);
+        let mut r = Relay::new(Cadence::default(), &[1, 2], 0);
         r.start(0);
-        r.poll(Cadence::standard().relay_time(9));
+        r.poll(Cadence::default().relay_time(9));
         r
     }
 
     #[test]
     fn turns_are_due_on_absolute_deadlines() {
-        let mut r = Relay::new(Cadence::standard(), &[1], 0);
+        let mut r = Relay::new(Cadence::new(&[17, 17, 16]), &[1], 0);
         r.start(1_000);
         assert_eq!(r.poll(1_000).len(), 1);
         assert!(r.poll(17_999).is_empty());
@@ -269,12 +341,10 @@ mod tests {
     #[test]
     fn repeated_and_early_actions_enter_one_turn_once() {
         let mut r = started();
-        r.on_packet(&up(1, 0, 0, vec![], 1, vec![vec![9]])).unwrap();
-        r.on_packet(&up(1, 0, 0, vec![], 0, vec![vec![8], vec![9]]))
-            .unwrap();
-        r.on_packet(&up(1, 0, 0, vec![], 0, vec![vec![8], vec![9]]))
-            .unwrap();
-        r.poll(Cadence::standard().relay_time(10));
+        r.on_packet(&up(1, 0, 0, vec![], 1, acts(&[9]))).unwrap();
+        r.on_packet(&up(1, 0, 0, vec![], 0, acts(&[8, 9]))).unwrap();
+        r.on_packet(&up(1, 0, 0, vec![], 0, acts(&[8, 9]))).unwrap();
+        r.poll(Cadence::default().relay_time(10));
         let actions: Vec<_> = r.log.iter().flat_map(|t| t.actions.clone()).collect();
         assert_eq!(
             actions,
@@ -325,5 +395,74 @@ mod tests {
         assert_eq!(r.log_from, 4);
         r.on_packet(&up(2, 99, 0, vec![], 0, vec![])).unwrap();
         assert_eq!(r.log_from, 6);
+    }
+
+    #[test]
+    fn a_marked_release_lands_a_turn_after_its_press_without_holding_others() {
+        let mut r = started();
+        let press_release = vec![
+            UpAction {
+                release: false,
+                data: vec![1],
+            },
+            UpAction {
+                release: true,
+                data: vec![2],
+            },
+            UpAction {
+                release: false,
+                data: vec![3],
+            },
+        ];
+        r.on_packet(&up(1, 0, 0, vec![], 0, press_release)).unwrap();
+        r.on_packet(&up(2, 0, 0, vec![], 0, acts(&[4]))).unwrap();
+        r.poll(Cadence::default().relay_time(11));
+        let press = turn_of(&r, 0, 1);
+        assert_eq!(turn_of(&r, 1, 4), press);
+        assert_eq!(turn_of(&r, 0, 2), press + 1);
+        assert_eq!(turn_of(&r, 0, 3), press + 1);
+
+        r.on_packet(&up(
+            1,
+            0,
+            0,
+            vec![],
+            3,
+            vec![UpAction {
+                release: true,
+                data: vec![5],
+            }],
+        ))
+        .unwrap();
+        r.poll(Cadence::default().relay_time(12));
+        assert_eq!(turn_of(&r, 0, 5), press + 2);
+    }
+
+    #[test]
+    fn a_player_a_second_behind_stops_the_clock_and_the_restart_is_rebased() {
+        let cadence = Cadence::default();
+        let mut r = Relay::new(cadence.clone(), &[1], 0);
+        r.start(0);
+        let stop_at = cadence.relay_time(126);
+        r.poll(stop_at);
+        assert_eq!((r.turns_emitted(), r.stops()), (126, 1));
+        let probes = r.poll(stop_at + 500_000);
+        assert_eq!(r.turns_emitted(), 126);
+        assert!(!probes.is_empty());
+
+        let restart = r.next_wake();
+        r.on_packet(&up(1, 126, 0, vec![0; 64], 0, vec![])).unwrap();
+        r.on_packet(&up(1, 126, 64, vec![0; 62], 0, vec![]))
+            .unwrap();
+        let resumed = r.poll(restart);
+        assert_eq!(r.turns_emitted(), 127);
+        assert_eq!(r.next_wake(), restart + cadence.period_us());
+        let base = restart - cadence.relay_time(126);
+        match decode(&resumed[0].1).unwrap() {
+            Packet::Down(d) => assert_eq!(d.base_us, base as u64),
+            other => panic!("{other:?}"),
+        }
+        r.poll(restart + 10 * cadence.period_us());
+        assert_eq!((r.turns_emitted(), r.stops()), (137, 1));
     }
 }
