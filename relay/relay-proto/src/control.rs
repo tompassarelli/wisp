@@ -14,6 +14,7 @@ pub enum Refusal {
     NoRoom,
     Full,
     Players,
+    Busy,
 }
 
 impl Refusal {
@@ -23,6 +24,7 @@ impl Refusal {
             Refusal::NoRoom => 2,
             Refusal::Full => 3,
             Refusal::Players => 4,
+            Refusal::Busy => 5,
         }
     }
 
@@ -32,6 +34,7 @@ impl Refusal {
             2 => Refusal::NoRoom,
             3 => Refusal::Full,
             4 => Refusal::Players,
+            5 => Refusal::Busy,
             _ => return Err(WireError::Flags),
         })
     }

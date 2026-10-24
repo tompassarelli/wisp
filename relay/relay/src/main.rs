@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use relay::{udp, Config, Server};
 
-const USAGE: &str = "usage: relay [--bind ADDR] [--steps 8|17,17,16] [--lobby-ms N] [--idle-s N] [--rooms-per-minute N] [--once]";
+const USAGE: &str = "usage: relay [--bind ADDR] [--steps 8|17,17,16] [--lobby-ms N] [--idle-s N] [--rooms-per-minute N] [--max-rooms N] [--slot-mib N] [--once]";
 
 fn parse(args: &[String]) -> Result<(String, Config, bool), String> {
     let mut bind = "0.0.0.0:7457".to_string();
@@ -30,6 +30,8 @@ fn parse(args: &[String]) -> Result<(String, Config, bool), String> {
             "--lobby-ms" => cfg.lobby_us = number()? * 1_000,
             "--idle-s" => cfg.idle_us = number()? * 1_000_000,
             "--rooms-per-minute" => cfg.rooms_per_window = number()? as u32,
+            "--max-rooms" => cfg.max_rooms = number()? as usize,
+            "--slot-mib" => cfg.slot_bytes = (number()? as u64) << 20,
             _ => return Err(format!("unknown flag {flag}")),
         }
     }

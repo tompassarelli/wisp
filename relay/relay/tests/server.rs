@@ -295,3 +295,62 @@ fn rooms_close_when_every_player_leaves_or_after_the_idle_limit() {
     s.poll(2 * idle - 1, &mut out);
     assert_eq!((s.rooms(), s.stats().rooms_closed), (0, 2));
 }
+
+#[test]
+fn creates_past_the_room_cap_are_refused_as_busy_until_a_room_closes() {
+    let mut s = Server::new(Config {
+        max_rooms: 2,
+        ..Config::default()
+    });
+    assert!(matches!(create(&mut s, 0, addr(1, 1), 1), Control::Room { .. }));
+    assert!(matches!(create(&mut s, 0, addr(2, 1), 2), Control::Room { .. }));
+    assert_eq!(
+        create(&mut s, 0, addr(3, 1), 3),
+        Control::Refused {
+            request: 3,
+            reason: Refusal::Busy
+        }
+    );
+    assert_eq!((s.rooms(), s.stats().busy, s.stats().rate_limited), (2, 1, 0));
+    let idle = Config::default().idle_us;
+    s.poll(idle, &mut Vec::new());
+    assert_eq!(s.rooms(), 0);
+    assert!(matches!(create(&mut s, idle, addr(3, 1), 4), Control::Room { .. }));
+}
+
+#[test]
+fn a_room_closes_once_it_relays_past_its_byte_budget_and_its_slots_are_gone() {
+    let slot_bytes = 4_096;
+    let mut s = Server::new(Config {
+        lobby_us: 0,
+        slot_bytes,
+        ..Config::default()
+    });
+    let (a, b) = (addr(1, 1000), addr(2, 1000));
+    let (token, joiner) = full_room(&mut s, a, b);
+    let mut now = 0;
+    let mut relayed = 0u64;
+    while s.rooms() == 1 {
+        let mut out = Vec::new();
+        s.on_datagram(now, a, &up(token, vec![]), &mut out);
+        s.on_datagram(now, b, &up(joiner, vec![]), &mut out);
+        out.clear();
+        s.poll(now, &mut out);
+        relayed += out.iter().map(|(_, bytes)| bytes.len() as u64).sum::<u64>();
+        assert!(now < 60_000_000, "the room relayed {relayed} bytes and stayed open");
+        now += 8_000;
+    }
+    assert!(relayed > 2 * slot_bytes);
+    assert!(relayed <= 2 * slot_bytes + 2 * relay_proto::wire::MAX_PACKET as u64 * relay_proto::wire::MAX_PACKETS_PER_TICK as u64);
+    assert_eq!((s.stats().spent, s.stats().rooms_closed), (1, 1));
+    let mut out = Vec::new();
+    s.on_datagram(now, a, &up(token, vec![]), &mut out);
+    s.poll(now, &mut out);
+    assert!(downs(&out, a).is_empty());
+    let cookie = s.cookie(b, now);
+    let rejoin = say(&mut s, now, b, &Control::Join { cookie, request: 9, room: 0 });
+    assert!(matches!(
+        control::decode(&rejoin[0].1),
+        Ok(Control::Refused { reason: Refusal::NoRoom, .. })
+    ));
+}

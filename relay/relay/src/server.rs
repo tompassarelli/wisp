@@ -13,9 +13,10 @@ use relay_proto::Micros;
 
 use crate::game_room::GameRoom;
 use crate::path::{send_down, Delivery, Path};
+use crate::room::{Room, Slot};
 
 pub use crate::path::{Out, AMPLIFICATION};
-pub const REPORT_US: Micros = 5_000_000;
+pub use crate::room::REPORT_US;
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -27,6 +28,8 @@ pub struct Config {
     pub cookie_epoch_us: Micros,
     pub challenge_gap_us: Micros,
     pub max_players: u8,
+    pub max_rooms: usize,
+    pub slot_bytes: u64,
     pub game_timing: LobbyTiming,
 }
 
@@ -41,6 +44,8 @@ impl Default for Config {
             cookie_epoch_us: 10_000_000,
             challenge_gap_us: 20_000,
             max_players: 24,
+            max_rooms: 128,
+            slot_bytes: 256 << 20,
             game_timing: HOST_TIMING,
         }
     }
@@ -51,6 +56,8 @@ pub struct Stats {
     pub rooms_created: u64,
     pub rooms_closed: u64,
     pub rate_limited: u64,
+    pub busy: u64,
+    pub spent: u64,
     pub challenges: u64,
     pub rebinds: u64,
     pub verified: u64,
@@ -58,77 +65,6 @@ pub struct Stats {
     pub withheld: u64,
     pub desyncs: u64,
     pub stops: u64,
-}
-
-
-#[derive(Debug)]
-struct Slot {
-    token: u64,
-    path: Option<Path>,
-    joined_by: Option<(SocketAddr, u64)>,
-    left: bool,
-}
-
-#[derive(Debug)]
-struct Room {
-    relay: Relay,
-    slots: Vec<Slot>,
-    full_at: Option<Micros>,
-    started: bool,
-    game: GameRoom,
-    next_report: Micros,
-    heard: Micros,
-}
-
-impl Room {
-    fn reply(&self, room: u64, slot: usize, request: u64, steps: &[u8]) -> Vec<u8> {
-        control::encode(&Control::Room {
-            request,
-            room,
-            token: self.slots[slot].token,
-            players: self.slots.len() as u8,
-            slot: slot as u8,
-            steps: steps.to_vec(),
-        })
-    }
-
-    fn done(&self) -> bool {
-        self.slots.iter().all(|s| s.left)
-    }
-
-    fn poll_game(&mut self, id: u64, now: Micros, lobby_us: Micros, cadence: &Cadence, out: &mut Out, log: &mut Vec<String>) {
-        let ready = if self.game.hosted() { self.game.playing() } else { self.full_at.is_some_and(|t| now >= t + lobby_us) };
-        if !self.started && ready {
-            self.relay.start(now);
-            self.started = true;
-            log.push(format!("room {id:016x} playing"));
-        }
-        for (index, bytes) in self.game.poll(now) {
-            if let Some(path) = &mut self.slots[index].path {
-                path.send(bytes, out);
-            }
-        }
-        log.extend(self.game.take_log().into_iter().map(|line| format!("room {id:016x} {line}")));
-        if self.started && now >= self.next_report {
-            self.next_report = now + REPORT_US;
-            log.push(self.report(id, now, cadence));
-        }
-    }
-
-    fn report(&self, id: u64, now: Micros, cadence: &Cadence) -> String {
-        let turns = self.relay.turns_emitted();
-        let game_us = cadence.relay_time(turns);
-        let wall_us = self.relay.running_since().map_or(0, |since| now - since);
-        let pace = if wall_us > 0 { game_us as f64 / wall_us as f64 } else { 0.0 };
-        format!(
-            "room {id:016x} summary: turns {turns} game {:.3} s wall {:.3} s pace {pace:.4} checksums compared {} desyncs {} stops {}",
-            game_us as f64 / 1e6,
-            wall_us as f64 / 1e6,
-            self.relay.checksums_compared(),
-            u32::from(self.relay.desync().is_some()),
-            self.relay.stops(),
-        )
-    }
 }
 
 #[derive(Debug)]
@@ -299,8 +235,10 @@ impl Server {
     }
 
     fn refuse(&mut self, request: u64, reason: Refusal) -> Vec<u8> {
-        if reason == Refusal::RateLimited {
-            self.stats.rate_limited += 1;
+        match reason {
+            Refusal::RateLimited => self.stats.rate_limited += 1,
+            Refusal::Busy => self.stats.busy += 1,
+            _ => {}
         }
         control::encode(&Control::Refused { request, reason })
     }
@@ -316,6 +254,9 @@ impl Server {
         }
         if players == 0 || players > self.cfg.max_players {
             return self.refuse(request, Refusal::Players);
+        }
+        if self.rooms.len() >= self.cfg.max_rooms {
+            return self.refuse(request, Refusal::Busy);
         }
         let window = self.cfg.rate_window_us;
         let entry = self.creations.entry(from.ip()).or_insert((now, 0));
@@ -350,6 +291,7 @@ impl Server {
             slots,
             started: false,
             heard: now,
+            relayed: 0,
         };
         let reply = room.reply(id, 0, request, &steps);
         self.rooms.insert(id, room);
@@ -438,6 +380,7 @@ impl Server {
     pub fn poll(&mut self, now: Micros, out: &mut Out) {
         let mut closing = Vec::new();
         for (&id, room) in &mut self.rooms {
+            let mark = out.len();
             room.poll_game(id, now, self.cfg.lobby_us, &self.cadence, out, &mut self.log);
             if room.relay.next_wake() <= now {
                 for (index, bytes) in room.relay.poll(now) {
@@ -454,7 +397,13 @@ impl Server {
                     }
                 }
             }
-            if now - room.heard >= self.cfg.idle_us {
+            room.relayed += out[mark..].iter().map(|(_, b)| b.len() as u64).sum::<u64>();
+            let budget = self.cfg.slot_bytes * room.slots.len() as u64;
+            if room.relayed > budget {
+                self.stats.spent += 1;
+                self.log.push(format!("room {id:016x} closed: relayed {} bytes, over its {budget}-byte budget", room.relayed));
+                closing.push(id);
+            } else if now - room.heard >= self.cfg.idle_us {
                 closing.push(id);
             }
         }
