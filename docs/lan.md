@@ -524,7 +524,10 @@ makes, for each client:
   (default `~/.local/share/wisp/lan/clients/<name>/`), created inside a network
   namespace with nothing but loopback. It holds no Battle.net and no account.
   Its only setting is `HKCU\Software\Blizzard Entertainment\Warcraft III` →
-  `Allow Local Files` = 1, which the menu page needs;
+  `Allow Local Files` = 1, which the menu page needs. Setup sets it again on
+  an existing prefix whose `user.reg` lacks it: without it the client sits at
+  its error modal, its menu page never reports, and `lan fresh` fails with
+  "no menu page reported";
 - a reflinked copy of the install (`cp --reflink=always`). On btrfs or xfs a
   33 GB install costs no space until a file in it changes. Where the
   filesystem can't clone (ext4, tmpfs), setup copies every entry outside

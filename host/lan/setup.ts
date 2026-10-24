@@ -92,6 +92,8 @@ const placeInstall = (name: string, from: string, refresh: boolean) => Effect.ge
   return `linked (Data hardlinked, ${Math.round(bytes / 2 ** 20)} MB copied)`;
 });
 
+const ALLOW_LOCAL_FILES = "\"Allow Local Files\"=dword:00000001";
+
 export const setupClient = (name: string, from: string, poolBuild: string, port: number, log: (line: string) => void) => Effect.gen(function*() {
   if (!existsSync(join(from, "_retail_/x86_64/Warcraft III.exe"))) return yield* new LanFailure({ problem: `${from} isn't a Warcraft III install (no _retail_/x86_64/Warcraft III.exe)` });
   const build = yield* Effect.try({
@@ -102,15 +104,16 @@ export const setupClient = (name: string, from: string, poolBuild: string, port:
     return yield* new LanFailure({ problem: `${from} is build ${build ?? "unknown"}, but the pool runs ${poolBuild}; set up from an install on ${poolBuild}` });
   }
   const root = clientRoot(name);
-  if (!existsSync(join(prefixOf(name), "user.reg"))) {
+  const userRegistry = join(prefixOf(name), "user.reg");
+  if (!existsSync(userRegistry) || !readFileSync(userRegistry, "utf8").includes(ALLOW_LOCAL_FILES)) {
     mkdirSync(root, { recursive: true });
     const appId = "3516115599";
     const registry = yield* GameLauncher.use((launcher) => launcher.inPrefix({
       root, appId, isolateNetwork: true, exe: "C:\\windows\\system32\\reg.exe",
       args: ["add", "HKCU\\Software\\Blizzard Entertainment\\Warcraft III", "/v", "Allow Local Files", "/t", "REG_DWORD", "/d", "1", "/f"],
     })).pipe(Effect.mapError((failure) => new LanFailure({ problem: failure.message })));
-    yield* run(`create ${name}'s prefix`, registry.command, registry.env);
-    log(`${name}: prefix created with Allow Local Files`);
+    yield* run(`set Allow Local Files in ${name}'s prefix`, registry.command, registry.env);
+    log(`${name}: prefix has Allow Local Files`);
   }
   if (!existsSync(installOf(name))) {
     const how = yield* placeInstall(name, from, false);
