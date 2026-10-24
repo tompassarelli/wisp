@@ -1,6 +1,7 @@
 use relay_proto::cadence::Cadence;
 use relay_proto::rng::Rng;
-use relay_proto::sim::{run, AgentSpec, Loss, Outcome, Path, Scenario};
+use relay_proto::sim::{run, AgentOutcome, AgentSpec, Loss, Outcome, Path, Scenario};
+use relay_proto::transport::{self, Transport};
 use relay_proto::wire::{self, Action, Down, Packet, Turn, Up, UpAction};
 use relay_proto::Micros;
 
@@ -40,6 +41,7 @@ fn scenario(seed: u64) -> Scenario {
             },
             action_bytes: (0, rng.range(0, 300) as usize),
             releases: rng.unit(),
+            udp_blocked: false,
         })
         .collect();
     let outages = (0..rng.below(4))
@@ -140,6 +142,79 @@ fn every_agent_feeds_the_same_turns_and_every_action_once() {
     }
 }
 
+fn fed_bytes(a: &AgentOutcome) -> Vec<u8> {
+    let head = Down {
+        token: 0,
+        seq: 0,
+        sent_us: 0,
+        base_us: 0,
+        action_ack: 0,
+        checksum_ack: 0,
+        turn_from: 0,
+        turns: Vec::new(),
+    };
+    let mut out = Vec::new();
+    for f in &a.fed {
+        let (bytes, n) = wire::encode_down(&head, std::slice::from_ref(&f.turn), wire::MAX_PACKET);
+        assert_eq!(n, 1);
+        out.extend_from_slice(&bytes[wire::DOWN_HEADER..]);
+    }
+    out
+}
+
+fn with_udp_blocked(mut s: Scenario, blocked: impl Fn(usize) -> bool) -> Scenario {
+    let shift = transport::FALLBACK_US + SECOND;
+    s.lobby_us += shift;
+    for o in &mut s.outages {
+        *o = (o.0 + shift, o.1 + shift);
+    }
+    for (i, a) in s.agents.iter_mut().enumerate() {
+        a.udp_blocked = blocked(i);
+    }
+    s
+}
+
+fn check_transports(seed: u64, s: &Scenario, o: &Outcome) {
+    for (i, (spec, a)) in s.agents.iter().zip(&o.agents).enumerate() {
+        let want = if spec.udp_blocked {
+            Transport::Tcp
+        } else {
+            Transport::Udp
+        };
+        assert_eq!(a.transport, want, "seed {seed}: agent {i} transport");
+    }
+    let longest = o.agents.iter().max_by_key(|a| a.fed.len()).unwrap();
+    let reference = fed_bytes(longest);
+    for (i, a) in o.agents.iter().enumerate() {
+        let bytes = fed_bytes(a);
+        assert_eq!(
+            bytes,
+            reference[..bytes.len()],
+            "seed {seed}: agent {i} fed different bytes"
+        );
+    }
+}
+
+#[test]
+fn with_udp_dropped_every_agent_feeds_the_same_turn_bytes_over_tcp() {
+    for seed in 0..48u64 {
+        let s = with_udp_blocked(scenario(seed), |_| true);
+        let o = run(&s);
+        check(seed, &s, &o);
+        check_transports(seed, &s, &o);
+    }
+}
+
+#[test]
+fn one_room_carries_udp_and_tcp_agents_together() {
+    for seed in 0..16u64 {
+        let s = with_udp_blocked(scenario(seed), |i| i % 2 == 1);
+        let o = run(&s);
+        check(seed, &s, &o);
+        check_transports(seed, &s, &o);
+    }
+}
+
 #[test]
 fn turns_over_the_packet_ceiling_split_across_turns() {
     let path = Path {
@@ -155,6 +230,7 @@ fn turns_over_the_packet_ceiling_split_across_turns() {
         actions_hz: 400.0,
         action_bytes: (200, 500),
         releases: 0.5,
+        udp_blocked: false,
     };
     let s = Scenario {
         seed: 99,

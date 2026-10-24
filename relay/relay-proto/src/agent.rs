@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 
 use crate::cadence::Cadence;
 use crate::depth::{self, DepthChoice, LinkSample};
+use crate::transport::{Transport, FALLBACK_US};
 use crate::wire::{
     self, Packet, Turn, Up, UpAction, WireError, MAX_ACTION, MAX_PACKET, MAX_PACKETS_PER_TICK,
     NOT_STARTED,
@@ -90,6 +91,10 @@ pub struct Agent {
     checksum_base: u32,
     next_send: Micros,
     up_seq: u32,
+    transport: Transport,
+    fallback_at: Option<Micros>,
+    streamed_actions: u32,
+    streamed_checksums: u32,
     stats: AgentStats,
 }
 
@@ -121,12 +126,20 @@ impl Agent {
             checksum_base: 0,
             next_send: now,
             up_seq: 0,
+            transport: Transport::Udp,
+            fallback_at: Some(now + FALLBACK_US),
+            streamed_actions: 0,
+            streamed_checksums: 0,
             stats: AgentStats::default(),
         }
     }
 
     pub fn started(&self) -> bool {
         self.base.is_some()
+    }
+
+    pub fn transport(&self) -> Transport {
+        self.transport
     }
 
     pub fn choice(&self) -> Option<&DepthChoice> {
@@ -179,6 +192,7 @@ impl Agent {
         if down.token != self.cfg.token {
             return Err(AgentError::WrongToken);
         }
+        self.fallback_at = None;
         let offset = now - down.sent_us as Micros;
         if self.choice.is_none() {
             self.lobby.record(down.seq, offset);
@@ -225,7 +239,7 @@ impl Agent {
     }
 
     pub fn next_wake(&self) -> Micros {
-        let mut wake = self.next_send;
+        let mut wake = self.next_send.min(self.fallback_at.unwrap_or(Micros::MAX));
         if let (Some(_), Some(_)) = (self.base, &self.choice) {
             match self.buffer.front() {
                 Some(Some(_)) => wake = wake.min(self.due()),
@@ -237,6 +251,13 @@ impl Agent {
     }
 
     pub fn poll(&mut self, now: Micros) -> (Vec<Fed>, Vec<Vec<u8>>) {
+        if self.fallback_at.is_some_and(|at| now >= at) {
+            self.fallback_at = None;
+            self.transport = Transport::Tcp;
+            self.streamed_actions = self.action_base;
+            self.streamed_checksums = self.checksum_base;
+            self.next_send = now;
+        }
         let fed = self.feed(now);
         let packets = if now >= self.next_send {
             self.upstream(now)
@@ -353,7 +374,15 @@ impl Agent {
         self.next_send = now + self.period;
         let checksums = self.checksums.make_contiguous();
         let actions = self.actions.make_contiguous();
-        let (mut sums_sent, mut actions_sent) = (0usize, 0usize);
+        let (mut sums_sent, mut actions_sent) = match self.transport {
+            Transport::Udp => (0, 0),
+            Transport::Tcp => (
+                (self.streamed_checksums.saturating_sub(self.checksum_base) as usize)
+                    .min(checksums.len()),
+                (self.streamed_actions.saturating_sub(self.action_base) as usize)
+                    .min(actions.len()),
+            ),
+        };
         let mut out = Vec::new();
         loop {
             let head = Up {
@@ -376,6 +405,8 @@ impl Agent {
             out.push(bytes);
             sums_sent += s;
             actions_sent += a;
+            self.streamed_checksums = self.checksum_base + sums_sent as u32;
+            self.streamed_actions = self.action_base + actions_sent as u32;
             let done = sums_sent == checksums.len() && actions_sent == actions.len();
             if done || s + a == 0 || out.len() == MAX_PACKETS_PER_TICK {
                 return out;

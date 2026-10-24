@@ -6,23 +6,12 @@ use crate::cadence::Cadence;
 use crate::depth::{DepthChoice, LinkSample};
 pub use crate::histogram::Histogram;
 use crate::relay::Relay;
+use crate::net::{Clock, Link, Stream};
+pub use crate::net::{Loss, Path};
 use crate::rng::Rng;
+use crate::transport::Transport;
 use crate::wire::{self, Packet, Turn, UpAction};
 use crate::Micros;
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Loss {
-    None,
-    Independent(f64),
-    Burst { loss: f64, mean_burst: f64 },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Path {
-    pub one_way_us: Micros,
-    pub jitter_mean_us: f64,
-    pub loss: Loss,
-}
 
 #[derive(Clone, Debug)]
 pub struct AgentSpec {
@@ -33,6 +22,7 @@ pub struct AgentSpec {
     pub actions_hz: f64,
     pub action_bytes: (usize, usize),
     pub releases: f64,
+    pub udp_blocked: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -64,6 +54,7 @@ pub struct AgentOutcome {
     pub echo: Histogram,
     pub bytes_down: u64,
     pub bytes_up: u64,
+    pub transport: Transport,
 }
 
 
@@ -77,74 +68,9 @@ pub struct Outcome {
     pub match_start: Micros,
 }
 
-struct Link {
-    path: Path,
-    rng: Rng,
-    bad: bool,
-}
-
-impl Link {
-    fn new(path: Path, rng: Rng) -> Self {
-        Link {
-            path,
-            rng,
-            bad: false,
-        }
-    }
-
-    fn send(&mut self, now: Micros, quiet: bool, outages: &[(Micros, Micros)]) -> Option<Micros> {
-        let lost = match self.path.loss {
-            Loss::None => false,
-            Loss::Independent(p) => self.rng.chance(p),
-            Loss::Burst { loss, mean_burst } => {
-                let leave = 1.0 / mean_burst.max(1.0);
-                let enter = loss * leave / (1.0 - loss).max(1e-9);
-                self.bad = if self.bad {
-                    !self.rng.chance(leave)
-                } else {
-                    self.rng.chance(enter)
-                };
-                self.bad
-            }
-        };
-        let jitter = self.rng.exp(self.path.jitter_mean_us) as Micros;
-        if quiet {
-            return Some(now + self.path.one_way_us + jitter);
-        }
-        if lost || outages.iter().any(|&(a, b)| now >= a && now < b) {
-            return None;
-        }
-        Some(now + self.path.one_way_us + jitter)
-    }
-}
-
-#[derive(Clone, Copy)]
-struct Clock {
-    offset: Micros,
-    ppb: i64,
-}
-
-impl Clock {
-    fn local(self, t: Micros) -> Micros {
-        self.offset + t + ((t as i128 * self.ppb as i128).div_euclid(1_000_000_000)) as Micros
-    }
-
-    fn true_time(self, local: Micros) -> Micros {
-        let mut t = (((local - self.offset) as i128 * 1_000_000_000)
-            / (1_000_000_000 + self.ppb as i128)) as Micros;
-        while self.local(t) < local {
-            t += 1;
-        }
-        while self.local(t - 1) >= local {
-            t -= 1;
-        }
-        t
-    }
-}
-
 enum Event {
-    ToRelay(Vec<u8>),
-    ToAgent(usize, Vec<u8>),
+    ToRelay(usize, Vec<u8>, Transport),
+    ToAgent(usize, Vec<u8>, Transport),
 }
 
 struct Node {
@@ -153,6 +79,10 @@ struct Node {
     clock: Clock,
     down: Link,
     up: Link,
+    tcp_down: Stream,
+    tcp_up: Stream,
+    rtt_us: Micros,
+    udp_blocked: bool,
     rng: Rng,
     next_action: Micros,
     action_count: u32,
@@ -210,6 +140,10 @@ fn node(s: &Scenario, index: usize, token: u64, rng: &mut Rng) -> Node {
         clock,
         down: Link::new(spec.down, rng.fork()),
         up: Link::new(spec.up, rng.fork()),
+        tcp_down: Stream::default(),
+        tcp_up: Stream::default(),
+        rtt_us: spec.down.one_way_us + spec.up.one_way_us,
+        udp_blocked: spec.udp_blocked,
         rng,
         next_action: if spec.actions_hz > 0.0 {
             first
@@ -235,6 +169,7 @@ fn node(s: &Scenario, index: usize, token: u64, rng: &mut Rng) -> Node {
             echo: Histogram::default(),
             bytes_down: 0,
             bytes_up: 0,
+            transport: Transport::Udp,
         },
     }
 }
@@ -317,21 +252,74 @@ impl Sim<'_> {
                     Micros::MIN
                 }
             }));
+        let dupack_us = 3 * self.s.cadence.period_us();
+        self.send_down(now, quiet, playing, dupack_us, packets);
+        self.send_up(now, quiet, playing, dupack_us);
+    }
+
+
+    fn send_down(
+        &mut self,
+        now: Micros,
+        quiet: bool,
+        playing: bool,
+        dupack_us: Micros,
+        packets: Vec<(usize, Vec<u8>)>,
+    ) {
         for (i, bytes) in packets {
+            let via = self.relay.transport(i);
+            let n = &mut self.nodes[i];
+            let (at, bytes) = match via {
+                Transport::Udp if n.udp_blocked => (None, bytes),
+                Transport::Udp => (n.down.send(now, quiet, &self.s.outages), bytes),
+                Transport::Tcp => {
+                    let at = n.down.stream(
+                        now,
+                        quiet,
+                        &self.s.outages,
+                        n.rtt_us,
+                        dupack_us,
+                        &mut n.tcp_down.resume,
+                    );
+                    (Some(n.tcp_down.arrival(at)), wire::frame(&bytes))
+                }
+            };
             if playing {
-                self.nodes[i].out.bytes_down += bytes.len() as u64;
+                n.out.bytes_down += bytes.len() as u64;
             }
-            if let Some(at) = self.nodes[i].down.send(now, quiet, &self.s.outages) {
-                self.push(at, Event::ToAgent(i, bytes));
+            if let Some(at) = at {
+                self.push(at, Event::ToAgent(i, bytes, via));
             }
         }
+    }
+
+    fn send_up(&mut self, now: Micros, quiet: bool, playing: bool, dupack_us: Micros) {
         for i in 0..self.nodes.len() {
-            for bytes in self.nodes[i].step(now, self.s) {
+            let packets = self.nodes[i].step(now, self.s);
+            let via = self.nodes[i].agent.transport();
+            for bytes in packets {
+                let n = &mut self.nodes[i];
+                let (at, bytes) = match via {
+                    Transport::Udp if n.udp_blocked => (None, bytes),
+                    Transport::Udp => (n.up.send(now, quiet, &self.s.outages), bytes),
+                    Transport::Tcp => {
+                        let sent = now.max(*n.tcp_up.open_at.get_or_insert(now + n.rtt_us));
+                        let at = n.up.stream(
+                            sent,
+                            quiet,
+                            &self.s.outages,
+                            n.rtt_us,
+                            dupack_us,
+                            &mut n.tcp_up.resume,
+                        );
+                        (Some(n.tcp_up.arrival(at)), wire::frame(&bytes))
+                    }
+                };
                 if playing {
-                    self.nodes[i].out.bytes_up += bytes.len() as u64;
+                    n.out.bytes_up += bytes.len() as u64;
                 }
-                if let Some(at) = self.nodes[i].up.send(now, quiet, &self.s.outages) {
-                    self.push(at, Event::ToRelay(bytes));
+                if let Some(at) = at {
+                    self.push(at, Event::ToRelay(i, bytes, via));
                 }
             }
         }
@@ -345,13 +333,19 @@ impl Sim<'_> {
             self.heap.pop();
             self.free.push(slot);
             match self.events[slot].take().unwrap() {
-                Event::ToRelay(bytes) => {
+                Event::ToRelay(_, bytes, Transport::Udp) => {
                     let _ = self.relay.on_packet(&bytes);
                 }
-                Event::ToAgent(i, bytes) => {
-                    self.nodes[i].note_arrivals(self.now, &bytes);
-                    let local = self.nodes[i].clock.local(self.now);
-                    let _ = self.nodes[i].agent.on_packet(local, &bytes);
+                Event::ToRelay(i, bytes, Transport::Tcp) => {
+                    for f in self.nodes[i].tcp_up.frames(&bytes) {
+                        let _ = self.relay.on_packet_via(&f, Transport::Tcp);
+                    }
+                }
+                Event::ToAgent(i, bytes, Transport::Udp) => self.nodes[i].receive(self.now, &bytes),
+                Event::ToAgent(i, bytes, Transport::Tcp) => {
+                    for f in self.nodes[i].tcp_down.frames(&bytes) {
+                        self.nodes[i].receive(self.now, &f);
+                    }
                 }
             }
         }
@@ -370,6 +364,7 @@ impl Sim<'_> {
                 .map(|mut n| {
                     n.out.stats = n.agent.stats().clone();
                     n.out.unacked_at_end = n.agent.unacked_actions();
+                    n.out.transport = n.agent.transport();
                     for (&sent, &got) in self.emitted_at.iter().zip(&n.arrived) {
                         if sent != Micros::MIN && got != Micros::MIN {
                             n.out.delivery.add(got - sent);
@@ -383,6 +378,12 @@ impl Sim<'_> {
 }
 
 impl Node {
+    fn receive(&mut self, now: Micros, bytes: &[u8]) {
+        self.note_arrivals(now, bytes);
+        let local = self.clock.local(now);
+        let _ = self.agent.on_packet(local, bytes);
+    }
+
     fn note_arrivals(&mut self, now: Micros, bytes: &[u8]) {
         let Ok(Packet::Down(d)) = wire::decode(bytes) else {
             return;

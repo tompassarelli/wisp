@@ -245,6 +245,54 @@ verifies it, so it can't be used to amplify an attack.
   `relay-agent`'s own tests check the handshake's cookie echo, the Verify
   after a rebind and a refusal, against a bare socket.
 
+**TCP fallback (wisp#41).** Some networks (hotels, schools, offices) block
+outbound UDP; W3Champions falls back from QUIC to TCP for the same reason.
+UDP stays the default. The agent's first up packets are its handshake and go
+over UDP. If no down packet with its token arrives within 2 s
+(`transport::FALLBACK_US`), the agent opens one TCP connection to the same
+relay port and stays on it for the match. The connection carries the same
+packets, each behind `wire::frame`'s u16 length prefix, and
+`transport::Deframer` cuts them back out of the stream, refusing a frame
+over 1,200 bytes. The relay keys players by token as before, so one room
+holds UDP and TCP players together: a player heard over TCP is answered over
+TCP from then on.
+
+- **Each item once.** TCP is reliable and ordered, so over TCP the relay
+  sends each turn once and the agent each action and checksum once, from
+  where its last packet ended; acknowledgements still trim both queues. The
+  first sim run kept UDP's redundant history on TCP: during head-of-line
+  stalls the unacknowledged history outgrew the 4 packets a tick, the newest
+  turns stopped going out and the relay's clock stopped for good.
+- **Sim model.** A segment is delayed and lost like a UDP packet on the same
+  path and delivered in order, so a lost segment holds every later one. A
+  lost segment is resent one RTT plus 3 turn periods later (fast
+  retransmit; RACK detects a lost retransmission the same way). An outage
+  is recovered by one retransmission timer per connection, RTT + 200 ms
+  doubling up to 120 s, after which the queued segments flow again. The
+  connection opens one RTT after the switch.
+- **Property test** (`relay-proto/tests/property.rs`): the first 48 of the
+  128 scenarios rerun with UDP dropped entirely for every agent (the lobby
+  and outages moved 3 s later so the lobby outlasts the fallback). Every
+  agent ends on TCP and feeds the same turn sequence byte for byte (each
+  fed turn as encoded on the wire), with the checks above. 16 scenarios run
+  with every second agent blocked, in one room with UDP agents.
+- **Measured** (bench, one hour, 8 ms turns, 25 October 2026):
+
+| RTT | Loss | D (A/B), depth | Max depth | Underruns per 10 min (A/B) | Delivery p50/p99/p99.9 | Bytes/s down/up |
+|---|---|---|---|---|---|---|
+| 100 ms | UDP blocked, 1% over TCP | 6/6, 48.0 ms | 255.2 ms | 732.83/762.00 | 51.9/174.5/229.3 ms | 6459/5797 |
+
+- **Reading it.** Delivery p99 is 174.5 ms against 59.4 ms over UDP at
+  the same RTT and loss: a lost segment holds the stream for one RTT plus
+  three turns. The depth rule assumes D + 1 copies of each turn, but TCP
+  sends one, so it chooses 48 ms and underruns about 1.2 times a second.
+  With `--margin 0.99` (depth from the lobby's 99th-percentile delay) the
+  agents choose 140.3 ms and see 8.33/8.00 underruns per 10 minutes, past
+  the 100 ms ceiling and the bar. So TCP keeps a player on a UDP-blocked
+  network in the match but plays far worse than UDP does at 5% loss, and
+  UDP stays the default. Bytes include the 2-byte prefix and are about half
+  UDP's, because nothing is repeated. The TCP depth rule is open.
+
 ## Jitter buffer (boxes R6, R9, C2)
 
 The agent writes turn k to the game at its feed time
@@ -353,7 +401,8 @@ rustc 1.97.0 by `relay/rust-toolchain.toml`, with no dependencies. CI job
     release mark, and a length) plus its bytes. Decoding refuses short,
     trailing or unknown bytes, including unknown flags. A packet doesn't
     depend on datagram boundaries, so `wire::frame` (a u16 length prefix) is
-    all the TCP fallback (wisp#41) needs.
+    all the TCP fallback (Transport, above) needs.
+  - `transport`: the 2 s fallback deadline and the TCP stream's deframer.
   - `relay`: the turn clock on absolute deadlines (probes every turn period
     in the lobby, then turn k at base + relayTime(k)). It takes each player's
     next action in sequence exactly once, caps a turn at what fits one
@@ -383,8 +432,8 @@ rustc 1.97.0 by `relay/rust-toolchain.toml`, with no dependencies. CI job
     smallest D that meets the bar is chosen; past 100 ms of depth (12 turns
     at 8 ms) the link is too poor (`!` in the table).
   - `sim`: a seeded event simulator with per-direction delay, exponential
-    jitter, independent or Gilbert-Elliott loss, blackouts and agent clock
-    drift.
+    jitter, independent or Gilbert-Elliott loss, blackouts, agent clock
+    drift and per-agent blocked UDP with the TCP fallback.
 - **Change from the plan.** When the unacknowledged turns (or actions) don't
   fit 1,200 bytes, the sender sends up to 4 consecutive packets in that
   tick, oldest first. With one packet a tick, a heavy action stream starved
@@ -409,8 +458,10 @@ rustc 1.97.0 by `relay/rust-toolchain.toml`, with no dependencies. CI job
   −100 ppm, and each sends 4 actions a second of 9–29 bytes, half of them
   marked releases. Blackout cells drop every packet for 1 s every 5 minutes.
   Their underruns from a blackout start until 1 s after it drains are not
-  counted. "Depth" is the worse agent's chosen depth and "max depth" the
-  most it reached with added depth. "Catch-up after blackout" is the longest
+  counted. The "UDP blocked" cell drops all UDP for both agents, so they
+  play over the TCP fallback (Transport, above); it is measured only.
+  "Depth" is the worse agent's chosen depth and "max depth" the most it
+  reached with added depth. "Catch-up after blackout" is the longest
   time from a blackout's end until the agent is back to D + 1. "Delivery" is
   the time from the relay emitting a turn to the agent first holding it, at
   the worse agent's p50, p99 and p99.9. "Own echo" is the time from an agent
@@ -457,6 +508,7 @@ rustc 1.97.0 by `relay/rust-toolchain.toml`, with no dependencies. CI job
 | 200 ms | 3% bursts of 2 | 11/12, 96.0 ms | 114.6 ms | 1.00/0.50 | – | 101.5/118.6/148.3 ms | 302.7/320.7 ms | 21161/20878 | 0 | none | measured |
 | 200 ms | 3% bursts of 4 | 12!/12!, 96.0 ms | 263.5 ms | 18.33/20.50 | – | 101.5/137.1/201.2 ms | 306.6/344.4 ms | 21176/20922 | 0 | none | measured |
 | 200 ms | 1% + 1 s blackout / 5 min | 3/3, 24.0 ms | 1008.0 ms | 0.17/0.17 | 858 ms | 101.5/109.8/780.3 ms | 230.9/243.3 ms | 21147/20833 | 11 | none | pass (≤ 50.0 ms) |
+| 100 ms | UDP blocked, 1% over TCP | 6/6, 48.0 ms | 255.2 ms | 732.83/762.00 | – | 51.9/174.5/229.3 ms | 162.6/304.7 ms | 6459/5797 | 0 | none | measured |
 
 - **Bar.** Met in every judged cell: depth 24–32 ms up to 1% loss (D = 3,
   one agent D = 4 at 150 ms), 32 ms at 2% and 40 ms at 5% (D = 4–5),
@@ -594,8 +646,8 @@ Built for wisp#37 (code box), in `relay/`:
 - **NAT.** Every agent sends first, to the relay's public address, so no hole
   punching, STUN or port forwarding is needed. CGNAT works. Traffic every
   turn period keeps NAT mappings open; in the lobby the agent sends at least
-  once a second. A network that blocks UDP can't use the relay; those players
-  keep Battle.net play.
+  once a second. A network that blocks UDP reaches the relay over TCP on the
+  same port (Transport, above).
 - **Joining.** The host's client asks the relay for a room and shows a code;
   the joiner types it, as Smashcraft's Battle.net join codes work today
   (smashcraft:docs/design/client.md, "Direct play"). The code names the relay

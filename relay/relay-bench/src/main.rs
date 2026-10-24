@@ -9,6 +9,7 @@ const JITTER_MEAN_US: f64 = 2_000.0;
 const BLACKOUT_EVERY: Micros = 300 * SECOND;
 const BLACKOUT_LEN: Micros = SECOND;
 const RTTS_MS: [i64; 3] = [100, 150, 200];
+const UDP_BLOCKED: (i64, Kind) = (100, Kind::UdpBlocked(0.01));
 const KINDS: [Kind; 10] = [
     Kind::Clean,
     Kind::Independent(0.005),
@@ -28,6 +29,7 @@ enum Kind {
     Independent(f64),
     Burst(f64, f64),
     Blackout(f64),
+    UdpBlocked(f64),
 }
 
 impl Kind {
@@ -37,13 +39,14 @@ impl Kind {
             Kind::Independent(p) => format!("{}% independent", p * 100.0),
             Kind::Burst(p, b) => format!("{}% bursts of {b}", p * 100.0),
             Kind::Blackout(p) => format!("{}% + 1 s blackout / 5 min", p * 100.0),
+            Kind::UdpBlocked(p) => format!("UDP blocked, {}% over TCP", p * 100.0),
         }
     }
 
     fn loss(self) -> Loss {
         match self {
             Kind::Clean => Loss::None,
-            Kind::Independent(p) | Kind::Blackout(p) => Loss::Independent(p),
+            Kind::Independent(p) | Kind::Blackout(p) | Kind::UdpBlocked(p) => Loss::Independent(p),
             Kind::Burst(loss, mean_burst) => Loss::Burst { loss, mean_burst },
         }
     }
@@ -53,7 +56,7 @@ impl Kind {
             Kind::Clean => Some(50_000),
             Kind::Independent(p) | Kind::Blackout(p) if p <= 0.01 => Some(50_000),
             Kind::Independent(_) | Kind::Blackout(_) => Some(66_667),
-            Kind::Burst(..) => None,
+            Kind::Burst(..) | Kind::UdpBlocked(_) => None,
         }
     }
 }
@@ -95,6 +98,7 @@ fn scenario(cell: &Cell, o: &Options, match_us: Micros) -> (Scenario, Vec<(Micro
         actions_hz: 4.0,
         action_bytes: (4, 24),
         releases: 0.5,
+        udp_blocked: matches!(cell.kind, Kind::UdpBlocked(_)),
     };
     let blackouts: Vec<(Micros, Micros)> = match cell.kind {
         Kind::Blackout(_) => (1..)
@@ -319,6 +323,11 @@ fn main() {
             });
         }
     }
+    cells.push(Cell {
+        rtt_ms: UDP_BLOCKED.0,
+        kind: UDP_BLOCKED.1,
+        seed: 0x5eed_0000 + KINDS.len() as u64,
+    });
     let match_us = (o.minutes * 60.0 * SECOND as f64) as Micros;
     let rows: Vec<Row> = thread::scope(|scope| {
         let handles: Vec<_> = cells

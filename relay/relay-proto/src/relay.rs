@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::cadence::Cadence;
+use crate::transport::{Route, Transport};
 use crate::wire::{
     self, Action, Down, Packet, Turn, WireError, MAX_PACKET, MAX_PACKETS_PER_TICK, MAX_TURN,
     NOT_STARTED, TURN_HEADER,
@@ -18,6 +19,7 @@ struct Player {
     checksum_count: u32,
     packet_seq: u32,
     last_turn: Option<u32>,
+    route: Route,
 }
 
 #[derive(Debug)]
@@ -65,6 +67,7 @@ impl Relay {
                     checksum_count: 0,
                     packet_seq: 0,
                     last_turn: None,
+                    route: Route::default(),
                 })
                 .collect(),
             origin,
@@ -116,7 +119,15 @@ impl Relay {
         }
     }
 
+    pub fn transport(&self, player: usize) -> Transport {
+        self.players[player].route.transport()
+    }
+
     pub fn on_packet(&mut self, bytes: &[u8]) -> Result<usize, RelayError> {
+        self.on_packet_via(bytes, Transport::Udp)
+    }
+
+    pub fn on_packet_via(&mut self, bytes: &[u8], via: Transport) -> Result<usize, RelayError> {
         let up = match wire::decode(bytes).map_err(RelayError::Wire)? {
             Packet::Up(up) => up,
             Packet::Down(_) => return Err(RelayError::NotUp),
@@ -128,6 +139,7 @@ impl Relay {
             .ok_or(RelayError::UnknownToken)?;
         let emitted = self.next_turn;
         let player = &mut self.players[index];
+        player.route.hear(via, player.turn_ack);
         player.turn_ack = player.turn_ack.max(up.turn_ack.min(emitted));
         for (i, sent) in up.actions.into_iter().enumerate() {
             if up.action_from.wrapping_add(i as u32) == player.next_action
@@ -223,7 +235,7 @@ impl Relay {
         let log_from = self.log_from;
         let turns = self.log.make_contiguous();
         let p = &mut self.players[index];
-        let mut from = p.turn_ack.max(log_from);
+        let mut from = p.route.floor(p.turn_ack.max(log_from));
         let mut out = Vec::new();
         loop {
             let head = Down {
@@ -241,6 +253,7 @@ impl Relay {
             let (bytes, n) = wire::encode_down(&head, rest, MAX_PACKET);
             out.push(bytes);
             from += n as u32;
+            p.route.sent_to(from);
             if n == 0 || n == rest.len() || out.len() == MAX_PACKETS_PER_TICK {
                 return out;
             }
@@ -325,6 +338,20 @@ mod tests {
         r.start(0);
         r.poll(Cadence::default().relay_time(9));
         r
+    }
+
+    #[test]
+    fn a_player_heard_over_tcp_is_answered_over_tcp_in_the_same_room() {
+        let mut r = started();
+        r.on_packet(&up(1, 0, 0, vec![], 0, acts(&[1]))).unwrap();
+        r.on_packet_via(&up(2, 0, 0, vec![], 0, acts(&[2])), Transport::Tcp)
+            .unwrap();
+        r.on_packet_via(&up(2, 0, 0, vec![], 1, vec![]), Transport::Udp)
+            .unwrap();
+        assert_eq!(r.transport(0), Transport::Udp);
+        assert_eq!(r.transport(1), Transport::Tcp);
+        r.poll(Cadence::default().relay_time(10));
+        assert_eq!(turn_of(&r, 0, 1), turn_of(&r, 1, 2));
     }
 
     #[test]
