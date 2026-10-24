@@ -67,9 +67,9 @@ That last fact splits the plan in two:
    buffer can all be built now and measured natively on 3.0.0.24268 pool
    pairs, which are our own offline test clients.
 2. **Reach players.** This needs a route by which an unmodified, signed-in
-   live client joins a game the agent hosts. Box R0 looks for one from
-   outside the game. Shipping waits on R0 or on Tom's decision (Decisions,
-   below).
+   live client joins a game the agent hosts. Box R0 found none from outside
+   the game on 3.0.1.24371 (Reaching players, below), so shipping waits on
+   Tom's decision (Decisions, below).
 
 ## Shape
 
@@ -328,6 +328,94 @@ and the lobby of remote players. No FLO code is copied.
   with no client keep Battle.net join codes, which need no install. Both
   players in a match use the same transport.
 
+## Reaching players (box R0)
+
+Box R0 tried every route that public sources name, all from outside the
+game, on 25 October 2026. The client was clone-d on gex45 (account d,
+3.0.1.24371, signed in, at the main menu). Wisp's LAN host ran on
+127.0.0.1:6112 under a probe that logged every connection and packet, and
+announced its game every second to UDP 16000–16007 and later to the game's
+own UDP port as well. Requests went through Wisp's menu page
+(wisp:host/play/menus.ts). The game's sockets were read with `ss`. No step
+read or wrote game memory, injected code, attached a debugger or changed a
+game file.
+
+No route reached the host: its log has no connection and no packet from the
+client. Throughout, the game's UDP sockets were one or two ephemeral ports
+on 0.0.0.0 (49946 in the first launch). It never bound 6112, 16000–16007 or
+the mDNS port 5353 on either provider, and the clone has no Bonjour service.
+So nothing in it was listening for a LAN announcement. War3Log stayed empty in the first launch.
+In the second (`-region xx`, below) it holds the command line, the map scan,
+`LoginDoorClose` and "Activating WebUI", and no network line.
+
+Menu-socket requests (names from wisp:docs/driving-warcraft.md and
+kgallimore/wc3MultiTool at `278366fd`, read for facts only; that repository
+has no licence). Results below are on Battle.net unless loopback is named:
+
+- `GetGameList`: `GameList {games: []}`, 14 ms.
+- `JoinGameByGameName {gameName: "r0-wisp", gamePass: "r0"}`:
+  `GameSearchGameNotFound`, then the chat line "Failed to join game", 0.2 s.
+  The name went to Battle.net's search, not to the local network.
+- `JoinGame {gameId: 1}`: no answer in 10 s; the client stayed at the main
+  menu. Battle.net's own list later held a stranger's game with id 1, so
+  this request is not sent there again.
+- `SendGameListing`: `GameListClear`, then Battle.net's public custom games
+  only (`GameListUpdate` with Battle.net ids and pings of 27–384 ms).
+- `InitializeLocalNetProvider`: `OnNetProviderChanged {providerId: "LOOP"}`
+  in 17 ms. On loopback, `GetGameList` returned `[]`, `SendGameListing` only
+  `GameListClear`, `JoinGame {gameId: 1}` nothing in 10 s, and
+  `JoinGameByGameName` only `CancelTeamInvitations`. With the game also
+  announced straight to the game's UDP port 49946, the list stayed empty and
+  the port's receive queue stayed at 0.
+- `InitializeNetProvider`: `OnNetProviderChanged {providerId: "BNET"}` in
+  19 ms. A signed-in client simply returns to Battle.net, with no sign-in.
+- `PlayOffline`: no answer in 22 s and no change on screen.
+
+No public request names a LAN provider. wisp#21 found only `BNET` and
+`LOOP` on 3.0.1.
+
+Launch arguments. The public list is MindWorX's Hive Workshop guide and its
+2020 reply (hiveworkshop.com thread 288224). Battle.net passes extra
+arguments through its "Additional command line arguments" setting
+(`Games.w3.AdditionalLaunchArguments` in Battle.net.config):
+
+- `-region xx` (the one value in the public list that is not a real
+  region): Battle.net started the game as `Warcraft III.exe -region xx
+  -launch -uid w3`. It signed in and reached the main menu in 37 s, still on
+  Battle.net: `GetGameList` `[]`, `JoinGameByGameName` `GameSearchGameNotFound`
+  in 0.2 s, `SendGameListing` Battle.net's public games. Its UDP socket was
+  again one ephemeral port, and the host saw nothing.
+- `-loadfile MAP` (with or without `-gametype`): not rerun here. It starts a
+  local game on the loopback provider, the one Wisp's solo games and
+  `play --lobby-only` use, so it hosts and never joins.
+- `-csdk-aurora-dnsname`: not tried. It names the Battle.net game service
+  the client talks to, so a join through it would mean answering as
+  Battle.net, which wisp:docs/clean-room.md forbids.
+- `-routerconfig`, `-routerapp`, `-sso`, `-csdk-gameutil-filter`,
+  `-enablenagle`: not tried. The public list gives no meaning or value for
+  them, and guessing values is not a documented route.
+
+Battle.net app options:
+
+- Region (Americas, Europe, Asia): not switched. It picks the Battle.net
+  gateway the client signs in to, which lists Battle.net-hosted games only,
+  and those are outside R0.
+- The app's "Game version" menu (seen on clone-d, set to Warcraft III,
+  3.0.1.24371) offers "Warcraft III - Legacy TFT 1.29", per Blizzard's
+  instructions quoted by PC Games (pcgames.de, "Classic-Version von Warcraft
+  3 ist endlich zurück"). Patch 3.0.0's notes (Liquipedia, "Patch 3.0.0") say
+  LAN and offline play remain only through that Classic client. It is build
+  1.29, not 3.0.1, and has no Lua (Lua arrived in 1.31), so Smashcraft's map
+  cannot run on it.
+- W3Champions' 3.0 "Native LAN" switches the provider inside the running
+  game (w3champions-issues #57 and #58). Its discovery, UDP 16000 or mDNS
+  with `W3C_LAN_TRANSPORT=csdk`, runs on the LAN provider that switch puts in
+  place. Our clean-room rules forbid that switch on a player's client.
+
+So no route from outside the game reaches a 127.0.0.1 host on 3.0.1.24371,
+and the relay's player boxes wait on Tom's choice (Decisions, below). R0 is
+rerun when a new live build ships.
+
 ## Boxes
 
 Each box is its own issue with its Done when; the epic tracks them.
@@ -441,5 +529,9 @@ reports its burst-loss cells.
   [#57](https://github.com/w3champions/w3champions-issues/issues/57) and
   [#58](https://github.com/w3champions/w3champions-issues/issues/58): their
   3.0 "Native LAN" launch and discovery.
+- Box R0's route list: kgallimore/wc3MultiTool at `278366fd` (menu-socket
+  names, no licence, facts only); MindWorX's command-line guide on Hive
+  Workshop (thread 288224, archived 5 November 2025); Liquipedia's "Patch
+  3.0.0"; PC Games' report of Blizzard's Legacy TFT 1.29 instructions.
 - RFC 9000 (QUIC), RFC 9002 (loss detection), RFC 9221 (unreliable
   datagrams); quinn's datagram send queue and congestion control.

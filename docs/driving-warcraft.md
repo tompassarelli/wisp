@@ -121,7 +121,7 @@ From prior art unless marked. Names are case-sensitive.
 | `SetTeam`, `SetHandicap` | `{slot, team}`, `{slot, handicap: 50-100}` | `GameLobbySetup` |
 | `SendGameChatMessage` | `{content}` (255 characters at most) | `ChatMessage` |
 | `InitializeLocalNetProvider` | `{}` | The local, single-player provider: its lobbies are invisible to other clients. |
-| `InitializeNetProvider`, `PlayOffline` | `{}` | On 3.0 both start a Battle.net sign-in (the build reports `enableOfflineMode: false`). Don't send them to a signed-in client. |
+| `InitializeNetProvider`, `PlayOffline` | `{}` | On 3.0, from the login doors, both start a Battle.net sign-in (the build reports `enableOfflineMode: false`). On a signed-in 3.0.1.24371 client (25 Oct 2026), `InitializeNetProvider` answers `OnNetProviderChanged {providerId: "BNET"}` and `PlayOffline` answers nothing ([relay.md](relay.md#reaching-players-box-r0)). |
 | `ScoreScreenClose` | `{}` | Ignored by 3.0.0.24268 (7 Oct 2026); Escape leaves the score screen |
 
 Events seen without a request: `SetGlueScreen {screen}` (for example
