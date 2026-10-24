@@ -1,13 +1,23 @@
 # Platforms
 
+On Linux, clicks, keys, chat and input batches reach a client through its private
+desktop's own VNC server (`private-desktop.sh control RUN ...`, from the
+private-desktop-development skill on `agents path`), as one control run per
+batch. Headless labwc drops XTEST pointer motion, and Wine ignores the Shift
+that VNC sends only as modifier state, so shifted characters are typed with a
+real Shift held around them; text with a character a US layout can't type is
+refused before anything is sent. Sign-in secrets still go to `xdotool type` on
+stdin, so a secret never sits on a command line, and a client with no run
+folder (the owner's own desktop during a game's sign-in) is clicked through
+`xdotool`. `xdotool`, `wlrctl`, `grim`
+and `tesseract` come from `PATH`, else from `nix build nixpkgs#NAME`.
+
 `InputInjection.preflight(client)` verifies focus on the client's private Warcraft
-window, initializes a compositor virtual pointer, observes a one-pixel XTEST
-motion and restores its position. It fails within five seconds naming the
-display and failed boundary. Headless labwc can otherwise report successful
-XTEST commands without moving its pointer until a compositor pointer exists.
-`Clients.preflight(client)` exposes the same check to native runners. Call it
-after map startup and verify a harmless key with the map's own fresh receipt;
-pointer coordinates alone do not establish keyboard delivery.
+window and that its VNC server takes a control run, and fails within twelve
+seconds naming the display and failed boundary. `Clients.preflight(client)`
+exposes the same check to native runners. Call it after map startup and verify
+a harmless key with the map's own fresh receipt; a reachable VNC server alone
+does not establish keyboard delivery.
 
 Wisp is built on and for Linux. Windows and macOS consumers (map makers, and
 players running the standalone player) should fit without the Linux code
@@ -30,7 +40,7 @@ or niri.
 | `ProcessTable` | process discovery: the process table, a prefix's game processes, a launcher's working directory and environment, whether a pid lives, its resident memory and network interfaces | `/proc` (linux/procfs.ts) |
 | `ResourceAccounting` | process and resource accounting: CPU pressure, the CPU limit, whether this run holds a capacity lease, thread CPU time | `/proc/pressure`, cgroup `cpu.max`, `clock_gettime` from libc |
 | `ScreenCapture` | screen capture of a client's desktop | `grim` (linux/desktop.ts) |
-| `InputInjection` | input injection: finding, focusing and placing windows, keys, text, pointer presses and input batches | `xdotool` and `wlrctl` on a private X11/Wayland desktop |
+| `InputInjection` | input injection: finding, focusing and placing windows, keys, text, pointer presses and input batches | the private desktop's VNC server for input; `xdotool` and `wlrctl` for windows and focus |
 | `GameLauncher` | game launch in a prefix | Proton under `steam-run`, optionally offline (`bwrap`) and with its own session bus |
 | `PlayMachine`, `PlayDesktop` | game launch, processes and windows for [`wisp play`](play.md) and [`wisp client doctor`](doctor.md) | Battle.net under Wine via `nsenter`, niri, `grim`, `xdotool` (linux/play.ts) |
 | `Namespaces` | entering a process's namespaces, or running offline | `nsenter`, `bwrap --unshare-net` |

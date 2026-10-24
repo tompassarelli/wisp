@@ -25,6 +25,7 @@ export interface Client {
   readonly documents: string;
 
   readonly menuReportPort?: number;
+  readonly run?: string;
   readonly tools: Tools;
   readonly x11: Record<string, string>;
   readonly wayland: Record<string, string>;

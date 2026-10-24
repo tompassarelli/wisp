@@ -13,7 +13,7 @@ function client(name: string, source: string): Client {
   const tool = join(folder, name);
   writeFileSync(tool, `#!${process.execPath}\n${source}`);
   chmodSync(tool, 0o755);
-  return { name, documents: folder, tools: { grim: tool, xdotool: tool, wlrctl: tool, tesseract: tool }, x11: {}, wayland: {}, window: "42" };
+  return { name, documents: folder, tools: { grim: tool, xdotool: tool, wlrctl: tool, tesseract: tool }, run: folder, x11: {}, wayland: {}, window: "42" };
 }
 
 test("[invariant] timed capture keeps binary pixel bytes and brackets the framebuffer producer on the supplied stimulus clock", async () => {
