@@ -3,6 +3,21 @@
 version = 4
 
 [[package]]
+name = "relay"
+version = "0.1.0"
+dependencies = [
+ "relay-agent",
+ "relay-proto",
+]
+
+[[package]]
+name = "relay-agent"
+version = "0.1.0"
+dependencies = [
+ "relay-proto",
+]
+
+[[package]]
 name = "relay-bench"
 version = "0.1.0"
 dependencies = [

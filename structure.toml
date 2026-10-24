@@ -108,7 +108,7 @@ may_use = []
 [[module]]
 name = "relay"
 paths = ["relay/**"]
-responsibility = "Rust relay workspace: wire format, relay and agent cores, seeded network simulator and bench."
+responsibility = "Rust relay workspace: wire format, relay and agent cores, seeded network simulator and bench, UDP relay server and agent link."
 may_use = []
 
 [[module]]

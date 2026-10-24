@@ -104,6 +104,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cargo test --locked -p relay-proto
+      - run: cargo test --locked -p relay -p relay-agent
 
   # New structural debt (import cycle, layer violation, oversize file or function, rising hotspot) against structure.toml (north:harness/code-health).
   code-health:

@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod cadence;
+pub mod control;
 pub mod depth;
 pub mod relay;
 pub mod rng;

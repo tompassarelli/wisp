@@ -125,6 +125,10 @@ impl Agent {
         }
     }
 
+    pub fn started(&self) -> bool {
+        self.base.is_some()
+    }
+
     pub fn choice(&self) -> Option<&DepthChoice> {
         self.choice.as_ref()
     }

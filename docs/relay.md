@@ -1,8 +1,9 @@
 # Wisp's online relay (plan)
 
 Status: planned, 24 October 2026. Epic: wisp#28. R6's protocol core and
-bench are built (Protocol core and bench, below); nothing else is. Each
-section names the box that builds or measures it.
+bench are built (Protocol core and bench, below), and R7's server and agent
+link run on UDP (Transport, "Built"); R7's netem cells and everything else
+are not. Each section names the box that builds or measures it.
 
 Smashcraft's online matches run on Battle.net's turns today. On 24 October
 2026 Tom chose to build our own relay instead of depending on Battle.net's or
@@ -197,6 +198,53 @@ verifies it, so it can't be used to amplify an attack.
   on the path can forge actions or take over a player's stream. The first
   version accepts that (Deferred, below).
 
+**Built (R7's code box, wisp#36).** Crate `relay` (library and binary
+`relay`) is the server and crate `relay-agent` the agent's link, both over
+`std::net::UdpSocket` on `relay-proto`'s cores, with no dependencies.
+
+- **Control packets** (`relay-proto` `control`) share the wire header (magic,
+  version, kind): Create (cookie, request id, players) and Join (cookie,
+  request id, room) from an agent; Challenge (cookie), Room (request id, room,
+  session token, players, slot, the cadence's steps) and Refused (rate
+  limited, no room, full, bad player count) from the relay; Verify (token,
+  cookie) and Leave (token) from an agent. A repeated Create or Join with the
+  same request id from the same address gets the same answer.
+- **Cookie.** SipHash under a key drawn at start of (10 s epoch, address),
+  accepted for the current and previous epoch, so a cookie lives 10–20 s and
+  the relay keeps no state for it. Create or Join without a valid cookie for
+  its source address gets only a Challenge, 11 bytes against the request's
+  20 or 27, and creates nothing.
+- **Session tokens and slots.** The relay draws a room code and one 64-bit
+  token per slot at Create and hands them out by Join; Room carries the
+  token. The lobby (relay probes every turn period) starts when every slot
+  has joined and turns start after the lobby time (20 s by default,
+  `--lobby-ms`). The agent picks its depth at the first packet with a base.
+- **Amplification and rebind.** The address that joined is verified by the
+  cookie it echoed. An up packet with a known token from another address
+  moves the player there unverified: its actions and acknowledgements count,
+  and the relay sends it a Challenge (at most every 20 ms) and every turn,
+  each packet trimmed oldest first to what keeps the bytes sent within three
+  times the bytes received, and withheld if not even the 45-byte header
+  fits. The agent answers a Challenge with Verify, and a valid cookie for
+  the new address lifts the bound.
+- **Limits.** At most 6 rooms per source IP (any port) a minute
+  (`--rooms-per-minute`), counted only for cookie-verified Creates. A room
+  closes when every player has sent Leave or after 10 idle minutes
+  (`--idle-s`).
+- **Tests.** `relay/tests/server.rs` drives the server without sockets: a
+  cookie verifies only its own address and lapses after its second epoch; an
+  address that rebinds mid-match gets at most three times its bytes for 30
+  turns with turns trimmed, a forged Verify doesn't lift that and a valid one
+  restores full history; the rate limit and room closing.
+  `relay/tests/loopback.rs` runs two `relay-agent` links against the server
+  over loopback UDP for 500 turns at 8 ms, rebinding the host's port at turn
+  200: both feed the same turns in order, every host action lands once and
+  in order, the relay counts one rebind and one verification, no clock stop
+  and no desync. A second test runs the `relay` binary itself
+  (`--bind 127.0.0.1:0 --once`) with two links for 250 turns.
+  `relay-agent`'s own tests check the handshake's cookie echo, the Verify
+  after a rebind and a refusal, against a bare socket.
+
 ## Jitter buffer (boxes R6, R9, C2)
 
 The agent writes turn k to the game at its feed time
@@ -287,7 +335,8 @@ row at its stamp, rolling back when the row arrives late
 
 Built 25 October 2026 in `wisp:relay/`, a Rust workspace pinned to
 rustc 1.97.0 by `relay/rust-toolchain.toml`, with no dependencies. CI job
-`relay-proto` runs `cargo test --locked -p relay-proto`.
+`relay-proto` runs `cargo test --locked -p relay-proto` and then
+`-p relay -p relay-agent`.
 
 - **`relay-proto`** holds pure state machines with no I/O and no clock of
   their own. The caller passes every time in microseconds.

@@ -6,8 +6,8 @@ pub const MAX_CHECKSUMS: usize = 64;
 pub const MAX_PACKETS_PER_TICK: usize = 4;
 pub const NOT_STARTED: u64 = u64::MAX;
 
-const KIND_DOWN: u8 = 1;
-const KIND_UP: u8 = 2;
+pub const KIND_DOWN: u8 = 1;
+pub const KIND_UP: u8 = 2;
 
 pub const DOWN_HEADER: usize = 3 + 8 + 4 + 8 + 8 + 4 + 4 + 4 + 2;
 pub const UP_HEADER: usize = 3 + 8 + 4 + 8 + 4 + 4 + 2 + 4 + 2;
