@@ -134,6 +134,7 @@ describe("setup without reflinks", () => {
         mkdirSync(join(from, path, ".."), { recursive: true });
         writeFileSync(join(from, path), text);
       };
+      file(".build.info", "Branch!STRING:0|Active!DEC:1|Version!STRING:0\nus|1|3.0.0.24268\n");
       file("_retail_/x86_64/Warcraft III.exe", "exe 1");
       file("_retail_/webui/index.html", menuPage(47123));
       file("Data/data/data.000", "archive 1");
@@ -141,7 +142,7 @@ describe("setup without reflinks", () => {
       const setup = (name: string) => {
         mkdirSync(join(installOf(name), ".."), { recursive: true });
         writeFileSync(join(prefixOf(name), "user.reg"), "");
-        return Effect.runPromise(setupClient(name, from, 47200, (line) => lines.push(line)).pipe(
+        return Effect.runPromise(setupClient(name, from, "3.0.0.24268", 47200, (line) => lines.push(line)).pipe(
           Effect.provideService(GameLauncher, GameLauncher.of({ inPrefix: () => Effect.die("setup made a prefix") }))));
       };
       const filesOf = (name: string) => readdirSync(installOf(name), { recursive: true, withFileTypes: true })
@@ -151,7 +152,7 @@ describe("setup without reflinks", () => {
       for (const name of ["lan0a", "lan0b"]) {
         expect(statSync(join(installOf(name), "Data/data/data.000")).ino).toBe(statSync(join(from, "Data/data/data.000")).ino);
         expect(filesOf(name).filter((path) => !path.includes("/Data/")).map((path) => [path, statSync(path).nlink])).toEqual(
-          ["_retail_/x86_64/Warcraft III.exe", "_retail_/webui/index.html"].map((path) => [join(installOf(name), path), 1]).sort());
+          [".build.info", "_retail_/x86_64/Warcraft III.exe", "_retail_/webui/index.html"].map((path) => [join(installOf(name), path), 1]).sort());
       }
       expect(readFileSync(join(from, "_retail_/webui/index.html"), "utf8")).toBe(menuPage(47123));
       file("_retail_/x86_64/Warcraft III.exe", "exe 22");

@@ -1,5 +1,5 @@
-import { existsSync, linkSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, linkSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect } from "effect";
 import { ChildProcess } from "effect/process";
@@ -20,6 +20,34 @@ const run = (what: string, command: readonly string[], env: Readonly<Record<stri
 const filesUnder = (path: string) => statSync(path).isDirectory()
   ? readdirSync(path, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => join(entry.parentPath, entry.name))
   : [path];
+
+const buildOf = (install: string) => {
+  const [header, ...rows] = readFileSync(join(install, ".build.info"), "utf8").split(/\r?\n/).filter((line) => line.length > 0).map((line) => line.split("|"));
+  const column = (name: string) => header?.findIndex((field) => field.split("!")[0] === name) ?? -1;
+  const row = rows.find((fields) => fields[column("Active")] === "1") ?? rows[0];
+  return row?.[column("Version")] || undefined;
+};
+
+const dataFiles = (install: string) => {
+  const data = join(install, "Data");
+  return existsSync(data) ? filesUnder(data).map((file) => relative(data, file)).sort() : [];
+};
+
+const pruneData = (name: string, from: string) => Effect.try({
+  try: () => {
+    const data = join(installOf(name), "Data");
+    if (!existsSync(data)) return [];
+    const own = realpathSync(data);
+    if (!own.startsWith(`${realpathSync(clientRoot(name))}/`) || (existsSync(join(from, "Data")) && own === realpathSync(join(from, "Data")))) {
+      throw new Error(`${data} is not ${name}'s own Data`);
+    }
+    const kept = new Set(dataFiles(from));
+    const extra = dataFiles(installOf(name)).filter((file) => !kept.has(file));
+    for (const file of extra) rmSync(join(own, file));
+    return extra;
+  },
+  catch: (cause) => new LanFailure({ problem: `${name}: remove the Data files the source lacks: ${String(cause)}` }),
+});
 
 // Clones the install; where cp can't clone (ext4, tmpfs), copies everything outside Data/ and hardlinks Data/'s files to the source's.
 // A refresh relinks Data/ instead of writing into a file other clients share; cp -a itself unlinks a hardlinked destination before
@@ -64,8 +92,15 @@ const placeInstall = (name: string, from: string, refresh: boolean) => Effect.ge
   return `linked (Data hardlinked, ${Math.round(bytes / 2 ** 20)} MB copied)`;
 });
 
-export const setupClient = (name: string, from: string, port: number, log: (line: string) => void) => Effect.gen(function*() {
+export const setupClient = (name: string, from: string, poolBuild: string, port: number, log: (line: string) => void) => Effect.gen(function*() {
   if (!existsSync(join(from, "_retail_/x86_64/Warcraft III.exe"))) return yield* new LanFailure({ problem: `${from} isn't a Warcraft III install (no _retail_/x86_64/Warcraft III.exe)` });
+  const build = yield* Effect.try({
+    try: () => buildOf(from),
+    catch: (cause) => new LanFailure({ problem: `${from}: read the install's .build.info: ${String(cause)}` }),
+  });
+  if (build !== poolBuild) {
+    return yield* new LanFailure({ problem: `${from} is build ${build ?? "unknown"}, but the pool runs ${poolBuild}; set up from an install on ${poolBuild}` });
+  }
   const root = clientRoot(name);
   if (!existsSync(join(prefixOf(name), "user.reg"))) {
     mkdirSync(root, { recursive: true });
@@ -81,19 +116,23 @@ export const setupClient = (name: string, from: string, port: number, log: (line
     const how = yield* placeInstall(name, from, false);
     log(`${name}: install ${how} from ${from}`);
   } else {
-
-    const stamps = yield* Effect.try({
-      try: () => [join(from, "_retail_/x86_64/Warcraft III.exe"), join(retailOf(name), "x86_64/Warcraft III.exe")].map((exe) => {
-        const { size, mtimeMs } = statSync(exe);
-        return `${size} bytes, modified ${new Date(mtimeMs).toISOString()}`;
+    const { stamps, sameData } = yield* Effect.try({
+      try: () => ({
+        stamps: [join(from, "_retail_/x86_64/Warcraft III.exe"), join(retailOf(name), "x86_64/Warcraft III.exe")].map((exe) => {
+          const { size, mtimeMs } = statSync(exe);
+          return `${size} bytes, modified ${new Date(mtimeMs).toISOString()}`;
+        }),
+        sameData: dataFiles(from).join("\n") === dataFiles(installOf(name)).join("\n"),
       }),
-      catch: (cause) => new LanFailure({ problem: `${name}: read the install executables: ${String(cause)}` }),
+      catch: (cause) => new LanFailure({ problem: `${name}: read the install executables and Data: ${String(cause)}` }),
     });
-    if (stamps[0] !== stamps[1]) {
+    if (stamps[0] !== stamps[1] || !sameData) {
       const how = yield* placeInstall(name, from, true);
-      log(`${name}: install refreshed, ${how} (executable was ${stamps[1]}, now ${stamps[0]})`);
+      log(`${name}: install refreshed, ${how} (${stamps[0] !== stamps[1] ? `executable was ${stamps[1]}, now ${stamps[0]}` : "Data's file list differed from the source's"})`);
     }
   }
+  const pruned = yield* pruneData(name, from);
+  if (pruned.length > 0) log(`${name}: removed ${pruned.length} Data files the source lacks`);
   yield* installMenuPage(retailOf(name), port).pipe(Effect.mapError((failure) => new LanFailure({ problem: failure.message })));
   log(`${name}: menu page reports to 127.0.0.1:${port}`);
 });

@@ -215,9 +215,9 @@ them `clone-a` and `clone-d`, so doctor starts each through `launch.sh`
 
 with absolute paths in place of `~`.
 
-The lanes' clients files are kept in `~/.local/state/wisp/online/`:
-`ad-clients.json` (clone-a + clone-d) and `bc-clients.json` (A and B, named
-`a` and `b`). A lane owner starts its clients with `bun wisp client start
+The lanes' clients files are kept in `~/.local/state/wisp/online/`, one per
+signed-in pair; which clones each pairs is in south's battlenet-accounts
+skill. A lane owner starts its clients with `bun wisp client start
 --clients-file FILE`: each client without a live desktop gets one as the user
 service `wisp-desktop-CLIENT-OWNER` (OWNER is named by the clients file, so
 `a` in two lanes' files gets two desktops), its new run folder is written into the file,
@@ -502,8 +502,13 @@ provider or emulating Battle.net is outside this tool's scope.
 ## Setting up
 
 Running `setup` again refreshes an existing client's install when its Warcraft
-executable differs (size or modification time) from `--from`, then reinstalls that client's menu
-page. Stop the pool first, and use an install whose update has finished.
+executable differs (size or modification time) from `--from` or its `Data/`
+holds a different file list, deletes the files in the client's own `Data/`
+that the source lacks, then reinstalls that client's menu page. A client
+moved between builds otherwise keeps the old build's `.idx` and config
+files, and the game reports that its data must be repaired (wisp#26). Stop
+the pool first, and use an install whose update has finished.
+
 
 `wisp lan setup --from "<a prefix>/drive_c/Program Files (x86)/Warcraft III" --pairs N`
 makes, for each client:
@@ -523,7 +528,12 @@ makes, for each client:
   reporting to the client's own port (47200 + 2K for side a, 47201 + 2K for side b).
 
 The source install must have been started once through Battle.net. Setup
-reads it and never changes it.
+reads it and never changes it. Setup refuses, before copying anything, a
+source whose `.build.info` names another build than the pool's
+(3.0.0.24268), and names both builds. A signed-in clone is a valid source
+only while it is on the pool build; once Battle.net updates it, set up from
+a copy taken while it was on the pool build.
+
 
 ## Running a pool
 
