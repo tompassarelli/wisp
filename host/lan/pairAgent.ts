@@ -13,6 +13,7 @@ import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { mapCopies, mapFactsLine, readMapFacts } from "./map";
+import { relayedStatus } from "./relayedStatus";
 import { ALARM_AFTER_MS, agentPidFile, type Driver, MENUS_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, STOP_GRACE, alive, launchUntilShown, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, stopGame, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
 import { preferences } from "../os/warcraft/clientProfiles";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
@@ -245,12 +246,17 @@ const agent = Effect.gen(function*() {
   }));
 
   const fileSystem = yield* FileSystem.FileSystem;
-  let relayed: { readonly folder: string; readonly scope: Scope.Closeable } | undefined;
+  let relayed: { readonly id: string; readonly folder: string; readonly map: string; readonly scope: Scope.Closeable } | undefined;
   const endRelayed = Effect.suspend(() => {
     const ending = relayed;
     relayed = undefined;
     return ending === undefined ? Effect.void : Scope.close(ending.scope, Exit.void).pipe(Effect.andThen(Effect.sync(() => say(`ended relayed ${ending.folder}`))));
   });
+  const relayedGame = () => {
+    if (relayed === undefined) return undefined;
+    const log = join(relayed.folder, "relay.log");
+    return { id: relayed.id, log, map: relayed.map, ...relayedStatus(existsSync(log) ? readFileSync(log, "utf8") : "", clients.map(({ name }) => name)) };
+  };
 
   const relayedMatch = (mapFile: string, relayBin: string, agentBin: string, turnMs: number) => Effect.scoped(Effect.gen(function*() {
     yield* endGame;
@@ -261,7 +267,7 @@ const agent = Effect.gen(function*() {
     yield* copyMap(mapFile);
     const map = yield* readMapFacts(mapFile, packager, `Maps\\Wisp\\${basename(mapFile)}`);
     const scope = yield* Scope.fork(agentScope);
-    relayed = { folder, scope };
+    relayed = { id: `relayed-${id}`, folder, map: mapFile, scope };
     const spawn = (name: string, command: string, args: readonly string[]) =>
       spawnLogged(ChildProcess.make(command, args, { stdin: "ignore", forceKillAfter: "5 seconds" }), { stdout: join(folder, `${name}.log`), stderr: join(folder, `${name}.err`) }).pipe(Scope.provide(scope), Effect.provideService(FileSystem.FileSystem, fileSystem));
     const relayAddress = `127.0.0.1:${17000 + pair}`;
@@ -313,15 +319,15 @@ const agent = Effect.gen(function*() {
     const url = new URL(request.url);
     if (url.pathname === "/status") {
       const running = yield* Effect.forEach(clients, ({ name }) => gamePid(name).pipe(Effect.map((pid) => ({ name, pid, documents: documentsOf(name) }))));
-      const status = game === undefined ? undefined : game.host.status();
-      const playing = status !== undefined && status.phase !== "lobby" && status.phase !== "over";
+      const current = game === undefined ? relayedGame() : { id: game.id, log: game.log, map: game.map, ...game.host.status() };
+      const playing = current !== undefined && current.phase !== "lobby" && current.phase !== "over";
       return Response.json({
         pair,
         profile: profile.name,
         fps: profile.maxFps,
         network,
         clients: running,
-        game: game === undefined ? undefined : { id: game.id, log: game.log, map: game.map, ...status },
+        game: current,
         driver,
         idle: driverVerdict(driver, Date.now()).idle,
         ...idleness(started, ended, driver, playing, running.filter(({ pid }) => pid === undefined).map(({ name }) => name), Date.now()),

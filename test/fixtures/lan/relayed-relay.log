@@ -1,0 +1,25 @@
+listening 127.0.0.1:17000
+0.004 room 1d76136c3aaf2dba slot 0 Host { map: MapFacts { path: [77, 97, 112, 115, 92, 87, 105, 115, 112, 92, 119, 51, 55, 45, 114, 101, 108, 97, 121, 46, 119, 51, 120], size: 65990627, crc32: 645810900, sha1: [48, 47, 45, 59, 124, 112, 18, 20, 241, 193, 184, 249, 214, 177, 122, 67, 217, 168, 51, 201], xoro: 1123477140, width: 52, height: 52, layout: 1, forces: [15], players: [MapPlayer { id: 0, controller: 1, race: 1 }, MapPlayer { id: 1, controller: 1, race: 1 }, MapPlayer { id: 2, controller: 1, race: 1 }, MapPlayer { id: 3, controller: 1, race: 1 }] }, computers: 0 }
+2.663 room 1d76136c3aaf2dba slot 0 Joined { name: [] }
+3.349 room 1d76136c3aaf2dba slot 0 MapSize { size: 65990627 }
+3.360 room 1d76136c3aaf2dba slot 0 Ready
+4.928 room 1d76136c3aaf2dba slot 1 Joined { name: [] }
+5.666 room 1d76136c3aaf2dba slot 1 MapSize { size: 65990627 }
+5.676 room 1d76136c3aaf2dba slot 1 Ready
+6.429 room 1d76136c3aaf2dba phase Countdown
+12.430 room 1d76136c3aaf2dba phase Loading
+26.239 room 1d76136c3aaf2dba slot 0 Loaded
+26.408 room 1d76136c3aaf2dba playing
+26.408 room 1d76136c3aaf2dba slot 1 Loaded
+26.408 room 1d76136c3aaf2dba summary: turns 0 game 0.000 s wall 0.000 s pace 0.0000 checksums compared 0 desyncs 0 stops 0
+31.412 room 1d76136c3aaf2dba summary: turns 365 game 2.920 s wall 5.004 s pace 0.5836 checksums compared 362 desyncs 0 stops 2
+36.413 room 1d76136c3aaf2dba summary: turns 990 game 7.920 s wall 10.005 s pace 0.7916 checksums compared 985 desyncs 0 stops 2
+41.415 room 1d76136c3aaf2dba summary: turns 1615 game 12.920 s wall 15.007 s pace 0.8609 checksums compared 1610 desyncs 0 stops 2
+46.415 room 1d76136c3aaf2dba summary: turns 2241 game 17.928 s wall 20.007 s pace 0.8961 checksums compared 2237 desyncs 0 stops 2
+51.422 room 1d76136c3aaf2dba summary: turns 2866 game 22.928 s wall 25.014 s pace 0.9166 checksums compared 2860 desyncs 0 stops 2
+56.425 room 1d76136c3aaf2dba summary: turns 3492 game 27.936 s wall 30.017 s pace 0.9307 checksums compared 3488 desyncs 0 stops 2
+61.426 room 1d76136c3aaf2dba summary: turns 4117 game 32.936 s wall 35.018 s pace 0.9405 checksums compared 4113 desyncs 0 stops 2
+66.427 room 1d76136c3aaf2dba summary: turns 4742 game 37.936 s wall 40.019 s pace 0.9480 checksums compared 4738 desyncs 0 stops 2
+71.429 room 1d76136c3aaf2dba summary: turns 5367 game 42.936 s wall 45.021 s pace 0.9537 checksums compared 5363 desyncs 0 stops 2
+76.430 room 1d76136c3aaf2dba summary: turns 5992 game 47.936 s wall 50.022 s pace 0.9583 checksums compared 5988 desyncs 0 stops 2
+81.430 room 1d76136c3aaf2dba summary: turns 6617 game 52.936 s wall 55.022 s pace 0.9621 checksums compared 6613 desyncs 0 stops 2
