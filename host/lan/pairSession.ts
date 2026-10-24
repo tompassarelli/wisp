@@ -9,7 +9,7 @@ import { ChildProcess } from "effect/process";
 import { flagValues } from "../cli/command";
 import { spawnLogged } from "../cli/hostProcess";
 import { LanFailure } from "./join";
-import { agentFile, pairDirectory, pairFlags, pairSides, stopAgent } from "./pool";
+import { agentFile, agentPidFile, pairDirectory, pairFlags, pairSides, stopAgent } from "./pool";
 import { desktopSize } from "../os/warcraft/clientProfiles";
 
 const argument = (name: string) => flagValues(process.argv, name)[0];
@@ -22,6 +22,7 @@ const directory = pairDirectory(pair);
 mkdirSync(directory, { recursive: true });
 const size = desktopSize(profile);
 rmSync(agentFile(pair), { force: true });
+rmSync(agentPidFile(pair), { force: true });
 
 const startDesktopB = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;

@@ -12,7 +12,7 @@ import { LanFailure } from "../lan/join";
 import { lanPluginProblem } from "../lan/plugin";
 import { ensurePackager } from "../compile/mapBuild";
 import {
-  PAIR_SIDES, agentFile, agentSocket, alive, clientName, lanPlayRefusal, mapPackager, networkFlagProblem, pairClients, pairSides, pairCustody, pairDirectory, pairEntryFile, pairsHeldBy, livePairs, poolClientsFile, poolFile, poolHolder, poolHolderFile, poolOwners, playtestPairRefusal, prefixOf, readPool, reportPort, stopAgent, writeJson, writePoolClients, wrongUser,
+  PAIR_SIDES, agentFile, agentPidFile, agentSocket, alive, clientName, lanPlayRefusal, mapPackager, networkFlagProblem, pairClients, pairSides, pairCustody, pairDirectory, pairEntryFile, pairsHeldBy, livePairs, poolClientsFile, poolFile, poolHolder, poolHolderFile, poolOwners, playtestPairRefusal, prefixOf, readPool, reportPort, stopAgent, writeJson, writePoolClients, wrongUser,
 } from "../lan/pool";
 import { PROFILES, desktopSize } from "../os/warcraft/clientProfiles";
 import { DEFAULT_BUILD } from "../client/builds";
@@ -134,6 +134,7 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
     mkdirSync(directory, { recursive: true });
     rmSync(agentSocket(pair), { force: true });
     rmSync(agentFile(pair), { force: true });
+    rmSync(agentPidFile(pair), { force: true });
     const waiting = yield* pairAdmission(capacity);
     if (waiting !== undefined) return yield* new CapacityDeferred({ reason: waiting });
     rmSync(admissionFile(directory), { force: true });

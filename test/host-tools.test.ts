@@ -187,3 +187,15 @@ test("[boundary] lan pool: playtest admits one pair, refuses held and racing pai
   }
   expect({ processes: box.marked().length, sessions: box.sessions().length }).toEqual({ processes: 0, sessions: 0 });
 }, 120_000);
+
+test("[boundary] lan pool: SIGTERM while a pair is still starting stops its agent before its desktops, so none of its games outlive the pool", async () => {
+  const box = sandbox();
+  const pair = poolPair + 3;
+  const runner = pool(box, { WISP_TEST_AGENT_READY_MS: "20000" }, pair);
+  await until(() => existsSync(join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${pair}`, "agent.pid")) && box.sessions().length === 1, 30, "the starting pair's agent");
+  expect(existsSync(join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${pair}`, "agent.json"))).toBe(false);
+  runner.kill("SIGTERM");
+  const result = await leftovers(runner, box);
+  expect(result.code).not.toBe("still running");
+  expect({ processes: result.processes, sessions: result.sessions }).toEqual({ processes: 0, sessions: 0 });
+}, 60_000);
