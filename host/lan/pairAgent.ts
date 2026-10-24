@@ -13,7 +13,7 @@ import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { mapCopies, readMapFacts } from "./map";
-import { ALARM_AFTER_MS, type Driver, MENUS_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, STOP_GRACE, alive, launchUntilShown, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, stopGame, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
+import { ALARM_AFTER_MS, agentPidFile, type Driver, MENUS_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, STOP_GRACE, alive, launchUntilShown, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, stopGame, agentSocket, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
 import { preferences } from "../os/warcraft/clientProfiles";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
 
@@ -107,6 +107,7 @@ const agent = Effect.gen(function*() {
   const capacity = argument("capacity");
   if (capacity === undefined) return yield* new LanFailure({ problem: "pairAgent requires --capacity MACHINE_CAPACITY_HELPER" });
   mkdirSync(directory, { recursive: true });
+  writeFileSync(agentPidFile(pair), `${process.pid}\n`);
   const agentScope = yield* Effect.scope;
   const copyMap = yield* mapCopies(clients.map(({ name }) => join(documentsOf(name), "Maps/Wisp")));
   const table = yield* ProcessTable;
