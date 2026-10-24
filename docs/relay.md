@@ -302,8 +302,12 @@ verifies it, so it can't be used to amplify an attack.
   unverified address. While the cookie round trip completes, the relay keeps
   sending every turn there, trimming each packet's history to fit the
   three-times budget (the agent sends about 125 packets a second, so a turn or
-  two of history fits). A rebind costs at most one RTT of thinner
-  redundancy, not a stall. R10 measures it.
+  two of history fits). The relay can't learn the new address before the
+  first up packet from it arrives, and until then it sends to the old
+  mapping, which the NAT drops: the agent loses its downstream for about one
+  RTT plus one turn. With depth below the RTT that is one underrun, which
+  catch-up drains, with no stop or desync. R10 measured it (Where the relay
+  runs, below).
 - **Limits.** Rooms close when a match ends or after 10 idle minutes, and
   room creation is rate-limited per address.
 - **Not defended.** Nothing is encrypted, because a match's actions are

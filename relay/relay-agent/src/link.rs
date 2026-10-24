@@ -8,7 +8,7 @@ use relay_proto::agent::{Agent, AgentConfig, AgentError, Fed};
 use relay_proto::cadence::Cadence;
 use relay_proto::control::{self, Control, KIND_CHALLENGE};
 use relay_proto::stream::{self, RoomStream, KIND_STREAM};
-use relay_proto::wire::{UpAction, KIND_COVER, KIND_DOWN, MAX_PACKET};
+use relay_proto::wire::{self, Packet, UpAction, KIND_COVER, KIND_DOWN, MAX_PACKET};
 use relay_proto::Micros;
 
 pub const HANDSHAKE_TRIES: u32 = 20;
@@ -29,6 +29,7 @@ pub struct Link {
     challenges: u64,
     stream: RoomStream,
     inbox: Vec<Vec<u8>>,
+    arrivals: Option<Vec<(u32, Micros)>>,
 }
 
 fn bind_for(server: SocketAddr) -> io::Result<UdpSocket> {
@@ -128,6 +129,7 @@ impl Link {
                             challenges: 0,
                             stream: RoomStream::new(token),
                             inbox: Vec::new(),
+                            arrivals: None,
                         });
                     }
                     Ok(Control::Refused { request: r, reason }) if r == request => {
@@ -193,6 +195,14 @@ impl Link {
         self.agent.record_checksum(value);
     }
 
+    pub fn record_arrivals(&mut self) {
+        self.arrivals.get_or_insert_with(Vec::new);
+    }
+
+    pub fn take_arrivals(&mut self) -> Vec<(u32, Micros)> {
+        self.arrivals.as_mut().map(std::mem::take).unwrap_or_default()
+    }
+
     pub fn rebind(&mut self) -> io::Result<()> {
         self.socket = bind_for(self.server)?;
         Ok(())
@@ -253,6 +263,13 @@ impl Link {
         match control::kind(bytes) {
             Some(KIND_DOWN | KIND_COVER) => {
                 let now = self.now();
+                if let Some(arrivals) = &mut self.arrivals {
+                    if let Ok(Packet::Down(d)) = wire::decode(bytes) {
+                        if d.token == self.token {
+                            arrivals.push((d.seq, now - d.sent_us as Micros));
+                        }
+                    }
+                }
                 if self.agent.on_packet(now, bytes).is_ok()
                     && self.agent.choice().is_none()
                     && self.agent.started()

@@ -10,6 +10,7 @@ pub mod room;
 pub mod stream;
 pub mod lobby;
 pub mod sim;
+pub mod trace;
 pub mod transport;
 pub mod wire;
 
