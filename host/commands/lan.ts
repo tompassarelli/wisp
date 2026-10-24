@@ -9,8 +9,9 @@ import { collect, pollUntil, spawnLogged } from "../cli/hostProcess";
 import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from "../cli/command";
 import { LanFailure } from "../lan/join";
 import { lanPluginProblem } from "../lan/plugin";
+import { ensurePackager } from "../compile/mapBuild";
 import {
-  PAIR_SIDES, type PoolPair, agentSocket, alive, clientName, lanPlayRefusal, networkFlagProblem, pairClients, pairSides, pairCustody, pairDirectory, poolClientsFile, poolFile, poolHolderFile, poolOwners, playtestPairRefusal, readPool, reportPort, writeJson, writePoolClients, wrongUser,
+  PAIR_SIDES, type PoolPair, agentSocket, alive, clientName, lanPlayRefusal, mapPackager, networkFlagProblem, pairClients, pairSides, pairCustody, pairDirectory, poolClientsFile, poolFile, poolHolderFile, poolOwners, playtestPairRefusal, readPool, reportPort, writeJson, writePoolClients, wrongUser,
 } from "../lan/pool";
 import { PROFILES, desktopSize } from "../os/warcraft/clientProfiles";
 import { setupClient } from "../lan/setup";
@@ -195,7 +196,8 @@ const pool: Command = (args) => Effect.gen(function*() {
   const profileOf = (pair: number) => profiles[pair] ?? profiles.at(-1) ?? "parity";
   const launcher = yield* desktopLauncher(args);
   const capacity = yield* capacityHelper(args);
-  const sessions: { readonly exitCode: Effect.Effect<unknown, unknown> }[] = [];
+  yield* ensurePackager(mapPackager());
+  const sessions:{ readonly exitCode: Effect.Effect<unknown, unknown> }[] = [];
   const entries: PoolPair[] = [];
 
   const chosen = flagValues(args, "pair").map((value) => wholeFlag(["--pair", value], "pair"));
@@ -293,6 +295,7 @@ const dummy: Command = (args) => Effect.gen(function*() {
   const clients = status["clients"] as { name: string; pid?: number }[];
   const native = clients.find(({ name }) => name === clientName(pair, "a"));
   if (native?.pid === undefined) return yield* new UsageFailure({ problem: `pair ${pair}'s first client is not running` });
+  yield* ensurePackager(mapPackager());
   const state = yield* readJson(join(pairDirectory(pair), "agent.json"), AgentProcess);
   const [command = "", ...entered] = yield* Namespaces.use((namespaces) => namespaces.enter(state.pid, ["user", "net"], [process.execPath, join(import.meta.dir, "../lan/dummySession.ts"), String(pair), resolve(map), resolve(program), String(count), String(native.pid)]));
   const exit = yield* Effect.scoped(Effect.flatMap(
