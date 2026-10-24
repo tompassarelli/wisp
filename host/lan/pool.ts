@@ -2,12 +2,13 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Duration, Effect, Option, Schema } from "effect";
+import { reservedLease } from "./admission";
 import { LanFailure } from "./join";
 import { UsageFailure, flagValues, wholeFlag } from "../cli/command";
 import { pollUntil } from "../cli/hostProcess";
 import { writeAtomic } from "../io/files";
 import { cacheHome, dataHome, stateHome } from "../io/xdg";
-import { InputInjection } from "../os/platform/services";
+import { CapacityAdmission, InputInjection } from "../os/platform/services";
 import { documentsFolder } from "../os/warcraft/battleNet";
 import { PROFILES, type Profile } from "../os/warcraft/clientProfiles";
 export {
@@ -358,11 +359,11 @@ export function pairOf(pool: PoolFile, names: readonly string[]): PoolPair | und
 
 export const STOP_GRACE = "10 seconds";
 
-export const stopGame = (stop: {
+export const stopGame = <A>(stop: {
   readonly terminate: Effect.Effect<void>;
-  readonly survivors: Effect.Effect<readonly number[]>;
-  readonly kill: (pids: readonly number[]) => Effect.Effect<void>;
-  readonly outlived: (pids: readonly number[]) => Effect.Effect<void>;
+  readonly survivors: Effect.Effect<readonly A[]>;
+  readonly kill: (left: readonly A[]) => Effect.Effect<void>;
+  readonly outlived: (left: readonly A[]) => Effect.Effect<void>;
   readonly grace: Duration.Input;
 }): Effect.Effect<void> => {
   const gone = pollUntil(stop.survivors, { until: (left) => left.length === 0, every: "250 millis", within: stop.grace, onTimeout: () => stop.survivors });
@@ -375,6 +376,38 @@ export const stopGame = (stop: {
     yield* pollUntil(stop.survivors, { until: (rest) => rest.length === 0, every: "250 millis", within: "3 seconds", onTimeout: () => Effect.succeed([]) });
   });
 };
+
+export const clientLog = (pair: number, name: string) => join(pairDirectory(pair), `${name}.err`);
+
+/** The capacity lease client `name` of pair K last ran under, from the RESERVED line its wrapper printed into its log. */
+export const clientLease = (pair: number, name: string) => {
+  try {
+    return reservedLease(readFileSync(clientLog(pair, name), "utf8"));
+  } catch {
+    return undefined;
+  }
+};
+
+/** Stops client `name` of pair K by the exact scope of its last capacity lease, whether or not that lease's wrapper still runs; succeeds with whether the scope is gone. */
+export const stopClientScope = (pair: number, name: string, outlived: (lease: string) => Effect.Effect<void>) => CapacityAdmission.use((admission) => {
+  const lease = clientLease(pair, name);
+  if (lease === undefined) return Effect.succeed(true);
+  const live = admission.leaseLive(lease).pipe(Effect.orElseSucceed(() => true));
+  const signal = (signal: "SIGTERM" | "SIGKILL") => admission.signalLease(lease, signal).pipe(Effect.ignore);
+  return stopGame({
+    terminate: signal("SIGTERM"),
+    survivors: live.pipe(Effect.map((up) => (up ? [lease] : []))),
+    kill: () => signal("SIGKILL"),
+    outlived: () => outlived(lease),
+    grace: STOP_GRACE,
+  }).pipe(Effect.andThen(live), Effect.map((up) => !up));
+});
+
+/** Stops each client of pair K by the exact scope of its last capacity lease; succeeds with the clients whose scope outlived it. */
+export const stopPairScopes = (pair: number, outlived: (name: string, lease: string) => Effect.Effect<void>) => Effect.forEach(PAIR_SIDES, (side) => {
+  const name = clientName(pair, side);
+  return stopClientScope(pair, name, (lease) => outlived(name, lease)).pipe(Effect.map((gone) => (gone ? [] : [name])));
+}).pipe(Effect.map((left) => left.flat()));
 
 export const pairsHeldBy = (pid: number): number[] => {
   const root = stateRoot();

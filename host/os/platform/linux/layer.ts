@@ -52,6 +52,18 @@ const audio = Layer.effect(AudioIsolation, Effect.gen(function*() {
   });
 }));
 
+// The machine-capacity helper names each lease's scope agent-capacity-<lease id without dashes>.scope.
+const leaseScope = (lease: string) => `agent-capacity-${lease.replaceAll("-", "")}.scope`;
+
+const userManager = (args: readonly string[]) => Effect.try({
+  try: () => {
+    const env = { ...process.env, XDG_RUNTIME_DIR: userRuntime(), DBUS_SESSION_BUS_ADDRESS: `unix:path=${userRuntime()}/bus` };
+    const done = Bun.spawnSync(["systemctl", "--user", ...args], { env, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+    return done.stdout.toString().trim();
+  },
+  catch: failure("capacity admission"),
+});
+
 const admission = Layer.effect(CapacityAdmission, Effect.gen(function*() {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   return CapacityAdmission.of({
@@ -63,6 +75,10 @@ const admission = Layer.effect(CapacityAdmission, Effect.gen(function*() {
     session: (helper, owner, memoryGib) => Effect.succeed([
       process.execPath, helper, "session", "--class", "native", ...(memoryGib === undefined ? [] : ["--memory-gib", String(memoryGib)]), "--owner", owner, "--",
     ]),
+    signalLease: (lease, signal) => userManager(["kill", `--signal=${signal}`, leaseScope(lease)]).pipe(Effect.asVoid),
+    leaseLive: (lease) => userManager(["show", leaseScope(lease), "--property=ActiveState", "--value"]).pipe(
+      Effect.map((state) => !["", "inactive", "failed"].includes(state)),
+    ),
   });
 }));
 

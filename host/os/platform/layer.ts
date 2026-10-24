@@ -39,7 +39,7 @@ export const unsupportedLayer = (platform: string): Layer.Layer<Platform> => {
     Layer.succeed(GameLauncher, GameLauncher.of({ inPrefix: () => refuse("game launch") })),
     Layer.succeed(Namespaces, Namespaces.of({ offline: () => refuse("network isolation"), enter: () => refuse("process namespaces") })),
     Layer.succeed(AudioIsolation, AudioIsolation.of({ sink: (name) => Effect.succeed({ env: {}, problem: `${name}: audio isolation is not supported on this platform (${platform}); it shares the default output` }) })),
-    Layer.succeed(CapacityAdmission, CapacityAdmission.of({ probe: () => refuse("capacity admission"), session: () => refuse("capacity admission") })),
+    Layer.succeed(CapacityAdmission, CapacityAdmission.of({ probe: () => refuse("capacity admission"), session: () => refuse("capacity admission"), signalLease: () => refuse("capacity admission"), leaseLive: () => refuse("capacity admission") })),
     Layer.succeed(PageOpener, PageOpener.of({ open: () => refuse("opening a page") })),
     Layer.succeed(ScreenCapture, ScreenCapture.of({ frame: desktop("screen capture") })),
     Layer.succeed(InputInjection, InputInjection.of({

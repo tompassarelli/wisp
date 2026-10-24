@@ -11,6 +11,9 @@ const DEFERRED_EXIT = 75;
 /** Whether a run under the capacity helper exited because the helper deferred it. */
 export const deferredExit = (exitCode: number) => exitCode === DEFERRED_EXIT;
 
+/** The lease the capacity helper reserved, from the RESERVED line it printed. */
+export const reservedLease = (stderr: string) => /"decision":"RESERVED".*?"lease":"([0-9a-f-]{36})"/.exec(stderr)?.[1];
+
 /** The DEFER reason, and the CPU pressure it saw, that the capacity helper printed. */
 export function capacityDeferral(stderr: string): { readonly reason: string; readonly cpuSomeAvg10?: string } | undefined {
   const deferred = /"decision":"DEFER","reason":"([A-Z_]+)"(?:.*?"cpuSomeAvg10":([\d.]+))?/.exec(stderr);

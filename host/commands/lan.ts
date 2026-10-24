@@ -4,7 +4,7 @@ import { userInfo } from "node:os";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Console, Effect, Exit, Schema, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { Namespaces, ProcessTable } from "../os/platform/services";
+import { Namespaces } from "../os/platform/services";
 import { collect, pollUntil, spawnLogged } from "../cli/hostProcess";
 import { type Command, UsageFailure, describeCause, flagValues, portFlag, wholeFlag } from "../cli/command";
 import { CLEAR, type Impairment, clearedAlready, impairCommands, impairmentSummary } from "../lan/netem";
@@ -12,7 +12,7 @@ import { LanFailure } from "../lan/join";
 import { lanPluginProblem } from "../lan/plugin";
 import { ensurePackager } from "../compile/mapBuild";
 import {
-  PAIR_SIDES, agentFile, agentPidFile, agentSocket, alive, clientName, lanPlayRefusal, mapPackager, networkFlagProblem, pairClients, pairSides, pairCustody, pairDirectory, pairEntryFile, pairsHeldBy, livePairs, poolClientsFile, poolFile, poolHolder, poolHolderFile, poolOwners, playtestPairRefusal, prefixOf, readPool, reportPort, stopAgent, writeJson, writePoolClients, wrongUser,
+  PAIR_SIDES, agentFile, agentPidFile, agentSocket, alive, clientName, lanPlayRefusal, mapPackager, networkFlagProblem, pairClients, pairSides, pairCustody, pairDirectory, pairEntryFile, pairsHeldBy, livePairs, poolClientsFile, poolFile, poolHolder, poolHolderFile, poolOwners, playtestPairRefusal, readPool, reportPort, stopAgent, stopPairScopes, writeJson, writePoolClients, wrongUser,
 } from "../lan/pool";
 import { PROFILES, desktopSize } from "../os/warcraft/clientProfiles";
 import { DEFAULT_BUILD } from "../client/builds";
@@ -128,6 +128,8 @@ const holdPair = (pair: number) => pairCustody(pair).pipe(Effect.andThen(Effect.
   if (refusal !== undefined) return yield* new LanFailure({ problem: refusal });
 })))));
 
+const outlivedStop = (name: string, lease: string) => Console.log(`${name} outlived its stop (lease ${lease}); killing its scope`);
+
 const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, network: boolean, fps?: number) => {
   const directory = pairDirectory(pair);
   const attempt = Effect.gen(function*() {
@@ -135,6 +137,8 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
     rmSync(agentSocket(pair), { force: true });
     rmSync(agentFile(pair), { force: true });
     rmSync(agentPidFile(pair), { force: true });
+    const outlived = yield* stopPairScopes(pair, outlivedStop);
+    if (outlived.length > 0) return yield* new LanFailure({ problem: `${outlived.join(" and ")} from its last start outlived the stop of ${outlived.length === 1 ? "its" : "their"} capacity scope` });
     const waiting = yield* pairAdmission(capacity);
     if (waiting !== undefined) return yield* new CapacityDeferred({ reason: waiting });
     rmSync(admissionFile(directory), { force: true });
@@ -225,7 +229,7 @@ const pool: Command = (args) => Effect.gen(function*() {
     const agentFile = join(pairDirectory(pair), "agent.json");
     const runs = existsSync(agentFile) ? (yield* readJson(agentFile, AgentFile)).runs ?? {} : {};
 
-    yield* Effect.addFinalizer(() => started.stop.pipe(Effect.andThen(Effect.sync(() => {
+    yield* Effect.addFinalizer(() => started.stop.pipe(Effect.andThen(stopPairScopes(pair, outlivedStop)), Effect.andThen(Effect.sync(() => {
       for (const run of [runs.a, runs.b]) {
         if (run !== undefined && basename(run).startsWith("private-desktop.") && existsSync(join(run, "lifecycle-owned"))) rmSync(join(run, "active"), { force: true });
       }
@@ -311,10 +315,8 @@ const stop: Command = (args) => Effect.gen(function*() {
   yield* Effect.try({ try: () => process.kill(holder, "SIGTERM"), catch: (cause) => new LanFailure({ problem: `signal pool ${holder}: ${describeCause(cause)}` }) });
   const gone = yield* pollUntil(Effect.sync(() => !alive(holder)), { until: (ended) => ended, every: "250 millis", within: POOL_STOP, onTimeout: () => Effect.succeed(false) });
   if (!gone) return yield* new LanFailure({ problem: `pair ${pair}'s pool ${holder} still runs ${POOL_STOP} after SIGTERM` });
-  const table = yield* ProcessTable;
-  const left = yield* Effect.forEach(PAIR_SIDES, (side) => table.games(prefixOf(clientName(pair, side))).pipe(Effect.orElseSucceed(() => [])));
-  const pids = left.flat().map(({ pid }) => pid);
-  if (pids.length > 0) return yield* new LanFailure({ problem: `pair ${pair}'s pool ${holder} stopped, but its games still run (pid ${pids.join(", ")})` });
+  const left = yield* stopPairScopes(pair, outlivedStop);
+  if (left.length > 0) return yield* new LanFailure({ problem: `pair ${pair}'s pool ${holder} stopped, but the capacity scope of ${left.join(" and ")} still runs` });
   yield* Console.log(`pair ${pair}: pool ${holder} stopped; none of its games run`);
 });
 
