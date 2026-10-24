@@ -253,16 +253,18 @@ row at its stamp, rolling back when the row arrives late
   the right frame, so the cost is a deeper rollback, not a wrong frame.
 - **Downstream jitter** is what the buffer removes. Even turns give even
   callbacks, so local sampling stays at the pool's one-frame spread.
-- **Local feel.** Whether D also delays a player's own key state is
-  unmeasured. The sweep found that held-key reads follow the synchronized key
-  events in 8 of 10 client-runs. If a press only reads as held once its key
-  event returns through the host, then RTT + D adds directly to the player's
-  own input delay, and D must stay as small as the late rate allows. R3
-  measures this on the pool with netem at 0, 100 and 200 ms. If reads wait
-  for the echo, the relay still evens turns and removes loss stalls, but its
-  latency counts in full: R9 then judges each cell by press-to-sample delay
-  as well as spread, and the relay's placement (one region near both
-  players) matters more than its depth.
+- **Local feel.** Held-key reads are local: neither RTT nor D delays a
+  player's own key state. R3 measured it on a gex45 pool pair at
+  deadline-paced 17/17/16 with netem at 0, 100 and 200 ms
+  (smashcraft:docs/warcraft-api-netcode-findings.md, "Held-key reads under
+  round-trip delay"). The press-to-first-held-sample median moved by under
+  2 ms (4.0 and 5.7 ms at 0, 5.0 and 4.2 ms at 200, p5–p95 within −7 to
+  17 ms throughout), less than one frame, while the synchronized key-down
+  event moved by the full added round trip (26 ms to 227 ms after the held
+  sample). `BlzIsKeyPressed` follows the client's own input pump, as
+  smashcraft#218 found. So D is priced by the opponent's view and rollback
+  depth above, not by local input delay, and R9 judges each cell by spread,
+  late rate and rollback depth, not by press-to-sample delay.
 - **Taps.** Smashcraft#218 loses a tap when its press and release reach the
   host in one turn. Separate packets don't prevent that: two packets less
   than a turn apart land in the same turn, and a stalled client sends both
