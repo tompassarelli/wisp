@@ -184,7 +184,7 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--slot N` | Which client's capture or readings to read (default 0) | `perf native`, `perf fit`, `perf sections` |
 | `--threshold SHARE` | The rise that fails a comparison | `perf compare` |
 | `--cost` | Also print predicted Warcraft cost per frame | `headless` |
-| `--pool-profile NAME` | Offline pool display settings: parity, checks, hfr, visual or capture-classic (all Classic) | `lan pool` |
+| `--pool-profile NAME` | Offline pool display settings: parity, checks, hfr, visual, capture-classic or capture-classic-1080 (all Classic) | `lan pool` |
 | `--fps N` | The foreground and background frame cap for native pool clients | `lan pool` |
 | `--clients-file FILE` | The native clients configuration file | `integrity capture`, `pad`, `fresh` |
 | `--four-fighters` | Capture the four-fighter match and rematch | `integrity capture` |

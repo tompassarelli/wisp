@@ -627,6 +627,8 @@ client's War3Preferences `[Video]`, `[Misc]` and `[Sound]` at launch:
   occlusion enabled. Sound effects are on and music is off, so the same
   profile can record effect audio. Pool metadata records the selected
   profile. Retain that metadata and the saved preferences with captures.
+- `capture-classic-1080` is `capture-classic` in a 1920×1080 window, the
+  resolution native silhouette captures compare at (wisp#2).
 
 **The pool draws only Classic.** Its clients never sign in, and an unsigned
 client draws Classic models whatever `[Misc] hd` says. On 9 October 2026
