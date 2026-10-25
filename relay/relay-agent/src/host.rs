@@ -1,5 +1,6 @@
 use std::io::{self, ErrorKind, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use relay_proto::room::{self, FromAgent, FromRelay, MapFacts};
@@ -8,6 +9,7 @@ use relay_proto::Micros;
 
 use crate::game::{GameHost, Output, Phase};
 use crate::link::Link;
+use crate::trace::Trace;
 use crate::w3gs::{PlayerAction, SockAddr, Splitter};
 
 const ANNOUNCE_US: Micros = 250_000;
@@ -21,11 +23,13 @@ pub struct HostConfig {
     pub listen_port: u16,
     pub announce_ports: Vec<u16>,
     pub host: Option<(MapFacts, u8)>,
+    pub trace: Option<PathBuf>,
 }
 
 #[derive(Debug, Default)]
 pub struct HostSummary {
     pub turns: u64,
+    pub fed: u64,
     pub underruns: usize,
     pub depth_turns: u32,
     pub releases: u64,
@@ -70,6 +74,7 @@ pub struct AgentHost<'a> {
     next_announce: Micros,
     next_ping: Micros,
     summary: HostSummary,
+    trace: Option<Trace>,
 }
 
 impl<'a> AgentHost<'a> {
@@ -81,6 +86,7 @@ impl<'a> AgentHost<'a> {
         if let Some((map, computers)) = &cfg.host {
             link.push_room(room::encode_from_agent(&FromAgent::Host { map: map.clone(), computers: *computers }));
         }
+        let trace = cfg.trace.as_deref().map(Trace::create).transpose()?;
         Ok(AgentHost {
             cfg,
             link,
@@ -94,6 +100,7 @@ impl<'a> AgentHost<'a> {
             next_announce: 0,
             next_ping: PING_US,
             summary: HostSummary::default(),
+            trace,
         })
     }
 
@@ -108,7 +115,7 @@ impl<'a> AgentHost<'a> {
     pub fn run(mut self) -> io::Result<HostSummary> {
         let line = format!("agent slot {} of room {:016x} listening on 127.0.0.1:{}", self.link.slot(), self.link.room(), self.port()?);
         (self.log)(line);
-        loop {
+        while !crate::stop::requested() {
             let now = self.now();
             self.accept()?;
             self.read_client()?;
@@ -124,6 +131,10 @@ impl<'a> AgentHost<'a> {
             }
         }
         self.link.leave()?;
+        if let Some(trace) = self.trace.as_mut() {
+            trace.flush()?;
+        }
+        self.summary.fed = self.link.agent().stats().fed;
         self.summary.underruns = self.link.agent().stats().underrun_at.len();
         self.summary.depth_turns = self.link.agent().choice().map_or(0, |c| c.turns);
         Ok(self.summary)
@@ -202,6 +213,9 @@ impl<'a> AgentHost<'a> {
 
     fn relay_step(&mut self) -> io::Result<bool> {
         let fed = self.link.step(Instant::now() + STEP)?;
+        if let Some(trace) = self.trace.as_mut() {
+            trace.record(&self.link, &fed)?;
+        }
         for message in self.link.take_room() {
             match room::decode_from_relay(&message) {
                 Ok(event) => {

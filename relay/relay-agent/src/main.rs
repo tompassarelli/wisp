@@ -5,7 +5,7 @@ use relay_agent::host::{AgentHost, HostConfig};
 use relay_agent::Link;
 use relay_proto::room::MapFacts;
 
-const USAGE: &str = "relay-agent --relay HOST:PORT --name GAME (--create PLAYERS --map 'path=... size=...' [--computers N] | --join ROOM) [--announce PORT,...] [--version N]";
+const USAGE: &str = "relay-agent --relay HOST:PORT --name GAME (--create PLAYERS --map 'path=... size=...' [--computers N] | --join ROOM) [--announce PORT,...] [--version N] [--trace FILE]";
 const CLIENT_PORTS: &str = "16000,16001,16002,16003,16004,16005,16006,16007";
 
 fn flag<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
@@ -34,6 +34,7 @@ fn config(args: &[String]) -> Result<(String, HostConfig, Option<u8>, Option<u64
         listen_port: 0,
         announce_ports: flag(args, "--announce").unwrap_or(CLIENT_PORTS).split(',').map(str::parse).collect::<Result<_, _>>().map_err(|e| format!("--announce: {e}"))?,
         host,
+        trace: flag(args, "--trace").map(Into::into),
     };
     Ok((relay, cfg, create, join))
 }
@@ -47,6 +48,7 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    relay_agent::stop::on_signals();
     let started = std::time::Instant::now();
     let mut log = |line: String| println!("{:.3} {line}", started.elapsed().as_secs_f64());
     let link = relay

@@ -30,6 +30,7 @@ pub struct Link {
     stream: RoomStream,
     inbox: Vec<Vec<u8>>,
     arrivals: Option<Vec<(u32, Micros)>>,
+    chosen_at: Option<Micros>,
 }
 
 fn bind_for(server: SocketAddr) -> io::Result<UdpSocket> {
@@ -130,6 +131,7 @@ impl Link {
                             stream: RoomStream::new(token),
                             inbox: Vec::new(),
                             arrivals: None,
+                            chosen_at: None,
                         });
                     }
                     Ok(Control::Refused { request: r, reason }) if r == request => {
@@ -164,6 +166,10 @@ impl Link {
 
     pub fn agent(&self) -> &Agent {
         &self.agent
+    }
+
+    pub fn chosen_at(&self) -> Option<Micros> {
+        self.chosen_at
     }
 
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
@@ -275,6 +281,9 @@ impl Link {
                     && self.agent.started()
                 {
                     self.agent.choose_depth();
+                }
+                if self.chosen_at.is_none() && self.agent.choice().is_some() {
+                    self.chosen_at = Some(now);
                 }
             }
             Some(KIND_STREAM) => {

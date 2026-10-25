@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream, UdpSocket};
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -95,9 +96,29 @@ fn play(port: u16, name: &[u8], presses: bool) -> Seen {
     seen
 }
 
+fn trace_path(name: &str) -> PathBuf {
+    std::env::temp_dir().join(format!("relay-game-{}-{name}.trace", std::process::id()))
+}
+
+fn check_trace(path: &Path, summary: &HostSummary) {
+    let text = std::fs::read_to_string(path).unwrap();
+    let lines: Vec<Vec<i64>> = text.lines().map(|l| l.split(' ').skip(1).map(|f| f.parse().unwrap()).collect()).collect();
+    let kinds: Vec<&str> = text.lines().map(|l| l.split(' ').next().unwrap()).collect();
+    let fed: Vec<&Vec<i64>> = kinds.iter().zip(&lines).filter(|(k, _)| **k == "fed").map(|(_, l)| l).collect();
+    assert_eq!(fed.len() as u64, summary.fed, "one fed line per fed turn");
+    assert!(fed.iter().enumerate().all(|(i, l)| l.len() == 5 && l[0] == i as i64), "fed lines run 0, 1, 2, ... with five fields");
+    let depth: Vec<&Vec<i64>> = kinds.iter().zip(&lines).filter(|(k, _)| **k == "depth").map(|(_, l)| l).collect();
+    assert_eq!(depth.len(), 1, "one depth line");
+    assert_eq!(depth[0][0], summary.depth_turns as i64);
+    assert!(depth[0][1] <= fed[0][1], "D is chosen before the first turn is fed");
+    assert_eq!(kinds.iter().filter(|k| **k == "underrun").count(), summary.underruns);
+    std::fs::remove_file(path).unwrap();
+}
+
 fn agent(link: Link, map: Option<MapFacts>, name: &'static [u8], ports: mpsc::Sender<u16>) -> HostSummary {
     let mut log = |_line: String| {};
-    let cfg = HostConfig { game_name: name.to_vec(), version: 10200, listen_port: 0, announce_ports: Vec::new(), host: map.map(|m| (m, 0)) };
+    let trace = Some(trace_path(std::str::from_utf8(name).unwrap()));
+    let cfg = HostConfig { game_name: name.to_vec(), version: 10200, listen_port: 0, announce_ports: Vec::new(), host: map.map(|m| (m, 0)), trace };
     let host = AgentHost::new(cfg, link, &mut log).unwrap();
     ports.send(host.port().unwrap()).unwrap();
     host.run().unwrap()
@@ -129,7 +150,7 @@ fn two_games_join_load_and_play_through_agents_and_the_relay() {
     let client_a = thread::spawn(move || play(port_a, b"a", true));
     let client_b = thread::spawn(move || play(port_b, b"b", false));
     let (seen_a, seen_b) = (client_a.join().unwrap(), client_b.join().unwrap());
-    let (summary_a, _) = (agent_a.join().unwrap(), agent_b.join().unwrap());
+    let (summary_a, summary_b) = (agent_a.join().unwrap(), agent_b.join().unwrap());
     let stats = relay.join().unwrap();
 
     assert!(seen_a.turns >= LEAVE_AT && seen_b.turns >= LEAVE_AT, "turns {} and {}", seen_a.turns, seen_b.turns);
@@ -141,6 +162,9 @@ fn two_games_join_load_and_play_through_agents_and_the_relay() {
         assert!(up.0 > down.0, "the release lands a turn after its press: {:?}", seen.keys);
     }
     assert_eq!((stats.rooms_closed, stats.desyncs), (1, 0));
+    assert!(summary_a.fed >= LEAVE_AT as u64, "fed {}", summary_a.fed);
+    check_trace(&trace_path("a"), &summary_a);
+    check_trace(&trace_path("b"), &summary_b);
     for seen in [&seen_a, &seen_b] {
         assert_eq!(seen.marks, [(0, 1, mark_data())], "only the first turn carries the relay's mark, from the lowest slot's player");
     }

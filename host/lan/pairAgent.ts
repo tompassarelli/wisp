@@ -259,12 +259,12 @@ const agent = Effect.gen(function*() {
     const names = clients.map(({ side }) => `wisp-${pair}${side}-${id.slice(11, 19)}`);
     const [host, ...guests] = clients;
     if (host === undefined) return yield* new LanFailure({ problem: "the pair has no clients" });
-    yield* spawn(`agent-${host.side}`, agentBin, ["--relay", relayAddress, "--name", names[0]!, "--create", String(clients.length), "--map", mapFactsLine(map)]);
+    yield* spawn(`agent-${host.side}`, agentBin, ["--relay", relayAddress, "--name", names[0]!, "--create", String(clients.length), "--map", mapFactsLine(map), "--trace", join(folder, `agent-${host.side}.trace`)]);
     const hostLog = join(folder, `agent-${host.side}.log`);
     let room: string | undefined;
     const created = yield* until(Effect.sync(() => (room = existsSync(hostLog) ? /^\S+ room ([0-9a-f]{16}) slot 0$/m.exec(readFileSync(hostLog, "utf8"))?.[1] : undefined) !== undefined), "20 seconds");
     if (!created || room === undefined) return yield* new LanFailure({ problem: `the host agent made no room; see ${folder}` });
-    yield* Effect.forEach(guests, (guest, index) => spawn(`agent-${guest.side}`, agentBin, ["--relay", relayAddress, "--name", names[index + 1]!, "--join", room!]), { discard: true });
+    yield* Effect.forEach(guests, (guest, index) => spawn(`agent-${guest.side}`, agentBin, ["--relay", relayAddress, "--name", names[index + 1]!, "--join", room!, "--trace", join(folder, `agent-${guest.side}.trace`)]), { discard: true });
     say(`relayed ${folder}: relay on ${relayAddress}, games ${names.join(", ")}`);
     for (const [index, client] of clients.entries()) {
       const pid = yield* gamePid(client.name);

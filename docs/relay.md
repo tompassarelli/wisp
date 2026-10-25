@@ -1065,6 +1065,17 @@ Built for wisp#37 (code box), in `relay/`:
 - `wisp lan relayed MAP --relay-bin DIR --pair K` starts the relay and one
   agent per client inside the pair's namespace and joins each client to its
   own agent's game; logs land in the pair's `games/relayed-*` folder.
+- `relay-agent --trace FILE` (off by default) writes the jitter buffer's
+  timeline, one line per event in the agent's link clock (µs since the
+  handshake): `fed index wall_us scheduled_us backlog extra_us` per fed turn
+  (`scheduled_us` is `Agent::scheduled(index)` as it was fed, `backlog` the
+  turns already received behind it, `extra_us` the added delay after
+  settling), `depth D at_us` when D (turns) is chosen, and
+  `underrun index at_us` per underrun. It is buffered and flushed at least
+  once a second and on exit. SIGINT and SIGTERM stop the agent's loop, so it
+  still leaves the room, flushes the trace and prints its `agent summary:`
+  line. `wisp lan relayed` writes `agent-<side>.trace` beside each
+  `agent-<side>.log` (wisp#38).
 
 ## Where the relay runs, NAT, and who can join (boxes R10, C1)
 
