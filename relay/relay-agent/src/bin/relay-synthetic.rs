@@ -3,13 +3,13 @@ use std::net::ToSocketAddrs;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use relay_agent::Link;
+use relay_agent::{Link, Tuning};
 use relay_proto::rng::Rng;
 use relay_proto::trace::Trace;
 use relay_proto::wire::{Turn, UpAction};
 use relay_proto::Micros;
 
-const USAGE: &str = "relay-synthetic --relay HOST:PORT --seconds N (--create PLAYERS | --join ROOM) [--rebind-at SECONDS] [--trace FILE]";
+const USAGE: &str = "relay-synthetic --relay HOST:PORT --seconds N (--create PLAYERS | --join ROOM) [--rebind-at SECONDS] [--trace FILE] [--raise-headroom-ms N] [--max-total-depth-ms N]";
 const SLICE: Duration = Duration::from_millis(1);
 const LATE_WAKE: Duration = Duration::from_millis(4);
 const SCHEDULING_US: Micros = 100_000;
@@ -23,10 +23,15 @@ struct Options {
     join: Option<u64>,
     rebind_at: Option<u64>,
     trace: Option<String>,
+    tuning: Tuning,
 }
 
 fn flag<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
     args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).map(String::as_str)
+}
+
+fn millis(args: &[String], name: &str) -> Result<Option<Micros>, String> {
+    flag(args, name).map(|n| n.parse::<u32>().map(|ms| Micros::from(ms) * 1000).map_err(|e| format!("{name}: {e}"))).transpose()
 }
 
 fn options(args: &[String]) -> Result<Options, String> {
@@ -38,6 +43,7 @@ fn options(args: &[String]) -> Result<Options, String> {
         join: flag(args, "--join").map(|r| u64::from_str_radix(r, 16).map_err(|e| format!("--join: {e}"))).transpose()?,
         rebind_at: number("--rebind-at")?,
         trace: flag(args, "--trace").map(str::to_string),
+        tuning: Tuning { raise_headroom_us: millis(args, "--raise-headroom-ms")?, max_total_depth_us: millis(args, "--max-total-depth-ms")? },
     };
     if o.create.is_some() == o.join.is_some() {
         return Err(USAGE.into());
@@ -112,8 +118,8 @@ fn connect(o: &Options) -> std::io::Result<Link> {
         .next()
         .ok_or_else(|| std::io::Error::other(format!("{} has no address", o.relay)))?;
     match (o.create, o.join) {
-        (Some(players), _) => Link::create(server, players),
-        (_, Some(room)) => Link::join(server, room),
+        (Some(players), _) => Link::create_tuned(server, players, o.tuning),
+        (_, Some(room)) => Link::join_tuned(server, room, o.tuning),
         _ => unreachable!(),
     }
 }
