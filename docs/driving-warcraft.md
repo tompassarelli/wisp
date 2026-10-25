@@ -370,7 +370,10 @@ Wisp's menu page reports it instead.
 - The one exception is outside Wisp: Smashcraft Servers, the opt-in LAN
   switch for players in smashcraft-client, which Tom approved on 25 October
   2026 and tests first on a spare signed-in account of ours
-  ([clean-room.md](clean-room.md#smashcraft-servers)). Wisp's own tools still
+  ([clean-room.md](clean-room.md#smashcraft-servers)). On 3.0.1.24371 the
+  switch alone doesn't give a LAN provider (wisp#21), so players there reach
+  the relay through Smashcraft Servers only after Tom decides the player
+  question that follows wisp#21's offline work. Wisp's own tools still
   never switch a signed-in client.
 
 ## Ranked recommendation

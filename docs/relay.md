@@ -64,7 +64,10 @@ Measured facts, each with its source:
   (wisp#21, 24 October). W3Champions' 3.0 path switches the provider inside
   the running game. On 25 October 2026 Tom approved the same kind of switch
   for players, only as their opt-in to Smashcraft Servers
-  (wisp:docs/clean-room.md, "Smashcraft Servers").
+  (wisp:docs/clean-room.md, "Smashcraft Servers"). On 3.0.1.24371 the
+  switch alone doesn't give a LAN provider (wisp#21), so players there reach
+  the relay through Smashcraft Servers only after Tom decides the player
+  question that follows wisp#21's offline work.
 
 That last fact splits the plan in two:
 
@@ -73,8 +76,9 @@ That last fact splits the plan in two:
    pairs, which are our own offline test clients.
 2. **Reach players.** This needs a route by which an unmodified, signed-in
    live client joins a game the agent hosts. Box R0 found none from outside
-   the game on 3.0.1.24371 (Reaching players, below), so players reach the
-   agent through Smashcraft Servers (C3 and Decisions, below).
+   the game on 3.0.1.24371 (Reaching players, below). Players there reach
+   the agent through Smashcraft Servers only after Tom decides the player
+   question that follows wisp#21 (C3 and Decisions, below).
 
 ## Baseline: Wisp's TCP host on a lossy path (box R4)
 
@@ -1678,8 +1682,10 @@ Battle.net app options:
   place. Smashcraft Servers is that kind of switch, allowed only as the
   player's opt-in (wisp:docs/clean-room.md, "Smashcraft Servers").
 
-So no route from outside the game reaches a 127.0.0.1 host on 3.0.1.24371,
-and players reach the relay through Smashcraft Servers (Decisions, below). R0
+So no route from outside the game reaches a 127.0.0.1 host on 3.0.1.24371.
+On that build the switch alone doesn't give a LAN provider (wisp#21), so
+players reach the relay through Smashcraft Servers only after Tom decides
+the player question that follows wisp#21's offline work (Decisions, below). R0
 is rerun when a new live build ships, since a route from outside would need
 no switch.
 
@@ -1730,7 +1736,9 @@ smashcraft-client (epic smashcraft-client#25):
   (smashcraft-client#27).
 - **C3** Smashcraft Servers: the opt-in LAN switch beside Battle.net,
   unavailable on unchecked builds, tested end to end on the spare signed-in
-  account before players see it (smashcraft-client#28).
+  account before players see it (smashcraft-client#28). Players on
+  3.0.1.24371 get Smashcraft Servers only after Tom decides the player
+  question that follows wisp#21.
 
 Order: R0, R1, R5 and R6 start now. R2 and R3 follow R1; R4 follows R1 and
 R5; R7 follows R5 and R6; R8 follows R1 and R6; R9 follows R3, R4, R7 and
@@ -1761,6 +1769,11 @@ model is TypeScript in wisp:src/headless/syncChannel.ts beside
   clients to locate its LAN provider (gate 38, wisp#21). The limits are in
   wisp:docs/clean-room.md, "Smashcraft Servers". C3 and then C1
   can now proceed.
+- **Players on 3.0.1.24371 (Tom, open).** On that build the switch alone
+  doesn't give a LAN provider (wisp#21), and wisp:docs/clean-room.md allows
+  writing one only on our own offline test clients. Players there reach the
+  relay through Smashcraft Servers only after Tom decides the player
+  question that follows wisp#21's offline work.
 - **Public port (Tom).** R10 asks before opening the relay's UDP port on
   Nexus or gex45.
 - **Settled here.** Raw UDP with redundancy, no QUIC, per Tom's direction.
