@@ -212,11 +212,14 @@ Two findings from the earlier gex45 runs, which do not count
 
 ## Relay under internet conditions (box R9)
 
-Status: measured on the laptop's LAN pool on 25 October 2026 (wisp#38).
-Not passed: the agent's feed deviation p99 is 2.4–2.9 ms in every jitter
-cell against a 2 ms bar, and three cells fall short of one callback per
-burst on every frame (99.92–99.97%). Taps, the light-input spread, desyncs
-and the blackout drain are below.
+Status: passed on the laptop's LAN pool on 25 October 2026 (wisp#38), once
+wisp#56 moved the agent's feed wait onto a high-resolution timer. In the
+rerun the agent's feed deviation p99 is 0.066–0.092 ms in every cell against
+a 2 ms bar. Every probe tap is seen apart from presses that fall on a stall
+of both clients. The light-input spread is at most 1 frame, there are zero
+desyncs, and one callback per burst is 100% outside host stalls (Notes).
+The heavy burst cell, which met every bar, and the blackout stand from the
+first run (Before wisp#56, below).
 
 The same probe as the baseline above, through the relay instead of Wisp's
 TCP host: pool pair 0 (Warcraft III 3.0.0.24268, offline LAN, 60 fps cap),
@@ -224,40 +227,129 @@ each run in a fresh pool session of its own, started for that run and
 stopped with SIGINT.
 
 - **Relay.** `wisp lan relayed MAP --relay-bin DIR --pair 0` at the default
-  8 ms turn, relay and agents built from wisp f1d01a83. The relay binds
+  8 ms turn, relay and agents built from wisp fdaac7e6, which carries
+  wisp#56's `ppoll` feed wait (0d60b0d4). The relay binds
   `127.0.0.1:17000 + pair` inside the pair's namespace, so the path is
   `wisp lan netem --pair 0 ... --udp-port 17000`, applied before
   `lan relayed` starts: the agents' relay link crosses the impaired path and
   each client's TCP link to its own agent does not. Every counted run shows
-  netem's packet counter rising through the probe (27,000–43,000 packets in
-  `netem-stats.txt`; 7,180 in the blackout run, whose switch resets it),
-  and `tc filter` matches both ports at 0x4268.
+  netem's packet counter rising through the probe (28,576–29,468 packets in
+  the jitter cells, 50,350 in the burst cell, in `netem-stats.txt`).
 - **Map and probe.** The baseline's: Smashcraft 59824cc9b (`w32-echo.w3x`,
   sha256 26b206e48e3f6b7b…), `-dev quick hero rifleman stocks 9`, then
   `-dev callback-clock 3600`, each sent from client a and confirmed by a new
   `Chat(` line in `relay.log` (every chat landed on its first send), and
   the seed-7 tap driver with light or heavy input. 60 s of callbacks per run,
-  as in the baseline, to fit the 5-minute session; the issue's 80–120 s
-  does not fit.
-- **Host load.** Each run started with at most 6 live Warcraft clients and
-  both `protectedCpuSomeAvg10` and the system `/proc/pressure/cpu` some
-  avg10 under 20, under a quiet native capacity session; a run with any
+  to fit the 5-minute session.
+- **Cells.** The 8 jitter cells and `r120-l2-burst-light`, the cells that
+  missed a bar in the first run.
+- **Host load.** Each run started with both `protectedCpuSomeAvg10` and the
+  system `/proc/pressure/cpu` some avg10 under 20 and with no other session
+  on pair 0, under a quiet native capacity session; a run with any
   per-second reading at 20 or above would have been discarded, and none
-  was. No other laptop pair ran.
+  was. `r200-l2-j20-light` ran beside another session's native capture on
+  pair 1 (one client, 14 computer players, load average up to 11.4); its
+  pressures peaked at 1.36 and 1.75. The other runs had only pair 0's two
+  clients.
 
-Columns: the agent's feed deviation p99 (ms, agent a, b), fed time minus
-`Agent::scheduled` outside underruns, from `agent-<side>.trace`; underruns;
-D, the depth each agent chose in turns; taps seen; press-to-sample median
-and spread (ms, frames p5–p95), from the probe; rollbacks per minute and the
-deepest rollback in frames, from Smashcraft's counters; desyncs from the
-relay's checksum compare; one callback per burst, the share of callback
-bursts (callbacks under 2 ms apart) that hold one callback, per client;
-callback gap p50/p99/max over both clients; pace, game seconds per wall
-second over the relay's last summary; both pressures at the probe's start
-and end, and their peaks; then the baseline's same cell with its callback
-gap, taps, spread, rollbacks/min, deepest rollback and desyncs. The baseline
-measured jitter only at 120 ms and 2%, so the other jitter cells sit beside
-its cell without jitter.
+Columns as in the first run (Before wisp#56), with one change: one callback
+per burst treats callbacks under 2.5 ms apart as one burst, since a gap of
+about 2 ms is two Smashcraft frames in one 16.7 ms drawn frame whether the
+clock reads 1.998 or 2.000 ms (wisp-lead2's ruling of 25 October 2026 on
+wisp#38). The first run counted only gaps under 2 ms, and its runs give the
+same shares under either rule.
+
+| Path | Input | Run | Feed deviation p99 ms | Underruns | D (turns) | Taps seen (a, b) | Press-to-sample median ms | Spread ms (frames p5–p95) | Rollbacks/min (a, b) | Deepest rollback | Desyncs | One callback per burst | Callback gap p50/p99/max ms | Pace | At start / end: protectedCpuSomeAvg10, system some avg10 | Peak: protected, system | wisp#33 same cell: gap; taps; spread; rollbacks/min; deepest; desyncs |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 120 ms, 2%, jitter 20 ms | light | `r120-l2-j20-light` | 0.067, 0.067 | 0, 0 | 5, 5 | 137/138, 138/139 | 9, 9 | 32 (1), 34 (0) | 257, 246 | 18 | 0 | 100.00%, 100.00% | 19.0/33.0/43 | 1.000 | 0, 0.05 / 0, 0.00 | 0, 0.18 | `r120-l2-j20-light`: 16.0/84.0/357; 133/138, 129/139; 78, 52 (1, 1); 231, 248; 24; 0 |
+| 120 ms, 2%, jitter 20 ms | heavy | `r120-l2-j20-heavy` | 0.067, 0.066 | 0, 0 | 5, 5 | 138/138, 141/141 | 2, 8 | 43 (2), 37 (2) | 582, 581 | 21 | 0 | 100.00%, 100.00% | 18.0/33.0/48 | 1.000 | 0.02, 1.63 / 0, 0.00 | 0.02, 1.63 | `r120-l2-j20-heavy`: 14.0/67.0/334; 129/138, 132/141; 78, 62 (2, 2); 535, 523; 24; 0 |
+| 120 ms, 5%, jitter 20 ms | light | `r120-l5-j20-light` | 0.068, 0.068 | 0, 0 | 5, 5 | 137/138, 138/139 | 9, 10 | 32 (1), 31 (1) | 246, 234 | 17 | 0 | 100.00%, 100.00% | 19.0/33.0/73 | 1.000 | 0, 0.49 / 0, 0.00 | 0, 0.58 | `r120-l5-light`: 12.0/147.0/344; 131/138, 123/139; 68, 65 (2, 2); 236, 233; 24; 0 |
+| 120 ms, 5%, jitter 20 ms | heavy | `r120-l5-j20-heavy` | 0.067, 0.068 | 0, 0 | 6, 5 | 138/138, 139/141 | 3, 3 | 44 (2), 45 (2) | 579, 579 | 24 | 0 | 100.00%, 100.00% | 18.0/33.0/153 | 1.000 | 0.02, 0.32 / 0, 0.00 | 0.02, 0.32 | `r120-l5-heavy`: 12.0/145.0/542; 129/138, 122/141; 89, 66 (2, 2); 493, 495; 24; 0 |
+| 200 ms, 2%, jitter 20 ms | light | `r200-l2-j20-light` | 0.092, 0.091 | 0, 0 | 5, 5 | 137/138, 138/139 | 6, 6 | 44 (1), 37 (1) | 246, 245 | 21 | 0 | 100.00%, 100.00% | 18.0/33.0/75 | 1.000 | 0.97, 1.08 / 1, 1.02 | 1.36, 1.75 | `r200-l2-light`: 15.0/58.0/443; 125/138, 127/139; 58, 50 (1, 2); 221, 216; 24; 0 |
+| 200 ms, 2%, jitter 20 ms | heavy | `r200-l2-j20-heavy` | 0.068, 0.068 | 0, 0 | 5, 5 | 138/138, 140/141 | 2, 7 | 51 (2), 39 (1) | 582, 582 | 24 | 0 | 100.00%, 100.00% | 18.0/33.0/53 | 1.000 | 0.02, 0.25 / 0.02, 0.03 | 0.18, 0.25 | `r200-l2-heavy`: 13.0/61.0/323; 123/138, 124/141; 63, 51 (2, 2); 495, 500; 24; 0 |
+| 200 ms, 5%, jitter 20 ms | light | `r200-l5-j20-light` | 0.066, 0.067 | 0, 0 | 5, 5 | 137/138, 138/139 | 8, 9 | 33 (1), 29 (1) | 251, 253 | 21 | 0 | 100.00%, 100.00% | 18.0/33.0/43 | 1.000 | 0, 0.04 / 0, 0.04 | 0, 0.43 | `r200-l5-light`: 8.0/225.0/596; 104/138, 108/139; 77, 64 (2, 3); 193, 199; 24; 0 |
+| 200 ms, 5%, jitter 20 ms | heavy | `r200-l5-j20-heavy` | 0.067, 0.067 | 0, 0 | 5, 5 | 138/138, 141/141 | 4, 3 | 72 (2), 48 (3) | 581, 583 | 24 | 0 | 99.86%, 99.86% (100.00% outside host stalls) | 17.0/34.0/185 | 1.000 | 0, 0.07 / 0, 0.15 | 0, 0.28 | `r200-l5-heavy`: 10.0/219.0/535; 113/138, 97/141; 80, 68 (3, 5); 388, 396; 24; 0 |
+| 120 ms, 2%, bursts | light | `r120-l2-burst-light` | 0.082, 0.082 | 1, 1 (turn 1068, before the probe) | 4, 4 | 137/138, 138/139 | 8, 9 | 36 (1), 32 (1) | 248, 235 | 17 | 0 | 100.00%, 100.00% | 19.0/33.0/39 | 1.000 | 0, 0.12 / 0, 0.00 | 0.18, 0.22 | `r120-l2-burst-light`: 18.0/35.0/175; 133/138, 133/139; 85, 42 (1, 0); 246, 239; 22; 0 |
+
+Notes:
+
+- **Pool sessions**, start to stop, in seconds (pool ready at, then
+  stopped at): `r120-l2-j20-light` 154.7, 276.8; `r120-l2-j20-heavy` 156.4,
+  279.7; `r120-l5-j20-light` 155.8, 278.5; `r120-l5-j20-heavy` 154.8, 277.5;
+  `r200-l2-j20-light` 157.6, 281.4; `r200-l2-j20-heavy` 159.0, 283.3;
+  `r200-l5-j20-light` 152.8, 274.7; `r200-l5-j20-heavy` 154.8, 276.8;
+  `r120-l2-burst-light` 154.8, 276.6. The driver cuts a session at 290 s;
+  none was cut. Two `r120-l2-j20-heavy` attempts were discarded unmeasured
+  (`runs-rerun/discarded`): one pool was interrupted at 100 s, before it was
+  ready, and one was stopped mid-session to free the laptop.
+- **Feed deviation is off the kernel tick.** With the agent waiting in
+  `ppoll` on a nanosecond timeout, the p99 is 0.07–0.09 ms where it was
+  2.4–2.9 ms in the jitter cells, and through every probe window (the turns
+  from the `-dev callback-clock` chat on) the largest deviation is 0.24–1.47 ms
+  on either agent. The exception is `r200-l2-j20-light`, the run beside the
+  pair-1 capture: 2 and 3 of about 8,045 feeds there reach 2.8 and 3.1 ms.
+- **Host stalls** are stalls that hit both clients at the same game moment
+  while both agents fed every probe turn within 1.5 ms of schedule with no
+  underrun; they don't count against the relay (wisp-lead2's ruling of
+  25 October 2026 on wisp#38). `r200-l5-j20-heavy` has four, at callbacks
+  323 (141 ms on both clients), 2149–2150 (185 and 165 ms), 2177 (93 and
+  94 ms) and 3468–3469 (136 and 145 ms), with agent feeds in the probe at
+  most 0.26 ms (a) and 0.39 ms (b) from schedule, system pressure at most
+  0.28 and only pair 0's clients running. Its five short gaps per client
+  (1.998 ms, one 2.014 ms; callbacks 343, 2172, 2175, 3493 and 3496 on a,
+  343, 2172, 2175, 2187 and 3493 on b) each come 10–27 callbacks after one of
+  these stalls, as the client finishes catching up: within 8 ms of where it
+  would have run without the stall. Outside these catch-ups every burst holds
+  one callback. The first run's doubles in this cell came mid-run with no
+  stall near them, and none recurs.
+- **Other stalls of both clients cost taps, not bursts.**
+  `r120-l5-j20-heavy` stalls both clients at callbacks 1386–1387 (55 and
+  63 ms) and 3217–3218 (153 and 145 ms), and client b's presses 50 and 128
+  fall on those stalls with no edge in the game, the case the release mark
+  cannot reach; its agents fed every probe turn within 1.3 ms. In
+  `r200-l2-j20-heavy` both clients slow together for 2.6 s from 28.2 s into
+  the probe (gaps of 41–53 ms), and client b's press 67, held 50.7 ms, falls
+  on a 41 ms gap there and leaves no down or up edge; the agents fed every
+  probe turn within 0.8 ms. `r120-l5-j20-light` (72–73 ms at callback 2072)
+  and `r200-l2-j20-light` (54–75 ms at 2474–2475) also stall both clients,
+  with no tap or burst lost.
+- **Taps.** Apart from those, the one press each light run misses is the
+  probe's first press, which its matcher cannot place, as in the first run.
+- **The burst cell's underrun** is one turn, 1068, on both agents at once,
+  about 8.5 s into the match and before the probe; no turn underran in any
+  probe window.
+
+Output directories are `~/.local/state/wisp-38/runs-rerun/CELL` on the
+laptop, laid out as the first run's.
+
+What the relay changes, read against the baseline, in both runs:
+
+- **Loss stops reaching the game.** The callback gap p99 is 33–34 ms in
+  every cell, the unimpaired baseline's 29 ms plus a few, against 48–84 ms
+  at 2% and 145–225 ms at 5% over TCP; the 200 ms, 5% yardstick goes from a
+  219–225 ms p99 and single gaps near 600 ms to 33–34 ms, with single gaps
+  of 43–53 ms apart from host stalls. No agent underran in a probe window;
+  D settled at 4–6 turns (32–48 ms).
+- **Taps and spread.** Every probe tap is seen apart from the cases in the
+  notes, against 97–134 of 138–141 over TCP; the light-input spread is at
+  most 1 frame p5–p95 in every cell, against up to 3 over TCP.
+- **Rollbacks match the unimpaired baseline**, about 250 a minute with
+  light input and 580 with heavy (baseline `r0`: 243–248 and 578–581),
+  where TCP's impaired cells ran 193–248 and 388–537; the deepest is
+  17–24 frames.
+- **Zero desyncs** and pace 1.000 in every cell.
+
+### Before wisp#56 (first run)
+
+The first run, relay and agents built from wisp f1d01a83, waited for each
+feed under `SO_RCVTIMEO`. It ran all 10 cells and the blackout under the
+same setup, except that each run started with at most 6 live Warcraft
+clients and no other laptop pair. Netem counted 27,000–43,000 packets per
+run (7,180 in the blackout run, whose switch resets it), and `tc filter`
+matched both ports at 0x4268. Columns as above, with one callback per
+burst counting callbacks under 2 ms apart. Not passed then: the agent's feed
+deviation p99 was 2.4–2.9 ms in every jitter cell, and three cells fell short
+of one callback per burst on every frame (99.92–99.97%).
 
 | Path | Input | Run | Feed deviation p99 ms | Underruns | D (turns) | Taps seen (a, b) | Press-to-sample median ms | Spread ms (frames p5–p95) | Rollbacks/min (a, b) | Deepest rollback | Desyncs | One callback per burst | Callback gap p50/p99/max ms | Pace | At start / end: protectedCpuSomeAvg10, system some avg10 | Peak: protected, system | wisp#33 same cell: gap; taps; spread; rollbacks/min; deepest; desyncs |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -326,22 +418,6 @@ each with the callback clocks, the stimulus record, the relayed game folder
 (`relay.log`, `agent-{a,b}.log` and `.trace`), the netem setting and
 `netem-stats.txt` counters at probe start and end, the gate record, the
 pool session's timings and the per-second host samples.
-
-What the relay changes, read against the baseline:
-
-- **Loss stops reaching the game.** The callback gap p99 is 33–34 ms in
-  every cell, the unimpaired baseline's 29 ms plus a few, against 48–84 ms
-  at 2% and 145–225 ms at 5% over TCP; the 200 ms, 5% yardstick goes from a
-  219–225 ms p99 and single gaps near 600 ms to 33 ms and 43–53 ms. No
-  agent underran in any cell; D settled at 4–6 turns (32–48 ms).
-- **Taps and spread.** Every probe tap is seen apart from the cases above,
-  against 97–134 of 138–141 over TCP; the light-input spread is 1 frame
-  p5–p95 in every cell, against up to 3 over TCP.
-- **Rollbacks match the unimpaired baseline**, about 250 a minute with
-  light input and 580 with heavy (baseline `r0`: 243–248 and 578–581),
-  where TCP's impaired cells ran 193–248 and 388–537; the deepest is
-  17–24 frames.
-- **Zero desyncs** and pace 1.000 in every cell.
 
 ### Blackout
 
