@@ -1299,6 +1299,21 @@ cap under 10, but that is outside the gate. On the clean wired trace
 the agent sees no visible stall and never raises, which
 `the_clean_wired_trace_never_raises_with_100_ms_of_headroom` checks.
 
+Live agents take the same two settings: `relay-agent --raise-headroom-ms MS`
+sets `raise_headroom_us` and `--max-total-depth-ms MS` sets
+`max_total_depth_us`; without them the agent never raises and keeps the
+100 ms cap, as before. `wisp lan relayed --raise-headroom-ms MS` passes the
+headroom to both agents (off by default). The agent's summary line ends
+`spiky BOOL stalls N raise_ms MS` (`AgentStats::spiky`, `visible_stalls`
+and the raise in ms), and its trace gets `spiky at_us` when the path is
+flagged and `raise R_us at_us` when the floor first rises (see "Lobby and
+game on the agent"). `relay-agent/tests/spiky.rs` holds a loopback relay's
+packets back twice within 60 s and checks both: with 100 ms of headroom the
+agent reports `spiky true`, the stalls and a raise, and traces it; without
+a headroom it reports the stalls but `raise_ms 0.0`. The in-match warning
+stays the map's job, but the map reads nothing yet: no carrier reaches a
+map (wisp#54).
+
 ## Lobby and game on the agent (box R8)
 
 The agent ports host.ts's lobby and game loop to Rust. host.ts is Wisp's
@@ -1382,13 +1397,22 @@ Built for wisp#37 (code box), in `relay/`:
 - `wisp lan relayed MAP --relay-bin DIR --pair K` starts the relay and one
   agent per client inside the pair's namespace and joins each client to its
   own agent's game; logs land in the pair's `games/relayed-*` folder.
+  `--raise-headroom-ms MS` passes the spiky-path raise to both agents (off
+  by default; see "Spiky paths (wisp#53)").
+- `relay-agent --raise-headroom-ms MS` and `--max-total-depth-ms MS` set
+  the agent's raise headroom and its cap on depth plus raise (no raise and
+  100 ms when absent). The `agent summary:` line is `turns N underruns N
+  depth D releases N spiky BOOL stalls N raise_ms MS`; the first four fields
+  keep their order, so older parsers still read them.
 - `relay-agent --trace FILE` (off by default) writes the jitter buffer's
   timeline, one line per event in the agent's link clock (µs since the
   handshake): `fed index wall_us scheduled_us backlog extra_us` per fed turn
   (`scheduled_us` is `Agent::scheduled(index)` as it was fed, `backlog` the
   turns already received behind it, `extra_us` the added delay after
   settling), `depth D at_us` when D (turns) is chosen, and
-  `underrun index at_us` per underrun. It is buffered and flushed at least
+  `underrun index at_us` per underrun, `spiky at_us` once when the path is
+  flagged spiky and `raise R_us at_us` once when the floor first rises. It
+  is buffered and flushed at least
   once a second and on exit. SIGINT and SIGTERM stop the agent's loop, so it
   still leaves the room, flushes the trace and prints its `agent summary:`
   line. `wisp lan relayed` writes `agent-<side>.trace` beside each

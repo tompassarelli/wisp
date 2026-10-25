@@ -273,8 +273,10 @@ const relayed: Command = (args) => Effect.gen(function*() {
   const turnMs = yield* number(args, "turn-ms", 8);
   const [bin] = flagValues(args, "relay-bin");
   if (bin === undefined) return yield* new UsageFailure({ problem: "relayed takes --relay-bin DIR, the folder holding the relay and relay-agent binaries" });
+  const raiseHeadroomMs = wholeFlag(args, "raise-headroom-ms");
+  if (raiseHeadroomMs instanceof UsageFailure) return yield* raiseHeadroomMs;
   const started = Date.now();
-  const result = yield* agent(pair, "/relayed", { map: resolve(map), relay: resolve(bin, "relay"), agent: resolve(bin, "relay-agent"), turnMs, driver: yield* driverPid });
+  const result = yield* agent(pair, "/relayed", { map: resolve(map), relay: resolve(bin, "relay"), agent: resolve(bin, "relay-agent"), turnMs, driver: yield* driverPid, ...(raiseHeadroomMs === undefined ? {} : { raiseHeadroomMs }) });
   yield* Console.log(`pair ${pair}: playing ${map} through a relay after ${((Date.now() - started) / 1000).toFixed(1)} s; logs ${String(result["folder"])}`);
 });
 
@@ -415,7 +417,7 @@ const netem: Command = (args) => Effect.gen(function*() {
   }
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--build BUILD] [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | relayed MAP --relay-bin DIR [--pair K] [--turn-ms MS] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--udp-port N | --tcp-port N] | netem off --pair K | status [--pair K] | end --pair K | stop --pair K";
+export const LAN_USAGE = "setup --from INSTALL [--build BUILD] [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | relayed MAP --relay-bin DIR [--pair K] [--turn-ms MS] [--raise-headroom-ms MS] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--udp-port N | --tcp-port N] | netem off --pair K | status [--pair K] | end --pair K | stop --pair K";
 
 const ownerCheck = poolOwners.pipe(Effect.flatMap((owners) => {
   const refusal = wrongUser(process.getuid?.() ?? 0, owners, ["bun", ...process.argv.slice(1)]);

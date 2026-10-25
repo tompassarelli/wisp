@@ -117,7 +117,7 @@ fn check_trace(path: &Path, summary: &HostSummary) {
 fn agent(link: Link, map: Option<MapFacts>, name: &'static [u8], ports: mpsc::Sender<u16>) -> HostSummary {
     let mut log = |_line: String| {};
     let trace = Some(trace_path(std::str::from_utf8(name).unwrap()));
-    let cfg = HostConfig { game_name: name.to_vec(), version: 10200, listen_port: 0, announce_ports: Vec::new(), host: map.map(|m| (m, 0)), trace };
+    let cfg = HostConfig { game_name: name.to_vec(), version: 10200, listen_port: 0, announce_ports: Vec::new(), host: map.map(|m| (m, 0)), trace, tuning: Default::default() };
     let host = AgentHost::new(cfg, link, &mut log).unwrap();
     ports.send(host.port().unwrap()).unwrap();
     host.run().unwrap()

@@ -14,11 +14,13 @@ pub struct Trace {
     flushed: Instant,
     depth: bool,
     underruns: usize,
+    spiky: bool,
+    raised: bool,
 }
 
 impl Trace {
     pub fn create(path: &Path) -> io::Result<Trace> {
-        Ok(Trace { out: BufWriter::new(File::create(path)?), flushed: Instant::now(), depth: false, underruns: 0 })
+        Ok(Trace { out: BufWriter::new(File::create(path)?), flushed: Instant::now(), depth: false, underruns: 0, spiky: false, raised: false })
     }
 
     pub fn record(&mut self, link: &Link, fed: &[Fed]) -> io::Result<()> {
@@ -31,6 +33,15 @@ impl Trace {
             writeln!(self.out, "underrun {index} {at}")?;
         }
         self.underruns = stats.underrun_at.len();
+        let at = fed.last().map_or_else(|| link.now(), |f| f.at);
+        if !self.spiky && stats.spiky {
+            writeln!(self.out, "spiky {at}")?;
+            self.spiky = true;
+        }
+        if !self.raised && stats.raise_us > 0 {
+            writeln!(self.out, "raise {} {at}", stats.raise_us)?;
+            self.raised = true;
+        }
         for f in fed {
             writeln!(self.out, "fed {} {} {} {} {}", f.index, f.at, f.scheduled, f.backlog, f.extra_us)?;
         }

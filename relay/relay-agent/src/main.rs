@@ -2,14 +2,19 @@ use std::net::ToSocketAddrs;
 use std::process::ExitCode;
 
 use relay_agent::host::{AgentHost, HostConfig};
-use relay_agent::Link;
+use relay_agent::{Link, Tuning};
+use relay_proto::Micros;
 use relay_proto::room::MapFacts;
 
-const USAGE: &str = "relay-agent --relay HOST:PORT --name GAME (--create PLAYERS --map 'path=... size=...' [--computers N] | --join ROOM) [--announce PORT,...] [--version N] [--trace FILE]";
+const USAGE: &str = "relay-agent --relay HOST:PORT --name GAME (--create PLAYERS --map 'path=... size=...' [--computers N] | --join ROOM) [--announce PORT,...] [--version N] [--trace FILE] [--raise-headroom-ms N] [--max-total-depth-ms N]";
 const CLIENT_PORTS: &str = "16000,16001,16002,16003,16004,16005,16006,16007";
 
 fn flag<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
     args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).map(String::as_str)
+}
+
+fn millis(args: &[String], name: &str) -> Result<Option<Micros>, String> {
+    flag(args, name).map(|n| n.parse::<u32>().map(|ms| Micros::from(ms) * 1000).map_err(|e| format!("{name}: {e}"))).transpose()
 }
 
 fn config(args: &[String]) -> Result<(String, HostConfig, Option<u8>, Option<u64>), String> {
@@ -35,6 +40,7 @@ fn config(args: &[String]) -> Result<(String, HostConfig, Option<u8>, Option<u64
         announce_ports: flag(args, "--announce").unwrap_or(CLIENT_PORTS).split(',').map(str::parse).collect::<Result<_, _>>().map_err(|e| format!("--announce: {e}"))?,
         host,
         trace: flag(args, "--trace").map(Into::into),
+        tuning: Tuning { raise_headroom_us: millis(args, "--raise-headroom-ms")?, max_total_depth_us: millis(args, "--max-total-depth-ms")? },
     };
     Ok((relay, cfg, create, join))
 }
@@ -55,8 +61,8 @@ fn main() -> ExitCode {
         .to_socket_addrs()
         .and_then(|mut addrs| addrs.next().ok_or_else(|| std::io::Error::other(format!("{relay} has no address"))))
         .and_then(|server| match (create, join) {
-            (Some(players), _) => Link::create(server, players),
-            (_, Some(room)) => Link::join(server, room),
+            (Some(players), _) => Link::create_tuned(server, players, cfg.tuning),
+            (_, Some(room)) => Link::join_tuned(server, room, cfg.tuning),
             _ => unreachable!(),
         });
     let link = match link {
@@ -69,7 +75,16 @@ fn main() -> ExitCode {
     log(format!("room {:016x} slot {}", link.room(), link.slot()));
     match AgentHost::new(cfg, link, &mut log).and_then(AgentHost::run) {
         Ok(s) => {
-            println!("agent summary: turns {} underruns {} depth {} releases {}", s.turns, s.underruns, s.depth_turns, s.releases);
+            println!(
+                "agent summary: turns {} underruns {} depth {} releases {} spiky {} stalls {} raise_ms {:.1}",
+                s.turns,
+                s.underruns,
+                s.depth_turns,
+                s.releases,
+                s.spiky,
+                s.visible_stalls,
+                s.raise_us as f64 / 1000.0
+            );
             ExitCode::SUCCESS
         }
         Err(e) => {

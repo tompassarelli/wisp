@@ -8,7 +8,7 @@ use relay_proto::wire::UpAction;
 use relay_proto::Micros;
 
 use crate::game::{GameHost, Output, Phase};
-use crate::link::Link;
+use crate::link::{Link, Tuning};
 use crate::trace::Trace;
 use crate::w3gs::{SockAddr, Splitter};
 
@@ -24,6 +24,7 @@ pub struct HostConfig {
     pub announce_ports: Vec<u16>,
     pub host: Option<(MapFacts, u8)>,
     pub trace: Option<PathBuf>,
+    pub tuning: Tuning,
 }
 
 #[derive(Debug, Default)]
@@ -33,6 +34,9 @@ pub struct HostSummary {
     pub underruns: usize,
     pub depth_turns: u32,
     pub releases: u64,
+    pub spiky: bool,
+    pub visible_stalls: u64,
+    pub raise_us: Micros,
 }
 
 struct Client {
@@ -137,6 +141,8 @@ impl<'a> AgentHost<'a> {
         self.summary.fed = self.link.agent().stats().fed;
         self.summary.underruns = self.link.agent().stats().underrun_at.len();
         self.summary.depth_turns = self.link.agent().choice().map_or(0, |c| c.turns);
+        let stats = self.link.agent().stats();
+        (self.summary.spiky, self.summary.visible_stalls, self.summary.raise_us) = (stats.spiky, stats.visible_stalls, stats.raise_us);
         Ok(self.summary)
     }
 

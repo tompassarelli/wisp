@@ -16,6 +16,19 @@ pub const HANDSHAKE_RETRY: Duration = Duration::from_millis(250);
 pub const LEAVE_COPIES: usize = 3;
 const MIN_WAIT: Duration = Duration::from_micros(50);
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Tuning {
+    pub raise_headroom_us: Option<Micros>,
+    pub max_total_depth_us: Option<Micros>,
+}
+
+impl Tuning {
+    fn apply(self, cfg: &mut AgentConfig) {
+        cfg.raise_headroom_us = self.raise_headroom_us.or(cfg.raise_headroom_us);
+        cfg.max_total_depth_us = self.max_total_depth_us.unwrap_or(cfg.max_total_depth_us);
+    }
+}
+
 #[derive(Debug)]
 pub struct Link {
     socket: UdpSocket,
@@ -67,22 +80,34 @@ fn recv(
 
 impl Link {
     pub fn create(server: SocketAddr, players: u8) -> io::Result<Link> {
-        Self::connect(server, |cookie, request| Control::Create {
+        Self::create_tuned(server, players, Tuning::default())
+    }
+
+    pub fn join(server: SocketAddr, room: u64) -> io::Result<Link> {
+        Self::join_tuned(server, room, Tuning::default())
+    }
+
+    pub fn create_tuned(server: SocketAddr, players: u8, tuning: Tuning) -> io::Result<Link> {
+        Self::connect(server, tuning, |cookie, request| Control::Create {
             cookie,
             request,
             players,
         })
     }
 
-    pub fn join(server: SocketAddr, room: u64) -> io::Result<Link> {
-        Self::connect(server, |cookie, request| Control::Join {
+    pub fn join_tuned(server: SocketAddr, room: u64, tuning: Tuning) -> io::Result<Link> {
+        Self::connect(server, tuning, |cookie, request| Control::Join {
             cookie,
             request,
             room,
         })
     }
 
-    fn connect(server: SocketAddr, ask: impl Fn(u64, u64) -> Control) -> io::Result<Link> {
+    fn connect(
+        server: SocketAddr,
+        tuning: Tuning,
+        ask: impl Fn(u64, u64) -> Control,
+    ) -> io::Result<Link> {
         let socket = bind_for(server)?;
         let request = RandomState::new().build_hasher().finish();
         let mut cookie = 0;
@@ -117,7 +142,8 @@ impl Link {
                             ));
                         }
                         let origin = Instant::now();
-                        let cfg = AgentConfig::new(token, Cadence::new(&steps));
+                        let mut cfg = AgentConfig::new(token, Cadence::new(&steps));
+                        tuning.apply(&mut cfg);
                         return Ok(Link {
                             socket,
                             server,

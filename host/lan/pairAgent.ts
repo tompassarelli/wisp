@@ -86,7 +86,7 @@ interface Game {
 const FreshRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, turnSteps: Schema.optionalKey(Schema.Array(Schema.Int)), computers: Schema.optionalKey(Schema.Finite), driver: Schema.optionalKey(Schema.Int) }));
 const SoloRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, driver: Schema.optionalKey(Schema.Int) }));
 const SpeedRequest = Schema.fromJsonString(Schema.Struct({ speed: Schema.Finite }));
-const RelayedRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, relay: Schema.String, agent: Schema.String, turnMs: Schema.Int, driver: Schema.optionalKey(Schema.Int) }));
+const RelayedRequest = Schema.fromJsonString(Schema.Struct({ map: Schema.String, relay: Schema.String, agent: Schema.String, turnMs: Schema.Int, raiseHeadroomMs: Schema.optionalKey(Schema.Int), driver: Schema.optionalKey(Schema.Int) }));
 
 
 const agent = Effect.gen(function*() {
@@ -242,7 +242,7 @@ const agent = Effect.gen(function*() {
     return { id: relayed.id, log, map: relayed.map, ...relayedStatus(existsSync(log) ? readFileSync(log, "utf8") : "", clients.map(({ name }) => name)) };
   };
 
-  const relayedMatch = (mapFile: string, relayBin: string, agentBin: string, turnMs: number) => Effect.scoped(Effect.gen(function*() {
+  const relayedMatch = (mapFile: string, relayBin: string, agentBin: string, turnMs: number, raiseHeadroomMs: number | undefined) => Effect.scoped(Effect.gen(function*() {
     yield* endGame;
     yield* endRelayed;
     const id = new Date().toISOString().replace(/[:.]/g, "-");
@@ -255,16 +255,17 @@ const agent = Effect.gen(function*() {
     const spawn = (name: string, command: string, args: readonly string[]) =>
       spawnLogged(ChildProcess.make(command, args, { stdin: "ignore", forceKillAfter: "5 seconds" }), { stdout: join(folder, `${name}.log`), stderr: join(folder, `${name}.err`) }).pipe(Scope.provide(scope), Effect.provideService(FileSystem.FileSystem, fileSystem));
     const relayAddress = `127.0.0.1:${17000 + pair}`;
+    const tuning = raiseHeadroomMs === undefined ? [] : ["--raise-headroom-ms", String(raiseHeadroomMs)];
     yield* spawn("relay", relayBin, ["--bind", relayAddress, "--steps", String(turnMs)]);
     const names = clients.map(({ side }) => `wisp-${pair}${side}-${id.slice(11, 19)}`);
     const [host, ...guests] = clients;
     if (host === undefined) return yield* new LanFailure({ problem: "the pair has no clients" });
-    yield* spawn(`agent-${host.side}`, agentBin, ["--relay", relayAddress, "--name", names[0]!, "--create", String(clients.length), "--map", mapFactsLine(map), "--trace", join(folder, `agent-${host.side}.trace`)]);
+    yield* spawn(`agent-${host.side}`, agentBin, ["--relay", relayAddress, "--name", names[0]!, "--create", String(clients.length), "--map", mapFactsLine(map), "--trace", join(folder, `agent-${host.side}.trace`), ...tuning]);
     const hostLog = join(folder, `agent-${host.side}.log`);
     let room: string | undefined;
     const created = yield* until(Effect.sync(() => (room = existsSync(hostLog) ? /^\S+ room ([0-9a-f]{16}) slot 0$/m.exec(readFileSync(hostLog, "utf8"))?.[1] : undefined) !== undefined), "20 seconds");
     if (!created || room === undefined) return yield* new LanFailure({ problem: `the host agent made no room; see ${folder}` });
-    yield* Effect.forEach(guests, (guest, index) => spawn(`agent-${guest.side}`, agentBin, ["--relay", relayAddress, "--name", names[index + 1]!, "--join", room!, "--trace", join(folder, `agent-${guest.side}.trace`)]), { discard: true });
+    yield* Effect.forEach(guests, (guest, index) => spawn(`agent-${guest.side}`, agentBin, ["--relay", relayAddress, "--name", names[index + 1]!, "--join", room!, "--trace", join(folder, `agent-${guest.side}.trace`), ...tuning]), { discard: true });
     say(`relayed ${folder}: relay on ${relayAddress}, games ${names.join(", ")}`);
     for (const [index, client] of clients.entries()) {
       const pid = yield* gamePid(client.name);
@@ -335,7 +336,7 @@ const agent = Effect.gen(function*() {
       const missing = [body.map, body.relay, body.agent].find((path) => !existsSync(path));
       if (missing !== undefined) return Response.json({ error: `no file at ${missing}` }, { status: 400 });
       yield* drive(body.driver);
-      const exit = yield* Effect.exit(relayedMatch(body.map, body.relay, body.agent, body.turnMs));
+      const exit = yield* Effect.exit(relayedMatch(body.map, body.relay, body.agent, body.turnMs, body.raiseHeadroomMs));
       if (Exit.isSuccess(exit)) return Response.json(exit.value);
       say(`relayed failed: ${String(exit.cause)}`);
       return Response.json({ error: String(exit.cause) }, { status: 500 });
