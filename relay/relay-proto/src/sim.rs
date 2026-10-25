@@ -32,6 +32,7 @@ pub struct AgentSpec {
     pub down_replay: Option<Replay>,
     pub up_replay: Option<Replay>,
     pub fixed_depth_us: Option<Micros>,
+    pub raise_headroom_us: Option<Micros>,
 }
 
 #[derive(Clone, Debug)]
@@ -134,6 +135,7 @@ fn node(s: &Scenario, index: usize, token: u64, rng: &mut Rng) -> Node {
             (d / s.cadence.period_us()).max(1) as u32
         }),
         fixed_turns: spec.fixed_depth_us.map(|d| depth::whole_turns(d, s.cadence.period_us())),
+        raise_headroom_us: spec.raise_headroom_us,
         ..defaults
     };
     Node {

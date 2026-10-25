@@ -76,6 +76,7 @@ struct Options {
     cover: bool,
     max_depth_us: Option<Micros>,
     depth_us: Option<Micros>,
+    raise_headroom_us: Option<Micros>,
     trace: Option<String>,
 }
 
@@ -114,6 +115,7 @@ fn scenario(cell: &Cell, o: &Options, match_us: Micros) -> (Scenario, Vec<(Micro
         down_replay: None,
         up_replay: None,
         fixed_depth_us: None,
+        raise_headroom_us: None,
     };
     let blackouts: Vec<(Micros, Micros)> = match cell.kind {
         Kind::Blackout(_) => (1..)
@@ -239,8 +241,13 @@ fn depth_label(row: &Row, i: usize, a: &sim::AgentOutcome) -> String {
         }
         _ => String::new(),
     };
+    let raised = if a.stats.raise_us > 0 {
+        format!(" raised {} ms", ms(a.stats.raise_us))
+    } else {
+        String::new()
+    };
     format!(
-        "{}{}{}{fixed}",
+        "{}{}{}{fixed}{raised}",
         a.choice.turns,
         if a.cover > 0 {
             format!("+{}", a.cover)
@@ -342,6 +349,13 @@ fn value<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
         .map(String::as_str)
 }
 
+fn millis(args: &[String], flag: &str, min_ms: Micros) -> Option<Option<Micros>> {
+    match value(args, flag) {
+        Some(ms) => Some(Some(ms.parse::<Micros>().ok().filter(|&ms| ms >= min_ms)? * 1000)),
+        None => Some(None),
+    }
+}
+
 fn options(args: &[String]) -> Option<Options> {
     let trace = value(args, "--trace").map(str::to_string);
     if trace.is_none() && !args.iter().any(|a| a == "--grid") {
@@ -370,14 +384,9 @@ fn options(args: &[String]) -> Option<Options> {
         None => None,
     };
     let cover = !args.iter().any(|a| a == "--no-cover");
-    let max_depth_us = match value(args, "--max-depth-ms") {
-        Some(ms) => Some(ms.parse::<Micros>().ok().filter(|&ms| ms > 0)? * 1000),
-        None => None,
-    };
-    let depth_us = match value(args, "--depth-ms") {
-        Some(ms) => Some(ms.parse::<Micros>().ok().filter(|&ms| ms > 0)? * 1000),
-        None => None,
-    };
+    let max_depth_us = millis(args, "--max-depth-ms", 1)?;
+    let depth_us = millis(args, "--depth-ms", 1)?;
+    let raise_headroom_us = millis(args, "--raise-headroom-ms", 0)?;
     Some(Options {
         minutes,
         rtts_ms,
@@ -386,6 +395,7 @@ fn options(args: &[String]) -> Option<Options> {
         cover,
         max_depth_us,
         depth_us,
+        raise_headroom_us,
         trace,
     })
 }
@@ -394,7 +404,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(o) = options(&args) else {
         eprintln!(
-            "usage: relay-bench --grid|--trace FILE [--minutes N] [--rtts MS,...] [--steps 8|17,17,16] [--margin QUANTILE] [--no-cover] [--max-depth-ms MS] [--depth-ms MS]"
+            "usage: relay-bench --grid|--trace FILE [--minutes N] [--rtts MS,...] [--steps 8|17,17,16] [--margin QUANTILE] [--no-cover] [--max-depth-ms MS] [--depth-ms MS] [--raise-headroom-ms MS]"
         );
         std::process::exit(2);
     };

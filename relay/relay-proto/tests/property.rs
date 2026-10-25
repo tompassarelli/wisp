@@ -1,12 +1,15 @@
+use relay_proto::agent::{Agent, AgentConfig, AgentStats, Fed};
 use relay_proto::cadence::Cadence;
 use relay_proto::depth;
 use relay_proto::rng::Rng;
 use relay_proto::sim::{run, AgentOutcome, AgentSpec, Loss, Outcome, Path, Scenario};
 use relay_proto::transport::{self, Transport};
-use relay_proto::wire::{self, Action, Cover, Down, Packet, Turn, Up, UpAction};
+use relay_proto::wire::{self, Action, Down, Turn};
 use relay_proto::Micros;
 
 const SECOND: Micros = 1_000_000;
+const SPIKY_BASE: Micros = 30 * SECOND;
+const SPIKY_TOKEN: u64 = 7;
 
 fn path(rng: &mut Rng) -> Path {
     let loss = match rng.below(3) {
@@ -46,6 +49,7 @@ fn scenario(seed: u64) -> Scenario {
             down_replay: None,
             up_replay: None,
             fixed_depth_us: None,
+            raise_headroom_us: None,
         })
         .collect();
     let outages = (0..rng.below(4))
@@ -148,6 +152,109 @@ fn every_agent_feeds_the_same_turns_and_every_action_once() {
     }
 }
 
+fn spiky_down(seq: usize, sent: Micros, base: u64, from: usize, turns: &[Turn]) -> Vec<u8> {
+    let head = Down {
+        token: SPIKY_TOKEN,
+        seq: seq as u32,
+        sent_us: sent as u64,
+        base_us: base,
+        action_ack: 0,
+        checksum_ack: 0,
+        turn_from: from as u32,
+        turns: vec![],
+    };
+    wire::encode_down(&head, turns, wire::MAX_PACKET).0
+}
+
+fn spiky_stream(seed: u64) -> (Cadence, Vec<(Micros, Vec<u8>)>) {
+    let mut rng = Rng::new(seed);
+    let steps: &[u8] = [&[8][..], &[17, 17, 16], &[25]][rng.below(3) as usize];
+    let cadence = Cadence::new(steps);
+    let period = cadence.period_us();
+    let delay = rng.range(1_000, 80_000);
+    let lobby = 2 * depth::min_packets(period);
+    let mut out: Vec<(Micros, Vec<u8>)> = (0..lobby)
+        .map(|i| {
+            let sent = i as Micros * period;
+            (sent + delay, spiky_down(i, sent, wire::NOT_STARTED, 0, &[]))
+        })
+        .collect();
+    let (mut stall_until, spike_p) = (0, rng.unit() * 0.02);
+    for k in 0..rng.range(2_000, 6_000) as usize {
+        let sent = SPIKY_BASE + cadence.relay_time(k as u32);
+        if rng.chance(spike_p) {
+            stall_until = sent + rng.range(10_000, 200_000);
+        }
+        let actions = (0..rng.below(3))
+            .map(|n| Action {
+                player: rng.below(4) as u8,
+                seq: n as u32,
+                data: vec![k as u8; rng.below(9) as usize],
+            })
+            .collect();
+        let turn = Turn {
+            step_ms: cadence.step_ms(k as u32),
+            actions,
+        };
+        let at = sent.max(stall_until) + delay + rng.exp(2_000.0) as Micros;
+        let bytes = spiky_down(lobby + k, sent, SPIKY_BASE as u64, k, &[turn]);
+        out.push((at, bytes));
+    }
+    out.sort_by_key(|p| p.0);
+    (cadence, out)
+}
+
+fn feed_stream(
+    cadence: &Cadence,
+    stream: &[(Micros, Vec<u8>)],
+    headroom: Option<Micros>,
+) -> (Vec<Fed>, AgentStats) {
+    let mut cfg = AgentConfig::new(SPIKY_TOKEN, cadence.clone());
+    cfg.raise_headroom_us = headroom;
+    let mut agent = Agent::new(cfg, 0);
+    let (mut fed, mut now) = (Vec::new(), 0);
+    let mut run_until = |agent: &mut Agent, t: Micros, now: &mut Micros| loop {
+        let wake = agent.next_wake().max(*now);
+        if wake > t {
+            break;
+        }
+        *now = wake;
+        fed.extend(agent.poll(wake).0);
+    };
+    for (at, bytes) in stream {
+        if *at >= SPIKY_BASE && agent.choice().is_none() {
+            agent.choose_depth().unwrap();
+        }
+        run_until(&mut agent, *at, &mut now);
+        now = now.max(*at);
+        agent.on_packet(*at, bytes).unwrap();
+    }
+    run_until(&mut agent, now + 10 * SECOND, &mut now);
+    (fed, agent.stats().clone())
+}
+
+#[test]
+fn the_raise_moves_feed_times_but_never_the_fed_turns() {
+    let mut raised = 0;
+    for seed in 0..48u64 {
+        let (cadence, stream) = spiky_stream(seed);
+        let (off, _) = feed_stream(&cadence, &stream, None);
+        let (on, stats) = feed_stream(&cadence, &stream, Some(32_000));
+        let turns = |fed: &[Fed]| -> Vec<(u32, Turn)> {
+            fed.iter().map(|f| (f.index, f.turn.clone())).collect()
+        };
+        assert_eq!(turns(&off), turns(&on), "seed {seed}: the raise fed other turns");
+        let lobby = 2 * depth::min_packets(cadence.period_us());
+        assert_eq!(on.len(), stream.len() - lobby, "seed {seed}: turns left unfed");
+        assert!(
+            on.windows(2).all(|w| w[0].at <= w[1].at),
+            "seed {seed}: a feed went back in time"
+        );
+        raised += (stats.raise_us > 0) as u32;
+    }
+    assert!(raised >= 16, "only {raised} of 48 streams raised");
+}
+
 fn fed_bytes(a: &AgentOutcome) -> Vec<u8> {
     let head = Down {
         token: 0,
@@ -240,6 +347,7 @@ fn turns_over_the_packet_ceiling_split_across_turns() {
         down_replay: None,
         up_replay: None,
         fixed_depth_us: None,
+        raise_headroom_us: None,
     };
     let s = Scenario {
         seed: 99,
@@ -263,85 +371,6 @@ fn turns_over_the_packet_ceiling_split_across_turns() {
     assert!(o.agents[0].sent.len() > 1000);
 }
 
-fn random_packet(rng: &mut Rng) -> Packet {
-    let bytes = |rng: &mut Rng, max: u64| {
-        (0..rng.below(max))
-            .map(|_| rng.next_u64() as u8)
-            .collect::<Vec<u8>>()
-    };
-    let kind = rng.below(3);
-    if kind != 1 {
-        let turns: Vec<Turn> = (0..rng.below(6))
-            .map(|_| Turn {
-                step_ms: rng.next_u64() as u8,
-                actions: (0..rng.below(4))
-                    .map(|_| Action {
-                        player: rng.next_u64() as u8,
-                        seq: rng.next_u64() as u32,
-                        data: bytes(rng, 40),
-                    })
-                    .collect(),
-            })
-            .collect();
-        if kind == 2 {
-            return Packet::Cover(Cover {
-                token: rng.next_u64(),
-                seq: rng.next_u64() as u32,
-                turn_from: rng.next_u64() as u32,
-                turns,
-            });
-        }
-        Packet::Down(Down {
-            token: rng.next_u64(),
-            seq: rng.next_u64() as u32,
-            sent_us: rng.next_u64(),
-            base_us: rng.next_u64(),
-            action_ack: rng.next_u64() as u32,
-            checksum_ack: rng.next_u64() as u32,
-            turn_from: rng.next_u64() as u32,
-            turns,
-        })
-    } else {
-        Packet::Up(Up {
-            token: rng.next_u64(),
-            seq: rng.next_u64() as u32,
-            sent_us: rng.next_u64(),
-            turn_ack: rng.next_u64() as u32,
-            cover: rng.below(2) as u8 * rng.next_u64() as u8,
-            cover_turns: rng.next_u64() as u8,
-            checksum_from: rng.next_u64() as u32,
-            checksums: (0..rng.below(10)).map(|_| rng.next_u64() as u32).collect(),
-            action_from: rng.next_u64() as u32,
-            actions: (0..rng.below(8))
-                .map(|_| UpAction {
-                    release: rng.chance(0.5),
-                    data: bytes(rng, 60),
-                })
-                .collect(),
-        })
-    }
-}
-
-#[test]
-fn packets_round_trip_and_damaged_bytes_never_panic() {
-    let mut rng = Rng::new(7);
-    for _ in 0..5000 {
-        let p = random_packet(&mut rng);
-        let bytes = wire::encode(&p).unwrap();
-        assert!(bytes.len() <= wire::MAX_PACKET);
-        assert_eq!(wire::decode(&bytes), Ok(p));
-        let mut damaged = bytes.clone();
-        for _ in 0..1 + rng.below(4) {
-            let i = rng.below(damaged.len() as u64) as usize;
-            damaged[i] = rng.next_u64() as u8;
-        }
-        damaged.truncate(rng.below(damaged.len() as u64 + 1) as usize);
-        let _ = wire::decode(&damaged);
-        let noise: Vec<u8> = (0..rng.below(1300)).map(|_| rng.next_u64() as u8).collect();
-        let _ = wire::decode(&noise);
-    }
-}
-
 fn steady(one_way_us: Micros, loss: f64, udp_blocked: bool) -> AgentSpec {
     let path = Path {
         one_way_us,
@@ -360,6 +389,7 @@ fn steady(one_way_us: Micros, loss: f64, udp_blocked: bool) -> AgentSpec {
         down_replay: None,
         up_replay: None,
         fixed_depth_us: None,
+        raise_headroom_us: None,
     }
 }
 

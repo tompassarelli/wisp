@@ -1,4 +1,4 @@
-use relay_proto::agent::{Agent, AgentConfig, AgentError, Fed};
+use relay_proto::agent::{raise_ceiling, Agent, AgentConfig, AgentError, Fed};
 use relay_proto::cadence::Cadence;
 use relay_proto::wire::{
     decode, encode, encode_down, Cover, Down, Packet, Turn, Up, MAX_PACKET, NOT_STARTED,
@@ -21,8 +21,16 @@ struct Bench {
 
 impl Bench {
     fn new() -> Self {
+        Bench::with_headroom(None)
+    }
+
+    fn with_headroom(headroom_us: Option<Micros>) -> Self {
         let cadence = Cadence::new(&[17, 17, 16]);
-        let mut agent = Agent::new(AgentConfig::new(TOKEN, cadence.clone()), 0);
+        let cfg = AgentConfig {
+            raise_headroom_us: headroom_us,
+            ..AgentConfig::new(TOKEN, cadence.clone())
+        };
+        let mut agent = Agent::new(cfg, 0);
         let period = cadence.period_us();
         for i in 0..LOBBY_PACKETS {
             let sent = i as Micros * period;
@@ -313,4 +321,63 @@ fn cover_packets_fill_the_buffer_and_bursts_seen_in_the_match_raise_cover() {
         agent.on_packet(BASE, &encode(&Packet::Cover(cover)).unwrap()),
         Err(AgentError::WrongToken)
     );
+}
+
+#[test]
+fn the_raise_is_the_headroom_in_whole_8_ms_steps_up_to_32_ms() {
+    assert_eq!(raise_ceiling(None), 0);
+    assert_eq!(raise_ceiling(Some(-5_000)), 0);
+    assert_eq!(raise_ceiling(Some(7_999)), 0);
+    assert_eq!(raise_ceiling(Some(8_000)), 8_000);
+    assert_eq!(raise_ceiling(Some(23_999)), 16_000);
+    assert_eq!(raise_ceiling(Some(100_000)), 32_000);
+}
+
+fn two_stalls(b: &mut Bench, apart: u32) -> u32 {
+    on_time(b, 0, 10);
+    b.deliver(b.nominal(10) + 12_000, 10, 11);
+    on_time(b, 11, 10 + apart);
+    let second = 10 + apart;
+    b.deliver(b.nominal(second) + 24_000, second, second + 1);
+    second
+}
+
+#[test]
+fn a_second_visible_stall_within_60_s_raises_extra_delay_a_millisecond_a_turn() {
+    let mut b = Bench::with_headroom(Some(32_000));
+    let second = two_stalls(&mut b, 600);
+    assert!(b.agent.stats().spiky);
+    assert_eq!(b.agent.stats().visible_stalls, 2);
+    on_time(&mut b, second + 1, second + 20);
+    b.run_until(b.nominal(second + 19) + 32_000);
+    let extra: Vec<Micros> = b.fed[second as usize..].iter().map(|f| f.extra_us).collect();
+    let mut want: Vec<Micros> = (25..=32).map(|ms| ms * 1000).collect();
+    want.resize(extra.len(), 32_000);
+    assert_eq!(extra, want);
+    for f in &b.fed[second as usize + 1..] {
+        assert_eq!(f.target, b.nominal(f.index) + 32_000, "turn {}", f.index);
+    }
+    assert_eq!(b.agent.stats().raise_us, 32_000);
+}
+
+#[test]
+fn stalls_more_than_60_s_apart_do_not_raise() {
+    let mut b = Bench::with_headroom(Some(32_000));
+    let second = two_stalls(&mut b, 3_610);
+    on_time(&mut b, second + 1, second + 20);
+    b.run_until(b.nominal(second + 19) + 24_000);
+    assert_eq!(b.agent.stats().visible_stalls, 2);
+    assert!(!b.agent.stats().spiky);
+    assert_eq!(b.agent.extra_us(), b.cadence.period_us());
+}
+
+#[test]
+fn without_headroom_a_spiky_path_is_flagged_but_never_raised() {
+    let mut b = Bench::new();
+    let second = two_stalls(&mut b, 600);
+    on_time(&mut b, second + 1, second + 20);
+    b.run_until(b.nominal(second + 19) + 24_000);
+    assert!(b.agent.stats().spiky);
+    assert_eq!(b.agent.stats().raise_us, 0);
+    assert_eq!(b.agent.extra_us(), b.cadence.period_us());
 }

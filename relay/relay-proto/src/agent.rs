@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 mod cover;
+mod raise;
 mod upstream;
 
 use crate::cadence::Cadence;
@@ -8,6 +9,9 @@ use crate::depth::{self, DepthChoice, LinkSample, LossCounter, LossCounts};
 use crate::transport::{Transport, FALLBACK_US};
 use crate::wire::{self, Packet, Turn, UpAction, WireError, MAX_ACTION, NOT_STARTED};
 use crate::Micros;
+
+pub use raise::ceiling as raise_ceiling;
+use raise::Raise;
 
 #[derive(Clone, Debug)]
 pub struct AgentConfig {
@@ -27,6 +31,7 @@ pub struct AgentConfig {
     pub cover_every: u64,
     pub bursty: f64,
     pub fixed_turns: Option<u32>,
+    pub raise_headroom_us: Option<Micros>,
 }
 
 impl AgentConfig {
@@ -49,6 +54,7 @@ impl AgentConfig {
             cover_every: 1_000,
             bursty: 0.2,
             fixed_turns: None,
+            raise_headroom_us: None,
         }
     }
 }
@@ -73,6 +79,9 @@ pub struct AgentStats {
     pub fed: u64,
     pub buffer_sum_us: i128,
     pub max_extra_us: Micros,
+    pub spiky: bool,
+    pub visible_stalls: u64,
+    pub raise_us: Micros,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -119,12 +128,14 @@ pub struct Agent {
     fallback_at: Option<Micros>,
     streamed_actions: u32,
     streamed_checksums: u32,
+    raise: Raise,
     stats: AgentStats,
 }
 
 impl Agent {
     pub fn new(cfg: AgentConfig, now: Micros) -> Self {
         let period = cfg.cadence.period_us();
+        let raise = Raise::new(cfg.raise_headroom_us);
         Agent {
             cfg,
             period,
@@ -160,6 +171,7 @@ impl Agent {
             fallback_at: Some(now + FALLBACK_US),
             streamed_actions: 0,
             streamed_checksums: 0,
+            raise,
             stats: AgentStats::default(),
         }
     }
@@ -414,7 +426,8 @@ impl Agent {
                 self.last_underrun = now;
             }
             let scheduled = self.scheduled(index);
-            let target = self.nominal(index);
+            let nominal = self.nominal(index);
+            let target = nominal + self.raise.floor_us;
             let turn = self.buffer.pop_front().unwrap().unwrap();
             self.next_feed += 1;
             self.last_feed = now;
@@ -428,7 +441,7 @@ impl Agent {
                 at: now,
                 scheduled,
                 target,
-                lag_us: now - target + self.depth_us,
+                lag_us: now - nominal + self.depth_us,
                 backlog: self.received_through - self.next_feed,
                 extra_us: self.extra_us,
             });
@@ -438,19 +451,25 @@ impl Agent {
 
     fn settle(&mut self, index: u32, now: Micros) {
         let t = self.period;
+        self.raise.fed(now, self.cfg.cadence.step_ms(index.wrapping_sub(1)) as Micros * 1000);
+        let floor = self.raise.floor();
         if self.catch_up {
             self.extra_us = (now - self.nominal(index)).max(0);
-            if self.extra_us <= t {
+            if self.extra_us <= t + floor {
                 self.catch_up = false;
             }
-        } else if self.extra_us > 2 * t {
+        } else if self.extra_us > 2 * t + floor {
             self.catch_up = true;
             self.stats.catch_ups += 1;
-        } else if self.extra_us > t {
-            self.extra_us -= self.cfg.slew_us.min(self.extra_us - t);
-        } else if self.extra_us > 0 && now - self.last_underrun >= self.cfg.settle_us {
-            self.extra_us -= self.cfg.slew_us.min(self.extra_us);
+        } else if self.extra_us > t + floor {
+            self.extra_us -= self.cfg.slew_us.min(self.extra_us - t - floor);
+        } else if self.extra_us > floor && now - self.last_underrun >= self.cfg.settle_us {
+            self.extra_us -= self.cfg.slew_us.min(self.extra_us - floor);
         }
+        self.extra_us += self.cfg.slew_us.min(floor - self.extra_us).max(0);
+        self.stats.spiky = self.raise.spiky;
+        self.stats.visible_stalls = self.raise.stalls;
+        self.stats.raise_us = floor;
         let shift =
             (self.anchor_target - self.anchor_applied).clamp(-self.cfg.slew_us, self.cfg.slew_us);
         self.anchor_applied += shift;

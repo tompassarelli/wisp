@@ -74,6 +74,7 @@ fn trace_scenario(cell: &Cell, o: &Options, trace: &Trace) -> Scenario {
     laptop.down_replay = Some(Replay::new(trace, s.lobby_us));
     laptop.up_replay = Some(Replay::new(trace, s.lobby_us));
     laptop.fixed_depth_us = o.depth_us;
+    laptop.raise_headroom_us = o.raise_headroom_us;
     s
 }
 
@@ -211,6 +212,18 @@ mod tests {
         let s = trace_scenario(&c, &o, &trace);
         assert_eq!(s.agents[0].fixed_depth_us, Some(30_000));
         assert_eq!(s.agents[1].fixed_depth_us, None);
+    }
+
+    #[test]
+    fn raise_headroom_ms_reaches_only_the_laptop_in_microseconds() {
+        assert_eq!(args(&[]).raise_headroom_us, None);
+        let o = args(&["--raise-headroom-ms", "32"]);
+        assert_eq!(o.raise_headroom_us, Some(32_000));
+        let trace = load("traces/laptop-wifi-to-nexus-2026-10-25.trace").unwrap();
+        let c = Cell { rtt_ms: 44, kind: Kind::Trace(false), seed: 1 };
+        let s = trace_scenario(&c, &o, &trace);
+        assert_eq!(s.agents[0].raise_headroom_us, Some(32_000));
+        assert_eq!(s.agents[1].raise_headroom_us, None);
     }
 
     #[test]

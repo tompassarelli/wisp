@@ -1029,6 +1029,52 @@ the laptop from 109 visible stalls and 244 callback-less frames per
 10 minutes to 34 and 96; the whole trace still loses 1,032 frames' callbacks
 per 10 minutes at 64 ms, most of them in the rescans.
 
+#### Spiky paths (wisp#53)
+
+On a path whose delay spikes pass the depth again and again, the agent
+raises its delay (box B3, ruling (a′) on wisp#53). After a second visible
+stall (a callback gap of at least 25 ms, counted as in box B1b) within
+60 s, it marks the path spiky and sets a floor under its extra delay equal
+to the raise. Catch-up then stops at one turn above the floor, and any
+shortfall below the floor is added 1 ms a turn. The depth itself never
+changes, and neither do the turns fed or the game's steps: only feed
+times move, which the property
+`the_raise_moves_feed_times_but_never_the_fed_turns` checks against the
+same packet stream with the raise on and off. The raise is
+`AgentConfig::raise_headroom_us` (Smashcraft's headroom, the depth that
+keeps `connectionPoor` false) rounded down to whole 8 ms steps and capped
+at 32 ms; without a headroom, or below 8 ms, the agent marks the path
+spiky (`AgentStats::spiky`) and doesn't raise. The bench gives the
+laptop's agent a headroom with `--raise-headroom-ms MS`; the D column then
+says `raised` and the raise.
+
+**Bar (ruling (a′)).** Per 10 minutes with the Wi-Fi rescans cut: at most
+35 visible stalls and at most 100 callback-less frames, at a depth plus
+raise of at most 64 ms.
+
+The laptop's rows (`--trace traces/laptop-wifi-to-nexus-2026-10-25.trace`
+with `--depth-ms 32`, `--depth-ms 64`, then `--depth-ms 32
+--raise-headroom-ms 32`; columns as in box B1b):
+
+| D (A/B), depth | Loss | Underruns | Callback-less | Stalls ≥ 1 | Stalls ≥ 2 | 2× s | Double | Per poll | Peak lag ms | Lag ≥ 2 | Lag ≥ 4 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 4 fixed/3, 32.0 ms | trace, whole | 723.53 | 2163.56 | 619.16 | 566.98 | 38.08 | 3838.41 | 1 | 254.1 | 565.98 | 214.75 |
+| 4 fixed/3, 32.0 ms | trace, rescans cut | 220.04 | 243.66 | 109.40 | 52.21 | 4.82 | 405.26 | 1 | 254.1 | 48.48 | 18.65 |
+| 8 fixed/3, 64.0 ms | trace, whole | 593.07 | 1031.60 | 553.94 | 283.99 | 18.55 | 1784.23 | 1 | 254.1 | 259.91 | 35.12 |
+| 8 fixed/3, 64.0 ms | trace, rescans cut | 54.70 | 95.72 | 33.56 | 23.62 | 1.65 | 150.42 | 1 | 254.1 | 19.89 | 6.22 |
+| 4 fixed raised 32.0 ms/3, 32.0 ms | trace, whole | 593.07 | 1035.62 | 553.94 | 285.00 | 18.58 | 1786.24 | 1 | 254.1 | 259.91 | 36.13 |
+| 4 fixed raised 32.0 ms/3, 32.0 ms | trace, rescans cut | 60.91 | 98.21 | 36.05 | 21.13 | 1.71 | 157.88 | 1 | 254.1 | 19.89 | 6.22 |
+
+With the rescans cut the raise fires 3.8 s into the match (the model
+said 3.3 s) and holds 32 + 32 = 64 ms from then on. It gives 98.2
+callback-less frames per 10 minutes, inside the bar, and 36.1 visible
+stalls, 1.1 over it. Fixed at 64 ms from the first turn the laptop has
+33.6; the raised row adds the two stalls at 32 ms that detect the path,
+2.5 per 10 minutes of this 8-minute trace. In the model the raised row
+equals its fixed-64 row (32.3). On the whole trace the rescans still dominate (554 visible
+stalls per 10 minutes), as the plan expected. `--grid` is byte-identical,
+since no grid agent has a headroom.
+
 ## Lobby and game on the agent (box R8)
 
 The agent ports host.ts's lobby and game loop to Rust. host.ts is Wisp's
