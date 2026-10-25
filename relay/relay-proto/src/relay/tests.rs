@@ -291,23 +291,3 @@ fn players_who_run_the_first_turn_on_time_start_the_clock_at_the_start() {
     r.poll(500 + cadence.relay_time(10));
     assert_eq!((r.turns_emitted(), r.running_since()), (11, Some(500)));
 }
-
-#[test]
-fn a_lead_action_opens_the_first_turn_only_and_takes_no_player_seq() {
-    let mut r = Relay::new(Cadence::default(), &[1, 2], 0);
-    r.on_packet(&up(1, 0, 0, vec![], 0, acts(&[8]))).unwrap();
-    r.lead(Action { player: 0, seq: u32::MAX, data: vec![7] });
-    r.start(0);
-    r.poll(0);
-    r.lead(Action { player: 1, seq: u32::MAX, data: vec![6] });
-    r.on_packet(&up(1, 0, 0, vec![5], 1, acts(&[9]))).unwrap();
-    r.on_packet(&up(2, 0, 0, vec![5], 0, vec![])).unwrap();
-    r.poll(Cadence::default().relay_time(9));
-    let turns: Vec<Vec<(u8, Vec<u8>)>> = r
-        .log
-        .iter()
-        .map(|t| t.actions.iter().map(|a| (a.player, a.data.clone())).collect())
-        .collect();
-    assert_eq!(turns[0], [(0, vec![7]), (0, vec![8])]);
-    assert_eq!(turns[1..].concat(), [(0, vec![9])]);
-}

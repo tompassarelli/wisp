@@ -156,8 +156,6 @@ export const MEASURED_RELAY: RelayTiming = { steps: [8], jitterMs: 2, links: [{ 
 export const RELAY_LAG_STOP_MS = 1000;
 export const RELAY_CATCH_UP_STEP_MS = 4;
 export const RELAY_SLEW_HOLD_MS = 30000;
-export const RELAY_MARK_PREFIX = "WISP_RLY";
-export const RELAY_PROTOCOL_VERSION = 1;
 
 export interface RelayDelivery extends SyncDelivery {
 
@@ -235,7 +233,6 @@ export function relayDelivery(timing: RelayTiming = MEASURED_RELAY, seed = 1): R
   return {
     ageMs: (sender: number, frame: number) => ageMs(sender, frame),
     arrivalFrame: (sender: number, frame: number, _message: SyncMessage) => Math.max(frame + 1, Math.ceil(frame + ageMs(sender, frame) / CALLBACK_MS - f32(1e-9))),
-    opening: (players) => (players.length === 0 ? [] : [{ sender: Math.min(...players), prefix: RELAY_MARK_PREFIX, data: `${RELAY_PROTOCOL_VERSION}` }]),
   };
 }
 

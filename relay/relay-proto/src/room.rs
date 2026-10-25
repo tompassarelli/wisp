@@ -70,10 +70,6 @@ impl RoomFacts {
     pub fn pids(&self) -> Vec<u8> {
         self.map.user_slots().into_iter().take(self.players as usize).map(|id| id + 1).collect()
     }
-
-    pub fn unheld_pid(&self) -> Option<u8> {
-        self.map.user_slots().get((self.players + self.computers) as usize).map(|id| id + 1)
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -306,18 +302,6 @@ pub(crate) mod tests {
             forces: vec![1, 2],
             players: vec![MapPlayer { id: 0, controller: 1, race: 1 }, MapPlayer { id: 1, controller: 1, race: 2 }],
         }
-    }
-
-    #[test]
-    fn the_unheld_pid_is_the_first_user_slot_past_players_and_computers() {
-        let mut map = map();
-        map.players.push(MapPlayer { id: 4, controller: 2, race: 1 });
-        map.players.push(MapPlayer { id: 2, controller: 1, race: 1 });
-        map.players.push(MapPlayer { id: 3, controller: 1, race: 1 });
-        let facts = |players, computers| RoomFacts { map: map.clone(), seed: 0, players, computers, you: 1 };
-        assert_eq!(facts(2, 0).unheld_pid(), Some(3));
-        assert_eq!(facts(2, 1).unheld_pid(), Some(4));
-        assert_eq!(facts(3, 1).unheld_pid(), None);
     }
 
     #[test]

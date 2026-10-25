@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { CALLBACK_MS, MEASURED_RELAY, RELAY_CATCH_UP_STEP_MS, RELAY_MARK_PREFIX, RELAY_PROTOCOL_VERSION, type RelayTiming, relayCallbacks, relayDelivery } from "./syncChannel";
+import { CALLBACK_MS, MEASURED_RELAY, RELAY_CATCH_UP_STEP_MS, type RelayTiming, relayCallbacks, relayDelivery } from "./syncChannel";
 import { f32 } from "../sim/f32";
 
 const quantile = (values: readonly number[], q: number) => {
@@ -74,11 +73,4 @@ test("[spec relay-bench --grid --rtts 120, 120 ms 1% + 1 s blackout] an outage f
   const cut = Math.floor((outage.atMs - 200) / CALLBACK_MS);
   const late = Array.from({ length: 12 }, (_, index) => delivery.ageMs(0, cut + index));
   expect(Math.max(...late)).toBeGreaterThan(500);
-});
-
-test("[spec wisp#52] the relay mark's prefix and version are relay-proto's, sent once from the lowest slot", () => {
-  const relayProto = (file: string) => readFileSync(new URL(`../../relay/relay-proto/src/${file}`, import.meta.url), "utf8");
-  expect(relayProto("wire.rs")).toContain(`pub const VERSION: u8 = ${RELAY_PROTOCOL_VERSION};`);
-  expect(relayProto("mark.rs")).toContain(`pub const MARK_PREFIX: &[u8] = b"${RELAY_MARK_PREFIX}";`);
-  expect(relayDelivery().opening?.([3, 1, 2])).toEqual([{ sender: 1, prefix: RELAY_MARK_PREFIX, data: `${RELAY_PROTOCOL_VERSION}` }]);
 });

@@ -1,8 +1,6 @@
 use relay_proto::lobby::{Lobby, LobbyPhase, LobbyTiming};
-use relay_proto::mark;
 use relay_proto::room::{self, FromAgent, FromRelay};
 use relay_proto::stream::{self, RoomStream};
-use relay_proto::wire::Action;
 use relay_proto::Micros;
 
 #[derive(Debug)]
@@ -33,10 +31,6 @@ impl GameRoom {
 
     pub fn playing(&self) -> bool {
         self.lobby.as_ref().is_some_and(|l| l.phase() == LobbyPhase::Playing)
-    }
-
-    pub fn mark(&self) -> Option<Action> {
-        self.lobby.as_ref()?.lowest_present().map(|p| mark::mark_action(p as u8))
     }
 
     pub fn take_log(&mut self) -> Vec<String> {

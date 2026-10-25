@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { installHeadless } from "../host/headless/headless";
 import { installDispatch, on, trampoline } from "../src/map/dispatch";
 import { configureRuntime } from "../src/runtime/config";
-import { MEASURED_BATTLE_NET, MEASURED_RELAY, MEASURED_TURN_BURSTS, RELAY_MARK_PREFIX, RELAY_PROTOCOL_VERSION, relayCallbacks, relayDelivery, syncDelivery, turnBursts } from "../src/headless/syncChannel";
+import { MEASURED_BATTLE_NET, MEASURED_TURN_BURSTS, syncDelivery, turnBursts } from "../src/headless/syncChannel";
 
 const FIXTURE = { filePrefix: "fixture", globalPrefixes: ["__fixture"], localNatives: { BlzFrameSetText: "shows text on this client" } };
 const runtime = installHeadless(FIXTURE);
@@ -148,43 +148,4 @@ test("[invariant] with turn-burst callbacks each callback reads its turn's wall 
   expect(landed[0]).toEqual(landed[1] ?? []);
   expect((landed[0] ?? []).length).toBeGreaterThan(900);
   for (const frame of landed[0] ?? []) expect(timing.wallMs(frame)).toBeGreaterThan(timing.wallMs(frame - 1));
-});
-
-test("[spec wisp#52] relay delivery leads the first turn with one relay mark from the lowest slot; Battle.net delivery and turn bursts never send one", () => {
-  const marks = (players: readonly number[], options: Parameters<typeof runtime.clients>[2]) => {
-    const seen: string[][] = players.map(() => []);
-    const clients = runtime.clients({
-      start: () => {
-        configure();
-        installDispatch();
-        globalThis.__fixtureFrame = 0;
-        on("fixture.frame", () => {
-          globalThis.__fixtureFrame = (globalThis.__fixtureFrame ?? 0) + 1;
-        });
-        on("fixture.mark", () => {
-          seen[players.indexOf(GetPlayerId(GetLocalPlayer()))]?.push(`${GetPlayerId(GetTriggerPlayer())}:${BlzGetTriggerSyncData()}@${globalThis.__fixtureFrame ?? 0}`);
-        });
-        const trigger = CreateTrigger();
-        for (const sender of players) BlzTriggerRegisterPlayerSyncEvent(trigger, Player(sender), RELAY_MARK_PREFIX, false);
-        TriggerAddAction(trigger, trampoline("fixture.mark"));
-        TimerStart(CreateTimer(), 1 / 60, true, trampoline("fixture.frame"));
-        if (GetPlayerId(GetLocalPlayer()) === 2) BlzSendSyncData(RELAY_MARK_PREFIX, "map");
-      },
-      install: () => {},
-    }, players, options);
-    clients.start();
-    clients.frames(120);
-    expect(clients.firstDivergence()).toBeUndefined();
-    return seen;
-  };
-  const sent = (seen: readonly string[][]) => seen.map((messages) => messages.map((message) => message.split("@")[0]));
-  const mark = `1:${RELAY_PROTOCOL_VERSION}@0`;
-  for (const options of [{ delivery: relayDelivery(MEASURED_RELAY, 5), callbacks: relayCallbacks() }, { delivery: relayDelivery(MEASURED_RELAY, 5) }]) {
-    const seen = marks([2, 1], options);
-    expect(seen.map((messages) => messages[0])).toEqual([mark, mark]);
-    expect(sent(seen)).toEqual([[`1:${RELAY_PROTOCOL_VERSION}`, "2:map"], [`1:${RELAY_PROTOCOL_VERSION}`, "2:map"]]);
-  }
-  for (const options of [{ delivery: syncDelivery() }, { delivery: syncDelivery(), callbacks: turnBursts() }, { callbacks: turnBursts() }]) {
-    expect(sent(marks([2, 1], options))).toEqual([["2:map"], ["2:map"]]);
-  }
 });

@@ -105,7 +105,7 @@ player.
 | Loss | Nothing is dropped: a lost packet only delays its message by one turn per loss, as the next packet repeats it. | No turn lost in the hour. |
 | Order | Each sender's messages arrive in the order it sent them. | |
 | Callbacks | `relayCallbacks()` runs callbacks 16.7 ms apart, as the agent's even feed does. | |
-| Relay mark | Before the first frame's callbacks every client receives one sync message from the lowest client slot (on Warcraft III, from the first user slot no player holds, for which Warcraft fires no map sync event, wisp#54), prefix `RELAY_MARK_PREFIX` (`WISP_RLY`) and data `RELAY_PROTOCOL_VERSION` (`1`), ahead of anything sent before it, as the relay leads its first turn with it (wisp:docs/relay.md, "Lobby and game on the agent"). A map latches it by registering the prefix's sync event for every player at map init and must not read the event's player. `syncDelivery()` and `turnBursts()` never send it. | |
+| Relay mark | None: relay delivery sends only what the clients send, so a map cannot tell a relayed match from Battle.net (wisp:docs/relay.md, "No relay mark"). | |
 
 **Outage.** An outage blacks out both directions for `lengthMs` from relay
 time `atMs`. Messages whose packets fall inside it leave when it ends. The

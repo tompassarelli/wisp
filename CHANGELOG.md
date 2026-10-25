@@ -10,6 +10,12 @@ declares (wisp:docs/architecture.md, "Where things live").
   `fieldSlicesOpen`, which write one field's record text in slices of a
   bounded number of steps, byte for byte the text of `writeFieldTokens`
   (wisp#55, wisp:docs/repro.md, "Saving state as record text").
+- Removed: the relay mark. The relay no longer leads the first turn with a
+  `WISP_RLY` sync action, `relayDelivery()` sends no opening message, and
+  `wisp/src/headless/syncChannel` no longer exports `RELAY_MARK_PREFIX` or
+  `RELAY_PROTOCOL_VERSION`, nor `SyncDelivery` an `opening`; a map cannot
+  tell a relayed match from Battle.net (wisp:docs/relay.md, "No relay
+  mark").
 - The relay agent gives every Warcraft III the relay mark under the first
   map user slot no player holds, and none when the map has no such slot:
   under a player's own id the client closed at turn 0, and a sender that

@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-use relay_proto::mark::MARK_SEQ;
 use relay_proto::room::{FromAgent as Up, FromRelay as Down, RoomFacts};
 use relay_proto::wire::Action;
 
@@ -288,11 +287,7 @@ impl GameHost {
         let pids = self.room.pids();
         actions
             .into_iter()
-            .filter_map(|a| {
-                // Warcraft closes on an action under its own id that it never sent and desyncs when the sender differs by client.
-                let pid = if a.seq == MARK_SEQ { self.room.unheld_pid()? } else { *pids.get(a.player as usize)? };
-                Some(PlayerAction { player_id: pid, data: a.data })
-            })
+            .filter_map(|a| pids.get(a.player as usize).map(|&pid| PlayerAction { player_id: pid, data: a.data }))
             .collect()
     }
 
