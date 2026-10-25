@@ -1123,12 +1123,14 @@ and the lobby of remote players. No FLO code is copied.
   and so does a sender that differs between clients, which desyncs (wisp#37:
   gex45 runs on 25 October 2026, one map; the lowest slot's id dropped its
   client at turn 0, the lowest other present player latched a desync within
-  341 turns, the unheld id played 6662 turns with no desync). Whether
-  Warcraft fires the sync event for an id no player holds is not yet
-  observed natively. The mark takes no player's action sequence, and
+  341 turns, the unheld id played 6662 turns with no desync). Warcraft
+  III fires no map sync event for the unheld id, so no native map can
+  latch the mark yet; under the other player's id both clients fire it at
+  game time 0 and the relay latches a desync (wisp#54: gex45 pair 12,
+  25 October 2026, `test/relay-mark54`). The mark takes no player's action sequence, and
   rooms without a hosted game (synthetic and bench rooms) get no mark. The
   agent frames it with the other actions through `w3gs::incoming_action`;
-  lobby bytes up to the first turn are unchanged (wisp#52). A map latches
+  lobby bytes up to the first turn are unchanged (wisp#52). Headless, a map latches
   it by registering `BlzTriggerRegisterPlayerSyncEvent` for the prefix
   `WISP_RLY` on every player at map init and setting a flag when it fires;
   the mark runs ahead of every player action in turn 0, so every client
