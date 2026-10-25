@@ -906,6 +906,10 @@ and still saw up to 5.5 underruns per 10 minutes, and bursts of 4 at 1% and
   line through each 10 s window's smallest delay, which removes the two
   clocks' drift. `relay-synthetic --trace FILE` records one from a
   one-player room; a replay takes the RTT's half as the base one-way delay.
+  `gex45-wired-to-nexus-2026-10-25.trace` is gex45's wired path from
+  Hetzner (wisp#53): 74,679 packets, none lost, delay above the floor
+  p50/p99/max 0.3/2.8/16.4 ms at a 184 ms RTT; its bench cell chose 24 ms
+  and had 1 underrun per 10 minutes.
 
 ### Recorded trace cell (wisp#45)
 

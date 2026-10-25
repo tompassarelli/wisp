@@ -96,6 +96,9 @@ fn run_rows(cells: Vec<(Cell, Scenario)>, period_us: Micros) -> Vec<Row> {
 }
 
 fn describe(trace: &Trace, windows: &[(usize, usize)]) -> String {
+    if windows.is_empty() {
+        return "rescan windows: none\n".into();
+    }
     let s = |i: usize| i as f64 * trace.period_us as f64 / SECOND as f64;
     let starts: Vec<String> = windows.iter().map(|w| format!("{:.1}", s(w.0))).collect();
     let lens: Vec<f64> = windows.iter().map(|w| s(w.1 - w.0)).collect();
@@ -149,10 +152,12 @@ pub fn main(o: &Options, name: &str, period_us: Micros) {
         kind,
         seed: 0x5eed_7000 + k,
     };
-    let mut cells = vec![
-        (cell(Kind::Trace(false), 0), trace_scenario(&cell(Kind::Trace(false), 0), o, &trace)),
-        (cell(Kind::Trace(true), 1), trace_scenario(&cell(Kind::Trace(true), 1), o, &cut(&trace, &windows))),
-    ];
+    let mut cells = vec![(cell(Kind::Trace(false), 0), trace_scenario(&cell(Kind::Trace(false), 0), o, &trace))];
+    if !windows.is_empty() {
+        let c = cell(Kind::Trace(true), 1);
+        let s = trace_scenario(&c, o, &cut(&trace, &windows));
+        cells.push((c, s));
+    }
     let match_us = trace.delays_us.len() as Micros * trace.period_us;
     for (k, p) in INDEPENDENT.into_iter().enumerate() {
         let c = cell(Kind::Independent(p), 2 + k as u64);

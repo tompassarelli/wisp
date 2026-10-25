@@ -43,8 +43,8 @@ impl Kind {
             Kind::Burst(p, b) => format!("{}% bursts of {b}", p * 100.0),
             Kind::Blackout(p) => format!("{}% + 1 s blackout / 5 min", p * 100.0),
             Kind::UdpBlocked(p) => format!("UDP blocked, {}% over TCP", p * 100.0),
-            Kind::Trace(false) => "laptop Wi-Fi trace, whole".into(),
-            Kind::Trace(true) => "laptop Wi-Fi trace, rescans cut".into(),
+            Kind::Trace(false) => "trace, whole".into(),
+            Kind::Trace(true) => "trace, rescans cut".into(),
         }
     }
 
