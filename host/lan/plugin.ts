@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { dirname, join, sep } from "node:path";
-import { Effect, Schedule } from "effect";
+import { Effect, Schedule, type Scope } from "effect";
 import type { MenuSocket } from "../os/warcraft/menuSocket";
 import { LanFailure } from "./join";
 import { isolatedNetworkProblem } from "./offline";
@@ -9,12 +9,21 @@ import { describeCause } from "../cli/command";
 
 const LAN_PLUGIN = join(process.env["HOME"] ?? "", ".local/share/wisp-private/lan/index.ts");
 
+export interface PoolLaunch {
+  readonly name: string;
+  readonly prefix: string;
+  readonly install: string;
+  readonly offline: boolean;
+}
+
 export interface LanPlugin {
 
   readonly version: (exePath: string) => string;
   readonly versionForPort?: (port: number) => string | undefined;
 
   readonly enableLan: (pid: number, exePath: string, menus: MenuSocket, log: (line: string) => void) => Effect.Effect<void, LanFailure>;
+
+  readonly launchEnvironment?: (client: PoolLaunch) => Effect.Effect<Readonly<Record<string, string>>, LanFailure, Scope.Scope>;
 }
 
 export const lanPluginProblem = (path = LAN_PLUGIN) => (existsSync(path) ? undefined

@@ -14,7 +14,7 @@ import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { mapCopies, mapFactsLine, readMapFacts } from "./map";
 import { relayedStatus } from "./relayedStatus";
-import { ALARM_AFTER_MS, agentPidFile, type Driver, MENUS_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, alive, launchUntilShown, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, agentSocket, clientLease, clientLog, stopClientScope, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
+import { ALARM_AFTER_MS, agentPidFile, type Driver, MENUS_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, alive, launchEnvironment, launchUntilShown, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, agentSocket, clientLease, clientLog, stopClientScope, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
 import { preferences, windowSize } from "../os/warcraft/clientProfiles";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
 
@@ -54,7 +54,8 @@ const launch = (capacity: string, client: PoolClient) => Effect.gen(function*() 
   const [command = process.execPath, ...native] = yield* nativeCommand(capacity, client.name, gameRuntime);
   const sound = yield* AudioIsolation.use((audio) => audio.sink(client.name, audioSinkOf(client.name)));
   if (sound.problem !== undefined) say(sound.problem);
-  const env = { ...client.env, ...sound.env, ...launched.env, SteamGameId: appId };
+  const added = yield* launchEnvironment(client.name, network);
+  const env = { ...client.env, ...sound.env, ...launched.env, ...added, SteamGameId: appId };
   const errFile = clientLog(pair, client.name);
   const game = yield* spawnLogged(ChildProcess.make(command, [...native, ...launched.command], {
     env, extendEnv: true, stdin: "ignore", forceKillAfter: "15 seconds",
