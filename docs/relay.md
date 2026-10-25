@@ -62,8 +62,9 @@ Measured facts, each with its source:
   3.0.1.24371, no outside route reaches LAN: the menus only build the
   loopback provider, and 3.0.1.24342 had no LAN provider left
   (wisp#21, 24 October). W3Champions' 3.0 path switches the provider inside
-  the running game, which our clean-room rules forbid on any client a player
-  owns (wisp:docs/clean-room.md).
+  the running game. On 25 October 2026 Tom approved the same kind of switch
+  for players, only as their opt-in to Smashcraft Servers
+  (wisp:docs/clean-room.md, "Smashcraft Servers").
 
 That last fact splits the plan in two:
 
@@ -72,8 +73,8 @@ That last fact splits the plan in two:
    pairs, which are our own offline test clients.
 2. **Reach players.** This needs a route by which an unmodified, signed-in
    live client joins a game the agent hosts. Box R0 found none from outside
-   the game on 3.0.1.24371 (Reaching players, below), so shipping waits on
-   Tom's decision (Decisions, below).
+   the game on 3.0.1.24371 (Reaching players, below), so players reach the
+   agent through Smashcraft Servers (C3 and Decisions, below).
 
 ## Baseline: Wisp's TCP host on a lossy path (box R4)
 
@@ -1504,11 +1505,13 @@ Battle.net app options:
 - W3Champions' 3.0 "Native LAN" switches the provider inside the running
   game (w3champions-issues #57 and #58). Its discovery, UDP 16000 or mDNS
   with `W3C_LAN_TRANSPORT=csdk`, runs on the LAN provider that switch puts in
-  place. Our clean-room rules forbid that switch on a player's client.
+  place. Smashcraft Servers is that kind of switch, allowed only as the
+  player's opt-in (wisp:docs/clean-room.md, "Smashcraft Servers").
 
 So no route from outside the game reaches a 127.0.0.1 host on 3.0.1.24371,
-and the relay's player boxes wait on Tom's choice (Decisions, below). R0 is
-rerun when a new live build ships.
+and players reach the relay through Smashcraft Servers (Decisions, below). R0
+is rerun when a new live build ships, since a route from outside would need
+no switch.
 
 ## Boxes
 
@@ -1555,11 +1558,15 @@ smashcraft-client (epic smashcraft-client#25):
   (smashcraft-client#26).
 - **C2** The agent's feed schedule holds on Windows and Linux runners
   (smashcraft-client#27).
+- **C3** Smashcraft Servers: the opt-in LAN switch beside Battle.net,
+  unavailable on unchecked builds, tested end to end on the spare signed-in
+  account before players see it (smashcraft-client#28).
 
 Order: R0, R1, R5 and R6 start now. R2 and R3 follow R1; R4 follows R1 and
 R5; R7 follows R5 and R6; R8 follows R1 and R6; R9 follows R3, R4, R7 and
 R8; R10 follows R7 and Tom's approval of the port; R11 follows R6; S1 follows
-R11; C1 follows R8, R10 and either an R0 route or Tom's decision; C2 follows
+R11; C3 follows wisp#21, the scan that locates the LAN provider on
+3.0.1.24371 on offline pool clients; C1 follows R8, R10 and C3; C2 follows
 R6.
 
 Code placement: the relay is map-agnostic, so it lives in Wisp as a Rust
@@ -1573,12 +1580,17 @@ model is TypeScript in wisp:src/headless/syncChannel.ts beside
 
 ## Decisions
 
-- **Players on the live build (Tom).** Without an R0 route, the relay
-  reaches only our 3.0.0.24268 pool. Gate 41, opened 24 October, offers three
-  options: keep clean-room and ship to players only when a clean route
-  exists, meanwhile carrying Wisp's standalone window online through the
-  relay; allow W3Champions' in-game switch in the shipped client; or stop
-  the relay.
+- **Players on the live build (Tom, 25 October 2026).** Without an R0
+  route, the relay reached only our 3.0.0.24268 pool, and gate 41 asked what
+  players get. Weighing W3Champions' years of running the same kind of
+  in-game LAN switch for most active Reforged players without known bans,
+  Tom approved shipping it to players as an opt-in named Smashcraft Servers,
+  beside Battle.net, whose opt-in text says Smashcraft changes how Warcraft
+  connects while it runs and that Blizzard has not approved it. He also
+  approved scanning the live build, 3.0.1.24371, on our own offline pool
+  clients to locate its LAN provider (gate 38, wisp#21). The limits are in
+  wisp:docs/clean-room.md, "Smashcraft Servers". C3 and then C1
+  can now proceed.
 - **Public port (Tom).** R10 asks before opening the relay's UDP port on
   Nexus or gex45.
 - **Settled here.** Raw UDP with redundancy, no QUIC, per Tom's direction.

@@ -266,8 +266,10 @@ decision.
   once; the extent is undisclosed. This is our reading. We found no
   w3champions.com page that says it, so no link is given.
 - **Development and testing on your own offline clients and maps only.**
-  Never switch a signed-in Battle.net client. It isn't for cheating, or for
-  touching anyone else's game.
+  Never switch a signed-in Battle.net client from Wisp; the only signed-in
+  switch is a player's opt-in to Smashcraft Servers
+  ([clean-room.md](clean-room.md#smashcraft-servers)).
+  It isn't for cheating, or for touching anyone else's game.
 
 **How it works.** `wisp lan` ([lan.md](lan.md)) runs offline clients in pairs:
 
@@ -365,6 +367,11 @@ Wisp's menu page reports it instead.
 - That account risk is of a different kind from a UI file.
 - Wisp takes it only where no account exists: the offline pool clients of
   [section 2](#2-lan-hosting-offline-clients-and-wisps-host).
+- The one exception is outside Wisp: Smashcraft Servers, the opt-in LAN
+  switch for players in smashcraft-client, which Tom approved on 25 October
+  2026 and tests first on a spare signed-in account of ours
+  ([clean-room.md](clean-room.md#smashcraft-servers)). Wisp's own tools still
+  never switch a signed-in client.
 
 ## Ranked recommendation
 
