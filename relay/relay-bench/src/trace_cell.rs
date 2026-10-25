@@ -75,6 +75,7 @@ fn trace_scenario(cell: &Cell, o: &Options, trace: &Trace) -> Scenario {
     laptop.up_replay = Some(Replay::new(trace, s.lobby_us));
     laptop.fixed_depth_us = o.depth_us;
     laptop.raise_headroom_us = o.raise_headroom_us;
+    laptop.max_total_depth_us = o.max_total_depth_us;
     s
 }
 
@@ -215,15 +216,29 @@ mod tests {
     }
 
     #[test]
-    fn raise_headroom_ms_reaches_only_the_laptop_in_microseconds() {
+    fn raise_headroom_and_total_depth_reach_only_the_laptop_in_microseconds() {
         assert_eq!(args(&[]).raise_headroom_us, None);
-        let o = args(&["--raise-headroom-ms", "32"]);
+        assert_eq!(args(&[]).max_total_depth_us, None);
+        let o = args(&["--raise-headroom-ms", "32", "--max-total-depth-ms", "72"]);
         assert_eq!(o.raise_headroom_us, Some(32_000));
+        assert_eq!(o.max_total_depth_us, Some(72_000));
         let trace = load("traces/laptop-wifi-to-nexus-2026-10-25.trace").unwrap();
         let c = Cell { rtt_ms: 44, kind: Kind::Trace(false), seed: 1 };
         let s = trace_scenario(&c, &o, &trace);
         assert_eq!(s.agents[0].raise_headroom_us, Some(32_000));
         assert_eq!(s.agents[1].raise_headroom_us, None);
+        assert_eq!(s.agents[0].max_total_depth_us, Some(72_000));
+        assert_eq!(s.agents[1].max_total_depth_us, None);
+    }
+
+    #[test]
+    fn the_clean_wired_trace_never_raises_with_100_ms_of_headroom() {
+        let trace = load("traces/gex45-wired-to-nexus-2026-10-25.trace").unwrap();
+        let o = args(&["--raise-headroom-ms", "100"]);
+        let c = Cell { rtt_ms: 184, kind: Kind::Trace(false), seed: 0x5eed_7000 };
+        let s = trace_scenario(&c, &o, &trace);
+        let stats = &sim::run(&s).agents[0].stats;
+        assert_eq!((stats.raise_us, stats.spiky), (0, false));
     }
 
     #[test]

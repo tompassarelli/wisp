@@ -77,6 +77,7 @@ struct Options {
     max_depth_us: Option<Micros>,
     depth_us: Option<Micros>,
     raise_headroom_us: Option<Micros>,
+    max_total_depth_us: Option<Micros>,
     trace: Option<String>,
 }
 
@@ -116,6 +117,7 @@ fn scenario(cell: &Cell, o: &Options, match_us: Micros) -> (Scenario, Vec<(Micro
         up_replay: None,
         fixed_depth_us: None,
         raise_headroom_us: None,
+        max_total_depth_us: None,
     };
     let blackouts: Vec<(Micros, Micros)> = match cell.kind {
         Kind::Blackout(_) => (1..)
@@ -387,6 +389,7 @@ fn options(args: &[String]) -> Option<Options> {
     let max_depth_us = millis(args, "--max-depth-ms", 1)?;
     let depth_us = millis(args, "--depth-ms", 1)?;
     let raise_headroom_us = millis(args, "--raise-headroom-ms", 0)?;
+    let max_total_depth_us = millis(args, "--max-total-depth-ms", 1)?;
     Some(Options {
         minutes,
         rtts_ms,
@@ -396,6 +399,7 @@ fn options(args: &[String]) -> Option<Options> {
         max_depth_us,
         depth_us,
         raise_headroom_us,
+        max_total_depth_us,
         trace,
     })
 }
@@ -404,7 +408,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(o) = options(&args) else {
         eprintln!(
-            "usage: relay-bench --grid|--trace FILE [--minutes N] [--rtts MS,...] [--steps 8|17,17,16] [--margin QUANTILE] [--no-cover] [--max-depth-ms MS] [--depth-ms MS] [--raise-headroom-ms MS]"
+            "usage: relay-bench --grid|--trace FILE [--minutes N] [--rtts MS,...] [--steps 8|17,17,16] [--margin QUANTILE] [--no-cover] [--max-depth-ms MS] [--depth-ms MS] [--raise-headroom-ms MS] [--max-total-depth-ms MS]"
         );
         std::process::exit(2);
     };

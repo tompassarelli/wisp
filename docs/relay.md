@@ -1233,15 +1233,23 @@ times move, which the property
 `the_raise_moves_feed_times_but_never_the_fed_turns` checks against the
 same packet stream with the raise on and off. The raise is
 `AgentConfig::raise_headroom_us` (Smashcraft's headroom, the depth that
-keeps `connectionPoor` false) rounded down to whole 8 ms steps and capped
-at 32 ms; without a headroom, or below 8 ms, the agent marks the path
-spiky (`AgentStats::spiky`) and doesn't raise. The bench gives the
-laptop's agent a headroom with `--raise-headroom-ms MS`; the D column then
-says `raised` and the raise.
+keeps `connectionPoor` false), capped so that depth plus raise stays within
+`AgentConfig::max_total_depth_us` (100 ms by default), then rounded down to
+whole 8 ms steps; the agent computes it when it chooses its depth. Without
+a headroom, below 8 ms, or with the depth already within 8 ms of the cap,
+the agent marks the path spiky (`AgentStats::spiky`) and doesn't raise.
+The bench gives the laptop's agent a headroom with `--raise-headroom-ms MS`
+and a total cap with `--max-total-depth-ms MS`; the D column then says
+`raised` and the raise.
 
-**Bar (ruling (a′)).** Per 10 minutes with the Wi-Fi rescans cut: at most
-35 visible stalls and at most 100 callback-less frames, at a depth plus
-raise of at most 64 ms.
+Gate 49 (2026-10-25) allows adaptive depth up to about 100 ms on paths with
+repeated stalls to reach at most 10 visible stalls per 10 minutes, keeps the
+clean wired path at its baseline with no raise and keeps the in-match
+warning, and drops the slowdown.
+
+**Bar (gate 49).** Per 10 minutes with the Wi-Fi rescans cut: at most
+10 visible stalls and at most 100 callback-less frames, at a depth plus
+raise of at most 100 ms.
 
 The laptop's rows (`--trace traces/laptop-wifi-to-nexus-2026-10-25.trace`
 with `--depth-ms 32`, `--depth-ms 64`, then `--depth-ms 32
@@ -1265,6 +1273,31 @@ stalls, 1.1 over it. Fixed at 64 ms from the first turn the laptop has
 equals its fixed-64 row (32.3). On the whole trace the rescans still dominate (554 visible
 stalls per 10 minutes), as the plan expected. `--grid` is byte-identical,
 since no grid agent has a headroom.
+
+The total cap swept on the rescans-cut laptop trace (`--depth-ms 32
+--raise-headroom-ms 200 --max-total-depth-ms CAP`, so the cap binds; the
+raise is CAP − 32 ms rounded down to 8 ms):
+
+| Cap | D (A/B), depth | Loss | Underruns | Callback-less | Stalls ≥ 1 | Stalls ≥ 2 | 2× s | Double | Per poll | Peak lag ms | Lag ≥ 2 | Lag ≥ 4 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 64 ms | 4 fixed raised 32.0 ms/3, 32.0 ms | trace, rescans cut | 60.91 | 98.21 | 36.05 | 21.13 | 1.71 | 157.88 | 1 | 254.1 | 19.89 | 6.22 |
+| 72 ms | 4 fixed raised 40.0 ms/3, 32.0 ms | trace, rescans cut | 54.70 | 79.56 | 29.84 | 17.40 | 1.33 | 124.31 | 1 | 254.1 | 14.92 | 6.22 |
+| 80 ms | 4 fixed raised 48.0 ms/3, 32.0 ms | trace, rescans cut | 39.78 | 65.89 | 22.38 | 12.43 | 1.13 | 100.69 | 1 | 254.1 | 9.95 | 4.97 |
+| 88 ms | 4 fixed raised 56.0 ms/3, 32.0 ms | trace, rescans cut | 32.32 | 54.70 | 18.65 | 8.70 | 0.92 | 82.05 | 1 | 254.1 | 8.70 | 4.97 |
+| 96 ms | 4 fixed raised 64.0 ms/3, 32.0 ms | trace, rescans cut | 24.86 | 46.00 | 13.67 | 8.70 | 0.77 | 69.62 | 1 | 254.1 | 6.22 | 4.97 |
+| 100 ms | 4 fixed raised 64.0 ms/3, 32.0 ms | trace, rescans cut | 24.86 | 46.00 | 13.67 | 8.70 | 0.77 | 69.62 | 1 | 254.1 | 6.22 | 4.97 |
+
+Cap 100 ms (`max_total_depth_us` 100_000; the raise is 64 ms after 8 ms
+rounding, 96 ms in all) gives 13.67 visible stalls and 46.00 callback-less
+frames per 10 minutes. The bar of 10 visible stalls is not met within
+100 ms, and gate 49 says to stop at 100 ms and report the number, so the
+cap stays there. The plan's model at a fixed 100 ms gave 11.2. The 64 ms
+row reproduces the earlier 32 + 32 row. Beyond the gate, 104 and 112 ms
+give 11.19 and 12.43 visible stalls and 120 ms would give 9.95, the first
+cap under 10, but that is outside the gate. On the clean wired trace
+(`traces/gex45-wired-to-nexus-2026-10-25.trace`) with 100 ms of headroom
+the agent sees no visible stall and never raises, which
+`the_clean_wired_trace_never_raises_with_100_ms_of_headroom` checks.
 
 ## Lobby and game on the agent (box R8)
 

@@ -50,6 +50,7 @@ fn scenario(seed: u64) -> Scenario {
             up_replay: None,
             fixed_depth_us: None,
             raise_headroom_us: None,
+            max_total_depth_us: None,
         })
         .collect();
     let outages = (0..rng.below(4))
@@ -348,6 +349,7 @@ fn turns_over_the_packet_ceiling_split_across_turns() {
         up_replay: None,
         fixed_depth_us: None,
         raise_headroom_us: None,
+        max_total_depth_us: None,
     };
     let s = Scenario {
         seed: 99,
@@ -390,6 +392,7 @@ fn steady(one_way_us: Micros, loss: f64, udp_blocked: bool) -> AgentSpec {
         up_replay: None,
         fixed_depth_us: None,
         raise_headroom_us: None,
+        max_total_depth_us: None,
     }
 }
 

@@ -115,6 +115,7 @@ fn clean(fixed_depth_us: Option<Micros>) -> AgentSpec {
         up_replay: None,
         fixed_depth_us,
         raise_headroom_us: None,
+        max_total_depth_us: None,
     }
 }
 

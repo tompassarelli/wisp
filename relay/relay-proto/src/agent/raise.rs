@@ -2,12 +2,11 @@ use crate::Micros;
 
 const SECOND: Micros = 1_000_000;
 const CALLBACK_HZ: Micros = 60;
-const MAX_RAISE_US: Micros = 32_000;
 const RAISE_STEP_US: Micros = 8_000;
 const SPIKY_WINDOW_US: Micros = 60 * SECOND;
 
-pub fn ceiling(headroom_us: Option<Micros>) -> Micros {
-    headroom_us.map_or(0, |h| h.clamp(0, MAX_RAISE_US) / RAISE_STEP_US * RAISE_STEP_US)
+pub fn ceiling(headroom_us: Option<Micros>, depth_us: Micros, max_total_us: Micros) -> Micros {
+    headroom_us.map_or(0, |h| h.min(max_total_us - depth_us).max(0) / RAISE_STEP_US * RAISE_STEP_US)
 }
 
 #[derive(Debug)]
@@ -23,9 +22,9 @@ pub(super) struct Raise {
 }
 
 impl Raise {
-    pub fn new(headroom_us: Option<Micros>) -> Self {
+    pub fn new() -> Self {
         Raise {
-            ceiling_us: ceiling(headroom_us),
+            ceiling_us: 0,
             floor_us: 0,
             spiky: false,
             stalls: 0,
@@ -34,6 +33,10 @@ impl Raise {
             stalled: false,
             last_stall: None,
         }
+    }
+
+    pub fn cap(&mut self, ceiling_us: Micros) {
+        self.ceiling_us = ceiling_us;
     }
 
     pub fn fed(&mut self, now: Micros, step_us: Micros) {

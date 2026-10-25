@@ -324,13 +324,15 @@ fn cover_packets_fill_the_buffer_and_bursts_seen_in_the_match_raise_cover() {
 }
 
 #[test]
-fn the_raise_is_the_headroom_in_whole_8_ms_steps_up_to_32_ms() {
-    assert_eq!(raise_ceiling(None), 0);
-    assert_eq!(raise_ceiling(Some(-5_000)), 0);
-    assert_eq!(raise_ceiling(Some(7_999)), 0);
-    assert_eq!(raise_ceiling(Some(8_000)), 8_000);
-    assert_eq!(raise_ceiling(Some(23_999)), 16_000);
-    assert_eq!(raise_ceiling(Some(100_000)), 32_000);
+fn the_raise_is_the_headroom_in_whole_8_ms_steps_up_to_the_total_depth_cap() {
+    assert_eq!(raise_ceiling(None, 32_000, 100_000), 0);
+    assert_eq!(raise_ceiling(Some(-5_000), 32_000, 100_000), 0);
+    assert_eq!(raise_ceiling(Some(7_999), 32_000, 100_000), 0);
+    assert_eq!(raise_ceiling(Some(8_000), 32_000, 100_000), 8_000);
+    assert_eq!(raise_ceiling(Some(23_999), 32_000, 100_000), 16_000);
+    assert_eq!(raise_ceiling(Some(100_000), 32_000, 100_000), 64_000);
+    assert_eq!(raise_ceiling(Some(100_000), 32_000, 72_000), 40_000);
+    assert_eq!(raise_ceiling(Some(100_000), 104_000, 100_000), 0);
 }
 
 fn two_stalls(b: &mut Bench, apart: u32) -> u32 {
@@ -358,6 +360,16 @@ fn a_second_visible_stall_within_60_s_raises_extra_delay_a_millisecond_a_turn() 
         assert_eq!(f.target, b.nominal(f.index) + 32_000, "turn {}", f.index);
     }
     assert_eq!(b.agent.stats().raise_us, 32_000);
+}
+
+#[test]
+fn a_large_headroom_raises_only_to_the_total_depth_cap() {
+    let mut b = Bench::with_headroom(Some(200_000));
+    let second = two_stalls(&mut b, 600);
+    on_time(&mut b, second + 1, second + 20);
+    let cap = (100_000 - b.depth()) / 8_000 * 8_000;
+    assert!(cap > 32_000);
+    assert_eq!(b.agent.stats().raise_us, cap);
 }
 
 #[test]

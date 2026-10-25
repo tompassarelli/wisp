@@ -32,6 +32,7 @@ pub struct AgentConfig {
     pub bursty: f64,
     pub fixed_turns: Option<u32>,
     pub raise_headroom_us: Option<Micros>,
+    pub max_total_depth_us: Micros,
 }
 
 impl AgentConfig {
@@ -55,6 +56,7 @@ impl AgentConfig {
             bursty: 0.2,
             fixed_turns: None,
             raise_headroom_us: None,
+            max_total_depth_us: 100_000,
         }
     }
 }
@@ -135,7 +137,7 @@ pub struct Agent {
 impl Agent {
     pub fn new(cfg: AgentConfig, now: Micros) -> Self {
         let period = cfg.cadence.period_us();
-        let raise = Raise::new(cfg.raise_headroom_us);
+        let raise = Raise::new();
         Agent {
             cfg,
             period,
@@ -244,6 +246,11 @@ impl Agent {
         self.lobby_offsets = self.lobby.sorted_offsets();
         self.next_review = self.cfg.cover_every;
         self.depth_us = choice.turns as Micros * self.period + choice.link.margin_us;
+        self.raise.cap(raise::ceiling(
+            self.cfg.raise_headroom_us,
+            self.depth_us,
+            self.cfg.max_total_depth_us,
+        ));
         self.anchor_target = choice.link.anchor_us;
         self.anchor_applied = choice.link.anchor_us;
         self.choice = Some(choice.clone());

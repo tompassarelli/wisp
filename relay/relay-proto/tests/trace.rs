@@ -88,6 +88,7 @@ fn replaying(down: Option<Replay>) -> AgentSpec {
         up_replay: None,
         fixed_depth_us: None,
         raise_headroom_us: None,
+        max_total_depth_us: None,
     }
 }
 
