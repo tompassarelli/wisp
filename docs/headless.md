@@ -1276,6 +1276,37 @@ there to the pixel. The `GAME_UI` children at x -0.05 and 0.82 would sit on
 screen (at 101 px and 1139 px) and are still not drawn: a `GAME_UI` child
 outside x 0..0.8 is not drawn on a wide screen either.
 
+### Team glow drawn on a flat quad, read from a screenshot
+
+`test/glow6/` ([#6](https://github.com/tompassarelli/wisp/issues/6)) draws
+one flat quad facing the camera with an additive ReplaceableId 2 layer, as an
+effect coloured by a red Player 0, and then its twin, the same quad with our
+own 32×32 radial texture (`textures.ts`, written as a grey-palette BLP), and
+then neither, 12 s each on a black board. The camera looks 15° off straight
+down, so screen up is world +y in both Warcraft and Wisp. Each phase writes
+`glow6-p0.txt` (phase, client size, Player 0's colour, camera fields, target
+and eye). `oracle.ts` runs the map headless and predicts each quad's added
+light per pixel with Wisp's texel rule (top mip, bilinear,
+perspective-correct, colour × alpha × layer opacity) through `camera()`;
+`read.ts` compares shown minus hidden with it: per channel the largest and
+95th-percentile level difference, the gain, the radii where each profile
+falls to half and to 2 levels, and the 1 px radial profile.
+
+```sh
+bun test/glow6/build.ts BASE.w3m PRIVATE_OUT.w3x
+bun wisp lan solo PRIVATE_OUT.w3x --pair K
+bun test/glow6/oracle.ts TEAMGLOW00.png PRIVATE_ORACLE [DX,DY]
+bun test/glow6/read.ts PRIVATE_CAPTURES PRIVATE_ORACLE
+```
+
+Measured on 3.0.0.24268, Classic `capture-classic-1080`, 25 October 2026:
+both quads match the rule. The team-glow quad differs by at most 3.9 levels
+(95th percentile 1.8), its twin by at most 2.8 (1.8), each about 2% brighter
+in sum with half-maximum radii 1 px wider, and every 24-level box edge within
+1 px. With these camera fields read back unchanged, native draws both quads
+169.6 px higher than `camera()` places them and no wider, so the oracle is
+registered by the twin's centroid (`DX,DY` 0,-169.6).
+
 ## Warcraft 3.0 natives
 
 The typed API is generated from the installed 3.0.1 build 24342 `common.j`
