@@ -298,7 +298,11 @@ Notes:
   arrivals no longer line up with the feed schedule, so more feeds wait out
   the timeout. Underruns stayed 0 and the clients drew one callback per
   burst through it, so the bar misses on timer resolution, not on turns
-  reaching Warcraft late.
+  reaching Warcraft late. Under `CONFIG_HZ=250` a timeout under a tick
+  sleeps two ticks, 8 ms, so a live agent fed only when a packet came:
+  after a 250 ms hold it fed every 8 ms with 210–220 ms of extra delay
+  instead of catching up at 4 ms (wisp#53). The agent now waits in
+  `ppoll` on a high-resolution timer (wisp#56), and catches up at 4 ms.
 - **The short shares** are 4 readings: `r200-l2-j20-heavy` one callback gap
   of 1.998 ms on client a and `r200-l5-j20-heavy` three, each between gaps
   of 17–28 ms (os.clock steps in about 1 ms, so these are 2 ms steps just
@@ -1304,15 +1308,18 @@ sets `raise_headroom_us` and `--max-total-depth-ms MS` sets
 `max_total_depth_us`; without them the agent never raises and keeps the
 100 ms cap, as before. `wisp lan relayed --raise-headroom-ms MS` passes the
 headroom to both agents (off by default). The agent's summary line ends
-`spiky BOOL stalls N raise_ms MS` (`AgentStats::spiky`, `visible_stalls`
-and the raise in ms), and its trace gets `spiky at_us` when the path is
-flagged and `raise R_us at_us` when the floor first rises (see "Lobby and
-game on the agent"). `relay-agent/tests/spiky.rs` holds a loopback relay's
-packets back twice within 60 s and checks both: with 100 ms of headroom the
-agent reports `spiky true`, the stalls and a raise, and traces it; without
-a headroom it reports the stalls but `raise_ms 0.0`. The in-match warning
-stays the map's job, but the map reads nothing yet: no carrier reaches a
-map (wisp#54).
+`spiky BOOL stalls N raise_ms MS` (`AgentStats::spiky`, `visible_stalls` and
+the raise in ms), and its trace gets `spiky at_us` when the path is flagged
+and `raise R_us at_us` when the floor first rises (see "Lobby and game on
+the agent"). `relay-agent/tests/spiky.rs` holds a loopback relay's packets
+back twice within 60 s and checks both: with 100 ms of headroom the agent
+reports `spiky true`, the stalls and a raise, and traces it; without a
+headroom it reports the stalls but `raise_ms 0.0`. After one 250 ms hold,
+with no headroom, each feed until the extra delay is back within a turn of
+its value before the hold comes at least 4 ms after the last and lowers the
+extra delay by exactly how far it ran ahead of schedule, the catch-up rule,
+and the extra delay is back within 2 s. The in-match warning stays the map's
+job, but the map reads nothing yet: no carrier reaches a map (wisp#54).
 
 ## Lobby and game on the agent (box R8)
 

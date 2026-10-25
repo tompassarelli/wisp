@@ -17,7 +17,10 @@ const STEP: Duration = Duration::from_millis(8);
 const LOBBY: Duration = Duration::from_millis(1200);
 const PLAY: Duration = Duration::from_secs(4);
 const HOLDS: [(Duration, Duration); 2] = [(Duration::from_millis(1000), Duration::from_millis(250)), (Duration::from_millis(2500), Duration::from_millis(500))];
+const ONE_HOLD: [(Duration, Duration); 1] = [(Duration::from_millis(1000), Duration::from_millis(250))];
 const RESEND: u32 = 100;
+const CATCH_UP_GAP_US: i64 = 4_000;
+const STEP_US: i64 = 8_000;
 
 struct Agent(Child);
 
@@ -40,8 +43,8 @@ fn answer_join(server: &UdpSocket) -> SocketAddr {
     }
 }
 
-fn held(played: Duration) -> bool {
-    HOLDS.iter().any(|&(at, length)| played >= at && played < at + length)
+fn held(holds: &[(Duration, Duration)], played: Duration) -> bool {
+    holds.iter().any(|&(at, length)| played >= at && played < at + length)
 }
 
 fn down(seq: u32, sent: Duration, base: Option<Duration>, emitted: u32) -> Vec<u8> {
@@ -52,14 +55,14 @@ fn down(seq: u32, sent: Duration, base: Option<Duration>, emitted: u32) -> Vec<u
     wire::encode_down(&head, &turns, MAX_PACKET).0
 }
 
-fn relay_with_stalls(server: &UdpSocket, agent: SocketAddr) {
+fn relay_with_stalls(server: &UdpSocket, agent: SocketAddr, holds: &[(Duration, Duration)]) {
     let origin = Instant::now();
     let mut seq = 0;
     while origin.elapsed() < LOBBY + PLAY {
         let now = origin.elapsed();
         let played = now.checked_sub(LOBBY);
         let emitted = played.map_or(0, |p| (p.as_micros() / STEP.as_micros()) as u32 + 1);
-        if !played.is_some_and(held) {
+        if !played.is_some_and(|p| held(holds, p)) {
             server.send_to(&down(seq, now, played.map(|_| LOBBY), emitted), agent).unwrap();
             seq += 1;
         }
@@ -67,7 +70,7 @@ fn relay_with_stalls(server: &UdpSocket, agent: SocketAddr) {
     }
 }
 
-fn run(extra: &[&str], trace: &PathBuf) -> (String, String) {
+fn run(extra: &[&str], trace: &PathBuf, holds: &[(Duration, Duration)]) -> (String, String) {
     let server = UdpSocket::bind("127.0.0.1:0").unwrap();
     server.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
     let mut agent = Agent(
@@ -81,7 +84,7 @@ fn run(extra: &[&str], trace: &PathBuf) -> (String, String) {
     );
     let stdout = agent.0.stdout.take().unwrap();
     let peer = answer_join(&server);
-    relay_with_stalls(&server, peer);
+    relay_with_stalls(&server, peer, holds);
     assert_eq!(unsafe { kill(agent.0.id() as i32, SIGINT) }, 0);
     let summary = BufReader::new(stdout).lines().map_while(Result::ok).find(|l| l.starts_with("agent summary:")).expect("an agent summary");
     assert!(agent.0.wait().unwrap().success());
@@ -101,7 +104,7 @@ fn trace_path(name: &str) -> PathBuf {
 
 #[test]
 fn two_visible_stalls_within_a_minute_raise_the_floor_when_headroom_is_given() {
-    let (summary, trace) = run(&["--raise-headroom-ms", "100"], &trace_path("raise"));
+    let (summary, trace) = run(&["--raise-headroom-ms", "100"], &trace_path("raise"), &HOLDS);
     assert!(summary.starts_with("agent summary: turns 0 underruns "), "{summary:?}");
     assert_eq!(field(&summary, "spiky"), "true", "{summary:?}");
     assert!(field(&summary, "stalls").parse::<u64>().unwrap() >= 2, "{summary:?}");
@@ -115,9 +118,35 @@ fn two_visible_stalls_within_a_minute_raise_the_floor_when_headroom_is_given() {
 
 #[test]
 fn without_headroom_the_agent_never_raises_even_on_a_spiky_path() {
-    let (summary, trace) = run(&[], &trace_path("flat"));
+    let (summary, trace) = run(&[], &trace_path("flat"), &HOLDS);
     assert_eq!(field(&summary, "spiky"), "true", "{summary:?}");
     assert!(field(&summary, "stalls").parse::<u64>().unwrap() >= 2, "{summary:?}");
     assert_eq!(field(&summary, "raise_ms"), "0.0", "{summary:?}");
     assert!(!trace.lines().any(|l| l.starts_with("raise ")));
+}
+
+fn fed(trace: &str) -> Vec<[i64; 5]> {
+    let rows = trace.lines().filter_map(|l| l.strip_prefix("fed "));
+    rows.map(|l| {
+        let v: Vec<i64> = l.split_whitespace().map(|w| w.parse().unwrap()).collect();
+        [v[0], v[1], v[2], v[3], v[4]]
+    })
+    .collect()
+}
+
+#[test]
+fn after_one_hold_catch_up_feeds_by_its_rule_until_extra_delay_is_back_within_a_turn_inside_2_s() {
+    let (_, trace) = run(&[], &trace_path("catchup"), &ONE_HOLD);
+    let underrun: i64 = trace.lines().find_map(|l| l.strip_prefix("underrun ")).and_then(|l| l.split_whitespace().next()).unwrap().parse().unwrap();
+    let rows = fed(&trace);
+    let resumed = rows.iter().position(|r| r[0] == underrun).unwrap();
+    let before = rows[resumed - 1][4];
+    assert!(rows[resumed][4] >= 200_000, "{:?}", rows[resumed]);
+    let back = rows[resumed..].iter().position(|r| r[4] <= before + STEP_US).map_or(rows.len() - 1, |i| resumed + i);
+    assert!(rows[back][4] <= before + STEP_US, "extra {:?} before {before}", rows[back]);
+    assert!(rows[back][1] - rows[resumed][1] <= 2_000_000, "{:?} after {:?}", rows[back], rows[resumed]);
+    for w in rows[resumed..=back].windows(2) {
+        assert!(w[1][1] - w[0][1] >= CATCH_UP_GAP_US, "{w:?}");
+        assert_eq!(w[0][4] - w[1][4], w[1][2] - w[1][1], "{w:?}");
+    }
 }
