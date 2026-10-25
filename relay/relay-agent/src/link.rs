@@ -2,6 +2,7 @@ use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
 use std::io::{self, ErrorKind};
 use std::net::{SocketAddr, UdpSocket};
+use std::os::fd::AsRawFd;
 use std::time::{Duration, Instant};
 
 use relay_proto::agent::{Agent, AgentConfig, AgentError, Fed};
@@ -14,7 +15,6 @@ use relay_proto::Micros;
 pub const HANDSHAKE_TRIES: u32 = 20;
 pub const HANDSHAKE_RETRY: Duration = Duration::from_millis(250);
 pub const LEAVE_COPIES: usize = 3;
-const MIN_WAIT: Duration = Duration::from_micros(50);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Tuning {
@@ -46,12 +46,33 @@ pub struct Link {
     chosen_at: Option<Micros>,
 }
 
+const POLLIN: i16 = 1;
+
+#[repr(C)]
+struct PollFd {
+    fd: i32,
+    events: i16,
+    revents: i16,
+}
+
+#[repr(C)]
+struct Timespec {
+    tv_sec: i64,
+    tv_nsec: i64,
+}
+
+extern "C" {
+    fn ppoll(fds: *mut PollFd, nfds: u64, timeout: *const Timespec, sigmask: *const u8) -> i32;
+}
+
 fn bind_for(server: SocketAddr) -> io::Result<UdpSocket> {
-    if server.is_ipv4() {
+    let socket = if server.is_ipv4() {
         UdpSocket::bind("0.0.0.0:0")
     } else {
         UdpSocket::bind("[::]:0")
-    }
+    }?;
+    socket.set_nonblocking(true)?;
+    Ok(socket)
 }
 
 fn quiet(e: &io::Error) -> bool {
@@ -70,11 +91,26 @@ fn recv(
     wait: Duration,
     buf: &mut [u8],
 ) -> io::Result<Option<(usize, SocketAddr)>> {
-    socket.set_read_timeout(Some(wait.max(MIN_WAIT)))?;
+    if !readable(socket, wait)? {
+        return Ok(None);
+    }
     match socket.recv_from(buf) {
         Ok(got) => Ok(Some(got)),
         Err(e) if quiet(&e) => Ok(None),
         Err(e) => Err(e),
+    }
+}
+
+fn readable(socket: &UdpSocket, wait: Duration) -> io::Result<bool> {
+    let mut fd = PollFd { fd: socket.as_raw_fd(), events: POLLIN, revents: 0 };
+    // SO_RCVTIMEO counts in 1 ms jiffies; ppoll sleeps on an hrtimer, which wakes late by its slack
+    let timeout = Timespec { tv_sec: wait.as_secs() as i64, tv_nsec: wait.subsec_nanos() as i64 };
+    match unsafe { ppoll(&mut fd, 1, &timeout, std::ptr::null()) } {
+        n if n < 0 => {
+            let e = io::Error::last_os_error();
+            if quiet(&e) { Ok(false) } else { Err(e) }
+        }
+        n => Ok(n > 0),
     }
 }
 
