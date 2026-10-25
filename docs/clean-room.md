@@ -81,6 +81,12 @@ allowed only as follows:
 - **The scan.** Locating the LAN provider on a Warcraft build is done only on
   our own offline pool clients, which hold no Battle.net account; never on a
   signed-in client or a player's.
+- **The offline provider write.** On a build that has no LAN provider to
+  turn on, writing the missing provider into the running game is allowed
+  only on our own offline test clients, which hold no Battle.net account
+  (Tom, 25 October 2026). No player build and no signed-in client may use
+  it; letting players use it needs a new decision from Tom after it works
+  offline.
 - **The test.** Before any player sees a switch build, it passes end to end on
   a spare signed-in test account of ours.
 
@@ -88,14 +94,15 @@ Nothing else is allowed: no other read or write of game memory, no reading
 hidden game state, no sending or changing match input, no anti-cheat evasion
 (a refused or detected switch reports unavailable and stops), nothing in
 ranked or ladder play, and no W3Champions code; their FLO is a reference for
-behaviour only. What the scan or switch shows never decides Wisp's or
-Smashcraft's behaviour.
+behaviour only. What the scan, switch or offline provider write shows never
+decides Wisp's or Smashcraft's behaviour.
 
 The switch's addresses, offsets, byte patterns and procedure live in a private
-repository and ship compiled inside the client. Wisp, Smashcraft and
-smashcraft-client are public: their code, issues, pull requests and docs see
-only the interface (enable the LAN provider, returning ok or an error), and
-the rest of this page applies to them unchanged.
+repository and ship compiled inside the client. The offline provider write's
+internals live in the same private repository and never ship in any client.
+Wisp, Smashcraft and smashcraft-client are public: their code, issues, pull
+requests and docs see only the interface (enable the LAN provider, returning
+ok or an error), and the rest of this page applies to them unchanged.
 
 After a Warcraft patch the switch may stop working. It accepts only builds it
 was checked on, so on a new build Smashcraft Servers reports itself
