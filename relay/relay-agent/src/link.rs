@@ -2,7 +2,6 @@ use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
 use std::io::{self, ErrorKind};
 use std::net::{SocketAddr, UdpSocket};
-use std::os::fd::AsRawFd;
 use std::time::{Duration, Instant};
 
 use relay_proto::agent::{Agent, AgentConfig, AgentError, Fed};
@@ -11,6 +10,8 @@ use relay_proto::control::{self, Control, KIND_CHALLENGE};
 use relay_proto::stream::{self, RoomStream, KIND_STREAM};
 use relay_proto::wire::{self, Packet, UpAction, KIND_COVER, KIND_DOWN, MAX_PACKET};
 use relay_proto::Micros;
+
+use crate::wait::Waiter;
 
 pub const HANDSHAKE_TRIES: u32 = 20;
 pub const HANDSHAKE_RETRY: Duration = Duration::from_millis(250);
@@ -44,25 +45,7 @@ pub struct Link {
     inbox: Vec<Vec<u8>>,
     arrivals: Option<Vec<(u32, Micros)>>,
     chosen_at: Option<Micros>,
-}
-
-const POLLIN: i16 = 1;
-
-#[repr(C)]
-struct PollFd {
-    fd: i32,
-    events: i16,
-    revents: i16,
-}
-
-#[repr(C)]
-struct Timespec {
-    tv_sec: i64,
-    tv_nsec: i64,
-}
-
-extern "C" {
-    fn ppoll(fds: *mut PollFd, nfds: u64, timeout: *const Timespec, sigmask: *const u8) -> i32;
+    waiter: Waiter,
 }
 
 fn bind_for(server: SocketAddr) -> io::Result<UdpSocket> {
@@ -87,11 +70,12 @@ fn quiet(e: &io::Error) -> bool {
 }
 
 fn recv(
+    waiter: &Waiter,
     socket: &UdpSocket,
     wait: Duration,
     buf: &mut [u8],
 ) -> io::Result<Option<(usize, SocketAddr)>> {
-    if !readable(socket, wait)? {
+    if !readable(waiter, socket, wait)? {
         return Ok(None);
     }
     match socket.recv_from(buf) {
@@ -101,16 +85,10 @@ fn recv(
     }
 }
 
-fn readable(socket: &UdpSocket, wait: Duration) -> io::Result<bool> {
-    let mut fd = PollFd { fd: socket.as_raw_fd(), events: POLLIN, revents: 0 };
-    // SO_RCVTIMEO counts in 1 ms jiffies; ppoll sleeps on an hrtimer, which wakes late by its slack
-    let timeout = Timespec { tv_sec: wait.as_secs() as i64, tv_nsec: wait.subsec_nanos() as i64 };
-    match unsafe { ppoll(&mut fd, 1, &timeout, std::ptr::null()) } {
-        n if n < 0 => {
-            let e = io::Error::last_os_error();
-            if quiet(&e) { Ok(false) } else { Err(e) }
-        }
-        n => Ok(n > 0),
+fn readable(waiter: &Waiter, socket: &UdpSocket, wait: Duration) -> io::Result<bool> {
+    match waiter.readable(socket, wait) {
+        Err(e) if quiet(&e) => Ok(false),
+        got => got,
     }
 }
 
@@ -145,6 +123,7 @@ impl Link {
         ask: impl Fn(u64, u64) -> Control,
     ) -> io::Result<Link> {
         let socket = bind_for(server)?;
+        let waiter = Waiter::new()?;
         let request = RandomState::new().build_hasher().finish();
         let mut cookie = 0;
         let mut buf = [0u8; MAX_PACKET + 1];
@@ -152,7 +131,7 @@ impl Link {
             socket.send_to(&control::encode(&ask(cookie, request)), server)?;
             let deadline = Instant::now() + HANDSHAKE_RETRY;
             while let Some(wait) = deadline.checked_duration_since(Instant::now()) {
-                let Some((n, from)) = recv(&socket, wait, &mut buf)? else {
+                let Some((n, from)) = recv(&waiter, &socket, wait, &mut buf)? else {
                     break;
                 };
                 if from != server {
@@ -194,6 +173,7 @@ impl Link {
                             inbox: Vec::new(),
                             arrivals: None,
                             chosen_at: None,
+                            waiter,
                         });
                     }
                     Ok(Control::Refused { request: r, reason }) if r == request => {
@@ -318,7 +298,7 @@ impl Link {
             let next = self.stream.next_wake().map_or(self.agent.next_wake(), |w| w.min(self.agent.next_wake()));
             let wake = self.origin + Duration::from_micros(next.max(0) as u64);
             let wait = wake.min(until).saturating_duration_since(now);
-            if let Some((n, from)) = recv(&self.socket, wait, &mut buf)? {
+            if let Some((n, from)) = recv(&self.waiter, &self.socket, wait, &mut buf)? {
                 if from == self.server {
                     tap(self.now(), &buf[..n]);
                     self.on_datagram(&buf[..n])?;

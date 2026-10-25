@@ -839,7 +839,9 @@ makes the late rate about p^D rather than about p.
   reports the link as too poor before the match. Turns are never dropped.
 - **Timers.** The agent needs millisecond deadlines. On Windows it uses a
   high-resolution waitable timer, because default sleeps are 15.6 ms
-  granular. C2 checks the feed schedule on Windows and Linux. The loopback
+  granular. C2 checks the feed schedule on Windows and Linux: the Windows
+  workflow's relay pacer job feeds 7,500 turns of 8 ms on windows-latest
+  and ubuntu-latest and fails on a p99 above 1 ms. The loopback
   TCP to the game sets `TCP_NODELAY`.
 
 **How it meets Smashcraft's frame-stamped inputs and rollback.** Smashcraft

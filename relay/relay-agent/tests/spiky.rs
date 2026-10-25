@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 use std::io::{BufRead, BufReader};
 use std::net::{SocketAddr, UdpSocket};
 use std::path::PathBuf;

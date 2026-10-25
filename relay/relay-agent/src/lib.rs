@@ -6,6 +6,7 @@ pub mod link;
 pub mod slots;
 pub mod stop;
 pub mod trace;
+pub mod wait;
 pub mod w3gs;
 
 pub use link::*;

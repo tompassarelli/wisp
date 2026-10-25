@@ -2,6 +2,7 @@ name: Windows
 
 # The platform-neutral core on Windows with no Linux layer (wisp:docs/platforms.md).
 # A separate workflow from CI, so a Windows failure doesn't open "main is red".
+# The relay pacer job runs beside its Linux twin so the two OSes' feed deadlines compare in one run.
 on:
   pull_request:
   push:
@@ -44,3 +45,26 @@ jobs:
         run: bun examples/sample/scripts/sample.ts headless
       - name: Map build and the platform boundary
         run: bun test test/map-build.test.ts -t '^(?!.*interrupting a map step)'
+
+  relay-pacer:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    name: relay pacer (${{ matrix.os }})
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: relay
+    steps:
+      - uses: actions/checkout@v4
+      - if: runner.os == 'Windows'
+        run: cargo test --locked -p relay -p relay-agent
+      - name: 60 s of 8 ms feeds
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          cargo test --locked -p relay-agent --test feed -- --ignored --nocapture 2>&1 | tee "$RUNNER_TEMP/pacer.txt"
+          { echo '```'; grep '^pacer ' "$RUNNER_TEMP/pacer.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

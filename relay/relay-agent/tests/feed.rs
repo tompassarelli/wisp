@@ -12,6 +12,8 @@ use relay_proto::Micros;
 const STEP_MS: u8 = 8;
 const FEEDS: usize = 200;
 const ARRIVALS: usize = 40;
+const PACED: usize = 7_500;
+const CHUNK: usize = 250;
 
 fn linked() -> (UdpSocket, Link, SocketAddr) {
     let server = UdpSocket::bind("127.0.0.1:0").unwrap();
@@ -28,15 +30,20 @@ fn linked() -> (UdpSocket, Link, SocketAddr) {
     (server, link, agent)
 }
 
-fn down(link: &Link, seq: u32, turns: Vec<Turn>) -> Vec<u8> {
+fn down(link: &Link, seq: u32, turn_from: u32, turns: Vec<Turn>) -> Vec<u8> {
     let now = link.now() as u64;
-    let d = Down { token: 7, seq, sent_us: now, base_us: now, action_ack: 0, checksum_ack: 0, turn_from: 0, turns };
+    let d = Down { token: 7, seq, sent_us: now, base_us: now, action_ack: 0, checksum_ack: 0, turn_from, turns };
     wire::encode(&Packet::Down(d)).unwrap()
 }
 
 fn median(mut late: Vec<Micros>) -> Micros {
     late.sort_unstable();
     late[late.len() / 2]
+}
+
+fn spread(mut late: Vec<Micros>) -> (Micros, Micros, Micros) {
+    late.sort_unstable();
+    (late[late.len() / 2], late[late.len() * 99 / 100], late[late.len() - 1])
 }
 
 fn sleeper_lateness(stop: &AtomicBool) -> Vec<Micros> {
@@ -54,11 +61,11 @@ fn a_link_with_no_incoming_packets_feeds_as_promptly_as_a_sleeping_thread_wakes(
     let (server, mut link, agent) = linked();
     let lobby = depth::min_packets(STEP_MS as Micros * 1000) as u32;
     for seq in 0..lobby {
-        server.send_to(&down(&link, seq, Vec::new()), agent).unwrap();
+        server.send_to(&down(&link, seq, 0, Vec::new()), agent).unwrap();
         link.step(Instant::now() + Duration::from_micros(200)).unwrap();
     }
     let turns = vec![Turn { step_ms: STEP_MS, actions: Vec::new() }; FEEDS + 20];
-    server.send_to(&down(&link, lobby, turns), agent).unwrap();
+    server.send_to(&down(&link, lobby, 0, turns), agent).unwrap();
     let stop = AtomicBool::new(false);
     let (fed, sleeps) = thread::scope(|s| {
         let sleeper = s.spawn(|| sleeper_lateness(&stop));
@@ -107,4 +114,38 @@ fn a_packet_arrival_wakes_the_link_as_promptly_as_a_sleeping_thread_wakes() {
     assert_eq!(late.len(), ARRIVALS, "{} of {ARRIVALS} challenges arrived", late.len());
     let (arrival, sleep) = (median(late), median(sleeps));
     assert!(arrival <= sleep + 500, "median arrival handled {arrival} us after its send, a sleeping thread {sleep} us");
+}
+
+#[test]
+#[ignore = "runs 60 s; the Windows workflow's relay pacer job runs it on windows-latest and ubuntu-latest"]
+fn sixty_seconds_of_8_ms_feeds_land_within_1_ms_of_their_deadlines_at_p99() {
+    let (server, mut link, agent) = linked();
+    let lobby = depth::min_packets(STEP_MS as Micros * 1000) as u32;
+    for seq in 0..lobby {
+        server.send_to(&down(&link, seq, 0, Vec::new()), agent).unwrap();
+        link.step(Instant::now() + Duration::from_micros(200)).unwrap();
+    }
+    for (i, from) in (0..PACED + 20).step_by(CHUNK).enumerate() {
+        let turns = vec![Turn { step_ms: STEP_MS, actions: Vec::new() }; CHUNK];
+        server.send_to(&down(&link, lobby + i as u32, from as u32, turns), agent).unwrap();
+    }
+    let stop = AtomicBool::new(false);
+    let (fed, sleeps) = thread::scope(|s| {
+        let sleeper = s.spawn(|| sleeper_lateness(&stop));
+        let mut fed = Vec::new();
+        let deadline = Instant::now() + Duration::from_secs(90);
+        while fed.len() < PACED && Instant::now() < deadline {
+            fed.extend(link.step(Instant::now() + Duration::from_millis(50)).unwrap());
+        }
+        stop.store(true, Ordering::Relaxed);
+        (fed, sleeper.join().unwrap())
+    });
+    assert!(fed.len() >= PACED, "fed {}", fed.len());
+    let (p50, p99, max) = spread(fed[..PACED].iter().map(|f| f.at - f.scheduled).collect());
+    let (s50, s99, smax) = spread(sleeps);
+    println!(
+        "pacer {}: {PACED} feeds of {STEP_MS} ms turns, late p50 {p50} us, p99 {p99} us, max {max} us; a sleeping thread beside it p50 {s50} us, p99 {s99} us, max {smax} us",
+        std::env::consts::OS
+    );
+    assert!(p99 <= 1_000, "p99 feed {p99} us late");
 }
