@@ -82,10 +82,12 @@ allowed only as follows:
   our own offline pool clients, which hold no Battle.net account; never on a
   signed-in client or a player's.
 - **The offline provider write.** On a build that has no LAN provider to
-  turn on, writing the missing provider into the running game is allowed
-  only on our own offline test clients, which hold no Battle.net account
-  (Tom, 25 October 2026). No player build and no signed-in client may use
-  it; letting players use it needs a new decision from Tom after it works
+  turn on, writing the missing provider into the running game, and learning
+  what it must do by logging the provider calls that pass through our own
+  code, is allowed only on our own offline test clients, which hold no
+  Battle.net account (Tom, 25 October 2026; the logging is the lead's ruling
+  under that decision). No player build and no signed-in client may use it;
+  letting players use it needs a new decision from Tom after it works
   offline.
 - **The test.** Before any player sees a switch build, it passes end to end on
   a spare signed-in test account of ours.
@@ -99,7 +101,8 @@ decides Wisp's or Smashcraft's behaviour.
 
 The switch's addresses, offsets, byte patterns and procedure live in a private
 repository and ship compiled inside the client. The offline provider write's
-internals live in the same private repository and never ship in any client.
+internals live in the same private repository and never ship in any client,
+and its call logs stay private and are never committed.
 Wisp, Smashcraft and smashcraft-client are public: their code, issues, pull
 requests and docs see only the interface (enable the LAN provider, returning
 ok or an error), and the rest of this page applies to them unchanged.
