@@ -26,6 +26,7 @@ pub struct AgentConfig {
     pub cover_cap_us: Micros,
     pub cover_every: u64,
     pub bursty: f64,
+    pub fixed_turns: Option<u32>,
 }
 
 impl AgentConfig {
@@ -47,6 +48,7 @@ impl AgentConfig {
             cover_cap_us: 66_667,
             cover_every: 1_000,
             bursty: 0.2,
+            fixed_turns: None,
         }
     }
 }
@@ -210,7 +212,7 @@ impl Agent {
 
     fn decide(&mut self) -> DepthChoice {
         self.choice_pending = false;
-        let choice = match self.transport {
+        let mut choice = match self.transport {
             Transport::Udp => self.choose_covered(),
             Transport::Tcp => self.lobby.choose_tcp(
                 self.period,
@@ -219,6 +221,10 @@ impl Agent {
                 self.cfg.margin_quantile,
             ),
         };
+        if let Some(turns) = self.cfg.fixed_turns {
+            choice.turns = turns;
+            choice.too_poor = false;
+        }
         self.cover = choice.cover;
         self.lobby_counts = self.lobby.counts();
         self.lobby_offsets = self.lobby.sorted_offsets();

@@ -73,6 +73,7 @@ fn trace_scenario(cell: &Cell, o: &Options, trace: &Trace) -> Scenario {
     laptop.up.one_way_us = trace.rtt_us - trace.rtt_us / 2;
     laptop.down_replay = Some(Replay::new(trace, s.lobby_us));
     laptop.up_replay = Some(Replay::new(trace, s.lobby_us));
+    laptop.fixed_depth_us = o.depth_us;
     s
 }
 
@@ -88,6 +89,7 @@ fn run_rows(cells: Vec<(Cell, Scenario)>, period_us: Micros) -> Vec<Row> {
                     period_us,
                     outcome: sim::run(s),
                     blackouts: Vec::new(),
+                    fixed_depth_us: s.agents[0].fixed_depth_us,
                 })
             })
             .collect();
@@ -165,7 +167,7 @@ pub fn main(o: &Options, name: &str, period_us: Micros) {
         cells.push((c, s));
     }
     let rows = run_rows(cells, period_us);
-    print!("{}{}{}", render(&rows), describe(&trace, &windows), bytes_line(&rows));
+    print!("{}{}{}", render(&rows, true), describe(&trace, &windows), bytes_line(&rows));
 }
 
 #[cfg(test)]
@@ -191,5 +193,38 @@ mod tests {
         let kept = cut(&trace, &windows);
         assert_eq!(kept.delays_us.len(), d.len() - 14_407);
         assert_eq!(kept.delays_us.iter().flatten().max(), Some(&254_797));
+    }
+
+    fn args(extra: &[&str]) -> Options {
+        let mut a = vec!["--trace".to_string(), "t".to_string()];
+        a.extend(extra.iter().map(|x| x.to_string()));
+        crate::options(&a).unwrap()
+    }
+
+    #[test]
+    fn depth_ms_fixes_the_laptop_only_in_microseconds() {
+        assert_eq!(args(&[]).depth_us, None);
+        let o = args(&["--depth-ms", "30"]);
+        assert_eq!(o.depth_us, Some(30_000));
+        let trace = load("traces/laptop-wifi-to-nexus-2026-10-25.trace").unwrap();
+        let c = Cell { rtt_ms: 44, kind: Kind::Trace(false), seed: 1 };
+        let s = trace_scenario(&c, &o, &trace);
+        assert_eq!(s.agents[0].fixed_depth_us, Some(30_000));
+        assert_eq!(s.agents[1].fixed_depth_us, None);
+    }
+
+    #[test]
+    fn a_fixed_row_says_so_and_only_trace_tables_get_frame_columns() {
+        let o = args(&[]);
+        let c = Cell { rtt_ms: 44, kind: Kind::Clean, seed: 1 };
+        let (mut s, _) = scenario(&c, &o, 10 * SECOND);
+        s.agents[0].fixed_depth_us = Some(30_000);
+        let rows = run_rows(vec![(c, s)], 8_000);
+        let row = render(&rows, true).lines().nth(2).unwrap().to_string();
+        assert!(row.contains("| 4 fixed (30.0 ms rounded to 32.0 ms)/3, 32.0 ms |"), "{row}");
+        assert_eq!(row.matches('|').count(), 16, "{row}");
+        assert!(row.ends_with("| 0.00/0.00 |"), "{row}");
+        let grid = render(&rows, false);
+        assert!(grid.lines().all(|l| l.matches('|').count() == 13), "{grid}");
     }
 }

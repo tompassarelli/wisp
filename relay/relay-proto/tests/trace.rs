@@ -86,6 +86,7 @@ fn replaying(down: Option<Replay>) -> AgentSpec {
         udp_blocked: false,
         down_replay: down,
         up_replay: None,
+        fixed_depth_us: None,
     }
 }
 

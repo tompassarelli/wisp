@@ -75,6 +75,7 @@ struct Options {
     margin: Option<f64>,
     cover: bool,
     max_depth_us: Option<Micros>,
+    depth_us: Option<Micros>,
     trace: Option<String>,
 }
 
@@ -91,6 +92,7 @@ struct Row {
     period_us: Micros,
     outcome: Outcome,
     blackouts: Vec<(Micros, Micros)>,
+    fixed_depth_us: Option<Micros>,
 }
 
 fn scenario(cell: &Cell, o: &Options, match_us: Micros) -> (Scenario, Vec<(Micros, Micros)>) {
@@ -111,6 +113,7 @@ fn scenario(cell: &Cell, o: &Options, match_us: Micros) -> (Scenario, Vec<(Micro
         udp_blocked: matches!(cell.kind, Kind::UdpBlocked(_)),
         down_replay: None,
         up_replay: None,
+        fixed_depth_us: None,
     };
     let blackouts: Vec<(Micros, Micros)> = match cell.kind {
         Kind::Blackout(_) => (1..)
@@ -224,25 +227,57 @@ fn rate(row: &Row, f: impl Fn(&sim::AgentOutcome) -> u64) -> u64 {
         .unwrap_or(0)
 }
 
-fn render_row(row: &Row) -> String {
+fn depth_label(row: &Row, i: usize, a: &sim::AgentOutcome) -> String {
+    let fixed = match row.fixed_depth_us {
+        Some(asked) if i == 0 => {
+            let got = a.choice.turns as Micros * row.period_us;
+            if got == asked {
+                " fixed".to_string()
+            } else {
+                format!(" fixed ({} ms rounded to {} ms)", ms(asked), ms(got))
+            }
+        }
+        _ => String::new(),
+    };
+    format!(
+        "{}{}{}{fixed}",
+        a.choice.turns,
+        if a.cover > 0 {
+            format!("+{}", a.cover)
+        } else {
+            String::new()
+        },
+        if a.choice.too_poor { "!" } else { "" }
+    )
+}
+
+fn frame_columns(row: &Row) -> String {
+    let per10 = |f: fn(&sim::Frames) -> f64| {
+        let v: Vec<String> = row
+            .outcome
+            .agents
+            .iter()
+            .map(|a| format!("{:.2}", f(&a.frames) * 10.0 / row.minutes))
+            .collect();
+        v.join("/")
+    };
+    format!(
+        " {} | {} | {} |",
+        per10(|f| f.visible_stalls as f64),
+        per10(|f| f.frozen as f64),
+        per10(|f| f.stretched_us as f64 / SECOND as f64),
+    )
+}
+
+fn render_row(row: &Row, frames: bool) -> String {
     let agents = &row.outcome.agents;
     let per10: Vec<f64> = (0..agents.len())
         .map(|i| counted_underruns(row, i) as f64 * 10.0 / row.minutes)
         .collect();
     let depths: Vec<String> = agents
         .iter()
-        .map(|a| {
-            format!(
-                "{}{}{}",
-                a.choice.turns,
-                if a.cover > 0 {
-                    format!("+{}", a.cover)
-                } else {
-                    String::new()
-                },
-                if a.choice.too_poor { "!" } else { "" }
-            )
-        })
+        .enumerate()
+        .map(|(i, a)| depth_label(row, i, a))
         .collect();
     let drains: Vec<Option<Micros>> = agents
         .iter()
@@ -252,7 +287,7 @@ fn render_row(row: &Row) -> String {
     let max_depth = worst(row, |a| chosen_depth(row, a) + a.stats.max_extra_us);
     let per10_text: Vec<String> = per10.iter().map(|u| format!("{u:.2}")).collect();
     format!(
-        "| {} ms | {} | {}, {} ms | {} ms | {} | {} | {} | {} | {}/{} | {} | {} | {} |\n",
+        "| {} ms | {} | {}, {} ms | {} ms | {} | {} | {} | {} | {}/{} | {} | {} | {} |{}\n",
         row.rtt_ms,
         row.kind.label(),
         depths.join("/"),
@@ -269,15 +304,24 @@ fn render_row(row: &Row) -> String {
             .desync
             .map_or("none".to_string(), |t| format!("turn {t}")),
         verdict(row, &per10, &drains),
+        if frames { frame_columns(row) } else { String::new() },
     )
 }
 
-fn render(rows: &[Row]) -> String {
-    let mut out = String::from(
-        "| RTT | Loss | D (A/B), depth | Max depth | Underruns per 10 min (A/B) | Catch-up after blackout | Delivery p50/p99/p99.9 | Own echo p50/p99 | Bytes/s down/up | Clock stops | Desync | Bar |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n",
+fn render(rows: &[Row], frames: bool) -> String {
+    let (head, rule) = if frames {
+        (
+            " Visible stalls per 10 min (A/B) | Frozen frames per 10 min (A/B) | Stretched s per 10 min (A/B) |",
+            "---|---|---|",
+        )
+    } else {
+        ("", "")
+    };
+    let mut out = format!(
+        "| RTT | Loss | D (A/B), depth | Max depth | Underruns per 10 min (A/B) | Catch-up after blackout | Delivery p50/p99/p99.9 | Own echo p50/p99 | Bytes/s down/up | Clock stops | Desync | Bar |{head}\n|---|---|---|---|---|---|---|---|---|---|---|---|{rule}\n",
     );
     for row in rows {
-        out.push_str(&render_row(row));
+        out.push_str(&render_row(row, frames));
     }
     out
 }
@@ -321,6 +365,10 @@ fn options(args: &[String]) -> Option<Options> {
         Some(ms) => Some(ms.parse::<Micros>().ok().filter(|&ms| ms > 0)? * 1000),
         None => None,
     };
+    let depth_us = match value(args, "--depth-ms") {
+        Some(ms) => Some(ms.parse::<Micros>().ok().filter(|&ms| ms > 0)? * 1000),
+        None => None,
+    };
     Some(Options {
         minutes,
         rtts_ms,
@@ -328,6 +376,7 @@ fn options(args: &[String]) -> Option<Options> {
         margin,
         cover,
         max_depth_us,
+        depth_us,
         trace,
     })
 }
@@ -336,7 +385,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(o) = options(&args) else {
         eprintln!(
-            "usage: relay-bench --grid|--trace FILE [--minutes N] [--rtts MS,...] [--steps 8|17,17,16] [--margin QUANTILE] [--no-cover] [--max-depth-ms MS]"
+            "usage: relay-bench --grid|--trace FILE [--minutes N] [--rtts MS,...] [--steps 8|17,17,16] [--margin QUANTILE] [--no-cover] [--max-depth-ms MS] [--depth-ms MS]"
         );
         std::process::exit(2);
     };
@@ -375,11 +424,12 @@ fn main() {
                         period_us,
                         outcome: sim::run(&s),
                         blackouts,
+                        fixed_depth_us: None,
                     }
                 })
             })
             .collect();
         handles.into_iter().map(|h| h.join().unwrap()).collect()
     });
-    print!("{}", render(&rows));
+    print!("{}", render(&rows, false));
 }

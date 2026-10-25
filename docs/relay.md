@@ -978,6 +978,41 @@ made `cargo run -p relay-bench` ambiguous.
   agent asked for no cover, and cover wouldn't help, because every copy in
   a slot waits out the same stall. The depth rule is unchanged in this box.
 
+#### Fixed depth and visible stalls (wisp#53, box B1)
+
+`--depth-ms MS` fixes the laptop's (agent A's) depth instead of the depth
+rule's choice, rounded to whole 8 ms turns; the D column says `fixed` after
+A's turns, and names the rounding when the asked depth isn't a whole number
+of turns. B keeps the rule's choice. Without the flag the depth is the
+rule's, as above.
+
+Trace tables (not `--grid`, whose output is byte-identical) gain three
+columns at the end, per agent per 10 minutes of match, counted on the
+agent's clock between match start and match end:
+
+- **Visible stalls.** Gaps between consecutive feeds at least one 60 Hz
+  frame (16.7 ms) longer than the turn step. Every match has one: the
+  agent feeds turn 0, then waits about 120 ms for turn 1.
+- **Frozen frames.** 60 Hz frames, counted from match start, in which the
+  agent fed no turn.
+- **Stretched seconds.** Zero until box B2 adds half-speed feeding.
+
+These measure; no agent behaviour changes. The rows at 32 and 64 ms
+(`--trace traces/laptop-wifi-to-nexus-2026-10-25.trace --depth-ms 32`,
+then `64`; the independent-loss rows are as above plus the new columns):
+
+| RTT | Loss | D (A/B), depth | Max depth | Underruns per 10 min (A/B) | Catch-up after blackout | Delivery p50/p99/p99.9 | Own echo p50/p99 | Bytes/s down/up | Clock stops | Desync | Bar | Visible stalls per 10 min (A/B) | Frozen frames per 10 min (A/B) | Stretched s per 10 min (A/B) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 44 ms | laptop Wi-Fi trace, whole | 4 fixed/3, 32.0 ms | 254.1 ms | 723.53/0.00 | – | 25.1/119.6/164.1 ms | 90.9/191.0 ms | 10542/10051 | 0 | none | fail (underruns) | 586.05/1.00 | 1938.77/9.03 | 0.00/0.00 |
+| 44 ms | laptop Wi-Fi trace, rescans cut | 4 fixed/3, 32.0 ms | 254.1 ms | 220.04/0.00 | – | 24.7/60.6/134.6 ms | 90.8/139.6 ms | 10108/9517 | 0 | none | fail (underruns) | 72.10/1.24 | 193.93/7.46 | 0.00/0.00 |
+| 44 ms | laptop Wi-Fi trace, whole | 8 fixed/3, 64.0 ms | 254.1 ms | 593.07/0.00 | – | 25.1/119.6/164.1 ms | 122.3/216.5 ms | 10542/10065 | 0 | none | fail (underruns) | 538.88/1.00 | 836.92/9.03 | 0.00/0.00 |
+| 44 ms | laptop Wi-Fi trace, rescans cut | 8 fixed/3, 64.0 ms | 254.1 ms | 54.70/0.00 | – | 24.7/60.6/134.6 ms | 120.7/165.1 ms | 10108/9522 | 0 | none | fail (underruns) | 28.59/1.24 | 88.26/11.19 | 0.00/0.00 |
+
+With the rescans cut, doubling the depth from 32 to 64 ms takes the laptop
+from 72 visible stalls and 194 frozen frames per 10 minutes to 29 and 88;
+the whole trace still freezes 837 frames per 10 minutes at 64 ms, most of
+them in the rescans. B's frozen frames (7–11) are mostly the match's start-up.
+
 ## Lobby and game on the agent (box R8)
 
 The agent ports host.ts's lobby and game loop to Rust. host.ts is Wisp's

@@ -14,6 +14,10 @@ pub fn max_turns(period_us: Micros) -> u32 {
     (MAX_DEPTH_US / period_us).max(1) as u32
 }
 
+pub fn whole_turns(depth_us: Micros, period_us: Micros) -> u32 {
+    ((depth_us + period_us / 2) / period_us).max(1) as u32
+}
+
 pub fn min_packets(period_us: Micros) -> usize {
     (MEASURE_US / period_us).max(1) as usize
 }
