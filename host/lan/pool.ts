@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 import { Duration, Effect, Option, Schema } from "effect";
 import { reservedLease } from "./admission";
 import { LanFailure } from "./join";
-import { type LanPlugin, lanPluginProblem, loadLanPlugin } from "./plugin";
 import { UsageFailure, flagValues, wholeFlag } from "../cli/command";
 import { pollUntil } from "../cli/hostProcess";
 import { writeAtomic } from "../io/files";
@@ -59,13 +58,6 @@ export const installOf = (name: string) => join(prefixOf(name), "drive_c/Program
 export const retailOf = (name: string) => join(installOf(name), "_retail_");
 export const exeOf = (name: string) => join(retailOf(name), "x86_64/Warcraft III.exe");
 export const documentsOf = (name: string) => documentsFolder(prefixOf(name));
-
-const installedPlugin = Effect.suspend(() => (lanPluginProblem() === undefined ? Effect.asSome(loadLanPlugin) : Effect.succeedNone));
-
-export const launchEnvironment = (name: string, network: boolean, plugin: Effect.Effect<Option.Option<LanPlugin>, LanFailure> = installedPlugin) => plugin.pipe(
-  Effect.flatMap((loaded) => Option.getOrUndefined(loaded)?.launchEnvironment?.({ name, prefix: prefixOf(name), install: installOf(name), offline: !network }) ?? Effect.succeed({})),
-);
-
 export const pairDirectory = (pair: number) => join(stateRoot(), `pair-${pair}`);
 
 export const poolHolderFile = (pair: number) => join(pairDirectory(pair), "pool.pid");
