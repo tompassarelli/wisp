@@ -9,12 +9,17 @@ use relay_proto::Micros;
 
 use crate::game::{GameHost, Output, Phase};
 use crate::link::{Link, Tuning};
+use crate::stop::StopHandle;
 use crate::trace::Trace;
 use crate::w3gs::{SockAddr, Splitter};
 
 const ANNOUNCE_US: Micros = 250_000;
 const PING_US: Micros = 3_000_000;
 const STEP: Duration = Duration::from_millis(1);
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
 
 #[derive(Clone, Debug)]
 pub struct HostConfig {
@@ -23,6 +28,7 @@ pub struct HostConfig {
     pub listen_port: u16,
     pub announce_ports: Vec<u16>,
     pub host: Option<(MapFacts, u8)>,
+    pub expect_map_sha1: Option<[u8; 20]>,
     pub trace: Option<PathBuf>,
     pub tuning: Tuning,
 }
@@ -79,6 +85,7 @@ pub struct AgentHost<'a> {
     next_ping: Micros,
     summary: HostSummary,
     trace: Option<Trace>,
+    stop: StopHandle,
 }
 
 impl<'a> AgentHost<'a> {
@@ -105,11 +112,16 @@ impl<'a> AgentHost<'a> {
             next_ping: PING_US,
             summary: HostSummary::default(),
             trace,
+            stop: StopHandle::default(),
         })
     }
 
     pub fn port(&self) -> io::Result<u16> {
         Ok(self.listener.local_addr()?.port())
+    }
+
+    pub fn stop_handle(&self) -> StopHandle {
+        self.stop.clone()
     }
 
     fn now(&self) -> Micros {
@@ -119,7 +131,7 @@ impl<'a> AgentHost<'a> {
     pub fn run(mut self) -> io::Result<HostSummary> {
         let line = format!("agent slot {} of room {:016x} listening on 127.0.0.1:{}", self.link.slot(), self.link.room(), self.port()?);
         (self.log)(line);
-        while !crate::stop::requested() {
+        while !crate::stop::requested() && !self.stop.stopped() {
             let now = self.now();
             self.accept()?;
             self.read_client()?;
@@ -225,7 +237,7 @@ impl<'a> AgentHost<'a> {
         for message in self.link.take_room() {
             match room::decode_from_relay(&message) {
                 Ok(event) => {
-                    if self.on_room(event) {
+                    if self.on_room(event)? {
                         return Ok(true);
                     }
                 }
@@ -244,26 +256,31 @@ impl<'a> AgentHost<'a> {
         Ok(false)
     }
 
-    fn on_room(&mut self, event: FromRelay) -> bool {
+    fn on_room(&mut self, event: FromRelay) -> io::Result<bool> {
         match event {
             FromRelay::Room(facts) => {
                 (self.log)(format!("room: p{} of {}, seed {:08x}, map {}", facts.you, facts.players, facts.seed, String::from_utf8_lossy(&facts.map.path)));
+                if let Some(expected) = self.cfg.expect_map_sha1.filter(|e| *e != facts.map.sha1) {
+                    self.link.leave()?;
+                    let message = format!("map SHA-1 {} differs from the room's {}", hex(&expected), hex(&facts.map.sha1));
+                    return Err(io::Error::new(ErrorKind::InvalidData, message));
+                }
                 self.game.get_or_insert_with(|| GameHost::new(facts));
             }
             FromRelay::Refused { reason } => {
                 (self.log)(format!("refused: {}", String::from_utf8_lossy(&reason)));
-                return true;
+                return Ok(true);
             }
             event => {
                 (self.log)(format!("room event {event:?}"));
-                let Some(game) = self.game.as_mut() else { return false };
+                let Some(game) = self.game.as_mut() else { return Ok(false) };
                 let packets = game.relay(event);
                 if let Some(c) = self.client.as_mut() {
                     c.write(packets);
                 }
             }
         }
-        false
+        Ok(false)
     }
 
     fn lobby(&mut self, now: Micros) -> io::Result<()> {

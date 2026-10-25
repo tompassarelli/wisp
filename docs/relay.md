@@ -1359,6 +1359,17 @@ and the lobby of remote players. No FLO code is copied.
 - **Conformance.** host.ts's `onPacket` hook records a pool session's bytes.
   The agent must produce the same lobby bytes for the same room. That
   transcript test keeps the two hosts from drifting.
+- **Expected map.** `HostConfig::expect_map_sha1` lets an embedder such as
+  smashcraft-client (smashcraft-client#26) name the map SHA-1 its player
+  has. When the room's facts arrive with a different SHA-1, the AgentHost
+  leaves the room and `run` returns an `InvalidData` error naming both
+  SHA-1s in hex, before the game sees the room, so no countdown starts. The
+  relay does not let a joiner leave and rejoin a slot, so the check belongs
+  in the agent, not before it. `None` (the binary's choice) skips the check.
+- **Stop per host.** `AgentHost::stop_handle` returns a `StopHandle` that
+  stops that host's `run` alone; `run` also stops on the process-wide
+  SIGINT/SIGTERM flag, which the binary keeps using. Several AgentHosts in
+  one process can then be cancelled one at a time.
 
 Built for wisp#37 (code box), in `relay/`:
 

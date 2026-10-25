@@ -39,6 +39,7 @@ fn config(args: &[String]) -> Result<(String, HostConfig, Option<u8>, Option<u64
         listen_port: 0,
         announce_ports: flag(args, "--announce").unwrap_or(CLIENT_PORTS).split(',').map(str::parse).collect::<Result<_, _>>().map_err(|e| format!("--announce: {e}"))?,
         host,
+        expect_map_sha1: None,
         trace: flag(args, "--trace").map(Into::into),
         tuning: Tuning { raise_headroom_us: millis(args, "--raise-headroom-ms")?, max_total_depth_us: millis(args, "--max-total-depth-ms")? },
     };

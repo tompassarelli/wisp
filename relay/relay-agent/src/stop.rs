@@ -1,4 +1,5 @@
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 static STOP: AtomicBool = AtomicBool::new(false);
 
@@ -19,4 +20,17 @@ pub fn on_signals() {
 
 pub fn requested() -> bool {
     STOP.load(Ordering::Relaxed)
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct StopHandle(Arc<AtomicBool>);
+
+impl StopHandle {
+    pub fn stop(&self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+
+    pub fn stopped(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
 }
