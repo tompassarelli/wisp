@@ -4,6 +4,12 @@
 declared by the game. `wisp client look`, `wisp client read`, `wisp client click`,
 `wisp client keys` and `wisp client chat` use that client's private desktop.
 
+Every `wisp client` action reads the clients file the game passes to
+`makeClient`, which the sample takes from `WISP_CLIENTS`. `--clients-file FILE`,
+anywhere in the arguments, names another file for that run, such as the LAN
+pool's `~/.local/state/wisp/lan/clients.json`. An option the action does not
+define fails with a usage error that names it.
+
 `wisp client watch [CLIENT...] [--once] [--json] [--record FILE]` reads its
 events; `wisp client wait CLIENT STATE... [--seconds N]` waits for a state.
 See [watching clients](watch.md).

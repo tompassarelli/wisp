@@ -79,7 +79,8 @@ on the staged output, never on the base or container.
 ## Play it and change it while it runs
 
 These commands drive signed-in clients on private desktops. `WISP_CLIENTS`
-names the clients file (default ~/.local/state/wisp/clients.json):
+names the clients file (default ~/.local/state/wisp/clients.json); `client`
+also takes `--clients-file FILE`, which wins over both:
 
 ```json
 {

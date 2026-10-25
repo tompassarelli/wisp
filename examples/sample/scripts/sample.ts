@@ -79,7 +79,7 @@ runMainCli("bun examples/sample/scripts/sample.ts", {
   map: { usage: "build --base BASE.w3m --out OUT.w3x [--container MAP.w3x] | rebuild MAP.w3x", load: async () => ([verb, ...args]) => verb === "build" ? build(args) : verb === "rebuild" ? rebuild(args) : Effect.fail(new UsageFailure({ problem: "map takes build or rebuild" })) },
   hot: { usage: "--data DIR [--data DIR ...] [--watch]", load: async () => makeHot({ project, sourceDirectory, sourceMapDirectory, filePrefix }) },
   fresh: { usage: "MAP.w3x [--rebuild] [--map-folder Maps/00-Wisp]   (WISP_CLIENTS=clients.json)", load: async () => fresh },
-  client: { usage: "look|read|click|keys|chat CLIENT ... | watch [CLIENT...] [--once] [--json] [--record FILE] | wait CLIENT STATE... [--seconds N]   (WISP_CLIENTS=clients.json)", load: async () => makeClient(clientsFile, { filePrefix }) },
+  client: { usage: "look|read|click|keys|chat CLIENT ... | watch [CLIENT...] [--once] [--json] [--record FILE] | wait CLIENT STATE... [--seconds N]   [--clients-file FILE] (default WISP_CLIENTS=clients.json)", load: async () => makeClient(clientsFile, { filePrefix }) },
   menus: {
     usage: "install|remove RETAIL_DIR | listen | host --folder F --map FILE --name NAME [--password P] [--start] | join --name NAME --password P | start | leave   [--port N]",
     load: async () => (await import("wisp/scripts/wisp/commands/menus")).makeMenus(),

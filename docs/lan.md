@@ -340,7 +340,8 @@ under `$XDG_STATE_HOME/wisp/lan/` (default `~/.local/state/wisp/lan/`):
 
 - `pool.json`: every pair a live pool holds, their agent sockets and desktops, whichever pool started them;
 - `clients.json`: every pool client in the clients-file schema
-  (`WISP_CLIENTS=~/.local/state/wisp/lan/clients.json`);
+  (`WISP_CLIENTS=~/.local/state/wisp/lan/clients.json`, or
+  `client ... --clients-file ~/.local/state/wisp/lan/clients.json`);
 - `pair-K/clients.json`: one pair's clients, named `a` and `b`, for tools
   written against two clients A and B;
 - `alarms.log`: one line per pair whose driver died and left it idle for 10

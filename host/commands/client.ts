@@ -24,7 +24,24 @@ const watchAction = (clientsFile: string, action: "wait", name: string | undefin
   yield* Console.log(describeView(view));
 }).pipe(Effect.provide(ClientWatch.layer(watch)), step(`${action} ${name ?? ""}`));
 
-export const makeClient = (stateFilePath: string, watch: WatchOptions = {}, doctor?: Command, signOut?: Command): Command => ([action, name, ...rest]) => action === "start" ? (doctor === undefined ? Effect.fail(new UsageFailure({ problem: "the game has not declared client recovery" })) : serviceStart(stateFilePath, [...(name === undefined ? [] : [name]), ...rest], doctor, watch)) : action === "stop" ? serviceStop(stateFilePath, [...(name === undefined ? [] : [name]), ...rest]) : action === "status" ? serviceStatus(stateFilePath, [...(name === undefined ? [] : [name]), ...rest], watch) : action === "sign-out" ? (signOut === undefined ? Effect.fail(new UsageFailure({ problem: "the game has not declared client sign-out" })) : signOut([...(name === undefined ? [] : [name]), ...rest])) : action === "watch" ? makeWatch(stateFilePath, watch)([...(name === undefined ? [] : [name]), ...rest]) : action === "doctor" ? (doctor === undefined ? Effect.fail(new UsageFailure({ problem: "the game has not declared client recovery" })) : serviceDoctor(stateFilePath, [...(name === undefined ? [] : [name]), ...rest], doctor)) : action === "wait" ? watchAction(stateFilePath, action, name, rest, watch) : Effect.gen(function*() {
+const undeclared = (what: string) => Effect.fail(new UsageFailure({ problem: `the game has not declared client ${what}` }));
+
+type ClientsService = Clients["Service"];
+type ClientTarget = ClientsService["all"][number];
+
+const readRegion = (clients: ClientsService, target: ClientTarget, ink: Ink, rest: readonly string[]) => Effect.gen(function*() {
+  const [x, y, width, height] = numbers(rest, 4) ?? [];
+  if (x === undefined || y === undefined || width === undefined || height === undefined) return yield* new UsageFailure({ problem: "read takes X Y W H" });
+  yield* Console.log((yield* clients.read(target, { x, y, width, height }, ink)).trim());
+});
+
+const clickPoint = (clients: ClientsService, target: ClientTarget, rest: readonly string[]) => Effect.gen(function*() {
+  const [x, y] = numbers(rest, 2) ?? [];
+  if (x === undefined || y === undefined) return yield* new UsageFailure({ problem: "click takes X Y" });
+  yield* clients.click(target, x, y);
+});
+
+const inputAction = (stateFilePath: string, watch: WatchOptions, action: string | undefined, name: string | undefined, rest: readonly string[]) => Effect.gen(function*() {
   const clients = yield* Clients;
   const target = clients.all.find((candidate) => candidate.name === name);
   if (target === undefined) return yield* new UsageFailure({ problem: `unknown client ${name}; known: ${clients.all.map((c) => c.name).join(", ")}` });
@@ -34,18 +51,10 @@ export const makeClient = (stateFilePath: string, watch: WatchOptions = {}, doct
       case "look":
         for (const word of yield* clients.words(target, ink)) yield* Console.log(`${word.x},${word.y} ${word.text}`);
         return;
-      case "read": {
-        const [x, y, width, height] = numbers(rest, 4) ?? [];
-        if (x === undefined || y === undefined || width === undefined || height === undefined) return yield* new UsageFailure({ problem: "read takes X Y W H" });
-        yield* Console.log((yield* clients.read(target, { x, y, width, height }, ink)).trim());
-        return;
-      }
-      case "click": {
-        const [x, y] = numbers(rest, 2) ?? [];
-        if (x === undefined || y === undefined) return yield* new UsageFailure({ problem: "click takes X Y" });
-        yield* clients.click(target, x, y);
-        return;
-      }
+      case "read":
+        return yield* readRegion(clients, target, ink, rest);
+      case "click":
+        return yield* clickPoint(clients, target, rest);
       case "chat":
         if (rest.length === 0) return yield* new UsageFailure({ problem: "chat takes TEXT" });
         yield* clients.batch(target, [{ kind: "keys", keys: ["Return"] }, { kind: "text", text: rest.join(" ") }, { kind: "keys", keys: ["Return"] }]);
@@ -59,3 +68,33 @@ export const makeClient = (stateFilePath: string, watch: WatchOptions = {}, doct
   });
   yield* run.pipe(step(`${action} ${name}`));
 }).pipe(Effect.provide(Layer.merge(Clients.layer(stateFilePath), ClientWatch.layer(watch))));
+
+const clientAction = (stateFilePath: string, watch: WatchOptions, doctor?: Command, signOut?: Command): Command => ([action, name, ...rest]) => {
+  const args = [...(name === undefined ? [] : [name]), ...rest];
+  switch (action) {
+    case "start": return doctor === undefined ? undeclared("recovery") : serviceStart(stateFilePath, args, doctor, watch);
+    case "stop": return serviceStop(stateFilePath, args);
+    case "status": return serviceStatus(stateFilePath, args, watch);
+    case "sign-out": return signOut === undefined ? undeclared("sign-out") : signOut(args);
+    case "watch": return makeWatch(stateFilePath, watch)(args);
+    case "doctor": return doctor === undefined ? undeclared("recovery") : serviceDoctor(stateFilePath, args, doctor);
+    case "wait": return watchAction(stateFilePath, action, name, rest, watch);
+    default: return inputAction(stateFilePath, watch, action, name, rest);
+  }
+};
+
+const ACTION_FLAGS: Readonly<Record<string, readonly string[]>> = { watch: ["--once", "--json", "--record"], wait: ["--seconds"] };
+
+const withoutClientsFile = (args: readonly string[]) =>
+  args.filter((arg, index) => arg !== "--clients-file" && !arg.startsWith("--clients-file=") && args[index - 1] !== "--clients-file");
+
+export const makeClient = (stateFilePath: string, watch: WatchOptions = {}, doctor?: Command, signOut?: Command): Command => (args) => {
+  const [clientsFile] = flagValues(args, "clients-file");
+  if ((args.includes("--clients-file") && clientsFile === undefined) || clientsFile === "") return Effect.fail(new UsageFailure({ problem: "--clients-file takes a FILE" }));
+  const rest = withoutClientsFile(args);
+  const [action = ""] = rest;
+  const known = ACTION_FLAGS[action] ?? [];
+  const unknownFlag = rest.find((arg) => arg.startsWith("--") && !known.includes(arg.split("=")[0]!));
+  if (unknownFlag !== undefined) return Effect.fail(new UsageFailure({ problem: `client ${action} has no option ${unknownFlag}` }));
+  return clientAction(clientsFile ?? stateFilePath, watch, doctor, signOut)(rest);
+};
