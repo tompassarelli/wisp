@@ -1307,6 +1307,40 @@ in sum with half-maximum radii 1 px wider, and every 24-level box edge within
 169.6 px higher than `camera()` places them and no wider, so the oracle is
 registered by the twin's centroid (`DX,DY` 0,-169.6).
 
+### Team-glow plane replicas and the real body at Smashcraft's camera
+
+`test/glow6e/` ([#6](https://github.com/tompassarelli/wisp/issues/6)) holds
+W2's Warden forward-air frames 57, 58, 60 and 61 at the camera and place the
+W2-flat headless scenes record. It shows each frame's glow three ways as our
+own models, built from Wisp's pose of the glow geoset: its 8 planes on
+billboarded bones (`planes`), the same planes frozen where Wisp turns them
+(`flat`), and the billboarded planes with the 3 static floor quads (`all`).
+It also shows the real body with and without the glow geoset, and a
+billboarded twin of our own texture at the camera target for angles of
+attack 350°, 330°, 310° and 285° and at C1's camera. Phases last 6 s on a
+black floor and wall. `build.ts` takes the glow-free body and the model its
+glow geoset comes from as private inputs. `oracle.ts` predicts each phase's
+added light per pixel by Wisp's texel rule summed over overlapping
+triangles, and `read.ts` compares shown minus hidden (the body with glow
+minus without) with it.
+
+```sh
+bun test/glow6e/build.ts BASE.w3m GLOW_FREE_BODY.mdx GLOW_SOURCE.mdx PRIVATE_OUT.w3x
+bun wisp lan solo PRIVATE_OUT.w3x --pair K
+bun test/glow6e/oracle.ts TEAMGLOW00.png build/glow6e/assets PRIVATE_ORACLE
+bun test/glow6e/read.ts PRIVATE_CAPTURES PRIVATE_ORACLE
+```
+
+Measured on 3.0.0.24268, Classic `capture-classic-1080`, 25 October 2026:
+every replica matches Wisp's prediction on all four frames (light sums
+within 0.2%, centroids within 0.13 px, 24-level boxes within 1 px), so
+native orients, sizes and adds billboarded team-glow planes as Wisp does.
+With the body's timeline time set again every 1/32 s, its glow ends within
+1 px of Wisp's prediction on the right, top and bottom of every frame. The
+twin sits where `camera()` puts it at 350°, but higher at steeper angles:
+27.8, 79.9 and 169.4 px at 330°, 310° and 285°, and 169.65 px at C1's
+camera, whatever the distance or field of view.
+
 ## Warcraft 3.0 natives
 
 The typed API is generated from the installed 3.0.1 build 24342 `common.j`
