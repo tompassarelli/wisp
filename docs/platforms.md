@@ -1,15 +1,18 @@
 # Platforms
 
-On Linux, clicks, keys, chat and input batches reach a client through its private
-desktop's own VNC server (`private-desktop.sh control RUN ...`, from the
-private-desktop-development skill on `agents path`), as one control run per
-batch. Headless labwc drops XTEST pointer motion, and Wine ignores the Shift
+On Linux, keys, chat and the key runs of input batches reach a client through
+its private desktop's own VNC server (`private-desktop.sh control RUN ...`, from
+the private-desktop-development skill on `agents path`), one control run per
+stretch of key actions between clicks. Clicks stay on XTEST, because every VNC
+pointer event, a button included, moves the game's pointer to the compositor's
+cursor: each click moves the pointer with `xdotool mousemove_relative` until
+`getmouselocation` reads the target (sending one VNC move first on a retry,
+because headless labwc drops XTEST motion until a compositor pointer exists),
+then presses and releases with `xdotool`. Wine ignores the Shift
 that VNC sends only as modifier state, so shifted characters are typed with a
 real Shift held around them; text with a character a US layout can't type is
 refused before anything is sent. Sign-in secrets still go to `xdotool type` on
-stdin, so a secret never sits on a command line, and a client with no run
-folder (the owner's own desktop during a game's sign-in) is clicked through
-`xdotool`. `xdotool`, `wlrctl`, `grim`
+stdin, so a secret never sits on a command line. `xdotool`, `wlrctl`, `grim`
 and `tesseract` come from `PATH`, else from `nix build nixpkgs#NAME`.
 
 `InputInjection.preflight(client)` verifies focus on the client's private Warcraft

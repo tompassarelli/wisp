@@ -4,6 +4,8 @@ export type InputAction =
   | { readonly kind: "click"; readonly x: number; readonly y: number; readonly settleMillis?: number; readonly holdMillis?: number }
   | { readonly kind: "wait"; readonly millis: number };
 
+export type KeyAction = Exclude<InputAction, { readonly kind: "click" }>;
+
 const SENDING_KEYS = new Set(["return", "kp_enter", "iso_enter", "linefeed"]);
 export const sendsChat = (names: readonly string[]) => names.some((name) => name.split("+").some((key) => SENDING_KEYS.has(key.toLowerCase())));
 
@@ -35,7 +37,7 @@ const keyActions = (action: Extract<InputAction, { kind: "keys" }>) => action.ke
   return ["key", name, ...pauseFor(action.delayMillis ?? 12)];
 });
 
-export function vncActions(actions: readonly InputAction[]): readonly string[] {
+export function vncActions(actions: readonly KeyAction[]): readonly string[] {
   const out: string[] = [];
   const pause = (millis: number) => { out.push(...pauseFor(millis)); };
   for (const action of actions) {
@@ -49,13 +51,6 @@ export function vncActions(actions: readonly InputAction[]): readonly string[] {
           out.push(...(SHIFTED.has(character) ? ["keydown", "shift", "key", name, "keyup", "shift"] : ["key", name]));
           pause(action.delayMillis ?? TEXT_DELAY_MILLIS);
         }
-        break;
-      case "click":
-        out.push("move", String(action.x), String(action.y));
-        pause(action.settleMillis ?? 120);
-        out.push("mousedown", "1");
-        pause(action.holdMillis ?? 60);
-        out.push("mouseup", "1");
         break;
       case "wait":
         pause(action.millis);

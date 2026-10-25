@@ -3,7 +3,7 @@ import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Exit, Layer, Option } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { type InputAction, untypable, vncActions, vncKey } from "../../warcraft/inputBatch";
+import { type InputAction, type KeyAction, untypable, vncActions, vncKey } from "../../warcraft/inputBatch";
 import { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, runTool } from "../../warcraft/desktopClient";
 import { skillScript } from "../../../cli/hostProcess";
 import { step } from "../../../cli/timings";
@@ -60,7 +60,7 @@ const focus = (client: Client, title: string, strict: boolean) =>
     yield* runTool(client.name, `activate ${named} window`, [client.tools.xdotool, "windowactivate", "--sync", client.window], client.x11);
   });
 
-// Input goes through the desktop's own VNC server: headless labwc drops XTEST pointer motion, and Wine ignores VNC's modifier-only Shift.
+// Keys go through the desktop's VNC server, since Wine ignores VNC's modifier-only Shift; clicks stay on XTEST, since every VNC pointer event moves the game's pointer to the compositor's cursor.
 const control = (client: Client, operation: string, actions: readonly string[]) => Effect.gen(function*() {
   if (client.run === undefined) return yield* new DesktopFailure({ operation, client: client.name, cause: "not on a private desktop, so there is no VNC server to send input through" });
   const launcher = yield* skillScript("private-desktop-development", "scripts/private-desktop.sh").pipe(Effect.mapError(fail(operation, client.name)));
@@ -71,13 +71,24 @@ const send = (client: Client, operation: string, actions: readonly InputAction[]
   const typed = actions.flatMap((action) => (action.kind === "text" ? [action.text] : [])).join("");
   const bad = untypable(typed);
   if (bad !== undefined) return yield* new DesktopFailure({ operation, client: client.name, cause: `${JSON.stringify(bad)} has no US-layout key; nothing was sent` });
-  const planned = vncActions(actions);
-  if (planned.length === 0) return;
+  const steps = actions.reduce<(KeyAction[] | Extract<InputAction, { kind: "click" }>)[]>((out, action) => {
+    const last = out.at(-1);
+    if (action.kind === "click") out.push(action);
+    else if (Array.isArray(last)) last.push(action);
+    else out.push([action]);
+    return out;
+  }, []);
   const held = [...new Set(actions.flatMap((action) => (action.kind === "keys" ? action.keys : [])))];
-  const clicks = actions.some((action) => action.kind === "click");
-  const release = [...(clicks ? ["mouseup", "1"] : []), ...held.flatMap((key) => ["keyup", vncKey(key)]), ...(typed === "" ? [] : ["keyup", "shift"])];
-  yield* Effect.acquireUseRelease(Effect.void, () => control(client, operation, planned), (_, exit) =>
-    Exit.isSuccess(exit) || release.length === 0 ? Effect.void : control(client, `release after ${operation}`, release).pipe(Effect.ignore));
+  const release = [...held.flatMap((key) => ["keyup", vncKey(key)]), ...(typed === "" ? [] : ["keyup", "shift"])];
+  const play = Effect.forEach(steps, (step) => {
+    if (!Array.isArray(step)) return press(client, step.x, step.y, step.settleMillis, step.holdMillis);
+    const planned = vncActions(step);
+    return planned.length === 0 ? Effect.void : control(client, operation, planned);
+  }, { discard: true });
+  yield* Effect.acquireUseRelease(Effect.void, () => play, (_, exit) => Exit.isSuccess(exit) ? Effect.void : Effect.all([
+    actions.some((action) => action.kind === "click") ? runTool(client.name, `release button after ${operation}`, [client.tools.xdotool, "mouseup", "1"], client.x11) : Effect.void,
+    release.length === 0 ? Effect.void : control(client, `release after ${operation}`, release),
+  ], { discard: true }).pipe(Effect.ignore));
 });
 
 const preflight = (client: Client) => Effect.gen(function*() {
@@ -98,20 +109,31 @@ const pointer = (client: Client) =>
     }),
   );
 
-const pressOnOwnDesktop = (client: Client, x: number, y: number) =>
-  Effect.gen(function*() {
-    const from = yield* pointer(client);
-    yield* runTool(client.name, "move pointer", [client.tools.xdotool, "mousemove_relative", "--", String(x - from.x), String(y - from.y)], client.x11);
-    const at = yield* pointer(client);
-    if (at.x !== x || at.y !== y) return yield* new DesktopFailure({ operation: "move pointer", client: client.name, cause: `pointer at ${at.x},${at.y}, wanted ${x},${y}` });
-    yield* Effect.sleep("120 millis");
+const POINTER_TRIES = 3;
+
+function movePointer(client: Client, x: number, y: number) {
+  return Effect.gen(function*() {
+    for (let attempt = 0; ; attempt++) {
+      const at = yield* pointer(client);
+      if (at.x === x && at.y === y) return;
+      if (attempt === POINTER_TRIES) return yield* new DesktopFailure({ operation: "move pointer", client: client.name, cause: `pointer at ${at.x},${at.y} after ${POINTER_TRIES} moves, wanted ${x},${y}` });
+      if (attempt > 0 && client.run !== undefined) yield* control(client, "create compositor pointer", ["move", String(x), String(y)]);
+      yield* runTool(client.name, "move pointer", [client.tools.xdotool, "mousemove_relative", "--", String(x - at.x), String(y - at.y)], client.x11);
+    }
+  });
+}
+
+function press(client: Client, x: number, y: number, settleMillis = 120, holdMillis = 60) {
+  return Effect.gen(function*() {
+    yield* movePointer(client, x, y);
+    yield* Effect.sleep(`${settleMillis} millis`);
     yield* runTool(client.name, "press button", [client.tools.xdotool, "mousedown", "1"], client.x11);
-    yield* Effect.sleep("60 millis");
+    yield* Effect.sleep(`${holdMillis} millis`);
     yield* runTool(client.name, "release button", [client.tools.xdotool, "mouseup", "1"], client.x11);
   });
+}
 
-const pressAt = (client: Client, x: number, y: number) =>
-  client.run === undefined ? pressOnOwnDesktop(client, x, y) : send(client, `click ${x},${y}`, [{ kind: "click", x, y }]);
+const pressAt = (client: Client, x: number, y: number) => press(client, x, y);
 
 const batch = (client: Client, actions: readonly InputAction[]) =>
   send(client, "input batch", actions).pipe(step(`${client.name}: input batch (${actions.length} actions)`));
