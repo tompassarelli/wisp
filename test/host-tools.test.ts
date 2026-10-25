@@ -18,7 +18,8 @@ const sandbox = () => {
 
   writeFileSync(join(bin, "pw-dump"), "#!/bin/sh\nexit 0\n");
   writeFileSync(join(bin, "pw-cli"), "#!/bin/sh\nexit 1\n");
-  for (const tool of ["pw-dump", "pw-cli"]) chmodSync(join(bin, tool), 0o755);
+  writeFileSync(join(bin, "systemctl"), `#!/bin/sh\nexec "$WISP_TEST_BUN" "${join(fixtures, "systemctl.ts")}" "$@"\n`);
+  for (const tool of ["pw-dump", "pw-cli", "systemctl"]) chmodSync(join(bin, tool), 0o755);
   const env = {
     ...process.env,
     HOME: folder,
@@ -194,6 +195,29 @@ test("[boundary] lan pool: SIGTERM while a pair is still starting stops its agen
   const runner = pool(box, { WISP_TEST_AGENT_READY_MS: "20000" }, pair);
   await until(() => existsSync(join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${pair}`, "agent.pid")) && box.sessions().length === 1, 30, "the starting pair's agent");
   expect(existsSync(join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${pair}`, "agent.json"))).toBe(false);
+  runner.kill("SIGTERM");
+  const result = await leftovers(runner, box);
+  expect(result.code).not.toBe("still running");
+  expect({ processes: result.processes, sessions: result.sessions }).toEqual({ processes: 0, sessions: 0 });
+}, 60_000);
+
+test("[boundary] lan pool: an agent killed during its pair's start still has its clients' capacity scopes stopped, so none of its games outlive the pool", async () => {
+  const box = sandbox();
+  const pair = poolPair + 4;
+  const directory = join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${pair}`);
+  const die = join(box.env.HOME, "agent-die");
+  const runner = pool(box, { WISP_TEST_AGENT_READY_MS: "20000", WISP_TEST_AGENT_DIE: die }, pair);
+  await until(() => existsSync(join(directory, "agent.pid")) && ["a", "b"].every((side) => existsSync(join(directory, `lan${pair}${side}.err`))) && box.sessions().length === 1, 30, "the starting pair's agent and clients");
+  const agent = Number(readFileSync(join(directory, "agent.pid"), "utf8").trim());
+  writeFileSync(die, "");
+  await until(() => {
+    try {
+      return readFileSync(`/proc/${agent}/environ`, "latin1") === "";
+    } catch {
+      return true;
+    }
+  }, 10, "the killed agent's exit");
+  expect(existsSync(join(directory, "agent.json"))).toBe(false);
   runner.kill("SIGTERM");
   const result = await leftovers(runner, box);
   expect(result.code).not.toBe("still running");

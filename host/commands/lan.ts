@@ -152,7 +152,7 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
         stdout: join(directory, "session.out"),
         stderr: join(directory, "session.err"),
       });
-      yield* Effect.addFinalizer(() => stopAgent(pair));
+      yield* Effect.addFinalizer(() => stopAgent(pair).pipe(Effect.andThen(stopPairScopes(pair, outlivedStop))));
       const step = Effect.gen(function*() {
         if (existsSync(admissionFile(directory))) return yield* new CapacityDeferred({ reason: (yield* readJson(admissionFile(directory), AdmissionRefusal)).reason });
         if (!(yield* session.handle.isRunning.pipe(Effect.orElseSucceed(() => false)))) {
@@ -231,7 +231,7 @@ const pool: Command = (args) => Effect.gen(function*() {
     const agentFile = join(pairDirectory(pair), "agent.json");
     const runs = existsSync(agentFile) ? (yield* readJson(agentFile, AgentFile)).runs ?? {} : {};
 
-    yield* Effect.addFinalizer(() => started.stop.pipe(Effect.andThen(stopPairScopes(pair, outlivedStop)), Effect.andThen(Effect.sync(() => {
+    yield* Effect.addFinalizer(() => started.stop.pipe(Effect.andThen(Effect.sync(() => {
       for (const run of [runs.a, runs.b]) {
         if (run !== undefined && basename(run).startsWith("private-desktop.") && existsSync(join(run, "lifecycle-owned"))) rmSync(join(run, "active"), { force: true });
       }
