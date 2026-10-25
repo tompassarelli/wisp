@@ -15,7 +15,7 @@ import {
   PAIR_SIDES, agentFile, agentPidFile, agentSocket, alive, clientName, lanPlayRefusal, mapPackager, networkFlagProblem, pairClients, pairSides, pairCustody, pairDirectory, pairEntryFile, pairsHeldBy, livePairs, poolClientsFile, poolFile, poolHolder, poolHolderFile, poolOwners, playtestPairRefusal, readPool, reportPort, stopAgent, stopPairScopes, writeJson, writePoolClients, wrongUser,
 } from "../lan/pool";
 import { PROFILES, desktopSize } from "../os/warcraft/clientProfiles";
-import { DEFAULT_BUILD } from "../client/builds";
+import { DEFAULT_BUILD, profileFor } from "../client/builds";
 import { setupClient } from "../lan/setup";
 import { CapacityDeferred, admissionFile, capacityDeferral, deferredExit, pairAdmission, retryWhileDeferred } from "../lan/admission";
 
@@ -52,11 +52,13 @@ const setup: Command = (args) => Effect.gen(function*() {
   const [from] = flagValues(args, "from");
   if (from === undefined) return yield* new UsageFailure({ problem: "--from names an existing Warcraft III install folder (the one holding _retail_)" });
   const pairs = yield* number(args, "pairs", 1);
+  const [build = DEFAULT_BUILD] = flagValues(args, "build");
+  if (profileFor(build) === undefined) return yield* new UsageFailure({ problem: `--build ${build} has no build profile in builds/` });
 
   const chosen = flagValues(args, "pair").map((value) => wholeFlag(["--pair", value], "pair"));
   if (!chosen.every((pair) => typeof pair === "number")) return yield* new UsageFailure({ problem: "--pair takes a pair number" });
   for (const pair of chosen.length > 0 ? chosen : Array.from({ length: pairs }, (_, index) => index)) {
-    for (const side of PAIR_SIDES) yield* setupClient(clientName(pair, side), from, DEFAULT_BUILD, reportPort(pair, side), (line) => console.log(line));
+    for (const side of PAIR_SIDES) yield* setupClient(clientName(pair, side), from, build, reportPort(pair, side), (line) => console.log(line));
   }
 });
 
@@ -413,7 +415,7 @@ const netem: Command = (args) => Effect.gen(function*() {
   }
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | relayed MAP --relay-bin DIR [--pair K] [--turn-ms MS] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--udp-port N | --tcp-port N] | netem off --pair K | status [--pair K] | end --pair K | stop --pair K";
+export const LAN_USAGE = "setup --from INSTALL [--build BUILD] [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | relayed MAP --relay-bin DIR [--pair K] [--turn-ms MS] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--udp-port N | --tcp-port N] | netem off --pair K | status [--pair K] | end --pair K | stop --pair K";
 
 const ownerCheck = poolOwners.pipe(Effect.flatMap((owners) => {
   const refusal = wrongUser(process.getuid?.() ?? 0, owners, ["bun", ...process.argv.slice(1)]);
