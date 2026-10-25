@@ -45,6 +45,7 @@ const JourneyFile = Schema.Struct({
     Schema.Struct({ frame: Schema.Finite, player: Schema.Finite, chat: Schema.String }),
     Schema.Struct({ frame: Schema.Finite, player: Schema.Finite, key: Schema.Finite, meta: Schema.Finite, down: Schema.optionalKey(Schema.Boolean) }),
     Schema.Struct({ frame: Schema.Finite, player: Schema.Finite, mouse: Schema.Struct({ x: Schema.Finite, y: Schema.Finite, left: Schema.optionalKey(Schema.Boolean) }) }),
+    Schema.Struct({ frame: Schema.Finite, player: Schema.Finite, click: Schema.Struct({ x: Schema.Finite, y: Schema.Finite }) }),
     Schema.Struct({ frame: Schema.Finite, reload: Schema.Literal(true) }),
   ])),
 });

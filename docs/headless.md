@@ -128,6 +128,7 @@ export const JOURNEY: Journey = {
     { frame: 60, reload: true },
     { frame: 90, player: 1, key: 0x54, meta: 2 },
     { frame: 100, player: 0, mouse: { x: 640, y: 360, left: true } },
+    { frame: 110, player: 0, click: { x: 0.4, y: 0.3 } },
   ],
 };
 ```
@@ -137,6 +138,8 @@ A mouse event moves that player's pointer to screen pixel `x`, `y`
 (`BlzGetMouseScreenPosX/Y`) on their client only, and `left` holds or
 releases the left button (`BlzIsMouseButtonPressed`); it stays where the last
 event left it, so a drag is a press, moves and a release.
+A click event is `Lockstep.click` at Warcraft UI coordinates (see Typing and
+clicks); the journey fails when no frame there takes clicks.
 `runJourney` starts the map in every client, plays the events and returns each
 client's call count, checksum and error reports, the first divergence and any
 reload not running.
