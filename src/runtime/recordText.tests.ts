@@ -1,5 +1,7 @@
 import { addToken, addWrittenToken, addWrittenTokens, createTokenLines, endTokenLine, lineTokens, parseRecord, recordTokens, tokenLines, writeFieldTokens } from "./recordText";
-import { assertDefined, assertEquals, test } from "./testing";
+import { beginFieldSlices, createFieldCursor, fieldSlicesOpen, writeFieldSlice } from "./recordSlices";
+import { assertDefined, assertEquals, assertTrue, test } from "./testing";
+import { floorMod } from "../sim/intMath";
 
 function withGaps(): (number | undefined)[] {
   const items: (number | undefined)[] = [];
@@ -98,5 +100,78 @@ test("[invariant] record text: fields written into reused line buffers give the 
       endTokenLine(sink);
       assertEquals(sink.lines.join("\n"), packed(tokens, "state ", width).join("\n"), `width ${width}`);
     }
+  }
+});
+
+const SLICED_KEYED = ["byKey"];
+const FIELD_NAMES = ["a", "b", "c", "byKey"];
+
+function randomValue(next: (below: number) => number, depth: number, name: string): unknown {
+  const pick = depth === 0 ? 7 : next(depth >= 6 ? 5 : 8);
+  if (pick === 0) return next(100) - 50;
+  if (pick === 1) return 0.25 * (next(9) - 4) + 0.125;
+  if (pick === 2) return next(2) === 0;
+  if (pick === 3) return next(2) === 0 ? "a b'%" : "Stand";
+  if (pick === 4) return undefined;
+  if (name === "byKey") {
+    const keyed: Record<number, unknown> = {};
+    for (const key of [-2, 0, 5]) if (next(3) > 0) keyed[key] = randomValue(next, depth + 1, "keyed");
+    return keyed;
+  }
+  if (pick === 5) {
+    const items: unknown[] = [];
+    for (let index = next(5) - 1; index >= 0; index--) items.push(randomValue(next, depth + 1, "item"));
+    return items;
+  }
+  const record: Record<string, unknown> = {};
+  for (const field of FIELD_NAMES) if (next(3) > 0) record[field] = randomValue(next, depth + 1, field);
+  return record;
+}
+
+function slicedLines(value: unknown, size: number): string {
+  const sink = createTokenLines("s ", 24);
+  const cursor = createFieldCursor();
+  assertTrue(beginFieldSlices(cursor, "state", value, SLICED_KEYED));
+  while (fieldSlicesOpen(cursor)) addWrittenTokens(sink, assertDefined(writeFieldSlice(cursor, size), "slice"));
+  endTokenLine(sink);
+  return sink.lines.join("\n");
+}
+
+test("[property seed 55] record text: a field written in slices of any size gives the text of writing it whole", () => {
+  let seed = 55;
+  const next = (below: number) => {
+    seed = floorMod(seed * 75 + 74, 65537);
+    return floorMod(seed, below);
+  };
+  for (let round = 0; round < 60; round++) {
+    const value = randomValue(next, 0, "state");
+    const sink = createTokenLines("s ", 24);
+    addWrittenTokens(sink, assertDefined(writeFieldTokens("state", value, SLICED_KEYED), "whole"));
+    endTokenLine(sink);
+    const size = 1 + next(12);
+    assertEquals(slicedLines(value, size), sink.lines.join("\n"), `round ${round} slices of ${size}`);
+  }
+});
+
+function deepRecord(levels: number): Record<string, unknown> {
+  let record: Record<string, unknown> = { leaf: 1 };
+  for (let level = 0; level < levels; level++) record = { x: level, list: [level, 0.5, "s"], inner: record, y: true };
+  return record;
+}
+
+test("[invariant] record text: a slice of N steps writes at most N tokens of a deeply nested field, and N unless it ends the field", () => {
+  const record = deepRecord(28);
+  const whole = assertDefined(writeFieldTokens("state", record), "whole");
+  const cursor = createFieldCursor();
+  for (const size of [1, 3, 32]) {
+    assertTrue(beginFieldSlices(cursor, "state", record));
+    let total = 0;
+    while (fieldSlicesOpen(cursor)) {
+      const count = assertDefined(writeFieldSlice(cursor, size), "slice");
+      assertTrue(count <= size && cursor.steps <= size);
+      if (fieldSlicesOpen(cursor)) assertEquals(count, size, `slice of ${size} at token ${total}`);
+      total += count;
+    }
+    assertEquals(total, whole, `slices of ${size}`);
   }
 });

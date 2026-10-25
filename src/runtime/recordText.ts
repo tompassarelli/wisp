@@ -306,6 +306,10 @@ export function writeFieldTokens(name: string, value: unknown, keyedByInteger: r
   return writeValue(writer, name, value, 0) ? writer.count : undefined;
 }
 
+// An export list keeps these Lua locals; an exported function would cost a table lookup on every call.
+
+export { MAX_DEPTH, arrayLength, indexName, isFieldName, isFields, isKeyed, keyedName, token, valueText, writer };
+
 export interface TokenLines {
   width: number;
   prefix: string;

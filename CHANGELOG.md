@@ -5,6 +5,11 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## Unreleased
 
+- `wisp/src/runtime/recordSlices` exports `FieldCursor`,
+  `createFieldCursor`, `beginFieldSlices`, `writeFieldSlice` and
+  `fieldSlicesOpen`, which write one field's record text in slices of a
+  bounded number of steps, byte for byte the text of `writeFieldTokens`
+  (wisp#55, wisp:docs/repro.md, "Saving state as record text").
 - The relay agent gives every Warcraft III the relay mark under the first
   map user slot no player holds, and none when the map has no such slot:
   under a player's own id the client closed at turn 0, and a sender that

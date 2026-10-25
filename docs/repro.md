@@ -54,6 +54,20 @@ name replaced) adds them; `endTokenLine` ends the last line. The lines are
 byte for byte the prefixed lines of `tokenLines` over the same tokens. The
 buffer holds one field at a time: add its tokens before writing the next.
 
+To bound the work of one callback, write a field in slices
+(wisp:src/runtime/recordSlices.ts): `createFieldCursor()` once,
+`beginFieldSlices(cursor, name, value, keyed)` per field, then
+`writeFieldSlice(cursor, steps)` until `fieldSlicesOpen(cursor)` is false.
+Each slice takes at most `steps` steps (a value, an undefined value skipped, or
+a closing bracket), leaves them in `cursor.steps`, writes at most that many
+tokens into the same buffer and returns their count for `addWrittenTokens`.
+Opening a record also lists its keys once. Slices of any size give the text of
+`writeFieldTokens` byte for byte. The cursor keeps its place between
+callbacks, so other record text writes may run between slices, but the field
+must not change until its last slice. A slice that finds a value it can't write
+returns undefined after adding earlier slices' tokens, so treat the text as
+failed. Sliced writes cost about a fifth more in total than one whole write.
+
 A record keyed by integers (`{ readonly [action: number]: Move }`, a mapped
 type over a numeric enum) is the same Lua table as an array, so Lua can't tell
 which one TypeScript means. Name every field that holds one:

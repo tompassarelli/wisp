@@ -126,6 +126,7 @@
     "./src/runtime/lookup": "./src/runtime/lookup.ts",
     "./src/runtime/nativeDriver": "./src/runtime/nativeDriver.ts",
     "./src/runtime/payload": "./src/runtime/payload.ts",
+    "./src/runtime/recordSlices": "./src/runtime/recordSlices.ts",
     "./src/runtime/recordText": "./src/runtime/recordText.ts",
     "./src/runtime/repro": "./src/runtime/repro.ts",
     "./src/runtime/scene": "./src/runtime/scene.ts",
