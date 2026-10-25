@@ -1014,9 +1014,15 @@ and the lobby of remote players. No FLO code is copied.
   now `1`) and a zero sender word. The lowest occupied slot owns it: the
   lowest relay slot whose player has not left (relay-proto
   `Lobby::lowest_present`), normally slot 0, the room's creator, which every
-  room has. Every agent maps that slot to the same player id, so the action
-  is identical on every client. It takes no player's action sequence, and
-  rooms without a hosted game (synthetic and bench rooms) get no mark. The
+  room has. Every agent maps that slot to its player id, except the owner's
+  own agent, which gives its client the mark from the lowest other present
+  player, and no mark in a room of one: Warcraft III closes its connection
+  on an action under its own player id that it never sent, and a relayed
+  match dropped at turn 0 until the agent did this (wisp#37, gex45 A/B on
+  25 October 2026). The bytes are identical on every client but the sender
+  is not, so a map must not read the sync event's player. It takes no
+  player's action sequence, and rooms without a hosted game (synthetic and
+  bench rooms) get no mark. The
   agent frames it with the other actions through `w3gs::incoming_action`;
   lobby bytes up to the first turn are unchanged (wisp#52). A map latches
   it by registering `BlzTriggerRegisterPlayerSyncEvent` for the prefix

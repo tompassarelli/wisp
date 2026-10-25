@@ -10,7 +10,7 @@ use relay_proto::Micros;
 use crate::game::{GameHost, Output, Phase};
 use crate::link::Link;
 use crate::trace::Trace;
-use crate::w3gs::{PlayerAction, SockAddr, Splitter};
+use crate::w3gs::{SockAddr, Splitter};
 
 const ANNOUNCE_US: Micros = 250_000;
 const PING_US: Micros = 3_000_000;
@@ -227,15 +227,8 @@ impl<'a> AgentHost<'a> {
             }
         }
         let Some(game) = self.game.as_mut() else { return Ok(false) };
-        let pids = game.room().pids();
         for f in fed {
-            let actions: Vec<PlayerAction> = f
-                .turn
-                .actions
-                .into_iter()
-                .filter_map(|a| pids.get(a.player as usize).map(|&pid| PlayerAction { player_id: pid, data: a.data }))
-                .collect();
-            if let Some(packet) = game.turn(f.turn.step_ms as u16, &actions) {
+            if let Some(packet) = game.turn(f.turn.step_ms as u16, f.turn.actions) {
                 self.summary.turns += 1;
                 if let Some(c) = self.client.as_mut() {
                     c.write(vec![packet]);

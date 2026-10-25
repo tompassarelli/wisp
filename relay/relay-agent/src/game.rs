@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
+use relay_proto::mark::MARK_SEQ;
 use relay_proto::room::{FromAgent as Up, FromRelay as Down, RoomFacts};
+use relay_proto::wire::Action;
 
 use crate::keys::ReleaseMarker;
 use crate::slots::slot_table;
@@ -275,11 +277,24 @@ impl GameHost {
         (self.phase == Phase::Playing).then(|| w3gs::stop_lag(pid, 0))
     }
 
-    pub fn turn(&mut self, step_ms: u16, actions: &[PlayerAction]) -> Option<Vec<u8>> {
+    pub fn turn(&mut self, step_ms: u16, actions: Vec<Action>) -> Option<Vec<u8>> {
         if self.phase == Phase::Loading {
             self.phase = Phase::Playing;
         }
-        (self.phase == Phase::Playing && self.connected && !self.local_left()).then(|| w3gs::incoming_action(step_ms, actions))
+        (self.phase == Phase::Playing && self.connected && !self.local_left()).then(|| w3gs::incoming_action(step_ms, &self.player_actions(actions)))
+    }
+
+    fn player_actions(&self, actions: Vec<Action>) -> Vec<PlayerAction> {
+        let pids = self.room.pids();
+        actions
+            .into_iter()
+            .filter_map(|a| {
+                let pid = *pids.get(a.player as usize)?;
+                // Warcraft closes its connection on an action under its own player id that it never sent.
+                let pid = if a.seq == MARK_SEQ && pid == self.local() { *self.others().first()? } else { pid };
+                Some(PlayerAction { player_id: pid, data: a.data })
+            })
+            .collect()
     }
 
     pub fn listing(&self, version: u32, name: &[u8], port: u16, uptime_seconds: u32) -> Option<Vec<u8>> {
