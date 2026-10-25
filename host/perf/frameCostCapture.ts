@@ -8,6 +8,7 @@ interface FrameCostSample {
   readonly catchUp: number;
   readonly gcKb: number | undefined;
   readonly sectionsUs: readonly number[];
+  readonly stamps: readonly number[];
 }
 
 export interface FrameCostCapture {
@@ -16,6 +17,7 @@ export interface FrameCostCapture {
   readonly clockStepUs: number;
   readonly elapsedMs: number;
   readonly sections: readonly string[];
+  readonly stamps: readonly string[];
   readonly samples: readonly FrameCostSample[];
 }
 
@@ -32,10 +34,21 @@ export interface SectionRow extends Omit<CaptureDistribution, "frames"> {
   readonly worstShare: number | undefined;
 }
 
+export interface WorstCallback {
+  readonly sample: number;
+  readonly luaUs: number;
+  readonly catchUp: number;
+  readonly sectionsUs: readonly number[];
+  readonly stamps: readonly number[];
+}
+
 export interface SectionTable {
   readonly frames: number;
   readonly worstFrames: number;
+  readonly sections: readonly string[];
+  readonly stamps: readonly string[];
   readonly rows: readonly SectionRow[];
+  readonly worst: readonly WorstCallback[];
   readonly gcKb: Omit<CaptureDistribution, "frames"> | undefined;
 }
 
@@ -44,26 +57,29 @@ const SECTION_NAMES = /^(?:[a-z][a-z0-9-]*(?:,[a-z][a-z0-9-]*)*)?$/;
 type CaptureHeading = Omit<FrameCostCapture, "samples"> & { readonly frames: number };
 
 function parseHeading(line: string): CaptureHeading {
-  const head = /^frame capture run=(\d+) frames=(\d+) version=(\d+) clock-us=([\d.]+) elapsed-ms=([\d.]+) changed=([01]) sections=(\S*)$/.exec(line);
+  const head = /^frame capture run=(\d+) frames=(\d+) version=(\d+) clock-us=([\d.]+) elapsed-ms=([\d.]+) changed=([01]) sections=(\S*) stamps=(\S*)$/.exec(line);
   if (head === null) throw new Error("missing frame capture heading");
   const [run, frames, version, clockStepUs, elapsedMs, changed] = head.slice(1, 7).map(Number);
   const sectionText = head[7] ?? "";
+  const stampText = head[8] ?? "";
   if (run === undefined || frames === undefined || version === undefined || clockStepUs === undefined || elapsedMs === undefined || ![run, frames, version, clockStepUs, elapsedMs].every(Number.isFinite)
     || run < 1 || frames < 1 || frames > MAX_FRAME_COST_CAPTURE || clockStepUs <= 0 || elapsedMs <= 0) throw new Error("invalid frame capture bounds or unavailable native clock");
   if (changed !== 0) throw new Error("frame capture crossed a code reload");
   if (!SECTION_NAMES.test(sectionText)) throw new Error(`invalid frame capture sections ${sectionText}`);
-  return { run, frames, version, clockStepUs, elapsedMs, sections: sectionText === "" ? [] : sectionText.split(",") };
+  if (!SECTION_NAMES.test(stampText)) throw new Error(`invalid frame capture stamps ${stampText}`);
+  return { run, frames, version, clockStepUs, elapsedMs, sections: sectionText === "" ? [] : sectionText.split(","), stamps: stampText === "" ? [] : stampText.split(",") };
 }
 
-function parseSample(line: string, index: number, sections: number): FrameCostSample {
-  const match = /^sample (\d+) lua-us=([\d.]+) natives=(\d+) catchup=(\d+) gc-kb=(-?[\d.]+|none) sections-us=([\d.,]*)$/.exec(line);
+function parseSample(line: string, index: number, sections: number, stampCount: number): FrameCostSample {
+  const match = /^sample (\d+) lua-us=([\d.]+) natives=(\d+) catchup=(\d+) gc-kb=(-?[\d.]+|none) sections-us=([\d.,]*) stamps=([\d.,-]*)$/.exec(line);
   if (match === null) throw new Error(`invalid frame capture sample ${index + 1}`);
   const [frame, luaUs, natives, catchUp] = match.slice(1, 5).map(Number);
   const gcKb = match[5] === "none" ? undefined : Number(match[5]);
   const sectionsUs = match[6] === "" ? [] : (match[6] ?? "").split(",").map(Number);
-  if (frame !== index + 1 || luaUs === undefined || natives === undefined || catchUp === undefined || ![luaUs, natives, catchUp, gcKb ?? 0, ...sectionsUs].every(Number.isFinite)
-    || sectionsUs.length !== sections) throw new Error(`invalid frame capture sample ${index + 1}`);
-  return { luaUs, natives, catchUp, gcKb, sectionsUs };
+  const stamps = match[7] === "" ? [] : (match[7] ?? "").split(",").map(Number);
+  if (frame !== index + 1 || luaUs === undefined || natives === undefined || catchUp === undefined || ![luaUs, natives, catchUp, gcKb ?? 0, ...sectionsUs, ...stamps].every(Number.isFinite)
+    || sectionsUs.length !== sections || stamps.length !== stampCount) throw new Error(`invalid frame capture sample ${index + 1}`);
+  return { luaUs, natives, catchUp, gcKb, sectionsUs, stamps };
 }
 
 export function parseFrameCostCapture(text: string): FrameCostCapture {
@@ -71,7 +87,7 @@ export function parseFrameCostCapture(text: string): FrameCostCapture {
   if (lines === undefined) throw new Error("frame capture is not a complete Preload file");
   const { frames, ...heading } = parseHeading(lines[0] ?? "");
   if (lines.length !== frames + 1) throw new Error(`frame capture has ${lines.length - 1} samples, expected ${frames}`);
-  return { ...heading, samples: lines.slice(1).map((line, index) => parseSample(line, index, heading.sections.length)) };
+  return { ...heading, samples: lines.slice(1).map((line, index) => parseSample(line, index, heading.sections.length, heading.stamps.length)) };
 }
 
 export function captureReceipt(text: string, slot: number): string {
@@ -108,7 +124,11 @@ export function sectionTable(capture: FrameCostCapture): SectionTable {
     worstShare: worstTotal > 0 ? worst.reduce((total, { index }) => total + (values[index] ?? 0), 0) / worstTotal : undefined,
   }));
   const gc = samples.flatMap(({ gcKb }) => (gcKb === undefined ? [] : [gcKb]));
-  return { frames: samples.length, worstFrames, rows, gcKb: gc.length === samples.length ? spread(gc) : undefined };
+  const worstCallbacks = worst.map(({ index }): WorstCallback => {
+    const { luaUs, catchUp, sectionsUs, stamps } = samples[index] ?? { luaUs: 0, catchUp: 0, sectionsUs: [], stamps: [] };
+    return { sample: index + 1, luaUs, catchUp, sectionsUs, stamps };
+  });
+  return { frames: samples.length, worstFrames, sections: capture.sections, stamps: capture.stamps, rows, worst: worstCallbacks, gcKb: gc.length === samples.length ? spread(gc) : undefined };
 }
 
 const ms = (us: number) => (us / 1000).toFixed(3);
@@ -121,5 +141,14 @@ export function sectionTableLines(table: SectionTable): string[] {
     `${"section".padEnd(width)}${cells(["median", "p95", "p99", "worst", "worst 1%"])}`,
     ...table.rows.map((row) => `${row.name.padEnd(width)}${cells([ms(row.median), ms(row.p95), ms(row.p99), ms(row.max), row.worstShare === undefined ? "-" : `${(row.worstShare * 100).toFixed(1)}%`])}`),
     table.gcKb === undefined ? "gc-kb: unavailable" : `${"gc-kb".padEnd(width)}${cells([table.gcKb.median, table.gcKb.p95, table.gcKb.p99, table.gcKb.max].map((value) => value.toFixed(1)))}`,
+    `worst 1% callbacks; milliseconds`,
+    ...worstCallbackLines(table),
   ];
+}
+
+function worstCallbackLines(table: SectionTable): string[] {
+  const heading = ["sample", "total", "catch-up", ...table.stamps, ...table.sections];
+  const rows = table.worst.map(({ sample, luaUs, catchUp, stamps, sectionsUs }) => [`${sample}`, ms(luaUs), `${catchUp}`, ...stamps.map((value) => `${value}`), ...sectionsUs.map(ms)]);
+  const widths = heading.map((name, column) => Math.max(name.length, ...rows.map((row) => (row[column] ?? "").length)));
+  return [heading, ...rows].map((row) => row.map((value, column) => value.padStart(widths[column] ?? 0)).join("  "));
 }

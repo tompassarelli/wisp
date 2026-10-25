@@ -23,7 +23,7 @@ function play(): string[] {
 
 const after = (lines: readonly string[], prefix: string) => lines.filter((line) => line.startsWith(prefix)).map((line) => line.slice(prefix.length));
 
-farmTest("[invariant] both clients measure the same frames: no desync, equal reports, natives and instructions; a capture's sections fit inside its Lua time", async () => {
+farmTest("[invariant] both clients measure the same frames: no desync, equal reports, natives and instructions; a capture's sections fit inside its Lua time and its stamps advance by each callback's catch-up", async () => {
   const lines = play();
   expect(after(lines, "desync: ")).toEqual(["none"]);
   expect(lines.filter((line) => line.includes(" error: "))).toEqual([]);
@@ -47,6 +47,8 @@ farmTest("[invariant] both clients measure the same frames: no desync, equal rep
   expect(after(lines, "capture desync: ")).toEqual(["none"]);
   const capture = parseFrameCostCapture(captureReceipt(lines.join("\n"), 0));
   expect(capture.sections).toEqual(["work"]);
+  expect(capture.stamps).toEqual(["simulation"]);
+  expect(capture.samples.slice(1).filter(({ catchUp, stamps: [simulation = 0] }, index) => simulation - (capture.samples[index]?.stamps[0] ?? 0) !== catchUp)).toEqual([]);
   expect(capture.samples.filter(({ luaUs, gcKb, sectionsUs: [work = -1] }) => !(work >= 0 && work <= luaUs && gcKb !== undefined))).toEqual([]);
 }, 120_000);
 

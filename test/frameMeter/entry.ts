@@ -59,5 +59,5 @@ export function start(this: void): void {
   }
   TriggerAddAction(chat, trampoline("fixture.command"));
   startHotReload();
-  startFrameMeter({ frame: "fixture.frame", simulationFrame: () => state().simulation, toggle: "-perf", sections: ["work"] });
+  startFrameMeter({ frame: "fixture.frame", simulationFrame: () => state().simulation, toggle: "-perf", sections: ["work"], stamps: [{ name: "simulation", read: () => state().simulation }] });
 }

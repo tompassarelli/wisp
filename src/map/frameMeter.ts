@@ -25,6 +25,13 @@ export interface FrameMeterOptions {
   readonly toggle: string;
 
   readonly sections?: readonly string[];
+
+  readonly stamps?: readonly FrameStamp[];
+}
+
+export interface FrameStamp {
+  readonly name: string;
+  readonly read: (this: void) => number;
 }
 
 type Run = (this: void, name: string) => void;
@@ -55,6 +62,7 @@ interface Capture {
   readonly catchUp: number[];
   readonly gc: number[];
   readonly sections: number[];
+  readonly stamps: number[];
 
   skip: boolean;
   changed: boolean;
@@ -67,6 +75,7 @@ interface MeterState {
   readonly step: number;
   readonly heap: ((this: void) => number) | undefined;
   readonly sections: readonly string[];
+  readonly stamps: readonly FrameStamp[];
   readonly times: FrameSectionTimes;
 
   plain: Run | undefined;
@@ -203,7 +212,7 @@ export function startFrameCostCapture(frames: number): number {
   state.captureRuns = run;
   state.capture = {
     run, limit: frames, version: installedVersion(), started: state.clock?.() ?? 0,
-    lua: [], natives: [], catchUp: [], gc: [], sections: [], skip: true, changed: false,
+    lua: [], natives: [], catchUp: [], gc: [], sections: [], stamps: [], skip: true, changed: false,
   };
   state.times.clock = state.clock;
   return run;
@@ -217,15 +226,18 @@ function resetSections(state: MeterState): void {
 
 function writeCapture(state: MeterState, capture: Capture): void {
   const count = state.sections.length;
+  const stampCount = state.stamps.length;
   const elapsed = state.clock === undefined ? 0 : state.clock() - capture.started;
   PreloadGenClear();
   PreloadGenStart();
-  Preload(frameCostCaptureHeading(capture.run, capture.limit, capture.version, state.step * 1000000, elapsed * 1000, capture.changed, state.sections));
+  Preload(frameCostCaptureHeading(capture.run, capture.limit, capture.version, state.step * 1000000, elapsed * 1000, capture.changed, state.sections, state.stamps.map(({ name }) => name)));
   for (let index = 0; index < capture.limit; index++) {
     const sections: number[] = [];
     for (let section = 0; section < count; section++) sections.push((capture.sections[index * count + section] ?? 0) * 1000000);
+    const stamps: number[] = [];
+    for (let stamp = 0; stamp < stampCount; stamp++) stamps.push(capture.stamps[index * stampCount + stamp] ?? 0);
     Preload(frameCostCaptureSample(index + 1, state.clock === undefined ? undefined : (capture.lua[index] ?? 0) * 1000000, capture.natives[index] ?? 0, capture.catchUp[index] ?? 0,
-      state.heap === undefined ? undefined : capture.gc[index] ?? 0, sections));
+      state.heap === undefined ? undefined : capture.gc[index] ?? 0, sections, stamps));
   }
   PreloadGenEnd(frameCostCaptureFile(GetPlayerId(GetLocalPlayer()), capture.run, runtimeConfiguration().filePrefix));
 }
@@ -245,6 +257,7 @@ function captureFrame(state: MeterState, calls: number, catchUp: number, version
   capture.gc.push(state.gcKb);
   const totals = state.times.totals;
   for (let index = 0; index < state.sections.length; index++) capture.sections.push(totals[index] ?? 0);
+  for (const stamp of state.stamps) capture.stamps.push(stamp.read());
   resetSections(state);
   if (capture.lua.length < capture.limit) return;
 
@@ -366,12 +379,16 @@ export function startFrameMeter(options: FrameMeterOptions): void {
   sections.forEach((name, index) => {
     if (!sectionName(name) || sections.indexOf(name) !== index) throw new Error(`frame section ${name} needs a unique lowercase name of letters, digits and hyphens`);
   });
+  const stamps = options.stamps ?? [];
+  stamps.forEach(({ name }, index) => {
+    if (!sectionName(name) || stamps.findIndex((stamp) => stamp.name === name) !== index) throw new Error(`frame stamp ${name} needs a unique lowercase name of letters, digits and hyphens`);
+  });
   const { clock, step } = findClock();
   const read = options.simulationFrame;
   const collect = (globalThis as Record<string, unknown>).collectgarbage;
   const heap = typeof collect === "function" ? () => (collect as (this: void, option: "count") => number)("count") : undefined;
   const state: MeterState = {
-    options, clock, step, heap, sections, times: { clock: undefined, started: sections.map(() => 0), totals: sections.map(() => 0) },
+    options, clock, step, heap, sections, stamps, times: { clock: undefined, started: sections.map(() => 0), totals: sections.map(() => 0) },
     plain: undefined, measured: undefined, calls: 0, frameCalls: 0, lua: 0, gcKb: 0,
     simulation: read === undefined ? 0 : read(), recent: emptyWindow(), current: emptyWindow(), version: installedVersion(),
     before: undefined, overlay: createOverlay(), shown: false, frames: 0, capture: undefined, captureRuns: 0,

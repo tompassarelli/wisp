@@ -80,7 +80,13 @@ elapsed time, code version, the section names, and every callback's Lua
 microseconds, native count, simulation catch-up, Lua heap change in KB
 (`collectgarbage("count")` after minus before each measured callback, so
 negative when the collector freed more than the frame allocated; `none`
-without `collectgarbage`) and each section's microseconds. It retains the
+without `collectgarbage`), each section's microseconds and each stamp's value.
+`startFrameMeter({ ..., stamps: [{ name: "frame", read }] })` names the
+stamps (lowercase letters, digits and hyphens, unique): integers the game
+reads at the end of each captured callback, such as its simulation frame or
+match number, so a receipt names which frame a slow callback ran. The receipt
+lists their names in the heading's `stamps=` and each sample's values in
+`stamps=`. It retains the
 complete sample in bounded arrays; there is no file output or sorting during
 the sample. Report generation is
 outside the sample and should not share a timing-sensitive subsequent trial.
@@ -113,7 +119,8 @@ running capture reads the clock in them. Measure what they add with
 `wisp perf sections RECEIPT` prints, per section, the median, p95, p99 and
 worst milliseconds, and its share of the Lua time of the worst 1% of frames
 (ranked by total Lua time), followed by `other`, `total` and the heap change
-in KB. RECEIPT is a native `<prefix>-perf-capture-p<slot>-run<run>.txt` or a
+in KB, and then the worst 1% of callbacks: each one's sample number, total
+milliseconds, catch-up, stamps and section milliseconds. RECEIPT is a native `<prefix>-perf-capture-p<slot>-run<run>.txt` or a
 headless perf run's output whose lines read `p<slot> capture: <receipt line>`
 (`--slot N`, default 0). `--json` prints the same table as one result. The
 host functions are `sectionTable(capture)` and `sectionTableLines(table)`.

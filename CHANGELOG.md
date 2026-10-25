@@ -5,6 +5,14 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## Unreleased
 
+- `wisp/src/map/frameMeter` exports `FrameStamp`, and `startFrameMeter`
+  takes `stamps`. Frame capture receipts gain `stamps=` in the heading and in
+  each sample: `frameCostCaptureHeading` takes the stamp names and
+  `frameCostCaptureSample` their values; `parseFrameCostCapture` returns
+  `stamps` and each sample's `stamps`; `sectionTable` adds `sections`,
+  `stamps` and the worst 1% of callbacks as `worst`, which
+  `sectionTableLines` prints (wisp:docs/frame-cost.md, "A bounded native
+  capture").
 - `wisp/src/runtime/recordSlices` exports `FieldCursor`,
   `createFieldCursor`, `beginFieldSlices`, `writeFieldSlice` and
   `fieldSlicesOpen`, which write one field's record text in slices of a
