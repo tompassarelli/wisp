@@ -45,7 +45,7 @@ impl Raise {
         let mut stall = false;
         for _ in before..self.game_us * CALLBACK_HZ / SECOND {
             if let Some(last) = self.last_callback.replace(now) {
-                let long = (now - last) * 2 * CALLBACK_HZ >= 3 * SECOND;
+                let long = (now - last) * CALLBACK_HZ >= 2 * SECOND;
                 stall |= long && !self.stalled;
                 self.stalled = long;
             }

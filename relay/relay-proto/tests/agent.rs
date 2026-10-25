@@ -25,7 +25,11 @@ impl Bench {
     }
 
     fn with_headroom(headroom_us: Option<Micros>) -> Self {
-        let cadence = Cadence::new(&[17, 17, 16]);
+        Bench::with_steps(&[17, 17, 16], headroom_us)
+    }
+
+    fn with_steps(steps: &[u8], headroom_us: Option<Micros>) -> Self {
+        let cadence = Cadence::new(steps);
         let cfg = AgentConfig {
             raise_headroom_us: headroom_us,
             ..AgentConfig::new(TOKEN, cadence.clone())
@@ -337,7 +341,7 @@ fn the_raise_is_the_headroom_in_whole_8_ms_steps_up_to_the_total_depth_cap() {
 
 fn two_stalls(b: &mut Bench, apart: u32) -> u32 {
     on_time(b, 0, 10);
-    b.deliver(b.nominal(10) + 12_000, 10, 11);
+    b.deliver(b.nominal(10) + 20_000, 10, 11);
     on_time(b, 11, 10 + apart);
     let second = 10 + apart;
     b.deliver(b.nominal(second) + 24_000, second, second + 1);
@@ -347,7 +351,7 @@ fn two_stalls(b: &mut Bench, apart: u32) -> u32 {
 #[test]
 fn a_second_visible_stall_within_60_s_raises_extra_delay_a_millisecond_a_turn() {
     let mut b = Bench::with_headroom(Some(32_000));
-    let second = two_stalls(&mut b, 600);
+    let second = two_stalls(&mut b, 2_000);
     assert!(b.agent.stats().spiky);
     assert_eq!(b.agent.stats().visible_stalls, 2);
     on_time(&mut b, second + 1, second + 20);
@@ -365,7 +369,7 @@ fn a_second_visible_stall_within_60_s_raises_extra_delay_a_millisecond_a_turn() 
 #[test]
 fn a_large_headroom_raises_only_to_the_total_depth_cap() {
     let mut b = Bench::with_headroom(Some(200_000));
-    let second = two_stalls(&mut b, 600);
+    let second = two_stalls(&mut b, 2_000);
     on_time(&mut b, second + 1, second + 20);
     let cap = (100_000 - b.depth()) / 8_000 * 8_000;
     assert!(cap > 32_000);
@@ -386,10 +390,42 @@ fn stalls_more_than_60_s_apart_do_not_raise() {
 #[test]
 fn without_headroom_a_spiky_path_is_flagged_but_never_raised() {
     let mut b = Bench::new();
-    let second = two_stalls(&mut b, 600);
+    let second = two_stalls(&mut b, 2_000);
     on_time(&mut b, second + 1, second + 20);
     b.run_until(b.nominal(second + 19) + 24_000);
     assert!(b.agent.stats().spiky);
     assert_eq!(b.agent.stats().raise_us, 0);
     assert_eq!(b.agent.extra_us(), b.cadence.period_us());
+}
+
+fn fed_late(b: &mut Bench, turns: u32, late: impl Fn(u32) -> Micros) {
+    for k in 0..turns {
+        let at = b.base + b.cadence.relay_time(k) + DELAY;
+        while b.agent.next_feed() < k {
+            let t = b.agent.scheduled(b.agent.next_feed()) + late(b.agent.next_feed());
+            if t > at {
+                break;
+            }
+            let (fed, _) = b.agent.poll(t);
+            b.fed.extend(fed);
+        }
+        let bytes = down(b.seq, at - DELAY, b.base as u64, k, &b.turns(k, k + 1));
+        b.seq += 1;
+        b.agent.on_packet(at, &bytes).unwrap();
+    }
+}
+
+#[test]
+fn feeds_up_to_3_ms_late_on_8_ms_turns_are_no_stall_and_never_raise() {
+    let mut b = Bench::with_steps(&[8], Some(100_000));
+    let turns = 60 * 125;
+    fed_late(&mut b, turns, |k| {
+        ((k as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15) >> 40) as Micros % 3_001
+    });
+    assert!(b.fed.len() as u32 >= turns - 10, "{}", b.fed.len());
+    assert!(b.fed.iter().all(|f| f.at - f.scheduled <= 3_000 && f.extra_us == 0));
+    assert_eq!(b.agent.stats().underrun_at.len(), 0);
+    assert_eq!(b.agent.stats().visible_stalls, 0);
+    assert!(!b.agent.stats().spiky);
+    assert_eq!(b.agent.stats().raise_us, 0);
 }

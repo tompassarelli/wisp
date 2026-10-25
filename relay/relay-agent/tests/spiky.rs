@@ -2,6 +2,7 @@ use std::io::{BufRead, BufReader};
 use std::net::{SocketAddr, UdpSocket};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::{Duration, Instant};
 
 use relay_proto::control::{self, Control};
@@ -18,9 +19,14 @@ const LOBBY: Duration = Duration::from_millis(1200);
 const PLAY: Duration = Duration::from_secs(4);
 const HOLDS: [(Duration, Duration); 2] = [(Duration::from_millis(1000), Duration::from_millis(250)), (Duration::from_millis(2500), Duration::from_millis(500))];
 const ONE_HOLD: [(Duration, Duration); 1] = [(Duration::from_millis(1000), Duration::from_millis(250))];
+const CLEAN_RUNS: usize = 20;
+const CLEAN_WAVE: usize = 4;
 const RESEND: u32 = 100;
 const CATCH_UP_GAP_US: i64 = 4_000;
 const STEP_US: i64 = 8_000;
+const CALLBACK_HZ: i64 = 60;
+const SECOND_US: i64 = 1_000_000;
+static MACHINE: RwLock<()> = RwLock::new(());
 
 struct Agent(Child);
 
@@ -93,6 +99,14 @@ fn run(extra: &[&str], trace: &PathBuf, holds: &[(Duration, Duration)]) -> (Stri
     (summary, text)
 }
 
+fn shared() -> RwLockReadGuard<'static, ()> {
+    MACHINE.read().unwrap_or_else(|e| e.into_inner())
+}
+
+fn exclusive() -> RwLockWriteGuard<'static, ()> {
+    MACHINE.write().unwrap_or_else(|e| e.into_inner())
+}
+
 fn field<'a>(summary: &'a str, name: &str) -> &'a str {
     let words: Vec<&str> = summary.split_whitespace().collect();
     words.iter().position(|w| *w == name).and_then(|i| words.get(i + 1)).copied().unwrap_or_else(|| panic!("{name} in {summary:?}"))
@@ -104,6 +118,7 @@ fn trace_path(name: &str) -> PathBuf {
 
 #[test]
 fn two_visible_stalls_within_a_minute_raise_the_floor_when_headroom_is_given() {
+    let _machine = shared();
     let (summary, trace) = run(&["--raise-headroom-ms", "100"], &trace_path("raise"), &HOLDS);
     assert!(summary.starts_with("agent summary: turns 0 underruns "), "{summary:?}");
     assert_eq!(field(&summary, "spiky"), "true", "{summary:?}");
@@ -118,6 +133,7 @@ fn two_visible_stalls_within_a_minute_raise_the_floor_when_headroom_is_given() {
 
 #[test]
 fn without_headroom_the_agent_never_raises_even_on_a_spiky_path() {
+    let _machine = shared();
     let (summary, trace) = run(&[], &trace_path("flat"), &HOLDS);
     assert_eq!(field(&summary, "spiky"), "true", "{summary:?}");
     assert!(field(&summary, "stalls").parse::<u64>().unwrap() >= 2, "{summary:?}");
@@ -134,8 +150,43 @@ fn fed(trace: &str) -> Vec<[i64; 5]> {
     .collect()
 }
 
+fn stalls(rows: &[[i64; 5]]) -> u64 {
+    let (mut last, mut stalled, mut count) = (None, false, 0);
+    for (n, row) in rows.iter().enumerate() {
+        let frame = |turns: i64| turns * STEP_US * CALLBACK_HZ / SECOND_US;
+        for _ in frame(n as i64)..frame(n as i64 + 1) {
+            if let Some(at) = last.replace(row[1]) {
+                let long = (row[1] - at) * CALLBACK_HZ >= 2 * SECOND_US;
+                count += u64::from(long && !stalled);
+                stalled = long;
+            }
+        }
+    }
+    count
+}
+
+#[test]
+fn a_clean_loopback_path_is_flagged_only_on_stalls_of_2_frames_in_its_own_feeds() {
+    let _machine = exclusive();
+    let mut results = Vec::new();
+    for wave in (0..CLEAN_RUNS).collect::<Vec<_>>().chunks(CLEAN_WAVE) {
+        let runs: Vec<_> = wave.iter().map(|&i| std::thread::spawn(move || run(&["--raise-headroom-ms", "100"], &trace_path(&format!("clean{i}")), &[]))).collect();
+        results.extend(runs.into_iter().map(|r| r.join().unwrap()));
+    }
+    assert_eq!(results.len(), CLEAN_RUNS);
+    for (summary, trace) in results {
+        let own = stalls(&fed(&trace));
+        assert_eq!(field(&summary, "stalls"), own.to_string(), "{summary:?}");
+        if own < 2 {
+            assert_eq!(field(&summary, "spiky"), "false", "{summary:?}");
+            assert_eq!(field(&summary, "raise_ms"), "0.0", "{summary:?}");
+        }
+    }
+}
+
 #[test]
 fn after_one_hold_catch_up_feeds_by_its_rule_until_extra_delay_is_back_within_a_turn_inside_2_s() {
+    let _machine = shared();
     let (_, trace) = run(&[], &trace_path("catchup"), &ONE_HOLD);
     let underrun: i64 = trace.lines().find_map(|l| l.strip_prefix("underrun ")).and_then(|l| l.split_whitespace().next()).unwrap().parse().unwrap();
     let rows = fed(&trace);

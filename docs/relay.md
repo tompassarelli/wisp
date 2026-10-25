@@ -1227,24 +1227,24 @@ per 10 minutes at 64 ms, most of them in the rescans.
 #### Spiky paths (wisp#53)
 
 On a path whose delay spikes pass the depth again and again, the agent
-raises its delay (box B3, ruling (a′) on wisp#53). After a second visible
-stall (a callback gap of at least 25 ms, counted as in box B1b) within
-60 s, it marks the path spiky and sets a floor under its extra delay equal
-to the raise. Catch-up then stops at one turn above the floor, and any
-shortfall below the floor is added 1 ms a turn. The depth itself never
-changes, and neither do the turns fed or the game's steps: only feed
-times move, which the property
-`the_raise_moves_feed_times_but_never_the_fed_turns` checks against the
-same packet stream with the raise on and off. The raise is
+raises its delay (box B3, ruling (a′) on wisp#53). After a second stall
+within 60 s (a run of callback gaps of at least 33.3 ms, 2 frames, with
+callbacks placed as in box B1b), it marks the path spiky and sets a floor
+under its extra delay equal to the raise. Catch-up then stops at one turn
+above the floor, and any shortfall below the floor is added 1 ms a turn. The
+depth itself never changes, and neither do the turns fed or the game's
+steps: only feed times move, which the property
+`the_raise_moves_feed_times_but_never_the_fed_turns` checks against the same
+packet stream with the raise on and off. The raise is
 `AgentConfig::raise_headroom_us` (Smashcraft's headroom, the depth that
 keeps `connectionPoor` false), capped so that depth plus raise stays within
 `AgentConfig::max_total_depth_us` (100 ms by default), then rounded down to
-whole 8 ms steps; the agent computes it when it chooses its depth. Without
-a headroom, below 8 ms, or with the depth already within 8 ms of the cap,
-the agent marks the path spiky (`AgentStats::spiky`) and doesn't raise.
-The bench gives the laptop's agent a headroom with `--raise-headroom-ms MS`
-and a total cap with `--max-total-depth-ms MS`; the D column then says
-`raised` and the raise.
+whole 8 ms steps; the agent computes it when it chooses its depth. Without a
+headroom, below 8 ms, or with the depth already within 8 ms of the cap, the
+agent marks the path spiky (`AgentStats::spiky`) and doesn't raise. The
+bench gives the laptop's agent a headroom with `--raise-headroom-ms MS` and
+a total cap with `--max-total-depth-ms MS`; the D column then says `raised`
+and the raise.
 
 Gate 49 (2026-10-25) allows adaptive depth up to about 100 ms on paths with
 repeated stalls to reach at most 10 visible stalls per 10 minutes, keeps the
@@ -1303,23 +1303,42 @@ cap under 10, but that is outside the gate. On the clean wired trace
 the agent sees no visible stall and never raises, which
 `the_clean_wired_trace_never_raises_with_100_ms_of_headroom` checks.
 
+The raise counts a stall at 2 frames, not at box B1b's 1.5 (wisp#53).
+Steady feeding of 8 ms turns gives callback gaps of 16 and 24 ms, so at
+25 ms a live agent's 1 ms of feed jitter counted as a stall and could flag
+and raise a clean path; 33.3 ms leaves 9.3 ms for jitter.
+`feeds_up_to_3_ms_late_on_8_ms_turns_are_no_stall_and_never_raise` feeds a
+minute of 8 ms turns up to 3 ms late and checks no stall, flag or raise.
+The bench's visible-stall columns keep box B1b's 25 ms definition. Every
+row above is unchanged by it: `--grid`, the laptop's raised rows at 32 ms
+with 100 ms of headroom (raised 64.0 ms, 13.67 visible stalls and 46.00
+callback-less frames per 10 minutes with the rescans cut) and the clean
+wired trace (no raise) are byte-identical: in both laptop rows the two
+stalls that flag the path are longer than 2 frames, so the raise starts at
+the same feed.
+
 Live agents take the same two settings: `relay-agent --raise-headroom-ms MS`
 sets `raise_headroom_us` and `--max-total-depth-ms MS` sets
 `max_total_depth_us`; without them the agent never raises and keeps the
 100 ms cap, as before. `wisp lan relayed --raise-headroom-ms MS` passes the
 headroom to both agents (off by default). The agent's summary line ends
-`spiky BOOL stalls N raise_ms MS` (`AgentStats::spiky`, `visible_stalls` and
-the raise in ms), and its trace gets `spiky at_us` when the path is flagged
-and `raise R_us at_us` when the floor first rises (see "Lobby and game on
-the agent"). `relay-agent/tests/spiky.rs` holds a loopback relay's packets
-back twice within 60 s and checks both: with 100 ms of headroom the agent
-reports `spiky true`, the stalls and a raise, and traces it; without a
-headroom it reports the stalls but `raise_ms 0.0`. After one 250 ms hold,
-with no headroom, each feed until the extra delay is back within a turn of
-its value before the hold comes at least 4 ms after the last and lowers the
-extra delay by exactly how far it ran ahead of schedule, the catch-up rule,
-and the extra delay is back within 2 s. The in-match warning stays the map's
-job, but the map reads nothing yet: no carrier reaches a map (wisp#54).
+`spiky BOOL stalls N raise_ms MS` (`AgentStats::spiky`, `visible_stalls`,
+the stalls of 2 frames the raise counts, and the raise in ms), and its trace
+gets `spiky at_us` when the path is flagged and `raise R_us at_us` when the
+floor first rises (see "Lobby and game on the agent").
+`relay-agent/tests/spiky.rs` holds a loopback relay's packets back twice
+within 60 s and checks both: with 100 ms of headroom the agent reports
+`spiky true`, the stalls and a raise, and traces it; without a headroom it
+reports the stalls but `raise_ms 0.0`. Run 20 times, four at once, with no
+holds and 100 ms of headroom, each agent reports the stalls of 2 frames that
+its own fed turns in its trace hold, and `spiky false` and `raise_ms 0.0`
+whenever they are fewer than two, so a pause of the test machine is not
+taken for a wrong flag. After one 250 ms hold, with no headroom, each feed
+until the extra delay is back within a turn of its value before the hold
+comes at least 4 ms after the last and lowers the extra delay by exactly how
+far it ran ahead of schedule, the catch-up rule, and the extra delay is back
+within 2 s. The in-match warning stays the map's job, but the map reads
+nothing yet: no carrier reaches a map (wisp#54).
 
 ## Lobby and game on the agent (box R8)
 
