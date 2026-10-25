@@ -14,7 +14,7 @@ use relay_proto::lobby::LobbyTiming;
 use relay_proto::mark::{mark_data, MARK_PREFIX};
 use relay_proto::room::MapFacts;
 
-const MAP: &str = "path=Maps\\Wisp\\t.w3x size=4096 crc32=1 sha1=00112233445566778899aabbccddeeff00112233 xoro=2 width=52 height=52 layout=1 forces=15 players=0:1:1,1:1:1";
+const MAP: &str = "path=Maps\\Wisp\\t.w3x size=4096 crc32=1 sha1=00112233445566778899aabbccddeeff00112233 xoro=2 width=52 height=52 layout=1 forces=15 players=0:1:1,1:1:1,2:1:1";
 const LEAVE_AT: u32 = 200;
 const PRESS_AT: u32 = 20;
 
@@ -165,6 +165,7 @@ fn two_games_join_load_and_play_through_agents_and_the_relay() {
     assert!(summary_a.fed >= LEAVE_AT as u64, "fed {}", summary_a.fed);
     check_trace(&trace_path("a"), &summary_a);
     check_trace(&trace_path("b"), &summary_b);
-    assert_eq!(seen_a.marks, [(0, 2, mark_data())], "the mark owner's own game gets the mark from the other player, never under its own id");
-    assert_eq!(seen_b.marks, [(0, 1, mark_data())], "only the first turn carries the relay's mark, from the lowest slot's player");
+    for seen in [&seen_a, &seen_b] {
+        assert_eq!(seen.marks, [(0, 3, mark_data())], "only the first turn carries the relay's mark, from the first user slot no player holds");
+    }
 }

@@ -289,9 +289,8 @@ impl GameHost {
         actions
             .into_iter()
             .filter_map(|a| {
-                let pid = *pids.get(a.player as usize)?;
-                // Warcraft closes its connection on an action under its own player id that it never sent.
-                let pid = if a.seq == MARK_SEQ && pid == self.local() { *self.others().first()? } else { pid };
+                // Warcraft closes on an action under its own id that it never sent and desyncs when the sender differs by client.
+                let pid = if a.seq == MARK_SEQ { self.room.unheld_pid()? } else { *pids.get(a.player as usize)? };
                 Some(PlayerAction { player_id: pid, data: a.data })
             })
             .collect()

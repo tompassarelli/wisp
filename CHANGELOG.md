@@ -5,10 +5,11 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## Unreleased
 
-- The relay agent gives the mark owner's own Warcraft III the relay mark
-  from the lowest other present player, because the client closed its
-  connection at turn 0 on an action under its own id (wisp#37); a map must
-  not read the mark's sync player.
+- The relay agent gives every Warcraft III the relay mark under the first
+  map user slot no player holds, and none when the map has no such slot:
+  under a player's own id the client closed at turn 0, and a sender that
+  differed between clients desynced (wisp#37); a map must not read the
+  mark's sync player.
 - `relayDelivery()` leads the first turn with the relay mark, a sync message
   from the lowest slot with prefix `WISP_RLY` and the relay protocol version
   as data; `wisp/src/headless/syncChannel` exports `RELAY_MARK_PREFIX` and

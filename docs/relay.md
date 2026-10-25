@@ -1045,30 +1045,33 @@ and the lobby of remote players. No FLO code is copied.
   game time (host.ts allows 50 turns), makes the relay stop the clock, and
   agents show Warcraft's lag screen. A player who stays away for 30 s is
   dropped as having left. The clock then restarts from a rebased deadline.
-- **Relay mark.** Once every game in a hosted room has loaded, the relay
-  leads the first turn it emits with one synchronized action, the same bytes
-  for every agent, so a map can latch that its match runs through the relay:
-  a `BlzSendSyncData` action (0x77) with the prefix `WISP_RLY`, the relay
-  protocol version as decimal text for data (relay-proto `wire::VERSION`,
-  now `1`) and a zero sender word. The lowest occupied slot owns it: the
-  lowest relay slot whose player has not left (relay-proto
-  `Lobby::lowest_present`), normally slot 0, the room's creator, which every
-  room has. Every agent maps that slot to its player id, except the owner's
-  own agent, which gives its client the mark from the lowest other present
-  player, and no mark in a room of one: Warcraft III closes its connection
-  on an action under its own player id that it never sent, and a relayed
-  match dropped at turn 0 until the agent did this (wisp#37, gex45 A/B on
-  25 October 2026). The bytes are identical on every client but the sender
-  is not, so a map must not read the sync event's player. It takes no
-  player's action sequence, and rooms without a hosted game (synthetic and
-  bench rooms) get no mark. The
+- **Relay mark.** Once every game in a hosted room has loaded, the
+  relay leads the first turn it emits with one synchronized action,
+  the same bytes for every agent, so a map can latch that its match
+  runs through the relay: a `BlzSendSyncData` action (0x77) with the
+  prefix `WISP_RLY`, the relay protocol version as decimal text for data
+  (relay-proto `wire::VERSION`, now `1`) and a zero sender word. The relay
+  sends it while any player is present and names the lowest such slot
+  (relay-proto `Lobby::lowest_present`), but no agent uses that slot's
+  id: every agent gives its game the mark under the same player id, the
+  first map user slot past the room's players and computers (relay-proto
+  `RoomFacts::unheld_pid`), which no player holds, and gives no mark when
+  the map has no such slot. A player's own id fails in Warcraft III, which
+  closes its connection on an action under its own id that it never sent,
+  and so does a sender that differs between clients, which desyncs (wisp#37:
+  gex45 runs on 25 October 2026, one map; the lowest slot's id dropped its
+  client at turn 0, the lowest other present player latched a desync within
+  341 turns, the unheld id played 6662 turns with no desync). Whether
+  Warcraft fires the sync event for an id no player holds is not yet
+  observed natively. The mark takes no player's action sequence, and
+  rooms without a hosted game (synthetic and bench rooms) get no mark. The
   agent frames it with the other actions through `w3gs::incoming_action`;
   lobby bytes up to the first turn are unchanged (wisp#52). A map latches
   it by registering `BlzTriggerRegisterPlayerSyncEvent` for the prefix
   `WISP_RLY` on every player at map init and setting a flag when it fires;
-  the mark runs ahead of every player action in turn 0, so every client holds
-  the flag before the match's first input, and a Battle.net match never sets
-  it. Maps must not send the prefix themselves.
+  the mark runs ahead of every player action in turn 0, so every client
+  holds the flag before the match's first input, and a Battle.net match
+  never sets it. Maps must not send the prefix themselves.
 - **Conformance.** host.ts's `onPacket` hook records a pool session's bytes.
   The agent must produce the same lobby bytes for the same room. That
   transcript test keeps the two hosts from drifting.
