@@ -147,6 +147,29 @@ fn an_underrun_waits_and_keeps_at_most_one_turn_of_added_depth() {
 }
 
 #[test]
+fn each_fed_turn_carries_its_scheduled_time_backlog_and_extra_delay() {
+    let mut b = Bench::new();
+    on_time(&mut b, 0, 10);
+    let late = b.nominal(10) + 5_000;
+    b.deliver(late, 10, 11);
+    assert_eq!(b.agent.stats().underrun_index, vec![10]);
+    b.deliver(late, 11, 40);
+    while b.agent.next_feed() < 40 {
+        let index = b.agent.next_feed();
+        let scheduled = b.agent.scheduled(index);
+        let (fed, _) = b.agent.poll(scheduled + 300);
+        assert_eq!(fed.len(), 1, "turn {index}");
+        let f = &fed[0];
+        assert_eq!((f.index, f.scheduled), (index, scheduled));
+        assert_eq!(f.scheduled, b.nominal(index) + 5_000, "turn {index}");
+        assert_eq!(f.at - f.scheduled, 300, "turn {index}");
+        assert_eq!(f.backlog, 39 - index, "turn {index}");
+        assert_eq!(f.extra_us, b.agent.extra_us());
+        assert_eq!(f.extra_us, 5_000);
+    }
+}
+
+#[test]
 fn added_depth_slews_back_a_millisecond_a_turn_after_thirty_quiet_seconds() {
     let mut b = Bench::new();
     on_time(&mut b, 0, 10);

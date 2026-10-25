@@ -1,14 +1,12 @@
 use std::collections::VecDeque;
 
 mod cover;
+mod upstream;
 
 use crate::cadence::Cadence;
 use crate::depth::{self, DepthChoice, LinkSample, LossCounter, LossCounts};
 use crate::transport::{Transport, FALLBACK_US};
-use crate::wire::{
-    self, Packet, Turn, Up, UpAction, WireError, MAX_ACTION, MAX_PACKET, MAX_PACKETS_PER_TICK,
-    NOT_STARTED,
-};
+use crate::wire::{self, Packet, Turn, UpAction, WireError, MAX_ACTION, NOT_STARTED};
 use crate::Micros;
 
 #[derive(Clone, Debug)]
@@ -58,11 +56,15 @@ pub struct Fed {
     pub index: u32,
     pub turn: Turn,
     pub at: Micros,
+    pub scheduled: Micros,
+    pub backlog: u32,
+    pub extra_us: Micros,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct AgentStats {
     pub underrun_at: Vec<Micros>,
+    pub underrun_index: Vec<u32>,
     pub catch_ups: u64,
     pub fed: u64,
     pub buffer_sum_us: i128,
@@ -368,7 +370,7 @@ impl Agent {
             + self.depth_us
     }
 
-    fn scheduled(&self, index: u32) -> Micros {
+    pub fn scheduled(&self, index: u32) -> Micros {
         self.nominal(index) + self.extra_us
     }
 
@@ -391,6 +393,7 @@ impl Agent {
                 if self.awaits_deadline() && now >= self.scheduled(index) {
                     self.waiting = true;
                     self.stats.underrun_at.push(now);
+                    self.stats.underrun_index.push(index);
                 }
                 break;
             }
@@ -402,6 +405,7 @@ impl Agent {
                 self.waiting = false;
                 self.last_underrun = now;
             }
+            let scheduled = self.scheduled(index);
             let turn = self.buffer.pop_front().unwrap().unwrap();
             self.next_feed += 1;
             self.last_feed = now;
@@ -413,6 +417,9 @@ impl Agent {
                 index,
                 turn,
                 at: now,
+                scheduled,
+                backlog: self.received_through - self.next_feed,
+                extra_us: self.extra_us,
             });
         }
         out
@@ -436,55 +443,5 @@ impl Agent {
         let shift =
             (self.anchor_target - self.anchor_applied).clamp(-self.cfg.slew_us, self.cfg.slew_us);
         self.anchor_applied += shift;
-    }
-
-    fn upstream(&mut self, now: Micros) -> Vec<Vec<u8>> {
-        let (cover, cover_turns) = match (&self.choice, self.cover, self.transport) {
-            (Some(c), 1.., Transport::Udp) => (self.cover, (c.turns + 1).min(u8::MAX as u32) as u8),
-            _ => (0, 0),
-        };
-        self.next_send = now + self.period;
-        let checksums = self.checksums.make_contiguous();
-        let actions = self.actions.make_contiguous();
-        let (mut sums_sent, mut actions_sent) = match self.transport {
-            Transport::Udp => (0, 0),
-            Transport::Tcp => (
-                (self.streamed_checksums.saturating_sub(self.checksum_base) as usize)
-                    .min(checksums.len()),
-                (self.streamed_actions.saturating_sub(self.action_base) as usize)
-                    .min(actions.len()),
-            ),
-        };
-        let mut out = Vec::new();
-        loop {
-            let head = Up {
-                token: self.cfg.token,
-                seq: self.up_seq,
-                sent_us: now as u64,
-                turn_ack: self.received_through,
-                cover,
-                cover_turns,
-                checksum_from: self.checksum_base + sums_sent as u32,
-                checksums: Vec::new(),
-                action_from: self.action_base + actions_sent as u32,
-                actions: Vec::new(),
-            };
-            self.up_seq = self.up_seq.wrapping_add(1);
-            let (bytes, s, a) = wire::encode_up(
-                &head,
-                &checksums[sums_sent..],
-                &actions[actions_sent..],
-                MAX_PACKET,
-            );
-            out.push(bytes);
-            sums_sent += s;
-            actions_sent += a;
-            self.streamed_checksums = self.checksum_base + sums_sent as u32;
-            self.streamed_actions = self.action_base + actions_sent as u32;
-            let done = sums_sent == checksums.len() && actions_sent == actions.len();
-            if done || s + a == 0 || out.len() == MAX_PACKETS_PER_TICK {
-                return out;
-            }
-        }
     }
 }
