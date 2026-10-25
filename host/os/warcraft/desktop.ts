@@ -3,6 +3,7 @@ import { pollFor } from "../../cli/hostProcess";
 import { type Frame, InputInjection, ScreenCapture, decodePpm } from "../platform/services";
 import { ClientWatch, describeView, typesIntoMatch } from "../../dev/watch";
 import { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, readClientsFile, runTool } from "./desktopClient";
+import { chatEntryBand, chatEntryOpen, sendCheckedChat } from "./chatEntry";
 import { sendsChat, type InputAction } from "./inputBatch";
 export { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, readClientsFile, runTool } from "./desktopClient";
 export type { InputAction } from "./inputBatch";
@@ -148,6 +149,18 @@ export const batch = Effect.fnUntraced(function*(client: Client, actions: readon
   if (actions.some((action) => action.kind === "text" || (action.kind === "keys" && sendsChat(action.keys)))) yield* requireMatch(client, "typed text or Return");
   yield* focus(client);
   yield* InputInjection.use((input) => input.batch(client, actions));
+});
+
+export const chat = Effect.fnUntraced(function*(client: Client, line: string) {
+  yield* requireMatch(client, "chat");
+  yield* focus(client);
+  const input = yield* InputInjection;
+  const band = chatEntryBand(yield* input.windowRegion(client));
+  yield* sendCheckedChat(client, {
+    open: capture(client, band.region).pipe(Effect.map((frame) => chatEntryOpen(frame, band.minRun))),
+    pressReturn: input.batch(client, [{ kind: "keys", keys: ["Return"] }]),
+    sendLine: input.batch(client, [{ kind: "text", text: line }, { kind: "keys", keys: ["Return"] }]),
+  });
 });
 
 export const waitFor = <A, E, R>(client: { readonly name: string }, what: string, seconds: number, observe: Effect.Effect<A | undefined, E, R>) =>

@@ -18,6 +18,7 @@ export class Clients extends Context.Service<Clients, {
   readonly keys: (client: Client, ...names: string[]) => Effect.Effect<void, desktop.DesktopFailure>;
   readonly typeText: (client: Client, value: string) => Effect.Effect<void, desktop.DesktopFailure>;
   readonly batch: (client: Client, actions: readonly desktop.InputAction[]) => Effect.Effect<void, desktop.DesktopFailure>;
+  readonly chat: (client: Client, line: string) => Effect.Effect<void, desktop.DesktopFailure>;
 }>()("wisp/Clients") {
   static readonly layer = (path: string) => Layer.effect(Clients, connect(path));
 }
@@ -50,5 +51,6 @@ const connect = (path: string) => Effect.gen(function*() {
     keys: (client, ...names) => Effect.flatMap(session(client), (value) => on(desktop.keys(value, ...names))),
     typeText: (client, value) => Effect.flatMap(session(client), (target) => on(desktop.typeText(target, value))),
     batch: (client, actions) => Effect.flatMap(session(client), (target) => on(desktop.batch(target, actions))),
+    chat: (client, line) => Effect.flatMap(session(client), (target) => on(desktop.chat(target, line))),
   });
 });

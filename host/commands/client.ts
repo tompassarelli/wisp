@@ -57,7 +57,7 @@ const inputAction = (stateFilePath: string, watch: WatchOptions, action: string 
         return yield* clickPoint(clients, target, rest);
       case "chat":
         if (rest.length === 0) return yield* new UsageFailure({ problem: "chat takes TEXT" });
-        yield* clients.batch(target, [{ kind: "keys", keys: ["Return"] }, { kind: "text", text: rest.join(" ") }, { kind: "keys", keys: ["Return"] }]);
+        yield* clients.chat(target, rest.join(" "));
         return;
       case "keys":
         yield* clients.keys(target, ...rest);
