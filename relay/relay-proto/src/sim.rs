@@ -376,7 +376,6 @@ impl Sim<'_> {
                     n.out.unacked_at_end = n.agent.unacked_actions();
                     n.out.transport = n.agent.transport();
                     n.out.cover = n.agent.cover();
-                    n.out.frames.close();
                     for (&sent, &got) in self.emitted_at.iter().zip(&n.arrived) {
                         if sent != Micros::MIN && got != Micros::MIN {
                             n.out.delivery.add(got - sent);

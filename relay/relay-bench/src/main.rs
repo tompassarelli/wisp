@@ -252,20 +252,24 @@ fn depth_label(row: &Row, i: usize, a: &sim::AgentOutcome) -> String {
 }
 
 fn frame_columns(row: &Row) -> String {
-    let per10 = |f: fn(&sim::Frames) -> f64| {
-        let v: Vec<String> = row
-            .outcome
-            .agents
-            .iter()
-            .map(|a| format!("{:.2}", f(&a.frames) * 10.0 / row.minutes))
-            .collect();
+    let each = |f: &dyn Fn(&sim::Frames) -> String| {
+        let v: Vec<String> = row.outcome.agents.iter().map(|a| f(&a.frames)).collect();
         v.join("/")
     };
+    let per10 = |f: fn(&sim::Frames) -> f64| {
+        each(&|fr: &sim::Frames| format!("{:.2}", f(fr) * 10.0 / row.minutes))
+    };
     format!(
-        " {} | {} | {} |",
-        per10(|f| f.visible_stalls as f64),
-        per10(|f| f.frozen as f64),
-        per10(|f| f.stretched_us as f64 / SECOND as f64),
+        " {} | {} | {} | {} | {} | {} | {} | {} | {} |",
+        per10(|f| f.callbackless as f64),
+        per10(|f| f.stalls as f64),
+        per10(|f| f.long_stalls as f64),
+        per10(|f| f.catch_up_us as f64 / SECOND as f64),
+        per10(|f| f.double_callbacks as f64),
+        each(&|f: &sim::Frames| f.max_per_poll.to_string()),
+        each(&|f: &sim::Frames| ms(f.peak_lag_us)),
+        per10(|f| f.lag_events as f64),
+        per10(|f| f.long_lag_events as f64),
     )
 }
 
@@ -311,8 +315,13 @@ fn render_row(row: &Row, frames: bool) -> String {
 fn render(rows: &[Row], frames: bool) -> String {
     let (head, rule) = if frames {
         (
-            " Visible stalls per 10 min (A/B) | Frozen frames per 10 min (A/B) | Stretched s per 10 min (A/B) |",
-            "---|---|---|",
+            concat!(
+                " Callback-less frames per 10 min (A/B) | Visible stalls ≥ 1 frame per 10 min (A/B) |",
+                " Visible stalls ≥ 2 frames per 10 min (A/B) | 2× catch-up s per 10 min (A/B) |",
+                " Double-callback frames per 10 min (A/B) | Max turns per poll (A/B) | Peak lag ms (A/B) |",
+                " Lag events ≥ 2 frames per 10 min (A/B) | Lag events ≥ 4 frames per 10 min (A/B) |",
+            ),
+            "---|---|---|---|---|---|---|---|---|",
         )
     } else {
         ("", "")

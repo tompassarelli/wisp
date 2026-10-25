@@ -36,12 +36,13 @@ impl Node {
             self.act(now, s);
         }
         let before = self.agent.stats().underrun_at.len();
+        let catch_up = self.agent.catching_up();
         let (fed, packets) = self.agent.poll(self.clock.local(now));
         for _ in before..self.agent.stats().underrun_at.len() {
             self.out.underruns.push(now);
         }
-        for f in fed {
-            self.record_feed(now, f, s, s.lobby_us);
+        for (k, f) in fed.into_iter().enumerate() {
+            self.record_feed(now, f, s, catch_up && k == 0);
         }
         packets
     }
@@ -73,7 +74,8 @@ impl Node {
         };
     }
 
-    fn record_feed(&mut self, now: Micros, f: Fed, s: &Scenario, match_start: Micros) {
+    fn record_feed(&mut self, now: Micros, f: Fed, s: &Scenario, catch_up: bool) {
+        let match_start = s.lobby_us;
         self.out.fed_digest = digest_turn(self.out.fed_digest, f.index, &f.turn);
         self.out.fed_count += 1;
         self.agent.record_checksum(self.out.fed_digest as u32);
@@ -83,7 +85,7 @@ impl Node {
                 self.out.uneven_feeds += 1;
             }
         }
-        self.out.frames.feed(f.at, step);
+        self.out.frames.feed(f.at, step, f.lag_us, f.at - f.target, catch_up);
         self.last_feed = Some(now);
         for a in &f.turn.actions {
             if a.player as usize == self.index && a.data.len() >= 5 {

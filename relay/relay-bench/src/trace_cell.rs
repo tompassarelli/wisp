@@ -222,8 +222,8 @@ mod tests {
         let rows = run_rows(vec![(c, s)], 8_000);
         let row = render(&rows, true).lines().nth(2).unwrap().to_string();
         assert!(row.contains("| 4 fixed (30.0 ms rounded to 32.0 ms)/3, 32.0 ms |"), "{row}");
-        assert_eq!(row.matches('|').count(), 16, "{row}");
-        assert!(row.ends_with("| 0.00/0.00 |"), "{row}");
+        assert_eq!(row.matches('|').count(), 22, "{row}");
+        assert!(row.ends_with("| 0.00/0.00 | 0.00/0.00 |"), "{row}");
         let grid = render(&rows, false);
         assert!(grid.lines().all(|l| l.matches('|').count() == 13), "{grid}");
     }

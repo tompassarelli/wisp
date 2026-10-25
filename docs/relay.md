@@ -986,32 +986,48 @@ A's turns, and names the rounding when the asked depth isn't a whole number
 of turns. B keeps the rule's choice. Without the flag the depth is the
 rule's, as above.
 
-Trace tables (not `--grid`, whose output is byte-identical) gain three
-columns at the end, per agent per 10 minutes of match, counted on the
-agent's clock between match start and match end:
+Trace tables (not `--grid`, whose output is byte-identical) gain columns
+at the end, per agent, counted on the agent's clock between match start and
+match end. Box B1b counts them in Warcraft callbacks: the game runs one
+callback per 16.7 ms of game time, and each fed 8 ms turn adds 8 ms of game
+time, so a callback falls at the feed that carries game time past each
+16.7 ms mark. Steady feeding gives callback gaps of 16 and 24 ms. Rates are
+per 10 minutes of match.
 
-- **Visible stalls.** Gaps between consecutive feeds at least one 60 Hz
-  frame (16.7 ms) longer than the turn step. Every match has one: the
-  agent feeds turn 0, then waits about 120 ms for turn 1.
-- **Frozen frames.** 60 Hz frames, counted from match start, in which the
-  agent fed no turn.
-- **Stretched seconds.** Zero until box B2 adds half-speed feeding.
+- **Callback-less frames.** 60 Hz frames drawn with no callback: each
+  callback gap, rounded to whole frames, less one.
+- **Visible stalls ≥ 1 frame.** Runs of consecutive callback gaps of at
+  least 25 ms (1.5 frames), one per run.
+- **Visible stalls ≥ 2 frames.** Those runs holding a gap of at least
+  41.7 ms (2.5 frames).
+- **2× catch-up s.** Time spent feeding at the catch-up gap (4 ms a turn).
+- **Double-callback frames.** Callback gaps under 8.3 ms (half a frame).
+- **Max turns per poll.** The most turns fed at one instant.
+- **Peak lag.** The furthest the agent's game time fell behind the relay's
+  clock as the agent reads it (depth included), in ms.
+- **Lag events ≥ 2 / ≥ 4 frames.** Runs of fed turns at least one frame
+  later than their depth's schedule, counted when the run's peak reaches 2
+  or 4 frames (the extra frames the opponent rolls back by).
 
-These measure; no agent behaviour changes. The rows at 32 and 64 ms
-(`--trace traces/laptop-wifi-to-nexus-2026-10-25.trace --depth-ms 32`,
-then `64`; the independent-loss rows are as above plus the new columns):
+These measure; no agent behaviour changes. The laptop's columns at 32 and
+64 ms (`--trace traces/laptop-wifi-to-nexus-2026-10-25.trace --depth-ms 32`,
+then `64`; B, at 3 turns, has none of these, a 24.0 ms peak lag and one turn
+a poll), against probe53/model3.awk's estimates (wisp#53):
 
-| RTT | Loss | D (A/B), depth | Max depth | Underruns per 10 min (A/B) | Catch-up after blackout | Delivery p50/p99/p99.9 | Own echo p50/p99 | Bytes/s down/up | Clock stops | Desync | Bar | Visible stalls per 10 min (A/B) | Frozen frames per 10 min (A/B) | Stretched s per 10 min (A/B) |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 44 ms | laptop Wi-Fi trace, whole | 4 fixed/3, 32.0 ms | 254.1 ms | 723.53/0.00 | – | 25.1/119.6/164.1 ms | 90.9/191.0 ms | 10542/10051 | 0 | none | fail (underruns) | 586.05/1.00 | 1938.77/9.03 | 0.00/0.00 |
-| 44 ms | laptop Wi-Fi trace, rescans cut | 4 fixed/3, 32.0 ms | 254.1 ms | 220.04/0.00 | – | 24.7/60.6/134.6 ms | 90.8/139.6 ms | 10108/9517 | 0 | none | fail (underruns) | 72.10/1.24 | 193.93/7.46 | 0.00/0.00 |
-| 44 ms | laptop Wi-Fi trace, whole | 8 fixed/3, 64.0 ms | 254.1 ms | 593.07/0.00 | – | 25.1/119.6/164.1 ms | 122.3/216.5 ms | 10542/10065 | 0 | none | fail (underruns) | 538.88/1.00 | 836.92/9.03 | 0.00/0.00 |
-| 44 ms | laptop Wi-Fi trace, rescans cut | 8 fixed/3, 64.0 ms | 254.1 ms | 54.70/0.00 | – | 24.7/60.6/134.6 ms | 120.7/165.1 ms | 10108/9522 | 0 | none | fail (underruns) | 28.59/1.24 | 88.26/11.19 | 0.00/0.00 |
+| D (A/B), depth | Loss | Underruns | Callback-less | Stalls ≥ 1 | Stalls ≥ 2 | 2× s | Double | Per poll | Peak lag ms | Lag ≥ 2 | Lag ≥ 4 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 4 fixed/3, 32.0 ms | trace, whole | 723.53 | 2163.56 | 619.16 | 566.98 | 38.08 | 3838.41 | 1 | 254.1 | 565.98 | 214.75 |
+| 4 fixed/3, 32.0 ms | trace, rescans cut | 220.04 | 243.66 | 109.40 | 52.21 | 4.82 | 405.26 | 1 | 254.1 | 48.48 | 18.65 |
+| model3, 32 ms | rescans cut | 213.8 | 247.4 | 115.6 | 49.7 | 4.9 | 396.6 | 1 | 254.8 | 48.5 | 18.6 |
+| 8 fixed/3, 64.0 ms | trace, whole | 593.07 | 1031.60 | 553.94 | 283.99 | 18.55 | 1784.23 | 1 | 254.1 | 259.91 | 35.12 |
+| 8 fixed/3, 64.0 ms | trace, rescans cut | 54.70 | 95.72 | 33.56 | 23.62 | 1.65 | 150.42 | 1 | 254.1 | 19.89 | 6.22 |
+| model3, 64 ms | rescans cut | 57.2 | 93.2 | 32.3 | 21.1 | 1.6 | 152.9 | 1 | 254.8 | 21.1 | 6.2 |
 
-With the rescans cut, doubling the depth from 32 to 64 ms takes the laptop
-from 72 visible stalls and 194 frozen frames per 10 minutes to 29 and 88;
-the whole trace still freezes 837 frames per 10 minutes at 64 ms, most of
-them in the rescans. B's frozen frames (7–11) are mostly the match's start-up.
+The bench's underruns are within 5% of the model's, and its other columns
+within 12%. With the rescans cut, doubling the depth from 32 to 64 ms takes
+the laptop from 109 visible stalls and 244 callback-less frames per
+10 minutes to 34 and 96; the whole trace still loses 1,032 frames' callbacks
+per 10 minutes at 64 ms, most of them in the rescans.
 
 ## Lobby and game on the agent (box R8)
 

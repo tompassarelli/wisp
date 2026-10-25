@@ -59,6 +59,8 @@ pub struct Fed {
     pub turn: Turn,
     pub at: Micros,
     pub scheduled: Micros,
+    pub target: Micros,
+    pub lag_us: Micros,
     pub backlog: u32,
     pub extra_us: Micros,
 }
@@ -412,6 +414,7 @@ impl Agent {
                 self.last_underrun = now;
             }
             let scheduled = self.scheduled(index);
+            let target = self.nominal(index);
             let turn = self.buffer.pop_front().unwrap().unwrap();
             self.next_feed += 1;
             self.last_feed = now;
@@ -424,6 +427,8 @@ impl Agent {
                 turn,
                 at: now,
                 scheduled,
+                target,
+                lag_us: now - target + self.depth_us,
                 backlog: self.received_through - self.next_feed,
                 extra_us: self.extra_us,
             });
