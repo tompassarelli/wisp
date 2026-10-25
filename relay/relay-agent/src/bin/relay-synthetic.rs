@@ -253,7 +253,7 @@ impl Run {
         let at: Vec<String> = underruns.iter().map(|&u| format!("{:.3}", ms(u - start) / 1000.0)).collect();
         println!("underruns at s: [{}]", at.join(", "));
         println!(
-            "summary: fed {} underruns {} (within {} ms of the agent's own late wake: {scheduling}) late wakes over {} ms {} (max {:.1} ms) depth {} turns max extra {:.1} ms challenges {} rebound {}",
+            "summary: fed {} underruns {} (within {} ms of the agent's own late wake: {scheduling}) late wakes over {} ms {} (max {:.1} ms) depth {} turns max extra {:.1} ms challenges {} rebound {} spiky {} stalls {} raise {:.1} ms",
             self.fed_count,
             underruns.len(),
             SCHEDULING_US / 1000,
@@ -264,6 +264,9 @@ impl Run {
             ms(agent.stats().max_extra_us),
             self.link.challenges(),
             self.rebound,
+            agent.stats().spiky,
+            agent.stats().visible_stalls,
+            ms(agent.stats().raise_us),
         );
         println!("rtt: handshake {:.1} ms per round trip; action ack {}", handshake.as_secs_f64() * 500.0, spread(&self.rtts));
         if let Some(path) = &o.trace {
