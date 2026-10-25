@@ -209,6 +209,196 @@ Two findings from the earlier gex45 runs, which do not count
   the host's start crashed.
 
 
+## Relay under internet conditions (box R9)
+
+Status: measured on the laptop's LAN pool on 25 October 2026 (wisp#38).
+Not passed: the agent's feed deviation p99 is 2.4–2.9 ms in every jitter
+cell against a 2 ms bar, and three cells fall short of one callback per
+burst on every frame (99.92–99.97%). Taps, the light-input spread, desyncs
+and the blackout drain are below.
+
+The same probe as the baseline above, through the relay instead of Wisp's
+TCP host: pool pair 0 (Warcraft III 3.0.0.24268, offline LAN, 60 fps cap),
+each run in a fresh pool session of its own, started for that run and
+stopped with SIGINT.
+
+- **Relay.** `wisp lan relayed MAP --relay-bin DIR --pair 0` at the default
+  8 ms turn, relay and agents built from wisp f1d01a83. The relay binds
+  `127.0.0.1:17000 + pair` inside the pair's namespace, so the path is
+  `wisp lan netem --pair 0 ... --udp-port 17000`, applied before
+  `lan relayed` starts: the agents' relay link crosses the impaired path and
+  each client's TCP link to its own agent does not. Every counted run shows
+  netem's packet counter rising through the probe (27,000–43,000 packets in
+  `netem-stats.txt`; 7,180 in the blackout run, whose switch resets it),
+  and `tc filter` matches both ports at 0x4268.
+- **Map and probe.** The baseline's: Smashcraft 59824cc9b (`w32-echo.w3x`,
+  sha256 26b206e48e3f6b7b…), `-dev quick hero rifleman stocks 9`, then
+  `-dev callback-clock 3600`, each sent from client a and confirmed by a new
+  `Chat(` line in `relay.log` (every chat landed on its first send), and
+  the seed-7 tap driver with light or heavy input. 60 s of callbacks per run,
+  as in the baseline, to fit the 5-minute session; the issue's 80–120 s
+  does not fit.
+- **Host load.** Each run started with at most 6 live Warcraft clients and
+  both `protectedCpuSomeAvg10` and the system `/proc/pressure/cpu` some
+  avg10 under 20, under a quiet native capacity session; a run with any
+  per-second reading at 20 or above would have been discarded, and none
+  was. No other laptop pair ran.
+
+Columns: the agent's feed deviation p99 (ms, agent a, b), fed time minus
+`Agent::scheduled` outside underruns, from `agent-<side>.trace`; underruns;
+D, the depth each agent chose in turns; taps seen; press-to-sample median
+and spread (ms, frames p5–p95), from the probe; rollbacks per minute and the
+deepest rollback in frames, from Smashcraft's counters; desyncs from the
+relay's checksum compare; one callback per burst, the share of callback
+bursts (callbacks under 2 ms apart) that hold one callback, per client;
+callback gap p50/p99/max over both clients; pace, game seconds per wall
+second over the relay's last summary; both pressures at the probe's start
+and end, and their peaks; then the baseline's same cell with its callback
+gap, taps, spread, rollbacks/min, deepest rollback and desyncs. The baseline
+measured jitter only at 120 ms and 2%, so the other jitter cells sit beside
+its cell without jitter.
+
+| Path | Input | Run | Feed deviation p99 ms | Underruns | D (turns) | Taps seen (a, b) | Press-to-sample median ms | Spread ms (frames p5–p95) | Rollbacks/min (a, b) | Deepest rollback | Desyncs | One callback per burst | Callback gap p50/p99/max ms | Pace | At start / end: protectedCpuSomeAvg10, system some avg10 | Peak: protected, system | wisp#33 same cell: gap; taps; spread; rollbacks/min; deepest; desyncs |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 120 ms, 2%, jitter 20 ms | light | `r120-l2-j20-light` | 2.72, 2.67 | 0, 0 | 5, 5 | 137/138, 138/139 | 12, 8 | 30 (1), 34 (1) | 249, 242 | 19 | 0 | 100.00%, 100.00% | 19.0/33.0/126 | 1.000 | 0, 0.02 / 0, 0.00 | 0, 0.18 | `r120-l2-j20-light`: 16.0/84.0/357; 133/138, 129/139; 78, 52 (1, 1); 231, 248; 24; 0 |
+| 120 ms, 2%, jitter 20 ms | heavy | `r120-l2-j20-heavy` | 2.44, 2.38 | 0, 0 | 5, 5 | 138/138, 140/141 | -1, 4 | 47 (2), 39 (1) | 580, 582 | 21 | 0 | 100.00%, 100.00% | 18.0/33.0/47 | 1.000 | 0, 0.04 / 0, 0.00 | 0, 0.04 | `r120-l2-j20-heavy`: 14.0/67.0/334; 129/138, 132/141; 78, 62 (2, 2); 535, 523; 24; 0 |
+| 120 ms, 5%, jitter 20 ms | light | `r120-l5-j20-light` | 2.76, 2.72 | 0, 0 | 6, 5 | 137/138, 138/139 | 10, 11 | 31 (1), 29 (1) | 253, 252 | 17 | 0 | 100.00%, 100.00% | 19.0/34.0/46 | 1.000 | 0, 0.28 / 0, 0.03 | 0, 0.28 | `r120-l5-light`: 12.0/147.0/344; 131/138, 123/139; 68, 65 (2, 2); 236, 233; 24; 0 |
+| 120 ms, 5%, jitter 20 ms | heavy | `r120-l5-j20-heavy` | 2.82, 2.77 | 0, 0 | 5, 5 | 138/138, 141/141 | 3, 6 | 39 (2), 43 (2) | 579, 581 | 20 | 0 | 100.00%, 100.00% | 18.0/33.0/42 | 1.000 | 0, 0.06 / 0, 0.00 | 0, 0.06 | `r120-l5-heavy`: 12.0/145.0/542; 129/138, 122/141; 89, 66 (2, 2); 493, 495; 24; 0 |
+| 200 ms, 2%, jitter 20 ms | light | `r200-l2-j20-light` | 2.73, 2.69 | 0, 0 | 5, 5 | 137/138, 138/139 | 10, 9 | 35 (1), 31 (1) | 252, 229 | 22 | 0 | 100.00%, 100.00% | 18.0/33.0/42 | 1.000 | 0, 0.06 / 0, 0.18 | 0, 0.19 | `r200-l2-light`: 15.0/58.0/443; 125/138, 127/139; 58, 50 (1, 2); 221, 216; 24; 0 |
+| 200 ms, 2%, jitter 20 ms | heavy | `r200-l2-j20-heavy` | 2.47, 2.52 | 0, 0 | 5, 5 | 138/138, 141/141 | 5, 3 | 46 (1), 41 (3) | 578, 580 | 24 | 0 | 99.97%, 100.00% | 18.0/33.0/44 | 1.000 | 0, 0.02 / 0, 0.00 | 0, 0.02 | `r200-l2-heavy`: 13.0/61.0/323; 123/138, 124/141; 63, 51 (2, 2); 495, 500; 24; 0 |
+| 200 ms, 5%, jitter 20 ms | light | `r200-l5-j20-light` | 2.73, 2.72 | 0, 0 | 5, 5 | 137/138, 138/139 | 7, 9 | 29 (1), 31 (1) | 255, 237 | 22 | 0 | 100.00%, 100.00% | 19.0/33.0/43 | 1.000 | 0, 0.05 / 0, 0.00 | 0, 0.2 | `r200-l5-light`: 8.0/225.0/596; 104/138, 108/139; 77, 64 (2, 3); 193, 199; 24; 0 |
+| 200 ms, 5%, jitter 20 ms | heavy | `r200-l5-j20-heavy` | 2.85, 2.91 | 0, 0 | 5, 6 | 138/138, 141/141 | 5, 4 | 47 (1), 43 (2) | 582, 581 | 24 | 0 | 99.92%, 100.00% | 18.0/33.0/53 | 1.000 | 0, 0.50 / 0, 0.10 | 0, 0.79 | `r200-l5-heavy`: 10.0/219.0/535; 113/138, 97/141; 80, 68 (3, 5); 388, 396; 24; 0 |
+| 120 ms, 2%, bursts | light | `r120-l2-burst-light` | 0.62, 0.61 | 0, 0 | 5, 6 | 137/138, 138/139 | 9, 8 | 36 (1), 39 (1) | 247, 246 | 22 | 0 | 99.97%, 99.97% | 18.0/33.0/277 | 1.000 | 0.01, 0.76 / 0.24, 0.60 | 0.68, 1.46 | `r120-l2-burst-light`: 18.0/35.0/175; 133/138, 133/139; 85, 42 (1, 0); 246, 239; 22; 0 |
+| 120 ms, 2%, bursts | heavy | `r120-l2-burst-heavy` | 0.44, 0.66 | 0, 0 | 5, 4 | 138/138, 140/141 | 3, 5 | 48 (2), 40 (2) | 579, 582 | 22 | 0 | 100.00%, 100.00% | 18.0/34.0/71 | 1.000 | 0, 0.55 / 0, 0.34 | 0, 0.76 | `r120-l2-burst-heavy`: 15.0/53.0/410; 133/138, 129/141; 76, 62 (2, 2); 535, 529; 24; 0 |
+
+Notes:
+
+- **Pool sessions**, start to stop, in seconds (pool ready at, then
+  stopped at): `r120-l2-j20-light` 158.3, 279.3; `r120-l2-j20-heavy` 155.8,
+  278.0; `r120-l5-j20-light` 154.7, 277.4; `r120-l5-j20-heavy` 157.8, 279.9;
+  `r200-l2-j20-light` 154.7, 277.5; `r200-l2-j20-heavy` 156.3, 280.1;
+  `r200-l5-j20-light` 153.8, 276.1; `r200-l5-j20-heavy` 153.8, 276.0;
+  `r120-l2-burst-light` 157.4, 280.4; `r120-l2-burst-heavy` 157.4, 280.5;
+  `blackout` 156.4, 279.1. The relayed match played 22–25 s after the pool
+  was ready. The driver cuts a session at 290 s; none was cut.
+- **Five earlier runs are discarded** (`runs/discarded/wrong-setup`): their
+  driver sent `-dev setup time 2;quick stage 2 pair rifleman / illidan`
+  instead of the baseline's quick match, so stage and fighters differed, and
+  under heavy input the match ended 10–30 s into the probe (Smashcraft's
+  frame counter stops while callbacks go on), which also produced 8–14%
+  double callbacks on the end screen.
+- **Feed deviation sits on the kernel's 1 ms tick.** In the jitter cells
+  58–86% of an agent's feeds land in the same tenth of a millisecond of
+  wall time and deviations cluster at 0, 1 and 2 ms; in the burst cells,
+  which have no jitter, p99 is 0.44–0.66 ms. The agent waits for its next
+  feed in `recv_from` under `SO_RCVTIMEO` (`relay-agent/src/link.rs`), which
+  the kernel counts in jiffies (`CONFIG_HZ=1000` on the laptop): a feed
+  that no packet arrival wakes for in time wakes on a later tick. Jittered
+  arrivals no longer line up with the feed schedule, so more feeds wait out
+  the timeout. Underruns stayed 0 and the clients drew one callback per
+  burst through it, so the bar misses on timer resolution, not on turns
+  reaching Warcraft late.
+- **The short shares** are 4 readings: `r200-l2-j20-heavy` one callback gap
+  of 1.998 ms on client a and `r200-l5-j20-heavy` three, each between gaps
+  of 17–28 ms (os.clock steps in about 1 ms, so these are 2 ms steps just
+  under the burst rule's 2 ms); and in `r120-l2-burst-light` one double per
+  client inside the catch-up after a 269–277 ms stall.
+- **Both clients stall together at one game moment** in two light cells:
+  124–126 ms at callback 2899 in `r120-l2-j20-light` and 269–277 ms at
+  callbacks 2998–2999 in `r120-l2-burst-light`. The agents fed every turn on
+  schedule through both (no underrun, backlog at most D), and CPU and disk
+  pressure stayed flat, so the stall is in the game, not the path.
+- **Taps.** The one press each light run misses is the probe's first press,
+  which its matcher cannot place (the baseline's client b misses it too).
+  `r120-l2-j20-heavy` client b's press 117 shows a down edge at a 1164 ms
+  press-to-sample lag, 2 ms under the 1166–1206 ms the run's other presses
+  matched at, so the matcher drops a seen tap. `r120-l2-burst-heavy` client
+  b's press 105 has no down edge: it falls on a 71 ms stall of that client,
+  the case the release mark cannot reach.
+
+Output directories are `~/.local/state/wisp-38/runs/CELL` on the laptop,
+each with the callback clocks, the stimulus record, the relayed game folder
+(`relay.log`, `agent-{a,b}.log` and `.trace`), the netem setting and
+`netem-stats.txt` counters at probe start and end, the gate record, the
+pool session's timings and the per-second host samples.
+
+What the relay changes, read against the baseline:
+
+- **Loss stops reaching the game.** The callback gap p99 is 33–34 ms in
+  every cell, the unimpaired baseline's 29 ms plus a few, against 48–84 ms
+  at 2% and 145–225 ms at 5% over TCP; the 200 ms, 5% yardstick goes from a
+  219–225 ms p99 and single gaps near 600 ms to 33 ms and 43–53 ms. No
+  agent underran in any cell; D settled at 4–6 turns (32–48 ms).
+- **Taps and spread.** Every probe tap is seen apart from the cases above,
+  against 97–134 of 138–141 over TCP; the light-input spread is 1 frame
+  p5–p95 in every cell, against up to 3 over TCP.
+- **Rollbacks match the unimpaired baseline**, about 250 a minute with
+  light input and 580 with heavy (baseline `r0`: 243–248 and 578–581),
+  where TCP's impaired cells ran 193–248 and 388–537; the deepest is
+  17–24 frames.
+- **Zero desyncs** and pace 1.000 in every cell.
+
+### Blackout
+
+One run (`blackout`, 120 ms RTT with 20 ms jitter and no loss, light input)
+switched the relay link to 100% loss 30 s into the probe and back. Each
+switch is a `wisp lan netem` call of about 0.33 s, so the link lost
+everything for 1.34 s (applied 1792901154.134, restored 1792901155.472,
+Unix seconds), longer than the 1 s asked.
+
+- **Drain.** Feeding resumed after a 1221 ms gap on agent a (1203 ms on
+  b) with 110 turns waiting. Catch-up fed a turn every 4–5 ms and the
+  backlog was back to D + 1 and held there 1358 ms after feeding resumed on
+  agent a (D = 4) and 1156 ms on agent b (D = 6), inside the 2 s bound.
+  `extra_us` then settles at 5.2 and 6.7 ms, under the catch-up exit of one
+  turn plus the floor.
+- **Game.** 0 desyncs, one underrun per agent (the outage itself), and one
+  relay lag stop; pace over the match fell to 0.9953. Both clients froze
+  for up to 1227 ms and lost probe presses 72–74, the three that fell in
+  the outage; the light spread stayed at 1 frame.
+
+Agent a's depth trace around the outage, in its link clock (s since the
+handshake; the agents' clocks start about 0.24 s apart), per 100 ms: turns
+fed, most turns waiting (`backlog`), largest added delay (`extra_us`) and
+largest feed deviation, then the first fed lines after the outage
+(`fed index wall_us scheduled_us backlog extra_us`):
+
+```
+start_s fed max_backlog max_extra_ms dev_max_ms
+83.9 13 4 0.0 2.2
+84.0 13 10 0.0 2.1
+84.1 5 4 0.0 1.1
+84.2-85.2 0 (no turn arrives; underrun at 84.127, turn 7234)
+85.3 8 110 1213.0 0.0
+85.4 21 106 773.0 -2.0
+85.5 20 91 709.0 -1.0
+85.6 19 84 647.2 -1.5
+85.7 20 78 594.2 -2.0
+85.8 20 70 536.2 -2.0
+85.9 19 62 474.2 -1.2
+86.0 19 55 424.2 -1.0
+86.1 20 49 372.2 -2.0
+86.2 19 42 311.2 -1.0
+86.3 20 34 257.6 -1.0
+86.4 20 28 200.2 -2.0
+86.5 19 20 142.0 -1.2
+86.6 20 13 87.2 -2.0
+86.7 15 7 26.3 2.0
+86.8 13 4 5.2 2.0
+86.9 12 4 5.2 1.0
+87.0 13 4 5.2 2.0
+
+fed 7233 84119383 84119263 0 0
+fed 7234 85340301 85340301 110 1213038
+fed 7235 85346383 85348301 109 1211120
+fed 7236 85351398 85770521 109 791997
+fed 7237 85355401 85359398 108 788000
+fed 7238 85360388 85363401 108 784987
+```
+
+Agent b's trace (`runs/blackout/depth-b.txt`) has the same shape: 110 turns
+at 85.1 s on its clock, 12 by 86.2 s, and 6–7 from 86.3 s on.
+
 ## Shape
 
 ```text
