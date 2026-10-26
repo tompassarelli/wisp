@@ -1,9 +1,15 @@
 use std::sync::Arc;
 
+use crate::wire::Down;
 use crate::Micros;
 
 pub const FORMAT: &str = "relay path trace v1";
 pub const FLOOR_WINDOW: usize = 1250;
+
+pub fn arrival(down: &Down, now_us: Micros) -> Option<(u32, Micros)> {
+    let newest = down.turn_from + (down.turns.len() as u32).checked_sub(1)?;
+    Some((newest, now_us - down.sent_us as Micros))
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Trace {

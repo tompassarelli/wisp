@@ -8,6 +8,7 @@ use relay_proto::agent::{Agent, AgentConfig, AgentError, Fed};
 use relay_proto::cadence::Cadence;
 use relay_proto::control::{self, Control, KIND_CHALLENGE};
 use relay_proto::stream::{self, RoomStream, KIND_STREAM};
+use relay_proto::trace;
 use relay_proto::wire::{self, Packet, UpAction, KIND_COVER, KIND_DOWN, MAX_PACKET};
 use relay_proto::Micros;
 
@@ -314,7 +315,7 @@ impl Link {
                 if let Some(arrivals) = &mut self.arrivals {
                     if let Ok(Packet::Down(d)) = wire::decode(bytes) {
                         if d.token == self.token {
-                            arrivals.push((d.seq, now - d.sent_us as Micros));
+                            arrivals.extend(trace::arrival(&d, now));
                         }
                     }
                 }

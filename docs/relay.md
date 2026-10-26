@@ -1178,8 +1178,10 @@ and still saw up to 5.5 underruns per 10 minutes, and bursts of 4 at 1% and
 - **Recorded path traces.** `relay/relay-bench/traces/` holds traces of real
   paths in `relay path trace v1` (wisp:relay/relay-proto/src/trace.rs): a
   header with the turn period and the path's median action-acknowledgement
-  RTT, then one line per downstream packet in sequence, its one-way delay in
-  microseconds above the path's floor, or `-` when it was lost. The floor is a
+  RTT, then one line per turn: the one-way delay in microseconds above the
+  path's floor of the downstream packet whose newest turn it is, or `-` when
+  none arrived. Cover packets share the downstream packet sequence, so the
+  recorder keys packets by turn, not by sequence (wisp#39). The floor is a
   line through each 10 s window's smallest delay, which removes the two
   clocks' drift. `relay-synthetic --trace FILE` records one from a
   one-player room; a replay takes the RTT's half as the base one-way delay.
