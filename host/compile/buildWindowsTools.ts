@@ -17,6 +17,8 @@ const PACKAGER_SOURCE = join(import.meta.dir, "../../native/map-pack.c");
 
 const LINK = ["-static", "-s", "-Wl,--no-insert-timestamp"];
 
+const prefixMap = (work: string) => `-ffile-prefix-map=${work.replaceAll("\\", "/")}=.`;
+
 const run = (operation: string, command: readonly string[], cwd?: string) =>
   captureProcess(operation, cwd ?? command[0] ?? "", command, cwd === undefined ? {} : { cwd }).pipe(
     Effect.flatMap(({ exitCode, stdout, stderr }) => exitCode === 0
@@ -38,7 +40,7 @@ const stormlib = (work: string) => Effect.gen(function*() {
   const source = join(work, `StormLib-${STORMLIB_VERSION}`);
   const build = join(work, "stormlib-build");
   yield* run("configure StormLib", ["cmake", "-S", source, "-B", build, "-G", "MinGW Makefiles", "-DCMAKE_SH=CMAKE_SH-NOTFOUND",
-    "-DCMAKE_BUILD_TYPE=Release", "-DBUILD_SHARED_LIBS=OFF", "-DSTORM_USE_BUNDLED_LIBRARIES=ON", "-DSTORM_SKIP_INSTALL=ON"]);
+    `-DCMAKE_C_FLAGS=${prefixMap(work)}`, `-DCMAKE_CXX_FLAGS=${prefixMap(work)}`, "-DCMAKE_BUILD_TYPE=Release", "-DBUILD_SHARED_LIBS=OFF", "-DSTORM_USE_BUNDLED_LIBRARIES=ON", "-DSTORM_SKIP_INSTALL=ON"]);
   yield* run("build StormLib", ["cmake", "--build", build, "--parallel", String(availableParallelism())]);
   return { include: join(source, "src"), library: join(build, "libStormLib.a") };
 });
@@ -46,7 +48,7 @@ const stormlib = (work: string) => Effect.gen(function*() {
 const packager = (work: string, out: string) => Effect.gen(function*() {
   const { include, library } = yield* stormlib(work);
   const object = join(work, "map-pack.o");
-  yield* run("compile map packager", ["gcc", "-O2", "-DSTORMLIB_NO_AUTO_LINK", `-I${include}`, "-c", PACKAGER_SOURCE, "-o", object]);
+  yield* run("compile map packager", ["gcc", "-O2", prefixMap(work), "-DSTORMLIB_NO_AUTO_LINK", `-I${include}`, "-c", PACKAGER_SOURCE, "-o", object]);
   yield* run("link map packager", ["g++", ...LINK, object, library, "-lwininet", "-o", join(out, "map-pack.exe")]);
   const usage = yield* captureProcess("run map packager", out, [join(out, "map-pack.exe")]);
   if (usage.exitCode !== 2) return yield* new MapBuildFailure({ operation: "run map packager", path: out, cause: `usage exited ${usage.exitCode}: ${usage.stderr}` });
