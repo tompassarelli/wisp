@@ -5,6 +5,11 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## Unreleased
 
+- `wisp/scripts/wisp/syntheticBaseMap` exports `syntheticBaseMap` and
+  `syntheticMapInfo`; `bun node_modules/wisp/host/toolchain/syntheticBaseMap.ts
+  MAP_PACK OUT.w3x` writes the base map a consumer's CI builds its `.w3x`
+  from, never one to play (wisp#72, wisp:docs/ci.md, "A synthetic base map
+  for CI builds").
 - `wisp/src/map/frameMeter` exports `FrameStamp`, and `startFrameMeter`
   takes `stamps`. Frame capture receipts gain `stamps=` in the heading and in
   each sample: `frameCostCaptureHeading` takes the stamp names and

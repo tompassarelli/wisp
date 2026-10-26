@@ -46,7 +46,9 @@ tests build and cache the pinned one (wisp:host/compile/lua32.ts). The output mu
 checkout. The build also needs `nix` on first use: it links nixpkgs `lua5_3`,
 which checks the script's syntax, into wisp:build/tools/lua and compiles the map
 packager from wisp:native/map-pack.c against nixpkgs StormLib into
-wisp:build/tools/map-pack, again whenever that source changes. The packager
+wisp:build/tools/map-pack, again whenever that source changes. With `CC` and
+`STORMLIB_PREFIX` set it needs no `nix`: it compiles `luac` from the vendored
+Lua source and the packager against that StormLib (wisp:docs/ci.md). The packager
 only reads the base map and container (they may be read-only); the build
 stages the map in a copy of its own process and renames it into `--out`, so
 concurrent builds never share a partial file.

@@ -15,7 +15,7 @@ import type { Phase } from "../toolchain/compiler";
 import { type SourceMapFailure, SourceErrors } from "./sourceErrors";
 import { step } from "../cli/timings";
 import { checkUnitModels, type UnitModels, type ModelSource } from "../models/unitModels";
-import { lua32Key } from "./lua32";
+import { compileLua32, lua32Key } from "./lua32";
 import { installWindowsTool, usesWindowsTools } from "./windowsTools";
 
 export { MapBuildFailure };
@@ -313,8 +313,20 @@ const ensureLua = (directory: string) => usesWindowsTools()
   ? Effect.suspend(() => installWindowsTool("luac.exe", lua32Key("stock"), join(directory, "bin/luac.exe")))
   : Effect.suspend(() => existsSync(join(directory, "bin/luac")) ? Effect.void : Effect.gen(function*() {
   yield* tryMapSync("create Lua directory", directory, () => mkdirSync(dirname(directory), { recursive: true }));
+  if (process.env.CC !== undefined) return yield* compileLuac(directory);
   yield* runProcess("link Lua compiler", directory, ["nix", "build", "--out-link", directory, "nixpkgs#lua5_3"]);
 }).pipe(step("link Lua compiler")));
+
+const compileLuac = (directory: string) => Effect.gen(function*() {
+  const build = `${directory}.${process.pid}.build`;
+  const { src } = yield* compileLua32("stock", build);
+  yield* tryMapSync("install Lua compiler", directory, () => {
+    mkdirSync(join(directory, "bin"), { recursive: true });
+    copyFileSync(join(src, "luac"), join(directory, `bin/luac.${process.pid}.next`));
+    renameSync(join(directory, `bin/luac.${process.pid}.next`), join(directory, "bin/luac"));
+    rmSync(build, { recursive: true, force: true });
+  });
+});
 
 /** One FILE<TAB>ARCHIVE_NAME line per entry, the packager's list format. */
 const entryList = (entries: readonly ArchiveEntry[]) => entries.map(({ entry, source }) => {

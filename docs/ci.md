@@ -150,6 +150,30 @@ bun node_modules/wisp/host/compile/ciMapBuild.ts --store ~/maps --name mygame --
   -- bash -c 'bun scripts/game.ts map build --base "$WISP_BASE_MAP" --out "$WISP_MAP_OUT"'
 ```
 
+### A synthetic base map for CI builds
+
+A game's public CI has no World Editor map, yet can still check that its
+`.w3x` builds from a clean clone. The installed package exports
+`wisp/scripts/wisp/syntheticBaseMap`
+(wisp:host/toolchain/syntheticBaseMap.ts), which writes a minimal base map: a
+`war3map.lua` with empty `main` and `config`, and a `war3map.w3i` with no
+players, forces or bounds. It is the base for consumer CI map builds only,
+not for play: a map built on it has no terrain, players or start locations.
+`MAP_PACK` is where the map packager lives, built on first use as for
+`map build` (on Linux with `nix`, or with gcc, make and StormLib when `CC` and
+`STORMLIB_PREFIX` are set; from the shipped Windows tools on Windows).
+The last line checks that the built script starts the game's entry global,
+`wispTs` unless the game names another:
+
+```sh
+bun node_modules/wisp/host/toolchain/syntheticBaseMap.ts build/tools/map-pack "$RUNNER_TEMP/base.w3x"
+bun scripts/game.ts map build --base "$RUNNER_TEMP/base.w3x" --out "$RUNNER_TEMP/game.w3x"
+build/tools/map-pack extract "$RUNNER_TEMP/game.w3x" "$RUNNER_TEMP/war3map.lua" && grep -q 'wispTs.start' "$RUNNER_TEMP/war3map.lua"
+```
+
+Wisp's Windows job builds its sample the same way
+([Windows CI](platforms.md#windows-ci)).
+
 ## Wisp's own use
 
 Wisp's CI (wisp:.github/workflows/ci.yml) calls the template twice on the
@@ -173,7 +197,9 @@ has no failures the job runs only the checks (`bun run check`, clean room,
 moved, has no such summary and runs the whole suite. It installs
 Ubuntu's `libstorm-dev` and sets `STORMLIB_PREFIX=/usr` and `CC=gcc`, so the
 map packager (wisp:host/compile/mapBuild.ts) and its tests
-(wisp:test/map-pack.test.ts) build against that StormLib instead of nixpkgs';
+(wisp:test/map-pack.test.ts) build against that StormLib instead of nixpkgs',
+and `map build` compiles its syntax-checking `luac` from the vendored Lua
+5.3.6 source with gcc and make instead of linking nixpkgs `lua5_3`;
 without those two variables they use `nix`.
 
 Every 5 minutes wisp:.github/workflows/farm-load.yml samples the load of the
