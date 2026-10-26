@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Cause, Effect, Exit, Scope } from "effect";
 import { GameLauncher } from "../host/os/platform/services";
 import { startHost } from "../host/lan/host";
-import { ALARM_AFTER_MS, type Driver, driverVerdict, idleness, installOf, lanPlayRefusal, networkFlagProblem, pairClients, pairFlags, pairSides, prefixOf, wrongUser } from "../host/lan/pool";
+import { ALARM_AFTER_MS, type Driver, clientRun, driverVerdict, idleness, installOf, lanPlayRefusal, networkFlagProblem, pairClients, pairFlags, pairSides, prefixOf, wrongUser } from "../host/lan/pool";
 import { setupClient } from "../host/lan/setup";
 import { menuPage } from "../host/play/menus";
 import { LanFailure } from "../host/lan/join";
@@ -119,6 +119,26 @@ describe("pool operability", () => {
           }
         }
       }
+    }
+  });
+
+  test("[integration filesystem] a client whose Warcraft III wrote a crash report since its launch stops reporting its pid, and a crash from before the launch leaves a running client running", () => {
+    const documents = mkdtempSync(join(tmpdir(), "wisp-lan-crash-"));
+    try {
+      const launched = Date.now();
+      expect(clientRun(4242, documents, launched)).toEqual({ pid: 4242 });
+      mkdirSync(join(documents, "Errors/2026-10-26 16.06.33 d4247d40"), { recursive: true });
+      writeFileSync(join(documents, "Errors/2026-10-26 16.06.33 d4247d40/Crash.txt"), "ACCESS_VIOLATION\n");
+      utimesSync(join(documents, "Errors/2026-10-26 16.06.33 d4247d40/Crash.txt"), (launched - 60_000) / 1000, (launched - 60_000) / 1000);
+      expect(clientRun(4242, documents, launched)).toEqual({ pid: 4242 });
+      expect(clientRun(undefined, documents, launched)).toEqual({});
+      mkdirSync(join(documents, "Errors/2026-10-26 16.19.29 a1bf8290"), { recursive: true });
+      writeFileSync(join(documents, "Errors/2026-10-26 16.19.29 a1bf8290/Crash.txt"), "ACCESS_VIOLATION\n");
+      utimesSync(join(documents, "Errors/2026-10-26 16.19.29 a1bf8290/Crash.txt"), (launched + 30_000) / 1000, (launched + 30_000) / 1000);
+      expect(clientRun(4242, documents, launched)).toEqual({ crash: "Errors/2026-10-26 16.19.29 a1bf8290" });
+      expect(idleness(new Date(launched).toISOString(), undefined, undefined, false, clientRun(4242, documents, launched).pid === undefined ? ["lan0a"] : [], launched).state).toBe("dead");
+    } finally {
+      rmSync(documents, { recursive: true, force: true });
     }
   });
 });

@@ -334,6 +334,23 @@ export function idleness(started: string, ended: string | undefined, driver: Dri
   return { state: busy ? "busy" : "idle", idleSince, idleSeconds: busy ? 0 : Math.max(0, Math.floor((now - since) / 1000)) };
 }
 
+export function crashSince(documents: string, since: number): string | undefined {
+  const errors = join(documents, "Errors");
+  if (!existsSync(errors)) return undefined;
+  const written = readdirSync(errors).flatMap((folder) => {
+    const report = join(errors, folder, "Crash.txt");
+    return existsSync(report) && statSync(report).mtimeMs >= since ? [{ folder, at: statSync(report).mtimeMs }] : [];
+  });
+  const newest = written.sort((left, right) => right.at - left.at)[0];
+  return newest === undefined ? undefined : `Errors/${newest.folder}`;
+}
+
+export function clientRun(pid: number | undefined, documents: string, launched: number | undefined): { readonly pid?: number; readonly crash?: string } {
+  const crash = launched === undefined ? undefined : crashSince(documents, launched);
+  if (crash !== undefined) return { crash };
+  return pid === undefined ? {} : { pid };
+}
+
 export function pairOf(pool: PoolFile, names: readonly string[]): PoolPair | undefined {
   return pool.pairs.find(({ id }) => names.every((name) => PAIR_SIDES.some((side) => clientName(id, side) === name)));
 }

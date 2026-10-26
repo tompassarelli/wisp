@@ -14,7 +14,7 @@ import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { mapCopies, mapFactsLine, readMapFacts } from "./map";
 import { relayedStatus } from "./relayedStatus";
-import { ALARM_AFTER_MS, agentPidFile, confirmToplevel, type Driver, MENUS_DEADLINE, TOPLEVEL_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, alive, launchUntilShown, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, agentSocket, clientLease, clientLog, stopClientScope, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
+import { ALARM_AFTER_MS, agentPidFile, confirmToplevel, type Driver, MENUS_DEADLINE, TOPLEVEL_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, alive, launchUntilShown, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, agentSocket, clientLease, clientLog, stopClientScope, audioSinkOf, clientName, clientRoot, clientRun, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
 import { preferences, windowSize } from "../os/warcraft/clientProfiles";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
 import { DesktopFailure, ToplevelMissing } from "../os/warcraft/desktopClient";
@@ -38,6 +38,8 @@ type PoolClient = (typeof clients)[number];
 
 const until = <E, R>(check: Effect.Effect<boolean, E, R>, limit: `${number} seconds`) =>
   pollUntil(check, { until: (held) => held, every: "250 millis", within: limit, onTimeout: () => Effect.succeed(false) });
+
+const launchedAt = new Map<string, number>();
 
 const stopClient = (client: PoolClient) => stopClientScope(pair, client.name, (lease) => Effect.sync(() => say(`${client.name} outlived its stop (lease ${lease}); killing its scope`)));
 
@@ -98,7 +100,8 @@ const agent = Effect.gen(function*() {
   const agentScope = yield* Effect.scope;
   const copyMap = yield* mapCopies(clients.map(({ name }) => join(documentsOf(name), "Maps/Wisp")));
   const table = yield* ProcessTable;
-  const gamePid = (name: string) => table.games(prefixOf(name)).pipe(Effect.map((games) => games[0]?.pid), Effect.orElseSucceed(() => undefined));
+  const gameRun = (name: string) => table.games(prefixOf(name)).pipe(Effect.map((games) => games[0]?.pid), Effect.orElseSucceed(() => undefined), Effect.map((pid) => clientRun(pid, documentsOf(name), launchedAt.get(name))));
+  const gamePid = (name: string) => gameRun(name).pipe(Effect.map(({ pid }) => pid));
 
   const reports = new Map<string, MenuReports>();
   for (const client of clients) {
@@ -321,7 +324,7 @@ const agent = Effect.gen(function*() {
   const handle = (request: Request) => Effect.gen(function*() {
     const url = new URL(request.url);
     if (url.pathname === "/status") {
-      const running = yield* Effect.forEach(clients, ({ name }) => gamePid(name).pipe(Effect.map((pid) => ({ name, pid, documents: documentsOf(name) }))));
+      const running = yield* Effect.forEach(clients, ({ name }) => gameRun(name).pipe(Effect.map((run) => ({ name, ...run, documents: documentsOf(name) }))));
       const current = game === undefined ? relayedGame() : { id: game.id, log: game.log, map: game.map, ...game.host.status() };
       const playing = current !== undefined && current.phase !== "lobby" && current.phase !== "over";
       return Response.json({
