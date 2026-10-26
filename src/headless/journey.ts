@@ -1,11 +1,12 @@
 import type { Lockstep } from "./lockstep";
-import type { MissingNative } from "./clientTypes";
+import type { MissingNative, PlayerMouseInput } from "./clientTypes";
 import { point } from "./pointer";
 
 export type JourneyEvent =
   | { readonly frame: number; readonly player: number; readonly chat: string }
   | { readonly frame: number; readonly player: number; readonly key: number; readonly meta: number; readonly down?: boolean }
   | { readonly frame: number; readonly player: number; readonly mouse: { readonly x: number; readonly y: number; readonly left?: boolean } }
+  | { readonly frame: number; readonly player: number; readonly playerMouse: PlayerMouseInput }
   | { readonly frame: number; readonly player: number; readonly click: { readonly x: number; readonly y: number } }
   | { readonly frame: number; readonly reload: true };
 
@@ -89,6 +90,7 @@ export function runJourney(clients: Lockstep, journey: Journey, options: Journey
       else clients.key(event.player, event.key, event.meta, event.down);
     }
     else if ("mouse" in event) point(clients.client(event.player), event.mouse.x, event.mouse.y, event.mouse.left);
+    else if ("playerMouse" in event) clients.playerMouse(event.player, event.playerMouse);
     else if ("click" in event) {
       if (!clients.click(event.player, event.click.x, event.click.y)) throw new Error(`journey click at frame ${event.frame} (${event.click.x}, ${event.click.y}) reached no frame that takes clicks`);
     }

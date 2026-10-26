@@ -1,6 +1,6 @@
 import { divideFloat32, roundToFloat32, subtractFloat32TowardZero } from "../../sim/binary32";
 import { f32 } from "../../sim/f32";
-import type { Handle, HandleFactory, NativeBehavior, SyncMessage } from "../clientTypes";
+import type { Handle, HandleFactory, NativeBehavior, PlayerMouseInput, SyncMessage } from "../clientTypes";
 import type { Frame } from "../frames";
 import { FRAMES_PER_SECOND } from "../frameRate";
 import { isFrame } from "./frames";
@@ -39,6 +39,9 @@ interface EventContext {
   syncData: string;
   chat: string;
   key: number;
+  mouseX: number;
+  mouseY: number;
+  mouseButton: unknown;
   timer: Timer | undefined;
   frame: Frame | undefined;
   frameEvent: unknown;
@@ -48,7 +51,22 @@ type Registration =
   | { readonly kind: "sync"; readonly trigger: Trigger; readonly player: number; readonly prefix: string }
   | { readonly kind: "chat"; readonly trigger: Trigger; readonly player: number; readonly text: string; readonly exact: boolean }
   | { readonly kind: "key"; readonly trigger: Trigger; readonly player: number; readonly key: number; readonly meta: number; readonly down: boolean }
+  | { readonly kind: "player"; readonly trigger: Trigger; readonly player: number; readonly event: unknown }
   | { readonly kind: "frame"; readonly trigger: Trigger; readonly frame: Frame; readonly event: unknown };
+
+/** One player's synchronized mouse event at world coordinates: its player event, and its button for a press or release. */
+export interface PlayerMouse {
+  readonly event: unknown;
+  readonly x: number;
+  readonly y: number;
+  readonly button: unknown;
+}
+
+export function playerMouseEvent(natives: Readonly<Record<string, unknown>>, input: PlayerMouseInput): PlayerMouse {
+  if (!("button" in input)) return { event: natives.EVENT_PLAYER_MOUSE_MOVE, x: input.x, y: input.y, button: undefined };
+  const button = input.button === "left" ? natives.MOUSE_BUTTON_TYPE_LEFT : input.button === "middle" ? natives.MOUSE_BUTTON_TYPE_MIDDLE : natives.MOUSE_BUTTON_TYPE_RIGHT;
+  return { event: input.down ? natives.EVENT_PLAYER_MOUSE_DOWN : natives.EVENT_PLAYER_MOUSE_UP, x: input.x, y: input.y, button };
+}
 
 /** The shortest repeating period: a zero period fires about 10,000 times a game second (wisp:docs/warsmash-notes.md#timers-and-frame-stepping). */
 const MIN_PERIOD = f32(0.0001);
@@ -67,7 +85,7 @@ export class TriggersTimers {
 
   private now = 0;
   private readonly registrations: Registration[] = [];
-  private readonly event: EventContext = { player: 0, syncPrefix: "", syncData: "", chat: "", key: 0, timer: undefined, frame: undefined, frameEvent: undefined };
+  private readonly event: EventContext = { player: 0, syncPrefix: "", syncData: "", chat: "", key: 0, mouseX: 0, mouseY: 0, mouseButton: undefined, timer: undefined, frame: undefined, frameEvent: undefined };
 
   constructor(private readonly handle: HandleFactory, private readonly units: Units) {}
 
@@ -86,6 +104,9 @@ export class TriggersTimers {
     if (event.syncData !== undefined) this.event.syncData = event.syncData;
     if (event.chat !== undefined) this.event.chat = event.chat;
     if (event.key !== undefined) this.event.key = event.key;
+    if (event.mouseX !== undefined) this.event.mouseX = event.mouseX;
+    if (event.mouseY !== undefined) this.event.mouseY = event.mouseY;
+    if (event.mouseButton !== undefined) this.event.mouseButton = event.mouseButton;
     if (event.frame !== undefined) this.event.frame = event.frame;
     if (event.frameEvent !== undefined) this.event.frameEvent = event.frameEvent;
     const running = trigger.running;
@@ -174,6 +195,14 @@ export class TriggersTimers {
     }
   }
 
+  playerMouse(sender: number, { event, x, y, button }: PlayerMouse): void {
+    for (const registration of [...this.registrations]) {
+      if (registration.kind === "player" && registration.player === sender && registration.event === event) {
+        this.fire(registration.trigger, { player: sender, mouseX: roundToFloat32(x), mouseY: roundToFloat32(y), mouseButton: button });
+      }
+    }
+  }
+
   frameEvent(sender: number, id: number, event: unknown): void {
     for (const registration of [...this.registrations]) {
       if (registration.kind === "frame" && registration.frame.id === id && registration.event === event) {
@@ -241,6 +270,10 @@ export class TriggersTimers {
       BlzGetTriggerSyncPrefix: () => this.event.syncPrefix,
       GetEventPlayerChatString: () => this.event.chat,
       BlzGetTriggerPlayerKey: () => this.event.key,
+      BlzGetTriggerPlayerMouseX: () => this.event.mouseX,
+      BlzGetTriggerPlayerMouseY: () => this.event.mouseY,
+      BlzGetTriggerPlayerMousePosition: () => this.units.location(this.event.mouseX, this.event.mouseY),
+      BlzGetTriggerPlayerMouseButton: () => this.event.mouseButton,
       GetExpiredTimer: () => this.event.timer,
       CreateTrigger: (): Trigger => ({ ...this.handle("trigger"), actions: [], destroyed: false, running: false, interrupted: false }),
       BlzTriggerIsRunning: (trigger: Trigger) => trigger.running,
@@ -258,6 +291,10 @@ export class TriggersTimers {
       },
       TriggerRegisterPlayerChatEvent: (trigger: Trigger, player: number, text: string, exact: boolean) => {
         this.registrations.push({ kind: "chat", trigger, player, text, exact });
+        return this.handle("event");
+      },
+      TriggerRegisterPlayerEvent: (trigger: Trigger, player: number, event: unknown) => {
+        this.registrations.push({ kind: "player", trigger, player, event });
         return this.handle("event");
       },
       BlzTriggerRegisterPlayerKeyEvent: (trigger: Trigger, player: number, key: number, meta: number, down: boolean) => {

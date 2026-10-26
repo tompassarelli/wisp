@@ -15,6 +15,13 @@ export interface SyncMessage {
   readonly data: string;
 }
 
+export type MouseButton = "left" | "middle" | "right";
+
+/** A player's mouse at world coordinates: a move, or a button pressed or released there. */
+export type PlayerMouseInput =
+  | { readonly x: number; readonly y: number }
+  | { readonly x: number; readonly y: number; readonly button: MouseButton; readonly down: boolean };
+
 export interface MapEntry {
   start(this: void): void;
   install(this: void): void;

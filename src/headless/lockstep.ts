@@ -4,7 +4,7 @@ import { type Hash, type ModuleSet, ModulePublisher, type VersionFiles } from ".
 import { type ClientFiles, type ClientScope, HeadlessClient, type LocalNatives, type MapEntry, type NativeBehaviors, type SyncMessage, WISP_LOCAL_NATIVES, describeCall, sameCall } from "./client";
 import type { NativeDeclarations } from "./declarations";
 import type { EffectDeaths, UnitStateFixtures } from "./clientTypes";
-import type { IntentionalNoops } from "./clientTypes";
+import type { IntentionalNoops, PlayerMouseInput } from "./clientTypes";
 import type { SceneryFixtures } from "./warcraft3Scenery";
 import type { Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 import type { AbilityObjectFixtures } from "./warcraft3Abilities";
@@ -64,6 +64,7 @@ export interface SyncDelivery {
 export type LinkEvent =
   | { readonly sender: number; readonly kind: "sync"; readonly prefix: string; readonly data: string }
   | { readonly sender: number; readonly kind: "key"; readonly key: number; readonly meta: number; readonly down: boolean }
+  | { readonly sender: number; readonly kind: "mouse"; readonly mouse: PlayerMouseInput }
   | { readonly sender: number; readonly kind: "chat"; readonly text: string }
   | { readonly sender: number; readonly kind: "click"; readonly frame: number };
 
@@ -191,6 +192,7 @@ export class Lockstep {
   private apply(client: HeadlessClient, event: LinkEvent): void {
     if (event.kind === "sync") client.deliverSync({ sender: event.sender, prefix: event.prefix, data: event.data });
     else if (event.kind === "key") client.keyEvent(event.sender, event.key, event.meta, event.down);
+    else if (event.kind === "mouse") client.playerMouse(event.sender, event.mouse);
     else if (event.kind === "chat") client.chat(event.sender, event.text);
     else client.frameEvent(event.sender, event.frame, client.natives.FRAMEEVENT_CONTROL_CLICK);
   }
@@ -256,10 +258,15 @@ export class Lockstep {
     for (const client of this.clients) if (client.log.length > keep) client.forget(client.log.length - keep);
   }
 
-  chat(sender: number, message: string): void {
-    if (this.options.link !== undefined) return this.send({ sender, kind: "chat", text: message });
-    for (const client of this.clients) client.chat(sender, message);
+  /** A player's input event reaches every client on one frame: through the link, or here at once. */
+  private input(event: LinkEvent): void {
+    if (this.options.link !== undefined) return this.send(event);
+    for (const client of this.clients) this.apply(client, event);
     this.flush();
+  }
+
+  chat(sender: number, message: string): void {
+    this.input({ sender, kind: "chat", text: message });
   }
 
   press(sender: number, key: number, meta = 0): void {
@@ -267,12 +274,13 @@ export class Lockstep {
   }
 
   key(sender: number, key: number, meta: number, down: boolean): void {
-    if (this.options.link !== undefined) {
-      for (const client of this.clients) if (client.slot === sender) client.hold(key, meta, down);
-      return this.send({ sender, kind: "key", key, meta, down });
-    }
-    for (const client of this.clients) client.key(sender, key, meta, down);
-    this.flush();
+    for (const client of this.clients) if (client.slot === sender) client.hold(key, meta, down);
+    this.input({ sender, kind: "key", key, meta, down });
+  }
+
+  /** A player's world-coordinate mouse event reaches every client's triggers on one frame, as a key event does. */
+  playerMouse(sender: number, mouse: PlayerMouseInput): void {
+    this.input({ sender, kind: "mouse", mouse });
   }
 
   client(slot: number): HeadlessClient {
@@ -294,13 +302,7 @@ export class Lockstep {
     const frame = clicker.clickTarget(x, y);
     if (frame === undefined) return false;
     clicker.frames.focus(frame, true);
-    if (this.options.link !== undefined) {
-      this.send({ sender, kind: "click", frame: frame.id });
-      return true;
-    }
-    const click = clicker.natives.FRAMEEVENT_CONTROL_CLICK;
-    for (const client of this.clients) client.frameEvent(sender, frame.id, click);
-    this.flush();
+    this.input({ sender, kind: "click", frame: frame.id });
     return true;
   }
 

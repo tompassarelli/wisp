@@ -111,14 +111,14 @@ export function coreFixture(declarations: NativeDeclarations, executed?: Set<str
   const frame = call("BlzCreateFrameByType", "TEXTAREA", "fixture", undefined, "", 0) as Handle;
   call("BlzTextAreaFrameSetAutoScroll", frame, false);
   equal(client.textAreaAutoScroll.get(frame), false, "text auto scroll");
-  client.key(0, 65, 2, true);
+  client.hold(65, 2, true);
   equal(call("BlzIsKeyPressed", 65), true, "key held");
   equal(call("BlzIsMetaKeyPressed", 2), true, "meta held");
-  client.key(0, 65, 3, true);
+  client.hold(65, 3, true);
   equal(call("BlzIsMetaKeyPressed", 1), true, "shift in combined modifiers");
   equal(call("BlzIsMetaKeyPressed", 2), true, "ctrl in combined modifiers");
   equal(call("BlzIsMetaKeyPressed", 4), false, "alt absent in combined modifiers");
-  client.key(0, 65, 0, false);
+  client.hold(65, 0, false);
   equal(call("BlzIsKeyPressed", 65), false, "key released");
   client.heldMouseButtons.add("MOUSE_BUTTON_TYPE_LEFT");
   equal(call("BlzIsMouseButtonPressed", "MOUSE_BUTTON_TYPE_LEFT"), true, "mouse held");

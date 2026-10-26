@@ -1,6 +1,6 @@
 import { f32 } from "../sim/f32";
 import { mixCall } from "./callHash";
-import type { CameraPose, CineFilterPose, ClientFiles, EffectDeaths, EffectPose, Handle, IntentionalNoops, LocalNatives, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, SyncMessage, UnitPose, UnitStateFixtures } from "./clientTypes";
+import type { CameraPose, CineFilterPose, ClientFiles, EffectDeaths, EffectPose, Handle, IntentionalNoops, LocalNatives, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, PlayerMouseInput, SoundCue, SyncMessage, UnitPose, UnitStateFixtures } from "./clientTypes";
 import type { NativeDeclarations } from "./declarations";
 import { FRAME_POINTS, type Frame, type FrameTemplate, Frames } from "./frames";
 import { FRAMES_PER_SECOND, steppedFrames } from "./frameRate";
@@ -12,7 +12,7 @@ import { frameNatives, type FrameContext, inputNatives } from "./natives/frames"
 import { mathNatives } from "./natives/math";
 import { PreloadText } from "./natives/preloadText";
 import { Sounds } from "./natives/sound";
-import { TriggersTimers } from "./natives/triggersTimers";
+import { playerMouseEvent, TriggersTimers } from "./natives/triggersTimers";
 import { type Unit, Units } from "./natives/units";
 import { TextTags } from "./textTags";
 import { type AbilityObjectFixtures, Warcraft3Abilities } from "./warcraft3Abilities";
@@ -355,11 +355,6 @@ export class HeadlessClient {
     this.run(() => this.timers.chat(sender, message));
   }
 
-  key(sender: number, key: number, meta: number, down: boolean): void {
-    if (sender === this.slot) this.hold(key, meta, down);
-    this.keyEvent(sender, key, meta, down);
-  }
-
   hold(key: number, meta: number, down: boolean): void {
     this.heldMeta = meta;
     if (down) this.heldKeys.add(key);
@@ -368,6 +363,10 @@ export class HeadlessClient {
 
   keyEvent(sender: number, key: number, meta: number, down: boolean): void {
     this.run(() => this.timers.keyEvent(sender, key, meta, down));
+  }
+
+  playerMouse(sender: number, input: PlayerMouseInput): void {
+    this.run(() => this.timers.playerMouse(sender, playerMouseEvent(this.natives, input)));
   }
 
   type(text: string): boolean {

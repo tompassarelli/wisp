@@ -128,6 +128,7 @@ export const JOURNEY: Journey = {
     { frame: 60, reload: true },
     { frame: 90, player: 1, key: 0x54, meta: 2 },
     { frame: 100, player: 0, mouse: { x: 640, y: 360, left: true } },
+    { frame: 105, player: 1, playerMouse: { x: 512, y: -256, button: "right", down: true } },
     { frame: 110, player: 0, click: { x: 0.4, y: 0.3 } },
   ],
 };
@@ -138,6 +139,13 @@ A mouse event moves that player's pointer to screen pixel `x`, `y`
 (`BlzGetMouseScreenPosX/Y`) on their client only, and `left` holds or
 releases the left button (`BlzIsMouseButtonPressed`); it stays where the last
 event left it, so a drag is a press, moves and a release.
+A player mouse event is that player's synchronized mouse event at world
+`x`, `y`: a move, or with `button` (`left`, `middle`, `right`) and `down` a
+press or release. Like a key event it reaches every client's
+`TriggerRegisterPlayerEvent` triggers on one frame, with `GetTriggerPlayer`,
+`BlzGetTriggerPlayerMouseX/Y`, `BlzGetTriggerPlayerMousePosition` and
+`BlzGetTriggerPlayerMouseButton` set; `test/player-mouse67/` checks it in Bun
+and Lua32.
 A click event is `Lockstep.click` at Warcraft UI coordinates (see Typing and
 clicks); the journey fails when no frame there takes clicks.
 `runJourney` starts the map in every client, plays the events and returns each

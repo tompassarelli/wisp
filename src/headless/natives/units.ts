@@ -62,6 +62,12 @@ export class Units {
     return { locations: this.locations.size, groups: this.groups.size };
   }
 
+  location(x: number, y: number): Handle {
+    const handle = this.handle("location");
+    this.locations.set(handle, { x, y });
+    return handle;
+  }
+
   create(owner: number, typeId: number, x: number, y: number, facing: number): Unit {
     const handle = this.handle("unit");
     const state = this.states[typeId];
@@ -129,11 +135,7 @@ export class Units {
       GetPlayerId: (player: number) => player,
       GetPlayerName: (player: number) => playerNames?.[player] ?? `Player ${player + 1}`,
       GetHandleId: (handle: unknown) => (isHandle(handle) ? handle.id : handle),
-      Location: (x: number, y: number) => {
-        const handle = this.handle("location");
-        this.locations.set(handle, { x, y });
-        return handle;
-      },
+      Location: (x: number, y: number) => this.location(x, y),
       RemoveLocation: (handle: Handle) => { this.locations.delete(handle); },
       MoveLocation: (handle: Handle, x: number, y: number) => {
         const location = this.locations.get(handle);

@@ -85,6 +85,10 @@ const Whole = Schema.Finite;
 const Event = Schema.Union([
   Schema.Struct({ sender: Whole, kind: Schema.Literal("sync"), prefix: Schema.String, data: Schema.String }),
   Schema.Struct({ sender: Whole, kind: Schema.Literal("key"), key: Whole, meta: Whole, down: Schema.Boolean }),
+  Schema.Struct({ sender: Whole, kind: Schema.Literal("mouse"), mouse: Schema.Union([
+    Schema.Struct({ x: Schema.Finite, y: Schema.Finite, button: Schema.Literals(["left", "middle", "right"]), down: Schema.Boolean }),
+    Schema.Struct({ x: Schema.Finite, y: Schema.Finite }),
+  ]) }),
   Schema.Struct({ sender: Whole, kind: Schema.Literal("chat"), text: Schema.String }),
   Schema.Struct({ sender: Whole, kind: Schema.Literal("click"), frame: Whole }),
 ]);
