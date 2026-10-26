@@ -122,7 +122,7 @@ jobs:
           out="$RUNNER_TEMP/seed-farm"
           commit=$(git rev-parse HEAD)
           label=()
-          [ -n "$(gh label list --limit 200 --json name -q '.[] | select(.name == "bug") | .name')" ] && label=(--label bug)
+          [ -n "$(gh label list --limit 200 --json name -q '.[] | select(.name == "bug") | .name')" ] && label=(--label bug --label priority:now)
           while IFS=$'\t' read -r title path seed; do
             replay="git checkout $commit && bun install --frozen-lockfile && $COMMAND repro $path"
             download="gh run download ${{ github.run_id }} -R $GH_REPO -n $ARTIFACT"
