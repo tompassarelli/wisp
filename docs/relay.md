@@ -1195,6 +1195,43 @@ and still saw up to 5.5 underruns per 10 minutes, and bursts of 4 at 1% and
   2.8/58.9/236.5 ms at a 43 ms RTT. Replayed with `--raise-headroom-ms 100
   --max-total-depth-ms 100` it has 20.01 underruns per 10 minutes, against
   22 in the live match.
+- **Relay send log (wisp#60).** `relay --send-log FILE` (off by default;
+  when off the relay keeps no record and decodes nothing) appends what the
+  relay sends downstream in `relay send log v1`
+  (wisp:relay/relay-proto/src/send_log.rs), written as the first line when
+  the file is empty. One line per downstream packet: `down ROOM SLOT SEQ
+  NEWEST AT_US`, or `cover ...` for a cover packet, where ROOM is the room
+  id in hex, SLOT the player slot, SEQ the packet sequence (covers share
+  it), NEWEST the packet's newest turn or `-` when it carries none, and
+  AT_US the send time. One line per clock stop: `stop ROOM AT_US lag SLOT
+  BEHIND_US`, the slot furthest behind on checksums and by how much (past
+  `LAG_LIMIT_US`, 1 s), which is the only cause that counts in the
+  summary's `stops`. Times are µs since the room was created on the relay,
+  the reference of every down packet's `sent_us` stamp, so a `down` line's
+  AT_US equals the `sent_us` its agent receives. A path trace's delays are
+  measured against that stamp; the agent's own `--trace` uses its link
+  clock (µs since its handshake) instead, so only path traces join with
+  the log. Lines are buffered and flushed at least once a second and when
+  the relay exits; a killed relay can lose its last second.
+  `relay/tests/send_log.rs` plays a room through the relay binary on
+  loopback, holds one player's checksums back past the lag limit, and
+  checks the log against every down and cover packet each agent received,
+  in order, with times that never fall and one stop naming the held slot.
+- **Loss runs on the route or the relay.** `cargo run -p relay-bench --bin
+  relay-losses -- --send-log FILE --trace FILE [--room ID] [--slot N]`
+  joins a send log with one agent's path trace (`relay-synthetic --trace`)
+  by turn: slot i of the trace is the slot's smallest newest turn in the
+  log plus i, which holds when the agent heard the first turn's packet.
+  For each run of lost slots of 100 ms or more it takes the last turn the
+  relay sent before the run as the schedule's anchor, one trace period a
+  turn, and counts the run's turns the relay sent as a packet's newest
+  turn within one period of schedule. All of them on time puts the run on
+  the route; none puts it on the relay (a pause sends nothing, then
+  catches up late with the turns packed into a few packets); anything else
+  is mixed. Each line gives the counts and the longest gap between the
+  relay's down packets to that slot across the run, then the room's stops
+  with their times and slots. `relay-proto/tests/send_log.rs` checks one
+  synthetic pair of files for each case.
 
 ### Recorded trace cell (wisp#45)
 

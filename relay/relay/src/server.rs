@@ -6,6 +6,7 @@ use std::net::{IpAddr, SocketAddr};
 use relay_proto::cadence::Cadence;
 use relay_proto::control::{self, Control, Refusal};
 use relay_proto::relay::Relay;
+use relay_proto::send_log::Line;
 use relay_proto::lobby::{LobbyTiming, HOST_TIMING};
 use relay_proto::stream::KIND_STREAM;
 use relay_proto::transport::Transport;
@@ -79,6 +80,7 @@ pub struct Server {
     creations: HashMap<IpAddr, (Micros, u32)>,
     stats: Stats,
     log: Vec<String>,
+    sends: Option<Vec<Line>>,
 }
 
 impl Server {
@@ -93,6 +95,7 @@ impl Server {
             creations: HashMap::new(),
             stats: Stats::default(),
             log: Vec::new(),
+            sends: None,
         }
     }
 
@@ -113,6 +116,14 @@ impl Server {
 
     pub fn take_log(&mut self) -> Vec<String> {
         std::mem::take(&mut self.log)
+    }
+
+    pub fn record_sends(&mut self) {
+        self.sends.get_or_insert_with(Vec::new);
+    }
+
+    pub fn take_sends(&mut self) -> Vec<Line> {
+        self.sends.as_mut().map(std::mem::take).unwrap_or_default()
     }
 
     pub fn cookie(&self, peer: impl Into<Peer>, now: Micros) -> u64 {
@@ -396,19 +407,7 @@ impl Server {
             let mark = out.len();
             room.poll_game(id, now, self.cfg.lobby_us, &self.cadence, out, &mut self.log);
             if room.relay.next_wake() <= now {
-                for (index, bytes) in room.relay.poll(now) {
-                    let slot = &mut room.slots[index];
-                    if slot.left {
-                        continue;
-                    }
-                    if let Some(path) = &mut slot.path {
-                        match send_down(path, bytes, out) {
-                            Delivery::Sent | Delivery::Undecodable => {}
-                            Delivery::Trimmed => self.stats.trimmed += 1,
-                            Delivery::Withheld => self.stats.withheld += 1,
-                        }
-                    }
-                }
+                send_turns(room, id, now, out, &mut self.stats, self.sends.as_mut());
             }
             room.relayed += out[mark..].iter().map(|(_, b)| b.len() as u64).sum::<u64>();
             let budget = self.cfg.slot_bytes * room.slots.len() as u64;
@@ -446,3 +445,27 @@ impl Server {
     }
 }
 
+fn send_turns(room: &mut Room, id: u64, now: Micros, out: &mut Out, stats: &mut Stats, mut sends: Option<&mut Vec<Line>>) {
+    let stops = room.relay.stops();
+    let origin = room.relay.origin();
+    for (index, bytes) in room.relay.poll(now) {
+        let slot = &mut room.slots[index];
+        if slot.left {
+            continue;
+        }
+        if let Some(path) = &mut slot.path {
+            let before = out.len();
+            match send_down(path, bytes, out) {
+                Delivery::Sent | Delivery::Undecodable => {}
+                Delivery::Trimmed => stats.trimmed += 1,
+                Delivery::Withheld => stats.withheld += 1,
+            }
+            if let (Some(sends), Some((_, sent))) = (sends.as_deref_mut(), out.get(before)) {
+                sends.extend(Line::packet(id, index, sent, now - origin));
+            }
+        }
+    }
+    if let (Some(sends), Some(stop)) = (sends, room.relay.last_stop().filter(|_| room.relay.stops() > stops)) {
+        sends.push(Line::Stop { room: id, at_us: stop.at_us, slot: stop.slot, behind_us: stop.behind_us });
+    }
+}

@@ -45,9 +45,17 @@ pub struct Relay {
     pending: VecDeque<Pending>,
     stopped: Option<Micros>,
     stops: u32,
+    last_stop: Option<Stop>,
     running_since: Option<Micros>,
     compared: u32,
     desync: Option<u32>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Stop {
+    pub at_us: Micros,
+    pub slot: usize,
+    pub behind_us: Micros,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -87,6 +95,7 @@ impl Relay {
             pending: VecDeque::new(),
             stopped: None,
             stops: 0,
+            last_stop: None,
             running_since: None,
             compared: 0,
             desync: None,
@@ -105,6 +114,14 @@ impl Relay {
 
     pub fn stops(&self) -> u32 {
         self.stops
+    }
+
+    pub fn origin(&self) -> Micros {
+        self.origin
+    }
+
+    pub fn last_stop(&self) -> Option<Stop> {
+        self.last_stop
     }
 
     pub fn running_since(&self) -> Option<Micros> {
@@ -226,10 +243,11 @@ impl Relay {
             if self.awaiting_first_turn() {
                 self.stopped = Some(now);
                 self.next_probe = 0;
-            } else if self.lagging() {
+            } else if let Some((slot, behind_us)) = self.laggard() {
                 self.stopped = Some(now);
                 self.next_probe = 0;
                 self.stops += 1;
+                self.last_stop = Some(Stop { at_us: now - self.origin, slot, behind_us });
             } else {
                 if self.next_turn == 1 {
                     self.running_since = self.base;
@@ -302,10 +320,17 @@ impl Relay {
     }
 
     fn lagging(&self) -> bool {
+        self.laggard().is_some()
+    }
+
+    fn laggard(&self) -> Option<(usize, Micros)> {
         let emitted = self.cadence.relay_time(self.next_turn);
         self.players
             .iter()
-            .any(|p| emitted - self.cadence.relay_time(p.checksum_count) > LAG_LIMIT_US)
+            .map(|p| emitted - self.cadence.relay_time(p.checksum_count))
+            .enumerate()
+            .filter(|&(_, behind)| behind > LAG_LIMIT_US)
+            .max_by_key(|&(_, behind)| behind)
     }
 
     fn packets_for(&mut self, index: usize, now: Micros) -> Vec<Vec<u8>> {

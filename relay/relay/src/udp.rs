@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use relay_proto::transport::Transport;
 use relay_proto::Micros;
 
+use crate::send_log::SendLog;
 use crate::server::{Out, Server};
 
 const MAX_WAIT_US: Micros = 50_000;
@@ -29,19 +30,22 @@ pub(crate) fn quiet(e: &io::Error) -> bool {
     )
 }
 
-pub(crate) fn tick(server: &mut Server, t: Micros, once: bool, idle_us: Micros) -> Option<Micros> {
+pub(crate) fn tick(server: &mut Server, t: Micros, once: bool, idle_us: Micros, sends: Option<&mut SendLog>) -> io::Result<Option<Micros>> {
+    if let Some(log) = sends {
+        log.write(&server.take_sends())?;
+    }
     for line in server.take_log() {
         println!("{:.3} {line}", t as f64 / 1e6);
     }
     if once && server.rooms() == 0 && (server.stats().rooms_closed > 0 || t >= idle_us) {
-        return None;
+        return Ok(None);
     }
-    Some(
+    Ok(Some(
         server
             .next_wake()
             .map_or(MAX_WAIT_US, |w| w - t)
             .clamp(MIN_WAIT_US, MAX_WAIT_US),
-    )
+    ))
 }
 
 pub fn serve(
@@ -58,7 +62,7 @@ pub fn serve(
         let t = now();
         server.poll(t, &mut out);
         flush(socket, &mut out);
-        let Some(wait) = tick(server, t, once, idle_us) else {
+        let Some(wait) = tick(server, t, once, idle_us, None)? else {
             return Ok(());
         };
         socket.set_read_timeout(Some(Duration::from_micros(wait as u64)))?;

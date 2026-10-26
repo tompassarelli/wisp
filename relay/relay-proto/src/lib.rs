@@ -9,6 +9,7 @@ pub mod rng;
 pub mod room;
 pub mod stream;
 pub mod lobby;
+pub mod send_log;
 pub mod sim;
 pub mod trace;
 pub mod transport;

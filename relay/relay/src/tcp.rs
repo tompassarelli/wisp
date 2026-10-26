@@ -11,6 +11,7 @@ use relay_proto::transport::{Deframer, Transport};
 use relay_proto::wire::frame;
 use relay_proto::Micros;
 
+use crate::send_log::SendLog;
 use crate::server::{Out, Peer, Server};
 use crate::udp;
 
@@ -275,6 +276,7 @@ pub fn serve(
     once: bool,
     idle_us: Micros,
     limits: Limits,
+    mut sends: Option<&mut SendLog>,
 ) -> io::Result<()> {
     let (events, inbox) = mpsc::sync_channel(EVENTS);
     let udp_events = events.clone();
@@ -301,8 +303,8 @@ pub fn serve(
         server.poll(t, &mut out);
         hub.flush(socket, &mut out);
         hub.sweep(server);
-        let Some(wait) = udp::tick(server, t, once, idle_us) else {
-            return Ok(());
+        let Some(wait) = udp::tick(server, t, once, idle_us, sends.as_deref_mut())? else {
+            return sends.map_or(Ok(()), SendLog::flush);
         };
         match inbox.recv_timeout(Duration::from_micros(wait as u64)) {
             Ok(event) => {
@@ -310,7 +312,7 @@ pub fn serve(
                 hub.flush(socket, &mut out);
             }
             Err(RecvTimeoutError::Timeout) => {}
-            Err(RecvTimeoutError::Disconnected) => return Ok(()),
+            Err(RecvTimeoutError::Disconnected) => return sends.map_or(Ok(()), SendLog::flush),
         }
     }
 }
