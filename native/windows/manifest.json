@@ -1,0 +1,20 @@
+{
+  "tools": {
+    "map-pack.exe": {
+      "sha256": "1826b9e4a20047e91a1b34589f4193b18ae589b9ae51c118413d74f5f741d797",
+      "source": "574c027d51ee5621f402f6d8a07be74a910a539307579a8ea185d88beebc33ef"
+    },
+    "lua32-stock.exe": {
+      "sha256": "e442e50727f50e910e8537530389d317b14f9414e925b8e635c9c2eb12db6ee6",
+      "source": "fd75791eabf3c6c5"
+    },
+    "lua32-toward-zero.exe": {
+      "sha256": "61930679b93277b74c8a31d8e65ea6bc416ab188df31d6c2f9ae8fc7b62c2d1f",
+      "source": "0b5d36fe2ca39943"
+    },
+    "luac.exe": {
+      "sha256": "55e60c0eb2665b7d9b9ce027813d175c386e3e43de42af7104c878fa5f248df2",
+      "source": "fd75791eabf3c6c5"
+    }
+  }
+}

@@ -36,6 +36,8 @@ jobs:
         with:
           name: windows-tools
           path: ${{ runner.temp }}/windows-tools
+      - name: The committed tools are the ones these sources build
+        run: diff native/windows/manifest.json "$RUNNER_TEMP/windows-tools/manifest.json"
 
   # A map maker's Windows machine: only Bun, no compiler, make or nix.
   windows:

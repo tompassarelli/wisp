@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { generateMDX, parseMDL, parseMDX } from "../vendor/war3-model.mjs";
 import { ensurePackager } from "../host/compile/mapBuild";
+import { decodeMapInfo, encodeMapInfo } from "../host/toolchain/mapInfo";
+import { syntheticBaseMap, syntheticMapInfo } from "./syntheticBaseMap";
 
 const build = join(import.meta.dir, "../build");
 mkdirSync(build, { recursive: true });
@@ -130,4 +132,17 @@ test("[invariant] listed entries are packaged and extracted in one archive openi
   expect([tga[16], tga[17]! & 15, tga[18 + 15 * 4 + 3], tga[18 + 2]]).toEqual([32, 8, 255, 255]);
   const texture = readFileSync(extracted.find(({ entry }) => entry.endsWith("blp-3"))!.source);
   expect([texture.readUInt32LE(8), texture[156 + 1024 + 16]]).toEqual([8, 255]);
+});
+
+test("[invariant] create writes a new archive whose listed entries extract byte for byte, as the synthetic base map a Windows map build starts from", async () => {
+  const packager = join(work, "map-pack");
+  const base = join(work, "synthetic.w3x");
+  await Effect.runPromise(syntheticBaseMap(packager, base));
+  const info = join(work, "synthetic.w3i");
+  const read = Bun.spawnSync([packager, "extract", base, info, "war3map.w3i"]);
+  expect({ code: read.exitCode, stderr: read.stderr.toString() }).toEqual({ code: 0, stderr: "" });
+  expect(decodeMapInfo(readFileSync(info))).toEqual(decodeMapInfo(encodeMapInfo(syntheticMapInfo())));
+  const listed = join(work, "synthetic.listfile");
+  expect(Bun.spawnSync([packager, "extract", base, listed, "(listfile)"]).exitCode).toBe(0);
+  expect(readFileSync(listed, "utf8").split(/\r?\n/).filter(Boolean).sort()).toEqual(["war3map.lua", "war3map.w3i"]);
 });
