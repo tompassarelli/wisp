@@ -1189,6 +1189,12 @@ and still saw up to 5.5 underruns per 10 minutes, and bursts of 4 at 1% and
   Hetzner (wisp#53): 74,679 packets, none lost, delay above the floor
   p50/p99/max 0.3/2.8/16.4 ms at a 184 ms RTT; its bench cell chose 24 ms
   and had 1 underrun per 10 minutes.
+  `laptop-wifi-match-to-nexus-2026-10-26.trace` is the laptop host's own
+  arrivals during wisp#39's 10-minute match against gex45 (`--create 2
+  --trace`): 74,980 packets, 88 lost, delay above the floor p50/p99/max
+  2.8/58.9/236.5 ms at a 43 ms RTT. Replayed with `--raise-headroom-ms 100
+  --max-total-depth-ms 100` it has 20.01 underruns per 10 minutes, against
+  22 in the live match.
 
 ### Recorded trace cell (wisp#45)
 
