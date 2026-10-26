@@ -124,12 +124,36 @@ Before #108, by file (all now inside wisp:host/os/platform/linux/):
 | `systemd-run --user`, `systemctl --user` | host/client/clientServices.ts | linux/systemd.ts |
 | `/run/user/<uid>`, PipeWire sinks, `dbus-run-session` | host/lan/pairAgent.ts | linux/layer.ts (`AudioIsolation`, `GameLauncher`) |
 
+## Windows tools
+
+On Windows a map maker needs only Bun: Wisp's native tools ship prebuilt in
+wisp:native/windows/, statically linked 64-bit MinGW executables of map-pack
+(over StormLib 9.30 with its bundled zlib, bzip2, LibTomCrypt and
+LibTomMath), both 32-bit-number Lua 5.3.6 variants and that Lua's `luac`
+for the script syntax check. On `win32`, wisp:host/compile/windowsTools.ts
+checks each against wisp:native/windows/manifest.json before use: its SHA-256,
+and that it was built from today's sources (map-pack.c's SHA-256, the Lua32
+build key). A stale or altered tool fails the build naming it; Wisp never
+calls nix, gcc or make there. Linux keeps building them from source.
+Licenses are in wisp:docs/notices/.
+
+To rebuild them, change the sources and run the Windows workflow's `tools`
+job, which builds them with the runner's MinGW and CMake
+(`bun host/compile/buildWindowsTools.ts OUT`) and uploads the
+`windows-tools` artifact; commit its files into wisp:native/windows/. The
+builds are reproducible on the runner (two runs gave the same bytes), so the
+job also fails when the committed manifest differs from the one it built: a
+source change without a rebuild, or a new MinGW on the runner image.
+
 ## Windows CI
 
 The `windows` job (wisp:.github/workflows/windows.yml) runs the core on
-`windows-latest` with no Linux layer: the type check, the Lua32 runner, the
-sample's tests (`bun run test examples/sample`), its headless journey (`wisp headless`), the
-map build tests and the platform boundary test. The map build test that
+`windows-latest` with no Linux layer and with every directory holding gcc,
+make or nix removed from `PATH`, as on a map maker's machine: the type check,
+the Lua32 runner, the sample's tests (`bun run test examples/sample`), its
+32-bit Lua tests, its headless journey (`wisp headless`), the map build tests,
+and a real `sample.ts map build` from a synthetic base map
+(wisp:test/syntheticBaseMap.ts, written by map-pack's `create`). The map build test that
 interrupts a step is left out there: its stand-in child is `sh -c 'echo $$'`,
 whose pid is Git Bash's, not the Windows process `process.kill` checks, so it
 still needs a Windows-native stand-in. It is a separate workflow from CI, so a Windows failure

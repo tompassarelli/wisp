@@ -7,6 +7,7 @@ import { basename, join } from "node:path";
 import { Console, Effect, Schedule, Schema } from "effect";
 import { MapBuildFailure, captureProcess, runProcess } from "../cli/hostProcess";
 import { step } from "../cli/timings";
+import { usesWindowsTools, windowsTool } from "./windowsTools";
 
 export const TOWARD_ZERO_HEADER = join(import.meta.dir, "../../native/toward-zero.h");
 
@@ -96,11 +97,47 @@ const buildLock = (lock: string) => Effect.acquireRelease(
   () => Effect.sync(() => rmSync(lock, { force: true })),
 );
 
-export const lua32 = (variant: Lua32Variant) => Effect.gen(function*() {
-  const root = lua32CacheRoot();
+const lua32Recipe = (variant: Lua32Variant) => {
   const headers = headersFor(variant).map((path) => [basename(path), readFileSync(path, "utf8")] as const);
   const flags = ["-DLUA_32BITS", ...headers.map(([name]) => `-include ${name}`)].join(" ");
   const key = sha256([LUA_SOURCE_SHA256, "generic", flags, ...headers.flat(), ...SOURCE_EDITS.flat()].join("\0")).slice(0, 16);
+  return { headers, flags, key };
+};
+
+export const lua32Key = (variant: Lua32Variant) => lua32Recipe(variant).key;
+
+export const compileLua32 = (variant: Lua32Variant, build: string, makeArgs: readonly string[] = []) => Effect.gen(function*() {
+  const { headers, flags } = lua32Recipe(variant);
+  const source = yield* luaSource;
+  yield* trySync("prepare build", build, () => {
+    rmSync(build, { recursive: true, force: true });
+    mkdirSync(build, { recursive: true });
+  });
+  yield* trySync("decompress Lua source", build, () => writeFileSync(join(build, "lua-5.3.6.tar"), Bun.gunzipSync(readFileSync(source))));
+  yield* runProcess("unpack Lua source", build, ["tar", "--no-same-owner", "-xf", "lua-5.3.6.tar"], build);
+  const src = join(build, "lua-5.3.6/src");
+  yield* trySync("write headers", src, () => {
+    for (const [name, text] of headers) writeFileSync(join(src, name), text);
+  });
+  yield* trySync("edit Lua source", src, () => {
+    for (const [file, from, to] of SOURCE_EDITS) {
+      const text = readFileSync(join(src, file), "utf8");
+      if (!text.includes(from)) throw new Error(`${file} has no ${JSON.stringify(from)}`);
+      writeFileSync(join(src, file), text.replace(from, to));
+    }
+  });
+  yield* runProcess(`compile Lua32 ${variant}`, src, makeCommand(["-C", src, `-j${availableParallelism()}`, "generic", `MYCFLAGS=${flags}`, ...makeArgs]));
+  const executable = existsSync(join(src, "lua.exe")) ? "lua.exe" : "lua";
+  const rounding = yield* luaRounding(join(src, executable));
+  const expected = variant === "stock" ? "nearest" : "toward-zero";
+  if (rounding !== expected) return yield* fail("check rounding", src, `it rounds ${rounding}, not ${expected}`);
+  return { src, executable };
+});
+
+export const lua32 = (variant: Lua32Variant) => Effect.gen(function*() {
+  const { key } = lua32Recipe(variant);
+  if (usesWindowsTools()) return yield* windowsTool(`lua32-${variant}.exe`, key);
+  const root = lua32CacheRoot();
   const directory = join(root, key);
   const installed = () => [join(directory, "lua"), join(directory, "lua.exe")].find((path) => existsSync(path));
   const cached = installed();
@@ -110,30 +147,8 @@ export const lua32 = (variant: Lua32Variant) => Effect.gen(function*() {
     yield* buildLock(`${directory}.lock`);
     const raced = installed();
     if (raced !== undefined) return raced;
-    const source = yield* luaSource;
     const build = `${directory}.build`;
-    yield* trySync("prepare build", build, () => {
-      rmSync(build, { recursive: true, force: true });
-      mkdirSync(build, { recursive: true });
-    });
-    yield* trySync("decompress Lua source", build, () => writeFileSync(join(build, "lua-5.3.6.tar"), Bun.gunzipSync(readFileSync(source))));
-    yield* runProcess("unpack Lua source", build, ["tar", "--no-same-owner", "-xf", "lua-5.3.6.tar"], build);
-    const src = join(build, "lua-5.3.6/src");
-    yield* trySync("write headers", src, () => {
-      for (const [name, text] of headers) writeFileSync(join(src, name), text);
-    });
-    yield* trySync("edit Lua source", src, () => {
-      for (const [file, from, to] of SOURCE_EDITS) {
-        const text = readFileSync(join(src, file), "utf8");
-        if (!text.includes(from)) throw new Error(`${file} has no ${JSON.stringify(from)}`);
-        writeFileSync(join(src, file), text.replace(from, to));
-      }
-    });
-    yield* runProcess(`compile Lua32 ${variant}`, src, makeCommand(["-C", src, `-j${availableParallelism()}`, "generic", `MYCFLAGS=${flags}`]));
-    const executable = existsSync(join(src, "lua.exe")) ? "lua.exe" : "lua";
-    const rounding = yield* luaRounding(join(src, executable));
-    const expected = variant === "stock" ? "nearest" : "toward-zero";
-    if (rounding !== expected) return yield* fail("check rounding", src, `it rounds ${rounding}, not ${expected}`);
+    const { src, executable } = yield* compileLua32(variant, build);
     yield* trySync("install Lua32", directory, () => {
       mkdirSync(`${build}/out`);
       copyFileSync(join(src, executable), `${build}/out/${executable}`);

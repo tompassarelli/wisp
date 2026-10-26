@@ -52,9 +52,9 @@ const ALLIED = 0x1;
 const ALLIED_VICTORY = 0x2;
 const SHARED_VISION = 0x4;
 
-type Field = "byte" | "int" | "string";
+export type Field = "byte" | "int" | "string";
 
-const ENVIRONMENT: readonly [Field, number][] = [
+export const ENVIRONMENT_FIELDS: readonly [Field, number][] = [
   ["byte", 1],
   ["int", 2],
   ["string", 4],
@@ -114,7 +114,7 @@ export function decodeMapInfo(bytes: Uint8Array): MapInfo {
   const bounds = take(cursor, 56);
   const flags = int32(cursor);
   const environmentStart = cursor.offset;
-  for (const [field, count] of ENVIRONMENT) {
+  for (const [field, count] of ENVIRONMENT_FIELDS) {
     for (let index = 0; index < count; index++) {
       if (field === "string") string(cursor);
       else take(cursor, field === "byte" ? 1 : 4);

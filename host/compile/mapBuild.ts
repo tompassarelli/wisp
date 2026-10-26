@@ -15,6 +15,8 @@ import type { Phase } from "../toolchain/compiler";
 import { type SourceMapFailure, SourceErrors } from "./sourceErrors";
 import { step } from "../cli/timings";
 import { checkUnitModels, type UnitModels, type ModelSource } from "../models/unitModels";
+import { lua32Key } from "./lua32";
+import { installWindowsTool, usesWindowsTools } from "./windowsTools";
 
 export { MapBuildFailure };
 
@@ -278,8 +280,11 @@ function withFileIo(objectData: readonly GeneratedFile[] = []): readonly Generat
 
 const PACKAGER_SOURCE = join(import.meta.dir, "../../native/map-pack.c");
 
+export const packagerSource = () => new Bun.CryptoHasher("sha256").update(readFileSync(PACKAGER_SOURCE)).digest("hex");
+
 export const ensurePackager = (path: string) => Effect.suspend(() => {
-  const source = new Bun.CryptoHasher("sha256").update(readFileSync(PACKAGER_SOURCE)).digest("hex");
+  const source = packagerSource();
+  if (usesWindowsTools()) return installWindowsTool("map-pack.exe", source, `${path}.exe`);
   const stamp = `${path}.source-sha256`;
   const stormlibRooted = process.env.STORMLIB_PREFIX !== undefined || existsSync(stormlibGcRoot(path));
   const current = stormlibRooted && existsSync(path) && existsSync(stamp) && readFileSync(stamp, "utf8").trim() === source;
@@ -304,7 +309,9 @@ const compilePackager = (path: string, source: string, stamp: string) => Effect.
   });
 }).pipe(step("compile map packager"));
 
-const ensureLua = (directory: string) => Effect.suspend(() => existsSync(join(directory, "bin/luac")) ? Effect.void : Effect.gen(function*() {
+const ensureLua = (directory: string) => usesWindowsTools()
+  ? Effect.suspend(() => installWindowsTool("luac.exe", lua32Key("stock"), join(directory, "bin/luac.exe")))
+  : Effect.suspend(() => existsSync(join(directory, "bin/luac")) ? Effect.void : Effect.gen(function*() {
   yield* tryMapSync("create Lua directory", directory, () => mkdirSync(dirname(directory), { recursive: true }));
   yield* runProcess("link Lua compiler", directory, ["nix", "build", "--out-link", directory, "nixpkgs#lua5_3"]);
 }).pipe(step("link Lua compiler")));
@@ -318,7 +325,7 @@ const entryList = (entries: readonly ArchiveEntry[]) => entries.map(({ entry, so
 const writeEntryList = (path: string, entries: readonly ArchiveEntry[]) =>
   tryMapSync("write entry list", path, () => writeFileSync(path, entryList(entries)));
 
-function mapPack(packager: string) {
+export function mapPack(packager: string) {
   return {
 
     replaceAll: (archive: string, entries: readonly ArchiveEntry[], list: string) =>
@@ -330,6 +337,8 @@ function mapPack(packager: string) {
       runProcess(`extract ${entry}`, archive, [packager, "extract", archive, file, entry]),
     replace: (archive: string, file: string, entry = "war3map.lua") =>
       runProcess(`replace ${entry}`, archive, [packager, "replace", archive, file, entry]),
+    create: (archive: string, entries: readonly ArchiveEntry[], list: string) =>
+      writeEntryList(list, entries).pipe(Effect.andThen(runProcess(`create ${archive} with ${entries.length} entries`, archive, [packager, "create", archive, list]))),
   };
 }
 
