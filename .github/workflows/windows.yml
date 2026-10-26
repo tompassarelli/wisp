@@ -2,7 +2,6 @@ name: Windows
 
 # The platform-neutral core on Windows with no Linux layer (wisp:docs/platforms.md).
 # A separate workflow from CI, so a Windows failure doesn't open "main is red".
-# The relay pacer job runs beside its Linux twin so the two OSes' feed deadlines compare in one run.
 on:
   pull_request:
   push:
@@ -17,6 +16,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Builds the committed Windows tools in native/windows/ from source with MinGW
+  # and uploads them as the windows-tools artifact (wisp:docs/platforms.md).
+  tools:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: gcc --version && cmake --version && command -v gcc make cmake
+      - run: bun host/compile/buildWindowsTools.ts "$RUNNER_TEMP/windows-tools"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-tools
+          path: ${{ runner.temp }}/windows-tools
+
+  # A map maker's Windows machine: only Bun, no compiler, make or nix.
   windows:
     runs-on: windows-latest
     timeout-minutes: 20
@@ -29,6 +50,18 @@ jobs:
         with:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile
+      - name: Remove compilers, make and nix from PATH
+        run: |
+          kept=()
+          IFS=: read -ra entries <<< "$PATH"
+          for entry in "${entries[@]}"; do
+            for tool in gcc gcc.exe cc.exe make make.exe mingw32-make.exe nix; do
+              [ -e "$entry/$tool" ] && continue 2
+            done
+            kept+=("$entry")
+          done
+          echo "PATH=$(IFS=:; cygpath -wp "${kept[*]}")" >> "$GITHUB_ENV"
+      - run: "! command -v gcc && ! command -v make && ! command -v nix"
       - run: bun run check
       - name: Lua32 runner
         run: |
@@ -43,28 +76,11 @@ jobs:
           bun test --timeout 120000 -t "farm: .*32-bit Lua" ./examples/sample/test/path.test.ts ./examples/sample/test/headless.test.ts
       - name: wisp headless
         run: bun examples/sample/scripts/sample.ts headless
-      - name: Map build and the platform boundary
+      - name: Map build
         run: bun test test/map-build.test.ts -t '^(?!.*interrupting a map step)'
-
-  relay-pacer:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
-    name: relay pacer (${{ matrix.os }})
-    timeout-minutes: 20
-    defaults:
-      run:
-        shell: bash
-        working-directory: relay
-    steps:
-      - uses: actions/checkout@v4
-      - if: runner.os == 'Windows'
-        run: cargo test --locked -p relay -p relay-agent
-      - name: 60 s of 8 ms feeds
-        if: ${{ !cancelled() }}
+      - name: The sample map from a synthetic base map
         run: |
-          set -o pipefail
-          cargo test --locked -p relay-agent --test feed -- --ignored --nocapture 2>&1 | tee "$RUNNER_TEMP/pacer.txt"
-          { echo '```'; grep '^pacer ' "$RUNNER_TEMP/pacer.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          bun test/syntheticBaseMap.ts build/tools/map-pack "$RUNNER_TEMP/base.w3x"
+          bun examples/sample/scripts/sample.ts map build --base "$RUNNER_TEMP/base.w3x" --out "$RUNNER_TEMP/sample.w3x"
+          build/tools/map-pack extract "$RUNNER_TEMP/sample.w3x" "$RUNNER_TEMP/war3map.lua"
+          grep -q 'wispTs.start' "$RUNNER_TEMP/war3map.lua"

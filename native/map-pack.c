@@ -1,4 +1,5 @@
 /* C is the irreducible boundary to StormLib's MPQ archive API. */
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -32,6 +33,25 @@ static bool addEntry(HANDLE archive, const char *file, const char *archiveName) 
     return ok;
 }
 
+static long readLine(char **line, size_t *capacity, FILE *stream) {
+    size_t length = 0;
+    int c;
+    while ((c = fgetc(stream)) != EOF) {
+        if (length + 2 > *capacity) {
+            size_t grown = *capacity < 128 ? 128 : *capacity * 2;
+            char *larger = realloc(*line, grown);
+            if (larger == NULL) return -1;
+            *line = larger;
+            *capacity = grown;
+        }
+        (*line)[length++] = (char)c;
+        if (c == '\n') break;
+    }
+    if (length == 0) return -1;
+    (*line)[length] = '\0';
+    return (long)length;
+}
+
 static int eachListed(HANDLE archive, const char *list, bool replace) {
     FILE *lines = fopen(list, "r");
     if (lines == NULL) {
@@ -40,10 +60,10 @@ static int eachListed(HANDLE archive, const char *list, bool replace) {
     }
     char *line = NULL;
     size_t capacity = 0;
-    ssize_t length;
+    long length;
     unsigned number = 0;
     int status = 0;
-    while (status == 0 && (length = getline(&line, &capacity, lines)) != -1) {
+    while (status == 0 && (length = readLine(&line, &capacity, lines)) != -1) {
         number++;
         if (length > 0 && line[length - 1] == '\n') line[--length] = '\0';
         if (length == 0) continue;
@@ -67,17 +87,21 @@ static int eachListed(HANDLE archive, const char *list, bool replace) {
 
 int main(int argc, char **argv) {
     const char *command = argc > 1 ? argv[1] : "";
-    bool listed = !strcmp(command, "replace-list") || !strcmp(command, "extract-list");
+    bool create = !strcmp(command, "create");
+    bool listed = create || !strcmp(command, "replace-list") || !strcmp(command, "extract-list");
     bool single = !strcmp(command, "extract") || !strcmp(command, "replace");
     if (!(listed && argc == 4) && !(single && (argc == 4 || argc == 5))) {
         fprintf(stderr, "Usage: map-pack extract|replace MAP.w3x FILE [ARCHIVE_NAME]\n"
-                        "       map-pack extract-list|replace-list MAP.w3x LIST (lines FILE<TAB>ARCHIVE_NAME)\n");
+                        "       map-pack extract-list|replace-list|create MAP.w3x LIST (lines FILE<TAB>ARCHIVE_NAME)\n");
         return 2;
     }
-    bool replace = !strcmp(command, "replace") || !strcmp(command, "replace-list");
+    bool replace = create || !strcmp(command, "replace") || !strcmp(command, "replace-list");
     HANDLE archive;
     /* Extraction opens read-only: inputs may be sealed, and are never changed. */
-    if (!SFileOpenArchive(argv[2], 0, replace ? 0 : MPQ_OPEN_READ_ONLY, &archive)) {
+    bool opened = create
+        ? SFileCreateArchive(argv[2], MPQ_CREATE_LISTFILE | MPQ_CREATE_ARCHIVE_V1, 16, &archive)
+        : SFileOpenArchive(argv[2], 0, replace ? 0 : MPQ_OPEN_READ_ONLY, &archive);
+    if (!opened) {
         fprintf(stderr, "Cannot open map archive (%u)\n", GetLastError());
         return 1;
     }

@@ -1,0 +1,3 @@
+native/*.c text eol=lf
+native/*.h text eol=lf
+native/windows/*.exe binary
