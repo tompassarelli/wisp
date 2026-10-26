@@ -68,10 +68,9 @@ their `DesktopFailure`. Accounting reads that have a portable meaning report
 nothing instead: no CPU pressure, no CPU limit, no lease, and thread CPU from
 `process.cpuUsage()`.
 
-wisp:test/platform-boundary.test.ts holds the boundary: it fails on any new
-direct use outside wisp:host/os/platform/linux/, checks that it catches a
-planted one, and runs each service and a command against the Windows layer
-for the named error.
+No test scans for a new direct use outside wisp:host/os/platform/linux/;
+review holds that line. The [Windows CI](#windows-ci) job runs the core with
+no Linux layer, so a Linux call on the consumer path fails there.
 
 ## Core and platform-specific modules
 
