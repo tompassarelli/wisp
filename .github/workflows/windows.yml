@@ -17,7 +17,8 @@ concurrency:
 
 jobs:
   # Builds the committed Windows tools in native/windows/ from source with MinGW
-  # and uploads them as the windows-tools artifact (wisp:docs/platforms.md).
+  # and uploads them as the windows-tools artifact; fails when they differ from
+  # the committed ones (wisp:docs/platforms.md).
   tools:
     runs-on: windows-latest
     timeout-minutes: 20

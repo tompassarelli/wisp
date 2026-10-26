@@ -1,8 +1,8 @@
 {
   "tools": {
     "map-pack.exe": {
-      "sha256": "1826b9e4a20047e91a1b34589f4193b18ae589b9ae51c118413d74f5f741d797",
-      "source": "574c027d51ee5621f402f6d8a07be74a910a539307579a8ea185d88beebc33ef"
+      "sha256": "40baa928eb1bf6099dc4c130771b6ae5f3045f32dcbfff9cba94934d8d98b4a9",
+      "source": "d16b57a8ba1d66eb4b8e93c3427d48603011d24228645caba6ef2a448d410c59"
     },
     "lua32-stock.exe": {
       "sha256": "e442e50727f50e910e8537530389d317b14f9414e925b8e635c9c2eb12db6ee6",

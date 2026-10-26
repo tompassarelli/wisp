@@ -140,7 +140,10 @@ Licenses are in wisp:docs/notices/.
 To rebuild them, change the sources and run the Windows workflow's `tools`
 job, which builds them with the runner's MinGW and CMake
 (`bun host/compile/buildWindowsTools.ts OUT`) and uploads the
-`windows-tools` artifact; commit its files into wisp:native/windows/.
+`windows-tools` artifact; commit its files into wisp:native/windows/. The
+builds are reproducible on the runner (two runs gave the same bytes), so the
+job also fails when the committed manifest differs from the one it built: a
+source change without a rebuild, or a new MinGW on the runner image.
 
 ## Windows CI
 
