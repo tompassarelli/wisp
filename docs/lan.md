@@ -491,6 +491,22 @@ provider or emulating Battle.net is outside this tool's scope.
   later, SIGKILLs both and says so in the agent log, so a client hung before
   its window no longer outlives the pool's stop. Without xdotool, or when xdotool can't reach the
   desktop's display, the agent cannot see windows and keeps the launch it has.
+- **A toplevel on the client's own compositor.** An X window is not enough:
+  focusing the game for input and capture asks the client's compositor for
+  its `Warcraft III` toplevel (`wlrctl toplevel focus`), and pair 14 client b
+  (25 October 2026) and pair 12 client b (26 October) came up with a
+  connected game but no toplevel, so every pad on them failed at
+  `focus Warcraft`. Before it serves its socket, the agent waits up to
+  `TOPLEVEL_DEADLINE` (20 s) for each client's compositor to list that
+  toplevel (`wlrctl toplevel find`); a client without one is restarted once,
+  and the pair fails with `confirm Warcraft toplevel after one restart
+  failed for lanKs: the compositor lists no Warcraft III toplevel` if the
+  restart lists none either (`confirmToplevel`, wisp:host/lan/pool.ts). When
+  wlrctl can't ask the compositor, the agent says so and keeps the launch.
+  A strict `focus` that finds no toplevel fails with a `ToplevelMissing`
+  cause (`toplevelMissing` in wisp:host/os/warcraft/desktopClient.ts tells
+  it apart), which a pad batch counts as INVALID and reruns under
+  `--retries`.
 - **Ready after the intro.** A fresh 3.0.1 client plays its intro cinematic
   for about 2.5 minutes over whatever runs underneath: a solo game started
   during it played and ended unseen, and every capture frame showed the

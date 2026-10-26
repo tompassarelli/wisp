@@ -5,7 +5,7 @@ import { ClientWatch, describeView, typesIntoMatch } from "../../dev/watch";
 import { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, readClientsFile, runTool } from "./desktopClient";
 import { chatEntryBand, chatEntryOpen, sendCheckedChat } from "./chatEntry";
 import { sendsChat, type InputAction } from "./inputBatch";
-export { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, readClientsFile, runTool } from "./desktopClient";
+export { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, ToplevelMissing, readClientsFile, runTool, toplevelMissing } from "./desktopClient";
 export type { InputAction } from "./inputBatch";
 export { sendsChat } from "./inputBatch";
 

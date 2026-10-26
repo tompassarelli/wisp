@@ -48,6 +48,19 @@ export const launchUntilShown = <A, E, R>(start: {
   return attempt(1);
 };
 
+export const TOPLEVEL_DEADLINE = "20 seconds";
+
+/** Confirms a launched client's game window is a toplevel on its own compositor, which focusing it for input and capture needs: when `listed` (bounded by its caller) says it isn't, `restart`s the client once and fails with `missing()` if it still isn't. */
+export const confirmToplevel = <E, M, R>(check: {
+  readonly listed: Effect.Effect<boolean, E, R>;
+  readonly restart: Effect.Effect<void, E, R>;
+  readonly missing: () => M;
+}): Effect.Effect<void, E | M, R> => Effect.gen(function*() {
+  if (yield* check.listed) return;
+  yield* check.restart;
+  if (!(yield* check.listed)) return yield* Effect.fail(check.missing());
+});
+
 export const clientName = (pair: number, side: Side) => `lan${pair}${side}`;
 
 export const reportPort = (pair: number, side: Side) => 47200 + pair * 2 + PAIR_SIDES.indexOf(side);

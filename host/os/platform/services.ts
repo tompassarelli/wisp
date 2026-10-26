@@ -155,6 +155,8 @@ export class ScreenCapture extends Context.Service<ScreenCapture, {
 export interface WindowTools {
   readonly place: (env: Readonly<Record<string, string>>, title: string, place: Region) => Effect.Effect<number>;
   readonly shown: (env: Readonly<Record<string, string>>, title: string) => Effect.Effect<boolean, DesktopFailure>;
+  /** Whether the session's compositor lists a toplevel titled `title`, which focusing the game window needs; fails when it can't be asked. */
+  readonly listed: (env: Readonly<Record<string, string>>, title: string) => Effect.Effect<boolean, DesktopFailure>;
 }
 
 export class InputInjection extends Context.Service<InputInjection, {

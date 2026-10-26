@@ -14,9 +14,10 @@ import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { mapCopies, mapFactsLine, readMapFacts } from "./map";
 import { relayedStatus } from "./relayedStatus";
-import { ALARM_AFTER_MS, agentPidFile, type Driver, MENUS_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, alive, launchUntilShown, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, agentSocket, clientLease, clientLog, stopClientScope, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
+import { ALARM_AFTER_MS, agentPidFile, confirmToplevel, type Driver, MENUS_DEADLINE, TOPLEVEL_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, alive, launchUntilShown, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, agentSocket, clientLease, clientLog, stopClientScope, audioSinkOf, clientName, clientRoot, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
 import { preferences, windowSize } from "../os/warcraft/clientProfiles";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
+import { DesktopFailure, ToplevelMissing } from "../os/warcraft/desktopClient";
 
 const argument = (name: string) => flagValues(process.argv, name)[0];
 const { pair, profile, network } = pairFlags(process.argv);
@@ -135,6 +136,23 @@ const agent = Effect.gen(function*() {
   yield* Effect.forEach([...reports], ([name, report]) => Effect.gen(function*() {
     const reached = yield* pollUntil(report.sent.pipe(Effect.map(reachedMenus)), { until: (reached) => reached, every: "1 second", within: MENUS_DEADLINE, onTimeout: () => Effect.succeed(false) });
     say(reached ? `${name} reached its login doors` : `${name} showed no login doors within ${MENUS_DEADLINE}; going on`);
+  }), { concurrency: "unbounded", discard: true });
+
+  if (Option.isSome(windows)) yield* Effect.forEach(clients, (client) => confirmToplevel({
+    listed: pollUntil(windows.value.listed(client.env, "Warcraft III"), { until: (listed) => listed, every: "1 second", within: TOPLEVEL_DEADLINE, onTimeout: () => Effect.succeed(false) }).pipe(
+      Effect.catchTag("DesktopFailure", (failure) => Effect.sync(() => {
+        say(`${client.name}: can't list its compositor's toplevels (${String(failure.cause)}); keeping this launch`);
+        return true;
+      })),
+    ),
+    restart: Effect.gen(function*() {
+      say(`${client.name}: its compositor listed no Warcraft III toplevel within ${TOPLEVEL_DEADLINE}; restarting it once`);
+      const report = reports.get(client.name);
+      const before = report === undefined ? undefined : (yield* report.address)?.guid;
+      yield* start(client);
+      if (report !== undefined) yield* pollUntil(report.address, { until: (address) => address !== undefined && address.guid !== before, every: "1 second", within: MENUS_DEADLINE, onTimeout: () => Effect.void });
+    }),
+    missing: () => new DesktopFailure({ operation: "confirm Warcraft toplevel after one restart", client: client.name, cause: new ToplevelMissing({ title: "Warcraft III" }) }),
   }), { concurrency: "unbounded", discard: true });
 
   const menusOf = (name: string): Effect.Effect<MenuSocket, LanFailure | MenuFailure, Scope.Scope> => Effect.gen(function*() {

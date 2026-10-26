@@ -4,7 +4,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Exit, Layer, Option } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { type InputAction, type KeyAction, untypable, vncActions, vncKey } from "../../warcraft/inputBatch";
-import { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, runTool } from "../../warcraft/desktopClient";
+import { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, ToplevelMissing, runTool, toolExit, toplevelMissing } from "../../warcraft/desktopClient";
 import { skillScript } from "../../../cli/hostProcess";
 import { step } from "../../../cli/timings";
 import { InputInjection, ScreenCapture, type WindowTools } from "../services";
@@ -52,11 +52,20 @@ const findWindows = (entry: ClientEntry, xdotool: string, x11: Record<string, st
     Effect.map((bytes) => text(bytes).split("\n").filter((line) => line !== "")),
   );
 
+/** Runs wlrctl's toplevel `action` on the toplevel titled `title`; succeeds with false when the compositor lists none, and fails when wlrctl can't ask it. */
+const toplevel = (client: string, operation: string, wlrctl: string, action: "find" | "focus", title: string, wayland: Record<string, string>) =>
+  toolExit(client, operation, [wlrctl, "toplevel", action, `title:${title}`], wayland).pipe(Effect.flatMap(({ code, stderr }) => {
+    if (code === 0) return Effect.succeed(true);
+    if (code === 1 && stderr === "") return Effect.succeed(false);
+    return Effect.fail(new DesktopFailure({ operation, client, cause: `${wlrctl} exited ${code}: ${stderr}` }));
+  }));
+
 const focus = (client: Client, title: string, strict: boolean) =>
   Effect.gen(function*() {
     const named = strict && title === "Warcraft III" ? "Warcraft" : title;
-    const toplevel = runTool(client.name, `focus ${named}`, [client.tools.wlrctl, "toplevel", "focus", `title:${title}`], client.wayland);
-    yield* strict ? toplevel : toplevel.pipe(Effect.ignore);
+    const focused = toplevel(client.name, `focus ${named}`, client.tools.wlrctl, "focus", title, client.wayland);
+    if (strict && !(yield* focused)) return yield* new DesktopFailure({ operation: `focus ${named}`, client: client.name, cause: new ToplevelMissing({ title }) });
+    if (!strict) yield* focused.pipe(Effect.ignore);
     yield* runTool(client.name, `activate ${named} window`, [client.tools.xdotool, "windowactivate", "--sync", client.window], client.x11);
   });
 
@@ -97,7 +106,7 @@ const preflight = (client: Client) => Effect.gen(function*() {
   if (active !== client.window) return yield* new DesktopFailure({ operation: "input preflight focus", client: client.name, cause: `window ${active} is active, expected ${client.window} on ${client.x11.DISPLAY}` });
   yield* control(client, "input preflight connection", ["pause", "0"]);
 }).pipe(
-  Effect.mapError(cause => new DesktopFailure({ operation: "input preflight", client: client.name, cause: `${client.x11.DISPLAY}: ${cause.message}` })),
+  Effect.mapError(cause => new DesktopFailure({ operation: "input preflight", client: client.name, cause: toplevelMissing(cause) ? cause.cause : `${client.x11.DISPLAY}: ${cause.message}` })),
   Effect.timeoutOrElse({ duration: "12 seconds", orElse: () => Effect.fail(new DesktopFailure({ operation: "input preflight", client: client.name, cause: `display/focus/VNC check exceeded 12 s on ${client.x11.DISPLAY}` })) }),
 );
 
@@ -185,7 +194,12 @@ export const linuxDesktopLayer = Layer.mergeAll(
         if ((yield* output(xdotool, ["getdisplaygeometry"], env)).trim() !== "") return false;
         return yield* new DesktopFailure({ operation: `look for the ${title} window`, client: env["DISPLAY"] ?? process.env["DISPLAY"] ?? "no display", cause: "xdotool can't reach the display" });
       });
-      return Option.some({ place, shown });
+      const listed: WindowTools["listed"] = (env, title) => Effect.gen(function*() {
+        const where = env["WAYLAND_DISPLAY"] ?? process.env["WAYLAND_DISPLAY"] ?? "no compositor";
+        const wlrctl = yield* resolveTool(where, process.env["WISP_WLRCTL"] ?? "wlrctl");
+        return yield* toplevel(where, `list the ${title} toplevel`, wlrctl, "find", title, { ...env });
+      });
+      return Option.some({ place, shown, listed });
     }),
     display: (entry) => desktopSession(entry).pipe(Effect.map(({ x11 }) => x11.DISPLAY)),
     preflight,

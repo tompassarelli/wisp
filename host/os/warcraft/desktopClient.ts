@@ -13,6 +13,22 @@ export class DesktopFailure extends Schema.TaggedError<DesktopFailure>()("Deskto
   }
 }
 
+export class ToplevelMissing extends Schema.TaggedError<ToplevelMissing>()("ToplevelMissing", {
+  title: Schema.String,
+}) {
+  override get message(): string {
+    return `the compositor lists no ${this.title} toplevel`;
+  }
+}
+
+/** Whether `error`, or a cause it wraps, is a client whose compositor lists no toplevel for its game window. */
+export const toplevelMissing = (error: unknown): boolean => {
+  for (let at = error, depth = 0; typeof at === "object" && at !== null && depth < 8; at = (at as { readonly cause?: unknown }).cause, depth++) {
+    if ("_tag" in at && at._tag === "ToplevelMissing") return true;
+  }
+  return false;
+};
+
 const ClientsFile = Schema.Struct({
   tools: Schema.Struct({ grim: Schema.String, xdotool: Schema.String, wlrctl: Schema.String, tesseract: Schema.String }),
   clients: Schema.NonEmptyArray(Schema.Struct({ name: Schema.String, run: Schema.String, documents: Schema.String, menuReportPort: Schema.optional(Schema.Int), displaySettings: Schema.optional(Schema.Record(Schema.String, Schema.String)), profile: Schema.optional(Schema.Literals(CLIENT_PROFILE_NAMES)), offline: Schema.optionalKey(Schema.Boolean) })),
@@ -65,7 +81,28 @@ export function runTool(client: string, operation: string, command: readonly str
   return process.env.WISP_DESKTOP_TIMINGS === "1" ? effect.pipe(step(`${client}: ${operation}`)) : effect;
 }
 
-export type ClientsConfig = typeof ClientsFile.Type;
+/** Runs `command` to its exit and succeeds with its exit code and stderr; fails only when it can't be run. */
+export function toolExit(client: string, operation: string, command: readonly string[], env: Record<string, string>) {
+  return Effect.acquireUseRelease(
+    Effect.try({
+      try: () => Bun.spawn([...command], { env: { ...Bun.env, ...env }, stdin: "ignore", stdout: "ignore", stderr: "pipe" }),
+      catch: fail(operation, client),
+    }),
+    (child) => Effect.tryPromise({
+      try: async () => {
+        const [stderr, code] = await Promise.all([new Response(child.stderr).text(), child.exited]);
+        return { code, stderr: stderr.trim() };
+      },
+      catch: fail(operation, client),
+    }),
+    (child) => Effect.promise(async () => {
+      if (child.exitCode === null) child.kill("SIGKILL");
+      await child.exited;
+    }),
+  );
+}
+
+export type ClientsConfig =typeof ClientsFile.Type;
 export type ClientEntry = ClientsConfig["clients"][number];
 
 export const readClientsFile = (path: string) =>
