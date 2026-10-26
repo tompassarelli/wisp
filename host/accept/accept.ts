@@ -9,19 +9,20 @@ import { describeCause } from "../cli/command";
 import { encodePpm, type Frame } from "../scene/frameProbe";
 
 export type Step =
-
   | { readonly chat: string; readonly client?: string }
   | { readonly keys: readonly string[]; readonly client?: string; readonly holdMs?: number }
   | { readonly waitMs: number }
-
   | { readonly receipt: string; readonly client?: string; readonly seconds?: number };
 
+export interface Press {
+  readonly keys: readonly string[];
+  readonly client?: string;
+  readonly holdMs?: number;
+}
+
 export type Capture =
-
-  | { readonly kind: "frames"; readonly name: string; readonly client?: string; readonly region?: Region; readonly count?: number; readonly everyMs?: number }
-
+  | { readonly kind: "frames"; readonly name: string; readonly client?: string; readonly region?: Region; readonly count?: number; readonly everyMs?: number; readonly press?: Press }
   | { readonly kind: "reading"; readonly name: string; readonly client?: string; readonly region?: Region; readonly ink?: Ink; readonly pattern?: string }
-
   | { readonly kind: "measure"; readonly name: string; readonly client?: string; readonly region?: Region; readonly measure: string };
 
 interface Count {
@@ -30,35 +31,26 @@ interface Count {
 }
 
 export type Rule = (
-
   | { readonly kind: "receipt"; readonly pattern: string; readonly client?: string } & Count
-
   | { readonly kind: "log"; readonly pattern: string; readonly client?: string; readonly since?: "check" | "session" } & Count
-
   | { readonly kind: "reading"; readonly name: string; readonly min?: number; readonly max?: number; readonly pattern?: string }
 ) & { readonly orLook?: boolean };
 
 export interface NativeCheck {
   readonly id: string;
-
   readonly closes: string;
-
   readonly map: string;
-
   readonly session?: string;
   readonly after?: string;
   readonly setup?: readonly Step[];
   readonly capture?: readonly Capture[];
   readonly pass?: readonly Rule[];
-
   readonly look?: string;
 }
 
 export interface AcceptSuite {
-
   readonly maps: Readonly<Record<string, { readonly describe: string }>>;
   readonly checks: readonly NativeCheck[];
-
   readonly measures?: Readonly<Record<string, (frame: Frame) => number | undefined>>;
 }
 
@@ -74,14 +66,11 @@ export class AcceptFailure extends Schema.TaggedError<AcceptFailure>()("AcceptFa
 export interface ReceiptFile {
   readonly name: string;
   readonly text: string;
-
   readonly modified: number;
 }
 
 export class AcceptDriver extends Context.Service<AcceptDriver, {
-
   readonly clients: readonly [string, ...string[]];
-
   readonly prepare: Effect.Effect<void, AcceptFailure>;
 
   readonly start: (map: string, session: string) => Effect.Effect<void, AcceptFailure>;
@@ -135,6 +124,9 @@ export function suiteProblems(suite: AcceptSuite, clients?: readonly string[]): 
       problems.push(`${id}: pattern ${source} is not a regular expression`);
     }
   };
+  const holdMs = (id: string, millis: number | undefined) => {
+    if (millis !== undefined && (!Number.isFinite(millis) || millis <= 0)) problems.push(`${id}: held keys need a positive finite holdMs`);
+  };
   const client = (id: string, name: string | undefined) => {
     if (name !== undefined && clients !== undefined && !clients.includes(name)) problems.push(`${id}: unknown client ${name}`);
   };
@@ -151,10 +143,14 @@ export function suiteProblems(suite: AcceptSuite, clients?: readonly string[]): 
     for (const step of check.setup ?? []) {
       if ("receipt" in step) pattern(id, step.receipt);
       if ("client" in step) client(id, step.client);
-      if ("keys" in step && step.holdMs !== undefined && (!Number.isFinite(step.holdMs) || step.holdMs <= 0)) problems.push(`${id}: held keys need a positive finite holdMs`);
+      if ("keys" in step) holdMs(id, step.holdMs);
     }
     for (const capture of check.capture ?? []) {
       client(id, capture.client);
+      if (capture.kind === "frames" && capture.press !== undefined) {
+        client(id, capture.press.client);
+        holdMs(id, capture.press.holdMs);
+      }
       if (capture.kind === "reading" && capture.pattern !== undefined) pattern(id, capture.pattern);
       if (capture.kind === "measure" && suite.measures?.[capture.measure] === undefined) problems.push(`${id}: unknown measure ${capture.measure}`);
       if (capture.kind !== "frames") readings.add(capture.name);
@@ -171,17 +167,18 @@ export function suiteProblems(suite: AcceptSuite, clients?: readonly string[]): 
 
 const describeRegion = (region: Region | undefined) => (region === undefined ? "whole frame" : `${region.width}x${region.height}+${region.x}+${region.y}`);
 const describeCount = ({ min, max }: Count) => (min === undefined && max === undefined ? ">= 1" : max === undefined ? `>= ${min}` : min === undefined ? `<= ${max}` : min === max ? `= ${min}` : `${min}..${max}`);
+const describeKeys = (keys: readonly string[], client: string, holdMs: number | undefined) => `keys ${client}: ${keys.join(" ")}${holdMs === undefined ? "" : ` held ${holdMs} ms`}`;
 
 function describeStep(step: Step, host: string): string {
   if ("chat" in step) return `chat ${step.client ?? host}: ${step.chat}`;
-  if ("keys" in step) return `keys ${step.client ?? host}: ${step.keys.join(" ")}${step.holdMs === undefined ? "" : ` held ${step.holdMs} ms`}`;
+  if ("keys" in step) return describeKeys(step.keys, step.client ?? host, step.holdMs);
   if ("waitMs" in step) return `wait ${step.waitMs} ms`;
   return `wait for receipt ${step.client ?? host} /${step.receipt}/ (${step.seconds ?? DEFAULT_RECEIPT_SECONDS} s)`;
 }
 
 function describeCapture(capture: Capture, host: string): string {
   const client = capture.client ?? host;
-  if (capture.kind === "frames") return `frames ${capture.name} ${client} ${describeRegion(capture.region)} x${capture.count ?? 1}${(capture.count ?? 1) > 1 ? ` every ${capture.everyMs ?? 0} ms` : ""}`;
+  if (capture.kind === "frames") return `frames ${capture.name} ${client} ${describeRegion(capture.region)} x${capture.count ?? 1}${(capture.count ?? 1) > 1 ? ` every ${capture.everyMs ?? 0} ms` : ""}${capture.press === undefined ? "" : ` from ${describeKeys(capture.press.keys, capture.press.client ?? client, capture.press.holdMs)}`}`;
   if (capture.kind === "reading") return `reading ${capture.name} ${client} ${describeRegion(capture.region)}${capture.pattern === undefined ? "" : ` /${capture.pattern}/`}`;
   return `measure ${capture.name} ${client} ${capture.measure} ${describeRegion(capture.region)}`;
 }
@@ -340,13 +337,17 @@ export const runAccept = (suite: AcceptSuite, sessions: readonly PlannedSession[
         const client = capture.client ?? host;
         if (capture.kind === "frames") {
           const count = capture.count ?? 1;
-          for (let index = 0; index < count; index++) {
-            if (index > 0) yield* Effect.sleep(Duration.millis(capture.everyMs ?? 0));
-            const frame = cropFrame(yield* driver.capture(client), capture.region);
-            const name = `${fileName(capture.name)}-${client}-${String(index).padStart(2, "0")}.ppm`;
-            yield* save(join(evidence, name), encodePpm(frame));
-            files.push(name);
-          }
+          const frames = Effect.gen(function*() {
+            for (let index = 0; index < count; index++) {
+              if (index > 0) yield* Effect.sleep(Duration.millis(capture.everyMs ?? 0));
+              const frame = cropFrame(yield* driver.capture(client), capture.region);
+              const name = `${fileName(capture.name)}-${client}-${String(index).padStart(2, "0")}.ppm`;
+              yield* save(join(evidence, name), encodePpm(frame));
+              files.push(name);
+            }
+          });
+          const { press } = capture;
+          yield* press === undefined ? frames : Effect.all([frames, driver.keys(press.client ?? client, press.keys, press.holdMs)], { concurrency: "unbounded", discard: true });
         } else if (capture.kind === "reading") {
           const text = yield* driver.read(client, capture.region, capture.ink ?? "light");
           const name = `${fileName(capture.name)}-${client}.txt`;

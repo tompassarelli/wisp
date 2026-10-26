@@ -65,6 +65,29 @@ test("[scenario] an acceptance held-key step keeps its declared duration through
   expect(report.results[0]?.verdict).toBe("needs-look");
 });
 
+test("[scenario] a frames capture with a press takes its first frame before the held keys are released", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "wisp-accept-press-"));
+  directories.push(directory);
+  const fake = fakeDriver();
+  const base = await Effect.runPromise(AcceptDriver.pipe(Effect.provide(fake.layer)));
+  const driver = AcceptDriver.of({
+    ...base,
+    keys: (client, keys, holdMs) => Effect.sync(() => { fake.calls.push(`press ${client} ${keys.join(" ")} held ${holdMs} ms`); }).pipe(Effect.andThen(Effect.sleep("40 millis")), Effect.andThen(Effect.sync(() => { fake.calls.push("release"); }))),
+    capture: () => Effect.sync(() => { fake.calls.push("frame"); return { width: 1, height: 1, rgb: new Uint8Array(3) }; }),
+  });
+  const suite: AcceptSuite = {
+    maps: { good: { describe: "a short move captured from its key press" } },
+    checks: [{ id: "jab", closes: "native input timing", map: "good", capture: [{ kind: "frames", name: "jab", client: "a", count: 3, everyMs: 30, press: { keys: ["n"], holdMs: 60 } }], look: "the jab's windup and contact" }],
+  };
+  expect(suiteProblems(suite, ["a"])).toEqual([]);
+  expect(suiteProblems({ ...suite, checks: [{ ...suite.checks[0]!, capture: [{ kind: "frames", name: "jab", press: { keys: ["n"], client: "z", holdMs: 0 } }] }] }, ["a"])).toEqual(["jab: unknown client z", "jab: held keys need a positive finite holdMs"]);
+  const report = await Effect.runPromise(runAccept(suite, planSessions(suite.checks), directory).pipe(Effect.provide(Layer.succeed(AcceptDriver, driver))));
+  const driven = fake.calls.filter((call) => call === "frame" || call === "release" || call.startsWith("press"));
+  expect(driven.slice(0, 3)).toEqual(["frame", "press a n held 60 ms", "frame"]);
+  expect(driven.indexOf("release")).toBeGreaterThan(driven.indexOf("frame"));
+  expect(report.results[0]?.files.filter((file) => file.endsWith(".ppm"))).toEqual(["jab-a-00.ppm", "jab-a-01.ppm", "jab-a-02.ppm"]);
+});
+
 const suite: AcceptSuite = {
   maps: { broken: { describe: "a map whose session can't start" }, good: { describe: "a map that starts" } },
   checks: [
