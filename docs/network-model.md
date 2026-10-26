@@ -35,6 +35,17 @@ the first match of Smashcraft's #26 runs r7 and r8 (Smashcraft 0.0.42,
 smashcraft:evidence/input-integrity-0042-r7-20261005/ and -r8-). Chat and key
 events still arrive at once.
 
+Bun and the emitted 32-bit Lua give the same arrival frames for the same
+send frames (wisp#71). Both models count time in whole thirds of a
+millisecond, in which a 60 Hz frame is exactly 50, and pick the extra turns
+by comparing the generator's whole-number state with whole-number bounds, so
+no step rounds differently in binary32. A `SyncLatency`'s `latencyMs` and
+`turnMs`, and a `TurnBurstModel`'s `turnMs`, must therefore be whole thirds
+of a millisecond; the measured models are whole milliseconds.
+test/sync-delivery71/schedule.ts runs a fixed 120-message schedule through
+`syncDelivery(MEASURED_BATTLE_NET)` and `turnBursts()`, and
+test/lua32-fixtures.test.ts checks its rows match in both runtimes.
+
 Hosting: r7 and r8 ran as a Battle.net Custom Game (`[TEST] sc-integrity-r7`/`-r8`,
 created on signed-in client A and found by client B through the Custom Games
 search), not on a LAN, so the fit describes Battle.net-hosted turns. Offline

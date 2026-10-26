@@ -8,11 +8,15 @@ export class Random {
     this.state = floorMod(Math.abs(Math.trunc(seed)), 2147483646) + 1;
   }
 
-  next(): number {
+  nextState(): number {
     const high = floorDiv(this.state, 44488);
     const next = 48271 * (this.state - high * 44488) - 3399 * high;
     this.state = next > 0 ? next : next + 2147483647;
-    return this.state / 2147483647;
+    return this.state;
+  }
+
+  next(): number {
+    return this.nextState() / 2147483647;
   }
 
   between(low: number, high: number): number {

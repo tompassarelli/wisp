@@ -13,6 +13,7 @@ import { EXPECTED as PLAYER_MOUSE } from "./player-mouse67/expected";
 import { EXPECTED as UNIT_MOTION } from "./unit-motion57/expected";
 import { EXPECTED as UNIT_STATES } from "./unit-states/expected";
 import { allWarcraft3Fixtures } from "./warcraft3-core/all";
+import { scheduleRows } from "./sync-delivery71/schedule";
 
 // Every headless fixture's emitted 32-bit Lua in one shared run: each fixture's rows equal its Bun rows.
 const root = join(import.meta.dir, "..");
@@ -27,6 +28,7 @@ const warcraft3Executed = async () => {
 
 const FIXTURES: readonly { readonly name: string; readonly map?: string; readonly rows: () => readonly string[] | Promise<readonly string[]> }[] = [
   { name: "warcraft3", rows: warcraft3Executed },
+  { name: "sync-delivery", rows: scheduleRows },
   { name: "coverage", rows: () => ["native coverage contract passed"] },
   { name: "unit-states", map: "unit-states", rows: () => bothClients(UNIT_STATES) },
   { name: "unit-motion", map: "unit-motion57", rows: () => bothClients(UNIT_MOTION) },

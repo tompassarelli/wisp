@@ -16,6 +16,7 @@ import { ANIMATION_NOOPS } from "../animation58/cases";
 import { CAPTURE_FRAME, RULER, RULER_DEATH_SECONDS } from "../animation58/layout";
 import { animationRows } from "../animation58/rows";
 import { PLAYER_MOUSE_JOURNEY } from "../player-mouse67/journey";
+import { scheduleRows } from "../sync-delivery71/schedule";
 
 // One Lua32 run of every fixture in test/lua32-fixtures.test.ts: it prints each fixture's rows, prefixed by its name, for the test to compare.
 declare const arg: Readonly<Record<number, string | undefined>>;
@@ -41,6 +42,7 @@ const FIXTURES: Record<string, (this: void, bundle: string) => string[]> = {
     allWarcraft3Fixtures(parseNativeDeclarations(declarations), executed);
     return [...executed].sort();
   },
+  "sync-delivery": () => scheduleRows(),
   "coverage": () => {
     coverageFixture();
     return ["native coverage contract passed"];

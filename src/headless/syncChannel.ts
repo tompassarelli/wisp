@@ -2,7 +2,7 @@ import type { SyncMessage } from "./clientTypes";
 import type { SyncDelivery } from "./lockstep";
 import { Random } from "./random";
 import { f32 } from "../sim/f32";
-import { floorMod } from "../sim/intMath";
+import { floorDiv, floorMod } from "../sim/intMath";
 import { type CallbackTiming, FRAME_MS } from "./frameRate";
 
 export { type CallbackTiming, EVEN_CALLBACKS } from "./frameRate";
@@ -26,37 +26,51 @@ export const MEASURED_BATTLE_NET: SyncLatency = {
 
 export const CALLBACK_MS = FRAME_MS;
 
-export function syncAgeMs(latency: SyncLatency, frame: number, extraTurns: number): number {
-  const sentMs = frame * CALLBACK_MS;
-  const turn = Math.ceil((sentMs + latency.latencyMs) / latency.turnMs - f32(1e-9)) + extraTurns;
-  return turn * latency.turnMs - sentMs;
+// Whole thirds of a millisecond make a 60 Hz frame 50 units, so arrivals round alike in Bun and binary32 Lua.
+const THIRDS_PER_MS = 3;
+const THIRDS_PER_FRAME = 50;
+
+const ceilDiv = (a: number, b: number) => -floorDiv(-a, b);
+
+function arrivalThirds(latency: SyncLatency, frame: number, extraTurns: number): number {
+  const turnThirds = latency.turnMs * THIRDS_PER_MS;
+  return (ceilDiv(frame * THIRDS_PER_FRAME + latency.latencyMs * THIRDS_PER_MS, turnThirds) + extraTurns) * turnThirds;
 }
 
-function turnsFor(probabilities: readonly number[], draw: number): number {
-  let rest = draw;
-  for (let turns = 0; turns < probabilities.length - 1; turns++) {
-    rest -= probabilities[turns] ?? 0;
-    if (rest <= 0) return turns;
-  }
-  return probabilities.length - 1;
+export function syncAgeMs(latency: SyncLatency, frame: number, extraTurns: number): number {
+  return (arrivalThirds(latency, frame, extraTurns) - frame * THIRDS_PER_FRAME) / THIRDS_PER_MS;
+}
+
+// A state s draws s / (2^31 - 1), which is at most p exactly when s < p * 2^31: whole numbers compare alike in Bun and binary32 Lua.
+function turnBounds(probabilities: readonly number[]): number[] {
+  let bound = 0;
+  return probabilities.slice(0, -1).map((p) => (bound += Math.floor(p * 2147483648)));
+}
+
+function turnsFor(bounds: readonly number[], state: number): number {
+  for (let turns = 0; turns < bounds.length; turns++) if (state < (bounds[turns] ?? 0)) return turns;
+  return bounds.length;
 }
 
 export function syncDelivery(latency: SyncLatency = MEASURED_BATTLE_NET, seed = 1): SyncDelivery {
   const total = latency.extraTurns.reduce((sum, p) => sum + p, 0);
   // Binary32 probabilities sum to 1 within a few of its ulps.
   if (Math.abs(total - 1) > f32(1e-6)) throw new Error(`extra-turn probabilities sum to ${total}, not 1`);
-  if (!(latency.turnMs > 0) || !(latency.latencyMs >= 0)) throw new Error("turn length must be positive and latency not negative");
-  const senders = new Map<number, { readonly random: Random; lastArrivalMs: number }>();
+  if (!(latency.turnMs > 0) || !(latency.latencyMs >= 0) || !Number.isInteger(latency.turnMs * THIRDS_PER_MS) || !Number.isInteger(latency.latencyMs * THIRDS_PER_MS)) {
+    throw new Error("turn length must be positive and latency not negative, each in whole thirds of a millisecond");
+  }
+  const bounds = turnBounds(latency.extraTurns);
+  const senders = new Map<number, { readonly random: Random; lastArrivalThirds: number }>();
   return {
     arrivalFrame: (sender: number, frame: number, _message: SyncMessage) => {
       let state = senders.get(sender);
       if (state === undefined) {
-        state = { random: new Random(seed * 7919 + sender * 104729 + 1), lastArrivalMs: 0 };
+        state = { random: new Random(seed * 7919 + sender * 104729 + 1), lastArrivalThirds: 0 };
         senders.set(sender, state);
       }
-      const arrivalMs = Math.max(state.lastArrivalMs, frame * CALLBACK_MS + syncAgeMs(latency, frame, turnsFor(latency.extraTurns, state.random.next())));
-      state.lastArrivalMs = arrivalMs;
-      return Math.max(frame + 1, Math.ceil(arrivalMs / CALLBACK_MS - f32(1e-9)));
+      const arrival = Math.max(state.lastArrivalThirds, arrivalThirds(latency, frame, turnsFor(bounds, state.random.nextState())));
+      state.lastArrivalThirds = arrival;
+      return Math.max(frame + 1, ceilDiv(arrival, THIRDS_PER_FRAME));
     },
   };
 }
@@ -103,10 +117,10 @@ export interface TurnBurstModel {
 export const MEASURED_TURN_BURSTS: TurnBurstModel = { turnMs: 25, jitterMs: 12, hitchChance: f32(0.005), hitchMeanMs: 30 };
 
 export function turnBursts(model: TurnBurstModel = MEASURED_TURN_BURSTS, seed = 1): CallbackTiming {
-  if (!(model.turnMs >= CALLBACK_MS) || !(model.jitterMs >= 0) || !(model.hitchChance >= 0 && model.hitchChance < 1) || !(model.hitchMeanMs >= 0)) {
-    throw new Error("a turn must last at least one callback, and jitter, hitch chance and hitch length must not be negative");
+  if (!(model.turnMs >= CALLBACK_MS) || !Number.isInteger(model.turnMs * THIRDS_PER_MS) || !(model.jitterMs >= 0) || !(model.hitchChance >= 0 && model.hitchChance < 1) || !(model.hitchMeanMs >= 0)) {
+    throw new Error("a turn must last at least one callback in whole thirds of a millisecond, and jitter, hitch chance and hitch length must not be negative");
   }
-  const turnOf = (frame: number) => Math.max(1, Math.ceil((frame * CALLBACK_MS) / model.turnMs - f32(1e-9)));
+  const turnOf = (frame: number) => Math.max(1, ceilDiv(frame * THIRDS_PER_FRAME, model.turnMs * THIRDS_PER_MS));
   let lag = 0;
   const cycle = 6000;
   for (let frame = 1; frame <= cycle; frame++) lag += turnOf(frame) * model.turnMs - frame * CALLBACK_MS;
