@@ -20,8 +20,9 @@ const sandbox = () => {
   writeFileSync(join(bin, "pw-cli"), "#!/bin/sh\nexit 1\n");
   writeFileSync(join(bin, "systemctl"), `#!/bin/sh\nexec "$WISP_TEST_BUN" "${join(fixtures, "systemctl.ts")}" "$@"\n`);
   for (const tool of ["pw-dump", "pw-cli", "systemctl"]) chmodSync(join(bin, tool), 0o755);
+  const { NORTH_FLEET_SESSION: _session, ...inherited } = process.env;
   const env = {
-    ...process.env,
+    ...inherited,
     HOME: folder,
     PATH: `${bin}:${process.env["PATH"] ?? ""}`,
     XDG_STATE_HOME: join(folder, "state"),
@@ -71,14 +72,24 @@ const leftovers = async (runner: Bun.Subprocess, box: ReturnType<typeof sandbox>
 const capacity = join(fixtures, "capacity.ts");
 
 const poolPair = 94;
-const pool = (box: ReturnType<typeof sandbox>, extra: Record<string, string>, pair = poolPair) => {
+const pool = (box: ReturnType<typeof sandbox>, extra: Record<string, string>, pair = poolPair, flags: readonly string[] = [], within: readonly string[] = []) => {
   const plugin = join(box.env.HOME, ".local/share/wisp-private/lan");
   mkdirSync(plugin, { recursive: true });
 
   writeFileSync(join(plugin, "index.ts"), "export {};\n");
-  return Bun.spawn([process.execPath, join(root, "examples/sample/scripts/sample.ts"), "lan", "pool", "--pair", String(pair), "--capacity", capacity, "--desktop", join(fixtures, "desktop.sh"), "--wait", "0"], {
+  return Bun.spawn([...within, process.execPath, join(root, "examples/sample/scripts/sample.ts"), "lan", "pool", "--pair", String(pair), "--capacity", capacity, "--desktop", join(fixtures, "desktop.sh"), "--wait", "0", ...flags], {
     env: { ...box.env, ...extra }, stdout: "pipe", stderr: "pipe",
   });
+};
+
+const pairState = (box: ReturnType<typeof sandbox>, pair: number) => join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${pair}`);
+
+const claimOf = (box: ReturnType<typeof sandbox>, pair: number) => {
+  try {
+    return JSON.parse(readFileSync(join(pairState(box, pair), "claim.json"), "utf8")) as { pid: number; session: string; agent?: { pid: number } };
+  } catch {
+    return undefined;
+  }
 };
 
 const poolIds = (box: ReturnType<typeof sandbox>) => {
@@ -96,8 +107,9 @@ test("[boundary] lan pool: playtest admits one pair, refuses held and racing pai
   writeFileSync(playtest, JSON.stringify({ on: true, auto: true, since: 1791979200 }));
   const pairDirectory = join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${poolPair}`);
   mkdirSync(pairDirectory, { recursive: true });
-  const holder = join(pairDirectory, "pool.pid");
-  writeFileSync(holder, "2147483647\n");
+  const holder = join(pairDirectory, "claim.json");
+  const foreign = `${JSON.stringify({ pair: poolPair, owner: "", session: "", pid: 2147483647, start: 1 })}\n`;
+  writeFileSync(holder, foreign);
   const custody = Bun.spawn(["flock", "--exclusive", "--no-fork", join(pairDirectory, "pool.lock"), "sh", "-c", "echo held; exec cat >/dev/null"], { env: box.env, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
   try {
     expect((await custody.stdout.getReader().read()).done).toBe(false);
@@ -111,7 +123,7 @@ test("[boundary] lan pool: playtest admits one pair, refuses held and racing pai
       expect(code).toBe(1);
       expect(await new Response(child.stdout).text()).toContain("held by wisp lan pool");
     }
-    expect(readFileSync(holder, "utf8")).toBe("2147483647\n");
+    expect(readFileSync(holder, "utf8")).toBe(foreign);
     expect(box.sessions()).toHaveLength(0);
     expect(box.activeDesktops()).toEqual([]);
   } finally {
@@ -121,7 +133,7 @@ test("[boundary] lan pool: playtest admits one pair, refuses held and racing pai
   const runner = pool(box, {});
   await until(() => existsSync(join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${poolPair}`, "clients.json")), 30, "the ready pool pair");
   expect(box.activeDesktops()).toEqual(["a", "b"]);
-  expect(readFileSync(holder, "utf8").trim()).toBe(String(runner.pid));
+  expect(claimOf(box, poolPair)?.pid).toBe(runner.pid);
   const locked = Bun.spawn(["flock", "--exclusive", "--nonblock", join(pairDirectory, "pool.lock"), "true"], { env: box.env, stdout: "pipe", stderr: "pipe" });
   expect(await locked.exited).toBe(1);
   const second = pool(box, {});
@@ -141,7 +153,7 @@ test("[boundary] lan pool: playtest admits one pair, refuses held and racing pai
   expect(refusal).toContain("Nexus or the Warcraft VM");
   expect(box.sessions()).toHaveLength(1);
   expect(existsSync(join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${poolPair + 1}`, "clients.json"))).toBe(false);
-  expect(existsSync(join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${poolPair + 1}`, "pool.pid"))).toBe(false);
+  expect(existsSync(join(box.env.XDG_STATE_HOME, "wisp/lan", `pair-${poolPair + 1}`, "claim.json"))).toBe(false);
   expect(box.activeDesktops()).toEqual(["a", "b"]);
   for (const on of [false, undefined]) {
     if (on === undefined) rmSync(playtest);
@@ -223,3 +235,70 @@ test("[boundary] lan pool: an agent killed during its pair's start still has its
   expect(result.code).not.toBe("still running");
   expect({ processes: result.processes, sessions: result.sessions }).toEqual({ processes: 0, sessions: 0 });
 }, 60_000);
+
+const tickets = (box: ReturnType<typeof sandbox>, pair: number) => {
+  try {
+    return readdirSync(join(pairState(box, pair), "queue")).filter((name) => /^\d{12}\.json$/.test(name));
+  } catch {
+    return [];
+  }
+};
+
+const lockFree = async (box: ReturnType<typeof sandbox>, pair: number) => (await Bun.spawn(["flock", "--exclusive", "--nonblock", join(pairState(box, pair), "pool.lock"), "true"]).exited) === 0;
+
+const settled = async (check: () => boolean, seconds: number) => {
+  for (const deadline = Date.now() + seconds * 1000; !check() && Date.now() < deadline;) await Bun.sleep(100);
+  return check();
+};
+
+const stopFrom = async (box: ReturnType<typeof sandbox>, session: string, pair: number) => {
+  const stop = Bun.spawn([process.execPath, join(root, "examples/sample/scripts/sample.ts"), "lan", "stop", "--pair", String(pair)], { env: { ...box.env, NORTH_FLEET_SESSION: session }, stdout: "pipe", stderr: "pipe" });
+  return { code: await stop.exited, out: (await new Response(stop.stdout).text()).trim() };
+};
+
+test("[boundary] lan pool --queue: two waiters get a held pair in the order they asked, claim.json names each pool once it holds pool.lock, and lan stop frees the pair from another session", async () => {
+  const box = sandbox();
+  const pair = poolPair + 5;
+  const quiet = { WISP_TEST_HOLDER: "quiet" };
+  const first = pool(box, { ...quiet, NORTH_FLEET_SESSION: "holder" }, pair);
+  await until(() => claimOf(box, pair)?.pid === first.pid, 30, "the first pool's claim");
+  const early = pool(box, { ...quiet, NORTH_FLEET_SESSION: "early" }, pair, ["--queue"]);
+  await until(() => tickets(box, pair).length === 1, 15, "the early waiter's ticket");
+  const late = pool(box, { ...quiet, NORTH_FLEET_SESSION: "late" }, pair, ["--queue"]);
+  await until(() => tickets(box, pair).length === 2, 15, "the late waiter's ticket");
+  const barging = pool(box, quiet, pair);
+  const bargingCode = await Promise.race([barging.exited, Bun.sleep(15_000).then(() => "still running")]);
+  if (bargingCode === "still running") barging.kill("SIGKILL");
+  expect({ code: bargingCode, refused: (await new Response(barging.stdout).text()).includes("2 waiting in line for it (first: fleet session early)") }).toEqual({ code: 1, refused: true });
+
+  expect(await stopFrom(box, "late", pair)).toMatchObject({ code: 0, out: expect.stringContaining(`pair ${pair}: pool ${first.pid} stopped;`) });
+  expect(await settled(() => claimOf(box, pair)?.pid === early.pid, 15)).toBe(true);
+  expect({ session: claimOf(box, pair)?.session, lockFree: await lockFree(box, pair), waiting: tickets(box, pair).length }).toEqual({ session: "early", lockFree: false, waiting: 1 });
+
+  expect(await stopFrom(box, "holder", pair)).toMatchObject({ code: 0, out: expect.stringContaining(`pair ${pair}: pool ${early.pid} stopped;`) });
+  expect(await settled(() => claimOf(box, pair)?.pid === late.pid, 15)).toBe(true);
+  expect({ session: claimOf(box, pair)?.session, lockFree: await lockFree(box, pair), waiting: tickets(box, pair).length }).toEqual({ session: "late", lockFree: false, waiting: 0 });
+
+  late.kill("SIGTERM");
+  const result = await leftovers(late, box);
+  expect({ code: result.code === "still running", processes: result.processes, sessions: result.sessions, claim: claimOf(box, pair), lockFree: await lockFree(box, pair) }).toEqual({ code: false, processes: 0, sessions: 0, claim: undefined, lockFree: true });
+}, 120_000);
+
+test("[boundary] lan pool: a pool or a queued waiter whose fleet session's process exits stops itself, and its pair's claim, lock and line are freed", async () => {
+  const box = sandbox();
+  const pair = poolPair + 6;
+  const session = (name: string, flags: readonly string[]) => pool(box, { WISP_TEST_HOLDER: "quiet", NORTH_FLEET_SESSION: name }, pair, flags, ["sh", "-c", '"$@" & wait', "sh"]);
+  const holder = session("gone-holder", []);
+  await until(() => claimOf(box, pair)?.agent?.pid === holder.pid, 30, "the holder's claim naming its session's process");
+  const waiter = session("gone-waiter", ["--queue"]);
+  await until(() => tickets(box, pair).length === 1, 15, "the waiter's ticket");
+
+  waiter.kill("SIGKILL");
+  expect(await settled(() => tickets(box, pair).length === 0, 15)).toBe(true);
+  expect(claimOf(box, pair)?.session).toBe("gone-holder");
+
+  holder.kill("SIGKILL");
+  expect(await settled(() => claimOf(box, pair) === undefined && box.sessions().length === 0, 30)).toBe(true);
+  expect(await lockFree(box, pair)).toBe(true);
+  expect(await settled(() => box.marked().length === 0, 15)).toBe(true);
+}, 120_000);

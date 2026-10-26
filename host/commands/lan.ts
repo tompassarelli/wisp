@@ -1,4 +1,4 @@
-import { existsSync, linkSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { userInfo } from "node:os";
 import * as BunServices from "@effect/platform-bun/BunServices";
@@ -9,10 +9,12 @@ import { collect, pollUntil, spawnLogged } from "../cli/hostProcess";
 import { type Command, UsageFailure, describeCause, flagValues, portFlag, wholeFlag } from "../cli/command";
 import { CLEAR, type Impairment, clearedAlready, impairCommands, impairmentSummary } from "../lan/netem";
 import { LanFailure } from "../lan/join";
+import { markOf } from "../lan/claim";
+import { type Custodian, holdPair, sessionEnded, sessionProcess } from "../lan/custody";
 import { lanPluginProblem } from "../lan/plugin";
 import { ensurePackager } from "../compile/mapBuild";
 import {
-  PAIR_SIDES, agentFile, agentPidFile, agentSocket, alive, clientName, lanPlayRefusal, mapPackager, networkFlagProblem, pairClients, pairSides, pairCustody, pairDirectory, pairEntryFile, pairsHeldBy, livePairs, poolClientsFile, poolFile, poolHolder, poolHolderFile, poolOwners, playtestPairRefusal, readPool, reportPort, stopAgent, stopPairScopes, writeJson, writePoolClients, wrongUser,
+  PAIR_SIDES, agentFile, agentPidFile, agentSocket, alive, clientName, lanPlayRefusal, mapPackager, networkFlagProblem, pairClients, pairSides, pairDirectory, pairEntryFile, pairsHeldBy, livePairs, poolClientsFile, poolFile, poolHolder, poolOwners, playtestPairRefusal, readPool, reportPort, stopAgent, stopPairScopes, writeJson, writePoolClients, wrongUser,
 } from "../lan/pool";
 import { PROFILES, desktopSize } from "../os/warcraft/clientProfiles";
 import { DEFAULT_BUILD, profileFor } from "../client/builds";
@@ -102,37 +104,9 @@ const clientsReady = (pair: number, network: boolean) => Effect.tryPromise({
 
 const READY = "10 minutes";
 
-const holdPair = (pair: number) => pairCustody(pair).pipe(Effect.andThen(Effect.acquireRelease(
-  Effect.try({
-    try: () => {
-      const file = poolHolderFile(pair);
-      const known = existsSync(file);
-      const holder = Number(known ? readFileSync(file, "utf8").trim() : "");
-      if (Number.isInteger(holder) && holder > 0 && holder !== process.pid && alive(holder)) throw new LanFailure({ problem: `it is held by wisp lan pool ${holder}; stop that pool first` });
-      if (holder === process.pid) return;
-      mkdirSync(pairDirectory(pair), { recursive: true });
-      if (known) rmSync(file);
-      const next = `${file}.${process.pid}.next`;
-      writeFileSync(next, `${process.pid}\n`);
-      try {
-        linkSync(next, file);
-      } finally {
-        rmSync(next, { force: true });
-      }
-    },
-    catch: (cause) => cause instanceof LanFailure ? cause : new LanFailure({ problem: `hold pair ${pair}: ${describeCause(cause)}` }),
-  }),
-  () => Effect.sync(() => {
-    if (existsSync(poolHolderFile(pair)) && readFileSync(poolHolderFile(pair), "utf8").trim() === String(process.pid)) rmSync(poolHolderFile(pair), { force: true });
-  }),
-).pipe(Effect.andThen(Effect.gen(function*() {
-  const refusal = yield* playtestPairRefusal(pair);
-  if (refusal !== undefined) return yield* new LanFailure({ problem: refusal });
-})))));
-
 const outlivedStop = (name: string, lease: string) => Console.log(`${name} outlived its stop (lease ${lease}); killing its scope`);
 
-const startPair = (pair: number, profile: string, launcher: string, capacity: string, waitSeconds: number, network: boolean, fps?: number) => {
+const startPair = (pair: number, custody: { readonly custodian: Custodian; readonly queued: boolean }, profile: string, launcher: string, capacity: string, waitSeconds: number, network: boolean, fps?: number) => {
   const directory = pairDirectory(pair);
   const attempt = Effect.gen(function*() {
     mkdirSync(directory, { recursive: true });
@@ -174,7 +148,7 @@ const startPair = (pair: number, profile: string, launcher: string, capacity: st
       return { ...session.handle, stop: Scope.close(scope, Exit.void) };
     }).pipe(Scope.provide(scope), Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))));
   });
-  return holdPair(pair).pipe(Effect.andThen(retryWhileDeferred(attempt, {
+  return holdPair(pair, custody.custodian, custody.queued).pipe(Effect.andThen(retryWhileDeferred(attempt, {
     seconds: waitSeconds,
     waiting: (reason) => `pair ${pair}: the capacity helper defers it (${reason})`,
     exhausted: (reason) => new LanFailure({ problem: `the capacity helper kept deferring it for ${waitSeconds} s (${reason})` }),
@@ -194,7 +168,29 @@ const publishPool = (profile: string, fps: number | undefined) => Effect.gen(fun
   }
 });
 
-const pool: Command = (args) => Effect.gen(function*() {
+/** Records running pair K in its `pair.json`, `clients.json` and the shared pool files, and undoes that once `stop` has stopped it. */
+const registerPair = (pair: number, stop: Effect.Effect<void>, { profile, profileText, network, fps }: { readonly profile: string; readonly profileText: string; readonly network: boolean; readonly fps?: number }) => Effect.gen(function*() {
+  const agentFile = join(pairDirectory(pair), "agent.json");
+  const runs = existsSync(agentFile) ? (yield* readJson(agentFile, AgentFile)).runs ?? {} : {};
+
+  yield* Effect.addFinalizer(() => stop.pipe(Effect.andThen(Effect.sync(() => {
+    for (const run of [runs.a, runs.b]) {
+      if (run !== undefined && basename(run).startsWith("private-desktop.") && existsSync(join(run, "lifecycle-owned"))) rmSync(join(run, "active"), { force: true });
+    }
+    rmSync(pairEntryFile(pair), { force: true });
+  })), Effect.andThen(publishPool(profileText, fps)), Effect.ignore));
+  const status = yield* agent(pair, "/status").pipe(Effect.flatMap(Schema.decodeUnknownEffect(AgentStatus)), Effect.orElseSucceed(() => ({ clients: [] })));
+  const pids = new Map(status.clients.map(({ name, pid }) => [name, pid]));
+  const clientsPath = join(pairDirectory(pair), "clients.json");
+  yield* writePoolClients(clientsPath, pairClients(pair, runs, pairSides(network)).map((client) => ({ ...client, name: client.name.endsWith("a") ? "a" : "b", poolName: client.name, pid: pids.get(client.name) })));
+  writeJson(pairEntryFile(pair), { id: pair, clients: clientsPath, agentSocket: agentSocket(pair), runs, appIds: { a: `steam_app_${3516115600 + pair * 2}`, b: `steam_app_${3516115601 + pair * 2}` }, profile, ...(network ? { network } : {}) });
+  yield* publishPool(profileText, fps);
+  yield* Console.log(network
+    ? `pair ${pair}: ${clientName(pair, "a")} running alone with network for solo games (${profile}${fps === undefined ? "" : `, ${fps} fps`}); desktop ${runs.a ?? "?"}`
+    : `pair ${pair}: ${clientName(pair, "a")} and ${clientName(pair, "b")} running (${profile}${fps === undefined ? "" : `, ${fps} fps`}); desktops ${runs.a ?? "?"} and ${runs.b ?? "?"}`);
+});
+
+const runPool = (args: readonly string[], custodian: Custodian) => Effect.gen(function*() {
   const missing = lanPluginProblem();
   if (missing !== undefined) return yield* new LanFailure({ problem: `${missing}. Install the plugin there, then run wisp lan pool again` });
   const pairs = yield* number(args, "pairs", 1);
@@ -220,7 +216,7 @@ const pool: Command = (args) => Effect.gen(function*() {
   const order = chosen.length > 0 ? chosen : Array.from({ length: pairs }, (_, index) => index);
   for (const [admitted, pair] of order.entries()) {
     const profile = profileOf(pair);
-    const started = yield* startPair(pair, profile, launcher, capacity, waitSeconds, network, fps).pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed(failure)));
+    const started = yield* startPair(pair, { custodian, queued: args.includes("--queue") }, profile, launcher, capacity, waitSeconds, network, fps).pipe(Effect.catchTag("LanFailure", (failure) => Effect.succeed(failure)));
     if (started instanceof LanFailure) {
 
       yield* Console.log(`${started.problem}; the pool stays at ${admitted} pair${admitted === 1 ? "" : "s"}; waiting: ${order.slice(admitted).join(", ")}`);
@@ -228,30 +224,25 @@ const pool: Command = (args) => Effect.gen(function*() {
       break;
     }
     sessions.push(started);
-    const agentFile = join(pairDirectory(pair), "agent.json");
-    const runs = existsSync(agentFile) ? (yield* readJson(agentFile, AgentFile)).runs ?? {} : {};
-
-    yield* Effect.addFinalizer(() => started.stop.pipe(Effect.andThen(Effect.sync(() => {
-      for (const run of [runs.a, runs.b]) {
-        if (run !== undefined && basename(run).startsWith("private-desktop.") && existsSync(join(run, "lifecycle-owned"))) rmSync(join(run, "active"), { force: true });
-      }
-      rmSync(pairEntryFile(pair), { force: true });
-    })), Effect.andThen(publishPool(profileText, fps)), Effect.ignore));
-    const status = yield* agent(pair, "/status").pipe(Effect.flatMap(Schema.decodeUnknownEffect(AgentStatus)), Effect.orElseSucceed(() => ({ clients: [] })));
-    const pids = new Map(status.clients.map(({ name, pid }) => [name, pid]));
-    const clientsPath = join(pairDirectory(pair), "clients.json");
-    yield* writePoolClients(clientsPath, pairClients(pair, runs, pairSides(network)).map((client) => ({ ...client, name: client.name.endsWith("a") ? "a" : "b", poolName: client.name, pid: pids.get(client.name) })));
-    writeJson(pairEntryFile(pair), { id: pair, clients: clientsPath, agentSocket: agentSocket(pair), runs, appIds: { a: `steam_app_${3516115600 + pair * 2}`, b: `steam_app_${3516115601 + pair * 2}` }, profile, ...(network ? { network } : {}) });
-    yield* publishPool(profileText, fps);
-    yield* Console.log(network
-      ? `pair ${pair}: ${clientName(pair, "a")} running alone with network for solo games (${profile}${fps === undefined ? "" : `, ${fps} fps`}); desktop ${runs.a ?? "?"}`
-      : `pair ${pair}: ${clientName(pair, "a")} and ${clientName(pair, "b")} running (${profile}${fps === undefined ? "" : `, ${fps} fps`}); desktops ${runs.a ?? "?"} and ${runs.b ?? "?"}`);
+    yield* registerPair(pair, started.stop, { profile, profileText, network, ...(fps === undefined ? {} : { fps }) });
   }
   yield* Console.log(`pool: ${poolFile()}; clients: ${poolClientsFile()}. Ctrl-C stops it.`);
 
   const ended = Effect.forEach(sessions, (session) => Effect.ignore(session.exitCode), { concurrency: "unbounded", discard: true });
   yield* seconds > 0 ? Effect.timeoutOption(ended, `${seconds} seconds`) : ended;
 }).pipe(Effect.scoped, Effect.provide(BunServices.layer));
+
+const custodianOf = (args: readonly string[]) => Effect.suspend(() => {
+  const session = process.env["NORTH_FLEET_SESSION"] ?? "";
+  const [owner = session] = flagValues(args, "owner");
+  const ownerPid = wholeFlag(args, "owner-pid", { min: 1 });
+  if (ownerPid instanceof UsageFailure) return Effect.fail(ownerPid);
+  const agent = ownerPid !== undefined ? markOf(ownerPid) : session === "" ? undefined : sessionProcess(session);
+  if (ownerPid !== undefined && agent === undefined) return Effect.fail(new UsageFailure({ problem: `--owner-pid ${ownerPid} names no running process` }));
+  return Effect.succeed<Custodian>({ session, owner, ...(agent === undefined ? {} : { agent }) });
+});
+
+const pool: Command = (args) => custodianOf(args).pipe(Effect.flatMap((custodian) => Effect.raceFirst(runPool(args, custodian), sessionEnded(custodian))));
 
 const fresh: Command = (args) => Effect.gen(function*() {
   const [map] = [...flagValues(args, "map"), ...args.filter((arg, index) => !arg.startsWith("--") && !args[index - 1]?.startsWith("--"))];
@@ -319,6 +310,8 @@ const stop: Command = (args) => Effect.gen(function*() {
   yield* Effect.try({ try: () => process.kill(holder, "SIGTERM"), catch: (cause) => new LanFailure({ problem: `signal pool ${holder}: ${describeCause(cause)}` }) });
   const gone = yield* pollUntil(Effect.sync(() => !alive(holder)), { until: (ended) => ended, every: "250 millis", within: POOL_STOP, onTimeout: () => Effect.succeed(false) });
   if (!gone) return yield* new LanFailure({ problem: `pair ${pair}'s pool ${holder} still runs ${POOL_STOP} after SIGTERM` });
+  const next = poolHolder(pair);
+  if (next !== undefined && next !== holder) return yield* Console.log(`pair ${pair}: pool ${holder} stopped; pool ${next} has taken the pair`);
   const left = yield* stopPairScopes(pair, outlivedStop);
   if (left.length > 0) return yield* new LanFailure({ problem: `pair ${pair}'s pool ${holder} stopped, but the capacity scope of ${left.join(" and ")} still runs` });
   yield* Console.log(`pair ${pair}: pool ${holder} stopped; none of its games run`);
@@ -417,7 +410,7 @@ const netem: Command = (args) => Effect.gen(function*() {
   }
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--build BUILD] [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | relayed MAP --relay-bin DIR [--pair K] [--turn-ms MS] [--raise-headroom-ms MS] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--udp-port N | --tcp-port N] | netem off --pair K | status [--pair K] | end --pair K | stop --pair K";
+export const LAN_USAGE = "setup --from INSTALL [--build BUILD] [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] [--queue] [--owner NAME] [--owner-pid PID] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | relayed MAP --relay-bin DIR [--pair K] [--turn-ms MS] [--raise-headroom-ms MS] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--udp-port N | --tcp-port N] | netem off --pair K | status [--pair K] | end --pair K | stop --pair K";
 
 const ownerCheck = poolOwners.pipe(Effect.flatMap((owners) => {
   const refusal = wrongUser(process.getuid?.() ?? 0, owners, ["bun", ...process.argv.slice(1)]);

@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Duration, Effect, Option, Schema } from "effect";
 import { reservedLease } from "./admission";
+import { readClaimAt } from "./claim";
 import { LanFailure } from "./join";
 import { UsageFailure, flagValues, wholeFlag } from "../cli/command";
 import { pollUntil } from "../cli/hostProcess";
@@ -73,7 +74,9 @@ export const exeOf = (name: string) => join(retailOf(name), "x86_64/Warcraft III
 export const documentsOf = (name: string) => documentsFolder(prefixOf(name));
 export const pairDirectory = (pair: number) => join(stateRoot(), `pair-${pair}`);
 
-export const poolHolderFile = (pair: number) => join(pairDirectory(pair), "pool.pid");
+export const claimFile = (pair: number) => join(pairDirectory(pair), "claim.json");
+
+export const readClaim = (pair: number) => readClaimAt(claimFile(pair));
 
 export const agentFile = (pair: number) => join(pairDirectory(pair), "agent.json");
 
@@ -90,7 +93,7 @@ const pidIn = (file: string, read: (text: string) => unknown) => {
   }
 };
 
-export const poolHolder = (pair: number) => pidIn(poolHolderFile(pair), (text) => Number(text.trim()));
+export const poolHolder = (pair: number) => readClaim(pair)?.pid;
 
 export const AGENT_STOP = "45 seconds";
 
@@ -104,35 +107,6 @@ export const stopAgent = (pair: number) => Effect.suspend(() => {
     return Effect.void;
   }
   return pollUntil(Effect.sync(() => !alive(pid)), { until: (gone) => gone, every: "250 millis", within: AGENT_STOP, onTimeout: () => Effect.void });
-});
-
-const poolLockFile = (pair: number) => join(pairDirectory(pair), "pool.lock");
-
-export const pairCustody = (pair: number) => Effect.gen(function*() {
-  yield* Effect.try({
-    try: () => mkdirSync(pairDirectory(pair), { recursive: true }),
-    catch: (cause) => new LanFailure({ problem: `create pair ${pair}: ${String(cause)}` }),
-  });
-  const child = yield* Effect.acquireRelease(
-    Effect.try({
-      try: () => Bun.spawn(["flock", "--exclusive", "--nonblock", "--no-fork", poolLockFile(pair), "sh", "-c", "echo held; exec cat >/dev/null"], { stdin: "pipe", stdout: "pipe", stderr: "pipe" }),
-      catch: (cause) => new LanFailure({ problem: `lock pair ${pair}: ${String(cause)}` }),
-    }),
-    (child) => Effect.promise(async () => {
-      child.stdin.end();
-      await child.exited;
-    }),
-  );
-  const ready = yield* Effect.tryPromise({
-    try: () => child.stdout.getReader().read(),
-    catch: (cause) => new LanFailure({ problem: `lock pair ${pair}: ${String(cause)}` }),
-  });
-  if (ready.done) {
-    const code = yield* Effect.promise(() => child.exited);
-    if (code !== 1) return yield* new LanFailure({ problem: `flock pair ${pair} exited ${code}: ${(yield* Effect.promise(() => new Response(child.stderr).text())).trim()}` });
-    const holder = yield* Effect.try(() => readFileSync(poolHolderFile(pair), "utf8").trim()).pipe(Effect.orElseSucceed(() => "taking custody"));
-    return yield* new LanFailure({ problem: `it is held by wisp lan pool ${holder}; stop that pool first` });
-  }
 });
 
 const PlaytestState = Schema.fromJsonString(Schema.Struct({ on: Schema.Boolean }));
@@ -150,14 +124,8 @@ export const playtestPairRefusal = (pair: number) => Effect.gen(function*() {
   if (!state.on) return undefined;
   const held = yield* Effect.try({
     try: () => readdirSync(stateRoot()).filter((name) => /^pair-\d+$/.test(name) && name !== `pair-${pair}`).some((name) => {
-      const holder = join(stateRoot(), name, "pool.pid");
-      try {
-        const pid = Number(readFileSync(holder, "utf8").trim());
-        return Number.isInteger(pid) && pid > 0 && alive(pid);
-      } catch (cause) {
-        if ((cause as NodeJS.ErrnoException).code === "ENOENT") return false;
-        throw cause;
-      }
+      const holder = poolHolder(Number(name.slice("pair-".length)));
+      return holder !== undefined && alive(holder);
     }),
     catch: (cause) => new LanFailure({ problem: `read LAN pair holders: ${String(cause)}` }),
   });
@@ -263,7 +231,7 @@ const decodePairEntry = Schema.decodeUnknownOption(Schema.fromJsonString(PoolPai
 
 const decodePoolFile = Schema.decodeUnknownOption(PoolFileJson);
 
-/** Every pair a live `wisp lan pool` holds (its `pool.pid`) and has registered: its `pair.json`, or else, for another process's pool that writes no `pair.json`, its entry in `pool.json`. */
+/** Every pair a live `wisp lan pool` holds (its `claim.json`) and has registered: its `pair.json`, or else, for another process's pool that writes no `pair.json`, its entry in `pool.json`. */
 export const livePairs = (): PoolPair[] => {
   const root = stateRoot();
   if (!existsSync(root)) return [];
