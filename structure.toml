@@ -114,7 +114,7 @@ may_use = []
 [[module]]
 name = "native"
 paths = ["native/**"]
-responsibility = "C map packer and the toward-zero float header."
+responsibility = "C map packer, the Lua32 headers and the prebuilt Windows tools."
 may_use = []
 
 [[generated]]

@@ -99,7 +99,7 @@ int main(int argc, char **argv) {
     HANDLE archive;
     /* Extraction opens read-only: inputs may be sealed, and are never changed. */
     bool opened = create
-        ? SFileCreateArchive(argv[2], MPQ_CREATE_LISTFILE | MPQ_CREATE_ARCHIVE_V1, 16, &archive)
+        ? SFileCreateArchive(argv[2], MPQ_CREATE_ARCHIVE_V1, 16, &archive)
         : SFileOpenArchive(argv[2], 0, replace ? 0 : MPQ_OPEN_READ_ONLY, &archive);
     if (!opened) {
         fprintf(stderr, "Cannot open map archive (%u)\n", GetLastError());
