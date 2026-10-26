@@ -48,7 +48,10 @@ farmTest("[spec #129] the check command reports every number-rule error the Lua3
     ["6,17", "10.6 isn't a binary32 value"],
     ["7,7", "an `if` condition tests a number or string"],
     ["11,24", "Unsupported node kind RegularExpressionLiteral"],
+    ["12,23", "Array literals may not contain undefined or null"],
   ];
+  // The rules that repeat one of TypeScriptToLua's own refusals, by the start of its message.
+  const refusals = ["Unsupported node kind RegularExpressionLiteral", "Array literals may not contain undefined or null"];
   const { options } = parseConfigFileWithSystem(join(cwd, "tsconfig.json"));
   const compiled = transpileFiles([join(cwd, "inputs.ts")], { ...options, noEmitOnError: false }, () => {}).diagnostics
     .filter((diagnostic) => diagnostic.code === NUMBER_RULE_CODE)
@@ -56,10 +59,13 @@ farmTest("[spec #129] the check command reports every number-rule error the Lua3
   const checked = await numberRuleReport(["tsconfig.json"], { cwd, cachePath: join(root, "build/number-rules-refused.json") });
   expect(checked).toEqual(compiled);
   const unsupported = transpileFiles([join(cwd, "inputs.ts")], { ...options, noEmitOnError: false }, () => {}).diagnostics
-    .filter((diagnostic) => diagnostic.source === "typescript-to-lua" && diagnostic.code === 100013)
-    .map((diagnostic) => `${line(diagnostic, cwd).replace(/: Error TS\d+$/, "")}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`);
-  expect(unsupported).toEqual(["inputs.ts(11,24): Unsupported node kind RegularExpressionLiteral"]);
-  expect(checked.filter((report) => report.includes("Unsupported node kind")).map((report) => report.replace("error TS9300: ", "").replace(/(Literal):.*$/, "$1"))).toEqual(unsupported);
+    .filter((diagnostic) => diagnostic.source === "typescript-to-lua" && diagnostic.category === ts.DiagnosticCategory.Error)
+    .map((diagnostic) => `${line(diagnostic, cwd).replace(/: Error TS\d+$/, "")}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n").replace(/\.$/, "")}`);
+  expect(unsupported).toEqual(["inputs.ts(11,24): Unsupported node kind RegularExpressionLiteral", "inputs.ts(12,23): Array literals may not contain undefined or null"]);
+  expect(checked.flatMap((report) => {
+    const refusal = refusals.find((start) => report.includes(`TS9300: ${start}`));
+    return refusal === undefined ? [] : [`${report.slice(0, report.indexOf(": error"))}: ${refusal}`];
+  })).toEqual(unsupported);
   expect(checked.map((report, index) => {
     const [, at, message] = /^inputs\.ts\((\d+,\d+)\): error TS9300: (.*)$/.exec(report) ?? [];
     return [at, message?.slice(0, refused[index]?.[1]?.length)];

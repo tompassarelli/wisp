@@ -5,6 +5,9 @@
 //   and runtime services without a deterministic Lua meaning;
 // - `.length` of an array whose elements may be undefined: Lua's length of a
 //   table with nil in it is any border, so Bun and Warcraft disagree;
+// - `undefined` or `null` before the last element of an array literal, and
+//   regular expressions: TypeScriptToLua refuses both, so the check reports
+//   them before the Lua32 compile does;
 // - Math's trigonometry, roots, powers and logarithms inside f32(), the mark
 //   of synchronized binary32 arithmetic, and Warcraft's math and random
 //   natives anywhere: each platform's math library differs by an ulp, and a
@@ -50,6 +53,8 @@ export interface RuleSyntax<N extends RuleNode<N>> {
     readonly MinusToken: number;
     readonly AnyKeyword: number;
     readonly RegularExpressionLiteral: number;
+    readonly NullKeyword: number;
+    readonly UndefinedKeyword: number;
     readonly UnknownKeyword: number;
     readonly ExclamationToken: number;
     readonly BarBarToken: number;
@@ -60,6 +65,7 @@ export interface RuleSyntax<N extends RuleNode<N>> {
   isNumericLiteral(node: N): node is N & Named;
   isIdentifier(node: N): node is N & Named;
   isBinaryExpression(node: N): node is N & { readonly left: N; readonly operatorToken: N; readonly right: N };
+  isArrayLiteralExpression(node: N): node is N & { readonly elements: readonly N[] };
   isCallExpression(node: N): node is N & { readonly expression: N; readonly arguments: readonly N[] };
   isParenthesizedExpression(node: N): node is N & { readonly expression: N };
   isPrefixUnaryExpression(node: N): node is N & { readonly operator: number; readonly operand: N };
@@ -233,6 +239,12 @@ export function scanNumberRules<N extends RuleNode<N>>(syntax: RuleSyntax<N>, fi
       if (service !== undefined && !syntax.isTypeReferenceNode(node.parent)) {
         findings.push({ node, message: service, condition: { identifier: node, test: "standardLibrary" } });
       }
+    } else if (syntax.isArrayLiteralExpression(node)) {
+      const isNil = (element: N) => element.kind === kind.NullKeyword || element.kind === kind.UndefinedKeyword || (syntax.isIdentifier(element) && element.text === "undefined");
+      const last = node.elements.findLastIndex((element) => !isNil(element));
+      node.elements.forEach((element, index) => {
+        if (index < last && isNil(element)) reject(element, "Array literals may not contain undefined or null: TypeScriptToLua refuses a nil before the last element, since Lua's length of the table is then any border; use a sentinel value");
+      });
     } else if (node.kind === kind.RegularExpressionLiteral) {
       reject(node, "Unsupported node kind RegularExpressionLiteral: TypeScriptToLua has no regular expressions; match with string methods");
     } else if (!isTest) {

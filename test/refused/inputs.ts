@@ -9,3 +9,4 @@ export function refused(cooldown: number, charge: number, frame: number, label: 
 }
 
 export const pattern = /^[a-z]+$/; // smashcraft runs 38890506862, 39131342098 and 39137573264: specialCues.tests.ts, stageRules.ts
+export const slots = [undefined, 0, 1]; // smashcraft run 39390603730: fighterCopy.tests.ts
