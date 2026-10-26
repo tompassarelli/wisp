@@ -147,7 +147,11 @@ the map is the cause, not the solo path.
 
 **One game per launch.** After `EndGame` returned both SmashcraftBC
 clients to their menus, `lan solo` with another map crashed both while
-loading (a null read). Start the pool again for the next map.
+loading (a null read), and a second solo game on a pair already in one ended
+the first and then stalled client a on its score screen or crashed both
+(smashcraft#542). So `lan solo` relaunches each client that has played a game
+since its launch, waits for its login doors, and only then copies MAP and
+hosts.
 
 ## Signed-in clients cloned from Tom's install
 

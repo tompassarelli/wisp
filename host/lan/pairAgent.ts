@@ -5,7 +5,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Cause, Duration, Effect, Exit, Fiber, FiberSet, FileSystem, Layer, Option, Schema, Scope } from "effect";
 import { platformLayer, runPlatformSync } from "../os/platform/layer";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { AudioIsolation, GameLauncher, InputInjection, ProcessTable } from "../os/platform/services";
+import { AudioIsolation, CapacityAdmission, GameLauncher, InputInjection, ProcessTable } from "../os/platform/services";
 import { UsageFailure, flagValues, wholeFlag } from "../cli/command";
 import { pollUntil, spawnLogged } from "../cli/hostProcess";
 import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports, playLocalGame, type SentMessage } from "../play/menus";
@@ -124,8 +124,7 @@ const agent = Effect.gen(function*() {
     relaunching: (launches) => Effect.sync(() => say(`${client.name} showed no window within ${WINDOW_DEADLINE}; relaunching (${launches}/${WINDOW_RELAUNCHES})`)),
     exhausted: (launches) => new LanFailure({ problem: `${client.name} showed no window within ${WINDOW_DEADLINE} in ${launches} launches` }),
   });
-  const games: { readonly isRunning: Effect.Effect<boolean, unknown> }[] = [];
-  yield* Effect.forEach(clients, (client) => start(client).pipe(Effect.map((handle) => { games.push(handle); })), { discard: true });
+  yield* Effect.forEach(clients, (client) => start(client), { discard: true });
 
   if (Option.isNone(windows)) say("no window placement: game windows keep the size and place the desktop gives them");
   else {
@@ -166,6 +165,23 @@ const agent = Effect.gen(function*() {
     const latest = yield* report.address;
     if (latest === undefined) return yield* new LanFailure({ problem: `${name}'s menus never reported` });
     return yield* connectMenus(latest);
+  });
+
+  // Warcraft III crashes or stalls on its score screen when one launch plays a second game, so a client that has played is relaunched before the next solo game.
+  const played = new Set<string>();
+  const launchServices = yield* Effect.context<AudioIsolation | CapacityAdmission | FileSystem.FileSystem | GameLauncher | ProcessTable>();
+  const relaunch = (client: PoolClient) => Effect.gen(function*() {
+    const report = reports.get(client.name);
+    if (report === undefined) return yield* new LanFailure({ problem: `no listener for ${client.name}` });
+    const before = new Set(yield* report.sent);
+    const page = (yield* report.address)?.guid;
+    say(`${client.name} played a game since its launch; relaunching it`);
+    yield* start(client).pipe(Scope.provide(agentScope), Effect.provide(launchServices));
+    played.delete(client.name);
+    const fresh = Effect.all([report.sent, report.address]).pipe(Effect.map(([sent, address]) => address?.guid !== page && reachedMenus(sent.filter((message) => !before.has(message)))));
+    const reached = yield* pollUntil(fresh, { until: (reached) => reached, every: "1 second", within: MENUS_DEADLINE, onTimeout: () => Effect.succeed(false) });
+    if (!reached) return yield* new LanFailure({ problem: `${client.name} showed no login doors within ${MENUS_DEADLINE} of its relaunch` });
+    say(`${client.name} reached its login doors again`);
   });
 
   let game: Game | undefined;
@@ -240,6 +256,7 @@ const agent = Effect.gen(function*() {
       if (pid === undefined) return yield* new LanFailure({ problem: `${client.name} isn't running` });
       const menus = yield* menusOf(client.name);
       yield* (yield* loadLanPlugin).enableLan(pid, exeOf(client.name), menus, say);
+      played.add(client.name);
       yield* joinLanGame(menus, `wisp-${pair}-${id.slice(11, 19)}`);
       yield* until(Effect.sync(() => host.status().players.some(({ label, connected }) => label === client.name && connected)), "20 seconds");
     }
@@ -293,6 +310,7 @@ const agent = Effect.gen(function*() {
       if (pid === undefined) return yield* new LanFailure({ problem: `${client.name} isn't running` });
       const menus = yield* menusOf(client.name);
       yield* (yield* loadLanPlugin).enableLan(pid, exeOf(client.name), menus, say);
+      played.add(client.name);
       yield* joinLanGame(menus, names[index]!);
     }
     const relayLog = join(folder, "relay.log");
@@ -304,10 +322,12 @@ const agent = Effect.gen(function*() {
   const solo = (mapFile: string) => Effect.scoped(Effect.gen(function*() {
     yield* endGame;
     const started = Date.now();
+    yield* Effect.forEach(clients.filter(({ name }) => played.has(name)), relaunch, { concurrency: "unbounded", discard: true });
     yield* copyMap(mapFile);
     return yield* Effect.forEach(clients, (client) => Effect.gen(function*() {
       if ((yield* gamePid(client.name)) === undefined) return yield* new LanFailure({ problem: `${client.name} isn't running` });
       const menus = yield* menusOf(client.name);
+      played.add(client.name);
       yield* playLocalGame(menus, { folder: "Wisp", file: basename(mapFile), playerName: client.name });
       const seconds = (Date.now() - started) / 1000;
       say(`${client.name}: solo ${basename(mapFile)} playing after ${seconds.toFixed(1)} s`);
