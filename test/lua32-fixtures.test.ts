@@ -10,6 +10,7 @@ import { NATIVE_ROWS as SHADOW_STRIKE } from "./shadow-strike94/native-rows";
 import { EXPECTED as SOUNDS } from "./sounds60/expected";
 import { EXPECTED as TIMERS } from "./timers56/expected";
 import { EXPECTED as PLAYER_MOUSE } from "./player-mouse67/expected";
+import { deliveryRows } from "./sync-delivery71/arrivals";
 import { EXPECTED as UNIT_MOTION } from "./unit-motion57/expected";
 import { EXPECTED as UNIT_STATES } from "./unit-states/expected";
 import { allWarcraft3Fixtures } from "./warcraft3-core/all";
@@ -32,6 +33,7 @@ const FIXTURES: readonly { readonly name: string; readonly map?: string; readonl
   { name: "unit-motion", map: "unit-motion57", rows: () => bothClients(UNIT_MOTION) },
   { name: "timers", map: "timers56", rows: () => bothClients(TIMERS) },
   { name: "player-mouse", map: "player-mouse67", rows: () => bothClients(PLAYER_MOUSE) },
+  { name: "sync-delivery", rows: deliveryRows },
   { name: "sounds", map: "sounds60", rows: () => bothClients(SOUNDS) },
   { name: "script-rules", map: "script-rules50", rows: () => bothClients([...SCRIPT_RULES, ...SCRIPT_RULES_SYNC]) },
   { name: "shadow-strike", map: "shadow-strike94", rows: () => bothClients(SHADOW_STRIKE.flat()) },

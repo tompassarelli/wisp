@@ -16,6 +16,7 @@ import { ANIMATION_NOOPS } from "../animation58/cases";
 import { CAPTURE_FRAME, RULER, RULER_DEATH_SECONDS } from "../animation58/layout";
 import { animationRows } from "../animation58/rows";
 import { PLAYER_MOUSE_JOURNEY } from "../player-mouse67/journey";
+import { deliveryRows } from "../sync-delivery71/arrivals";
 
 // One Lua32 run of every fixture in test/lua32-fixtures.test.ts: it prints each fixture's rows, prefixed by its name, for the test to compare.
 declare const arg: Readonly<Record<number, string | undefined>>;
@@ -63,6 +64,7 @@ const FIXTURES: Record<string, (this: void, bundle: string) => string[]> = {
     const problems = result.clients.flatMap(client => [...client.errors.map(error => `p${client.slot} error ${error}`), ...client.missingNatives.map(missing => `p${client.slot} unmodeled ${missing.native}`)]);
     return diverged(clients, [...files(clients, ["player-mouse67"]), ...problems]);
   },
+  "sync-delivery": () => deliveryRows(),
   "sounds": bundle => {
     const clients = played(luaLockstep({ filePrefix: "sounds60", natives: SOUND_NATIVES }, bundle, declarations), 240);
     return diverged(clients, files(clients, ["sounds60"]));

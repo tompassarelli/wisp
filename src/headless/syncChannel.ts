@@ -3,7 +3,7 @@ import type { SyncDelivery } from "./lockstep";
 import { Random } from "./random";
 import { f32 } from "../sim/f32";
 import { floorMod } from "../sim/intMath";
-import { type CallbackTiming, FRAME_MS } from "./frameRate";
+import { type CallbackTiming, FRAME_MS, FRAMES_PER_SECOND } from "./frameRate";
 
 export { type CallbackTiming, EVEN_CALLBACKS } from "./frameRate";
 
@@ -26,10 +26,23 @@ export const MEASURED_BATTLE_NET: SyncLatency = {
 
 export const CALLBACK_MS = FRAME_MS;
 
+// Turn arithmetic counts sixtieths of a millisecond, so frame n starts at n·1000 and whole-millisecond
+// latencies and turns stay integers: a turn that ends on a frame boundary lands on that frame in Bun and in 32-bit Lua alike (wisp#71).
+const UNITS_PER_FRAME = 1000;
+
+function ceilDiv(a: number, b: number): number {
+  let quotient = Math.ceil(a / b);
+  while (quotient * b < a) quotient++;
+  while ((quotient - 1) * b >= a) quotient--;
+  return quotient;
+}
+
+function syncTurn(latency: SyncLatency, frame: number, extraTurns: number): number {
+  return ceilDiv(frame * UNITS_PER_FRAME + latency.latencyMs * FRAMES_PER_SECOND, latency.turnMs * FRAMES_PER_SECOND) + extraTurns;
+}
+
 export function syncAgeMs(latency: SyncLatency, frame: number, extraTurns: number): number {
-  const sentMs = frame * CALLBACK_MS;
-  const turn = Math.ceil((sentMs + latency.latencyMs) / latency.turnMs - f32(1e-9)) + extraTurns;
-  return turn * latency.turnMs - sentMs;
+  return syncTurn(latency, frame, extraTurns) * latency.turnMs - frame * CALLBACK_MS;
 }
 
 function turnsFor(probabilities: readonly number[], draw: number): number {
@@ -46,17 +59,18 @@ export function syncDelivery(latency: SyncLatency = MEASURED_BATTLE_NET, seed = 
   // Binary32 probabilities sum to 1 within a few of its ulps.
   if (Math.abs(total - 1) > f32(1e-6)) throw new Error(`extra-turn probabilities sum to ${total}, not 1`);
   if (!(latency.turnMs > 0) || !(latency.latencyMs >= 0)) throw new Error("turn length must be positive and latency not negative");
-  const senders = new Map<number, { readonly random: Random; lastArrivalMs: number }>();
+  const senders = new Map<number, { readonly random: Random; lastArrival: number }>();
   return {
     arrivalFrame: (sender: number, frame: number, _message: SyncMessage) => {
       let state = senders.get(sender);
       if (state === undefined) {
-        state = { random: new Random(seed * 7919 + sender * 104729 + 1), lastArrivalMs: 0 };
+        state = { random: new Random(seed * 7919 + sender * 104729 + 1), lastArrival: 0 };
         senders.set(sender, state);
       }
-      const arrivalMs = Math.max(state.lastArrivalMs, frame * CALLBACK_MS + syncAgeMs(latency, frame, turnsFor(latency.extraTurns, state.random.next())));
-      state.lastArrivalMs = arrivalMs;
-      return Math.max(frame + 1, Math.ceil(arrivalMs / CALLBACK_MS - f32(1e-9)));
+      const turn = syncTurn(latency, frame, turnsFor(latency.extraTurns, state.random.next()));
+      const arrival = Math.max(state.lastArrival, turn * latency.turnMs * FRAMES_PER_SECOND);
+      state.lastArrival = arrival;
+      return Math.max(frame + 1, ceilDiv(arrival, UNITS_PER_FRAME));
     },
   };
 }
@@ -106,7 +120,7 @@ export function turnBursts(model: TurnBurstModel = MEASURED_TURN_BURSTS, seed = 
   if (!(model.turnMs >= CALLBACK_MS) || !(model.jitterMs >= 0) || !(model.hitchChance >= 0 && model.hitchChance < 1) || !(model.hitchMeanMs >= 0)) {
     throw new Error("a turn must last at least one callback, and jitter, hitch chance and hitch length must not be negative");
   }
-  const turnOf = (frame: number) => Math.max(1, Math.ceil((frame * CALLBACK_MS) / model.turnMs - f32(1e-9)));
+  const turnOf = (frame: number) => Math.max(1, ceilDiv(frame * UNITS_PER_FRAME, model.turnMs * FRAMES_PER_SECOND));
   let lag = 0;
   const cycle = 6000;
   for (let frame = 1; frame <= cycle; frame++) lag += turnOf(frame) * model.turnMs - frame * CALLBACK_MS;

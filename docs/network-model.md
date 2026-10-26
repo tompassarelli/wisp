@@ -18,7 +18,11 @@ const clients = headless.clients(entry, [0, 1], { delivery: syncDelivery(MEASURE
 ```
 
 A `Lockstep` takes the same object as its `delivery` option. The seed makes
-a run repeat exactly; change it to sample other delays.
+a run repeat exactly; change it to sample other delays. Turns and frames are
+counted in whole sixtieths of a millisecond, so a whole-millisecond model
+gives the emitted 32-bit Lua the same arrival frames as Bun, with or without
+`turnBursts()`; test/lua32-fixtures.test.ts compares a fixed send schedule's
+(wisp#71).
 
 ## What it models
 
