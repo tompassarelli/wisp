@@ -3,13 +3,13 @@ import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
 import { MapBuildFailure } from "../cli/hostProcess";
 
-export const WINDOWS_TOOLS = join(import.meta.dir, "../../native/windows");
+const WINDOWS_TOOLS = join(import.meta.dir, "../../native/windows");
 
-export const WINDOWS_TOOLS_MANIFEST = join(WINDOWS_TOOLS, "manifest.json");
+const WINDOWS_TOOLS_MANIFEST = join(WINDOWS_TOOLS, "manifest.json");
 
 export const usesWindowsTools = () => process.platform === "win32";
 
-export const WindowsTool = Schema.Struct({ sha256: Schema.String, source: Schema.String });
+const WindowsTool = Schema.Struct({ sha256: Schema.String, source: Schema.String });
 
 export const WindowsToolsManifest = Schema.Struct({ tools: Schema.Record(Schema.String, WindowsTool) });
 
