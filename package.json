@@ -82,6 +82,7 @@
     "./scripts/wisp/soak/types": "./host/soak/types.ts",
     "./scripts/wisp/sourceErrors": "./host/compile/sourceErrors.ts",
     "./scripts/wisp/standalone": "./host/render/standalone.ts",
+    "./scripts/wisp/syntheticBaseMap": "./host/toolchain/syntheticBaseMap.ts",
     "./scripts/wisp/terrainAuthor": "./host/terrain/terrainAuthor.ts",
     "./scripts/wisp/testRunner": "./host/testing/testRunner.ts",
     "./scripts/wisp/timingTest": "./host/testing/timingTest.ts",

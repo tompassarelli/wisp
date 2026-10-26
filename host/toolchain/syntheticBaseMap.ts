@@ -2,8 +2,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Effect } from "effect";
-import { ensurePackager, mapPack } from "../host/compile/mapBuild";
-import { ENVIRONMENT_FIELDS, encodeMapInfo, type MapInfo } from "../host/toolchain/mapInfo";
+import { ensurePackager, mapPack } from "../compile/mapBuild";
+import { ENVIRONMENT_FIELDS, encodeMapInfo, type MapInfo } from "./mapInfo";
 
 const SCRIPT = `function InitGlobals()
 end
@@ -51,7 +51,7 @@ export const syntheticBaseMap = (packager: string, out: string) => Effect.acquir
 if (import.meta.main) {
   const [packager, out] = process.argv.slice(2);
   if (packager === undefined || out === undefined) {
-    console.error("usage: bun test/syntheticBaseMap.ts PACKAGER OUT.w3x");
+    console.error("usage: bun host/toolchain/syntheticBaseMap.ts PACKAGER OUT.w3x");
     process.exit(2);
   }
   await Effect.runPromise(syntheticBaseMap(resolve(packager), resolve(out)));
