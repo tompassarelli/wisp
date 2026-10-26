@@ -22,6 +22,9 @@ export function capacityDeferral(stderr: string): { readonly reason: string; rea
   return cpuSomeAvg10 === undefined ? { reason } : { reason, cpuSomeAvg10 };
 }
 
+/** The DEFER reason a native start waiting in the capacity helper's queue printed, from one QUEUED line. */
+export const capacityQueued = (line: string) => /"decision":"QUEUED","reason":"([A-Z_]+)"/.exec(line)?.[1];
+
 export class CapacityDeferred extends Schema.TaggedError<CapacityDeferred>()("CapacityDeferred", { reason: Schema.String }) {}
 
 /** Runs `attempt` again every 45 s while it fails with `CapacityDeferred`, for up to `seconds`; then fails with `exhausted`. */

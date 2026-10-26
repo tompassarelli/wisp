@@ -75,16 +75,19 @@ command that clears them.
    second wineserver on the prefix; inside, it reaches the launcher's. The
    second Battle.net.exe hands the command to the running launcher
    (`Received IPC Message: IPC_COMMAND` in its log) and exits. The request
-   runs inside `machine-capacity session --class native --owner
-   wisp-game-<client>` (`play` uses `play`), resolved with `agents path
+   runs inside `machine-capacity session --class native --wait-seconds 1800
+   --owner wisp-game-<client>` (`play` uses `play`), resolved with `agents path
    machine-capacity` as `lan pool` does, so whatever it starts lives in a
    `native.slice` scope and passes CPU, memory and GPU admission instead of
    joining the calling terminal's scope (`nsenter` keeps its caller's
    cgroup). The helper runs with the host's `PATH`, `XDG_RUNTIME_DIR` and
    `DBUS_SESSION_BUS_ADDRESS`; `env` restores the launcher's values before
-   `nsenter`. A DEFER prints `<client>: waiting: the capacity helper defers
-   launching Warcraft III (<reason>); trying again in 45 s` and retries for
-   up to 30 minutes before stopping. Nothing is
+   `nsenter`. A deferred launch waits in the helper's arrival-order queue
+   rather than asking again on a timer, so a client or GPU job that asks
+   later can't take the slot it waits for (wisp#76). It prints `<client>:
+   waiting in the capacity helper's queue to launch Warcraft III (<reason>)`
+   for each new reason, stops after 30 minutes without admission, and fails
+   when Battle.net.exe hasn't exited 30 s after admission. Nothing is
    clicked in the launcher's window, whichever game or page it shows (on 6
    Oct, two main-display runs that clicked through its Games tab and Play
    stopped on a stuck pointer and on a page without them). The launcher

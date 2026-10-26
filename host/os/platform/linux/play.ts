@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { closeSync, copyFileSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, statSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { Effect, Layer, type PlatformError, Schema, Stream } from "effect";
+import { Console, Deferred, type Duration, Effect, Fiber, Layer, Option, type PlatformError, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { serverDirectoryName, type ProcessInfo } from "../../warcraft/battleNet";
 import { launcherProcess, listProcesses } from "./procfs";
@@ -14,7 +14,7 @@ import { decodePpm } from "../services";
 import { startUnit } from "./systemd";
 import { acquireStartLock, startLockPath } from "../../../client/startLock";
 import { writeAtomic } from "../../../io/files";
-import { CapacityDeferred, capacityDeferral, deferredExit, retryWhileDeferred } from "../../../lan/admission";
+import { capacityDeferral, capacityQueued, deferredExit } from "../../../lan/admission";
 import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow } from "../../../play/play";
 
 export interface PlayTools {
@@ -75,6 +75,8 @@ export interface LaunchRequest {
   readonly host: Readonly<Record<string, string | undefined>>;
 }
 
+const LAUNCH_WAIT_SECONDS = 1800;
+
 const HOST_KEYS = ["PATH", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"] as const;
 
 export const launchCommand = (request: LaunchRequest) => {
@@ -89,16 +91,14 @@ export const launchCommand = (request: LaunchRequest) => {
   return {
     command: [...service, ...(request.client === "playtest"
       ? ["--slice=playtest.slice", "--"]
-      : ["--", request.bun, request.capacity, "session", "--class", "native", "--owner", `wisp-game-${request.client}`, "--"]),
+      : ["--", request.bun, request.capacity, "session", "--class", "native", "--wait-seconds", String(LAUNCH_WAIT_SECONDS), "--owner", `wisp-game-${request.client}`, "--"]),
       request.env, ...unset, ...restore, request.nsenter, "-t", String(launcher.pid), "-U", "-m", "--preserve-credentials", `--wdns=${launcher.cwd}`, "--",
       request.wine, ...(request.proton ? ["runinprefix"] : []), "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe", "--exec=launch W3"],
     env,
   };
 };
 
-const LAUNCH_WAIT_SECONDS = 1800;
-
-const launchInContainer = (run: Runner, tools: PlayTools, launcher: ProcessInfo, client: string) => Effect.gen(function*() {
+const launchInContainer = (run: AdmittedRunner, tools: PlayTools, launcher: ProcessInfo, client: string) => Effect.gen(function*() {
   const failed = problem("couldn't ask Battle.net to launch Warcraft III");
   const capacity = client === "playtest" ? "" : tools.capacity ?? (yield* skillScript("machine-capacity", "scripts/machine-capacity.mjs").pipe(Effect.mapError((cause) => failed(cause.problem))));
   const request = yield* Effect.try({
@@ -126,23 +126,21 @@ const launchInContainer = (run: Runner, tools: PlayTools, launcher: ProcessInfo,
     catch: failed,
   });
   const { command, env } = launchCommand(request);
-  const attempt = Effect.gen(function*() {
-    const { exitCode, stderr } = yield* run(ChildProcess.make(command[0]!, command.slice(1), { env, stdin: "ignore", stdout: "ignore" })).pipe(
-      Effect.mapError(failed),
-      Effect.timeoutOrElse({ duration: "30 seconds", orElse: () => Effect.fail(failed("didn't exit within 30 s")) }),
-    );
-    const deferred = deferredExit(exitCode) ? capacityDeferral(stderr) : undefined;
-    if (deferred !== undefined) return yield* new CapacityDeferred({ reason: deferred.reason });
-    if (exitCode !== 0) return yield* failed(`exited ${exitCode}: ${stderr.trim().split("\n").slice(-3).join(" ")}`);
-  });
-  yield* retryWhileDeferred(attempt, {
-    seconds: LAUNCH_WAIT_SECONDS,
-    waiting: (reason) => `${client}: waiting: the capacity helper defers launching Warcraft III (${reason})`,
-    exhausted: (reason) => failed(`the capacity helper kept deferring it for ${LAUNCH_WAIT_SECONDS} s (${reason})`),
-  });
+  const admission = client === "playtest" ? 30 : LAUNCH_WAIT_SECONDS + 30;
+  const launched = yield* run(ChildProcess.make(command[0]!, command.slice(1), { env, stdin: "ignore", stdout: "ignore" }), {
+    admission: `${admission} seconds`,
+    exit: "30 seconds",
+    waiting: (reason) => Console.log(`${client}: waiting in the capacity helper's queue to launch Warcraft III (${reason})`),
+  }).pipe(Effect.mapError(failed));
+  if (launched.kind === "undecided") return yield* failed(`the capacity helper neither admitted nor deferred it within ${admission} s`);
+  if (launched.kind === "running") return yield* failed("didn't exit within 30 s of its admission");
+  const { exitCode, stderr } = launched;
+  const deferred = deferredExit(exitCode) ? capacityDeferral(stderr) : undefined;
+  if (deferred !== undefined) return yield* failed(`the capacity helper kept deferring it for ${LAUNCH_WAIT_SECONDS} s (${deferred.reason})`);
+  if (exitCode !== 0) return yield* failed(`exited ${exitCode}: ${stderr.trim().split("\n").slice(-3).join(" ")}`);
 });
 
-const machine = (run: Runner, tools: PlayTools): PlayMachine["Service"] => ({
+const machine = (run: Runner, admitted: AdmittedRunner, tools: PlayTools): PlayMachine["Service"] => ({
   processes: Effect.try({ try: listProcesses, catch: problem("couldn't read the process table") }),
   serverDirectory: (prefix) => Effect.try({
     try: () => {
@@ -160,7 +158,7 @@ const machine = (run: Runner, tools: PlayTools): PlayMachine["Service"] => ({
       }
     }
   }),
-  launch: (launcher, client) => launchInContainer(run, tools, launcher, client),
+  launch: (launcher, client) => launchInContainer(admitted, tools, launcher, client),
   openSteam: (url) => startDetached([tools.steam, url]).pipe(Effect.asVoid),
   start: startDetached,
   startService: (unit, command, log) => startUnit(unit, command, log).pipe(Effect.mapError((failure) => new PlayProblem({ problem: failure.problem }))),
@@ -223,6 +221,50 @@ const runner = Effect.gen(function*() {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   return ((command) => collect(command).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner))) satisfies Runner;
 });
+
+type AdmittedRun =
+  | { readonly kind: "exited"; readonly exitCode: number; readonly stderr: string }
+  | { readonly kind: "undecided" }
+  | { readonly kind: "running" };
+
+interface AdmissionLimits {
+  readonly admission: Duration.Input;
+  readonly exit: Duration.Input;
+  readonly waiting: (reason: string) => Effect.Effect<void>;
+}
+
+type AdmittedRunner = (command: ChildProcess.Command, limits: AdmissionLimits) => Effect.Effect<AdmittedRun, PlatformError.PlatformError>;
+
+const DECIDED = /"decision":"(?:RESERVED|DEFER)"/;
+
+/** Runs a command the capacity helper admits: up to `admission` for the helper to admit or defer it, or for it to exit, then up to `exit` for it to exit. */
+export const admittedRunner = Effect.gen(function*() {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  return ((command, { admission, exit, waiting }) => Effect.scoped(Effect.gen(function*() {
+    const handle = yield* command;
+    const said: string[] = [];
+    const decided = yield* Deferred.make<void>();
+    const reading = yield* Effect.forkScoped(handle.stderr.pipe(
+      Stream.decodeText(),
+      Stream.splitLines,
+      Stream.runForEach((line) => Effect.gen(function*() {
+        said.push(line);
+        const queued = capacityQueued(line);
+        if (queued !== undefined) yield* waiting(queued);
+        if (DECIDED.test(line)) yield* Deferred.succeed(decided, undefined);
+      })),
+      Effect.ignore,
+    ));
+    const admitted = yield* Deferred.await(decided).pipe(Effect.raceFirst(handle.exitCode), Effect.timeoutOption(admission));
+    if (Option.isNone(admitted)) return { kind: "undecided" } as const;
+    const exitCode = yield* handle.exitCode.pipe(Effect.timeoutOption(exit));
+    if (Option.isNone(exitCode)) return { kind: "running" } as const;
+    yield* Fiber.join(reading);
+    return { kind: "exited", exitCode: Number(exitCode.value), stderr: said.join("\n") } as const;
+  }).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner)))) satisfies AdmittedRunner;
+});
+
+const runners = Effect.all({ run: runner, admitted: admittedRunner });
 
 const tool = (run: Runner, command: readonly string[], env: Record<string, string>, stdin?: Uint8Array, allowExit: readonly number[] = []) => {
   const failed = problem(`${basename(command[0] ?? "")} ${command.slice(1, 3).join(" ")} failed`);
@@ -309,10 +351,10 @@ const desktop = (run: Runner, tools: PlayTools, display: string): PlayDesktop["S
 export const linuxPlayHostLayer = (display: string, tools: Partial<PlayTools> = {}) => {
   const resolved = { ...PLAY_TOOLS, ...tools };
   return Layer.mergeAll(
-    Layer.effect(PlayMachine, Effect.map(runner, (run) => PlayMachine.of(machine(run, resolved)))),
+    Layer.effect(PlayMachine, Effect.map(runners, ({ run, admitted }) => PlayMachine.of(machine(run, admitted, resolved)))),
     Layer.effect(PlayDesktop, Effect.map(runner, (run) => PlayDesktop.of(desktop(run, resolved, display)))),
   ).pipe(Layer.provide(BunServices.layer));
 };
 
 export const linuxPlayMachineLayer = (tools: Partial<PlayTools> = {}) =>
-  Layer.effect(PlayMachine, Effect.map(runner, (run) => PlayMachine.of(machine(run, { ...PLAY_TOOLS, ...tools })))).pipe(Layer.provide(BunServices.layer));
+  Layer.effect(PlayMachine, Effect.map(runners, ({ run, admitted }) => PlayMachine.of(machine(run, admitted, { ...PLAY_TOOLS, ...tools })))).pipe(Layer.provide(BunServices.layer));
