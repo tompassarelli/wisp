@@ -186,7 +186,7 @@ wisp:src/headless/turnLedger.ts is the pure core; wisp:host/net/peer.ts
 the handshake.
 
 **Events.** Every synchronized event a client raises goes over the wire:
-`BlzSendSyncData` messages, player key events, chat and frame clicks. A
+`BlzSendSyncData` messages, player key and mouse events, chat and frame clicks. A
 `Lockstep` created with `link` (a `TurnLedger`) and `humans` (every slot in the
 match) runs only the local slot's client and hands each event to the link
 instead of delivering it in process.

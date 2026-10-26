@@ -1,6 +1,6 @@
 import { f32 } from "../sim/f32";
 import { mixCall } from "./callHash";
-import type { CameraPose, CineFilterPose, ClientFiles, EffectDeaths, EffectPose, Handle, IntentionalNoops, LocalNatives, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, SyncMessage, UnitPose, UnitStateFixtures } from "./clientTypes";
+import type { CameraPose, CineFilterPose, ClientFiles, EffectDeaths, EffectPose, Handle, IntentionalNoops, LocalNatives, MissingNative, MouseButton, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, SyncMessage, UnitPose, UnitStateFixtures } from "./clientTypes";
 import type { NativeDeclarations } from "./declarations";
 import { FRAME_POINTS, type Frame, type FrameTemplate, Frames } from "./frames";
 import { FRAMES_PER_SECOND, steppedFrames } from "./frameRate";
@@ -20,7 +20,7 @@ import { Warcraft3Inventory, type Warcraft3InventoryFixtures } from "./warcraft3
 import { WARCRAFT3_ENUM_VALUES } from "./warcraft3Natives";
 import { Scenery, type SceneryFixtures } from "./warcraft3Scenery";
 
-export type { CameraPose, CineFilterPose, ClientFiles, EffectDeaths, EffectPose, Handle, IntentionalNoops, LocalNatives, MapEntry, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, SyncMessage, UnitPose, UnitStateFixture, UnitStateFixtures } from "./clientTypes";
+export type { CameraPose, CineFilterPose, ClientFiles, EffectDeaths, EffectPose, Handle, IntentionalNoops, LocalNatives, MapEntry, MissingNative, MouseButton, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, SyncMessage, UnitPose, UnitStateFixture, UnitStateFixtures } from "./clientTypes";
 export { describeCall, describeNumber, describeValue, sameCall } from "./jassFormat";
 export { assertSoundCue } from "./natives/sound";
 export { FRAMES_PER_SECOND };
@@ -290,7 +290,10 @@ export class HeadlessClient {
       ...this.abilities.behaviors(handle),
       ...inputNatives(frameContext),
       ...frameNatives(frameContext),
-      ...this.timers.behaviors(this.slot, network),
+      ...this.timers.behaviors(this.slot, network, {
+        modelled: event => event === this.natives.EVENT_PLAYER_MOUSE_MOVE || event === this.natives.EVENT_PLAYER_MOUSE_DOWN || event === this.natives.EVENT_PLAYER_MOUSE_UP,
+        missing: native => { this.missingNatives.push({ native, client: this.slot, frame: this.frame }); },
+      }),
       ...this.preloadText.behaviors(),
       ...this.camera.behaviors(),
       ...this.sounds.behaviors(),
@@ -368,6 +371,16 @@ export class HeadlessClient {
 
   keyEvent(sender: number, key: number, meta: number, down: boolean): void {
     this.run(() => this.timers.keyEvent(sender, key, meta, down));
+  }
+
+  mouseMove(sender: number, x: number, y: number): void {
+    this.run(() => this.timers.mouseEvent(sender, this.natives.EVENT_PLAYER_MOUSE_MOVE, x, y, undefined));
+  }
+
+  mouseButton(sender: number, x: number, y: number, button: MouseButton, down: boolean): void {
+    const event = down ? this.natives.EVENT_PLAYER_MOUSE_DOWN : this.natives.EVENT_PLAYER_MOUSE_UP;
+    const pressed = button === "left" ? this.natives.MOUSE_BUTTON_TYPE_LEFT : button === "middle" ? this.natives.MOUSE_BUTTON_TYPE_MIDDLE : this.natives.MOUSE_BUTTON_TYPE_RIGHT;
+    this.run(() => this.timers.mouseEvent(sender, event, x, y, pressed));
   }
 
   type(text: string): boolean {

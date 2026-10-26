@@ -39,6 +39,9 @@ interface EventContext {
   syncData: string;
   chat: string;
   key: number;
+  mouseX: number;
+  mouseY: number;
+  mouseButton: unknown;
   timer: Timer | undefined;
   frame: Frame | undefined;
   frameEvent: unknown;
@@ -48,7 +51,13 @@ type Registration =
   | { readonly kind: "sync"; readonly trigger: Trigger; readonly player: number; readonly prefix: string }
   | { readonly kind: "chat"; readonly trigger: Trigger; readonly player: number; readonly text: string; readonly exact: boolean }
   | { readonly kind: "key"; readonly trigger: Trigger; readonly player: number; readonly key: number; readonly meta: number; readonly down: boolean }
-  | { readonly kind: "frame"; readonly trigger: Trigger; readonly frame: Frame; readonly event: unknown };
+  | { readonly kind: "frame"; readonly trigger: Trigger; readonly frame: Frame; readonly event: unknown }
+  | { readonly kind: "player"; readonly trigger: Trigger; readonly player: number; readonly event: unknown };
+
+interface PlayerEvents {
+  modelled(this: void, event: unknown): boolean;
+  missing(this: void, native: string): void;
+}
 
 /** The shortest repeating period: a zero period fires about 10,000 times a game second (wisp:docs/warsmash-notes.md#timers-and-frame-stepping). */
 const MIN_PERIOD = f32(0.0001);
@@ -67,7 +76,7 @@ export class TriggersTimers {
 
   private now = 0;
   private readonly registrations: Registration[] = [];
-  private readonly event: EventContext = { player: 0, syncPrefix: "", syncData: "", chat: "", key: 0, timer: undefined, frame: undefined, frameEvent: undefined };
+  private readonly event: EventContext = { player: 0, syncPrefix: "", syncData: "", chat: "", key: 0, mouseX: 0, mouseY: 0, mouseButton: undefined, timer: undefined, frame: undefined, frameEvent: undefined };
 
   constructor(private readonly handle: HandleFactory, private readonly units: Units) {}
 
@@ -86,6 +95,9 @@ export class TriggersTimers {
     if (event.syncData !== undefined) this.event.syncData = event.syncData;
     if (event.chat !== undefined) this.event.chat = event.chat;
     if (event.key !== undefined) this.event.key = event.key;
+    if (event.mouseX !== undefined) this.event.mouseX = event.mouseX;
+    if (event.mouseY !== undefined) this.event.mouseY = event.mouseY;
+    if (event.mouseButton !== undefined) this.event.mouseButton = event.mouseButton;
     if (event.frame !== undefined) this.event.frame = event.frame;
     if (event.frameEvent !== undefined) this.event.frameEvent = event.frameEvent;
     const running = trigger.running;
@@ -174,6 +186,16 @@ export class TriggersTimers {
     }
   }
 
+  mouseEvent(sender: number, event: unknown, x: number, y: number, button: unknown): void {
+    const mouseX = roundToFloat32(x);
+    const mouseY = roundToFloat32(y);
+    for (const registration of [...this.registrations]) {
+      if (registration.kind === "player" && registration.player === sender && registration.event === event) {
+        this.fire(registration.trigger, { player: sender, mouseX, mouseY, mouseButton: button });
+      }
+    }
+  }
+
   frameEvent(sender: number, id: number, event: unknown): void {
     for (const registration of [...this.registrations]) {
       if (registration.kind === "frame" && registration.frame.id === id && registration.event === event) {
@@ -187,9 +209,9 @@ export class TriggersTimers {
       registration.kind === "frame" && registration.frame === frame && registration.event === event && !registration.trigger.destroyed);
   }
 
-  behaviors(slot: number, network: SyncMessage[]): Readonly<Record<string, NativeBehavior>> {
+  behaviors(slot: number, network: SyncMessage[], playerEvents: PlayerEvents): Readonly<Record<string, NativeBehavior>> {
     return {
-      ...this.triggerBehaviors(),
+      ...this.triggerBehaviors(playerEvents),
       CreateTimer: (): Timer => {
         const timer: Timer = { ...this.handle("timer"), callback: undefined, periodic: false, timeout: 0, period: 0, due: 0,
           order: 0, running: false, expired: false, paused: undefined };
@@ -227,7 +249,7 @@ export class TriggersTimers {
     };
   }
 
-  private triggerBehaviors(): Readonly<Record<string, NativeBehavior>> {
+  private triggerBehaviors(playerEvents: PlayerEvents): Readonly<Record<string, NativeBehavior>> {
     return {
       GetTriggerPlayer: () => this.event.player,
       BlzTriggerRegisterFrameEvent: (trigger: Trigger, frame: unknown, event: unknown) => {
@@ -241,6 +263,10 @@ export class TriggersTimers {
       BlzGetTriggerSyncPrefix: () => this.event.syncPrefix,
       GetEventPlayerChatString: () => this.event.chat,
       BlzGetTriggerPlayerKey: () => this.event.key,
+      BlzGetTriggerPlayerMouseX: () => this.event.mouseX,
+      BlzGetTriggerPlayerMouseY: () => this.event.mouseY,
+      BlzGetTriggerPlayerMousePosition: () => this.units.location(this.event.mouseX, this.event.mouseY),
+      BlzGetTriggerPlayerMouseButton: () => this.event.mouseButton,
       GetExpiredTimer: () => this.event.timer,
       CreateTrigger: (): Trigger => ({ ...this.handle("trigger"), actions: [], destroyed: false, running: false, interrupted: false }),
       BlzTriggerIsRunning: (trigger: Trigger) => trigger.running,
@@ -262,6 +288,11 @@ export class TriggersTimers {
       },
       BlzTriggerRegisterPlayerKeyEvent: (trigger: Trigger, player: number, key: number, meta: number, down: boolean) => {
         this.registrations.push({ kind: "key", trigger, player, key, meta, down });
+        return this.handle("event");
+      },
+      TriggerRegisterPlayerEvent: (trigger: Trigger, player: number, event: unknown) => {
+        if (playerEvents.modelled(event)) this.registrations.push({ kind: "player", trigger, player, event });
+        else playerEvents.missing("TriggerRegisterPlayerEvent");
         return this.handle("event");
       },
     };

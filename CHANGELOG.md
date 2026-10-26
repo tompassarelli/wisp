@@ -5,6 +5,12 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## Unreleased
 
+- `wisp/src/headless/journey` adds the `playerMouse` journey event and
+  exports `PlayerMouse`; `wisp/src/headless/lockstep`'s `Lockstep` adds
+  `mouseMove` and `mouseButton`, and `LinkEvent` gains `mouseMove` and
+  `mouseButton` events; `wisp/src/headless/client` exports `MouseButton`
+  and `HeadlessClient` adds `mouseMove` and `mouseButton` (wisp#67,
+  wisp:docs/headless.md, "Player mouse events").
 - `wisp/src/map/frameMeter` exports `FrameStamp`, and `startFrameMeter`
   takes `stamps`. Frame capture receipts gain `stamps=` in the heading and in
   each sample: `frameCostCaptureHeading` takes the stamp names and

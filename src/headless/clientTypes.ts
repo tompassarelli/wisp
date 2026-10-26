@@ -15,6 +15,8 @@ export interface SyncMessage {
   readonly data: string;
 }
 
+export type MouseButton = "left" | "middle" | "right";
+
 export interface MapEntry {
   start(this: void): void;
   install(this: void): void;

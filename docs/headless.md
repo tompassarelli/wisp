@@ -31,7 +31,7 @@ effects, and logs every native call except the local-only ones.
 | --- | --- |
 | Players | Player N is the number N. The journey's player slots are playing humans with a client each; every other slot is empty. `GetLocalPlayer` is the client's slot. `GetPlayerName` reads `playerNames`, a map declaration keyed by slot, with `Player N` (one-based) for unnamed slots. |
 | Timers | 60 frames a second over Warcraft's timer clock: binary32 deadlines whose sums round toward zero (native reads one 1/65536 s unit lower in 280 of 4,000 1/60 s readings from callback 3,364, wisp#134). A frame runs every callback due by its end, earliest deadline first and equal deadlines in `TimerStart` order, so a period shorter than a frame fires several times in it (1/1024 s: 17 or 18). A period is at least 0.0001 s (a zero period: 10,002 times in the first second) and a one-shot timeout at least 1/1024 s. A timer started inside a callback is timed from its deadline and fires in the same frame when due. Inside a callback, timers read its deadline as the game time; a periodic timer's elapsed time restarts each period, an expired one reads its timeout and a paused one keeps its value. [Rules](warsmash-notes.md#timers-and-frame-stepping). |
-| Triggers | Sync, chat, key and frame events, registered per player or frame. A chat line matches its registered text exactly or as a substring, as registered. |
+| Triggers | Sync, chat, key, player mouse and frame events, registered per player or frame. A chat line matches its registered text exactly or as a substring, as registered. |
 | Sync messages | `BlzSendSyncData` reaches every client, including the sender, in send order, after the frame or event that sent it and before the next, its data cut to 255 characters as Warcraft 3.0.1 cuts it. Warcraft delivers it some frames later; a [delivery](network-model.md) gives the measured latency. |
 | Files | `Preload` writes files the test reads from `client.files`. `Preloader` reads files the host published (`publish`, `reload`), or another program wrote in a client's [CustomMapData folder](#input-from-another-program), one chunk per FileIO tooltip level, and keeps the first content it read from a path, as Warcraft does. |
 | Units | Position, type, move speed and attack cooldown. |
@@ -128,6 +128,8 @@ export const JOURNEY: Journey = {
     { frame: 60, reload: true },
     { frame: 90, player: 1, key: 0x54, meta: 2 },
     { frame: 100, player: 0, mouse: { x: 640, y: 360, left: true } },
+    { frame: 105, player: 1, playerMouse: { x: 1234.5, y: -987.25 } },
+    { frame: 106, player: 1, playerMouse: { x: 1240, y: -980, button: "right", down: true } },
     { frame: 110, player: 0, click: { x: 0.4, y: 0.3 } },
   ],
 };
@@ -138,6 +140,10 @@ A mouse event moves that player's pointer to screen pixel `x`, `y`
 (`BlzGetMouseScreenPosX/Y`) on their client only, and `left` holds or
 releases the left button (`BlzIsMouseButtonPressed`); it stays where the last
 event left it, so a drag is a press, moves and a release.
+A `playerMouse` event is that player's synchronized mouse event at world
+point `x`, `y` (see Player mouse events): a move without `button`, and with
+`button` (`"left"`, `"middle"` or `"right"`) a down or, with `down: false`,
+an up. It never moves the `mouse` pointer.
 A click event is `Lockstep.click` at Warcraft UI coordinates (see Typing and
 clicks); the journey fails when no frame there takes clicks.
 `runJourney` starts the map in every client, plays the events and returns each
@@ -155,6 +161,29 @@ Warcraft's UI coordinates (0.8 by 0.6 over the 4:3 area): the highest-level
 shown, enabled frame there with a click event, placed by its absolute points
 and size, takes the keyboard, and every client runs its click event with the
 clicker. It returns false when no frame there takes clicks.
+
+## Player mouse events
+
+`Lockstep.mouseMove(player, x, y)` and `Lockstep.mouseButton(player, x, y,
+button, down)` deliver one player's synchronized mouse event at world point
+`x`, `y`, rounded to binary32, as the key events are delivered: every client
+runs, on the same frame, the triggers registered for that player with
+`TriggerRegisterPlayerEvent` and `EVENT_PLAYER_MOUSE_MOVE`,
+`EVENT_PLAYER_MOUSE_DOWN` or `EVENT_PLAYER_MOUSE_UP`. In them
+`GetTriggerPlayer` is the sender, `BlzGetTriggerPlayerMouseX` and `...Y` the
+point, `BlzGetTriggerPlayerMousePosition` a new location there, and
+`BlzGetTriggerPlayerMouseButton` the button (`MOUSE_BUTTON_TYPE_*`). Over
+[Wisp's transport](network-model.md#wisps-transport) they are `mouseMove` and
+`mouseButton` events and wait for the turn delay. wisp:test/headless-mouse.test.ts
+and its Lua32 fixture check one player's move, down and up in both clients.
+
+Unmodelled: the button a move event reads (it keeps the last button event's);
+whether Warcraft raises these events while the pointer is over UI or outside
+the playable area; how often it raises moves; whether a down also raises a
+move; and any link between these events and the local pointer
+(`BlzGetMouseScreenPosX/Y`, `BlzIsMouseButtonPressed`), which they leave as
+they are. `TriggerRegisterPlayerEvent` with any other player event reports an
+unmodeled native.
 
 ## Input from another program
 
@@ -439,7 +468,7 @@ replacement for #38's offline native driver and #39's native fast-forward is
 callbacks; chat events invoke its registered map handler directly. Neither
 uses an OS keyboard, a chat window, a lobby, or a Warcraft process.
 `--journey FILE.json` accepts a game's scripted journey, including held-key
-events with `down: true` and `down: false`.
+events with `down: true` and `down: false` and `playerMouse` events.
 
 `--step N` advances at most N simulation frames per call, preserving every
 input and observation frame. Without it, the driver advances straight to the

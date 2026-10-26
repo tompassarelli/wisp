@@ -121,6 +121,12 @@ export class Units {
     return poses;
   }
 
+  location(x: number, y: number): Handle {
+    const handle = this.handle("location");
+    this.locations.set(handle, { x, y });
+    return handle;
+  }
+
   playerBehaviors({ slot, humans, playerNames }: PlayerContext): Readonly<Record<string, NativeBehavior>> {
     const playing = (player: number) => humans.includes(player);
     return {
@@ -129,11 +135,7 @@ export class Units {
       GetPlayerId: (player: number) => player,
       GetPlayerName: (player: number) => playerNames?.[player] ?? `Player ${player + 1}`,
       GetHandleId: (handle: unknown) => (isHandle(handle) ? handle.id : handle),
-      Location: (x: number, y: number) => {
-        const handle = this.handle("location");
-        this.locations.set(handle, { x, y });
-        return handle;
-      },
+      Location: (x: number, y: number) => this.location(x, y),
       RemoveLocation: (handle: Handle) => { this.locations.delete(handle); },
       MoveLocation: (handle: Handle, x: number, y: number) => {
         const location = this.locations.get(handle);

@@ -4,7 +4,7 @@ import { type Hash, type ModuleSet, ModulePublisher, type VersionFiles } from ".
 import { type ClientFiles, type ClientScope, HeadlessClient, type LocalNatives, type MapEntry, type NativeBehaviors, type SyncMessage, WISP_LOCAL_NATIVES, describeCall, sameCall } from "./client";
 import type { NativeDeclarations } from "./declarations";
 import type { EffectDeaths, UnitStateFixtures } from "./clientTypes";
-import type { IntentionalNoops } from "./clientTypes";
+import type { IntentionalNoops, MouseButton } from "./clientTypes";
 import type { SceneryFixtures } from "./warcraft3Scenery";
 import type { Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 import type { AbilityObjectFixtures } from "./warcraft3Abilities";
@@ -64,6 +64,8 @@ export interface SyncDelivery {
 export type LinkEvent =
   | { readonly sender: number; readonly kind: "sync"; readonly prefix: string; readonly data: string }
   | { readonly sender: number; readonly kind: "key"; readonly key: number; readonly meta: number; readonly down: boolean }
+  | { readonly sender: number; readonly kind: "mouseMove"; readonly x: number; readonly y: number }
+  | { readonly sender: number; readonly kind: "mouseButton"; readonly x: number; readonly y: number; readonly button: MouseButton; readonly down: boolean }
   | { readonly sender: number; readonly kind: "chat"; readonly text: string }
   | { readonly sender: number; readonly kind: "click"; readonly frame: number };
 
@@ -191,6 +193,8 @@ export class Lockstep {
   private apply(client: HeadlessClient, event: LinkEvent): void {
     if (event.kind === "sync") client.deliverSync({ sender: event.sender, prefix: event.prefix, data: event.data });
     else if (event.kind === "key") client.keyEvent(event.sender, event.key, event.meta, event.down);
+    else if (event.kind === "mouseMove") client.mouseMove(event.sender, event.x, event.y);
+    else if (event.kind === "mouseButton") client.mouseButton(event.sender, event.x, event.y, event.button, event.down);
     else if (event.kind === "chat") client.chat(event.sender, event.text);
     else client.frameEvent(event.sender, event.frame, client.natives.FRAMEEVENT_CONTROL_CLICK);
   }
@@ -272,6 +276,18 @@ export class Lockstep {
       return this.send({ sender, kind: "key", key, meta, down });
     }
     for (const client of this.clients) client.key(sender, key, meta, down);
+    this.flush();
+  }
+
+  mouseMove(sender: number, x: number, y: number): void {
+    if (this.options.link !== undefined) return this.send({ sender, kind: "mouseMove", x, y });
+    for (const client of this.clients) client.mouseMove(sender, x, y);
+    this.flush();
+  }
+
+  mouseButton(sender: number, x: number, y: number, button: MouseButton, down: boolean): void {
+    if (this.options.link !== undefined) return this.send({ sender, kind: "mouseButton", x, y, button, down });
+    for (const client of this.clients) client.mouseButton(sender, x, y, button, down);
     this.flush();
   }
 

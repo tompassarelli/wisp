@@ -13,6 +13,9 @@ import { EFFECT_DEATHS, deathTimeline } from "../effects59/deaths";
 import { ANIMATION_NOOPS } from "../animation58/cases";
 import { CAPTURE_FRAME, RULER, RULER_DEATH_SECONDS } from "../animation58/layout";
 import { animationRows } from "../animation58/rows";
+import { runJourney } from "../../src/headless/journey";
+import { MEASURED_BATTLE_NET, syncDelivery } from "../../src/headless/syncChannel";
+import { PLAYER_MOUSE_JOURNEY } from "../player-mouse67/journey";
 
 // One Lua32 run of every fixture in test/lua32-fixtures.test.ts: it prints each fixture's rows, prefixed by its name, for the test to compare.
 declare const arg: Readonly<Record<number, string | undefined>>;
@@ -53,6 +56,12 @@ const FIXTURES: Record<string, (this: void, bundle: string) => string[]> = {
   "timers": bundle => {
     const clients = played(luaLockstep({ filePrefix: "timers56" }, bundle, declarations), 76);
     return diverged(clients, files(clients, ["timers56"]));
+  },
+  "player-mouse": bundle => {
+    const clients = luaLockstep({ filePrefix: "mouse" }, bundle, declarations, undefined, syncDelivery(MEASURED_BATTLE_NET));
+    runJourney(clients, PLAYER_MOUSE_JOURNEY);
+    const unmodeled = clients.clients.flatMap(client => client.missingNatives.map(missing => `p${client.slot} unmodeled ${missing.native}`));
+    return diverged(clients, [...unmodeled, ...files(clients, ["player-mouse"])]);
   },
   "sounds": bundle => {
     const clients = played(luaLockstep({ filePrefix: "sounds60", natives: SOUND_NATIVES }, bundle, declarations), 240);

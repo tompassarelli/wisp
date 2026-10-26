@@ -7,6 +7,7 @@ import { EXPECTED as ANIMATION, EXPECTED_FILE as ANIMATION_FILE } from "./animat
 import { DEATH_TIMELINE, EXPECTED as EFFECTS } from "./effects59/expected";
 import { EXPECTED as SCRIPT_RULES, EXPECTED_SYNC as SCRIPT_RULES_SYNC } from "./script-rules50/expected";
 import { NATIVE_ROWS as SHADOW_STRIKE } from "./shadow-strike94/native-rows";
+import { EXPECTED as PLAYER_MOUSE } from "./player-mouse67/expected";
 import { EXPECTED as SOUNDS } from "./sounds60/expected";
 import { EXPECTED as TIMERS } from "./timers56/expected";
 import { EXPECTED as UNIT_MOTION } from "./unit-motion57/expected";
@@ -30,6 +31,7 @@ const FIXTURES: readonly { readonly name: string; readonly map?: string; readonl
   { name: "unit-states", map: "unit-states", rows: () => bothClients(UNIT_STATES) },
   { name: "unit-motion", map: "unit-motion57", rows: () => bothClients(UNIT_MOTION) },
   { name: "timers", map: "timers56", rows: () => bothClients(TIMERS) },
+  { name: "player-mouse", map: "player-mouse67", rows: () => bothClients(PLAYER_MOUSE) },
   { name: "sounds", map: "sounds60", rows: () => bothClients(SOUNDS) },
   { name: "script-rules", map: "script-rules50", rows: () => bothClients([...SCRIPT_RULES, ...SCRIPT_RULES_SYNC]) },
   { name: "shadow-strike", map: "shadow-strike94", rows: () => bothClients(SHADOW_STRIKE.flat()) },
