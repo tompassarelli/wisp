@@ -8,6 +8,7 @@ import { customMapData, writtenPreloadFile } from "../host/headless/headlessInpu
 import { installDispatch, on, trampoline } from "../src/map/dispatch";
 import { readChunk, writeLines } from "../src/map/fileio";
 import { configureRuntime } from "../src/runtime/config";
+import { registeredTests } from "../src/runtime/testing";
 
 declare global {
   var __fixtureBox: framehandle | undefined;
@@ -64,3 +65,7 @@ test("a client's CustomMapData folder: the map's files are there as Warcraft wri
   clients.frames(1);
   expect(clients.clients.map(seenBy)).toEqual(["Q ", undefined]);
 });
+
+const registered = registeredTests.length;
+await import("../src/headless/natives/preloadText.tests");
+for (const rule of registeredTests.splice(registered)) test(rule.name, rule.run);

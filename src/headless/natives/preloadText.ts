@@ -1,6 +1,23 @@
 import { errorFile, FILE_IO_ABILITY } from "../../runtime/gameFiles";
 import type { ClientFiles, NativeBehavior } from "../clientTypes";
 
+const PRELOAD_LINE_BYTES = 259;
+const BYTE_STRINGS = "\u00e9".length === 2;
+
+// Native Warcraft III writes at most 259 UTF-8 bytes of a Preload line and may split a character; Bun strings cannot hold the split byte, so they drop the whole character.
+export function preloadLine(line: string): string {
+  if (BYTE_STRINGS) return line.slice(0, PRELOAD_LINE_BYTES);
+  let bytes = 0;
+  for (let index = 0; index < line.length; index++) {
+    const unit = line.charCodeAt(index);
+    const size = unit < 0x80 ? 1 : unit < 0x800 ? 2 : unit >= 0xd800 && unit < 0xdc00 ? 4 : 3;
+    if (bytes + size > PRELOAD_LINE_BYTES) return line.slice(0, index);
+    bytes += size;
+    if (size === 4) index++;
+  }
+  return line;
+}
+
 export interface PreloadContext {
   readonly slot: number;
   readonly filePrefix: string;
@@ -46,7 +63,7 @@ export class PreloadText {
       // PreloadGenClear starts the modeled buffer; Start only enables native file generation.
       PreloadGenStart: () => undefined,
       Preload: (line: string) => {
-        this.preload.push(line);
+        this.preload.push(preloadLine(line));
       },
       PreloadGenEnd: (name: string) => {
         files.set(name, this.preload);

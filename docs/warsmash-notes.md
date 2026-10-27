@@ -683,7 +683,7 @@ retain the exact maps, files and measured rows.
 | Player slots (`Player`, `GetPlayerId`, `GetLocalPlayer`, `GetPlayerController`, `GetPlayerSlotState`) | `platform/shell/{inputs,playerFiles}.ts` and 20 files reading the local player | `player-*` rows | 3.0.1 rows match |
 | Map-made frame reads (`BlzFrameGetChildrenCount`, `BlzFrameGetChild`, `BlzFrameGetName`, `BlzFrameGetEnable`, `BlzFrameGetText`, `BlzFrameGetTextSizeLimit`, `BlzFrameIsVisible`) and frame writes | `platform/editboxJournal.ts`, `game/ui/*.ts` | `frame-*` rows | 3.0.1, 6 rows match after the fixes below. The chat box's place in Warcraft's own UI (children 2, 0, 4, 5) is not modeled: headless has no Warcraft UI, so `editboxJournal` takes its typed path |
 | Input events: chat (exact or substring), key press and release, mouse, frame clicks and edit boxes (`TriggerRegisterPlayerChatEvent`, `BlzTriggerRegisterPlayerKeyEvent`, `BlzTriggerRegisterFrameEvent`, `TriggerRegisterPlayerEvent`, `BlzIsKeyPressed`, `BlzGetTriggerPlayerKey`, mouse getters) | `platform/shell/{keys,keyEvents,inputs,analogPad}.ts`, `platform/{keyboardJournal,editboxJournal}.ts`, `game/ui/frames.ts` | `test/headless-input.test.ts` | Intentional substitution: scripted input. wisp#19's pad parity compares delivered frames |
-| Files: `Preload` output and `Preloader`'s first read per path | Wisp's FileIO and reloader; `platform/shell/{frameCost,renderClock}.ts` | `test/headless-input.test.ts` | Native-derived ([hot reload](hot-reload.md)) |
+| Files: `Preload` output and `Preloader`'s first read per path | Wisp's FileIO and reloader; `platform/shell/{frameCost,renderClock}.ts` | `test/headless-input.test.ts`, `src/headless/natives/preloadText.tests.ts` | Native-derived ([hot reload](hot-reload.md)); each `Preload` string cut to 259 bytes ([Preload line length](#preload-line-length-wisp77)) |
 | Handle ids (`GetHandleId`): key codes, frame lookup keys, a diagnostic unit id | `platform/shell/{keys,objectData}.ts`, `game/ui/frames.ts` | `ConvertOsKeyType` returns its code; frames keep one handle each | Key codes match by declaration; unit numbers differ per runtime and are diagnostic text only |
 | Scene and presentation: camera, fog, sky, terrain, day and night, lightning, text tags, on-screen messages, fonts | `platform/shell/{view,shell,stageScenery,keys}.ts`, `game/render/{hitAreaPresentation,bearFeedback}.ts` | Scene state in `test/scene.test.ts`; the rest are declared no-ops | Pixels only; #40 and #48 own them. Not a simulation rule |
 | Map origin (`GetPlayableMapRect`, `GetRectCenter`, `GetLocationX/Y/Z`, `RemoveLocation`) | `platform/shell/shell.ts` | Smashcraft supplies its authored (0, 0, 0) | Map data, not an engine rule |
@@ -1058,6 +1058,33 @@ initialization, and describes single-player without computer opponents.
 That is a documented change, not a timing measurement or equivalent workload
 to #48's four-fighter match. No browser gameplay, GPU first-use timing or
 Warcraft-native behavior was measured in this research pass.
+
+## Preload line length (wisp#77)
+
+**Native-confirmed** 27 October 2026 on an offline LAN pool client at
+3.0.0.24268 (gex45, pair 0, client a), with the sample map writing probe
+lines through `PreloadGenClear`, `Preload` and `PreloadGenEnd` and the
+`CustomMapData` files read back from outside the game:
+
+- Warcraft writes at most **259 bytes** of each `Preload` string. ASCII lines
+  of 240 to 259 characters came back whole; every line from 260 to 2000
+  characters came back as its first 259.
+- The limit counts bytes, not characters. `W:` followed by 200 `é` (402 UTF-8
+  bytes) came back as its first 259 bytes, ending on the lone lead byte
+  `0xC3` of a split `é`.
+- The cut applies to the string alone: the line keeps its `call Preload( "`
+  prefix and its closing `" )` and CRLF.
+
+The earlier single observation from smashcraft#509 (a 334-character line read
+back as 263) did not reproduce under control: no probe line came back longer
+than 259 bytes.
+
+Headless applies the same cut in `Preload`
+(wisp:src/headless/natives/preloadText.ts). In Lua, whose strings are bytes, it
+keeps the first 259 bytes exactly, split byte included. In Bun, a string can't
+hold the split byte, so a cut inside a character drops that character. The
+`[native]` test in wisp:src/headless/natives/preloadText.tests.ts pins 258,
+259 and 260 bytes and the multi-byte cut in both runtimes.
 
 ## Native confirmations still queued
 
