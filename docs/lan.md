@@ -604,16 +604,22 @@ high-weight slice for game clients, with no CPU quota. Each offline client
 requests 1.5 GiB through `--memory-gib`; measured
 parity clients used 0.8–1.4 GB resident memory. This sizes admission and
 `MemoryHigh` while keeping the native class's CPU treatment. The pool adds
-pairs while the helper admits them, probing native admission for both of its clients (`--new-clients 2`), so a pair is never half-started and torn down when the host has room for only one more client (smashcraft#585), and requiring
-`protectedCpuSomeAvg10` below 20% before each new pair, in present and away
-mode. A deferred pair is retried every 45 s, for up to `--wait` seconds
-(default 1800). After that the pool keeps its admitted pairs and lists the
-remaining pair numbers as waiting. The agent stops its games when it is
-stopped, or when its pair's session ends.
+pairs while the helper admits them, in present and away mode. Each pair's
+session declares both of its clients (`--new-clients 2`, or 1 for a
+`--network` pair), so a pair is never half-started and torn down when the
+host has room for only one more client (smashcraft#585). It passes
+`--wait-seconds` (`--wait`, default 1800) and waits in the helper's
+arrival-order native queue, so a later pair, client launch or GPU job cannot
+take the slot it waits for; the pool prints each new reason the helper gives
+for holding it. Retrying a deferral every 45 s instead lost pair 0 two full
+windows to later pairs on gex45 on 26 October 2026 (wisp#76). If the helper
+still defers it after those seconds, the pool keeps its admitted pairs and
+lists the remaining pair numbers as waiting. The agent stops its games when
+it is stopped, or when its pair's session ends.
 
 - `--pair K` (repeated) picks which pairs start, in that order of admission.
 - If the helper defers either game's native scope, the pair agent stops any
-  game already started for that pair. `lan pool` retries the whole pair.
+  game already started for that pair and the pair fails.
   Direct pair-session and agent entry points require the capacity helper too.
 - Several pools may run at once, each on its own pairs (one per agent). Each
   pool writes its pair's entry to `pair-K/pair.json` and rebuilds `pool.json`

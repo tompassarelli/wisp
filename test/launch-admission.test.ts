@@ -21,3 +21,12 @@ test("a client launch waits in the capacity helper's queue for its admission, th
   expect(said).toEqual(["DEFER_GPU_BUSY"]);
   expect(await run("sleep 5")).toEqual({ kind: "running" });
 });
+
+test("a client launch whose helper leaves a child holding stderr still returns once the helper exits", async () => {
+  const helper = ChildProcess.make("bash", ["-c", `echo '{"decision":"RESERVED","reason":"RUN"}' >&2; sleep 20 & exit 0`], { stdout: "ignore" });
+  const started = Date.now();
+  const launched = await Effect.runPromise(Effect.flatMap(admittedRunner, (admitted) => admitted(helper, {
+    admission: "10 seconds", exit: "10 seconds", waiting: () => Effect.void,
+  })).pipe(Effect.provide(BunServices.layer)));
+  expect({ launched, quick: Date.now() - started < 5000 }).toEqual({ launched: { kind: "exited", exitCode: 0, stderr: '{"decision":"RESERVED","reason":"RUN"}' }, quick: true });
+});

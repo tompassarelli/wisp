@@ -2,16 +2,25 @@ import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const [verb, ...rest] = process.argv.slice(2);
-if (verb === "probe") {
-  if (rest[rest.indexOf("--new-clients") + 1] !== "2") {
-    console.error("a pair probe must declare its two new clients");
-    process.exit(64);
-  }
-  console.log(JSON.stringify({ decision: "RUN", reason: "OK", protectedCpuSomeAvg10: 0 }));
-  process.exit(0);
-}
+const rest = process.argv.slice(3);
+const option = (name: string) => (rest.indexOf(name) >= 0 && rest.indexOf(name) < rest.indexOf("--") ? rest[rest.indexOf(name) + 1] : undefined);
 const command = rest.slice(rest.indexOf("--") + 1);
+const owner = option("--owner") ?? "";
+if (owner.startsWith("wisp-lan-pair-") && option("--new-clients") !== (command.includes("--network") ? "1" : "2")) {
+  console.error("a pair session must declare its new clients: two, or one with --network");
+  process.exit(64);
+}
+const queueMs = process.env["WISP_TEST_CAPACITY_QUEUE_MS"];
+if (queueMs !== undefined && owner.startsWith("wisp-lan-pair-")) {
+  const deferral = { reason: "DEFER_GPU_BUSY", cpuSomeAvg10: 0 };
+  if (option("--wait-seconds") === undefined) {
+    console.error(JSON.stringify({ decision: "DEFER", ...deferral }));
+    process.exit(75);
+  }
+  console.error(JSON.stringify({ decision: "QUEUED", ...deferral }));
+  await Bun.sleep(Number(queueMs));
+}
+console.error(JSON.stringify({ decision: "RESERVED", reason: "RUN", owner }));
 const sessions = process.env["WISP_TEST_SESSIONS"] ?? "";
 mkdirSync(sessions, { recursive: true });
 const record = join(sessions, `${process.pid}.json`);

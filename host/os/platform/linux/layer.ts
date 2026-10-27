@@ -3,7 +3,6 @@ import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Layer, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { collect } from "../../../cli/hostProcess";
 import {
   AudioIsolation, BackgroundServices, CapacityAdmission, GameLauncher, Namespaces, PageOpener, PlatformFailure, ProcessTable, ResourceAccounting,
 } from "../services";
@@ -64,22 +63,14 @@ const userManager = (args: readonly string[]) => Effect.try({
   catch: failure("capacity admission"),
 });
 
-const admission = Layer.effect(CapacityAdmission, Effect.gen(function*() {
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  return CapacityAdmission.of({
-    probe: (helper, memoryGib, newClients) => collect(ChildProcess.make(process.execPath, [helper, "probe", "--class", "native", "--memory-gib", String(memoryGib), "--new-clients", String(newClients)], { stdin: "ignore" })).pipe(
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-      Effect.map(({ exitCode, stdout, stderr }) => ({ exitCode, stdout: new TextDecoder().decode(stdout), stderr })),
-      Effect.mapError(failure("capacity admission")),
-    ),
-    session: (helper, owner, memoryGib) => Effect.succeed([
-      process.execPath, helper, "session", "--class", "native", ...(memoryGib === undefined ? [] : ["--memory-gib", String(memoryGib)]), "--owner", owner, "--",
-    ]),
-    signalLease: (lease, signal) => userManager(["kill", `--signal=${signal}`, leaseScope(lease)]).pipe(Effect.asVoid),
-    leaseLive: (lease) => userManager(["show", leaseScope(lease), "--property=ActiveState", "--value"]).pipe(
-      Effect.map((state) => !["", "inactive", "failed"].includes(state)),
-    ),
-  });
+const admission = Layer.succeed(CapacityAdmission, CapacityAdmission.of({
+  session: (helper, owner, memoryGib) => Effect.succeed([
+    process.execPath, helper, "session", "--class", "native", ...(memoryGib === undefined ? [] : ["--memory-gib", String(memoryGib)]), "--owner", owner, "--",
+  ]),
+  signalLease: (lease, signal) => userManager(["kill", `--signal=${signal}`, leaseScope(lease)]).pipe(Effect.asVoid),
+  leaseLive: (lease) => userManager(["show", leaseScope(lease), "--property=ActiveState", "--value"]).pipe(
+    Effect.map((state) => !["", "inactive", "failed"].includes(state)),
+  ),
 }));
 
 const synchronous = Layer.mergeAll(

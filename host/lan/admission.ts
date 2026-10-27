@@ -1,7 +1,6 @@
 import { join } from "node:path";
-import { Console, Effect, Schedule, Schema } from "effect";
+import { Effect } from "effect";
 import { CapacityAdmission } from "../os/platform/services";
-import { LanFailure } from "./join";
 
 export const admissionFile = (directory: string) => join(directory, "admission.json");
 
@@ -25,43 +24,15 @@ export function capacityDeferral(stderr: string): { readonly reason: string; rea
 /** The DEFER reason a native start waiting in the capacity helper's queue printed, from one QUEUED line. */
 export const capacityQueued = (line: string) => /"decision":"QUEUED","reason":"([A-Z_]+)"/.exec(line)?.[1];
 
-export class CapacityDeferred extends Schema.TaggedError<CapacityDeferred>()("CapacityDeferred", { reason: Schema.String }) {}
+/** The newest reason the capacity helper printed for keeping a native start in its queue. */
+export const lastQueued = (stderr: string) => stderr.split("\n").map(capacityQueued).findLast((reason) => reason !== undefined);
 
-/** Runs `attempt` again every 45 s while it fails with `CapacityDeferred`, for up to `seconds`; then fails with `exhausted`. */
-export const retryWhileDeferred = <A, E, R, E2>(
-  attempt: Effect.Effect<A, E | CapacityDeferred, R>,
-  { seconds, waiting, exhausted }: { readonly seconds: number; readonly waiting: (reason: string) => string; readonly exhausted: (reason: string) => E2 },
-): Effect.Effect<A, Exclude<E, CapacityDeferred> | E2, R> => {
-  const deadline = Date.now() + seconds * 1000;
-  const retrying = (failure: E | CapacityDeferred): failure is CapacityDeferred => failure instanceof CapacityDeferred && Date.now() < deadline;
-  return attempt.pipe(
-    Effect.tapError((failure) => (retrying(failure) ? Console.log(`${waiting(failure.reason)}; trying again in 45 s`) : Effect.void)),
-    // Not a poll: it retries an attempt the capacity helper deferred.
-    Effect.retry({ schedule: Schedule.spaced("45 seconds"), while: retrying }),
-    Effect.catchIf((failure): failure is CapacityDeferred => failure instanceof CapacityDeferred, (failure) => Effect.fail(exhausted(failure.reason))),
-  ) as Effect.Effect<A, Exclude<E, CapacityDeferred> | E2, R>;
-};
-
-const ProbeReply = Schema.fromJsonString(Schema.Struct({
-  decision: Schema.String,
-  reason: Schema.optional(Schema.String),
-  protectedCpuSomeAvg10: Schema.optional(Schema.Unknown),
-}));
-
-export const pairAdmission = (capacity: string) => Effect.gen(function*() {
-  const probe = yield* CapacityAdmission.use((admission) => admission.probe(capacity, 3, 2)).pipe(
-    Effect.mapError((cause) => new LanFailure({ problem: `the capacity helper did not run: ${cause._tag === "PlatformFailure" ? cause.problem : cause.message}` })),
-  );
-  const status = yield* Schema.decodeEffect(ProbeReply)(probe.stdout).pipe(
-    Effect.mapError((cause) => new LanFailure({ problem: `the capacity helper's probe reply: ${cause.message}` })),
-  );
-  const pressure = status.protectedCpuSomeAvg10;
-  if (typeof pressure !== "number" || !Number.isFinite(pressure)) return yield* new LanFailure({ problem: "the capacity helper did not report protected CPU pressure" });
-  if (pressure >= 20) return `protected CPU pressure ${pressure}% (waiting for less than 20%)`;
-  if (probe.exitCode === DEFERRED_EXIT && status.decision === "DEFER") return status.reason;
-  if (probe.exitCode !== 0 || status.decision !== "RUN") return yield* new LanFailure({ problem: `the capacity helper refused: ${probe.stderr.trim()}` });
-  return undefined;
-});
+/** Why a native start given `waitSeconds` in the capacity helper's queue exited deferred, from what the helper printed. */
+export function unadmitted(stderr: string, waitSeconds: number) {
+  const deferred = capacityDeferral(stderr);
+  if (deferred === undefined) return `the capacity helper refused: ${stderr.trim().split("\n").slice(-2).join(" | ")}`;
+  return `the capacity helper kept deferring it for ${waitSeconds} s (${deferred.reason}${deferred.cpuSomeAvg10 === undefined ? "" : `, CPU pressure ${deferred.cpuSomeAvg10}%`})`;
+}
 
 export const nativeCommand = (capacity: string, name: string, runtime: string) =>
   CapacityAdmission.use((admission) => admission.session(capacity, `wisp-lan:${name}`, 1.5)).pipe(Effect.map((session) => [...session, "env", `XDG_RUNTIME_DIR=${runtime}`]));

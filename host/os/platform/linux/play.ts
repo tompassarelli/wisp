@@ -237,6 +237,8 @@ type AdmittedRunner = (command: ChildProcess.Command, limits: AdmissionLimits) =
 
 const DECIDED = /"decision":"(?:RESERVED|DEFER)"/;
 
+const STDERR_GRACE = "1 second";
+
 /** Runs a command the capacity helper admits: up to `admission` for the helper to admit or defer it, or for it to exit, then up to `exit` for it to exit. */
 export const admittedRunner = Effect.gen(function*() {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -259,7 +261,7 @@ export const admittedRunner = Effect.gen(function*() {
     if (Option.isNone(admitted)) return { kind: "undecided" } as const;
     const exitCode = yield* handle.exitCode.pipe(Effect.timeoutOption(exit));
     if (Option.isNone(exitCode)) return { kind: "running" } as const;
-    yield* Fiber.join(reading);
+    yield* Fiber.join(reading).pipe(Effect.timeoutOption(STDERR_GRACE));
     return { kind: "exited", exitCode: Number(exitCode.value), stderr: said.join("\n") } as const;
   }).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner)))) satisfies AdmittedRunner;
 });

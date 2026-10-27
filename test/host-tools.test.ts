@@ -77,7 +77,7 @@ const pool = (box: ReturnType<typeof sandbox>, extra: Record<string, string>, pa
   mkdirSync(plugin, { recursive: true });
 
   writeFileSync(join(plugin, "index.ts"), "export {};\n");
-  return Bun.spawn([...within, process.execPath, join(root, "examples/sample/scripts/sample.ts"), "lan", "pool", "--pair", String(pair), "--capacity", capacity, "--desktop", join(fixtures, "desktop.sh"), "--wait", "0", ...flags], {
+  return Bun.spawn([...within, process.execPath, join(root, "examples/sample/scripts/sample.ts"), "lan", "pool", "--pair", String(pair), "--capacity", capacity, "--desktop", join(fixtures, "desktop.sh"), ...flags, "--wait", "0"], {
     env: { ...box.env, ...extra }, stdout: "pipe", stderr: "pipe",
   });
 };
@@ -302,3 +302,16 @@ test("[boundary] lan pool: a pool or a queued waiter whose fleet session's proce
   expect(await lockFree(box, pair)).toBe(true);
   expect(await settled(() => box.marked().length === 0, 15)).toBe(true);
 }, 120_000);
+
+test("[boundary] lan pool: a pair start the capacity helper defers waits in the helper's queue and starts once admitted, without asking again", async () => {
+  const box = sandbox();
+  const pair = poolPair + 7;
+  const runner = pool(box, { WISP_TEST_CAPACITY_QUEUE_MS: "3000" }, pair, ["--wait", "300"]);
+  await until(() => existsSync(join(pairState(box, pair), "clients.json")), 30, "the queued pair once admitted");
+  runner.kill("SIGTERM");
+  const result = await leftovers(runner, box);
+  expect({
+    waited: (await new Response(runner.stdout).text()).includes(`pair ${pair}: waiting in the capacity helper's queue (DEFER_GPU_BUSY)`),
+    stopped: result.code !== "still running", processes: result.processes, sessions: result.sessions,
+  }).toEqual({ waited: true, stopped: true, processes: 0, sessions: 0 });
+}, 60_000);

@@ -108,14 +108,7 @@ export class AudioIsolation extends Context.Service<AudioIsolation, {
   readonly sink: (name: string, sinkName: string) => Effect.Effect<{ readonly env: Readonly<Record<string, string>>; readonly problem?: string }>;
 }>()("wisp/platform/AudioIsolation") {}
 
-export interface AdmissionProbe {
-  readonly exitCode: number;
-  readonly stdout: string;
-  readonly stderr: string;
-}
-
 export class CapacityAdmission extends Context.Service<CapacityAdmission, {
-  readonly probe: (helper: string, memoryGib: number, newClients: number) => Effect.Effect<AdmissionProbe, PlatformError>;
   readonly session: (helper: string, owner: string, memoryGib?: number) => Effect.Effect<readonly string[], PlatformUnsupported>;
   readonly signalLease: (lease: string, signal: "SIGTERM" | "SIGKILL") => Effect.Effect<void, PlatformError>;
   readonly leaseLive: (lease: string) => Effect.Effect<boolean, PlatformError>;

@@ -19,7 +19,7 @@ import {
 import { PROFILES, desktopSize } from "../os/warcraft/clientProfiles";
 import { DEFAULT_BUILD, profileFor } from "../client/builds";
 import { setupClient } from "../lan/setup";
-import { CapacityDeferred, admissionFile, capacityDeferral, deferredExit, pairAdmission, retryWhileDeferred } from "../lan/admission";
+import { admissionFile, deferredExit, lastQueued, unadmitted } from "../lan/admission";
 
 const SESSION = join(import.meta.dir, "../lan/pairSession.ts");
 
@@ -106,53 +106,67 @@ const READY = "10 minutes";
 
 const outlivedStop = (name: string, lease: string) => Console.log(`${name} outlived its stop (lease ${lease}); killing its scope`);
 
+const RESERVED = /"decision":"RESERVED"/;
+
+const DECISION_GRACE_SECONDS = 60;
+
 const startPair = (pair: number, custody: { readonly custodian: Custodian; readonly queued: boolean }, profile: string, launcher: string, capacity: string, waitSeconds: number, network: boolean, fps?: number) => {
   const directory = pairDirectory(pair);
-  const attempt = Effect.gen(function*() {
+  const sessionErr = join(directory, "session.err");
+  const started = Effect.gen(function*() {
     mkdirSync(directory, { recursive: true });
     rmSync(agentSocket(pair), { force: true });
     rmSync(agentFile(pair), { force: true });
     rmSync(agentPidFile(pair), { force: true });
     const outlived = yield* stopPairScopes(pair, outlivedStop);
     if (outlived.length > 0) return yield* new LanFailure({ problem: `${outlived.join(" and ")} from its last start outlived the stop of ${outlived.length === 1 ? "its" : "their"} capacity scope` });
-    const waiting = yield* pairAdmission(capacity);
-    if (waiting !== undefined) return yield* new CapacityDeferred({ reason: waiting });
     rmSync(admissionFile(directory), { force: true });
 
     const scope = yield* Scope.fork(yield* Effect.scope);
     return yield* Effect.gen(function*() {
 
-      const session = yield* spawnLogged(ChildProcess.make(process.execPath, [capacity, "session", "--class", "native", "--memory-gib", "1", "--owner", `wisp-lan-pair-${pair}`, "--", process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity, ...(fps === undefined ? [] : ["--fps", String(fps)]), ...(network ? ["--network"] : [])], { stdin: "ignore", forceKillAfter: "90 seconds" }), {
+      const session = yield* spawnLogged(ChildProcess.make(process.execPath, [capacity, "session", "--class", "native", "--memory-gib", "1", "--new-clients", String(pairSides(network).length), ...(waitSeconds > 0 ? ["--wait-seconds", String(waitSeconds)] : []), "--owner", `wisp-lan-pair-${pair}`, "--", process.execPath, SESSION, "--pair", String(pair), "--pool-profile", profile, "--launcher", launcher, "--capacity", capacity, ...(fps === undefined ? [] : ["--fps", String(fps)]), ...(network ? ["--network"] : [])], { stdin: "ignore", forceKillAfter: "90 seconds" }), {
         stdout: join(directory, "session.out"),
-        stderr: join(directory, "session.err"),
+        stderr: sessionErr,
       });
       yield* Effect.addFinalizer(() => stopAgent(pair).pipe(Effect.andThen(stopPairScopes(pair, outlivedStop))));
-      const step = Effect.gen(function*() {
-        if (existsSync(admissionFile(directory))) return yield* new CapacityDeferred({ reason: (yield* readJson(admissionFile(directory), AdmissionRefusal)).reason });
-        if (!(yield* session.handle.isRunning.pipe(Effect.orElseSucceed(() => false)))) {
-          const code = yield* session.handle.exitCode.pipe(Effect.map(Number), Effect.orElseSucceed(() => -1));
-          yield* session.written.pipe(Effect.timeoutOption("1 second"));
-          if (!deferredExit(code)) return yield* new LanFailure({ problem: `its session exited with ${code}; see ${directory}/session.err and desktop-*.err` });
+      const ended = Effect.gen(function*() {
+        if (yield* session.handle.isRunning.pipe(Effect.orElseSucceed(() => false))) return;
+        const code = yield* session.handle.exitCode.pipe(Effect.map(Number), Effect.orElseSucceed(() => -1));
+        yield* session.written.pipe(Effect.timeoutOption("1 second"));
+        if (!deferredExit(code)) return yield* new LanFailure({ problem: `its session exited with ${code}; see ${sessionErr} and desktop-*.err` });
+        return yield* new LanFailure({ problem: unadmitted(readFileSync(sessionErr, "utf8"), waitSeconds) });
+      });
 
-          const said = readFileSync(join(directory, "session.err"), "utf8");
-          const deferred = capacityDeferral(said);
-          if (deferred?.cpuSomeAvg10 === undefined) return yield* new LanFailure({ problem: `the capacity helper refused: ${said.trim().split("\n").slice(-2).join(" | ")}` });
-          return yield* new CapacityDeferred({ reason: `${deferred.reason}, CPU pressure ${deferred.cpuSomeAvg10}%` });
-        }
+      let queued: string | undefined;
+      const reserved = Effect.gen(function*() {
+        yield* ended;
+        const said = existsSync(sessionErr) ? readFileSync(sessionErr, "utf8") : "";
+        if (RESERVED.test(said)) return true;
+        const reason = lastQueued(said);
+        if (reason !== undefined && reason !== queued) yield* Console.log(`pair ${pair}: waiting in the capacity helper's queue (${reason})`);
+        queued = reason ?? queued;
+        return false;
+      });
+      const decided = waitSeconds + DECISION_GRACE_SECONDS;
+      yield* pollUntil(reserved, {
+        until: (admitted) => admitted, every: "1 second", within: `${decided} seconds`,
+        onTimeout: () => Effect.fail(new LanFailure({ problem: `the capacity helper neither admitted nor deferred it within ${decided} s; see ${sessionErr}` })),
+      });
+
+      const step = Effect.gen(function*() {
+        if (existsSync(admissionFile(directory))) return yield* new LanFailure({ problem: `the capacity helper deferred a game inside it (${(yield* readJson(admissionFile(directory), AdmissionRefusal)).reason})` });
+        yield* ended;
         return yield* clientsReady(pair, network);
       });
       yield* pollUntil(step, {
         until: (ready) => ready, every: "1 second", within: READY,
-        onTimeout: () => Effect.fail(new LanFailure({ problem: `its clients weren't both running within ${READY}; see ${directory}` })),
+        onTimeout: () => Effect.fail(new LanFailure({ problem: `its clients weren't both running within ${READY} of its admission; see ${directory}` })),
       });
       return { ...session.handle, stop: Scope.close(scope, Exit.void) };
     }).pipe(Scope.provide(scope), Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))));
   });
-  return holdPair(pair, custody.custodian, custody.queued).pipe(Effect.andThen(retryWhileDeferred(attempt, {
-    seconds: waitSeconds,
-    waiting: (reason) => `pair ${pair}: the capacity helper defers it (${reason})`,
-    exhausted: (reason) => new LanFailure({ problem: `the capacity helper kept deferring it for ${waitSeconds} s (${reason})` }),
-  })), Effect.mapError((failure) => new LanFailure({ problem: `pair ${pair}: ${failure.message}` })));
+  return holdPair(pair, custody.custodian, custody.queued).pipe(Effect.andThen(started), Effect.mapError((failure) => new LanFailure({ problem: `pair ${pair}: ${failure.message}` })));
 };
 
 const PUBLISH_ROUNDS = 5;
