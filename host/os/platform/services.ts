@@ -115,7 +115,7 @@ export interface AdmissionProbe {
 }
 
 export class CapacityAdmission extends Context.Service<CapacityAdmission, {
-  readonly probe: (helper: string, memoryGib: number) => Effect.Effect<AdmissionProbe, PlatformError>;
+  readonly probe: (helper: string, memoryGib: number, newClients: number) => Effect.Effect<AdmissionProbe, PlatformError>;
   readonly session: (helper: string, owner: string, memoryGib?: number) => Effect.Effect<readonly string[], PlatformUnsupported>;
   readonly signalLease: (lease: string, signal: "SIGTERM" | "SIGKILL") => Effect.Effect<void, PlatformError>;
   readonly leaseLive: (lease: string) => Effect.Effect<boolean, PlatformError>;

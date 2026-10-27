@@ -67,7 +67,7 @@ const userManager = (args: readonly string[]) => Effect.try({
 const admission = Layer.effect(CapacityAdmission, Effect.gen(function*() {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   return CapacityAdmission.of({
-    probe: (helper, memoryGib) => collect(ChildProcess.make(process.execPath, [helper, "probe", "--class", "native", "--memory-gib", String(memoryGib)], { stdin: "ignore" })).pipe(
+    probe: (helper, memoryGib, newClients) => collect(ChildProcess.make(process.execPath, [helper, "probe", "--class", "native", "--memory-gib", String(memoryGib), "--new-clients", String(newClients)], { stdin: "ignore" })).pipe(
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       Effect.map(({ exitCode, stdout, stderr }) => ({ exitCode, stdout: new TextDecoder().decode(stdout), stderr })),
       Effect.mapError(failure("capacity admission")),

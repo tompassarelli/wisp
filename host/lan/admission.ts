@@ -46,7 +46,7 @@ const ProbeReply = Schema.fromJsonString(Schema.Struct({
 }));
 
 export const pairAdmission = (capacity: string) => Effect.gen(function*() {
-  const probe = yield* CapacityAdmission.use((admission) => admission.probe(capacity, 3)).pipe(
+  const probe = yield* CapacityAdmission.use((admission) => admission.probe(capacity, 3, 2)).pipe(
     Effect.mapError((cause) => new LanFailure({ problem: `the capacity helper did not run: ${cause._tag === "PlatformFailure" ? cause.problem : cause.message}` })),
   );
   const status = yield* Schema.decodeEffect(ProbeReply)(probe.stdout).pipe(

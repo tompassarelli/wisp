@@ -600,7 +600,7 @@ high-weight slice for game clients, with no CPU quota. Each offline client
 requests 1.5 GiB through `--memory-gib`; measured
 parity clients used 0.8–1.4 GB resident memory. This sizes admission and
 `MemoryHigh` while keeping the native class's CPU treatment. The pool adds
-pairs while the helper admits them, probing native admission and requiring
+pairs while the helper admits them, probing native admission for both of its clients (`--new-clients 2`), so a pair is never half-started and torn down when the host has room for only one more client (smashcraft#585), and requiring
 `protectedCpuSomeAvg10` below 20% before each new pair, in present and away
 mode. A deferred pair is retried every 45 s, for up to `--wait` seconds
 (default 1800). After that the pool keeps its admitted pairs and lists the

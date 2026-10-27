@@ -4,6 +4,10 @@ import { join } from "node:path";
 
 const [verb, ...rest] = process.argv.slice(2);
 if (verb === "probe") {
+  if (rest[rest.indexOf("--new-clients") + 1] !== "2") {
+    console.error("a pair probe must declare its two new clients");
+    process.exit(64);
+  }
   console.log(JSON.stringify({ decision: "RUN", reason: "OK", protectedCpuSomeAvg10: 0 }));
   process.exit(0);
 }
