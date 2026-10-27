@@ -31,7 +31,7 @@ export interface CiSoak extends SoakCommandOptions {
   readonly reads?: readonly string[];
 }
 
-export class CiFailure extends Schema.TaggedError<CiFailure>()("CiFailure", {
+export class CiFailure extends Schema.TaggedError<CiFailure, { readonly brand: unique symbol }>()("CiFailure", {
   problem: Schema.String,
   exitCode: Schema.Int,
 }) {

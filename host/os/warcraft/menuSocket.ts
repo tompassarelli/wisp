@@ -1,6 +1,6 @@
 import { type Effect, Schema } from "effect";
 
-export class MenuFailure extends Schema.TaggedError<MenuFailure>()("MenuFailure", {
+export class MenuFailure extends Schema.TaggedError<MenuFailure, { readonly brand: unique symbol }>()("MenuFailure", {
   operation: Schema.String,
   problem: Schema.String,
 }) {

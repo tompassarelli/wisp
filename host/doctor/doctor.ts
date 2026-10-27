@@ -33,7 +33,7 @@ export interface DoctorTarget {
   readonly account?: { readonly username: readonly string[]; readonly password: readonly string[] };
 }
 
-export class DoctorStop extends Schema.TaggedError<DoctorStop>()("DoctorStop", {
+export class DoctorStop extends Schema.TaggedError<DoctorStop, { readonly brand: unique symbol }>()("DoctorStop", {
   problem: Schema.String,
 }) {
   override get message(): string {

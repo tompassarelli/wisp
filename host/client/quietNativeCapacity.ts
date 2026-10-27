@@ -5,7 +5,7 @@ import { ChildProcess } from "effect/process";
 import { capacityHelper } from "../render/gpuLease";
 import { spawnLogged } from "../cli/hostProcess";
 
-class QuietLeaseFailure extends Schema.TaggedError<QuietLeaseFailure>()("QuietLeaseFailure", {
+class QuietLeaseFailure extends Schema.TaggedError<QuietLeaseFailure, { readonly brand: unique symbol }>()("QuietLeaseFailure", {
   problem: Schema.String,
 }) {
   override get message(): string { return this.problem; }

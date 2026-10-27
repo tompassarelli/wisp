@@ -23,7 +23,7 @@ const BUILD_COMMANDS = {
   "menus start": "menuDriving", "play": "menuDriving",
 } as const satisfies Readonly<Record<string, BuildCapability>>;
 
-export class BuildFailure extends Schema.TaggedError<BuildFailure>()("BuildFailure", { problem: Schema.String }) {
+export class BuildFailure extends Schema.TaggedError<BuildFailure, { readonly brand: unique symbol }>()("BuildFailure", { problem: Schema.String }) {
   override get message(): string { return this.problem; }
 }
 export const profileFor = (id: string) => BUILD_PROFILES.find((profile) => profile.id === id);

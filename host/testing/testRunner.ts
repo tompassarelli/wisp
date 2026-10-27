@@ -22,7 +22,7 @@ const LEASE_WAIT_MINUTES = 3;
 
 export const INCONCLUSIVE_EXIT = 75;
 
-export class TestRunFailure extends Schema.TaggedError<TestRunFailure>()("TestRunFailure", {
+export class TestRunFailure extends Schema.TaggedError<TestRunFailure, { readonly brand: unique symbol }>()("TestRunFailure", {
   problem: Schema.String,
 }) {
   override get message() {

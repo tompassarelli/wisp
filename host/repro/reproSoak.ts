@@ -12,7 +12,7 @@ const importFrom = (directory: string, file: string) => {
   return path.startsWith(".") ? path : `./${path}`;
 };
 
-class SoakReplayFailure extends Schema.TaggedError<SoakReplayFailure>()("SoakReplayFailure", { problem: Schema.String }) {}
+class SoakReplayFailure extends Schema.TaggedError<SoakReplayFailure, { readonly brand: unique symbol }>()("SoakReplayFailure", { problem: Schema.String }) {}
 
 export const replaySoakRepro = (file: string, declaration: { readonly project: string; readonly tests: string }, options: { readonly shrink: boolean; readonly out?: string; readonly name?: string }) =>
   Effect.tryPromise({ try: async () => {

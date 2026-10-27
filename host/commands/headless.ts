@@ -25,7 +25,7 @@ import { step } from "../cli/timings";
 import { type PerfProject, measureRun } from "./perf";
 import { FRAME_MS } from "../../src/headless/frameRate";
 
-export class HeadlessFailure extends Schema.TaggedError<HeadlessFailure>()("HeadlessFailure", {
+export class HeadlessFailure extends Schema.TaggedError<HeadlessFailure, { readonly brand: unique symbol }>()("HeadlessFailure", {
   journey: Schema.String,
   problems: Schema.Finite,
   cause: Schema.optional(Schema.Unknown),

@@ -11,7 +11,7 @@ export interface ProcessOutput {
   readonly output: string;
 }
 
-export class DevProcessFailure extends Schema.TaggedError<DevProcessFailure>()("DevProcessFailure", {
+export class DevProcessFailure extends Schema.TaggedError<DevProcessFailure, { readonly brand: unique symbol }>()("DevProcessFailure", {
   command: Schema.String,
   problem: Schema.String,
 }) {

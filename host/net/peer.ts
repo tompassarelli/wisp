@@ -11,25 +11,25 @@ const PING_SPACING_MS = 25;
 const SLACK_MS = 4;
 const RESEND_MS = FRAME_MS / 2;
 
-export class NetFailure extends Schema.TaggedError<NetFailure>()("NetFailure", { problem: Schema.String }) {
+export class NetFailure extends Schema.TaggedError<NetFailure, { readonly brand: unique symbol }>()("NetFailure", { problem: Schema.String }) {
   override get message(): string {
     return this.problem;
   }
 }
 
-class PeerSilent extends Schema.TaggedError<PeerSilent>()("PeerSilent", { frame: Schema.Finite, silentMs: Schema.Finite }) {
+class PeerSilent extends Schema.TaggedError<PeerSilent, { readonly brand: unique symbol }>()("PeerSilent", { frame: Schema.Finite, silentMs: Schema.Finite }) {
   override get message(): string {
     return `the peer stopped sending: no packet for ${(this.silentMs / 1000).toFixed(1)} s, at frame ${this.frame}`;
   }
 }
 
-class PeerLeft extends Schema.TaggedError<PeerLeft>()("PeerLeft", { frame: Schema.Finite, reason: Schema.String }) {
+class PeerLeft extends Schema.TaggedError<PeerLeft, { readonly brand: unique symbol }>()("PeerLeft", { frame: Schema.Finite, reason: Schema.String }) {
   override get message(): string {
     return `the peer left at frame ${this.frame}: ${this.reason}`;
   }
 }
 
-class NetDesync extends Schema.TaggedError<NetDesync>()("NetDesync", { frame: Schema.Finite, local: Schema.String, remote: Schema.String }) {
+class NetDesync extends Schema.TaggedError<NetDesync, { readonly brand: unique symbol }>()("NetDesync", { frame: Schema.Finite, local: Schema.String, remote: Schema.String }) {
   override get message(): string {
     return `checksums differ after frame ${this.frame}: here ${this.local}, the peer ${this.remote}`;
   }

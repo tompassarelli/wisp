@@ -6,7 +6,7 @@ import { ErrorReport, FILE_SLOT_NUMBERS, type MalformedGameFile } from "../io/pr
 import { describeCause } from "../cli/command";
 import { type GameFileFailure, GameFiles } from "../io/gameFiles";
 
-export class SourceMapFailure extends Schema.TaggedError<SourceMapFailure>()("SourceMapFailure", {
+export class SourceMapFailure extends Schema.TaggedError<SourceMapFailure, { readonly brand: unique symbol }>()("SourceMapFailure", {
   operation: Schema.String,
   path: Schema.String,
   cause: Schema.Unknown,

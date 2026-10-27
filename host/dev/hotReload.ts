@@ -33,7 +33,7 @@ const ACK_TIMEOUT_MS = 10_000;
 
 const PUBLISH_CONCURRENCY = 2;
 
-class NotAcknowledged extends Schema.TaggedError<NotAcknowledged>()("NotAcknowledged", {
+class NotAcknowledged extends Schema.TaggedError<NotAcknowledged, { readonly brand: unique symbol }>()("NotAcknowledged", {
   version: Schema.Finite,
   directories: Schema.Array(Schema.String),
 

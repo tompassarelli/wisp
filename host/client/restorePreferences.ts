@@ -4,11 +4,11 @@ import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Effect, Runtime, Schema } from "effect";
 import { pollUntil } from "../cli/hostProcess";
 
-class PreferencesFailure extends Schema.TaggedError<PreferencesFailure>()("PreferencesFailure", { cause: Schema.Unknown }) {
+class PreferencesFailure extends Schema.TaggedError<PreferencesFailure, { readonly brand: unique symbol }>()("PreferencesFailure", { cause: Schema.Unknown }) {
   override get message() { return String(this.cause); }
 }
 
-class PreferencesUsage extends Schema.TaggedError<PreferencesUsage>()("PreferencesUsage", {}) {
+class PreferencesUsage extends Schema.TaggedError<PreferencesUsage, { readonly brand: unique symbol }>()("PreferencesUsage", {}) {
   override readonly [Runtime.errorExitCode] = 2;
   override get message() { return "usage: restorePreferences.ts PID DOCUMENTS"; }
 }

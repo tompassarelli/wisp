@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import { pollUntil } from "../cli/hostProcess";
 import type { MenuSocket } from "../os/warcraft/menuSocket";
 
-export class LanFailure extends Schema.TaggedError<LanFailure>()("LanFailure", {
+export class LanFailure extends Schema.TaggedError<LanFailure, { readonly brand: unique symbol }>()("LanFailure", {
   problem: Schema.String,
 }) {
   override get message(): string {

@@ -26,7 +26,7 @@ export type CaptureManifest = typeof CaptureManifestSchema.Type;
 export type CaptureSlice = typeof Slice.Type;
 export type CaptureControl = typeof Control.Type;
 
-class ManifestFailure extends Schema.TaggedError<ManifestFailure>()("ManifestFailure", { problem: Schema.String }) {
+class ManifestFailure extends Schema.TaggedError<ManifestFailure, { readonly brand: unique symbol }>()("ManifestFailure", { problem: Schema.String }) {
   override get message(): string { return this.problem; }
 }
 

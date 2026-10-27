@@ -12,7 +12,7 @@ import { bloom } from "./bloom";
 import { shading } from "./shading";
 import { drawExtent } from "./draw-extent";
 
-export class FidelityFailure extends Schema.TaggedError<FidelityFailure>()("FidelityFailure", { problem: Schema.String }) {
+export class FidelityFailure extends Schema.TaggedError<FidelityFailure, { readonly brand: unique symbol }>()("FidelityFailure", { problem: Schema.String }) {
   override get message(): string { return this.problem; }
 }
 export type Verdict = "PASS" | "FAIL" | "INCONCLUSIVE";

@@ -3,7 +3,7 @@ import { Effect, Schema, SchemaIssue } from "effect";
 import { FILE_IO_ABILITY, FILE_SLOTS } from "../../src/runtime/gameFiles";
 import { longBrackets } from "../toolchain/mapInfo";
 
-export class MalformedGameFile extends Schema.TaggedError<MalformedGameFile>()("MalformedGameFile", {
+export class MalformedGameFile extends Schema.TaggedError<MalformedGameFile, { readonly brand: unique symbol }>()("MalformedGameFile", {
   file: Schema.String,
   field: Schema.String,
   problem: Schema.String,

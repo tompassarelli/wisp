@@ -8,7 +8,7 @@ import { Effect, Schema } from "effect";
 import { ChildProcess } from "effect/process";
 import { collect } from "../cli/hostProcess";
 
-class PackageFailure extends Schema.TaggedError<PackageFailure>()("PackageFailure", { cause: Schema.Unknown }) {
+class PackageFailure extends Schema.TaggedError<PackageFailure, { readonly brand: unique symbol }>()("PackageFailure", { cause: Schema.Unknown }) {
   override get message() { return String(this.cause); }
 }
 const attempt = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: cause => new PackageFailure({ cause }) }).pipe(Effect.uninterruptible);

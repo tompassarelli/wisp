@@ -58,7 +58,7 @@ export interface StandaloneOptions {
   readonly net?: StandaloneNet;
 }
 
-class MapMismatch extends Schema.TaggedError<MapMismatch>()("MapMismatch", { code: Schema.String, here: Schema.String }) {
+class MapMismatch extends Schema.TaggedError<MapMismatch, { readonly brand: unique symbol }>()("MapMismatch", { code: Schema.String, here: Schema.String }) {
   override get message(): string {
     return `the join code is for map ${this.code}, this build is map ${this.here.slice(0, CODE_HASH_DIGITS)}; both players need the same build`;
   }

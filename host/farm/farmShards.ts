@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 import { Effect, Schema } from "effect";
 import { describeCause } from "../cli/command";
 
-export class FarmShardFailure extends Schema.TaggedError<FarmShardFailure>()("FarmShardFailure", { problem: Schema.String }) {
+export class FarmShardFailure extends Schema.TaggedError<FarmShardFailure, { readonly brand: unique symbol }>()("FarmShardFailure", { problem: Schema.String }) {
   override get message(): string {
     return this.problem;
   }

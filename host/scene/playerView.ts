@@ -21,7 +21,7 @@ export const SceneReportFile: GameFileKind<SceneReport> = {
   }),
 };
 
-export class PlayerViewFailure extends Schema.TaggedError<PlayerViewFailure>()("PlayerViewFailure", {
+export class PlayerViewFailure extends Schema.TaggedError<PlayerViewFailure, { readonly brand: unique symbol }>()("PlayerViewFailure", {
   client: Schema.String,
 
   source: Schema.String,
@@ -32,7 +32,7 @@ export class PlayerViewFailure extends Schema.TaggedError<PlayerViewFailure>()("
   }
 }
 
-class FrameFileFailure extends Schema.TaggedError<FrameFileFailure>()("FrameFileFailure", {
+class FrameFileFailure extends Schema.TaggedError<FrameFileFailure, { readonly brand: unique symbol }>()("FrameFileFailure", {
   operation: Schema.String,
   path: Schema.String,
   cause: Schema.Unknown,

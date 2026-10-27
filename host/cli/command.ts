@@ -3,7 +3,7 @@ import { Schema } from "effect";
 import type { Platform } from "../os/platform/services";
 export { describeCause } from "./hostProcess";
 
-export class UsageFailure extends Schema.TaggedError<UsageFailure>()("UsageFailure", {
+export class UsageFailure extends Schema.TaggedError<UsageFailure, { readonly brand: unique symbol }>()("UsageFailure", {
   problem: Schema.String,
 }) {
   override get message(): string {

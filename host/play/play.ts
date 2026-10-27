@@ -13,7 +13,7 @@ import { step } from "../cli/timings";
 import { hostLocalLobby, hostLobby, leaveLobby, reportedMenus, startLobby } from "./menus";
 import { ClientWatch, unlessLost } from "../dev/watch";
 
-export class PlayProblem extends Schema.TaggedError<PlayProblem>()("PlayProblem", {
+export class PlayProblem extends Schema.TaggedError<PlayProblem, { readonly brand: unique symbol }>()("PlayProblem", {
   problem: Schema.String,
 }) {
   override get message(): string {
@@ -21,7 +21,7 @@ export class PlayProblem extends Schema.TaggedError<PlayProblem>()("PlayProblem"
   }
 }
 
-class PlayFailure extends Schema.TaggedError<PlayFailure>()("PlayFailure", {
+class PlayFailure extends Schema.TaggedError<PlayFailure, { readonly brand: unique symbol }>()("PlayFailure", {
   step: Schema.Int,
   title: Schema.String,
   problem: Schema.String,

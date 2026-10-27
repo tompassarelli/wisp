@@ -2,7 +2,7 @@ import { appendFileSync } from "node:fs";
 import { Console, Effect, Schema } from "effect";
 import { captureProcess } from "../cli/hostProcess";
 
-class MainRedFailure extends Schema.TaggedError<MainRedFailure>()("MainRedFailure", { command: Schema.String, problem: Schema.String }) {
+class MainRedFailure extends Schema.TaggedError<MainRedFailure, { readonly brand: unique symbol }>()("MainRedFailure", { command: Schema.String, problem: Schema.String }) {
   override get message(): string {
     return `${this.command}: ${this.problem}`;
   }

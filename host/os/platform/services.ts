@@ -3,7 +3,7 @@ import type { ProcessInfo } from "../warcraft/battleNet";
 import type { Client, ClientEntry, ClientsConfig, DesktopFailure, Region } from "../warcraft/desktopClient";
 import type { InputAction } from "../warcraft/inputBatch";
 
-export class PlatformUnsupported extends Schema.TaggedError<PlatformUnsupported>()("PlatformUnsupported", {
+export class PlatformUnsupported extends Schema.TaggedError<PlatformUnsupported, { readonly brand: unique symbol }>()("PlatformUnsupported", {
   capability: Schema.String,
   platform: Schema.String,
 }) {
@@ -12,7 +12,7 @@ export class PlatformUnsupported extends Schema.TaggedError<PlatformUnsupported>
   }
 }
 
-export class PlatformFailure extends Schema.TaggedError<PlatformFailure>()("PlatformFailure", {
+export class PlatformFailure extends Schema.TaggedError<PlatformFailure, { readonly brand: unique symbol }>()("PlatformFailure", {
   capability: Schema.String,
   problem: Schema.String,
 }) {

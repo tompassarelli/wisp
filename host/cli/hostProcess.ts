@@ -76,7 +76,7 @@ export const pollFor = <A, E, R>(seconds: number, every: Duration.Input, check: 
   // @effect-diagnostics-next-line effectSucceedWithVoid:off -- an undefined result, which Effect.void's void type cannot satisfy
   pollUntil(check, { until: (value) => value !== undefined, every, within: Duration.seconds(seconds), onTimeout: () => Effect.succeed(undefined) });
 
-export class MapBuildFailure extends Schema.TaggedError<MapBuildFailure>()("MapBuildFailure", {
+export class MapBuildFailure extends Schema.TaggedError<MapBuildFailure, { readonly brand: unique symbol }>()("MapBuildFailure", {
   operation: Schema.String,
   path: Schema.String,
   cause: Schema.Unknown,
@@ -135,7 +135,7 @@ export const stageMap = <E>(source: string, destination: string, edit: (staged: 
     (staged) => Effect.sync(() => rmSync(staged, { force: true })),
   );
 
-export class ServiceProblem extends Schema.TaggedError<ServiceProblem>()("ServiceProblem", {
+export class ServiceProblem extends Schema.TaggedError<ServiceProblem, { readonly brand: unique symbol }>()("ServiceProblem", {
   problem: Schema.String,
 }) {
   override get message(): string {

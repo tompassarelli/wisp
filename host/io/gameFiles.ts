@@ -5,7 +5,7 @@ import { hostFile } from "../../src/runtime/gameFiles";
 import { type GameFileKind, MalformedGameFile, hostPath, linePreloadFile } from "./preloadRecord";
 import { describeCause } from "../cli/command";
 
-export class GameFileFailure extends Schema.TaggedError<GameFileFailure>()("GameFileFailure", {
+export class GameFileFailure extends Schema.TaggedError<GameFileFailure, { readonly brand: unique symbol }>()("GameFileFailure", {
   operation: Schema.String,
   path: Schema.String,
   cause: Schema.Unknown,

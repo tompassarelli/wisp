@@ -3,7 +3,7 @@ import { describeCause } from "../../cli/hostProcess";
 import { step } from "../../cli/timings";
 import { CLIENT_PROFILE_NAMES } from "./clientProfiles";
 
-export class DesktopFailure extends Schema.TaggedError<DesktopFailure>()("DesktopFailure", {
+export class DesktopFailure extends Schema.TaggedError<DesktopFailure, { readonly brand: unique symbol }>()("DesktopFailure", {
   operation: Schema.String,
   client: Schema.String,
   cause: Schema.Unknown,
@@ -13,7 +13,7 @@ export class DesktopFailure extends Schema.TaggedError<DesktopFailure>()("Deskto
   }
 }
 
-export class ToplevelMissing extends Schema.TaggedError<ToplevelMissing>()("ToplevelMissing", {
+export class ToplevelMissing extends Schema.TaggedError<ToplevelMissing, { readonly brand: unique symbol }>()("ToplevelMissing", {
   title: Schema.String,
 }) {
   override get message(): string {

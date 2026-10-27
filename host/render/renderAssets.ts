@@ -23,7 +23,7 @@ export interface RenderAssetReaders {
   readonly stock: (path: string, layer: AssetLayer) => Promise<Uint8Array | undefined>;
 }
 
-export class RenderAssetFailure extends Schema.TaggedError<RenderAssetFailure>()("RenderAssetFailure", { cause: Schema.Unknown }) {
+export class RenderAssetFailure extends Schema.TaggedError<RenderAssetFailure, { readonly brand: unique symbol }>()("RenderAssetFailure", { cause: Schema.Unknown }) {
   override get message(): string { return `render asset: ${String(this.cause)}`; }
 }
 

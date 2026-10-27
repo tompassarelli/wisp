@@ -6,7 +6,7 @@ import { Effect, Schedule, Schema } from "effect";
 import { describeCause } from "../cli/command";
 import { Summary } from "./farmShards";
 
-export class FarmFailure extends Schema.TaggedError<FarmFailure>()("FarmFailure", { problem: Schema.String }) {
+export class FarmFailure extends Schema.TaggedError<FarmFailure, { readonly brand: unique symbol }>()("FarmFailure", { problem: Schema.String }) {
   override get message(): string {
     return this.problem;
   }

@@ -158,7 +158,7 @@ export function sceneWithUnits(project: HeadlessRenderProject, scene: RenderScen
     ...(special.length === 0 ? {} : { terrainDoodads: { placements: special, models: project.doodads?.models ?? {} } }) };
 }
 
-export class RenderFailure extends Schema.TaggedError<RenderFailure>()("RenderFailure", {
+export class RenderFailure extends Schema.TaggedError<RenderFailure, { readonly brand: unique symbol }>()("RenderFailure", {
   cause: Schema.Unknown,
 }) {
   override get message(): string { return `headless render: ${String(this.cause)}`; }

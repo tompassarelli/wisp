@@ -53,7 +53,7 @@ const fail = (operation: string, path: string, cause: unknown) => new MapBuildFa
 const sha256 = (bytes: Uint8Array | string) => new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
 const trySync = <A>(operation: string, path: string, run: () => A) => Effect.try({ try: run, catch: (cause) => fail(operation, path, cause) });
 
-class LockHeld extends Schema.TaggedError<LockHeld>()("LockHeld", { path: Schema.String }) {}
+class LockHeld extends Schema.TaggedError<LockHeld, { readonly brand: unique symbol }>()("LockHeld", { path: Schema.String }) {}
 
 export const lua32CacheRoot = () => join(cacheHome(), "wisp/lua32");
 

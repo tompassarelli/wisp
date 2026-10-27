@@ -54,7 +54,7 @@ export interface AcceptSuite {
   readonly measures?: Readonly<Record<string, (frame: Frame) => number | undefined>>;
 }
 
-export class AcceptFailure extends Schema.TaggedError<AcceptFailure>()("AcceptFailure", {
+export class AcceptFailure extends Schema.TaggedError<AcceptFailure, { readonly brand: unique symbol }>()("AcceptFailure", {
   operation: Schema.String,
   problem: Schema.String,
 }) {

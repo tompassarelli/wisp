@@ -10,7 +10,7 @@ export const UnitModels = Schema.Struct({
 export type UnitModels = typeof UnitModels.Type;
 export interface ModelSource { readonly entry: string; readonly source: string }
 
-class UnitModelsFailure extends Schema.TaggedError<UnitModelsFailure>()("UnitModelsFailure", { problem: Schema.String }) {
+class UnitModelsFailure extends Schema.TaggedError<UnitModelsFailure, { readonly brand: unique symbol }>()("UnitModelsFailure", { problem: Schema.String }) {
   override get message() { return this.problem; }
 }
 

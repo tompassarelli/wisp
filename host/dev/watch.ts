@@ -61,7 +61,7 @@ export type WatchEvent =
   | { readonly type: "ladder scan"; readonly client: string; readonly at: number; readonly source: "log"; readonly scan: LadderScan["kind"] }
   | { readonly type: "load errors"; readonly client: string; readonly at: number; readonly source: "log"; readonly count: number; readonly first?: string };
 
-export class WatchFailure extends Schema.TaggedError<WatchFailure>()("WatchFailure", {
+export class WatchFailure extends Schema.TaggedError<WatchFailure, { readonly brand: unique symbol }>()("WatchFailure", {
   client: Schema.String,
   operation: Schema.String,
   problem: Schema.String,

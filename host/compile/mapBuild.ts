@@ -31,7 +31,7 @@ export interface BuildProject {
   readonly entryGlobal?: string;
 }
 
-export class CompileFailure extends Schema.TaggedError<CompileFailure>()("CompileFailure", {
+export class CompileFailure extends Schema.TaggedError<CompileFailure, { readonly brand: unique symbol }>()("CompileFailure", {
   diagnostics: Schema.String,
 }) {
   override get message(): string {

@@ -6,7 +6,7 @@ import { Console, Effect, FileSystem, Schema } from "effect";
 import { ChildProcess } from "effect/process";
 import { type Command, UsageFailure, describeCause } from "../cli/command";
 
-export class NativeRemoteFailure extends Schema.TaggedError<NativeRemoteFailure>()("NativeRemoteFailure", {
+export class NativeRemoteFailure extends Schema.TaggedError<NativeRemoteFailure, { readonly brand: unique symbol }>()("NativeRemoteFailure", {
   problem: Schema.String,
 }) {
   override get message(): string { return this.problem; }

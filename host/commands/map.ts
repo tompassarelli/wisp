@@ -10,7 +10,7 @@ import { collect } from "../cli/hostProcess";
 import { ensurePackager } from "../compile/mapBuild";
 import { decodePreviewTexture, decodePreviewRgba, decodeMinimapMarkers, drawStartMarkers, selectMapPreview } from "../scene/mapPreview";
 
-export class MapPreviewFailure extends Schema.TaggedError<MapPreviewFailure>()("MapPreviewFailure", { problem: Schema.String }) {
+export class MapPreviewFailure extends Schema.TaggedError<MapPreviewFailure, { readonly brand: unique symbol }>()("MapPreviewFailure", { problem: Schema.String }) {
   override get message() { return this.problem; }
 }
 

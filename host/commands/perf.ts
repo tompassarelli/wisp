@@ -29,7 +29,7 @@ export interface PerfProject {
   readonly runs?: Readonly<Record<string, LuaBuild>>;
 }
 
-export class PerfFailure extends Schema.TaggedError<PerfFailure>()("PerfFailure", {
+export class PerfFailure extends Schema.TaggedError<PerfFailure, { readonly brand: unique symbol }>()("PerfFailure", {
   problem: Schema.String,
 }) {
   override get message(): string {

@@ -23,7 +23,7 @@ export interface Tunable {
   readonly step: number;
 }
 
-export class TuneFailure extends Schema.TaggedError<TuneFailure>()("TuneFailure", {
+export class TuneFailure extends Schema.TaggedError<TuneFailure, { readonly brand: unique symbol }>()("TuneFailure", {
   problem: Schema.String,
 }) {
   override get message(): string {

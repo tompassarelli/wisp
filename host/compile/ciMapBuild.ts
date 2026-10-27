@@ -37,7 +37,7 @@ function stepProblem(step: MapBuildStep): string | undefined {
   return undefined;
 }
 
-class CiMapBuildFailure extends Schema.TaggedError<CiMapBuildFailure>()("CiMapBuildFailure", {
+class CiMapBuildFailure extends Schema.TaggedError<CiMapBuildFailure, { readonly brand: unique symbol }>()("CiMapBuildFailure", {
   problem: Schema.String,
 }) {
   override get message(): string {

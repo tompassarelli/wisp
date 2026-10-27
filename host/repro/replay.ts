@@ -6,7 +6,7 @@ import { describeCause } from "../cli/command";
 import { type HeadlessMap, installHeadless } from "../headless/headless";
 import { preloadRecord } from "../io/preloadRecord";
 
-export class ReproFailure extends Schema.TaggedError<ReproFailure>()("ReproFailure", {
+export class ReproFailure extends Schema.TaggedError<ReproFailure, { readonly brand: unique symbol }>()("ReproFailure", {
   file: Schema.String,
   problem: Schema.String,
 }) {

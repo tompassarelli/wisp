@@ -15,7 +15,7 @@ import { emitJson } from "../cli/jsonResults";
 import { shrinkSoakRepro } from "../repro/reproShrink";
 import { step } from "../cli/timings";
 
-class SoakFailure extends Schema.TaggedError<SoakFailure>()("SoakFailure", {
+class SoakFailure extends Schema.TaggedError<SoakFailure, { readonly brand: unique symbol }>()("SoakFailure", {
   problem: Schema.String,
   cause: Schema.optional(Schema.Unknown),
 }) {

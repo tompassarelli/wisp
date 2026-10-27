@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 
-class PanelFailure extends Schema.TaggedError<PanelFailure>()("PanelFailure", { cause: Schema.Unknown }) {
+class PanelFailure extends Schema.TaggedError<PanelFailure, { readonly brand: unique symbol }>()("PanelFailure", { cause: Schema.Unknown }) {
   override get message() { return String(this.cause); }
 }
 
