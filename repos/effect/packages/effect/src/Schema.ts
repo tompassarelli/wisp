@@ -36,6 +36,7 @@ import * as HashMap_ from "./HashMap.ts"
 import * as HashSet_ from "./HashSet.ts"
 import * as Cookies_ from "./http/Cookies.ts"
 import * as Headers_ from "./http/Headers.ts"
+import * as UrlParams_internal from "./http/internal/urlParams.ts"
 import * as UrlParams_ from "./http/UrlParams.ts"
 import { NodeInspectSymbol } from "./Inspectable.ts"
 import * as core from "./internal/core.ts"
@@ -4029,6 +4030,7 @@ export declare namespace StructWithRest {
    */
   type Objects = Constraint & {
     readonly ast: SchemaAST.Objects
+    readonly Encoded: object
   }
   /**
    * Readonly list of record schemas that provide the additional index signatures
@@ -4197,6 +4199,13 @@ export interface StructWithRest<
  * producing a schema whose decoded type intersects the struct and all records.
  *
  * **Gotchas**
+ *
+ * The base schema must have an object-shaped encoded type. Whole-object
+ * transformations are not supported, even with an empty rest array. Apply
+ * transformations such as `Schema.fromJsonString` to the completed
+ * `StructWithRest` schema instead. Object-shaped encoded types alone do not
+ * guarantee compatibility: unsupported encodings are still rejected at runtime.
+ * Transformations on individual fields remain supported.
  *
  * TypeScript index signatures also apply to fixed keys. `StructWithRest` does
  * not reject incompatible fixed fields at the call site; use
@@ -5958,6 +5967,9 @@ export type DecodingDefaultOptions = {
 function toIssueEffect<A, R>(
   self: Effect.Effect<A, SchemaError, R>
 ): Effect.Effect<A, SchemaIssue.Issue, R> {
+  if (effectIsExit(self) && self._tag === "Success") {
+    return self as unknown as Exit_.Exit<A, SchemaIssue.Issue>
+  }
   return Effect.catchCause(self, (cause) => Effect.failCauseSync(() => Cause_.map(cause, (error) => error.issue)))
 }
 /**
@@ -6304,6 +6316,12 @@ type Flatten<Schemas> = Schemas extends readonly [infer Head, ...infer Tail]
   ? Head extends Union<infer Inner> ? [...Flatten<Inner>, ...Flatten<Tail>]
   : [Head, ...Flatten<Tail>]
   : []
+type DiscriminantKey<T extends PropertyKey> = T extends number ? `${T}` : T
+type EnsureUniqueDiscriminants<Tags extends ReadonlyArray<PropertyKey>, Seen = never> = Tags extends
+  readonly [infer Head extends PropertyKey, ...infer Tail extends ReadonlyArray<PropertyKey>]
+  ? [DiscriminantKey<Head> & Seen] extends [never] ? EnsureUniqueDiscriminants<Tail, Seen | DiscriminantKey<Head>>
+  : never
+  : unknown
 type MatchCasesResult<Cases> = {
   [K in keyof Cases]-?: NonNullable<Cases[K]> extends (...args: Array<any>) => infer R ? R : never
 }[keyof Cases]
@@ -6388,7 +6406,10 @@ export type toTaggedUnion<
  *
  * **Gotchas**
  *
- * Throws if multiple members use the same discriminant property key.
+ * Rejects overlapping discriminant types in known member tuples at compile
+ * time, including nested unions. Numeric and string values such as `1` and
+ * `"1"` count as duplicates. Also throws at runtime if multiple members use the
+ * same discriminant property key.
  *
  * **Example** (Adding tagged-union utilities to an existing union)
  *
@@ -6415,7 +6436,7 @@ export type toTaggedUnion<
  */
 export function toTaggedUnion<const Tag extends PropertyKey>(tag: Tag) {
   return <const Members extends ReadonlyArray<Constraint & { readonly Type: { readonly [K in Tag]: PropertyKey } }>>(
-    self: Union<Members>
+    self: Union<Members> & NoInfer<EnsureUniqueDiscriminants<TaggedUnionUtils<Tag, Members>["discriminants"]>>
   ): toTaggedUnion<Tag, Members> => {
     const cases: Record<PropertyKey, unknown> = {}
     const discriminants: Array<PropertyKey> = []
@@ -15213,9 +15234,9 @@ export const UrlParams: UrlParams = declare(
     toCodec: () =>
       link<UrlParams_.UrlParams>()(
         ArraySchema(Tuple([String, String])),
-        SchemaTransformation.transform({
+        SchemaTransformation.transform<UrlParams_.UrlParams, ReadonlyArray<readonly [string, string]>>({
           decode: UrlParams_.make,
-          encode: (self) => self.params
+          encode: (self) => self.params.map(([key, value]) => [key, UrlParams_internal.unwrap(value)])
         })
       )
   }

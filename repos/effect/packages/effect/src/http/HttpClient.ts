@@ -47,6 +47,7 @@ import * as HttpMethod from "./HttpMethod.ts"
 import * as TraceContext from "./HttpTraceContext.ts"
 import * as tracing from "./internal/tracing.ts"
 import * as Url from "./Url.ts"
+import * as UrlParams from "./UrlParams.ts"
 
 const TypeId = "~effect/http/HttpClient"
 
@@ -727,7 +728,11 @@ export const make = (
           (span) => {
             span.attribute("http.request.method", request.method)
             const redactedHeaderNames = fiber.getRef(Headers.CurrentRedactedNames)
-            tracing.addUrlAttributes(span, url)
+            tracing.addUrlAttributes(
+              span,
+              url,
+              tracing.redactedNames(request.urlParams, fiber.getRef(UrlParams.CurrentRedactedNames))
+            )
             const headerFilter = fiber.getRef(TracerHeaderFilter)
             tracing.addHeaderAttributes(span, "request", request.headers, headerFilter, redactedHeaderNames)
             request = fiber.getRef(TracerPropagationEnabled)
@@ -952,6 +957,9 @@ export const retry: {
  * Specifying a `while` predicate allows you to consider other errors as
  * transient, and is ignored in "response-only" mode.
  *
+ * A `Retry-After` header on a transient response, or on the response of a
+ * status code error, sets the minimum delay before the next attempt.
+ *
  * @stability unstable
  * @category error handling
  * @since 4.0.0
@@ -1025,14 +1033,15 @@ export const retryTransient: {
   ): HttpClient.With<E | ES, R1 | R> => {
     const isOnlySchedule = Schedule.isSchedule(options)
     const retryOn = isOnlySchedule ? "errors-and-responses" : options.retryOn ?? "errors-and-responses"
-    const schedule = isOnlySchedule ? options : options.schedule
-    const passthroughSchedule = schedule && Schedule.passthrough(schedule)
+    const schedule = withRetryAfter(
+      isOnlySchedule ? options : options.schedule ?? Schedule.forever
+    )
     const times = isOnlySchedule ? undefined : options.times
     return transformResponse(
       self,
       flow(
         retryOn === "errors-only" ? identity : Effect.repeat({
-          schedule: passthroughSchedule!,
+          schedule,
           times,
           while: isTransientResponse
         }),
@@ -1267,7 +1276,10 @@ export const withRateLimiter: {
       if (options.disableResponseInspection || response.status !== 429) {
         return Effect.succeed<Duration.Duration | undefined>(undefined)
       }
-      const retryAfter = parseRetryAfter(clock, getHeader(response.headers, ...headerNames.retryAfter))
+      const retryAfter = parseRetryAfter(
+        clock.currentTimeMillisUnsafe(),
+        getHeader(response.headers, ...headerNames.retryAfter)
+      )
       if (retryAfter === undefined) {
         return Effect.succeed<Duration.Duration | undefined>(undefined)
       }
@@ -1447,21 +1459,24 @@ const parseRateLimitWindow = (
 }
 
 const parseRetryAfter = (
-  clock: Clock,
+  nowMillis: number,
   value: string | undefined
 ): Duration.Duration | undefined => {
   if (value === undefined) {
     return undefined
   }
-  const numeric = parseNumberHeader(value)
-  if (numeric !== undefined) {
-    return Duration.max(Duration.seconds(numeric), Duration.millis(1))
+  const trimmed = value.trim()
+  if (/^\d+(?:\.\d+)?$/.test(trimmed)) {
+    const numeric = Number(trimmed)
+    return Number.isFinite(numeric)
+      ? Duration.max(Duration.seconds(numeric), Duration.millis(1))
+      : undefined
   }
-  const parsedDate = Date.parse(value)
+  const parsedDate = Date.parse(trimmed)
   if (Number.isNaN(parsedDate)) {
     return undefined
   }
-  const millis = parsedDate - clock.currentTimeMillisUnsafe()
+  const millis = parsedDate - nowMillis
   if (millis <= 0) {
     return Duration.millis(1)
   }
@@ -1739,6 +1754,18 @@ export const TracerHeaderFilter = Context.Reference<
 /**
  * Context reference that controls whether outgoing client spans are propagated to request headers.
  *
+ * **Details**
+ *
+ * When this is `true`, the client writes the compact B3 `b3` header and the
+ * W3C `traceparent` header. The default is on. The client span is still
+ * created when this is `false`.
+ *
+ * **Gotchas**
+ *
+ * A browser preflight fails when the target does not list `b3` and
+ * `traceparent` in `Access-Control-Allow-Headers`. Set this to `false` for
+ * those requests.
+ *
  * @stability unstable
  * @category services
  * @since 4.0.0
@@ -1922,6 +1949,28 @@ const isTransientHttpError = (error: unknown) =>
   Error.isHttpClientError(error) &&
   (error.reason._tag === "TransportError" ||
     (error.reason._tag === "StatusCodeError" && isTransientResponse(error.reason.response)))
+
+const retryAfterOf = (input: unknown, nowMillis: number): Duration.Duration | undefined => {
+  const response = Error.isHttpClientError(input)
+    ? input.response
+    : Predicate.hasProperty(input, HttpClientResponse.TypeId)
+    ? input as HttpClientResponse.HttpClientResponse
+    : undefined
+  return parseRetryAfter(nowMillis, response?.headers["retry-after"])
+}
+
+const withRetryAfter = <ES, R1>(
+  schedule: Schedule.Schedule<unknown, any, ES, R1>
+): Schedule.Schedule<unknown, any, ES, R1> =>
+  Schedule.fromStep(
+    Effect.map(Schedule.toStep(schedule), (step) => (now: number, input: unknown) => {
+      const retryAfter = retryAfterOf(input, now)
+      if (retryAfter === undefined) {
+        return step(now, input)
+      }
+      return Effect.map(step(now, input), ([output, delay]) => [output, Duration.max(delay, retryAfter)])
+    })
+  )
 
 const isTooManyRequestsHttpClientError = (
   error: unknown

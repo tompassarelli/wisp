@@ -49,6 +49,7 @@ import { internalCall } from "../Utils.ts"
 import type { Primitive } from "./core.ts"
 import {
   args,
+  causeAddInterrupts,
   causeAnnotate,
   causeCombine,
   causeEmpty,
@@ -130,9 +131,9 @@ export class Interrupt extends ReasonBase<"Interrupt"> implements Cause.Interrup
     )
   }
   [Hash.symbol](): number {
-    return Hash.combine(Hash.string(`${this._tag}:${this.fiberId}`))(
-      Hash.random(this.annotations)
-    )
+    // Equality compares annotations by reference, so leave them out instead of
+    // hashing them randomly.
+    return Hash.string(`${this._tag}:${this.fiberId}`)
   }
 }
 
@@ -566,7 +567,7 @@ export class FiberImpl<A = any, E = any> implements Fiber.Fiber<A, E> {
       cause = causeAnnotate(cause, annotations)
     }
     this._interruptedCause = this._interruptedCause
-      ? causeCombine(this._interruptedCause, cause)
+      ? causeAddInterrupts(this._interruptedCause, cause)
       : cause
     if (this.interruptible) {
       if (this._running) {
@@ -1507,14 +1508,19 @@ const succeedPayload = function(this: { readonly payload: any }, _value: unknown
 // V8 includes the property name of a stored continuation in its stack trace.
 // Other engines need an explicit frame for the stack cleaner to cut at.
 const continuationMarksStack = (() => {
-  if (getStackTraceLimit() === 0) return false
+  const limit = getStackTraceLimit()
+  if (limit === 0) return false
   const marker = "~effect/Effect/stackProbe"
   const probe = {
     [marker]: function stackProbe() {
-      return new Error().stack
+      return new Error()
     }
   }
-  return probe[marker]()?.includes("[as " + marker + "]") === true
+  // Only the probe frame is needed to detect the continuation property name.
+  setStackTraceLimit(1)
+  const error = probe[marker]()
+  setStackTraceLimit(limit)
+  return error.stack?.includes("[as " + marker + "]") === true
 })()
 const mapCont = function(this: { readonly payload: any }, value: any, fiber: FiberImpl) {
   const f = this.payload
