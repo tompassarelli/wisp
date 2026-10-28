@@ -5,6 +5,7 @@ import { step } from "../cli/timings";
 import { ClientWatch, FAIL_ON, STATE_KINDS, type StateKind, type WatchOptions, describeView, inState, waitFor } from "../dev/watch";
 import { makeWatch, selectClients, watchedClients } from "../client/clientWatchCommand";
 import { serviceDoctor, serviceStart, serviceStatus, serviceStop } from "../client/clientServicesCommand";
+import { shareInstalls } from "../client/clientStorage";
 
 const numbers = (values: readonly string[], count: number) => {
   const parsed = values.slice(0, count).map(Number);
@@ -75,6 +76,7 @@ const clientAction = (stateFilePath: string, watch: WatchOptions, doctor?: Comma
     case "start": return doctor === undefined ? undeclared("recovery") : serviceStart(stateFilePath, args, doctor, watch);
     case "stop": return serviceStop(stateFilePath, args);
     case "status": return serviceStatus(stateFilePath, args, watch);
+    case "share": return shareInstalls(args);
     case "sign-out": return signOut === undefined ? undeclared("sign-out") : signOut(args);
     case "watch": return makeWatch(stateFilePath, watch)(args);
     case "doctor": return doctor === undefined ? undeclared("recovery") : serviceDoctor(stateFilePath, args, doctor);

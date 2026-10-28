@@ -98,7 +98,7 @@ const agent = Effect.gen(function*() {
   mkdirSync(directory, { recursive: true });
   writeFileSync(agentPidFile(pair), `${process.pid}\n`);
   const agentScope = yield* Effect.scope;
-  const copyMap = yield* mapCopies(clients.map(({ name }) => join(documentsOf(name), "Maps/Wisp")));
+  const copyMap = yield* mapCopies(clients.map(({ name }) => join(documentsOf(name), "Maps/Wisp")), join(directory, "map-copies"));
   const table = yield* ProcessTable;
   const gameRun = (name: string) => table.games(prefixOf(name)).pipe(Effect.map((games) => games[0]?.pid), Effect.orElseSucceed(() => undefined), Effect.map((pid) => clientRun(pid, documentsOf(name), launchedAt.get(name))));
   const gamePid = (name: string) => gameRun(name).pipe(Effect.map(({ pid }) => pid));

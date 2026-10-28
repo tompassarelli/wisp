@@ -9,6 +9,7 @@ import {
 } from "./clientServices";
 import { ServiceProblem, skillScript } from "../cli/hostProcess";
 import { ClientWatch, type WatchOptions, describeView, inState, waitFor } from "../dev/watch";
+import { unshareBehindLive } from "./clientStorage";
 
 const chosenClients = (clientsFile: string, names: readonly string[]) => Effect.gen(function*() {
   if (names.some((name) => name.startsWith("-"))) return yield* new UsageFailure({ problem: "takes client names only" });
@@ -58,10 +59,11 @@ const reviveDesktops = <E = never>(clientsFile: string, names: readonly string[]
 });
 
 export const serviceDoctor = (clientsFile: string, names: readonly string[], doctor: Command) =>
-  reviveDesktops(clientsFile, names).pipe(Effect.andThen(doctor(names)));
+  unshareBehindLive(clientsFile, names).pipe(Effect.andThen(reviveDesktops(clientsFile, names)), Effect.andThen(doctor(names)));
 
 export const serviceStart = (clientsFile: string, names: readonly string[], doctor: Command, watch: WatchOptions) => Effect.gen(function*() {
   const clients = yield* chosenClients(clientsFile, names);
+  yield* unshareBehindLive(clientsFile, clients.map(({ name }) => name));
   yield* reviveDesktops(clientsFile, names);
   yield* doctor(clients.map(({ name }) => name));
 

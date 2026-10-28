@@ -28,6 +28,29 @@ doctor and returns at the menu; `wisp client status [CLIENT...]` names the
 service behind each, and `wisp client stop [CLIENT...]` stops them. See
 [clients as services](doctor.md#clients-as-services).
 
+## Shared game storage
+
+`wisp client share INSTALL...` hardlinks every byte-identical file at the
+same path under two or more Warcraft III installs' `Data/` folders, keeping
+the most-linked copy. It refuses while a client runs in one of them. The game
+writes only its storage's `shmem` files while it runs (on gex45 from 24 to 28
+October 2026, no other storage file in three signed-in clones or the LAN pool
+changed), so those stay each install's own, as does everything outside
+`Data/`: configuration, Documents, CustomMapData, logs and caches. Shared
+files stay writable: the game opens its storage for writing and stops with
+`E_STORAGE_INIT` when every storage file is read-only and `E_REPAIR` when
+only the `data.NNN` archives are (gex45, 28 October 2026). Hardlinks need one filesystem; on btrfs, where
+`cp --reflink` already shares the blocks, there is nothing to gain.
+
+Battle.net updates an install by writing into its storage, so `client start`
+and `client doctor` first read the live build from the patch CDN and give
+any signed-in client (one whose prefix has `Battle.net Launcher.exe`) that is
+behind it and shares storage a private copy of each shared file, so the
+update never writes into its siblings' files.
+Once its siblings are on the new build too, run `client share` over them
+again. LAN pool clients share their source's storage the same way through
+[`lan setup`](lan.md) and never update.
+
 ## Remote native runs
 
 `bun wisp native remote` stages a native run on an SSH host and copies its

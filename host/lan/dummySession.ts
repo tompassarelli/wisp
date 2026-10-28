@@ -25,7 +25,7 @@ const target = join(documentsOf(name), "Maps/Wisp", basename(mapFile));
 const packager = mapPackager();
 const output = join(pairDirectory(pair), "dummy", new Date().toISOString().replace(/[:.]/g, "-"));
 BunRuntime.runMain(Effect.scoped(Effect.gen(function*() {
-  if (target !== mapFile) yield* (yield* mapCopies([dirname(target)]))(mapFile);
+  if (target !== mapFile) yield* (yield* mapCopies([dirname(target)], join(pairDirectory(pair), "dummy-map-copies")))(mapFile);
   const map = yield* readMapFacts(mapFile, packager, inGame);
   const lan = yield* loadLanPlugin;
   const version = lan.version(exeOf(name));

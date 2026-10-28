@@ -144,7 +144,7 @@ describe("pool operability", () => {
 });
 
 describe("setup without reflinks", () => {
-  test("[integration cp on tmpfs] clients copy everything outside Data, hardlink Data, leave the source's menu page alone and relink a replaced Data file on refresh", async () => {
+  test("[integration cp on tmpfs] clients copy everything outside Data, share Data but for the game's shmem, leave the source's menu page alone and relink a replaced Data file on refresh", async () => {
     const root = mkdtempSync("/dev/shm/wisp-lan-setup-");
     const dataHome = process.env.XDG_DATA_HOME;
     process.env.XDG_DATA_HOME = join(root, "data");
@@ -158,6 +158,7 @@ describe("setup without reflinks", () => {
       file("_retail_/x86_64/Warcraft III.exe", "exe 1");
       file("_retail_/webui/index.html", menuPage(47123));
       file("Data/data/data.000", "archive 1");
+      file("Data/data/shmem", "shared memory");
       const lines: string[] = [];
       const setup = (name: string) => {
         mkdirSync(join(installOf(name), ".."), { recursive: true });
@@ -171,6 +172,7 @@ describe("setup without reflinks", () => {
       await setup("lan0b");
       for (const name of ["lan0a", "lan0b"]) {
         expect(statSync(join(installOf(name), "Data/data/data.000")).ino).toBe(statSync(join(from, "Data/data/data.000")).ino);
+        expect(statSync(join(installOf(name), "Data/data/shmem")).nlink).toBe(1);
         expect(filesOf(name).filter((path) => !path.includes("/Data/")).map((path) => [path, statSync(path).nlink])).toEqual(
           [".build.info", "_retail_/x86_64/Warcraft III.exe", "_retail_/webui/index.html"].map((path) => [join(installOf(name), path), 1]).sort());
       }
@@ -184,9 +186,9 @@ describe("setup without reflinks", () => {
       expect(readFileSync(join(installOf("lan0a"), "_retail_/x86_64/Warcraft III.exe"), "utf8")).toBe("exe 22");
       expect(readFileSync(join(from, "_retail_/webui/index.html"), "utf8")).toBe(menuPage(47123));
       expect(lines.filter((line) => line.includes("install"))).toEqual([
-        "lan0a: install linked (Data hardlinked, 0 MB copied) from " + from,
-        "lan0b: install linked (Data hardlinked, 0 MB copied) from " + from,
-        expect.stringMatching(/^lan0a: install refreshed, linked \(Data hardlinked, 0 MB copied\) \(executable was 5 bytes, .*now 6 bytes/),
+        "lan0a: install linked (Data shared, 0 MB copied) from " + from,
+        "lan0b: install linked (Data shared, 0 MB copied) from " + from,
+        expect.stringMatching(/^lan0a: install refreshed, linked \(Data shared, 0 MB copied\) \(executable was 5 bytes, .*now 6 bytes/),
       ]);
     } finally {
       if (dataHome === undefined) delete process.env.XDG_DATA_HOME;
@@ -206,7 +208,7 @@ describe("map copies", () => {
     for (const name of ["first.w3x", "second.w3x"]) writeFileSync(join(root, name), name);
     const seen: string[][] = [];
     const exit = await Effect.runPromiseExit(Effect.scoped(Effect.gen(function*() {
-      const copy = yield* mapCopies([a, b]);
+      const copy = yield* mapCopies([a, b], join(root, "ledger"));
       yield* copy(join(root, "first.w3x"));
       yield* copy(join(root, "second.w3x"));
       seen.push(readdirSync(a).sort(), readdirSync(b).sort());
@@ -216,6 +218,32 @@ describe("map copies", () => {
     expect(seen).toEqual([["own.w3x", "second.w3x"], ["second.w3x"]]);
     expect([readdirSync(a).sort(), readdirSync(b)]).toEqual([["own.w3x", "second.w3x"], []]);
     expect(readFileSync(join(a, "own.w3x"), "utf8")).toBe("the player's map");
+  });
+
+  test("the next run removes the copies a killed run left, and keeps the files that were there first", async () => {
+    const root = mkdtempSync(join(tmpdir(), "wisp-map-copies-"));
+    const [a, b] = [join(root, "a/Maps/Wisp"), join(root, "b/Maps/Wisp")];
+    const ledger = join(root, "pair-3/map-copies");
+    mkdirSync(a, { recursive: true });
+    writeFileSync(join(a, "own.w3x"), "the player's map");
+    for (const name of ["killed.w3x", "next.w3x"]) writeFileSync(join(root, name), name);
+    try {
+      const killed = await Effect.runPromise(Scope.make());
+      await Effect.runPromise(Effect.gen(function*() {
+        yield* (yield* mapCopies([a, b], ledger))(join(root, "killed.w3x"));
+      }).pipe(Scope.provide(killed)));
+      expect([readdirSync(a).sort(), readdirSync(b)]).toEqual([["killed.w3x", "own.w3x"], ["killed.w3x"]]);
+      const seen = await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+        const copy = yield* mapCopies([a, b], ledger);
+        const before = [readdirSync(a).sort(), readdirSync(b)];
+        yield* copy(join(root, "next.w3x"));
+        return [before, [readdirSync(a).sort(), readdirSync(b)]];
+      })));
+      expect(seen).toEqual([[["own.w3x"], []], [["next.w3x", "own.w3x"], ["next.w3x"]]]);
+      expect([readdirSync(a), readdirSync(b), readdirSync(join(root, "pair-3"))]).toEqual([["own.w3x"], [], []]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

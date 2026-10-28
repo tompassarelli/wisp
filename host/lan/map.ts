@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, sep } from "node:path";
 import { Effect } from "effect";
@@ -115,14 +115,30 @@ export const readMapFacts = (mapFile: string, packager: string, path = pathInGam
   return yield* read(() => mapFactsFrom(new Uint8Array(readFileSync(mapFile)), path, name => entries.get(name)));
 })).pipe(Effect.mapError(cause => new LanFailure({ problem: String(cause) })));
 
+const recorded = (ledger: string) => existsSync(ledger) ? readFileSync(ledger, "utf8").split("\n").filter((line) => line !== "") : [];
+
+const record = (ledger: string, written: ReadonlySet<string>) => {
+  mkdirSync(join(ledger, ".."), { recursive: true });
+  writeFileSync(ledger, [...written].map((path) => `${path}\n`).join(""));
+};
+
 /**
  * Copies maps into the clients' map folders, keeping only the newest copy it made in each; the scope removes that one too,
  * so a failed or interrupted run leaves no copy behind. A file of the same name that was there first is replaced but never removed (wisp:docs/lan.md).
+ * The ledger lists the copies made, so the next run with the same ledger removes those a killed run left.
  */
-export const mapCopies = (folders: readonly string[]) => Effect.acquireRelease(
-  Effect.sync(() => new Set<string>()),
+export const mapCopies = (folders: readonly string[], ledger: string) => Effect.acquireRelease(
+  Effect.try({
+    try: () => {
+      for (const path of recorded(ledger)) rmSync(path, { force: true });
+      rmSync(ledger, { force: true });
+      return new Set<string>();
+    },
+    catch: (cause) => new LanFailure({ problem: `removing the map copies ${ledger} lists: ${String(cause)}` }),
+  }),
   (written) => Effect.sync(() => {
     for (const path of written) rmSync(path, { force: true });
+    rmSync(ledger, { force: true });
   }),
 ).pipe(Effect.map((written) => (mapFile: string) => Effect.try({
   try: () => {
@@ -136,8 +152,10 @@ export const mapCopies = (folders: readonly string[]) => Effect.acquireRelease(
       mkdirSync(join(target, ".."), { recursive: true });
       if (existsSync(target)) rmSync(target);
       else written.add(target);
+      record(ledger, written);
       copyFileSync(mapFile, target);
     }
+    record(ledger, written);
   },
   catch: (cause) => new LanFailure({ problem: `copying ${mapFile} into ${folders.join(", ")}: ${String(cause)}` }),
 })));

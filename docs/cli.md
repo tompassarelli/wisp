@@ -65,7 +65,7 @@ program can register it; "game" means the consuming game defines it.
 | `controller` | The always-on controller service | (session) | game |
 | `accept` | The game's declared native checks | (session) | Wisp |
 | `native` | A native run on an SSH VM, with staged inputs and downloaded evidence | `remote` | Wisp |
-| `client` | One native client: its screen, input, state, recovery and services | `look`, `read`, `click`, `keys`, `chat`, `wait`, `watch`, `doctor`, `sign-out`, `start`, `stop`, `status` | Wisp |
+| `client` | One native client: its screen, input, state, recovery and services | `look`, `read`, `click`, `keys`, `chat`, `wait`, `watch`, `doctor`, `sign-out`, `start`, `stop`, `status`, `share` | Wisp |
 | `menus` | Warcraft III's menus through Wisp's menu page | `install`, `remove`, `listen`, `host`, `join`, `start`, `leave` | Wisp |
 | `online` | Direct play over Battle.net by join code | `setup`, `host`, `join` | game |
 | `lan` | The offline LAN client pool | `setup`, `pool`, `fresh`, `status`, `end` | Wisp |

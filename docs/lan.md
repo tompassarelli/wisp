@@ -260,6 +260,10 @@ With nothing running in Tom's prefix:
    `Battle.net\\EncryptionKey` sections from its `pfx/user.reg`.
 3. `bun wisp menus install "<clone>/pfx/drive_c/Program Files (x86)/Warcraft III/_retail_" --port PORT`
    with the port in the table (Tom's install uses 47124).
+4. On a filesystem without reflinks (gex45's ext4), share the new clone's
+   game storage with its siblings on the same build:
+   `bun wisp client share "<clone>/pfx/drive_c/Program Files (x86)/Warcraft III" "<sibling>/pfx/drive_c/Program Files (x86)/Warcraft III"...`
+   ([shared game storage](client.md#shared-game-storage)).
 
 ### Launching
 
@@ -553,9 +557,10 @@ makes, for each client:
 - a reflinked copy of the install (`cp --reflink=always`). On btrfs or xfs a
   33 GB install costs no space until a file in it changes. Where the
   filesystem can't clone (ext4, tmpfs), setup copies every entry outside
-  `Data/` (about 0.3 GB) and hardlinks `Data/` to the source's files
-  (`cp -al`), and a refresh relinks a changed `Data/` file instead of writing
-  into it;
+  `Data/` (about 0.3 GB) and hardlinks `Data/` to the source's files but for
+  the game's `shmem` files, which each client keeps its own
+  ([shared game storage](client.md#shared-game-storage)). A refresh always
+  takes this path, relinking a changed `Data/` file instead of writing into it;
 - Wisp's menu page ([driving-warcraft.md](driving-warcraft.md#1-the-menu-socket-recommended)),
   reporting to the client's own port (47200 + 2K for side a, 47201 + 2K for side b).
 
@@ -794,8 +799,10 @@ blaming settings: such a client is the one to stop or restart.
    copy behind ([mapCopies](../host/lan/map.ts),
    wisp:host/lan/map.ts; `lan dummy` removes its copy when its run
    ends). It removes only paths it created: a file of the same name that was
-   there first is replaced and stays. A killed agent (SIGKILL) runs no
-   finalizer, so its last copy stays and is then a file that was there first;
+   there first is replaced and stays. The agent lists its copies in the
+   pair's `map-copies` file (`lan dummy` in `dummy-map-copies`), so when a
+   killed agent (SIGKILL), which runs no finalizer, left one, the pair's next
+   agent removes it as it starts;
 2. reads the map's facts (map.ts): its size, CRC32 and SHA-1, the xoro
    checksum of its game files (Flo's, plus `war3map.w3l` after `war3map.w3q`
    on 3.0.0.24268), its playable size, and its players and forces from
