@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 
 const VERSIONS_URL = "http://us.patch.battle.net:1119/w3/versions";
 
-export class LiveBuildUnread extends Schema.TaggedError<LiveBuildUnread, { readonly brand: unique symbol }>()("LiveBuildUnread", {
+class LiveBuildUnread extends Schema.TaggedError<LiveBuildUnread, { readonly brand: unique symbol }>()("LiveBuildUnread", {
   problem: Schema.String,
 }) {
   override get message(): string {
@@ -10,7 +10,7 @@ export class LiveBuildUnread extends Schema.TaggedError<LiveBuildUnread, { reado
   }
 }
 
-export function liveBuildFrom(text: string): string | undefined {
+function liveBuildFrom(text: string): string | undefined {
   const lines = text.split(/\r?\n/).filter(line => line.trim() !== "" && !line.startsWith("##"));
   const columns = (lines[0] ?? "").split("|").map(column => column.split("!")[0]);
   const region = columns.indexOf("Region"), name = columns.indexOf("VersionsName");

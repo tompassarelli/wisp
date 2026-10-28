@@ -2,7 +2,7 @@ import { chmodSync, closeSync, copyFileSync, existsSync, linkSync, mkdirSync, op
 import { basename, dirname, join, relative } from "node:path";
 import { Effect, Schema } from "effect";
 
-export class StorageFailure extends Schema.TaggedError<StorageFailure, { readonly brand: unique symbol }>()("StorageFailure", {
+class StorageFailure extends Schema.TaggedError<StorageFailure, { readonly brand: unique symbol }>()("StorageFailure", {
   problem: Schema.String,
 }) {
   override get message(): string {
@@ -15,9 +15,9 @@ const GAME_WRITTEN = new Set(["shmem"]);
 
 const PRIVATE_MODE = 0o644;
 
-export const isGameWritten = (file: string) => GAME_WRITTEN.has(basename(file));
+const isGameWritten = (file: string) => GAME_WRITTEN.has(basename(file));
 
-export const storageFiles = (install: string): readonly string[] => {
+const storageFiles = (install: string): readonly string[] => {
   const data = join(install, "Data");
   return existsSync(data)
     ? readdirSync(data, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => relative(data, join(entry.parentPath, entry.name))).sort()
