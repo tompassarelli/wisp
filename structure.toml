@@ -19,7 +19,7 @@ name = "tests"
 thresholds = { function_lines = 150, function_complexity = 30 }
 paths = ["test/**", "**/*.test.ts", "**/*.tests.ts", "examples/**"]
 responsibility = "Bun and Lua tests, numbered fixture maps and examples."
-may_use = ["num", "natives", "runtime", "map", "headless", "cli", "os", "build", "lan", "net", "render", "host", "commands", "plugins"]
+may_use = ["num", "ui", "natives", "runtime", "map", "headless", "cli", "os", "build", "lan", "net", "render", "host", "commands", "plugins"]
 
 [[module]]
 name = "num"
@@ -44,6 +44,12 @@ name = "map"
 paths = ["src/map/**"]
 responsibility = "Map-side services that call natives: Preloader file I/O, dispatch, hot reload, frame meter, native driver, scene report."
 may_use = ["runtime", "num", "natives"]
+
+[[module]]
+name = "ui"
+paths = ["src/ui/**"]
+responsibility = "Reusable map-side UI built from Warcraft frames, presentation only: chat."
+may_use = ["natives", "runtime", "num"]
 
 [[module]]
 name = "headless"

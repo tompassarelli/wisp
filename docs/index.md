@@ -20,6 +20,11 @@ capture; the cast point and projectile speed are not separately measured.
 ground tiles into W3E grid points. `bun examples/terrain.ts` writes a synthetic
 line and rectangle; the existing terrain reader and renderer consume its bytes.
 
+[Chat panel](chat.md) (`ChatPanel`, wisp:src/ui/chatPanel.ts): a reusable,
+presentation-only panel that draws a map's received chat in recent and history
+views above its menus, in the players' colours, in a box the map places per
+screen.
+
 [Build profiles](builds.md) retain each checked game build's capabilities,
 protocol and menu differences. `wisp client doctor` detects and prints its
 profile; a build-dependent command names a missing capability before running.

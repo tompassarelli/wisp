@@ -22,6 +22,7 @@
     "src/natives/*.d.ts",
     "src/runtime/*.ts",
     "src/sim/*.ts",
+    "src/ui/*.ts",
     "src/game/**/*.ts",
     "src/map/**/*.ts",
     "src/headless/*.ts"

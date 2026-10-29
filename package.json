@@ -133,6 +133,8 @@
     "./src/runtime/repro": "./src/runtime/repro.ts",
     "./src/runtime/scene": "./src/runtime/scene.ts",
     "./src/runtime/testing": "./src/runtime/testing.ts",
+    "./src/ui/chatLog": "./src/ui/chatLog.ts",
+    "./src/ui/chatPanel": "./src/ui/chatPanel.ts",
     "./src/sim/binary32": "./src/sim/binary32.ts",
     "./src/sim/f32": "./src/sim/f32.ts",
     "./src/sim/intMath": "./src/sim/intMath.ts",

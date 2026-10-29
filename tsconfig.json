@@ -40,6 +40,7 @@
     "host/browser/**",
     "src/map/**",
     "src/natives/**",
+    "src/ui/chatPanel.ts",
     "src/headless/lua.ts",
     "src/headless/luaPerf.ts",
     "src/game/ui/**",
