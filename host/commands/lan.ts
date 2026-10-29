@@ -434,20 +434,22 @@ const ownerCheck = poolOwners.pipe(Effect.flatMap((owners) => {
 
 export const lan: Command = (argv) => ownerCheck.pipe(Effect.andThen(Effect.suspend(() => subcommand(argv))));
 
+const subcommands: Readonly<Record<string, Command>> = {
+  setup: setup,
+  pool: pool,
+  fresh: fresh,
+  solo: solo,
+  relayed: relayed,
+  dummy: dummy,
+  status: status,
+  speed: speed,
+  netem: netem,
+  end: end,
+  stop: stop,
+  lease: lease,
+};
+
 const subcommand: Command = ([sub, ...args]) => {
-  switch (sub) {
-    case "setup": return setup(args);
-    case "pool": return pool(args);
-    case "fresh": return fresh(args);
-    case "solo": return solo(args);
-    case "relayed": return relayed(args);
-    case "dummy": return dummy(args);
-    case "status": return status(args);
-    case "speed": return speed(args);
-    case "netem": return netem(args);
-    case "end": return end(args);
-    case "stop": return stop(args);
-    case "lease": return lease(args);
-    default: return Effect.fail(new UsageFailure({ problem: `lan takes ${LAN_USAGE}` }));
-  }
+  const run = sub === undefined ? undefined : Object.hasOwn(subcommands, sub) ? subcommands[sub] : undefined;
+  return run === undefined ? Effect.fail(new UsageFailure({ problem: `lan takes ${LAN_USAGE}` })) : run(args);
 };
