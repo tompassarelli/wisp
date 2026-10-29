@@ -47,3 +47,17 @@ generated files (script, map info, object data) and writes the header, then
 verifies those files' bytes and that every packed entry is listed. On
 Smashcraft packaging and verification fell from 8.4 s to 0.5 s, and every
 one of the 743 entries and the header matched a full pack.
+
+## Map reuse
+
+A game that builds one map for many workers wraps its build in
+`reuseOrBuild` ([map reuse](../host/compile/mapReuse.ts); wisp:host/compile/mapReuse.ts).
+The caller keys the build with `mapReuseKey`, the hash of exactly the inputs
+it names (its tree, `wisp.lock`, the build-input pins, the profile, the
+edition and the map's name), and the first caller to hold the key's lock builds
+and stores the map and its `.base.lua`. Every later caller with the same key
+waits for that lock, copies the stored map and logs `reused map build KEY`. The
+store is `$WISP_MAP_REUSE_STORE` (default `~/.cache/wisp/maps`), so every worker
+on the host reads it; it holds at most `$WISP_MAP_REUSE_GIB` (default 8) GiB,
+and the least recently used builds go first. Copy a stored build to another
+host over ssh, into that host's store under the same key.
