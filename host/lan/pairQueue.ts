@@ -32,8 +32,8 @@ export interface QueueWorld {
   readonly directory: string;
   readonly hosts: readonly QueueHost[];
   readonly alive: (pid: number) => boolean;
-  /** Whether something outside the queue holds the pair (a pool started with an explicit `--pair`). */
-  readonly held: (slot: Slot) => boolean;
+  /** The fleet session of whatever outside the queue holds the pair (a pool started with an explicit `--pair`), "" when it names none, undefined when nothing does. */
+  readonly holder: (slot: Slot) => string | undefined;
   readonly idleness?: (leases: readonly Lease[]) => Effect.Effect<ReadonlyMap<string, number>>;
 }
 
@@ -72,23 +72,20 @@ const liveTickets = (world: QueueWorld): readonly string[] => {
   });
 };
 
+const leased = (leases: readonly Lease[], slot: Slot) => leases.some((lease) => lease.host === slot.host && lease.pair === slot.pair);
+
 const pairsInUse = (world: QueueWorld, host: QueueHost, leases: readonly Lease[]) =>
-  host.pairs.filter((pair) => leases.some((lease) => lease.host === host.name && lease.pair === pair) || world.held({ host: host.name, pair })).length;
+  host.pairs.filter((pair) => leased(leases, { host: host.name, pair }) || world.holder({ host: host.name, pair }) !== undefined).length;
 
 const atLimit = (world: QueueWorld, host: QueueHost, leases: readonly Lease[]) =>
   host.clientLimit !== undefined && (pairsInUse(world, host, leases) + 1) * 2 > host.clientLimit;
 
-/** The first slot that no lease and no outside holder has, on the available host with the fewest pairs in use (listed order breaks ties). */
-export const nextFree = (world: QueueWorld, leases: readonly Lease[]): Slot | undefined => {
-  const byUse = [...world.hosts].sort((left, right) => pairsInUse(world, left, leases) - pairsInUse(world, right, leases));
-  for (const host of byUse) {
-    if (!host.available || atLimit(world, host, leases)) continue;
-    for (const pair of [...host.pairs].sort((left, right) => left - right)) {
-      const slot = { host: host.name, pair };
-      if (!leases.some((lease) => lease.host === slot.host && lease.pair === slot.pair) && !world.held(slot)) return slot;
-    }
-  }
-  return undefined;
+/** The first unleased slot a pool of the requester's own fleet `session` holds, which adds no clients; else the first slot that no lease and no outside holder has, on the available host with the fewest pairs in use (listed order breaks ties). */
+export const nextFree = (world: QueueWorld, leases: readonly Lease[], session = ""): Slot | undefined => {
+  const byUse = [...world.hosts].filter((host) => host.available).sort((left, right) => pairsInUse(world, left, leases) - pairsInUse(world, right, leases));
+  const slots = (hosts: readonly QueueHost[]) => hosts.flatMap((host) => [...host.pairs].sort((left, right) => left - right).map((pair) => ({ host: host.name, pair })));
+  const own = session === "" ? undefined : slots(byUse).find((slot) => !leased(leases, slot) && world.holder(slot) === session);
+  return own ?? slots(byUse.filter((host) => !atLimit(world, host, leases))).find((slot) => !leased(leases, slot) && world.holder(slot) === undefined);
 };
 
 export const expireIdle = (world: QueueWorld) => Effect.gen(function*() {
@@ -111,6 +108,8 @@ export interface Request {
   readonly owner: string;
   readonly pid: number;
   readonly waitSeconds: number;
+  /** The requester's fleet session, "" outside one. */
+  readonly session: string;
 }
 
 const attempt = <A>(what: string, run: () => A) => Effect.try({ try: run, catch: (cause) => new LanFailure({ problem: `${what}: ${String(cause)}` }) });
@@ -126,11 +125,11 @@ export const takePair = (world: QueueWorld, request: Request) => Effect.scoped(E
   });
   let checkedAt = 0;
   const freeSlot = Effect.gen(function*() {
-    const free = nextFree(world, liveLeases(world));
+    const free = nextFree(world, liveLeases(world), request.session);
     if (free !== undefined || Date.now() - checkedAt < IDLE_CHECK_SECONDS * 1000) return free;
     checkedAt = Date.now();
     yield* expireIdle(world);
-    return nextFree(world, liveLeases(world));
+    return nextFree(world, liveLeases(world), request.session);
   });
   const turn = Effect.scoped(Effect.gen(function*() {
     yield* holdLock(join(world.directory, "queue.lock")).pipe(Effect.mapError((cause) => new LanFailure({ problem: cause.message })));
@@ -160,6 +159,6 @@ export const releasePair = (directory: string, slot: Slot) => Effect.sync(() => 
 export const queueStatus = (world: QueueWorld) => ({
   waiting: liveTickets(world).length,
   leases: liveLeases(world),
-  free: world.hosts.flatMap((host) => host.available && !atLimit(world, host, liveLeases(world)) ? host.pairs.filter((pair) => !world.held({ host: host.name, pair })).map((pair) => ({ host: host.name, pair })) : [])
-    .filter((slot) => !liveLeases(world).some((lease) => lease.host === slot.host && lease.pair === slot.pair)),
+  free: world.hosts.flatMap((host) => host.available && !atLimit(world, host, liveLeases(world)) ? host.pairs.filter((pair) => world.holder({ host: host.name, pair }) === undefined).map((pair) => ({ host: host.name, pair })) : [])
+    .filter((slot) => !leased(liveLeases(world), slot)),
 });

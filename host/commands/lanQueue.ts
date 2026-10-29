@@ -5,7 +5,7 @@ import { Console, Effect, Option, Schema } from "effect";
 import { type Command, UsageFailure, flagValues, wholeFlag } from "../cli/command";
 import { LanFailure } from "../lan/join";
 import { type Lease, type QueueHost, type QueueWorld, expireIdle, queueStatus, releasePair, slotKey, takePair } from "../lan/pairQueue";
-import { agentSocket, alive, dataRoot, installOf, poolHolder, stateRoot } from "../lan/pool";
+import { agentSocket, alive, dataRoot, installOf, readClaim, stateRoot } from "../lan/pool";
 import { lanPoolSupported } from "../os/warcraft/builds";
 import { buildOf } from "../os/warcraft/sharedStorage";
 
@@ -35,17 +35,20 @@ const clientLimit = (command: readonly string[]) => Effect.promise(async () => {
   return await run.exited === 0 && Number.isInteger(limit) ? limit : undefined;
 }).pipe(Effect.orElseSucceed(() => undefined));
 
-export const PEER_STATE_SCRIPT = "state=\"${XDG_STATE_HOME:-$HOME/.local/state}/wisp/lan\"; data=\"${XDG_DATA_HOME:-$HOME/.local/share}/wisp/lan\"; me=$(hostname)\nlive() { kill -0 \"$1\" 2>/dev/null; }\nnum() { sed -n \"s/.*\\\"$1\\\": *\\([0-9]*\\).*/\\1/p\" \"$2\"; }\nfor f in \"$state\"/queue/leases/\"$me\"-*.json; do [ -f \"$f\" ] || continue; live \"$(num pid \"$f\")\" && echo \"busy $(num pair \"$f\")\"; done\nfor f in \"$state\"/pair-*/claim.json; do [ -f \"$f\" ] || continue; pair=$(basename \"$(dirname \"$f\")\"); live \"$(num pid \"$f\")\" && echo \"busy ${pair#pair-}\"; done\nfor d in \"$data\"/clients/lan*a/pfx/drive_c/\"Program Files (x86)\"/\"Warcraft III\"; do [ -f \"$d/.build.info\" ] || continue; k=${d#*/clients/lan}; k=${k%%a/*}\n  echo \"build $k $(awk -F'|' 'NR==1{for(i=1;i<=NF;i++){split($i,a,\"!\"); if(a[1]==\"Version\")v=i; if(a[1]==\"Active\")c=i}} NR>1 && $c==1 && !done {print $v; done=1}' \"$d/.build.info\")\"; done\ntrue";
+export const PEER_STATE_SCRIPT = "state=\"${XDG_STATE_HOME:-$HOME/.local/state}/wisp/lan\"; data=\"${XDG_DATA_HOME:-$HOME/.local/share}/wisp/lan\"; me=$(hostname)\nlive() { kill -0 \"$1\" 2>/dev/null; }\nnum() { sed -n \"s/.*\\\"$1\\\": *\\([0-9]*\\).*/\\1/p\" \"$2\" | head -n 1; }\nstr() { sed -n \"s/.*\\\"$1\\\": *\\\"\\([^\\\"]*\\)\\\".*/\\1/p\" \"$2\" | head -n 1; }\nfor f in \"$state\"/queue/leases/\"$me\"-*.json; do [ -f \"$f\" ] || continue; live \"$(num pid \"$f\")\" && echo \"busy $(num pair \"$f\")\"; done\nfor f in \"$state\"/pair-*/claim.json; do [ -f \"$f\" ] || continue; pair=$(basename \"$(dirname \"$f\")\"); live \"$(num pid \"$f\")\" && echo \"busy ${pair#pair-} $(str session \"$f\")\"; done\nfor d in \"$data\"/clients/lan*a/pfx/drive_c/\"Program Files (x86)\"/\"Warcraft III\"; do [ -f \"$d/.build.info\" ] || continue; k=${d#*/clients/lan}; k=${k%%a/*}\n  echo \"build $k $(awk -F'|' 'NR==1{for(i=1;i<=NF;i++){split($i,a,\"!\"); if(a[1]==\"Version\")v=i; if(a[1]==\"Active\")c=i}} NR>1 && $c==1 && !done {print $v; done=1}' \"$d/.build.info\")\"; done\ntrue";
 
 export interface PeerState {
-  readonly busy: ReadonlySet<number>;
+  /** Each busy pair's holder session: a pool claim's fleet session, "" for the peer's own lease or a claim that names none. */
+  readonly busy: ReadonlyMap<number, string>;
   readonly builds: ReadonlyMap<number, string>;
 }
 
 export const parsePeerState = (output: string): PeerState => {
   const rows = output.split("\n").map((line) => line.trim().split(/\s+/));
+  const busy = new Map<number, string>();
+  for (const [kind, pair, session = ""] of rows) if (kind === "busy" && Number.isInteger(Number(pair)) && busy.get(Number(pair)) !== "") busy.set(Number(pair), session);
   return {
-    busy: new Set(rows.flatMap(([kind, pair]) => (kind === "busy" && Number.isInteger(Number(pair)) ? [Number(pair)] : []))),
+    busy,
     builds: new Map(rows.flatMap(([kind, pair, version]) => (kind === "build" && Number.isInteger(Number(pair)) && version !== undefined ? [[Number(pair), version] as const] : []))),
   };
 };
@@ -109,15 +112,16 @@ const leaseQueue = () => join(stateRoot(), "queue");
 const world = (any: boolean) => Effect.gen(function*() {
   const local: QueueHost = { name: hostname(), pairs: provisionedPairs().filter(localPoolable), available: true, clientLimit: yield* clientLimit(["north", "capacity", "warcraft-limit"]) };
   const remote = any ? yield* Effect.forEach([...remoteHosts()], ([name, pairs]) => Effect.all([laptopAvailable(), clientLimit(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "--", name, "north capacity warcraft-limit"])]).pipe(Effect.flatMap(([available, limit]) => peerState(name).pipe(Effect.map((state) => ({ busy: state?.busy, host: { name, pairs: state === undefined ? pairs : poolablePairs(pairs, state.builds), available: available && state !== undefined, clientLimit: limit } satisfies QueueHost })))))) : [];
-  const busyThere = new Map(remote.map(({ busy, host }) => [host.name, busy ?? new Set<number>()]));
+  const busyThere = new Map(remote.map(({ busy, host }) => [host.name, busy ?? new Map<number, string>()]));
   return {
     directory: leaseQueue(),
     hosts: [local, ...remote.map(({ host }) => host)],
     alive,
     idleness: idleness(local.name),
-    held: ({ host, pair }) => {
-      const holder = poolHolder(pair);
-      return host === local.name ? holder !== undefined && alive(holder) : busyThere.get(host)?.has(pair) === true;
+    holder: ({ host, pair }) => {
+      if (host !== local.name) return busyThere.get(host)?.get(pair);
+      const claim = readClaim(pair);
+      return claim !== undefined && alive(claim.pid) ? claim.session : undefined;
     },
   } satisfies QueueWorld;
 });
@@ -136,7 +140,7 @@ export const lease: Command = ([verb, ...args]) => Effect.gen(function*() {
     if (owner === undefined) return yield* new UsageFailure({ problem: LEASE_USAGE });
     if (pid instanceof UsageFailure) return yield* pid;
     if (wait instanceof UsageFailure) return yield* wait;
-    const slot = yield* takePair(state, { owner, pid, waitSeconds: wait });
+    const slot = yield* takePair(state, { owner, pid, waitSeconds: wait, session: process.env["NORTH_FLEET_SESSION"] ?? "" });
     return yield* Console.log(JSON.stringify(slot));
   }
   if (verb === "release") {

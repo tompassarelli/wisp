@@ -985,7 +985,11 @@ prints `{"host":H,"pair":K}` for the next free pair, and `lan lease release
 ([queue](../host/lan/pairQueue.ts), [command](../host/commands/lanQueue.ts);
 wisp:host/lan/pairQueue.ts, wisp:host/commands/lanQueue.ts). Requests are served
 in arrival order. A pair is free when it has no live lease and no `lan pool
---pair K` started outside the queue holds it; this host's pairs (every
+--pair K` started outside the queue holds it. A pair a `lan pool` of the
+requester's own fleet session holds (its `claim.json` `session` equals the
+requester's `NORTH_FLEET_SESSION`) is free to that requester and offered before
+any other, even with the host at its client cap, since it adds no clients; any
+other session still waits for it (wisp#85). This host's pairs (every
 `lanKa` install `lan setup` made) come before another host's. `--hosts any` adds
 the pairs `$WISP_PAIR_REMOTE` lists (`laptop=0,1`) while `north laptop status` says
 available. `lan lease status` prints the waiting count, the leases and the free

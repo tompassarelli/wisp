@@ -309,8 +309,8 @@ test("[boundary] lan pool: a pair is held while its check runs and released, wit
   const box = sandbox();
   const pair = poolPair + 8;
   const session = pool(box, { WISP_TEST_HOLDER: "quiet", NORTH_FLEET_SESSION: "lane" }, pair, ["--release-idle", "2"], ["sh", "-c", '"$@"; exec sleep 600', "sh"]);
-  const queue: QueueWorld = { directory: join(box.env.XDG_STATE_HOME, "wisp/lan/queue"), hosts: [{ name: hostname(), pairs: [pair], available: true }], alive: (pid) => session.exitCode === null && pid === session.pid, held: () => false };
-  await Effect.runPromise(takePair(queue, { owner: "lane", pid: session.pid, waitSeconds: 5 }));
+  const queue: QueueWorld = { directory: join(box.env.XDG_STATE_HOME, "wisp/lan/queue"), hosts: [{ name: hostname(), pairs: [pair], available: true }], alive: (pid) => session.exitCode === null && pid === session.pid, holder: () => undefined };
+  await Effect.runPromise(takePair(queue, { owner: "lane", pid: session.pid, waitSeconds: 5, session: "" }));
   await until(() => claimOf(box, pair)?.agent?.pid === session.pid, 30, "the pool's claim naming its session's process");
   const idleness = join(pairState(box, pair), "test-idleness.json");
   const reads = () => existsSync(`${idleness}.reads`) ? readFileSync(`${idleness}.reads`, "utf8").length : 0;
