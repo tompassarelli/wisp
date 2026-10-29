@@ -41,10 +41,23 @@ export const copyFromPeer = (store: string, key: string, remote: readonly string
   );
 };
 
-export const reuseCapBytes = () => {
-  const gib = Number(process.env.WISP_MAP_REUSE_GIB);
-  return (Number.isFinite(gib) && gib > 0 ? gib : DEFAULT_CAP_GIB) * 2 ** 30;
+const positive = (text: string | undefined) => {
+  const gib = Number(text);
+  return text !== undefined && text.trim() !== "" && Number.isFinite(gib) && gib > 0 ? gib : undefined;
 };
+
+const hostMapShare = () => {
+  try {
+    const done = Bun.spawnSync(["north", "capacity", "disk-share", "map_store"], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+    return done.exitCode === 0 ? done.stdout.toString().trim() : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/** The store's cap: `$WISP_MAP_REUSE_GIB`, else the map_store share of the host's disk budget in orchestration.toml, else 8 GiB. */
+export const reuseCapBytes = (hostShare: () => string | undefined = hostMapShare) =>
+  (positive(process.env.WISP_MAP_REUSE_GIB) ?? positive(hostShare()) ?? DEFAULT_CAP_GIB) * 2 ** 30;
 
 /** The hash of exactly the named inputs: each label and value is length-prefixed, so no two input sets share a key. */
 export const mapReuseKey = (inputs: Readonly<Record<string, string | Uint8Array>>): string => {

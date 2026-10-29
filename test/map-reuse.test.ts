@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFile
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { mapReuseKey, pruneReuseStore, reuseOrBuild } from "../host/compile/mapReuse";
+import { mapReuseKey, pruneReuseStore, reuseCapBytes, reuseOrBuild } from "../host/compile/mapReuse";
 
 const scratch = () => mkdtempSync(join(tmpdir(), "wisp-map-reuse-"));
 
@@ -89,4 +89,19 @@ test("[scenario] a store past its cap drops the least recently used builds first
   expect(existsSync(join(store, oldest))).toBe(false);
   expect(existsSync(join(store, middle))).toBe(true);
   expect(pruneReuseStore(store, 1, oldest)).toEqual([middle, newest]);
+});
+
+test("[scenario] the store's cap is the env override, else the host's map_store share, else 8 GiB", () => {
+  const saved = process.env.WISP_MAP_REUSE_GIB;
+  try {
+    delete process.env.WISP_MAP_REUSE_GIB;
+    expect(reuseCapBytes(() => "6.5")).toBe(6.5 * 2 ** 30);
+    expect(reuseCapBytes(() => undefined)).toBe(8 * 2 ** 30);
+    expect(reuseCapBytes(() => "")).toBe(8 * 2 ** 30);
+    process.env.WISP_MAP_REUSE_GIB = "2";
+    expect(reuseCapBytes(() => "6.5")).toBe(2 * 2 ** 30);
+  } finally {
+    if (saved === undefined) delete process.env.WISP_MAP_REUSE_GIB;
+    else process.env.WISP_MAP_REUSE_GIB = saved;
+  }
 });
