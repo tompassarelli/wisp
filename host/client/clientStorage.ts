@@ -22,12 +22,13 @@ const runningIn = (installs: readonly string[]) => ProcessTable.use((table) => t
 export const shareInstalls = (args: readonly string[]) => Effect.gen(function*() {
   const installs = [...new Set(args.map((path) => resolve(path)))];
   const invalid = installs.filter((install) => !existsSync(join(install, ".build.info")) || !existsSync(join(install, "Data")));
-  if (installs.length < 2 || args.some((arg) => arg.startsWith("-"))) return yield* new UsageFailure({ problem: "share takes two or more INSTALL folders" });
+  if (installs.length < 2 || args.some((arg) => arg.startsWith("-"))) return yield* new UsageFailure({ problem: "share takes a BASE install and one or more INSTALL folders" });
   if (invalid.length > 0) return yield* new UsageFailure({ problem: `not a Warcraft III install (no .build.info and Data): ${invalid.join(", ")}` });
   const busy = yield* runningIn(installs);
   if (busy.length > 0) return yield* new ServiceProblem({ problem: `a client is running in ${busy.join(", ")}; stop it first` });
-  const shared = yield* shareStorage(installs).pipe(Effect.mapError((failure) => new ServiceProblem({ problem: failure.message })));
-  yield* Console.log(`shared ${shared.linked} storage files across ${installs.length} installs, freeing ${gigabytes(shared.freedBytes)}; gave ${shared.separated} game-written files back to their own install`);
+  const [base, ...views] = installs;
+  const shared = yield* shareStorage(base!, views).pipe(Effect.mapError((failure) => new ServiceProblem({ problem: failure.message })));
+  yield* Console.log(`linked ${shared.linked} files of ${views.length} installs to ${base}'s storage and _retail_ and removed ${shared.removed} it lacks, freeing ${gigabytes(shared.freedBytes)}`);
 });
 
 export const unshareBehindLive = (clientsFile: string, names: readonly string[]) => Effect.gen(function*() {

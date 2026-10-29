@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect } from "effect";
 import { ChildProcess } from "effect/process";
@@ -22,28 +22,9 @@ const filesUnder = (path: string) => statSync(path).isDirectory()
   ? readdirSync(path, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => join(entry.parentPath, entry.name))
   : [path];
 
-const dataFiles = (install: string) => {
-  const data = join(install, "Data");
-  return existsSync(data) ? filesUnder(data).map((file) => relative(data, file)).sort() : [];
-};
+const SHARED = new Set(["Data", "_retail_"]);
 
-const pruneData = (name: string, from: string) => Effect.try({
-  try: () => {
-    const data = join(installOf(name), "Data");
-    if (!existsSync(data)) return [];
-    const own = realpathSync(data);
-    if (!own.startsWith(`${realpathSync(clientRoot(name))}/`) || (existsSync(join(from, "Data")) && own === realpathSync(join(from, "Data")))) {
-      throw new Error(`${data} is not ${name}'s own Data`);
-    }
-    const kept = new Set(dataFiles(from));
-    const extra = dataFiles(installOf(name)).filter((file) => !kept.has(file));
-    for (const file of extra) rmSync(join(own, file));
-    return extra;
-  },
-  catch: (cause) => new LanFailure({ problem: `${name}: remove the Data files the source lacks: ${String(cause)}` }),
-});
-
-// A new install is cloned where cp can; otherwise, and on every refresh, everything outside Data/ is copied and Data/'s files are shared with the source's.
+// A new install is cloned where cp can; otherwise, and on every refresh, everything outside Data/ and _retail_ is copied and those two are linked to the source's.
 const placeInstall = (name: string, from: string, refresh: boolean) => Effect.gen(function*() {
   const install = installOf(name);
   const cloned = !refresh && (yield* run(`copy the install in ${name}`, ["cp", "-a", "--reflink=always", from, install]).pipe(
@@ -51,7 +32,7 @@ const placeInstall = (name: string, from: string, refresh: boolean) => Effect.ge
     Effect.catchIf((failure) => /failed to clone/.test(failure.problem), () => Effect.succeed(false)),
   ));
   if (cloned) return "reflinked";
-  const copied = readdirSync(from).filter((entry) => entry !== "Data").map((entry) => join(from, entry));
+  const copied = readdirSync(from).filter((entry) => !SHARED.has(entry)).map((entry) => join(from, entry));
   yield* Effect.try({
     try: () => {
       if (!refresh) rmSync(install, { recursive: true, force: true });
@@ -59,13 +40,12 @@ const placeInstall = (name: string, from: string, refresh: boolean) => Effect.ge
     },
     catch: (cause) => new LanFailure({ problem: `${name}: clear the partial clone: ${String(cause)}` }),
   });
-  if (copied.length > 0) yield* run(`copy the install outside Data into ${name}`, ["cp", "-a", ...copied, `${install}/`]);
-  yield* linkStorage(from, install).pipe(Effect.mapError((failure) => new LanFailure({ problem: `${name}: ${failure.problem}` })));
+  if (copied.length > 0) yield* run(`copy the install outside Data and _retail_ into ${name}`, ["cp", "-a", ...copied, `${install}/`]);
   const bytes = yield* Effect.try({
     try: () => copied.flatMap(filesUnder).reduce((sum, file) => sum + statSync(file).size, 0),
     catch: (cause) => new LanFailure({ problem: `${name}: measure the copied install: ${String(cause)}` }),
   });
-  return `linked (Data shared, ${Math.round(bytes / 2 ** 20)} MB copied)`;
+  return `copied ${Math.round(bytes / 2 ** 20)} MB outside Data and _retail_`;
 });
 
 const ALLOW_LOCAL_FILES = "\"Allow Local Files\"=dword:00000001";
@@ -95,23 +75,22 @@ export const setupClient = (name: string, from: string, poolBuild: string, port:
     const how = yield* placeInstall(name, from, false);
     log(`${name}: install ${how} from ${from}`);
   } else {
-    const { stamps, sameData } = yield* Effect.try({
+    const { stamps } = yield* Effect.try({
       try: () => ({
         stamps: [join(from, "_retail_/x86_64/Warcraft III.exe"), join(retailOf(name), "x86_64/Warcraft III.exe")].map((exe) => {
           const { size, mtimeMs } = statSync(exe);
           return `${size} bytes, modified ${new Date(mtimeMs).toISOString()}`;
         }),
-        sameData: dataFiles(from).join("\n") === dataFiles(installOf(name)).join("\n"),
       }),
-      catch: (cause) => new LanFailure({ problem: `${name}: read the install executables and Data: ${String(cause)}` }),
+      catch: (cause) => new LanFailure({ problem: `${name}: read the install executables: ${String(cause)}` }),
     });
-    if (stamps[0] !== stamps[1] || !sameData) {
+    if (stamps[0] !== stamps[1]) {
       const how = yield* placeInstall(name, from, true);
-      log(`${name}: install refreshed, ${how} (${stamps[0] !== stamps[1] ? `executable was ${stamps[1]}, now ${stamps[0]}` : "Data's file list differed from the source's"})`);
+      log(`${name}: install refreshed, ${how} (executable was ${stamps[1]}, now ${stamps[0]})`);
     }
   }
-  const pruned = yield* pruneData(name, from);
-  if (pruned.length > 0) log(`${name}: removed ${pruned.length} Data files the source lacks`);
+  const linked = yield* linkStorage(from, installOf(name)).pipe(Effect.mapError((failure) => new LanFailure({ problem: `${name}: ${failure.problem}` })));
+  if (linked.linked + linked.removed > 0) log(`${name}: linked ${linked.linked} files to the source's Data and _retail_ and removed ${linked.removed} it lacks`);
   yield* installMenuPage(retailOf(name), port).pipe(Effect.mapError((failure) => new LanFailure({ problem: failure.message })));
   log(`${name}: menu page reports to 127.0.0.1:${port}`);
 });

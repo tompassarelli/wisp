@@ -30,13 +30,18 @@ service behind each, and `wisp client stop [CLIENT...]` stops them. See
 
 ## Shared game storage
 
-`wisp client share INSTALL...` hardlinks every byte-identical file at the
-same path under two or more Warcraft III installs' `Data/` folders, keeping
-the most-linked copy. It refuses while a client runs in one of them. The game
-writes only its storage's `shmem` files while it runs (on gex45 from 24 to 28
-October 2026, no other storage file in three signed-in clones or the LAN pool
-changed), so those stay each install's own, as does everything outside
-`Data/`: configuration, Documents, CustomMapData, logs and caches. Shared
+`wisp client share BASE INSTALL...` makes each INSTALL's `Data/` and
+`_retail_` a view of BASE's: every file there becomes a hardlink to BASE's,
+and a file BASE lacks, such as an older `.idx` version, is removed, because a
+storage mixing its own indices with another copy's archives is corrupt. Every
+install must be on BASE's build (version and build key); the share refuses
+otherwise, and while a client runs in any of them. The game writes only its
+storage's `shmem` files while it runs (on gex45 from 24 to 28 October 2026,
+no other storage or `_retail_` file in three signed-in clones or the LAN pool
+changed), so those stay each install's own, refreshed from BASE's whenever the
+storage changes, as do the menu page (`_retail_/webui/index.html`) and
+everything outside `Data/` and `_retail_`: configuration, Documents,
+CustomMapData, logs and caches. Shared
 files stay writable: the game opens its storage for writing and stops with
 `E_STORAGE_INIT` when every storage file is read-only and `E_REPAIR` when
 only the `data.NNN` archives are (gex45, 28 October 2026). Hardlinks need one filesystem; on btrfs, where
@@ -47,8 +52,8 @@ and `client doctor` first read the live build from the patch CDN and give
 any signed-in client (one whose prefix has `Battle.net Launcher.exe`) that is
 behind it and shares storage a private copy of each shared file, so the
 update never writes into its siblings' files.
-Once its siblings are on the new build too, run `client share` over them
-again. LAN pool clients share their source's storage the same way through
+Once they are all on the new build, run `client share` with one of them as
+BASE again. LAN pool clients share their source's storage the same way through
 [`lan setup`](lan.md) and never update.
 
 ## Remote native runs

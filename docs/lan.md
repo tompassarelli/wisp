@@ -260,9 +260,10 @@ With nothing running in Tom's prefix:
    `Battle.net\\EncryptionKey` sections from its `pfx/user.reg`.
 3. `bun wisp menus install "<clone>/pfx/drive_c/Program Files (x86)/Warcraft III/_retail_" --port PORT`
    with the port in the table (Tom's install uses 47124).
-4. On a filesystem without reflinks (gex45's ext4), share the new clone's
-   game storage with its siblings on the same build:
-   `bun wisp client share "<clone>/pfx/drive_c/Program Files (x86)/Warcraft III" "<sibling>/pfx/drive_c/Program Files (x86)/Warcraft III"...`
+4. On a filesystem without reflinks (gex45's ext4), make the new clone's
+   game storage and `_retail_` a view of the base clone's on the same build
+   (clone-c on gex45):
+   `bun wisp client share "<base>/pfx/drive_c/Program Files (x86)/Warcraft III" "<clone>/pfx/drive_c/Program Files (x86)/Warcraft III"`
    ([shared game storage](client.md#shared-game-storage)).
 
 ### Launching
@@ -561,11 +562,12 @@ makes, for each client:
   "no menu page reported";
 - a reflinked copy of the install (`cp --reflink=always`). On btrfs or xfs a
   33 GB install costs no space until a file in it changes. Where the
-  filesystem can't clone (ext4, tmpfs), setup copies every entry outside
-  `Data/` (about 0.3 GB) and hardlinks `Data/` to the source's files but for
-  the game's `shmem` files, which each client keeps its own
-  ([shared game storage](client.md#shared-game-storage)). A refresh always
-  takes this path, relinking a changed `Data/` file instead of writing into it;
+  filesystem can't clone (ext4, tmpfs), setup copies the few small entries
+  outside `Data/` and `_retail_` and hardlinks those two to the source's
+  files but for the game's `shmem` files and the menu page, which each client
+  keeps its own ([shared game storage](client.md#shared-game-storage)). Every
+  setup relinks a changed file and removes one the source lacks instead of
+  writing into it;
 - Wisp's menu page ([driving-warcraft.md](driving-warcraft.md#1-the-menu-socket-recommended)),
   reporting to the client's own port (47200 + 2K for side a, 47201 + 2K for side b).
 
@@ -579,7 +581,7 @@ a copy taken while it was on the pool build.
 
 ### Disk use of the client copies
 
-Measured on gex45 on 29 October 2026 (155 GB under `~/.local/share/wisp`, 22 GB free): the 27 LAN clients share one `Data/`, and a byte comparison of every `Data/` file of 1 MiB or more across the LAN clients, `online/clone-*` and `classic-24371` found nothing more that `client share` could link. The online clones and `classic-24371` (build 24371) hold same-named, same-sized `data.0NN` archives that differ in content (`data.001` in clone-b against classic differs in 661,072 bytes), because Battle.net patches CASC archives in place and each copy drifted with its own `.idx` files. Outside `Data/`, same-sized files that may match come to at most about 14 GB among the LAN clients (`_retail_` executables and DLLs, Wine prefix files) and 5 GB among the online clones; none is linked, because a `lan setup` refresh writes through shared files outside `Data/`. Revisit linking `_retail_` only if gex45 falls under the 15 GiB free floor.
+On gex45 on 29 October 2026 the 24371 installs (`classic-24371` and clones b, c and d) held the same build's storage in different bytes, because Battle.net patches CASC archives in place and each copy drifted with its own `.idx` versions, so linking only byte-identical files left 70 GiB of it unshared, and each LAN client held its own 0.3 GB `_retail_`. `client share BASE INSTALL...` now makes each install's whole `Data/` and `_retail_` a view of one base's, taking the base's `.idx` files with its archives, so a same-build install costs only its own `shmem` files, menu page, configuration, Documents and Wine prefix beyond the base.
 ## Running a pool
 
 Each client has its own private desktop (the private-desktop-development

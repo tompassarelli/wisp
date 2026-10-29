@@ -1,4 +1,4 @@
-import { chmodSync, closeSync, copyFileSync, existsSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 import { Effect, Schema } from "effect";
 
@@ -10,27 +10,36 @@ class StorageFailure extends Schema.TaggedError<StorageFailure, { readonly brand
   }
 }
 
+const SHARED_TREES = ["Data", "_retail_"];
+
 // The game rewrites its storage's shmem files while it runs, so each install keeps its own; it opens the rest for writing too and fails on read-only ones.
-const GAME_WRITTEN = new Set(["shmem"]);
+const isShmem = (file: string) => file.startsWith("Data/") && basename(file) === "shmem";
+
+const MENU_PAGE = "_retail_/webui/index.html";
+
+const isOwn = (file: string) => isShmem(file) || file === MENU_PAGE;
 
 const PRIVATE_MODE = 0o644;
 
-const isGameWritten = (file: string) => GAME_WRITTEN.has(basename(file));
-
-const storageFiles = (install: string): readonly string[] => {
-  const data = join(install, "Data");
-  return existsSync(data)
-    ? readdirSync(data, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => relative(data, join(entry.parentPath, entry.name))).sort()
+const sharedTreeFiles = (install: string): readonly string[] => SHARED_TREES.flatMap((tree) => {
+  const folder = join(install, tree);
+  return existsSync(folder)
+    ? readdirSync(folder, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => relative(install, join(entry.parentPath, entry.name)))
     : [];
-};
+}).sort();
 
-const storagePath = (install: string, file: string) => join(install, "Data", file);
-
-export const buildOf = (install: string) => {
+const fieldsOf = (install: string) => {
   const [header, ...rows] = readFileSync(join(install, ".build.info"), "utf8").split(/\r?\n/).filter((line) => line.length > 0).map((line) => line.split("|"));
   const column = (name: string) => header?.findIndex((field) => field.split("!")[0] === name) ?? -1;
   const row = rows.find((fields) => fields[column("Active")] === "1") ?? rows[0];
-  return row?.[column("Version")] || undefined;
+  return (name: string) => row?.[column(name)] || undefined;
+};
+
+export const buildOf = (install: string) => fieldsOf(install)("Version");
+
+const buildKeyOf = (install: string) => {
+  const field = fieldsOf(install);
+  return `${field("Version")}/${field("Build Key")}`;
 };
 
 const replaceWith = (target: string, place: (temporary: string) => void) => {
@@ -45,134 +54,78 @@ const replaceWith = (target: string, place: (temporary: string) => void) => {
   }
 };
 
-const share = (source: string, target: string) => {
+const ownCopy = (source: string, target: string) => {
   mkdirSync(dirname(target), { recursive: true });
-  replaceWith(target, (temporary) => linkSync(source, temporary));
+  replaceWith(target, (temporary) => {
+    copyFileSync(source, temporary);
+    chmodSync(temporary, PRIVATE_MODE);
+  });
 };
 
-export const linkStorage = (from: string, install: string) => Effect.try({
-  try: () => {
-    let linked = 0;
-    for (const file of storageFiles(from)) {
-      const source = storagePath(from, file), target = storagePath(install, file);
-      if (isGameWritten(file)) {
-        if (existsSync(target)) continue;
-        mkdirSync(dirname(target), { recursive: true });
-        copyFileSync(source, target);
-        chmodSync(target, PRIVATE_MODE);
-        continue;
-      }
-      if (existsSync(target) && statSync(target).ino === statSync(source).ino) continue;
-      share(source, target);
-      linked += 1;
-    }
-    return linked;
-  },
-  catch: (cause) => new StorageFailure({ problem: `link ${install}'s storage to ${from}'s: ${String(cause)}` }),
-});
-
-const HASH_CHUNK = 8 * 2 ** 20;
-
-const hashOf = (path: string) => Effect.try({
-  try: () => {
-    const hasher = new Bun.CryptoHasher("sha256");
-    const chunk = Buffer.allocUnsafe(HASH_CHUNK);
-    const file = openSync(path, "r");
-    try {
-      for (let read = readSync(file, chunk); read > 0; read = readSync(file, chunk)) hasher.update(chunk.subarray(0, read));
-    } finally {
-      closeSync(file);
-    }
-    return hasher.digest("hex");
-  },
-  catch: (cause) => new StorageFailure({ problem: `hash ${path}: ${String(cause)}` }),
-});
-
-interface Inode {
-  readonly paths: string[];
-  readonly size: number;
-  readonly links: number;
-  readonly device: number;
+export interface Linked {
+  readonly linked: number;
+  readonly removed: number;
+  readonly freedBytes: number;
 }
 
-const inodesOf = (paths: readonly string[]) => {
-  const inodes = new Map<string, Inode>();
-  for (const path of paths) {
-    const { dev, ino, size, nlink } = statSync(path);
-    const known = inodes.get(`${dev}:${ino}`);
-    if (known === undefined) inodes.set(`${dev}:${ino}`, { paths: [path], size, links: nlink, device: dev });
-    else known.paths.push(path);
-  }
-  return [...inodes.values()];
-};
-
-const groupBy = <A>(items: readonly A[], key: (item: A) => string) => {
-  const groups = new Map<string, A[]>();
-  for (const item of items) groups.set(key(item), [...(groups.get(key(item)) ?? []), item]);
-  return [...groups.values()];
-};
-
-const identical = (inodes: readonly Inode[]) => inodes.length === 1
-  ? Effect.succeed([inodes])
-  : Effect.forEach(inodes, (inode) => hashOf(inode.paths[0]!).pipe(Effect.map((hash) => ({ inode, hash })))).pipe(
-    Effect.map((hashed) => groupBy(hashed, ({ hash }) => hash).map((group) => group.map(({ inode }) => inode))));
-
-const shareInodes = (same: readonly Inode[]) => Effect.try({
-  try: () => {
-    const [kept, ...others] = [...same].sort((a, b) => b.links - a.links);
-    if (kept === undefined || kept.links + others.length === 1) return { linked: 0, freedBytes: 0 };
-    for (const inode of others) for (const path of inode.paths) share(kept.paths[0]!, path);
-    return {
-      linked: others.reduce((sum, inode) => sum + inode.paths.length, 0),
-      freedBytes: others.filter((inode) => inode.paths.length === inode.links).reduce((sum, inode) => sum + inode.size, 0),
-    };
-  },
-  catch: (cause) => new StorageFailure({ problem: `share ${same[0]?.paths[0]}: ${String(cause)}` }),
-});
-
-const ownCopy = (path: string) => replaceWith(path, (temporary) => {
-  copyFileSync(path, temporary);
-  chmodSync(temporary, PRIVATE_MODE);
-});
-
-const separateGameWritten = (installs: readonly string[]) => Effect.try({
-  try: () => {
-    const linked = installs.flatMap((install) => storageFiles(install).filter(isGameWritten).map((file) => storagePath(install, file))).filter((path) => statSync(path).nlink > 1);
-    for (const path of linked) ownCopy(path);
-    return linked.length;
-  },
-  catch: (cause) => new StorageFailure({ problem: `give each install its own game-written storage files: ${String(cause)}` }),
-});
-
-export const shareStorage = (installs: readonly string[]) => Effect.gen(function*() {
-  const separated = yield* separateGameWritten(installs);
-  const located = installs.flatMap((install) => storageFiles(install).filter((file) => !isGameWritten(file)).map((file) => ({ file, path: storagePath(install, file) })));
-  let linked = 0, freedBytes = 0;
-  for (const paths of groupBy(located, ({ file }) => file)) {
-    const inodes = yield* Effect.try({ try: () => inodesOf(paths.map(({ path }) => path)), catch: (cause) => new StorageFailure({ problem: `read ${paths[0]?.file}: ${String(cause)}` }) });
-    for (const candidates of groupBy(inodes, (inode) => `${inode.device}:${inode.size}`)) {
-      for (const same of yield* identical(candidates)) {
-        const shared = yield* shareInodes(same);
-        linked += shared.linked;
-        freedBytes += shared.freedBytes;
-      }
+// Makes install's Data/ and _retail_ a view of base's: every file but the game-written ones is a hardlink to base's, and files base lacks go,
+// so an install never mixes its own .idx versions with base's archives. Its shmem files follow base's whenever its storage changed.
+export const linkStorage = (base: string, install: string) => Effect.try({
+  try: (): Linked => {
+    const baseFiles = sharedTreeFiles(base);
+    const kept = new Set(baseFiles);
+    let linked = 0, removed = 0, freedBytes = 0;
+    for (const file of sharedTreeFiles(install).filter((file) => !kept.has(file) && !isOwn(file))) {
+      const { size, nlink } = statSync(join(install, file));
+      rmSync(join(install, file));
+      removed += 1;
+      if (nlink === 1) freedBytes += size;
     }
-  }
-  return { linked, freedBytes, separated };
+    for (const file of baseFiles.filter((file) => !isOwn(file))) {
+      const source = join(base, file), target = join(install, file);
+      const present = existsSync(target) ? statSync(target) : undefined;
+      if (present?.ino === statSync(source).ino) continue;
+      if (present?.nlink === 1) freedBytes += present.size;
+      mkdirSync(dirname(target), { recursive: true });
+      replaceWith(target, (temporary) => linkSync(source, temporary));
+      linked += 1;
+    }
+    const changed = linked + removed > 0;
+    for (const file of baseFiles.filter(isOwn)) {
+      const target = join(install, file);
+      if (!existsSync(target) || statSync(target).nlink > 1 || (changed && isShmem(file))) ownCopy(join(base, file), target);
+    }
+    return { linked, removed, freedBytes };
+  },
+  catch: (cause) => new StorageFailure({ problem: `link ${install}'s storage and _retail_ to ${base}'s: ${String(cause)}` }),
 });
 
-export const sharedFiles = (install: string) => storageFiles(install).filter((file) => !isGameWritten(file) && statSync(storagePath(install, file)).nlink > 1);
+export const shareStorage = (base: string, installs: readonly string[]) => Effect.gen(function*() {
+  const key = yield* Effect.try({ try: () => buildKeyOf(base), catch: (cause) => new StorageFailure({ problem: `read ${base}'s .build.info: ${String(cause)}` }) });
+  const others = yield* Effect.try({ try: () => installs.filter((install) => buildKeyOf(install) !== key), catch: (cause) => new StorageFailure({ problem: `read an install's .build.info: ${String(cause)}` }) });
+  if (others.length > 0) return yield* new StorageFailure({ problem: `${others.join(", ")} ${others.length === 1 ? "is" : "are"} not on ${base}'s build ${key}` });
+  let linked = 0, removed = 0, freedBytes = 0;
+  for (const install of installs) {
+    const result = yield* linkStorage(base, install);
+    linked += result.linked;
+    removed += result.removed;
+    freedBytes += result.freedBytes;
+  }
+  return { linked, removed, freedBytes };
+});
+
+export const sharedFiles = (install: string) => sharedTreeFiles(install).filter((file) => !isOwn(file) && statSync(join(install, file)).nlink > 1);
 
 export const unshareStorage = (install: string) => Effect.try({
   try: () => {
     const files = sharedFiles(install);
     let bytes = 0;
     for (const file of files) {
-      const path = storagePath(install, file);
-      ownCopy(path);
+      const path = join(install, file);
+      ownCopy(path, path);
       bytes += statSync(path).size;
     }
     return { files: files.length, bytes };
   },
-  catch: (cause) => new StorageFailure({ problem: `give ${install} its own storage: ${String(cause)}` }),
+  catch: (cause) => new StorageFailure({ problem: `give ${install} its own storage and _retail_: ${String(cause)}` }),
 });

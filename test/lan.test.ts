@@ -140,7 +140,7 @@ describe("pool operability", () => {
 });
 
 describe("setup without reflinks", () => {
-  test("[integration cp on tmpfs] clients copy everything outside Data, share Data but for the game's shmem, leave the source's menu page alone and relink a replaced Data file on refresh", async () => {
+  test("[integration cp on tmpfs] clients copy everything outside Data and _retail_, share those two but for the game's shmem and the menu page, leave the source's menu page alone and relink a replaced file on refresh", async () => {
     const root = mkdtempSync("/dev/shm/wisp-lan-setup-");
     const dataHome = process.env.XDG_DATA_HOME;
     process.env.XDG_DATA_HOME = join(root, "data");
@@ -169,22 +169,25 @@ describe("setup without reflinks", () => {
       for (const name of ["lan0a", "lan0b"]) {
         expect(statSync(join(installOf(name), "Data/data/data.000")).ino).toBe(statSync(join(from, "Data/data/data.000")).ino);
         expect(statSync(join(installOf(name), "Data/data/shmem")).nlink).toBe(1);
-        expect(filesOf(name).filter((path) => !path.includes("/Data/")).map((path) => [path, statSync(path).nlink])).toEqual(
-          [".build.info", "_retail_/x86_64/Warcraft III.exe", "_retail_/webui/index.html"].map((path) => [join(installOf(name), path), 1]).sort());
+        expect(statSync(join(installOf(name), "_retail_/x86_64/Warcraft III.exe")).ino).toBe(statSync(join(from, "_retail_/x86_64/Warcraft III.exe")).ino);
+        expect(filesOf(name).filter((path) => !path.includes("/Data/") && !path.includes("/x86_64/")).map((path) => [path, statSync(path).nlink])).toEqual(
+          [".build.info", "_retail_/webui/index.html"].map((path) => [join(installOf(name), path), 1]).sort());
       }
       expect(readFileSync(join(from, "_retail_/webui/index.html"), "utf8")).toBe(menuPage(47123));
-      file("_retail_/x86_64/Warcraft III.exe", "exe 22");
+      file("_retail_/x86_64/Warcraft III.exe.next", "exe 22");
+      renameSync(join(from, "_retail_/x86_64/Warcraft III.exe.next"), join(from, "_retail_/x86_64/Warcraft III.exe"));
       file("Data/data/data.000.next", "archive 2");
       renameSync(join(from, "Data/data/data.000.next"), join(from, "Data/data/data.000"));
       await setup("lan0a");
       expect(statSync(join(installOf("lan0a"), "Data/data/data.000")).ino).toBe(statSync(join(from, "Data/data/data.000")).ino);
       expect(readFileSync(join(installOf("lan0b"), "Data/data/data.000"), "utf8")).toBe("archive 1");
       expect(readFileSync(join(installOf("lan0a"), "_retail_/x86_64/Warcraft III.exe"), "utf8")).toBe("exe 22");
+      expect(readFileSync(join(installOf("lan0b"), "_retail_/x86_64/Warcraft III.exe"), "utf8")).toBe("exe 1");
       expect(readFileSync(join(from, "_retail_/webui/index.html"), "utf8")).toBe(menuPage(47123));
       expect(lines.filter((line) => line.includes("install"))).toEqual([
-        "lan0a: install linked (Data shared, 0 MB copied) from " + from,
-        "lan0b: install linked (Data shared, 0 MB copied) from " + from,
-        expect.stringMatching(/^lan0a: install refreshed, linked \(Data shared, 0 MB copied\) \(executable was 5 bytes, .*now 6 bytes/),
+        "lan0a: install copied 0 MB outside Data and _retail_ from " + from,
+        "lan0b: install copied 0 MB outside Data and _retail_ from " + from,
+        expect.stringMatching(/^lan0a: install refreshed, copied 0 MB outside Data and _retail_ \(executable was 5 bytes, .*now 6 bytes/),
       ]);
     } finally {
       if (dataHome === undefined) delete process.env.XDG_DATA_HOME;
