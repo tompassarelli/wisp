@@ -34,6 +34,7 @@ function capabilityProblem(id: string, capability: BuildCapability): string | un
   if (entry.status === "unsupported") return `${capability} not supported on ${id} (${entry.issue})`;
   return undefined;
 }
+export const lanPoolSupported = (id: string) => capabilityProblem(id, "lanPool") === undefined;
 export const requireCapability = (id: string, capability: BuildCapability) => Effect.suspend(() => {
   const problem = capabilityProblem(id, capability);
   return problem === undefined ? Effect.succeed(profileFor(id)!) : Effect.fail(new BuildFailure({ problem }));

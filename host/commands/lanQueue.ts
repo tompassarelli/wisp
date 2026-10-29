@@ -5,7 +5,9 @@ import { Console, Effect } from "effect";
 import { type Command, UsageFailure, flagValues, wholeFlag } from "../cli/command";
 import { LanFailure } from "../lan/join";
 import { type QueueHost, type QueueWorld, queueStatus, releasePair, takePair } from "../lan/pairQueue";
-import { alive, dataRoot, poolHolder, stateRoot } from "../lan/pool";
+import { alive, dataRoot, installOf, poolHolder, stateRoot } from "../lan/pool";
+import { lanPoolSupported } from "../os/warcraft/builds";
+import { buildOf } from "../os/warcraft/sharedStorage";
 
 export const LEASE_USAGE = "lease take --owner NAME [--pid PID] [--wait SECONDS] [--hosts local|any] | lease release --host H --pair K | lease status [--hosts local|any]";
 
@@ -33,19 +35,45 @@ const clientLimit = (command: readonly string[]) => Effect.promise(async () => {
   return await run.exited === 0 && Number.isInteger(limit) ? limit : undefined;
 }).pipe(Effect.orElseSucceed(() => undefined));
 
-export const BUSY_PAIRS_SCRIPT = "state=\"${XDG_STATE_HOME:-$HOME/.local/state}/wisp/lan\"; me=$(hostname)\nlive() { kill -0 \"$1\" 2>/dev/null; }\nnum() { sed -n \"s/.*\\\"$1\\\": *\\([0-9]*\\).*/\\1/p\" \"$2\"; }\nfor f in \"$state\"/queue/leases/\"$me\"-*.json; do [ -f \"$f\" ] || continue; live \"$(num pid \"$f\")\" && echo \"$(num pair \"$f\")\"; done\nfor f in \"$state\"/pair-*/claim.json; do [ -f \"$f\" ] || continue; pair=$(basename \"$(dirname \"$f\")\"); live \"$(num pid \"$f\")\" && echo \"${pair#pair-}\"; done\ntrue";
+export const PEER_STATE_SCRIPT = "state=\"${XDG_STATE_HOME:-$HOME/.local/state}/wisp/lan\"; data=\"${XDG_DATA_HOME:-$HOME/.local/share}/wisp/lan\"; me=$(hostname)\nlive() { kill -0 \"$1\" 2>/dev/null; }\nnum() { sed -n \"s/.*\\\"$1\\\": *\\([0-9]*\\).*/\\1/p\" \"$2\"; }\nfor f in \"$state\"/queue/leases/\"$me\"-*.json; do [ -f \"$f\" ] || continue; live \"$(num pid \"$f\")\" && echo \"busy $(num pair \"$f\")\"; done\nfor f in \"$state\"/pair-*/claim.json; do [ -f \"$f\" ] || continue; pair=$(basename \"$(dirname \"$f\")\"); live \"$(num pid \"$f\")\" && echo \"busy ${pair#pair-}\"; done\nfor d in \"$data\"/clients/lan*a/pfx/drive_c/\"Program Files (x86)\"/\"Warcraft III\"; do [ -f \"$d/.build.info\" ] || continue; k=${d#*/clients/lan}; k=${k%%a/*}\n  echo \"build $k $(awk -F'|' 'NR==1{for(i=1;i<=NF;i++){split($i,a,\"!\"); if(a[1]==\"Version\")v=i; if(a[1]==\"Active\")c=i}} NR>1 && $c==1 && !done {print $v; done=1}' \"$d/.build.info\")\"; done\ntrue";
 
-export const parseBusy = (output: string): ReadonlySet<number> => new Set(output.split("\n").map((line) => Number.parseInt(line, 10)).filter(Number.isInteger));
+export interface PeerState {
+  readonly busy: ReadonlySet<number>;
+  readonly builds: ReadonlyMap<number, string>;
+}
 
-const busyPairs = (name: string) => Effect.promise(async () => {
-  const run = Bun.spawn(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "--", name, BUSY_PAIRS_SCRIPT], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+export const parsePeerState = (output: string): PeerState => {
+  const rows = output.split("\n").map((line) => line.trim().split(/\s+/));
+  return {
+    busy: new Set(rows.flatMap(([kind, pair]) => (kind === "busy" && Number.isInteger(Number(pair)) ? [Number(pair)] : []))),
+    builds: new Map(rows.flatMap(([kind, pair, version]) => (kind === "build" && Number.isInteger(Number(pair)) && version !== undefined ? [[Number(pair), version] as const] : []))),
+  };
+};
+
+export const poolablePairs = (pairs: readonly number[], builds: ReadonlyMap<number, string>) =>
+  pairs.filter((pair) => {
+    const version = builds.get(pair);
+    return version !== undefined && lanPoolSupported(version);
+  });
+
+const peerState = (name: string) => Effect.promise(async () => {
+  const run = Bun.spawn(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "--", name, PEER_STATE_SCRIPT], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
   const output = await new Response(run.stdout).text();
-  return await run.exited === 0 ? parseBusy(output) : undefined;
+  return await run.exited === 0 ? parsePeerState(output) : undefined;
 }).pipe(Effect.orElseSucceed(() => undefined));
 
+const localPoolable = (pair: number) => {
+  try {
+    const version = buildOf(installOf(`lan${pair}a`));
+    return version !== undefined && lanPoolSupported(version);
+  } catch {
+    return false;
+  }
+};
+
 const world = (any: boolean) => Effect.gen(function*() {
-  const local: QueueHost = { name: hostname(), pairs: provisionedPairs(), available: true, clientLimit: yield* clientLimit(["north", "capacity", "warcraft-limit"]) };
-  const remote = any ? yield* Effect.forEach([...remoteHosts()], ([name, pairs]) => Effect.all([laptopAvailable(), clientLimit(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "--", name, "north capacity warcraft-limit"])]).pipe(Effect.flatMap(([available, limit]) => busyPairs(name).pipe(Effect.map((busy) => ({ busy, host: { name, pairs, available: available && busy !== undefined, clientLimit: limit } satisfies QueueHost })))))) : [];
+  const local: QueueHost = { name: hostname(), pairs: provisionedPairs().filter(localPoolable), available: true, clientLimit: yield* clientLimit(["north", "capacity", "warcraft-limit"]) };
+  const remote = any ? yield* Effect.forEach([...remoteHosts()], ([name, pairs]) => Effect.all([laptopAvailable(), clientLimit(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "--", name, "north capacity warcraft-limit"])]).pipe(Effect.flatMap(([available, limit]) => peerState(name).pipe(Effect.map((state) => ({ busy: state?.busy, host: { name, pairs: state === undefined ? pairs : poolablePairs(pairs, state.builds), available: available && state !== undefined, clientLimit: limit } satisfies QueueHost })))))) : [];
   const busyThere = new Map(remote.map(({ busy, host }) => [host.name, busy ?? new Set<number>()]));
   return {
     directory: join(stateRoot(), "queue"),

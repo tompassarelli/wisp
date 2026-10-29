@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { BUSY_PAIRS_SCRIPT, parseBusy } from "../host/commands/lanQueue";
+import { PEER_STATE_SCRIPT, parsePeerState, poolablePairs } from "../host/commands/lanQueue";
 import { type QueueWorld, nextFree, queueStatus, releasePair, takePair } from "../host/lan/pairQueue";
 
 const world = (overrides: Partial<QueueWorld> = {}): QueueWorld => ({
@@ -54,7 +54,7 @@ test("[scenario] a host at its client cap is skipped until a pair frees, and a h
   expect(nextFree(state, [lease(7)])).toEqual({ host: "laptop", pair: 0 });
 });
 
-test("[scenario] the peer's busy pairs are the ones a live lease of its own or a live pool claim holds, and its dead holders are not", async () => {
+test("[scenario] the peer's busy pairs are the ones a live lease of its own or a live pool claim holds, and only pairs on a build that runs a pool are offered", async () => {
   const root = mkdtempSync(join(tmpdir(), "wisp-busy-pairs-"));
   const host = (await Bun.$`hostname`.text()).trim();
   const state = join(root, "wisp/lan");
@@ -67,8 +67,15 @@ test("[scenario] the peer's busy pairs are the ones a live lease of its own or a
     mkdirSync(join(state, `pair-${pair}`), { recursive: true });
     writeFileSync(join(state, `pair-${pair}`, "claim.json"), JSON.stringify({ pid }, null, 2));
   }
-  const output = await Bun.$`sh -c ${BUSY_PAIRS_SCRIPT}`.env({ ...process.env, XDG_STATE_HOME: root }).text();
-  expect([...parseBusy(output)].sort()).toEqual([3, 7]);
+  for (const [pair, version] of [[3, "3.0.0.24268"], [7, "3.0.1.24342"]] as const) {
+    const install = join(root, "data/wisp/lan/clients", `lan${pair}a/pfx/drive_c/Program Files (x86)/Warcraft III`);
+    mkdirSync(install, { recursive: true });
+    writeFileSync(join(install, ".build.info"), `Branch!STRING:0|Active!DEC:1|Version!STRING:0\nus|1|${version}\n`);
+  }
+  const state_ = parsePeerState(await Bun.$`sh -c ${PEER_STATE_SCRIPT}`.env({ ...process.env, XDG_STATE_HOME: root, XDG_DATA_HOME: join(root, "data") }).text());
+  expect([...state_.busy].sort()).toEqual([3, 7]);
+  expect([...state_.builds]).toEqual(expect.arrayContaining([[3, "3.0.0.24268"], [7, "3.0.1.24342"]]));
+  expect(poolablePairs([3, 7, 9], state_.builds)).toEqual([3]);
 });
 
 test("[scenario] with two hosts free, each new lease goes to the host with fewer pairs in use, this host first on a tie", async () => {
