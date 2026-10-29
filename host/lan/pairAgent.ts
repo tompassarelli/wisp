@@ -14,7 +14,7 @@ import { LanFailure, joinLanGame } from "./join";
 import { loadLanPlugin } from "./plugin";
 import { mapCopies, mapFactsLine, readMapFacts } from "./map";
 import { relayedStatus } from "./relayedStatus";
-import { ALARM_AFTER_MS, agentPidFile, confirmToplevel, type Driver, MENUS_DEADLINE, TOPLEVEL_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, alive, launchUntilShown, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, agentSocket, clientLease, clientLog, stopClientScope, audioSinkOf, clientName, clientRoot, clientRun, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
+import { ALARM_AFTER_MS, agentPidFile, confirmToplevel, type Driver, MENUS_DEADLINE, TOPLEVEL_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, alive, launchUntilShown, endLaunch, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, agentSocket, clientLease, clientLog, stopClientScope, audioSinkOf, clientName, clientRoot, clientRun, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
 import { preferences, windowSize } from "../os/warcraft/clientProfiles";
 import { admissionFile, capacityDeferral, clientAdmitted, deferredExit, nativeCommand } from "./admission";
 import { recordFailure, recordPassed } from "./pairHealth";
@@ -122,7 +122,7 @@ const agent = Effect.gen(function*() {
         return true;
       })),
     ),
-    stop: () => stopClient(client).pipe(Effect.asVoid),
+    stop: (launched) => endLaunch(launched, stopClient(client)),
     relaunching: (launches) => Effect.sync(() => say(`${client.name} showed no window within ${WINDOW_DEADLINE}; relaunching (${launches}/${WINDOW_RELAUNCHES})`)),
     exhausted: (launches) => new LanFailure({ problem: `${client.name} showed no window within ${WINDOW_DEADLINE} in ${launches} launches` }),
   });

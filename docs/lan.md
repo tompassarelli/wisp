@@ -499,7 +499,10 @@ provider or emulating Battle.net is outside this tool's scope.
   for each client's `Warcraft III` window, then stops that game and launches
   it again, at most `WINDOW_RELAUNCHES` (3) times (`launchUntilShown`,
   wisp:host/lan/pool.ts); the pair fails if the fourth launch shows no
-  window either. Every stop of a client, a relaunch's or the pool's
+  window either. A relaunch first ends the launch's own native capacity
+  session (`endLaunch`), so a session still queued for its GPU slot can't
+  start a second copy of the client that holds another slot of its pair's
+  reservation. Every stop of a client, a relaunch's or the pool's
   (`stopGame`, wisp:host/lan/pool.ts), sends its native capacity session
   SIGTERM and, if the session or its game still runs `STOP_GRACE` (10 s)
   later, SIGKILLs both and says so in the agent log, so a client hung before

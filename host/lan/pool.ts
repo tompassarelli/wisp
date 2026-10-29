@@ -31,6 +31,10 @@ export const MENUS_DEADLINE = "5 minutes";
 export const reachedMenus = (sent: readonly { readonly message: string; readonly payload?: unknown }[]) =>
   sent.some(({ message, payload }) => message === "ScreenTransitionInfo" && typeof payload === "object" && payload !== null && "screen" in payload && payload.screen === "LOGIN_DOORS");
 
+/** Ends one launch of a pool client: its own capacity session first, so one still queued for admission can't start a second copy of the client after its relaunch, then whatever runs in the scope of the lease its log names. */
+export const endLaunch = <E, R>(launched: { readonly kill: () => Effect.Effect<void, unknown> }, stopScope: Effect.Effect<unknown, E, R>) =>
+  launched.kill().pipe(Effect.ignore, Effect.andThen(stopScope), Effect.asVoid);
+
 export const launchUntilShown = <A, E, R>(start: {
   readonly launch: Effect.Effect<A, E, R>;
   readonly shown: (launched: A) => Effect.Effect<boolean, E, R>;

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Cause, Effect, Exit } from "effect";
 import { LanFailure } from "../host/lan/join";
-import { WINDOW_RELAUNCHES, launchUntilShown } from "../host/lan/pool";
+import { WINDOW_RELAUNCHES, endLaunch, launchUntilShown } from "../host/lan/pool";
 
 describe("pool client relaunch", () => {
   test("[spec docs/lan.md] a pool client that shows no window within its deadline is stopped and relaunched at most three times, and its pair fails when the fourth launch shows none", () => {
@@ -24,5 +24,15 @@ describe("pool client relaunch", () => {
     expect(never.launches).toBe(4);
     expect(never.log).toEqual(["stop 1", "relaunch after 1", "stop 2", "relaunch after 2", "stop 3", "relaunch after 3", "stop 4"]);
     expect(Exit.isFailure(never.exit) && Cause.squash(never.exit.cause)).toEqual(new LanFailure({ problem: "no window in 4 launches" }));
+  });
+
+  test("[spec docs/lan.md] a relaunch ends the launch's own capacity session before stopping its lease scope, so a session still queued can't start a second copy of the client", () => {
+    const log: string[] = [];
+    const launched = { kill: () => Effect.sync(() => { log.push("kill session"); }) };
+    Effect.runSync(endLaunch(launched, Effect.sync(() => { log.push("stop scope"); })));
+    expect(log).toEqual(["kill session", "stop scope"]);
+    const failing = { kill: () => Effect.fail(new Error("already exited")) };
+    Effect.runSync(endLaunch(failing, Effect.sync(() => { log.push("stop scope after a failed kill"); })));
+    expect(log.at(-1)).toBe("stop scope after a failed kill");
   });
 });
