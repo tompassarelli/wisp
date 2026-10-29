@@ -987,7 +987,7 @@ wisp:host/lan/pairQueue.ts, wisp:host/commands/lanQueue.ts). Requests are served
 in arrival order. A pair is free when it has no live lease and no `lan pool
 --pair K` started outside the queue holds it; this host's pairs (every
 `lanKa` install `lan setup` made) come before another host's. `--hosts any` adds
-the pairs `$WISP_PAIR_REMOTE` lists (`laptop=0,1`) while `laptop status` says
+the pairs `$WISP_PAIR_REMOTE` lists (`laptop=0,1`) while `north laptop status` says
 available. `lan lease status` prints the waiting count, the leases and the free
 pairs. A host that sets a Warcraft client cap in orchestration.toml (`north capacity warcraft-limit`, read over ssh for another host) is offered only while its pairs leased or held in a pool of their own come to at most half that cap. The queue lives in `~/.local/state/wisp/lan/queue` and serializes only
 the choice of a pair; leased pairs run concurrently.

@@ -23,7 +23,7 @@ const remoteHosts = (spec = process.env.WISP_PAIR_REMOTE ?? ""): ReadonlyMap<str
   }));
 
 const laptopAvailable = () => Effect.promise(async () => {
-  const run = Bun.spawn(["laptop", "status"], { stdout: "pipe", stderr: "ignore" });
+  const run = Bun.spawn(["north", "laptop", "status"], { stdout: "pipe", stderr: "ignore" });
   return (await new Response(run.stdout).text()).startsWith("laptop: available") && await run.exited === 0;
 }).pipe(Effect.orElseSucceed(() => false));
 
