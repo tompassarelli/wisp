@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { PEER_STATE_SCRIPT, parsePeerState, poolablePairs } from "../host/commands/lanQueue";
-import { type QueueWorld, nextFree, queueStatus, releasePair, takePair } from "../host/lan/pairQueue";
+import { PEER_STATE_SCRIPT, parseIdle, parsePeerState, poolablePairs } from "../host/commands/lanQueue";
+import { type QueueWorld, expireIdle, nextFree, queueStatus, releasePair, takePair } from "../host/lan/pairQueue";
 
 const world = (overrides: Partial<QueueWorld> = {}): QueueWorld => ({
   directory: join(mkdtempSync(join(tmpdir(), "wisp-pair-queue-")), "queue"),
@@ -83,4 +83,41 @@ test("[scenario] with two hosts free, each new lease goes to the host with fewer
   const slots = [];
   for (const pid of [101, 102, 103, 104]) slots.push(await take(state, `capture-${pid}`, pid));
   expect(slots).toEqual([{ host: "gex45", pair: 7 }, { host: "laptop", pair: 0 }, { host: "gex45", pair: 15 }, { host: "laptop", pair: 1 }]);
+});
+
+const leaseFor = (state: QueueWorld, slot: { host: string; pair: number }, owner: string, secondsAgo: number) => {
+  mkdirSync(join(state.directory, "leases"), { recursive: true });
+  writeFileSync(join(state.directory, "leases", `${slot.host}-${slot.pair}.json`), JSON.stringify({ ...slot, owner, pid: process.pid, since: new Date(Date.now() - secondsAgo * 1000).toISOString() }));
+};
+
+test("[scenario] a lease whose pair has been idle for five minutes is released with a log line naming its holder, and a busy or younger lease is kept", async () => {
+  const idle = new Map([["gex45:7", 400], ["gex45:15", 0], ["laptop:0", 400]]);
+  const state = world({ idleness: () => Effect.succeed(idle) });
+  leaseFor(state, { host: "gex45", pair: 7 }, "capture-idle", 900);
+  leaseFor(state, { host: "gex45", pair: 15 }, "capture-busy", 900);
+  leaseFor(state, { host: "laptop", pair: 0 }, "capture-new", 60);
+  await Effect.runPromise(expireIdle(state));
+  expect(queueStatus(state).leases.map((lease) => lease.owner).sort()).toEqual(["capture-busy", "capture-new"]);
+  const log = readFileSync(join(state.directory, "released.log"), "utf8");
+  expect(log).toContain("released idle lease gex45:7 held by capture-idle");
+  expect(log).toContain(`pid ${process.pid}`);
+});
+
+test("[scenario] a lease on a pair whose state cannot be read is kept, and one on a pair with no agent is released once the lease itself is five minutes old", async () => {
+  const state = world({ idleness: () => Effect.succeed(new Map([["laptop:0", Number.POSITIVE_INFINITY]])) });
+  leaseFor(state, { host: "gex45", pair: 7 }, "capture-unread", 900);
+  leaseFor(state, { host: "laptop", pair: 0 }, "capture-no-agent", 900);
+  await Effect.runPromise(expireIdle(state));
+  expect(queueStatus(state).leases.map((lease) => lease.owner)).toEqual(["capture-unread"]);
+});
+
+test("[scenario] a request blocked behind an idle lease takes its pair once the lease is released", async () => {
+  const state = world({ hosts: [{ name: "gex45", pairs: [7], available: true }], idleness: () => Effect.succeed(new Map([["gex45:7", 600]])) });
+  leaseFor(state, { host: "gex45", pair: 7 }, "capture-idle", 900);
+  expect(await take(state, "capture-next", 202)).toEqual({ host: "gex45", pair: 7 });
+});
+
+test("[scenario] the peer's pair states parse into idle seconds, infinity for a pair with no agent and zero for one playing", () => {
+  const parsed = parseIdle(`7\t{"state":"idle","idleSeconds":412}\n8\t{"state":"busy","idleSeconds":0}\n9\tnone\n10\tnot json\n`);
+  expect([...parsed]).toEqual([[7, 412], [8, 0], [9, Number.POSITIVE_INFINITY]]);
 });

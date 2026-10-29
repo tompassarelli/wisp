@@ -990,4 +990,4 @@ in arrival order. A pair is free when it has no live lease and no `lan pool
 the pairs `$WISP_PAIR_REMOTE` lists (`laptop=0,1`) while `north laptop status` says
 available. `lan lease status` prints the waiting count, the leases and the free
 pairs. A host that sets a Warcraft client cap in orchestration.toml (`north capacity warcraft-limit`, read over ssh for another host) is offered only while its pairs leased or held in a pool of their own come to at most half that cap. The queue lives in `~/.local/state/wisp/lan/queue` and serializes only
-the choice of a pair; leased pairs run concurrently.
+the choice of a pair; leased pairs run concurrently. A lease on a pair whose agent has measured it idle (no game playing, no live driver) for five minutes, bounded by the lease's own age, is released by the next `lease take` that finds no free pair or by `lease status`; the line naming the lease's holder goes to stderr and to `queue/released.log`. A lease on a pair with no agent counts as idle from the moment it was taken, and a pair whose state cannot be read keeps its lease.

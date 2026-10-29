@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Duration, Effect, Schema } from "effect";
 import { LanFailure } from "./join";
@@ -34,7 +34,13 @@ export interface QueueWorld {
   readonly alive: (pid: number) => boolean;
   /** Whether something outside the queue holds the pair (a pool started with an explicit `--pair`). */
   readonly held: (slot: Slot) => boolean;
+  readonly idleness?: (leases: readonly Lease[]) => Effect.Effect<ReadonlyMap<string, number>>;
 }
+
+export const IDLE_RELEASE_SECONDS = 300;
+const IDLE_CHECK_SECONDS = 15;
+
+export const slotKey = (slot: Slot) => `${slot.host}:${slot.pair}`;
 
 const leaseFile = (directory: string, slot: Slot) => join(directory, "leases", `${slot.host}-${slot.pair}.json`);
 const ticketsDirectory = (directory: string) => join(directory, "tickets");
@@ -85,6 +91,22 @@ export const nextFree = (world: QueueWorld, leases: readonly Lease[]): Slot | un
   return undefined;
 };
 
+export const expireIdle = (world: QueueWorld) => Effect.gen(function*() {
+  if (world.idleness === undefined) return;
+  const leases = liveLeases(world);
+  if (leases.length === 0) return;
+  const idle = yield* world.idleness(leases);
+  const now = Date.now();
+  for (const lease of leases) {
+    const seconds = Math.min(idle.get(slotKey(lease)) ?? Number.NaN, (now - Date.parse(lease.since)) / 1000);
+    if (!(seconds >= IDLE_RELEASE_SECONDS)) continue;
+    rmSync(leaseFile(world.directory, lease), { force: true });
+    const line = `${new Date(now).toISOString()} released idle lease ${slotKey(lease)} held by ${lease.owner} (pid ${lease.pid}, taken ${lease.since}): no capture activity for ${Math.floor(seconds)} s\n`;
+    appendFileSync(join(world.directory, "released.log"), line);
+    process.stderr.write(line);
+  }
+});
+
 export interface Request {
   readonly owner: string;
   readonly pid: number;
@@ -102,11 +124,19 @@ export const takePair = (world: QueueWorld, request: Request) => Effect.scoped(E
     mkdirSync(join(world.directory, "leases"), { recursive: true });
     writeFileSync(ticketPath, "");
   });
+  let checkedAt = 0;
+  const freeSlot = Effect.gen(function*() {
+    const free = nextFree(world, liveLeases(world));
+    if (free !== undefined || Date.now() - checkedAt < IDLE_CHECK_SECONDS * 1000) return free;
+    checkedAt = Date.now();
+    yield* expireIdle(world);
+    return nextFree(world, liveLeases(world));
+  });
   const turn = Effect.scoped(Effect.gen(function*() {
     yield* holdLock(join(world.directory, "queue.lock")).pipe(Effect.mapError((cause) => new LanFailure({ problem: cause.message })));
     const [head] = liveTickets(world);
     if (head !== ticket) return undefined;
-    const slot = nextFree(world, liveLeases(world));
+    const slot = yield* freeSlot;
     if (slot === undefined) return undefined;
     const lease: Lease = { ...slot, owner: request.owner, pid: request.pid, since: new Date().toISOString() };
     yield* attempt("record the lease", () => {

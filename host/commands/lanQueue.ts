@@ -1,11 +1,11 @@
 import { existsSync, readdirSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
-import { Console, Effect } from "effect";
+import { Console, Effect, Option, Schema } from "effect";
 import { type Command, UsageFailure, flagValues, wholeFlag } from "../cli/command";
 import { LanFailure } from "../lan/join";
-import { type QueueHost, type QueueWorld, queueStatus, releasePair, takePair } from "../lan/pairQueue";
-import { alive, dataRoot, installOf, poolHolder, stateRoot } from "../lan/pool";
+import { type Lease, type QueueHost, type QueueWorld, expireIdle, queueStatus, releasePair, slotKey, takePair } from "../lan/pairQueue";
+import { agentSocket, alive, dataRoot, installOf, poolHolder, stateRoot } from "../lan/pool";
 import { lanPoolSupported } from "../os/warcraft/builds";
 import { buildOf } from "../os/warcraft/sharedStorage";
 
@@ -71,6 +71,39 @@ const localPoolable = (pair: number) => {
   }
 };
 
+export const IDLE_PAIRS_SCRIPT = "state=\"${XDG_STATE_HOME:-$HOME/.local/state}/wisp/lan\"\nfor dir in \"$state\"/pair-*; do\n  [ -d \"$dir\" ] || continue\n  if [ -S \"$dir/agent.sock\" ]; then printf '%s\\t' \"${dir##*pair-}\"; curl -s --max-time 3 --unix-socket \"$dir/agent.sock\" http://pair/status | tr -d '\\n'; echo\n  else printf '%s\\tnone\\n' \"${dir##*pair-}\"; fi\ndone\ntrue";
+
+const PairState = Schema.Struct({ state: Schema.String, idleSeconds: Schema.Finite });
+const decodePairState = Schema.decodeUnknownOption(Schema.fromJsonString(PairState));
+
+export const parseIdle = (output: string): ReadonlyMap<number, number> => new Map(output.split("\n").flatMap((line) => {
+  const [pair, status = ""] = line.split("\t");
+  const number = Number.parseInt(pair ?? "", 10);
+  if (!Number.isInteger(number)) return [];
+  if (status === "none") return [[number, Number.POSITIVE_INFINITY] as const];
+  const state = decodePairState(status);
+  return Option.isSome(state) ? [[number, state.value.state === "idle" ? state.value.idleSeconds : 0] as const] : [];
+}));
+
+const localIdle = (pair: number) => Effect.promise(async () => {
+  if (!existsSync(agentSocket(pair))) return Number.POSITIVE_INFINITY;
+  const state = decodePairState(await (await fetch("http://pair/status", { unix: agentSocket(pair), signal: AbortSignal.timeout(3000) })).text());
+  return Option.isSome(state) ? (state.value.state === "idle" ? state.value.idleSeconds : 0) : undefined;
+}).pipe(Effect.orElseSucceed(() => undefined));
+
+const remoteIdle = (name: string) => Effect.promise(async () => {
+  const run = Bun.spawn(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "--", name, IDLE_PAIRS_SCRIPT], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+  const output = await new Response(run.stdout).text();
+  return await run.exited === 0 ? parseIdle(output) : undefined;
+}).pipe(Effect.orElseSucceed(() => undefined));
+
+const idleness = (local: string) => (leases: readonly Lease[]) => Effect.gen(function*() {
+  const entries = yield* Effect.forEach(leases, (lease) => lease.host === local
+    ? localIdle(lease.pair).pipe(Effect.map((seconds) => [slotKey(lease), seconds] as const))
+    : remoteIdle(lease.host).pipe(Effect.map((pairs) => [slotKey(lease), pairs?.get(lease.pair) ?? (pairs === undefined ? undefined : Number.POSITIVE_INFINITY)] as const)), { concurrency: "unbounded" });
+  return new Map(entries.flatMap(([key, seconds]) => seconds === undefined ? [] : [[key, seconds] as const]));
+});
+
 const world = (any: boolean) => Effect.gen(function*() {
   const local: QueueHost = { name: hostname(), pairs: provisionedPairs().filter(localPoolable), available: true, clientLimit: yield* clientLimit(["north", "capacity", "warcraft-limit"]) };
   const remote = any ? yield* Effect.forEach([...remoteHosts()], ([name, pairs]) => Effect.all([laptopAvailable(), clientLimit(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "--", name, "north capacity warcraft-limit"])]).pipe(Effect.flatMap(([available, limit]) => peerState(name).pipe(Effect.map((state) => ({ busy: state?.busy, host: { name, pairs: state === undefined ? pairs : poolablePairs(pairs, state.builds), available: available && state !== undefined, clientLimit: limit } satisfies QueueHost })))))) : [];
@@ -79,6 +112,7 @@ const world = (any: boolean) => Effect.gen(function*() {
     directory: join(stateRoot(), "queue"),
     hosts: [local, ...remote.map(({ host }) => host)],
     alive,
+    idleness: idleness(local.name),
     held: ({ host, pair }) => {
       const holder = poolHolder(pair);
       return host === local.name ? holder !== undefined && alive(holder) : busyThere.get(host)?.has(pair) === true;
@@ -106,6 +140,9 @@ export const lease: Command = ([verb, ...args]) => Effect.gen(function*() {
     if (host === undefined || pair === undefined || pair instanceof UsageFailure) return yield* new UsageFailure({ problem: LEASE_USAGE });
     return yield* releasePair(state.directory, { host, pair });
   }
-  if (verb === "status") return yield* Console.log(JSON.stringify(queueStatus(state)));
+  if (verb === "status") {
+    yield* expireIdle(state);
+    return yield* Console.log(JSON.stringify(queueStatus(state)));
+  }
   return yield* new LanFailure({ problem: `lan takes ${LEASE_USAGE}` });
 });
