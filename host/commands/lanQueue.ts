@@ -104,12 +104,14 @@ const idleness = (local: string) => (leases: readonly Lease[]) => Effect.gen(fun
   return new Map(entries.flatMap(([key, seconds]) => seconds === undefined ? [] : [[key, seconds] as const]));
 });
 
+const leaseQueue = () => join(stateRoot(), "queue");
+
 const world = (any: boolean) => Effect.gen(function*() {
   const local: QueueHost = { name: hostname(), pairs: provisionedPairs().filter(localPoolable), available: true, clientLimit: yield* clientLimit(["north", "capacity", "warcraft-limit"]) };
   const remote = any ? yield* Effect.forEach([...remoteHosts()], ([name, pairs]) => Effect.all([laptopAvailable(), clientLimit(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "--", name, "north capacity warcraft-limit"])]).pipe(Effect.flatMap(([available, limit]) => peerState(name).pipe(Effect.map((state) => ({ busy: state?.busy, host: { name, pairs: state === undefined ? pairs : poolablePairs(pairs, state.builds), available: available && state !== undefined, clientLimit: limit } satisfies QueueHost })))))) : [];
   const busyThere = new Map(remote.map(({ busy, host }) => [host.name, busy ?? new Set<number>()]));
   return {
-    directory: join(stateRoot(), "queue"),
+    directory: leaseQueue(),
     hosts: [local, ...remote.map(({ host }) => host)],
     alive,
     idleness: idleness(local.name),
@@ -119,6 +121,9 @@ const world = (any: boolean) => Effect.gen(function*() {
     },
   } satisfies QueueWorld;
 });
+
+/** Frees this host's leases on `pairs`, so the queue offers them again once their pool has let them go. */
+export const releaseLocalLeases = (pairs: readonly number[]) => Effect.forEach(pairs, (pair) => releasePair(leaseQueue(), { host: hostname(), pair }), { discard: true });
 
 const hostsAny = (args: readonly string[]) => flagValues(args, "hosts")[0] === "any";
 

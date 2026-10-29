@@ -114,6 +114,9 @@ Run as another user, every `wisp lan` command refuses and prints the
 `sudo -u OWNER` command to run instead; `wisp lan status` marks a pair whose
 driver died without `wisp lan end`, and the pool's alarm log gets a line after
 10 idle minutes ([Pool owner and drivers](lan.md#pool-owner-and-drivers)).
+A pool lets go of its pairs, and this host's queue leases on them, once they
+have been idle 10 minutes after their last check (`--release-idle SECONDS`),
+not when its session ends ([Commands](lan.md#commands)).
 
 For lobby protocol checks, [`wisp lan dummy`](lan.md#dummy-lobby-checks)
 uses the separate GoWarcraft3 dummy beside side a for repeated joins, map and

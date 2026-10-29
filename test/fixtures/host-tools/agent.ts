@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { agentPidFile, agentSocket, clientLog, clientName, pairDirectory } from "../../../host/lan/pool";
 
@@ -29,5 +29,11 @@ for (const ready = Date.now() + Number(process.env["WISP_TEST_AGENT_READY_MS"] ?
   if (die !== undefined && existsSync(die)) process.kill(process.pid, "SIGKILL");
 }
 rmSync(agentSocket(pair), { force: true });
-Bun.serve({ unix: agentSocket(pair), fetch: () => Response.json({ pair, clients: clients.map(({ name, child }) => ({ name, pid: child.pid })) }) });
+// A test sets the pair's idleness by writing it to `test-idleness.json`; each answer adds a line to `test-idleness.json.reads`.
+const idleness = join(pairDirectory(pair), "test-idleness.json");
+Bun.serve({ unix: agentSocket(pair), fetch: () => {
+  const read: unknown = existsSync(idleness) ? JSON.parse(readFileSync(idleness, "utf8")) : {};
+  appendFileSync(`${idleness}.reads`, "\n");
+  return Response.json({ pair, clients: clients.map(({ name, child }) => ({ name, pid: child.pid })), ...(read as object) });
+} });
 writeFileSync(join(pairDirectory(pair), "agent.json"), JSON.stringify({ pid: process.pid, runs }));

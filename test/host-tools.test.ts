@@ -1,7 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
+import { Effect } from "effect";
+import { type QueueWorld, queueStatus, takePair } from "../host/lan/pairQueue";
 
 const root = join(import.meta.dir, "..");
 const fixtures = join(import.meta.dir, "fixtures/host-tools");
@@ -301,6 +303,29 @@ test("[boundary] lan pool: a pool or a queued waiter whose fleet session's proce
   expect(await settled(() => claimOf(box, pair) === undefined && box.sessions().length === 0, 30)).toBe(true);
   expect(await lockFree(box, pair)).toBe(true);
   expect(await settled(() => box.marked().length === 0, 15)).toBe(true);
+}, 120_000);
+
+test("[boundary] lan pool: a pair is held while its check runs and released, with this host's queue lease on it, once it has been idle --release-idle seconds, while the session that started it lives on", async () => {
+  const box = sandbox();
+  const pair = poolPair + 8;
+  const session = pool(box, { WISP_TEST_HOLDER: "quiet", NORTH_FLEET_SESSION: "lane" }, pair, ["--release-idle", "2"], ["sh", "-c", '"$@"; exec sleep 600', "sh"]);
+  const queue: QueueWorld = { directory: join(box.env.XDG_STATE_HOME, "wisp/lan/queue"), hosts: [{ name: hostname(), pairs: [pair], available: true }], alive: (pid) => session.exitCode === null && pid === session.pid, held: () => false };
+  await Effect.runPromise(takePair(queue, { owner: "lane", pid: session.pid, waitSeconds: 5 }));
+  await until(() => claimOf(box, pair)?.agent?.pid === session.pid, 30, "the pool's claim naming its session's process");
+  const idleness = join(pairState(box, pair), "test-idleness.json");
+  const reads = () => existsSync(`${idleness}.reads`) ? readFileSync(`${idleness}.reads`, "utf8").length : 0;
+  // Two more answers after a phase starts mean the pool judged at least one whole poll of it and asked again.
+  const heldThrough = async (state: string, idleSeconds: number) => {
+    writeFileSync(idleness, JSON.stringify({ state, idleSeconds }));
+    const before = reads();
+    await until(() => reads() >= before + 2, 30, `two idleness polls while ${state} for ${idleSeconds} s`);
+    return claimOf(box, pair)?.pid !== undefined && !(await lockFree(box, pair));
+  };
+  expect({ checking: await heldThrough("busy", 0), justEnded: await heldThrough("idle", 1) }).toEqual({ checking: true, justEnded: true });
+
+  writeFileSync(idleness, JSON.stringify({ state: "idle", idleSeconds: 2 }));
+  expect(await settled(() => claimOf(box, pair) === undefined && box.sessions().length === 0, 30)).toBe(true);
+  expect({ lockFree: await lockFree(box, pair), leases: queueStatus(queue).leases, sessionLives: session.exitCode === null }).toEqual({ lockFree: true, leases: [], sessionLives: true });
 }, 120_000);
 
 test("[boundary] lan pool: a pair start the capacity helper defers waits in the helper's queue and starts once admitted, without asking again", async () => {
