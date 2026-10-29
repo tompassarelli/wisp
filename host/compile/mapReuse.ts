@@ -2,14 +2,38 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, s
 import { dirname, join } from "node:path";
 import { Console, Effect } from "effect";
 import { cacheHome } from "../os/xdg";
-import { tryMapSync } from "../cli/hostProcess";
+import { tryMapPromise, tryMapSync } from "../cli/hostProcess";
 import { holdLock } from "../cli/flockHold";
 
 const DEFAULT_CAP_GIB = 8;
 const SIDECARS = [".base.lua"] as const;
 const MAP_FILE = "map.w3x";
+const REMOTE_STORE = '"${WISP_MAP_REUSE_STORE:-${XDG_CACHE_HOME:-$HOME/.cache}/wisp/maps}"';
 
 export const reuseStore = () => process.env.WISP_MAP_REUSE_STORE || join(cacheHome(), "wisp/maps");
+
+/** `$WISP_MAP_REUSE_PEERS`: the ssh destinations whose store a build missing here is copied from, under the same key, before building it. */
+export const reusePeers = () => (process.env.WISP_MAP_REUSE_PEERS ?? "").split(/[\s,]+/).filter((peer) => peer !== "");
+
+export const sshTo = (peer: string): readonly string[] => ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", peer];
+
+/** Copies a peer's stored build of `key` into `store` under the same key; false when the peer has none or cannot be reached. */
+export const copyFromPeer = (store: string, key: string, remote: readonly string[]) => tryMapPromise("copy a stored map from a peer", store, async () => {
+  const staging = join(store, `.peer-${key}-${process.pid}`);
+  rmSync(staging, { recursive: true, force: true });
+  mkdirSync(staging, { recursive: true });
+  try {
+    const send = Bun.spawn([...remote, `cd ${REMOTE_STORE} && test -f ${key}/${MAP_FILE} && tar -cf - ${key}`], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+    const unpack = Bun.spawn(["tar", "-xf", "-", "-C", staging], { stdin: send.stdout, stdout: "ignore", stderr: "ignore" });
+    const [sent, unpacked] = await Promise.all([send.exited, unpack.exited]);
+    if (sent !== 0 || unpacked !== 0 || !existsSync(join(staging, key, MAP_FILE))) return false;
+    rmSync(join(store, key), { recursive: true, force: true });
+    renameSync(join(staging, key), join(store, key));
+    return true;
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
+});
 
 export const reuseCapBytes = () => {
   const gib = Number(process.env.WISP_MAP_REUSE_GIB);
@@ -62,14 +86,20 @@ export interface MapReuse<E, R> {
   readonly out: string;
   readonly build: Effect.Effect<void, E, R>;
   readonly store?: string;
+  readonly peers?: readonly string[];
+  readonly remote?: (peer: string) => readonly string[];
 }
 
-/** Puts at `out` the map of `key`: the stored one when a build of the same inputs finished, else the one `build` writes, which it then stores. Concurrent callers with one key wait for the first build and reuse it. */
-export const reuseOrBuild = <E, R>({ key, out, build, store = reuseStore() }: MapReuse<E, R>) => Effect.scoped(Effect.gen(function*() {
+/** Puts at `out` the map of `key`: the stored one when a build of the same inputs finished here or on a peer, else the one `build` writes, which it then stores. Concurrent callers with one key wait for the first build and reuse it. */
+export const reuseOrBuild = <E, R>({ key, out, build, store = reuseStore(), peers = reusePeers(), remote = sshTo }: MapReuse<E, R>) => Effect.scoped(Effect.gen(function*() {
   yield* tryMapSync("create the map store", store, () => mkdirSync(store, { recursive: true }));
   yield* holdLock(lockPath(store, key));
   const entry = join(store, key);
   const stored = join(entry, MAP_FILE);
+  for (const peer of peers) {
+    if (existsSync(stored)) break;
+    if (yield* copyFromPeer(store, key, remote(peer))) yield* Console.log(`copied map build ${key} from ${peer}`);
+  }
   if (existsSync(stored)) {
     yield* tryMapSync("reuse the stored map", stored, () => {
       const now = new Date();

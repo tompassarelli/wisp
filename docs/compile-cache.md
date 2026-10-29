@@ -59,5 +59,8 @@ and stores the map and its `.base.lua`. Every later caller with the same key
 waits for that lock, copies the stored map and logs `reused map build KEY`. The
 store is `$WISP_MAP_REUSE_STORE` (default `~/.cache/wisp/maps`), so every worker
 on the host reads it; it holds at most `$WISP_MAP_REUSE_GIB` (default 8) GiB,
-and the least recently used builds go first. Copy a stored build to another
-host over ssh, into that host's store under the same key.
+and the least recently used builds go first. A key missing here is first
+copied over ssh from each destination `$WISP_MAP_REUSE_PEERS` names (space or
+comma separated, such as `tom@gex45`) that has it stored, into this store under
+the same key, logging `copied map build KEY from PEER` before `reused map build
+KEY`; an unreachable peer, or one without the key, leaves the build to run here.

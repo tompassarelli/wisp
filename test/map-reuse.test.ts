@@ -38,6 +38,36 @@ test("[scenario] two builds of one key run the build once, the second reuses the
   }
 });
 
+test("[scenario] a build stored on a peer host is copied over the peer's shell under the same key and reused, and an unreachable peer leaves the build to run here", async () => {
+  const peerStore = join(scratch(), "peer"), store = join(scratch(), "store"), work = scratch();
+  const key = mapReuseKey({ tree: "peer", profile: "native-capture" });
+  let builds = 0;
+  const build = (out: string) => Effect.sync(() => {
+    builds += 1;
+    writeFileSync(out, `map ${builds}`);
+    writeFileSync(`${out}.base.lua`, "base");
+  });
+  const viaPeerShell = () => ["env", `WISP_MAP_REUSE_STORE=${peerStore}`, "sh", "-c"];
+  const logged: string[] = [];
+  const log = console.log;
+  console.log = (line: unknown) => { logged.push(String(line)); };
+  try {
+    const built = join(work, "peer.w3x"), copied = join(work, "here.w3x"), unreachable = join(work, "alone.w3x");
+    await Effect.runPromise(reuseOrBuild({ key, out: built, build: build(built), store: peerStore, peers: [] }));
+    expect(await Effect.runPromise(reuseOrBuild({ key, out: copied, build: build(copied), store, peers: ["laptop"], remote: viaPeerShell }))).toEqual({ reused: true, key });
+    expect(builds).toBe(1);
+    expect(readFileSync(copied, "utf8")).toBe("map 1");
+    expect(readFileSync(`${copied}.base.lua`, "utf8")).toBe("base");
+    expect(existsSync(join(store, key, "map.w3x"))).toBe(true);
+    expect(logged).toEqual(expect.arrayContaining([`copied map build ${key} from laptop`, `reused map build ${key}`]));
+    const other = mapReuseKey({ tree: "only here" });
+    expect(await Effect.runPromise(reuseOrBuild({ key: other, out: unreachable, build: build(unreachable), store, peers: ["laptop"], remote: () => ["false"] }))).toEqual({ reused: false, key: other });
+    expect(builds).toBe(2);
+  } finally {
+    console.log = log;
+  }
+});
+
 test("[property] a key changes with any input and does not depend on input order", () => {
   const base = { tree: "abc", lock: "x", profile: "playable", edition: "classic" };
   expect(mapReuseKey(base)).toBe(mapReuseKey({ edition: "classic", profile: "playable", lock: "x", tree: "abc" }));
