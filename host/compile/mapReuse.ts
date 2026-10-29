@@ -2,12 +2,13 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, s
 import { dirname, join } from "node:path";
 import { Console, Effect } from "effect";
 import { cacheHome } from "../os/xdg";
-import { tryMapPromise, tryMapSync } from "../cli/hostProcess";
+import { runProcess, tryMapSync } from "../cli/hostProcess";
 import { holdLock } from "../cli/flockHold";
 
 const DEFAULT_CAP_GIB = 8;
 const SIDECARS = [".base.lua"] as const;
 const MAP_FILE = "map.w3x";
+const UNPACK = 'set -o pipefail; staging=$1; shift; "$@" | tar -xf - -C "$staging"';
 const REMOTE_STORE = '"${WISP_MAP_REUSE_STORE:-${XDG_CACHE_HOME:-$HOME/.cache}/wisp/maps}"';
 
 export const reuseStore = () => process.env.WISP_MAP_REUSE_STORE || join(cacheHome(), "wisp/maps");
@@ -18,22 +19,27 @@ export const reusePeers = () => (process.env.WISP_MAP_REUSE_PEERS ?? "").split(/
 export const sshTo = (peer: string): readonly string[] => ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", peer];
 
 /** Copies a peer's stored build of `key` into `store` under the same key; false when the peer has none or cannot be reached. */
-export const copyFromPeer = (store: string, key: string, remote: readonly string[]) => tryMapPromise("copy a stored map from a peer", store, async () => {
+export const copyFromPeer = (store: string, key: string, remote: readonly string[]) => {
   const staging = join(store, `.peer-${key}-${process.pid}`);
-  rmSync(staging, { recursive: true, force: true });
-  mkdirSync(staging, { recursive: true });
-  try {
-    const send = Bun.spawn([...remote, `cd ${REMOTE_STORE} && test -f ${key}/${MAP_FILE} && tar -cf - ${key}`], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
-    const unpack = Bun.spawn(["tar", "-xf", "-", "-C", staging], { stdin: send.stdout, stdout: "ignore", stderr: "ignore" });
-    const [sent, unpacked] = await Promise.all([send.exited, unpack.exited]);
-    if (sent !== 0 || unpacked !== 0 || !existsSync(join(staging, key, MAP_FILE))) return false;
-    rmSync(join(store, key), { recursive: true, force: true });
-    renameSync(join(staging, key), join(store, key));
-    return true;
-  } finally {
-    rmSync(staging, { recursive: true, force: true });
-  }
-});
+  return Effect.acquireUseRelease(
+    tryMapSync("stage a map copy from a peer", staging, () => {
+      rmSync(staging, { recursive: true, force: true });
+      mkdirSync(staging, { recursive: true });
+    }),
+    () => runProcess("copy a stored map from a peer", store, ["bash", "-c", UNPACK, "bash", staging, ...remote, `cd ${REMOTE_STORE} && test -f ${key}/${MAP_FILE} && tar -cf - ${key}`]).pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
+      Effect.flatMap((fetched) => fetched && existsSync(join(staging, key, MAP_FILE))
+        ? tryMapSync("place the peer's map copy", store, () => {
+          rmSync(join(store, key), { recursive: true, force: true });
+          renameSync(join(staging, key), join(store, key));
+          return true;
+        })
+        : Effect.succeed(false)),
+    ),
+    () => Effect.sync(() => rmSync(staging, { recursive: true, force: true })),
+  );
+};
 
 export const reuseCapBytes = () => {
   const gib = Number(process.env.WISP_MAP_REUSE_GIB);
