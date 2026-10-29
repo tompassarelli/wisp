@@ -43,3 +43,11 @@ test("[scenario] a lease whose process died frees its pair, and a pair held outs
   dead.add(101);
   expect(await take(state, "capture-b", 102)).toEqual({ host: "gex45", pair: 15 });
 });
+
+test("[scenario] a host at its client cap is skipped until a pair frees, and a host with no cap is never skipped", async () => {
+  const state = world({ hosts: [{ name: "gex45", pairs: [7, 15, 16], available: true, clientLimit: 4 }, { name: "laptop", pairs: [0, 1], available: true }], held: ({ host, pair }) => host === "gex45" && pair === 16 });
+  const first = await take(state, "capture-a", 101);
+  expect(first).toEqual({ host: "gex45", pair: 7 });
+  expect(nextFree(state, [{ ...first, owner: "capture-a", pid: 101, since: "" }])).toEqual({ host: "laptop", pair: 0 });
+  expect(queueStatus(state).free.every((slot) => slot.host === "laptop")).toBe(true);
+});

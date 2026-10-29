@@ -27,9 +27,15 @@ const laptopAvailable = () => Effect.promise(async () => {
   return (await new Response(run.stdout).text()).startsWith("laptop: available") && await run.exited === 0;
 }).pipe(Effect.orElseSucceed(() => false));
 
+const clientLimit = (command: readonly string[]) => Effect.promise(async () => {
+  const run = Bun.spawn([...command], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+  const limit = Number.parseInt((await new Response(run.stdout).text()).trim(), 10);
+  return await run.exited === 0 && Number.isInteger(limit) ? limit : undefined;
+}).pipe(Effect.orElseSucceed(() => undefined));
+
 const world = (any: boolean) => Effect.gen(function*() {
-  const local: QueueHost = { name: hostname(), pairs: provisionedPairs(), available: true };
-  const remote = any ? yield* Effect.forEach([...remoteHosts()], ([name, pairs]) => laptopAvailable().pipe(Effect.map((available): QueueHost => ({ name, pairs, available })))) : [];
+  const local: QueueHost = { name: hostname(), pairs: provisionedPairs(), available: true, clientLimit: yield* clientLimit(["north", "capacity", "warcraft-limit"]) };
+  const remote = any ? yield* Effect.forEach([...remoteHosts()], ([name, pairs]) => Effect.all([laptopAvailable(), clientLimit(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "--", name, "north capacity warcraft-limit"])]).pipe(Effect.map(([available, limit]): QueueHost => ({ name, pairs, available, clientLimit: limit })))) : [];
   return {
     directory: join(stateRoot(), "queue"),
     hosts: [local, ...remote],

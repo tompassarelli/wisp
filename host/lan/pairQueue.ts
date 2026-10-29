@@ -25,6 +25,7 @@ export interface QueueHost {
   readonly name: string;
   readonly pairs: readonly number[];
   readonly available: boolean;
+  readonly clientLimit?: number | undefined;
 }
 
 export interface QueueWorld {
@@ -65,10 +66,16 @@ const liveTickets = (world: QueueWorld): readonly string[] => {
   });
 };
 
+const pairsInUse = (world: QueueWorld, host: QueueHost, leases: readonly Lease[]) =>
+  host.pairs.filter((pair) => leases.some((lease) => lease.host === host.name && lease.pair === pair) || world.held({ host: host.name, pair })).length;
+
+const atLimit = (world: QueueWorld, host: QueueHost, leases: readonly Lease[]) =>
+  host.clientLimit !== undefined && (pairsInUse(world, host, leases) + 1) * 2 > host.clientLimit;
+
 /** The first slot, in host preference order, that no lease and no outside holder has. */
 export const nextFree = (world: QueueWorld, leases: readonly Lease[]): Slot | undefined => {
   for (const host of world.hosts) {
-    if (!host.available) continue;
+    if (!host.available || atLimit(world, host, leases)) continue;
     for (const pair of [...host.pairs].sort((left, right) => left - right)) {
       const slot = { host: host.name, pair };
       if (!leases.some((lease) => lease.host === slot.host && lease.pair === slot.pair) && !world.held(slot)) return slot;
@@ -113,7 +120,7 @@ export const takePair = (world: QueueWorld, request: Request) => Effect.scoped(E
     until: (slot) => slot !== undefined,
     every: "1 second",
     within: Duration.seconds(request.waitSeconds),
-    onTimeout: () => Effect.fail(new LanFailure({ problem: `no free pair within ${request.waitSeconds} s (${world.hosts.map((host) => `${host.name}${host.available ? "" : " unavailable"}: ${host.pairs.length} pairs`).join(", ")})` })),
+    onTimeout: () => Effect.fail(new LanFailure({ problem: `no free pair within ${request.waitSeconds} s (${world.hosts.map((host) => `${host.name}${host.available ? "" : " unavailable"}: ${host.pairs.length} pairs${host.clientLimit === undefined ? "" : `, ${host.clientLimit} clients`}`).join(", ")})` })),
   }).pipe(Effect.map((slot) => slot as Slot), Effect.ensuring(Effect.sync(() => rmSync(ticketPath, { force: true }))));
 }));
 
@@ -122,6 +129,6 @@ export const releasePair = (directory: string, slot: Slot) => Effect.sync(() => 
 export const queueStatus = (world: QueueWorld) => ({
   waiting: liveTickets(world).length,
   leases: liveLeases(world),
-  free: world.hosts.flatMap((host) => host.available ? host.pairs.filter((pair) => !world.held({ host: host.name, pair })).map((pair) => ({ host: host.name, pair })) : [])
+  free: world.hosts.flatMap((host) => host.available && !atLimit(world, host, liveLeases(world)) ? host.pairs.filter((pair) => !world.held({ host: host.name, pair })).map((pair) => ({ host: host.name, pair })) : [])
     .filter((slot) => !liveLeases(world).some((lease) => lease.host === slot.host && lease.pair === slot.pair)),
 });
