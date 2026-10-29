@@ -572,6 +572,9 @@ only while it is on the pool build; once Battle.net updates it, set up from
 a copy taken while it was on the pool build.
 
 
+### Disk use of the client copies
+
+Measured on gex45 on 29 October 2026 (155 GB under `~/.local/share/wisp`, 22 GB free): the 27 LAN clients share one `Data/`, and a byte comparison of every `Data/` file of 1 MiB or more across the LAN clients, `online/clone-*` and `classic-24371` found nothing more that `client share` could link. The online clones and `classic-24371` (build 24371) hold same-named, same-sized `data.0NN` archives that differ in content (`data.001` in clone-b against classic differs in 661,072 bytes), because Battle.net patches CASC archives in place and each copy drifted with its own `.idx` files. Outside `Data/`, same-sized files that may match come to at most about 14 GB among the LAN clients (`_retail_` executables and DLLs, Wine prefix files) and 5 GB among the online clones; none is linked, because a `lan setup` refresh writes through shared files outside `Data/`. Revisit linking `_retail_` only if gex45 falls under the 15 GiB free floor.
 ## Running a pool
 
 Each client has its own private desktop (the private-desktop-development
