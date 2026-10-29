@@ -71,7 +71,7 @@ const localPoolable = (pair: number) => {
   }
 };
 
-export const IDLE_PAIRS_SCRIPT = "state=\"${XDG_STATE_HOME:-$HOME/.local/state}/wisp/lan\"\nfor dir in \"$state\"/pair-*; do\n  [ -d \"$dir\" ] || continue\n  if [ -S \"$dir/agent.sock\" ]; then printf '%s\\t' \"${dir##*pair-}\"; curl -s --max-time 3 --unix-socket \"$dir/agent.sock\" http://pair/status | tr -d '\\n'; echo\n  else printf '%s\\tnone\\n' \"${dir##*pair-}\"; fi\ndone\ntrue";
+const IDLE_PAIRS_SCRIPT = "state=\"${XDG_STATE_HOME:-$HOME/.local/state}/wisp/lan\"\nfor dir in \"$state\"/pair-*; do\n  [ -d \"$dir\" ] || continue\n  if [ -S \"$dir/agent.sock\" ]; then printf '%s\\t' \"${dir##*pair-}\"; curl -s --max-time 3 --unix-socket \"$dir/agent.sock\" http://pair/status | tr -d '\\n'; echo\n  else printf '%s\\tnone\\n' \"${dir##*pair-}\"; fi\ndone\ntrue";
 
 const PairState = Schema.Struct({ state: Schema.String, idleSeconds: Schema.Finite });
 const decodePairState = Schema.decodeUnknownOption(Schema.fromJsonString(PairState));

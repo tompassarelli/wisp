@@ -37,7 +37,7 @@ export interface QueueWorld {
   readonly idleness?: (leases: readonly Lease[]) => Effect.Effect<ReadonlyMap<string, number>>;
 }
 
-export const IDLE_RELEASE_SECONDS = 300;
+const IDLE_RELEASE_SECONDS = 300;
 const IDLE_CHECK_SECONDS = 15;
 
 export const slotKey = (slot: Slot) => `${slot.host}:${slot.pair}`;
