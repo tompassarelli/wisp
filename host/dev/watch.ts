@@ -8,7 +8,7 @@ import { ProcessTable } from "../os/platform/services";
 import { type LadderScan, SCAN_QUIET_MS, importFailures, ladderScan, logTime, sessionMarks, sessionStart, sessionText, war3LogPath } from "../os/warcraft/war3Log";
 import { type Client, clientUnit } from "../client/client";
 import { dataDirectory } from "../io/gameFiles";
-import { type MenuEvent, connectMenus, keptAddress, menuAddress } from "../play/menus";
+import { type MenuEvent, connectMenus, keptAddress, menuAddress } from "../lan/menus";
 import { pairClients, pairSides, readPool } from "../lan/pool";
 import { describeCause } from "../cli/command";
 import { pollUntil } from "../cli/hostProcess";

@@ -3,7 +3,7 @@ import { TestClock } from "effect/testing";
 import { PlayDesktop, PlayMachine, play, type PlayDeclaration } from "../host/play/play";
 import { ClientWatch, type ClientState } from "../host/dev/watch";
 import { Effect, Exit, Fiber, Layer } from "effect";
-import { type MenuAddress, connectMenus, hostLocalLobby, hostLobby, leaveLobby, listenForMenus, startLobby } from "../host/play/menus";
+import { type MenuAddress, connectMenus, hostLocalLobby, hostLobby, leaveLobby, listenForMenus, startLobby } from "../host/lan/menus";
 
 const GUID = "6f1c2a90-guid";
 const MAPS = "C:/Users/player/Documents/Warcraft III/Maps/";

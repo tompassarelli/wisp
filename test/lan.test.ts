@@ -8,7 +8,7 @@ import { GameLauncher } from "../host/os/platform/services";
 import { startHost } from "../host/lan/host";
 import { ALARM_AFTER_MS, type Driver, clientRun, driverVerdict, idleness, installOf, lanPlayRefusal, networkFlagProblem, pairClients, pairFlags, pairSides, prefixOf, wrongUser } from "../host/lan/pool";
 import { setupClient } from "../host/lan/setup";
-import { menuPage } from "../host/play/menus";
+import { menuPage } from "../host/lan/menus";
 import { LanFailure } from "../host/lan/join";
 import { type MapFacts, mapCopies, readMapFacts } from "../host/lan/map";
 import { PACKET, Writer, encodePacket } from "../host/lan/w3gs";

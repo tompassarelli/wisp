@@ -1652,7 +1652,7 @@ game, on 25 October 2026. The client was clone-d on gex45 (account d,
 127.0.0.1:6112 under a probe that logged every connection and packet, and
 announced its game every second to UDP 16000–16007 and later to the game's
 own UDP port as well. Requests went through Wisp's menu page
-(wisp:host/play/menus.ts). The game's sockets were read with `ss`. No step
+(wisp:host/lan/menus.ts). The game's sockets were read with `ss`. No step
 read or wrote game memory, injected code, attached a debugger or changed a
 game file.
 

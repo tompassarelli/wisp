@@ -5,7 +5,7 @@ import { Deferred, Effect, Exit, Fiber, Schedule, Scope, Semaphore } from "effec
 import { decodeActions } from "./actions";
 import { LanFailure } from "./join";
 import type { MapFacts } from "./map";
-import { DEFAULT_BUILD, requireCapability } from "../client/builds";
+import { DEFAULT_BUILD, requireCapability } from "../os/warcraft/builds";
 import {
   CHAT, DEFAULT_GAME_FLAGS, LEAVE_REASONS, PACKET, PRODUCT, PROTOBUF, RACE_RANDOM_SELECTABLE, SLOT_CLOSED, SLOT_OCCUPIED, SLOT_OPEN,
   type Chat, type PlayerAction, type Slot, type SlotTable,

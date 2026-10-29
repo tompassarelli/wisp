@@ -106,7 +106,7 @@ game UI is up and prints the seconds each took.
 The pair agent (wisp:host/lan/pairAgent.ts, `POST /solo`) copies MAP
 into each client's `Maps/Wisp/`, keeping at most its newest copy
 ([how a match starts](#how-a-match-starts)), and drives each client's menus
-(`playLocalGame`, wisp:host/play/menus.ts) as Single Player's Custom Game
+(`playLocalGame`, wisp:host/lan/menus.ts) as Single Player's Custom Game
 does, with no click, keyboard or memory write:
 
 1. `LoginDoorClose`. A client that never signed in sits at its login doors

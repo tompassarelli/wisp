@@ -4,7 +4,7 @@ import { Effect, Schedule } from "effect";
 import type { MenuSocket } from "../os/warcraft/menuSocket";
 import { LanFailure } from "./join";
 import { isolatedNetworkProblem } from "./offline";
-import { requireCapability } from "../client/builds";
+import { requireCapability } from "../os/warcraft/builds";
 import { describeCause } from "../cli/command";
 
 const LAN_PLUGIN = join(process.env["HOME"] ?? "", ".local/share/wisp-private/lan/index.ts");

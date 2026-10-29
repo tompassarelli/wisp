@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect";
 import { documentsFolder } from "../os/warcraft/battleNet";
 import { type Command, type CommandFailure, UsageFailure } from "../cli/command";
 import { DoctorHands, type DoctorTarget, doctor, withDoctor } from "../doctor/doctor";
-import { type MenuFailure, type MenuSocket, leaveLobby, reportedMenus } from "../play/menus";
+import { type MenuFailure, type MenuSocket, leaveLobby, reportedMenus } from "../lan/menus";
 import { type PlayDeclaration, PlayProblem, leaveScoreScreen, play } from "../play/play";
 import { type PlayTools, playHostLayer, playMachineLayer } from "../os/platform/play";
 import type { ClientWatch } from "../dev/watch";

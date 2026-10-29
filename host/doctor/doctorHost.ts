@@ -5,10 +5,10 @@ import type { Platform } from "../os/platform/services";
 import * as desktop from "../os/warcraft/desktop";
 import { DoctorHands, type DoctorTarget } from "./doctor";
 import { collect } from "../cli/hostProcess";
-import { leaveLobby, reportedMenus } from "../play/menus";
+import { leaveLobby, reportedMenus } from "../lan/menus";
 import { PlayProblem } from "../play/play";
 import { detectBuild, executableIn } from "../client/buildHost";
-import { requireCapability } from "../client/builds";
+import { requireCapability } from "../os/warcraft/builds";
 
 const PLACEHOLDERS = { username: undefined, password: /^Password$/ } as const;
 

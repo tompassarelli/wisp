@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import { ChildProcess } from "effect/process";
 import { GameLauncher } from "../os/platform/services";
 import { collect } from "../cli/hostProcess";
-import { installMenuPage } from "../play/menus";
+import { installMenuPage } from "./menus";
 import { buildOf, linkStorage } from "../os/warcraft/sharedStorage";
 import { LanFailure } from "./join";
 import { clientRoot, installOf, prefixOf, retailOf } from "./pool";

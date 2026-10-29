@@ -78,8 +78,8 @@ may_use = ["cli", "runtime", "num", "plugins"]
 [[module]]
 name = "lan"
 paths = ["host/lan/**"]
-responsibility = "Offline LAN pair pool: netns pairs, W3GS host, dummy, admission."
-may_use = ["cli", "os"]
+responsibility = "Offline LAN pair pool: netns pairs, W3GS host, dummy, admission, and the menu driver that hosts, joins and starts games through Warcraft's own menu page."
+may_use = ["cli", "os", "build"]
 
 [[module]]
 name = "net"

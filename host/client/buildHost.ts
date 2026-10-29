@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { BuildFailure, buildProfileLines, profileFor } from "./builds";
+import { BuildFailure, buildProfileLines, profileFor } from "../os/warcraft/builds";
 import { loadLanPlugin } from "../lan/plugin";
 
 export const executableIn = (prefix: string) => join(prefix, "drive_c/Program Files (x86)/Warcraft III/_retail_/x86_64/Warcraft III.exe");

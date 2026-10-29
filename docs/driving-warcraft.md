@@ -89,7 +89,7 @@ two ways:
 A third way, not tried, is to capture the browser's handshake on the loopback
 interface at launch. That needs root and sees other loopback traffic.
 
-**Wisp's page** (wisp:host/play/menus.ts `menuPage`) is that skeleton:
+**Wisp's page** (wisp:host/lan/menus.ts `menuPage`) is that skeleton:
 
 - `#root` and `#portal`, with the game's own `GlueManager.js` from its data.
   Nothing of Blizzard's is copied.
@@ -247,7 +247,7 @@ decision.
 | W3Champions launcher, `~/code/resources/w3champions/launcher` | `src/update-handling/WindowsLauncher.ts` and `MacLauncher.ts` set `Allow Local Files`; `src/update-handling/LauncherStrategy.ts` unpacks W3Champions' page into `_retail_`; `src/game/ingame-bridge.ts` and `game.types.ts` are the bridge between that page and the launcher on `127.0.0.1:38123`, the launcher's own messages, not the game's. Deprecated; its successor (w3champions/launcher-e-release) is closed. | No licence: read only, nothing copied. |
 | [kgallimore/wc3MultiTool](https://github.com/kgallimore/wc3MultiTool) | `packages/main/src/globals/gameSocket.ts` (request and event names, `CreateLobby` payload); `buildResources/webui.html`, `index.js` (a page that takes the GUID from its URL) | No licence: read only. |
 | [Promises/wc3-slop-lan](https://github.com/Promises/wc3-slop-lan) | `harness/webui/index.html` (host, join, LAN join and start sequences); `activator/src/menus.rs`, `harness/webui/bridge.py` (an outside socket client); `docs/porting.md` §2.2 (the Windows build) | No licence: read only. |
-| Wisp | wisp:host/play/menus.ts, wisp:host/commands/menus.ts, wisp:test/menus.test.ts | MIT. Written from the observed protocol: message names and JSON shapes are the interface, not copied code. |
+| Wisp | wisp:host/lan/menus.ts, wisp:host/commands/menus.ts, wisp:test/menus.test.ts | MIT. Written from the observed protocol: message names and JSON shapes are the interface, not copied code. |
 
 ## 2. LAN hosting: offline clients and Wisp's host
 

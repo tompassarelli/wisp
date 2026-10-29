@@ -63,7 +63,7 @@
     "./scripts/wisp/mapBuild": "./host/compile/mapBuild.ts",
     "./scripts/wisp/mapReuse": "./host/compile/mapReuse.ts",
     "./scripts/wisp/mapPreview": "./host/scene/mapPreview.ts",
-    "./scripts/wisp/menus": "./host/play/menus.ts",
+    "./scripts/wisp/menus": "./host/lan/menus.ts",
     "./scripts/wisp/models": "./host/models/models.ts",
     "./scripts/wisp/nativeFit": "./host/perf/nativeFit.ts",
     "./scripts/wisp/net/peer": "./host/net/peer.ts",

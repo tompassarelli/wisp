@@ -18,7 +18,7 @@ import {
   PAIR_SIDES, agentFile, agentPidFile, agentSocket, alive, clientName, lanPlayRefusal, mapPackager, networkFlagProblem, pairClients, pairSides, pairDirectory, pairEntryFile, pairsHeldBy, livePairs, poolClientsFile, poolFile, poolHolder, poolOwners, playtestPairRefusal, readPool, reportPort, stopAgent, stopPairScopes, writeJson, writePoolClients, wrongUser,
 } from "../lan/pool";
 import { PROFILES, desktopSize } from "../os/warcraft/clientProfiles";
-import { DEFAULT_BUILD, profileFor } from "../client/builds";
+import { DEFAULT_BUILD, profileFor } from "../os/warcraft/builds";
 import { setupClient } from "../lan/setup";
 import { admissionFile, deferredExit, lastQueued, unadmitted } from "../lan/admission";
 

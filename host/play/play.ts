@@ -10,7 +10,7 @@ import { type DisplaySettings, absentSettings, displayChanges, preferencesBackup
 import { SCAN_QUIET_MS, importFailures, ladderScan, sessionStart, war3LogPath } from "../os/warcraft/war3Log";
 import { pollFor } from "../cli/hostProcess";
 import { step } from "../cli/timings";
-import { hostLocalLobby, hostLobby, leaveLobby, reportedMenus, startLobby } from "./menus";
+import { hostLocalLobby, hostLobby, leaveLobby, reportedMenus, startLobby } from "../lan/menus";
 import { ClientWatch, unlessLost } from "../dev/watch";
 
 export class PlayProblem extends Schema.TaggedError<PlayProblem, { readonly brand: unique symbol }>()("PlayProblem", {

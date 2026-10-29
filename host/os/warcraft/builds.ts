@@ -1,8 +1,8 @@
 import { Effect, Schema } from "effect";
-import rollback from "../../builds/3.0.0.24268.json";
-import patch from "../../builds/3.0.1.24342.json";
-import hotfix from "../../builds/3.0.1.24370.json";
-import live from "../../builds/3.0.1.24371.json";
+import rollback from "../../../builds/3.0.0.24268.json";
+import patch from "../../../builds/3.0.1.24342.json";
+import hotfix from "../../../builds/3.0.1.24370.json";
+import live from "../../../builds/3.0.1.24371.json";
 
 const Capability = Schema.Struct({ status: Schema.Literals(["supported", "unsupported", "unchecked"]), issue: Schema.String });
 const Profile = Schema.Struct({
