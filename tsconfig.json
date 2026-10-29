@@ -38,6 +38,8 @@
   ],
   "exclude": [
     "host/browser/**",
+    "host/soak/ci/game.ts",
+    "host/soak/ci/map.ts",
     "src/map/**",
     "src/natives/**",
     "src/ui/chatPanel.ts",

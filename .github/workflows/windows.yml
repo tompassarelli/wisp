@@ -83,7 +83,7 @@ jobs:
         run: bun test test/map-build.test.ts -t '^(?!.*interrupting a map step)'
       - name: The sample map from a synthetic base map
         run: |
-          bun host/toolchain/syntheticBaseMap.ts build/tools/map-pack "$RUNNER_TEMP/base.w3x"
+          bun host/compile/syntheticBaseMap.ts build/tools/map-pack "$RUNNER_TEMP/base.w3x"
           bun examples/sample/scripts/sample.ts map build --base "$RUNNER_TEMP/base.w3x" --out "$RUNNER_TEMP/sample.w3x"
           build/tools/map-pack extract "$RUNNER_TEMP/sample.w3x" "$RUNNER_TEMP/war3map.lua"
           grep -q 'wispTs.start' "$RUNNER_TEMP/war3map.lua"

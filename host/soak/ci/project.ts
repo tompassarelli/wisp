@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { defineSoak } from "../../host/soak/soak";
+import { defineSoak } from "../soak";
 
 export default defineSoak({
   name: "soak test",

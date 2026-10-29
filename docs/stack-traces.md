@@ -22,7 +22,7 @@ src/main.ts:48: Error: injected ping failure
 
 Paths are relative to the compiling tsconfig's directory; the installed
 package's own throws read `wisp/src/...`, such as `at()`'s
-`wisp/src/runtime/lookup.ts:4`. A rethrow of the latest thrown value keeps its
+`wisp/src/sim/at.ts:4`. A rethrow of the latest thrown value keeps its
 first site. Only the throwing branch runs the recording, so ordinary frames
 cost the same: seven paired Lua32 runs of Smashcraft's frame-cost workload
 (4,096 frames each) measured a median ratio of **0.9999** (0.912–1.015), with

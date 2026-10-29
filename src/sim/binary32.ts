@@ -4,7 +4,7 @@
 
 // Warcraft + and * can round toward zero; integer arithmetic and power-of-two scaling preserve nearest-even results.
 
-import { at } from "../runtime/lookup";
+import { at } from "./at";
 import { floorDiv, floorMod } from "./intMath";
 import { addLimbs, bitLength, lessThan, type Limbs, TWO_POWERS as LIMB_POWERS, shiftRightJam, subtractLimbs } from "./limbs";
 

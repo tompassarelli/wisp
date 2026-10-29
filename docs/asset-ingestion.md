@@ -23,7 +23,7 @@ source file.
 
 The single-entry `map-pack replace|extract MAP FILE [ARCHIVE_NAME]` stays for
 script-only rebuilds. `map-pack create MAP LIST` writes a new archive from a
-list; tests use it for a synthetic base map (wisp:host/toolchain/syntheticBaseMap.ts).
+list; tests use it for a synthetic base map (wisp:host/compile/syntheticBaseMap.ts).
 
 ## Quality settings
 

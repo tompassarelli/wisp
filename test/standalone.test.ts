@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { installHeadless } from "../host/headless/headless";
-import { openStandalone, type StandaloneGame, type StandaloneOptions } from "../host/render/standalone";
+import { openStandalone, type StandaloneGame, type StandaloneOptions } from "../host/play/standalone";
 
 test("[spec docs/play.md] standalone records scripted checksums and skips live, networked or explicitly disabled checksums", async () => {
   const directory = await mkdtemp(join(tmpdir(), "wisp-checksums-"));

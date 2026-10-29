@@ -1,5 +1,5 @@
 import { defineSoakGame } from "../../host/soak/soak";
-import game from "./game";
+import game from "../../host/soak/ci/game";
 
 export default defineSoakGame({
   ...game,

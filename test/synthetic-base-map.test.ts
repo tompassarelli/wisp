@@ -19,7 +19,7 @@ farmTest("[boundary] the installed package's syntheticBaseMap export writes a ba
     const install = Bun.spawnSync([process.execPath, "install", "--offline", "--ignore-scripts", "--silent"], { cwd: fixture, stdout: "pipe", stderr: "pipe" });
     expect({ code: install.exitCode, stderr: install.stderr.toString().replace(/bun install[^\n]*\n|Saved lockfile\n/g, "") }).toEqual({ code: 0, stderr: "" });
     const script = Bun.resolveSync("wisp/scripts/wisp/syntheticBaseMap", fixture);
-    expect(script).toBe(join(fixture, "node_modules/wisp/host/toolchain/syntheticBaseMap.ts"));
+    expect(script).toBe(join(fixture, "node_modules/wisp/host/compile/syntheticBaseMap.ts"));
     const packager = join(root, "build/tools/map-pack");
     await Effect.runPromise(ensurePackager(packager));
     const base = join(out, "base.w3x");

@@ -151,7 +151,7 @@ make or nix removed from `PATH`, as on a map maker's machine: the type check,
 the Lua32 runner, the sample's tests (`bun run test examples/sample`), its
 32-bit Lua tests, its headless journey (`wisp headless`), the map build tests,
 and a real `sample.ts map build` from a synthetic base map
-(wisp:host/toolchain/syntheticBaseMap.ts, written by map-pack's `create`). The map build test that
+(wisp:host/compile/syntheticBaseMap.ts, written by map-pack's `create`). The map build test that
 interrupts a step is left out there: its stand-in child is `sh -c 'echo $$'`,
 whose pid is Git Bash's, not the Windows process `process.kill` checks, so it
 still needs a Windows-native stand-in. It is a separate workflow from CI, so a Windows failure

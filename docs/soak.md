@@ -28,7 +28,7 @@ export default defineSoak({
   name: "mygame",
   map: MY_HEADLESS_MAP,
   // Loaded only by the worker processes: the map entry and how a match is set up.
-  game: join(import.meta.dir, "../test/soak/game.ts"),
+  game: join(import.meta.dir, "../host/soak/ci/game.ts"),
   scene: MY_SCENE,
   roster: { fighters: ["knight", "archer"], stages: ["field"], policies: [["fuzz", "cpu"], ["cpu", "cpu"]] },
   controller: { buttons: ["jump", "attack"], axes: ["x"], axisLimit: 127, deadZone: 30 },

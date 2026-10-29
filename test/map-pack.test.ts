@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import { generateMDX, parseMDL, parseMDX } from "../vendor/war3-model.mjs";
 import { ensurePackager } from "../host/compile/mapBuild";
 import { decodeMapInfo, encodeMapInfo } from "../host/toolchain/mapInfo";
-import { syntheticBaseMap, syntheticMapInfo } from "../host/toolchain/syntheticBaseMap";
+import { syntheticBaseMap, syntheticMapInfo } from "../host/compile/syntheticBaseMap";
 
 const build = join(import.meta.dir, "../build");
 mkdirSync(build, { recursive: true });

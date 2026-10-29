@@ -155,7 +155,7 @@ bun node_modules/wisp/host/compile/ciMapBuild.ts --store ~/maps --name mygame --
 A game's public CI has no World Editor map, yet can still check that its
 `.w3x` builds from a clean clone. The installed package exports
 `wisp/scripts/wisp/syntheticBaseMap`
-(wisp:host/toolchain/syntheticBaseMap.ts), which writes a minimal base map: a
+(wisp:host/compile/syntheticBaseMap.ts), which writes a minimal base map: a
 `war3map.lua` with empty `main` and `config`, and a `war3map.w3i` with no
 players, forces or bounds. It is the base for consumer CI map builds only,
 not for play: a map built on it has no terrain, players or start locations.
@@ -166,7 +166,7 @@ The last line checks that the built script starts the game's entry global,
 `wispTs` unless the game names another:
 
 ```sh
-bun node_modules/wisp/host/toolchain/syntheticBaseMap.ts build/tools/map-pack "$RUNNER_TEMP/base.w3x"
+bun node_modules/wisp/host/compile/syntheticBaseMap.ts build/tools/map-pack "$RUNNER_TEMP/base.w3x"
 bun scripts/game.ts map build --base "$RUNNER_TEMP/base.w3x" --out "$RUNNER_TEMP/game.w3x"
 build/tools/map-pack extract "$RUNNER_TEMP/game.w3x" "$RUNNER_TEMP/war3map.lua" && grep -q 'wispTs.start' "$RUNNER_TEMP/war3map.lua"
 ```

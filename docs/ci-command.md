@@ -79,7 +79,7 @@ same soak ([repros](repro.md#shrinking-a-soak-failure)).
 
 Wisp declares its own in wisp:host/commands/repo.ts: its `bun run check`, its
 test files, and the soak test's map with fault-free policies
-(wisp:test/soak/ci-project.ts), with `repro` beside it. That soak imports
+(wisp:host/soak/ci/ciProject.ts), with `repro` beside it. That soak imports
 everything it plays, so it declares no `reads`. `bun run ci` is
 `ci post-merge`.
 

@@ -12,8 +12,8 @@ import type { SoakMatch } from "../host/soak/types";
 import { readSoakRepro, soakRepro } from "../host/soak/file";
 import { MEASURED_BATTLE_NET, syncDelivery } from "../src/headless/syncChannel";
 import { timingsLayer } from "../host/cli/timings";
-import game from "./soak/game";
-import project from "./soak/project";
+import game from "../host/soak/ci/game";
+import project from "../host/soak/ci/project";
 import { farmTest } from "../host/farm/farmTest";
 
 const runtime = installHeadless(project.map);
@@ -144,7 +144,7 @@ test("[invariant] a real-time run through input helpers, recorded with helperRec
 farmTest("[spec #16] the command plays matches in worker processes and keeps a repro file for each finding", async () => {
   const out = mkdtempSync(join(tmpdir(), "wisp-soak-"));
   const lines: string[] = [];
-  const soak = makeSoak({ project: join(import.meta.dir, "soak/project.ts"), out });
+  const soak = makeSoak({ project: join(import.meta.dir, "../host/soak/ci/project.ts"), out });
   const run = (args: readonly string[]) => Effect.runPromiseExit(soak(args).pipe(Effect.provide(Layer.merge(timingsLayer(() => undefined), platformLayer())), Effect.provideService(Console.Console, {
     ...console, log: (...text: unknown[]) => lines.push(text.join(" ")),
   })));

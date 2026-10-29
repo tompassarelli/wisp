@@ -16,7 +16,7 @@ A module may import only the modules in its "may use" column. `src/` never impor
 | headless | `src/headless/` | Emulated Warcraft client: natives, lockstep, sync channel, journeys, Lua perf | map, runtime, num, natives |
 | cli | `host/cli/` | Command type, CLI runner, timings, process spawning, JSON results, panel server | none |
 | os | `host/os/` (`platform/`, `warcraft/`) | Host OS, desktop, Battle.net launcher, Warcraft window and input | cli |
-| build | `host/toolchain/` | TSTL compile, Lua bundle, map script, object data, natives producer, number rules, source maps, package | cli, runtime, num |
+| build | `host/toolchain/` | TSTL compile, Lua bundle, map script, object data, natives producer, number rules, source maps, package | cli, runtime, num, plugins |
 | lan, net | `host/lan/`, `host/net/` | Offline LAN pair pool; UDP lockstep peer, proxy, join code | cli, os; cli, headless |
 | render | `host/{browser,fidelity,render,models,terrain}/` | WebGL renderer, models, terrain, fidelity metrics | cli, os, headless, runtime, num |
 | host | the other `host/` directories, one per responsibility: `accept`, `checks`, `client`, `compile`, `dev`, `doctor`, `farm`, `headless`, `io`, `perf`, `play`, `repro`, `scene`, `soak`, `testing`, `tune` | Feature services: play, doctor, menus, accept, soak, farm, map build, dev loop, test runner, repository checks | everything above |

@@ -73,7 +73,7 @@ may_use = ["cli"]
 name = "build"
 paths = ["host/toolchain/**"]
 responsibility = "TSTL compile, Lua bundle, map info and script, object data, natives producer, number rules, source maps, packaging."
-may_use = ["cli", "runtime", "num"]
+may_use = ["cli", "runtime", "num", "plugins"]
 
 [[module]]
 name = "lan"

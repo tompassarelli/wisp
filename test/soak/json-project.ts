@@ -1,4 +1,4 @@
-import project from "./project";
+import project from "../../host/soak/ci/project";
 
 export default {
   ...project,

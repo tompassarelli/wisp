@@ -7,14 +7,14 @@ import { ChildProcess } from "effect/process";
 import type { HeadlessClient } from "../../src/headless/client";
 import type { LockstepLink } from "../../src/headless/lockstep";
 import { spawnLogged } from "../cli/hostProcess";
-import { requireGpuLease } from "./gpuLease";
+import { requireGpuLease } from "../render/gpuLease";
 import { joinCode, joinTarget, CODE_HASH_DIGITS } from "../net/joinCode";
 import { type NetSession, NetFailure, runNetPeer } from "../net/peer";
-import { captureScene, sceneWithUnits, RenderFailure, type HeadlessRenderProject } from "./headlessRender";
-import { createSoundResolver } from "./standaloneSound";
-import type { StandaloneFrame, StandaloneInput } from "./standaloneFrames";
+import { captureScene, sceneWithUnits, RenderFailure, type HeadlessRenderProject } from "../render/headlessRender";
+import { createSoundResolver } from "../render/standaloneSound";
+import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
 
-export type { StandaloneFrame, StandaloneInput } from "./standaloneFrames";
+export type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
 
 export interface StandaloneSession {
   readonly client: HeadlessClient;

@@ -41,7 +41,7 @@ test("[boundary] ci pre-merge runs the type check, only the tests the diff since
   write("src/b.ts", "export const b = 1;\n");
   write("notes.md", "notes\n");
   // The soak imports a but not b or the notes: Wisp's own soak project, reached from inside the root through a.
-  write("soak/project.ts", `import "../src/a";\nexport { default } from ${JSON.stringify(join(import.meta.dir, "soak/ci-project.ts"))};\n`);
+  write("soak/project.ts", `import "../src/a";\nexport { default } from ${JSON.stringify(join(import.meta.dir, "../host/soak/ci/ciProject.ts"))};\n`);
   write("test/a.test.ts", 'import { expect, test } from "bun:test";\nimport { a } from "../src/a";\ntest("a", () => expect(a).toBe(1));\n');
   // b's test fails whenever it runs, and leaves a mark: pre-merge must leave it out until b changes, and --plan-only always.
   write("test/b.test.ts", 'import { appendFileSync } from "node:fs";\nimport { expect, test } from "bun:test";\nimport { b } from "../src/b";\ntest("b", () => { appendFileSync("b-ran", ""); expect(b).toBe(2); });\n');

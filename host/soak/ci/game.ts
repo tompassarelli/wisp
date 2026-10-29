@@ -1,5 +1,5 @@
-import { defineSoakGame } from "../../host/soak/soak";
-import { reproLines } from "../../src/runtime/repro";
+import { defineSoakGame } from "../soak";
+import { reproLines } from "../../../src/runtime/repro";
 import { LAST_TICK, install, start, state } from "./map";
 
 export default defineSoakGame({

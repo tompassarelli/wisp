@@ -2,8 +2,8 @@ import { join } from "node:path";
 import { runMainCli } from "../cli/cli";
 
 const root = join(import.meta.dir, "../..");
-/** Wisp's own soak for `ci`: the soak test's map with fault-free policies (wisp:test/soak/ci-project.ts). */
-const soak = { project: join(root, "test/soak/ci-project.ts"), out: join(root, "build/soak") };
+/** Wisp's own soak for `ci`: the soak test's map with fault-free policies (wisp:host/soak/ci/ciProject.ts). */
+const soak = { project: join(root, "host/soak/ci/ciProject.ts"), out: join(root, "build/soak") };
 
 runMainCli("bun wisp", {
   native: { usage: "remote --host HOST --project DIR --map FILE --pads DIR --clients-file FILE --run RUN [--dry-run] -- WISP_ARGS", load: async () => (await import("./nativeRemote")).nativeRemote },
@@ -22,7 +22,7 @@ runMainCli("bun wisp", {
   repro: {
     usage: "FILE [--shrink] [--test NAME]   (a ci soak repro: docs/repro.md)",
     load: async () => (await import("./repro")).makeRepro(async () => ({
-      map: (await import("../../test/soak/ci-project")).default.map,
+      map: (await import("../soak/ci/ciProject")).default.map,
       replay: join(root, "test/fixtures/repro/replay.ts"),
       tests: join(root, "test/repros"),
       soak: { project: soak.project, tests: join(root, "test/repros") },
