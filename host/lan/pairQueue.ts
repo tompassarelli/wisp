@@ -72,9 +72,10 @@ const pairsInUse = (world: QueueWorld, host: QueueHost, leases: readonly Lease[]
 const atLimit = (world: QueueWorld, host: QueueHost, leases: readonly Lease[]) =>
   host.clientLimit !== undefined && (pairsInUse(world, host, leases) + 1) * 2 > host.clientLimit;
 
-/** The first slot, in host preference order, that no lease and no outside holder has. */
+/** The first slot that no lease and no outside holder has, on the available host with the fewest pairs in use (listed order breaks ties). */
 export const nextFree = (world: QueueWorld, leases: readonly Lease[]): Slot | undefined => {
-  for (const host of world.hosts) {
+  const byUse = [...world.hosts].sort((left, right) => pairsInUse(world, left, leases) - pairsInUse(world, right, leases));
+  for (const host of byUse) {
     if (!host.available || atLimit(world, host, leases)) continue;
     for (const pair of [...host.pairs].sort((left, right) => left - right)) {
       const slot = { host: host.name, pair };

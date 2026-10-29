@@ -33,16 +33,27 @@ const clientLimit = (command: readonly string[]) => Effect.promise(async () => {
   return await run.exited === 0 && Number.isInteger(limit) ? limit : undefined;
 }).pipe(Effect.orElseSucceed(() => undefined));
 
+export const BUSY_PAIRS_SCRIPT = "state=\"${XDG_STATE_HOME:-$HOME/.local/state}/wisp/lan\"; me=$(hostname)\nlive() { kill -0 \"$1\" 2>/dev/null; }\nnum() { sed -n \"s/.*\\\"$1\\\": *\\([0-9]*\\).*/\\1/p\" \"$2\"; }\nfor f in \"$state\"/queue/leases/\"$me\"-*.json; do [ -f \"$f\" ] || continue; live \"$(num pid \"$f\")\" && echo \"$(num pair \"$f\")\"; done\nfor f in \"$state\"/pair-*/claim.json; do [ -f \"$f\" ] || continue; pair=$(basename \"$(dirname \"$f\")\"); live \"$(num pid \"$f\")\" && echo \"${pair#pair-}\"; done\ntrue";
+
+export const parseBusy = (output: string): ReadonlySet<number> => new Set(output.split("\n").map((line) => Number.parseInt(line, 10)).filter(Number.isInteger));
+
+const busyPairs = (name: string) => Effect.promise(async () => {
+  const run = Bun.spawn(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "--", name, BUSY_PAIRS_SCRIPT], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+  const output = await new Response(run.stdout).text();
+  return await run.exited === 0 ? parseBusy(output) : undefined;
+}).pipe(Effect.orElseSucceed(() => undefined));
+
 const world = (any: boolean) => Effect.gen(function*() {
   const local: QueueHost = { name: hostname(), pairs: provisionedPairs(), available: true, clientLimit: yield* clientLimit(["north", "capacity", "warcraft-limit"]) };
-  const remote = any ? yield* Effect.forEach([...remoteHosts()], ([name, pairs]) => Effect.all([laptopAvailable(), clientLimit(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "--", name, "north capacity warcraft-limit"])]).pipe(Effect.map(([available, limit]): QueueHost => ({ name, pairs, available, clientLimit: limit })))) : [];
+  const remote = any ? yield* Effect.forEach([...remoteHosts()], ([name, pairs]) => Effect.all([laptopAvailable(), clientLimit(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "--", name, "north capacity warcraft-limit"])]).pipe(Effect.flatMap(([available, limit]) => busyPairs(name).pipe(Effect.map((busy) => ({ busy, host: { name, pairs, available: available && busy !== undefined, clientLimit: limit } satisfies QueueHost })))))) : [];
+  const busyThere = new Map(remote.map(({ busy, host }) => [host.name, busy ?? new Set<number>()]));
   return {
     directory: join(stateRoot(), "queue"),
-    hosts: [local, ...remote],
+    hosts: [local, ...remote.map(({ host }) => host)],
     alive,
     held: ({ host, pair }) => {
       const holder = poolHolder(pair);
-      return host === local.name && holder !== undefined && alive(holder);
+      return host === local.name ? holder !== undefined && alive(holder) : busyThere.get(host)?.has(pair) === true;
     },
   } satisfies QueueWorld;
 });
