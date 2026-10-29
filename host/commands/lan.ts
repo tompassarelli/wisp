@@ -10,13 +10,14 @@ import { LEASE_USAGE, lease, releaseLocalLeases } from "./lanQueue";
 import { type Command, UsageFailure, describeCause, flagValues, portFlag, wholeFlag } from "../cli/command";
 import { CLEAR, type Impairment, clearedAlready, impairCommands, impairmentSummary } from "../lan/netem";
 import { LanFailure } from "../lan/join";
-import { markOf } from "../lan/claim";
+import { markOf, orphaned } from "../lan/claim";
 import { type Custodian, holdPair, sessionEnded, sessionProcess } from "../lan/custody";
 import { lanPluginProblem } from "../lan/plugin";
+import { recordFailure, recordPassed } from "../lan/pairHealth";
 import { RELEASE_AFTER_SECONDS, poolEnds } from "../lan/poolRelease";
 import { ensurePackager } from "../compile/mapBuild";
 import {
-  PAIR_SIDES, agentFile, agentPidFile, agentSocket, alive, clientName, lanPlayRefusal, mapPackager, networkFlagProblem, pairClients, pairSides, pairDirectory, pairEntryFile, pairsHeldBy, livePairs, poolClientsFile, poolFile, poolHolder, poolOwners, playtestPairRefusal, readPool, reportPort, stopAgent, stopPairScopes, writeJson, writePoolClients, wrongUser,
+  PAIR_SIDES, agentFile, agentPidFile, agentSocket, alive, clientName, lanPlayRefusal, mapPackager, networkFlagProblem, pairClients, pairSides, pairDirectory, pairEntryFile, pairsHeldBy, readClaim, livePairs, poolClientsFile, poolFile, poolHolder, poolOwners, playtestPairRefusal, readPool, reportPort, stopAgent, stopPairScopes, writeJson, writePoolClients, wrongUser,
 } from "../lan/pool";
 import { PROFILES, desktopSize } from "../os/warcraft/clientProfiles";
 import { DEFAULT_BUILD, profileFor } from "../os/warcraft/builds";
@@ -110,6 +111,9 @@ const outlivedStop = (name: string, lease: string) => Console.log(`${name} outli
 
 const RESERVED = /"decision":"RESERVED"/;
 
+/** Fails a pair start with `problem`, counted against the pair's health since it is the pair's own fault rather than the host's capacity. */
+const pairFault = (pair: number, problem: string) => Effect.sync(() => recordFailure(pair, problem)).pipe(Effect.andThen(Effect.fail(new LanFailure({ problem }))));
+
 const DECISION_GRACE_SECONDS = 60;
 
 const startPair = (pair: number, custody: { readonly custodian: Custodian; readonly queued: boolean }, profile: string, launcher: string, capacity: string, waitSeconds: number, network: boolean, fps?: number) => {
@@ -136,7 +140,7 @@ const startPair = (pair: number, custody: { readonly custodian: Custodian; reado
         if (yield* session.handle.isRunning.pipe(Effect.orElseSucceed(() => false))) return;
         const code = yield* session.handle.exitCode.pipe(Effect.map(Number), Effect.orElseSucceed(() => -1));
         yield* session.written.pipe(Effect.timeoutOption("1 second"));
-        if (!deferredExit(code)) return yield* new LanFailure({ problem: `its session exited with ${code}; see ${sessionErr} and desktop-*.err` });
+        if (!deferredExit(code)) return yield* pairFault(pair, `its session exited with ${code}; see ${sessionErr} and desktop-*.err`);
         return yield* new LanFailure({ problem: unadmitted(readFileSync(sessionErr, "utf8"), waitSeconds) });
       });
 
@@ -163,7 +167,7 @@ const startPair = (pair: number, custody: { readonly custodian: Custodian; reado
       });
       yield* pollUntil(step, {
         until: (ready) => ready, every: "1 second", within: READY,
-        onTimeout: () => Effect.fail(new LanFailure({ problem: `its clients weren't both running within ${READY} of its admission; see ${directory}` })),
+        onTimeout: () => pairFault(pair, `its clients weren't both running within ${READY} of its admission; see ${directory}`),
       });
       return { ...session.handle, stop: Scope.close(scope, Exit.void) };
     }).pipe(Scope.provide(scope), Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))));
@@ -326,8 +330,9 @@ const stop: Command = (args) => Effect.gen(function*() {
   const pair = yield* number(args, "pair", undefined);
   const holder = poolHolder(pair);
   if (holder === undefined || !alive(holder)) return yield* new LanFailure({ problem: `pair ${pair} has no running pool` });
+  const claim = readClaim(pair);
   const shared = pairsHeldBy(holder).filter((id) => id !== pair);
-  if (shared.length > 0) return yield* new LanFailure({ problem: `pair ${pair}'s pool ${holder} also runs pair${shared.length === 1 ? "" : "s"} ${shared.join(", ")}; stop that pool itself to stop them together` });
+  if (shared.length > 0 && !(claim !== undefined && orphaned(claim))) return yield* new LanFailure({ problem: `pair ${pair}'s pool ${holder} also runs pair${shared.length === 1 ? "" : "s"} ${shared.join(", ")}; stop that pool itself to stop them together` });
   yield* Effect.try({ try: () => process.kill(holder, "SIGTERM"), catch: (cause) => new LanFailure({ problem: `signal pool ${holder}: ${describeCause(cause)}` }) });
   const gone = yield* pollUntil(Effect.sync(() => !alive(holder)), { until: (ended) => ended, every: "250 millis", within: POOL_STOP, onTimeout: () => Effect.succeed(false) });
   if (!gone) return yield* new LanFailure({ problem: `pair ${pair}'s pool ${holder} still runs ${POOL_STOP} after SIGTERM` });
@@ -337,6 +342,19 @@ const stop: Command = (args) => Effect.gen(function*() {
   if (left.length > 0) return yield* new LanFailure({ problem: `pair ${pair}'s pool ${holder} stopped, but the capacity scope of ${left.join(" and ")} still runs` });
   yield* Console.log(`pair ${pair}: pool ${holder} stopped; none of its games run`);
 });
+
+/** The health check that returns a pair to the lease queue: starts it in line behind other pools and passes once both its fresh clients run. */
+const check: Command = (args) => custodianOf(args).pipe(Effect.flatMap((custodian) => Effect.gen(function*() {
+  const missing = lanPluginProblem();
+  if (missing !== undefined) return yield* new LanFailure({ problem: missing });
+  const pair = yield* number(args, "pair", undefined);
+  const [profile = "parity"] = flagValues(args, "pool-profile");
+  if (PROFILES[profile] === undefined) return yield* new UsageFailure({ problem: `--pool-profile takes ${Object.keys(PROFILES).join(" or ")}` });
+  const started = yield* startPair(pair, { custodian, queued: true }, profile, yield* desktopLauncher(args), yield* capacityHelper(args), yield* number(args, "wait", 1800), false);
+  recordPassed(pair);
+  yield* started.stop;
+  yield* Console.log(`pair ${pair}: both clients ran; healthy, and the lease queue offers it again`);
+}).pipe(Effect.scoped, Effect.provide(BunServices.layer))));
 
 const end: Command = (args) => Effect.gen(function*() {
   const pair = yield* number(args, "pair", undefined);
@@ -431,7 +449,7 @@ const netem: Command = (args) => Effect.gen(function*() {
   }
 });
 
-export const LAN_USAGE = `setup --from INSTALL [--build BUILD] [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] [--queue] [--owner NAME] [--owner-pid PID] [--release-idle SECONDS] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | relayed MAP --relay-bin DIR [--pair K] [--turn-ms MS] [--raise-headroom-ms MS] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--udp-port N | --tcp-port N] | netem off --pair K | status [--pair K] | end --pair K | stop --pair K | ${LEASE_USAGE}`;
+export const LAN_USAGE = `setup --from INSTALL [--build BUILD] [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] [--queue] [--owner NAME] [--owner-pid PID] [--release-idle SECONDS] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | relayed MAP --relay-bin DIR [--pair K] [--turn-ms MS] [--raise-headroom-ms MS] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--udp-port N | --tcp-port N] | netem off --pair K | status [--pair K] | end --pair K | stop --pair K | check --pair K [--pool-profile parity|visual|hfr] [--wait SECONDS] | ${LEASE_USAGE}`;
 
 const ownerCheck = poolOwners.pipe(Effect.flatMap((owners) => {
   const refusal = wrongUser(process.getuid?.() ?? 0, owners, ["bun", ...process.argv.slice(1)]);
@@ -452,6 +470,7 @@ const subcommands: Readonly<Record<string, Command>> = {
   netem: netem,
   end: end,
   stop: stop,
+  check: check,
   lease: lease,
 };
 

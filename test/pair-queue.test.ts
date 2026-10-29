@@ -3,7 +3,10 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { PEER_STATE_SCRIPT, parseIdle, parsePeerState, poolablePairs } from "../host/commands/lanQueue";
+import { PEER_STATE_SCRIPT, localHolder, parseIdle, parsePeerState, poolablePairs } from "../host/commands/lanQueue";
+import { markOf } from "../host/lan/claim";
+import { readHealth, recordFailure, recordPassed } from "../host/lan/pairHealth";
+import { claimFile, writeJson } from "../host/lan/pool";
 import { type QueueWorld, expireIdle, nextFree, queueStatus, releasePair, takePair } from "../host/lan/pairQueue";
 
 const world = (overrides: Partial<QueueWorld> = {}): QueueWorld => ({
@@ -126,7 +129,50 @@ test("[scenario] a request blocked behind an idle lease takes its pair once the 
   expect(await take(state, "capture-next", 202)).toEqual({ host: "gex45", pair: 7 });
 });
 
-test("[scenario] the peer's pair states parse into idle seconds, infinity for a pair with no agent and zero for one playing", () => {
-  const parsed = parseIdle(`7\t{"state":"idle","idleSeconds":412}\n8\t{"state":"busy","idleSeconds":0}\n9\tnone\n10\tnot json\n`);
-  expect([...parsed]).toEqual([[7, 412], [8, 0], [9, Number.POSITIVE_INFINITY]]);
+test("[scenario] the peer's pair states parse into idle seconds, infinity for a pair with no agent, zero for one its driver holds, and the undriven seconds of a dead pair", () => {
+  const parsed = parseIdle(`7\t{"state":"idle","idleSeconds":412}\n8\t{"state":"busy","idleSeconds":0}\n9\tnone\n10\tnot json\n11\t{"state":"dead","idleSeconds":700,"down":["lan11b"]}\n`);
+  expect([...parsed]).toEqual([[7, 412], [8, 0], [9, Number.POSITIVE_INFINITY], [11, 700]]);
+});
+
+const inStateHome = async (body: () => Promise<void>) => {
+  const previous = process.env["XDG_STATE_HOME"];
+  process.env["XDG_STATE_HOME"] = mkdtempSync(join(tmpdir(), "wisp-pair-state-"));
+  try {
+    await body();
+  } finally {
+    if (previous === undefined) delete process.env["XDG_STATE_HOME"];
+    else process.env["XDG_STATE_HOME"] = previous;
+  }
+};
+
+test("[scenario] a pair whose pool failed twice in a row to start is listed unhealthy and skipped by lease take until its health check passes", () => inStateHome(async () => {
+  const state = world({ hosts: [{ name: "gex45", pairs: [7, 15], available: true }], health: ({ pair }) => readHealth(pair) });
+  recordFailure(7, "lan7a never reached character selection");
+  expect(nextFree(state, [])).toEqual({ host: "gex45", pair: 7 });
+  recordFailure(7, "lan7a isn't running");
+  expect(await take(state, "capture-a", 101)).toEqual({ host: "gex45", pair: 15 });
+  await expect(take(state, "capture-b", 102, 1)).rejects.toThrow("no free pair within 1 s");
+  expect(queueStatus(state).health).toEqual([
+    { host: "gex45", pair: 7, healthy: false, failures: 2, problem: "lan7a isn't running" },
+    { host: "gex45", pair: 15, healthy: true, failures: 0 },
+  ]);
+  recordPassed(7);
+  expect(await take(state, "capture-b", 102)).toEqual({ host: "gex45", pair: 7 });
+}));
+
+test("[scenario] a live pool whose custodian session has exited holds its pair for nobody, so the queue offers the pair", () => inStateHome(async () => {
+  const custodian = Bun.spawn(["sleep", "30"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+  writeJson(claimFile(7), { pair: 7, owner: "tyrande-portraits", session: "tyrande-portraits", ...markOf(process.pid), agent: markOf(custodian.pid) });
+  expect(localHolder(7)).toBe("tyrande-portraits");
+  custodian.kill();
+  await custodian.exited;
+  expect(localHolder(7)).toBeUndefined();
+}));
+
+test("[scenario] the peer reports each recorded pair's start failures", async () => {
+  const root = mkdtempSync(join(tmpdir(), "wisp-peer-health-"));
+  mkdirSync(join(root, "wisp/lan/pair-4"), { recursive: true });
+  writeFileSync(join(root, "wisp/lan/pair-4/health.json"), JSON.stringify({ failures: 2, problem: "lan4b isn't running", at: "" }, null, 2));
+  const peer = parsePeerState(await Bun.$`sh -c ${PEER_STATE_SCRIPT}`.env({ ...process.env, XDG_STATE_HOME: root, XDG_DATA_HOME: join(root, "data") }).text());
+  expect([...peer.failures]).toEqual([[4, 2]]);
 });

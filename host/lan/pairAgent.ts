@@ -17,6 +17,7 @@ import { relayedStatus } from "./relayedStatus";
 import { ALARM_AFTER_MS, agentPidFile, confirmToplevel, type Driver, MENUS_DEADLINE, TOPLEVEL_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, alive, launchUntilShown, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, agentSocket, clientLease, clientLog, stopClientScope, audioSinkOf, clientName, clientRoot, clientRun, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
 import { preferences, windowSize } from "../os/warcraft/clientProfiles";
 import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
+import { recordFailure, recordPassed } from "./pairHealth";
 import { DesktopFailure, ToplevelMissing } from "../os/warcraft/desktopClient";
 
 const argument = (name: string) => flagValues(process.argv, name)[0];
@@ -335,6 +336,11 @@ const agent = Effect.gen(function*() {
     }), { concurrency: "unbounded" });
   }));
 
+  const judged = <A, E, R>(start: Effect.Effect<A, E, R>) => Effect.exit(start).pipe(Effect.tap((exit) => Effect.sync(() => {
+    if (Exit.isSuccess(exit)) recordPassed(pair);
+    else if (!Cause.hasInterruptsOnly(exit.cause)) recordFailure(pair, String(Cause.squash(exit.cause)));
+  })));
+
   const run = yield* FiberSet.makeRuntimePromise<ChildProcessSpawner.ChildProcessSpawner>();
   const decode = <A>(schema: Schema.Decoder<A>, request: Request) =>
     Effect.tryPromise({ try: () => request.text(), catch: (cause) => new LanFailure({ problem: String(cause) }) }).pipe(
@@ -365,7 +371,7 @@ const agent = Effect.gen(function*() {
       const body = yield* decode(FreshRequest, request);
       if (!existsSync(body.map)) return Response.json({ error: `no map at ${body.map}` }, { status: 400 });
       yield* drive(body.driver);
-      const exit = yield* Effect.exit(fresh(body.map, body.turnSteps, body.computers));
+      const exit = yield* judged(fresh(body.map, body.turnSteps, body.computers));
       if (Exit.isSuccess(exit)) return Response.json(exit.value);
       say(`fresh failed: ${String(exit.cause)}`);
       return Response.json({ error: String(exit.cause) }, { status: 500 });
@@ -377,7 +383,7 @@ const agent = Effect.gen(function*() {
       const missing = [body.map, body.relay, body.agent].find((path) => !existsSync(path));
       if (missing !== undefined) return Response.json({ error: `no file at ${missing}` }, { status: 400 });
       yield* drive(body.driver);
-      const exit = yield* Effect.exit(relayedMatch(body.map, body.relay, body.agent, body.turnMs, body.raiseHeadroomMs));
+      const exit = yield* judged(relayedMatch(body.map, body.relay, body.agent, body.turnMs, body.raiseHeadroomMs));
       if (Exit.isSuccess(exit)) return Response.json(exit.value);
       say(`relayed failed: ${String(exit.cause)}`);
       return Response.json({ error: String(exit.cause) }, { status: 500 });
@@ -386,7 +392,7 @@ const agent = Effect.gen(function*() {
       const body = yield* decode(SoloRequest, request);
       if (!existsSync(body.map)) return Response.json({ error: `no map at ${body.map}` }, { status: 400 });
       yield* drive(body.driver);
-      const exit = yield* Effect.exit(solo(body.map));
+      const exit = yield* judged(solo(body.map));
       if (Exit.isSuccess(exit)) return Response.json({ clients: exit.value });
       say(`solo failed: ${String(exit.cause)}`);
       return Response.json({ error: String(exit.cause) }, { status: 500 });

@@ -54,3 +54,6 @@ export const readClaimAt = (file: string): PairClaim | undefined => {
 };
 
 export const claimHolder = (claim: PairClaim) => `wisp lan pool ${claim.pid}${claim.session === "" ? "" : ` (fleet session ${claim.session})`}`;
+
+/** Whether the claim's pool outlived its custodian: the fleet session process (or `--owner-pid`) that started it has exited, so nobody may need the pair any more. */
+export const orphaned = (claim: PairClaim) => claim.agent !== undefined && !running(claim.agent);

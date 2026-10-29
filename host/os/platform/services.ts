@@ -109,7 +109,7 @@ export class AudioIsolation extends Context.Service<AudioIsolation, {
 }>()("wisp/platform/AudioIsolation") {}
 
 export class CapacityAdmission extends Context.Service<CapacityAdmission, {
-  readonly session: (helper: string, owner: string, memoryGib?: number) => Effect.Effect<readonly string[], PlatformUnsupported>;
+  readonly session: (helper: string, owner: string, memoryGib?: number, waitSeconds?: number) => Effect.Effect<readonly string[], PlatformUnsupported>;
   readonly signalLease: (lease: string, signal: "SIGTERM" | "SIGKILL") => Effect.Effect<void, PlatformError>;
   readonly leaseLive: (lease: string) => Effect.Effect<boolean, PlatformError>;
 }>()("wisp/platform/CapacityAdmission") {}

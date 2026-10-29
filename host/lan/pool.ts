@@ -325,13 +325,13 @@ export function driverVerdict(driver: Driver | undefined, now: number): { readon
   return { idle: `idle since ${driver.goneAt}, driver gone`, alarm: now - Date.parse(driver.goneAt) >= ALARM_AFTER_MS };
 }
 
-/** Whether a pair is dead (a client in `down` has no game process), busy (a live driver or a game in progress, `playing`) or idle at `now`, and since when it has been idle: the latest of the agent's start `started`, its last `wisp lan end` `ended` and its driver's `goneAt`. */
-export function idleness(started: string, ended: string | undefined, driver: Driver | undefined, playing: boolean, down: readonly string[], now: number): { readonly state: "dead" | "busy" | "idle"; readonly idleSince: string; readonly idleSeconds: number; readonly down?: readonly string[] } {
+/** Whether a pair is dead (a client in `down` has no game process), busy (a live driver) or idle at `now`, and for how long nobody has driven it: since the latest of the agent's start `started`, its last `wisp lan end` `ended` and its driver's `goneAt`. A game still `playing` after its driver is gone, or a dead pair nobody drives, counts as idle, so its pool lets go of it. */
+export function idleness(started: string, ended: string | undefined, driver: Driver | undefined, playing: boolean, down: readonly string[], now: number): { readonly state: "dead" | "busy" | "idle"; readonly idleSince: string; readonly idleSeconds: number; readonly playing?: true; readonly down?: readonly string[] } {
   const since = Math.max(Date.parse(started), ended === undefined ? -Infinity : Date.parse(ended), driver?.goneAt === undefined ? -Infinity : Date.parse(driver.goneAt));
   const idleSince = new Date(since).toISOString();
-  if (down.length > 0) return { state: "dead", idleSince, idleSeconds: 0, down };
-  const busy = playing || (driver !== undefined && driver.goneAt === undefined);
-  return { state: busy ? "busy" : "idle", idleSince, idleSeconds: busy ? 0 : Math.max(0, Math.floor((now - since) / 1000)) };
+  const driven = driver !== undefined && driver.goneAt === undefined;
+  const idleSeconds = driven ? 0 : Math.max(0, Math.floor((now - since) / 1000));
+  return { state: down.length > 0 ? "dead" : driven ? "busy" : "idle", idleSince, idleSeconds, ...(playing ? { playing: true as const } : {}), ...(down.length > 0 ? { down } : {}) };
 }
 
 export function crashSince(documents: string, since: number): string | undefined {

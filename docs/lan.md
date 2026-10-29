@@ -341,7 +341,8 @@ Tom's `system.reg`, `user.reg`, `Warcraft III/.build.info` and Battle.net
 | `wisp lan speed N --pair K` | Diagnostic turn delivery at 1–16 times real time; 1 restores normal delivery. Measure client frame progress to establish actual game speed. |
 | `wisp lan netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--udp-port N \| --tcp-port N]`, `wisp lan netem off --pair K` | Adds round-trip delay, jitter and independent or bursty packet loss to pair K's loopback, or to UDP or TCP on one port of it, or removes it, and prints the loopback's queueing disciplines and filters. See "Simulated latency and loss". |
 | `wisp lan end --pair K` | Ends pair K's game. The clients go back to their menus. |
-| `wisp lan stop --pair K` | Stops the pool holding pair K (`pair-K/claim.json`), from any session, with SIGTERM, waits up to 90 s for it to exit, then stops each client's last capacity scope by its exact name and fails if one still runs. It refuses a pool that also holds other pairs. |
+| `wisp lan stop --pair K` | Stops the pool holding pair K (`pair-K/claim.json`), from any session, with SIGTERM, waits up to 90 s for it to exit, then stops each client's last capacity scope by its exact name and fails if one still runs. It refuses a pool that also holds other pairs, unless that pool's custodian (the claim's `agent`) has exited: such an orphaned pool is stopped whole (wisp#86). |
+| `wisp lan check --pair K [--pool-profile parity\|visual\|hfr] [--wait SECONDS]` | The pair health check: starts pair K in line behind other pools (as `--queue`), and once both its fresh clients run, clears the pair's start failures and stops it, so the lease queue offers the pair again (see "Leasing a pair"). |
 
 Pool clients are named `lan<K>a` and `lan<K>b`. The pool writes three files
 under `$XDG_STATE_HOME/wisp/lan/` (default `~/.local/state/wisp/lan/`):
@@ -400,10 +401,14 @@ Each driver raises the alarm once. The decision is `driverVerdict`
 
 Every pair's `wisp lan status` line also says whether it is idle and for how
 long: `state` is `"dead"`, with the names in `down`, while a client has no
-game process; `"busy"` while a driver is recorded and alive or its game is
-counting down, loading or playing; otherwise `"idle"`. `idleSince` is the latest of the agent's start, the last `wisp lan
+game process; `"busy"` while a driver is recorded and alive; otherwise
+`"idle"`, with `"playing": true` while a game is counting down, loading or
+playing. `idleSince` is the latest of the agent's start, the last `wisp lan
 end` and the moment the driver was found gone; `idleSeconds` is the whole
-seconds since `idleSince`, 0 while busy or dead. A pair released with `end` 17 minutes
+seconds since `idleSince`, 0 only while a live driver holds the pair. A game
+left playing by a driver that died, or a dead pair nobody drives, counts idle,
+so its pool and lease let it go instead of holding it for a session that no
+longer uses it (wisp#86). A pair released with `end` 17 minutes
 ago reads, among its other fields:
 
 ```
@@ -995,5 +1000,18 @@ the pairs `$WISP_PAIR_REMOTE` lists (`laptop=0,1`) while `north laptop status` s
 available. `lan lease status` prints the waiting count, the leases and the free
 pairs. A lease also ends when the `lan pool` running its pair lets the pair go
 because its checks ended (`--release-idle`, above), so a lane holds a pair for
-its native check or capture batch, not its whole session (wisp#83). A host that sets a Warcraft client cap in orchestration.toml (`north capacity warcraft-limit`, read over ssh for another host) is offered only while its pairs leased or held in a pool of their own come to at most half that cap. The queue lives in `~/.local/state/wisp/lan/queue` and serializes only
+its native check or capture batch, not its whole session (wisp#83). A pair
+whose pool failed twice in a row to start a game (the agent's `fresh`, `solo`
+or `relayed` failed) or to bring its clients up (its session exited, or its
+clients weren't both running within 10 minutes of admission) is unhealthy:
+`pair-K/health.json` counts the failures and keeps the last problem, `lease
+take` skips the pair, and `lease status` lists every pair under `health`
+with `healthy`, `failures` and `problem`. A capacity deferral is the host's,
+not the pair's, and counts nothing. A started game or a passing `wisp lan
+check --pair K` clears the count (wisp#86; wisp:host/lan/pairHealth.ts). A
+live pool whose custodian has exited holds its pair for nobody: the queue
+offers the pair, and the `lease take` that is granted it stops that pool. A
+pool client's own launch waits up to 480 s in the capacity helper's queue, so
+a client slot another start took between the pair's admission and the
+client's launch delays the pool instead of failing it. A host that sets a Warcraft client cap in orchestration.toml (`north capacity warcraft-limit`, read over ssh for another host) is offered only while its pairs leased or held in a pool of their own come to at most half that cap. The queue lives in `~/.local/state/wisp/lan/queue` and serializes only
 the choice of a pair; leased pairs run concurrently. A lease on a pair whose agent has measured it idle (no game playing, no live driver) for five minutes, bounded by the lease's own age, is released by the next `lease take` that finds no free pair or by `lease status`; the line naming the lease's holder goes to stderr and to `queue/released.log`. A lease on a pair with no agent counts as idle from the moment it was taken, and a pair whose state cannot be read keeps its lease.

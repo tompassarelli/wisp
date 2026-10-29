@@ -34,5 +34,8 @@ export function unadmitted(stderr: string, waitSeconds: number) {
   return `the capacity helper kept deferring it for ${waitSeconds} s (${deferred.reason}${deferred.cpuSomeAvg10 === undefined ? "" : `, CPU pressure ${deferred.cpuSomeAvg10}%`})`;
 }
 
+/** How long a pool client's launch waits in the capacity helper's queue: inside the 10 minutes its pair start gives both clients to run. */
+const CLIENT_ADMISSION_WAIT_SECONDS = 480;
+
 export const nativeCommand = (capacity: string, name: string, runtime: string) =>
-  CapacityAdmission.use((admission) => admission.session(capacity, `wisp-lan:${name}`, 1.5)).pipe(Effect.map((session) => [...session, "env", `XDG_RUNTIME_DIR=${runtime}`]));
+  CapacityAdmission.use((admission) => admission.session(capacity, `wisp-lan:${name}`, 1.5, CLIENT_ADMISSION_WAIT_SECONDS)).pipe(Effect.map((session) => [...session, "env", `XDG_RUNTIME_DIR=${runtime}`]));
