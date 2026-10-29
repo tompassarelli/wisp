@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { basename, join } from "node:path";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { Cause, Duration, Effect, Exit, Fiber, FiberSet, FileSystem, Layer, Option, Schema, Scope } from "effect";
+import { Cause, Duration, Effect, Exit, Fiber, FiberSet, FileSystem, Layer, Option, Schedule, Schema, Scope, Semaphore } from "effect";
 import { platformLayer, runPlatformSync } from "../os/platform/layer";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { AudioIsolation, CapacityAdmission, GameLauncher, InputInjection, ProcessTable } from "../os/platform/services";
@@ -172,19 +172,22 @@ const agent = Effect.gen(function*() {
   // Warcraft III crashes or stalls on its score screen when one launch plays a second game, so a client that has played is relaunched before the next solo game.
   const played = new Set<string>();
   const launchServices = yield* Effect.context<AudioIsolation | CapacityAdmission | FileSystem.FileSystem | GameLauncher | ProcessTable>();
-  const relaunch = (client: PoolClient) => Effect.gen(function*() {
+  const relaunching = yield* Semaphore.make(1);
+  const relaunch = (client: PoolClient, why: string, needed: Effect.Effect<boolean>) => relaunching.withPermits(1)(Effect.gen(function*() {
+    if (!(yield* needed)) return;
     const report = reports.get(client.name);
     if (report === undefined) return yield* new LanFailure({ problem: `no listener for ${client.name}` });
     const before = new Set(yield* report.sent);
     const page = (yield* report.address)?.guid;
-    say(`${client.name} played a game since its launch; relaunching it`);
+    say(`${client.name} ${why}; relaunching it`);
     yield* start(client).pipe(Scope.provide(agentScope), Effect.provide(launchServices));
     played.delete(client.name);
     const fresh = Effect.all([report.sent, report.address]).pipe(Effect.map(([sent, address]) => address?.guid !== page && reachedMenus(sent.filter((message) => !before.has(message)))));
     const reached = yield* pollUntil(fresh, { until: (reached) => reached, every: "1 second", within: MENUS_DEADLINE, onTimeout: () => Effect.succeed(false) });
     if (!reached) return yield* new LanFailure({ problem: `${client.name} showed no login doors within ${MENUS_DEADLINE} of its relaunch` });
     say(`${client.name} reached its login doors again`);
-  });
+  }));
+  const gone = (client: PoolClient) => gamePid(client.name).pipe(Effect.map((pid) => pid === undefined));
 
   let game: Game | undefined;
 
@@ -324,7 +327,7 @@ const agent = Effect.gen(function*() {
   const solo = (mapFile: string) => Effect.scoped(Effect.gen(function*() {
     yield* endGame;
     const started = Date.now();
-    yield* Effect.forEach(clients.filter(({ name }) => played.has(name)), relaunch, { concurrency: "unbounded", discard: true });
+    yield* Effect.forEach(clients.filter(({ name }) => played.has(name)), (client) => relaunch(client, "played a game since its launch", Effect.sync(() => played.has(client.name))), { concurrency: "unbounded", discard: true });
     yield* copyMap(mapFile);
     return yield* Effect.forEach(clients, (client) => Effect.gen(function*() {
       if ((yield* gamePid(client.name)) === undefined) return yield* new LanFailure({ problem: `${client.name} isn't running` });
@@ -423,6 +426,9 @@ const agent = Effect.gen(function*() {
   yield* Effect.addFinalizer(() => endRelayed);
   writeFileSync(join(directory, "agent.json"), `${JSON.stringify({ pid: process.pid, socket: agentSocket(pair), profile: profile.name, fps: profile.maxFps, network, runs })}\n`);
   say(`agent on ${agentSocket(pair)}`);
+  yield* Effect.forkScoped(Effect.forEach(clients, (client) => relaunch(client, "lost its game process", gone(client)).pipe(
+    Effect.catch((failure) => Effect.sync(() => say(`${client.name}: ${failure.message}`))),
+  ), { discard: true }).pipe(Effect.repeat(Schedule.spaced("5 seconds"))));
 
   const sessionPid = wholeFlag(process.argv, "session-pid", { fallback: 0 });
   if (sessionPid instanceof UsageFailure) return yield* sessionPid;
