@@ -1,10 +1,7 @@
 import { Effect } from "effect";
 import { pollFor } from "../../cli/hostProcess";
 import { type Frame, InputInjection, ScreenCapture, decodePpm } from "../platform/services";
-import { ClientWatch, describeView, typesIntoMatch } from "../../dev/watch";
 import { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, readClientsFile, runTool } from "./desktopClient";
-import { chatEntryBand, chatEntryOpen, sendCheckedChat } from "./chatEntry";
-import { sendsChat, type InputAction } from "./inputBatch";
 export { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, ToplevelMissing, readClientsFile, runTool, toplevelMissing } from "./desktopClient";
 export type { InputAction } from "./inputBatch";
 export { sendsChat } from "./inputBatch";
@@ -103,35 +100,6 @@ export const preflight = (client: Client) => InputInjection.use((input) => input
 
 export const focus = (client: Client) => InputInjection.use((input) => input.focus(client, "Warcraft III", true));
 
-const requireMatch = (client: Client, input: string) =>
-  Effect.gen(function*() {
-    const provided = yield* Effect.serviceOption(ClientWatch);
-    const view = yield* (provided._tag === "Some"
-      ? provided.value.view(client)
-      : ClientWatch.use((watch) => watch.view(client)).pipe(Effect.provide(ClientWatch.layer())));
-    if (!typesIntoMatch(view)) {
-      return yield* new DesktopFailure({
-        operation: `send ${input}`,
-        client: client.name,
-        cause: `refused outside a match its menu page reports, where it would reach Battle.net's channel or a lobby's chat; now ${describeView(view)}${view.menus === true ? "" : " (no menu page connected)"}`,
-      });
-    }
-  }).pipe(Effect.catchTag("WatchFailure", (cause) => Effect.fail(new DesktopFailure({ operation: `send ${input}`, client: client.name, cause }))));
-
-export const keys = (client: Client, ...names: string[]) =>
-  Effect.gen(function*() {
-    if (sendsChat(names)) yield* requireMatch(client, names.join(" "));
-    yield* focus(client);
-    yield* InputInjection.use((input) => input.keys(client, names));
-  });
-
-export const typeText = (client: Client, value: string, delayMillis?: number) =>
-  Effect.gen(function*() {
-    yield* requireMatch(client, "typed text");
-    yield* focus(client);
-    yield* InputInjection.use((input) => input.typeText(client, value, delayMillis));
-  });
-
 export const windowPid = (client: Client) => InputInjection.use((input) => input.windowPid(client));
 
 export const click = (client: Client, x: number, y: number) =>
@@ -143,25 +111,6 @@ export const click = (client: Client, x: number, y: number) =>
 const focusWindow = (client: Client, title: string) => InputInjection.use((input) => input.focus(client, title, false));
 
 export const pressAt = (client: Client, x: number, y: number) => InputInjection.use((input) => input.pressAt(client, x, y));
-
-export const batch = Effect.fnUntraced(function*(client: Client, actions: readonly InputAction[]) {
-  if (actions.length === 0) return;
-  if (actions.some((action) => action.kind === "text" || (action.kind === "keys" && sendsChat(action.keys)))) yield* requireMatch(client, "typed text or Return");
-  yield* focus(client);
-  yield* InputInjection.use((input) => input.batch(client, actions));
-});
-
-export const chat = Effect.fnUntraced(function*(client: Client, line: string) {
-  yield* requireMatch(client, "chat");
-  yield* focus(client);
-  const input = yield* InputInjection;
-  const band = chatEntryBand(yield* input.windowRegion(client));
-  yield* sendCheckedChat(client, {
-    open: capture(client, band.region).pipe(Effect.map((frame) => chatEntryOpen(frame, band.minRun))),
-    pressReturn: input.batch(client, [{ kind: "keys", keys: ["Return"] }]),
-    sendLine: input.batch(client, [{ kind: "text", text: line }, { kind: "keys", keys: ["Return"] }]),
-  });
-});
 
 export const waitFor = <A, E, R>(client: { readonly name: string }, what: string, seconds: number, observe: Effect.Effect<A | undefined, E, R>) =>
   pollFor(seconds, "50 millis", observe).pipe(Effect.filterOrFail(

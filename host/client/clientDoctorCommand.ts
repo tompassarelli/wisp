@@ -8,7 +8,7 @@ import { type ClientProfile, clientSettings } from "../os/warcraft/clientProfile
 import { DoctorHands, DoctorStop, type DoctorTarget, doctor, signOut } from "../doctor/doctor";
 import { privateDoctorHands } from "../doctor/doctorHost";
 import { PlayMachine } from "../play/play";
-import { type PlayTools, playMachineLayer } from "../os/platform/play";
+import { type PlayTools, playMachineLayer } from "../play/launch";
 import type { ClientWatch } from "../dev/watch";
 
 export interface DoctorDeclaration {

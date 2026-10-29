@@ -345,7 +345,7 @@ once two reads agree. Wisp no longer creates games this way: `play` and
 
 **Risk:** a game created by clicks has no password, so Battle.net lists it
 publicly. Typing outside a match is refused by Wisp's private-desktop input
-(wisp:host/os/warcraft/desktop.ts `requireMatch`).
+(wisp:host/client/desktop.ts `requireMatch`).
 
 **Costs:**
 

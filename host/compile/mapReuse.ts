@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, utimesSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Console, Effect } from "effect";
-import { cacheHome } from "../io/xdg";
+import { cacheHome } from "../os/xdg";
 import { tryMapSync } from "../cli/hostProcess";
 import { holdLock } from "../cli/flockHold";
 

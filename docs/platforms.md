@@ -45,7 +45,7 @@ or niri.
 | `ScreenCapture` | screen capture of a client's desktop | `grim` (linux/desktop.ts) |
 | `InputInjection` | input injection: finding, focusing and placing windows, keys, text, pointer presses and input batches | the private desktop's VNC server for input; `xdotool` and `wlrctl` for windows and focus |
 | `GameLauncher` | game launch in a prefix | Proton under `steam-run`, optionally offline (`bwrap`) and with its own session bus |
-| `PlayMachine`, `PlayDesktop` | game launch, processes and windows for [`wisp play`](play.md) and [`wisp client doctor`](doctor.md) | Battle.net under Wine via `nsenter`, niri, `grim`, `xdotool` (linux/play.ts) |
+| `PlayMachine`, `PlayDesktop` | game launch, processes and windows for [`wisp play`](play.md) and [`wisp client doctor`](doctor.md) | Battle.net under Wine via `nsenter`, niri, `grim`, `xdotool` (play/linuxLaunch.ts) |
 | `Namespaces` | entering a process's namespaces, or running offline | `nsenter`, `bwrap --unshare-net` |
 | `AudioIsolation` | a client's own audio sink | PipeWire null sinks (`pw-dump`, `pw-cli`) |
 | `BackgroundServices` | background services and which service owns a process | `systemd-run --user`, `systemctl --user`, cgroups |
@@ -96,8 +96,8 @@ platform call with the named error:
   `plugin` and `wisp lan` (wisp:host/commands/lan.ts);
 - signed-in client services: wisp:host/client/clientServices.ts,
   `clientServicesCommand.ts`, `doctorHost.ts`, `clientDoctorCommand.ts`;
-- playing on the owner's desktop: wisp:host/os/platform/play.ts selects
-  wisp:host/os/platform/linux/play.ts, or a layer that refuses on other
+- playing on the owner's desktop: wisp:host/play/launch.ts selects
+  wisp:host/play/linuxLaunch.ts, or a layer that refuses on other
   platforms.
 
 ## Linux assumptions found
@@ -111,13 +111,13 @@ Before #108, by file (all now inside wisp:host/os/platform/linux/):
 | `/proc/pressure/cpu` (and `/proc/self/stat`, which the test-cost preload stopped reading in 0d3dd85) | host/testing/testRunner.ts, host/testing/testCostPreload.ts | linux/procfs.ts |
 | cgroups (`/proc/<pid>/cgroup`, `/sys/fs/cgroup/.../cpu.max`, `cgroup.procs`) | host/client/clientServices.ts, host/dev/context.ts, host/commands/soak.ts, host/testing/testRunner.ts | linux/procfs.ts |
 | libc `clock_gettime` thread clock and the only `process.platform` branch | host/soak/clock.ts | linux/procfs.ts, layer.ts |
-| Wine (`wine`, `wineserver`, `WINEPREFIX`) | host/play/play.ts | linux/play.ts, linux/procfs.ts |
+| Wine (`wine`, `wineserver`, `WINEPREFIX`) | host/play/play.ts | play/linuxLaunch.ts, linux/procfs.ts |
 | Wine's runtime recognised by its `wineserver` name | host/os/warcraft/battleNet.ts (`prefixUse`) | linux/procfs.ts sets `ProcessInfo.runtime`; `prefixUse` reads the flag |
 | Proton and `steam-run` | host/lan/pairAgent.ts, host/lan/setup.ts | linux/layer.ts (`GameLauncher`) |
-| `nsenter` | host/commands/lan.ts | linux/play.ts, linux/layer.ts (`Namespaces`) |
+| `nsenter` | host/commands/lan.ts | play/linuxLaunch.ts, linux/layer.ts (`Namespaces`) |
 | `bwrap --unshare-net` | host/lan/pairSession.ts, host/lan/setup.ts | linux/layer.ts (`Namespaces`, `GameLauncher`) |
-| `grim` | host/os/warcraft/desktopClient.ts, host/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool), linux/play.ts |
-| `xdotool` | host/os/warcraft/desktopClient.ts, host/lan/pairAgent.ts, host/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool), linux/play.ts |
+| `grim` | host/os/warcraft/desktopClient.ts, host/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool), play/linuxLaunch.ts |
+| `xdotool` | host/os/warcraft/desktopClient.ts, host/lan/pairAgent.ts, host/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool), play/linuxLaunch.ts |
 | `wlrctl`, Wayland (`WAYLAND_DISPLAY`, private desktop run folders) | host/os/warcraft/desktopClient.ts, host/lan/pairAgent.ts, host/lan/pool.ts | linux/desktop.ts (`InputInjection.tools` names it for the pool) |
 | `systemd-run --user`, `systemctl --user` | host/client/clientServices.ts | linux/systemd.ts |
 | `/run/user/<uid>`, PipeWire sinks, `dbus-run-session` | host/lan/pairAgent.ts | linux/layer.ts (`AudioIsolation`, `GameLauncher`) |

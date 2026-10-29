@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect } from "effect";
 import { ChildProcess } from "effect/process";
-import { type LaunchRequest, admittedRunner, launchCommand } from "../host/os/platform/linux/play";
+import { type LaunchRequest, admittedRunner, launchCommand } from "../host/play/linuxLaunch";
 
 test("a client launch waits in the capacity helper's queue for its admission, then exits within its own limit", async () => {
   const request: LaunchRequest = {

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Clock, Console, Deferred, Effect, Option, Queue, Schema, type Scope } from "effect";
 import { pollFor } from "../cli/hostProcess";
-import { writeAtomic } from "../io/files";
+import { writeAtomic } from "../os/files";
 import { DEFAULT_BUILD, profileFor, requireCapability } from "../os/warcraft/builds";
 import { loadLanPlugin, lanPluginProblem } from "./plugin";
 import { describeCause } from "../cli/command";

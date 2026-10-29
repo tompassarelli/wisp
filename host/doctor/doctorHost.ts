@@ -2,7 +2,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Layer } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { Platform } from "../os/platform/services";
-import * as desktop from "../os/warcraft/desktop";
+import * as desktop from "../client/desktop";
 import { DoctorHands, type DoctorTarget } from "./doctor";
 import { collect } from "../cli/hostProcess";
 import { leaveLobby, reportedMenus } from "../lan/menus";

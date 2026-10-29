@@ -9,7 +9,7 @@ import type { BundledModules } from "../toolchain/luaBundle";
 import { BUNDLE_MODULE } from "../../src/runtime/modules";
 import { abilityData } from "../toolchain/objectData";
 import { bytesChecksum } from "../io/preloadRecord";
-import { writeAtomic } from "../io/files";
+import { writeAtomic } from "../os/files";
 import { MapBuildFailure, runProcess, stageMap, tryMapPromise, tryMapSync, captureProcess } from "../cli/hostProcess";
 import type { Phase } from "../toolchain/compiler";
 import { type SourceMapFailure, SourceErrors } from "./sourceErrors";

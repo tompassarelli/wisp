@@ -5,7 +5,7 @@ import { type Command, type CommandFailure, UsageFailure } from "../cli/command"
 import { DoctorHands, type DoctorTarget, doctor, withDoctor } from "../doctor/doctor";
 import { type MenuFailure, type MenuSocket, leaveLobby, reportedMenus } from "../lan/menus";
 import { type PlayDeclaration, PlayProblem, leaveScoreScreen, play } from "../play/play";
-import { type PlayTools, playHostLayer, playMachineLayer } from "../os/platform/play";
+import { type PlayTools, playHostLayer, playMachineLayer } from "../play/launch";
 import type { ClientWatch } from "../dev/watch";
 
 const leaveBy = (port: number | undefined, what: string, leave: (menus: MenuSocket) => Effect.Effect<void, MenuFailure>) =>

@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { stateHome } from "../io/xdg";
+import { stateHome } from "../os/xdg";
 import { dirname, join } from "node:path";
 import { Effect } from "effect";
 import { PlayProblem } from "../play/play";

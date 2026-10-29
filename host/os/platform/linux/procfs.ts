@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync, readlinkSync, statSync } from "n
 import { dirname, join, resolve } from "node:path";
 import type { ProcessInfo } from "../../warcraft/battleNet";
 import type { CpuPressure, GameProcess, LauncherProcess, ServiceOwner } from "../services";
-import { readTextOrUndefined as readText } from "../../../io/files";
+import { readTextOrUndefined as readText } from "../../files";
 
 function prefixPath(prefix: string, windowsPath: string): string {
   const match = /^([A-Za-z]):\\(.*)$/.exec(windowsPath);

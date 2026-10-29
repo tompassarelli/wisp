@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type LaunchRequest, launchCommand } from "../host/os/platform/linux/play";
+import { type LaunchRequest, launchCommand } from "../host/play/linuxLaunch";
 import { launchOutcome, newestLauncherLog, shortcutUrl } from "../host/os/warcraft/battleNet";
 
 const line = (component: string, text: string) => "I 2026-10-06 01:47:49.901612 [" + component + "] {Main} " + text + "\n";

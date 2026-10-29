@@ -1,10 +1,10 @@
 import { Context, Effect, Layer } from "effect";
 import type { Platform } from "../os/platform/services";
-import * as desktop from "../os/warcraft/desktop";
+import * as desktop from "./desktop";
 import type { Frame } from "../scene/frameProbe";
 import type { Client } from "./client";
 export { type Client, clientUnit } from "./client";
-export { DesktopFailure, type Ink, type Region, type Word, type InputAction, waitFor } from "../os/warcraft/desktop";
+export { DesktopFailure, type Ink, type Region, type Word, type InputAction, waitFor } from "./desktop";
 
 export class Clients extends Context.Service<Clients, {
 

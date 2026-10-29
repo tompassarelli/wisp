@@ -1,9 +1,9 @@
 import { Effect, Layer } from "effect";
-import { PlayDesktop, PlayMachine, PlayProblem } from "../../play/play";
-import { hostPlatform } from "./layer";
-import { linuxPlayHostLayer, linuxPlayMachineLayer, type PlayTools } from "./linux/play";
-import { PlatformUnsupported } from "./services";
-export type { PlayTools } from "./linux/play";
+import { PlayDesktop, PlayMachine, PlayProblem } from "./play";
+import { hostPlatform } from "../os/platform/layer";
+import { linuxPlayHostLayer, linuxPlayMachineLayer, type PlayTools } from "./linuxLaunch";
+import { PlatformUnsupported } from "../os/platform/services";
+export type { PlayTools } from "./linuxLaunch";
 
 const refused = (platform: string) => Effect.fail(new PlayProblem({ problem: new PlatformUnsupported({ capability: "playing on the owner's desktop", platform }).message }));
 

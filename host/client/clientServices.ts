@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { readTextOrUndefined } from "../io/files";
+import { readTextOrUndefined } from "../os/files";
 import { ServiceProblem, pollFor } from "../cli/hostProcess";
-import { stateHome } from "../io/xdg";
+import { stateHome } from "../os/xdg";
 import { dirname, join, resolve } from "node:path";
 import { Effect, Schema } from "effect";
 import { BackgroundServices, CapacityAdmission, type PlatformError, ProcessTable, type ServiceOwner } from "../os/platform/services";

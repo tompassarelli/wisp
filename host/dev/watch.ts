@@ -1,5 +1,5 @@
 import { readdirSync, statSync } from "node:fs";
-import { readTextOrUndefined } from "../io/files";
+import { readTextOrUndefined } from "../os/files";
 import { join } from "node:path";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { ackFile } from "../../src/runtime/gameFiles";

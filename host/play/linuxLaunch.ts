@@ -5,17 +5,17 @@ import { basename, dirname } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Console, Deferred, type Duration, Effect, Fiber, Layer, Option, type PlatformError, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { serverDirectoryName, type ProcessInfo } from "../../warcraft/battleNet";
-import { launcherProcess, listProcesses } from "./procfs";
-import { parseWords, separateInk } from "../../warcraft/desktop";
-import { describeCause } from "../../../cli/command";
-import { type Collected, collect, skillScript } from "../../../cli/hostProcess";
-import { decodePpm } from "../services";
-import { startUnit } from "./systemd";
-import { acquireStartLock, startLockPath } from "../../../client/startLock";
-import { writeAtomic } from "../../../io/files";
-import { capacityDeferral, capacityQueued, deferredExit } from "../../../lan/admission";
-import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow } from "../../../play/play";
+import { serverDirectoryName, type ProcessInfo } from "../os/warcraft/battleNet";
+import { launcherProcess, listProcesses } from "../os/platform/linux/procfs";
+import { parseWords, separateInk } from "../os/warcraft/desktop";
+import { describeCause } from "../cli/command";
+import { type Collected, collect, skillScript } from "../cli/hostProcess";
+import { decodePpm } from "../os/platform/services";
+import { startUnit } from "../os/platform/linux/systemd";
+import { acquireStartLock, startLockPath } from "../client/startLock";
+import { writeAtomic } from "../os/files";
+import { capacityDeferral, capacityQueued, deferredExit } from "../lan/admission";
+import { type DesktopWindow, PlayDesktop, PlayMachine, PlayProblem, type XWindow } from "./play";
 
 export interface PlayTools {
   readonly grim: string;

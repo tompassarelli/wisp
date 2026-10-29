@@ -2,7 +2,7 @@
 
 import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
-import { cacheHome } from "../io/xdg";
+import { cacheHome } from "../os/xdg";
 import { basename, join } from "node:path";
 import { Console, Effect, Schedule, Schema } from "effect";
 import { MapBuildFailure, captureProcess, runProcess } from "../cli/hostProcess";

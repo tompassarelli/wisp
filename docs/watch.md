@@ -116,7 +116,7 @@ substitutes the service.
 
 Return and typed text reach Battle.net's public channel from the menus and a
 lobby's chat from a lobby. Wisp's private-desktop input
-(wisp:host/os/warcraft/desktop.ts) therefore checks the client before any
+(wisp:host/client/desktop.ts) therefore checks the client before any
 Return, KP_Enter or typed text, in `keys`, `typeText` and `batch`, and so in
 `wisp client chat|keys`, accept's `chat` steps and every consumer that drives
 a client through them. It refuses unless `typesIntoMatch(view)`: the client is
