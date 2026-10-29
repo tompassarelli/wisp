@@ -6,6 +6,7 @@ import { Console, Effect, Exit, Schema, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { Namespaces } from "../os/platform/services";
 import { collect, pollUntil, spawnLogged } from "../cli/hostProcess";
+import { LEASE_USAGE, lease } from "./lanQueue";
 import { type Command, UsageFailure, describeCause, flagValues, portFlag, wholeFlag } from "../cli/command";
 import { CLEAR, type Impairment, clearedAlready, impairCommands, impairmentSummary } from "../lan/netem";
 import { LanFailure } from "../lan/join";
@@ -424,7 +425,7 @@ const netem: Command = (args) => Effect.gen(function*() {
   }
 });
 
-export const LAN_USAGE = "setup --from INSTALL [--build BUILD] [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] [--queue] [--owner NAME] [--owner-pid PID] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | relayed MAP --relay-bin DIR [--pair K] [--turn-ms MS] [--raise-headroom-ms MS] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--udp-port N | --tcp-port N] | netem off --pair K | status [--pair K] | end --pair K | stop --pair K";
+export const LAN_USAGE = `setup --from INSTALL [--build BUILD] [--pairs N | --pair K...] | pool [--pairs N | --pair K...] [--pool-profile parity|visual|hfr[,...]] [--fps N] [--seconds S] [--network with one --pair K] [--queue] [--owner NAME] [--owner-pid PID] | fresh MAP [--pair K] [--computers N] [--turn-ms MS[,MS...]] | solo MAP [--pair K...] | relayed MAP --relay-bin DIR [--pair K] [--turn-ms MS] [--raise-headroom-ms MS] | dummy MAP --program W3GSCLIENT [--pair K] [--count N] | speed N --pair K | netem --pair K --rtt MS [--loss PERCENT] [--jitter MS] [--burst] [--udp-port N | --tcp-port N] | netem off --pair K | status [--pair K] | end --pair K | stop --pair K | ${LEASE_USAGE}`;
 
 const ownerCheck = poolOwners.pipe(Effect.flatMap((owners) => {
   const refusal = wrongUser(process.getuid?.() ?? 0, owners, ["bun", ...process.argv.slice(1)]);
@@ -446,6 +447,7 @@ const subcommand: Command = ([sub, ...args]) => {
     case "netem": return netem(args);
     case "end": return end(args);
     case "stop": return stop(args);
+    case "lease": return lease(args);
     default: return Effect.fail(new UsageFailure({ problem: `lan takes ${LAN_USAGE}` }));
   }
 };

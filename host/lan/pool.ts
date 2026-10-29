@@ -16,8 +16,8 @@ export {
   CLIENT_PROFILE_NAMES, type ClientProfile, PROFILES, type Profile, clientSettings, desktopSize, preferences,
 } from "../os/warcraft/clientProfiles";
 
-const stateRoot = () => join(stateHome(), "wisp/lan");
-const dataRoot = () => join(dataHome(), "wisp/lan");
+export const stateRoot = () => join(stateHome(), "wisp/lan");
+export const dataRoot = () => join(dataHome(), "wisp/lan");
 export const mapPackager = () => join(cacheHome(), "wisp/lan/map-pack");
 
 export const PAIR_SIDES = ["a", "b"] as const;

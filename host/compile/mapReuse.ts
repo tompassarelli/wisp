@@ -2,7 +2,8 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, s
 import { dirname, join } from "node:path";
 import { Console, Effect } from "effect";
 import { cacheHome } from "../io/xdg";
-import { MapBuildFailure, tryMapSync } from "../cli/hostProcess";
+import { tryMapSync } from "../cli/hostProcess";
+import { holdLock } from "../cli/flockHold";
 
 const DEFAULT_CAP_GIB = 8;
 const SIDECARS = [".base.lua"] as const;
@@ -50,23 +51,6 @@ export const pruneReuseStore = (store: string, capBytes: number, keep: string): 
 
 const lockPath = (store: string, key: string) => join(store, `${key}.lock`);
 
-/** Holds the key's lock until the scope ends, waiting while another build holds it; the lock goes with its holder, even a killed one. */
-const holdKey = (store: string, key: string) => Effect.acquireRelease(
-  tryMapSync("create the map store", store, () => mkdirSync(store, { recursive: true })).pipe(
-    Effect.andThen(Effect.tryPromise({
-      try: async () => {
-        const child = Bun.spawn(["flock", "--exclusive", "--no-fork", lockPath(store, key), "sh", "-c", "echo held; exec cat >/dev/null"], { stdin: "pipe", stdout: "pipe", stderr: "ignore" });
-        const reader = child.stdout.getReader();
-        await reader.read();
-        reader.releaseLock();
-        return child;
-      },
-      catch: (cause) => new MapBuildFailure({ operation: "lock the map build", path: lockPath(store, key), cause }),
-    })),
-  ),
-  (child) => Effect.sync(() => child.kill()),
-);
-
 const copyMap = (from: string, to: string) => {
   mkdirSync(dirname(to), { recursive: true });
   copyFileSync(from, to);
@@ -82,7 +66,8 @@ export interface MapReuse<E, R> {
 
 /** Puts at `out` the map of `key`: the stored one when a build of the same inputs finished, else the one `build` writes, which it then stores. Concurrent callers with one key wait for the first build and reuse it. */
 export const reuseOrBuild = <E, R>({ key, out, build, store = reuseStore() }: MapReuse<E, R>) => Effect.scoped(Effect.gen(function*() {
-  yield* holdKey(store, key);
+  yield* tryMapSync("create the map store", store, () => mkdirSync(store, { recursive: true }));
+  yield* holdLock(lockPath(store, key));
   const entry = join(store, key);
   const stored = join(entry, MAP_FILE);
   if (existsSync(stored)) {

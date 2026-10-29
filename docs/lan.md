@@ -975,3 +975,19 @@ that names its start time, then one line per event, in seconds since then:
 
 Tests replay a recorded exchange of two offline clients through the host
 (wisp:test/fixtures/lan/offline-pair.packets, wisp:test/lan.test.ts).
+
+## Leasing a pair
+
+Workers that need a native client pair ask one queue for it instead of naming
+a pair: `lan lease take --owner NAME [--wait SECONDS] [--hosts local|any]`
+prints `{"host":H,"pair":K}` for the next free pair, and `lan lease release
+--host H --pair K` or the requester's death frees it
+([queue](../host/lan/pairQueue.ts), [command](../host/commands/lanQueue.ts);
+wisp:host/lan/pairQueue.ts, wisp:host/commands/lanQueue.ts). Requests are served
+in arrival order. A pair is free when it has no live lease and no `lan pool
+--pair K` started outside the queue holds it; this host's pairs (every
+`lanKa` install `lan setup` made) come before another host's. `--hosts any` adds
+the pairs `$WISP_PAIR_REMOTE` lists (`laptop=0,1`) while `laptop status` says
+available. `lan lease status` prints the waiting count, the leases and the free
+pairs. The queue lives in `~/.local/state/wisp/lan/queue` and serializes only
+the choice of a pair; leased pairs run concurrently.
