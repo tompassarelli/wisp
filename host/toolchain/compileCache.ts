@@ -187,8 +187,7 @@ export function compileCache(directory: string, configPath: string, options: ts.
   const modulePath = (id: string) => join(store, `${id}.json`);
   const known = new WeakMap<ProcessedFile, string>();
 
-  const liveModule = (program: ts.Program, id: string): ProcessedFile => {
-    const module = JSON.parse(readFileSync(modulePath(id), "utf8")) as StoredModule;
+  const liveModule = (program: ts.Program, id: string, module: StoredModule): ProcessedFile => {
     const fileName = fromStored(module.file);
     const source = program.getSourceFile(fileName);
     const file: ProcessedFile = {
@@ -221,13 +220,15 @@ export function compileCache(directory: string, configPath: string, options: ts.
     buildInfoFile: join(root, ".wisp-compile.tsbuildinfo"),
     restore: () => {
       let index: Store;
+      let stored: StoredModule[];
       try {
         index = JSON.parse(readFileSync(indexPath, "utf8")) as Store;
+        if (index.version !== STORE_VERSION || index.key !== key) return undefined;
+        stored = index.modules.map((id) => JSON.parse(readFileSync(modulePath(id), "utf8")) as StoredModule);
       } catch {
         return undefined;
       }
-      if (index.version !== STORE_VERSION || index.key !== key || !index.modules.every((id) => existsSync(modulePath(id)))) return undefined;
-      return { buildInfo: index.buildInfo, modules: (program) => index.modules.map((id) => liveModule(program, id)) };
+      return { buildInfo: index.buildInfo, modules: (program) => index.modules.map((id, position) => liveModule(program, id, stored[position] as StoredModule)) };
     },
     save: (buildInfo, modules) => {
       mkdirSync(store, { recursive: true });
