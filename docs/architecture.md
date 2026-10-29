@@ -12,6 +12,7 @@ A module may import only the modules in its "may use" column. `src/` never impor
 | num | `src/sim/` | binary32 soft-float, f32 helpers, intMath | none |
 | natives | `src/natives/warcraft.d.ts` | Warcraft native declarations (generated) | none |
 | runtime | `src/runtime/` | Pure map-side helpers: lookup, record text, config, payload, modules, test harness | num |
+| netcode | `src/netcode/` | Game-agnostic rollback netcode behind a row codec: frame ring, input ledger, batched delta messages, wire varints, prediction and rollback session | runtime, num |
 | map | `src/map/` | Map-side services calling natives: file I/O, dispatch, hot reload, frame meter, native driver, scene | runtime, num, natives |
 | headless | `src/headless/` | Emulated Warcraft client: natives, lockstep, sync channel, journeys, Lua perf | map, runtime, num, natives |
 | cli | `host/cli/` | Command type, CLI runner, timings, process spawning, JSON results, panel server | none |
@@ -32,6 +33,7 @@ A module may import only the modules in its "may use" column. `src/` never impor
 | Float or integer math | `src/sim/f32.ts`, `src/sim/intMath.ts`, `src/sim/binary32.ts` | `src/num/` in W-num |
 | Map-side file I/O, hot reload, frame meter | `src/map/fileio.ts`, `src/map/hotReload.ts`, `src/map/frameMeter.ts` | stays |
 | Pure map helper | `src/runtime/` | stays |
+| Rollback netcode a game feeds its own row codec and simulation | `src/netcode/` | stays |
 | A command a game instantiates | `host/commands/<verb>.ts` (Wisp's own program: `host/commands/repo.ts`) | stays |
 | CLI runner, process spawning | `host/cli/cli.ts`, `host/cli/hostProcess.ts` | stays |
 | Warcraft window, launcher, input | `host/os/warcraft/`, `host/os/platform/` | stays |

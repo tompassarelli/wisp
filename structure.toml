@@ -19,7 +19,7 @@ name = "tests"
 thresholds = { function_lines = 150, function_complexity = 30 }
 paths = ["test/**", "**/*.test.ts", "**/*.tests.ts", "examples/**"]
 responsibility = "Bun and Lua tests, numbered fixture maps and examples."
-may_use = ["num", "ui", "natives", "runtime", "map", "headless", "cli", "os", "build", "lan", "net", "render", "host", "commands", "plugins"]
+may_use = ["num", "ui", "natives", "runtime", "netcode", "map", "headless", "cli", "os", "build", "lan", "net", "render", "host", "commands", "plugins"]
 
 [[module]]
 name = "num"
@@ -38,6 +38,12 @@ name = "runtime"
 paths = ["src/runtime/**"]
 responsibility = "Pure map-side helpers: lookup, record text, repro header, config, payload, module registry, frame cost, test harness."
 may_use = ["num"]
+
+[[module]]
+name = "netcode"
+paths = ["src/netcode/**"]
+responsibility = "Game-agnostic rollback netcode behind a row codec: frame ring, input ledger, batched delta messages, wire varints and the prediction and rollback session."
+may_use = ["runtime", "num"]
 
 [[module]]
 name = "map"

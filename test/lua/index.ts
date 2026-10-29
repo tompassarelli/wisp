@@ -6,3 +6,5 @@ import "../../src/runtime/recordText.tests";
 import "../../src/ui/chat.tests";
 import "../../src/headless/animation.tests";
 import "../../src/headless/natives/preloadText.tests";
+import "../../src/netcode/rowCodec.tests";
+import "../../src/netcode/session.tests";

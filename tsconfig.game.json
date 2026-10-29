@@ -23,6 +23,7 @@
     "src/runtime/*.ts",
     "src/sim/*.ts",
     "src/ui/*.ts",
+    "src/netcode/*.ts",
     "src/game/**/*.ts",
     "src/map/**/*.ts",
     "src/headless/*.ts"

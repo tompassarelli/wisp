@@ -5,6 +5,12 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## Unreleased
 
+- `wisp/src/netcode/codec`, `frameRing`, `ledger`, `message`, `session` and
+  `wire` export the generic rollback netcode Battlecraft proved: `RowCodec`,
+  the per-player `FrameRing`, the `InputLedger` (including players who left),
+  batched delta `encodeMessage`/`decodeMessage`, the wire varints, and the
+  `Session` that predicts, rolls back and confirms (wisp#73,
+  wisp:docs/netcode.md).
 - `wisp/scripts/wisp/syntheticBaseMap` exports `syntheticBaseMap` and
   `syntheticMapInfo`; `bun node_modules/wisp/host/compile/syntheticBaseMap.ts
   MAP_PACK OUT.w3x` writes the base map a consumer's CI builds its `.w3x`
