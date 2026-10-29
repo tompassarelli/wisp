@@ -257,6 +257,7 @@ export const listenForMenus = (reportPort = DEFAULT_MENU_REPORT_PORT, onSent: (s
 });
 
 const CLOSED: MenuEvent = { messageType: "", payload: undefined };
+const MENU_SOCKET_OPEN_SECONDS = 20;
 
 export const connectMenus = (address: MenuAddress): Effect.Effect<MenuSocket, MenuFailure, Scope.Scope> => Effect.gen(function*() {
   const buildId = address.buildId ?? process.env["WISP_GAME_BUILD"] ?? (lanPluginProblem() === undefined ? (yield* loadLanPlugin.pipe(Effect.mapError((cause) => new MenuFailure({ operation: "detect menu build", problem: cause.message })))).versionForPort?.(address.port) : undefined);
@@ -279,7 +280,11 @@ export const connectMenus = (address: MenuAddress): Effect.Effect<MenuSocket, Me
         if (open) Queue.offerUnsafe(events, CLOSED);
         else resume(Effect.fail(new MenuFailure({ operation: "connect to the menus", problem: `127.0.0.1:${address.port} refused the menu socket; the game has restarted or its address is stale` })));
       };
-    }),
+      return Effect.sync(() => opening.close());
+    }).pipe(Effect.timeoutOrElse({
+      duration: `${MENU_SOCKET_OPEN_SECONDS} seconds`,
+      orElse: () => Effect.fail(new MenuFailure({ operation: "connect to the menus", problem: `127.0.0.1:${address.port} didn't open the menu socket within ${MENU_SOCKET_OPEN_SECONDS} s; the game may be wedged` })),
+    })),
     (open) => Effect.sync(() => open.close()),
   );
   const send = (message: string, payload: Readonly<Record<string, unknown>> = {}) => Effect.try({
