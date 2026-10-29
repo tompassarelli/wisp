@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { CapacityAdmission } from "../os/platform/services";
+import { pollUntil } from "../cli/hostProcess";
 
 export const admissionFile = (directory: string) => join(directory, "admission.json");
 
@@ -36,6 +38,27 @@ export function unadmitted(stderr: string, waitSeconds: number) {
 
 /** How long a pool client's launch waits in the capacity helper's queue: inside the 10 minutes its pair start gives both clients to run. */
 const CLIENT_ADMISSION_WAIT_SECONDS = 480;
+
+const readLog = (file: string) => {
+  try {
+    return readFileSync(file, "utf8");
+  } catch {
+    return "";
+  }
+};
+
+/** Waits while a pool client's launch sits in the capacity helper's queue, saying each new reason, until the helper's RESERVED line in `errFile` admits it (true) or the launch exits or outwaits its queue time (false), so the wait for its window starts at its admission. */
+export const clientAdmitted = (name: string, errFile: string, isRunning: Effect.Effect<boolean, unknown>, say: (line: string) => void) => {
+  let queued: string | undefined;
+  return pollUntil(Effect.gen(function*() {
+    const said = readLog(errFile);
+    if (reservedLease(said) !== undefined) return true;
+    const reason = lastQueued(said);
+    if (reason !== undefined && reason !== queued) say(`${name}: waiting in the capacity helper's queue (${reason})`);
+    queued = reason ?? queued;
+    return (yield* isRunning.pipe(Effect.orElseSucceed(() => false))) ? undefined : false;
+  }), { until: (state) => state !== undefined, every: "1 second", within: `${CLIENT_ADMISSION_WAIT_SECONDS + 60} seconds`, onTimeout: () => Effect.succeed(false) });
+};
 
 export const nativeCommand = (capacity: string, name: string, runtime: string) =>
   CapacityAdmission.use((admission) => admission.session(capacity, `wisp-lan:${name}`, 1.5, CLIENT_ADMISSION_WAIT_SECONDS)).pipe(Effect.map((session) => [...session, "env", `XDG_RUNTIME_DIR=${runtime}`]));

@@ -16,7 +16,7 @@ import { mapCopies, mapFactsLine, readMapFacts } from "./map";
 import { relayedStatus } from "./relayedStatus";
 import { ALARM_AFTER_MS, agentPidFile, confirmToplevel, type Driver, MENUS_DEADLINE, TOPLEVEL_DEADLINE, WINDOW_DEADLINE, WINDOW_RELAUNCHES, alive, launchUntilShown, reachedMenus, PAIR_SIDES, alarmLog, driverVerdict, idleness, lanPlayRefusal, pairFlags, pairSides, agentSocket, clientLease, clientLog, stopClientScope, audioSinkOf, clientName, clientRoot, clientRun, documentsOf, exeOf, mapPackager, pairDirectory, poolClientsFile, prefixOf, reportPort } from "./pool";
 import { preferences, windowSize } from "../os/warcraft/clientProfiles";
-import { admissionFile, capacityDeferral, deferredExit, nativeCommand } from "./admission";
+import { admissionFile, capacityDeferral, clientAdmitted, deferredExit, nativeCommand } from "./admission";
 import { recordFailure, recordPassed } from "./pairHealth";
 import { DesktopFailure, ToplevelMissing } from "../os/warcraft/desktopClient";
 
@@ -64,6 +64,7 @@ const launch = (capacity: string, client: PoolClient) => Effect.gen(function*() 
     env, extendEnv: true, stdin: "ignore", forceKillAfter: "15 seconds",
   }), { stdout: join(directory, `${client.name}.out`), stderr: errFile });
   yield* Effect.addFinalizer(() => stopClient(client));
+  yield* clientAdmitted(client.name, errFile, game.handle.isRunning, say);
   const early = yield* game.handle.exitCode.pipe(Effect.map(Number), Effect.orElseSucceed(() => -1), Effect.timeoutOption("5 seconds"));
   if (Option.isSome(early)) {
     yield* game.written;
