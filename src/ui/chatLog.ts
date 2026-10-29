@@ -71,16 +71,19 @@ export interface GlyphWidths {
   readonly other: number;
 }
 
-/** Warcraft's Friz Quadrata (`Fonts\FRIZQT__.TTF`), fitted to native captures and rounded up so a row never overruns. */
+/**
+ * Warcraft's Friz Quadrata (`Fonts\FRIZQT__.TTF`), fitted to native captures at a 10-pixel font, where glyphs
+ * render widest for their size, and rounded up: Warcraft wraps a row that overruns its frame and hides the rest.
+ */
 export const FRIZ_QUADRATA_WIDTHS: GlyphWidths = {
-  space: f32(0.28),
-  narrow: f32(0.28),
-  short: f32(0.41),
-  lower: f32(0.59),
-  wideLower: f32(0.88),
-  upper: f32(0.78),
-  wideUpper: f32(1.0),
-  other: f32(0.7),
+  space: f32(0.35),
+  narrow: f32(0.32),
+  short: f32(0.48),
+  lower: f32(0.7),
+  wideLower: f32(1.0),
+  upper: f32(0.88),
+  wideUpper: f32(1.12),
+  other: f32(0.8),
 };
 
 const NARROW_GLYPHS = "ijlI.,:;'!|`";
