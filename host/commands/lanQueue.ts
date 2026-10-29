@@ -12,11 +12,11 @@ export const LEASE_USAGE = "lease take --owner NAME [--pid PID] [--wait SECONDS]
 const WAIT_SECONDS = 1800;
 
 /** The pairs `lan setup` made on this host: one `lanKa` client install each. */
-export const provisionedPairs = (clients = join(dataRoot(), "clients")): readonly number[] =>
+const provisionedPairs = (clients = join(dataRoot(), "clients")): readonly number[] =>
   existsSync(clients) ? readdirSync(clients).flatMap((name) => /^lan(\d+)a$/.exec(name)?.[1] ?? []).map(Number) : [];
 
 /** `NAME=K,K` entries of $WISP_PAIR_REMOTE: the pairs set up on another host that this host's workers may lease. */
-export const remoteHosts = (spec = process.env.WISP_PAIR_REMOTE ?? ""): ReadonlyMap<string, readonly number[]> =>
+const remoteHosts = (spec = process.env.WISP_PAIR_REMOTE ?? ""): ReadonlyMap<string, readonly number[]> =>
   new Map(spec.split(";").filter((entry) => entry.includes("=")).map((entry) => {
     const [name = "", pairs = ""] = entry.split("=");
     return [name, pairs.split(",").map(Number).filter(Number.isInteger)] as const;
