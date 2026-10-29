@@ -1,5 +1,21 @@
+import { f32 } from "../sim/f32";
 import { assertEquals, test } from "../runtime/testing";
-import { addChatLine, advanceChat, chatName, chatOpacity, colourCode, createChatLog, visibleChatRows, wrapChat } from "./chatLog";
+import {
+  addChatLine,
+  advanceChat,
+  chatName,
+  chatOpacity,
+  colourCode,
+  createChatLog,
+  FRIZ_QUADRATA_WIDTHS,
+  type GlyphWidths,
+  lighten,
+  textWidth,
+  visibleChatRows,
+  wrapChat,
+} from "./chatLog";
+
+const EVEN: GlyphWidths = { space: 1.0, narrow: 1.0, short: 1.0, lower: 1.0, wideLower: 1.0, upper: 1.0, wideUpper: 1.0, other: 1.0 };
 
 test("[reference] chat: a name is coloured and a Battle.net tag is dropped", () => {
   assertEquals(colourCode(0xff0303), "|cffff0303");
@@ -8,18 +24,37 @@ test("[reference] chat: a name is coloured and a Battle.net tag is dropped", () 
   assertEquals(chatName("#1234"), "#1234");
   const log = createChatLog(10);
   addChatLine(log, 0x20c000, "Tom#1234", "hi");
-  assertEquals(visibleChatRows(log, 5, 40, 10.0)[0]?.text, "|cff20c000Tom|r: hi");
+  assertEquals(visibleChatRows(log, 5, 40.0, EVEN, 10.0)[0]?.text, "|cff20c000Tom|r: hi");
 });
 
-test("[reference] chat: wrapping breaks at spaces, cuts a word longer than the row and indents under the message", () => {
-  assertEquals(wrapChat("aaa bbb ccc", 7).join("|"), "aaa bbb|ccc");
-  assertEquals(wrapChat("abcdefghij", 4).join("|"), "abcd|efgh|ij");
-  assertEquals(wrapChat("", 4).join("|"), "");
+test("[reference] chat: lightening moves each channel toward white and keeps white white", () => {
+  assertEquals(colourCode(lighten(0xff0303, 50)), "|cffff8181");
+  assertEquals(colourCode(lighten(0x0042ff, 50)), "|cff7fa0ff");
+  assertEquals(lighten(0xffffff, 50), 0xffffff);
+  assertEquals(lighten(0x123456, 0), 0x123456);
+});
+
+test("[reference] chat: wrapping breaks at spaces, cuts a word wider than the row and starts later rows at the left edge", () => {
+  assertEquals(wrapChat("aaa bbb ccc", 7.0, 7.0, EVEN).join("|"), "aaa bbb|ccc");
+  assertEquals(wrapChat("aaa bbb ccc", 3.0, 7.0, EVEN).join("|"), "aaa|bbb ccc");
+  assertEquals(wrapChat("abcdefghij", 4.0, 4.0, EVEN).join("|"), "abcd|efgh|ij");
+  assertEquals(wrapChat("", 4.0, 4.0, EVEN).join("|"), "");
   const log = createChatLog(10);
   addChatLine(log, 0, "Al", "one two three four five six seven eight");
-  const rows = visibleChatRows(log, 10, 20, -1.0);
-  assertEquals(rows.length, 3);
-  assertEquals(rows[1]?.text.startsWith("    "), true);
+  const rows = visibleChatRows(log, 10, 20.0, EVEN, -1.0);
+  assertEquals(rows.map(row => row.text).join("|"), "|cff000000Al|r: one two three|four five six seven|eight");
+});
+
+test("[reference] chat: Friz Quadrata widths never fall short of the widths measured natively, so no row overruns its frame", () => {
+  const measured: [string, number][] = [
+    ["Tompas: okay this works test is a bit choppy", f32(20.64)],
+    ["but i just watned to see if i type a", f32(15.5)],
+    ["long msg how it works", f32(10.53)],
+  ];
+  for (const [text, width] of measured) assertEquals(textWidth(text, FRIZ_QUADRATA_WIDTHS) >= width, true);
+  const pieces = wrapChat("okay this works test is a bit choppy but i just watned to see if i type a long msg how it works", 18.0, 24.0, FRIZ_QUADRATA_WIDTHS);
+  for (let index = 0; index < pieces.length; index++) assertEquals(textWidth(pieces[index] ?? "", FRIZ_QUADRATA_WIDTHS) <= (index === 0 ? 18.0 : 24.0), true);
+  assertEquals(pieces.join(" "), "okay this works test is a bit choppy but i just watned to see if i type a long msg how it works");
 });
 
 test("[reference] chat: lines leave the recent view in order and the history keeps them", () => {
@@ -29,10 +64,10 @@ test("[reference] chat: lines leave the recent view in order and the history kee
     advanceChat(log, 5.0);
   }
   assertEquals(log.lines.length, 3);
-  assertEquals(visibleChatRows(log, 10, 40, -1.0).length, 3);
-  assertEquals(visibleChatRows(log, 10, 40, 11.0).length, 2);
-  assertEquals(visibleChatRows(log, 1, 40, 11.0)[0]?.text.endsWith("d"), true);
-  assertEquals(visibleChatRows(log, 10, 40, 4.0).length, 0);
+  assertEquals(visibleChatRows(log, 10, 40.0, EVEN, -1.0).length, 3);
+  assertEquals(visibleChatRows(log, 10, 40.0, EVEN, 11.0).length, 2);
+  assertEquals(visibleChatRows(log, 1, 40.0, EVEN, 11.0)[0]?.text.endsWith("d"), true);
+  assertEquals(visibleChatRows(log, 10, 40.0, EVEN, 4.0).length, 0);
 });
 
 test("[reference] chat: opacity holds then ramps down over the fade", () => {

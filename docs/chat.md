@@ -14,9 +14,9 @@ ends carrying chat lines; this page does not choose one.
 ## Using it
 
 ```ts
-const chat = new ChatPanel({ name: "MyChat", font, fontSize, rowHeight, glyphWidth: 0.5, margin,
+const chat = new ChatPanel({ name: "MyChat", font, fontSize, rowHeight, glyphWidths: FRIZ_QUADRATA_WIDTHS, margin,
   panelTexture, panelAlpha: 190, level: 200, capacity: 100, historyRows: 14,
-  recentSeconds: 14.0, fadeSeconds: 3.0, colour: slot => rgbOf(slot), ignore: text => text.startsWith("-") });
+  recentSeconds: 14.0, fadeSeconds: 3.0, colour: slot => lighten(rgbOf(slot), 45), ignore: text => text.startsWith("-") });
 const received = CreateTrigger();
 registerChatEvents(received, slots);
 TriggerAddAction(received, trampoline("chat"));   // on("chat", () => chat.receive())
@@ -31,9 +31,17 @@ chat.update(FRAME_SECONDS, box);   // box: { left, bottom, width, rows }, or und
   `fadeSeconds`; the history key switches to the last `historyRows` rows at full
   opacity, taller than the recent box and drawn over the map's menus.
 - A name shows in its player's colour (`colour(slot)`, 0xRRGGBB) without a
-  Battle.net `#tag`.
-- Wrapping is the module's own: `fontSize * glyphWidth` sets the characters per
-  row, breaking at spaces, with later rows indented under the message.
+  Battle.net `#tag`; `lighten(rgb, percent)` lifts a saturated player colour so
+  it reads on a dark backdrop.
+- Wrapping is the module's own and measures text by glyph class
+  (`GlyphWidths`, in units of the font size). `FRIZ_QUADRATA_WIDTHS` holds
+  Warcraft's chat font, fitted to native captures and rounded up so a row never
+  reaches past the box; rows break at spaces and later rows start at the box's
+  left edge, because spaces cannot line up with a proportional font.
+- `margin` is the padding on every side: the backdrop's top and bottom edges sit
+  closer to the rows by the row's spare height, so the text has as much space
+  above and below as left and right. Give it a plain texture; a texture with
+  drawn edges puts its lines through the text.
 - The box is in screen coordinates (0.8 wide, 0.6 high) and grows upward from
   `bottom`; a map passes a different box per screen and keeps it inside the
   4:3 area so 3:2 and 4:3 windows show the same place.

@@ -1,7 +1,7 @@
 // A chat panel a map draws in place of Warcraft's: it only reads received lines and writes its own frames.
 
 import { f32 } from "../sim/f32";
-import { addChatLine, advanceChat, chatAge, chatOpacity, createChatLog, type ChatLog, type ChatRow, visibleChatRows } from "./chatLog";
+import { addChatLine, advanceChat, chatAge, chatOpacity, createChatLog, type ChatLog, type ChatRow, type GlyphWidths, visibleChatRows } from "./chatLog";
 
 export interface ChatStyle {
   /** Prefix of the frames' names, unique per panel. */
@@ -9,8 +9,9 @@ export interface ChatStyle {
   readonly font: string;
   readonly fontSize: number;
   readonly rowHeight: number;
-  /** Width of an average glyph as a fraction of the font size; sets how many characters fill a row. */
-  readonly glyphWidth: number;
+  /** The font's glyph advances, which decide where a row wraps. */
+  readonly glyphWidths: GlyphWidths;
+  /** Space between the text and the backdrop's edge, on every side. */
   readonly margin: number;
   readonly panelTexture: string;
   /** Backdrop opacity, 0 to 255. */
@@ -112,11 +113,11 @@ export class ChatPanel {
     for (const line of this.log.lines) if (seconds < 0.0 || chatAge(this.log, line.born) < seconds) alive++;
     if (alive === 0) return [];
     const count = history ? this.style.historyRows : Math.min(box.rows, this.style.historyRows);
-    const width = Math.floor(f32(box.width / f32(this.style.fontSize * this.style.glyphWidth)));
+    const width = f32(box.width / this.style.fontSize);
     const key = `${this.log.revision}:${alive}:${count}:${width}:${seconds}`;
     if (key !== this.rowsKey) {
       this.rowsKey = key;
-      this.rows = visibleChatRows(this.log, count, width, seconds);
+      this.rows = visibleChatRows(this.log, count, width, this.style.glyphWidths, seconds);
     }
     return this.rows;
   }
@@ -125,10 +126,11 @@ export class ChatPanel {
     const key = `${box.left}:${box.bottom}:${box.width}:${count}`;
     if (key === this.placedKey) return;
     this.placedKey = key;
-    const { rowHeight, margin } = this.style;
+    const { rowHeight, margin, fontSize } = this.style;
+    const edge = Math.max(0.0, f32(margin - f32(f32(rowHeight - fontSize) * 0.5)));
     BlzFrameClearAllPoints(this.backdrop);
-    BlzFrameSetAbsPoint(this.backdrop, FRAMEPOINT_BOTTOMLEFT, f32(box.left - margin), f32(box.bottom - margin));
-    BlzFrameSetAbsPoint(this.backdrop, FRAMEPOINT_TOPRIGHT, f32(box.left + box.width + margin), f32(box.bottom + f32(rowHeight * count) + margin));
+    BlzFrameSetAbsPoint(this.backdrop, FRAMEPOINT_BOTTOMLEFT, f32(box.left - margin), f32(box.bottom - edge));
+    BlzFrameSetAbsPoint(this.backdrop, FRAMEPOINT_TOPRIGHT, f32(box.left + box.width + margin), f32(box.bottom + f32(rowHeight * count) + edge));
     for (let index = 0; index < count; index++) {
       const row = this.rowFrames[index] as framehandle;
       BlzFrameClearAllPoints(row);
