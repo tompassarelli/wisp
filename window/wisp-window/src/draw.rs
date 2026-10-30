@@ -145,7 +145,7 @@ impl Gpu {
             mapped_at_creation: false,
         });
         let info = adapter.get_info();
-        let renderer = Renderer::new(device.clone(), queue.clone(), config.format);
+        let renderer = Renderer::new(device.clone(), queue.clone(), config.format, crate::remaster::Quality::from_environment());
         let ui = UiRenderer::new(device.clone(), queue.clone(), config.format);
         Ok(Self { surface, config, device, queue, pipeline, vertices, renderer, ui, aspect, scene: None, capture, adapter_handle: adapter, present, images: HashSet::new(), adapter: info.name, backend: format!("{:?}", info.backend) })
     }

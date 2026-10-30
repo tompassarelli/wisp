@@ -19,6 +19,7 @@ pollster = "0.4"
 sdl3-sys = { version = "0.7.2", default-features = false, features = ["build-from-source-static", "sdl-unix-console-build", "no-sdl-video", "no-sdl-audio", "no-sdl-gpu", "no-sdl-render", "no-sdl-camera", "no-sdl-dialog", "no-sdl-tray", "no-sdl-power"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
 texpresso = { version = "2.0.2", default-features = false }
 wgpu = "30.0.1"
 winit = "=0.30.13"

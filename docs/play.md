@@ -294,6 +294,8 @@ drawn), `missedPresents` (an acquire interval over 1.5 T, with
 and `droppedSamples`; `presentedMs` is the interval between two images the
 display handed back. Closing the window ends the session.
 
+Set `WISP_REMASTER=standard` or `high` to remaster textures and round silhouettes at load (see [Remaster at load](native-window-plan.md#remaster-at-load)); the default is off.
+
 `bun wisp window probe [--baseline] [--frames N] [--out DIR]` runs the sample map's scene
 through the production player and window on a display, for N frames after 120
 warm-up frames, and writes `probe.json` with the counts `missedPresents`,

@@ -841,6 +841,48 @@ The menu and HUD frames are drawn by `window/wisp-window/src/ui/`, one render pa
 - **Draw.** Each scene's quads go to one instance buffer in drawing order, written only when they differ from the last scene's; a run of quads that share a texture is one draw call. The pass loads the world's image, blends straight alpha, and has no depth. A textured frame whose image has not decoded yet is skipped until it has.
 - **Not yet drawn:** frames with a colour but no texture draw nothing, as in Chrome, and `|c` colours apply to the whole text.
 
+## Remaster at load
+
+Classic art is sharpened and lit on the player's machine from the player's own map and install (wisp#109; Tom asked for this, 2026-10-31). Shapes stay Classic: only textures and the silhouette's roundness change.
+
+- **Setting.** `WISP_REMASTER=off|standard|high`, read when the window opens; off by default. Standard doubles a texture's sides and subdivides each triangle once, High does both twice. Textures of 1024 px or more on a side (backdrops) are left alone.
+- **Method chosen: edge-directed Catmull-Rom, our own code** (`remaster/upscale.rs`). Each output pixel is a Catmull-Rom sample; where the 3x3 structure tensor shows one dominant edge, it is averaged with two samples along the edge, then clamped to the four nearest source pixels (plus 6% overshoot) so it never rings. Alpha is premultiplied, so cutout silhouettes get no fringes. It needs no model, runtime or download, and no licence beyond our own.
+- **Normals and roughness** (`remaster/relief.rs`) come from the upscaled albedo: luminance is the height, a difference of two box blurs removes slow colour shifts, alpha adds a bevel where a silhouette ends, and a Sobel-style slope gives the normal. Roughness is a heuristic (bright high-contrast detail glossier, flat dull areas rougher), not a measurement. Output contract for the lighting box: an RGBA8 `relief` texture per source texture whose RGB is a tangent-space normal (`n * 0.5 + 0.5`; x toward +u, y toward +v, which is down the image, z out) and whose alpha is roughness; `Renderer` keeps it in `reliefs`, keyed like `textures`. Nothing binds it in a shader yet.
+- **Cache.** `$XDG_CACHE_HOME/wisp/remaster` (`LOCALAPPDATA` on Windows, else `~/.cache`): `<sha256 of source bytes, quality and algorithm version>.albedo.png` and `.relief.png`. The work runs on the decode workers once per texture; a later run reads the cache. Nothing derived from a player's files is written to a repository, package or download: the example tools write only to a directory they are given.
+- **Silhouettes** (`render/tessellate.rs`). Midpoint subdivision at model build with PN-triangle edge points; corners never move; open borders, non-manifold edges and seams whose two sides disagree about normals keep their straight midpoints; a midpoint moves at most 8% of its edge. The bind pose is what is subdivided, bone weights are merged to the top four, so the GPU skinning is unchanged.
+
+### Measured choice (31 October 2026, the laptop, release build, one thread)
+
+Quality is PSNR of each upscaler restoring the original from a copy of half its size (higher is better); times are `enhance` for the whole texture including normal and roughness; `cache hit` reads both PNGs back. Textures are the Lich King's three from Smashcraft's map imports (map file entries `LichKing.BLP`, `FrostmourneNew.blp`, `HelmOfDom.BLP`). Produced by `cargo run --release -p wisp-window --example remaster_report -- OUT_DIR FILES...`.
+
+| texture | size | bilinear dB | bicubic dB | edge-directed dB | x2 ms | x4 ms | cache hit ms |
+|---|---|---|---|---|---|---|---|
+| LichKing | 512x512 | 24.61 | 25.66 | 25.55 | 540 | 2465 | 28 |
+| FrostmourneNew | 256x512 | 26.16 | 27.08 | 26.99 | 218 | 1176 | 14 |
+| HelmOfDom | 256x256 | 25.14 | 26.49 | 26.41 | 115 | 597 | 7 |
+
+Edge-directed beats bilinear by about 1 dB and ties plain Catmull-Rom within 0.11 dB; PSNR does not measure stair-step smoothness, which is what the edge averaging is for, so it is kept. A learned upscaler is not in this table: Real-ESRGAN, waifu2x and xBR were read for licence only ([references.md](references.md)) and were not run, so their times and quality are unmeasured.
+
+### Silhouette before and after (one subdivision, bind pose, orthographic)
+
+Pixels of a 512x512 mask of the model's bind-pose silhouette, scaled to the same bounds; "only before" is area the tessellated model lost, "only after" area it gained. Models are Smashcraft's `LichKing2.mdx`, `IllidanTimelineBody` and `PeonTimelineBody` from the map imports (612, 590, 629 in the unpacked cache). Overlay PNGs (grey both, red only before, green only after) come from `cargo run --release -p wisp-window --example silhouette_report -- OUT_DIR MODELS...` and stay outside the repository.
+
+| model | view | triangles before | after | silhouette px | only before | only after | IoU |
+|---|---|---|---|---|---|---|---|
+| LichKing2 | front | 1931 | 7724 | 58572 | 240 | 1725 | 0.9665 |
+| LichKing2 | side | 1931 | 7724 | 97779 | 94 | 710 | 0.9918 |
+| IllidanTimelineBody | front | 1289 | 5156 | 46675 | 24 | 739 | 0.9837 |
+| IllidanTimelineBody | side | 1289 | 5156 | 147931 | 0 | 1 | 1.0000 |
+| PeonTimelineBody | front | 372 | 1488 | 68738 | 212 | 3471 | 0.9464 |
+| PeonTimelineBody | side | 372 | 1488 | 106563 | 589 | 3270 | 0.9638 |
+
+The overlay of the peon's front view shows the change: rounded forms (back, belly, helmet crown) bulge outward by a few pixels, while the blocky axe head, arm and boots keep their cut edges, which is the 8% shift cap and the seam rule at work. The simulation's hit areas do not come from the model, so no hitbox moves; the drawn outline grows by at most about 5% of the silhouette's area (peon front, the largest).
+
+### Not yet done
+
+- A before/after window screenshot at match zoom, both facings, and the three fresh viewers' reads: the window has no offscreen capture, so they need W3's capture.
+- Binding the relief map in the lighting shader (wisp-109-light owns it).
+
 ## Boxes
 
 Order:

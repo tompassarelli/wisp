@@ -35,12 +35,36 @@ ships each licence text below.
   UI text rasterizing. Ship the licence.
 - `bytemuck` 1.25.2, Zlib OR Apache-2.0 OR MIT,
   https://github.com/Lokathor/bytemuck. GPU buffer layouts.
+- `sha2` 0.10, MIT OR Apache-2.0, https://github.com/RustCrypto/hashes. Names a
+  remastered texture's cache entry by the SHA-256 of its source. Ship the
+  licence.
 - `serde_json`, MIT OR Apache-2.0, https://github.com/serde-rs/json. Scene
   snapshot parsing.
 
 Not adopted by default: `symphonia` 0.6.1 (MPL-2.0). Its file-level copyleft
 would oblige the player build to offer its source. It is the fallback if the
 sound box finds a codec the permissive decoders cannot read.
+
+## Remaster candidates (wisp#109, [native-window-plan.md](native-window-plan.md#remaster-at-load))
+
+Licences read from each repository's licence file through the GitHub API on
+2026-10-31. None of these is linked or shipped; the chosen method is Wisp's own
+code, written from the published ideas (structure-tensor edge direction,
+Catmull-Rom resampling, premultiplied alpha) and copies nothing.
+
+- Real-ESRGAN (xinntao, BSD-3-Clause, master a4abfb29), https://github.com/xinntao/Real-ESRGAN.
+  Licence file BSD-3-Clause (GitHub API; the weights' licence was not checked).
+  Not run and not adopted: it needs weights fetched at run time and an ONNX
+  or Vulkan runtime, which the classical path avoids.
+- Real-ESRGAN-ncnn-vulkan (xinntao, MIT), https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan.
+  A runner for the same weights on Tencent's ncnn (licence not read). Not run;
+  not adopted for the same reasons.
+- waifu2x (nagadomi, MIT), https://github.com/nagadomi/waifu2x. Not run; not adopted (its models target line art, which the Classic
+  painted textures are not; this was not tested).
+- `ort` (pykeio, Apache-2.0), https://github.com/pykeio/ort. The Rust ONNX
+  Runtime binding a model path would use. Not adopted; the classical path needs no runtime.
+- xBR and Super-xBR (Hyllian, libretro glsl-shaders; the one file read carries an MIT-style
+  notice, the others were not read). Made for pixel art. Not run; not adopted.
 
 ## Tools
 

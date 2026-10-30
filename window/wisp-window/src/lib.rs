@@ -13,7 +13,7 @@ mod host;
 mod input;
 mod metrics;
 pub mod model;
-mod render;
+pub mod render;
 mod mailbox;
 mod pacing;
 mod present;
@@ -21,6 +21,7 @@ mod pad;
 mod pad_sdl;
 mod sync;
 mod timer;
+pub mod remaster;
 pub mod texture;
 pub mod ui;
 

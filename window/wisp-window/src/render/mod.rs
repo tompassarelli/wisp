@@ -7,17 +7,20 @@
 
 mod math;
 mod gpu;
-mod model;
+pub mod model;
 mod pipelines;
 mod scene;
-mod source;
+pub mod source;
+pub mod tessellate;
 
 use std::collections::HashMap;
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
+use std::sync::Arc;
+
 use crate::decode_pool::Pool;
-use crate::texture::{self, Image};
+use crate::remaster::{self, Cache, Prepared, Quality};
 use math::{multiply, projection, Mat4, IDENTITY};
 use gpu::{bone_storage, frame_group, instance_storage, upload, white};
 use model::{Filter, ModelData, Paint, Vertex};
@@ -99,6 +102,9 @@ pub struct Renderer {
     sampler: wgpu::Sampler,
     white: wgpu::TextureView,
     textures: HashMap<String, wgpu::TextureView>,
+    reliefs: HashMap<String, wgpu::TextureView>,
+    quality: Quality,
+    cache: Option<Arc<Cache>>,
     models: Vec<GpuModel>,
     model_ids: HashMap<String, usize>,
     bone_buffer: wgpu::Buffer,
@@ -116,7 +122,7 @@ pub struct Renderer {
     order: Vec<usize>,
     groups: Vec<Group>,
     sky_group_of: Option<Group>,
-    decoder: Pool<Result<Image, String>>,
+    decoder: Pool<Result<Prepared, String>>,
     decoding: HashMap<u64, String>,
     next_job: u64,
     waiting: Vec<(String, Vec<u8>)>,
@@ -124,7 +130,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(device: wgpu::Device, queue: wgpu::Queue, format: wgpu::TextureFormat) -> Self {
+    pub fn new(device: wgpu::Device, queue: wgpu::Queue, format: wgpu::TextureFormat, quality: Quality) -> Self {
         let (pipelines, frame_layout, layer_layout) = pipelines::build(&device, format);
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::Repeat,
@@ -151,6 +157,9 @@ impl Renderer {
             layer_layout,
             sampler,
             textures: HashMap::new(),
+            reliefs: HashMap::new(),
+            quality,
+            cache: (quality != Quality::Off).then(Cache::open).flatten().map(Arc::new),
             models: Vec::new(),
             model_ids: HashMap::new(),
             bone_buffer,
@@ -183,7 +192,8 @@ impl Renderer {
         } else {
             self.next_job += 1;
             self.decoding.insert(self.next_job, path.to_ascii_lowercase());
-            self.decoder.submit(self.next_job, move || texture::decode(&bytes));
+            let (quality, cache) = (self.quality, self.cache.clone());
+            self.decoder.submit(self.next_job, move || remaster::prepare(&bytes, quality, cache.as_deref()));
         }
     }
 
@@ -194,8 +204,11 @@ impl Renderer {
             let Some(path) = self.decoding.remove(&job) else { continue };
             finished += 1;
             match decoded {
-                Ok(image) => {
-                    let view = upload(&self.device, &self.queue, &image);
+                Ok(prepared) => {
+                    if let Some(relief) = &prepared.relief {
+                        self.reliefs.insert(path.clone(), upload(&self.device, &self.queue, relief));
+                    }
+                    let view = upload(&self.device, &self.queue, &prepared.albedo);
                     self.textures.insert(path, view);
                 }
                 Err(error) => self.problems.push(format!("{path}: {error}")),
@@ -204,7 +217,7 @@ impl Renderer {
         if self.decoding.is_empty() {
             for (path, bytes) in std::mem::take(&mut self.waiting) {
                 finished += 1;
-                match source::model(&bytes) {
+                match source::model(&bytes, self.quality) {
                     Ok(data) => self.add_model(&path, data),
                     Err(error) => self.problems.push(format!("{path}: {error}")),
                 }

@@ -3,7 +3,10 @@
 use crate::model::{self, global_sequence_frame, Playhead, Pose};
 
 use super::math::Mat4;
+use crate::remaster::Quality;
+
 use super::model::{Filter, Layer, ModelData, Paint, Part, Rig, Vertex};
+use super::tessellate::tessellate;
 
 const TEAM_COLOR: u32 = 1;
 const TEAM_GLOW: u32 = 2;
@@ -42,7 +45,7 @@ fn paint(model: &model::Model, texture_id: i32) -> Paint {
     }
 }
 
-pub fn model(bytes: &[u8]) -> Result<ModelData, String> {
+pub fn model(bytes: &[u8], quality: Quality) -> Result<ModelData, String> {
     let parsed = model::Model::from_mdx(bytes).map_err(|error| error.to_string())?;
     // A model lives as long as the window does, and its pose borrows it, so it is leaked rather than made self-referential.
     let model: &'static model::Model = Box::leak(Box::new(parsed));
@@ -70,6 +73,8 @@ pub fn model(bytes: &[u8]) -> Result<ModelData, String> {
         parts.push(Part { first_index, index_count: indices.len() as u32 - first_index, layers });
     }
     let pose = Pose::new(model, &[]).map_err(|error| error.to_string())?;
-    Ok(ModelData { vertices, indices, parts, rig: Box::new(MdxRig { model, playhead: Playhead::new(model), pose }) })
+    let mut data = ModelData { vertices, indices, parts, rig: Box::new(MdxRig { model, playhead: Playhead::new(model), pose }) };
+    tessellate(&mut data, quality.tessellation_levels());
+    Ok(data)
 }
 
