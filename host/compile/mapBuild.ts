@@ -16,9 +16,11 @@ import { type SourceMapFailure, SourceErrors } from "./sourceErrors";
 import { step } from "../cli/timings";
 import { checkUnitModels, type UnitModels, type ModelSource } from "../models/unitModels";
 import { compileLua32, lua32Key } from "./lua32";
+import { type ArchiveEntry, type AssetArchiveBase, type AssetManifest, assetArchiveKey, assetManifest, changedAssets, nearestAssetArchive } from "./assetArchivePlan";
 import { installWindowsTool, usesWindowsTools } from "./windowsTools";
 
 export { MapBuildFailure };
+export type { ArchiveEntry };
 
 export interface BuildProject {
   readonly projectRoot: string;
@@ -360,37 +362,44 @@ const workDirectory = (parent: string) =>
     (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
   );
 
-export interface ArchiveEntry {
-  readonly entry: string;
-
-  readonly source: string;
-}
-
-export const assetArchiveKey = (container: string, assets: readonly ArchiveEntry[]) => {
-  const hash = new Bun.CryptoHasher("sha256");
-  hash.update(readFileSync(container));
-  for (const { entry, source } of assets) hash.update(`\0${entry}\0`).update(readFileSync(source));
-  return hash.digest("hex");
-};
-
 const ASSET_ARCHIVES_KEPT = 3;
 
-const assetArchive = (packager: string, container: string, assets: readonly ArchiveEntry[], work: string) => Effect.gen(function*() {
+const cachedAssetArchives = (directory: string): readonly AssetArchiveBase[] =>
+  readdirSync(directory).filter((name) => name.endsWith(".json")).flatMap((name) => {
+    const key = name.slice(0, -".json".length);
+    if (!existsSync(join(directory, `${key}.w3x`))) return [];
+    try {
+      return [{ key, manifest: JSON.parse(readFileSync(join(directory, name), "utf8")) as AssetManifest }];
+    } catch {
+      return [];
+    }
+  });
+
+export const assetArchive = (packager: string, container: string, assets: readonly ArchiveEntry[], work: string) => Effect.gen(function*() {
   const directory = join(compileCacheDirectory(), "archives");
-  const key = yield* tryMapSync("hash map assets", container, () => assetArchiveKey(container, assets));
+  const wanted = yield* tryMapSync("hash map assets", container, () => assetManifest(container, assets));
+  const key = assetArchiveKey(wanted);
   const archive = join(directory, `${key}.w3x`);
   if (existsSync(archive)) {
     yield* tryMapSync("touch asset archive", archive, () => utimesSync(archive, new Date(), new Date()));
     return archive;
   }
   yield* tryMapSync("create asset archive directory", directory, () => mkdirSync(directory, { recursive: true }));
-  yield* stageMap(container, archive, (staged) => mapPack(packager).replaceAll(staged, assets, join(work, "asset-entries")).pipe(
-    Effect.andThen(verifyArchive(packager, staged, assets, work)),
-  ));
+  const base = yield* tryMapSync("find cached asset archive", directory, () => nearestAssetArchive(cachedAssetArchives(directory), wanted));
+  const packed = base === undefined ? assets : changedAssets(assets, base.manifest, wanted);
+  yield* stageMap(base === undefined ? container : join(directory, `${base.key}.w3x`), archive, (staged) =>
+    mapPack(packager).replaceAll(staged, packed, join(work, "asset-entries")).pipe(
+      Effect.andThen(verifyArchive(packager, staged, packed, work)),
+    )).pipe(step(base === undefined ? `pack ${packed.length} assets` : `replace ${packed.length} changed assets`));
+  yield* tryMapSync("record asset archive", archive, () =>
+    writeAtomic(join(directory, `${key}.json`), JSON.stringify({ ...wanted, generation: base === undefined ? 0 : base.manifest.generation + 1 })));
   yield* tryMapSync("prune asset archives", directory, () => {
     const kept = readdirSync(directory).filter((name) => name.endsWith(".w3x")).map((name) => join(directory, name))
       .sort((left, right) => statSync(right).mtimeMs - statSync(left).mtimeMs);
-    for (const old of kept.slice(ASSET_ARCHIVES_KEPT)) rmSync(old, { force: true });
+    for (const old of kept.slice(ASSET_ARCHIVES_KEPT)) {
+      rmSync(old, { force: true });
+      rmSync(old.replace(/\.w3x$/, ".json"), { force: true });
+    }
   });
   return archive;
 });

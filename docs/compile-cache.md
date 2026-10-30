@@ -42,7 +42,13 @@ reused without compiling.
 A build packs the base map's files and the declared imports into the container
 once per distinct content and keeps the result under `archives/`, keyed by a
 hash of the container and every entry's name and bytes; the three most
-recently used archives stay. Each build copies the archive, replaces only the
+recently used archives stay, each beside a `.json` manifest of the
+container's hash and every entry's hash. A build with no archive of its own
+starts from the cached archive of the same container that needs the fewest
+replacements (one holding no entry the build lacks, and built by fewer than
+eight earlier such steps), replaces only the entries whose bytes differ or are
+new, and verifies those; with none it packs every entry into a copy of the
+container. Each build copies the archive, replaces only the
 generated files (script, map info, object data) and writes the header, then
 verifies those files' bytes and that every packed entry is listed. On
 Smashcraft packaging and verification fell from 8.4 s to 0.5 s, and every
