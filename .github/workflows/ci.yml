@@ -129,7 +129,7 @@ jobs:
         timeout-minutes: 18
         uses: ./.github/actions/apt-install
         with:
-          packages: libudev-dev libasound2-dev libwayland-dev libxkbcommon-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev libvulkan1 mesa-vulkan-drivers
+          packages: libudev-dev libasound2-dev libwayland-dev libxkbcommon-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev libvulkan1 mesa-vulkan-drivers xvfb
       - if: steps.crate.outputs.present == 'true'
         run: cargo build --release --locked
         working-directory: window
@@ -138,7 +138,7 @@ jobs:
         working-directory: window
       - name: Headless probe on lavapipe
         if: steps.crate.outputs.present == 'true'
-        run: bun wisp window probe --frames 60 --out "$RUNNER_TEMP/window-probe"
+        run: xvfb-run -a bun wisp window probe --frames 60 --out "$RUNNER_TEMP/window-probe"
       - name: Can bun build --compile embed the library
         if: steps.crate.outputs.present == 'true'
         run: |

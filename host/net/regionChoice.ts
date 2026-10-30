@@ -5,7 +5,7 @@ import type { Endpoint } from "./link";
 import { describeRegions, nearest, pingRegions, pingRelay } from "./regionPing";
 
 /** The pick `--relay nearest` makes. */
-export const NEAREST = "nearest";
+const NEAREST = "nearest";
 
 const rttText = (rttMs: number) => `${rttMs.toFixed(0)} ms`;
 

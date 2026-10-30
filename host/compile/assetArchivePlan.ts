@@ -17,7 +17,7 @@ export interface AssetArchiveBase {
   readonly manifest: AssetManifest;
 }
 
-export const ASSET_ARCHIVE_GENERATIONS = 8;
+const ASSET_ARCHIVE_GENERATIONS = 8;
 
 const sha256 = (bytes: Uint8Array | string) => new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
 

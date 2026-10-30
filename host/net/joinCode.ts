@@ -13,7 +13,7 @@ export type JoinTarget =
 export type RelayRegions = ReadonlyMap<string, Endpoint>;
 
 /** The published list: Nexus, DigitalOcean sgp1 in Singapore (wisp:docs/relay.md, "Where the relay runs"). */
-export const PUBLISHED_REGIONS: readonly (readonly [string, Endpoint])[] = [["sgp", { address: "159.89.205.60", port: 7457 }]];
+const PUBLISHED_REGIONS: readonly (readonly [string, Endpoint])[] = [["sgp", { address: "159.89.205.60", port: 7457 }]];
 
 /** The published list; `WISP_RELAYS` ("sgp=203.0.113.9:7457,eu=...") adds to it or replaces a name in it. */
 export function relayRegions(env: Readonly<Record<string, string | undefined>> = process.env): RelayRegions {

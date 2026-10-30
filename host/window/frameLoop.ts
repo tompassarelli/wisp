@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
 import type { WindowView } from "./binding";
 import { spread } from "./stats";
@@ -50,7 +51,7 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
     if (ended) return;
     ended = true;
     if (error !== undefined) window.status(error);
-    setTimeout(() => {
+    Effect.runFork(Effect.sleep(100).pipe(Effect.andThen(Effect.sync(() => {
       if (disposed) return;
       const elapsedMs = performance.now() - firstFrameAt;
       const result = error !== undefined ? { error } : {
@@ -63,7 +64,7 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
         ...options.extraResult?.(series),
       };
       finished(result);
-    }, 100);
+    }))));
   };
 
   return {

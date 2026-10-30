@@ -10,7 +10,7 @@ import { DesktopFailure, runTool } from "../os/warcraft/desktopClient";
 import { type PressLatencyOptions, pressLatency, type Rect } from "./pressLatency";
 
 /** Frames the reference page waits between the key and the pixel it changes. */
-export const REFERENCE_DELAYS = [0, 4, 8] as const;
+const REFERENCE_DELAYS = [0, 4, 8] as const;
 
 const REGION: Rect = { x: 60, y: 60, width: 300, height: 300 };
 const CONTROL: Rect = { x: 600, y: 450, width: 150, height: 100 };

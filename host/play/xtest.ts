@@ -31,7 +31,7 @@ export function displaySocket(display: string): string | undefined {
   return number === undefined ? undefined : `/tmp/.X11-unix/X${number}`;
 }
 
-export const connectionSetup = () => Uint8Array.of(0x6c, 0, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+const connectionSetup = () => Uint8Array.of(0x6c, 0, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
 export function queryExtension(name: string): Uint8Array {
   const bytes = new Uint8Array(8 + padded(name.length));
@@ -43,7 +43,7 @@ export function queryExtension(name: string): Uint8Array {
   return bytes;
 }
 
-export function getKeyboardMapping(first: number, count: number): Uint8Array {
+function getKeyboardMapping(first: number, count: number): Uint8Array {
   const bytes = new Uint8Array(8);
   new DataView(bytes.buffer).setUint16(2, 2, true);
   bytes[0] = GET_KEYBOARD_MAPPING;
@@ -85,8 +85,8 @@ class Reader {
   }
 
   take(length: number) {
-    return new Promise<Uint8Array>((resolve) => {
-      this.waiting = { length, resolve };
+    return Effect.callback<Uint8Array>((resume) => {
+      this.waiting = { length, resolve: (bytes) => resume(Effect.succeed(bytes)) };
       this.settle();
     });
   }
@@ -105,41 +105,40 @@ export interface Keyboard {
   readonly send: (down: boolean) => { readonly beforeNs: number; readonly afterNs: number };
 }
 
-async function connectKeyboard(display: string, keyName: string): Promise<{ readonly keyboard: Keyboard; readonly close: () => void }> {
-  const path = displaySocket(display);
-  const keysym = keysymOf(keyName);
-  if (path === undefined) throw new Error(`${display} is not an X display such as :4`);
-  if (keysym === undefined) throw new Error(`${keyName} is not a single character, a named key or 0x hex`);
-  const reader = new Reader();
-  const socket = connect(path);
-  socket.on("data", (chunk: Buffer) => reader.push(chunk));
-  await new Promise<void>((resolve, reject) => { socket.once("connect", resolve); socket.once("error", reject); });
-  socket.write(connectionSetup());
-  const head = await reader.take(8);
-  const setup = await reader.take(new DataView(head.buffer).getUint16(6, true) * 4);
-  if (head[0] !== 1) throw new Error(`${path} refused the connection: ${new TextDecoder().decode(setup.subarray(0, head[1]))}`);
-  const minKeycode = setup[SETUP_MIN_KEYCODE]!;
-  const maxKeycode = setup[SETUP_MAX_KEYCODE]!;
-  socket.write(queryExtension("XTEST"));
-  const extension = await reader.take(32);
-  if (extension[8] !== 1) throw new Error(`${path} has no XTEST extension`);
-  const opcode = extension[9]!;
-  socket.write(getKeyboardMapping(minKeycode, maxKeycode - minKeycode + 1));
-  const mapping = await reader.take(32);
-  const body = await reader.take(new DataView(mapping.buffer).getUint32(4, true) * 4);
-  const keycode = keycodeOf(keysym, minKeycode, mapping[1]!, new Uint32Array(body.buffer, body.byteOffset, body.length / 4));
-  if (keycode === undefined) throw new Error(`no key on ${path} types ${keyName} unshifted`);
-  return {
-    keyboard: {
-      send: (down) => {
-        const beforeNs = nowNs();
-        socket.write(fakeKey(opcode, keycode, down));
-        return { beforeNs, afterNs: nowNs() };
-      },
-    },
-    close: () => socket.destroy(),
-  };
-}
+const connectKeyboard = (display: string, keyName: string) => {
+  const fail = (cause: string) => new DesktopFailure({ operation: "open the keyboard", client: display, cause });
+  return Effect.acquireRelease(Effect.gen(function*() {
+    const path = displaySocket(display);
+    const keysym = keysymOf(keyName);
+    if (path === undefined) return yield* fail(`${display} is not an X display such as :4`);
+    if (keysym === undefined) return yield* fail(`${keyName} is not a single character, a named key or 0x hex`);
+    const reader = new Reader();
+    const socket = connect(path);
+    socket.on("data", (chunk: Buffer) => reader.push(chunk));
+    yield* Effect.callback<void, DesktopFailure>((resume) => {
+      socket.once("connect", () => resume(Effect.void));
+      socket.once("error", (cause) => resume(Effect.fail(fail(cause.message))));
+    }).pipe(Effect.onError(() => Effect.sync(() => socket.destroy())));
+    return yield* Effect.gen(function*() {
+      socket.write(connectionSetup());
+      const head = yield* reader.take(8);
+      const setup = yield* reader.take(new DataView(head.buffer).getUint16(6, true) * 4);
+      if (head[0] !== 1) return yield* fail(`${path} refused the connection: ${new TextDecoder().decode(setup.subarray(0, head[1]))}`);
+      const minKeycode = setup[SETUP_MIN_KEYCODE]!;
+      const maxKeycode = setup[SETUP_MAX_KEYCODE]!;
+      socket.write(queryExtension("XTEST"));
+      const extension = yield* reader.take(32);
+      if (extension[8] !== 1) return yield* fail(`${path} has no XTEST extension`);
+      const opcode = extension[9]!;
+      socket.write(getKeyboardMapping(minKeycode, maxKeycode - minKeycode + 1));
+      const mapping = yield* reader.take(32);
+      const body = yield* reader.take(new DataView(mapping.buffer).getUint32(4, true) * 4);
+      const keycode = keycodeOf(keysym, minKeycode, mapping[1]!, new Uint32Array(body.buffer, body.byteOffset, body.length / 4));
+      if (keycode === undefined) return yield* fail(`no key on ${path} types ${keyName} unshifted`);
+      return { socket, keycode, opcode };
+    }).pipe(Effect.onError(() => Effect.sync(() => socket.destroy())));
+  }), ({ socket }) => Effect.sync(() => socket.destroy()));
+};
 
 /**
  * Opens a connection to the X server on `display` and presses `keyName` through XTEST in-process,
@@ -147,10 +146,12 @@ async function connectKeyboard(display: string, keyName: string): Promise<{ read
  * a whole display frame of doubt about when the key went down.
  * The server must accept connections without credentials, as the private desktop's Xwayland does.
  */
-export const openKeyboard = (display: string, keyName: string) => Effect.acquireRelease(
-  Effect.tryPromise({
-    try: () => connectKeyboard(display, keyName),
-    catch: (cause) => new DesktopFailure({ operation: "open the keyboard", client: display, cause: cause instanceof Error ? cause.message : String(cause) }),
-  }),
-  ({ close }) => Effect.sync(close),
-).pipe(Effect.map(({ keyboard }) => keyboard));
+export const openKeyboard = (display: string, keyName: string) => connectKeyboard(display, keyName).pipe(
+  Effect.map(({ socket, keycode, opcode }): Keyboard => ({
+    send: (down) => {
+      const beforeNs = nowNs();
+      socket.write(fakeKey(opcode, keycode, down));
+      return { beforeNs, afterNs: nowNs() };
+    },
+  })),
+);
