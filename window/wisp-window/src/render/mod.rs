@@ -249,7 +249,7 @@ impl Renderer {
                 };
                 let uniform = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("layer"),
-                    contents: bytemuck::bytes_of(&LayerUniform { kind, cutoff: if layer.filter == Filter::Cutout { 0.75 } else { 0.0 }, geoset_slot: part.opacity_slot, layer_slot: layer.opacity_slot }),
+                    contents: bytemuck::bytes_of(&LayerUniform { kind, cutoff: if layer.filter == Filter::Cutout { 0.75 } else { 0.0 }, geoset_slot: part.opacity_slot, layer_slot: layer.opacity_slot, ignores_texture_alpha: u32::from(layer.filter == Filter::Additive), pad: [0; 3] }),
                     usage: wgpu::BufferUsages::UNIFORM,
                 });
                 let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {

@@ -32,4 +32,6 @@ pub struct LayerUniform {
     pub cutoff: f32,
     pub geoset_slot: u32,
     pub layer_slot: u32,
+    pub ignores_texture_alpha: u32,
+    pub pad: [u32; 3],
 }

@@ -12,6 +12,7 @@ struct Layer {
     cutoff: f32,
     geoset_slot: u32,
     layer_slot: u32,
+    ignores_texture_alpha: u32,
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -84,15 +85,22 @@ fn fragment_main(in: Varying) -> @location(0) vec4<f32> {
         if (glow < 0.02) {
             discard;
         }
-        color = vec4<f32>(in.team, glow);
+        color = vec4<f32>(select(in.team, in.team * glow, layer.ignores_texture_alpha == 1u), glow);
     }
-    color = vec4<f32>(color.rgb * in.light * in.tint.rgb, color.a * in.tint.a * in.fade);
+    let additive = layer.ignores_texture_alpha == 1u;
+    var fog_target = frame.fog_color.rgb;
+    if (additive) {
+        color = vec4<f32>(color.rgb * in.light * in.tint.rgb * in.tint.a * in.fade, 1.0);
+        fog_target = vec3<f32>(0.0);
+    } else {
+        color = vec4<f32>(color.rgb * in.light * in.tint.rgb, color.a * in.tint.a * in.fade);
+    }
     if (in.fade < 0.004 || color.a < layer.cutoff) {
         discard;
     }
     if (frame.fog_color.w > 0.5) {
         let fog = clamp((in.clip.w - frame.fog_range.x) / max(frame.fog_range.y - frame.fog_range.x, 1.0), 0.0, frame.fog_range.z);
-        color = vec4<f32>(mix(color.rgb, frame.fog_color.rgb, fog), color.a);
+        color = vec4<f32>(mix(color.rgb, fog_target, fog), color.a);
     }
     return color;
 }

@@ -7,9 +7,14 @@ const SIDE: u32 = 128;
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { force_fallback_adapter: false, ..Default::default() })).ok()?;
-    pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
+    static SHARED: std::sync::OnceLock<Option<(wgpu::Device, wgpu::Queue)>> = std::sync::OnceLock::new();
+    SHARED
+        .get_or_init(|| {
+            let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+            let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { force_fallback_adapter: false, ..Default::default() })).ok()?;
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
+        })
+        .clone()
 }
 
 fn translation(x: f32, y: f32, z: f32) -> Mat4 {
@@ -74,4 +79,151 @@ fn a_particle_and_a_bolt_reach_the_screen() {
     assert!(bolt_rows > 0, "the bolt lights rows in the upper third");
     let error = pollster::block_on(scope.pop());
     assert!(error.is_none(), "wgpu validation: {error:?}");
+}
+
+const BACKGROUND: [f32; 3] = [0.5, 0.25, 0.75];
+const TEAM: [f32; 3] = [0.9, 0.1, 0.3];
+
+struct FlatRig;
+
+impl model::Rig for FlatRig {
+    fn bone_count(&self) -> usize {
+        1
+    }
+
+    fn pose(&mut self, _sequence: i32, _frame: f32, _clock_ms: f32, out: &mut [Mat4]) {
+        out[0] = IDENTITY;
+    }
+
+    fn opacities(&self) -> &[f32] {
+        &[1.0; 8]
+    }
+
+    fn uv_rows(&self) -> &[[f32; 4]] {
+        const ROWS: [[f32; 4]; 16] = {
+            let mut rows = [[0.0; 4]; 16];
+            let mut slot = 0;
+            while slot < 8 {
+                rows[slot * 2] = [1.0, 0.0, 0.0, 0.0];
+                rows[slot * 2 + 1] = [0.0, 1.0, 0.0, 0.0];
+                slot += 1;
+            }
+            rows
+        };
+        &ROWS
+    }
+
+    fn emitters(&self) -> &[EmitterSample] {
+        &[]
+    }
+}
+
+struct Sheet {
+    filter: Filter,
+    depth: f32,
+    paint: Paint,
+    texel: [u8; 4],
+}
+
+fn sheet(filter: Filter, depth: f32, texel: [u8; 4]) -> Sheet {
+    Sheet { filter, depth, paint: Paint::Texture(String::new()), texel }
+}
+
+fn centre_of(sheets: &[Sheet]) -> [f32; 3] {
+    let Some((device, queue)) = device() else { return [f32::NAN; 3] };
+    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off);
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+    let mut parts = Vec::new();
+    for (index, sheet) in sheets.iter().enumerate() {
+        let name = format!("sheet{index}");
+        renderer.textures.insert(name.clone(), upload(&device, &queue, &crate::texture::Image { width: 1, height: 1, rgba: sheet.texel.to_vec() }));
+        let reach = sheet.depth * 4.0;
+        let base = vertices.len() as u32;
+        for (x, y, u, v) in [(-reach, -reach, 0.0, 1.0), (reach, -reach, 1.0, 1.0), (reach, reach, 1.0, 0.0), (-reach, reach, 0.0, 0.0)] {
+            vertices.push(Vertex { position: [x, y, -sheet.depth], normal: [0.0, 0.0, 1.0], uv: [u, v], bones: [0; 4], weights: [1.0, 0.0, 0.0, 0.0] });
+        }
+        let first_index = indices.len() as u32;
+        indices.extend([0, 1, 2, 0, 2, 3].map(|corner| base + corner));
+        let paint = match &sheet.paint {
+            Paint::Texture(_) => Paint::Texture(name),
+            other => other.clone(),
+        };
+        parts.push(model::Part { opacity_slot: 0, first_index, index_count: 6, layers: vec![model::Layer { paint, filter: sheet.filter, opacity_slot: 1 }] });
+    }
+    renderer.add_model("sheets", ModelData { vertices, indices, parts, rig: Box::new(FlatRig), emitters: Vec::new() });
+    let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };
+    scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0 };
+    scene.poses = vec![scene::Pose { id: 0, model: "sheets".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 0.0, alpha: 1.0, color: [1.0; 3], team: TEAM }];
+    let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
+    let image = render(&mut renderer, &device, &queue, &scene);
+    let error = pollster::block_on(scope.pop());
+    assert!(error.is_none(), "wgpu validation: {error:?}");
+    pixel(&image, SIDE / 2, SIDE / 2).map(|channel| f32::from(channel) / 255.0)
+}
+
+fn assert_pixel(actual: [f32; 3], expected: [f32; 3], rule: &str) {
+    if actual[0].is_nan() {
+        return;
+    }
+    assert!((0..3).all(|channel| (actual[channel] - expected[channel]).abs() < 0.015), "{rule}: drew {actual:?}, expected {expected:?}");
+}
+
+fn over(source: [f32; 3], alpha: f32, destination: [f32; 3]) -> [f32; 3] {
+    [0, 1, 2].map(|channel| source[channel] * alpha + destination[channel] * (1.0 - alpha))
+}
+
+const SOURCE: [f32; 3] = [0.8, 0.4, 0.2];
+const FAR: [f32; 3] = [0.2, 0.6, 0.4];
+
+fn texel(color: [f32; 3], alpha: f32) -> [u8; 4] {
+    [color[0], color[1], color[2], alpha].map(|channel| (channel * 255.0).round() as u8)
+}
+
+#[test]
+fn transparent_tests_alpha_at_three_quarters_and_writes_depth() {
+    assert_pixel(centre_of(&[sheet(Filter::Cutout, 100.0, texel(SOURCE, 0.7))]), BACKGROUND, "alpha 0.7 is cut out");
+    assert_pixel(centre_of(&[sheet(Filter::Cutout, 100.0, texel(SOURCE, 0.8))]), SOURCE, "alpha 0.8 is drawn whole, not blended");
+    let behind = sheet(Filter::Opaque, 200.0, texel(FAR, 1.0));
+    assert_pixel(centre_of(&[sheet(Filter::Cutout, 100.0, texel(SOURCE, 0.8)), behind]), SOURCE, "a cut-out hides what is drawn behind it afterwards");
+}
+
+#[test]
+fn blend_is_source_alpha_over_with_no_depth_write() {
+    let near = over(SOURCE, 0.5, BACKGROUND);
+    assert_pixel(centre_of(&[sheet(Filter::Blend, 100.0, texel(SOURCE, 0.5))]), near, "source alpha over the background");
+    assert_pixel(centre_of(&[sheet(Filter::Blend, 100.0, texel(SOURCE, 0.5)), sheet(Filter::Blend, 200.0, texel(FAR, 0.5))]), over(FAR, 0.5, near), "a blended sheet leaves what is behind it drawable");
+}
+
+#[test]
+fn additive_adds_the_colour_and_ignores_the_texture_alpha() {
+    let expected = [0, 1, 2].map(|channel| (SOURCE[channel] + BACKGROUND[channel]).min(1.0));
+    assert_pixel(centre_of(&[sheet(Filter::Additive, 100.0, texel(SOURCE, 0.25))]), expected, "one plus one");
+}
+
+#[test]
+fn add_alpha_adds_the_colour_scaled_by_the_texture_alpha() {
+    let expected = [0, 1, 2].map(|channel| (SOURCE[channel] * 0.5 + BACKGROUND[channel]).min(1.0));
+    assert_pixel(centre_of(&[sheet(Filter::AddAlpha, 100.0, texel(SOURCE, 0.5))]), expected, "source alpha plus one");
+}
+
+#[test]
+fn modulate_multiplies_the_background_by_the_colour() {
+    let expected = [0, 1, 2].map(|channel| SOURCE[channel] * BACKGROUND[channel]);
+    assert_pixel(centre_of(&[sheet(Filter::Modulate, 100.0, texel(SOURCE, 1.0))]), expected, "destination colour times source colour");
+}
+
+#[test]
+fn modulate_twice_doubles_the_product() {
+    let expected = [0, 1, 2].map(|channel| (SOURCE[channel] * BACKGROUND[channel] * 2.0).min(1.0));
+    assert_pixel(centre_of(&[sheet(Filter::Modulate2x, 100.0, texel(SOURCE, 1.0))]), expected, "twice destination times source");
+}
+
+#[test]
+fn replaceable_one_and_two_draw_the_players_team_colour_and_glow() {
+    let team = Sheet { filter: Filter::Opaque, depth: 100.0, paint: Paint::TeamColor, texel: [0; 4] };
+    assert_pixel(centre_of(&[team]), TEAM, "replaceable 1 is the team colour");
+    let glow = Sheet { filter: Filter::Blend, depth: 100.0, paint: Paint::TeamGlow, texel: [0; 4] };
+    let expected = over(TEAM, 1.0f32.sin(), BACKGROUND);
+    assert_pixel(centre_of(&[glow]), expected, "replaceable 2 is the team glow at its centre");
 }

@@ -22,7 +22,8 @@ pub(super) fn blend_of(filter: Filter) -> Option<wgpu::BlendState> {
     match filter {
         Filter::Opaque | Filter::Cutout => None,
         Filter::Blend => Some(blend(SrcAlpha, OneMinusSrcAlpha)),
-        Filter::Additive | Filter::AddAlpha => Some(blend(SrcAlpha, One)),
+        Filter::Additive => Some(blend(One, One)),
+        Filter::AddAlpha => Some(blend(SrcAlpha, One)),
         Filter::Modulate => Some(blend(Zero, Src)),
         Filter::Modulate2x => Some(blend(Dst, Src)),
     }

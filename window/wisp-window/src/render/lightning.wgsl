@@ -11,7 +11,7 @@ struct Frame {
 };
 
 struct Bolt {
-    from: vec4<f32>,
+    origin: vec4<f32>,
     to: vec4<f32>,
     color: vec4<f32>,
 };
@@ -41,11 +41,11 @@ fn vertex_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) inst
     let step = vertex / 2u;
     let side = select(-1.0, 1.0, vertex % 2u == 0u);
     let along = f32(step) / f32(SEGMENTS);
-    let direction = bolt.to.xyz - bolt.from.xyz;
+    let direction = bolt.to.xyz - bolt.origin.xyz;
     let reach = length(direction);
-    let straight = mix(bolt.from.xyz, bolt.to.xyz, along);
+    let straight = mix(bolt.origin.xyz, bolt.to.xyz, along);
     let tick = u32(frame.eye.w * 24.0);
-    let seed = u32(bolt.from.w) * 7919u + tick * 104729u + step * 31u;
+    let seed = u32(bolt.origin.w) * 7919u + tick * 104729u + step * 31u;
     var wide = cross(direction, frame.eye.xyz - straight);
     if (dot(wide, wide) < 1e-6) {
         wide = frame.right.xyz;

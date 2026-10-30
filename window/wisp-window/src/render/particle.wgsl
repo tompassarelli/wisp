@@ -77,9 +77,9 @@ fn vertex_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) inde
         t = select((along - middle) / (1.0 - middle), along / middle, first_half);
     }
     let size = mix(select(spec.scaling.y, spec.scaling.x, first_half), select(spec.scaling.z, spec.scaling.y, first_half), t) * particle.placed.x;
-    let from = select(spec.second, spec.first, first_half);
+    let origin = select(spec.second, spec.first, first_half);
     let to = select(spec.third, spec.second, first_half);
-    var color = mix(from, to, t);
+    var color = mix(origin, to, t);
     color.a = color.a * particle.extra.w;
 
     let gravity = particle.extra.x;

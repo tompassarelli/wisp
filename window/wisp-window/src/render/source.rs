@@ -181,3 +181,18 @@ pub fn model(bytes: &[u8], quality: Quality) -> Result<ModelData, String> {
     Ok(data)
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn replaceable_one_and_two_are_the_team_colour_and_glow_and_a_named_file_is_itself() {
+        let texture = |replaceable_id, image: &str| model::Texture { replaceable_id, image: image.to_string() };
+        let model = model::Model { textures: vec![texture(1, ""), texture(2, ""), texture(0, "Textures\\Smoke.blp"), texture(11, "")], ..model::Model::default() };
+        assert_eq!(paint(&model, 0), Paint::TeamColor);
+        assert_eq!(paint(&model, 1), Paint::TeamGlow);
+        assert_eq!(paint(&model, 2), Paint::Texture("Textures\\Smoke.blp".to_string()));
+        assert_eq!(paint(&model, 3), Paint::None);
+    }
+}
