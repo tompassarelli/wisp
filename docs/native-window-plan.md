@@ -75,6 +75,13 @@ names, a C compiler, cmake for SDL3, pkg-config, and the libudev and libxkbcommo
 evdev driver and winit use, and puts the Wayland, X11 and Vulkan runtime libraries on
 `LD_LIBRARY_PATH` for `bun wisp window probe`.
 
+On a host whose north `[hosts.NAME]` sets `lease_builds`, such as gex45, that
+command waits for a heavy capacity lease, also when it is started over `ssh`
+or detached with `setsid`: north's `nix` shim sends `nix develop --command
+cargo ...` through `north capacity gate` (north#383). A `cargo` typed inside an
+interactive dev shell is the dev shell's own and takes no lease, so run builds
+there through `nix develop --command`.
+
 As first built, each frame the render thread sampled input and woke Bun
 through a `threadsafe` `JSCallback` that carried the input. Bun ran one step
 and handed back the scene with one FFI call that passed a pointer and a
