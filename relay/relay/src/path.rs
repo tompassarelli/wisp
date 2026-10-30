@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 
+use relay_proto::control::{self, Control};
 use relay_proto::transport::Transport;
 use relay_proto::wire::{self, Down, Packet, DOWN_HEADER, MAX_PACKET};
 use relay_proto::Micros;
@@ -66,6 +67,17 @@ impl Path {
         }
     }
 
+    pub(crate) fn challenge(&mut self, cookie: u64, now: Micros, gap: Micros, out: &mut Out) -> bool {
+        if self.verified || self.last_challenge.is_some_and(|t| now - t < gap) {
+            return false;
+        }
+        let sent = self.send(control::encode(&Control::Challenge { cookie }), out);
+        if sent {
+            self.last_challenge = Some(now);
+        }
+        sent
+    }
+
     pub(crate) fn budget(&self) -> u64 {
         (AMPLIFICATION * self.received).saturating_sub(self.sent)
     }
@@ -80,6 +92,20 @@ impl Path {
         out.push((self.addr, bytes));
         true
     }
+}
+
+pub(crate) fn bind<'a>(slot: &'a mut Option<Path>, from: Peer, rebinds: &mut u64) -> &'a mut Path {
+    if slot.as_ref().is_none_or(|p| p.addr != from) {
+        *rebinds += 1;
+        *slot = None;
+    }
+    slot.get_or_insert_with(|| Path {
+        addr: from,
+        verified: false,
+        received: 0,
+        sent: 0,
+        last_challenge: None,
+    })
 }
 
 pub(crate) fn send_down(path: &mut Path, bytes: Vec<u8>, out: &mut Out) -> Delivery {

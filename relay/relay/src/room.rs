@@ -1,4 +1,3 @@
-
 use relay_proto::cadence::Cadence;
 use relay_proto::control::{self, Control};
 use relay_proto::relay::Relay;
@@ -18,13 +17,24 @@ pub(crate) struct Slot {
 }
 
 #[derive(Debug)]
-pub(crate) struct Room {
+pub(crate) struct Clocked {
     pub(crate) relay: Relay,
-    pub(crate) slots: Vec<Slot>,
     pub(crate) full_at: Option<Micros>,
     pub(crate) started: bool,
     pub(crate) game: GameRoom,
     pub(crate) next_report: Micros,
+}
+
+#[derive(Debug)]
+pub(crate) enum Body {
+    Clocked(Clocked),
+    Peer,
+}
+
+#[derive(Debug)]
+pub(crate) struct Room {
+    pub(crate) slots: Vec<Slot>,
+    pub(crate) body: Body,
     pub(crate) heard: Micros,
     pub(crate) relayed: u64,
 }
@@ -45,7 +55,36 @@ impl Room {
         self.slots.iter().all(|s| s.left)
     }
 
+    pub(crate) fn full(&mut self, now: Micros) {
+        if let Body::Clocked(c) = &mut self.body {
+            c.full_at = Some(now);
+        }
+    }
+
     pub(crate) fn poll_game(&mut self, id: u64, now: Micros, lobby_us: Micros, cadence: &Cadence, out: &mut Out, log: &mut Vec<String>) {
+        if let Body::Clocked(c) = &mut self.body {
+            c.poll_game(id, now, lobby_us, cadence, &mut self.slots, out, log);
+        }
+    }
+
+    pub(crate) fn forward(&mut self, from: usize, payload: &[u8], out: &mut Out) {
+        let bytes = control::encode(&Control::Relayed {
+            from: from as u8,
+            payload: payload.to_vec(),
+        });
+        for (index, slot) in self.slots.iter_mut().enumerate() {
+            if index == from || slot.left {
+                continue;
+            }
+            if let Some(path) = slot.path.as_mut().filter(|p| p.verified) {
+                path.send(bytes.clone(), out);
+            }
+        }
+    }
+}
+
+impl Clocked {
+    fn poll_game(&mut self, id: u64, now: Micros, lobby_us: Micros, cadence: &Cadence, slots: &mut [Slot], out: &mut Out, log: &mut Vec<String>) {
         let ready = if self.game.hosted() { self.game.playing() } else { self.full_at.is_some_and(|t| now >= t + lobby_us) };
         if !self.started && ready {
             self.relay.start(now);
@@ -53,7 +92,7 @@ impl Room {
             log.push(format!("room {id:016x} playing"));
         }
         for (index, bytes) in self.game.poll(now) {
-            if let Some(path) = &mut self.slots[index].path {
+            if let Some(path) = &mut slots[index].path {
                 path.send(bytes, out);
             }
         }

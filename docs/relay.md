@@ -1644,6 +1644,37 @@ Built for wisp#37 (code box), in `relay/`:
   with no client keep Battle.net join codes, which need no install. Both
   players in a match use the same transport.
 
+## Peer room (box L1, wisp#100)
+
+A second room kind beside the clocked one, for standalone matches that run
+their own lockstep (wisp:docs/online-plan.md, "Wisp's relay"). It has no
+turn clock, no lobby and no W3GS host: it forwards each member's datagram,
+byte for byte, to the other members.
+
+- **Create and join.** `CreatePeer` (kind 13) opens a room for 2 to 4
+  members, else `Refused Players`. It passes the same cookie challenge,
+  counts against the same per-address room limit (`rooms_per_window`) and
+  answers with `Room`, whose `steps` are empty. `Join` fills the remaining
+  slots as it does for a clocked room.
+- **Datagrams.** A member sends `Peer` (kind 14: token, payload). The relay
+  sends every other joined member that has a verified address `Relayed`
+  (kind 15: sender's slot, payload). A `Peer` datagram is at most 1200 bytes,
+  so its payload is at most 1189 bytes and the `Relayed` copy is 1193 at
+  most. The token never leaves the relay.
+- **Handshake.** A member whose datagram arrives from an address other than
+  the one it joined from gets a `Challenge` and nothing is forwarded from
+  that address until its `Verify` carries the cookie. Until then the
+  3-times-received amplification limit holds, and the room forwards nothing
+  to that address.
+- **Limits.** The room is closed once the bytes it sent exceed
+  `slot_bytes` per slot, when every member has left, or after `idle_us`
+  without a datagram. Peer rooms add no wake-up to `Server::next_wake`.
+- **Test vectors.** relay/relay-proto/vectors/control.txt holds one packet
+  per line for every control message. `cargo test -p relay-proto peer_room`
+  checks the Rust codec against it, and `bun test test/relayVectors.test.ts`
+  checks host/net/relayControl.ts, the TypeScript codec the standalone
+  window will use (wisp#101).
+
 ## Reaching players (box R0)
 
 Box R0 tried every route that public sources name, all from outside the

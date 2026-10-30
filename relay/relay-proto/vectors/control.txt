@@ -1,0 +1,22 @@
+# One control packet per line: the message's fields as name=value (u64 in decimal, byte strings in hex), then hex= the packet it encodes to.
+create cookie=1 request=2 players=2 hex=5701030100000000000000020000000000000002
+create cookie=18446744073709551615 request=0 players=24 hex=570103ffffffffffffffff000000000000000018
+createPeer cookie=1311768467463790320 request=2 players=4 hex=57010df0debc9a78563412020000000000000004
+createPeer cookie=7 request=9 players=2 hex=57010d0700000000000000090000000000000002
+join cookie=3 request=4 room=5 hex=570104030000000000000004000000000000000500000000000000
+join cookie=18446744073709551615 request=18446744073709551614 room=1 hex=570104fffffffffffffffffeffffffffffffff0100000000000000
+challenge cookie=6 hex=5701050600000000000000
+challenge cookie=18446744073709551615 hex=570105ffffffffffffffff
+room request=7 room=8 token=9 players=2 slot=1 steps=111110 hex=570106070000000000000008000000000000000900000000000000020103111110
+room request=7 room=8 token=9 players=4 slot=3 steps= hex=570106070000000000000008000000000000000900000000000000040300
+verify token=10 cookie=11 hex=5701070a000000000000000b00000000000000
+leave token=12 hex=5701080c00000000000000
+refused request=13 reason=rateLimited hex=5701090d0000000000000001
+refused request=14 reason=noRoom hex=5701090e0000000000000002
+refused request=15 reason=full hex=5701090f0000000000000003
+refused request=16 reason=players hex=570109100000000000000004
+refused request=17 reason=busy hex=570109110000000000000005
+peer token=18 payload= hex=57010e1200000000000000
+peer token=18446744073709551615 payload=00ff7f80 hex=57010effffffffffffffff00ff7f80
+relayed from=0 payload= hex=57010f00
+relayed from=3 payload=00ff7f80 hex=57010f0300ff7f80

@@ -7,6 +7,13 @@ pub const KIND_ROOM: u8 = 6;
 pub const KIND_VERIFY: u8 = 7;
 pub const KIND_LEAVE: u8 = 8;
 pub const KIND_REFUSED: u8 = 9;
+pub const KIND_CREATE_PEER: u8 = 13;
+pub const KIND_PEER: u8 = 14;
+pub const KIND_RELAYED: u8 = 15;
+
+pub const PEER_HEADER: usize = 3 + 8;
+pub const MIN_PEERS: u8 = 2;
+pub const MAX_PEERS: u8 = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Refusal {
@@ -74,6 +81,19 @@ pub enum Control {
         request: u64,
         reason: Refusal,
     },
+    CreatePeer {
+        cookie: u64,
+        request: u64,
+        players: u8,
+    },
+    Peer {
+        token: u64,
+        payload: Vec<u8>,
+    },
+    Relayed {
+        from: u8,
+        payload: Vec<u8>,
+    },
 }
 
 pub fn kind(buf: &[u8]) -> Option<u8> {
@@ -87,20 +107,39 @@ pub fn token(buf: &[u8]) -> Option<u64> {
     Some(u64::from_le_bytes(buf.get(3..11)?.try_into().ok()?))
 }
 
-pub fn encode(c: &Control) -> Vec<u8> {
-    fn put(v: u64, n: usize, out: &mut Vec<u8>) {
-        out.extend_from_slice(&v.to_le_bytes()[..n]);
+fn put(v: u64, n: usize, out: &mut Vec<u8>) {
+    out.extend_from_slice(&v.to_le_bytes()[..n]);
+}
+
+fn kind_of(c: &Control) -> u8 {
+    match c {
+        Control::Create { .. } => KIND_CREATE,
+        Control::Join { .. } => KIND_JOIN,
+        Control::Challenge { .. } => KIND_CHALLENGE,
+        Control::Room { .. } => KIND_ROOM,
+        Control::Verify { .. } => KIND_VERIFY,
+        Control::Leave { .. } => KIND_LEAVE,
+        Control::Refused { .. } => KIND_REFUSED,
+        Control::CreatePeer { .. } => KIND_CREATE_PEER,
+        Control::Peer { .. } => KIND_PEER,
+        Control::Relayed { .. } => KIND_RELAYED,
     }
-    let mut out = vec![MAGIC, VERSION];
+}
+
+fn put_body(c: &Control, out: &mut Vec<u8>) {
     match c {
         Control::Create {
             cookie,
             request,
             players,
+        }
+        | Control::CreatePeer {
+            cookie,
+            request,
+            players,
         } => {
-            out.push(KIND_CREATE);
-            put(*cookie, 8, &mut out);
-            put(*request, 8, &mut out);
+            put(*cookie, 8, out);
+            put(*request, 8, out);
             out.push(*players);
         }
         Control::Join {
@@ -108,15 +147,11 @@ pub fn encode(c: &Control) -> Vec<u8> {
             request,
             room,
         } => {
-            out.push(KIND_JOIN);
-            put(*cookie, 8, &mut out);
-            put(*request, 8, &mut out);
-            put(*room, 8, &mut out);
+            put(*cookie, 8, out);
+            put(*request, 8, out);
+            put(*room, 8, out);
         }
-        Control::Challenge { cookie } => {
-            out.push(KIND_CHALLENGE);
-            put(*cookie, 8, &mut out);
-        }
+        Control::Challenge { cookie } => put(*cookie, 8, out),
         Control::Room {
             request,
             room,
@@ -125,30 +160,37 @@ pub fn encode(c: &Control) -> Vec<u8> {
             slot,
             steps,
         } => {
-            out.push(KIND_ROOM);
-            put(*request, 8, &mut out);
-            put(*room, 8, &mut out);
-            put(*token, 8, &mut out);
+            put(*request, 8, out);
+            put(*room, 8, out);
+            put(*token, 8, out);
             out.push(*players);
             out.push(*slot);
             out.push(steps.len() as u8);
             out.extend_from_slice(steps);
         }
         Control::Verify { token, cookie } => {
-            out.push(KIND_VERIFY);
-            put(*token, 8, &mut out);
-            put(*cookie, 8, &mut out);
+            put(*token, 8, out);
+            put(*cookie, 8, out);
         }
-        Control::Leave { token } => {
-            out.push(KIND_LEAVE);
-            put(*token, 8, &mut out);
-        }
+        Control::Leave { token } => put(*token, 8, out),
         Control::Refused { request, reason } => {
-            out.push(KIND_REFUSED);
-            put(*request, 8, &mut out);
+            put(*request, 8, out);
             out.push(reason.code());
         }
+        Control::Peer { token, payload } => {
+            put(*token, 8, out);
+            out.extend_from_slice(payload);
+        }
+        Control::Relayed { from, payload } => {
+            out.push(*from);
+            out.extend_from_slice(payload);
+        }
     }
+}
+
+pub fn encode(c: &Control) -> Vec<u8> {
+    let mut out = vec![MAGIC, VERSION, kind_of(c)];
+    put_body(c, &mut out);
     out
 }
 
@@ -169,21 +211,21 @@ impl Reader<'_> {
     fn u64(&mut self) -> Result<u64, WireError> {
         Ok(u64::from_le_bytes(self.take(8)?.try_into().unwrap()))
     }
+    fn rest(&mut self) -> Vec<u8> {
+        let rest = self.buf[self.at..].to_vec();
+        self.at = self.buf.len();
+        rest
+    }
 }
 
-pub fn decode(buf: &[u8]) -> Result<Control, WireError> {
-    if buf.len() > MAX_PACKET {
-        return Err(WireError::TooLong);
-    }
-    let mut r = Reader { buf, at: 0 };
-    if r.u8()? != MAGIC {
-        return Err(WireError::Magic);
-    }
-    if r.u8()? != VERSION {
-        return Err(WireError::Version);
-    }
-    let c = match r.u8()? {
+fn decode_body(kind: u8, r: &mut Reader) -> Result<Control, WireError> {
+    Ok(match kind {
         KIND_CREATE => Control::Create {
+            cookie: r.u64()?,
+            request: r.u64()?,
+            players: r.u8()?,
+        },
+        KIND_CREATE_PEER => Control::CreatePeer {
             cookie: r.u64()?,
             request: r.u64()?,
             players: r.u8()?,
@@ -219,8 +261,31 @@ pub fn decode(buf: &[u8]) -> Result<Control, WireError> {
             request: r.u64()?,
             reason: Refusal::from_code(r.u8()?)?,
         },
+        KIND_PEER => Control::Peer {
+            token: r.u64()?,
+            payload: r.rest(),
+        },
+        KIND_RELAYED => Control::Relayed {
+            from: r.u8()?,
+            payload: r.rest(),
+        },
         _ => return Err(WireError::Kind),
-    };
+    })
+}
+
+pub fn decode(buf: &[u8]) -> Result<Control, WireError> {
+    if buf.len() > MAX_PACKET {
+        return Err(WireError::TooLong);
+    }
+    let mut r = Reader { buf, at: 0 };
+    if r.u8()? != MAGIC {
+        return Err(WireError::Magic);
+    }
+    if r.u8()? != VERSION {
+        return Err(WireError::Version);
+    }
+    let kind = r.u8()?;
+    let c = decode_body(kind, &mut r)?;
     if r.at != buf.len() {
         return Err(WireError::Trailing);
     }
@@ -286,5 +351,72 @@ mod tests {
                 assert!(challenge <= encode(&c).len());
             }
         }
+    }
+
+    fn vector_fields(line: &str) -> (String, std::collections::HashMap<&str, &str>) {
+        let mut words = line.split(' ');
+        let kind = words.next().unwrap().to_string();
+        (kind, words.filter_map(|w| w.split_once('=')).collect())
+    }
+
+    fn unhex(text: &str) -> Vec<u8> {
+        (0..text.len()).step_by(2).map(|i| u8::from_str_radix(&text[i..i + 2], 16).unwrap()).collect()
+    }
+
+    fn vector_refusal(name: &str) -> Refusal {
+        match name {
+            "rateLimited" => Refusal::RateLimited,
+            "noRoom" => Refusal::NoRoom,
+            "full" => Refusal::Full,
+            "players" => Refusal::Players,
+            "busy" => Refusal::Busy,
+            other => panic!("unknown refusal {other}"),
+        }
+    }
+
+    fn vector_control(kind: &str, f: &std::collections::HashMap<&str, &str>) -> Control {
+        let n = |k: &str| f[k].parse::<u64>().unwrap();
+        let b = |k: &str| f[k].parse::<u8>().unwrap();
+        match kind {
+            "create" => Control::Create { cookie: n("cookie"), request: n("request"), players: b("players") },
+            "createPeer" => Control::CreatePeer { cookie: n("cookie"), request: n("request"), players: b("players") },
+            "join" => Control::Join { cookie: n("cookie"), request: n("request"), room: n("room") },
+            "challenge" => Control::Challenge { cookie: n("cookie") },
+            "room" => Control::Room { request: n("request"), room: n("room"), token: n("token"), players: b("players"), slot: b("slot"), steps: unhex(f["steps"]) },
+            "verify" => Control::Verify { token: n("token"), cookie: n("cookie") },
+            "leave" => Control::Leave { token: n("token") },
+            "refused" => Control::Refused { request: n("request"), reason: vector_refusal(f["reason"]) },
+            "peer" => Control::Peer { token: n("token"), payload: unhex(f["payload"]) },
+            "relayed" => Control::Relayed { from: b("from"), payload: unhex(f["payload"]) },
+            other => panic!("unknown vector type {other}"),
+        }
+    }
+
+    #[test]
+    fn peer_room_vectors_encode_and_decode_to_the_shared_packets() {
+        let file = include_str!("../vectors/control.txt");
+        let mut count = 0;
+        for line in file.lines().filter(|l| !l.is_empty() && !l.starts_with('#')) {
+            let (kind, fields) = vector_fields(line);
+            let message = vector_control(&kind, &fields);
+            let packet = unhex(fields["hex"]);
+            assert_eq!(encode(&message), packet, "{line}");
+            assert_eq!(decode(&packet), Ok(message), "{line}");
+            count += 1;
+        }
+        assert!(count >= 20);
+    }
+
+    #[test]
+    fn peer_room_datagrams_carry_any_payload_up_to_the_packet_limit() {
+        let most = MAX_PACKET - PEER_HEADER;
+        let full = Control::Peer { token: 5, payload: vec![0xa5; most] };
+        let bytes = encode(&full);
+        assert_eq!(bytes.len(), MAX_PACKET);
+        assert_eq!(token(&bytes), Some(5));
+        assert_eq!(decode(&bytes), Ok(full));
+        let over = encode(&Control::Peer { token: 5, payload: vec![0; most + 1] });
+        assert_eq!(decode(&over), Err(WireError::TooLong));
+        assert!(decode(&bytes[..PEER_HEADER - 1]).is_err());
     }
 }

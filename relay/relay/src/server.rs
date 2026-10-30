@@ -4,7 +4,7 @@ use std::hash::{BuildHasher, Hash, Hasher};
 use std::net::{IpAddr, SocketAddr};
 
 use relay_proto::cadence::Cadence;
-use relay_proto::control::{self, Control, Refusal};
+use relay_proto::control::{self, Control, Refusal, KIND_PEER, MAX_PEERS, MIN_PEERS};
 use relay_proto::relay::Relay;
 use relay_proto::send_log::Line;
 use relay_proto::lobby::{LobbyTiming, HOST_TIMING};
@@ -14,8 +14,11 @@ use relay_proto::wire::{KIND_UP, KIND_UP_COVER};
 use relay_proto::Micros;
 
 use crate::game_room::GameRoom;
-use crate::path::{send_down, Delivery, Path};
-use crate::room::{Room, Slot};
+use crate::path::{bind, Path};
+use crate::room::{Body, Clocked, Room, Slot};
+
+mod members;
+mod turns;
 
 pub use crate::path::{Out, Peer, AMPLIFICATION};
 pub use crate::room::REPORT_US;
@@ -65,6 +68,7 @@ pub struct Stats {
     pub verified: u64,
     pub trimmed: u64,
     pub withheld: u64,
+    pub forwarded: u64,
     pub desyncs: u64,
     pub stops: u64,
 }
@@ -167,12 +171,17 @@ impl Server {
     pub fn next_wake(&self) -> Option<Micros> {
         self.rooms
             .values()
-            .map(|r| match (r.started, r.full_at) {
-                (false, Some(full)) => r.relay.next_wake().min(full + self.cfg.lobby_us),
-                _ => r.relay.next_wake(),
+            .filter_map(|r| match &r.body {
+                Body::Clocked(c) => Some(c),
+                Body::Peer => None,
             })
-            .zip(self.rooms.values().map(|r| r.game.next_wake()))
-            .map(|(a, b)| a.min(b))
+            .map(|c| {
+                let turns = match (c.started, c.full_at) {
+                    (false, Some(full)) => c.relay.next_wake().min(full + self.cfg.lobby_us),
+                    _ => c.relay.next_wake(),
+                };
+                turns.min(c.game.next_wake())
+            })
             .min()
     }
 
@@ -184,6 +193,7 @@ impl Server {
         match control::kind(bytes) {
             Some(KIND_UP | KIND_UP_COVER) => self.on_up(now, from, bytes, out),
             Some(KIND_STREAM) => self.on_stream(now, from, bytes),
+            Some(KIND_PEER) => self.on_peer(now, from, bytes, out),
             Some(k) if k > KIND_UP => {
                 if let Ok(c) = control::decode(bytes) {
                     self.on_control(now, from, c, out);
@@ -205,7 +215,20 @@ impl Server {
                     out.push((from, challenge));
                     return;
                 }
-                let reply = self.create(now, from, request, players);
+                let reply = self.create(now, from, request, players, false);
+                out.push((from, reply));
+            }
+            Control::CreatePeer {
+                cookie,
+                request,
+                players,
+            } => {
+                if !self.cookie_ok(from, cookie, now) {
+                    let challenge = self.challenge(from, now);
+                    out.push((from, challenge));
+                    return;
+                }
+                let reply = self.create(now, from, request, players, true);
                 out.push((from, reply));
             }
             Control::Join {
@@ -221,39 +244,8 @@ impl Server {
                 let reply = self.join(now, from, request, room);
                 out.push((from, reply));
             }
-            Control::Verify { token, cookie } => {
-                if !self.cookie_ok(from, cookie, now) {
-                    return;
-                }
-                let Some(&(room, slot)) = self.tokens.get(&token) else {
-                    return;
-                };
-                let room = self.rooms.get_mut(&room).unwrap();
-                room.heard = now;
-                let slot = &mut room.slots[slot];
-                match &mut slot.path {
-                    Some(p) if p.addr == from && p.verified => {}
-                    Some(p) if p.addr == from => {
-                        p.verified = true;
-                        self.stats.verified += 1;
-                    }
-                    _ => {
-                        slot.path = Some(Path::verified(from));
-                        self.stats.rebinds += 1;
-                        self.stats.verified += 1;
-                    }
-                }
-            }
-            Control::Leave { token } => {
-                let Some(&(id, slot)) = self.tokens.get(&token) else {
-                    return;
-                };
-                let room = self.rooms.get_mut(&id).unwrap();
-                room.slots[slot].left = true;
-                if room.done() {
-                    self.close(id, now);
-                }
-            }
+            Control::Verify { token, cookie } => self.on_verify(now, from, token, cookie),
+            Control::Leave { token } => self.on_leave(now, token),
             _ => {}
         }
     }
@@ -267,8 +259,8 @@ impl Server {
         control::encode(&Control::Refused { request, reason })
     }
 
-    fn create(&mut self, now: Micros, from: Peer, request: u64, players: u8) -> Vec<u8> {
-        let steps = self.cfg.steps_ms.clone();
+    fn create(&mut self, now: Micros, from: Peer, request: u64, players: u8, peer: bool) -> Vec<u8> {
+        let steps = if peer { Vec::new() } else { self.cfg.steps_ms.clone() };
         if let Some((&id, room)) = self
             .rooms
             .iter()
@@ -276,7 +268,8 @@ impl Server {
         {
             return room.reply(id, 0, request, &steps);
         }
-        if players == 0 || players > self.cfg.max_players {
+        let allowed = if peer { MIN_PEERS..=MAX_PEERS } else { 1..=self.cfg.max_players };
+        if !allowed.contains(&players) {
             return self.refuse(request, Refusal::Players);
         }
         if self.rooms.len() >= self.cfg.max_rooms {
@@ -307,13 +300,20 @@ impl Server {
         slots[0].path = Some(Path::verified(from));
         slots[0].joined_by = Some((from, request));
         let seed = self.fresh_id() as u32 & 0x7fff_ffff;
+        let body = if peer {
+            Body::Peer
+        } else {
+            Body::Clocked(Clocked {
+                relay: Relay::new(self.cadence.clone(), &tokens, now),
+                game: GameRoom::new(seed, &tokens, self.cfg.game_timing),
+                next_report: 0,
+                full_at: (players == 1).then_some(now),
+                started: false,
+            })
+        };
         let room = Room {
-            relay: Relay::new(self.cadence.clone(), &tokens, now),
-            game: GameRoom::new(seed, &tokens, self.cfg.game_timing),
-            next_report: 0,
-            full_at: (players == 1).then_some(now),
+            body,
             slots,
-            started: false,
             heard: now,
             relayed: 0,
         };
@@ -325,9 +325,12 @@ impl Server {
     }
 
     fn join(&mut self, now: Micros, from: Peer, request: u64, id: u64) -> Vec<u8> {
-        let steps = self.cfg.steps_ms.clone();
         let Some(room) = self.rooms.get_mut(&id) else {
             return self.refuse(request, Refusal::NoRoom);
+        };
+        let steps = match room.body {
+            Body::Clocked(_) => self.cfg.steps_ms.clone(),
+            Body::Peer => Vec::new(),
         };
         if let Some(i) = room
             .slots
@@ -343,7 +346,7 @@ impl Server {
         room.slots[i].joined_by = Some((from, request));
         room.heard = now;
         if room.slots.iter().all(|s| s.joined_by.is_some()) {
-            room.full_at = Some(now);
+            room.full(now);
         }
         room.reply(id, i, request, &steps)
     }
@@ -357,7 +360,9 @@ impl Server {
             return;
         }
         room.heard = now;
-        room.game.on_stream(now, index, bytes);
+        if let Body::Clocked(c) = &mut room.body {
+            c.game.on_stream(now, index, bytes);
+        }
     }
 
     fn on_up(&mut self, now: Micros, from: Peer, bytes: &[u8], out: &mut Out) {
@@ -367,37 +372,20 @@ impl Server {
         let cookie = self.cookie(from, now);
         let room = self.rooms.get_mut(&id).unwrap();
         let slot = &mut room.slots[index];
+        let Body::Clocked(clocked) = &mut room.body else {
+            return;
+        };
         if slot.left || slot.joined_by.is_none() {
             return;
         }
         room.heard = now;
-        let path = match &mut slot.path {
-            Some(p) if p.addr == from => p,
-            _ => {
-                self.stats.rebinds += 1;
-                slot.path.insert(Path {
-                    addr: from,
-                    verified: false,
-                    received: 0,
-                    sent: 0,
-                    last_challenge: None,
-                })
-            }
-        };
+        let path = bind(&mut slot.path, from, &mut self.stats.rebinds);
         if !path.verified {
             path.received += bytes.len() as u64;
         }
-        let _ = room.relay.on_packet_via(bytes, from.via);
-        if !path.verified
-            && path
-                .last_challenge
-                .is_none_or(|t| now - t >= self.cfg.challenge_gap_us)
-        {
-            let challenge = control::encode(&Control::Challenge { cookie });
-            if path.send(challenge, out) {
-                path.last_challenge = Some(now);
-                self.stats.challenges += 1;
-            }
+        let _ = clocked.relay.on_packet_via(bytes, from.via);
+        if path.challenge(cookie, now, self.cfg.challenge_gap_us, out) {
+            self.stats.challenges += 1;
         }
     }
 
@@ -406,8 +394,8 @@ impl Server {
         for (&id, room) in &mut self.rooms {
             let mark = out.len();
             room.poll_game(id, now, self.cfg.lobby_us, &self.cadence, out, &mut self.log);
-            if room.relay.next_wake() <= now {
-                send_turns(room, id, now, out, &mut self.stats, self.sends.as_mut());
+            if matches!(&room.body, Body::Clocked(c) if c.relay.next_wake() <= now) {
+                turns::send_turns(room, id, now, out, &mut self.stats, self.sends.as_mut());
             }
             room.relayed += out[mark..].iter().map(|(_, b)| b.len() as u64).sum::<u64>();
             let budget = self.cfg.slot_bytes * room.slots.len() as u64;
@@ -434,38 +422,15 @@ impl Server {
         for slot in &room.slots {
             self.tokens.remove(&slot.token);
         }
-        if room.started {
-            self.log.push(room.report(id, now, &self.cadence));
-        }
         self.stats.rooms_closed += 1;
-        self.stats.stops += room.relay.stops() as u64;
-        if room.relay.desync().is_some() {
-            self.stats.desyncs += 1;
-        }
-    }
-}
-
-fn send_turns(room: &mut Room, id: u64, now: Micros, out: &mut Out, stats: &mut Stats, mut sends: Option<&mut Vec<Line>>) {
-    let stops = room.relay.stops();
-    let origin = room.relay.origin();
-    for (index, bytes) in room.relay.poll(now) {
-        let slot = &mut room.slots[index];
-        if slot.left {
-            continue;
-        }
-        if let Some(path) = &mut slot.path {
-            let before = out.len();
-            match send_down(path, bytes, out) {
-                Delivery::Sent | Delivery::Undecodable => {}
-                Delivery::Trimmed => stats.trimmed += 1,
-                Delivery::Withheld => stats.withheld += 1,
+        if let Body::Clocked(c) = &room.body {
+            if c.started {
+                self.log.push(c.report(id, now, &self.cadence));
             }
-            if let (Some(sends), Some((_, sent))) = (sends.as_deref_mut(), out.get(before)) {
-                sends.extend(Line::packet(id, index, sent, now - origin));
+            self.stats.stops += c.relay.stops() as u64;
+            if c.relay.desync().is_some() {
+                self.stats.desyncs += 1;
             }
         }
-    }
-    if let (Some(sends), Some(stop)) = (sends, room.relay.last_stop().filter(|_| room.relay.stops() > stops)) {
-        sends.push(Line::Stop { room: id, at_us: stop.at_us, slot: stop.slot, behind_us: stop.behind_us });
     }
 }
