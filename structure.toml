@@ -19,7 +19,7 @@ name = "tests"
 thresholds = { function_lines = 150, function_complexity = 30 }
 paths = ["test/**", "**/*.test.ts", "**/*.tests.ts", "examples/**"]
 responsibility = "Bun and Lua tests, numbered fixture maps and examples."
-may_use = ["num", "ui", "natives", "runtime", "netcode", "map", "headless", "cli", "process", "os", "build", "lan", "net", "render", "host", "commands", "plugins"]
+may_use = ["num", "ui", "natives", "runtime", "netcode", "map", "headless", "cli", "process", "os", "build", "lan", "net", "render", "host", "commands", "plugins", "contract"]
 
 [[module]]
 name = "num"
@@ -97,7 +97,7 @@ may_use = ["process", "runtime", "num", "plugins"]
 name = "lan"
 paths = ["host/lan/**"]
 responsibility = "Offline LAN pair pool: netns pairs, W3GS host, dummy, admission, and the menu driver that hosts, joins and starts games through Warcraft's own menu page."
-may_use = ["cli", "process", "os", "build"]
+may_use = ["cli", "process", "os", "build", "contract"]
 
 [[module]]
 name = "net"
@@ -109,19 +109,19 @@ may_use = ["process", "headless", "runtime", "num"]
 name = "render"
 paths = ["host/render/**", "host/browser/**", "host/fidelity/**", "host/models/**", "host/terrain/**"]
 responsibility = "WebGL headless and standalone renderer, models, terrain, GPU lease and fidelity metrics."
-may_use = ["process", "os", "headless", "runtime", "num"]
+may_use = ["process", "os", "headless", "runtime", "num", "contract"]
 
 [[module]]
 name = "commands"
 paths = ["host/commands/**"]
 responsibility = "Command factories a game instantiates and Wisp's own CLI entries."
-may_use = ["host", "render", "net", "lan", "build", "os", "cli", "process", "headless", "map", "runtime", "num"]
+may_use = ["host", "render", "net", "lan", "build", "os", "cli", "process", "headless", "map", "runtime", "num", "contract"]
 
 [[module]]
 name = "host"
 paths = ["host/**"]
 responsibility = "Feature services: play, doctor, menus, lobby, accept, soak, farm, dev loop, test runner, models, scenes."
-may_use = ["render", "net", "lan", "build", "os", "cli", "process", "headless", "map", "runtime", "num", "natives"]
+may_use = ["render", "net", "lan", "build", "os", "cli", "process", "headless", "map", "runtime", "num", "natives", "contract"]
 
 [[module]]
 name = "plugins"
