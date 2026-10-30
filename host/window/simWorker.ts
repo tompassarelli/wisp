@@ -1,9 +1,10 @@
 // The thread that steps a native window's game: started by simPlayer.ts. It blocks in the window's next_event, so it owns the frame loop and Bun's main thread keeps no part of it.
 import { Effect } from "effect";
-import { type StandaloneGame, openStandalone } from "../play/standalone";
+import { openStandalone } from "../play/standalone";
 import { type WindowView, adoptNativeWindow } from "./binding";
 import { createModelLibrary, drawScene, preloadScene } from "./drawScene";
 import { type FrameLoop, createFrameLoop } from "./frameLoop";
+import { loadGame } from "./gameModule";
 import { type RenderSeries, type RenderSeriesName, renderSeriesLengths, renderSeriesSince } from "./renderSeries";
 import type { SimWorkerAttach, SimWorkerInit, SimWorkerMessage } from "./simProtocol";
 import { GC_LOG_BEGIN, GC_LOG_END } from "./stats";
@@ -40,9 +41,7 @@ const serve = (view: WindowView, loop: FrameLoop, finished: Promise<void>) => Ef
 
 const run = async (init: SimWorkerInit) => {
   const began = performance.now();
-  const module = await import(init.game.module) as Record<string, StandaloneGame | undefined>;
-  const game = module[init.game.export];
-  if (game === undefined) throw new Error(`${init.game.module} exports no ${init.game.export}`);
+  const game = await loadGame(init.game);
   await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
     const player = yield* openStandalone(game, { ...init.options, window: "native", library: init.library });
     send({ type: "ready" });

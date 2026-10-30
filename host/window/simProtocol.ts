@@ -1,7 +1,12 @@
-/** The module and export a worker thread imports to get the game, which cannot cross threads as an object. */
+/**
+ * The module and export a worker thread imports to get the game, which cannot cross threads as an object. The export is the game, or a
+ * function from `arguments` to the game, which is how the worker builds it with the flags the player ran with (`--map MAP.w3x --player-assets-only`)
+ * and so reads the same map imports and Warcraft files the main thread's game does.
+ */
 export interface NativeGameModule {
   readonly module: string;
   readonly export: string;
+  readonly arguments?: readonly string[];
 }
 
 /** The parts of a run's options the worker thread's player reads. */
