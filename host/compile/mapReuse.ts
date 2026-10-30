@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, s
 import { dirname, join } from "node:path";
 import { Console, Effect } from "effect";
 import { cacheHome } from "../os/xdg";
-import { runProcess, tryMapSync } from "../cli/hostProcess";
+import { captureProcess, runProcess, tryMapSync } from "../cli/hostProcess";
 import { holdLock } from "../cli/flockHold";
 
 const DEFAULT_CAP_GIB = 8;
@@ -46,18 +46,17 @@ const positive = (text: string | undefined) => {
   return text !== undefined && text.trim() !== "" && Number.isFinite(gib) && gib > 0 ? gib : undefined;
 };
 
-const hostMapShare = () => {
-  try {
-    const done = Bun.spawnSync(["north", "capacity", "disk-share", "map_store"], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
-    return done.exitCode === 0 ? done.stdout.toString().trim() : undefined;
-  } catch {
-    return undefined;
-  }
-};
+const hostMapShare = captureProcess("read the host's map store share", "map_store", ["north", "capacity", "disk-share", "map_store"]).pipe(
+  Effect.map(({ exitCode, stdout }) => (exitCode === 0 ? stdout.trim() : undefined)),
+  Effect.orElseSucceed(() => undefined),
+);
 
 /** The store's cap: `$WISP_MAP_REUSE_GIB`, else the map_store share of the host's disk budget in orchestration.toml, else 8 GiB. */
-export const reuseCapBytes = (hostShare: () => string | undefined = hostMapShare) =>
-  (positive(process.env.WISP_MAP_REUSE_GIB) ?? positive(hostShare()) ?? DEFAULT_CAP_GIB) * 2 ** 30;
+export const reuseCapBytes = (hostShare: Effect.Effect<string | undefined> = hostMapShare) => {
+  const fromEnv = positive(process.env.WISP_MAP_REUSE_GIB);
+  const gib = fromEnv === undefined ? hostShare.pipe(Effect.map((share) => positive(share) ?? DEFAULT_CAP_GIB)) : Effect.succeed(fromEnv);
+  return gib.pipe(Effect.map((value) => value * 2 ** 30));
+};
 
 /** The hash of exactly the named inputs: each label and value is length-prefixed, so no two input sets share a key. */
 export const mapReuseKey = (inputs: Readonly<Record<string, string | Uint8Array>>): string => {
@@ -129,13 +128,14 @@ export const reuseOrBuild = <E, R>({ key, out, build, store = reuseStore(), peer
     return { reused: true, key } as const;
   }
   yield* build;
+  const capBytes = yield* reuseCapBytes();
   yield* tryMapSync("store the built map", entry, () => {
     const staging = join(store, `.staging-${key}-${process.pid}`);
     rmSync(staging, { recursive: true, force: true });
     copyMap(out, join(staging, MAP_FILE));
     rmSync(entry, { recursive: true, force: true });
     renameSync(staging, entry);
-    for (const name of pruneReuseStore(store, reuseCapBytes(), key)) console.log(`dropped stored map build ${name}`);
+    for (const name of pruneReuseStore(store, capBytes, key)) console.log(`dropped stored map build ${name}`);
   });
   yield* Console.log(`stored map build ${key}`);
   return { reused: false, key } as const;
