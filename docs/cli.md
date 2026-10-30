@@ -70,6 +70,7 @@ program can register it; "game" means the consuming game defines it.
 | `online` | Direct play over Battle.net by join code | `setup`, `host`, `join` | game |
 | `lan` | The offline LAN client pool | `setup`, `pool`, `fresh`, `status`, `end` | Wisp |
 | `fidelity` | Held-out look captures within calibration | `check` | Wisp |
+| `render` | Two renderers on one scene list, and the per-region bound between them ([Render compare](render-compare.md)) | `compare` | Wisp |
 | `headless` | A journey in simulated clients | (journey name), `silhouette` ([Screen bounds](headless.md#screen-bounds)) | Wisp |
 | `soak` | Many headless matches by computers and a fuzzed controller | (session) | Wisp |
 | `perf` | Predicted frame cost, and a window's press-to-pixel latency | (run name), `compare`, `native`, `fit`, `sections`, `latency`, `budget`, `profile`, `census` | Wisp |

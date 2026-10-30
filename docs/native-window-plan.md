@@ -390,9 +390,22 @@ The bound cannot come from Chrome against itself: one deterministic renderer
 on one machine has a spread of almost zero. A different GPU API differs
 legitimately in filtering, mip generation, multisampling and sRGB handling.
 So W3 records the bound before any native image is judged, from Chrome's
-spread across two ANGLE backends (`--use-angle=vulkan` and `gl`, as
-host/render/headlessRender.ts already selects). The bound is set per region
+spread across two ANGLE backends (`--use-angle=vulkan` and `gl-egl`, the headless form of `gl`;
+host/render/headlessRender.ts selects `gl` first). The bound is set per region
 and per metric and is never widened afterwards.
+
+**Recorded bound (2026-10-30, wisp#121).** `bun wisp render compare --reference
+chrome-vulkan --candidate chrome-gl --scenes test/render/models.json` on
+gex45 draws the three model scenes of [Render compare](render-compare.md)
+through ANGLE Vulkan and ANGLE OpenGL ES on the same NVIDIA RTX PRO 4000
+Blackwell GPU. The 640x360 scenes differ in no pixel: every
+region (flat and edge, three scenes) measures 0 in `maxDelta`, `p99Delta`,
+`meanDelta` and `differingFraction`, so each region's recorded bound is 0.
+The same scenes against SwiftShader measure up to 234 levels at the checker
+edges, so the comparison can see a difference when there is one. A native
+image on this GPU is therefore judged against an exact match; a native
+image on another GPU needs the bound re-measured on that GPU before it is
+judged, and the new bound is recorded here beside this one.
 
 `headless --render` then moves to the native offscreen renderer, so one
 renderer serves play and captures.

@@ -1,0 +1,26 @@
+{
+  "width": 640,
+  "height": 360,
+  "scenes": [
+    {
+      "name": "Wisp121Checker",
+      "model": "test/render/models/checker.mdl",
+      "texture": { "path": "war3mapImported\\Wisp121Checker.png", "size": 256, "cell": 16 },
+      "camera": { "x": 0, "y": 0, "distance": 1400, "angleOfAttack": 320, "rotation": 90 },
+      "pose": { "x": 0, "y": 0, "z": 0, "yaw": 0.3, "teamColor": 0 }
+    },
+    {
+      "name": "Wisp121Blend",
+      "model": "test/render/models/blend.mdl",
+      "camera": { "x": 0, "y": 0, "distance": 1300, "angleOfAttack": 300, "rotation": 90 },
+      "pose": { "x": 0, "y": 0, "z": 0, "yaw": 0.4, "teamColor": 1 }
+    },
+    {
+      "name": "Wisp121Pyramid",
+      "model": "test/render/models/pyramid.mdl",
+      "texture": { "path": "war3mapImported\\Wisp121Tiles.png", "size": 128, "cell": 4 },
+      "camera": { "x": 0, "y": 0, "distance": 1500, "angleOfAttack": 330, "rotation": 90 },
+      "pose": { "x": 0, "y": 0, "z": 0, "yaw": 0.6, "teamColor": 4 }
+    }
+  ]
+}

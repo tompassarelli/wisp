@@ -1,0 +1,20 @@
+Version { FormatVersion 800, }
+Model "Wisp121Pyramid" { NumGeosets 1, NumBones 1, BlendTime 0, MinimumExtent { -310, -310, -10 }, MaximumExtent { 310, 310, 430 }, BoundsRadius 435, }
+Sequences 1 {
+    Anim "Stand" { Interval { 0, 1000 }, MinimumExtent { -310, -310, -10 }, MaximumExtent { 310, 310, 430 }, BoundsRadius 435, }
+}
+Textures 1 { Bitmap { Image "war3mapImported\Wisp121Tiles.png", WrapWidth, WrapHeight, } }
+Materials 1 { Material { Layer { FilterMode None, static TextureID 0, static Alpha 1, } } }
+Geoset {
+    Vertices 18 { { -300, -300, 0 }, { 300, -300, 0 }, { 0, 0, 420 }, { 300, -300, 0 }, { 300, 300, 0 }, { 0, 0, 420 }, { 300, 300, 0 }, { -300, 300, 0 }, { 0, 0, 420 }, { -300, 300, 0 }, { -300, -300, 0 }, { 0, 0, 420 }, { -300, 300, 0 }, { 300, 300, 0 }, { 300, -300, 0 }, { -300, 300, 0 }, { 300, -300, 0 }, { -300, -300, 0 }, }
+    Normals 18 { { 0, -0.8137, 0.5812 }, { 0, -0.8137, 0.5812 }, { 0, -0.8137, 0.5812 }, { 0.8137, 0, 0.5812 }, { 0.8137, 0, 0.5812 }, { 0.8137, 0, 0.5812 }, { 0, 0.8137, 0.5812 }, { 0, 0.8137, 0.5812 }, { 0, 0.8137, 0.5812 }, { -0.8137, 0, 0.5812 }, { -0.8137, 0, 0.5812 }, { -0.8137, 0, 0.5812 }, { 0, 0, -1 }, { 0, 0, -1 }, { 0, 0, -1 }, { 0, 0, -1 }, { 0, 0, -1 }, { 0, 0, -1 }, }
+    TVertices 18 { { 0, 0 }, { 1, 0 }, { 0.5, 1 }, { 0, 0 }, { 1, 0 }, { 0.5, 1 }, { 0, 0 }, { 1, 0 }, { 0.5, 1 }, { 0, 0 }, { 1, 0 }, { 0.5, 1 }, { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 0 }, { 1, 1 }, { 0, 1 }, }
+    VertexGroup { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, }
+    Faces 1 18 { Triangles { { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17 }, } }
+    Groups 1 1 { Matrices { 0 }, }
+    MinimumExtent { -310, -310, -10 }, MaximumExtent { 310, 310, 430 }, BoundsRadius 435,
+    MaterialID 0,
+    SelectionGroup 0,
+}
+Bone "Root" { ObjectId 0, GeosetId 0, GeosetAnimId None, }
+PivotPoints 1 { { 0, 0, 0 }, }

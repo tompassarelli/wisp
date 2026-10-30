@@ -33,5 +33,15 @@ const quoted = (arg: string) => (/^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.re
 export const requireGpuLease = (argv: readonly string[] = process.argv) => Effect.gen(function*() {
   const helper = yield* capacityHelper.pipe(Effect.provide(BunServices.layer));
   if (helper === undefined || (yield* ResourceAccounting.use((accounting) => Effect.sync(accounting.insideCapacityLease)))) return;
-  return yield* new GpuLeaseRequired({ command: [process.execPath, helper, "run", "--class", "gpu", "--owner", "wisp-render", "--", ...argv].map(quoted).join(" ") });
+  return yield* new GpuLeaseRequired({ command: leaseCommand(helper, argv).map(quoted).join(" ") });
+});
+
+const leaseCommand = (helper: string, argv: readonly string[]) => [process.execPath, helper, "run", "--class", "gpu", "--owner", "wisp-render", "--timeout-seconds", "900", "--", ...argv];
+
+/** Reruns `argv` inside a gpu lease and gives its exit code, or undefined when this run already holds one or the machine has no capacity helper. */
+export const rerunInGpuLease = (argv: readonly string[] = process.argv) => Effect.gen(function*() {
+  const helper = yield* capacityHelper.pipe(Effect.provide(BunServices.layer));
+  if (helper === undefined || (yield* ResourceAccounting.use((accounting) => Effect.sync(accounting.insideCapacityLease)))) return undefined;
+  const [command, ...rest] = leaseCommand(helper, argv);
+  return yield* Effect.promise(() => Bun.spawn([command ?? "", ...rest], { stdin: "inherit", stdout: "inherit", stderr: "inherit" }).exited);
 });

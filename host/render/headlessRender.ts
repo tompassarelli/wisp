@@ -21,6 +21,9 @@ export type { Graphics } from "./graphicsProfiles";
 export type { UiRow } from "./screen";
 export type { DrawnPose, RenderScene, SceneEnvironment } from "./renderScene";
 
+export const CHROME_ANGLES = ["gl", "gl-egl", "vulkan", "swiftshader"] as const;
+export type ChromeAngle = (typeof CHROME_ANGLES)[number];
+
 export interface HeadlessRenderProject {
 
   readonly readAsset: (path: string, graphics?: Graphics) => Promise<Uint8Array | undefined>;
@@ -31,6 +34,10 @@ export interface HeadlessRenderProject {
   readonly width?: number;
   readonly height?: number;
   readonly chrome?: string;
+  /** Chrome's ANGLE backend, with no fallback to another; absent, `gl` then SwiftShader. */
+  readonly angle?: ChromeAngle;
+  /** Extra environment for Chrome, such as the EGL vendor that picks its GPU. */
+  readonly chromeEnv?: Readonly<Record<string, string>>;
   readonly preloadModels?: readonly string[];
 
   readonly terrain?: { readonly w3e?: Uint8Array; readonly bounds?: WorldBounds; readonly origin?: readonly [number, number] };
@@ -204,7 +211,7 @@ const ChromePages = Schema.fromJsonString(Schema.Array(Schema.Struct({ type: Sch
 
 const renderFailure = (cause: unknown) => (cause instanceof RenderFailure ? cause : new RenderFailure({ cause }));
 
-const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: boolean, graphics: Graphics) => Effect.gen(function*() {
+const openBrowser = (project: HeadlessRenderProject, bundle: string, angle: ChromeAngle, graphics: Graphics) => Effect.gen(function*() {
   const directory = yield* Effect.acquireRelease(
     Effect.tryPromise({ try: () => mkdtemp(join(tmpdir(), "wisp-render-")), catch: renderFailure }),
     (path) => Effect.promise(() => rm(path, { recursive: true, force: true })),
@@ -245,9 +252,8 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
   }})), (open) => Effect.promise(() => open.stop(true)));
   const chromeLog = join(directory, "chrome.log");
   const chromeStarted = performance.now();
-  const angle = fallback ? "swiftshader" : "gl";
   console.error(`headless render: Chrome ANGLE ${angle} starting at ${new Date().toISOString()}`);
-  const chrome = yield* spawnLogged(ChildProcess.make(project.chrome ?? process.env.CHROME ?? "google-chrome-stable", ["--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--disable-sync", "--remote-debugging-port=0", `--user-data-dir=${directory}`, "--use-gl=angle", `--use-angle=${angle}`, ...(fallback ? ["--enable-unsafe-swiftshader"] : []), `http://127.0.0.1:${server.port}/`]), { stdout: join(directory, "chrome.out"), stderr: chromeLog }).pipe(Effect.mapError(renderFailure));
+  const chrome = yield* spawnLogged(ChildProcess.make(project.chrome ?? process.env.CHROME ?? "google-chrome-stable", ["--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--disable-sync", "--remote-debugging-port=0", `--user-data-dir=${directory}`, "--use-gl=angle", `--use-angle=${angle}`, ...(angle === "swiftshader" ? ["--enable-unsafe-swiftshader"] : []), ...(angle === "gl-egl" ? ["--ozone-platform=headless"] : []), `http://127.0.0.1:${server.port}/`], { env: project.chromeEnv, extendEnv: true }), { stdout: join(directory, "chrome.out"), stderr: chromeLog }).pipe(Effect.mapError(renderFailure));
   console.error(`headless render: Chrome ANGLE ${angle} spawned after ${Math.round(performance.now() - chromeStarted)} ms`);
   const port = yield* pollFor(10, "50 millis", Effect.gen(function*() {
     const active = yield* Effect.promise(() => readFile(join(directory, "DevToolsActivePort"), "utf8").catch(() => ""));
@@ -285,17 +291,18 @@ const openBrowser = (project: HeadlessRenderProject, bundle: string, fallback: b
 });
 
 const openAnyBrowser = (project: HeadlessRenderProject, bundle: string, graphics: Graphics) => Effect.gen(function*() {
-  const attempt = (fallback: boolean) => Effect.gen(function*() {
+  const attempt = (angle: ChromeAngle) => Effect.gen(function*() {
     const started = performance.now();
     const scope = yield* Scope.fork(yield* Effect.scope);
-    return yield* openBrowser(project, bundle, fallback, graphics).pipe(
+    return yield* openBrowser(project, bundle, angle, graphics).pipe(
       Scope.provide(scope),
-      Effect.tapError((cause) => Effect.sync(() => console.error(`headless render: Chrome ANGLE ${fallback ? "swiftshader" : "gl"} failed after ${Math.round(performance.now() - started)} ms at ${new Date().toISOString()}: ${String(cause)}`))),
+      Effect.tapError((cause) => Effect.sync(() => console.error(`headless render: Chrome ANGLE ${angle} failed after ${Math.round(performance.now() - started)} ms at ${new Date().toISOString()}: ${String(cause)}`))),
       Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
     );
   });
-  return yield* attempt(false).pipe(Effect.catch(() => attempt(true)));
+  return project.angle === undefined ? yield* attempt("gl").pipe(Effect.catch(() => attempt("swiftshader"))) : yield* attempt(project.angle);
 });
+
 
 export const renderScenes = (project: HeadlessRenderProject, scenes: readonly RenderScene[], directory: string, graphics: Graphics = "classic", look: readonly Lever[] = [], bounds: readonly (readonly ModelBounds[])[] = []) => Effect.scoped(Effect.gen(function*() {
   const unsupported = unsupportedLevers(graphics, look);

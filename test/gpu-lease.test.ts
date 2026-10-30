@@ -31,7 +31,7 @@ test("[property seed 474] renders start only inside a gpu lease or without a cap
       expect(await verdict(absent, next(2) === 0, argv)).toBe("started");
       const refused = await verdict(present, false, argv);
       const command = refused.slice(refused.indexOf("\n  ") + 3);
-      expect(shellWords(command)).toEqual([process.execPath, present, "run", "--class", "gpu", "--owner", "wisp-render", "--", ...argv]);
+      expect(shellWords(command)).toEqual([process.execPath, present, "run", "--class", "gpu", "--owner", "wisp-render", "--timeout-seconds", "900", "--", ...argv]);
     }
   } finally {
     if (given === undefined) delete process.env["WISP_CAPACITY_HELPER"];

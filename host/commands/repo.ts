@@ -30,6 +30,7 @@ runMainCli("bun wisp", {
     })),
   },
   farm: { usage: "test [--ref REF] [--wait]   (the full suites on GitHub's free runners: docs/farm.md)", load: async () => (await import("./farm")).farm },
+  render: { usage: "compare --reference BACKEND --candidate BACKEND --scenes FILE --out DIR   (the render bound from Chrome's two ANGLE backends: docs/render-compare.md)", load: async () => (await import("./render")).renderCommand },
   window: {
     usage: "probe [--baseline] [--frames N] [--out DIR]   (the native window's seam and pacing: docs/native-window-plan.md)",
     load: async () => (await import("./window")).makeWindow(join(root, "examples/sample/scripts/standalone.ts")),

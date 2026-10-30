@@ -1,0 +1,20 @@
+Version { FormatVersion 800, }
+Model "Wisp121Blend" { NumGeosets 1, NumBones 1, BlendTime 0, MinimumExtent { -350, -370, 10 }, MaximumExtent { 350, 310, 70 }, BoundsRadius 466, }
+Sequences 1 {
+    Anim "Stand" { Interval { 0, 1000 }, MinimumExtent { -350, -370, 10 }, MaximumExtent { 350, 310, 70 }, BoundsRadius 466, }
+}
+Textures 1 { Bitmap { Image "", ReplaceableId 1, } }
+Materials 1 { Material { Layer { FilterMode Blend, Unshaded, TwoSided, static TextureID 0, static Alpha 0.5, } } }
+Geoset {
+    Vertices 18 { { -340, -220, 20 }, { 100, -220, 20 }, { 100, 220, 20 }, { -340, -220, 20 }, { 100, 220, 20 }, { -340, 220, 20 }, { -100, -140, 40 }, { 340, -140, 40 }, { 340, 300, 40 }, { -100, -140, 40 }, { 340, 300, 40 }, { -100, 300, 40 }, { -220, -360, 60 }, { 220, -360, 60 }, { 220, 80, 60 }, { -220, -360, 60 }, { 220, 80, 60 }, { -220, 80, 60 }, }
+    Normals 18 { { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, }
+    TVertices 18 { { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 0 }, { 1, 1 }, { 0, 1 }, { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 0 }, { 1, 1 }, { 0, 1 }, { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 0 }, { 1, 1 }, { 0, 1 }, }
+    VertexGroup { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, }
+    Faces 1 18 { Triangles { { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17 }, } }
+    Groups 1 1 { Matrices { 0 }, }
+    MinimumExtent { -350, -370, 10 }, MaximumExtent { 350, 310, 70 }, BoundsRadius 466,
+    MaterialID 0,
+    SelectionGroup 0,
+}
+Bone "Root" { ObjectId 0, GeosetId 0, GeosetAnimId None, }
+PivotPoints 1 { { 0, 0, 0 }, }
