@@ -19,6 +19,7 @@ mod pacing;
 mod present;
 mod pad;
 mod pad_sdl;
+mod surface_target;
 mod sync;
 mod timer;
 pub mod texture;

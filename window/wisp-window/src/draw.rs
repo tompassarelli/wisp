@@ -8,6 +8,7 @@ use winit::window::Window;
 
 use crate::capture;
 use crate::present::PresentSetting;
+use crate::surface_target::SurfaceTarget;
 use crate::render::{fitted, DrawScene, Renderer};
 use crate::ui::{is_font, UiRenderer};
 
@@ -91,7 +92,7 @@ impl Gpu {
     pub fn new(window: Arc<Window>, aspect: f32) -> Result<Self, String> {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        let surface = instance.create_surface(window).map_err(|e| format!("surface: {e}"))?;
+        let surface = instance.create_surface(SurfaceTarget::new(window)).map_err(|e| format!("surface: {e}"))?;
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
