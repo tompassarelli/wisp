@@ -325,7 +325,7 @@ match between two US players. Through Nexus it detours to Singapore at about
 That match drops by more than half.
 
 The region list therefore starts with Nexus, which serves Asia-Pacific and
-US-to-Asia matches at no added cost. A US-West relay comes second (L5). An
+US-to-Asia matches at no added cost. A US-West relay comes second (L5), once there are US-to-US matches. An
 EU relay comes after that, when measured players call for one. A player's
 own consumer route can be worse than the backbone path, and L4's real-path
 run measures how often that happens.
@@ -397,83 +397,85 @@ decision on accounts.
 Order:
 - N1, P1, P2, P3 and L1 start now. N2 and N3 follow N1, and N4 follows both.
 - L2 follows L1. L3 follows L2. L4 follows L3 and N4, so the relay is
-  accepted on Wisp's netcode. L5 waits on Tom.
+  accepted on Wisp's netcode. L5 waits for US-to-US matches.
 - P4 follows L2. P5 follows P1 to P3 and Tom's call.
 - G1 follows L2.
 
 Command flags and test files named in a Done when that don't exist yet are
 created by that box.
 
-- **N1 Golden rollback records for Smashcraft and Battlecraft** (smashcraft,
+- **N1 Golden rollback records for Smashcraft and Battlecraft** ([smashcraft#802](https://github.com/tompassarelli/smashcraft/issues/802); smashcraft,
   battlecraft). A packet-level golden per game, and a match golden for
   Smashcraft (2 and 4 humans; 0, 60 and 120 ms; 1% loss), recorded on main
   and run in Bun and 32-bit Lua. Done when:
   `cd ~/code/smashcraft/main/ts && bun test test/netcode-golden.test.ts test/online-golden.test.ts && cd ~/code/battlecraft/main && bun test test/rollback-golden.test.ts`
-- **N2 Wisp's schedule layer, with the session rebuilt on it** (wisp,
+- **N2 Wisp's schedule layer, with the session rebuilt on it** ([wisp#96](https://github.com/tompassarelli/wisp/issues/96); wisp,
   battlecraft). Generic `ledger`, `frameRing` and `schedule`, with `session`
   over them. Battlecraft's pin is bumped, and its re-recorded packet golden
   lands in its own commit. Done when:
   `cd ~/code/wisp/main && bun test test/netcode.test.ts test/runtime.test.ts && cd ~/code/battlecraft/main && grep -q "$(git -C ~/code/wisp/main rev-parse origin/main)" wisp.lock && bun test test/rollback-golden.test.ts`
-- **N3 Ping-based delay and machine rate in Wisp** (wisp, smashcraft).
+- **N3 Ping-based delay and machine rate in Wisp** ([wisp#97](https://github.com/tompassarelli/wisp/issues/97); wisp, smashcraft).
   `delay` and `rate` with their tests; Smashcraft bumps its pin and imports
   them. Done when:
   `cd ~/code/wisp/main && bun test test/netcode.test.ts && cd ~/code/smashcraft/main/ts && test ! -e src/game/netcode/delayPolicy.ts && bun test test/netcode-golden.test.ts test/online-golden.test.ts`
-- **N4 Smashcraft runs on Wisp's netcode** (smashcraft). It bumps its pin and
+- **N4 Smashcraft runs on Wisp's netcode** ([smashcraft#803](https://github.com/tompassarelli/smashcraft/issues/803); smashcraft). It bumps its pin and
   deletes its ledger, frameRing, capture, fixedSchedule and shadowSchedule;
   both goldens stay unchanged in Bun and Lua32. Done when:
   `cd ~/code/smashcraft/main/ts && test ! -e src/game/netcode/shadowSchedule.ts && git diff --exit-code origin/main~1 -- test/fixtures/netcode-golden test/fixtures/online-golden && bun test test/netcode-golden.test.ts test/online-golden.test.ts && bun wisp net-accept --out build/net-accept-n4`
-- **P1 Standalone parity audit** (smashcraft). One line per surface
+- **P1 Standalone parity audit** ([smashcraft#804](https://github.com/tompassarelli/smashcraft/issues/804); smashcraft). One line per surface
   (rendering, menus and HUD, sound, input, frame time), each with its check
   and a box or a reason. It is written to smashcraft:docs/standalone-parity.md.
   Done when: `test "$(grep -c '^- \*\*' ~/code/smashcraft/main/docs/standalone-parity.md)" -ge 5`
-- **P2 Standalone and native agree frame for frame** (smashcraft). A
+- **P2 Standalone and native agree frame for frame** ([smashcraft#806](https://github.com/tompassarelli/smashcraft/issues/806); smashcraft). A
   scripted standalone run of `cpu-expert.pad`, under both `native` and
   `pool-predicted` presentation, carries the same per-frame fighter digests
   as a native corpus recording of that pad. Done when:
   `cd ~/code/smashcraft/main/ts && bun wisp parity standalone test/native/pads/cpu-expert.pad --presentation native,pool-predicted`
-- **P3 Assets from the player's own files** (wisp, smashcraft). The window
+- **P3 Assets from the player's own files** ([wisp#98](https://github.com/tompassarelli/wisp/issues/98); wisp, smashcraft). The window
   reads map imports from a given `.w3x` and stock art from the Warcraft
   install, with no private asset store and no GPU lease. Done when:
   `cd ~/code/smashcraft/main/ts && bun wisp play --standalone --map build/release/Smashcraft.w3x --player-assets-only --script test/native/pads/cpu-expert.pad --headless --frames 1070 --out build/p3`
   exits 0.
-- **P4 Four humans in a standalone match** (wisp, smashcraft). peer.ts and
+- **P4 Four humans in a standalone match** ([wisp#99](https://github.com/tompassarelli/wisp/issues/99); wisp, smashcraft). peer.ts and
   TurnLedger take N peers through a peer room: a handshake per peer, a turn
   delay from the largest round trip and one remote per peer. Done when:
   `cd ~/code/smashcraft/main/ts && bun wisp net pair --humans 4 --relay local --script test/native/pads/cpu-expert.pad --frames 3600`
   reports matching checksums on all four.
-- **P5 Player build of the standalone window** (cost and publication: Tom
+- **P5 Player build of the standalone window** ([smashcraft#807](https://github.com/tompassarelli/smashcraft/issues/807); cost and publication: Tom
   decides). A packaged player download that needs no source tree, Bun or
   lease. Done when: `smashcraft-play --version` runs on a clean Windows
   runner.
-- **L1 Relay peer room** (wisp relay/). A clockless room kind that forwards
+- **L1 Relay peer room** ([wisp#100](https://github.com/tompassarelli/wisp/issues/100); wisp relay/). A clockless room kind that forwards
   opaque datagrams among 2 to 4 handshaken members under the existing
   limits, with the control messages' test vectors shared with TypeScript.
   Done when:
   `cd ~/code/wisp/main/relay && cargo test -p relay-proto peer_room && cargo test -p relay peer_room && cd .. && bun test test/relayVectors.test.ts`
-- **L2 Standalone host and join through a relay** (wisp). peer.ts's `Link`
+- **L2 Standalone host and join through a relay** ([wisp#101](https://github.com/tompassarelli/wisp/issues/101); wisp). peer.ts's `Link`
   goes direct or relayed; `turns` gets a compact encoding under 1200 bytes;
   `--relay REGION` and region-named codes; bytes per match measured. Done
   when: `cd ~/code/wisp/main && bun test test/netRelay.test.ts`
   plays two peers through a local relay binary behind `net proxy --rtt 170`
   with matching checksums, no packet over 1200 bytes, and the measured bytes
   per match printed.
-- **L3 Region list, ping display and ping-set delay** (wisp, smashcraft). It
+- **L3 Region list, ping display and ping-set delay** ([wisp#102](https://github.com/tompassarelli/wisp/issues/102); wisp, smashcraft). It
   pings each region before hosting; the host picks and the nearest is the
   default; peer.ts's RTT sets the map's delay through Wisp's `delay`; both
   delays are shown before the match. Done when:
   `cd ~/code/wisp/main && bun wisp net regions` prints each region with its
   measured round trip, and
   `cd ~/code/smashcraft/main/ts && bun test test/pingDelay.test.ts` passes.
-- **L4 Smashcraft net-accept through the relay** (smashcraft). It runs
+- **L4 Smashcraft net-accept through the relay** ([smashcraft#808](https://github.com/tompassarelli/smashcraft/issues/808); smashcraft). It runs
   net-accept's cells through a local relay, plus one real-path match from the
   laptop to gex45 through Nexus with its stall and depth figures recorded.
   Done when:
   `cd ~/code/smashcraft/main/ts && bun wisp net-accept --relay local --out build/net-accept-relay`
-- **L5 US-West relay** (cost: Tom decides, Hetzner Hillsboro CPX11 at €17.99
-  a month). A second region with the same service as Nexus. Done when:
+- **L5 US-West relay** ([wisp#103](https://github.com/tompassarelli/wisp/issues/103); waits until there are US-to-US matches; the server is then Tom's cost call, Hetzner
+  Hillsboro CPX11 at €17.99 a month on 30 October 2026). A second region
+  with the same service as Nexus. Nothing is bought now: Tom plays from
+  UTC+7, next to the Singapore relay (2026-10-30). Done when:
   `cd ~/code/wisp/main && bun wisp net regions | grep us-west`
   shows a measured round trip.
-- **G1 Ladder stub: match results at the relay** (wisp). A result control
+- **G1 Ladder stub: match results at the relay** ([wisp#104](https://github.com/tompassarelli/wisp/issues/104); wisp). A result control
   message from each client and one result line per finished peer room, with
   disagreements and missing reports marked. Done when:
   `cd ~/code/wisp/main/relay && cargo test -p relay peer_room_result`
