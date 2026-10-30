@@ -146,7 +146,7 @@ fn framing(bounds: [f32; 6], aspect: f32, light: Option<&Light>) -> (Camera, Lig
     let up = [view[1], view[5], view[9]];
     let toward = unit([toward_camera[0] * 0.8 - right[0] * 0.45 + up[0] * 0.5, toward_camera[1] * 0.8 - right[1] * 0.45 + up[1] * 0.5, toward_camera[2] * 0.8 - right[2] * 0.45 + up[2] * 0.5]);
     let (key, ambient) = light.map_or((KEY, AMBIENT), |light| (light.key, light.ambient));
-    let camera = Camera { view, eye, tangent: half * aspect / distance, near: distance * 0.1, far: distance * 3.0, sky_far: distance * 3.0, rise: 0.0 };
+    let camera = Camera { view, eye, tangent: half * aspect / distance, near: distance * 0.1, far: distance * 3.0, sky_far: distance * 3.0, rise: 0.0, reach: 0.0 };
     (camera, Light { toward, key, ambient })
 }
 
@@ -182,7 +182,7 @@ impl Renderer {
         let color_capacity = 64;
         let colors = color_storage(&self.device, color_capacity);
         let uv_rows = uv_storage(&self.device, color_capacity);
-        let group = frame_group(&self.device, &self.frame_layout, &frame, &bones, &colors, &uv_rows);
+        let group = frame_group(&self.device, &self.frame_layout, &frame, &bones, &colors, &uv_rows, self.shadow.bound());
         Slot {
             size,
             msaa: make(HDR, SAMPLES, wgpu::TextureUsages::RENDER_ATTACHMENT, "sprite colour"),
@@ -234,17 +234,17 @@ impl Renderer {
         let aspect = size.0 as f32 / size.1 as f32;
         let (camera, light) = framing(bounds, aspect, scene_light);
         let far = camera.far;
-        let uniform = Self::scene_frame(&Scene { camera, light: Some(light), ..Scene::default() }, aspect, aspect, far, size, 0.0, false, Glow::NONE);
+        let uniform = Self::scene_frame(&Scene { camera, light: Some(light), ..Scene::default() }, aspect, aspect, far, size, 0.0, false, Glow::NONE, super::Lit::Ambient);
         if bones > slot.bone_capacity {
             slot.bone_capacity = bones.next_power_of_two();
             slot.bones = bone_storage(&self.device, slot.bone_capacity);
-            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.colors, &slot.uv_rows);
+            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.colors, &slot.uv_rows, self.shadow.bound());
         }
         if colors.len() > slot.color_capacity {
             slot.color_capacity = colors.len().next_power_of_two();
             slot.colors = color_storage(&self.device, slot.color_capacity);
             slot.uv_rows = uv_storage(&self.device, slot.color_capacity);
-            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.colors, &slot.uv_rows);
+            slot.group = frame_group(&self.device, &self.frame_layout, &slot.frame, &slot.bones, &slot.colors, &slot.uv_rows, self.shadow.bound());
         }
         let queue = &self.queue;
         let team = [shot.team[0], shot.team[1], shot.team[2], 1.0];

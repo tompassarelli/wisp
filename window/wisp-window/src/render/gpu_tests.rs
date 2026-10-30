@@ -4,6 +4,8 @@ use model::EmitterSample;
 use scene::Bolt;
 use image::ImageEncoder;
 
+mod shadow;
+
 const SIDE: u32 = 128;
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
@@ -96,7 +98,7 @@ fn a_particle_and_a_bolt_reach_the_screen() {
     let emitter = ModelEmitter { spec, paint: Paint::None };
     let slot = renderer.particles.register(&device, &queue, &emitter, ("", &renderer.white), &renderer.sampler).expect("room for an emitter");
     let mut scene = Scene { frame: 0, ..Scene::default() };
-    scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0 };
+    scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 0.0 };
     let _ = render(&mut renderer, &device, &queue, &scene);
     renderer.particles.begin(1);
     let sample = EmitterSample { visible: true, rate: 120.0, ..EmitterSample::default() };
@@ -124,7 +126,7 @@ fn each_preset_draws_the_scene_with_its_post_effects_on_or_off() {
     let emitter = ModelEmitter { spec, paint: Paint::None };
     let slot = renderer.particles.register(&device, &queue, &emitter, ("", &renderer.white), &renderer.sampler).expect("room for an emitter");
     let mut scene = Scene { frame: 0, ..Scene::default() };
-    scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0 };
+    scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 0.0 };
     for (round, preset) in [PRESETS[0], PRESETS[1], PRESETS[2], PRESETS[0]].into_iter().enumerate() {
         renderer.set_features(preset.features());
         scene.frame = round as u32 * 2;
@@ -234,7 +236,7 @@ fn centre_of_geoset(sheets: &[Sheet], geoset: [f32; 4]) -> [f32; 3] {
     }
     renderer.add_model("sheets", ModelData { vertices, indices, parts, rig: Box::new(FlatRig::new(geoset)), emitters: Vec::new() });
     let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };
-    scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0 };
+    scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 0.0 };
     scene.poses = vec![scene::Pose { id: 0, model: "sheets".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 0.0, alpha: 1.0, color: [1.0; 3], team: TEAM }];
     let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
     let light = light_at_centre(&mut renderer, &device, &queue, &scene);
@@ -422,7 +424,7 @@ fn a_rig_is_posed_with_the_scene_clock_in_seconds() {
     let vertices = vec![Vertex { position: [0.0; 3], normal: [0.0, 0.0, 1.0], uv: [0.0; 2], bones: [0; 4], weights: [1.0, 0.0, 0.0, 0.0] }; 3];
     renderer.add_model("clock", ModelData { vertices, indices: vec![0, 1, 2], parts: vec![draw], rig: Box::new(ClockRig(seen.clone())), emitters: Vec::new() });
     let mut scene = Scene::default();
-    scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0 };
+    scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 0.0 };
     scene.poses = vec![scene::Pose { id: 0, model: "clock".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 2.5, alpha: 1.0, color: [1.0; 3], team: TEAM }];
     let _ = render(&mut renderer, &device, &queue, &scene);
     assert_eq!(*seen.lock().unwrap(), 2.5, "the pose clock reaches the rig as seconds, which the rig turns into global sequence milliseconds");
@@ -436,7 +438,7 @@ fn particle_light(filter_mode: u32, texel: [u8; 4]) -> [f32; 3] {
     let emitter = ModelEmitter { spec, paint: Paint::None };
     let slot = renderer.particles.register(&device, &queue, &emitter, ("shine", &view), &renderer.sampler).expect("room for an emitter");
     let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };
-    scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0 };
+    scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 0.0 };
     let _ = render(&mut renderer, &device, &queue, &scene);
     renderer.particles.begin(1);
     let sample = EmitterSample { visible: true, rate: 60.0, ..EmitterSample::default() };

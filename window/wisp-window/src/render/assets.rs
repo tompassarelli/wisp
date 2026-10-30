@@ -187,6 +187,7 @@ impl Renderer {
     /// Applies a preset's features. Bloom and ambient occlusion are the final-image pass's strengths, and a strength of zero skips that effect's passes; the other keys are read by their features as they land.
     pub fn set_features(&mut self, features: Features) {
         self.features = features;
+        self.set_shadow_side(match features.shadows { Shadows::Off => 0, Shadows::Map(side) => side });
         self.set_post_tuning(tuning_of(features, self.tuning));
         if let Some(incoming) = self.incoming.as_mut() {
             incoming.set_features(features);

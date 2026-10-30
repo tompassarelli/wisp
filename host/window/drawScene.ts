@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { type AnimationSequence, animationSample } from "../../src/headless/animation";
 import { parseMDX } from "../../vendor/war3-model.mjs";
+import { lightAtHour } from "../render/dayNightLight";
 import { parsableModel } from "../models/models";
 import { drawnPoses } from "../render/culling";
 import { nativeUi, uiAssets } from "./nativeUi";
@@ -47,6 +48,42 @@ export interface ModelLibrary {
   /** Reads and pushes each file once, so the window can draw the frames that name them. */
   show(paths: readonly string[]): void;
   loading(): number;
+  /** The key light and ambient the day-night model at `path` gives at `hours`, once the model is read. */
+  light(path: string, hours: number): NativeLight | undefined;
+}
+
+/** The light the native renderer shades with (window/wisp-window/src/render/scene.rs). */
+interface NativeLight {
+  readonly toward: readonly number[];
+  readonly key: readonly number[];
+  readonly ambient: readonly number[];
+}
+
+const NEUTRAL_AMBIENT = [0.5, 0.5, 0.5];
+
+/** Reads each day-night model once, and gives the light it holds at an hour once it is read. */
+function createDayNightLights(read: AssetReader, report: (problem: string) => void) {
+  const models = new Map<string, ReturnType<typeof parseMDX> | undefined>();
+  const reading = new Set<string>();
+  return {
+    loading: () => reading.size,
+    light(path: string, hours: number): NativeLight | undefined {
+      if (path === "") return undefined;
+      if (!models.has(path)) {
+        if (!reading.has(path)) {
+          reading.add(path);
+          void read(path)
+            .then((bytes) => { models.set(path, bytes === undefined ? undefined : parseMDX(parsableModel(bytes).bytes.slice().buffer)); })
+            .catch((cause: unknown) => { models.set(path, undefined); report(`${path}: ${cause instanceof Error ? cause.message : String(cause)}`); })
+            .finally(() => { reading.delete(path); });
+        }
+        return undefined;
+      }
+      const model = models.get(path);
+      const light = model === undefined ? undefined : lightAtHour(model, hours);
+      return light === undefined ? undefined : { toward: light.toward, key: light.key, ambient: light.ambient === "environment" ? NEUTRAL_AMBIENT : light.ambient };
+    },
+  };
 }
 
 /**
@@ -55,6 +92,7 @@ export interface ModelLibrary {
  */
 export function createModelLibrary(read: AssetReader, sink: AssetSink, report: (problem: string) => void): ModelLibrary {
   const entries = new Map<string, Entry>();
+  const lights = createDayNightLights(read, report);
   const pushed = new Map<string, Promise<void>>();
   const push = (path: string): Promise<void> => {
     const known = pushed.get(path);
@@ -98,7 +136,7 @@ export function createModelLibrary(read: AssetReader, sink: AssetSink, report: (
   };
   let reading = 0;
   return {
-    loading: () => reading,
+    loading: () => reading + lights.loading(),
     show(paths: readonly string[]): void {
       for (const path of paths) {
         if (pushed.has(path)) continue;
@@ -106,6 +144,7 @@ export function createModelLibrary(read: AssetReader, sink: AssetSink, report: (
         void push(path).finally(() => { reading--; });
       }
     },
+    light: lights.light,
     sequences(path: string): readonly AnimationSequence[] | undefined {
       const known = entries.get(path);
       if (known === undefined) {
@@ -169,7 +208,7 @@ export function drawScene(scene: RenderScene, library: ModelLibrary) {
   const environment = scene.environment;
   const sky = environment.sky !== "" && environment.skyVisible ? place({ handle: { id: 0 }, model: environment.sky, x: 0, y: 0, z: 0, alpha: 255, scale: 1, flat: false, animation: undefined, subAnimations: [], animationElapsed: 0, animationClock: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1], yaw: 0, pitch: 0, roll: 0 } as unknown as DrawnPose) : undefined;
   const poses = drawnPoses(scene.effects, view.eye, view.far, scene.world).flatMap((pose) => place(pose) ?? []);
-  return { frame: scene.frame, pending: library.loading(), playing: scene.playing === true, camera: { view: Array.from(view.view), eye: view.eye, tangent: view.shadow.tangent, near: view.near, far: view.far, skyFar: SKY_FAR, rise: NATIVE_RISE }, fog: fogOf(scene), sky, skyLook: environment.skyLook, poses, lightnings: (scene.lightnings ?? []).map((bolt) => ({ from: bolt.from, to: bolt.to, color: bolt.color })), weathers: (scene.weathers ?? []).map((weather) => ({ id: weather.id, rect: weather.rect })), ui, water: { preset: liquidPreset(poses.map((pose) => pose.model)) } };
+  return { frame: scene.frame, pending: library.loading(), playing: scene.playing === true, camera: { view: Array.from(view.view), eye: view.eye, tangent: view.shadow.tangent, near: view.near, far: view.far, skyFar: SKY_FAR, rise: NATIVE_RISE, reach: view.shadow.reach }, fog: fogOf(scene), light: library.light(environment.dayNight.unit, environment.timeOfDay), sky, skyLook: environment.skyLook, poses, lightnings: (scene.lightnings ?? []).map((bolt) => ({ from: bolt.from, to: bolt.to, color: bolt.color })), weathers: (scene.weathers ?? []).map((weather) => ({ id: weather.id, rect: weather.rect })), ui, water: { preset: liquidPreset(poses.map((pose) => pose.model)) } };
 }
 
 const PRELOAD_MS = 120_000;

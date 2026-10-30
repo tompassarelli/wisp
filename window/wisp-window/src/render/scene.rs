@@ -15,6 +15,30 @@ pub struct Camera {
     pub far: f32,
     pub sky_far: f32,
     pub rise: f32,
+    /// How far from the eye the sun's shadow map reaches.
+    #[serde(default)]
+    pub reach: f32,
+}
+
+impl Camera {
+    /// The eight corners of the view volume between the near plane and `reach`, which the sun's map covers; none when the camera has no reach.
+    pub fn sun_corners(&self, aspect: f32) -> Option<[[f32; 3]; 8]> {
+        if self.reach <= self.near {
+            return None;
+        }
+        let view = &self.view;
+        let (right, up, back) = ([view[0], view[4], view[8]], [view[1], view[5], view[9]], [view[2], view[6], view[10]]);
+        let mut corners = [[0.0; 3]; 8];
+        for (index, corner) in corners.iter_mut().enumerate() {
+            let depth = if index < 4 { self.near } else { self.reach };
+            let (sx, sy) = (if index & 2 == 0 { -1.0 } else { 1.0 }, if index & 1 == 0 { -1.0 } else { 1.0 });
+            let half = depth * self.tangent;
+            for axis in 0..3 {
+                corner[axis] = self.eye[axis] - back[axis] * depth + right[axis] * sx * half + up[axis] * sy * half / aspect;
+            }
+        }
+        Some(corners)
+    }
 }
 
 #[derive(Deserialize)]

@@ -16,6 +16,7 @@ mod particles;
 mod passes;
 mod pipelines;
 mod scene;
+mod shadow;
 mod targets;
 pub mod source;
 mod sprite;
@@ -34,17 +35,18 @@ use std::sync::Arc;
 
 use crate::decode_pool::Pool;
 use crate::remaster::{self, Baker, Cache, Edges, Loaded, Quality, Upscaler};
-use crate::settings::Features;
+use crate::settings::{Features, Shadows};
 use math::{mirrored, multiply, projection, Mat4, IDENTITY};
 use gpu::{bone_storage, frame_group, frame_uniform_buffer, instance_storage, color_storage, repeat_sampler, upload, uv_storage, white};
 use {lightning::Lightning, weather::Weather};
 use model::{Filter, ModelData, ModelEmitter, Paint, Vertex};
-use uniforms::{FrameUniform, Instance, LayerUniform, SceneFrame};
+use shadow::Shadow;
+use uniforms::{lighting_of, FrameUniform, Instance, LayerUniform, Lit, SceneFrame};
 use water::{Glow, Water};
 use particles::{ParticleFrame, Particles, Slot};
 use scene::{Pose, Scene};
 use targets::Targets;
-use crate::post::{Look, Post, Tuning, TUNING};
+use crate::post::{Post, Tuning, TUNING};
 
 pub use gpu::fitted;
 pub use sprite::Shot;
@@ -134,6 +136,7 @@ pub struct Renderer {
     water_level: Option<f32>,
     targets: Option<Targets>,
     post: Post,
+    shadow: Shadow,
     tuning: Tuning,
     sprites: Vec<sprite::Slot>,
     bone_scratch: Vec<Mat4>,
@@ -164,14 +167,14 @@ impl Renderer {
 
     pub fn new(device: wgpu::Device, queue: wgpu::Queue, format: wgpu::TextureFormat, quality: Quality, features: Features) -> Self {
         let (pipelines, frame_layout, layer_layout) = pipelines::build(&device, HDR);
-        let sampler = repeat_sampler(&device);
         let bone_buffer = bone_storage(&device, BONES_AT_START);
         let color_buffer = color_storage(&device, SLOTS_AT_START);
         let uv_buffer = uv_storage(&device, SLOTS_AT_START);
         let instance_buffer = instance_storage(&device, INSTANCES_AT_START);
+        let shadow = Shadow::new(&device, &layer_layout, [&bone_buffer, &color_buffer, &uv_buffer], match features.shadows { Shadows::Off => 0, Shadows::Map(side) => side });
         let set = |label| {
             let buffer = frame_uniform_buffer(&device, label);
-            let group = frame_group(&device, &frame_layout, &buffer, &bone_buffer, &color_buffer, &uv_buffer);
+            let group = frame_group(&device, &frame_layout, &buffer, &bone_buffer, &color_buffer, &uv_buffer, shadow.bound());
             FrameSet { buffer, group }
         };
         let (main, sky, mirror, mirror_sky) = (set("main frame"), set("sky frame"), set("mirrored frame"), set("mirrored sky frame"));
@@ -182,13 +185,13 @@ impl Renderer {
         let post = Post::new(&device, &queue, format, HDR, DEPTH, SAMPLES);
         Self {
             white: upload(&device, &queue, &white()),
+            sampler: repeat_sampler(&device),
             device,
             queue,
             format,
             pipelines,
             frame_layout,
             layer_layout,
-            sampler,
             textures: HashMap::new(),
             reliefs: HashMap::new(),
             quality,
@@ -219,6 +222,7 @@ impl Renderer {
             water_level: None,
             targets: None,
             post,
+            shadow,
             tuning: assets::tuning_of(features, TUNING),
             sprites: Vec::new(),
             bone_scratch: Vec::new(),
@@ -287,7 +291,7 @@ impl Renderer {
         };
         let uniform = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("layer"),
-            contents: bytemuck::bytes_of(&LayerUniform { kind, cutoff: if layer.filter == Filter::Cutout { 0.75 } else { 0.0 }, geoset_slot: part.color_slot, layer_slot: layer.color_slot, ignores_texture_alpha: u32::from(layer.filter == Filter::Additive), unshaded: u32::from(layer.unshaded), pad: [0; 2] }),
+            contents: bytemuck::bytes_of(&LayerUniform { kind, cutoff: if layer.filter == Filter::Cutout { 0.75 } else { 0.0 }, geoset_slot: part.color_slot, layer_slot: layer.color_slot, ignores_texture_alpha: u32::from(layer.filter == Filter::Additive), lighting: lighting_of(layer.filter, layer.unshaded), pad: [0; 2] }),
             usage: wgpu::BufferUsages::UNIFORM,
         });
         draw(Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -314,17 +318,21 @@ impl Renderer {
         self.targets = Some(targets);
     }
 
-    /// `mirror` is set when the frame is the mirrored copy drawn for the reflection, whose geometry below `plane` is cut away.
-    fn scene_frame(scene: &Scene, aspect: f32, window: f32, far: f32, size: (u32, u32), plane: f32, mirror: bool, glow: Glow) -> SceneFrame {
+    /// `mirror` is set when the frame is the mirrored copy drawn for the reflection, whose geometry below `plane` is cut away; `lit` says how the light and the sun's map reach what the frame draws.
+    fn scene_frame(scene: &Scene, aspect: f32, window: f32, far: f32, size: (u32, u32), plane: f32, mirror: bool, glow: Glow, lit: Lit) -> SceneFrame {
         let camera = &scene.camera;
         let view = camera.view;
-        let (light_toward, light_key, light_ambient) = match &scene.light {
-            Some(light) => ([light.toward[0], light.toward[1], light.toward[2], 0.0], [light.key[0], light.key[1], light.key[2], 1.0], [light.ambient[0], light.ambient[1], light.ambient[2], 0.0]),
-            None => ([0.0, 0.0, 1.0, 0.0], [0.0; 4], [1.0, 1.0, 1.0, 0.0]),
+        let (light_toward, light_key, light_ambient) = match (&scene.light, lit) {
+            (Some(light), Lit::Ambient | Lit::Sunlit(_)) => ([light.toward[0], light.toward[1], light.toward[2], 0.0], [light.key[0], light.key[1], light.key[2], 1.0], [light.ambient[0], light.ambient[1], light.ambient[2], 0.0]),
+            _ => ([0.0, 0.0, 1.0, 0.0], [0.0; 4], [1.0, 1.0, 1.0, 0.0]),
         };
         let (fog_color, fog_range) = match &scene.fog {
             Some(fog) => ([fog.color[0], fog.color[1], fog.color[2], 1.0], [fog.start, fog.end, fog.max, 0.0]),
             None => ([0.0; 4], [0.0, 1.0, 1.0, 0.0]),
+        };
+        let (sun_projection, shadow) = match lit {
+            Lit::Sunlit(sun) => (sun.view_projection, [sun.texel, sun.offset, 1.0, 0.0]),
+            Lit::Unlit | Lit::Ambient => (IDENTITY, [0.0; 4]),
         };
         let flat = multiply(&projection(camera.tangent, camera.near, far, aspect, window, camera.rise), &view);
         let view_projection = if mirror { multiply(&flat, &mirrored(plane)) } else { flat };
@@ -336,6 +344,8 @@ impl Renderer {
             screen: [width, height, 1.0 / width.max(1.0), 1.0 / height.max(1.0)],
             glow: glow.light,
             glow_at: glow.at,
+            sun_projection,
+            shadow,
         }
     }
 
@@ -393,7 +403,7 @@ impl Renderer {
     }
 
     /// Poses the sky, grows the storage buffers that outgrew their capacity, uploads the scene's per-frame data and stages its particles and bolts.
-    fn prepare(&mut self, scene: &Scene, aspect: f32, window: f32, size: (u32, u32)) {
+    fn prepare(&mut self, scene: &Scene, aspect: f32, window: f32, size: (u32, u32)) -> bool {
         self.layout(&scene.poses);
         let sky = scene.sky.as_ref().and_then(|pose| self.model_ids.get(pose.model.as_str()).map(|&id| (id, pose)));
         let sky_base = self.bone_scratch.len();
@@ -411,6 +421,7 @@ impl Renderer {
             self.color_buffer = color_storage(&self.device, self.color_capacity);
             self.uv_buffer = uv_storage(&self.device, self.color_capacity);
             self.bind_frames();
+            self.shadow.rebind(&self.device, [&self.bone_buffer, &self.color_buffer, &self.uv_buffer]);
         }
         let sky_instance = self.instance_scratch.len();
         if let Some((_, pose)) = sky {
@@ -431,20 +442,27 @@ impl Renderer {
         let plane = self.water_level.filter(|_| self.water.ready()).unwrap_or(0.0);
         let seconds = self.started.elapsed().as_secs_f32();
         let glow = if self.water_level.is_some() && self.water.ready() { scene.water.glow(plane, seconds) } else { Glow::NONE };
-        let frames = [(&self.main, scene.camera.far, false), (&self.sky, scene.camera.sky_far, false), (&self.mirror, scene.camera.far, true), (&self.mirror_sky, scene.camera.sky_far, true)];
-        for (set, far, mirror) in frames {
-            self.queue.write_buffer(&set.buffer, 0, bytemuck::bytes_of(&Self::scene_frame(scene, aspect, window, far, size, plane, mirror, glow)));
+        let sun = scene.light.as_ref().filter(|light| light.key.iter().any(|&channel| channel > 0.0)).filter(|_| self.shadow.side > 0).and_then(|light| scene.camera.sun_corners(aspect).map(|corners| shadow::sun(corners, light.toward, self.shadow.side)));
+        let lit = sun.as_ref().map_or(Lit::Ambient, Lit::Sunlit);
+        let main = Self::scene_frame(scene, aspect, window, scene.camera.far, size, plane, false, glow, lit);
+        let frames = [(&self.main, scene.camera.far, false, lit), (&self.sky, scene.camera.sky_far, false, Lit::Unlit), (&self.mirror, scene.camera.far, true, lit), (&self.mirror_sky, scene.camera.sky_far, true, Lit::Unlit)];
+        for (set, far, mirror, lit) in frames {
+            self.queue.write_buffer(&set.buffer, 0, bytemuck::bytes_of(&Self::scene_frame(scene, aspect, window, far, size, plane, mirror, glow, lit)));
+        }
+        if let Some(sun) = &sun {
+            self.shadow.write(&self.queue, sun);
         }
         let view = &scene.camera.view;
         let eye = scene.camera.eye;
         self.particles.finish(
             &self.queue,
-            &ParticleFrame { base: Self::scene_frame(scene, aspect, window, scene.camera.far, size, plane, false, glow).base, right: [view[0], view[4], view[8], 0.0], up: [view[1], view[5], view[9], 0.0], eye_and_now: [eye[0], eye[1], eye[2], 0.0] },
+            &ParticleFrame { base: main.base, right: [view[0], view[4], view[8], 0.0], up: [view[1], view[5], view[9], 0.0], eye_and_now: [eye[0], eye[1], eye[2], 0.0] },
         );
         self.problems.append(&mut self.particles.problems);
         self.lightning.stage(&self.queue, &scene.lightnings);
         self.weather.stage(&self.queue, &scene.camera, &scene.weathers, &self.features);
         self.sky_group_of = sky.map(|(id, _)| Group { model: id, first: sky_instance as u32, count: 1 });
+        sun.is_some()
     }
 
 }

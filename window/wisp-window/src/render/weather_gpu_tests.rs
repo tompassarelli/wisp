@@ -35,7 +35,7 @@ fn stage(weathers: &[&str], frame: u32) -> Scene {
     let rect = [-8192.0, -6144.0, 8192.0, 10240.0];
     Scene {
         frame,
-        camera: Camera { view: look_at(eye, target), eye, tangent: 0.45, near: 10.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0 },
+        camera: Camera { view: look_at(eye, target), eye, tangent: 0.45, near: 10.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0, reach: 0.0 },
         weathers: weathers.iter().map(|id| WeatherPose { id: id.to_string(), rect }).collect(),
         ..Scene::default()
     }

@@ -49,6 +49,8 @@ pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat) -> (Vec<
             entry(1, wgpu::ShaderStages::VERTEX, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }),
             entry(2, wgpu::ShaderStages::VERTEX, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }),
             entry(3, wgpu::ShaderStages::VERTEX, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }),
+            entry(4, wgpu::ShaderStages::FRAGMENT, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
+            entry(5, wgpu::ShaderStages::FRAGMENT, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison)),
         ],
     });
     let layer_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -89,11 +91,55 @@ pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat) -> (Vec<
                     stencil: Default::default(),
                     bias: Default::default(),
                 }),
-                multisample: wgpu::MultisampleState { count: SAMPLES, mask: !0, alpha_to_coverage_enabled: false },
+                multisample: wgpu::MultisampleState { count: SAMPLES, mask: !0, alpha_to_coverage_enabled: filter == Filter::Cutout },
                 multiview_mask: None,
                 cache: None,
             })
         })
         .collect();
     (pipelines, frame_layout, layer_layout)
+}
+
+/// The sun's depth pipeline and the layout of the frame group it binds, which cannot hold the map it writes.
+pub(super) fn shadow(device: &wgpu::Device, layer_layout: &wgpu::BindGroupLayout) -> (wgpu::BindGroupLayout, wgpu::RenderPipeline) {
+    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("shadow"), source: wgpu::ShaderSource::Wgsl(shader_source(include_str!("shader.wgsl")).into()) });
+    let storage = || wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None };
+    let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("shadow frame"),
+        entries: &[
+            entry(0, wgpu::ShaderStages::VERTEX_FRAGMENT, uniform_type()),
+            entry(1, wgpu::ShaderStages::VERTEX, storage()),
+            entry(2, wgpu::ShaderStages::VERTEX, storage()),
+            entry(3, wgpu::ShaderStages::VERTEX, storage()),
+        ],
+    });
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("shadow"), bind_group_layouts: &[Some(&layout), Some(layer_layout)], immediate_size: 0 });
+    let vertex_attributes = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Uint16x4, 4 => Float32x4];
+    let instance_attributes = wgpu::vertex_attr_array![5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4, 9 => Float32x4, 10 => Float32x4, 11 => Uint32x2];
+    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("shadow"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &module,
+            entry_point: Some("shadow_vertex"),
+            compilation_options: Default::default(),
+            buffers: &[
+                Some(wgpu::VertexBufferLayout { array_stride: size_of::<Vertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &vertex_attributes }),
+                Some(wgpu::VertexBufferLayout { array_stride: size_of::<Instance>() as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &instance_attributes }),
+            ],
+        },
+        fragment: Some(wgpu::FragmentState { module: &module, entry_point: Some("shadow_fragment"), compilation_options: Default::default(), targets: &[] }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: super::shadow::FORMAT,
+            depth_write_enabled: Some(true),
+            depth_compare: Some(wgpu::CompareFunction::LessEqual),
+            stencil: Default::default(),
+            bias: wgpu::DepthBiasState { constant: 2, slope_scale: 2.0, clamp: 0.0 },
+        }),
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+    (layout, pipeline)
 }

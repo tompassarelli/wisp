@@ -10,6 +10,8 @@ struct Frame {
     screen: vec4<f32>,
     glow: vec4<f32>,
     glow_at: vec4<f32>,
+    sun_projection: mat4x4<f32>,
+    shadow: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;
