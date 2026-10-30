@@ -152,14 +152,14 @@ impl Host {
             info: Mutex::new(String::new()),
             error: Mutex::new(None),
         });
-        let mut builder = EventLoop::<Command>::with_user_event();
-        any_thread(&mut builder);
         let (proxy_in, proxy_out) = mpsc::channel();
         let (handoff, windows) = mpsc::channel();
         let window_thread = {
             let app_shared = shared.clone();
             let title = title.to_string();
             guarded(&shared, wake, move || {
+                let mut builder = EventLoop::<Command>::with_user_event();
+                any_thread(&mut builder);
                 let event_loop = match builder.build() {
                     Ok(event_loop) => event_loop,
                     Err(error) => {
