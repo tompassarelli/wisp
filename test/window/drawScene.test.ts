@@ -67,3 +67,17 @@ test("modelLibrary_sends_a_shared_texture_before_every_model_that_names_it", asy
   await Bun.sleep(80);
   expect(pushed).toEqual(["shared.blp", "a.mdx", "b.mdx"]);
 });
+
+test("drawScene_plays_a_destroyed_effect_once_and_then_drops_it", () => {
+  const sequence = (name: string, start: number, end: number, looping: boolean): AnimationSequence => ({ name, start, end, looping, rarity: 0 });
+  const withDeath = [sequence("Birth", 0, 1000, false), sequence("Stand", 1000, 3000, true), sequence("Death", 3000, 4000, false)];
+  const noDeath = [sequence("Birth", 0, 1000, false), sequence("Stand", 1000, 3000, true)];
+  const destroyed = (frame: number, elapsed: number) => ({ ...scene, frame, effects: [{ ...pose("fx.mdx"), destroyed: 10, animationElapsed: elapsed }] } as unknown as RenderScene);
+  const drawn = (sequences: readonly AnimationSequence[], frame: number, elapsed: number) => drawScene(destroyed(frame, elapsed), { sequences: () => sequences, show: () => undefined, loading: () => 0 }).poses;
+  expect(drawn(withDeath, 40, 9)[0]?.sequence).toBe(2);
+  expect(Math.abs((drawn(withDeath, 40, 9)[0]?.frame ?? 0) - 3500)).toBeLessThanOrEqual(1);
+  expect(drawn(withDeath, 40, 9)).toHaveLength(1);
+  expect(drawn(withDeath, 71, 9)).toHaveLength(0);
+  expect(drawn(noDeath, 40, 2.5)).toHaveLength(1);
+  expect(drawn(noDeath, 400, 3.5)).toHaveLength(0);
+});

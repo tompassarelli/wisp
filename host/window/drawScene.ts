@@ -4,6 +4,7 @@ import { parseMDX } from "../../vendor/war3-model.mjs";
 import { parsableModel } from "../models/models";
 import { drawnPoses } from "../render/culling";
 import { nativeUi, uiAssets } from "./nativeUi";
+import { destroyedSample } from "./destroyedEffect";
 import type { DrawnPose, RenderScene } from "../render/renderScene";
 import { NATIVE_RISE, SKY_FAR, camera, transform } from "../render/screen";
 
@@ -103,7 +104,9 @@ export function drawScene(scene: RenderScene, library: ModelLibrary) {
   const place = (pose: DrawnPose): NativePose | undefined => {
     const sequences = library.sequences(pose.model);
     if (sequences === undefined) return undefined;
-    const sample = animationSample(sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, pose.unit === true ? "unit" : "effect");
+    const destroyed = destroyedSample(pose, sequences, scene.frame);
+    if (destroyed === "gone") return undefined;
+    const sample = destroyed ?? animationSample(sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, pose.unit === true ? "unit" : "effect");
     return { id: pose.handle.id, model: pose.model, matrix: Array.from(transform(pose)), sequence: sample.sequence, frame: sample.frame, clock: pose.animationClock, alpha: pose.alpha / 255, color: pose.color.map((value) => value / 255), team: (TEAMS[pose.teamColor] ?? NEUTRAL_TEAM).map((value) => value / 255) };
   };
   const ui = nativeUi(scene.ui);
