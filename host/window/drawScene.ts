@@ -46,13 +46,17 @@ export interface ModelLibrary {
  */
 export function createModelLibrary(read: AssetReader, sink: AssetSink, report: (problem: string) => void): ModelLibrary {
   const entries = new Map<string, Entry>();
-  const pushed = new Set<string>();
-  const push = async (path: string) => {
-    if (pushed.has(path)) return;
-    pushed.add(path);
-    const bytes = await read(path);
-    if (bytes === undefined) return report(`missing asset ${path}`);
-    sink.asset(path, bytes);
+  const pushed = new Map<string, Promise<void>>();
+  const push = (path: string): Promise<void> => {
+    const known = pushed.get(path);
+    if (known !== undefined) return known;
+    const started = (async () => {
+      const bytes = await read(path);
+      if (bytes === undefined) return report(`missing asset ${path}`);
+      sink.asset(path, bytes);
+    })();
+    pushed.set(path, started);
+    return started;
   };
   const load = async (path: string) => {
     const bytes = await read(path);

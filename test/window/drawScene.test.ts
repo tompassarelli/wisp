@@ -52,3 +52,18 @@ test("modelLibrary_pushes_each_ui_file_once_and_counts_it_until_read", async () 
   expect(pushed).toEqual(["a.tga", "b.ttf"]);
   expect(library.loading()).toBe(0);
 });
+
+test("modelLibrary_sends_a_shared_texture_before_every_model_that_names_it", async () => {
+  const { parseMDX, generateMDX } = await import("../../vendor/war3-model.mjs");
+  const fixture = await Bun.file("window/wisp-window/tests/fixtures/rig.mdx").bytes();
+  const model = parseMDX(fixture.slice().buffer);
+  model.Textures = [{ Image: "shared.blp", ReplaceableId: 0, Flags: 0 }];
+  const mdx = new Uint8Array(generateMDX(model));
+  const pushed: string[] = [];
+  const library = createModelLibrary(async (path) => { await Bun.sleep(path === "shared.blp" ? 20 : 0); return path.endsWith(".mdx") ? mdx : new Uint8Array([1]); }, { asset: (path) => { pushed.push(path); } }, () => undefined);
+  library.sequences("a.mdx");
+  await Bun.sleep(5);
+  library.sequences("b.mdx");
+  await Bun.sleep(80);
+  expect(pushed).toEqual(["shared.blp", "a.mdx", "b.mdx"]);
+});
