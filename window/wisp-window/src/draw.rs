@@ -182,7 +182,8 @@ impl Gpu {
         });
         let info = adapter.get_info();
         let upscaler = crate::remaster::Upscaler::on(device.clone(), queue.clone(), &info);
-        let renderer = Renderer::new(device.clone(), queue.clone(), config.format, settings.quality(settings::developer_quality()), settings.features()).with_upscaler(Arc::new(upscaler));
+        let mut renderer = Renderer::new(device.clone(), queue.clone(), config.format, crate::remaster::Quality::Off, settings.features()).with_upscaler(Arc::new(upscaler));
+        renderer.set_quality(settings.quality(settings::developer_quality()));
         let ui = UiRenderer::new(device.clone(), queue.clone(), config.format);
         Ok(Self { surface, config, device, queue, pipeline, vertices, renderer, ui, aspect, scene: None, capture, adapter_handle: adapter, present, settings, store, menu: Menu::default(), sweep, images: HashSet::new(), adapter: info.name, backend: format!("{:?}", info.backend) })
     }
