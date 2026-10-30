@@ -3,10 +3,12 @@ import { Effect, Fiber, Option, Schema } from "effect";
 import { ChildProcess } from "effect/process";
 import { type Command, UsageFailure, flagValues, wholeFlag } from "../cli/command";
 import { collect } from "../cli/hostProcess";
-import { type NetGame, type NetPeerOptions, type NetReport, NetFailure, runNetPeer } from "../net/peer";
+import { NetFailure } from "../net/failure";
+import { type RelayChoice, joinTarget, relayChoice, relayCode, relayRegions } from "../net/joinCode";
+import { type NetGame, type NetPeerOptions, type NetReport, type NetRole, runNetPeer } from "../net/peer";
 import { runProxy } from "../net/proxy";
 
-const VALUE_FLAGS = ["port", "listen", "to", "frames", "rtt", "loss", "seed", "delay", "freeze-at", "quit-at", "game"];
+const VALUE_FLAGS = ["port", "listen", "to", "frames", "rtt", "loss", "seed", "delay", "freeze-at", "quit-at", "game", "relay"];
 const JOINER_ONLY = ["--freeze-at", "--quit-at"];
 const PROXY_ONLY = ["--rtt", "--loss", "--seed"];
 
@@ -16,7 +18,8 @@ const Report = Schema.Struct({
   deliveryMs: Schema.Struct({ p50: Schema.Finite, p95: Schema.Finite, p99: Schema.Finite, max: Schema.Finite }),
   stepMs: Schema.Struct({ p50: Schema.Finite, p95: Schema.Finite, max: Schema.Finite }),
   slips: Schema.Finite, lateFrames: Schema.Finite, waitMs: Schema.Finite, packetsSent: Schema.Finite,
-  packetsReceived: Schema.Finite, wallMs: Schema.Finite,
+  packetsReceived: Schema.Finite, bytesSent: Schema.Finite, bytesReceived: Schema.Finite, largestSent: Schema.Finite, largestReceived: Schema.Finite,
+  wallMs: Schema.Finite,
 });
 const Outcome = Schema.fromJsonString(Schema.Union([
   Schema.Struct({ report: Report }),
@@ -49,18 +52,31 @@ function address(text: string | undefined, what: string): { readonly address: st
   return match === null ? new UsageFailure({ problem: `${what} needs ADDRESS:PORT` }) : { address: match[1] ?? "", port: Number(match[2]) };
 }
 
-function peerOptions(verb: "host" | "join", rest: readonly string[], game: string): NetPeerOptions | UsageFailure {
+function role(verb: "host" | "join", rest: readonly string[], port: number): { readonly role: NetRole; readonly relay?: RelayChoice } | UsageFailure {
+  const regions = relayRegions();
+  if (verb === "join") {
+    const target = joinTarget(rest[0] ?? "", regions);
+    if (typeof target === "string") return new UsageFailure({ problem: target });
+    return "relay" in target ? { role: { kind: "relayJoin", relay: target.relay, room: target.room } } : { role: { kind: "join", to: { address: target.address, port: target.port } } };
+  }
+  const [named] = flagValues(rest, "relay");
+  if (named === undefined) return { role: { kind: "host", port } };
+  const choice = relayChoice(named, regions);
+  return typeof choice === "string" ? new UsageFailure({ problem: choice }) : { role: { kind: "relayHost", relay: choice.relay }, relay: choice };
+}
+
+function peerOptions(verb: "host" | "join", rest: readonly string[], game: string): { readonly options: NetPeerOptions; readonly relay?: RelayChoice } | UsageFailure {
   const values = counts(rest, { port: 0, frames: 0, delay: 0, "freeze-at": 0, "quit-at": 0 });
   if (values instanceof UsageFailure) return values;
   if (values.frames < 1) return new UsageFailure({ problem: "--frames needs a positive frame count" });
-  const host = verb === "join" ? address(rest[0], "join") : undefined;
-  if (host instanceof UsageFailure) return host;
-  return {
-    role: host === undefined ? { host: { port: values.port } } : { join: host }, game, frames: values.frames,
+  const chosen = role(verb, rest, values.port);
+  if (chosen instanceof UsageFailure) return chosen;
+  return { ...(chosen.relay === undefined ? {} : { relay: chosen.relay }), options: {
+    role: chosen.role, game, frames: values.frames,
     ...(values.delay > 0 ? { delay: values.delay } : {}),
     ...(values["freeze-at"] > 0 ? { freezeAt: values["freeze-at"] } : {}),
     ...(values["quit-at"] > 0 ? { quitAt: values["quit-at"] } : {}),
-  };
+  } };
 }
 
 const freePort = Effect.tryPromise({
@@ -78,7 +94,7 @@ export function describeReport(label: string, outcome: Outcome): string {
   const { report } = outcome;
   return `${label}: ${report.frames} frames, delay ${report.delay} (round trip ${report.rttMs} ms), ${report.checksumsCompared} checksums compared, ${report.mismatches} mismatches, `
     + `delivery p50/p95/p99/max ${report.deliveryMs.p50}/${report.deliveryMs.p95}/${report.deliveryMs.p99}/${report.deliveryMs.max} ms over ${report.deliveries} turns, `
-    + `step p50/p95/max ${report.stepMs.p50}/${report.stepMs.p95}/${report.stepMs.max} ms, ${report.slips} slips, ${report.lateFrames} late frames, ${report.packetsSent} packets sent`;
+    + `step p50/p95/max ${report.stepMs.p50}/${report.stepMs.p95}/${report.stepMs.max} ms, ${report.slips} slips, ${report.lateFrames} late frames, ${report.packetsSent} packets sent, ${report.bytesSent} bytes sent (largest ${report.largestSent}), ${report.bytesReceived} bytes received`;
 }
 
 /** The arguments of `rest` that are (or are not) one of `flags` with its value. */
@@ -104,6 +120,7 @@ export function makeNet(load: (args: readonly string[]) => Promise<NetGame>, gam
       return yield* runProxy({ listen: values.listen, to, oneWayMs: values.rtt / 2, loss: values.loss, seed: values.seed });
     }
     if (verb === "pair") {
+      if (rest.includes("--relay")) return yield* new UsageFailure({ problem: "pair runs both sides on this machine; run host --relay and join CODE for a relayed match" });
       const prefix = process.argv.slice(0, process.argv.length - args.length);
       const shared = only(only(only(rest, JOINER_ONLY, false), PROXY_ONLY, false), ["--port"], false);
       const hostPort = yield* freePort;
@@ -133,8 +150,12 @@ export function makeNet(load: (args: readonly string[]) => Promise<NetGame>, gam
       return;
     }
     if (verb !== "host" && verb !== "join") return yield* new UsageFailure({ problem: "net takes host, join, proxy or pair" });
-    const options = peerOptions(verb, rest, flagValues(rest, "game")[0] ?? gameName);
-    if (options instanceof UsageFailure) return yield* options;
+    const chosen = peerOptions(verb, rest, flagValues(rest, "game")[0] ?? gameName);
+    if (chosen instanceof UsageFailure) return yield* chosen;
+    const { relay } = chosen;
+    const options: NetPeerOptions = { ...chosen.options, listening: (listening) => {
+      if ("room" in listening && relay !== undefined) console.error(`net: join code ${relayCode(relay, listening.room)}`);
+    } };
     const game = yield* Effect.tryPromise({ try: () => load(rest), catch: (cause) => new NetFailure({ problem: `loading the game: ${String(cause)}` }) });
     const began = performance.now();
     const report: NetReport = yield* runNetPeer(game, options).pipe(Effect.tapError((error) => Effect.sync(() => {

@@ -99,7 +99,10 @@ runMainCli("bun examples/sample/scripts/sample.ts", {
     },
   },
   net: {
-    usage: "host [--port N] | join ADDRESS:PORT | pair  --frames N [--delay FRAMES] [--freeze-at F] [--quit-at F] [--rtt MS] [--loss P] [--seed N] | proxy --listen PORT --to ADDRESS:PORT [--rtt MS] [--loss P] [--seed N]",
-    load: async () => (await import("wisp/scripts/wisp/commands/net")).makeNet(async () => (await import("../test/net")).SAMPLE_NET, NAME),
+    usage: "host [--port N | --relay REGION|ADDRESS:PORT] | join CODE|ADDRESS:PORT | pair  --frames N [--delay FRAMES] [--freeze-at F] [--quit-at F] [--rtt MS] [--loss P] [--seed N] [--chatter N] | proxy --listen PORT --to ADDRESS:PORT [--rtt MS] [--loss P] [--seed N]",
+    load: async () => (await import("wisp/scripts/wisp/commands/net")).makeNet(async (args) => {
+      const [chatter] = flagValues(args, "chatter");
+      return (await import("../test/net")).sampleNet(Number(chatter ?? 0));
+    }, NAME, ["chatter"]),
   },
 }, process.argv.slice(2));

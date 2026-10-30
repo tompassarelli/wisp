@@ -306,7 +306,7 @@ Two players on two machines play one match through the standalone window,
 with no server and no account. One hosts, the other joins:
 
 ```sh
-bun wisp play --standalone --host [--port N]
+bun wisp play --standalone --host [--port N | --relay REGION]
 bun wisp play --standalone --join CODE
 bun wisp play --standalone --join ADDRESS:PORT
 ```
@@ -316,7 +316,18 @@ socket is bound, then each direct address and port. The code packs the host's
 LAN IPv4 address, its UDP port and the first 8 hex digits of the map hash
 (wisp:host/net/joinCode.ts). A player on another network joins by
 direct address after the host forwards that UDP port; Wisp does no hole
-punching and runs no relay.
+punching on that route.
+
+`--host --relay REGION` opens a room on that region's relay instead and
+prints a relay code such as `sgp-7K2M-QX9D-R3TB-4`: the region and the room.
+`--join CODE` reaches the same room, through any NAT and with no port
+forward; both players send to the relay first, which forwards each datagram
+to the other (wisp:docs/relay.md, "Peer room"). `--relay` also takes a
+relay's `ADDRESS:PORT`, which prints `ADDRESS:PORT/ROOM`. The region list is
+`WISP_RELAYS="sgp=ADDRESS:PORT,..."` until wisp#102 publishes it. A relay code
+carries no map hash: the host refuses a joiner whose map differs. The same
+flags work on `net host` and `net join`, which print the reports (bytes sent,
+bytes received and the largest datagram, a relay's framing included).
 
 A game opts in with `StandaloneGame.net`: `mapHash()` names its build and
 `create(link, slot, { script })` returns one slot's `StandaloneNetSession`

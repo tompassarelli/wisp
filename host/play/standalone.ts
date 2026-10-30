@@ -8,8 +8,9 @@ import type { HeadlessClient } from "../../src/headless/client";
 import type { LockstepLink } from "../../src/headless/lockstep";
 import { spawnLogged } from "../cli/hostProcess";
 import { requireGpuLease } from "../render/gpuLease";
-import { joinCode, joinTarget, CODE_HASH_DIGITS } from "../net/joinCode";
-import { type NetSession, NetFailure, runNetPeer } from "../net/peer";
+import { joinCode, joinTarget, relayChoice, relayCode, relayRegions, CODE_HASH_DIGITS } from "../net/joinCode";
+import { NetFailure } from "../net/failure";
+import { type NetListening, type NetRole, type NetSession, runNetPeer } from "../net/peer";
 import { captureScene, sceneWithUnits, RenderFailure, type HeadlessRenderProject } from "../render/headlessRender";
 import { browserBundle } from "../render/browserBundle";
 import { createSoundResolver } from "../render/standaloneSound";
@@ -46,7 +47,7 @@ export interface StandaloneGame {
   };
 }
 
-type StandaloneNet = { readonly host: { readonly port: number } } | { readonly join: string };
+type StandaloneNet = { readonly host: { readonly port: number; readonly relay?: string } } | { readonly join: string };
 
 export interface StandaloneOptions {
   readonly script?: string;
@@ -207,22 +208,34 @@ const printSummary = (result: Readonly<Record<string, unknown>> | void) => {
 
 const FOREVER_FRAMES = 60 * 60 * 60 * 24;
 
-/** One player of a networked match: `--host` listens and prints the join code, `--join CODE|ADDRESS:PORT` joins it (wisp:docs/play.md). */
+/** One player of a networked match: `--host` listens (or, with `--relay REGION`, opens a relay room) and prints the join code, `--join CODE|ADDRESS:PORT` joins it (wisp:docs/play.md). */
 const runNetStandalone = (game: StandaloneGame, options: StandaloneOptions, net: StandaloneNet) => Effect.gen(function*() {
   const hooks = game.net;
   if (hooks === undefined) return yield* new NetFailure({ problem: `${game.title} doesn't support host and join` });
   const mapHash = yield* attempt(() => hooks.mapHash());
-  let role: { readonly host: { readonly port: number } } | { readonly join: { readonly address: string; readonly port: number } };
-  if ("host" in net) role = { host: net.host };
-  else {
+  let role: NetRole;
+  let relay: ReturnType<typeof relayChoice> | undefined;
+  if ("host" in net) {
+    relay = net.host.relay === undefined ? undefined : relayChoice(net.host.relay, relayRegions());
+    if (typeof relay === "string") return yield* new NetFailure({ problem: relay });
+    role = relay === undefined ? { kind: "host", port: net.host.port } : { kind: "relayHost", relay: relay.relay };
+  } else {
     const target = joinTarget(net.join);
     if (typeof target === "string") return yield* new NetFailure({ problem: target });
-    if (target.mapHash !== undefined && target.mapHash !== mapHash.slice(0, CODE_HASH_DIGITS)) return yield* new MapMismatch({ code: target.mapHash, here: mapHash });
-    role = { join: { address: target.address, port: target.port } };
+    if ("relay" in target) role = { kind: "relayJoin", relay: target.relay, room: target.room };
+    else {
+      if (target.mapHash !== undefined && target.mapHash !== mapHash.slice(0, CODE_HASH_DIGITS)) return yield* new MapMismatch({ code: target.mapHash, here: mapHash });
+      role = { kind: "join", to: { address: target.address, port: target.port } };
+    }
   }
   const script = options.script === undefined ? undefined : yield* attempt(() => Bun.file(options.script!).text());
   const created = Promise.withResolvers<StandaloneNetSession>();
-  const listening = (port: number) => {
+  const listening = (at: NetListening) => {
+    if ("room" in at) {
+      if (typeof relay === "object") console.log(`${game.title}: join code ${relayCode(relay, at.room)} (relay room; the joiner's map must match ${mapHash.slice(0, CODE_HASH_DIGITS)})`);
+      return;
+    }
+    const { port } = at;
     const addresses = reachableAddresses();
     const [lan] = addresses;
     if (lan !== undefined) console.log(`${game.title}: join code ${joinCode(lan, port, mapHash)} (map ${mapHash.slice(0, CODE_HASH_DIGITS)})`);
@@ -262,22 +275,25 @@ export const runStandalone = (game: StandaloneGame, options: StandaloneOptions =
   printSummary(yield* Effect.raceFirst(player.completed, closed));
 })).pipe(Effect.provide(BunServices.layer));
 
-/** Reads `--host [--port N]` or `--join CODE|ADDRESS:PORT` from a play command's arguments; the rest come back untouched. */
+/** Reads `--host [--port N | --relay REGION]` or `--join CODE|ADDRESS:PORT` from a play command's arguments; the rest come back untouched. */
 export function standaloneNetArguments(args: readonly string[]): { readonly net?: StandaloneNet; readonly rest: readonly string[] } | string {
   const rest: string[] = [];
-  let host = false, port = 0, join: string | undefined;
+  let host = false, port = 0, join: string | undefined, relay: string | undefined;
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
     if (arg === "--host") host = true;
-    else if (arg === "--port" || arg === "--join") {
+    else if (arg === "--port" || arg === "--join" || arg === "--relay") {
       const value = args[++index];
       if (value === undefined || value.startsWith("--")) return `${arg} needs a value`;
       if (arg === "--join") join = value;
+      else if (arg === "--relay") relay = value;
       else if (!/^\d{1,5}$/.test(value) || Number(value) > 65535) return "--port needs a UDP port number";
       else port = Number(value);
     } else if (arg !== undefined) rest.push(arg);
   }
   if (host && join !== undefined) return "--host and --join are two different players; pick one";
   if (port !== 0 && !host) return "--port goes with --host";
-  return { rest, ...(host ? { net: { host: { port } } } : join === undefined ? {} : { net: { join } }) };
+  if (relay !== undefined && !host) return "--relay goes with --host";
+  if (relay !== undefined && port !== 0) return "--relay and --port are two ways to host; pick one";
+  return { rest, ...(host ? { net: { host: { port, ...(relay === undefined ? {} : { relay }) } } } : join === undefined ? {} : { net: { join } }) };
 }

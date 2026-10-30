@@ -2,6 +2,10 @@ import { Effect, Option, Schema } from "effect";
 import type { LockstepLink } from "../../src/headless/lockstep";
 import { TurnLedger, type TurnPacket } from "../../src/headless/turnLedger";
 import { FRAME_MS } from "../../src/headless/frameRate";
+import { NetFailure } from "./failure";
+import { type Endpoint, type Link, openDirectLink } from "./link";
+import { openRelayLink } from "./relayLink";
+import { type Datagram, decodeDatagram, encodeDatagram, fitTurns } from "./wire";
 
 export { FRAME_MS };
 const SILENCE_MS = 3000;
@@ -10,12 +14,6 @@ const PINGS = 8;
 const PING_SPACING_MS = 25;
 const SLACK_MS = 4;
 const RESEND_MS = FRAME_MS / 2;
-
-export class NetFailure extends Schema.TaggedError<NetFailure, { readonly brand: unique symbol }>()("NetFailure", { problem: Schema.String }) {
-  override get message(): string {
-    return this.problem;
-  }
-}
 
 class PeerSilent extends Schema.TaggedError<PeerSilent, { readonly brand: unique symbol }>()("PeerSilent", { frame: Schema.Finite, silentMs: Schema.Finite }) {
   override get message(): string {
@@ -51,7 +49,7 @@ export interface NetGame {
 }
 
 export interface NetPeerOptions {
-  readonly role: { readonly host: { readonly port: number } } | { readonly join: { readonly address: string; readonly port: number } };
+  readonly role: NetRole;
   readonly game: string;
   readonly frames: number;
   readonly checksumEvery?: number;
@@ -59,9 +57,18 @@ export interface NetPeerOptions {
   /** Fault drills: stop sending, or leave, after this frame. */
   readonly freezeAt?: number;
   readonly quitAt?: number;
-  /** Called with the host's UDP port once it listens. */
-  readonly listening?: (port: number) => void;
+  /** Called once the host can be reached: with its UDP port, or the room its relay opened. */
+  readonly listening?: (listening: NetListening) => void;
 }
+
+/** Which end of a match this process is, and how it reaches the other: straight over UDP, or through a relay's peer room. */
+export type NetRole =
+  | { readonly kind: "host"; readonly port: number }
+  | { readonly kind: "join"; readonly to: Endpoint }
+  | { readonly kind: "relayHost"; readonly relay: Endpoint }
+  | { readonly kind: "relayJoin"; readonly relay: Endpoint; readonly room: bigint };
+
+export type NetListening = { readonly port: number } | { readonly room: bigint };
 
 export interface NetReport {
   readonly slot: number;
@@ -78,37 +85,13 @@ export interface NetReport {
   readonly waitMs: number;
   readonly packetsSent: number;
   readonly packetsReceived: number;
+  /** On the wire, a relay's framing included: all bytes this side sent and took in, and its largest datagram in each direction. */
+  readonly bytesSent: number;
+  readonly bytesReceived: number;
+  readonly largestSent: number;
+  readonly largestReceived: number;
   readonly wallMs: number;
 }
-
-const Whole = Schema.Finite;
-const Event = Schema.Union([
-  Schema.Struct({ sender: Whole, kind: Schema.Literal("sync"), prefix: Schema.String, data: Schema.String }),
-  Schema.Struct({ sender: Whole, kind: Schema.Literal("key"), key: Whole, meta: Whole, down: Schema.Boolean }),
-  Schema.Struct({ sender: Whole, kind: Schema.Literal("mouse"), mouse: Schema.Union([
-    Schema.Struct({ x: Schema.Finite, y: Schema.Finite, button: Schema.Literals(["left", "middle", "right"]), down: Schema.Boolean }),
-    Schema.Struct({ x: Schema.Finite, y: Schema.Finite }),
-  ]) }),
-  Schema.Struct({ sender: Whole, kind: Schema.Literal("chat"), text: Schema.String }),
-  Schema.Struct({ sender: Whole, kind: Schema.Literal("click"), frame: Whole }),
-]);
-const Datagram = Schema.fromJsonString(Schema.Union([
-  Schema.Struct({ t: Schema.Literal("hello"), game: Schema.String }),
-  Schema.Struct({ t: Schema.Literal("refuse"), problem: Schema.String }),
-  Schema.Struct({ t: Schema.Literal("ping"), id: Whole, at: Whole }),
-  Schema.Struct({ t: Schema.Literal("pong"), id: Whole, at: Whole }),
-  Schema.Struct({ t: Schema.Literal("delay"), delay: Whole, rttMs: Whole }),
-  Schema.Struct({ t: Schema.Literal("ready") }),
-  Schema.Struct({ t: Schema.Literal("go"), inMs: Whole }),
-  Schema.Struct({
-    t: Schema.Literal("turns"), from: Whole, frontier: Whole, ack: Whole, done: Schema.Boolean,
-    turns: Schema.Array(Schema.Struct({ frame: Whole, at: Whole, events: Schema.Array(Event) })),
-    checks: Schema.Array(Schema.Tuple([Whole, Schema.String])),
-  }),
-  Schema.Struct({ t: Schema.Literal("bye"), reason: Schema.String }),
-]));
-type Datagram = typeof Datagram.Type;
-const decodeDatagram = Schema.decodeUnknownOption(Datagram);
 
 const wallClock = () => performance.timeOrigin + performance.now();
 
@@ -142,52 +125,52 @@ function paceShift(at: { readonly scheduleFrame: number; readonly executed: numb
  * Each frame both send one packet of their turns; a frame runs once the peer's turns for it are in (wisp:docs/network-model.md).
  */
 export const runNetPeer = (game: NetGame, options: NetPeerOptions, log: (line: string) => void = console.error) => Effect.scoped(Effect.gen(function*() {
-  const hosting = "host" in options.role;
+  const { role } = options;
+  const hosting = role.kind === "host" || role.kind === "relayHost";
   const slot = hosting ? 0 : 1;
   const ledger = new TurnLedger(slot, 1 - slot, wallClock);
   const inbox: Datagram[] = [];
   const pongs: number[] = [];
-  let peer: { address: string; port: number } | undefined = "join" in options.role ? { ...options.role.join } : undefined;
   let received = 0, sent = 0;
   let lastHeard = wallClock();
 
-  const socket = yield* Effect.acquireRelease(Effect.tryPromise({
-    try: () => Bun.udpSocket({
-      hostname: "0.0.0.0",
-      port: "host" in options.role ? options.role.host.port : 0,
-      socket: {
-        data: (_socket, data, port, address) => {
-          const decoded = decodeDatagram(new TextDecoder().decode(data));
-          if (Option.isNone(decoded)) return;
-          if (peer === undefined && decoded.value.t === "hello") peer = { address, port };
-          if (peer === undefined || peer.port !== port) return;
-          received++;
-          lastHeard = wallClock();
-          if (decoded.value.t === "pong") pongs.push(lastHeard - decoded.value.at / 1000);
-          else inbox.push(decoded.value);
-        },
-        // A peer not yet bound, or gone, answers with ICMP port unreachable; the handshake deadline and silence rules decide that.
-        error: () => undefined,
+  const receive = (payload: Uint8Array) => {
+    const decoded = decodeDatagram(payload);
+    if (Option.isNone(decoded)) return;
+    received++;
+    lastHeard = wallClock();
+    if (decoded.value.t === "pong") pongs.push(lastHeard - decoded.value.at / 1000);
+    else inbox.push(decoded.value);
+  };
+  let link: Link;
+  if (role.kind === "relayHost" || role.kind === "relayJoin") {
+    const relayed = yield* openRelayLink({ relay: role.relay, opening: role.kind === "relayHost" ? { create: true } : { join: role.room }, receive });
+    link = relayed;
+    if (role.kind === "relayHost") {
+      log(`net: hosting slot 0 in relay room ${relayed.room.toString(16)} on ${role.relay.address}:${role.relay.port}`);
+      options.listening?.({ room: relayed.room });
+    }
+  } else {
+    const direct = yield* openDirectLink({
+      port: role.kind === "host" ? role.port : 0,
+      ...(role.kind === "join" ? { peer: role.to } : {}),
+      learn: (payload) => {
+        const decoded = decodeDatagram(payload);
+        return Option.isSome(decoded) && decoded.value.t === "hello";
       },
-    }),
-    catch: (cause) => new NetFailure({ problem: `UDP socket: ${String(cause)}` }),
-  }), (socket) => Effect.sync(() => socket.close()));
-  if (hosting) {
-    log(`net: hosting slot 0 on UDP port ${socket.port}`);
-    options.listening?.(socket.port);
+      receive,
+    });
+    link = direct;
+    if (role.kind === "host") {
+      log(`net: hosting slot 0 on UDP port ${direct.port}`);
+      options.listening?.({ port: direct.port });
+    }
   }
+  const where = role.kind === "join" ? `${role.to.address}:${role.to.port}` : role.kind === "relayJoin" ? `relay ${role.relay.address}:${role.relay.port}` : "";
 
   const send = (datagram: Datagram) => Effect.sync(() => {
-    const to = peer;
-    if (to === undefined) return;
-    const bytes = JSON.stringify(datagram);
     sent++;
-    // A peer that has gone answers with ICMP port unreachable; silence and goodbyes decide that, not a send.
-    try {
-      socket.send(bytes, to.port, to.address);
-    } catch {
-      return;
-    }
+    link.send(encodeDatagram(datagram));
   });
   const nap = (ms: number) => Effect.sleep(Math.max(0, ms));
 
@@ -197,7 +180,7 @@ export const runNetPeer = (game: NetGame, options: NetPeerOptions, log: (line: s
   let rttMs = 0, startAt = 0;
   const handshakeEnd = wallClock() + 30_000;
   if (hosting) {
-    while (peer === undefined) {
+    while (!inbox.some((datagram) => datagram.t === "hello")) {
       if (wallClock() > handshakeEnd) return yield* new NetFailure({ problem: "no player joined within 30 s" });
       yield* nap(5);
     }
@@ -233,7 +216,7 @@ export const runNetPeer = (game: NetGame, options: NetPeerOptions, log: (line: s
   } else {
     let agreed = false, lastHello = 0;
     while (!agreed) {
-      if (wallClock() > handshakeEnd) return yield* new NetFailure({ problem: `the host at ${peer?.address}:${peer?.port} did not answer within 30 s` });
+      if (wallClock() > handshakeEnd) return yield* new NetFailure({ problem: `the host at ${where} did not answer within 30 s` });
       if (wallClock() - lastHello >= 50) {
         lastHello = wallClock();
         yield* send({ t: "hello", game: options.game });
@@ -277,7 +260,8 @@ export const runNetPeer = (game: NetGame, options: NetPeerOptions, log: (line: s
         const costs = [...steps].sort((a, b) => a - b);
         return { p50: round(percentile(costs, 0.5)), p95: round(percentile(costs, 0.95)), max: round(costs.at(-1) ?? 0) };
       })(),
-      slips, lateFrames, waitMs: round(waitMs), packetsSent: sent, packetsReceived: received, wallMs: round(wallClock() - startAt),
+      slips, lateFrames, waitMs: round(waitMs), packetsSent: sent, packetsReceived: received,
+      bytesSent: link.traffic.bytesSent, bytesReceived: link.traffic.bytesReceived, largestSent: link.traffic.largestSent, largestReceived: link.traffic.largestReceived, wallMs: round(wallClock() - startAt),
     };
   };
   const checkEvery = options.checksumEvery ?? 60;
@@ -288,7 +272,11 @@ export const runNetPeer = (game: NetGame, options: NetPeerOptions, log: (line: s
   const sendTurns = (done: boolean) => Effect.suspend(() => {
     lastFrontier = ledger.frontier();
     lastSent = wallClock();
-    return send({ t: "turns", ...ledger.packet(done) });
+    return Effect.sync(() => {
+      const { bytes } = fitTurns(ledger.packet(done), link.maxPayload);
+      sent++;
+      link.send(bytes);
+    });
   });
   const leave = (reason: string) => send({ t: "bye", reason }).pipe(Effect.andThen(send({ t: "bye", reason })));
   const body = Effect.gen(function*() {

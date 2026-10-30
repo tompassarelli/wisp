@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { Random } from "../../src/headless/random";
-import { NetFailure } from "./peer";
+import { NetFailure } from "./failure";
 
 export interface ProxyOptions {
   readonly listen: number;

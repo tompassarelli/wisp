@@ -222,6 +222,19 @@ turn after the peer's last acknowledgement, its acknowledgement of the peer's
 frontier, and its last four checksums. A lost packet is repaired by the next
 one, a frame later; there is no retransmission timer.
 
+**Wire.** A `turns` packet is binary (wisp:host/net/wire.ts): varints for the
+frames, acknowledgement and counts, each turn's frame as the step from the
+turn before, its time as microseconds from the turn before (the first as a
+double), and each event as a kind byte, its sender and its fields, exact. Sixteen
+turns of a chat line and a key take 376 bytes where the JSON packet took 2452.
+A packet never passes 1200 bytes (`MAX_DATAGRAM`, a relay's cap and under a
+typical path MTU): when the turns after the acknowledgement don't fit, the
+newest wait for a later packet and the frontier stops one frame before the
+first of them, so the peer never takes a frame as complete that it was not
+sent. Handshake messages (hello, ping, delay, ready, go, bye) stay JSON behind
+a tag byte. The link under the packets is direct UDP or a relay's peer room
+(wisp:docs/relay.md, "Peer room"); a relayed datagram carries 11 more bytes.
+
 **Delay.** The host measures the round trip with eight pings and picks
 d = ceil((round trip / 2 + 4 ms) / 16.7 ms), at least 1: the one-way time plus
 room for the sender's frame and timer jitter. On one host that is 1 frame; at

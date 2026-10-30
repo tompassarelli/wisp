@@ -1673,7 +1673,19 @@ byte for byte, to the other members.
   per line for every control message. `cargo test -p relay-proto peer_room`
   checks the Rust codec against it, and `bun test test/relayVectors.test.ts`
   checks host/net/relayControl.ts, the TypeScript codec the standalone
-  window will use (wisp#101).
+  window uses (host/net/relayLink.ts, wisp#101).
+- **Standalone use.** `net host --relay REGION|ADDRESS:PORT` creates a
+  2-member room and `net join CODE` joins it
+  (wisp:docs/network-model.md, "Wire"). The member answers the relay's
+  Challenge with Verify, sends Leave on exit and hears only the relay's own
+  address. `test/netRelay.test.ts` plays 600 frames through a local relay
+  with the joiner behind `net proxy --rtt 170`: delay 6, equal checksums, no
+  datagram over 1200 bytes. With one chat line a frame per player the two
+  sides put 652 KB on the wire (65 KB/s together, largest datagram 461 bytes);
+  with six the cap binds, the largest datagram is 1200 bytes and the two put
+  4.5 MB on the wire (452 KB/s together). A 7-minute match at the light rate
+  is about 27 MB in and, resent, 54 MB out of the relay: about 18,000 matches
+  per TB of its traffic.
 
 ## Reaching players (box R0)
 
