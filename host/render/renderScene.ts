@@ -19,6 +19,8 @@ export interface RenderScene {
 
   readonly lightnings?: ReturnType<HeadlessClient["lightnings"]["poses"]>;
 
+  readonly weathers?: ReturnType<HeadlessClient["weathers"]["poses"]>;
+
   readonly world?: WorldBounds;
   readonly terrain?: Terrain;
   readonly terrainDoodads?: { readonly placements: readonly TerrainDoodad[]; readonly models: Readonly<Record<string, string | readonly string[]>> };

@@ -7,6 +7,7 @@ import { enforceStandaloneProfile } from "./standaloneProfile";
 import { FRAMES_PER_SECOND, steppedFrames } from "./frameRate";
 import { describeNumber } from "./jassFormat";
 import { Lightnings } from "./lightnings";
+import { Weathers } from "./weather";
 import { CameraCine } from "./natives/cameraCine";
 import { Effects } from "./natives/effects";
 import { frameNatives, type FrameContext, inputNatives } from "./natives/frames";
@@ -89,6 +90,7 @@ export class HeadlessClient {
 
   readonly textTags = new TextTags();
   readonly lightnings = new Lightnings();
+  readonly weathers = new Weathers();
   readonly textAreaAutoScroll = new Map<Handle, boolean>();
   readonly heldMouseButtons = new Set<unknown>();
   mouseScreenX = 0;
@@ -281,6 +283,7 @@ export class HeadlessClient {
         unitPosition: (unit) => { const live = unit as Unit | undefined; return live === undefined || live.removed ? undefined : { x: live.x, y: live.y, z: live.z }; },
       }),
       ...this.lightnings.behaviors({ handle }),
+      ...this.weathers.behaviors({ handle }),
       ...this.inventory.behaviors(),
       ...this.units.playerBehaviors({ slot: this.slot, humans, playerNames }),
       ...this.units.behaviors(),

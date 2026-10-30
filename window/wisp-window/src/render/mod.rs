@@ -10,6 +10,7 @@ mod assets;
 mod gpu;
 pub mod model;
 mod lightning;
+mod weather;
 mod particles;
 mod pipelines;
 mod scene;
@@ -30,7 +31,7 @@ use crate::remaster::{self, Cache, Prepared, Quality};
 use crate::settings::Features;
 use math::{multiply, projection, Mat4, IDENTITY};
 use gpu::{bone_storage, frame_group, instance_storage, opacity_storage, upload, uv_storage, white};
-use lightning::Lightning;
+use {lightning::Lightning, weather::Weather};
 use model::{Filter, ModelData, ModelEmitter, Paint, Vertex};
 use uniforms::{FrameUniform, Instance, LayerUniform};
 use particles::{ParticleFrame, Particles, Slot};
@@ -125,6 +126,7 @@ pub struct Renderer {
     features: Features,
     particles: Particles,
     lightning: Lightning,
+    weather: Weather,
     pub problems: Vec<String>,
 }
 
@@ -150,6 +152,7 @@ impl Renderer {
         let sky_group = frame_group(&device, &frame_layout, &sky_frame, &bone_buffer, &opacity_buffer, &uv_buffer);
         let particles = Particles::new(&device, HDR);
         let lightning = Lightning::new(&device, HDR, &particles);
+        let weather = Weather::new(&device, HDR, &particles);
         let post = Post::new(&device, &queue, format, HDR, DEPTH, SAMPLES);
         Self {
             white: upload(&device, &queue, &white()),
@@ -198,6 +201,7 @@ impl Renderer {
             features,
             particles,
             lightning,
+            weather,
             problems: Vec::new(),
         }
     }
@@ -399,6 +403,7 @@ impl Renderer {
         );
         self.problems.append(&mut self.particles.problems);
         self.lightning.stage(&self.queue, &scene.lightnings);
+        self.weather.stage(&self.queue, &scene.camera, &scene.weathers, &self.features);
         self.sky_group_of = sky.map(|(id, _)| Group { model: id, first: sky_instance as u32, count: 1 });
     }
 
@@ -455,6 +460,7 @@ impl Renderer {
         self.draw_groups(&mut pass, &self.groups, false);
         self.particles.draw(&mut pass);
         self.lightning.draw(&mut pass, &self.particles);
+        self.weather.draw(&mut pass, &self.particles);
         drop(pass);
         self.post.encode(encoder, target);
     }
@@ -474,3 +480,5 @@ impl crate::ui::UiTextures for Renderer {
 
 #[cfg(test)]
 mod gpu_tests;
+#[cfg(test)]
+mod weather_gpu_tests;

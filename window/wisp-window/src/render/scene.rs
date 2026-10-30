@@ -47,6 +47,13 @@ pub struct Pose {
     pub team: [f32; 3],
 }
 
+/// A weather the map added: the four letters of its id in Warcraft's weather table and the rect it covers (min x, min y, max x, max y).
+#[derive(Deserialize)]
+pub struct WeatherPose {
+    pub id: String,
+    pub rect: [f32; 4],
+}
+
 /// A lightning bolt between two world points, its colour 0 to 1.
 #[derive(Deserialize)]
 pub struct Bolt {
@@ -59,6 +66,7 @@ pub struct Bolt {
 #[serde(default)]
 pub struct Scene {
     pub lightnings: Vec<Bolt>,
+    pub weathers: Vec<WeatherPose>,
     pub camera: Camera,
     pub fog: Option<Fog>,
     pub light: Option<Light>,
