@@ -4,7 +4,6 @@
 //! unwind into Bun. A window handle is a counted reference to the host: `wisp_window_attach` gives another thread its own, and
 //! `wisp_window_stop` joins both library threads, so a thread that outlives the stop reaches a stopped host, never freed memory.
 
-mod adapter;
 mod capture;
 mod audio;
 mod clock;
@@ -18,8 +17,6 @@ mod metrics;
 pub mod model;
 pub mod render;
 mod mailbox;
-#[cfg(test)]
-mod offscreen;
 mod pacing;
 mod present;
 mod pad;
