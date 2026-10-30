@@ -61,6 +61,7 @@
     "./scripts/wisp/lobby": "./host/play/lobby.ts",
     "./scripts/wisp/lua32": "./host/compile/lua32.ts",
     "./scripts/wisp/mapBuild": "./host/compile/mapBuild.ts",
+    "./scripts/wisp/mapImports": "./host/play/mapImports.ts",
     "./scripts/wisp/mapReuse": "./host/compile/mapReuse.ts",
     "./scripts/wisp/mapPreview": "./host/scene/mapPreview.ts",
     "./scripts/wisp/menus": "./host/lan/menus.ts",

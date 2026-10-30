@@ -57,6 +57,8 @@ export interface StandaloneOptions {
   readonly recordChecksums?: boolean;
   readonly gamepadIndex?: number;
   readonly net?: StandaloneNet;
+  /** False for a player run, which has no gpu machine-capacity lease to hold. */
+  readonly gpuLease?: boolean;
 }
 
 class MapMismatch extends Schema.TaggedError<MapMismatch, { readonly brand: unique symbol }>()("MapMismatch", { code: Schema.String, here: Schema.String }) {
@@ -253,7 +255,7 @@ const runNetStandalone = (game: StandaloneGame, options: StandaloneOptions, net:
 });
 
 export const runStandalone = (game: StandaloneGame, options: StandaloneOptions = {}) => Effect.scoped(Effect.gen(function*() {
-  yield* requireGpuLease();
+  if (options.gpuLease !== false) yield* requireGpuLease();
   if (options.net !== undefined) return yield* runNetStandalone(game, options, options.net);
   const player = yield* openStandalone(game, options);
   const { closed } = yield* openWindow(game, options, player.url);

@@ -233,6 +233,17 @@ closes the game session.
 Like `headless --render`, `runStandalone` refuses to open Chrome outside a gpu
 machine-capacity lease where the helper is installed, naming the lease command
 to rerun it under ([Rendered frames and sound cues](headless.md#rendered-frames-and-sound-cues)).
+`gpuLease: false` in `StandaloneOptions` skips that check for a player run, which holds no lease.
+
+### Assets from a player's own files
+
+A player has no source tree or private asset store: the map is the `.w3x` they
+downloaded and stock art is their Warcraft install. `extractMapImports(map,
+packager)` (`wisp/scripts/wisp/mapImports`, wisp:host/play/mapImports.ts)
+unpacks every file the archive lists into `$XDG_CACHE_HOME/wisp/map-imports/<sha256 of the map>`
+once, with the map packager, and returns `{ entry, source }` rows a game's
+`readAsset` serves as map imports before it falls back to stock files. Smashcraft
+turns this on with `play --standalone --map MAP.w3x --player-assets-only`.
 
 ```ts
 import { runStandalone, type StandaloneGame } from "wisp/scripts/wisp/standalone";
