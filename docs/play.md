@@ -248,14 +248,21 @@ Chrome, and `chrome` stays the default. A game reads the flag with
 `runStandalone`. Bun loads the library with `bun:ffi` from
 `WISP_WINDOW_LIBRARY`, else beside the executable, else `window/target/release`
 (build it with `cd window && cargo build --release`). The library runs the
-window and a render thread; the render thread acquires the next `Fifo` image,
-samples the held keys onto a queue of 8 and wakes Bun with a `threadsafe` `JSCallback`; Bun takes the queued samples in order with `wisp_window_next_event`, a non-blocking take. With
-`nativeGame` in the options (the module path and export name that a worker
-thread imports the game from, because a game object cannot cross threads) the
-main thread only passes each wake to a worker thread through shared memory, and
-the worker steps the map once and gives the scene back as JSON in one call, so
-the game's garbage collections never delay a wake; a networked run, or a call
-without `nativeGame`, steps on the main thread. The render thread waits for each sample's scene until the scene deadline
+window and a render thread; the render thread acquires the next `Fifo` image and
+samples the held keys onto a queue of 8. The game's thread takes the samples in
+order with `wisp_window_next_event`, which blocks on a Rust condvar until one is
+queued, the window closes or fails, or `wisp_window_stop` is called, so it
+waits without running JavaScript and no callback crosses into Bun. The native
+window requires `nativeGame` in the options (the module path and export name
+that a worker thread imports the game from, because a game object cannot cross
+threads) and refuses `--net` until the netcode moves onto it (wisp#107). The
+worker owns the frame loop: it blocks in `next_event`, steps the map once,
+gives the scene back as JSON in one call, then yields one `setImmediate` turn so
+timers and `readAsset` completions run; Bun's main thread only opens the window
+and waits for the worker's `completed`, `closed` or `failed`. The worker holds
+its own counted reference to the window (`wisp_window_attach` and
+`wisp_window_release`), so closing the window never frees it under a worker
+that is still running. The render thread waits for each sample's scene until the scene deadline
 (the frame's acquire plus the measured frame time T, minus 4 ms), draws the newest
 scene that has arrived and redraws the last one when none has, so a late game
 never makes a present miss its vblank; a scene that missed its deadline is
@@ -279,13 +286,13 @@ through the production player and window on a display, for N frames after 120
 warm-up frames, and writes `probe.json` with the counts `missedPresents`,
 `lateScenes` and `droppedSamples` and a `gates` object that holds their bounds
 (0, at most 6 and 0), and beside them p50, p95, p99 and max for the wake
-(Rust sample to Bun handling), the step, the scene (encode plus parse), the
+(the render thread's sample to the worker returning from `next_event`), the step, the scene (encode plus parse), the
 `readAsset` calls, the present interval and the collection pauses. The pauses
 come from JavaScriptCore's collector log (`BUN_JSC_logGC`), because Bun 1.3.13
 reports no `gc` entries to `PerformanceObserver`; the run is a child process so
 its stderr can carry the log. It builds the library when it is missing.
 A process opens one native window, because winit builds one event loop per
-process. Measured on the private desktop's NVIDIA adapter (30 October 2026): the
+process. Measured with the callback wake that W1c replaced, on the private desktop's NVIDIA adapter (30 October 2026): the
 wake p99 is 0.7 ms when the machine is quiet and 3 to 4 ms under other load, the
 scene p99 under 1.6 ms, the present interval p95 17.5 to 18 ms, and Bun
 collects about once per frame while the sample map steps (650 collections in 630

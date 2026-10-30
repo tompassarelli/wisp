@@ -1,10 +1,9 @@
-// The thread that steps a native window's game: started by simPlayer.ts, which keeps Bun's main thread for the window's wake alone.
+// The thread that steps a native window's game: started by simPlayer.ts. It blocks in the window's next_event, so it owns the frame loop and Bun's main thread keeps no part of it.
 import { Effect } from "effect";
 import { type StandaloneGame, openStandalone } from "../play/standalone";
-import { attachNativeWindow, WAKE_ERROR, WAKE_FRAME } from "./binding";
-import { createFrameLoop } from "./frameLoop";
+import { type WindowView, adoptNativeWindow } from "./binding";
+import { type FrameLoop, createFrameLoop } from "./frameLoop";
 import { type RenderSeries, type RenderSeriesName, renderSeriesLengths, renderSeriesSince } from "./renderSeries";
-import { type WakeBox, takeWakes, wakeBox } from "./sharedWake";
 import type { SimWorkerAttach, SimWorkerInit, SimWorkerMessage } from "./simProtocol";
 import { GC_LOG_BEGIN, GC_LOG_END } from "./stats";
 
@@ -12,23 +11,45 @@ declare const self: Worker;
 
 const attached = Promise.withResolvers<number>();
 const READ_ASSET_EVERY = 30;
+const EVENT_WAIT_MS = 1000;
 
 const send = (message: SimWorkerMessage) => self.postMessage(message);
 const problemOf = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
+
+/** Steps the game once per sample, in the order the render thread took them: block in the window, step, submit, then one macrotask turn so timers, messages and `readAsset` completions run outside the time from sample to scene. Returns when the window closes, fails or is stopped. */
+const serve = (view: WindowView, loop: FrameLoop, finished: Promise<void>) => Effect.gen(function*() {
+  for (;;) {
+    const event = view.nextEvent(EVENT_WAIT_MS);
+    if (event.kind === "frame") {
+      loop.step(event.sample);
+      yield* Effect.callback<void>((resume) => { setImmediate(() => resume(Effect.void)); });
+    } else if (event.kind === "closed") {
+      send({ type: "closed" });
+      return;
+    } else if (event.kind === "failed") {
+      loop.complete(view.error() ?? "the window failed");
+      yield* Effect.promise(() => finished);
+      return;
+    } else if (event.kind === "stopped") {
+      loop.dispose();
+      return;
+    }
+  }
+});
 
 const run = async (init: SimWorkerInit) => {
   const began = performance.now();
   const module = await import(init.game.module) as Record<string, StandaloneGame | undefined>;
   const game = module[init.game.export];
   if (game === undefined) throw new Error(`${init.game.module} exports no ${init.game.export}`);
-  const box: WakeBox = wakeBox(init.box);
   await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
     const player = yield* openStandalone(game, { ...init.options, window: "native" });
     send({ type: "ready" });
     const view = yield* Effect.acquireRelease(
-      Effect.promise(() => attached.promise).pipe(Effect.map((handle) => attachNativeWindow(handle, init.library))),
+      Effect.promise(() => attached.promise).pipe(Effect.map((handle) => adoptNativeWindow(handle, init.library))),
       (opened) => Effect.sync(() => opened.release()),
     );
+    const finished = Promise.withResolvers<void>();
     const reads: number[] = [];
     let measuredFrom: Readonly<Record<RenderSeriesName, number>> | undefined;
     let measured: RenderSeries | undefined;
@@ -53,13 +74,10 @@ const run = async (init: SimWorkerInit) => {
       },
       extraResult: probe === undefined ? undefined : (series) => ({ series: { ...series, readAssets: reads, render: measured } }),
     }, (result) => {
-      void player.native.finish(result).catch(() => undefined).then(() => send({ type: "completed", result }));
+      void player.native.finish(result).catch(() => undefined).then(() => { send({ type: "completed", result }); finished.resolve(); });
     });
     view.start();
-    yield* Effect.promise(() => takeWakes(box, (wake) => {
-      if (wake.kind === WAKE_FRAME) loop.wake(wake.sampleNs, wake.handledNs);
-      else if (wake.kind === WAKE_ERROR) loop.complete(view.error() ?? "the window failed");
-    }, loop.dispose));
+    yield* serve(view, loop, finished.promise);
   })));
 };
 

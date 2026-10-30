@@ -13,7 +13,7 @@ class WindowFailure extends Schema.TaggedError<WindowFailure, { readonly brand: 
 }
 
 const WARMUP_FRAMES = 120;
-const USAGE = "probe [--baseline] [--frames N] [--out DIR]   (wisp:docs/native-window-plan.md, boxes W1 and W1b)";
+const USAGE = "probe [--baseline] [--frames N] [--out DIR]   (wisp:docs/native-window-plan.md, boxes W1 to W1c)";
 
 const attempt = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: (cause) => new WindowFailure({ problem: describeCause(cause) }) });
 

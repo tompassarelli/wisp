@@ -1,7 +1,8 @@
 //! The native window Wisp's standalone play opens (wisp:docs/native-window-plan.md).
 //!
 //! Bun loads this library with `bun:ffi`. Every exported function is `catch_unwind`-guarded, because a Rust panic must not
-//! unwind into Bun, and `wisp_window_close` joins both threads, so the wake callback is never called after it returns.
+//! unwind into Bun. A window handle is a counted reference to the host: `wisp_window_attach` gives another thread its own, and
+//! `wisp_window_stop` joins both library threads, so a thread that outlives the stop reaches a stopped host, never freed memory.
 
 mod clock;
 pub mod decode_pool;
@@ -25,9 +26,11 @@ use std::ffi::{c_char, c_void};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
 use std::slice;
+use std::sync::Arc;
 use std::time::Duration;
 
-use host::{Host, Wake};
+use frame::{End, Event};
+use host::Host;
 
 fn guard<T>(fallback: T, body: impl FnOnce() -> T) -> T {
     catch_unwind(AssertUnwindSafe(body)).unwrap_or(fallback)
@@ -44,23 +47,27 @@ unsafe fn host<'a>(handle: *mut c_void) -> Option<&'a Host> {
     (handle as *const Host).as_ref()
 }
 
+const EVENT_TIMEOUT: u32 = 0;
+const EVENT_FRAME: u32 = 1;
+const EVENT_CLOSED: u32 = 2;
+const EVENT_FAILED: u32 = 3;
+const EVENT_STOPPED: u32 = 4;
+
 /// Nanoseconds on the library's monotonic clock, the clock every sample time is on.
 #[no_mangle]
 pub extern "C" fn wisp_window_now_ns() -> f64 {
     guard(0.0, || clock::now_ns() as f64)
 }
 
-/// Opens the window and its threads. `wake` is called from the render thread with (kind, frame, sampleNs, buttons).
-/// Returns a handle, or null with the reason readable through `wisp_window_open_error`.
+/// Opens the window and its threads. Returns a handle, or null with the reason readable through `wisp_window_open_error`.
 ///
 /// # Safety
-/// `title` must point to `title_length` readable bytes; `wake` must stay callable until `wisp_window_close` returns.
+/// `title` must point to `title_length` readable bytes.
 #[no_mangle]
-pub unsafe extern "C" fn wisp_window_open(title: *const c_char, title_length: usize, width: u32, height: u32, wake: *const c_void) -> *mut c_void {
+pub unsafe extern "C" fn wisp_window_open(title: *const c_char, title_length: usize, width: u32, height: u32) -> *mut c_void {
     guard(ptr::null_mut(), || {
-        let wake: Wake = std::mem::transmute(wake);
-        match Host::open(text(title, title_length), width, height, wake) {
-            Ok(host) => Box::into_raw(Box::new(host)) as *mut c_void,
+        match Host::open(text(title, title_length), width, height) {
+            Ok(host) => Arc::into_raw(Arc::new(host)) as *mut c_void,
             Err(error) => {
                 *OPEN_ERROR.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = error;
                 ptr::null_mut()
@@ -140,18 +147,26 @@ pub unsafe extern "C" fn wisp_window_submit(handle: *mut c_void, scene: *const u
     })
 }
 
-/// Takes the oldest queued sample into `out` as (frame, sampleNs, buttons, axisX, axisY) and returns 1, or returns 0 when there is none within `timeout_ms`; a zero timeout never waits.
+/// Waits up to `timeout_ms` (zero never waits) for the next event and returns its kind: `EVENT_TIMEOUT`, `EVENT_FRAME` with the oldest
+/// queued sample in `out` as (frame, sampleNs, buttons, axisX, axisY), or `EVENT_CLOSED`, `EVENT_FAILED` or `EVENT_STOPPED` when the stream has ended.
+/// The calling thread runs no JavaScript while it waits; `wisp_window_stop` wakes it.
 ///
 /// # Safety
 /// `handle` is live and `out` has room for five f64s.
 #[no_mangle]
 pub unsafe extern "C" fn wisp_window_next_event(handle: *mut c_void, out: *mut f64, timeout_ms: u32) -> u32 {
-    guard(0, || {
-        let Some(sample) = host(handle).and_then(|host| host.next_sample(Duration::from_millis(timeout_ms as u64))) else { return 0 };
-        if !out.is_null() {
-            ptr::copy_nonoverlapping([sample.frame as f64, sample.sampled_ns as f64, sample.input.buttons as f64, sample.input.axis_x as f64, sample.input.axis_y as f64].as_ptr(), out, 5);
+    guard(EVENT_FAILED, || match host(handle).map(|host| host.next_event(Duration::from_millis(timeout_ms as u64))) {
+        None => EVENT_STOPPED,
+        Some(Event::Timeout) => EVENT_TIMEOUT,
+        Some(Event::Ended(End::Closed)) => EVENT_CLOSED,
+        Some(Event::Ended(End::Failed)) => EVENT_FAILED,
+        Some(Event::Ended(End::Stopped)) => EVENT_STOPPED,
+        Some(Event::Frame(sample)) => {
+            if !out.is_null() {
+                ptr::copy_nonoverlapping([sample.frame as f64, sample.sampled_ns as f64, sample.input.buttons as f64, sample.input.axis_x as f64, sample.input.axis_y as f64].as_ptr(), out, 5);
+            }
+            EVENT_FRAME
         }
-        1
     })
 }
 
@@ -202,20 +217,47 @@ pub unsafe extern "C" fn wisp_window_error(handle: *mut c_void, out: *mut u8, ca
     guard(0, || host(handle).and_then(|host| host.error()).map_or(0, |error| copy_text(&error, out, capacity)))
 }
 
-/// Stops the threads and frees the handle. Not to be called from inside `wake`.
+/// Stops both library threads and waits for them, and wakes a thread blocked in `wisp_window_next_event` with a stop. Safe to call again, from any thread holding a reference, and on a window that has already closed; a `wisp_window_submit` after it is ignored.
 ///
 /// # Safety
-/// `handle` comes from `wisp_window_open` and is passed here once.
+/// `handle` is live.
 #[no_mangle]
-pub unsafe extern "C" fn wisp_window_close(handle: *mut c_void) {
+pub unsafe extern "C" fn wisp_window_stop(handle: *mut c_void) {
     guard((), || {
-        if !handle.is_null() {
-            Box::from_raw(handle as *mut Host).close();
+        if let Some(host) = host(handle) {
+            host.stop();
         }
     })
 }
 
-/// The button names (by bit of the frame callback's mask) and metric names (by number) as JSON; returns its full length.
+/// Takes another reference to the window for a thread that makes its own calls; the thread gives it back with `wisp_window_release`. Returns the handle to use.
+///
+/// # Safety
+/// `handle` is live.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_window_attach(handle: *mut c_void) -> *mut c_void {
+    guard(ptr::null_mut(), || {
+        if !handle.is_null() {
+            Arc::increment_strong_count(handle as *const Host);
+        }
+        handle
+    })
+}
+
+/// Gives back one reference from `wisp_window_open` or `wisp_window_attach`; the last one frees the host, stopping it first if nobody has. The handle is not used again.
+///
+/// # Safety
+/// `handle` holds a reference that is released once.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_window_release(handle: *mut c_void) {
+    guard((), || {
+        if !handle.is_null() {
+            Arc::decrement_strong_count(handle as *const Host);
+        }
+    })
+}
+
+/// The button names (by bit of the next_event mask) and metric names (by number) as JSON; returns its full length.
 ///
 /// # Safety
 /// `out` has room for `capacity` bytes.

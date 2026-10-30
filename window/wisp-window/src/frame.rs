@@ -27,13 +27,12 @@ pub trait Surface {
     fn present(&self, image: Self::Image);
 }
 
-/// How the loop reads input and wakes the game's thread.
+/// How the loop reads input.
 pub trait Seam {
     fn input(&self) -> Input;
-    fn wake(&self, sample: &Sample);
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Sample {
     pub frame: u32,
     pub sampled_ns: u64,
@@ -54,9 +53,31 @@ pub enum Mode {
     Baseline,
 }
 
+/// What ended the stream of samples: the player closing the window, the library failing, or `stop`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum End {
+    Closed,
+    Failed,
+    Stopped,
+}
+
+/// What a consumer blocked in `next_event` gets back.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Event {
+    Timeout,
+    Frame(Sample),
+    Ended(End),
+}
+
+#[derive(Default)]
+struct Samples {
+    queue: VecDeque<Sample>,
+    end: Option<End>,
+}
+
 #[derive(Default)]
 pub struct Mailbox {
-    samples: Mutex<VecDeque<Sample>>,
+    samples: Mutex<Samples>,
     sample_ready: Condvar,
     scene: Mutex<Option<Submission>>,
     scene_ready: Condvar,
@@ -66,25 +87,46 @@ pub struct Mailbox {
 impl Mailbox {
     fn push_sample(&self, sample: Sample) -> bool {
         let mut samples = lock(&self.samples);
-        if samples.len() >= QUEUE_CAPACITY {
+        if samples.queue.len() >= QUEUE_CAPACITY {
             return false;
         }
-        samples.push_back(sample);
+        samples.queue.push_back(sample);
         self.sample_ready.notify_one();
         true
     }
 
-    /// The oldest queued sample, waiting up to `timeout` for one; a zero timeout never waits.
-    pub fn next_sample(&self, timeout: Duration) -> Option<Sample> {
+    /// The oldest queued sample, waiting up to `timeout` for one; a zero timeout never waits. A stop outranks every queued sample, and a close or failure follows the samples taken before it.
+    pub fn next_event(&self, timeout: Duration) -> Event {
         let guard = lock(&self.samples);
-        let (mut guard, _) =
-            self.sample_ready.wait_timeout_while(guard, timeout, |samples| samples.is_empty() && !self.is_stopping()).unwrap_or_else(|poisoned| poisoned.into_inner());
-        guard.pop_front()
+        let (mut guard, _) = self
+            .sample_ready
+            .wait_timeout_while(guard, timeout, |samples| samples.queue.is_empty() && samples.end.is_none())
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if guard.end == Some(End::Stopped) {
+            return Event::Ended(End::Stopped);
+        }
+        match (guard.queue.pop_front(), guard.end) {
+            (Some(sample), _) => Event::Frame(sample),
+            (None, Some(end)) => Event::Ended(end),
+            (None, None) => Event::Timeout,
+        }
     }
 
-    /// Keeps the scene for the newest sample answered, so a scene that arrives after a newer one is dropped.
+    /// Ends the stream for its consumer; the first end stays, except that a stop replaces a close or failure.
+    pub fn end(&self, end: End) {
+        let mut samples = lock(&self.samples);
+        if samples.end.is_none() || end == End::Stopped {
+            samples.end = Some(end);
+        }
+        self.sample_ready.notify_all();
+    }
+
+    /// Keeps the scene for the newest sample answered, so a scene that arrives after a newer one is dropped; after a stop it keeps nothing.
     pub fn submit(&self, submission: Submission) {
         let mut scene = lock(&self.scene);
+        if self.is_stopping() {
+            return;
+        }
         if scene.as_ref().is_none_or(|held| held.frame <= submission.frame) {
             *scene = Some(submission);
         }
@@ -108,9 +150,11 @@ impl Mailbox {
         self.stopping.load(Ordering::Acquire)
     }
 
+    /// Wakes every waiter and ends the stream with `End::Stopped`; a scene submitted after this returns is ignored.
     pub fn stop(&self) {
         self.stopping.store(true, Ordering::Release);
-        self.sample_ready.notify_all();
+        self.end(End::Stopped);
+        lock(&self.scene).take();
         self.scene_ready.notify_all();
     }
 }
@@ -211,9 +255,7 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
         let mut outcome = Outcome::default();
         if mode == Mode::Baseline {
             self.mailbox.submit(Submission { bytes: b"{}".to_vec(), step: sample.frame as u64, frame: sample.frame });
-        } else if self.mailbox.push_sample(sample) {
-            seam.wake(&sample);
-        } else {
+        } else if !self.mailbox.push_sample(sample) {
             outcome.dropped = true;
         }
         let deadline = acquired + (period_ms * 1e6) as u64 - DEADLINE_BEFORE_NEXT_ACQUIRE_NS;
@@ -298,8 +340,46 @@ mod tests {
         fn input(&self) -> Input {
             Input::default()
         }
+    }
 
-        fn wake(&self, _: &Sample) {}
+    #[test]
+    fn stop_wakes_a_blocked_consumer() {
+        let mailbox = Arc::new(Mailbox::default());
+        let consumer = {
+            let mailbox = mailbox.clone();
+            thread::spawn(move || {
+                let began = Instant::now();
+                (mailbox.next_event(Duration::from_secs(30)), began.elapsed())
+            })
+        };
+        thread::sleep(Duration::from_millis(50));
+        mailbox.stop();
+        let (event, waited) = consumer.join().unwrap();
+        assert_eq!(event, Event::Ended(End::Stopped), "the blocked consumer is told of the stop");
+        assert!(waited < Duration::from_secs(5), "the consumer returned long before its 30 s timeout");
+        mailbox.push_sample(Sample { frame: 0, sampled_ns: 0, input: Input::default() });
+        assert_eq!(mailbox.next_event(Duration::from_secs(30)), Event::Ended(End::Stopped), "a stop outranks a queued sample");
+    }
+
+    #[test]
+    fn stop_during_submit_leaves_no_scene_behind() {
+        let mailbox = Arc::new(Mailbox::default());
+        let submitter = {
+            let mailbox = mailbox.clone();
+            thread::spawn(move || {
+                let mut frame = 0;
+                while !mailbox.is_stopping() {
+                    mailbox.submit(Submission { bytes: vec![0; 4096], step: 1, frame });
+                    frame += 1;
+                }
+                mailbox.submit(Submission { bytes: b"{}".to_vec(), step: 2, frame });
+            })
+        };
+        thread::sleep(Duration::from_millis(20));
+        mailbox.stop();
+        submitter.join().unwrap();
+        assert!(mailbox.take_scene().is_none(), "no scene survives a stop, however late its submit");
+        assert!(!mailbox.wait_for_scene(0, Duration::from_secs(5)), "a stopped mailbox does not wait for a scene");
     }
 
     #[test]
@@ -314,7 +394,7 @@ mod tests {
             thread::spawn(move || {
                 let mut seen = Vec::new();
                 while seen.len() < FRAMES as usize {
-                    let Some(sample) = mailbox.next_sample(Duration::from_millis(500)) else { break };
+                    let Event::Frame(sample) = mailbox.next_event(Duration::from_millis(500)) else { break };
                     if sample.frame == LATE_SAMPLE {
                         thread::sleep(Duration::from_millis(50));
                     }

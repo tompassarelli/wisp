@@ -15,7 +15,6 @@ import { type NetListening, type NetRole, type NetSession, runNetPeer } from "..
 import { captureScene, sceneWithUnits, RenderFailure, type HeadlessRenderProject } from "../render/headlessRender";
 import { browserBundle } from "../render/browserBundle";
 import { createSoundResolver } from "../render/standaloneSound";
-import { openNativePlayer } from "../window/nativePlay";
 import { openSimPlayer } from "../window/simPlayer";
 import type { NativeGameModule } from "../window/simProtocol";
 import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
@@ -68,7 +67,7 @@ export interface StandaloneOptions {
   readonly net?: StandaloneNet;
   /** False skips the gpu machine-capacity lease check, which otherwise applies only to a scripted, captured or headless run (`agentRender`). */
   readonly gpuLease?: boolean;
-  /** With `window: "native"`, where a worker thread imports the game from: it then steps the game there, so the game's collections never delay the window's wake. Without it, or with `net`, the game steps on Bun's main thread. */
+  /** With `window: "native"`, where a worker thread imports the game from; the worker steps the game there, so the native window requires it. */
   readonly nativeGame?: NativeGameModule;
 }
 
@@ -220,15 +219,6 @@ const openWindow = (game: StandaloneGame, options: StandaloneOptions, url: strin
   };
 });
 
-type OpenedStandalone = Effect.Success<ReturnType<typeof openStandalone>>;
-
-/** The player's window, in the chosen kind: Chrome showing the page the player serves, or the native window the player drives. */
-const openPlayerWindow = (game: StandaloneGame, options: StandaloneOptions, player: OpenedStandalone) => {
-  if (options.window !== "native") return openWindow(game, options, player.url);
-  if ((options.captureFrames ?? []).length > 0) return Effect.fail(failed("the native window can't capture frames yet; use --window chrome"));
-  return openNativePlayer(player.native, { title: game.title, width: game.render.width ?? 1280, height: game.render.height ?? 720, scripted: options.script !== undefined, gamepadIndex: options.gamepadIndex });
-};
-
 const printSummary = (result: Readonly<Record<string, unknown>> | void) => {
   if (result === undefined) return;
   const { frameSamplesMs, intervalSamplesMs, requestSamplesMs, renderSamplesMs, frameTimings, ...summary } = result;
@@ -285,7 +275,7 @@ const runNetStandalone = (game: StandaloneGame, options: StandaloneOptions, net:
       return { client: session.client, paced: true, step: session.input, checksum: session.checksum, frame: session.frame, ...(session.finished === undefined ? {} : { finished: session.finished }), close: session.close };
     },
   }, options);
-  const { closed } = yield* openPlayerWindow(game, options, player);
+  const { closed } = yield* openWindow(game, options, player.url);
   const ended = Fiber.join(peer).pipe(Effect.tap((report) => Effect.sync(() => console.error(`net: ${JSON.stringify(report)}`))));
   const outcome = yield* Effect.raceFirst(
     Effect.all([player.completed, ended], { concurrency: "unbounded" }).pipe(Effect.map(([result]) => result)),
@@ -301,16 +291,21 @@ const runNetStandalone = (game: StandaloneGame, options: StandaloneOptions, net:
 export const agentRender = (options: StandaloneOptions) =>
   options.headless === true || options.script !== undefined || options.out !== undefined || options.recordChecksums === true || (options.captureFrames ?? []).length > 0;
 
+/** Plays in the native window: a worker thread imports the game and owns the frame loop ("Seam (revised)" in wisp:docs/native-window-plan.md), and the netcode joins it in W2 (wisp#107). */
+const runNativeStandalone = (game: StandaloneGame, options: StandaloneOptions) => Effect.gen(function*() {
+  if (options.net !== undefined) return yield* failed("the native window can't play over --net until the netcode moves onto it (wisp#107); use --window chrome");
+  if (options.nativeGame === undefined) return yield* failed("the native window needs nativeGame, the module and export a worker thread imports the game from");
+  if ((options.captureFrames ?? []).length > 0) return yield* failed("the native window can't capture frames yet; use --window chrome");
+  const sim = yield* openSimPlayer({ title: game.title, width: game.render.width ?? 1280, height: game.render.height ?? 720, scripted: options.script !== undefined, game: options.nativeGame, standalone: options });
+  printSummary(yield* Effect.raceFirst(sim.completed, sim.closed));
+});
+
 export const runStandalone = (game: StandaloneGame, options: StandaloneOptions = {}) => Effect.scoped(Effect.gen(function*() {
   if (options.gpuLease !== false && agentRender(options)) yield* requireGpuLease();
+  if (options.window === "native") return yield* runNativeStandalone(game, options);
   if (options.net !== undefined) return yield* runNetStandalone(game, options, options.net);
-  if (options.window === "native" && options.nativeGame !== undefined) {
-    const sim = yield* openSimPlayer({ title: game.title, width: game.render.width ?? 1280, height: game.render.height ?? 720, scripted: options.script !== undefined, game: options.nativeGame, standalone: options });
-    printSummary(yield* Effect.raceFirst(sim.completed, sim.closed));
-    return;
-  }
   const player = yield* openStandalone(game, options);
-  const { closed } = yield* openPlayerWindow(game, options, player);
+  const { closed } = yield* openWindow(game, options, player.url);
   printSummary(yield* Effect.raceFirst(player.completed, closed));
 })).pipe(Effect.provide(BunServices.layer));
 

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { WAKE_FRAME, openNativeWindow, windowLibraryPath } from "../host/window/binding";
+import { adoptNativeWindow, openNativeWindow, windowLibraryPath } from "../host/window/binding";
 import { standaloneWindowArgument } from "../host/play/standalone";
 
 const hasDisplay = (process.env.WAYLAND_DISPLAY ?? process.env.DISPLAY) !== undefined && existsSync(windowLibraryPath());
@@ -13,24 +13,19 @@ test("[spec docs/play.md] --window picks chrome or the native window and leaves 
 });
 
 // winit builds one event loop per process, so a process opens one native window.
-test.skipIf(!hasDisplay)("[spec docs/native-window-plan.md] a scene Bun never hands back counts as late, and closing the window mid-frame returns promptly with no wake after", async () => {
-  const woken: string[] = [];
-  const midFrame = Promise.withResolvers<void>();
-  const window = openNativeWindow({
-    title: "close mid-frame", width: 320, height: 200,
-    onWake: (kind) => {
-      woken.push(kind === WAKE_FRAME ? "frame" : "other");
-      if (kind === WAKE_FRAME && woken.length === 4) midFrame.resolve();
-    },
-  });
+test.skipIf(!hasDisplay)("[spec docs/native-window-plan.md] a scene Bun never hands back counts as late, and closing the window returns promptly and leaves a lent reference on a stopped host", () => {
+  const window = openNativeWindow({ title: "close mid-frame", width: 320, height: 200 });
+  const lent = adoptNativeWindow(window.lend());
   window.start();
-  await midFrame.promise;
+  let frames = 0;
+  for (let waits = 0; frames < 4 && waits < 20; waits++) if (window.nextEvent(500).kind === "frame") frames++;
+  expect(frames).toBe(4);
   expect(window.metric("lateScenes").some((late) => late === 1)).toBe(true);
   const began = performance.now();
   window.close();
   expect(performance.now() - began).toBeLessThan(1000);
-  const count = woken.length;
-  await Bun.sleep(100);
-  expect(woken.length).toBe(count);
-  expect(woken.every((kind) => kind === "frame")).toBe(true);
+  expect(lent.nextEvent(0).kind).toBe("stopped");
+  lent.submit("{}", 1, 99);
+  expect(lent.metric("lateScenes").length).toBeGreaterThan(0);
+  lent.release();
 });

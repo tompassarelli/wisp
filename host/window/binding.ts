@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { JSCallback, type Pointer, dlopen } from "bun:ffi";
+import { type Pointer, dlopen } from "bun:ffi";
 
 const root = join(import.meta.dir, "../..");
 const libraryFile = process.platform === "win32" ? "wisp_window.dll" : "libwisp_window.so";
@@ -15,7 +15,7 @@ export const windowLibraryBuild = { manifest: join(root, "window/Cargo.toml"), p
 
 const symbols = {
   wisp_window_now_ns: { args: [], returns: "f64" },
-  wisp_window_open: { args: ["ptr", "usize", "u32", "u32", "ptr"], returns: "ptr" },
+  wisp_window_open: { args: ["ptr", "usize", "u32", "u32"], returns: "ptr" },
   wisp_window_open_error: { args: ["ptr", "usize"], returns: "usize" },
   wisp_window_start: { args: ["ptr"], returns: "void" },
   wisp_window_status: { args: ["ptr", "ptr", "usize"], returns: "void" },
@@ -27,22 +27,23 @@ const symbols = {
   wisp_window_info: { args: ["ptr", "ptr", "usize"], returns: "usize" },
   wisp_window_error: { args: ["ptr", "ptr", "usize"], returns: "usize" },
   wisp_window_vocabulary: { args: ["ptr", "usize"], returns: "usize" },
-  wisp_window_close: { args: ["ptr"], returns: "void" },
+  wisp_window_stop: { args: ["ptr"], returns: "void" },
+  wisp_window_attach: { args: ["ptr"], returns: "ptr" },
+  wisp_window_release: { args: ["ptr"], returns: "void" },
 } as const;
 
-/** What the render thread tells Bun at each sample point: the kind below, the frame to step, when the sample was taken, the held buttons as a bit mask and when Bun began handling it. */
-export const WAKE_FRAME = 0, WAKE_CLOSED = 1, WAKE_ERROR = 2;
-
-/** Called on Bun's main thread for every wake, with numbers only so the seam allocates nothing; `handledNs` is the library's clock when the callback began, in the same nanoseconds as `sampleNs`. */
-export type OnWake = (kind: number, frame: number, sampleNs: number, mask: number, handledNs: number) => void;
+/** What `wisp_window_next_event` returns: a sample from the render thread, nothing within the timeout, or why the samples ended. */
+const EVENT_KINDS = ["timeout", "frame", "closed", "failed", "stopped"] as const;
 
 export interface NativeWindowOptions {
   readonly title: string;
   readonly width: number;
   readonly height: number;
   readonly library?: string | undefined;
-  readonly onWake: OnWake;
 }
+
+/** The next thing a thread that steps the game hears from the window. */
+export type WindowEvent = { readonly kind: "frame"; readonly sample: InputSample } | { readonly kind: "timeout" | "closed" | "failed" | "stopped" };
 
 /** One input sample the render thread took at a display frame: its number, when it was taken on the library's clock and the held buttons as a bit mask and the left stick. */
 export interface InputSample {
@@ -71,22 +72,24 @@ export interface WindowView {
   status(text: string): void;
   /** Selects the pad at `slot` (the browser's `gamepadIndex`); undefined takes the first connected pad. */
   selectPad(slot: number | undefined): void;
-  /** The oldest queued sample without waiting, or undefined when there is none; call it until it returns undefined to take every sample in order. */
-  nextSample(): InputSample | undefined;
+  /** Blocks this thread, running no JavaScript, until the render thread queues a sample, the window closes or fails, or the window is stopped, for at most `timeoutMs`; a zero timeout never waits. Samples come oldest first. */
+  nextEvent(timeoutMs: number): WindowEvent;
   /** Encodes `scene` into one buffer the view reuses and hands it to the render thread as the answer to the sample numbered `frame`. */
   submit(scene: string, step: number, frame: number): void;
   /** One of the library's per-frame series, in milliseconds. */
   metric(name: string): Float64Array;
   info(): WindowInfo;
   error(): string | undefined;
-  /** The names of the buttons set in a wake's mask. */
+  /** The names of the buttons set in a sample's mask. */
   buttons(mask: number): readonly string[];
-  /** The library's clock now, in the nanoseconds of a wake's `sampleNs`. */
+  /** The library's clock now, in the nanoseconds of a sample's `sampleNs`. */
   nowNs(): number;
 }
 
 export interface NativeWindow extends WindowView {
-  /** Stops the library's threads, then releases the callback and the library; the wake is never called after it returns. */
+  /** Takes a reference for another thread, which adopts it with `adoptNativeWindow` and releases it; taking it here, on the thread that owns the window, means the host cannot be freed before that thread has it. */
+  lend(): number;
+  /** Stops the library's threads, wakes a thread blocked in `nextEvent` with a stop, then gives back this reference and unloads the library. Another thread's attached view stays valid and sees a stopped window. */
   close(): void;
 }
 
@@ -116,7 +119,10 @@ const viewOf = (library: Library, handle: Pointer, vocabulary: { buttons: string
     startBaseline: () => call.wisp_window_start_baseline(handle),
     status: (text) => { const bytes = Buffer.from(text); call.wisp_window_status(handle, bytes, bytes.length); },
     selectPad: (slot) => call.wisp_window_select_pad(handle, slot ?? -1),
-    nextSample: () => (call.wisp_window_next_event(handle, sample, 0) === 0 ? undefined : { frame: sample[0]!, sampleNs: sample[1]!, mask: sample[2]!, axisX: sample[3]!, axisY: sample[4]! }),
+    nextEvent: (timeoutMs) => {
+      const kind = EVENT_KINDS[call.wisp_window_next_event(handle, sample, timeoutMs)] ?? "failed";
+      return kind === "frame" ? { kind, sample: { frame: sample[0]!, sampleNs: sample[1]!, mask: sample[2]!, axisX: sample[3]!, axisY: sample[4]! } } : { kind };
+    },
     submit: (scene, step, frame) => {
       let written = encoder.encodeInto(scene, sceneBuffer);
       while (written.read < scene.length) {
@@ -139,36 +145,38 @@ const viewOf = (library: Library, handle: Pointer, vocabulary: { buttons: string
   };
 };
 
-/** Another thread's view of a window `openNativeWindow` opened: it loads the library again and calls the same handle, which the library guards with its own locks. `release` unloads this view's copy. */
-export function attachNativeWindow(handle: number, library?: string): WindowView & { release(): void } {
+/** The worker thread's view of a window: it loads the library again and uses the reference `NativeWindow.lend` took for it, which the library guards with its own locks. `release` gives that reference back and unloads this view's copy; the host outlives the window's stop until every reference is released. */
+export function adoptNativeWindow(lent: number, library?: string): WindowView & { release(): void } {
   const loaded = dlopen(library ?? windowLibraryPath(), symbols);
-  return { ...viewOf(loaded, handle as Pointer, vocabularyOf(loaded)), release: () => loaded.close() };
+  return {
+    ...viewOf(loaded, lent as Pointer, vocabularyOf(loaded)),
+    release: () => {
+      loaded.symbols.wisp_window_release(lent as Pointer);
+      loaded.close();
+    },
+  };
 }
 
 export function openNativeWindow(options: NativeWindowOptions): NativeWindow {
   const library = dlopen(options.library ?? windowLibraryPath(), symbols);
   const call = library.symbols;
   const vocabulary = vocabularyOf(library);
-  let closed = false;
-  const wake = new JSCallback((kind: number, frame: number, sampleNs: number, mask: number) => {
-    if (closed) return;
-    options.onWake(kind, frame, sampleNs, mask, call.wisp_window_now_ns());
-  }, { args: ["u32", "u32", "f64", "u32"], returns: "void", threadsafe: true });
   const title = Buffer.from(options.title);
-  const handle = call.wisp_window_open(title, title.length, options.width, options.height, wake.ptr);
+  const handle = call.wisp_window_open(title, title.length, options.width, options.height);
   if (handle === null) {
     const reason = textFrom((out, capacity) => call.wisp_window_open_error(out, capacity));
-    wake.close();
     library.close();
     throw new Error(`the window didn't open: ${reason}`);
   }
+  let closed = false;
   return {
     ...viewOf(library, handle as Pointer, vocabulary),
+    lend: () => call.wisp_window_attach(handle as Pointer) as number,
     close: () => {
       if (closed) return;
       closed = true;
-      call.wisp_window_close(handle);
-      wake.close();
+      call.wisp_window_stop(handle as Pointer);
+      call.wisp_window_release(handle as Pointer);
       library.close();
     },
   };

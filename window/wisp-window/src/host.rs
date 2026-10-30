@@ -14,18 +14,11 @@ use winit::window::{Window, WindowId};
 
 use crate::clock::now_ns;
 use crate::draw::Gpu;
-use crate::frame::{Clock, FrameLoop, Mailbox, Mode, Sample, Seam, Submission, Surface};
+use crate::frame::{Clock, End, Event, FrameLoop, Mailbox, Mode, Seam, Submission, Surface};
 use crate::input::{Held, Input};
 use crate::metrics::Metrics;
 use crate::pad::Pads;
 use crate::sync::lock;
-
-/// Why Bun is being woken: a frame to step, the window going away, or the library failing.
-pub const WAKE_FRAME: u32 = 0;
-pub const WAKE_CLOSED: u32 = 1;
-pub const WAKE_ERROR: u32 = 2;
-
-pub type Wake = extern "C" fn(kind: u32, frame: u32, sample_ns: f64, buttons: u32);
 
 const WINDOW_WAIT: Duration = Duration::from_secs(10);
 
@@ -47,15 +40,28 @@ struct Shared {
     error: Mutex<Option<String>>,
 }
 
+impl Shared {
+    /// Marks the window as gone and tells the game's thread why through its next `next_event`.
+    fn finish(&self, end: End) {
+        self.closed.store(true, Ordering::Release);
+        self.mailbox.end(end);
+    }
+}
+
 fn pack(size: PhysicalSize<u32>) -> u64 {
     (size.width as u64) << 32 | size.height as u64
 }
 
+struct Threads {
+    window: JoinHandle<()>,
+    render: JoinHandle<()>,
+}
+
+/// The window's state, shared through `Arc` by every thread that holds the handle; the threads stop with `stop` and are joined once, whichever thread gets there first.
 pub struct Host {
     shared: Arc<Shared>,
-    proxy: EventLoopProxy<Command>,
-    window_thread: Option<JoinHandle<()>>,
-    render_thread: Option<JoinHandle<()>>,
+    proxy: Mutex<EventLoopProxy<Command>>,
+    threads: Mutex<Option<Threads>>,
 }
 
 struct App {
@@ -82,7 +88,7 @@ impl ApplicationHandler<Command> for App {
             }
             Err(error) => {
                 *lock(&self.shared.error) = Some(format!("window: {error}"));
-                self.shared.closed.store(true, Ordering::Release);
+                self.shared.finish(End::Failed);
                 event_loop.exit();
             }
         }
@@ -91,7 +97,7 @@ impl ApplicationHandler<Command> for App {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
-                self.shared.closed.store(true, Ordering::Release);
+                self.shared.finish(End::Closed);
                 event_loop.exit();
             }
             WindowEvent::Focused(focused) => {
@@ -137,20 +143,19 @@ fn any_thread(builder: &mut winit::event_loop::EventLoopBuilder<Command>) {
 }
 
 /// Spawns `body` and turns a panic into the error text, so no Rust panic ever unwinds toward Bun.
-fn guarded(shared: &Arc<Shared>, wake: Wake, body: impl FnOnce() + Send + 'static) -> JoinHandle<()> {
+fn guarded(shared: &Arc<Shared>, body: impl FnOnce() + Send + 'static) -> JoinHandle<()> {
     let shared = shared.clone();
     thread::spawn(move || {
         if let Err(panic) = catch_unwind(AssertUnwindSafe(body)) {
             let text = panic.downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| panic.downcast_ref::<String>().cloned()).unwrap_or_else(|| "panic".into());
             *lock(&shared.error) = Some(text);
-            shared.closed.store(true, Ordering::Release);
-            wake(WAKE_ERROR, 0, 0.0, 0);
+            shared.finish(End::Failed);
         }
     })
 }
 
 impl Host {
-    pub fn open(title: &str, width: u32, height: u32, wake: Wake) -> Result<Self, String> {
+    pub fn open(title: &str, width: u32, height: u32) -> Result<Self, String> {
         let shared = Arc::new(Shared {
             held: Held::default(),
             focused: AtomicBool::new(true),
@@ -168,14 +173,14 @@ impl Host {
         let window_thread = {
             let app_shared = shared.clone();
             let title = title.to_string();
-            guarded(&shared, wake, move || {
+            guarded(&shared, move || {
                 let mut builder = EventLoop::<Command>::with_user_event();
                 any_thread(&mut builder);
                 let event_loop = match builder.build() {
                     Ok(event_loop) => event_loop,
                     Err(error) => {
                         *lock(&app_shared.error) = Some(format!("event loop: {error}"));
-                        app_shared.closed.store(true, Ordering::Release);
+                        app_shared.finish(End::Failed);
                         let _ = proxy_in.send(None);
                         return;
                     }
@@ -191,9 +196,9 @@ impl Host {
         };
         let render_thread = {
             let shared = shared.clone();
-            guarded(&shared.clone(), wake, move || render_loop(shared, windows, wake))
+            guarded(&shared.clone(), move || render_loop(shared, windows))
         };
-        Ok(Self { shared, proxy, window_thread: Some(window_thread), render_thread: Some(render_thread) })
+        Ok(Self { shared, proxy: Mutex::new(proxy), threads: Mutex::new(Some(Threads { window: window_thread, render: render_thread })) })
     }
 
     pub fn start(&self) {
@@ -209,15 +214,15 @@ impl Host {
     }
 
     pub fn set_status(&self, text: &str) {
-        let _ = self.proxy.send_event(Command::Status(text.to_string()));
+        let _ = lock(&self.proxy).send_event(Command::Status(text.to_string()));
     }
 
     pub fn submit(&self, bytes: &[u8], step: u64, frame: u32) {
         self.shared.mailbox.submit(Submission { bytes: bytes.to_vec(), step, frame });
     }
 
-    pub fn next_sample(&self, timeout: Duration) -> Option<Sample> {
-        self.shared.mailbox.next_sample(timeout)
+    pub fn next_event(&self, timeout: Duration) -> Event {
+        self.shared.mailbox.next_event(timeout)
     }
 
     pub fn metric(&self, which: u32) -> Vec<f64> {
@@ -232,16 +237,20 @@ impl Host {
         lock(&self.shared.error).clone()
     }
 
-    /// Stops both threads and waits for them, so the wake callback is never called again once this returns.
-    pub fn close(mut self) {
+    /// Stops both threads and waits for them, and wakes a consumer blocked in `next_event` with a stop; safe to call again, and on a window that has already closed.
+    pub fn stop(&self) {
         self.shared.mailbox.stop();
-        let _ = self.proxy.send_event(Command::Exit);
-        if let Some(thread) = self.render_thread.take() {
-            let _ = thread.join();
+        let _ = lock(&self.proxy).send_event(Command::Exit);
+        if let Some(threads) = lock(&self.threads).take() {
+            let _ = threads.render.join();
+            let _ = threads.window.join();
         }
-        if let Some(thread) = self.window_thread.take() {
-            let _ = thread.join();
-        }
+    }
+}
+
+impl Drop for Host {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 
@@ -282,20 +291,15 @@ impl Clock for LibraryClock {
     }
 }
 
-struct WakeSeam {
+struct InputSeam {
     shared: Arc<Shared>,
     pads: Mutex<Pads>,
-    wake: Wake,
 }
 
-impl Seam for WakeSeam {
+impl Seam for InputSeam {
     fn input(&self) -> Input {
         let slot = usize::try_from(self.shared.pad_slot.load(Ordering::Acquire)).ok();
         lock(&self.pads).sample(slot, self.shared.focused.load(Ordering::Acquire), self.shared.held.sample())
-    }
-
-    fn wake(&self, sample: &Sample) {
-        (self.wake)(WAKE_FRAME, sample.frame, sample.sampled_ns as f64, sample.input.buttons);
     }
 }
 
@@ -307,30 +311,26 @@ fn mode_of(shared: &Shared) -> Mode {
     }
 }
 
-fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>, wake: Wake) {
+fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>) {
     let Ok(window) = windows.recv_timeout(WINDOW_WAIT) else {
-        if !shared.closed.swap(true, Ordering::AcqRel) {
-            lock(&shared.error).get_or_insert_with(|| "no window appeared".into());
-        }
-        wake(WAKE_ERROR, 0, 0.0, 0);
+        lock(&shared.error).get_or_insert_with(|| "no window appeared".into());
+        shared.finish(End::Failed);
         return;
     };
     let gpu = match Gpu::new(window.clone()) {
         Ok(gpu) => gpu,
         Err(error) => {
             *lock(&shared.error) = Some(error);
-            shared.closed.store(true, Ordering::Release);
-            wake(WAKE_ERROR, 0, 0.0, 0);
+            shared.finish(End::Failed);
             return;
         }
     };
     *lock(&shared.info) = format!("{{\"adapter\":{:?},\"backend\":{:?},\"presentMode\":\"Fifo\",\"desiredMaximumFrameLatency\":1}}", gpu.adapter, gpu.backend);
     let surface = WindowSurface { gpu, window, shared: shared.clone() };
     let mut frames = FrameLoop::new(surface, LibraryClock, shared.mailbox.clone(), shared.metrics.clone());
-    let seam = WakeSeam { shared: shared.clone(), pads: Mutex::new(Pads::open()), wake };
+    let seam = InputSeam { shared: shared.clone(), pads: Mutex::new(Pads::open()) };
     while !shared.mailbox.is_stopping() {
         if shared.closed.load(Ordering::Acquire) {
-            wake(WAKE_CLOSED, 0, 0.0, 0);
             wait_for_stop(&shared);
             return;
         }

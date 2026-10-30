@@ -19,17 +19,18 @@ export interface SimWorkerInit {
   readonly game: NativeGameModule;
   readonly options: WorkerPlayOptions;
   readonly library?: string | undefined;
-  readonly box: SharedArrayBuffer;
   /** A measured run: its figures include the raw series, the log carries markers around the measured frames and `readAsset` is timed. */
   readonly probe?: { readonly frames: number; readonly warmupFrames: number } | undefined;
 }
 
 export type SimWorkerMessage =
   | { readonly type: "ready" }
+  | { readonly type: "closed" }
   | { readonly type: "completed"; readonly result: Readonly<Record<string, unknown>> }
   | { readonly type: "failed"; readonly problem: string };
 
 export interface SimWorkerAttach {
   readonly type: "attach";
+  /** A reference to the window that `NativeWindow.lend` took for the worker, which releases it when it stops. */
   readonly handle: number;
 }

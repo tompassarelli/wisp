@@ -23,7 +23,6 @@ export interface FrameLoopOptions {
 /** Every per-frame series of a run, in milliseconds. */
 export interface FrameSeries {
   readonly wakes: number[];
-  readonly dispatches: number[];
   readonly steps: number[];
   readonly encodes: number[];
   readonly frames: number[];
@@ -31,8 +30,8 @@ export interface FrameSeries {
 }
 
 export interface FrameLoop {
-  /** A wake from the render thread: records its latency, then steps every queued sample in order. */
-  wake(sampleNs: number, handledNs: number): void;
+  /** Steps one sample taken from `nextEvent`, recording the time from when the render thread took it to when this thread got it; does nothing once the run has ended. */
+  step(sample: InputSample): void;
   /** Ends the run with `error` shown in the window, or with the figures when it is undefined. */
   complete(error?: string): void;
   /** Stops any figure still pending from reading the window, which is about to close. */
@@ -42,9 +41,9 @@ export interface FrameLoop {
 
 const thrown = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
 
-/** The step, scene and bookkeeping for each wake of a native window, on whichever thread runs the game. */
+/** The step, scene and bookkeeping for each sample of a native window, on whichever thread runs the game. */
 export function createFrameLoop(player: NativePlayer, window: WindowView, options: FrameLoopOptions, finished: (result: Readonly<Record<string, unknown>>) => void): FrameLoop {
-  const series: FrameSeries = { wakes: [], dispatches: [], steps: [], encodes: [], frames: [], intervals: [] };
+  const series: FrameSeries = { wakes: [], steps: [], encodes: [], frames: [], intervals: [] };
   const prepared = player.prepare();
   let ended = false, disposed = false, previous = 0, firstFrameAt = 0;
 
@@ -60,7 +59,7 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
         frames: series.frames.length, elapsedMs, fps: series.frames.length * 1000 / elapsedMs,
         frameMs: spread(series.frames), intervalMs: spread(series.intervals), presentedMs: spread(Array.from(window.metric("presentedMs"))),
         requestMs: spread(series.steps), renderMs: spread(Array.from(window.metric("drawMs"))), inputToPresentMs: spread(Array.from(window.metric("inputToPresentMs"))),
-        wakeMs: spread(series.wakes), dispatchMs: spread(series.dispatches), encodeMs: spread(series.encodes), parseMs: spread(Array.from(window.metric("parseMs"))),
+        wakeMs: spread(series.wakes), encodeMs: spread(series.encodes), parseMs: spread(Array.from(window.metric("parseMs"))),
         audioEvents: 0, audioReadyEvents: 0, audioPlayed: 0, audioDecodedAssets: 0, missingSounds: [] as string[],
         ...options.extraResult?.(series),
       };
@@ -69,9 +68,10 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
   };
 
   const step = (sample: InputSample) => {
+    if (ended) return;
     const began = performance.now();
     if (firstFrameAt === 0) firstFrameAt = began;
-    series.dispatches.push((window.nowNs() - sample.sampleNs) / 1e6);
+    series.wakes.push((window.nowNs() - sample.sampleNs) / 1e6);
     if (previous !== 0) series.intervals.push(began - previous);
     previous = began;
     try {
@@ -94,9 +94,6 @@ export function createFrameLoop(player: NativePlayer, window: WindowView, option
     series,
     complete,
     dispose: () => { disposed = true; ended = true; },
-    wake(sampleNs, handledNs) {
-      series.wakes.push((handledNs - sampleNs) / 1e6);
-      for (let sample = window.nextSample(); sample !== undefined && !ended; sample = window.nextSample()) step(sample);
-    },
+    step,
   };
 }

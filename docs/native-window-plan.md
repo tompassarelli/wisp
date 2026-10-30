@@ -828,7 +828,7 @@ yet are created by that box. Each graphics run takes the gpu lease as
 
   Done when:
   `cd ~/code/wisp/main/window && cargo test -p wisp-window late_scene_keeps_presents_on_clock 2>&1 | grep -q 'test result: ok. 1 passed' && cd .. && bun wisp window probe --baseline --frames 600 --out build/window-baseline && bun wisp window probe --frames 600 --out build/window-probe && jq -e '.missedPresents == 0 and .lateScenes <= 6 and .droppedSamples == 0' build/window-probe/probe.json`
-- **W1c A blocking call replaces the wake callback**
+- **W1c A blocking call replaces the wake callback** (built)
   ([wisp#117](https://github.com/tompassarelli/wisp/issues/117)). It builds
   "The wake: a blocking call instead of a callback":
   - `next_event` blocks with a timeout;
