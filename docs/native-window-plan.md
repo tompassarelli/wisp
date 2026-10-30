@@ -1,7 +1,10 @@
 # Native window (plan)
 
 Status: planned, 30 October 2026, and revised once after an adversarial
-review. This page plans only; each box at the end is its own issue.
+review. The seam between Bun and Rust was revised again the same day, after
+W1's probe failed its bounds three times; see "Seam (revised)", which
+supersedes the wake design in "Process shape" and "The game steps on a worker
+thread". This page plans only; each box at the end is its own issue.
 
 Tom decided on 30 October 2026 that the one to two frames of input lag Chrome
 can add are too much for a competitive fighter. Wisp's standalone window
@@ -65,10 +68,12 @@ on Windows, X11 and Wayland), and a render thread that owns the wgpu device
 and the frame clock. Bun's main thread keeps running the map, the netcode and
 the sockets.
 
-Each frame, the render thread samples input and wakes Bun through a
-`threadsafe` `JSCallback` that carries the input. Bun runs one step and hands
-back the scene with one FFI call that passes a pointer and a length. The
-render thread then draws and presents.
+As first built, each frame the render thread sampled input and woke Bun
+through a `threadsafe` `JSCallback` that carried the input. Bun ran one step
+and handed back the scene with one FFI call that passed a pointer and a
+length, and the render thread then drew and presented. "Seam (revised)"
+replaces that wake with a blocking call on the game's thread and a scene
+deadline; the measurements below still hold.
 
 Measured on this machine (Bun 1.3.13, a Rust cdylib firing every 16.667 ms on
 its own thread, 300 wakes, 30 October 2026):
@@ -129,6 +134,10 @@ block Bun's event loop, so UDP packets would be read only after the step that
 needed them.
 
 ### The game steps on a worker thread
+
+The worker stays. Its wake through the main thread, the `JSCallback` and the
+bounds below are superseded by "Seam (revised)", which explains why this
+design could not meet them.
 
 Decision (30 October 2026): in a local or scripted native run, the game's
 session, its step and the scene's encoding run in a Bun `Worker`, a thread of
@@ -488,12 +497,270 @@ Then one change deletes, with every caller updated:
 
 Only main is supported, so no fallback flag survives.
 
+## Seam (revised)
+
+Decision (30 October 2026, after three attempts at W1's probe bounds): Rust
+owns the frame clock, input sampling and the present. The thread that steps
+the game only has to deliver a scene by a deadline. When a scene misses it,
+the render thread presents the previous scene on time. Two boxes build this:
+
+- W1b gives the render thread its deadline and its own count of missed
+  presents.
+- W1c replaces the `threadsafe` `JSCallback` wake with a blocking FFI call on
+  the game's thread.
+
+### The assumption the three attempts shared
+
+Every attempt assumed that a JavaScript thread must answer each display wake
+within about 1 ms, so its collections sit on the present path. The attempts
+made that thread's pauses shorter: first one reused scene buffer, then the
+game on a worker, with the main thread only forwarding the wake. That brought
+the worst collection from 17.96 ms down to 3.67 ms, but it never met the
+bounds, which were:
+
+- `wakeMs.p99 < 1`;
+- `gcPauseMs.max < 2` on the main thread;
+- `presentedMs.p95 <= 17.5`.
+
+The last run (gex45, exclusive lease, load 4.7 before) measured:
+
+- wake p99 2.16 ms;
+- main-thread collections max 3.67 ms over 18;
+- present p95 18.02 ms;
+- scene p99 0.24 ms;
+- worker collections max 4.05 ms over 104;
+- 0 missed scenes.
+
+Read against the code, those numbers say three things.
+
+**The present does wait on JavaScript, without limit short of 100 ms.**
+`render_loop` (window/wisp-window/src/host.rs) acquires, samples, wakes Bun,
+then blocks in `wait_for_scene` for up to 100 ms (`SCENE_WAIT`) before it draws
+and presents. `missedScenes` counts only scenes more than 100 ms late, which is
+why it read 0. A JavaScript delay longer than what is left of the frame after
+the draw makes the present miss its vblank. Nothing in the loop prevents that.
+
+**The 18.02 ms is not missed presents.**
+
+- `presentedMs` is the interval from one acquire to the next. Under `Fifo` with
+  one frame of latency, the acquire returns at the vblank that shows the last
+  present.
+- A present that misses its vblank therefore shows as an interval near 2T,
+  33 ms, not 18 ms.
+- Sample to scene measured about 3 to 5 ms at p99, inside the frame.
+- So a p95 of 18.02 ms is the acquire's wake-up jitter (compositor, Xwayland,
+  scheduling) on frames that were on time.
+
+`presentedMs.p95 <= 17.5` gates that jitter, which no seam design changes. It
+does not gate misses: 30 of 600 frames could miss and the p95 still pass. It
+also hard-codes 60 Hz.
+
+**The wake crosses two event loops.**
+
+- Bun's FFI documentation says a thread-safe callback's arguments are copied on
+  the calling thread and the invocation is marshalled onto the JavaScript
+  thread. That makes the wake a task on the main thread's event loop.
+- The worker then wakes through `Atomics.waitAsync`, whose resolution is a
+  second task on the worker's loop.
+- Each hop waits for whatever its loop is running, its collections included.
+- This is the likely source of the dispatch tail (p95 2.1 ms, p99 3.3 ms), and
+  of the main thread collecting once every 33 wakes in Bun's callback
+  machinery.
+- W1c removes both hops, so its `wakeMs` tests this.
+
+So the bounds split in two:
+
+- **The guarantee.** These bounds protect what Tom asked for, with the latency
+  half measured in pixels by W2:
+  - no frame misses its present;
+  - a sample reaches a present within a frame;
+  - no sample is dropped.
+- **One design.**
+  - `wakeMs.p99 < 1` and the main thread's `gcPauseMs.max < 2` matter only while
+    a JavaScript thread sits between the sample and the present.
+  - `sceneMs.p99 < 1` is the trigger for a binary scene layout ("Porting the
+    renderer"), not a latency bound.
+  - `presentedMs.p95` measures the display's jitter.
+
+### Who owns the frame
+
+The render thread owns the frame, alone. The worker calls `wisp_window_start`
+once its frame loop is ready, so the first sample has a consumer. From then
+on, each frame runs in this order:
+
+1. **Acquire the next image.** Under `Fifo` this blocks until the display
+   releases one, and its return is the frame's anchor ("Lowest-latency present
+   path"). T is the median of the measured acquire intervals, not a constant.
+2. **Sample input.** The sample is the frame number, its time on the library's
+   clock and the button mask. It goes onto a bounded queue of 8. When the
+   queue is full, the oldest samples stay and the new one is counted in
+   `droppedSamples`.
+3. **Wait for the scene.** The wait ends when this sample's scene arrives, or
+   at the scene deadline, whichever is first.
+   - W1b samples right after the acquire, as today, and puts the deadline at
+     the anchor plus T minus 4 ms.
+   - W2 moves the deadline to the measured p99 draw plus a margin before the
+     next vblank, and the sample point to the deadline minus the measured p99
+     step.
+4. **Draw.** The render thread draws the newest scene that has arrived. If this
+   sample's scene has not, it redraws the last scene and counts a late scene
+   (`lateScenes`).
+5. **Present.**
+
+The game's thread takes samples in order, oldest first. A step that ran late
+catches up by stepping twice in one frame. Every sample still becomes exactly
+one sim frame, as a fighter's input needs, and the render thread shows the
+newest scene.
+
+A scene that misses its deadline is drawn on the next frame, so its sample
+waits one frame longer. A new figure, `inputToPresentMs`, records that cost.
+For each present, it is the present time minus the sample time of the scene
+drawn. It replaces `sampleToPresentMs`, which skipped frames that had no scene.
+
+A present counts as missed (`missedPresents`) when its acquire interval is
+more than 1.5 T. When a miss follows a frame whose scene wait ran to the
+deadline, it also counts in `missedPresentsAfterLateScene`. That split shows
+whether the seam or the display path caused the miss.
+
+W1b adds `wisp_window_next_event(handle, out, 0)`, a non-blocking take of the
+oldest queued sample. On each wake, today's worker drains it in order, so no
+sample is skipped. That is unlike `takeWakes`, which keeps only the newest.
+W1c makes the same call block.
+
+### The wake: a blocking call instead of a callback (W1c)
+
+The worker replaces `takeWakes`. Each frame it does four things:
+
+1. It calls `wisp_window_next_event(handle, out, timeoutMs)`. The call blocks on
+   a Rust condvar until a sample is queued, the window closes or fails, or the
+   window is told to stop.
+2. It steps one frame with that sample's input.
+3. It encodes the scene into the reused buffer and calls `wisp_window_submit`.
+4. It yields one macrotask turn, `await new Promise(setImmediate)`, so timers,
+   messages and `readAsset` completions run.
+
+The yield comes after the submit, outside the time from sample to scene.
+`readAssetMs` stays a figure, since a read now finishes only between frames.
+The `setImmediate` segfault in "The game steps on a worker thread" needed a
+threadsafe `JSCallback` alive in the process. W1c deletes that callback and
+checks the yield in its probe run.
+
+What the blocked call does to collections:
+
+- `bun:ffi` calls are synchronous. While a thread waits inside `next_event`, it
+  runs no JavaScript and allocates nothing.
+- JavaScriptCore stops a thread for a collection only at a safepoint, a point
+  where that thread's own code could trigger one (Riptide, WebKit). A thread
+  blocked in native code reaches none.
+- Each Bun `Worker` has its own heap; the probe's collector log already lists
+  the two threads' collections under separate heaps.
+- So a blocked worker delays only its own heap's collection. That collection
+  then runs inside the step, where `stepMs` and `lateScenes` see it.
+
+The main thread keeps no part of the frame. It opens the window, starts the
+worker, and waits for the worker's `completed`, `closed` or `failed` message.
+The worker learns of a close or an error from `next_event` and posts it.
+
+Shutdown cannot free the window under the worker. The library's handle
+becomes a counted reference to the host (`Arc<Host>`):
+
+- `wisp_window_attach` gives the worker its own reference.
+- `wisp_window_release` drops a reference.
+- `wisp_window_stop` stops the threads and wakes any blocked `next_event` with
+  a stop event. It is safe on a window that has already closed. A `submit`
+  after a stop is ignored.
+
+The host is freed when the last reference drops. A worker that misses its
+acknowledgement is therefore harmless: its later calls reach a stopped host,
+not freed memory. The shared stop word and `stopWakes`' timeout, which today
+fall through to `close` regardless, go away.
+
+### Rejected
+
+- **A JavaScript thread that answers each wake.** This is W1 as built, on the
+  main thread or relayed to a worker. It has three problems:
+  - it puts up to two event-loop hops between the sample and the step;
+  - it rests on Bun's `threadsafe` `JSCallback`, which the documentation calls
+    experimental;
+  - with that callback, the one known way to keep Bun's loop from idling, a
+    `setImmediate` loop, segfaults Bun 1.3.13.
+
+  The deadline in W1b alone already takes the wake off the present path. W1c
+  removes the experimental dependency and the hops.
+- **A shared ring that JavaScript polls.** Rust could write samples into a
+  `SharedArrayBuffer`. JavaScriptCore's `Atomics.wait`, however, parks the
+  thread in WTF's ParkingLot, which only a JavaScript `Atomics.notify` wakes,
+  not a signal from Rust. The worker would have to spin, burning a core, or
+  sleep-poll, which adds up to a timer tick to every sample. A blocking call
+  does the same wait on a condvar that Rust signals.
+- **Tuning the collector.** No JavaScriptCore or Bun option changed the
+  collection count ("The game steps on a worker thread"). The deadline makes
+  that count irrelevant to the present.
+- **A blocking call on the main thread.** It would block the event loop that
+  owns the sockets. The worker that blocks owns no sockets.
+- **Rust running Bun as a child process.** The reasons under "Process shape"
+  stand.
+
+### Paths without a worker
+
+W1c makes `--window native` require `nativeGame` and refuse `--net`.
+
+- The main-thread paths reach the window only through the `JSCallback`, which
+  W1c deletes.
+- Nothing calls them yet, because Smashcraft adopts the native window in W8.
+- W2 brings networked play back. Its phase-locked netcode tick drains the
+  queue without blocking (`next_event(handle, out, 0)` until it returns
+  nothing).
+- W2 also defines how the samples it drains map onto netcode frames. A drained
+  sample counts as consumed, not dropped.
+
+### The bounds, restated
+
+The probe measures 600 frames after a 120-frame warmup. Each bound protects
+the guarantee:
+
+- `missedPresents == 0`: no frame misses its present, whatever the cause.
+- `lateScenes <= 6`: at most 1% of samples miss their deadline and reach the
+  screen a frame late.
+- `droppedSamples == 0`: every sample becomes a sim frame.
+
+The probe reports the following as figures, not gates:
+
+- `presentedMs`, `inputToPresentMs` and `wakeMs`;
+- `stepMs` and `sceneMs`;
+- `gcPauseMs` and `workerGcPauseMs`;
+- `missedPresentsAfterLateScene`.
+
+`sceneMs.p99` above 1 ms still triggers the binary scene layout.
+
+Tom's target is press to pixels within one frame at p95, and no worse than
+native Warcraft. It stays W2's, because only the press harness sees pixels.
+These bounds are the part of that target the library can check on its own
+clock.
+
+Before the gate, W1b runs `bun wisp window probe --baseline`. It drives the
+render loop with no game: Rust submits a canned scene at the sample point. Its
+`missedPresents` on the same machine is the display path's own floor. A
+nonzero floor is a finding for W2 (fullscreen, compositor), not a reason to
+widen the bound.
+
+A Rust test guards the deadline without a display. It runs the frame loop
+against a fake surface on a 16.7 ms clock, with a consumer that sleeps 50 ms on
+one sample. It checks that:
+
+- every present lands on its clock;
+- that frame redraws the previous scene;
+- the late sample's scene is presented on a later frame;
+- no sample is dropped.
+
 ## Boxes
 
 Order:
 
 - W1 first; W7 can run beside it.
-- W2, W3 and W5 follow W1. W2 also needs wisp-latency's harness to land.
+- W1b meets W1's box; W1c follows W1b.
+- W2, W3 and W5 follow W1b. W2 also follows W1c and needs wisp-latency's
+  harness to land.
 - W4 follows W3. W6 follows W1.
 - W8 follows W2 to W7, and smashcraft#806, which creates
   `bun wisp parity standalone`.
@@ -519,16 +786,50 @@ yet are created by that box. Each graphics run takes the gpu lease as
     pauses (the main thread's, and the worker's beside them), `readAsset` and
     present interval.
 
+  Done when (restated in "Seam (revised)"; W1b meets it):
+  `cd ~/code/wisp/main && bun wisp window probe --frames 600 --out build/window-probe && jq -e '.missedPresents == 0 and .lateScenes <= 6 and .droppedSamples == 0' build/window-probe/probe.json`
+- **W1b The render thread owns the frame: scene deadline and missed presents**
+  ([wisp#116](https://github.com/tompassarelli/wisp/issues/116)). It
+  builds "Who owns the frame" behind today's wake:
+  - the frame loop behind a surface and clock it can be tested against, and
+    the late-scene test with its fake surface;
+  - the sample queue of 8, the scene deadline, the redraw of the last scene,
+    and `wisp_window_next_event` as a non-blocking take that the worker drains
+    in order on each wake;
+  - `missedPresents`, `missedPresentsAfterLateScene`, `lateScenes`,
+    `droppedSamples` and `inputToPresentMs`, with T taken from the measured
+    acquire interval;
+  - the worker calling `wisp_window_start` once its frame loop is ready;
+  - `bun wisp window probe --baseline`, and probe.json with the restated
+    bounds as gates and the wake and collection figures beside them.
+
   Done when:
-  `cd ~/code/wisp/main && bun wisp window probe --frames 600 --out build/window-probe && jq -e '.wakeMs.p99 < 1 and .sceneMs.p99 < 1 and .gcPauseMs.max < 2 and .presentedMs.p95 <= 17.5' build/window-probe/probe.json`
+  `cd ~/code/wisp/main/window && cargo test -p wisp-window late_scene_keeps_presents_on_clock 2>&1 | grep -q 'test result: ok. 1 passed' && cd .. && bun wisp window probe --baseline --frames 600 --out build/window-baseline && bun wisp window probe --frames 600 --out build/window-probe && jq -e '.missedPresents == 0 and .lateScenes <= 6 and .droppedSamples == 0' build/window-probe/probe.json`
+- **W1c A blocking call replaces the wake callback**
+  ([wisp#117](https://github.com/tompassarelli/wisp/issues/117)). It builds
+  "The wake: a blocking call instead of a callback":
+  - `next_event` blocks with a timeout;
+  - `wisp_window_stop`, `wisp_window_attach` and `wisp_window_release` over an
+    `Arc<Host>`, and `wisp_window_open` without a callback;
+  - the worker's loop with one `setImmediate` turn per frame;
+  - deletion of the `JSCallback`, sharedWake.ts and host/window/nativePlay.ts,
+    with `--window native` requiring `nativeGame` and refusing `--net` until
+    W2, and play.md updated;
+  - a Rust test that stops the window while a consumer is blocked and while
+    one is mid-submit.
+
+  Done when:
+  `cd ~/code/wisp/main && ! rg -q 'JSCallback' host && (cd window && cargo test -p wisp-window stop_ 2>&1 | grep -q 'test result: ok. 2 passed') && timeout 120 bun wisp window probe --frames 600 --out build/window-probe && jq -e '.missedPresents == 0 and .lateScenes <= 6 and .droppedSamples == 0' build/window-probe/probe.json`
 - **W2 Present path, phase lock and press-to-display latency** ([wisp#107](https://github.com/tompassarelli/wisp/issues/107)).
   It adds:
   - `Fifo` with the image count read back, and `Mailbox` and `Immediate` as
     settings;
-  - acquire-then-sleep pacing with miss detection, and the 60 Hz step rule
+  - acquire-then-sleep pacing with miss detection, moving W1b's fixed scene
+    deadline and sample point to the measured ones, and the 60 Hz step rule
     above 60 Hz;
   - borderless fullscreen;
-  - the netcode tick's phase lock for paced sessions;
+  - the netcode tick's phase lock for paced sessions, which brings back
+    `--window native` with `--net` through a non-blocking `next_event`;
   - the harness's `--window native|chrome|warcraft`, run windowed and
     fullscreen;
   - PresentMon numbers on Windows.
@@ -623,3 +924,22 @@ yet are created by that box. Each graphics run takes the gpu lease as
   - the netcode's paced clock and Bun-thread asset reads needed owners;
   - the Windows pad read narrowed device support;
   - the page's host, status and output work had no owner.
+- Seam (revised), 30 October 2026:
+  - thread-safe callbacks: Bun's FFI page says the engine "marshals the
+    invocation onto the JavaScript thread" and calls the support
+    experimental, https://bun.com/docs/runtime/ffi;
+  - safepoints: "Introducing Riptide: WebKit's Retreating Wavefront
+    Concurrent Garbage Collector",
+    https://webkit.org/blog/7122/introducing-riptide-webkits-retreating-wavefront-concurrent-garbage-collector/;
+  - the render loop's 100 ms scene wait: window/wisp-window/src/host.rs,
+    `SCENE_WAIT` and `wait_for_scene`, at 5dab83ad;
+  - the probe figures: wisp#105's last run on gex45 under an exclusive lease.
+  - an adversarial review by a fresh Sonnet reviewer. It found that:
+    - the 18 ms present p95 was acquire jitter rather than missed presents;
+    - a p95 interval bound could not catch misses;
+    - the netcode's non-blocking take contradicted "no dropped samples";
+    - shutdown after a missed acknowledgement could free the handle under
+      the worker;
+    - the queue's start and full policies were unstated;
+    - a filtered `cargo test` passes with zero tests;
+    - the first box was too large, so the plan was split into W1b and W1c.
