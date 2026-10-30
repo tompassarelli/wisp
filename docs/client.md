@@ -44,7 +44,7 @@ everything outside `Data/` and `_retail_`: configuration, Documents,
 CustomMapData, logs and caches. Shared
 files stay writable: the game opens its storage for writing and stops with
 `E_STORAGE_INIT` when every storage file is read-only and `E_REPAIR` when
-only the `data.NNN` archives are (gex45, 28 October 2026). Hardlinks need one filesystem; on btrfs, where
+only the `data.NNN` archives are (gex45, 28 October 2026). When an INSTALL sits in a Wine prefix (`drive_c/Program Files (x86)/Warcraft III`), the share also hardlinks the prefix's Wine graphics DLLs (`d3d9`, `d3d11`, `d3d12core`, `dxgi` and `amdxcffx64` in `drive_c/windows/system32` and `syswow64`) to BASE's when their bytes are identical, and leaves a differing one alone; about 3.5 GB across the LAN pool on gex45 (30 October 2026). `unshareBehindLive` gives them private copies with the rest. Hardlinks need one filesystem; on btrfs, where
 `cp --reflink` already shares the blocks, there is nothing to gain.
 
 Battle.net updates an install by writing into its storage, so `client start`

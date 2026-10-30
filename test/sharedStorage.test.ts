@@ -63,3 +63,44 @@ describe("shared storage", () => {
     }
   });
 });
+
+describe("shared prefix files", () => {
+  test("[integration fs on tmpfs] share hardlinks a prefix's byte-identical Wine graphics DLLs, leaves a differing one alone, and a rewrite in one client leaves the others unchanged", async () => {
+    const root = mkdtempSync("/dev/shm/wisp-shared-prefix-");
+    try {
+      const dll = Buffer.alloc(1 << 20, 7).toString("latin1");
+      const client = (name: string, d3d9: string) => {
+        const folder = install(root, `${name}/pfx/drive_c/Program Files (x86)/Warcraft III`, { "Data/data/data.000": "archive" });
+        const windows = join(folder, "../../windows");
+        write(join(windows, "system32/d3d11.dll"), dll);
+        write(join(windows, "syswow64/dxgi.dll"), dll);
+        write(join(windows, "system32/d3d9.dll"), d3d9);
+        write(join(windows, "system32/kernel32.dll"), d3d9);
+        return folder;
+      };
+      const [base, b, e] = [client("c", "c's"), client("b", "b's"), client("e", dll)] as const;
+      const windows = (folder: string, file: string) => join(folder, "../../windows", file);
+      const inode = (folder: string, file: string) => statSync(windows(folder, file)).ino;
+
+      const shared = await Effect.runPromise(shareStorage(base, [b, e]));
+
+      expect(shared.linked).toBe(2 + 2 * 2);
+      for (const file of ["system32/d3d11.dll", "syswow64/dxgi.dll"]) {
+        expect(new Set([base, b, e].map((folder) => inode(folder, file))).size).toBe(1);
+        expect(statSync(windows(base, file)).nlink).toBe(3);
+      }
+      expect(new Set([base, b, e].map((folder) => inode(folder, "system32/d3d9.dll"))).size).toBe(3);
+      expect(readFileSync(windows(b, "system32/d3d9.dll"), "utf8")).toBe("b's");
+      expect(inode(b, "system32/kernel32.dll")).not.toBe(inode(base, "system32/kernel32.dll"));
+      expect(sharedFiles(b)).toContain("../../windows/system32/d3d11.dll");
+      expect(await Effect.runPromise(shareStorage(base, [b, e]))).toEqual({ linked: 0, removed: 0, freedBytes: 0 });
+
+      await Effect.runPromise(unshareStorage(b));
+      writeFileSync(windows(b, "system32/d3d11.dll"), "b's graphics");
+      expect(readFileSync(windows(base, "system32/d3d11.dll"), "latin1")).toBe(dll);
+      expect(readFileSync(windows(e, "system32/d3d11.dll"), "latin1")).toBe(dll);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
