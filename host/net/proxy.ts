@@ -11,7 +11,7 @@ export interface ProxyOptions {
 }
 
 /**
- * A delay and loss proxy between one joiner and a host, standing in for a network path on one machine:
+ * A delay and loss proxy between one joiner and a host (the joiner is whoever sent last, so its relay ping and its match may use two sockets), standing in for a network path on one machine:
  * every datagram waits `oneWayMs` in each direction and is dropped with probability `loss`. It runs until interrupted.
  */
 export const runProxy = (options: ProxyOptions, log: (line: string) => void = console.error) => Effect.scoped(Effect.gen(function*() {
@@ -43,9 +43,9 @@ export const runProxy = (options: ProxyOptions, log: (line: string) => void = co
       port: options.listen,
       socket: {
         data: (_socket, data, port, address) => {
-          client ??= { address, port };
+          client = { address, port };
           const copy = new Uint8Array(data);
-          if (port === client.port) hold(() => toHost.send(copy, options.to.port, options.to.address));
+          hold(() => toHost.send(copy, options.to.port, options.to.address));
         },
         error: () => undefined,
       },

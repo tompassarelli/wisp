@@ -326,8 +326,12 @@ prints a relay code such as `sgp-7K2M-QX9D-R3TB-4`: the region and the room.
 `--join CODE` reaches the same room, through any NAT and with no port
 forward; both players send to the relay first, which forwards each datagram
 to the other (wisp:docs/relay.md, "Peer room"). `--relay` also takes a
-relay's `ADDRESS:PORT`, which prints `ADDRESS:PORT/ROOM`. The region list is
-`WISP_RELAYS="sgp=ADDRESS:PORT,..."` until wisp#102 publishes it. A relay code
+relay's `ADDRESS:PORT`, which prints `ADDRESS:PORT/ROOM`. The published region list
+is `sgp`, Nexus in Singapore (wisp:host/net/joinCode.ts); `WISP_RELAYS="eu=ADDRESS:PORT,..."`
+adds to it. `--relay nearest` takes the region with the lowest round trip.
+Before it hosts, the window pings every region and prints each round trip
+with the nearest marked; a joiner prints its own round trip to the relay its
+code names before it joins (`bun wisp net regions` prints the list alone). A relay code
 carries no map hash: the host refuses a joiner whose map differs. The same
 flags work on `net host` and `net join`, which print the reports (bytes sent,
 bytes received and the largest datagram, a relay's framing included).

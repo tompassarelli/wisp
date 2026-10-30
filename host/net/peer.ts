@@ -38,6 +38,8 @@ export type NetError = NetFailure | PeerSilent | PeerLeft | NetDesync;
 /** One client of a match, created before the handshake and started once both sides agree the turn delay. */
 export interface NetSession {
   start(this: void): void;
+  /** Hands the handshake's round trip to the map before `start`; it returns the input delay in frames that the map sets from it. */
+  measured?(this: void, rttMs: number): number;
   step(this: void): void;
   frame(this: void): number;
   checksum(this: void): string;
@@ -178,6 +180,10 @@ export const runNetPeer = (game: NetGame, options: NetPeerOptions, log: (line: s
   yield* Effect.addFinalizer(() => Effect.sync(() => session.close()));
 
   let rttMs = 0, startAt = 0;
+  const showMapDelay = () => {
+    const inputDelay = session.measured?.(rttMs);
+    if (inputDelay !== undefined) log(`net: slot ${slot}, map input delay ${inputDelay} frames (${(inputDelay * FRAME_MS).toFixed(1)} ms)`);
+  };
   const handshakeEnd = wallClock() + 30_000;
   if (hosting) {
     while (!inbox.some((datagram) => datagram.t === "hello")) {
@@ -201,6 +207,7 @@ export const runNetPeer = (game: NetGame, options: NetPeerOptions, log: (line: s
     const announce = send({ t: "delay", delay: ledger.delay, rttMs: Math.round(rttMs) });
     yield* announce;
     log(`net: slot ${slot}, round trip ${rttMs.toFixed(1)} ms, turn delay ${ledger.delay} frames (${(ledger.delay * FRAME_MS).toFixed(1)} ms)`);
+    showMapDelay();
     session.start();
     let ready = false, lastAnnounced = 0;
     while (!ready) {
@@ -233,6 +240,7 @@ export const runNetPeer = (game: NetGame, options: NetPeerOptions, log: (line: s
       }
     }
     log(`net: slot ${slot}, round trip ${rttMs.toFixed(1)} ms, turn delay ${ledger.delay} frames (${(ledger.delay * FRAME_MS).toFixed(1)} ms)`);
+    showMapDelay();
     session.start();
     let lastReady = 0;
     while (startAt === 0) {

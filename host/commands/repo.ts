@@ -8,6 +8,7 @@ const soak = { project: join(root, "host/soak/ci/ciProject.ts"), out: join(root,
 runMainCli("bun wisp", {
   native: { usage: "remote --host HOST --project DIR --map FILE --pads DIR --clients-file FILE --run RUN [--dry-run] -- WISP_ARGS", load: async () => (await import("./nativeRemote")).nativeRemote },
   fidelity: { usage: "check LEVER --reference DIR --candidate DIR   (docs/fidelity.md)", load: async () => (await import("./fidelity")).fidelity },
+  net: { usage: "regions   (each relay region with its measured round trip: docs/network-model.md)", load: async () => (await import("./net")).regionsCommand },
   map: { usage: "preview MAP.w3x --out IMAGE.ppm [--packager PATH] [--assets DIR]", load: async () => (await import("./map")).map },
   ci: {
     usage: "pre-merge --base SHA [--plan-only] | post-merge | nightly [--minutes M] | seeds --n N [--seed S]   [--json]   (docs/ci-command.md)",

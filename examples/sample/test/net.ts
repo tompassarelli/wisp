@@ -1,10 +1,12 @@
 // The sample as one client per process for `sample.ts net`: each player types -ping every two seconds, and `--chatter N` adds N chat lines every frame to fill the packets a busy game sends.
 import { installHeadless } from "wisp/scripts/wisp/headless";
 import type { NetGame } from "wisp/scripts/wisp/net/peer";
+import { autoDelay, delayPolicy, observeRtt, rttEstimate } from "wisp/src/netcode/delay";
 import { install, start } from "../src/main";
 import { SAMPLE_MAP } from "./journey";
 
 const CHATTER_LINE = "chatter chatter chatter";
+const POLICY = delayPolicy(8, 30);
 
 export const sampleNet = (chatter: number): NetGame => ({
   create: async (link, slot) => {
@@ -13,6 +15,11 @@ export const sampleNet = (chatter: number): NetGame => ({
     const client = lockstep.client(slot);
     return {
       start: () => lockstep.start(),
+      measured: (rttMs) => {
+        const estimate = rttEstimate();
+        observeRtt(estimate, rttMs);
+        return autoDelay(POLICY, estimate);
+      },
       step: () => {
         if (lockstep.frame % 120 === 17 + 40 * slot) lockstep.chat(slot, "-ping");
         for (let line = 0; line < chatter; line++) lockstep.chat(slot, CHATTER_LINE);

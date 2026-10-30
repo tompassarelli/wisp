@@ -222,6 +222,13 @@ turn after the peer's last acknowledgement, its acknowledgement of the peer's
 frontier, and its last four checksums. A lost packet is repaired by the next
 one, a frame later; there is no retransmission timer.
 
+**Regions and delay.** Before a relayed match, `net host --relay nearest` (and `play --standalone --host --relay nearest`)
+pings each published region and takes the lowest; `net join CODE` pings the code's relay and prints the round trip. The host's eight pings through the
+relay measure the relayed path and set the turn delay. The same round trip goes to the map through
+`NetSession.measured`, so the map's input delay follows from a number it
+can't read from its own sync echoes, which under lockstep are a whole number of turns
+(wisp:host/net/peer.ts, wisp:src/netcode/delay.ts, wisp:docs/relay.md, "Regions").
+
 **Wire.** A `turns` packet is binary (wisp:host/net/wire.ts): varints for the
 frames, acknowledgement and counts, each turn's frame as the step from the
 turn before, its time as microseconds from the turn before (the first as a

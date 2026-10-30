@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { Option } from "effect";
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { LinkEvent } from "../src/headless/lockstep";
 import type { TurnPacket } from "../src/headless/turnLedger";
 import { joinCode, joinTarget, relayChoice, relayCode, relayRegions } from "../host/net/joinCode";
+import { relayBinary } from "./headless/relayBinary";
 import { MAX_DATAGRAM, decodeDatagram, encodeDatagram, fitTurns } from "../host/net/wire";
 
 const root = join(import.meta.dir, "..");
@@ -87,7 +87,8 @@ describe("relay codes", () => {
     expect(joinTarget("tyo-0000-0000-0001-0", regions)).toContain("no relay region");
     expect(joinTarget("sgp-0000-0001", regions)).toContain("neither a join code");
     expect(joinTarget("sgp-ZZZZ-ZZZZ-ZZZZ-Z", regions)).not.toHaveProperty("relay");
-    expect(relayChoice("nowhere", relayRegions({}))).toContain("none listed");
+    expect(relayChoice("nowhere", relayRegions({}))).toContain("sgp");
+    expect(relayChoice("sgp", relayRegions({ WISP_RELAYS: "sgp=203.0.113.9:7000" }))).toEqual({ name: "sgp", relay: { address: "203.0.113.9", port: 7000 } });
   });
 });
 
@@ -97,17 +98,6 @@ const freePort = async () => {
   probe.close();
   return port;
 };
-
-async function relayBinary(): Promise<string> {
-  const override = process.env["WISP_RELAY_BIN"];
-  if (override !== undefined) return override;
-  const build = Bun.spawn(["cargo", "build", "--release", "-p", "relay"], { cwd: join(root, "relay"), stdin: "ignore", stdout: "ignore", stderr: "pipe" });
-  const [code, stderr] = await Promise.all([build.exited, new Response(build.stderr).text()]);
-  if (code !== 0) throw new Error(`cargo build -p relay failed: ${stderr}`);
-  const binary = join(root, "relay/target/release/relay");
-  if (!existsSync(binary)) throw new Error(`${binary} was not built`);
-  return binary;
-}
 
 const sample = ["bun", join(root, "examples/sample/scripts/sample.ts"), "net"];
 
@@ -153,7 +143,8 @@ async function relayedMatch(binary: string, chatter: number) {
     quiet([binary, "--bind", `127.0.0.1:${relayPort}`]);
     const flags = ["--frames", String(FRAMES), "--chatter", String(chatter)];
     const host = player([...sample, "host", "--relay", `127.0.0.1:${relayPort}`, ...flags]);
-    const code = (await lineMatching(host.stderr, /net: join code (\S+)/, "the host"))[1] ?? "";
+    const [hostLines, hostStderr] = host.stderr.tee();
+    const code = (await lineMatching(hostLines, /net: join code (\S+)/, "the host"))[1] ?? "";
     expect(code).toMatch(/^127\.0\.0\.1:\d+\/[0-9A-Z-]+$/);
     quiet([...sample, "proxy", "--listen", String(proxyPort), "--to", `127.0.0.1:${relayPort}`, "--rtt", "170"]);
     await Bun.sleep(500);
@@ -161,6 +152,10 @@ async function relayedMatch(binary: string, chatter: number) {
     const [hosted, joined] = await Promise.all([outcome(host), outcome(joiner)]);
     expect(hosted.outcome.failure).toBeUndefined();
     expect(joined.outcome.failure).toBeUndefined();
+    const [hostLog, joinLog] = await Promise.all([new Response(hostStderr).text(), new Response(joiner.stderr).text()]);
+    expect(hostLog).toMatch(/net: hosting through 127\.0\.0\.1:\d+, round trip to it \d+ ms/);
+    expect(joinLog).toMatch(/net: joining through 127\.0\.0\.1:\d+, round trip to it 1[67]\d ms/);
+    for (const log of [hostLog, joinLog]) expect(log).toMatch(/net: slot \d, map input delay [1-9]\d* frames/);
     return [hosted.outcome.report, joined.outcome.report];
   } finally {
     for (const child of children) child.kill();

@@ -4,9 +4,11 @@ import { ChildProcess } from "effect/process";
 import { type Command, UsageFailure, flagValues, wholeFlag } from "../cli/command";
 import { collect } from "../cli/hostProcess";
 import { NetFailure } from "../net/failure";
-import { type RelayChoice, joinTarget, relayChoice, relayCode, relayRegions } from "../net/joinCode";
+import { type RelayChoice, joinTarget, relayCode, relayRegions } from "../net/joinCode";
 import { type NetGame, type NetPeerOptions, type NetReport, type NetRole, runNetPeer } from "../net/peer";
 import { runProxy } from "../net/proxy";
+import { chooseHostRelay, showJoinPing } from "../net/regionChoice";
+import { describeRegions, pingRegions } from "../net/regionPing";
 
 const VALUE_FLAGS = ["port", "listen", "to", "frames", "rtt", "loss", "seed", "delay", "freeze-at", "quit-at", "game", "relay"];
 const JOINER_ONLY = ["--freeze-at", "--quit-at"];
@@ -52,27 +54,27 @@ function address(text: string | undefined, what: string): { readonly address: st
   return match === null ? new UsageFailure({ problem: `${what} needs ADDRESS:PORT` }) : { address: match[1] ?? "", port: Number(match[2]) };
 }
 
-function role(verb: "host" | "join", rest: readonly string[], port: number): { readonly role: NetRole; readonly relay?: RelayChoice } | UsageFailure {
-  const regions = relayRegions();
+/** A role as the command line gives it: a host's `--relay` is still the text it names until the regions are pinged. */
+type RoleRequest = Exclude<NetRole, { readonly kind: "relayHost" }> | { readonly kind: "hostThrough"; readonly relay: string };
+
+function role(verb: "host" | "join", rest: readonly string[], port: number): RoleRequest | UsageFailure {
   if (verb === "join") {
-    const target = joinTarget(rest[0] ?? "", regions);
+    const target = joinTarget(rest[0] ?? "", relayRegions());
     if (typeof target === "string") return new UsageFailure({ problem: target });
-    return "relay" in target ? { role: { kind: "relayJoin", relay: target.relay, room: target.room } } : { role: { kind: "join", to: { address: target.address, port: target.port } } };
+    return "relay" in target ? { kind: "relayJoin", relay: target.relay, room: target.room } : { kind: "join", to: { address: target.address, port: target.port } };
   }
   const [named] = flagValues(rest, "relay");
-  if (named === undefined) return { role: { kind: "host", port } };
-  const choice = relayChoice(named, regions);
-  return typeof choice === "string" ? new UsageFailure({ problem: choice }) : { role: { kind: "relayHost", relay: choice.relay }, relay: choice };
+  return named === undefined ? { kind: "host", port } : { kind: "hostThrough", relay: named };
 }
 
-function peerOptions(verb: "host" | "join", rest: readonly string[], game: string): { readonly options: NetPeerOptions; readonly relay?: RelayChoice } | UsageFailure {
+function peerOptions(verb: "host" | "join", rest: readonly string[], game: string): { readonly options: Omit<NetPeerOptions, "role">; readonly request: RoleRequest } | UsageFailure {
   const values = counts(rest, { port: 0, frames: 0, delay: 0, "freeze-at": 0, "quit-at": 0 });
   if (values instanceof UsageFailure) return values;
   if (values.frames < 1) return new UsageFailure({ problem: "--frames needs a positive frame count" });
   const chosen = role(verb, rest, values.port);
   if (chosen instanceof UsageFailure) return chosen;
-  return { ...(chosen.relay === undefined ? {} : { relay: chosen.relay }), options: {
-    role: chosen.role, game, frames: values.frames,
+  return { request: chosen, options: {
+    game, frames: values.frames,
     ...(values.delay > 0 ? { delay: values.delay } : {}),
     ...(values["freeze-at"] > 0 ? { freezeAt: values["freeze-at"] } : {}),
     ...(values["quit-at"] > 0 ? { quitAt: values["quit-at"] } : {}),
@@ -97,13 +99,26 @@ export function describeReport(label: string, outcome: Outcome): string {
     + `step p50/p95/max ${report.stepMs.p50}/${report.stepMs.p95}/${report.stepMs.max} ms, ${report.slips} slips, ${report.lateFrames} late frames, ${report.packetsSent} packets sent, ${report.bytesSent} bytes sent (largest ${report.largestSent}), ${report.bytesReceived} bytes received`;
 }
 
+/** `net regions`: each published relay region with its measured round trip, the nearest marked; fails when none answers. */
+export const listRegions = Effect.gen(function*() {
+  const pings = yield* pingRegions(relayRegions());
+  console.log(describeRegions(pings));
+  if (pings.length === 0) return yield* new NetFailure({ problem: "no relay region is listed" });
+  if (pings.every((ping) => ping.rttMs === undefined)) return yield* new NetFailure({ problem: "no relay region answered" });
+});
+
+/** Wisp's own `net`: only `regions`, since a game hosts and joins through its own `makeNet`. */
+export const regionsCommand: Command = (args) => args.length === 1 && args[0] === "regions"
+  ? listRegions.pipe(Effect.provide(BunServices.layer))
+  : Effect.fail(new UsageFailure({ problem: "net takes regions; a game's own net command hosts and joins" }));
+
 /** The arguments of `rest` that are (or are not) one of `flags` with its value. */
 function only(rest: readonly string[], flags: readonly string[], keep: boolean): string[] {
   return rest.filter((arg, index) => (flags.includes(arg) || flags.includes(rest[index - 1] ?? "")) === keep);
 }
 
 /**
- * `net host|join|proxy|pair`: one slot of a two-player match per process over Wisp's UDP lockstep (wisp:docs/network-model.md).
+ * `net host|join|proxy|pair|regions`: one slot of a two-player match per process over Wisp's UDP lockstep (wisp:docs/network-model.md).
  * Flags in `gameFlags` reach the game's `load`. `pair` runs a host and a joiner on this machine, through a delay and loss proxy
  * when `--rtt` or `--loss` is given; `--freeze-at` and `--quit-at` apply to the joiner.
  */
@@ -149,11 +164,22 @@ export function makeNet(load: (args: readonly string[]) => Promise<NetGame>, gam
       if (!drill && outcomes.some((outcome) => "failure" in outcome)) return yield* new NetFailure({ problem: "a side failed" });
       return;
     }
-    if (verb !== "host" && verb !== "join") return yield* new UsageFailure({ problem: "net takes host, join, proxy or pair" });
+    if (verb === "regions") return yield* listRegions;
+    if (verb !== "host" && verb !== "join") return yield* new UsageFailure({ problem: "net takes host, join, proxy, pair or regions" });
     const chosen = peerOptions(verb, rest, flagValues(rest, "game")[0] ?? gameName);
     if (chosen instanceof UsageFailure) return yield* chosen;
-    const { relay } = chosen;
-    const options: NetPeerOptions = { ...chosen.options, listening: (listening) => {
+    const regions = relayRegions();
+    const { request } = chosen;
+    let relay: RelayChoice | undefined;
+    let netRole: NetRole;
+    if (request.kind === "hostThrough") {
+      relay = yield* chooseHostRelay(request.relay, regions, console.error);
+      netRole = { kind: "relayHost", relay: relay.relay };
+    } else {
+      if (request.kind === "relayJoin") yield* showJoinPing(request.relay, regions, console.error);
+      netRole = request;
+    }
+    const options: NetPeerOptions = { ...chosen.options, role: netRole, listening: (listening) => {
       if ("room" in listening && relay !== undefined) console.error(`net: join code ${relayCode(relay, listening.room)}`);
     } };
     const game = yield* Effect.tryPromise({ try: () => load(rest), catch: (cause) => new NetFailure({ problem: `loading the game: ${String(cause)}` }) });

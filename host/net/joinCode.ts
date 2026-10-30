@@ -9,11 +9,15 @@ export type JoinTarget =
   | { readonly address: string; readonly port: number; readonly mapHash?: string }
   | { readonly relay: Endpoint; readonly room: bigint };
 
-/** A relay region's name and address; `WISP_RELAYS` ("sgp=203.0.113.9:7457,eu=...") adds to the published list, which is empty until wisp#102 publishes it. */
+/** A relay region's name and address. */
 export type RelayRegions = ReadonlyMap<string, Endpoint>;
 
+/** The published list: Nexus, DigitalOcean sgp1 in Singapore (wisp:docs/relay.md, "Where the relay runs"). */
+export const PUBLISHED_REGIONS: readonly (readonly [string, Endpoint])[] = [["sgp", { address: "159.89.205.60", port: 7457 }]];
+
+/** The published list; `WISP_RELAYS` ("sgp=203.0.113.9:7457,eu=...") adds to it or replaces a name in it. */
 export function relayRegions(env: Readonly<Record<string, string | undefined>> = process.env): RelayRegions {
-  const regions = new Map<string, Endpoint>();
+  const regions = new Map<string, Endpoint>(PUBLISHED_REGIONS);
   for (const entry of (env["WISP_RELAYS"] ?? "").split(",")) {
     const match = /^([a-z][a-z0-9]{1,7})=(.+):(\d{1,5})$/.exec(entry.trim());
     if (match !== null) regions.set(match[1] ?? "", { address: match[2] ?? "", port: Number(match[3]) });

@@ -1674,6 +1674,14 @@ byte for byte, to the other members.
   checks the Rust codec against it, and `bun test test/relayVectors.test.ts`
   checks host/net/relayControl.ts, the TypeScript codec the standalone
   window uses (host/net/relayLink.ts, wisp#101).
+- **Regions (wisp#102).** `bun wisp net regions` pings every region with a
+  cookie-less `join`, which the relay answers with a Challenge before it
+  looks at any room, so a probe costs the relay no state; a region's round
+  trip is the median of 5 probes (host/net/regionPing.ts). The host picks (`--relay nearest`
+  is the lowest) and the joiner sees its own ping. peer.ts hands the
+  handshake's measured round trip to the map (`NetSession.measured`), which
+  returns the input delay it sets from it through `src/netcode/delay.ts`;
+  both the turn delay and the map's delay print before the match.
 - **Standalone use.** `net host --relay REGION|ADDRESS:PORT` creates a
   2-member room and `net join CODE` joins it
   (wisp:docs/network-model.md, "Wire"). The member answers the relay's

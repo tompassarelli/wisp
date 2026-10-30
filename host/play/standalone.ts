@@ -8,7 +8,8 @@ import type { HeadlessClient } from "../../src/headless/client";
 import type { LockstepLink } from "../../src/headless/lockstep";
 import { spawnLogged } from "../cli/hostProcess";
 import { requireGpuLease } from "../render/gpuLease";
-import { joinCode, joinTarget, relayChoice, relayCode, relayRegions, CODE_HASH_DIGITS } from "../net/joinCode";
+import { joinCode, joinTarget, relayCode, relayRegions, CODE_HASH_DIGITS, type RelayChoice } from "../net/joinCode";
+import { chooseHostRelay, showJoinPing } from "../net/regionChoice";
 import { NetFailure } from "../net/failure";
 import { type NetListening, type NetRole, type NetSession, runNetPeer } from "../net/peer";
 import { captureScene, sceneWithUnits, RenderFailure, type HeadlessRenderProject } from "../render/headlessRender";
@@ -214,16 +215,17 @@ const runNetStandalone = (game: StandaloneGame, options: StandaloneOptions, net:
   if (hooks === undefined) return yield* new NetFailure({ problem: `${game.title} doesn't support host and join` });
   const mapHash = yield* attempt(() => hooks.mapHash());
   let role: NetRole;
-  let relay: ReturnType<typeof relayChoice> | undefined;
+  let relay: RelayChoice | undefined;
   if ("host" in net) {
-    relay = net.host.relay === undefined ? undefined : relayChoice(net.host.relay, relayRegions());
-    if (typeof relay === "string") return yield* new NetFailure({ problem: relay });
+    relay = net.host.relay === undefined ? undefined : yield* chooseHostRelay(net.host.relay, relayRegions(), console.error);
     role = relay === undefined ? { kind: "host", port: net.host.port } : { kind: "relayHost", relay: relay.relay };
   } else {
     const target = joinTarget(net.join);
     if (typeof target === "string") return yield* new NetFailure({ problem: target });
-    if ("relay" in target) role = { kind: "relayJoin", relay: target.relay, room: target.room };
-    else {
+    if ("relay" in target) {
+      yield* showJoinPing(target.relay, relayRegions(), console.error);
+      role = { kind: "relayJoin", relay: target.relay, room: target.room };
+    } else {
       if (target.mapHash !== undefined && target.mapHash !== mapHash.slice(0, CODE_HASH_DIGITS)) return yield* new MapMismatch({ code: target.mapHash, here: mapHash });
       role = { kind: "join", to: { address: target.address, port: target.port } };
     }
@@ -232,7 +234,7 @@ const runNetStandalone = (game: StandaloneGame, options: StandaloneOptions, net:
   const created = Promise.withResolvers<StandaloneNetSession>();
   const listening = (at: NetListening) => {
     if ("room" in at) {
-      if (typeof relay === "object") console.log(`${game.title}: join code ${relayCode(relay, at.room)} (relay room; the joiner's map must match ${mapHash.slice(0, CODE_HASH_DIGITS)})`);
+      if (relay !== undefined) console.log(`${game.title}: join code ${relayCode(relay, at.room)} (relay room; the joiner's map must match ${mapHash.slice(0, CODE_HASH_DIGITS)})`);
       return;
     }
     const { port } = at;
