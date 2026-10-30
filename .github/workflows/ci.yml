@@ -129,7 +129,7 @@ jobs:
         timeout-minutes: 18
         uses: ./.github/actions/apt-install
         with:
-          packages: libudev-dev libasound2-dev libwayland-dev libxkbcommon-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev libvulkan1 mesa-vulkan-drivers xvfb
+          packages: libudev-dev libasound2-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-0 libx11-dev libxcursor-dev libxi-dev libxrandr-dev libvulkan1 mesa-vulkan-drivers xvfb
       - if: steps.crate.outputs.present == 'true'
         run: cargo build --release --locked
         working-directory: window
