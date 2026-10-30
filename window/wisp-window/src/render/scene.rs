@@ -3,6 +3,7 @@
 use serde::Deserialize;
 
 use super::math::Mat4;
+use super::water::WaterSettings;
 
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -78,6 +79,8 @@ pub struct Scene {
     pub pending: u32,
     #[serde(default)]
     pub clear: [f32; 3],
+    #[serde(deserialize_with = "super::water::scene_water")]
+    pub water: WaterSettings,
 }
 
 impl Scene {

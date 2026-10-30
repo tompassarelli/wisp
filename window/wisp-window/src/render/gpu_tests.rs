@@ -6,12 +6,12 @@ use scene::Bolt;
 const SIDE: u32 = 128;
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
-fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
+pub(super) fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
     static SHARED: std::sync::OnceLock<Option<(wgpu::Device, wgpu::Queue)>> = std::sync::OnceLock::new();
     SHARED
         .get_or_init(|| {
             let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-            let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { force_fallback_adapter: false, ..Default::default() })).ok()?;
+            let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions { power_preference: wgpu::PowerPreference::HighPerformance, force_fallback_adapter: false, ..Default::default() })).ok()?;
             pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
         })
         .clone()
@@ -220,7 +220,7 @@ fn centre_of(sheets: &[Sheet]) -> [f32; 3] {
             Paint::Texture(_) => Paint::Texture(name),
             other => other.clone(),
         };
-        parts.push(model::Part { opacity_slot: 0, first_index, index_count: 6, layers: vec![model::Layer { paint, filter: sheet.filter, opacity_slot: 1 }] });
+        parts.push(model::Part { opacity_slot: 0, first_index, index_count: 6, layers: vec![model::Layer { paint, filter: sheet.filter, opacity_slot: 1, unshaded: false }] });
     }
     renderer.add_model("sheets", ModelData { vertices, indices, parts, rig: Box::new(FlatRig), emitters: Vec::new() });
     let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };
@@ -349,7 +349,7 @@ fn a_rig_is_posed_with_the_scene_clock_in_seconds() {
     let Some((device, queue)) = device() else { return };
     let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off, crate::settings::Preset::High.features());
     let seen = std::sync::Arc::new(std::sync::Mutex::new(-1.0));
-    let draw = model::Part { opacity_slot: 0, first_index: 0, index_count: 3, layers: vec![model::Layer { paint: Paint::None, filter: Filter::Opaque, opacity_slot: 1 }] };
+    let draw = model::Part { opacity_slot: 0, first_index: 0, index_count: 3, layers: vec![model::Layer { paint: Paint::None, filter: Filter::Opaque, opacity_slot: 1, unshaded: false }] };
     let vertices = vec![Vertex { position: [0.0; 3], normal: [0.0, 0.0, 1.0], uv: [0.0; 2], bones: [0; 4], weights: [1.0, 0.0, 0.0, 0.0] }; 3];
     renderer.add_model("clock", ModelData { vertices, indices: vec![0, 1, 2], parts: vec![draw], rig: Box::new(ClockRig(seen.clone())), emitters: Vec::new() });
     let mut scene = Scene::default();

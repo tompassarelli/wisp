@@ -46,6 +46,7 @@ impl Renderer {
             let Some(path) = self.decoding.remove(&job) else { continue };
             finished += 1;
             match decoded {
+                Ok(prepared) if water::is_frame(&path) => self.water.keep(path, prepared.albedo),
                 Ok(prepared) => {
                     if let Some(relief) = &prepared.relief {
                         self.reliefs.insert(path.clone(), upload(&self.device, &self.queue, relief));
@@ -57,6 +58,7 @@ impl Renderer {
             }
         }
         if self.decoding.is_empty() {
+            self.problems.extend(self.water.build(&self.device, &self.queue));
             for (path, bytes) in std::mem::take(&mut self.waiting) {
                 finished += 1;
                 match source::model(&bytes, self.quality) {

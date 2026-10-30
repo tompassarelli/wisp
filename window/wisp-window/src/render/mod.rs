@@ -13,6 +13,7 @@ mod emitters;
 mod lightning;
 mod weather;
 mod particles;
+mod passes;
 mod pipelines;
 mod scene;
 mod targets;
@@ -20,8 +21,12 @@ pub mod source;
 mod sprite;
 pub mod tessellate;
 mod uniforms;
+mod water;
+#[cfg(test)]
+mod stage_test;
 
 use std::collections::HashMap;
+use std::time::Instant;
 use bytemuck::Zeroable;
 use wgpu::util::DeviceExt;
 
@@ -30,11 +35,12 @@ use std::sync::Arc;
 use crate::decode_pool::Pool;
 use crate::remaster::{self, Cache, Prepared, Quality};
 use crate::settings::Features;
-use math::{multiply, projection, Mat4, IDENTITY};
-use gpu::{bone_storage, frame_group, instance_storage, opacity_storage, upload, uv_storage, white};
+use math::{mirrored, multiply, projection, Mat4, IDENTITY};
+use gpu::{bone_storage, frame_group, instance_storage, opacity_storage, repeat_sampler, upload, uv_storage, white};
 use {lightning::Lightning, weather::Weather};
 use model::{Filter, ModelData, ModelEmitter, Paint, Vertex};
-use uniforms::{FrameUniform, Instance, LayerUniform};
+use uniforms::{FrameUniform, Instance, LayerUniform, SceneFrame};
+use water::{Glow, Water};
 use particles::{ParticleFrame, Particles, Slot};
 use scene::{Pose, Scene};
 use targets::Targets;
@@ -61,7 +67,8 @@ struct Draw {
     filter: Filter,
     first_index: u32,
     index_count: u32,
-    bind_group: wgpu::BindGroup,
+    /// None for a water layer, which the water pass binds its own images for.
+    bind_group: Option<wgpu::BindGroup>,
 }
 
 struct GpuModel {
@@ -73,12 +80,19 @@ struct GpuModel {
     bones: usize,
     skin: sprite::Skin,
     emitters: Vec<(ModelEmitter, Option<Slot>)>,
+    water: bool,
 }
 
 struct Group {
     model: usize,
     first: u32,
     count: u32,
+}
+
+/// A scene's frame uniform and the group that binds it with the bone, opacity and texture-coordinate buffers.
+struct FrameSet {
+    buffer: wgpu::Buffer,
+    group: wgpu::BindGroup,
 }
 
 pub struct Renderer {
@@ -105,10 +119,13 @@ pub struct Renderer {
     uv_scratch: Vec<[f32; 4]>,
     instance_buffer: wgpu::Buffer,
     instance_capacity: usize,
-    main_frame: wgpu::Buffer,
-    sky_frame: wgpu::Buffer,
-    main_group: wgpu::BindGroup,
-    sky_group: wgpu::BindGroup,
+    main: FrameSet,
+    sky: FrameSet,
+    mirror: FrameSet,
+    mirror_sky: FrameSet,
+    water: Water,
+    started: Instant,
+    water_level: Option<f32>,
     targets: Option<Targets>,
     post: Post,
     tuning: Tuning,
@@ -135,23 +152,19 @@ pub struct Renderer {
 impl Renderer {
     pub fn new(device: wgpu::Device, queue: wgpu::Queue, format: wgpu::TextureFormat, quality: Quality, features: Features) -> Self {
         let (pipelines, frame_layout, layer_layout) = pipelines::build(&device, HDR);
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::Repeat,
-            address_mode_v: wgpu::AddressMode::Repeat,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::MipmapFilterMode::Linear,
-            anisotropy_clamp: 4,
-            ..Default::default()
-        });
-        let uniform = |label| device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: size_of::<FrameUniform>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-        let (main_frame, sky_frame) = (uniform("main frame"), uniform("sky frame"));
+        let sampler = repeat_sampler(&device);
+        let uniform = |label| device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: size_of::<SceneFrame>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         let bone_buffer = bone_storage(&device, BONES_AT_START);
         let opacity_buffer = opacity_storage(&device, OPACITIES_AT_START);
         let uv_buffer = uv_storage(&device, OPACITIES_AT_START);
         let instance_buffer = instance_storage(&device, INSTANCES_AT_START);
-        let main_group = frame_group(&device, &frame_layout, &main_frame, &bone_buffer, &opacity_buffer, &uv_buffer);
-        let sky_group = frame_group(&device, &frame_layout, &sky_frame, &bone_buffer, &opacity_buffer, &uv_buffer);
+        let set = |label| {
+            let buffer = uniform(label);
+            let group = frame_group(&device, &frame_layout, &buffer, &bone_buffer, &opacity_buffer, &uv_buffer);
+            FrameSet { buffer, group }
+        };
+        let (main, sky, mirror, mirror_sky) = (set("main frame"), set("sky frame"), set("mirrored frame"), set("mirrored sky frame"));
+        let water = Water::new(&device, HDR, &frame_layout);
         let particles = Particles::new(&device, HDR);
         let lightning = Lightning::new(&device, HDR, &particles);
         let weather = Weather::new(&device, HDR, &particles);
@@ -180,10 +193,13 @@ impl Renderer {
             uv_scratch: Vec::new(),
             instance_buffer,
             instance_capacity: INSTANCES_AT_START,
-            main_frame,
-            sky_frame,
-            main_group,
-            sky_group,
+            main,
+            sky,
+            mirror,
+            mirror_sky,
+            water,
+            started: Instant::now(),
+            water_level: None,
             targets: None,
             post,
             tuning: assets::tuning_of(features, TUNING),
@@ -221,43 +237,51 @@ impl Renderer {
         let indices = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some(path), contents: index_bytes, usage: wgpu::BufferUsages::INDEX });
         let mut draws = Vec::new();
         let mut opaque_first = false;
+        let mut water = false;
         for part in data.parts.iter().filter(|_| drawable) {
             for layer in &part.layers {
                 opaque_first |= layer.filter.index() < Filter::Blend.index();
-                let (kind, texture) = match &layer.paint {
-                    Paint::Texture(name) => match self.textures.get(&name.to_ascii_lowercase()) {
-                        Some(view) => (0, view),
-                        None => {
-                            self.problems.push(format!("{path}: texture {name} was never decoded, so its layer draws white"));
-                            (0, &self.white)
-                        }
-                    },
-                    Paint::TeamColor => (1, &self.white),
-                    Paint::TeamGlow => (2, &self.white),
-                    Paint::None => (0, &self.white),
-                };
-                let uniform = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("layer"),
-                    contents: bytemuck::bytes_of(&LayerUniform { kind, cutoff: if layer.filter == Filter::Cutout { 0.75 } else { 0.0 }, geoset_slot: part.opacity_slot, layer_slot: layer.opacity_slot, ignores_texture_alpha: u32::from(layer.filter == Filter::Additive), pad: [0; 3] }),
-                    usage: wgpu::BufferUsages::UNIFORM,
-                });
-                let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("layer"),
-                    layout: &self.layer_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(texture) },
-                        wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.sampler) },
-                        wgpu::BindGroupEntry { binding: 2, resource: uniform.as_entire_binding() },
-                    ],
-                });
-                draws.push(Draw { filter: layer.filter, first_index: part.first_index, index_count: part.index_count, bind_group });
+                water |= layer.paint == Paint::Water;
+                draws.push(self.layer_draw(path, part, layer));
             }
         }
         let emitters = self.register_emitters(path, data.emitters);
         let bones = data.rig.bone_count().max(1);
         self.model_ids.insert(path.to_string(), self.models.len());
-        self.models.push(GpuModel { vertices, indices, draws, opaque_first, skin: sprite::Skin::new(data.vertices, data.indices, &data.parts), rig: data.rig, bones, emitters });
+        self.models.push(GpuModel { vertices, indices, draws, opaque_first, skin: sprite::Skin::new(data.vertices, data.indices, &data.parts), rig: data.rig, bones, emitters, water });
         self.counts.push(0);
+    }
+
+    /// The draw of one layer of a part: a water layer carries no bind group, any other binds its texture and its slots.
+    fn layer_draw(&mut self, path: &str, part: &model::Part, layer: &model::Layer) -> Draw {
+        let draw = |bind_group| Draw { filter: layer.filter, first_index: part.first_index, index_count: part.index_count, bind_group };
+        let (kind, texture) = match &layer.paint {
+            Paint::Water => return draw(None),
+            Paint::Texture(name) => match self.textures.get(&name.to_ascii_lowercase()) {
+                Some(view) => (0, view),
+                None => {
+                    self.problems.push(format!("{path}: texture {name} was never decoded, so its layer draws white"));
+                    (0, &self.white)
+                }
+            },
+            Paint::TeamColor => (1, &self.white),
+            Paint::TeamGlow => (2, &self.white),
+            Paint::None => (0, &self.white),
+        };
+        let uniform = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("layer"),
+            contents: bytemuck::bytes_of(&LayerUniform { kind, cutoff: if layer.filter == Filter::Cutout { 0.75 } else { 0.0 }, geoset_slot: part.opacity_slot, layer_slot: layer.opacity_slot, ignores_texture_alpha: u32::from(layer.filter == Filter::Additive), unshaded: u32::from(layer.unshaded), pad: [0; 2] }),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        draw(Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("layer"),
+            layout: &self.layer_layout,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(texture) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.sampler) },
+                wgpu::BindGroupEntry { binding: 2, resource: uniform.as_entire_binding() },
+            ],
+        })))
     }
 
     pub fn has_model(&self, path: &str) -> bool {
@@ -273,7 +297,13 @@ impl Renderer {
         self.targets = Some(targets);
     }
 
+    /// The six shared frame fields alone, for the passes that read no water state.
     fn frame_uniform(scene: &Scene, aspect: f32, window: f32, far: f32) -> FrameUniform {
+        Self::scene_frame(scene, aspect, window, far, (1, 1), 0.0, false, Glow::NONE).base
+    }
+
+    /// `mirror` is set when the frame is the mirrored copy drawn for the reflection, whose geometry below `plane` is cut away.
+    fn scene_frame(scene: &Scene, aspect: f32, window: f32, far: f32, size: (u32, u32), plane: f32, mirror: bool, glow: Glow) -> SceneFrame {
         let camera = &scene.camera;
         let view = camera.view;
         let (light_toward, light_key, light_ambient) = match &scene.light {
@@ -284,15 +314,29 @@ impl Renderer {
             Some(fog) => ([fog.color[0], fog.color[1], fog.color[2], 1.0], [fog.start, fog.end, fog.max, 0.0]),
             None => ([0.0; 4], [0.0, 1.0, 1.0, 0.0]),
         };
-        FrameUniform { view_projection: multiply(&projection(camera.tangent, camera.near, far, aspect, window, camera.rise), &view), light_toward, light_key, light_ambient, fog_color, fog_range }
+        let flat = multiply(&projection(camera.tangent, camera.near, far, aspect, window, camera.rise), &view);
+        let view_projection = if mirror { multiply(&flat, &mirrored(plane)) } else { flat };
+        let (width, height) = (size.0 as f32, size.1 as f32);
+        SceneFrame {
+            base: FrameUniform { view_projection, light_toward, light_key, light_ambient, fog_color, fog_range },
+            eye: [camera.eye[0], camera.eye[1], camera.eye[2], 0.0],
+            camera: [camera.near, far, plane, f32::from(u8::from(mirror))],
+            screen: [width, height, 1.0 / width.max(1.0), 1.0 / height.max(1.0)],
+            glow: glow.light,
+            glow_at: glow.at,
+        }
     }
 
     /// Lays every resident pose out by model: bone matrices into the scratch, instances grouped so each model's are contiguous.
     fn layout(&mut self, poses: &[Pose]) {
         self.counts.iter_mut().for_each(|count| *count = 0);
         self.order.clear();
+        self.water_level = None;
         for pose in poses {
             if let Some(&id) = self.model_ids.get(pose.model.as_str()) {
+                if self.models[id].water && self.water_level.is_none() {
+                    self.water_level = Some(pose.matrix[14]);
+                }
                 if self.counts[id] == 0 {
                     self.order.push(id);
                 }
@@ -336,22 +380,8 @@ impl Renderer {
         }
     }
 
-    fn draw_groups<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, groups: &[Group], opaque: bool) {
-        for group in groups.iter().filter(|group| self.models[group.model].opaque_first == opaque && !self.models[group.model].draws.is_empty()) {
-            let model = &self.models[group.model];
-            pass.set_vertex_buffer(0, model.vertices.slice(..));
-            pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-            pass.set_index_buffer(model.indices.slice(..), wgpu::IndexFormat::Uint32);
-            for draw in &model.draws {
-                pass.set_pipeline(&self.pipelines[draw.filter.index()]);
-                pass.set_bind_group(1, &draw.bind_group, &[]);
-                pass.draw_indexed(draw.first_index..draw.first_index + draw.index_count, 0, group.first..group.first + group.count);
-            }
-        }
-    }
-
     /// Poses the sky, grows the storage buffers that outgrew their capacity, uploads the scene's per-frame data and stages its particles and bolts.
-    fn prepare(&mut self, scene: &Scene, aspect: f32, window: f32) {
+    fn prepare(&mut self, scene: &Scene, aspect: f32, window: f32, size: (u32, u32)) {
         self.layout(&scene.poses);
         let sky = scene.sky.as_ref().and_then(|pose| self.model_ids.get(pose.model.as_str()).map(|&id| (id, pose)));
         let sky_base = self.bone_scratch.len();
@@ -368,8 +398,7 @@ impl Renderer {
             self.bone_buffer = bone_storage(&self.device, self.bone_capacity);
             self.opacity_buffer = opacity_storage(&self.device, self.opacity_capacity);
             self.uv_buffer = uv_storage(&self.device, self.opacity_capacity);
-            self.main_group = frame_group(&self.device, &self.frame_layout, &self.main_frame, &self.bone_buffer, &self.opacity_buffer, &self.uv_buffer);
-            self.sky_group = frame_group(&self.device, &self.frame_layout, &self.sky_frame, &self.bone_buffer, &self.opacity_buffer, &self.uv_buffer);
+            self.bind_frames();
         }
         let sky_instance = self.instance_scratch.len();
         if let Some((_, pose)) = sky {
@@ -387,13 +416,18 @@ impl Renderer {
         self.queue.write_buffer(&self.opacity_buffer, 0, bytemuck::cast_slice(&self.opacity_scratch));
         self.queue.write_buffer(&self.uv_buffer, 0, bytemuck::cast_slice(&self.uv_scratch));
         self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&self.instance_scratch));
-        self.queue.write_buffer(&self.main_frame, 0, bytemuck::bytes_of(&Self::frame_uniform(scene, aspect, window, scene.camera.far)));
-        self.queue.write_buffer(&self.sky_frame, 0, bytemuck::bytes_of(&Self::frame_uniform(scene, aspect, window, scene.camera.sky_far)));
+        let plane = self.water_level.filter(|_| self.water.ready()).unwrap_or(0.0);
+        let seconds = self.started.elapsed().as_secs_f32();
+        let glow = if self.water_level.is_some() && self.water.ready() { scene.water.glow(plane, seconds) } else { Glow::NONE };
+        let frames = [(&self.main, scene.camera.far, false), (&self.sky, scene.camera.sky_far, false), (&self.mirror, scene.camera.far, true), (&self.mirror_sky, scene.camera.sky_far, true)];
+        for (set, far, mirror) in frames {
+            self.queue.write_buffer(&set.buffer, 0, bytemuck::bytes_of(&Self::scene_frame(scene, aspect, window, far, size, plane, mirror, glow)));
+        }
         let view = &scene.camera.view;
         let eye = scene.camera.eye;
         self.particles.finish(
             &self.queue,
-            &ParticleFrame { base: Self::frame_uniform(scene, aspect, window, scene.camera.far), right: [view[0], view[4], view[8], 0.0], up: [view[1], view[5], view[9], 0.0], eye_and_now: [eye[0], eye[1], eye[2], 0.0] },
+            &ParticleFrame { base: Self::scene_frame(scene, aspect, window, scene.camera.far, size, plane, false, glow).base, right: [view[0], view[4], view[8], 0.0], up: [view[1], view[5], view[9], 0.0], eye_and_now: [eye[0], eye[1], eye[2], 0.0] },
         );
         self.problems.append(&mut self.particles.problems);
         self.lightning.stage(&self.queue, &scene.lightnings);
@@ -401,65 +435,7 @@ impl Renderer {
         self.sky_group_of = sky.map(|(id, _)| Group { model: id, first: sky_instance as u32, count: 1 });
     }
 
-    /// Draws `scene` into `target`, a surface view of `size` in this renderer's format, in the encoder's order: the sky, then the world.
-    /// The world fills the window and keeps the reach of the `aspect` picture (the game's width over its height) in view: a taller or wider window shows more world, never bars.
-    pub fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, size: (u32, u32), aspect: f32, scene: &Scene) {
-        self.fit_targets(size);
-        self.particles.begin(scene.frame);
-        let viewport = [0.0, 0.0, size.0 as f32, size.1 as f32];
-        let window = size.0 as f32 / size.1.max(1) as f32;
-        self.prepare(scene, aspect, window);
-
-        let clear = (if scene.clear == [0.0; 3] { CLEAR } else { scene.clear.map(f64::from) }).map(linear_of);
-        let look = Look::of(scene, aspect, fitted(size, aspect).map(|edge| edge as f32), self.post.srgb_surface(), &self.tuning);
-        let procedural_sky = scene.sky.is_some() || scene.fog.is_some();
-        self.post.prepare(&look);
-        let targets = self.targets.as_ref().expect("fit_targets ran");
-        let begin = |encoder: &'_ mut wgpu::CommandEncoder, color_load: wgpu::LoadOp<wgpu::Color>, resolve: bool| -> wgpu::RenderPass<'static> {
-            encoder
-                .begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("scene"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &targets.color,
-                        depth_slice: None,
-                        resolve_target: resolve.then_some(&targets.resolved),
-                        ops: wgpu::Operations { load: color_load, store: wgpu::StoreOp::Store },
-                    })],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &targets.depth,
-                        depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }),
-                        stencil_ops: None,
-                    }),
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                })
-                .forget_lifetime()
-        };
-        {
-            let mut pass = begin(encoder, wgpu::LoadOp::Clear(wgpu::Color { r: clear[0], g: clear[1], b: clear[2], a: 1.0 }), false);
-            pass.set_viewport(viewport[0], viewport[1], viewport[2], viewport[3], 0.0, 1.0);
-            if procedural_sky {
-                self.post.draw_sky(&mut pass);
-            } else if let Some(group) = &self.sky_group_of {
-                pass.set_bind_group(0, &self.sky_group, &[]);
-                self.draw_groups(&mut pass, std::slice::from_ref(group), true);
-                self.draw_groups(&mut pass, std::slice::from_ref(group), false);
-            }
-        }
-        let mut pass = begin(encoder, wgpu::LoadOp::Load, true);
-        pass.set_viewport(viewport[0], viewport[1], viewport[2], viewport[3], 0.0, 1.0);
-        pass.set_bind_group(0, &self.main_group, &[]);
-        self.draw_groups(&mut pass, &self.groups, true);
-        self.draw_groups(&mut pass, &self.groups, false);
-        self.particles.draw(&mut pass);
-        self.lightning.draw(&mut pass, &self.particles);
-        self.weather.draw(&mut pass, &self.particles);
-        drop(pass);
-        self.post.encode(encoder, target);
-    }
 }
-
 
 impl crate::ui::UiTextures for Renderer {
     fn view(&self, path: &str) -> Option<&wgpu::TextureView> {

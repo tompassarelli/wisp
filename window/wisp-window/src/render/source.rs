@@ -100,9 +100,30 @@ fn paint(model: &model::Model, texture_id: i32) -> Paint {
     match texture.replaceable_id {
         TEAM_COLOR => Paint::TeamColor,
         TEAM_GLOW => Paint::TeamGlow,
+        0 if super::water::is_frame(&texture.image) => Paint::Water,
         0 if !texture.image.is_empty() => Paint::Texture(texture.image.clone()),
         _ => Paint::None,
     }
+}
+
+/// The layers a geoset draws, a layer that cycles through water frames counting as one water draw.
+fn layers_of(model: &model::Model, material: usize, layer_draws: &[Vec<Vec<(Option<i32>, u32)>>], geoset_index: usize) -> Vec<Layer> {
+    let Some(found) = model.materials.get(material) else {
+        return vec![Layer { paint: Paint::None, filter: Filter::Opaque, opacity_slot: geoset_index as u32, unshaded: false }];
+    };
+    let mut layers = Vec::new();
+    for (layer, draws) in found.layers.iter().zip(&layer_draws[material]) {
+        let unshaded = layer.shading_flags & model::shading::UNSHADED != 0;
+        let mut water_drawn = false;
+        for &(variant, opacity_slot) in draws {
+            let paint = paint(model, variant.unwrap_or(layer.texture_id));
+            if paint == Paint::Water && std::mem::replace(&mut water_drawn, true) {
+                continue;
+            }
+            layers.push(Layer { paint, filter: Filter::from_index(layer.filter_mode), opacity_slot, unshaded });
+        }
+    }
+    layers
 }
 
 pub fn model(bytes: &[u8], quality: Quality) -> Result<ModelData, String> {
@@ -149,19 +170,7 @@ pub fn model(bytes: &[u8], quality: Quality) -> Result<ModelData, String> {
             });
         }
         indices.extend(geoset.indices.iter().map(|&index| base + index));
-        let layers = model
-            .materials
-            .get(geoset.material_id as usize)
-            .map(|material| {
-                let mut layers = Vec::new();
-                for (layer, draws) in material.layers.iter().zip(&layer_draws[geoset.material_id as usize]) {
-                    for &(variant, opacity_slot) in draws {
-                        layers.push(Layer { paint: paint(model, variant.unwrap_or(layer.texture_id)), filter: Filter::from_index(layer.filter_mode), opacity_slot });
-                    }
-                }
-                layers
-            })
-            .unwrap_or_else(|| vec![Layer { paint: Paint::None, filter: Filter::Opaque, opacity_slot: geoset_index as u32 }]);
+        let layers = layers_of(model, geoset.material_id as usize, &layer_draws, geoset_index);
         parts.push(Part { opacity_slot: geoset_index as u32, first_index, index_count: indices.len() as u32 - first_index, layers });
     }
     let emitters = model.emitters.iter().map(|emitter| ModelEmitter { spec: emitter.clone(), paint: paint(model, emitter.texture_id) }).collect();

@@ -49,6 +49,11 @@ pub struct Geoset {
     pub material_id: u32,
 }
 
+/// A layer's shading flag bits (the MDX `Layer.shading`).
+pub mod shading {
+    pub const UNSHADED: u32 = 1;
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Layer {
     pub filter_mode: u32,

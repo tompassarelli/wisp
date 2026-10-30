@@ -47,6 +47,8 @@ pub enum Paint {
     Texture(String),
     TeamColor,
     TeamGlow,
+    /// One of Warcraft's water frames: the layer is drawn by the water pass, not as a textured layer.
+    Water,
     None,
 }
 
@@ -55,6 +57,8 @@ pub struct Layer {
     pub filter: Filter,
     /// Where this layer's opacity sits in a pose's opacities (`Rig::opacities`).
     pub opacity_slot: u32,
+    /// Drawn without the scene light, as a liquid or a glow is.
+    pub unshaded: bool,
 }
 
 /// A run of indices drawn with one material's layers, one draw per layer.

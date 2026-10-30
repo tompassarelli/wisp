@@ -14,6 +14,14 @@ pub fn multiply(a: &Mat4, b: &Mat4) -> Mat4 {
     out
 }
 
+/// The reflection in the horizontal plane at height `z`.
+pub fn mirrored(z: f32) -> Mat4 {
+    let mut out = IDENTITY;
+    out[10] = -1.0;
+    out[14] = 2.0 * z;
+    out
+}
+
 /// WebGL clip space spans z in [-1, 1]; wgpu's spans [0, 1]. Left-multiplying a GL projection maps one to the other.
 const GL_TO_WGPU: Mat4 = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.5, 1.0];
 
@@ -53,6 +61,13 @@ mod tests {
         assert!(tall[5] < level[5]);
         assert_eq!(wide[5], level[5]);
         assert!(wide[0] < level[0]);
+    }
+
+    #[test]
+    fn a_mirrored_point_keeps_its_distance_from_the_plane() {
+        let at = |z: f32| multiply(&mirrored(10.0), &[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, z, 1.0])[14];
+        assert_eq!(at(14.0), 6.0);
+        assert_eq!(at(10.0), 10.0);
     }
 
     #[test]

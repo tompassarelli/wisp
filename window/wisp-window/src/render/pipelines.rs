@@ -9,6 +9,14 @@ pub(super) fn entry(binding: u32, visibility: wgpu::ShaderStages, ty: wgpu::Bind
     wgpu::BindGroupLayoutEntry { binding, visibility, ty, count: None }
 }
 
+pub(super) const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Uint16x4, 4 => Float32x4];
+pub(super) const INSTANCE_ATTRIBUTES: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4, 9 => Float32x4, 10 => Float32x4, 11 => Uint32x2];
+
+/// A shader's body with the frame, vertex and instance declarations every model-shaped pipeline shares.
+pub(super) fn shader_source(body: &str) -> String {
+    format!("{}\n{body}", include_str!("common.wgsl"))
+}
+
 fn uniform_type() -> wgpu::BindingType {
     wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }
 }
@@ -32,7 +40,7 @@ pub(super) fn blend_of(filter: Filter) -> Option<wgpu::BlendState> {
 
 /// The seven pipelines in `FILTERS` order, and the frame and layer bind group layouts they use.
 pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat) -> (Vec<wgpu::RenderPipeline>, wgpu::BindGroupLayout, wgpu::BindGroupLayout) {
-    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("model"), source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()) });
+    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("model"), source: wgpu::ShaderSource::Wgsl(shader_source(include_str!("shader.wgsl")).into()) });
     let both = wgpu::ShaderStages::VERTEX_FRAGMENT;
     let frame_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("frame"),
@@ -52,8 +60,6 @@ pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat) -> (Vec<
         ],
     });
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("model"), bind_group_layouts: &[Some(&frame_layout), Some(&layer_layout)], immediate_size: 0 });
-    let vertex_attributes = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Uint16x4, 4 => Float32x4];
-    let instance_attributes = wgpu::vertex_attr_array![5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4, 9 => Float32x4, 10 => Float32x4, 11 => Uint32x2];
     let pipelines = FILTERS
         .iter()
         .map(|&filter| {
@@ -65,8 +71,8 @@ pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat) -> (Vec<
                     entry_point: Some("vertex_main"),
                     compilation_options: Default::default(),
                     buffers: &[
-                        Some(wgpu::VertexBufferLayout { array_stride: size_of::<Vertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &vertex_attributes }),
-                        Some(wgpu::VertexBufferLayout { array_stride: size_of::<Instance>() as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &instance_attributes }),
+                        Some(wgpu::VertexBufferLayout { array_stride: size_of::<Vertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &VERTEX_ATTRIBUTES }),
+                        Some(wgpu::VertexBufferLayout { array_stride: size_of::<Instance>() as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &INSTANCE_ATTRIBUTES }),
                     ],
                 },
                 fragment: Some(wgpu::FragmentState {

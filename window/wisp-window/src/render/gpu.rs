@@ -66,6 +66,49 @@ pub(super) fn upload(device: &wgpu::Device, queue: &wgpu::Queue, image: &Image) 
     texture.create_view(&Default::default())
 }
 
+/// The images as the layers of one array texture, each with its whole mip chain; they must share a size.
+pub(super) fn upload_layers(device: &wgpu::Device, queue: &wgpu::Queue, images: &[&Image]) -> wgpu::TextureView {
+    let first = images[0];
+    let levels = 32 - first.width.max(first.height).max(1).leading_zeros();
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("water frames"),
+        size: wgpu::Extent3d { width: first.width, height: first.height, depth_or_array_layers: images.len() as u32 },
+        mip_level_count: levels,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    for (layer, image) in images.iter().enumerate() {
+        let mut level = Image { width: image.width, height: image.height, rgba: Vec::new() };
+        for mip in 0..levels {
+            let source = if mip == 0 { *image } else { &level };
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo { texture: &texture, mip_level: mip, origin: wgpu::Origin3d { x: 0, y: 0, z: layer as u32 }, aspect: wgpu::TextureAspect::All },
+                &source.rgba,
+                wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(source.width * 4), rows_per_image: Some(source.height) },
+                wgpu::Extent3d { width: source.width, height: source.height, depth_or_array_layers: 1 },
+            );
+            level = halved(source);
+        }
+    }
+    texture.create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() })
+}
+
+/// The sampler model layers read with: repeating, linear, trilinear and anisotropic.
+pub(super) fn repeat_sampler(device: &wgpu::Device) -> wgpu::Sampler {
+    device.create_sampler(&wgpu::SamplerDescriptor {
+        address_mode_u: wgpu::AddressMode::Repeat,
+        address_mode_v: wgpu::AddressMode::Repeat,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::MipmapFilterMode::Linear,
+        anisotropy_clamp: 16,
+        ..Default::default()
+    })
+}
+
 pub(super) fn white() -> Image {
     Image { width: 1, height: 1, rgba: vec![255; 4] }
 }

@@ -23,6 +23,8 @@ interface NativePose {
 }
 
 const TEAMS = [[255, 3, 3], [0, 66, 255], [28, 230, 185], [84, 0, 129], [255, 252, 1], [254, 138, 14], [32, 192, 0], [229, 91, 176], [149, 150, 151], [126, 191, 241], [16, 98, 70], [78, 42, 4]];
+/** Warcraft ships 45 water frames per tileset; the push stops at the first one the install lacks. */
+const MAX_WATER_FRAMES = 64;
 const NEUTRAL_TEAM = [160, 160, 160];
 
 export type AssetReader = (path: string) => Promise<Uint8Array | undefined>;
@@ -65,12 +67,25 @@ export function createModelLibrary(read: AssetReader, sink: AssetSink, report: (
     pushed.set(path, started);
     return started;
   };
+  const isWaterFrame = (image: string) => /^replaceabletextures[\\/]water[\\/]water\d+\.blp$/i.test(image);
+  const pushWaterFrames = async () => {
+    for (let index = 0; index < MAX_WATER_FRAMES; index++) {
+      const path = `ReplaceableTextures\\Water\\Water${String(index).padStart(2, "0")}.blp`;
+      if (pushed.has(path)) continue;
+      const bytes = await read(path).catch(() => undefined);
+      if (bytes === undefined) return;
+      pushed.set(path, Promise.resolve());
+      sink.asset(path, bytes);
+    }
+  };
   const load = async (path: string) => {
     const bytes = await read(path);
     if (bytes === undefined) throw new Error("missing model");
     const parsable = parsableModel(bytes).bytes;
     const model = parseMDX(parsable.slice().buffer);
-    await Promise.all(model.Textures.filter((texture) => texture.Image !== "" && (texture.ReplaceableId ?? 0) === 0).map((texture) => push(texture.Image)));
+    const painted = model.Textures.filter((texture) => texture.Image !== "" && (texture.ReplaceableId ?? 0) === 0);
+    await Promise.all(painted.filter((texture) => !isWaterFrame(texture.Image)).map((texture) => push(texture.Image)));
+    if (painted.some((texture) => isWaterFrame(texture.Image))) await pushWaterFrames();
     sink.asset(path, parsable);
     const box = (low: ArrayLike<number> | null | undefined, high: ArrayLike<number> | null | undefined): Extent | undefined =>
       low && high && (high[0] ?? 0) > (low[0] ?? 0) ? [low[0] ?? 0, low[1] ?? 0, low[2] ?? 0, high[0] ?? 0, high[1] ?? 0, high[2] ?? 0] : undefined;
@@ -130,6 +145,13 @@ function fogOf(scene: RenderScene) {
   return { color: fog.color, start: height ? fog.linearStart ?? fog.zStart : fog.zStart, end: height ? fog.linearEnd ?? fog.zEnd : fog.zEnd, max: fog.maxLinearDensity ?? 1 };
 }
 
+/** Which liquid the water pass draws, told from the model paths a scene names: a lava or poison model asks for its own look, anything else is water. */
+export function liquidPreset(models: readonly string[]): "water" | "poison" | "lava" {
+  if (models.some((model) => /lava|magma|molten/i.test(model))) return "lava";
+  if (models.some((model) => /poison|plague|ooze|slime|toxic/i.test(model))) return "poison";
+  return "water";
+}
+
 /** The scene the native renderer draws: the camera, the fog, the sky and each model that is already loaded, with the sequence and frame the game's animation rules pick for it. */
 export function drawScene(scene: RenderScene, library: ModelLibrary) {
   const view = camera(scene, 1);
@@ -147,7 +169,7 @@ export function drawScene(scene: RenderScene, library: ModelLibrary) {
   const environment = scene.environment;
   const sky = environment.sky !== "" && environment.skyVisible ? place({ handle: { id: 0 }, model: environment.sky, x: 0, y: 0, z: 0, alpha: 255, scale: 1, flat: false, animation: undefined, subAnimations: [], animationElapsed: 0, animationClock: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1], yaw: 0, pitch: 0, roll: 0 } as unknown as DrawnPose) : undefined;
   const poses = drawnPoses(scene.effects, view.eye, view.far, scene.world).flatMap((pose) => place(pose) ?? []);
-  return { frame: scene.frame, pending: library.loading(), camera: { view: Array.from(view.view), eye: view.eye, tangent: view.shadow.tangent, near: view.near, far: view.far, skyFar: SKY_FAR, rise: NATIVE_RISE }, fog: fogOf(scene), sky, poses, lightnings: (scene.lightnings ?? []).map((bolt) => ({ from: bolt.from, to: bolt.to, color: bolt.color })), weathers: (scene.weathers ?? []).map((weather) => ({ id: weather.id, rect: weather.rect })), ui };
+  return { frame: scene.frame, pending: library.loading(), camera: { view: Array.from(view.view), eye: view.eye, tangent: view.shadow.tangent, near: view.near, far: view.far, skyFar: SKY_FAR, rise: NATIVE_RISE }, fog: fogOf(scene), sky, poses, lightnings: (scene.lightnings ?? []).map((bolt) => ({ from: bolt.from, to: bolt.to, color: bolt.color })), weathers: (scene.weathers ?? []).map((weather) => ({ id: weather.id, rect: weather.rect })), ui, water: { preset: liquidPreset(poses.map((pose) => pose.model)) } };
 }
 
 const PRELOAD_MS = 120_000;

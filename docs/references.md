@@ -94,6 +94,13 @@ adopted for the follow-up box, which ships its notice.
   carries an MIT-style notice, the others were not read). Made for pixel
   art. Not run; not adopted.
 
+## Technique references
+
+Read for method only (2026-10-31). Neither states a licence, so no code, shader text or texture is copied; the water pass in `window/wisp-window/src/render/water.wgsl` is written here and its textures are Warcraft's own water frames read from the player's install.
+
+- Alex Tardif, "Water Walkthrough", https://alextardif.com/Water.html. Gerstner waves with edge dampening, two scrolling normal layers combined in tangent space, noise-broken specular glints, reflections blended by Fresnel falloff, normal-driven refraction with an above-surface rejection test, depth-softened contact alpha, crest and shore foam.
+- keobkeig, "Realistic Water Tutorial", https://keobkeig.dev/tutorials/realistic-water-tutorial. Reoriented normal blending of the scrolling layers, Fresnel with F0 0.02, projected caustics from two scrolling layers combined with min, Beer-Lambert depth absorption, and the rule that the Gerstner sum of steepness, wavenumber and amplitude stays under 1.
+
 ## Tools
 
 - PresentMon (Intel, MIT), https://github.com/GameTechDev/PresentMon. Run
