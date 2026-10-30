@@ -26,6 +26,12 @@ export interface Frame extends Handle {
   scale: number;
   width: number;
   height: number;
+  /** The model a SPRITE frame shows (`BlzFrameSetModel`), its camera index and the sequence `BlzFrameSetSpriteAnimate` picks. */
+  model: string;
+  modelCamera: number;
+  spriteAnimation: number;
+  /** Seconds into the model's timeline a game that scrubs sets with `WispFrameSetSpriteTime`; negative while the sprite loops its sequence. */
+  spriteTime: number;
 
   readonly points: Map<unknown, { readonly x: number; readonly y: number }>;
 
@@ -132,6 +138,8 @@ export interface FrameSnapshot {
   readonly alignment: TextAlignment | undefined;
   readonly scale: number;
   readonly plain: boolean;
+  /** Set only on a frame that shows a model: the path, the model's camera index and the sequence index to play. */
+  readonly sprite?: { readonly model: string; readonly camera: number; readonly animation: number; readonly time: number };
 }
 
 export class Frames {
@@ -149,6 +157,7 @@ export class Frames {
       width: 0, height: 0, points: new Map(), anchors: [], destroyed: false,
       texture: "", color: 0xffffffff, textColor: 0xffffffff, alpha: 255,
       font: { file: "", height: 0, flags: 0 }, alignment: undefined, scale: 1, plain: true,
+      model: "", modelCamera: 0, spriteAnimation: 0, spriteTime: -1,
     };
     this.all.push(frame);
     return frame;
@@ -242,7 +251,8 @@ export class Frames {
       snapshots.push({ handle: { kind: frame.kind, id: frame.id }, name: frame.name, type: frame.type,
         parentId: frame.parent?.id, rectangle: this.rectangle(frame), text: frame.text, texture: frame.texture,
         color: frame.color, textColor: frame.textColor, alpha: frame.alpha, visible, level: this.drawLevel(frame),
-        font: frame.font, alignment: textAlignment(frame.alignment ?? (frame.type.toLowerCase().includes("button") ? { vertical: "MIDDLE", horizontal: "CENTER" } : undefined)), scale: frame.scale, plain: frame.plain });
+        font: frame.font, alignment: textAlignment(frame.alignment ?? (frame.type.toLowerCase().includes("button") ? { vertical: "MIDDLE", horizontal: "CENTER" } : undefined)), scale: frame.scale, plain: frame.plain,
+        ...(frame.model === "" ? {} : { sprite: { model: frame.model, camera: frame.modelCamera, animation: frame.spriteAnimation, time: frame.spriteTime } }) });
     }
     return snapshots;
   }

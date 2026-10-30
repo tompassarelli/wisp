@@ -18,3 +18,8 @@ test("uiAssets_names_each_file_once", () => {
   const frames = [frame({ texture: "a.tga" }), frame({ texture: "a.tga" }), frame({ text: "x", font: ttf }), frame({ text: "y", font: ttf }), frame({ text: "z", font: { file: "MasterFont", height: 0, flags: 0 } }), frame({ texture: "b.blp", font: ttf })];
   expect(uiAssets(frames)).toEqual(["a.tga", "Fonts\\FRIZQT__.TTF", "b.blp"]);
 });
+
+test("nativeUi_keeps_a_frame_that_shows_a_model_though_it_has_no_texture_or_text", () => {
+  const sprite = frame({ name: "card", type: "SPRITE", sprite: { model: "Fighter.mdx", camera: 0, animation: 0, time: -1 } });
+  expect(nativeUi([sprite, frame({ name: "bare" })]).map((each) => each.name)).toEqual(["card"]);
+});

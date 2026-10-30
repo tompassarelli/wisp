@@ -15,6 +15,7 @@ mod pipelines;
 mod scene;
 mod targets;
 pub mod source;
+mod sprite;
 pub mod tessellate;
 mod uniforms;
 
@@ -38,6 +39,7 @@ use targets::Targets;
 use crate::post::{Look, Post, Tuning, TUNING};
 
 pub use gpu::fitted;
+pub use sprite::Shot;
 pub use scene::Scene as DrawScene;
 
 const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -107,6 +109,7 @@ pub struct Renderer {
     targets: Option<Targets>,
     post: Post,
     tuning: Tuning,
+    sprites: Vec<sprite::Slot>,
     bone_scratch: Vec<Mat4>,
     instance_scratch: Vec<Instance>,
     counts: Vec<u32>,
@@ -179,6 +182,7 @@ impl Renderer {
             targets: None,
             post,
             tuning: assets::tuning_of(features, TUNING),
+            sprites: Vec::new(),
             bone_scratch: Vec::new(),
             instance_scratch: Vec::new(),
             counts: Vec::new(),
@@ -459,6 +463,11 @@ impl Renderer {
 
 impl crate::ui::UiTextures for Renderer {
     fn view(&self, path: &str) -> Option<&wgpu::TextureView> {
+        if let Some(rest) = path.strip_prefix("sprite/") {
+            let (index, size) = rest.split_once('/')?;
+            let (width, height) = size.split_once('x')?;
+            return self.sprite_view(index.parse().ok()?, (width.parse().ok()?, height.parse().ok()?));
+        }
         self.textures.get(&path.to_ascii_lowercase())
     }
 }

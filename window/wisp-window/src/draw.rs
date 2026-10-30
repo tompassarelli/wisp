@@ -301,10 +301,14 @@ impl Gpu {
             self.renderer.draw(&mut encoder, &view, size, self.aspect, scene);
             let [left, top, width, height] = fitted(size, self.aspect);
             self.ui.set_overlay(self.menu.scene(&self.settings));
-            self.ui.draw(&mut encoder, &view, size, [left as f32, top as f32, width as f32, height as f32], &self.renderer);
+            let area = [left as f32, top as f32, width as f32, height as f32];
+            self.ui.each_sprite(area, |index, extent, shot| self.renderer.draw_sprite(&mut encoder, index, extent, shot, scene.light.as_ref()));
+            self.ui.draw(&mut encoder, &view, size, area, &self.renderer);
             self.queue.submit([encoder.finish()]);
-            let ready = scene.pending == 0 && (scene.poses.is_empty() || scene.poses.iter().any(|pose| self.renderer.has_model(&pose.model)));
-            if ready && frame >= self.capture.as_ref().map_or(u32::MAX, |capture| capture.after) {
+            let after = self.capture.as_ref().map_or(u32::MAX, |capture| capture.after);
+            let modelled = scene.poses.is_empty() || scene.poses.iter().any(|pose| self.renderer.has_model(&pose.model));
+            let ready = scene.pending == 0 && modelled;
+            if ready && (scene.frame as u64).max(step) >= after as u64 {
                 self.save_capture(&texture.texture);
             }
             if ready && frame >= SWEEP_AFTER {

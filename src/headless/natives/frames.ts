@@ -72,6 +72,18 @@ export function frameNatives({ handle, frames, gameUiOrigin }: FrameContext): Re
     BlzFrameSetTexture: (frame: unknown, texture: string) => {
       if (isFrame(frame)) frame.texture = texture;
     },
+    BlzFrameSetModel: (frame: unknown, model: string, camera: number) => {
+      if (isFrame(frame)) {
+        frame.model = model;
+        frame.modelCamera = camera;
+      }
+    },
+    BlzFrameSetSpriteAnimate: (frame: unknown, animation: number) => {
+      if (isFrame(frame)) frame.spriteAnimation = animation;
+    },
+    WispFrameSetSpriteTime: (frame: unknown, seconds: number) => {
+      if (isFrame(frame)) frame.spriteTime = seconds;
+    },
     BlzFrameSetVertexColor: (frame: unknown, color: number) => {
       if (isFrame(frame)) frame.color = color;
     },

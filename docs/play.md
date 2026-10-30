@@ -296,6 +296,17 @@ display handed back. Closing the window ends the session.
 
 Press F10 in the window for the options screen: a Low, Medium, High or Ultra graphics preset and an Original or Remastered art choice (Remastered sharpens textures and rounds silhouettes, see [Remaster at load](native-window-plan.md#remaster-at-load)), saved per player and applied at once; see [Graphics settings](native-window-plan.md#graphics-settings). `WISP_REMASTER=off|standard|high` is a developer override of the art choice.
 
+A SPRITE frame (`BlzCreateFrameByType("SPRITE", ...)` with `BlzFrameSetModel` and
+`BlzFrameSetSpriteAnimate`) shows its model in the native window: the model is drawn into a
+target the size of the frame's rectangle in screen pixels, with four-sample antialiasing,
+and the UI pass draws that picture at the frame's level, so a portrait is as sharp as the
+window. The camera fits the sequence's box front-on, turned 20 degrees, and the key light
+comes from the camera's upper left with the scene's light colours (a neutral light when the
+scene has none). A game that scrubs a model's timeline calls `WispFrameSetSpriteTime(frame,
+seconds)`, a Wisp native the Warcraft build does not have, so it calls it only from native-window
+code. A sprite is drawn again only when its pose, size or light changes. Chrome does not draw
+SPRITE frames.
+
 `bun wisp window probe [--baseline] [--frames N] [--out DIR]` runs the sample map's scene
 through the production player and window on a display, for N frames after 120
 warm-up frames, and writes `probe.json` with the counts `missedPresents`,

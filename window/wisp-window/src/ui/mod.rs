@@ -15,6 +15,7 @@ pub use glyphs::is_font;
 use glyphs::{Glyphs, Slot, ATLAS_SIZE};
 use layout::{Line, Pixels};
 pub use scene::{Horizontal, UiFrame, UiScene, Vertical};
+use crate::render::Shot;
 
 const SHADER: &str = include_str!("shader.wgsl");
 const OUTLINE_ALPHA: f32 = 0.9;
@@ -184,6 +185,14 @@ impl UiRenderer {
         self.overlay = overlay;
     }
 
+    /// Calls `draw` for each sprite frame with its index in drawing order, the size of its rectangle in pixels and its pose, so the renderer can have its picture ready for `draw`.
+    pub fn each_sprite(&self, area: Pixels, mut draw: impl FnMut(usize, (u32, u32), &Shot)) {
+        let sprites = self.scene.frames.iter().filter_map(|frame| frame.sprite.as_ref().map(|shot| (shot, layout::pixels(frame.rectangle, area))));
+        for (index, (shot, pixels)) in sprites.enumerate() {
+            draw(index, sprite_size(pixels), shot);
+        }
+    }
+
     /// Registers a font file Bun pushed; false when `bytes` are not a face.
     pub fn add_font(&mut self, path: &str, bytes: &[u8]) -> bool {
         self.glyphs.add_font(path, bytes)
@@ -268,8 +277,17 @@ impl UiRenderer {
     fn build(&mut self, scene: &UiScene, overlay: &UiScene, area: Pixels, textures: &dyn UiTextures) -> bool {
         self.quads.clear();
         self.runs.clear();
+        let mut sprite = 0;
         for frame in scene.frames.iter().chain(&overlay.frames) {
             let pixels = layout::pixels(frame.rectangle, area);
+            if frame.sprite.is_some() {
+                let size = sprite_size(pixels);
+                if let Some(group) = self.image_group(&format!("sprite/{sprite}/{}x{}", size.0, size.1), textures) {
+                    let tint = rgba(0xffff_ffff, frame.alpha as f32 / 255.0);
+                    self.emit(Source::Image(group), Quad { rect: [pixels[0].round(), pixels[1].round(), size.0 as f32, size.1 as f32], uv: [0.0, 0.0, 1.0, 1.0], color: tint, coverage: 2 });
+                }
+                sprite += 1;
+            }
             let alpha = frame.alpha as f32 / 255.0;
             if frame.solid {
                 if pixels[2] > 0.0 && pixels[3] > 0.0 {
@@ -341,6 +359,11 @@ impl UiRenderer {
         self.lines = lines;
         !full
     }
+}
+
+/// A sprite's target holds one texel per screen pixel of its rectangle.
+fn sprite_size(pixels: Pixels) -> (u32, u32) {
+    ((pixels[2].round() as u32).clamp(1, 4096), (pixels[3].round() as u32).clamp(1, 4096))
 }
 
 fn glyph_quad(slot: Slot, pen: f32, baseline: f32, color: [f32; 4]) -> Quad {

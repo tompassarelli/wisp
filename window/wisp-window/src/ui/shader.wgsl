@@ -35,5 +35,10 @@ struct Out {
     if (input.coverage == 1u) {
         return vec4<f32>(input.color.rgb, input.color.a * sample.r);
     }
+    if (input.coverage == 2u) {
+        let lit = clamp(sample.rgb / max(sample.a, 0.0001), vec3<f32>(0.0), vec3<f32>(1.0));
+        let display = select(1.055 * pow(lit, vec3<f32>(1.0 / 2.4)) - 0.055, lit * 12.92, lit <= vec3<f32>(0.0031308));
+        return vec4<f32>(display, sample.a) * input.color;
+    }
     return sample * input.color;
 }

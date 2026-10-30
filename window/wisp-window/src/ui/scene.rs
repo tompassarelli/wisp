@@ -4,6 +4,8 @@ use std::borrow::Cow;
 
 use serde::Deserialize;
 
+use crate::render::Shot;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct UiFrame {
     pub rectangle: [f32; 4],
@@ -22,6 +24,7 @@ pub struct UiFrame {
     pub plain: bool,
     /// Drawn as a flat rectangle of `color`, with no texture or text.
     pub solid: bool,
+    pub sprite: Option<Shot>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
@@ -72,6 +75,7 @@ struct Row<'a> {
     scale: f32,
     #[serde(default)]
     plain: bool,
+    sprite: Option<Shot>,
 }
 
 #[derive(Deserialize, Default)]
@@ -131,6 +135,7 @@ impl UiScene {
                     scale: row.scale,
                     plain: row.plain,
                     solid: false,
+                    sprite: row.sprite,
                 })
             })
             .collect();

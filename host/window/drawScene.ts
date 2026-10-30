@@ -5,6 +5,7 @@ import { parsableModel } from "../models/models";
 import { drawnPoses } from "../render/culling";
 import { nativeUi, uiAssets } from "./nativeUi";
 import { destroyedSample } from "./destroyedEffect";
+import type { FrameSnapshot } from "../../src/headless/frames";
 import type { DrawnPose, RenderScene } from "../render/renderScene";
 import { NATIVE_RISE, SKY_FAR, camera, transform } from "../render/screen";
 
@@ -31,11 +32,16 @@ export interface AssetSink {
   asset(path: string, bytes: Uint8Array): void;
 }
 
-type Entry = { readonly sequences: readonly AnimationSequence[] } | "loading" | "failed";
+/** A sequence's box (minimum then maximum corner) in model units. */
+export type Extent = readonly [number, number, number, number, number, number];
+
+type Entry = { readonly sequences: readonly AnimationSequence[]; readonly extents: readonly Extent[]; readonly extent: Extent } | "loading" | "failed";
 
 /** What the scene needs from the model library: the sequences of a model that is loaded, the pushing of the files its UI names, and how many files are still being read. */
 export interface ModelLibrary {
   sequences(path: string): readonly AnimationSequence[] | undefined;
+  /** The box a loaded model fills while playing `sequence`, else its whole-model box. */
+  extent(path: string, sequence: number): Extent | undefined;
   /** Reads and pushes each file once, so the window can draw the frames that name them. */
   show(paths: readonly string[]): void;
   loading(): number;
@@ -66,7 +72,14 @@ export function createModelLibrary(read: AssetReader, sink: AssetSink, report: (
     const model = parseMDX(parsable.slice().buffer);
     await Promise.all(model.Textures.filter((texture) => texture.Image !== "" && (texture.ReplaceableId ?? 0) === 0).map((texture) => push(texture.Image)));
     sink.asset(path, parsable);
-    return model.Sequences.map((sequence) => ({ name: sequence.Name, start: sequence.Interval[0] ?? 0, end: sequence.Interval[1] ?? 0, looping: !sequence.NonLooping, rarity: sequence.Rarity }));
+    const box = (low: ArrayLike<number> | null | undefined, high: ArrayLike<number> | null | undefined): Extent | undefined =>
+      low && high && (high[0] ?? 0) > (low[0] ?? 0) ? [low[0] ?? 0, low[1] ?? 0, low[2] ?? 0, high[0] ?? 0, high[1] ?? 0, high[2] ?? 0] : undefined;
+    const whole = box(model.Info.MinimumExtent, model.Info.MaximumExtent) ?? [-50, -50, 0, 50, 50, 100];
+    return {
+      sequences: model.Sequences.map((sequence) => ({ name: sequence.Name, start: sequence.Interval[0] ?? 0, end: sequence.Interval[1] ?? 0, looping: !sequence.NonLooping, rarity: sequence.Rarity })),
+      extents: model.Sequences.map((sequence) => box(sequence.MinimumExtent, sequence.MaximumExtent) ?? whole),
+      extent: whole,
+    };
   };
   let reading = 0;
   return {
@@ -83,12 +96,31 @@ export function createModelLibrary(read: AssetReader, sink: AssetSink, report: (
       if (known === undefined) {
         entries.set(path, "loading");
         reading++;
-        load(path).then((sequences) => { entries.set(path, { sequences }); reading--; }, (cause: unknown) => { entries.set(path, "failed"); reading--; report(`${path}: ${cause instanceof Error ? cause.message : String(cause)}`); });
+        load(path).then((loaded) => { entries.set(path, loaded); reading--; }, (cause: unknown) => { entries.set(path, "failed"); reading--; report(`${path}: ${cause instanceof Error ? cause.message : String(cause)}`); });
         return undefined;
       }
       return typeof known === "string" ? undefined : known.sequences;
     },
+    extent(path: string, sequence: number): Extent | undefined {
+      const known = entries.get(path);
+      return known === undefined || typeof known === "string" ? undefined : known.extents[sequence] ?? known.extent;
+    },
   };
+}
+
+/** A SPRITE frame as the window draws it: the sequence its animation index names, the frame it shows `seconds` into the screen and the box to fit the camera to. */
+function spriteOf(frame: FrameSnapshot, library: ModelLibrary, seconds: number) {
+  const sprite = frame.sprite;
+  if (sprite === undefined) return undefined;
+  const sequences = library.sequences(sprite.model);
+  const sequence = sequences?.[sprite.animation];
+  const bounds = library.extent(sprite.model, sprite.animation);
+  if (sequence === undefined || bounds === undefined) return undefined;
+  const length = sequence.end - sequence.start;
+  const into = seconds * 1000;
+  const time = sprite.time >= 0 ? sprite.time * 1000 : length <= 0 ? sequence.start : sequence.start + (sequence.looping ? into % length : Math.min(into, length));
+  const team = [(frame.color >> 16) & 255, (frame.color >> 8) & 255, frame.color & 255].map((value) => value / 255);
+  return { model: sprite.model, sequence: sprite.animation, frame: time, clock: seconds, bounds, team };
 }
 
 function fogOf(scene: RenderScene) {
@@ -109,8 +141,9 @@ export function drawScene(scene: RenderScene, library: ModelLibrary) {
     const sample = destroyed ?? animationSample(sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, pose.unit === true ? "unit" : "effect");
     return { id: pose.handle.id, model: pose.model, matrix: Array.from(transform(pose)), sequence: sample.sequence, frame: sample.frame, clock: pose.animationClock, alpha: pose.alpha / 255, color: pose.color.map((value) => value / 255), team: (TEAMS[pose.teamColor] ?? NEUTRAL_TEAM).map((value) => value / 255) };
   };
-  const ui = nativeUi(scene.ui);
-  library.show(uiAssets(ui));
+  const frames = nativeUi(scene.ui);
+  library.show(uiAssets(frames));
+  const ui = frames.map((frame) => (frame.sprite === undefined ? frame : { ...frame, sprite: spriteOf(frame, library, scene.frame / 60) }));
   const environment = scene.environment;
   const sky = environment.sky !== "" && environment.skyVisible ? place({ handle: { id: 0 }, model: environment.sky, x: 0, y: 0, z: 0, alpha: 255, scale: 1, flat: false, animation: undefined, subAnimations: [], animationElapsed: 0, animationClock: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1], yaw: 0, pitch: 0, roll: 0 } as unknown as DrawnPose) : undefined;
   const poses = drawnPoses(scene.effects, view.eye, view.far, scene.world).flatMap((pose) => place(pose) ?? []);
