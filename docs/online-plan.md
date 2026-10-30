@@ -230,6 +230,11 @@ Measured facts first, then the parts the audit must settle:
     (`requireGpuLease`, wisp:host/play/standalone.ts). That is a development
     guard, and a player build must run without it.
   - Shipping a player build is Tom's call (P5).
+- **The window.** The standalone window becomes a native Rust program in place
+  of Chrome, because Chrome can add one to two frames of input lag (Tom,
+  30 October 2026). Its plan and boxes W1 to W9 are
+  [native-window-plan.md](native-window-plan.md); the player build (P5) ships
+  that window, not Chrome.
 - **Simulation.** It must match the Warcraft build exactly. The native corpus
   (smashcraft:docs/commands/parity.md) already holds native replays whose
   frames carry fighter digests, and `parity corpus` replays them in Bun and
@@ -443,8 +448,9 @@ created by that box.
   reports matching checksums on all four.
 - **P5 Player build of the standalone window** ([smashcraft#807](https://github.com/tompassarelli/smashcraft/issues/807); cost and publication: Tom
   decides). A packaged player download that needs no source tree, Bun or
-  lease. Done when: `smashcraft-play --version` runs on a clean Windows
-  runner.
+  lease. It ships the native window, with no Chrome
+  ([native-window-plan.md](native-window-plan.md), "Player build"). Done when:
+  `smashcraft-play --version` runs on a clean Windows runner.
 - **L1 Relay peer room** ([wisp#100](https://github.com/tompassarelli/wisp/issues/100); wisp relay/). A clockless room kind that forwards
   opaque datagrams among 2 to 4 handshaken members under the existing
   limits, with the control messages' test vectors shared with TypeScript.
