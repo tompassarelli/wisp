@@ -69,7 +69,7 @@ pub struct Part {
 /// Writes one skinning matrix per bone for a sequence and frame, with no allocation once built.
 pub trait Rig: Send {
     fn bone_count(&self) -> usize;
-    fn pose(&mut self, sequence: i32, frame: f32, clock_ms: f32, out: &mut [Mat4]);
+    fn pose(&mut self, sequence: i32, frame: f32, clock_seconds: f32, out: &mut [Mat4]);
     /// How opaque each geoset (first) and each material layer (after) is at the pose the last `pose` call wrote: the geoset animations and layer alphas.
     fn opacities(&self) -> &[f32];
     /// How each geoset's and layer's texture coordinates are moved at that pose: two rows of `[xx, xy, 0, shift]` per slot, in the order of `opacities`.

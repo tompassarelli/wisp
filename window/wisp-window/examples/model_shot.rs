@@ -34,6 +34,7 @@ fn main() {
     println!("adapter {}", adapter.get_info().name);
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).expect("device");
     let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, Quality::Off, wisp_window::settings::Preset::High.features());
+    let clock: f32 = std::env::var("WISP_SHOT_CLOCK").ok().and_then(|value| value.parse().ok()).unwrap_or(0.0);
     let mut poses = Vec::new();
     for (index, path) in args[2..].iter().enumerate() {
         let bytes = stocks.iter().find_map(|stock| std::fs::read(stock.join(path)).ok()).expect("model");
@@ -48,7 +49,7 @@ fn main() {
         }
         let (sequence, frame) = model.sequences.iter().position(|s| s.name.to_ascii_lowercase().starts_with("stand")).map_or((0, 0.0), |at| (at as i32, model.sequences[at].interval[0] as f32));
         renderer.ingest(path, bytes);
-        poses.push(serde_json::json!({ "model": path, "matrix": [1.0,0.0,0.0,0.0, 0.0,1.0,0.0,0.0, 0.0,0.0,1.0,0.0, index as f32 * 700.0, 0.0, 0.0, 1.0], "sequence": sequence, "frame": frame, "clock": 0.0, "alpha": 1.0, "color": [1.0, 1.0, 1.0], "team": [1.0, 0.0, 0.0] }));
+        poses.push(serde_json::json!({ "model": path, "matrix": [1.0,0.0,0.0,0.0, 0.0,1.0,0.0,0.0, 0.0,0.0,1.0,0.0, index as f32 * 700.0, 0.0, 0.0, 1.0], "sequence": sequence, "frame": frame, "clock": clock, "alpha": 1.0, "color": [1.0, 1.0, 1.0], "team": [1.0, 0.0, 0.0] }));
     }
     std::thread::sleep(std::time::Duration::from_secs(2));
     renderer.pump();

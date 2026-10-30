@@ -259,3 +259,43 @@ fn replaceable_one_and_two_draw_the_players_team_colour_and_glow() {
     let expected = over(TEAM, 1.0f32.sin(), BACKGROUND);
     assert_pixel(centre_of(&[glow]), expected, "replaceable 2 is the team glow at its centre");
 }
+
+struct ClockRig(std::sync::Arc<std::sync::Mutex<f32>>);
+
+impl model::Rig for ClockRig {
+    fn bone_count(&self) -> usize {
+        1
+    }
+
+    fn pose(&mut self, _sequence: i32, _frame: f32, clock_seconds: f32, out: &mut [Mat4]) {
+        *self.0.lock().unwrap() = clock_seconds;
+        out[0] = IDENTITY;
+    }
+
+    fn opacities(&self) -> &[f32] {
+        &[1.0; 8]
+    }
+
+    fn uv_rows(&self) -> &[[f32; 4]] {
+        &[[0.0; 4]; 16]
+    }
+
+    fn emitters(&self) -> &[EmitterSample] {
+        &[]
+    }
+}
+
+#[test]
+fn a_rig_is_posed_with_the_scene_clock_in_seconds() {
+    let Some((device, queue)) = device() else { return };
+    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off, crate::settings::Preset::High.features());
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(-1.0));
+    let draw = model::Part { opacity_slot: 0, first_index: 0, index_count: 3, layers: vec![model::Layer { paint: Paint::None, filter: Filter::Opaque, opacity_slot: 1 }] };
+    let vertices = vec![Vertex { position: [0.0; 3], normal: [0.0, 0.0, 1.0], uv: [0.0; 2], bones: [0; 4], weights: [1.0, 0.0, 0.0, 0.0] }; 3];
+    renderer.add_model("clock", ModelData { vertices, indices: vec![0, 1, 2], parts: vec![draw], rig: Box::new(ClockRig(seen.clone())), emitters: Vec::new() });
+    let mut scene = Scene::default();
+    scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0 };
+    scene.poses = vec![scene::Pose { id: 0, model: "clock".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 2.5, alpha: 1.0, color: [1.0; 3], team: TEAM }];
+    let _ = render(&mut renderer, &device, &queue, &scene);
+    assert_eq!(*seen.lock().unwrap(), 2.5, "the pose clock reaches the rig as seconds, which the rig turns into global sequence milliseconds");
+}

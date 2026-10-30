@@ -317,7 +317,7 @@ impl Renderer {
             let model = &mut self.models[id];
             let base = self.bone_scratch.len();
             self.bone_scratch.resize(base + model.bones, IDENTITY);
-            model.rig.pose(pose.sequence, pose.frame, pose.clock * 1000.0, &mut self.bone_scratch[base..]);
+            model.rig.pose(pose.sequence, pose.frame, pose.clock, &mut self.bone_scratch[base..]);
             let opacity_base = self.opacity_scratch.len();
             self.opacity_scratch.extend_from_slice(model.rig.opacities());
             self.uv_scratch.extend_from_slice(model.rig.uv_rows());
@@ -356,7 +356,7 @@ impl Renderer {
         let sky_opacity_base = self.opacity_scratch.len();
         if let Some((id, pose)) = sky {
             self.bone_scratch.resize(sky_base + self.models[id].bones, IDENTITY);
-            self.models[id].rig.pose(pose.sequence, pose.frame, pose.clock * 1000.0, &mut self.bone_scratch[sky_base..]);
+            self.models[id].rig.pose(pose.sequence, pose.frame, pose.clock, &mut self.bone_scratch[sky_base..]);
             self.opacity_scratch.extend_from_slice(self.models[id].rig.opacities());
             self.uv_scratch.extend_from_slice(self.models[id].rig.uv_rows());
         }
