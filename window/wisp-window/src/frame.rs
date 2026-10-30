@@ -16,8 +16,14 @@ const PERIOD_MINIMUM: usize = 5;
 const MISSED_PERIODS: f64 = 1.5;
 const SAMPLE_MEMORY: usize = 64;
 
+/// The frame loop's time: when things happen, and how long it waits for a scene.
 pub trait Clock {
     fn now_ns(&self) -> u64;
+
+    /// Waits until the scene for `frame` arrives or `deadline_ns` passes on this clock; true when it arrived.
+    fn wait_for_scene(&self, mailbox: &Mailbox, frame: u32, deadline_ns: u64) -> bool {
+        mailbox.wait_for_scene(frame, Duration::from_nanos(deadline_ns.saturating_sub(self.now_ns())))
+    }
 }
 
 /// What the frame loop draws on: `acquire` blocks until the display hands back an image, and `None` means nothing is showing right now.
@@ -207,8 +213,7 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
             outcome.dropped = true;
         }
         let deadline = anchor + (self.pacer.scene_deadline_ms(period_ms) * 1e6) as u64;
-        let wait = Duration::from_nanos(deadline.saturating_sub(self.clock.now_ns()));
-        outcome.late = !self.mailbox.wait_for_scene(sample.frame, wait) && !self.mailbox.is_stopping();
+        outcome.late = !self.clock.wait_for_scene(&self.mailbox, sample.frame, deadline) && !self.mailbox.is_stopping();
         outcome.arrived_ns = Some(self.clock.now_ns());
         if let Some(submission) = self.mailbox.take_scene() {
             let began = self.clock.now_ns();
@@ -251,46 +256,59 @@ struct Outcome {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
     use std::time::Instant;
 
-    const PERIOD: Duration = Duration::from_micros(16_667);
-    const FRAMES: u32 = 60;
-    const LATE_SAMPLE: u32 = 20;
+    const PERIOD_NS: u64 = 16_666_667;
+    /// How long the test's clock lets a consumer answer in real time before the scene counts as late: far more than any host's scheduling
+    /// delay, so only the samples the script holds back are late.
+    const ANSWER_GRACE: Duration = Duration::from_secs(1);
+    const WARMUP: u32 = PERIOD_MINIMUM as u32 + 1;
+    const FRAMES: u32 = 12;
+    const LATE_SAMPLE: u32 = 5;
+    const LATE_FRAMES: u32 = 2;
 
-    struct TestClock(Instant);
+    /// The library's clock in the test: the fake display moves it to each vblank, so every interval is exactly one period, and a scene
+    /// that does not come within the grace moves it to the deadline, so lateness follows the script, not the host's load.
+    #[derive(Clone, Default)]
+    struct TestClock(Arc<AtomicU64>);
 
     impl Clock for TestClock {
         fn now_ns(&self) -> u64 {
-            self.0.elapsed().as_nanos() as u64
+            self.0.load(Ordering::Acquire)
+        }
+
+        fn wait_for_scene(&self, mailbox: &Mailbox, frame: u32, deadline_ns: u64) -> bool {
+            let arrived = mailbox.wait_for_scene(frame, ANSWER_GRACE);
+            if !arrived {
+                self.0.fetch_max(deadline_ns, Ordering::AcqRel);
+            }
+            arrived
         }
     }
 
     struct FakeSurface {
-        origin: Instant,
-        acquires: u32,
-        presented: Arc<Mutex<Vec<(u64, Instant)>>>,
+        clock: TestClock,
+        acquires: Arc<AtomicU32>,
+        presented: Arc<Mutex<Vec<u64>>>,
         drawing: AtomicU32,
     }
 
     impl Surface for FakeSurface {
-        type Image = Instant;
+        type Image = ();
 
-        fn acquire(&mut self) -> Option<Instant> {
-            self.acquires += 1;
-            let vblank = self.origin + PERIOD * self.acquires;
-            thread::sleep(vblank.saturating_duration_since(Instant::now()));
-            Some(vblank)
+        fn acquire(&mut self) -> Option<()> {
+            let acquired = self.acquires.fetch_add(1, Ordering::AcqRel) + 1;
+            self.clock.0.store(acquired as u64 * PERIOD_NS, Ordering::Release);
+            Some(())
         }
 
-        fn draw(&mut self, _: &Instant, step: u64) {
+        fn draw(&mut self, _: &(), step: u64) {
             self.drawing.store(step as u32, Ordering::Release);
         }
 
-        fn present(&self, image: Instant) {
-            let step = self.drawing.load(Ordering::Acquire) as u64;
-            lock(&self.presented).push((step, image));
-            assert!(image.elapsed() < PERIOD, "a present landed after its vblank's frame");
+        fn present(&self, _: ()) {
+            lock(&self.presented).push(self.drawing.load(Ordering::Acquire) as u64);
         }
     }
 
@@ -347,16 +365,22 @@ mod tests {
         let mailbox = Arc::new(Mailbox::default());
         let metrics = Arc::new(Mutex::new(Metrics::default()));
         let presented = Arc::new(Mutex::new(Vec::new()));
-        let surface = FakeSurface { origin: Instant::now(), acquires: 0, presented: presented.clone(), drawing: AtomicU32::new(0) };
-        let mut frames = FrameLoop::new(surface, TestClock(Instant::now()), mailbox.clone(), metrics.clone());
+        let acquires = Arc::new(AtomicU32::new(0));
+        let clock = TestClock::default();
+        let surface = FakeSurface { clock: clock.clone(), acquires: acquires.clone(), presented: presented.clone(), drawing: AtomicU32::new(0) };
+        let mut frames = FrameLoop::new(surface, clock, mailbox.clone(), metrics.clone());
+        for _ in 0..WARMUP {
+            frames.frame(Mode::Loading, &Quiet);
+        }
         let consumer = {
-            let mailbox = mailbox.clone();
+            let (mailbox, acquires) = (mailbox.clone(), acquires.clone());
             thread::spawn(move || {
                 let mut seen = Vec::new();
-                while seen.len() < FRAMES as usize {
-                    let Event::Frame(sample) = mailbox.next_event(Duration::from_millis(500)) else { break };
+                while let Event::Frame(sample) = mailbox.next_event(Duration::from_secs(10)) {
                     if sample.frame == LATE_SAMPLE {
-                        thread::sleep(Duration::from_millis(50));
+                        while acquires.load(Ordering::Acquire) < WARMUP + LATE_SAMPLE + LATE_FRAMES + 1 {
+                            thread::sleep(Duration::from_millis(1));
+                        }
                     }
                     seen.push(sample.frame);
                     mailbox.submit(Submission { bytes: b"{}".to_vec(), step: sample.frame as u64 + 1, frame: sample.frame });
@@ -372,15 +396,18 @@ mod tests {
 
         assert_eq!(seen, (0..FRAMES).collect::<Vec<_>>(), "the consumer got every sample in order");
         let metrics = lock(&metrics);
-        let count = |which: u32| metrics.series(which).iter().sum::<f64>() as u32;
-        assert_eq!(count(5), 0, "no present missed");
-        assert_eq!(count(8), 0, "no sample dropped");
-        assert!((1..=4).contains(&count(7)), "the 50 ms sample's scenes were late: {}", count(7));
+        let flags = |which: Series| metrics.series(which as u32).iter().map(|flag| *flag as u32).collect::<Vec<_>>();
+        let late: Vec<u32> = (0..FRAMES).map(|frame| u32::from((LATE_SAMPLE..LATE_SAMPLE + LATE_FRAMES).contains(&frame))).collect();
+        assert_eq!(flags(Series::LateScenes), late, "exactly the frames waiting on the slow sample were late");
+        assert_eq!(flags(Series::MissedPresents).iter().sum::<u32>(), 0, "no present missed");
+        assert_eq!(flags(Series::DroppedSamples).iter().sum::<u32>(), 0, "no sample dropped");
 
-        let steps: Vec<u64> = lock(&presented).iter().map(|(step, _)| *step).collect();
-        let stuck = steps.iter().position(|step| *step == LATE_SAMPLE as u64).expect("the last scene before the late one");
-        assert_eq!(steps[stuck + 1], LATE_SAMPLE as u64, "the late frame redraws the previous scene");
-        assert!(steps.iter().any(|step| *step > LATE_SAMPLE as u64 + 1), "the late scene reached a later frame");
-        assert!(steps.windows(2).all(|pair| pair[0] <= pair[1]), "scenes never go backwards");
+        let steps = lock(&presented).clone();
+        let shown = &steps[WARMUP as usize..];
+        assert_eq!(shown.len(), FRAMES as usize, "every frame presented, the late ones included");
+        assert_eq!(shown[LATE_SAMPLE as usize], LATE_SAMPLE as u64, "the late frame redraws the previous scene");
+        assert_eq!(shown[(LATE_SAMPLE + 1) as usize], LATE_SAMPLE as u64, "so does the next while the slow sample is outstanding");
+        assert_eq!(shown[(LATE_SAMPLE + LATE_FRAMES) as usize], (LATE_SAMPLE + LATE_FRAMES) as u64 + 1, "the frame after catches up to its own scene");
+        assert!(shown.windows(2).all(|pair| pair[0] <= pair[1]), "scenes never go backwards");
     }
 }

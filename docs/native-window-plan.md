@@ -808,14 +808,23 @@ render loop with no game: Rust submits a canned scene at the sample point. Its
 nonzero floor is a finding for W2 (fullscreen, compositor), not a reason to
 widen the bound.
 
-A Rust test guards the deadline without a display. It runs the frame loop
-against a fake surface on a 16.7 ms clock, with a consumer that sleeps 50 ms on
-one sample. It checks that:
+A Rust test guards the deadline without a display. The frame loop reads time
+and waits for each scene through its clock (`Clock`), and the test injects one.
+The fake surface moves that clock exactly one 16.7 ms period at each acquire. A
+scene that has not come within a second of real time moves it to the deadline,
+and a consumer holds back one sample's scene until two more frames have been
+acquired. It checks that:
 
-- every present lands on its clock;
-- that frame redraws the previous scene;
-- the late sample's scene is presented on a later frame;
-- no sample is dropped.
+- no present is missed and every frame presents;
+- exactly the frames waiting on the held sample are late, and they redraw the
+  previous scene;
+- the frame after catches up to its own scene;
+- no sample is dropped, and every sample is stepped in order.
+
+The clock is injected because the first version slept on the wall clock. It
+failed on a loaded Linux runner and on Windows' 15.6 ms timer (#124). Now only
+the script decides which frames are late, and a slow host stretches the run,
+not the result.
 
 ## Renderer as built (wisp#108)
 
