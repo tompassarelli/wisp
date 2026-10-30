@@ -67,7 +67,9 @@ smashcraft#394) (wisp:docs/testing.md, "Test cost").
 Main stays green. Each CI run on main opens, updates or closes the one
 "main is red" issue, which lists the failing tests and the first failing
 commit, and every push prints that list (wisp:docs/ci.md, "Main stays green").
-A red main is not "already failing": if your commit broke it, fix it first.
+A red main is not "already failing": if your commit broke it, fix it first;
+a landing that turned a green main red and sees no green main run within
+15 minutes is reverted by a new `Revert` commit (wisp:docs/ci.md, "A red main reverts itself").
 
 Place each change by [Architecture](docs/architecture.md) (wisp:docs/architecture.md):
 `src/` never imports `host/` or `test/`, and host code never imports `test/`.

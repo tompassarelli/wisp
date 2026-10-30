@@ -1,0 +1,42 @@
+name: Revert red main
+
+# "Main is red" hands each failed CI run on main here. When the landing's parent
+# was green and no green main run follows within 15 minutes, the landing is
+# reverted with a new commit (wisp:host/checks/revertRed.ts).
+on:
+  workflow_dispatch:
+    inputs:
+      run:
+        description: failed CI run ID on main
+        required: true
+
+permissions:
+  actions: write
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: revert-red-${{ inputs.run }}
+  cancel-in-progress: false
+
+jobs:
+  revert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898183+github-actions[bot]@users.noreply.github.com"
+          bun host/checks/revertRed.ts "${{ inputs.run }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}

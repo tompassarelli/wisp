@@ -223,6 +223,33 @@ events arriving out of order never reopen or close it.
 Dispatching the workflow with a CI run ID reports any branch's run the same
 way, as "BRANCH is red", which is how to try it on a scratch branch.
 
+### A red main reverts itself
+
+A failed CI run on main also starts "Revert red main"
+(wisp:.github/workflows/revert-red.yml, which runs
+wisp:host/checks/revertRed.ts) with the run's ID. It reverts the landing only
+when all of these hold:
+
+- the run before it that finished was green, belonged to an ancestor, and
+  exactly one commit landed since, so the landing's parent was verified green
+  (a red parent or several unverified commits since the last green run revert
+  nothing);
+- the landing is not itself a revert, not a merge commit and changes nothing
+  under `.github/workflows/`, which the workflow token can't push;
+- no green main CI run finished within 15 minutes of the red run's end (a
+  newer run still going is waited for, up to 30 minutes more), and the landing
+  is still on main with no revert of it on top.
+
+Then it pushes a new commit, never a rewrite, titled `Revert "SUBJECT"` with a
+`Reverts: FULL_SHA` trailer (the form safe-push accepts) and starts main's CI
+for it. It comments on each issue the landing's message references and on its
+pull requests, naming the failing jobs and the run, and reopens a referenced
+issue the landing had closed. If the revert conflicts with what landed since,
+the job summary says so and the "main is red" issue stands. The author's lane
+re-lands the fixed change. Try it on a scratch run with
+`gh workflow run revert-red.yml -f run=RUN_ID`, which refuses any run that is
+not on main.
+
 Every push prints the open issue's failing tests in one line and never blocks:
 
 ```text

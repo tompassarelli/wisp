@@ -15,7 +15,7 @@ on:
         required: true
 
 permissions:
-  actions: read
+  actions: write
   contents: read
   issues: write
 
@@ -46,3 +46,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+      # A failed run that still has no green main run after 15 minutes is reverted.
+      - if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REPORT_RUN: ${{ inputs.run || github.event.workflow_run.id }}
+        run: |
+          if [ "$(gh run view "$REPORT_RUN" --json conclusion --jq .conclusion)" = failure ]; then
+            gh workflow run revert-red.yml -f run="$REPORT_RUN"
+          fi
