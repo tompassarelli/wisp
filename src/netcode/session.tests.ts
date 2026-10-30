@@ -1,9 +1,8 @@
 import { at } from "../runtime/lookup";
 import { assertEquals, assertGreaterThan, assertTrue, test } from "../runtime/testing";
 import { floorMod } from "../sim/intMath";
-import { ringRow } from "./frameRing";
 import { TOY_AIM, TOY_CODEC, TOY_FIRE, type ToyRow, lcg, toyRow } from "./rowCodec.tests";
-import { NET_SETTINGS, type Session, type Simulation, createSession, leave, predictedAt, receive, remoteThrough, tick } from "./session";
+import { NET_SETTINGS, type Session, type Simulation, confirmedFrame, createSession, leave, localRow, predictedAt, presentFrame, receive, remoteThrough, tick } from "./session";
 
 interface ToyState {
   readonly positions: readonly number[];
@@ -45,9 +44,9 @@ function truthAt(rows: readonly (readonly ToyRow[])[], frame: number): ToyState 
 
 function record(session: Session<ToyRow, ToyState>, captured: ToyRow[], from: number): number {
   let recorded = from;
-  for (let frame = from + 1; frame <= session.present + NET_SETTINGS.delay; frame++) {
+  for (let frame = from + 1; frame <= presentFrame(session) + NET_SETTINGS.delay; frame++) {
     const row = toyRow();
-    TOY_CODEC.copy(row, ringRow(session.pending, frame) ?? toyRow());
+    TOY_CODEC.copy(row, localRow(session, frame) ?? toyRow());
     captured[frame] = row;
     recorded = frame;
   }
@@ -94,15 +93,15 @@ test("rollback: two clients trading rows over a late, bursty channel predict, ro
   }
   const [first, second] = sessions;
   if (first === undefined || second === undefined) throw new Error("two sessions");
-  assertEquals(first.confirmedFrame, second.confirmedFrame, "confirmed frame");
-  assertGreaterThan(first.confirmedFrame, callbacks);
-  const truth = truthAt(captured, first.confirmedFrame);
+  assertEquals(confirmedFrame(first), confirmedFrame(second), "confirmed frame");
+  assertGreaterThan(confirmedFrame(first), callbacks);
+  const truth = truthAt(captured, confirmedFrame(first));
   assertEquals(toySum(first.confirmed), toySum(truth), "first client's confirmed state");
   assertEquals(toySum(second.confirmed), toySum(truth), "second client's confirmed state");
   for (const session of sessions) {
     assertGreaterThan(session.stats.rollbacks, 20);
     assertEquals(session.stats.refused, 0, "refused messages");
-    const settled = Math.min(session.present, remoteThrough(session));
+    const settled = Math.min(presentFrame(session), remoteThrough(session));
     const predicted = predictedAt(session, settled);
     if (predicted === undefined) throw new Error(`no prediction kept for frame ${settled}`);
     assertEquals(toySum(predicted), toySum(truthAt(captured, settled)), "rolled-back prediction");
@@ -146,9 +145,9 @@ test("leave: a player who leaves while holding a move key is idle after their la
   assertGreaterThan(leaveAt, gone);
   const rows: ToyRow[][] = [at(captured, 0), []];
   for (let frame = 1; frame <= gone; frame++) at(rows, 1)[frame] = at(at(captured, 1), frame);
-  assertGreaterThan(stayer.confirmedFrame, 250);
-  assertEquals(toySum(stayer.confirmed), toySum(truthAt(rows, stayer.confirmedFrame)), "confirmed state");
-  const predicted = predictedAt(stayer, stayer.confirmedFrame);
+  assertGreaterThan(confirmedFrame(stayer), 250);
+  assertEquals(toySum(stayer.confirmed), toySum(truthAt(rows, confirmedFrame(stayer))), "confirmed state");
+  const predicted = predictedAt(stayer, confirmedFrame(stayer));
   if (predicted === undefined) throw new Error("no prediction kept for the confirmed frame");
   assertEquals(toySum(predicted), toySum(stayer.confirmed), "rolled-back prediction");
   assertEquals(stayer.stats.refused, 0, "refused messages");

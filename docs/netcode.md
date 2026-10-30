@@ -9,13 +9,16 @@ game and runs as plain TypeScript in Bun and in Warcraft's 32-bit Lua.
 | Module | What it holds |
 | --- | --- |
 | `codec` | `RowCodec<Row>`: how a game's input row is made, copied, compared, held, flagged urgent, written to and read from the wire. |
-| `frameRing` | A fixed ring of rows keyed by frame; a slot answers only for the frame it holds. |
-| `ledger` | `InputLedger`: each player's accepted rows, how far each is known, who left and after which frame, and the receipt for every refusal. |
 | `delay` | The ping-based input delay: an integer round trip EWMA, `oneWayFrames`, `autoDelay`, `nextDelay` with its 34 ms lowering hysteresis, `agreedDelay` and the host's manual override, `correctDelay` and `timeSyncWait`. All integers, so Bun and Lua32 decide alike. |
+| `frameRing` | A fixed ring of rows keyed by frame; a slot answers only for the frame it holds, and can be vacant, released or cleared. |
+| `ledger` | `InputLedger`: the common record of synchronized input. Rows are admitted against the common frontier K, within epochs and a participant mask, over retained history that `discardThrough` trims; each refusal has a receipt (`wrongEpoch`, `outOfHistory`, `tooFarAhead`, `storageFull`, `conflict`, `gone`) and `takeLowestAccepted` reports the first frame a sender's new rows touch. |
+| `capture` | `Capture`, the result of offering a local sample to a schedule. |
+| `fixedSchedule` | Lockstep input at a fixed delay: a frame runs once K reaches it. |
+| `shadowSchedule` | The two-cursor schedule: a speculative cursor on the local row and predictions, a confirmed cursor on accepted rows only, `rewindSpeculative`, `captureLocalAt`, `remoteThrough`, `awaitedSlots` and the future-limit check that stops prediction capturing rows the ledger would refuse. |
 | `message` | `encodeMessage` and `decodeMessage`: a batch of consecutive frames as one text message of at most 200 bytes and 64 frames, each row written as a delta from the one before and runs of unchanged rows as a skip count. |
 | `rate` | Slow-machine detection: a machine under 55 fps with 750 ms busy for 2 seconds is slow until 2 seconds are not. A game words its own warning. |
 | `wire` | The 64-character alphabet, varints, signed varints and `WireReader`; a reader refuses non-minimal and over-limit values. |
-| `session` | `createSession`, `tick`, `receive`, `leave`: prediction, rollback and confirmation. |
+| `session` | `createSession`, `tick`, `receive`, `leave`: a driver over `shadowSchedule` for games with immutable state. It keeps 128 states to roll back to. |
 
 ## What a game writes
 
@@ -48,7 +51,7 @@ caller sends that text, such as with `BlzSendSyncData`, and calls
 `receive(session, sim, sender, wire)` with each message that arrives; the
 returned `Receipt` says whether it was accepted or why it was refused.
 
-Every client takes or refuses a row by the common confirmed frame alone, so
+Every client takes or refuses a row by the common frontier K alone, so
 all ledgers hold the same rows and the confirmed states agree. `leave`
 marks a player gone after their last accepted row; their later frames are
 idle, and a prediction that held their last key rolls back.

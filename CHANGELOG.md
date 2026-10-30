@@ -5,6 +5,16 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## Unreleased
 
+- `wisp/src/netcode/ledger` now admits rows against the common frontier K
+  with epochs, a participant mask, retained history, `discardThrough`,
+  `takeLowestAccepted` and the receipts `wrongEpoch` and `storageFull`;
+  `acceptRows` takes the epoch instead of the confirmed frame. New
+  `capture`, `fixedSchedule` and `shadowSchedule` hold the lockstep and the
+  speculative/confirmed cursor schedules, `frameRing` gains `ringVacant`,
+  `ringRelease` and `ringClear`, and `session` is rebuilt over the schedule:
+  `Session.present`, `confirmedFrame` and `pending` give way to
+  `presentFrame`, `confirmedFrame` and `localRow` (wisp#96,
+  wisp:docs/netcode.md).
 - `wisp/src/netcode/codec`, `frameRing`, `ledger`, `message`, `session` and
   `wire` export the generic rollback netcode Battlecraft proved: `RowCodec`,
   the per-player `FrameRing`, the `InputLedger` (including players who left),
