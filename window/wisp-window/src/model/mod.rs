@@ -1,6 +1,7 @@
 //! Warcraft III models as the native renderer loads them: parsed once into plain data, posed per frame into a bone palette
 //! the vertex shader skins with (wisp:docs/native-window-plan.md, box W3, "Models").
 
+mod emitter;
 mod mdl;
 mod mdx;
 mod pose;
@@ -11,6 +12,7 @@ use std::fmt;
 
 pub use pose::{Mat4, Playhead, Pose};
 pub use skin::{skin_position, SkinVertex};
+pub use emitter::{Emitter2, Scalar, LINE_EMITTER, XY_QUAD};
 pub use track::{global_sequence_frame, rotate, sample, Key, LineType, Track};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -52,6 +54,26 @@ pub struct Layer {
     pub filter_mode: u32,
     pub texture_id: i32,
     pub shading_flags: u32,
+    pub alpha: Scalar,
+    /// The texture the layer shows, as an index into the model's textures, when it changes over time.
+    pub texture_track: Option<Track<1>>,
+    /// The texture coordinate animation (`TXAN`) that moves the layer's texture coordinates, if any.
+    pub texture_anim: Option<usize>,
+}
+
+/// How a layer's texture coordinates move: translate, rotate and scale, each a track.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TextureAnim {
+    pub translation: Option<Track<3>>,
+    pub rotation: Option<Track<4>>,
+    pub scaling: Option<Track<3>>,
+}
+
+/// How a geoset's opacity changes: a geoset with no animation is fully opaque.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct GeosetAnim {
+    pub geoset: usize,
+    pub alpha: Scalar,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -74,6 +96,9 @@ pub struct Model {
     pub nodes: Vec<Option<Node>>,
     pub materials: Vec<Material>,
     pub textures: Vec<Texture>,
+    pub emitters: Vec<Emitter2>,
+    pub geoset_anims: Vec<GeosetAnim>,
+    pub texture_anims: Vec<TextureAnim>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -121,6 +146,12 @@ impl Model {
     pub(crate) fn finish(mut self, pivots: &[[f32; 3]]) -> Result<Self, ModelError> {
         for node in self.nodes.iter_mut().flatten() {
             node.pivot = pivots.get(node.object_id).copied().unwrap_or_default();
+        }
+        for emitter in &mut self.emitters {
+            if let Some(node) = self.nodes.get(emitter.node).and_then(Option::as_ref) {
+                emitter.flags = node.flags;
+                emitter.pivot = node.pivot;
+            }
         }
         for node in self.nodes.iter().flatten() {
             if let Some(parent) = node.parent {

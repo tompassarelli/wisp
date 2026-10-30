@@ -9,6 +9,7 @@ import { NATIVE_RISE, SKY_FAR, camera, transform } from "../render/screen";
 
 /** The pose of one model the native renderer draws (window/wisp-window/src/render/scene.rs). */
 interface NativePose {
+  readonly id: number;
   readonly model: string;
   readonly matrix: number[];
   readonly sequence: number;
@@ -99,14 +100,14 @@ export function drawScene(scene: RenderScene, library: ModelLibrary) {
     const sequences = library.sequences(pose.model);
     if (sequences === undefined) return undefined;
     const sample = animationSample(sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, pose.unit === true ? "unit" : "effect");
-    return { model: pose.model, matrix: Array.from(transform(pose)), sequence: sample.sequence, frame: sample.frame, clock: pose.animationClock, alpha: pose.alpha / 255, color: pose.color.map((value) => value / 255), team: (TEAMS[pose.teamColor] ?? NEUTRAL_TEAM).map((value) => value / 255) };
+    return { id: pose.handle.id, model: pose.model, matrix: Array.from(transform(pose)), sequence: sample.sequence, frame: sample.frame, clock: pose.animationClock, alpha: pose.alpha / 255, color: pose.color.map((value) => value / 255), team: (TEAMS[pose.teamColor] ?? NEUTRAL_TEAM).map((value) => value / 255) };
   };
   const ui = nativeUi(scene.ui);
   library.show(uiAssets(ui));
   const environment = scene.environment;
-  const sky = environment.sky !== "" && environment.skyVisible ? place({ model: environment.sky, x: 0, y: 0, z: 0, alpha: 255, scale: 1, flat: false, animation: undefined, subAnimations: [], animationElapsed: 0, animationClock: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1], yaw: 0, pitch: 0, roll: 0 } as unknown as DrawnPose) : undefined;
+  const sky = environment.sky !== "" && environment.skyVisible ? place({ handle: { id: 0 }, model: environment.sky, x: 0, y: 0, z: 0, alpha: 255, scale: 1, flat: false, animation: undefined, subAnimations: [], animationElapsed: 0, animationClock: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1], yaw: 0, pitch: 0, roll: 0 } as unknown as DrawnPose) : undefined;
   const poses = drawnPoses(scene.effects, view.eye, view.far, scene.world).flatMap((pose) => place(pose) ?? []);
-  return { frame: scene.frame, pending: library.loading(), camera: { view: Array.from(view.view), eye: view.eye, tangent: view.shadow.tangent, near: view.near, far: view.far, skyFar: SKY_FAR, rise: NATIVE_RISE }, fog: fogOf(scene), sky, poses, ui };
+  return { frame: scene.frame, pending: library.loading(), camera: { view: Array.from(view.view), eye: view.eye, tangent: view.shadow.tangent, near: view.near, far: view.far, skyFar: SKY_FAR, rise: NATIVE_RISE }, fog: fogOf(scene), sky, poses, lightnings: (scene.lightnings ?? []).map((bolt) => ({ from: bolt.from, to: bolt.to, color: bolt.color })), ui };
 }
 
 const PRELOAD_MS = 120_000;

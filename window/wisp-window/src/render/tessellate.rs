@@ -148,7 +148,7 @@ pub fn tessellate(data: &mut ModelData, levels: u32) {
         for _ in 0..levels {
             triangles = subdivide(&mut data.vertices, &triangles);
         }
-        parts.push(Part { first_index: indices.len() as u32, index_count: triangles.len() as u32, layers: part.layers });
+        parts.push(Part { opacity_slot: part.opacity_slot, first_index: indices.len() as u32, index_count: triangles.len() as u32, layers: part.layers });
         indices.extend(triangles);
     }
     data.indices = indices;
@@ -159,7 +159,7 @@ pub fn tessellate(data: &mut ModelData, levels: u32) {
 mod tests {
     use super::*;
     use crate::render::math::Mat4;
-    use crate::render::model::{Layer, Paint, Filter, Rig};
+    use crate::render::model::{EmitterSample, Layer, Paint, Filter, Rig};
 
     struct NoRig;
     impl Rig for NoRig {
@@ -167,6 +167,15 @@ mod tests {
             1
         }
         fn pose(&mut self, _: i32, _: f32, _: f32, _: &mut [Mat4]) {}
+        fn opacities(&self) -> &[f32] {
+            &[]
+        }
+        fn uv_rows(&self) -> &[[f32; 4]] {
+            &[]
+        }
+        fn emitters(&self) -> &[EmitterSample] {
+            &[]
+        }
     }
 
     fn vertex(position: [f32; 3], normal: [f32; 3]) -> Vertex {
@@ -174,8 +183,8 @@ mod tests {
     }
 
     fn model(vertices: Vec<Vertex>, indices: Vec<u32>) -> ModelData {
-        let parts = vec![Part { first_index: 0, index_count: indices.len() as u32, layers: vec![Layer { paint: Paint::None, filter: Filter::Opaque }] }];
-        ModelData { vertices, indices, parts, rig: Box::new(NoRig) }
+        let parts = vec![Part { opacity_slot: 0, first_index: 0, index_count: indices.len() as u32, layers: vec![Layer { paint: Paint::None, filter: Filter::Opaque, opacity_slot: 0 }] }];
+        ModelData { vertices, indices, parts, rig: Box::new(NoRig), emitters: Vec::new() }
     }
 
     fn octahedron() -> ModelData {

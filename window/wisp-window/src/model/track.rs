@@ -68,6 +68,10 @@ impl<const N: usize> Track<N> {
 }
 
 impl<const N: usize> Track<N> {
+    pub fn left_key(&self, playhead: &Playhead) -> Option<&Key<N>> {
+        self.bracket(playhead).map(|(left, _, _)| left)
+    }
+
     pub fn vector(&self, playhead: &Playhead) -> Option<[f32; N]> {
         let (left, right, frame) = self.bracket(playhead)?;
         let Some(t) = self.factor(left, right, frame) else { return Some(left.value) };

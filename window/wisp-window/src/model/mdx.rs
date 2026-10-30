@@ -1,5 +1,6 @@
 use super::track::{Key, LineType, Track};
-use super::{Geoset, Layer, Material, Model, ModelError, Node, Sequence, Texture};
+use super::emitter::{Emitter2, Scalar};
+use super::{Geoset, GeosetAnim, Layer, TextureAnim, Material, Model, ModelError, Node, Sequence, Texture};
 
 const NO_ID: i32 = -1;
 const NAME_LENGTH: usize = 80;
@@ -127,7 +128,8 @@ pub(super) fn parse(bytes: &[u8]) -> Result<Model, ModelError> {
             b"MTLS" => parse_materials(&mut chunk, &mut model)?,
             b"BONE" => parse_each_node(&mut chunk, &mut model, 8)?,
             b"HELP" => parse_each_node(&mut chunk, &mut model, 0)?,
-            b"ATCH" | b"LITE" | b"PREM" | b"PRE2" | b"RIBB" | b"CORN" => parse_sized_nodes(&mut chunk, &mut model)?,
+            b"GEOA" | b"TXAN" | b"PRE2" => parse_animated(&keyword, &mut chunk, &mut model)?,
+            b"ATCH" | b"LITE" | b"PREM" | b"RIBB" | b"CORN" => parse_sized_nodes(&mut chunk, &mut model)?,
             b"PIVT" => (0..size / 12).try_for_each(|_| chunk.floats::<3>().map(|point| pivots.push(point)))?,
             _ => {}
         }
@@ -165,6 +167,119 @@ fn parse_sized_nodes(chunk: &mut Reader, model: &mut Model) -> Result<(), ModelE
         let node = chunk.node()?;
         chunk.at = start + size;
         model.insert_node(node);
+    }
+    Ok(())
+}
+
+fn parse_animated(keyword: &[u8; 4], chunk: &mut Reader, model: &mut Model) -> Result<(), ModelError> {
+    match keyword {
+        b"GEOA" => parse_geoset_anims(chunk, model),
+        b"TXAN" => parse_texture_anims(chunk, model),
+        _ => parse_particle_emitters2(chunk, model),
+    }
+}
+
+fn parse_texture_anims(chunk: &mut Reader, model: &mut Model) -> Result<(), ModelError> {
+    while chunk.at < chunk.bytes.len() {
+        let start = chunk.at;
+        let size = chunk.count()?;
+        let mut anim = TextureAnim::default();
+        while chunk.at < start + size {
+            match chunk.keyword()? {
+                b"KTAT" => anim.translation = Some(chunk.track()?),
+                b"KTAR" => anim.rotation = Some(chunk.track()?),
+                b"KTAS" => anim.scaling = Some(chunk.track()?),
+                _ => return Err(ModelError::Chunk { chunk: "TXAN", reason: "unknown animation keyword" }),
+            }
+        }
+        chunk.at = start + size;
+        model.texture_anims.push(anim);
+    }
+    Ok(())
+}
+
+fn parse_geoset_anims(chunk: &mut Reader, model: &mut Model) -> Result<(), ModelError> {
+    while chunk.at < chunk.bytes.len() {
+        let start = chunk.at;
+        let size = chunk.count()?;
+        let mut alpha = Scalar::fixed(chunk.f32()?);
+        chunk.take(4 + 12)?;
+        let geoset = chunk.i32()?;
+        while chunk.at < start + size {
+            match chunk.keyword()? {
+                b"KGAO" => alpha.track = Some(chunk.track::<1>()?),
+                b"KGAC" => {
+                    chunk.track::<3>()?;
+                }
+                _ => return Err(ModelError::Chunk { chunk: "GEOA", reason: "unknown animation keyword" }),
+            }
+        }
+        chunk.at = start + size;
+        if let Ok(geoset) = usize::try_from(geoset) {
+            model.geoset_anims.push(GeosetAnim { geoset, alpha });
+        }
+    }
+    Ok(())
+}
+
+fn read_emitter_look(chunk: &mut Reader, emitter: &mut Emitter2) -> Result<(), ModelError> {
+    for value in [&mut emitter.speed, &mut emitter.variation, &mut emitter.latitude, &mut emitter.gravity] {
+        *value = Scalar::fixed(chunk.f32()?);
+    }
+    emitter.life_span = chunk.f32()?;
+    emitter.emission_rate = Scalar::fixed(chunk.f32()?);
+    emitter.width = Scalar::fixed(chunk.f32()?);
+    emitter.length = Scalar::fixed(chunk.f32()?);
+    emitter.filter_mode = chunk.i32()? as u32;
+    emitter.rows = chunk.i32()?.max(1) as u32;
+    emitter.columns = chunk.i32()?.max(1) as u32;
+    let frames = chunk.i32()?;
+    emitter.head = frames == 0 || frames == 2;
+    emitter.tail = frames == 1 || frames == 2;
+    emitter.tail_length = chunk.f32()?;
+    emitter.time = chunk.f32()?;
+    for color in &mut emitter.colors {
+        *color = chunk.floats::<3>()?;
+    }
+    for alpha in &mut emitter.alphas {
+        *alpha = f32::from(chunk.u8()?) / 255.0;
+    }
+    emitter.scaling = chunk.floats::<3>()?;
+    for animation in [&mut emitter.head_life, &mut emitter.head_decay, &mut emitter.tail_life, &mut emitter.tail_decay] {
+        for frame in animation.iter_mut() {
+            *frame = chunk.i32()? as f32;
+        }
+    }
+    emitter.texture_id = chunk.i32()?;
+    emitter.squirt = chunk.i32()? > 0;
+    chunk.take(8)?;
+    Ok(())
+}
+
+fn parse_particle_emitters2(chunk: &mut Reader, model: &mut Model) -> Result<(), ModelError> {
+    while chunk.at < chunk.bytes.len() {
+        let start = chunk.at;
+        let size = chunk.count()?;
+        let node = chunk.node()?;
+        let mut emitter = Emitter2 { node: node.object_id, ..Emitter2::default() };
+        read_emitter_look(chunk, &mut emitter)?;
+        while chunk.at < start + size {
+            let target = match chunk.keyword()? {
+                b"KP2V" => &mut emitter.visibility,
+                b"KP2E" => &mut emitter.emission_rate,
+                b"KP2W" => &mut emitter.width,
+                b"KP2N" => &mut emitter.length,
+                b"KP2S" => &mut emitter.speed,
+                b"KP2L" => &mut emitter.latitude,
+                b"KP2G" => &mut emitter.gravity,
+                b"KP2R" => &mut emitter.variation,
+                _ => return Err(ModelError::Chunk { chunk: "PRE2", reason: "unknown animation keyword" }),
+            };
+            target.track = Some(chunk.track::<1>()?);
+        }
+        chunk.at = start + size;
+        model.insert_node(node);
+        model.emitters.push(emitter);
     }
     Ok(())
 }
@@ -277,11 +392,94 @@ fn parse_materials(chunk: &mut Reader, model: &mut Model) -> Result<(), ModelErr
             let filter_mode = u32::try_from(chunk.i32()?).unwrap_or(0);
             let shading_flags = u32::try_from(chunk.i32()?).unwrap_or(0);
             let texture_id = chunk.i32()?;
-            material.layers.push(Layer { filter_mode, texture_id, shading_flags });
+            let texture_anim = usize::try_from(chunk.i32()?).ok();
+            chunk.take(4)?;
+            let mut alpha = Scalar::fixed(chunk.f32()?);
+            let mut texture_track = None;
+            while chunk.at < layer_start + layer_size {
+                match chunk.keyword()? {
+                    b"KMTA" => alpha.track = Some(chunk.track::<1>()?),
+                    b"KMTF" => texture_track = Some(chunk.track::<1>()?),
+                    b"KMTE" => {
+                        chunk.track::<1>()?;
+                    }
+                    _ => return Err(ModelError::Chunk { chunk: "MTLS", reason: "unknown layer keyword" }),
+                }
+            }
+            material.layers.push(Layer { filter_mode, texture_id, shading_flags, alpha, texture_track, texture_anim });
             chunk.at = layer_start + layer_size;
         }
         model.materials.push(material);
         chunk.at = start + size;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::XY_QUAD;
+
+    fn int(out: &mut Vec<u8>, value: i32) {
+        out.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn float(out: &mut Vec<u8>, value: f32) {
+        out.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn emitter_chunk() -> Vec<u8> {
+        let mut node = Vec::new();
+        int(&mut node, 96);
+        node.extend_from_slice(&[b'e'; 1]);
+        node.resize(4 + NAME_LENGTH, 0);
+        for value in [0, -1, XY_QUAD as i32] {
+            int(&mut node, value);
+        }
+        let mut body = Vec::new();
+        for value in [100.0, 0.5, 30.0, 9.0, 1.5, 20.0, 4.0, 6.0] {
+            float(&mut body, value);
+        }
+        for value in [1, 4, 2, 1] {
+            int(&mut body, value);
+        }
+        float(&mut body, 0.25);
+        float(&mut body, 0.4);
+        for value in [1.0, 0.5, 0.0, 0.2, 0.3, 0.4, 0.0, 0.0, 1.0] {
+            float(&mut body, value);
+        }
+        body.extend_from_slice(&[255, 128, 0]);
+        for value in [10.0, 20.0, 5.0] {
+            float(&mut body, value);
+        }
+        for value in [0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0] {
+            int(&mut body, value);
+        }
+        body.extend_from_slice(b"KP2V");
+        int(&mut body, 1);
+        int(&mut body, 0);
+        int(&mut body, -1);
+        int(&mut body, 0);
+        float(&mut body, 0.0);
+        let mut chunk = Vec::new();
+        int(&mut chunk, (4 + node.len() + body.len()) as i32);
+        chunk.extend_from_slice(&node);
+        chunk.extend_from_slice(&body);
+        chunk
+    }
+
+    #[test]
+    fn a_particle_emitter_reads_its_look_and_its_animated_visibility() {
+        let chunk = emitter_chunk();
+        let mut model = Model::default();
+        parse_particle_emitters2(&mut Reader { bytes: &chunk, at: 0 }, &mut model).unwrap();
+        let [emitter] = model.emitters.as_slice() else { panic!("one emitter") };
+        assert_eq!((emitter.speed.fixed, emitter.life_span, emitter.emission_rate.fixed), (100.0, 1.5, 20.0));
+        assert_eq!((emitter.filter_mode, emitter.rows, emitter.columns, emitter.head, emitter.tail), (1, 4, 2, false, true));
+        assert_eq!((emitter.alphas, emitter.scaling, emitter.head_decay), ([1.0, 128.0 / 255.0, 0.0], [10.0, 20.0, 5.0], [0.0, 0.0, 0.0]));
+        assert_eq!(emitter.head_life, [0.0, 3.0, 0.0]);
+        assert!(emitter.squirt);
+        assert_eq!(emitter.visibility.track.as_ref().map(|track| track.keys.len()), Some(1));
+        assert!(model.nodes[0].is_some());
+    }
 }

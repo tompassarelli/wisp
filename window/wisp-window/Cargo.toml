@@ -16,6 +16,7 @@ ddsfile = { version = "0.6.0", default-features = false }
 fontdue = "0.9.5"
 hound = "3.5.1"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "tga"] }
+jpeg-decoder = { version = "0.3.2", default-features = false }
 image-blp = { version = "1.2.0", default-features = false }
 lewton = "0.10.2"
 nanomp3 = "0.2.0"

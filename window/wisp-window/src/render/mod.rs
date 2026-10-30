@@ -8,13 +8,16 @@
 mod math;
 mod gpu;
 pub mod model;
+mod lightning;
+mod particles;
 mod pipelines;
 mod scene;
 pub mod source;
 pub mod tessellate;
+mod uniforms;
 
 use std::collections::HashMap;
-use bytemuck::{Pod, Zeroable};
+use bytemuck::Zeroable;
 use wgpu::util::DeviceExt;
 
 use std::sync::Arc;
@@ -22,8 +25,11 @@ use std::sync::Arc;
 use crate::decode_pool::Pool;
 use crate::remaster::{self, Cache, Prepared, Quality};
 use math::{multiply, projection, Mat4, IDENTITY};
-use gpu::{bone_storage, frame_group, instance_storage, upload, white};
-use model::{Filter, ModelData, Paint, Vertex};
+use gpu::{bone_storage, frame_group, instance_storage, opacity_storage, upload, uv_storage, white};
+use lightning::Lightning;
+use model::{Filter, ModelData, ModelEmitter, Paint, Vertex};
+use uniforms::{FrameUniform, Instance, LayerUniform};
+use particles::{ParticleFrame, Particles, Slot};
 use scene::{Pose, Scene};
 
 pub use gpu::fitted;
@@ -32,37 +38,10 @@ pub use scene::Scene as DrawScene;
 const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const SAMPLES: u32 = 4;
 const BONES_AT_START: usize = 16 * 1024;
+const OPACITIES_AT_START: usize = 16 * 1024;
 const INSTANCES_AT_START: usize = 4 * 1024;
 const DECODERS: usize = 2;
 const CLEAR: [f64; 3] = [0.04, 0.06, 0.09];
-
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-struct FrameUniform {
-    view_projection: Mat4,
-    light_toward: [f32; 4],
-    light_key: [f32; 4],
-    light_ambient: [f32; 4],
-    fog_color: [f32; 4],
-    fog_range: [f32; 4],
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-struct Instance {
-    model: Mat4,
-    tint: [f32; 4],
-    team: [f32; 4],
-    base: u32,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-struct LayerUniform {
-    kind: u32,
-    cutoff: f32,
-    pad: [f32; 2],
-}
 
 struct Draw {
     filter: Filter,
@@ -78,6 +57,7 @@ struct GpuModel {
     opaque_first: bool,
     rig: Box<dyn model::Rig>,
     bones: usize,
+    emitters: Vec<(ModelEmitter, Option<Slot>)>,
 }
 
 struct Group {
@@ -109,6 +89,11 @@ pub struct Renderer {
     model_ids: HashMap<String, usize>,
     bone_buffer: wgpu::Buffer,
     bone_capacity: usize,
+    opacity_buffer: wgpu::Buffer,
+    opacity_capacity: usize,
+    opacity_scratch: Vec<f32>,
+    uv_buffer: wgpu::Buffer,
+    uv_scratch: Vec<[f32; 4]>,
     instance_buffer: wgpu::Buffer,
     instance_capacity: usize,
     main_frame: wgpu::Buffer,
@@ -126,6 +111,8 @@ pub struct Renderer {
     decoding: HashMap<u64, String>,
     next_job: u64,
     waiting: Vec<(String, Vec<u8>)>,
+    particles: Particles,
+    lightning: Lightning,
     pub problems: Vec<String>,
 }
 
@@ -144,9 +131,13 @@ impl Renderer {
         let uniform = |label| device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: size_of::<FrameUniform>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         let (main_frame, sky_frame) = (uniform("main frame"), uniform("sky frame"));
         let bone_buffer = bone_storage(&device, BONES_AT_START);
+        let opacity_buffer = opacity_storage(&device, OPACITIES_AT_START);
+        let uv_buffer = uv_storage(&device, OPACITIES_AT_START);
         let instance_buffer = instance_storage(&device, INSTANCES_AT_START);
-        let main_group = frame_group(&device, &frame_layout, &main_frame, &bone_buffer);
-        let sky_group = frame_group(&device, &frame_layout, &sky_frame, &bone_buffer);
+        let main_group = frame_group(&device, &frame_layout, &main_frame, &bone_buffer, &opacity_buffer, &uv_buffer);
+        let sky_group = frame_group(&device, &frame_layout, &sky_frame, &bone_buffer, &opacity_buffer, &uv_buffer);
+        let particles = Particles::new(&device, format);
+        let lightning = Lightning::new(&device, format, &particles);
         Self {
             white: upload(&device, &queue, &white()),
             device,
@@ -164,6 +155,11 @@ impl Renderer {
             model_ids: HashMap::new(),
             bone_buffer,
             bone_capacity: BONES_AT_START,
+            opacity_buffer,
+            opacity_capacity: OPACITIES_AT_START,
+            opacity_scratch: Vec::new(),
+            uv_buffer,
+            uv_scratch: Vec::new(),
             instance_buffer,
             instance_capacity: INSTANCES_AT_START,
             main_frame,
@@ -181,6 +177,8 @@ impl Renderer {
             decoding: HashMap::new(),
             next_job: 0,
             waiting: Vec::new(),
+            particles,
+            lightning,
             problems: Vec::new(),
         }
     }
@@ -238,14 +236,20 @@ impl Renderer {
             for layer in &part.layers {
                 opaque_first |= layer.filter.index() < Filter::Blend.index();
                 let (kind, texture) = match &layer.paint {
-                    Paint::Texture(name) => (0, self.textures.get(&name.to_ascii_lowercase()).unwrap_or(&self.white)),
+                    Paint::Texture(name) => match self.textures.get(&name.to_ascii_lowercase()) {
+                        Some(view) => (0, view),
+                        None => {
+                            self.problems.push(format!("{path}: texture {name} was never decoded, so its layer draws white"));
+                            (0, &self.white)
+                        }
+                    },
                     Paint::TeamColor => (1, &self.white),
                     Paint::TeamGlow => (2, &self.white),
                     Paint::None => (0, &self.white),
                 };
                 let uniform = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("layer"),
-                    contents: bytemuck::bytes_of(&LayerUniform { kind, cutoff: if layer.filter == Filter::Cutout { 0.75 } else { 0.0 }, pad: [0.0; 2] }),
+                    contents: bytemuck::bytes_of(&LayerUniform { kind, cutoff: if layer.filter == Filter::Cutout { 0.75 } else { 0.0 }, geoset_slot: part.opacity_slot, layer_slot: layer.opacity_slot }),
                     usage: wgpu::BufferUsages::UNIFORM,
                 });
                 let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -260,9 +264,18 @@ impl Renderer {
                 draws.push(Draw { filter: layer.filter, first_index: part.first_index, index_count: part.index_count, bind_group });
             }
         }
+        let mut emitters = Vec::new();
+        for emitter in data.emitters {
+            let (key, view) = match &emitter.paint {
+                Paint::Texture(name) => (name.as_str(), self.textures.get(&name.to_ascii_lowercase()).unwrap_or(&self.white)),
+                _ => ("", &self.white),
+            };
+            let slot = self.particles.register(&self.device, &self.queue, &emitter, (key, view), &self.sampler);
+            emitters.push((emitter, slot));
+        }
         let bones = data.rig.bone_count().max(1);
         self.model_ids.insert(path.to_string(), self.models.len());
-        self.models.push(GpuModel { vertices, indices, draws, opaque_first, rig: data.rig, bones });
+        self.models.push(GpuModel { vertices, indices, draws, opaque_first, rig: data.rig, bones, emitters });
         self.counts.push(0);
     }
 
@@ -329,6 +342,8 @@ impl Renderer {
         self.instance_scratch.clear();
         self.instance_scratch.resize(cursor as usize, Instance::zeroed());
         self.bone_scratch.clear();
+        self.opacity_scratch.clear();
+        self.uv_scratch.clear();
         for pose in poses {
             let Some(&id) = self.model_ids.get(pose.model.as_str()) else { continue };
             let group = self.groups.iter().find(|group| group.model == id).map(|group| group.first).unwrap_or(0);
@@ -336,9 +351,19 @@ impl Renderer {
             let base = self.bone_scratch.len();
             self.bone_scratch.resize(base + model.bones, IDENTITY);
             model.rig.pose(pose.sequence, pose.frame, pose.clock * 1000.0, &mut self.bone_scratch[base..]);
+            let opacity_base = self.opacity_scratch.len();
+            self.opacity_scratch.extend_from_slice(model.rig.opacities());
+            self.uv_scratch.extend_from_slice(model.rig.uv_rows());
             let slot = (group + self.counts[id]) as usize;
             self.counts[id] += 1;
-            self.instance_scratch[slot] = Instance { model: pose.matrix, tint: [pose.color[0], pose.color[1], pose.color[2], pose.alpha], team: [pose.team[0], pose.team[1], pose.team[2], 1.0], base: base as u32 };
+            self.instance_scratch[slot] = Instance { model: pose.matrix, tint: [pose.color[0], pose.color[1], pose.color[2], pose.alpha], team: [pose.team[0], pose.team[1], pose.team[2], 1.0], base: [base as u32, opacity_base as u32] };
+            if pose.sequence >= 0 && pose.alpha > 0.0 {
+                for (index, ((emitter, slot), sample)) in model.emitters.iter().zip(model.rig.emitters()).enumerate() {
+                    let Some(slot) = *slot else { continue };
+                    let Some(bone) = self.bone_scratch.get(base + emitter.spec.node) else { continue };
+                    self.particles.emit(pose.id, index, slot, emitter, sample, &multiply(&pose.matrix, bone), pose.alpha);
+                }
+            }
         }
     }
 
@@ -356,29 +381,26 @@ impl Renderer {
         }
     }
 
-    /// Draws `scene` into `target`, a surface view of `size` in this renderer's format, in the encoder's order: the sky, then the world.
-    /// The world fills the window and keeps the reach of the `aspect` picture (the game's width over its height) in view: a taller or wider window shows more world, never bars.
-    pub fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, size: (u32, u32), aspect: f32, scene: &Scene) {
-        self.fit_targets(size);
-        let viewport = [0.0, 0.0, size.0 as f32, size.1 as f32];
-        let window = size.0 as f32 / size.1.max(1) as f32;
+    /// Poses the sky, grows the storage buffers that outgrew their capacity, uploads the scene's per-frame data and stages its particles and bolts.
+    fn prepare(&mut self, scene: &Scene, aspect: f32, window: f32) {
         self.layout(&scene.poses);
-        if self.bone_scratch.len() > self.bone_capacity {
-            self.bone_capacity = self.bone_scratch.len().next_power_of_two();
-            self.bone_buffer = bone_storage(&self.device, self.bone_capacity);
-            self.main_group = frame_group(&self.device, &self.frame_layout, &self.main_frame, &self.bone_buffer);
-            self.sky_group = frame_group(&self.device, &self.frame_layout, &self.sky_frame, &self.bone_buffer);
-        }
         let sky = scene.sky.as_ref().and_then(|pose| self.model_ids.get(pose.model.as_str()).map(|&id| (id, pose)));
         let sky_base = self.bone_scratch.len();
+        let sky_opacity_base = self.opacity_scratch.len();
         if let Some((id, pose)) = sky {
-            let bones = self.models[id].bones;
-            if sky_base + bones > self.bone_capacity {
-                self.problems.push("the sky's bones did not fit".into());
-            } else {
-                self.bone_scratch.resize(sky_base + bones, IDENTITY);
-                self.models[id].rig.pose(pose.sequence, pose.frame, pose.clock * 1000.0, &mut self.bone_scratch[sky_base..]);
-            }
+            self.bone_scratch.resize(sky_base + self.models[id].bones, IDENTITY);
+            self.models[id].rig.pose(pose.sequence, pose.frame, pose.clock * 1000.0, &mut self.bone_scratch[sky_base..]);
+            self.opacity_scratch.extend_from_slice(self.models[id].rig.opacities());
+            self.uv_scratch.extend_from_slice(self.models[id].rig.uv_rows());
+        }
+        if self.bone_scratch.len() > self.bone_capacity || self.opacity_scratch.len() > self.opacity_capacity {
+            self.bone_capacity = self.bone_scratch.len().next_power_of_two().max(self.bone_capacity);
+            self.opacity_capacity = self.opacity_scratch.len().next_power_of_two().max(self.opacity_capacity);
+            self.bone_buffer = bone_storage(&self.device, self.bone_capacity);
+            self.opacity_buffer = opacity_storage(&self.device, self.opacity_capacity);
+            self.uv_buffer = uv_storage(&self.device, self.opacity_capacity);
+            self.main_group = frame_group(&self.device, &self.frame_layout, &self.main_frame, &self.bone_buffer, &self.opacity_buffer, &self.uv_buffer);
+            self.sky_group = frame_group(&self.device, &self.frame_layout, &self.sky_frame, &self.bone_buffer, &self.opacity_buffer, &self.uv_buffer);
         }
         let sky_instance = self.instance_scratch.len();
         if let Some((_, pose)) = sky {
@@ -386,17 +408,37 @@ impl Renderer {
             placed[12] = scene.camera.eye[0];
             placed[13] = scene.camera.eye[1];
             placed[14] = scene.camera.eye[2];
-            self.instance_scratch.push(Instance { model: placed, tint: [1.0, 1.0, 1.0, 1.0], team: [1.0; 4], base: sky_base as u32 });
+            self.instance_scratch.push(Instance { model: placed, tint: [1.0, 1.0, 1.0, 1.0], team: [1.0; 4], base: [sky_base as u32, sky_opacity_base as u32] });
         }
         if self.instance_scratch.len() > self.instance_capacity {
             self.instance_capacity = self.instance_scratch.len().next_power_of_two();
             self.instance_buffer = instance_storage(&self.device, self.instance_capacity);
         }
         self.queue.write_buffer(&self.bone_buffer, 0, bytemuck::cast_slice(&self.bone_scratch));
+        self.queue.write_buffer(&self.opacity_buffer, 0, bytemuck::cast_slice(&self.opacity_scratch));
+        self.queue.write_buffer(&self.uv_buffer, 0, bytemuck::cast_slice(&self.uv_scratch));
         self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&self.instance_scratch));
         self.queue.write_buffer(&self.main_frame, 0, bytemuck::bytes_of(&Self::frame_uniform(scene, aspect, window, scene.camera.far)));
         self.queue.write_buffer(&self.sky_frame, 0, bytemuck::bytes_of(&Self::frame_uniform(scene, aspect, window, scene.camera.sky_far)));
+        let view = &scene.camera.view;
+        let eye = scene.camera.eye;
+        self.particles.finish(
+            &self.queue,
+            &ParticleFrame { base: Self::frame_uniform(scene, aspect, window, scene.camera.far), right: [view[0], view[4], view[8], 0.0], up: [view[1], view[5], view[9], 0.0], eye_and_now: [eye[0], eye[1], eye[2], 0.0] },
+        );
+        self.problems.append(&mut self.particles.problems);
+        self.lightning.stage(&self.queue, &scene.lightnings);
         self.sky_group_of = sky.map(|(id, _)| Group { model: id, first: sky_instance as u32, count: 1 });
+    }
+
+    /// Draws `scene` into `target`, a surface view of `size` in this renderer's format, in the encoder's order: the sky, then the world.
+    /// The world fills the window and keeps the reach of the `aspect` picture (the game's width over its height) in view: a taller or wider window shows more world, never bars.
+    pub fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, size: (u32, u32), aspect: f32, scene: &Scene) {
+        self.fit_targets(size);
+        self.particles.begin(scene.frame);
+        let viewport = [0.0, 0.0, size.0 as f32, size.1 as f32];
+        let window = size.0 as f32 / size.1.max(1) as f32;
+        self.prepare(scene, aspect, window);
 
         let clear = if scene.clear == [0.0; 3] { CLEAR } else { scene.clear.map(f64::from) };
         let targets = self.targets.as_ref().expect("fit_targets ran");
@@ -435,6 +477,8 @@ impl Renderer {
         pass.set_bind_group(0, &self.main_group, &[]);
         self.draw_groups(&mut pass, &self.groups, true);
         self.draw_groups(&mut pass, &self.groups, false);
+        self.particles.draw(&mut pass);
+        self.lightning.draw(&mut pass, &self.particles);
     }
 }
 
@@ -444,3 +488,6 @@ impl crate::ui::UiTextures for Renderer {
         self.textures.get(&path.to_ascii_lowercase())
     }
 }
+
+#[cfg(test)]
+mod gpu_tests;

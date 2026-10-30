@@ -34,6 +34,9 @@ pub struct Light {
 /// One placed model: its path, where it stands, the sequence and frame it shows and the colours it is drawn with.
 #[derive(Deserialize)]
 pub struct Pose {
+    /// The game handle of the model, which keeps its particle emitters running from one scene to the next; 0 for a pose with none.
+    #[serde(default)]
+    pub id: u32,
     pub model: String,
     pub matrix: Mat4,
     pub sequence: i32,
@@ -44,9 +47,18 @@ pub struct Pose {
     pub team: [f32; 3],
 }
 
+/// A lightning bolt between two world points, its colour 0 to 1.
+#[derive(Deserialize)]
+pub struct Bolt {
+    pub from: [f32; 3],
+    pub to: [f32; 3],
+    pub color: [f32; 4],
+}
+
 #[derive(Deserialize, Default)]
 #[serde(default)]
 pub struct Scene {
+    pub lightnings: Vec<Bolt>,
     pub camera: Camera,
     pub fog: Option<Fog>,
     pub light: Option<Light>,

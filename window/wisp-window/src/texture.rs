@@ -38,10 +38,20 @@ fn header_word(bytes: &[u8], at: usize) -> Option<u32> {
     Some(u32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?))
 }
 
+/// A BLP1 JPEG holds blue, green, red and alpha as four JPEG components; image-blp reads it through `image`, which takes four components for CMYK and drops the alpha, so the components are read raw here.
 fn blp_jpeg(bytes: &[u8]) -> Result<Image, String> {
     let parsed = image_blp::parser::load_blp_from_buf(bytes).map_err(|error| format!("BLP texture: {error}"))?;
-    let top = image_blp::convert::blp_to_image(&parsed, 0).map_err(|error| format!("BLP texture: {error}"))?.into_rgba8();
-    Ok(Image { width: top.width(), height: top.height(), rgba: top.into_raw() })
+    let image_blp::types::BlpContent::Jpeg(content) = &parsed.content else { return Err("BLP texture is not JPEG content".to_string()) };
+    let raw = content.full_jpeg(0).ok_or("BLP texture has no top image")?;
+    let mut decoder = jpeg_decoder::Decoder::new(Cursor::new(raw));
+    let samples = decoder.decode().map_err(|error| format!("BLP texture: {error}"))?;
+    let info = decoder.info().ok_or("BLP texture has no JPEG header")?;
+    let rgba = match info.pixel_format {
+        jpeg_decoder::PixelFormat::CMYK32 => samples.chunks_exact(4).flat_map(|pixel| [!pixel[2], !pixel[1], !pixel[0], !pixel[3]]).collect(),
+        jpeg_decoder::PixelFormat::RGB24 => samples.chunks_exact(3).flat_map(|pixel| [pixel[2], pixel[1], pixel[0], 255]).collect(),
+        jpeg_decoder::PixelFormat::L8 | jpeg_decoder::PixelFormat::L16 => return Err("BLP texture is a greyscale JPEG".to_string()),
+    };
+    Ok(Image { width: u32::from(info.width), height: u32::from(info.height), rgba })
 }
 
 fn blp_paletted(bytes: &[u8]) -> Result<Image, String> {

@@ -13,7 +13,7 @@ fn uniform_type() -> wgpu::BindingType {
     wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }
 }
 
-fn blend_of(filter: Filter) -> Option<wgpu::BlendState> {
+pub(super) fn blend_of(filter: Filter) -> Option<wgpu::BlendState> {
     use wgpu::BlendFactor::{Dst, One, OneMinusSrcAlpha, Src, SrcAlpha, Zero};
     let blend = |source, destination| wgpu::BlendState {
         color: wgpu::BlendComponent { src_factor: source, dst_factor: destination, operation: wgpu::BlendOperation::Add },
@@ -38,6 +38,8 @@ pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat) -> (Vec<
         entries: &[
             entry(0, both, uniform_type()),
             entry(1, wgpu::ShaderStages::VERTEX, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }),
+            entry(2, wgpu::ShaderStages::VERTEX, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }),
+            entry(3, wgpu::ShaderStages::VERTEX, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }),
         ],
     });
     let layer_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -45,12 +47,12 @@ pub(super) fn build(device: &wgpu::Device, format: wgpu::TextureFormat) -> (Vec<
         entries: &[
             entry(0, wgpu::ShaderStages::FRAGMENT, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
             entry(1, wgpu::ShaderStages::FRAGMENT, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
-            entry(2, wgpu::ShaderStages::FRAGMENT, uniform_type()),
+            entry(2, wgpu::ShaderStages::VERTEX_FRAGMENT, uniform_type()),
         ],
     });
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("model"), bind_group_layouts: &[Some(&frame_layout), Some(&layer_layout)], immediate_size: 0 });
     let vertex_attributes = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Uint16x4, 4 => Float32x4];
-    let instance_attributes = wgpu::vertex_attr_array![5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4, 9 => Float32x4, 10 => Float32x4, 11 => Uint32];
+    let instance_attributes = wgpu::vertex_attr_array![5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4, 9 => Float32x4, 10 => Float32x4, 11 => Uint32x2];
     let pipelines = FILTERS
         .iter()
         .map(|&filter| {

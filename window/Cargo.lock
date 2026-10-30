@@ -3285,6 +3285,7 @@ dependencies = [
  "image 0.24.9",
  "image 0.25.10",
  "image-blp",
+ "jpeg-decoder",
  "lewton",
  "nanomp3",
  "padbridge-model",
