@@ -226,7 +226,7 @@ type OpenedStandalone = Effect.Success<ReturnType<typeof openStandalone>>;
 const openPlayerWindow = (game: StandaloneGame, options: StandaloneOptions, player: OpenedStandalone) => {
   if (options.window !== "native") return openWindow(game, options, player.url);
   if ((options.captureFrames ?? []).length > 0) return Effect.fail(failed("the native window can't capture frames yet; use --window chrome"));
-  return openNativePlayer(player.native, { title: game.title, width: game.render.width ?? 1280, height: game.render.height ?? 720, scripted: options.script !== undefined });
+  return openNativePlayer(player.native, { title: game.title, width: game.render.width ?? 1280, height: game.render.height ?? 720, scripted: options.script !== undefined, gamepadIndex: options.gamepadIndex });
 };
 
 const printSummary = (result: Readonly<Record<string, unknown>> | void) => {

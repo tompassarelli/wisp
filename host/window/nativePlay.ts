@@ -10,6 +10,7 @@ export interface NativePlayOptions {
   readonly width: number;
   readonly height: number;
   readonly scripted: boolean;
+  readonly gamepadIndex?: number | undefined;
 }
 
 export const NATIVE_HELP = "Arrows / WASD move · J attack · K special · Space jump · L grab · Shift shield · Enter pause";
@@ -34,6 +35,7 @@ export const openNativePlayer = (player: NativePlayer, options: NativePlayOption
     (open) => Effect.sync(() => { loop?.dispose(); open.close(); }),
   );
   window.status(`${options.title} · loading game…`);
+  window.selectPad(options.gamepadIndex);
   loop = createFrameLoop(player, window, { scripted: options.scripted, startupMs: performance.now() - opened }, (result) => { void player.finish(result).catch(() => undefined); });
   window.status(`${options.title} · ${options.scripted ? "scripted run" : NATIVE_HELP}`);
   window.start();

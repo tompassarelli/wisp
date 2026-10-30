@@ -5,6 +5,7 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## Unreleased
 
+- The native window reads pads at its sample point: `InputSample` carries `axisX` and `axisY`, `WindowView.selectPad` takes the browser's `gamepadIndex`, and `bun wisp play --standalone --window native` plays with the first connected pad (wisp#110).
 - `wisp/src/netcode/ledger` now admits rows against the common frontier K
   with epochs, a participant mask, retained history, `discardThrough`,
   `takeLowestAccepted` and the receipts `wrongEpoch` and `storageFull`;

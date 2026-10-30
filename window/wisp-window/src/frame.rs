@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
+use crate::input::Input;
 use crate::metrics::{ms, Metrics, Series};
 use crate::sync::lock;
 
@@ -28,7 +29,7 @@ pub trait Surface {
 
 /// How the loop reads input and wakes the game's thread.
 pub trait Seam {
-    fn buttons(&self) -> u32;
+    fn input(&self) -> Input;
     fn wake(&self, sample: &Sample);
 }
 
@@ -36,7 +37,7 @@ pub trait Seam {
 pub struct Sample {
     pub frame: u32,
     pub sampled_ns: u64,
-    pub buttons: u32,
+    pub input: Input,
 }
 
 pub struct Submission {
@@ -204,7 +205,7 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
     }
 
     fn sample_and_wait(&mut self, mode: Mode, seam: &impl Seam, acquired: u64, period_ms: f64) -> Outcome {
-        let sample = Sample { frame: self.frame, sampled_ns: self.clock.now_ns(), buttons: seam.buttons() };
+        let sample = Sample { frame: self.frame, sampled_ns: self.clock.now_ns(), input: seam.input() };
         self.frame = self.frame.wrapping_add(1);
         self.sample_times[sample.frame as usize % SAMPLE_MEMORY] = Some((sample.frame, sample.sampled_ns));
         let mut outcome = Outcome::default();
@@ -294,8 +295,8 @@ mod tests {
     struct Quiet;
 
     impl Seam for Quiet {
-        fn buttons(&self) -> u32 {
-            0
+        fn input(&self) -> Input {
+            Input::default()
         }
 
         fn wake(&self, _: &Sample) {}

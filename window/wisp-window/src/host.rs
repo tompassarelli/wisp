@@ -1,5 +1,5 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, AtomicU8, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
@@ -15,8 +15,9 @@ use winit::window::{Window, WindowId};
 use crate::clock::now_ns;
 use crate::draw::Gpu;
 use crate::frame::{Clock, FrameLoop, Mailbox, Mode, Sample, Seam, Submission, Surface};
-use crate::input::Held;
+use crate::input::{Held, Input};
 use crate::metrics::Metrics;
+use crate::pad::Pads;
 use crate::sync::lock;
 
 /// Why Bun is being woken: a frame to step, the window going away, or the library failing.
@@ -35,6 +36,8 @@ enum Command {
 
 struct Shared {
     held: Held,
+    focused: AtomicBool,
+    pad_slot: AtomicI32,
     mode: AtomicU8,
     closed: AtomicBool,
     size: AtomicU64,
@@ -73,6 +76,7 @@ impl ApplicationHandler<Command> for App {
             Ok(window) => {
                 let window = Arc::new(window);
                 self.shared.size.store(pack(window.inner_size()), Ordering::Release);
+                self.shared.focused.store(window.has_focus(), Ordering::Release);
                 self.window = Some(window.clone());
                 let _ = self.handoff.send(window);
             }
@@ -90,7 +94,12 @@ impl ApplicationHandler<Command> for App {
                 self.shared.closed.store(true, Ordering::Release);
                 event_loop.exit();
             }
-            WindowEvent::Focused(false) => self.shared.held.clear(),
+            WindowEvent::Focused(focused) => {
+                self.shared.focused.store(focused, Ordering::Release);
+                if !focused {
+                    self.shared.held.clear();
+                }
+            }
             WindowEvent::Resized(size) => self.shared.size.store(pack(size), Ordering::Release),
             WindowEvent::KeyboardInput { event, .. } if !event.repeat => {
                 if let PhysicalKey::Code(code) = event.physical_key {
@@ -144,6 +153,8 @@ impl Host {
     pub fn open(title: &str, width: u32, height: u32, wake: Wake) -> Result<Self, String> {
         let shared = Arc::new(Shared {
             held: Held::default(),
+            focused: AtomicBool::new(true),
+            pad_slot: AtomicI32::new(-1),
             mode: AtomicU8::new(Mode::Loading as u8),
             closed: AtomicBool::new(false),
             size: AtomicU64::new(0),
@@ -191,6 +202,10 @@ impl Host {
 
     pub fn start_baseline(&self) {
         self.shared.mode.store(Mode::Baseline as u8, Ordering::Release);
+    }
+
+    pub fn select_pad(&self, slot: i32) {
+        self.shared.pad_slot.store(slot, Ordering::Release);
     }
 
     pub fn set_status(&self, text: &str) {
@@ -269,16 +284,18 @@ impl Clock for LibraryClock {
 
 struct WakeSeam {
     shared: Arc<Shared>,
+    pads: Mutex<Pads>,
     wake: Wake,
 }
 
 impl Seam for WakeSeam {
-    fn buttons(&self) -> u32 {
-        self.shared.held.sample()
+    fn input(&self) -> Input {
+        let slot = usize::try_from(self.shared.pad_slot.load(Ordering::Acquire)).ok();
+        lock(&self.pads).sample(slot, self.shared.focused.load(Ordering::Acquire), self.shared.held.sample())
     }
 
     fn wake(&self, sample: &Sample) {
-        (self.wake)(WAKE_FRAME, sample.frame, sample.sampled_ns as f64, sample.buttons);
+        (self.wake)(WAKE_FRAME, sample.frame, sample.sampled_ns as f64, sample.input.buttons);
     }
 }
 
@@ -310,7 +327,7 @@ fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>, wake: 
     *lock(&shared.info) = format!("{{\"adapter\":{:?},\"backend\":{:?},\"presentMode\":\"Fifo\",\"desiredMaximumFrameLatency\":1}}", gpu.adapter, gpu.backend);
     let surface = WindowSurface { gpu, window, shared: shared.clone() };
     let mut frames = FrameLoop::new(surface, LibraryClock, shared.mailbox.clone(), shared.metrics.clone());
-    let seam = WakeSeam { shared: shared.clone(), wake };
+    let seam = WakeSeam { shared: shared.clone(), pads: Mutex::new(Pads::open()), wake };
     while !shared.mailbox.is_stopping() {
         if shared.closed.load(Ordering::Acquire) {
             wake(WAKE_CLOSED, 0, 0.0, 0);

@@ -52,6 +52,7 @@ export const openSimPlayer = (options: SimPlayerOptions) => Effect.gen(function*
   );
   window.status(`${options.title} · loading game…`);
   worker.postMessage({ type: "attach", handle: window.handle });
+  window.selectPad(options.standalone.gamepadIndex);
   window.status(`${options.title} · ${options.scripted ? "scripted run" : NATIVE_HELP}`);
   return {
     startupMs: performance.now() - opened,

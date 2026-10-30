@@ -22,6 +22,7 @@ const symbols = {
   wisp_window_start_baseline: { args: ["ptr"], returns: "void" },
   wisp_window_submit: { args: ["ptr", "ptr", "usize", "f64", "u32"], returns: "void" },
   wisp_window_next_event: { args: ["ptr", "ptr", "u32"], returns: "u32" },
+  wisp_window_select_pad: { args: ["ptr", "i32"], returns: "void" },
   wisp_window_metric: { args: ["ptr", "u32", "ptr", "usize"], returns: "usize" },
   wisp_window_info: { args: ["ptr", "ptr", "usize"], returns: "usize" },
   wisp_window_error: { args: ["ptr", "ptr", "usize"], returns: "usize" },
@@ -43,11 +44,14 @@ export interface NativeWindowOptions {
   readonly onWake: OnWake;
 }
 
-/** One input sample the render thread took at a display frame: its number, when it was taken on the library's clock and the held buttons as a bit mask. */
+/** One input sample the render thread took at a display frame: its number, when it was taken on the library's clock and the held buttons as a bit mask and the left stick. */
 export interface InputSample {
   readonly frame: number;
   readonly sampleNs: number;
   readonly mask: number;
+  /** The left stick, Y up, as the pad reports it. */
+  readonly axisX: number;
+  readonly axisY: number;
 }
 
 export interface WindowInfo {
@@ -65,6 +69,8 @@ export interface WindowView {
   /** Starts the frames with no game: the render thread submits a canned scene at each sample point, which measures the display path alone. */
   startBaseline(): void;
   status(text: string): void;
+  /** Selects the pad at `slot` (the browser's `gamepadIndex`); undefined takes the first connected pad. */
+  selectPad(slot: number | undefined): void;
   /** The oldest queued sample without waiting, or undefined when there is none; call it until it returns undefined to take every sample in order. */
   nextSample(): InputSample | undefined;
   /** Encodes `scene` into one buffer the view reuses and hands it to the render thread as the answer to the sample numbered `frame`. */
@@ -103,13 +109,14 @@ const viewOf = (library: Library, handle: Pointer, vocabulary: { buttons: string
   const encoder = new TextEncoder();
   // A fresh array per frame reports external memory to the collector, which then collects every frame; one reused buffer keeps the pause count to what the frame allocates.
   let sceneBuffer = new Uint8Array(64 * 1024);
-  const sample = new Float64Array(3);
+  const sample = new Float64Array(5);
   return {
     handle: handle as number,
     start: () => call.wisp_window_start(handle),
     startBaseline: () => call.wisp_window_start_baseline(handle),
     status: (text) => { const bytes = Buffer.from(text); call.wisp_window_status(handle, bytes, bytes.length); },
-    nextSample: () => (call.wisp_window_next_event(handle, sample, 0) === 0 ? undefined : { frame: sample[0]!, sampleNs: sample[1]!, mask: sample[2]! }),
+    selectPad: (slot) => call.wisp_window_select_pad(handle, slot ?? -1),
+    nextSample: () => (call.wisp_window_next_event(handle, sample, 0) === 0 ? undefined : { frame: sample[0]!, sampleNs: sample[1]!, mask: sample[2]!, axisX: sample[3]!, axisY: sample[4]! }),
     submit: (scene, step, frame) => {
       let written = encoder.encodeInto(scene, sceneBuffer);
       while (written.read < scene.length) {

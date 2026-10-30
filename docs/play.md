@@ -262,7 +262,9 @@ never makes a present miss its vblank; a scene that missed its deadline is
 counted in `lateScenes` and drawn on a later frame. Box W1 draws only a clear colour and the step as 24 lit squares, and it
 shows the loading and ready text in the window's title. The scene is parsed in
 the library on every frame, so the cost of encoding and parsing it is measured
-before the renderer is ported. Keyboard only: pads, sound, captures and
+before the renderer is ported. Keyboard and pads (box W5: the left stick and the standard-layout buttons of the
+first connected pad, or `gamepadIndex`, read at the sample point and cleared with
+the keys when the window loses focus); sound, captures and
 `--headless` stay with Chrome (`--capture-frames` with the native window is
 refused). `standalone.json` keeps the page's fields and adds `adapter`,
 `backend`, `presentMode`, `desiredMaximumFrameLatency`, `wakeMs`, `encodeMs`,

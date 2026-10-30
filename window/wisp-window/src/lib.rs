@@ -9,6 +9,11 @@ mod frame;
 mod host;
 mod input;
 mod metrics;
+mod pad;
+#[cfg(target_os = "linux")]
+mod pad_gilrs;
+#[cfg(windows)]
+mod pad_windows;
 mod sync;
 
 use std::ffi::{c_char, c_void};
@@ -130,18 +135,31 @@ pub unsafe extern "C" fn wisp_window_submit(handle: *mut c_void, scene: *const u
     })
 }
 
-/// Takes the oldest queued sample into `out` as (frame, sampleNs, buttons) and returns 1, or returns 0 when there is none within `timeout_ms`; a zero timeout never waits.
+/// Takes the oldest queued sample into `out` as (frame, sampleNs, buttons, axisX, axisY) and returns 1, or returns 0 when there is none within `timeout_ms`; a zero timeout never waits.
 ///
 /// # Safety
-/// `handle` is live and `out` has room for three f64s.
+/// `handle` is live and `out` has room for five f64s.
 #[no_mangle]
 pub unsafe extern "C" fn wisp_window_next_event(handle: *mut c_void, out: *mut f64, timeout_ms: u32) -> u32 {
     guard(0, || {
         let Some(sample) = host(handle).and_then(|host| host.next_sample(Duration::from_millis(timeout_ms as u64))) else { return 0 };
         if !out.is_null() {
-            ptr::copy_nonoverlapping([sample.frame as f64, sample.sampled_ns as f64, sample.buttons as f64].as_ptr(), out, 3);
+            ptr::copy_nonoverlapping([sample.frame as f64, sample.sampled_ns as f64, sample.input.buttons as f64, sample.input.axis_x as f64, sample.input.axis_y as f64].as_ptr(), out, 5);
         }
         1
+    })
+}
+
+/// Selects the pad at slot `slot` (the browser's `gamepadIndex`); a negative slot takes the first connected pad.
+///
+/// # Safety
+/// `handle` is live.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_window_select_pad(handle: *mut c_void, slot: i32) {
+    guard((), || {
+        if let Some(host) = host(handle) {
+            host.select_pad(slot);
+        }
     })
 }
 

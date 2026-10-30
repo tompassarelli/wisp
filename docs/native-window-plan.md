@@ -432,7 +432,10 @@ The native window takes over the page's whole job, not only its drawing
   - `Gamepad::GetCurrentReading` for Xbox-layout pads;
   - `RawGameController::GetCurrentReading` for the rest, such as
     DualShock-style pads, which gilrs's backend also covers. W5 maps these
-    through the same SDL mapping database gilrs uses on Linux.
+    with a fixed DualShock table (Cross, Circle, Square, Triangle, L1, R1,
+    L2, R2, Share, Options, L3, R3 and the first switch as the d-pad). A pad
+    with another layout needs the SDL mapping database, which W5 has not
+    ported.
 - **Mapping.** The browser's standard-layout indices carry over:
   - 0 attack, 1 jump, 2 special, 3 jump;
   - 4 walk, 5 grab, 6 and 7 shield;

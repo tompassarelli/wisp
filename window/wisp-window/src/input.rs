@@ -4,6 +4,14 @@ use winit::keyboard::KeyCode;
 /// The buttons the page names, in the bit order of the mask the frame callback carries.
 pub const BUTTONS: [&str; 12] = ["left", "right", "up", "down", "attack", "special", "jump", "grab", "shield", "walk", "start", "view"];
 
+/// What one sample point reads: the held buttons as a bit mask and the left stick, Y up, raw.
+#[derive(Clone, Copy, Default, PartialEq, Debug)]
+pub struct Input {
+    pub buttons: u32,
+    pub axis_x: f32,
+    pub axis_y: f32,
+}
+
 /// The bit of the button a physical key presses, from the table the page keeps for `event.code`.
 pub fn button_bit(code: KeyCode) -> Option<u32> {
     let bit = match code {
