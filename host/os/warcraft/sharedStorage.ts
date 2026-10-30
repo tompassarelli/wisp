@@ -23,19 +23,34 @@ const PRIVATE_MODE = 0o644;
 
 const INSTALL_IN_PREFIX = "drive_c/Program Files (x86)/Warcraft III";
 
-const PREFIX_DLLS = ["d3d9", "d3d11", "d3d12core", "dxgi", "amdxcffx64"].map((name) => `${name}.dll`);
+const PREFIX_BINARY = /\.(dll|exe|sys|drv|ocx|ax|acm|cpl|tlb)$/i;
 
-const PREFIX_FOLDERS = ["drive_c/windows/system32", "drive_c/windows/syswow64"];
+const PREFIX_SYSTEM_FOLDERS = ["drive_c/windows/system32", "drive_c/windows/syswow64"];
+
+const BATTLE_NET = "drive_c/Program Files (x86)/Battle.net";
+
+const BATTLE_NET_VERSION = /^Battle\.net\.\d+$/;
 
 const prefixOf = (install: string) => {
   const folder = resolve(install);
   return folder.endsWith(`/${INSTALL_IN_PREFIX}`) ? folder.slice(0, -INSTALL_IN_PREFIX.length - 1) : undefined;
 };
 
-// Wine's graphics DLLs are the same bytes in every prefix of a pool, so they are shared when their contents match; prefix files are relative to the install.
+const filesUnder = (folder: string, accept: (name: string) => boolean) => existsSync(folder)
+  ? readdirSync(folder, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile() && accept(entry.name)).map((entry) => join(entry.parentPath, entry.name))
+  : [];
+
+// A pool's prefixes come from one Wine build, so the binaries Wine put in system32 and syswow64 (the graphics DLLs alone are 3.5 GB across gex45's pool) are shared when their contents match,
+// as are the files of Battle.net's version folders, which Battle.net never rewrites (an update adds a folder); prefix files are relative to the install.
 const prefixFiles = (install: string): readonly string[] => {
   const prefix = prefixOf(install);
-  return prefix === undefined ? [] : PREFIX_FOLDERS.flatMap((folder) => PREFIX_DLLS.map((dll) => relative(install, join(prefix, folder, dll)))).filter((file) => existsSync(join(install, file))).sort();
+  if (prefix === undefined) return [];
+  const battleNet = join(prefix, BATTLE_NET);
+  const versions = existsSync(battleNet) ? readdirSync(battleNet, { withFileTypes: true }).filter((entry) => entry.isDirectory() && BATTLE_NET_VERSION.test(entry.name)) : [];
+  return [
+    ...PREFIX_SYSTEM_FOLDERS.flatMap((folder) => filesUnder(join(prefix, folder), (name) => PREFIX_BINARY.test(name))),
+    ...versions.flatMap((entry) => filesUnder(join(battleNet, entry.name), () => true)),
+  ].map((file) => relative(install, file)).sort();
 };
 
 const sameBytes = (first: string, second: string) => statSync(first).size === statSync(second).size && readFileSync(first).equals(readFileSync(second));
