@@ -657,7 +657,7 @@ after the other, then ran 51 turns behind, so the host kept pausing the game.
 With the windows apart, both kept within a few turns at 1:1 game time. Two
 controller helpers typing on one display would also take each other's focus.
 
-**Profiles** (wisp:host/os/warcraft/clientProfiles.ts `PROFILES`). Each one writes the
+**Profiles** (wisp:host/contract/clientProfiles.ts `PROFILES`). Each one writes the
 client's War3Preferences `[Video]`, `[Misc]` and `[Sound]` at launch:
 
 - `parity` (the default) is for checksum and input runs, which need no pixels

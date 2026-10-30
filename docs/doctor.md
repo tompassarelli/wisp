@@ -153,7 +153,7 @@ sign-in, or before handing a client's prefix to another account.
 ## Graphics profiles
 
 Each signed-in client of the clients file runs one graphics profile, named by
-its entry's `profile` (wisp:host/os/warcraft/clientProfiles.ts `CLIENT_PROFILES`).
+its entry's `profile` (wisp:host/contract/clientProfiles.ts `CLIENT_PROFILES`).
 Doctor writes the profile's War3Preferences `[Video]`, `[Misc]` and `[Sound]`
 while the game is closed, so `client start` and every session that runs doctor
 first launch the client with it; the entry's `displaySettings` override its

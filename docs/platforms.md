@@ -32,7 +32,7 @@ Linux assumption found, and says where the boundary sits.
 ## The boundary
 
 Platform-specific work sits behind Effect services
-(wisp:host/os/platform/services.ts). Each is a `Context.Service` tag with a
+(wisp:host/contract/services.ts). Each is a `Context.Service` tag with a
 Linux layer under wisp:host/os/platform/linux/. Nothing outside that folder
 reads `/proc`, cgroup files or runs `nsenter`, `wine`, `grim`, `xdotool`,
 `wlrctl`, `systemd-run`, `systemctl`, `steam-run`, `bwrap`, `xdg-open`, PipeWire
@@ -84,7 +84,7 @@ The core should run anywhere Bun runs. Only the native side is per platform.
 | wisp:host/net/ (Wisp's own transport) and the LAN protocol in wisp:host/lan/ (`host`, `w3gs`, `join`, `actions`, `actionLog`, `map`) | core |
 | wisp:host/os/warcraft/ (`battleNet`, `war3Log`, `preferences`, `inputBatch`, `desktop`) | core logic over services; `desktop.ts` drives clients through `ScreenCapture` and `InputInjection` |
 | wisp:host/dev/watch.ts, `clients.ts`, `accept.ts`, `doctor.ts`, `play.ts` | core logic over `ProcessTable`, `InputInjection`, `PlayMachine` and `PlayDesktop` |
-| wisp:host/os/platform/services.ts, `layer.ts`, `play.ts` | the boundary |
+| wisp:host/contract/services.ts, `layer.ts`, `play.ts` | the boundary |
 | wisp:host/os/platform/linux/ | Linux layers |
 
 Linux-only tooling stays out of the consumer path. It goes through the same
