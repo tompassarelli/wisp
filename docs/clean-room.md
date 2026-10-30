@@ -129,8 +129,8 @@ behaves.
 ## The check
 
 wisp:host/checks/cleanRoom.ts runs before every push and in CI. Unless
-wisp:clean-room-allowlist.tsv lists the path as `original` or `generated`
-with how it was made, it refuses:
+wisp:clean-room-allowlist.tsv lists the path as `original`, `generated` or `licensed`
+with how it was made (for `licensed`, a third party's open-licence file with its licence text beside it, never a game file), it refuses:
 
 - game-format files (by extension or leading bytes);
 - files up to 2 MB with more than 20 JASS declaration lines, like a copy of

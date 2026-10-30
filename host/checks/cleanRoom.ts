@@ -51,7 +51,7 @@ export function contentRuleHits(path: string, text: string): string[] {
   }).map((rule) => rule.name);
 }
 
-export type Origin = "original" | "generated" | "stock-path";
+export type Origin = "original" | "generated" | "licensed" | "stock-path";
 
 export interface Policy {
 
@@ -161,6 +161,6 @@ export const runCleanRoom = (root: string, policy: Policy) => cleanRoom(root, po
     : Effect.forEach(problems, (problem) => Console.error(problem), { discard: true }).pipe(Effect.andThen(Effect.sync(() => process.exit(1))))),
 );
 
-export const WISP_POLICY: Policy = { origins: ["original", "generated"] };
+export const WISP_POLICY: Policy = { origins: ["original", "generated", "licensed"] };
 
 if (import.meta.main) await Effect.runPromise(runCleanRoom(process.argv[2] ?? join(import.meta.dir, "../.."), WISP_POLICY));

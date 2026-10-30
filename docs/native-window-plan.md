@@ -793,8 +793,18 @@ Decision (31 October 2026, after Tom said Chrome is a dead end and the Rust wind
 - **Skin on the GPU.** Each frame the render thread poses every drawn instance into one bone-matrix storage buffer; the vertex shader blends four bones per vertex.
 - **Instanced draws.** Poses are grouped by model. Each layer of each model is one instanced draw, with the layer's filter mode choosing one of seven pipelines (blend state and depth write). Models with a layer below Blend draw before the rest, as `orderDrawnModels` does in Chrome.
 - **No per-frame allocation in the draw.** The bone, instance and grouping scratch vectors keep their capacity; only a new model, texture or larger scene allocates. The scene's JSON parse still allocates once per scene (see "The scene goes to Rust as the same JSON").
-- **Not yet drawn:** day-night light and shadows, per-layer alpha and texture animation, particle and ribbon emitters, terrain and water, lightning, the cinematic filter, UI quads and text.
+- **Not yet drawn:** day-night light and shadows, per-layer alpha and texture animation, particle and ribbon emitters, terrain and water, lightning and the cinematic filter (the UI is drawn, see below).
 - **Capture.** `WISP_WINDOW_CAPTURE=FILE.png` (after `WISP_WINDOW_CAPTURE_AFTER` scenes that drew a model, default 30) saves the window's image; W3's offscreen capture replaces it.
+
+## UI as built (wisp#109)
+
+The menu and HUD frames are drawn by `window/wisp-window/src/ui/`, one render pass over the world, from the `ui` array of the scene Bun sends.
+
+- **Split.** Bun keeps the choice of what shows: `host/window/nativeUi.ts` drops every frame that draws nothing (hidden, no alpha, no rectangle, neither texture nor text), so the scene carries tens of frames rather than the thousands the game ever made, and names the textures and font files the rest need, which `createModelLibrary` pushes once with `wisp_window_asset`. Rust owns placement and drawing.
+- **Layout** (`ui/layout.rs`, plain functions with unit tests) follows the Chrome renderer: UI units are 0.8 x 0.6 at 4:3, scaled by the screen height and centred; frames draw in ascending level, scene order within a level; text is wrapped at its frame's width on spaces and `|n`, each line aligned on its own, with the first `|c` code colouring the whole text and `|r` dropped; a font without a height takes a size from the screen and the frame's height.
+- **Text** is rasterized by fontdue into one R8 glyph atlas, once per font, glyph and quarter-pixel size, when the glyph is first asked for, and drawn as instanced quads. A font file the game names (TTF or OTF, told from images by its magic) is registered from the bytes Bun pushes; until then, and for names that are not font files, the bundled DejaVu Sans draws, as Chrome's `sans-serif` does. A font with the outline flag draws a second atlas entry per glyph, grown by half the Chrome stroke width, in black at 0.9 alpha under the fill. A full atlas is emptied and rebuilt once.
+- **Draw.** Each scene's quads go to one instance buffer in drawing order, written only when they differ from the last scene's; a run of quads that share a texture is one draw call. The pass loads the world's image, blends straight alpha, and has no depth. A textured frame whose image has not decoded yet is skipped until it has.
+- **Not yet drawn:** frames with a colour but no texture draw nothing, as in Chrome, and `|c` colours apply to the whole text.
 
 ## Boxes
 

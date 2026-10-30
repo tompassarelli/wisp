@@ -24,6 +24,7 @@ mod sdl_mapping;
 mod sync;
 mod timer;
 pub mod texture;
+pub mod ui;
 
 use std::ffi::{c_char, c_void};
 use std::panic::{catch_unwind, AssertUnwindSafe};

@@ -12,7 +12,7 @@ const scene = { frame: 0, client: 0, effects: [pose("loaded.mdx"), pose("loading
 
 test("drawScene_reduces_to_loaded_poses", () => {
   const sequences = new Map<string, readonly AnimationSequence[]>([["loaded.mdx", [STAND]]]);
-  const drawn = drawScene(scene, { sequences: (path) => sequences.get(path), loading: () => 0 });
+  const drawn = drawScene(scene, { sequences: (path) => sequences.get(path), show: () => undefined, loading: () => 0 });
   expect(drawn.poses.map((placed) => placed.model)).toEqual(["loaded.mdx"]);
   expect(drawn.poses[0]?.sequence).toBe(0);
   expect(drawn.poses[0]?.frame).toBe(599);
@@ -29,4 +29,26 @@ test("modelLibrary_reports_a_missing_model", async () => {
   await Bun.sleep(10);
   expect(problems).toEqual(["gone.mdx: missing model"]);
   expect(pushed).toEqual([]);
+});
+
+test("drawScene_sends_only_the_ui_frames_that_draw_and_asks_for_their_files", () => {
+  const frame = (name: string, over: object) => ({ name, rectangle: [0, 0.1, 0.1, 0], text: "", texture: "", alpha: 255, visible: true, font: { file: "", height: 0, flags: 0 }, ...over });
+  const withUi = { ...scene, ui: [frame("tile", { texture: "tile.tga" }), frame("hidden", { texture: "gone.tga", visible: false }), frame("label", { text: "x", font: { file: "Fonts\\a.ttf", height: 0.01, flags: 1 } })] } as unknown as RenderScene;
+  const shown: string[][] = [];
+  const drawn = drawScene(withUi, { sequences: () => undefined, show: (paths) => shown.push([...paths]), loading: () => 0 });
+  expect(drawn.ui.map((each) => each.name)).toEqual(["tile", "label"]);
+  expect(shown).toEqual([["tile.tga", "Fonts\\a.ttf"]]);
+});
+
+test("modelLibrary_pushes_each_ui_file_once_and_counts_it_until_read", async () => {
+  const pushed: string[] = [];
+  const release = Promise.withResolvers<void>();
+  const library = createModelLibrary(async () => { await release.promise; return new Uint8Array([1]); }, { asset: (path) => { pushed.push(path); } }, () => undefined);
+  library.show(["a.tga", "b.ttf"]);
+  library.show(["a.tga"]);
+  expect(library.loading()).toBe(2);
+  release.resolve();
+  await Bun.sleep(10);
+  expect(pushed).toEqual(["a.tga", "b.ttf"]);
+  expect(library.loading()).toBe(0);
 });

@@ -424,3 +424,9 @@ impl Renderer {
     }
 }
 
+
+impl crate::ui::UiTextures for Renderer {
+    fn view(&self, path: &str) -> Option<&wgpu::TextureView> {
+        self.textures.get(&path.to_ascii_lowercase())
+    }
+}

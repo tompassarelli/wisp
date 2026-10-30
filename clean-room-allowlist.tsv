@@ -6,3 +6,4 @@ window/wisp-window/tests/fixtures/rig.mdx	generated	bun test/window/poseFixtures
 test/render/models/blend.mdl	original	hand-written MDL text for the render compare scenes (wisp:test/render/models.json, wisp#121)
 test/render/models/checker.mdl	original	hand-written MDL text for the render compare scenes (wisp:test/render/models.json, wisp#121)
 test/render/models/pyramid.mdl	original	hand-written MDL text for the render compare scenes (wisp:test/render/models.json, wisp#121)
+window/wisp-window/assets/DejaVuSans.ttf	licensed	DejaVu Sans 2.37 copied unmodified from the DejaVu fonts (Bitstream Vera licence, permitting redistribution; text in window/wisp-window/assets/DejaVu-LICENSE.txt), the native window's fallback UI face (wisp#109)

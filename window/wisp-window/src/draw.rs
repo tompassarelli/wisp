@@ -4,7 +4,8 @@ use std::sync::Arc;
 use winit::window::Window;
 
 use crate::capture;
-use crate::render::{DrawScene, Renderer};
+use crate::render::{fitted, DrawScene, Renderer};
+use crate::ui::{is_font, UiRenderer};
 
 const COUNTER_BITS: usize = 24;
 const VERTICES: usize = COUNTER_BITS * 6;
@@ -69,6 +70,7 @@ pub struct Gpu {
     pipeline: wgpu::RenderPipeline,
     vertices: wgpu::Buffer,
     renderer: Renderer,
+    ui: UiRenderer,
     aspect: f32,
     scene: Option<DrawScene>,
     capture: Option<Capture>,
@@ -134,7 +136,8 @@ impl Gpu {
         });
         let info = adapter.get_info();
         let renderer = Renderer::new(device.clone(), queue.clone(), config.format);
-        Ok(Self { surface, config, device, queue, pipeline, vertices, renderer, aspect, scene: None, capture, adapter: info.name, backend: format!("{:?}", info.backend) })
+        let ui = UiRenderer::new(device.clone(), queue.clone(), config.format);
+        Ok(Self { surface, config, device, queue, pipeline, vertices, renderer, ui, aspect, scene: None, capture, adapter: info.name, backend: format!("{:?}", info.backend) })
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -169,16 +172,24 @@ impl Gpu {
 
     /// Hands the renderer the files Bun pushed, and returns how many files it finished with.
     pub fn absorb(&mut self, files: Vec<(String, Vec<u8>)>) -> u64 {
+        let mut finished = 0;
         for (path, contents) in files {
-            self.renderer.ingest(&path, contents);
+            if is_font(&contents) {
+                finished += 1;
+                if !self.ui.add_font(&path, &contents) {
+                    self.renderer.problems.push(format!("{path}: not a font face"));
+                }
+            } else {
+                self.renderer.ingest(&path, contents);
+            }
         }
-        self.renderer.pump()
+        finished + self.renderer.pump()
     }
 
     /// Keeps the scene to draw.
     pub fn load_scene(&mut self, bytes: &[u8]) -> Result<(), String> {
         self.scene = Some(DrawScene::parse(bytes)?);
-        Ok(())
+        self.ui.load_scene(bytes)
     }
 
     pub fn take_problem(&mut self) -> Option<String> {
@@ -189,9 +200,12 @@ impl Gpu {
         let view = texture.texture.create_view(&Default::default());
         if let Some(scene) = &self.scene {
             let mut encoder = self.device.create_command_encoder(&Default::default());
-            self.renderer.draw(&mut encoder, &view, (self.config.width, self.config.height), self.aspect, scene);
+            let size = (self.config.width, self.config.height);
+            self.renderer.draw(&mut encoder, &view, size, self.aspect, scene);
+            let [left, top, width, height] = fitted(size, self.aspect);
+            self.ui.draw(&mut encoder, &view, size, [left as f32, top as f32, width as f32, height as f32], &self.renderer);
             self.queue.submit([encoder.finish()]);
-            if scene.pending == 0 && scene.frame >= self.capture.as_ref().map_or(u32::MAX, |capture| capture.after) && scene.poses.iter().any(|pose| self.renderer.has_model(&pose.model)) {
+            if scene.pending == 0 && scene.frame >= self.capture.as_ref().map_or(u32::MAX, |capture| capture.after) && (scene.poses.is_empty() || scene.poses.iter().any(|pose| self.renderer.has_model(&pose.model))) {
                 self.save_capture(&texture.texture);
             }
             return;

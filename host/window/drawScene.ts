@@ -2,6 +2,7 @@ import { type AnimationSequence, animationSample } from "../../src/headless/anim
 import { parseMDX } from "../../vendor/war3-model.mjs";
 import { parsableModel } from "../models/models";
 import { drawnPoses } from "../render/culling";
+import { nativeUi, uiAssets } from "./nativeUi";
 import type { DrawnPose, RenderScene } from "../render/renderScene";
 import { NATIVE_RISE, SKY_FAR, camera, transform } from "../render/screen";
 
@@ -29,9 +30,11 @@ export interface AssetSink {
 
 type Entry = { readonly sequences: readonly AnimationSequence[] } | "loading" | "failed";
 
-/** What the scene needs from the model library: the sequences of a model that is loaded, and how many are still being read. */
+/** What the scene needs from the model library: the sequences of a model that is loaded, the pushing of the files its UI names, and how many files are still being read. */
 export interface ModelLibrary {
   sequences(path: string): readonly AnimationSequence[] | undefined;
+  /** Reads and pushes each file once, so the window can draw the frames that name them. */
+  show(paths: readonly string[]): void;
   loading(): number;
 }
 
@@ -61,6 +64,13 @@ export function createModelLibrary(read: AssetReader, sink: AssetSink, report: (
   let reading = 0;
   return {
     loading: () => reading,
+    show(paths: readonly string[]): void {
+      for (const path of paths) {
+        if (pushed.has(path)) continue;
+        reading++;
+        void push(path).finally(() => { reading--; });
+      }
+    },
     sequences(path: string): readonly AnimationSequence[] | undefined {
       const known = entries.get(path);
       if (known === undefined) {
@@ -90,10 +100,12 @@ export function drawScene(scene: RenderScene, library: ModelLibrary) {
     const sample = animationSample(sequences, { animation: pose.animation, subAnimations: pose.subAnimations, elapsed: pose.animationElapsed }, pose.unit === true ? "unit" : "effect");
     return { model: pose.model, matrix: Array.from(transform(pose)), sequence: sample.sequence, frame: sample.frame, clock: pose.animationClock, alpha: pose.alpha / 255, color: pose.color.map((value) => value / 255), team: (TEAMS[pose.teamColor] ?? NEUTRAL_TEAM).map((value) => value / 255) };
   };
+  const ui = nativeUi(scene.ui);
+  library.show(uiAssets(ui));
   const environment = scene.environment;
   const sky = environment.sky !== "" && environment.skyVisible ? place({ model: environment.sky, x: 0, y: 0, z: 0, alpha: 255, scale: 1, flat: false, animation: undefined, subAnimations: [], animationElapsed: 0, animationClock: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1], yaw: 0, pitch: 0, roll: 0 } as unknown as DrawnPose) : undefined;
   const poses = drawnPoses(scene.effects, view.eye, view.far, scene.world).flatMap((pose) => place(pose) ?? []);
-  return { frame: scene.frame, pending: library.loading(), camera: { view: Array.from(view.view), eye: view.eye, tangent: view.shadow.tangent, near: view.near, far: view.far, skyFar: SKY_FAR, rise: NATIVE_RISE }, fog: fogOf(scene), sky, poses };
+  return { frame: scene.frame, pending: library.loading(), camera: { view: Array.from(view.view), eye: view.eye, tangent: view.shadow.tangent, near: view.near, far: view.far, skyFar: SKY_FAR, rise: NATIVE_RISE }, fog: fogOf(scene), sky, poses, ui };
 }
 
 const PRELOAD_MS = 120_000;
