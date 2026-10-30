@@ -34,6 +34,7 @@ env:
   BRANCH: ${{ inputs.branch || github.ref_name }}
   GH_TOKEN: ${{ github.token }}
   GH_REPO: ${{ github.repository }}
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 jobs:
   # A push runs the branch's copy of this file; the landing runs main's.
@@ -261,14 +262,16 @@ jobs:
           refuse() {
             { echo "Autoland didn't land \`$BRANCH\`${SHA:+ ($short, rebased onto main ${BASE:0:10})}: $1"; echo; printf '%s\n' "$2" | head -60
               echo; echo "The branch stays; push a fix to it and it tries again."; } >> "$GITHUB_STEP_SUMMARY"
+            fail_tip "$1"
             echo "::error title=Autoland didn't land::$BRANCH${SHA:+ ($short)}: $1"
             exit 1
           }
+          fail_tip() { gh api -X POST "repos/$GH_REPO/statuses/$TIP" -f state=failure -f context=autoland -f description="${1:0:139}" -f target_url="$RUN_URL" > /dev/null || echo "::warning::couldn't post the autoland failure status on ${TIP:0:10}"; }
           post_status() { gh api -X POST "repos/$GH_REPO/statuses/$TIP" -f state="$STATUS_STATE" -f context=autoland -f description="$STATUS_DESCRIPTION" > /dev/null; }
           case "$VERDICT" in
             gone) echo "$BRANCH no longer exists"; exit 0 ;;
             empty) git push origin --delete "$BRANCH"; echo "main already holds $BRANCH: deleted it" >> "$GITHUB_STEP_SUMMARY"; exit 0 ;;
-            conflict) refuse "rebasing onto main conflicts in these files:" "$DETAIL" ;;
+            conflict) refuse "rebasing onto main conflicts in $(printf '%s\n' "$DETAIL" | head -10 | paste -sd, - | sed 's/,/, /g')" "$DETAIL" ;;
             check) refuse "the checks failed:" "$(printf '```\n%s\n```' "$DETAIL")" ;;
             refuse) post_status; refuse "$STATUS_DESCRIPTION." "" ;;
             hold) post_status; echo "$BRANCH (${TIP:0:10}): $STATUS_DESCRIPTION; a later dispatch tries it again" >> "$GITHUB_STEP_SUMMARY"; exit 0 ;;
@@ -344,9 +347,11 @@ jobs:
           refuse() {
             { echo "Autoland didn't land \`$BRANCH\` ($short, rebased onto main ${BASE:0:10}): $1"; echo; printf '%s\n' "$2" | head -60
               echo; echo "The branch stays; push a fix to it and it tries again."; } >> "$GITHUB_STEP_SUMMARY"
+            fail_tip "$1"
             echo "::error title=Autoland didn't land::$BRANCH ($short): $1"
             exit 1
           }
+          fail_tip() { gh api -X POST "repos/$GH_REPO/statuses/$TIP" -f state=failure -f context=autoland -f description="${1:0:139}" -f target_url="$RUN_URL" > /dev/null || echo "::warning::couldn't post the autoland failure status on ${TIP:0:10}"; }
           requeue() {
             gh workflow run autoland.yml --ref main -f branch="$BRANCH"
             echo "$1: queued $BRANCH to be tested again on the new main" >> "$GITHUB_STEP_SUMMARY"

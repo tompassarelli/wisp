@@ -311,8 +311,10 @@ it locally.
    `workflow_run` either, so that CI run's last job dispatches "Main is red"
    with its own run ID.
 6. **Refuse.** On a conflict, a failed check, new failures or new
-   code-health debt, the branch stays and the run fails; its job summary
-   says "Autoland didn't land" and names the conflicting files, failed
+   code-health debt, the branch stays, the run fails and sets the tip's
+   `autoland` status to failure, linked to the run, so safe-push and
+   `north flow` read the refusal; its error and job summary
+   say "Autoland didn't land" and name the conflicting files, failed
    check, new failing tests or the gate's violations. Autoland
    posts no issue comments: read outcomes with `gh run list --workflow
    autoland.yml --branch claude/NAME` and `gh run view RUN_ID`. Push a fix to
