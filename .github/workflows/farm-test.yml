@@ -13,7 +13,7 @@ on:
         description: Names the run so `bun wisp farm test` can find the one it dispatched
         default: ""
       farm-runner:
-        description: Runner label for the even shard jobs in place of the FARM_RUNNER variable (measures a box before enabling it)
+        description: Runner label for the Bun shards in place of the farm-first routing in runner-routing.json (ubuntu-latest forces hosted runners)
         default: ""
   # Autoland (autoland.yml) runs the suites for a rebased branch inside its own run.
   workflow_call:
@@ -29,9 +29,10 @@ run-name: Farm test ${{ inputs.ref }} ${{ inputs.tag }}
 
 permissions:
   contents: read
+  actions: read
 
 env:
-  BUN_SHARDS: 4
+  BUN_SHARDS: 6
 
 jobs:
   plan:
@@ -54,24 +55,25 @@ jobs:
           path: farm-timings.json
           key: farm-test-timings-${{ github.run_id }}
           restore-keys: farm-test-timings-
-      # farm-load.yml samples the farm box every 5 minutes; the newest sample restores here.
-      - uses: actions/cache/restore@v4
-        with:
-          path: farm-load.json
-          key: farm-load-${{ github.run_id }}
-          restore-keys: farm-load-
       - id: plan
         env:
-          FARM: ${{ github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && (inputs.farm-runner || vars.FARM_RUNNER) || '' }}
+          GH_TOKEN: ${{ github.token }}
           FARM_INPUT: ${{ inputs.farm-runner }}
         run: |
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           bun host/farm/farmShards.ts plan --timings farm-timings.json --bun "$BUN_SHARDS" $(git ls-files '*.test.ts') > plan.json
-          # Even shard jobs go to FARM_RUNNER while its load sample is fresh and fits its cores, odd ones to hosted
-          # runners, so both pools run at once. A farm-runner input skips the load check.
-          load=(--load farm-load.json)
-          if [ -n "$FARM_INPUT" ]; then load=(); fi
-          bun host/farm/farmShards.ts place --shards "$(jq '.bun | length' plan.json)" --farm "$FARM" "${load[@]}" > placement.json
+          # The first shards go to the farm label while it has idle runners, the rest to hosted runners, so both pools
+          # run at once. The route script, from the workflow's own revision, never picks the farm for a pull request.
+          git fetch -q --depth 1 origin "$GITHUB_SHA" && git checkout -q FETCH_HEAD -- host/farm/runnerRoute.ts runner-routing.json
+          bun host/farm/runnerRoute.ts --class premerge --override "$FARM_INPUT" > route.txt
+          farm=$(sed -n 's/^runner=//p' route.txt); idle=$(sed -n 's/^idle=//p' route.txt)
+          [ "$farm" != ubuntu-latest ] || farm=""
+          [ -z "$FARM_INPUT" ] || idle=99
+          { echo "- route: $(sed -n 's/^reason=//p' route.txt)"; } >> "$GITHUB_STEP_SUMMARY"
+          # The farm image has no cargo, so a shard holding a test that builds the relay stays on hosted runners.
+          git grep -lE 'relayBinary|localRelay|--relay local|cargo (build|test)|"cargo"' -- test > cargo-tests.txt || true
+          cargo=$(jq -r --rawfile tests cargo-tests.txt '($tests | split("\n")) as $cargo | [.bun | to_entries[] | select(any(.value[]; ltrimstr("./") as $file | $cargo | index($file))) | .key] | join(",")' plan.json)
+          bun host/farm/farmShards.ts place --shards "$(jq '.bun | length' plan.json)" --farm "$farm" --idle "$idle" --cargo "$cargo" > placement.json
           echo "bun=$(jq -c '[range(.bun | length)]' plan.json)" >> "$GITHUB_OUTPUT"
           echo "bun-runners=$(jq -c 'map(.runner)' placement.json)" >> "$GITHUB_OUTPUT"
           jq -r 'to_entries[] | "- bun \(.key): \(.value.runner) (\(.value.reason))"' placement.json >> "$GITHUB_STEP_SUMMARY"
