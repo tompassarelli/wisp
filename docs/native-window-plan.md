@@ -891,6 +891,17 @@ Players' machines differ and rollback needs a steady frame, so every costly rend
 - **Options screen.** F10 opens and closes it (Esc closes); while it is open the arrow keys, W/S/A/D, Enter and Space drive it and the game sees no keys. It is drawn through the UI renderer as an overlay of UI frames (`menu.rs`), so it is crisp at any render scale.
 - **Preset sweep.** `WISP_WINDOW_PRESET_SWEEP=DIR` opens the screen once the scene is ready and, at each preset, draws 120 frames timed from the start of the draw to the GPU finishing it, prints p50, p95 and max, appends them to `DIR/frame-times.txt` and saves `DIR/options-<preset>.png`.
 
+  Measured 31 October 2026 on the laptop's Radeon 890M (RADV, Vulkan; `WISP_WINDOW_SIZE=2880x1920 bun wisp window probe --frames 700` in a private desktop, the sample map's scene, the window opening at 2878x1892 under the compositor's frame; the machine's CPU pressure was 1.4% over ten seconds). Frame time is from the start of the draw to the GPU finishing it, over 120 frames after a warm-up:
+
+  Preset | p50 | p95 | max
+  --- | --- | --- | ---
+  Low | 3.05 ms | 3.33 ms | 4.53 ms
+  Medium | 3.14 ms | 3.73 ms | 6.09 ms
+  High | 4.04 ms | 4.69 ms | 9.74 ms
+  Ultra | 3.97 ms | 4.57 ms | 9.08 ms
+
+  Low is inside the 8.3 ms budget by 5 ms. Ultra costs no more than High because the keys that would make it dearer (volumetrics, 8x MSAA, refractive water, 4096 shadows) are not read yet; Low pays less than High only through bloom and ambient occlusion, the two keys that act today.
+
 ## Remaster at load
 
 Classic art is sharpened and lit on the player's machine from the player's own map and install (wisp#109; Tom asked for this, 2026-10-31). Shapes stay Classic: only textures and the silhouette's roundness change.
