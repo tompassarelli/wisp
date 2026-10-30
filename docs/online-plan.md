@@ -226,9 +226,9 @@ Measured facts first, then the parts the audit must settle:
   Chrome and Smashcraft's private asset store. Players have none of these.
   - Map imports should come from the Hive map file the player already
     downloads. Stock art should come from their Warcraft install (P3).
-  - `runStandalone` refuses to open Chrome without a GPU lease
-    (`requireGpuLease`, wisp:host/play/standalone.ts). That is a development
-    guard, and a player build must run without it.
+  - `runStandalone` refuses a headless, scripted or capturing run without a GPU
+    lease (`requireGpuLease`, wisp:host/play/standalone.ts); the window a
+    person plays needs none.
   - Shipping a player build is Tom's call (P5).
 - **The window.** The standalone window becomes a native Rust program in place
   of Chrome, because Chrome can add one to two frames of input lag (Tom,

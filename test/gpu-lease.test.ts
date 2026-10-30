@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { ResourceAccounting } from "../host/os/platform/services";
+import { agentRender } from "../host/play/standalone";
 import { requireGpuLease } from "../host/render/gpuLease";
 
 // The shell is the reference for quoting: it must read the named command back as the helper, the gpu class and every argument.
@@ -36,4 +37,10 @@ test("[property seed 474] renders start only inside a gpu lease or without a cap
     if (given === undefined) delete process.env["WISP_CAPACITY_HELPER"];
     else process.env["WISP_CAPACITY_HELPER"] = given;
   }
+});
+
+test("only a headless, scripted or capturing standalone run needs a gpu lease, never the window a person plays (docs/play.md)", () => {
+  expect(agentRender({})).toBe(false);
+  expect(agentRender({ window: "native", frames: 10 })).toBe(false);
+  for (const options of [{ headless: true }, { script: "pad.txt" }, { out: "dir" }, { recordChecksums: true }, { captureFrames: [3] }]) expect(agentRender(options)).toBe(true);
 });

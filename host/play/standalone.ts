@@ -66,7 +66,7 @@ export interface StandaloneOptions {
   readonly recordChecksums?: boolean;
   readonly gamepadIndex?: number;
   readonly net?: StandaloneNet;
-  /** False for a player run, which has no gpu machine-capacity lease to hold. */
+  /** False skips the gpu machine-capacity lease check, which otherwise applies only to a scripted, captured or headless run (`agentRender`). */
   readonly gpuLease?: boolean;
   /** With `window: "native"`, where a worker thread imports the game from: it then steps the game there, so the game's collections never delay the window's wake. Without it, or with `net`, the game steps on Bun's main thread. */
   readonly nativeGame?: NativeGameModule;
@@ -297,8 +297,12 @@ const runNetStandalone = (game: StandaloneGame, options: StandaloneOptions, net:
   printSummary(outcome);
 });
 
+/** True for a run an agent drives (headless, scripted or capturing frames), never for the window a person plays. */
+export const agentRender = (options: StandaloneOptions) =>
+  options.headless === true || options.script !== undefined || options.out !== undefined || options.recordChecksums === true || (options.captureFrames ?? []).length > 0;
+
 export const runStandalone = (game: StandaloneGame, options: StandaloneOptions = {}) => Effect.scoped(Effect.gen(function*() {
-  if (options.gpuLease !== false) yield* requireGpuLease();
+  if (options.gpuLease !== false && agentRender(options)) yield* requireGpuLease();
   if (options.net !== undefined) return yield* runNetStandalone(game, options, options.net);
   if (options.window === "native" && options.nativeGame !== undefined) {
     const sim = yield* openSimPlayer({ title: game.title, width: game.render.width ?? 1280, height: game.render.height ?? 720, scripted: options.script !== undefined, game: options.nativeGame, standalone: options });

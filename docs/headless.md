@@ -531,7 +531,7 @@ journey runs, naming the command that reruns it inside one and waits for a free
 gpu slot: `bun HELPER run --class gpu --owner wisp-render -- ARGV...`. The
 check reads the run's cgroup, which shows a lease but not its class, so any
 capacity lease lets the render start. Without the helper, as on CI and cloud
-machines, `--render` runs as before. `runStandalone` applies the same check
+machines, `--render` runs as before. `runStandalone` applies the same check to a headless, scripted or capturing run, never to the window a person plays
 ([Standalone window](play.md#standalone-window)); the refusal, the inside-lease
 start and the no-helper start are covered by wisp:test/gpu-lease.test.ts
 (wisp:host/render/gpuLease.ts).
