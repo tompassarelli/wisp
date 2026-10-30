@@ -2,7 +2,7 @@
 
 use std::time::Instant;
 
-use wisp_window::remaster::{Edges, Upscaler, LARGEST_SOURCE};
+use wisp_window::remaster::{self, Cache, Edges, Quality, Upscaler, LARGEST_SOURCE};
 use wisp_window::texture::decode;
 
 fn main() {
@@ -16,6 +16,7 @@ fn main() {
     println!("adapter {} ({:?}, {:?}); method {}; start-up {:.0} ms", info.name, info.device_type, info.backend, upscaler.method(), started.elapsed().as_secs_f64() * 1000.0);
     let (mut pixels, mut total, mut count) = (0u64, 0.0, 0);
     let mut textures = Vec::new();
+    let mut files = Vec::new();
     for argument in std::env::args().skip(1) {
         let (path, edges) = match argument.strip_prefix('+') {
             Some(path) => (path.to_string(), Edges::Wrap),
@@ -37,6 +38,7 @@ fn main() {
         println!("{path}: {}x{} in {:.0} ms", image.width, image.height, seconds * 1000.0);
         pixels += u64::from(image.width) * u64::from(image.height);
         textures.push((image, edges));
+        files.push((path, edges));
         total += seconds;
         count += 1;
     }
@@ -47,4 +49,14 @@ fn main() {
         filter.doubled(image, *edges);
     }
     println!("the edge-directed filter alone on the same textures: {:.0} ms", started.elapsed().as_secs_f64() * 1000.0);
+    let folder = std::env::temp_dir().join(format!("cugan-bench-{}", std::process::id()));
+    let cache = Cache::at(folder.clone()).expect("a cache folder");
+    for pass in ["first run, cache empty", "second run, cache full"] {
+        let started = Instant::now();
+        for (path, edges) in &files {
+            remaster::prepare(&std::fs::read(path).expect("read texture"), Quality::Standard, Some(&cache), &upscaler, *edges).expect("prepare");
+        }
+        println!("remaster load of the same {} files, {pass}: {:.0} ms", files.len(), started.elapsed().as_secs_f64() * 1000.0);
+    }
+    let _ = std::fs::remove_dir_all(folder);
 }
