@@ -21,6 +21,8 @@ export interface Frame extends Handle {
 
   alignment: { readonly vertical: unknown; readonly horizontal: unknown } | undefined;
 
+  /** Made by `BlzCreateFrameByType` with no template: Classic gives its text a fixed base size, so only its scale sizes it. */
+  plain: boolean;
   scale: number;
   width: number;
   height: number;
@@ -129,6 +131,7 @@ export interface FrameSnapshot {
   readonly font: FrameFont;
   readonly alignment: TextAlignment | undefined;
   readonly scale: number;
+  readonly plain: boolean;
 }
 
 export class Frames {
@@ -145,7 +148,7 @@ export class Frames {
       ...handle, type, name, context, parent, text: "", visible: true, enabled: true, level: 0, textLimit: DEFAULT_TEXT_LIMIT,
       width: 0, height: 0, points: new Map(), anchors: [], destroyed: false,
       texture: "", color: 0xffffffff, textColor: 0xffffffff, alpha: 255,
-      font: { file: "", height: 0, flags: 0 }, alignment: undefined, scale: 1,
+      font: { file: "", height: 0, flags: 0 }, alignment: undefined, scale: 1, plain: true,
     };
     this.all.push(frame);
     return frame;
@@ -158,6 +161,7 @@ export class Frames {
   create(handle: (this: void) => Handle, name: string, parent: Frame | undefined, context: number): Frame {
     const definition = this.templates.get(name);
     const root = this.add(handle(), definition?.type ?? name, name, parent, context);
+    root.plain = false;
     if (definition === undefined) return root;
     root.width = definition.width;
     root.height = definition.height;
@@ -169,6 +173,7 @@ export class Frames {
     const make = (nodes: readonly FrameTemplateNode[], owner: Frame) => {
       for (const node of nodes) {
         const frame = this.add(handle(), node.type, definition.name + node.key.charAt(0).toUpperCase() + node.key.slice(1), owner, context);
+        frame.plain = false;
         frame.width = node.width ?? 0;
         frame.height = node.height ?? 0;
         if (node.type === "TEXT" && node.text !== undefined) frame.text = node.text;
@@ -237,7 +242,7 @@ export class Frames {
       snapshots.push({ handle: { kind: frame.kind, id: frame.id }, name: frame.name, type: frame.type,
         parentId: frame.parent?.id, rectangle: this.rectangle(frame), text: frame.text, texture: frame.texture,
         color: frame.color, textColor: frame.textColor, alpha: frame.alpha, visible, level: this.drawLevel(frame),
-        font: frame.font, alignment: textAlignment(frame.alignment ?? (frame.type.toLowerCase().includes("button") ? { vertical: "MIDDLE", horizontal: "CENTER" } : undefined)), scale: frame.scale });
+        font: frame.font, alignment: textAlignment(frame.alignment ?? (frame.type.toLowerCase().includes("button") ? { vertical: "MIDDLE", horizontal: "CENTER" } : undefined)), scale: frame.scale, plain: frame.plain });
     }
     return snapshots;
   }

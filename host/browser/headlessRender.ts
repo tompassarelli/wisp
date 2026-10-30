@@ -14,7 +14,7 @@ import { doodadSkinRows, terrainDoodadPoses } from "../terrain/terrainDoodads";
 import { ddsTexture } from "./ddsTexture";
 import { cliffOverrideTextures, cliffTexturePath } from "../terrain/terrainCliffs";
 import { type Matrix, multiply, normalize } from "./matrix";
-import { camera, identity, poseNodes, type Sampler, show, SKY_FAR, transform, uiPixels } from "../render/screen";
+import { camera, identity, poseNodes, type Sampler, show, SKY_FAR, transform, uiPixels, uiTextSize } from "../render/screen";
 
 interface Material { readonly Layers: readonly { readonly FilterMode?: number }[] }
 
@@ -614,7 +614,6 @@ window.renderScene = async (scene, options) => {
     drawText(context, tag.text, "sans-serif", tag.height * output.height / 0.6, `rgba(${red},${green},${blue},${alpha / 255})`, true,
       ((at[0] ?? 0) / w + 1) / 2 * output.width, "left", (1 - (at[1] ?? 0) / w) / 2 * output.height, "bottom");
   }
-  const scaleY = output.height / 0.6;
   for (const frame of [...scene.ui].sort((a, b) => a.level - b.level)) {
     if (!frame.visible || frame.alpha <= 0 || frame.rectangle === undefined) continue;
     const { x, y, width, height } = uiPixels(frame.rectangle, output.width, output.height);
@@ -626,7 +625,7 @@ window.renderScene = async (scene, options) => {
     }
     if (frame.text !== "") {
 
-      const size = (frame.font.height > 0 ? frame.font.height * scaleY : Math.max(10, Math.min(0.0122 * scaleY, height || 15))) * frame.scale;
+      const size = uiTextSize(frame, output.height, height);
       const alignment = frame.alignment ?? { vertical: "top", horizontal: "left" };
       drawText(context, frame.text, live ? loaded(fontFamily(frame.font.file)) ?? "sans-serif" : await fontFamily(frame.font.file), size, cssColor(frame.textColor), (frame.font.flags & 1) !== 0,
         alignment.horizontal === "left" ? x : alignment.horizontal === "center" ? x + width / 2 : x + width, alignment.horizontal,

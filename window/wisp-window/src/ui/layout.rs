@@ -6,6 +6,8 @@ pub const LEADING: f32 = 1.2;
 const MINIMUM_DEFAULT_SIZE: f32 = 10.0;
 const DEFAULT_SIZE_UNITS: f32 = 0.0122;
 const FALLBACK_HEIGHT: f32 = 15.0;
+/// Measured on Classic build 24268: about 8.5 px in a 724 px window.
+const PLAIN_TEXT_BASE: f32 = 0.0085;
 const UNITS_HIGH: f32 = 0.6;
 const UNITS_WIDE: f32 = 0.8;
 
@@ -19,9 +21,12 @@ pub fn pixels(rectangle: [f32; 4], area: Pixels) -> Pixels {
     [area[0] + area[2] / 2.0 + (left - UNITS_WIDE / 2.0) * scale, area[1] + (UNITS_HIGH - top) * scale, (right - left) * scale, (top - bottom) * scale]
 }
 
-/// The font size in pixels: the frame's own height, or one that scales with the screen and the frame's height.
-pub fn font_size(font_height: f32, scale: f32, frame_height: f32, area_height: f32) -> f32 {
+/// The font size in pixels. A scaled plain frame is its scale times Classic's fixed base, since Classic ignores the font height set on a plain `TEXT` frame; any other frame is its font height, or one that scales with the screen and the frame's height, times its scale.
+pub fn font_size(font_height: f32, scale: f32, plain: bool, frame_height: f32, area_height: f32) -> f32 {
     let screen = area_height / UNITS_HIGH;
+    if plain && scale != 1.0 {
+        return PLAIN_TEXT_BASE * screen * scale;
+    }
     let base = if font_height > 0.0 { font_height * screen } else { MINIMUM_DEFAULT_SIZE.max((DEFAULT_SIZE_UNITS * screen).min(if frame_height > 0.0 { frame_height } else { FALLBACK_HEIGHT })) };
     base * scale
 }
@@ -155,11 +160,28 @@ mod tests {
 
     #[test]
     fn font_size_follows_the_font_or_the_frame() {
-        assert_eq!(font_size(0.02, 1.0, 0.0, 720.0), 0.02 * 1200.0);
-        assert_eq!(font_size(0.02, 2.0, 0.0, 720.0), 0.02 * 1200.0 * 2.0);
-        assert_eq!(font_size(0.0, 1.0, 100.0, 720.0), 0.0122 * 1200.0);
-        assert_eq!(font_size(0.0, 1.0, 12.0, 720.0), 12.0);
-        assert_eq!(font_size(0.0, 1.0, 0.0, 300.0), 10.0);
+        assert_eq!(font_size(0.02, 1.0, false, 0.0, 720.0), 0.02 * 1200.0);
+        assert_eq!(font_size(0.02, 2.0, false, 0.0, 720.0), 0.02 * 1200.0 * 2.0);
+        assert_eq!(font_size(0.0, 1.0, false, 100.0, 720.0), 0.0122 * 1200.0);
+        assert_eq!(font_size(0.0, 1.0, false, 12.0, 720.0), 12.0);
+        assert_eq!(font_size(0.0, 1.0, false, 0.0, 300.0), 10.0);
+    }
+
+    fn near(actual: f32, expected: f32) {
+        assert!((actual - expected).abs() < 0.01, "{actual} is not {expected}");
+    }
+
+    #[test]
+    fn a_scaled_plain_frame_is_sized_by_its_scale_alone() {
+        let countdown = [(0.075_f32, 0.075_f32 / 0.0085), (0.09375, 0.09375 / 0.0085)];
+        for (height, sizes) in [(1080.0, [135.0, 168.75]), (1920.0, [240.0, 300.0])] {
+            for ((wanted, scale), expected) in countdown.into_iter().zip(sizes) {
+                near(font_size(wanted, scale, true, 0.0, height), expected);
+                near(font_size(wanted, scale, false, 0.0, height), expected * scale);
+            }
+            near(font_size(0.019, 1.0, true, 0.0, height), 0.019 * height / 0.6);
+            near(font_size(0.036, 0.6, false, 0.0, height), 0.036 * 0.6 * height / 0.6);
+        }
     }
 
     #[test]

@@ -4,7 +4,7 @@ import { nativeUi, uiAssets } from "../../host/window/nativeUi";
 
 const frame = (over: Partial<FrameSnapshot>): FrameSnapshot => ({
   handle: { kind: "frame", id: 1 } as FrameSnapshot["handle"], name: "f", type: "BACKDROP", parentId: undefined, rectangle: [0, 0.1, 0.1, 0], text: "", texture: "", color: 0xffffffff, textColor: 0xffffffff,
-  alpha: 255, visible: true, level: 0, font: { file: "", height: 0, flags: 0 }, alignment: undefined, scale: 1, ...over,
+  alpha: 255, visible: true, level: 0, font: { file: "", height: 0, flags: 0 }, alignment: undefined, scale: 1, plain: true, ...over,
 });
 
 test("nativeUi_keeps_only_frames_that_draw", () => {

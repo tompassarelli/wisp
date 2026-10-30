@@ -281,7 +281,7 @@ impl UiRenderer {
     fn text(&mut self, frame: &UiFrame, pixels: Pixels, area_height: f32, alpha: f32) -> bool {
         let [x, y, width, height] = pixels;
         let font = self.glyphs.font_for(&frame.font_file);
-        let size = layout::font_size(frame.font_height, frame.scale, height, area_height);
+        let size = layout::font_size(frame.font_height, frame.scale, frame.plain, height, area_height);
         let plain = layout::plain(&frame.text);
         let mut full = false;
         let mut lines = std::mem::take(&mut self.lines);

@@ -59,7 +59,7 @@ export function frameNatives({ handle, frames, gameUiOrigin }: FrameContext): Re
     BlzFrameGetChild: (frame: Handle, index: number) => (isFrame(frame) ? frames().children(frame)[index] : undefined) ?? memoized(`child ${frame.id} ${index}`),
     BlzCreateFrame: (name: string, owner: unknown, _priority: number, context: number) => frames().create(() => handle("framehandle"), name, isFrame(owner) ? owner : undefined, context),
     BlzCreateSimpleFrame: (name: string, owner: unknown, context: number) => created(name, name, owner, context),
-    BlzCreateFrameByType: (type: string, name: string, owner: unknown, _inherits: string, context: number) => created(type, name, owner, context),
+    BlzCreateFrameByType: (type: string, name: string, owner: unknown, inherits: string, context: number) => { const frame = created(type, name, owner, context); frame.plain = inherits === ""; return frame; },
     BlzDestroyFrame: (frame: unknown) => {
       if (isFrame(frame)) frames().destroy(frame);
     },

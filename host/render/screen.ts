@@ -112,6 +112,16 @@ export function uiPixels(rect: readonly [left: number, top: number, right: numbe
   return { x: width / 2 + (left - 0.4) * scale, y: (0.6 - top) * scale, width: (right - left) * scale, height: (top - bottom) * scale };
 }
 
+/** The base height in UI units Classic draws a plain `TEXT` frame's text at, whatever `BlzFrameSetFont` set: measured on build 24268 (about 8.5 px in a 724 px window), so a frame with a scale is sized by it. */
+export const PLAIN_TEXT_BASE = 0.0085;
+
+/** A text frame's font size in pixels at a screen `height`: a scaled plain frame is its scale times Classic's fixed base, any other frame its font height (or a size from the screen and its own pixel height when it has none) times its scale. */
+export function uiTextSize(frame: { readonly font: { readonly height: number }; readonly scale: number; readonly plain: boolean }, height: number, frameHeight: number): number {
+  const screen = height / 0.6;
+  if (frame.plain && frame.scale !== 1) return PLAIN_TEXT_BASE * screen * frame.scale;
+  return (frame.font.height > 0 ? frame.font.height * screen : Math.max(10, Math.min(0.0122 * screen, frameHeight || 15))) * frame.scale;
+}
+
 export interface UiRow {
   readonly name: string;
   readonly type: string;

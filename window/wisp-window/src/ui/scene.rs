@@ -19,6 +19,7 @@ pub struct UiFrame {
     pub horizontal: Horizontal,
     pub vertical: Vertical,
     pub scale: f32,
+    pub plain: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
@@ -67,6 +68,8 @@ struct Row<'a> {
     alignment: Option<Alignment>,
     #[serde(default = "unit")]
     scale: f32,
+    #[serde(default)]
+    plain: bool,
 }
 
 #[derive(Deserialize, Default)]
@@ -124,6 +127,7 @@ impl UiScene {
                     horizontal: alignment.horizontal,
                     vertical: alignment.vertical,
                     scale: row.scale,
+                    plain: row.plain,
                 })
             })
             .collect();

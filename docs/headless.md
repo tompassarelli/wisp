@@ -847,7 +847,14 @@ saves them as the scene's `environment`.
   the `font` a frame template declares) in UI units, 0.6 to the screen's
   height, times `BlzFrameSetScale`, placed by `BlzFrameSetTextAlignment` (or
   the template's `justify`) inside its rectangle, outlined when the font
-  flags hold 1 (`OUTLINE`). A map declares a TEXT template from its own FDF in
+  flags hold 1 (`OUTLINE`). A frame made by `BlzCreateFrameByType` with no
+  template that has a `BlzFrameSetScale` draws at 0.0085 times that scale
+  instead: Classic ignores the font height on such a frame (measured on
+  build 24268), so Smashcraft's `sizeText` countdown, which sets a scale of
+  `size / 0.0085` beside a font of `size`, is `size` tall in the Chrome window
+  and the native window, not `size` squared over 0.0085 (`uiTextSize`,
+  wisp:host/render/screen.ts; `font_size` in the native window's
+  `ui/layout.rs`). A map declares a TEXT template from its own FDF in
   its headless `frames`, such as Smashcraft's `SmashcraftDamage` (`MasterFont`,
   0.036, `OUTLINE`). A `.ttf` or `.otf` file loads through the asset server;
   a font name such as `MasterFont` draws sans-serif. A frame with no font
