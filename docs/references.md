@@ -12,13 +12,11 @@ ships each licence text below.
   Window, keyboard and focus. Ship the licence and any NOTICE.
 - `wgpu` and `naga` 30.0.1, MIT OR Apache-2.0, https://github.com/gfx-rs/wgpu.
   GPU drawing and WGSL translation. Ship the licence.
-- `gilrs` 0.11.2, Apache-2.0 OR MIT, https://gitlab.com/gilrs-project/gilrs.
-  Linux pads. Ship the licence.
-- `windows` 0.62.2, MIT OR Apache-2.0, https://github.com/microsoft/windows-rs.
-  Windows.Gaming.Input pad reads. Ship the licence.
-- SDL_GameControllerDB (the copy gilrs 0.11.2 ships), zlib, https://github.com/mdqinc/SDL_GameControllerDB.
-  Its Windows rows are vendored in `window/wisp-window/data/` and map Windows raw
-  controllers. Ship the licence beside the data.
+- `sdl3-sys` 0.7.2 (SDL 3.4.18), zlib, https://github.com/libsdl-org/SDL.
+  Pads through the gamepad API, linked statically with the joystick and
+  HIDAPI subsystems. It carries SDL_GameControllerDB. Ship the licence.
+- `padbridge-model` 0.4, MIT, https://github.com/tompassarelli/padbridge. The
+  melee layout and pad families the window shares with the Warcraft service.
 - `cpal` 0.18.2, Apache-2.0, https://github.com/RustAudio/cpal. Audio output.
   Ship the licence and any NOTICE.
 - `claxon` 0.4.3, Apache-2.0, https://github.com/ruuda/claxon. FLAC decoding.

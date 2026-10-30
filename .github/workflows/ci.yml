@@ -153,6 +153,18 @@ jobs:
             ${{ runner.temp }}/window-embed/embed.json
             ${{ runner.temp }}/window-probe
 
+  # wisp-window on Windows (wisp:docs/native-window-plan.md, box W5): SDL3 builds from source
+  # for the pads, and the library builds and tests there as well as on Linux.
+  window-windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo build --release --locked
+        working-directory: window
+      - run: cargo test --release --locked
+        working-directory: window
+
   # New structural debt (import cycle, layer violation, oversize file or function, rising hotspot) against structure.toml (north:harness/code-health).
   code-health:
     if: github.event_name != 'workflow_dispatch' || github.ref != 'refs/heads/main'

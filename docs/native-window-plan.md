@@ -71,8 +71,8 @@ the sockets.
 Build and test it from a clean checkout with one command:
 `cd window && nix develop --command cargo test -p wisp-window`. The dev shell
 (`window/flake.nix`, locked) supplies the toolchain `rust-toolchain.toml`
-names, a C compiler, pkg-config, and the libudev and libxkbcommon that gilrs
-and winit link, and puts the Wayland, X11 and Vulkan runtime libraries on
+names, a C compiler, cmake for SDL3, pkg-config, and the libudev and libxkbcommon that SDL3's
+evdev driver and winit use, and puts the Wayland, X11 and Vulkan runtime libraries on
 `LD_LIBRARY_PATH` for `bun wisp window probe`.
 
 As first built, each frame the render thread sampled input and woke Bun
@@ -207,10 +207,9 @@ texts.
   Windows, X11 and Wayland.
 - `wgpu` 30.0.1, MIT OR Apache-2.0: drawing on Vulkan (Linux), DX12 (Windows)
   and GL as a fallback. Its `naga` translator (same licence) takes WGSL.
-- `gilrs` 0.11.2, Apache-2.0/MIT: pads on Linux through evdev, with SDL
-  controller mappings.
-- `windows` 0.62.2, MIT OR Apache-2.0: Windows.Gaming.Input read directly
-  on Windows (see Pads).
+- `sdl3-sys` 0.7.2 (SDL 3.4.18), zlib: pads through SDL3's gamepad API,
+  built from source and linked statically with only the joystick and HIDAPI
+  subsystems (see Pads). `padbridge-model`, MIT, supplies the layout.
 - `cpal` 0.18.2, Apache-2.0: audio output.
 - `claxon` 0.4.3 (FLAC) and `hound` 3.5.1 (PCM and float WAV), both
   Apache-2.0: the first sound decoders. W6 settles the rest (see Sound).
@@ -447,27 +446,47 @@ The native window takes over the page's whole job, not only its drawing
 - **Keyboard.** Use winit's physical `KeyCode`, which matches the browser's
   `event.code`. The key table and button names stay as in play.md. Held keys
   clear when the window loses focus.
-- **Linux pads.** gilrs reads evdev events. The render thread drains them at
-  the sample point, so nothing waits on a poll timer. The pad's USB polling
-  rate (often 125 Hz) is hardware, and Warcraft pays it too.
-- **Windows pads.** gilrs polls on a background thread that sleeps 8 ms
-  between polls under Windows.Gaming.Input and 10 ms under XInput
-  (gilrs-core `windows_wgi/gamepad.rs` line 35 and `windows_xinput/gamepad.rs`
-  line 32, master on 30 October 2026). That quantizes a press by up to 8 ms.
-  The render thread therefore reads every pad itself at the sample point
-  through the `windows` crate, and gilrs is not used on Windows:
-  - `Gamepad::GetCurrentReading` for Xbox-layout pads;
-  - `RawGameController::GetCurrentReading` for the rest, such as
-    DualShock-style pads, which gilrs's backend also covers. W5 maps these
-    with a fixed DualShock table (Cross, Circle, Square, Triangle, L1, R1,
-    L2, R2, Share, Options, L3, R3 and the first switch as the d-pad). A pad
-    with another layout needs the SDL mapping database, which W5 has not
-    ported.
-- **Mapping.** The browser's standard-layout indices carry over:
-  - 0 attack, 1 jump, 2 special, 3 jump;
-  - 4 walk, 5 grab, 6 and 7 shield;
-  - 8 view, 9 start;
-  - 12 to 15 for the d-pad;
+- **Pads.** SDL3's gamepad API reads every pad on Linux and Windows, the
+  stack padbridge feeds Warcraft with, so a pad has the same layout in both
+  and the window gets SDL's controller database and its HIDAPI drivers
+  (the GameCube adapter through a Wii U adapter among them). The render
+  thread calls `SDL_UpdateGamepads` and reads the state at the sample point,
+  on the thread that initialised SDL's gamepad subsystem. SDL events are
+  switched off so nothing queues, and `SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS`
+  is set as padbridge sets it. The pad's USB polling rate (often 125 Hz) is
+  hardware, and Warcraft pays it too.
+- **No sleep-quantized poll on Windows.** SDL 3.4.18's Windows build selects
+  these joystick drivers (`src/joystick/SDL_joystick.c` lists them,
+  `CMakeLists.txt` lines 2464 to 2478 enable them, and each reads in its
+  update call):
+  - HIDAPI first, for the GameCube adapter, DualShock and Switch pads;
+    `SDL_hid_read_timeout` with a zero timeout calls `WaitForSingleObject`
+    with 0 and takes the overlapped read's result (`hidapi/windows/hid.c`);
+  - the Windows driver for XInput pads (`XInputGetState` in
+    `SDL_xinputjoystick.c` line 393) and DirectInput pads
+    (`IDirectInputDevice8_GetDeviceState` in `SDL_dinputjoystick.c` lines
+    998 and 1003);
+  - RawInput, Windows.Gaming.Input and GameInput are present but off: their
+    hints `SDL_HINT_JOYSTICK_RAWINPUT` and `SDL_HINT_JOYSTICK_WGI` default to
+    false and `SDL_GAMEINPUT_DEFAULT` is false outside GDK.
+
+  The one thread SDL starts for joysticks (`SDL_JoystickThread` in
+  `SDL_windowsjoystick.c`) only detects hotplug, by waiting on a device
+  notification message or a one-second condition timeout. The HIDAPI rumble
+  thread starts only on a rumble request. Neither reads input, so no poll
+  interval quantizes a press.
+- **Mapping.** SDL's standard-layout positions carry over, pressed as
+  padbridge's melee preset (`padbridge_model::pad_bindings`) presses them for
+  the pad's family, which the window asks SDL for (`SDL_GetGamepadTypeForID`)
+  as padbridge does:
+  - on an ordinary pad, A attacks, B specials, X and Y jump, RB grabs and
+    either trigger shields;
+  - on a GameCube pad (`SDL_GAMEPAD_TYPE_GAMECUBE`) the letters follow the
+    print: A attacks, B (SDL west) specials, X (SDL east) and Y jump, Z grabs
+    and L and R shield;
+  - Start is start, Back is view and the d-pad is left, right, up and down;
+  - a control padbridge binds to a move the page has no button for presses
+    nothing;
   - left stick on `axisX`/`axisY`, with Y up.
 
   Axes pass through raw with no window deadzone, as the browser passes
@@ -920,12 +939,14 @@ yet are created by that box. Each graphics run takes the gpu lease as
   Done when:
   `cd ~/code/wisp/main && bun wisp render compare --reference chrome --candidate native --scenes test/render/scenes.json`
 - **W5 Native pads on Linux and Windows** ([wisp#110](https://github.com/tompassarelli/wisp/issues/110)). It adds:
-  - gilrs and evdev drained at the sample point on Linux;
-  - `Gamepad` and `RawGameController` read at the sample point on Windows;
-  - the index mapping, raw axes, `gamepadIndex` and focus clearing.
+  - SDL3's gamepad API updated and read at the sample point on both;
+  - padbridge's melee layout for the pad's family, GameCube included;
+  - raw axes, `gamepadIndex` and focus clearing.
 
   A Linux test creates a virtual pad through uinput, presses a button, and
-  asserts the press is read at the next sample point.
+  asserts the press is read at the next sample point. Two SDL virtual-pad
+  tests check that a pad with the GameCube adapter's ids is a GameCube pad
+  with padbridge's layout.
 
   Done when:
   `cd ~/code/wisp/main/window && cargo test -p wisp-window input && cargo test -p wisp-window --features uinput pad_press_reaches_next_sample`
@@ -972,10 +993,10 @@ yet are created by that box. Each graphics run takes the gpu lease as
   (`desired_maximum_frame_latency`): https://docs.rs/wgpu/30.0.1/wgpu/enum.PresentMode.html
 - winit 0.30.13 `with_any_thread` on Windows, X11 and Wayland:
   https://docs.rs/winit/0.30.13/winit/platform/windows/trait.EventLoopBuilderExtWindows.html
-- gilrs 0.11.2 Windows backends and poll sleeps:
-  https://docs.rs/gilrs/0.11.2/gilrs/,
-  https://gitlab.com/gilrs-project/gilrs/-/blob/master/gilrs-core/src/platform/windows_wgi/gamepad.rs,
-  https://gitlab.com/gilrs-project/gilrs/-/blob/master/gilrs-core/src/platform/windows_xinput/gamepad.rs
+- SDL 3.4.18 Windows joystick drivers and threads:
+  https://github.com/libsdl-org/SDL/tree/release-3.4.18/src/joystick/windows,
+  https://github.com/libsdl-org/SDL/blob/release-3.4.18/src/joystick/SDL_joystick.c,
+  https://github.com/libsdl-org/SDL/blob/release-3.4.18/src/hidapi/windows/hid.c
 - Crate licences: the crates.io API, 30 October 2026 ([references.md](references.md)).
 - The plan was revised once after an adversarial review by a fresh Sonnet
   reviewer on 30 October 2026. The review found that:

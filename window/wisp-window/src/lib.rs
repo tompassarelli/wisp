@@ -15,12 +15,7 @@ mod metrics;
 pub mod model;
 mod render;
 mod pad;
-#[cfg(target_os = "linux")]
-mod pad_gilrs;
-#[cfg(windows)]
-mod pad_windows;
-#[cfg(any(windows, test))]
-mod sdl_mapping;
+mod pad_sdl;
 mod sync;
 mod timer;
 pub mod texture;

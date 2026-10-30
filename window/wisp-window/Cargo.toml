@@ -14,7 +14,9 @@ ddsfile = { version = "0.6.0", default-features = false }
 fontdue = "0.9.5"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "tga"] }
 image-blp = { version = "1.2.0", default-features = false }
+padbridge-model = { git = "https://github.com/tompassarelli/padbridge", rev = "126ba31e4065eef4e4025701b6cd5f4a6aaddbc2" }
 pollster = "0.4"
+sdl3-sys = { version = "0.7.2", default-features = false, features = ["build-from-source-static", "sdl-unix-console-build", "no-sdl-video", "no-sdl-audio", "no-sdl-gpu", "no-sdl-render", "no-sdl-camera", "no-sdl-dialog", "no-sdl-tray", "no-sdl-power"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 texpresso = { version = "2.0.2", default-features = false }
@@ -25,11 +27,10 @@ winit = "=0.30.13"
 uinput = ["dep:evdev"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
-gilrs = "=0.11.2"
 evdev = { version = "0.13", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62.2", features = ["Gaming_Input", "Foundation_Collections", "Win32_Media"] }
+windows = { version = "0.62.2", features = ["Win32_Media"] }
 
 [dev-dependencies]
 image-blp-pixels = { package = "image", version = "0.24.9", default-features = false }

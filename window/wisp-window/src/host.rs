@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, AtomicU8, Ordering};
 use std::sync::mpsc;
@@ -333,13 +334,13 @@ impl Clock for LibraryClock {
 
 struct InputSeam {
     shared: Arc<Shared>,
-    pads: Mutex<Pads>,
+    pads: RefCell<Pads>,
 }
 
 impl Seam for InputSeam {
     fn input(&self) -> Input {
         let slot = usize::try_from(self.shared.pad_slot.load(Ordering::Acquire)).ok();
-        lock(&self.pads).sample(slot, self.shared.focused.load(Ordering::Acquire), self.shared.held.sample())
+        self.pads.borrow_mut().sample(slot, self.shared.focused.load(Ordering::Acquire), self.shared.held.sample())
     }
 }
 
@@ -368,7 +369,7 @@ fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>, aspect
     *lock(&shared.info) = format!("{{\"adapter\":{:?},\"backend\":{:?},\"presentMode\":\"Fifo\",\"desiredMaximumFrameLatency\":1}}", gpu.adapter, gpu.backend);
     let surface = WindowSurface { gpu, window, shared: shared.clone() };
     let mut frames = FrameLoop::new(surface, LibraryClock, shared.mailbox.clone(), shared.metrics.clone());
-    let seam = InputSeam { shared: shared.clone(), pads: Mutex::new(Pads::open()) };
+    let seam = InputSeam { shared: shared.clone(), pads: RefCell::new(Pads::open()) };
     while !shared.mailbox.is_stopping() {
         if shared.closed.load(Ordering::Acquire) {
             wait_for_stop(&shared);
