@@ -289,8 +289,8 @@ joiner's hello, pings all of them, and picks the delay from the largest round tr
 measured; a joiner learns N from the room. `pair --relay local --humans N` runs a relay
 and N players on this machine and prints one line per player and a last line that says
 whether the checksums match on all N. It needs a relay binary: `WISP_RELAY_BIN`, else
-cargo builds relay/ (`pair` takes neither `--rtt`, `--loss` nor the fault drills with a
-relay). With `--rtt MS` or `--loss P`,
+cargo builds relay/ (`pair` takes no fault drills with a relay; `--rtt` and `--loss` put a
+proxy between the relay and each joiner, so a joiner's path to the host holds that round trip). With `--rtt MS` or `--loss P`,
 `pair` puts `net proxy` between them: a separate process that holds every
 datagram half the round trip in each direction and drops it with probability
 P (seeded by `--seed`). `--freeze-at F` makes the joiner stop sending after

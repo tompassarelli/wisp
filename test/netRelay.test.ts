@@ -182,6 +182,20 @@ describe("standalone host and join through the relay", () => {
   }, 120_000);
 });
 
+describe("a pair through the relay behind a delay and loss proxy", () => {
+  test("[scenario] net pair --relay local --rtt 120 --loss 0.01 plays 600 frames with equal checksums and the joiner measures the added round trip", async () => {
+    const binary = await relayBinary();
+    const run = Bun.spawn([...sample, "pair", "--relay", "local", "--rtt", "120", "--loss", "0.01", "--seed", "7", "--frames", String(FRAMES)], { stdin: "ignore", stdout: "pipe", stderr: "pipe", env: { ...process.env, WISP_RELAY_BIN: binary } });
+    const [stdout, stderr, code] = await Promise.all([new Response(run.stdout).text(), new Response(run.stderr).text(), run.exited]);
+    expect({ code, stderr: code === 0 ? "" : stderr }).toEqual({ code: 0, stderr: "" });
+    const lines = stdout.trim().split("\n");
+    expect(lines).toHaveLength(3);
+    for (const line of lines.slice(0, 2)) expect(line).toMatch(new RegExp(`^(host|join): ${FRAMES} frames, delay \\d+ .* [1-9]\\d* checksums compared, 0 mismatches`));
+    expect(Number(/^join: .*\(round trip (\d+) ms\)/.exec(lines[1] ?? "")?.[1])).toBeGreaterThan(110);
+    expect(lines[2]).toMatch(/^pair: 2 humans, 600 frames, checksums match on all 2/);
+  }, 120_000);
+});
+
 describe("four humans through the relay's peer room", () => {
   test("[scenario] net pair --relay local --humans 4 plays 600 frames with every player's checksums equal and no datagram over 1200 bytes", async () => {
     const binary = await relayBinary();
