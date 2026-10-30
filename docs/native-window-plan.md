@@ -869,6 +869,17 @@ yet are created by that box. Each graphics run takes the gpu lease as
   - `bun wisp render compare`, with its bound recorded first from Chrome's
     spread across two ANGLE backends.
 
+  Posing (built; [wisp#123](https://github.com/tompassarelli/wisp/issues/123)):
+  `window/wisp-window/src/model` parses MDX and MDL, reads tracks with
+  war3-model's interpolation and Wisp's `sample`/`rotate`, poses placed
+  nodes into a preallocated bone palette (`Pose::matrices`, the storage
+  buffer the skinning vertex shader reads) and loads every vertex as four bone
+  ids and weights, so classic matrix groups and the four-weight skin share one
+  shader. `window/wisp-window/tests/pose.rs` poses `tests/fixtures/rig.mdl`
+  and `rig.mdx` and matches war3-model's node matrices and vertex positions
+  from `rig.expected.json`; `bun test/window/poseFixtures.ts` regenerates all
+  three. Billboarded nodes and groups over four bones are not posed yet.
+
   Done when:
   `cd ~/code/wisp/main && bun wisp render compare --reference chrome --candidate native --scenes test/render/models.json`
 - **W4 Native lighting, effects, passes, world and UI** ([wisp#109](https://github.com/tompassarelli/wisp/issues/109)). It

@@ -1,0 +1,64 @@
+Version { FormatVersion 900, }
+Model "Rig" { BlendTime 0, MinimumExtent { -10, -10, -10 }, MaximumExtent { 10, 10, 10 }, BoundsRadius 10, }
+Sequences 2 {
+  Anim "Stand" { Interval { 0, 1000 }, MinimumExtent { -10, -10, -10 }, MaximumExtent { 10, 10, 10 }, BoundsRadius 10, }
+  Anim "Walk" { Interval { 1000, 2000 }, NonLooping, MinimumExtent { -10, -10, -10 }, MaximumExtent { 10, 10, 10 }, BoundsRadius 10, }
+}
+GlobalSequences 1 { Duration 400, }
+Bone "Root" {
+  ObjectId 0,
+  GeosetId Multiple, GeosetAnimId None,
+  Translation 4 { Linear, 0: { 0, 0, 0 }, 500: { 10, 0, 0 }, 1000: { 0, 0, 0 }, 2000: { 0, 20, 5 }, }
+}
+Bone "Hinge" {
+  ObjectId 1, Parent 0,
+  GeosetId Multiple, GeosetAnimId None,
+  Rotation 3 { Linear, 0: { 0, 0, 0, 1 }, 1000: { 0, 0, 0.7071068, 0.7071068 }, 2000: { 0.7071068, 0, 0, 0.7071068 }, }
+}
+Bone "Arm" {
+  ObjectId 2, Parent 1,
+  GeosetId Multiple, GeosetAnimId None,
+  Translation 3 { Hermite, 1000: { 0, 0, 0 }, InTan { 0, 0, 0 }, OutTan { 0, 6, 0 }, 1500: { 3, 3, 0 }, InTan { 2, 0, 0 }, OutTan { 0, -4, 0 }, 2000: { 0, 6, 2 }, InTan { 0, 3, 0 }, OutTan { 0, 0, 0 }, }
+  Scaling 2 { Bezier, 0: { 1, 1, 1 }, InTan { 1, 1, 1 }, OutTan { 1.5, 1, 1 }, 1000: { 2, 1, 1 }, InTan { 1.5, 1, 1 }, OutTan { 2, 1, 1 }, }
+}
+Bone "Spinner" {
+  ObjectId 3, Parent 1,
+  GeosetId Multiple, GeosetAnimId None,
+  Rotation 3 { Linear, GlobalSeqId 0, 0: { 0, 0, 0, 1 }, 200: { 0, 0.7071068, 0, 0.7071068 }, 400: { 0, 1, 0, 0 }, }
+  Translation 2 { DontInterp, 0: { 0, 0, 1 }, 500: { 0, 0, 3 }, }
+}
+Helper "Scaler" {
+  ObjectId 4, Parent 2,
+  Scaling 2 { DontInterp, 0: { 1, 1, 1 }, 500: { 2, 2, 2 }, }
+  Rotation 2 { Linear, 0: { 0, 0, 0, 1 }, 1000: { 0, 0.7071068, 0, 0.7071068 }, }
+}
+Bone "Still" {
+  ObjectId 5,
+  GeosetId Multiple, GeosetAnimId None,
+}
+Geoset {
+  Vertices 6 { { 1, 0, 0 }, { 0, 2, 0 }, { 0, 0, 3 }, { 2, 2, 2 }, { -1, 1, 4 }, { 5, 0, 1 }, }
+  Normals 6 { { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, }
+  TVertices 6 { { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 }, { 0, 0 }, { 1, 1 }, }
+  VertexGroup { 0, 1, 2, 3, 2, 0, }
+  Faces 1 6 { Triangles { { 0, 1, 2, 3, 4, 5 }, } }
+  Groups 4 7 { Matrices { 0 }, Matrices { 1, 2 }, Matrices { 3 }, Matrices { 2, 4, 3 }, }
+  MinimumExtent { -10, -10, -10 }, MaximumExtent { 10, 10, 10 },
+  BoundsRadius 10,
+  MaterialID 0,
+  SelectionGroup 0,
+}
+Geoset {
+  Vertices 4 { { 1, 1, 1 }, { 0, 3, 0 }, { 2, 0, 2 }, { -2, 1, 1 }, }
+  Normals 4 { { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, }
+  TVertices 4 { { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 }, }
+  VertexGroup { 0, 0, 0, 0, }
+  Faces 1 3 { Triangles { { 0, 1, 2 }, } }
+  Groups 1 1 { Matrices { 0 }, }
+  MinimumExtent { -10, -10, -10 }, MaximumExtent { 10, 10, 10 },
+  BoundsRadius 10,
+  MaterialID 0,
+  SelectionGroup 0,
+  SkinWeights 4 { { 1, 2, 3, 4, 100, 80, 50, 25 }, { 0, 1, 255, 255, 200, 55, 0, 0 }, { 2, 3, 0, 0, 255, 0, 0, 0 }, { 4, 2, 1, 3, 64, 64, 64, 63 }, }
+}
+PivotPoints 6 { { 0, 0, 0 }, { 1, 0, 0 }, { 2, 1, 0 }, { 0, 1, 2 }, { 1, 1, 1 }, { 3, 3, 3 }, }

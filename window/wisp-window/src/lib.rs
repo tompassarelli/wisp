@@ -10,6 +10,7 @@ mod frame;
 mod host;
 mod input;
 mod metrics;
+pub mod model;
 mod pad;
 #[cfg(target_os = "linux")]
 mod pad_gilrs;
