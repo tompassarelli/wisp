@@ -116,7 +116,8 @@ driver died without `wisp lan end`, and the pool's alarm log gets a line after
 10 idle minutes ([Pool owner and drivers](lan.md#pool-owner-and-drivers)).
 A pool lets go of its pairs, and this host's queue leases on them, once they
 have been idle 10 minutes after their last check (`--release-idle SECONDS`),
-not when its session ends ([Commands](lan.md#commands)).
+not when its session ends ([Commands](lan.md#commands)); `wisp lan holds` checks a day of
+`capacity.db` for holds past that ([Pair holds past the last capture](lan.md#pair-holds-past-the-last-capture)).
 
 For lobby protocol checks, [`wisp lan dummy`](lan.md#dummy-lobby-checks)
 uses the separate GoWarcraft3 dummy beside side a for repeated joins, map and

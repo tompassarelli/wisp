@@ -2,8 +2,10 @@ import { afterEach, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { Database } from "bun:sqlite";
 import { Effect } from "effect";
 import { type QueueWorld, queueStatus, takePair } from "../host/lan/pairQueue";
+import { readHolds } from "../host/lan/holdLog";
 
 const root = join(import.meta.dir, "..");
 const fixtures = join(import.meta.dir, "fixtures/host-tools");
@@ -336,7 +338,38 @@ test("[boundary] lan pool: a pair is held while its check runs and released, wit
   writeFileSync(idleness, JSON.stringify({ state: "idle", idleSeconds: 2 }));
   expect(await settled(() => claimOf(box, pair) === undefined && box.sessions().length === 0, 30)).toBe(true);
   expect({ lockFree: await lockFree(box, pair), leases: queueStatus(queue).leases, sessionLives: session.exitCode === null }).toEqual({ lockFree: true, leases: [], sessionLives: true });
+  const [record, ...others] = readHolds(join(box.env.XDG_STATE_HOME, "wisp/lan/holds.jsonl"));
+  const quiet = record === undefined ? Number.NaN : Date.parse(record.end) - Date.parse(record.lastBusy);
+  expect({ others: others.length, pair: record?.pair, how: record?.how, owner: record?.owner, quietAboutRelease: quiet >= 2000 && quiet < 12_000 }).toEqual({ others: 0, pair, how: "released", owner: "lane", quietAboutRelease: true });
 }, 120_000);
+
+test("[scenario] lan holds: each pair hold in capacity.db reads as seconds past the pool's recorded last capture, and a measured hold past the limit fails the run", async () => {
+  const box = sandbox();
+  const database = new Database(join(box.env.HOME, "capacity.db"));
+  database.run("create table capacity_runs (source_id TEXT PRIMARY KEY, at TEXT NOT NULL, family TEXT NOT NULL, owner TEXT, wallSeconds REAL)");
+  const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
+  const row = (id: string, endedAgo: number, owner: string, wall: number) => database.run("insert into capacity_runs values (?, ?, 'native client', ?, ?)", [id, at(endedAgo), owner, wall]);
+  row("short", 100, "wisp-lan-pair-1", 15 * 60);
+  row("long", 50, "wisp-lan-pair-3", 90 * 60);
+  row("unrecorded", 20, "wisp-lan-pair-4", 10 * 60);
+  row("client", 20, "wisp-lan:lan1a", 90 * 60);
+  database.close();
+  const record = (pair: number, endedAgo: number, busyAgo: number) => JSON.stringify({ pair, owner: "lane", end: at(endedAgo + 1), lastBusy: at(busyAgo), how: "released" });
+  mkdirSync(join(box.env.XDG_STATE_HOME, "wisp/lan"), { recursive: true });
+  const holds = join(box.env.XDG_STATE_HOME, "wisp/lan/holds.jsonl");
+  const run = async (limit: number) => {
+    const runner = Bun.spawn([process.execPath, join(root, "examples/sample/scripts/sample.ts"), "lan", "holds", "--db", join(box.env.HOME, "capacity.db"), "--limit-minutes", String(limit)], { env: box.env, stdout: "pipe", stderr: "pipe" });
+    return { code: await runner.exited, out: await new Response(runner.stdout).text() };
+  };
+
+  writeFileSync(holds, `${record(1, 100, 110)}\n${record(3, 50, 52)}\n`);
+  const passing = await run(30);
+  expect({ code: passing.code, short: /pair 1: .*, (599|600|601) s past its last capture/.test(passing.out), unrecorded: passing.out.includes("pair 4: held") && passing.out.includes("no record"), summary: passing.out.includes("3 holds in 24 h: 2 measured, 1 without a record, 0 over 30 min") }).toEqual({ code: 0, short: true, unrecorded: true, summary: true });
+
+  writeFileSync(holds, `${record(1, 100, 110)}\n${record(3, 50, 90 + 50)}\n`);
+  const failing = await run(30);
+  expect({ code: failing.code, summary: failing.out.includes("1 over 30 min") }).toEqual({ code: 1, summary: true });
+}, 60_000);
 
 test("[boundary] lan pool: a pair start the capacity helper defers waits in the helper's queue and starts once admitted, without asking again", async () => {
   const box = sandbox();
