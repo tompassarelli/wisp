@@ -269,22 +269,55 @@ doesn't. Tom then decided that Chrome can't ship and a native Rust window
 replaces it; these numbers are that window's baseline, and the harness below is
 its acceptance check (`--window native`).
 
-| Window | Press to first changed pixel, p50 | p95 | Trials answered | Command |
+The harness times a press to within one display frame (16.4 ms here).
+Its first version bracketed each press to within 48 ms and reported Chrome at
+85 ms and Warcraft at 82 ms, which could not show whether a window adds two
+frames. The numbers below are a re-measurement with the frame-accurate
+method.
+
+| Window | Press to first changed pixel, p50 (middle of the bracket) | p95 | Trials counted | Command |
 | --- | --- | --- | --- | --- |
-| `wisp play --standalone` (Chrome 156, Xwayland) | 85 ms | 195 ms | 29 of 30 | `bun host/play/pressLatency.ts --window chrome --display :1 --wayland-runtime RUN/runtime --key j --region 360,260,200,220 --control 620,425,300,40 --trials 30 --out DIR` |
-| Native Classic Warcraft 3.0.0.24268, same build | 82 ms | 257 ms | 29 of 30 | `bun host/play/pressLatency.ts --window warcraft --display :5 --wayland-runtime RUN/runtime --key n --region 200,220,220,270 --control 600,520,300,60 --trials 30 --out DIR` |
+| `wisp play --standalone` (Chrome 156, Xwayland) | 113 ms | 164 ms | 28 of 30 | `bun host/play/pressLatency.ts --window chrome --display :N --wayland-runtime RUN/runtime --key j --region 360,260,200,220 --control 620,425,300,40 --trials 30 --out DIR` |
+| Native Classic Warcraft 3.0.0.24268, same build, run 1 (load average 27 to 30) | 217 ms | 523 ms | 26 of 30 | `bun host/play/pressLatency.ts --window warcraft --display :N --wayland-runtime RUN/runtime --key n --region 200,220,220,270 --control 600,520,300,60 --trials 30 --out DIR` |
+| Native Classic Warcraft, run 2 (load average 16 to 19, as Chrome's run) | 97 ms | 508 ms | 26 of 30 | same |
 
-Each figure is the middle of the trial's bracket: the change came after the
-last unchanged screen grab began and before the first changed one ended. The
-conservative bound (the changed grab's end) is 24 ms higher at the median:
-109 against 106 ms at p50, 229 against 284 ms at p95. The bracket's median width
-is 48 ms, so the two medians are the same within the method's resolution, and
-neither window adds latency the other lacks.
+Each figure is the middle of the trial's bracket: the change was not on screen
+in the last frame drawn before the press's grab, and was in the first frame
+that showed it. The bracket's width is one display frame (median 16.7 ms for
+Chrome, 16.1 to 16.8 ms for Warcraft, against a 16.4 ms frame period; the
+widest of any trial is 21 ms, from a grab that ended late under load). The
+conservative bound (the changed frame's stamp) is 8 ms higher at the median:
+121 ms for Chrome, 105 ms for Warcraft's second run.
 
-A game's program runs the same harness as `bun wisp perf latency`, with the
-same flags. `GRIM` and `XDOTOOL` name the tools when they aren't on PATH.
+Reading the three rows: Chrome's median is one frame above Warcraft's second
+run, in the order the shell's extra frame would give, but Warcraft's two runs
+differ by 120 ms with only the host's load changed, so one pass of 30 presses
+cannot separate the two windows by a frame. A comparison needs both windows
+run back to back at the same load, several times; the native window's
+acceptance check should do that. The p95 figures are the host's, not the
+window's: each comes from two or three slow trials.
 
-Method (wisp:host/play/pressLatency.ts):
+### How the harness reaches one frame
+
+Validated 30 October 2026 on gex45 against a reference page of known delay:
+`bun host/play/latencyReference.ts --check --display :N --wayland-runtime RUN/runtime --out DIR`
+(`bun wisp perf latency --check` in a game's program). The page is Chrome with
+a box that turns white a fixed number of animation frames after the `j` key
+(0, 4 and 8, 30 presses each, wisp:host/play/latencyReference.ts). The page
+adds exactly those frames, so the medians must differ by that many frame
+periods; whatever the browser adds to every run cancels.
+
+| Page delay | Frame period | Press to pixel, p50 (conservative bound) | Gap from the undelayed page | Delay the page added | Error |
+| --- | --- | --- | --- | --- | --- |
+| 0 frames | 16.3 ms | 18.8 ms | | | |
+| 4 frames | 16.3 ms | 75.7 ms | 56.9 ms | 65.2 ms | -8.3 ms |
+| 8 frames | 16.4 ms | 142.8 ms | 124.0 ms | 130.7 ms | -6.7 ms |
+
+Both errors are about half a frame or less, and the check fails when one passes
+a whole frame (16.3 ms). The stated resolution is therefore one display frame:
+16.3 ms at the check, 16.4 ms in the table.
+
+Method (wisp:host/play/pressLatency.ts, wisp:host/play/xtest.ts):
 
 - Both windows sit alone on a private labwc desktop
   (`private-desktop-development`), the Warcraft client on LAN pair 0's lan0a
@@ -294,22 +327,40 @@ Method (wisp:host/play/pressLatency.ts):
   standalone with `-dev quick training` in place of its computer match, and the
   `native-input` map with the same chat command. Illidan, standing, taps
   attack (a 50 ms press): J in the browser's keys, N in the map's WASD preset.
+- A grab of the compositor output ends when the compositor has drawn its next
+  frame, so back-to-back grabs of just the watched rectangle (the fighter's
+  region and the control region, one `grim -g` of their bounding box) catch
+  every frame, one per 16.4 ms, and each grab's end is that frame's timestamp.
+  The first harness grabbed the whole output and bracketed from the previous
+  grab's start to the changed grab's end: two grabs, 48 ms.
+- The key goes down as one XTEST FakeInput request on the display's socket,
+  written by the harness at a logged monotonic time (0.1 to 0.3 ms
+  between the two readings around the write). The first harness spawned
+  `xdotool`, which takes 15 ms to start and exit, so its press time was
+  uncertain by almost a frame.
 - A trial waits for a quiet 300 ms (the fighter's region below 1,000 changed
-  pixels and the control region still), taps the key through `xdotool` at a
-  logged monotonic time, and grabs the whole output with `grim` until the
-  fighter's region passes three times its idle change. Each grab takes one
-  compositor frame (16.4 ms median), so trials sample every frame.
+  pixels and the control region still), then grabs continuously while a timer
+  fires the press at a random 0 to 17 ms past 100 ms, so the press falls on a
+  random phase of the frame. The response is the first grab after the press
+  whose region passes three times its idle change; the reference is the last
+  grab drawn before the press.
 - A trial whose control region (stage floor away from the fighters) changed
-  in the answering grab saw the camera move, not the press, and is dropped:
-  one per window.
+  in the answering grab saw the camera move, not the press, and is dropped.
+  A trial whose bracket spans more than one frame (the harness missed a
+  frame under load) is dropped from the latency figures and counted in
+  `missedFrames`; none was in the Chrome run and two were in each Warcraft
+  run. Trials counted are those answered, with the camera still and no
+  missed frame.
 - Both sides use the map's own two-frame input delay and predicted pooled
   fighters, so the game's share is equal; the difference is the shell.
 - The standalone's game host ran under a gpu capacity lease, which scopes it
   to one CPU; the training scene is light, but a throttled step would show as
   a slow trial.
-- The spread is the host's, not the window's: gex45 ran other sessions' pools
-  and builds throughout (load average 8 to 12), and each window's p95 comes
-  from two or three slow trials (Chrome's slowest 197 ms, Warcraft's 603 ms).
+- The spread is the host's, not the window's: gex45 ran other sessions' builds
+  throughout (load average 16 to 30).
+
+A game's program runs the same harness as `bun wisp perf latency`, with the
+same flags. `GRIM` names the tool when it isn't on PATH.
 
 Frame time over a two-minute four-fighter match:
 
