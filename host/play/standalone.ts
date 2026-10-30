@@ -44,7 +44,7 @@ export interface StandaloneGame {
   /** Host and join (wisp:docs/play.md): the map's hash, compared before a match, and one slot's session over the link. */
   readonly net?: {
     mapHash(this: void): Promise<string>;
-    create(this: void, link: LockstepLink, slot: number, options?: { readonly script?: string }): Promise<StandaloneNetSession>;
+    create(this: void, link: LockstepLink, slot: number, humans: number, options?: { readonly script?: string }): Promise<StandaloneNetSession>;
   };
 }
 
@@ -245,8 +245,8 @@ const runNetStandalone = (game: StandaloneGame, options: StandaloneOptions, net:
     if (lan === undefined) console.log(`${game.title}: no network address; on this machine join 127.0.0.1:${port}`);
   };
   const peer = yield* Effect.forkScoped(runNetPeer({
-    create: async (link, slot) => {
-      const session = await hooks.create(link, slot, script === undefined ? undefined : { script });
+    create: async (link, slot, humans) => {
+      const session = await hooks.create(link, slot, humans, script === undefined ? undefined : { script });
       return { ...session, start: () => { session.start(); created.resolve(session); }, close: () => undefined };
     },
   }, { role, game: `${game.title} map ${mapHash}`, frames: options.frames ?? FOREVER_FRAMES, listening }));

@@ -20,7 +20,7 @@ const events: readonly LinkEvent[] = [
 ];
 
 const packet = (turnFrames: readonly number[], overrides: Partial<TurnPacket> = {}): TurnPacket => ({
-  from: 1, frontier: (turnFrames.at(-1) ?? 0) + 3, ack: 70000, done: false,
+  from: 1, frontier: (turnFrames.at(-1) ?? 0) + 3, acks: [70000, 65000], done: false,
   turns: turnFrames.map((frame, index) => ({ frame, at: 1_793_300_000_123.456 + index * 16.7, events })),
   checks: [[60, "0x1f2e3d4c"], [120, "0x5a6b7c8d"]],
   ...overrides,
@@ -36,7 +36,7 @@ describe("compact turns packet", () => {
     expect(turns.map(({ at, ...turn }) => turn)).toEqual(sent.turns.map(({ at, ...turn }) => turn));
     turns.forEach((turn, index) => expect(Math.abs(turn.at - sent.turns[index]!.at)).toBeLessThanOrEqual(0.0005));
     expect(turns[0]?.at).toBe(sent.turns[0]!.at);
-    for (const control of [{ t: "hello", game: "Sample map abc" }, { t: "delay", delay: 6, rttMs: 170 }, { t: "bye", reason: "its match ended" }, { t: "ready" }] as const) {
+    for (const control of [{ t: "hello", game: "Sample map abc" }, { t: "delay", delay: 6, rtts: [0, 170, 90] }, { t: "bye", reason: "its match ended" }, { t: "ready" }] as const) {
       expect(decodeDatagram(encodeDatagram(control))).toEqual(Option.some(control));
     }
   });
@@ -179,5 +179,19 @@ describe("standalone host and join through the relay", () => {
       const bytes = sides.reduce((total, report) => total + (report?.bytesSent ?? 0), 0);
       console.log(`bytes per match, ${chatter} chat line${chatter === 1 ? "" : "s"} a frame each: ${bytes} on the wire from both players in ${FRAMES} frames at 170 ms, ${(bytes / FRAMES).toFixed(0)} per frame, ${(bytes / (FRAMES / 60)).toFixed(0)} per second; largest datagram ${Math.max(...sides.map((report) => report?.largestSent ?? 0))} bytes`);
     }
+  }, 120_000);
+});
+
+describe("four humans through the relay's peer room", () => {
+  test("[scenario] net pair --relay local --humans 4 plays 600 frames with every player's checksums equal and no datagram over 1200 bytes", async () => {
+    const binary = await relayBinary();
+    const run = Bun.spawn([...sample, "pair", "--relay", "local", "--humans", "4", "--frames", String(FRAMES)], { stdin: "ignore", stdout: "pipe", stderr: "pipe", env: { ...process.env, WISP_RELAY_BIN: binary } });
+    const [stdout, stderr, code] = await Promise.all([new Response(run.stdout).text(), new Response(run.stderr).text(), run.exited]);
+    expect({ code, stderr: code === 0 ? "" : stderr }).toEqual({ code: 0, stderr: "" });
+    const lines = stdout.trim().split("\n");
+    expect(lines).toHaveLength(5);
+    for (const line of lines.slice(0, 4)) expect(line).toMatch(new RegExp(`^(host|join\\d): ${FRAMES} frames, delay \\d+ .* [1-9]\\d* checksums compared, 0 mismatches`));
+    expect(lines[4]).toMatch(/^pair: 4 humans, 600 frames, checksums match on all 4/);
+    for (const line of lines.slice(0, 4)) expect(Number(/\(largest (\d+)\)/.exec(line)?.[1])).toBeLessThanOrEqual(MAX_DATAGRAM);
   }, 120_000);
 });

@@ -7,17 +7,18 @@ import { NetFailure } from "./failure";
 const HANDSHAKE_TRIES = 20;
 const HANDSHAKE_RETRY_MS = 250;
 
-export type RelayOpening = { readonly create: true } | { readonly join: bigint };
+export type RelayOpening = { readonly create: true; readonly players: number } | { readonly join: bigint };
 
 export interface RelayLinkOptions {
   readonly relay: Endpoint;
   readonly opening: RelayOpening;
-  readonly receive: (this: void, payload: Uint8Array) => void;
+  readonly receive: (this: void, payload: Uint8Array, from: number) => void;
 }
 
 export interface RelayedLink extends Link {
   readonly room: bigint;
   readonly slot: number;
+  readonly players: number;
 }
 
 const randomId = () => BigInt(Math.floor(Math.random() * 2 ** 52)) + 1n;
@@ -32,7 +33,7 @@ export const openRelayLink = (options: RelayLinkOptions) => Effect.gen(function*
     catch: (cause) => new NetFailure({ problem: `finding the relay ${options.relay.address}: ${String(cause)}` }),
   });
   const traffic = new Traffic();
-  let cookie = 0n, token: bigint | undefined, joined: { room: bigint; slot: number } | undefined, refusal: string | undefined;
+  let cookie = 0n, token: bigint | undefined, joined: { room: bigint; slot: number; players: number } | undefined, refusal: string | undefined;
   const request = randomId();
   const socket = yield* Effect.acquireRelease(Effect.tryPromise({
     try: () => Bun.udpSocket({
@@ -43,13 +44,13 @@ export const openRelayLink = (options: RelayLinkOptions) => Effect.gen(function*
           traffic.received(data.length);
           try {
             const message = decodeControl(new Uint8Array(data));
-            if (message.type === "relayed") options.receive(message.payload);
+            if (message.type === "relayed") options.receive(message.payload, message.from);
             else if (message.type === "challenge") {
               cookie = message.cookie;
               if (token !== undefined) udp.send(encodeControl({ type: "verify", token, cookie }), relay.port, relay.address);
             } else if (message.type === "room" && message.request === request) {
               token = message.token;
-              joined = { room: message.room, slot: message.slot };
+              joined = { room: message.room, slot: message.slot, players: message.players };
             } else if (message.type === "refused" && message.request === request) refusal = message.reason;
           } catch {
             return;
@@ -67,7 +68,7 @@ export const openRelayLink = (options: RelayLinkOptions) => Effect.gen(function*
     }
   }));
   const ask = () => encodeControl("create" in options.opening
-    ? { type: "createPeer", cookie, request, players: 2 }
+    ? { type: "createPeer", cookie, request, players: options.opening.players }
     : { type: "join", cookie, request, room: options.opening.join });
   for (let attempt = 0; joined === undefined; attempt++) {
     if (refusal !== undefined) return yield* new NetFailure({ problem: `the relay refused: ${refusal}` });
@@ -82,6 +83,7 @@ export const openRelayLink = (options: RelayLinkOptions) => Effect.gen(function*
     traffic,
     room: joined.room,
     slot: joined.slot,
+    players: joined.players,
     send: (payload) => {
       if (token === undefined) return;
       const bytes = encodeControl({ type: "peer", token, payload });

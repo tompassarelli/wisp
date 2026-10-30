@@ -12,7 +12,7 @@ const Control = Schema.Union([
   Schema.Struct({ t: Schema.Literal("refuse"), problem: Schema.String }),
   Schema.Struct({ t: Schema.Literal("ping"), id: Whole, at: Whole }),
   Schema.Struct({ t: Schema.Literal("pong"), id: Whole, at: Whole }),
-  Schema.Struct({ t: Schema.Literal("delay"), delay: Whole, rttMs: Whole }),
+  Schema.Struct({ t: Schema.Literal("delay"), delay: Whole, rtts: Schema.Array(Whole) }),
   Schema.Struct({ t: Schema.Literal("ready") }),
   Schema.Struct({ t: Schema.Literal("go"), inMs: Whole }),
   Schema.Struct({ t: Schema.Literal("bye"), reason: Schema.String }),
@@ -139,12 +139,14 @@ function readEvent(r: Reader): LinkEvent {
 }
 
 /**
- * A `turns` packet in bytes: the tag, the sender, frontier, acknowledgement and done flag, then each turn as its frame (the
+ * A `turns` packet in bytes: the tag, the sender, frontier, each member's acknowledgement and done flag, then each turn as its frame (the
  * first absolute, the rest from the turn before) and its time (the first as a double, the rest in microseconds from the turn
  * before) and its events, then the checksums. Events keep every field exactly; only turn times are rounded, to a microsecond.
  */
 function writeTurns(packet: TurnPacket): number[] {
-  const out = new Writer().u8(TURNS).varint(packet.from).varint(packet.frontier).varint(packet.ack).u8(packet.done ? 1 : 0).varint(packet.turns.length);
+  const out = new Writer().u8(TURNS).varint(packet.from).varint(packet.frontier).varint(packet.acks.length);
+  for (const ack of packet.acks) out.varint(ack);
+  out.u8(packet.done ? 1 : 0).varint(packet.turns.length);
   let frame = 0, atUs = 0;
   packet.turns.forEach((turn, index) => {
     const turnUs = Math.round(turn.at * 1000);
@@ -161,7 +163,10 @@ function writeTurns(packet: TurnPacket): number[] {
 }
 
 function readTurns(r: Reader): TurnPacket {
-  const from = r.varint(), frontier = r.varint(), ack = r.varint(), done = r.u8() === 1;
+  const from = r.varint(), frontier = r.varint();
+  const acks: number[] = [];
+  for (let count = r.varint(), index = 0; index < count; index++) acks.push(r.varint());
+  const done = r.u8() === 1;
   const turns: TurnPacket["turns"][number][] = [];
   let frame = 0, atUs = 0;
   for (let count = r.varint(), index = 0; index < count; index++) {
@@ -181,7 +186,7 @@ function readTurns(r: Reader): TurnPacket {
   }
   const checks: [number, string][] = [];
   for (let count = r.varint(), index = 0; index < count; index++) checks.push([r.varint(), r.text()]);
-  return { from, frontier, ack, done, turns, checks };
+  return { from, frontier, acks, done, turns, checks };
 }
 
 export function encodeDatagram(datagram: Datagram): Uint8Array {

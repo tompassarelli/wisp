@@ -212,14 +212,15 @@ delay is the only delay (wisp#112).
 **Turns and order.** There is one turn per frame (16.7 ms). An event raised
 while frame n runs is due at frame n + d, one raised between frames n and n + 1
 at n + 1 + d, where d is the turn delay. Every client delivers a frame's
-events before its callbacks, the lower slot's first, each sender's in the order
+events before its callbacks, the lowest slot's first, each sender's in the order
 it sent them, so every client sees the same events on the same frame. A frame
-runs only once the peer has promised all of its events for that frame.
+runs only once every peer has promised all of its events for that frame.
 
 **Packets.** After every frame, and every 8 ms while waiting, each side sends
-one packet: its frontier (the last frame whose events it has promised), every
-turn after the peer's last acknowledgement, its acknowledgement of the peer's
-frontier, and its last four checksums. A lost packet is repaired by the next
+one packet to all the others: its frontier (the last frame whose events it has promised), every
+turn after the slowest peer's acknowledgement, its acknowledgement of each peer's
+frontier (one count per slot), and its last four checksums. The relay's peer room forwards the
+one datagram to every other member, which tell senders apart by the room's slot. A lost packet is repaired by the next
 one, a frame later; there is no retransmission timer.
 
 **Regions and delay.** Before a relayed match, `net host --relay nearest` (and `play --standalone --host --relay nearest`)
@@ -230,7 +231,7 @@ can't read from its own sync echoes, which under lockstep are a whole number of 
 (wisp:host/net/peer.ts, wisp:src/netcode/delay.ts, wisp:docs/relay.md, "Regions").
 
 **Wire.** A `turns` packet is binary (wisp:host/net/wire.ts): varints for the
-frames, acknowledgement and counts, each turn's frame as the step from the
+frames, acknowledgements and counts, each turn's frame as the step from the
 turn before, its time as microseconds from the turn before (the first as a
 double), and each event as a kind byte, its sender and its fields, exact. Sixteen
 turns of a chat line and a key take 376 bytes where the JSON packet took 2452.
@@ -242,11 +243,12 @@ sent. Handshake messages (hello, ping, delay, ready, go, bye) stay JSON behind
 a tag byte. The link under the packets is direct UDP or a relay's peer room
 (wisp:docs/relay.md, "Peer room"); a relayed datagram carries 11 more bytes.
 
-**Delay.** The host measures the round trip with eight pings and picks
-d = ceil((round trip / 2 + 4 ms) / 16.7 ms), at least 1: the one-way time plus
+**Delay.** The host measures each peer's round trip with eight pings and picks
+d = ceil((largest round trip / 2 + 4 ms) / 16.7 ms), at least 1: the one-way time plus
 room for the sender's frame and timer jitter. On one host that is 1 frame; at
-60 ms round trip 3, at 120 ms 4. Both sides start their clients, then the host
-names a start time that the joiner shifts by half the round trip.
+60 ms round trip 3, at 120 ms 4. Every side starts its client, then the host
+names a start time that each joiner shifts by half its own round trip (the delay message
+carries every slot's).
 
 **Pacing.** Frames run on a 60 Hz schedule. A side more than three frames behind
 its schedule (a slow frame, a long wait) drops the backlog instead of racing to
@@ -254,12 +256,12 @@ catch up (a slip); a side whose schedule is ahead of the peer's estimated frame
 slows by up to 1 ms a frame (`paceShift`).
 
 **Checksums.** Every 60 frames each side records the game's checksum; packets
-carry the last four, and the first difference ends the match with
-`NetDesync` naming the frame and both values.
+carry the last four, and the first difference with any peer ends the match with
+`NetDesync` naming the frame, the peer's slot and both values.
 
 **Ending.** A peer that sends nothing for 3 s ends the match with `PeerSilent`;
 a peer that leaves sends a goodbye, and the other side ends at once with
-`PeerLeft` unless it already has every turn it needs. A finished side keeps
+`PeerLeft` unless it already has every turn it needs from that peer. A finished side keeps
 sending until the peer has its last turns and checksums (at most 3 s), then
 says goodbye.
 
@@ -278,7 +280,17 @@ bun examples/sample/scripts/sample.ts net pair --frames 1200 --freeze-at 300
 ```
 
 `host [--port N]` and `join ADDRESS:PORT` run one side each; `pair` runs both
-on this machine and prints one line per side. With `--rtt MS` or `--loss P`,
+on this machine and prints one line per side.
+
+**Up to four humans.** A match of 3 or 4 humans plays through a relay's peer room:
+`host --relay REGION|ADDRESS:PORT --humans N` opens a room for N members and each
+`join CODE` takes the room's next slot (the host is slot 0). The host waits for every
+joiner's hello, pings all of them, and picks the delay from the largest round trip it
+measured; a joiner learns N from the room. `pair --relay local --humans N` runs a relay
+and N players on this machine and prints one line per player and a last line that says
+whether the checksums match on all N. It needs a relay binary: `WISP_RELAY_BIN`, else
+cargo builds relay/ (`pair` takes neither `--rtt`, `--loss` nor the fault drills with a
+relay). With `--rtt MS` or `--loss P`,
 `pair` puts `net proxy` between them: a separate process that holds every
 datagram half the round trip in each direction and drops it with probability
 P (seeded by `--seed`). `--freeze-at F` makes the joiner stop sending after

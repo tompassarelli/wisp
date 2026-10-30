@@ -9,9 +9,9 @@ const CHATTER_LINE = "chatter chatter chatter";
 const POLICY = delayPolicy(8, 30);
 
 export const sampleNet = (chatter: number): NetGame => ({
-  create: async (link, slot) => {
+  create: async (link, slot, humans) => {
     const runtime = installHeadless(SAMPLE_MAP);
-    const lockstep = runtime.clients({ start, install }, [slot], { humans: [0, 1], link, keepCalls: 0 });
+    const lockstep = runtime.clients({ start, install }, [slot], { humans: Array.from({ length: humans }, (_, member) => member), link, keepCalls: 0 });
     const client = lockstep.client(slot);
     return {
       start: () => lockstep.start(),
