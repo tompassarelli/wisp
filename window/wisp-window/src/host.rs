@@ -85,6 +85,7 @@ impl ApplicationHandler<Command> for App {
             return;
         }
         let attributes = Window::default_attributes().with_title(self.title.clone()).with_inner_size(winit::dpi::LogicalSize::new(self.size.0, self.size.1));
+        let attributes = named_for_agent(attributes, agent_launched(&|key| std::env::var_os(key)));
         match event_loop.create_window(attributes) {
             Ok(window) => {
                 let window = Arc::new(window);
@@ -138,6 +139,27 @@ impl ApplicationHandler<Command> for App {
             Command::Exit => event_loop.exit(),
         }
     }
+}
+
+const AGENT_APP_ID: &str = "wisp-agent";
+
+fn agent_launched(var: &dyn Fn(&str) -> Option<std::ffi::OsString>) -> bool {
+    var("AI_AGENT").is_some_and(|value| !value.is_empty())
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn named_for_agent(attributes: winit::window::WindowAttributes, agent: bool) -> winit::window::WindowAttributes {
+    use winit::platform::{wayland::WindowAttributesExtWayland, x11::WindowAttributesExtX11};
+    if !agent {
+        return attributes;
+    }
+    let attributes = WindowAttributesExtWayland::with_name(attributes, AGENT_APP_ID, AGENT_APP_ID);
+    WindowAttributesExtX11::with_name(attributes, AGENT_APP_ID, AGENT_APP_ID)
+}
+
+#[cfg(not(all(unix, not(target_os = "macos"))))]
+fn named_for_agent(attributes: winit::window::WindowAttributes, _: bool) -> winit::window::WindowAttributes {
+    attributes
 }
 
 fn any_thread(builder: &mut winit::event_loop::EventLoopBuilder<Command>) {
@@ -427,5 +449,23 @@ fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>, aspect
 fn wait_for_stop(shared: &Arc<Shared>) {
     while !shared.mailbox.is_stopping() {
         thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsString;
+
+    use super::agent_launched;
+
+    fn env(value: Option<&'static str>) -> impl Fn(&str) -> Option<OsString> {
+        move |key| if key == "AI_AGENT" { value.map(OsString::from) } else { None }
+    }
+
+    #[test]
+    fn an_ai_agent_marker_selects_the_agent_app_id() {
+        assert!(agent_launched(&env(Some("claude-code/2.1"))));
+        assert!(!agent_launched(&env(Some(""))));
+        assert!(!agent_launched(&env(None)));
     }
 }
