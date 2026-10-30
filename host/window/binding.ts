@@ -49,6 +49,7 @@ export type PresentMode = (typeof PRESENT_MODES)[number];
 
 export interface NativeWindowOptions {
   readonly title: string;
+  /** `WISP_WINDOW_SIZE=WIDTHxHEIGHT` replaces both. */
   readonly width: number;
   readonly height: number;
   readonly library?: string | undefined;
@@ -191,7 +192,8 @@ export function openNativeWindow(options: NativeWindowOptions): NativeWindow {
   const call = library.symbols;
   const vocabulary = vocabularyOf(library);
   const title = Buffer.from(options.title);
-  const handle = call.wisp_window_open(title, title.length, options.width, options.height);
+  const size = /^(\d+)x(\d+)$/.exec(process.env.WISP_WINDOW_SIZE ?? "");
+  const handle = call.wisp_window_open(title, title.length, size === null ? options.width : Number(size[1]), size === null ? options.height : Number(size[2]));
   if (handle === null) {
     const reason = textFrom((out, capacity) => call.wisp_window_open_error(out, capacity));
     library.close();
