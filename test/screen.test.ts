@@ -117,3 +117,25 @@ test("[reference wisp#46] an effect draws at the scale and position its map set:
   expect(at([0, 0, 0])).toEqual([-240, -12, 1842]);
   expect(at([30, 0, 47])).toEqual([-180, -12, 1936]);
 });
+
+test("[reference wisp-standalone-menu] a child of a raised panel draws above a lower-level sibling, and a button's text is centred", () => {
+  const client = new HeadlessClient({ slot: 0, humans: [0], declarations: readNativeDeclarations(), filePrefix: "screen", localNatives: {}, network: [], screen: { width: 1280, height: 720 } });
+  const call = (name: string, ...args: unknown[]) => (client.natives[name] as (this: void, ...args: unknown[]) => unknown)(...args);
+  const frame = (type: string, name: string, owner?: unknown) => {
+    const created = call("BlzCreateFrameByType", type, name, owner, "", 0);
+    call("BlzFrameSetAbsPoint", created, 0, 0.1, 0.5);
+    call("BlzFrameSetSize", created, 0.2, 0.05);
+    return created;
+  };
+  const chip = frame("BACKDROP", "Chip");
+  call("BlzFrameSetLevel", chip, 10);
+  const panel = frame("BACKDROP", "Panel");
+  call("BlzFrameSetLevel", panel, 20);
+  frame("TEXT", "PanelText", panel);
+  frame("GLUETEXTBUTTON", "PanelButton", panel);
+  const rows = new Map(client.frames.snapshot().map((row) => [row.name, row]));
+  expect(rows.get("PanelText")!.level).toBeGreaterThan(rows.get("Chip")!.level);
+  expect(rows.get("PanelButton")!.level).toBeGreaterThan(rows.get("Chip")!.level);
+  expect(rows.get("PanelButton")!.alignment).toEqual({ vertical: "middle", horizontal: "center" });
+  expect(rows.get("PanelText")!.alignment).toBeUndefined();
+});

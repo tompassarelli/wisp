@@ -422,8 +422,20 @@ function fontFamily(file: string): Promise<string> {
   return family;
 }
 
-function drawText(context: CanvasRenderingContext2D, raw: string, family: string, size: number, color: string, outline: boolean, x: number, horizontal: "left" | "center" | "right", y: number, vertical: "top" | "middle" | "bottom") {
-  const lines = raw.replace(/\|c[0-9a-f]{8}|\|r/gi, "").replaceAll("|n", "\n").split("\n"), leading = size * 1.2;
+function wrapped(context: CanvasRenderingContext2D, line: string, limit: number): string[] {
+  if (limit <= 0 || context.measureText(line).width <= limit) return [line];
+  const rows: string[] = [];
+  let row = "";
+  for (const word of line.split(" ")) {
+    const next = row === "" ? word : `${row} ${word}`;
+    if (row !== "" && context.measureText(next).width > limit) { rows.push(row); row = word; } else row = next;
+  }
+  rows.push(row);
+  return rows;
+}
+function drawText(context: CanvasRenderingContext2D, raw: string, family: string, size: number, color: string, outline: boolean, x: number, horizontal: "left" | "center" | "right", y: number, vertical: "top" | "middle" | "bottom", limit = 0) {
+  context.font = `${size}px ${family}`;
+  const lines = raw.replace(/\|c[0-9a-f]{8}|\|r/gi, "").replaceAll("|n", "\n").split("\n").flatMap((line) => wrapped(context, line, limit)), leading = size * 1.2;
   const top = vertical === "top" ? y : vertical === "middle" ? y - lines.length * leading / 2 : y - lines.length * leading;
   context.font = `${size}px ${family}`; context.textAlign = horizontal; context.textBaseline = "top";
 
@@ -614,11 +626,11 @@ window.renderScene = async (scene, options) => {
     }
     if (frame.text !== "") {
 
-      const size = (frame.font.height > 0 ? frame.font.height * scaleY : Math.max(10, Math.min(22, height || 15))) * frame.scale;
+      const size = (frame.font.height > 0 ? frame.font.height * scaleY : Math.max(10, Math.min(0.0122 * scaleY, height || 15))) * frame.scale;
       const alignment = frame.alignment ?? { vertical: "top", horizontal: "left" };
       drawText(context, frame.text, live ? loaded(fontFamily(frame.font.file)) ?? "sans-serif" : await fontFamily(frame.font.file), size, cssColor(frame.textColor), (frame.font.flags & 1) !== 0,
         alignment.horizontal === "left" ? x : alignment.horizontal === "center" ? x + width / 2 : x + width, alignment.horizontal,
-        alignment.vertical === "top" ? y : alignment.vertical === "middle" ? y + height / 2 : y + height, alignment.vertical);
+        alignment.vertical === "top" ? y : alignment.vertical === "middle" ? y + height / 2 : y + height, alignment.vertical, width);
     }
   }
   context.globalAlpha = 1;

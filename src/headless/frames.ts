@@ -236,10 +236,16 @@ export class Frames {
       if (options.visibleOnly && (!visible || frame.alpha <= 0)) continue;
       snapshots.push({ handle: { kind: frame.kind, id: frame.id }, name: frame.name, type: frame.type,
         parentId: frame.parent?.id, rectangle: this.rectangle(frame), text: frame.text, texture: frame.texture,
-        color: frame.color, textColor: frame.textColor, alpha: frame.alpha, visible, level: frame.level,
-        font: frame.font, alignment: textAlignment(frame.alignment), scale: frame.scale });
+        color: frame.color, textColor: frame.textColor, alpha: frame.alpha, visible, level: this.drawLevel(frame),
+        font: frame.font, alignment: textAlignment(frame.alignment ?? (frame.type.toLowerCase().includes("button") ? { vertical: "MIDDLE", horizontal: "CENTER" } : undefined)), scale: frame.scale });
     }
     return snapshots;
+  }
+
+  // A frame whose level was never set draws at its parent's level, as Warcraft does, so a raised panel carries its children above lower siblings.
+  private drawLevel(frame: Frame): number {
+    for (let at: Frame | undefined = frame; at !== undefined; at = at.parent) if (at.level !== 0) return at.level;
+    return 0;
   }
 
   private rectangle(frame: Frame, visited: Set<Frame> = new Set()): Rectangle | undefined {
@@ -296,7 +302,7 @@ export class Frames {
       if (rectangle === undefined) continue;
       const [left, top, right, bottom] = rectangle;
       if (x < left || x > right || y > top || y < bottom) continue;
-      if (found === undefined || frame.level >= found.level) found = frame;
+      if (found === undefined || this.drawLevel(frame) >= this.drawLevel(found)) found = frame;
     }
     return found;
   }
