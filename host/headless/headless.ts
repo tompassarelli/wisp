@@ -1,14 +1,14 @@
 import { readFileSync } from "node:fs";
 import type { FrameTemplate } from "../../src/headless/frames";
-import type { UnitStateFixtures } from "../../src/headless/clientTypes";
+import type { MissingNative, UnitStateFixtures } from "../../src/headless/clientTypes";
 import type { SceneryFixtures } from "../../src/headless/warcraft3Scenery";
 import type { Warcraft3InventoryFixtures } from "../../src/headless/warcraft3Inventory";
 import type { AbilityObjectFixtures } from "../../src/headless/warcraft3Abilities";
 import { join } from "node:path";
-import type { ClientScope, HeadlessClient, LocalNatives, MapEntry, NativeBehaviors, SoundCue, IntentionalNoops } from "../../src/headless/client";
+import type { ClientScope, HeadlessClient, LocalNatives, MapEntry, NativeBehaviors, SoundCue, IntentionalNoops, StandaloneProfile } from "../../src/headless/client";
 import type { HeadlessRenderProject } from "../render/headlessRender";
 import { type NativeDeclarations, parseNativeDeclarations } from "../../src/headless/declarations";
-import { type Journey, type JourneyOptions, type JourneyResult, journeyLines, journeyProblems, runJourney } from "../../src/headless/journey";
+import { type Journey, type JourneyOptions, type JourneyResult, journeyLines, journeyProblems, missingNativeMessage, runJourney } from "../../src/headless/journey";
 import { Lockstep, type LockstepOptions } from "../../src/headless/lockstep";
 import { errorFile } from "../../src/runtime/gameFiles";
 import { BUNDLE_MODULE, type ModuleSet } from "../../src/runtime/modules";
@@ -29,6 +29,7 @@ export interface HeadlessMap {
 
   readonly localNatives?: LocalNatives;
   readonly intentionalNoops?: IntentionalNoops;
+  readonly standaloneProfile?: StandaloneProfile;
 
   readonly natives?: (client: HeadlessClient) => NativeBehaviors;
 
@@ -196,6 +197,7 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
         ...options,
         ...(map.localNatives === undefined ? {} : { localNatives: map.localNatives }),
         ...(map.intentionalNoops === undefined ? {} : { intentionalNoops: map.intentionalNoops }),
+        ...(map.standaloneProfile === undefined ? {} : { standaloneProfile: map.standaloneProfile }),
         ...(map.frames === undefined ? {} : { frames: map.frames }),
         ...(map.unitStates === undefined ? {} : { unitStates: map.unitStates }),
         ...(map.abilityObjects === undefined ? {} : { abilityObjects: map.abilityObjects }),
@@ -247,12 +249,16 @@ export interface HeadlessReport {
 }
 
 interface HeadlessFinding {
-  readonly kind: "desync" | "error" | "scene" | "check-fail" | "missing-native";
+  readonly kind: "desync" | "error" | "scene" | "check-fail" | "missing-native" | "outside-profile";
   readonly frame: number | null;
   readonly client: number | null;
   readonly message: string;
   readonly native?: string;
 }
+
+const missingNativeFinding = (missing: MissingNative): HeadlessFinding => ({
+  kind: missing.outsideProfile === true ? "outside-profile" : "missing-native", native: missing.native, client: missing.client, frame: missing.frame, message: missingNativeMessage(missing),
+});
 
 export function playHeadless(clients: Lockstep, journey: Journey, filePrefix: string, scene?: SceneExpectations, options?: JourneyOptions): HeadlessReport {
   const result = runJourney(clients, journey, options);
@@ -267,7 +273,7 @@ export function playHeadless(clients: Lockstep, journey: Journey, filePrefix: st
   for (const message of result.reloads) failures.push({ kind: "check-fail", frame: result.frames, client: null, message });
   for (const client of result.clients) {
     for (const message of client.errors) failures.push({ kind: "error", frame: null, client: client.slot, message });
-    for (const missing of client.missingNatives) failures.push({ kind: "missing-native", ...missing, message: `unmodeled native ${missing.native}` });
+    for (const missing of client.missingNatives) failures.push(missingNativeFinding(missing));
   }
   for (const client of clients.clients) {
     const report = client.files.get(errorFile(client.slot, filePrefix));

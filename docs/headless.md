@@ -68,6 +68,35 @@ missing-native failures. A function supplied through `natives` counts as
 modeled in both runtimes. Prefer supplied behavior when the return value
 matters, as the sample declares its playable rectangle's center at zero.
 
+### Standalone profile
+
+Standalone mode emulates only the natives a game declares in its standalone
+profile, not Warcraft's unit simulation: movement, pathing, orders, combat
+and buffs stay Warcraft's. A game that needs Warcraft to move, path, order,
+fight or buff its units is a Warcraft-only map; it builds and plays in the
+game with Wisp's toolchain but has no standalone mode. Warcraft's API stays
+the one seam: the same compiled map runs in Warcraft and in Wisp's host, and
+Wisp adds no API of its own for standalone games. Every newly emulated
+native moves Wisp toward a Warcraft engine, so the profile is the contract
+and grows only when a game shows it calls a native.
+
+A game generates its profile from the natives its compiled map bundle names
+and commits it:
+
+```sh
+bun node_modules/wisp/host/headless/standaloneProfile.ts build/map.lua > standalone-profile.json
+```
+
+and declares it as `standaloneProfile` in `HeadlessMap` or `LuaHeadlessMap`.
+A name the declarations don't have is refused when the clients start. A
+call to a native outside the profile fails the journey even when Wisp
+models it, recorded once per client with its frame as an `outside-profile`
+finding, `native NAME is outside the standalone profile`; a standalone run
+(`runStandalone`, Chrome or the native window) stops on it with
+`pN frame F: native NAME is outside the standalone profile`. Inside the
+profile, an unmodeled native still fails as above. `bun test
+test/headless-coverage.test.ts` checks both the generator and the failure.
+
 ## Synchronized and local-only calls
 
 Clients that took the same events must make the same native calls in the
@@ -1610,7 +1639,8 @@ models and textures stay in private local storage under the clean-room rules.
 The runtime emulates natives; it is not Warcraft. It has no engine frame
 timing, terrain, pathing, combat, real input devices or Battle.net
 beyond the [measured sync latency](network-model.md), and it emulates only
-natives a map has needed. A program that reads real devices can type into
+natives a map has needed. A standalone game is held to its
+[standalone profile](#standalone-profile). A program that reads real devices can type into
 it, but focus belongs to the map's own frame calls, not to a window;
 edit-box text-changed and Enter events are not emulated, and a click reaches
 only frames placed by absolute points. Explicit no-ops use the map's stated
@@ -1630,8 +1660,8 @@ prediction.
 Each journey writes one `type: "result"` record with `journey`, `ok`,
 `frames`, and `clients` (each client's slot, native call count, checksum,
 and errors, plus `missingNatives`). Each problem writes a `type: "failure"` record with `kind`
-(`desync`, `error`, `scene`, `check-fail`, or `missing-native`), `frame`, `client`, and `message`.
-Missing-native records also include `native`, its exact declared name.
+(`desync`, `error`, `scene`, `check-fail`, `missing-native` or `outside-profile`), `frame`, `client`, and `message`.
+Missing-native and outside-profile records also include `native`, its exact declared name.
 Unavailable frame or client values are `null`. JSON mode compares calls on
 every frame so a desync names the first differing frame and client.
 

@@ -50,6 +50,10 @@ replaces or redistributes the game.
   the game shows, plays, logs and writes, and the traffic of LAN games we host,
   plus public documentation. Never from disassembly, decompilation or the
   game's memory.
+- **Emulate a declared profile, not Warcraft.** Standalone mode runs only
+  the natives a game declares in its [standalone profile](docs/headless.md#standalone-profile),
+  never Warcraft's unit simulation; a map that needs Warcraft to move, path,
+  order, fight or buff its units plays in Warcraft only.
 - **Play fair.** No DRM bypass, no Battle.net emulation, no cheats, and nothing
   that touches other players or Blizzard's services.
 - **Original work.** Our own code only. No code from AGPL projects such as

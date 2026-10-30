@@ -4,7 +4,7 @@ import { type Hash, type ModuleSet, ModulePublisher, type VersionFiles } from ".
 import { type ClientFiles, type ClientScope, HeadlessClient, type LocalNatives, type MapEntry, type NativeBehaviors, type SyncMessage, WISP_LOCAL_NATIVES, describeCall, sameCall } from "./client";
 import type { NativeDeclarations } from "./declarations";
 import type { EffectDeaths, UnitStateFixtures } from "./clientTypes";
-import type { IntentionalNoops, PlayerMouseInput } from "./clientTypes";
+import type { IntentionalNoops, PlayerMouseInput, StandaloneProfile } from "./clientTypes";
 import type { SceneryFixtures } from "./warcraft3Scenery";
 import type { Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 import type { AbilityObjectFixtures } from "./warcraft3Abilities";
@@ -34,6 +34,7 @@ export interface LockstepOptions {
 
   readonly localNatives?: LocalNatives;
   readonly intentionalNoops?: IntentionalNoops;
+  readonly standaloneProfile?: StandaloneProfile | undefined;
   readonly natives?: (this: void, client: HeadlessClient) => NativeBehaviors;
   readonly scope?: ClientScope;
 
@@ -125,6 +126,7 @@ export class Lockstep {
         declarations: options.declarations,
         localNatives,
         ...(options.intentionalNoops === undefined ? {} : { intentionalNoops: options.intentionalNoops }),
+        standaloneProfile: options.standaloneProfile,
         network: this.network,
 
         screen: options.screen ?? { width: 1920 + 640 * index, height: 1080 },

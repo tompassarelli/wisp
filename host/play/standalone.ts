@@ -6,6 +6,7 @@ import { Deferred, Effect, Fiber, FiberSet, Schema } from "effect";
 import { ChildProcess } from "effect/process";
 import type { HeadlessClient } from "../../src/headless/client";
 import type { LockstepLink } from "../../src/headless/lockstep";
+import { missingNativeMessage } from "../../src/headless/journey";
 import { spawnLogged } from "../process/hostProcess";
 import { requireGpuLease } from "../render/gpuLease";
 import { joinCode, joinTarget, relayCode, relayRegions, CODE_HASH_DIGITS, type RelayChoice } from "../net/joinCode";
@@ -120,6 +121,8 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
   const advance = (input: StandaloneInput) => {
     const start = performance.now();
     session.step(input);
+    const outside = session.client.missingNatives.find((missing) => missing.outsideProfile === true);
+    if (outside !== undefined) throw new Error(`p${outside.client} frame ${outside.frame}: ${missingNativeMessage(outside)}`);
     const frame = session.frame?.() ?? session.client.frame;
     const checksum = recordChecksums ? session.checksum() : undefined;
     steps++;

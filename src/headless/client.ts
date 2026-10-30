@@ -1,8 +1,9 @@
 import { f32 } from "../sim/f32";
 import { mixCall } from "./callHash";
-import type { CameraPose, CineFilterPose, ClientFiles, EffectDeaths, EffectPose, Handle, IntentionalNoops, LocalNatives, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, PlayerMouseInput, SoundCue, SyncMessage, UnitPose, UnitStateFixtures } from "./clientTypes";
+import type { CameraPose, CineFilterPose, ClientFiles, EffectDeaths, EffectPose, Handle, IntentionalNoops, LocalNatives, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, PlayerMouseInput, SoundCue, StandaloneProfile, SyncMessage, UnitPose, UnitStateFixtures } from "./clientTypes";
 import type { NativeDeclarations } from "./declarations";
 import { FRAME_POINTS, type Frame, type FrameTemplate, Frames } from "./frames";
+import { enforceStandaloneProfile } from "./standaloneProfile";
 import { FRAMES_PER_SECOND, steppedFrames } from "./frameRate";
 import { describeNumber } from "./jassFormat";
 import { Lightnings } from "./lightnings";
@@ -20,7 +21,7 @@ import { Warcraft3Inventory, type Warcraft3InventoryFixtures } from "./warcraft3
 import { WARCRAFT3_ENUM_VALUES } from "./warcraft3Natives";
 import { Scenery, type SceneryFixtures } from "./warcraft3Scenery";
 
-export type { CameraPose, CineFilterPose, ClientFiles, EffectDeaths, EffectPose, Handle, IntentionalNoops, LocalNatives, MapEntry, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, SyncMessage, UnitPose, UnitStateFixture, UnitStateFixtures } from "./clientTypes";
+export type { CameraPose, CineFilterPose, ClientFiles, EffectDeaths, EffectPose, Handle, IntentionalNoops, LocalNatives, MapEntry, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, StandaloneProfile, SyncMessage, UnitPose, UnitStateFixture, UnitStateFixtures } from "./clientTypes";
 export { describeCall, describeNumber, describeValue, sameCall } from "./jassFormat";
 export { assertSoundCue } from "./natives/sound";
 export { FRAMES_PER_SECOND };
@@ -45,6 +46,7 @@ export interface ClientOptions {
   readonly declarations: NativeDeclarations;
   readonly localNatives: LocalNatives;
   readonly intentionalNoops?: IntentionalNoops;
+  readonly standaloneProfile?: StandaloneProfile | undefined;
   readonly network: SyncMessage[];
   /** Pixels `BlzGetLocalClientWidth/Height`, `BlzPixelToFrame*` and `BlzFrameToPixel*` read. */
   readonly screen: { readonly width: number; readonly height: number };
@@ -228,6 +230,7 @@ export class HeadlessClient {
         ? logged(name, arity.get(name) ?? 5, value as (this: void, ...args: unknown[]) => unknown)
         : value;
     }
+    enforceStandaloneProfile(options.standaloneProfile, declared, this.natives, (native) => { this.missingNatives.push({ native, client: this.slot, frame: this.frame, outsideProfile: true }); });
   }
 
   private handle(kind: string): Handle {

@@ -31,10 +31,13 @@ export type LocalNatives = Readonly<Record<string, string>>;
 
 export type IntentionalNoops = Readonly<Record<string, string>>;
 
+export type StandaloneProfile = readonly string[];
+
 export interface MissingNative {
   readonly native: string;
   readonly client: number;
   readonly frame: number;
+  readonly outsideProfile?: true;
 }
 
 export type NativeBehavior = (this: void, ...args: never[]) => unknown;

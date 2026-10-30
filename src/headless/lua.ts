@@ -1,4 +1,4 @@
-import type { ClientScope, EffectDeaths, LocalNatives, MapEntry, IntentionalNoops, HeadlessClient, NativeBehaviors, UnitStateFixtures } from "./client";
+import type { ClientScope, EffectDeaths, LocalNatives, MapEntry, IntentionalNoops, StandaloneProfile, HeadlessClient, NativeBehaviors, UnitStateFixtures } from "./client";
 import type { FrameTemplate } from "./frames";
 import type { SyncDelivery } from "./lockstep";
 import { parseNativeDeclarations } from "./declarations";
@@ -19,6 +19,7 @@ export interface LuaHeadlessMap {
   readonly filePrefix: string;
   readonly localNatives?: LocalNatives;
   readonly intentionalNoops?: IntentionalNoops;
+  readonly standaloneProfile?: StandaloneProfile;
   readonly natives?: (this: void, client: HeadlessClient) => NativeBehaviors;
 
   readonly players?: readonly number[];
@@ -51,6 +52,7 @@ export function luaLockstep(map: LuaHeadlessMap, bundle: string, declarations: s
     hash: stringChecksum,
     ...(map.localNatives === undefined ? {} : { localNatives: map.localNatives }),
     ...(map.intentionalNoops === undefined ? {} : { intentionalNoops: map.intentionalNoops }),
+    ...(map.standaloneProfile === undefined ? {} : { standaloneProfile: map.standaloneProfile }),
     ...(map.frames === undefined ? {} : { frames: map.frames }),
     ...(map.unitStates === undefined ? {} : { unitStates: map.unitStates }),
     ...(map.abilityObjects === undefined ? {} : { abilityObjects: map.abilityObjects }),

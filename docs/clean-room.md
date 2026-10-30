@@ -20,7 +20,9 @@ and history. The short form is the README's
   games or Blizzard's services.
 - No Battle.net login emulation and no DRM bypass. Wisp's online play uses its
   own servers and netcode.
-- No Warsmash (AGPL) code; facts only (wisp:docs/warsmash-notes.md).
+- No Warsmash (AGPL) code, and its facts are hypotheses only: a native
+  fixture decides each one, and no new fact is sourced from Warsmash
+  (wisp:docs/warsmash-notes.md, "How to use this page").
 - No "Warcraft" in a product name; "works with your Warcraft III install" is
   fine.
 
@@ -60,8 +62,13 @@ and history. The short form is the README's
   seems to need it, stop and measure from outside the game instead.
 - Emulate a Battle.net sign-in, patch out or work around copy protection, or
   ship a client that does.
-- Read Warsmash source to write Wisp code. Use only the facts in
-  wisp:docs/warsmash-notes.md, and decide numbers with native fixtures.
+- Read Warsmash source to write Wisp code, or add a Warsmash-sourced fact.
+  An outside review of Wisp (31 October 2026) found that Warsmash's contributors
+  worked from the game's leaked debug symbols, by its author's own account,
+  so its facts may derive from the game's internals.
+  The facts already in wisp:docs/warsmash-notes.md are hypotheses for a
+  native fixture to decide; Wisp behaviour rests on the fixture's measurement,
+  never on the note.
 - Put "Warcraft" (or Blizzard art or logos) in a product name, icon or logo.
 
 ## Smashcraft Servers (stopped)

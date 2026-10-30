@@ -12,6 +12,19 @@ changes, copied code, pseudocode, or a Warsmash integration.
 
 ## How to use this page
 
+**Hypotheses only.** Every fact on this page is a hypothesis that a native
+fixture decides; Wisp behaviour rests on the fixture's measurement, never on
+this page. No new fact is sourced from Warsmash: an outside review of Wisp
+(31 October 2026) found that Warsmash's contributors worked from the game's
+leaked debug symbols, by its author's own account, so a fact here may derive
+from the game's internals ([clean room](clean-room.md)). The page is closed
+to additions; a row leaves its hypothesis status only by a native-confirmed
+result with the fixture and build that measured it. On 31 October 2026 no
+open Wisp, Smashcraft or North issue named Warsmash or this page; the rows
+marked source-researched in [Native confirmations still queued](#native-confirmations-still-queued)
+are the open hypotheses, and any plan that would rest on one waits for its
+fixture.
+
 Warsmash is an independent Warcraft emulator, not a native-game measurement.
 Every observation below is **source-researched** unless explicitly labeled
 **native-confirmed**. Numerical differences must be decided by native

@@ -114,6 +114,10 @@ export function journeyProblems(result: JourneyResult): number {
   return problems;
 }
 
+export function missingNativeMessage(missing: MissingNative): string {
+  return missing.outsideProfile === true ? `native ${missing.native} is outside the standalone profile` : `unmodeled native ${missing.native}`;
+}
+
 export function journeyLines(result: JourneyResult): string[] {
   const lines: string[] = [];
   for (const client of result.clients) {
@@ -123,6 +127,6 @@ export function journeyLines(result: JourneyResult): string[] {
   if (result.reloaded > 0 && result.reloads.length === 0) lines.push(`hot reload ${result.reloaded} running in every client`);
   for (const reload of result.reloads) lines.push(reload);
   for (const client of result.clients) for (const error of client.errors) lines.push(`p${client.slot}: ${error}`);
-  for (const client of result.clients) for (const missing of client.missingNatives) lines.push(`p${missing.client} frame ${missing.frame}: unmodeled native ${missing.native}`);
+  for (const client of result.clients) for (const missing of client.missingNatives) lines.push(`p${missing.client} frame ${missing.frame}: ${missingNativeMessage(missing)}`);
   return lines;
 }
