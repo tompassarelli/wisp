@@ -11,7 +11,7 @@ use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::keyboard::PhysicalKey;
-use winit::window::{Window, WindowId};
+use winit::window::{Fullscreen, Window, WindowId};
 
 use crate::clock::now_ns;
 use crate::draw::Gpu;
@@ -19,12 +19,14 @@ use crate::frame::{Clock, End, Event, FrameLoop, Mailbox, Mode, Seam, Submission
 use crate::input::{Held, Input};
 use crate::metrics::Metrics;
 use crate::pad::Pads;
+use crate::present::PresentSetting;
 use crate::sync::lock;
 
 const WINDOW_WAIT: Duration = Duration::from_secs(10);
 
 enum Command {
     Status(String),
+    Fullscreen(bool),
     Exit,
 }
 
@@ -33,6 +35,7 @@ struct Shared {
     focused: AtomicBool,
     pad_slot: AtomicI32,
     mode: AtomicU8,
+    present: AtomicU8,
     closed: AtomicBool,
     size: AtomicU64,
     mailbox: Arc<Mailbox>,
@@ -127,6 +130,11 @@ impl ApplicationHandler<Command> for App {
                     window.set_title(&text);
                 }
             }
+            Command::Fullscreen(on) => {
+                if let Some(window) = &self.window {
+                    window.set_fullscreen(on.then_some(Fullscreen::Borderless(None)));
+                }
+            }
             Command::Exit => event_loop.exit(),
         }
     }
@@ -165,6 +173,7 @@ impl Host {
             focused: AtomicBool::new(true),
             pad_slot: AtomicI32::new(-1),
             mode: AtomicU8::new(Mode::Loading as u8),
+            present: AtomicU8::new(PresentSetting::Fifo as u8),
             closed: AtomicBool::new(false),
             size: AtomicU64::new(0),
             mailbox: Arc::new(Mailbox::default()),
@@ -218,6 +227,15 @@ impl Host {
 
     pub fn start_baseline(&self) {
         self.shared.mode.store(Mode::Baseline as u8, Ordering::Release);
+    }
+
+    /// Asks for a present mode; the render thread applies it at its next frame, and the surface's offer decides whether it holds.
+    pub fn set_present(&self, code: u8) {
+        self.shared.present.store(code, Ordering::Release);
+    }
+
+    pub fn set_fullscreen(&self, on: bool) {
+        let _ = lock(&self.proxy).send_event(Command::Fullscreen(on));
     }
 
     pub fn select_pad(&self, slot: i32) {
@@ -279,6 +297,8 @@ impl Drop for Host {
 
 struct WindowSurface {
     gpu: Gpu,
+    requested: PresentSetting,
+    reported: (PresentSetting, usize),
     window: Arc<Window>,
     shared: Arc<Shared>,
 }
@@ -301,7 +321,17 @@ impl Surface for WindowSurface {
     fn acquire(&mut self) -> Option<Self::Image> {
         let size = self.shared.size.load(Ordering::Acquire);
         self.gpu.resize((size >> 32) as u32, size as u32);
+        let wanted = PresentSetting::from_code(self.shared.present.load(Ordering::Acquire));
+        if wanted != self.requested {
+            self.requested = wanted;
+            self.gpu.set_present(wanted);
+        }
         let image = self.gpu.acquire();
+        let shown = (self.gpu.setting(), self.gpu.image_count());
+        if shown != self.reported {
+            self.reported = shown;
+            *lock(&self.shared.info) = info_json(&self.gpu);
+        }
         if image.is_none() {
             thread::sleep(Duration::from_millis(4));
         }
@@ -325,6 +355,10 @@ impl Surface for WindowSurface {
         self.window.pre_present_notify();
         self.gpu.present(image);
     }
+
+    fn blocks_on_display(&self) -> bool {
+        self.gpu.setting() == PresentSetting::Fifo
+    }
 }
 
 struct LibraryClock;
@@ -345,6 +379,10 @@ impl Seam for InputSeam {
         let slot = usize::try_from(self.shared.pad_slot.load(Ordering::Acquire)).ok();
         self.pads.borrow_mut().sample(slot, self.shared.focused.load(Ordering::Acquire), self.shared.held.sample())
     }
+}
+
+fn info_json(gpu: &Gpu) -> String {
+    format!("{{\"adapter\":{:?},\"backend\":{:?},\"presentMode\":{:?},\"desiredMaximumFrameLatency\":1,\"imageCount\":{}}}", gpu.adapter, gpu.backend, gpu.setting().name(), gpu.image_count())
 }
 
 fn mode_of(shared: &Shared) -> Mode {
@@ -369,8 +407,9 @@ fn render_loop(shared: Arc<Shared>, windows: mpsc::Receiver<Arc<Window>>, aspect
             return;
         }
     };
-    *lock(&shared.info) = format!("{{\"adapter\":{:?},\"backend\":{:?},\"presentMode\":\"Fifo\",\"desiredMaximumFrameLatency\":1}}", gpu.adapter, gpu.backend);
-    let surface = WindowSurface { gpu, window, shared: shared.clone() };
+    *lock(&shared.info) = info_json(&gpu);
+    let reported = (gpu.setting(), gpu.image_count());
+    let surface = WindowSurface { gpu, requested: PresentSetting::Fifo, reported, window, shared: shared.clone() };
     let mut frames = FrameLoop::new(surface, LibraryClock, shared.mailbox.clone(), shared.metrics.clone());
     let seam = InputSeam { shared: shared.clone(), pads: RefCell::new(Pads::open()) };
     while !shared.mailbox.is_stopping() {

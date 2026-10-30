@@ -262,11 +262,23 @@ timers and `readAsset` completions run; Bun's main thread only opens the window
 and waits for the worker's `completed`, `closed` or `failed`. The worker holds
 its own counted reference to the window (`wisp_window_attach` and
 `wisp_window_release`), so closing the window never frees it under a worker
-that is still running. The render thread waits for each sample's scene until the scene deadline
-(the frame's acquire plus the measured frame time T, minus 4 ms), draws the newest
+that is still running. The render thread sleeps from each acquire to the sample point (T minus the p99 of the
+last 120 frames' sample-to-scene and scene-to-present times, minus a margin that starts at
+1 ms, grows 0.5 ms on a late scene or missed present and gives it back after 600 clean
+frames), samples there, and waits for the scene until the scene deadline (T minus the p99
+scene-to-present time, the p99 lateness of the render thread's own wakes (at most 2 ms) and the margin). Each frame's timing is anchored to a vblank extrapolated from the display's learned phase, so a late wake from the acquire does not push the deadline past the next vblank. It draws the newest
 scene that has arrived and redraws the last one when none has, so a late game
 never makes a present miss its vblank; a scene that missed its deadline is
-counted in `lateScenes` and drawn on a later frame. Box W1 draws only a clear colour and the step as 24 lit squares, and it
+counted in `lateScenes` and drawn on a later frame. Above 60 Hz the game still steps 60 times a second: a step runs on the first vblank whose
+acquire is at or after its due time and the vblanks between redraw the last scene.
+
+`WISP_WINDOW_PRESENT` (`Fifo`, the default, `Mailbox` or `Immediate`) and
+`WISP_WINDOW_FULLSCREEN=1` (borderless fullscreen) set the present path of an `openNativeWindow`
+that names neither. A mode the surface does not offer falls back to `Fifo`; `standalone.json`
+reports the mode granted and `imageCount`, the distinct images `Fifo` handed back, because
+wgpu clamps `desiredMaximumFrameLatency` and does not report the swapchain's size. Under
+`Mailbox` and `Immediate` the acquire does not wait, so the window sleeps to the vblank
+extrapolated from the phase a `Fifo` acquire learned. Box W1 draws only a clear colour and the step as 24 lit squares, and it
 shows the loading and ready text in the window's title. The scene is parsed in
 the library on every frame, so the cost of encoding and parsing it is measured
 before the renderer is ported. Keyboard and pads (box W5: the left stick and the standard-layout buttons of the

@@ -1,14 +1,20 @@
 use std::path::PathBuf;
+use std::collections::hash_map::DefaultHasher;
+use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use winit::window::Window;
 
 use crate::capture;
+use crate::present::PresentSetting;
 use crate::render::{fitted, DrawScene, Renderer};
 use crate::ui::{is_font, UiRenderer};
 
+
 const COUNTER_BITS: usize = 24;
 const VERTICES: usize = COUNTER_BITS * 6;
+const IMAGE_CENSUS_LIMIT: usize = 16;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -74,6 +80,9 @@ pub struct Gpu {
     aspect: f32,
     scene: Option<DrawScene>,
     capture: Option<Capture>,
+    adapter_handle: wgpu::Adapter,
+    present: PresentSetting,
+    images: HashSet<u64>,
     pub adapter: String,
     pub backend: String,
 }
@@ -101,7 +110,8 @@ impl Gpu {
         if capture.is_some() {
             config.usage |= wgpu::TextureUsages::COPY_SRC;
         }
-        config.present_mode = wgpu::PresentMode::Fifo;
+        let present = PresentSetting::Fifo;
+        config.present_mode = present.mode();
         config.desired_maximum_frame_latency = 1;
         surface.configure(&device, &config);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: None, source: wgpu::ShaderSource::Wgsl(SHADER.into()) });
@@ -137,7 +147,27 @@ impl Gpu {
         let info = adapter.get_info();
         let renderer = Renderer::new(device.clone(), queue.clone(), config.format);
         let ui = UiRenderer::new(device.clone(), queue.clone(), config.format);
-        Ok(Self { surface, config, device, queue, pipeline, vertices, renderer, ui, aspect, scene: None, capture, adapter: info.name, backend: format!("{:?}", info.backend) })
+        Ok(Self { surface, config, device, queue, pipeline, vertices, renderer, ui, aspect, scene: None, capture, adapter_handle: adapter, present, images: HashSet::new(), adapter: info.name, backend: format!("{:?}", info.backend) })
+    }
+
+    pub fn setting(&self) -> PresentSetting {
+        self.present
+    }
+
+    /// How many distinct images `Fifo` has handed back so far: once the acquires have cycled, the swapchain's image count, which wgpu clamps from `desired_maximum_frame_latency` and does not report.
+    pub fn image_count(&self) -> usize {
+        self.images.len()
+    }
+
+    /// Reconfigures the surface to `setting`, or to `Fifo` when the surface does not offer it.
+    pub fn set_present(&mut self, setting: PresentSetting) {
+        let offered = setting.offered(&self.surface.get_capabilities(&self.adapter_handle).present_modes);
+        if offered != self.present {
+            self.present = offered;
+            self.config.present_mode = offered.mode();
+            self.images.clear();
+            self.surface.configure(&self.device, &self.config);
+        }
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -152,7 +182,14 @@ impl Gpu {
     /// Blocks until the display hands back an image under `Fifo`; `None` when the window shows nothing right now.
     pub fn acquire(&mut self) -> Option<wgpu::SurfaceTexture> {
         match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(texture) => Some(texture),
+            wgpu::CurrentSurfaceTexture::Success(texture) => {
+                if self.images.len() < IMAGE_CENSUS_LIMIT {
+                    let mut hasher = DefaultHasher::new();
+                    texture.texture.hash(&mut hasher);
+                    self.images.insert(hasher.finish());
+                }
+                Some(texture)
+            }
             wgpu::CurrentSurfaceTexture::Suboptimal(texture) => {
                 drop(texture);
                 self.surface.configure(&self.device, &self.config);

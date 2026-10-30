@@ -25,6 +25,8 @@ const symbols = {
   wisp_window_submit: { args: ["ptr", "ptr", "usize", "f64", "u32"], returns: "void" },
   wisp_window_next_event: { args: ["ptr", "ptr", "u32"], returns: "u32" },
   wisp_window_select_pad: { args: ["ptr", "i32"], returns: "void" },
+  wisp_window_set_present: { args: ["ptr", "u32"], returns: "void" },
+  wisp_window_set_fullscreen: { args: ["ptr", "u32"], returns: "void" },
   wisp_window_metric: { args: ["ptr", "u32", "ptr", "usize"], returns: "usize" },
   wisp_window_info: { args: ["ptr", "ptr", "usize"], returns: "usize" },
   wisp_window_error: { args: ["ptr", "ptr", "usize"], returns: "usize" },
@@ -37,11 +39,18 @@ const symbols = {
 /** What `wisp_window_next_event` returns: a sample from the render thread, nothing within the timeout, or why the samples ended. */
 const EVENT_KINDS = ["timeout", "frame", "closed", "failed", "stopped"] as const;
 
+export const PRESENT_MODES = ["Fifo", "Mailbox", "Immediate"] as const;
+export type PresentMode = (typeof PRESENT_MODES)[number];
+
 export interface NativeWindowOptions {
   readonly title: string;
   readonly width: number;
   readonly height: number;
   readonly library?: string | undefined;
+  /** The present mode to ask for; `WISP_WINDOW_PRESENT` (Fifo, Mailbox or Immediate) when unset. */
+  readonly present?: PresentMode | undefined;
+  /** Opens borderless fullscreen; `WISP_WINDOW_FULLSCREEN=1` when unset. */
+  readonly fullscreen?: boolean | undefined;
 }
 
 /** The next thing a thread that steps the game hears from the window. */
@@ -62,6 +71,8 @@ export interface WindowInfo {
   readonly backend: string;
   readonly presentMode: string;
   readonly desiredMaximumFrameLatency: number;
+  /** The distinct images `Fifo` has handed back so far; the swapchain's image count once the acquires have cycled. */
+  readonly imageCount: number;
 }
 
 /** What the thread that steps the game needs from an open window: the samples and scenes, the status and the measured series. Any thread can hold one. */
@@ -80,6 +91,9 @@ export interface WindowView {
   asset(path: string, bytes: Uint8Array): void;
   /** How many pushed files the window has not finished building. */
   assetsPending(): number;
+  /** Asks for a present mode; `info().presentMode` says which one the surface granted. */
+  setPresent(mode: PresentMode): void;
+  setFullscreen(on: boolean): void;
   /** Encodes `scene` into one buffer the view reuses and hands it to the render thread as the answer to the sample numbered `frame`. */
   submit(scene: string, step: number, frame: number): void;
   /** One of the library's per-frame series, in milliseconds. */
@@ -131,6 +145,8 @@ const viewOf = (library: Library, handle: Pointer, vocabulary: { buttons: string
     },
     asset: (path, bytes) => { const name = Buffer.from(path); call.wisp_window_asset(handle, name, name.length, bytes, bytes.length); },
     assetsPending: () => Number(call.wisp_window_assets_pending(handle)),
+    setPresent: (mode) => call.wisp_window_set_present(handle, PRESENT_MODES.indexOf(mode)),
+    setFullscreen: (on) => call.wisp_window_set_fullscreen(handle, on ? 1 : 0),
     submit: (scene, step, frame) => {
       let written = encoder.encodeInto(scene, sceneBuffer);
       while (written.read < scene.length) {
@@ -177,8 +193,12 @@ export function openNativeWindow(options: NativeWindowOptions): NativeWindow {
     throw new Error(`the window didn't open: ${reason}`);
   }
   let closed = false;
+  const view = viewOf(library, handle as Pointer, vocabulary);
+  const present = options.present ?? PRESENT_MODES.find((mode) => mode === process.env.WISP_WINDOW_PRESENT);
+  if (present !== undefined) view.setPresent(present);
+  if (options.fullscreen ?? process.env.WISP_WINDOW_FULLSCREEN === "1") view.setFullscreen(true);
   return {
-    ...viewOf(library, handle as Pointer, vocabulary),
+    ...view,
     lend: () => call.wisp_window_attach(handle as Pointer) as number,
     close: () => {
       if (closed) return;

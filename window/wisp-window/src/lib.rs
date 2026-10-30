@@ -14,6 +14,9 @@ mod input;
 mod metrics;
 pub mod model;
 mod render;
+mod mailbox;
+mod pacing;
+mod present;
 mod pad;
 mod pad_sdl;
 mod sync;
@@ -187,6 +190,32 @@ pub unsafe extern "C" fn wisp_window_next_event(handle: *mut c_void, out: *mut f
                 ptr::copy_nonoverlapping([sample.frame as f64, sample.sampled_ns as f64, sample.input.buttons as f64, sample.input.axis_x as f64, sample.input.axis_y as f64].as_ptr(), out, 5);
             }
             EVENT_FRAME
+        }
+    })
+}
+
+/// Asks for a present mode (0 Fifo, 1 Mailbox, 2 Immediate); a mode the surface does not offer leaves `Fifo`, which `wisp_window_info` reports.
+///
+/// # Safety
+/// `handle` is live.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_window_set_present(handle: *mut c_void, mode: u32) {
+    guard((), || {
+        if let Some(host) = host(handle) {
+            host.set_present(mode as u8);
+        }
+    })
+}
+
+/// Turns borderless fullscreen on or off.
+///
+/// # Safety
+/// `handle` is live.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_window_set_fullscreen(handle: *mut c_void, on: u32) {
+    guard((), || {
+        if let Some(host) = host(handle) {
+            host.set_fullscreen(on != 0);
         }
     })
 }
