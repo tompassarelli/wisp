@@ -57,7 +57,7 @@ export const openSimPlayer = (options: SimPlayerOptions) => Effect.gen(function*
   return {
     startupMs: performance.now() - opened,
     completed: Effect.tryPromise({ try: () => completed.promise, catch: (cause) => new RenderFailure({ cause }) }).pipe(
-      Effect.flatMap((result) => (typeof result.error === "string" ? Effect.fail(new RenderFailure({ cause: new Error(result.error) })) : Effect.succeed(result))),
+      Effect.filterOrFail((result) => typeof result.error !== "string", (result) => new RenderFailure({ cause: new Error(String(result.error)) })),
     ),
     closed: Effect.promise(() => closing.promise),
   };

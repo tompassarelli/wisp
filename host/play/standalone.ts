@@ -200,7 +200,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
   return {
     url: `http://127.0.0.1:${server.port}/`, completed: Deferred.await(completion),
     /** What the native window drives in place of the page: the scene before the first step, one step, and the end of the run. */
-    native: { prepare: () => ({ scene: sceneWithUnits(game.render, captureScene(session.client)), models: game.render.preloadModels ?? [], step: steps }), advance: (input: StandaloneInput) => advance(input).frame, finish: (result: Readonly<Record<string, unknown>>) => Effect.runPromise(finish(result)) },
+    native: { prepare: () => ({ scene: sceneWithUnits(game.render, captureScene(session.client)), models: game.render.preloadModels ?? [], step: steps }), advance: (input: StandaloneInput) => advance(input).frame, finish: (result: Readonly<Record<string, unknown>>) => run(finish(result)) },
   };
 });
 
