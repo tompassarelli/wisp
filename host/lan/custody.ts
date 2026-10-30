@@ -3,7 +3,7 @@ import { hostname } from "node:os";
 import { join } from "node:path";
 import { Console, Effect, Option, Schema } from "effect";
 import { describeCause } from "../cli/command";
-import { pollUntil } from "../cli/hostProcess";
+import { pollUntil } from "../process/hostProcess";
 import { type PairClaim, type ProcessMark, claimHolder, markOf, running } from "./claim";
 import { LanFailure } from "./join";
 import { type Lease, leaseOn } from "./pairQueue";

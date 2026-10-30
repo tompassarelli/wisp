@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { pollUntil } from "../cli/hostProcess";
+import { pollUntil } from "../process/hostProcess";
 import type { MenuSocket } from "../os/warcraft/menuSocket";
 
 export class LanFailure extends Schema.TaggedError<LanFailure, { readonly brand: unique symbol }>()("LanFailure", {

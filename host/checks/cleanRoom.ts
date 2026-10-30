@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { Console, Data, Effect } from "effect";
-import { captureProcess } from "../cli/hostProcess";
+import { captureProcess } from "../process/hostProcess";
 
 export const ALLOWLIST = "clean-room-allowlist.tsv";
 

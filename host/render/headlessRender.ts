@@ -5,7 +5,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Exit, Schema, Scope } from "effect";
 import { ChildProcess } from "effect/process";
 import type { EffectDeaths, HeadlessClient } from "../../src/headless/client";
-import { pollFor, spawnLogged } from "../cli/hostProcess";
+import { pollFor, spawnLogged } from "../process/hostProcess";
 import { deathSeconds } from "../models/models";
 import { browserBundle } from "./browserBundle";
 import type { RenderAssetResolution, ResolvedRenderAsset } from "./renderAssets";

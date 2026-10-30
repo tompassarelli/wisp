@@ -2,7 +2,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Deferred, Effect, Fiber, Option, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import { type Command, UsageFailure, flagValues, wholeFlag } from "../cli/command";
-import { collect } from "../cli/hostProcess";
+import { collect } from "../process/hostProcess";
 import { NetFailure } from "../net/failure";
 import type { Endpoint } from "../net/link";
 import { startLocalRelay } from "../net/localRelay";

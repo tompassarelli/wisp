@@ -2,7 +2,7 @@ import { alive, preferencesBackupPath, preferencesPath, restorePreferences } fro
 
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Effect, Runtime, Schema } from "effect";
-import { pollUntil } from "../cli/hostProcess";
+import { pollUntil } from "../process/hostProcess";
 
 class PreferencesFailure extends Schema.TaggedError<PreferencesFailure, { readonly brand: unique symbol }>()("PreferencesFailure", { cause: Schema.Unknown }) {
   override get message() { return String(this.cause); }

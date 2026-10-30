@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Cause, Effect } from "effect";
-import { pollUntil } from "../cli/hostProcess";
+import { pollUntil } from "../process/hostProcess";
 import { ProcessTable } from "../os/platform/services";
 import { startHost, type LanHost } from "./host";
 import { LanFailure } from "./join";

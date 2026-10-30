@@ -5,7 +5,7 @@ import { type Repro } from "../../src/runtime/repro";
 import { PageOpener } from "../os/platform/services";
 import { type Command, UsageFailure, describeCause, flagValues } from "../cli/command";
 import { type HeadlessMap } from "../headless/headless";
-import { step } from "../cli/timings";
+import { step } from "../process/timings";
 import { diffReproStates } from "../repro/reproInspection";
 import { replaySoakRepro } from "../repro/reproSoak";
 import { emitJson } from "../cli/jsonResults";

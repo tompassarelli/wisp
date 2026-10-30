@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Effect, Exit } from "effect";
 import { expect, test } from "bun:test";
 import { baseMapEntryNames } from "../host/compile/mapBuild";
-import { runProcess, stageMap } from "../host/cli/hostProcess";
+import { runProcess, stageMap } from "../host/process/hostProcess";
 
 test("[property seed 85] archive replacement preserves unrelated entries and removes every case alias", () => {
   expect(baseMapEntryNames("war3mapMap.blp\nwar3map.w3i\nwar3map.mmp\n", [

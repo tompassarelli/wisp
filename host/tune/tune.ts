@@ -4,7 +4,7 @@ import ts from "typescript";
 import { Clock, Console, Context, Effect, Layer, Schema, Semaphore } from "effect";
 import { describeCause } from "../cli/command";
 import { HotReload, type HotReloadFailure } from "../dev/hotReload";
-import { step } from "../cli/timings";
+import { step } from "../process/timings";
 
 export interface Tunable {
 

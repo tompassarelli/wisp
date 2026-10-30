@@ -9,7 +9,7 @@ import {
 import { linuxDesktopLayer } from "./desktop";
 import * as procfs from "./procfs";
 import { startUnit, stopUnit, unitState } from "./systemd";
-import { describeCause } from "../../../cli/command";
+import { describeCause } from "../../../process/hostProcess";
 
 const failure = (capability: string) => (cause: unknown) =>
   new PlatformFailure({ capability, problem: typeof cause === "object" && cause !== null && "problem" in cause ? String(cause.problem) : describeCause(cause) });

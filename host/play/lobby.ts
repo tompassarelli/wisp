@@ -6,7 +6,7 @@ import { Acknowledgement, FILE_SLOT_NUMBERS, type MalformedGameFile } from "../i
 import { type Client, Clients, type DesktopFailure, waitFor } from "../client/clients";
 import { GameFiles, dataDirectory, prepareHotFolders, readGameFile } from "../io/gameFiles";
 import { MenuFailure, hostLobby, joinLobby, leaveLobby, reportedMenus, startLobby } from "../lan/menus";
-import { step } from "../cli/timings";
+import { step } from "../process/timings";
 import { ClientWatch, inState, unlessLost, waitFor as waitForState } from "../dev/watch";
 
 export const MENU_SECONDS = 180;

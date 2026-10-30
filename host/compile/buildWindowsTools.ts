@@ -2,7 +2,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { availableParallelism, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Console, Effect } from "effect";
-import { MapBuildFailure, captureProcess, tryMapPromise, tryMapSync } from "../cli/hostProcess";
+import { MapBuildFailure, captureProcess, tryMapPromise, tryMapSync } from "../process/hostProcess";
 import { compileLua32, lua32Key } from "./lua32";
 import { packagerSource } from "./mapBuild";
 import { type WindowsToolsManifest, fileSha256 } from "./windowsTools";

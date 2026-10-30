@@ -9,7 +9,7 @@ import { type DisplayChange, type PreferenceSettings, preferenceChanges, prefere
 import { sessionLines, war3LogPath } from "../os/warcraft/war3Log";
 import type { Client } from "../client/clients";
 import { clientUnit } from "../client/clientServices";
-import { pollFor } from "../cli/hostProcess";
+import { pollFor } from "../process/hostProcess";
 import { PlayMachine, type PlayProblem } from "../play/play";
 import { type ClientView, ClientWatch, type StateKind, waitFor } from "../dev/watch";
 

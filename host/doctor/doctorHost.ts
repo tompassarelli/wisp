@@ -4,7 +4,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { Platform } from "../os/platform/services";
 import * as desktop from "../client/desktop";
 import { DoctorHands, type DoctorTarget } from "./doctor";
-import { collect } from "../cli/hostProcess";
+import { collect } from "../process/hostProcess";
 import { leaveLobby, reportedMenus } from "../lan/menus";
 import { PlayProblem } from "../play/play";
 import { detectBuild, executableIn } from "../client/buildHost";

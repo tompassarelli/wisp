@@ -5,7 +5,7 @@ import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Cause, Effect, Exit, Fiber, Layer, Ref, Schema } from "effect";
 import { capacityHelper } from "../render/gpuLease";
-import { pollUntil } from "../cli/hostProcess";
+import { pollUntil } from "../process/hostProcess";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { platformLayer } from "../os/platform/layer";
 import { type CpuPressure, ResourceAccounting } from "../os/platform/services";

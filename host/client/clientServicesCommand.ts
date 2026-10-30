@@ -7,7 +7,7 @@ import { UsageFailure } from "../cli/command";
 import {
   clientUnit, describeOwner, desktopCommand, desktopOwner, desktopPid, desktopUnit, liveDesktop, ownerOf, prefixProcesses, serviceState, startDesktop, stopService, writeRun,
 } from "./clientServices";
-import { ServiceProblem, skillScript } from "../cli/hostProcess";
+import { ServiceProblem, skillScript } from "../process/hostProcess";
 import { ClientWatch, type WatchOptions, describeView, inState, waitFor } from "../dev/watch";
 import { unshareBehindLive } from "./clientStorage";
 

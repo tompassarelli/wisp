@@ -6,7 +6,7 @@ import { MapBuild } from "../compile/mapBuild";
 import { SourceErrors } from "../compile/sourceErrors";
 import { Tune, type Tunable } from "../tune/tune";
 import { TUNE_PAGE } from "../tune/tunePage";
-import { step } from "../cli/timings";
+import { step } from "../process/timings";
 import { panelServer } from "../cli/panelServer";
 import { type HotProject, waitForProcessStop } from "../dev/hotReload";
 import { validateDataDirectories } from "./hot";

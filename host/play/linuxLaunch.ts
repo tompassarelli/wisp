@@ -9,7 +9,7 @@ import { serverDirectoryName, type ProcessInfo } from "../os/warcraft/battleNet"
 import { launcherProcess, listProcesses } from "../os/platform/linux/procfs";
 import { parseWords, separateInk } from "../os/warcraft/desktop";
 import { describeCause } from "../cli/command";
-import { type Collected, collect, skillScript } from "../cli/hostProcess";
+import { type Collected, collect, skillScript } from "../process/hostProcess";
 import { decodePpm } from "../os/platform/services";
 import { startUnit } from "../os/platform/linux/systemd";
 import { acquireStartLock, startLockPath } from "../client/startLock";

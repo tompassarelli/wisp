@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { pollFor } from "../../cli/hostProcess";
+import { pollFor } from "../../process/hostProcess";
 import { type Frame, InputInjection, ScreenCapture, decodePpm } from "../platform/services";
 import { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, readClientsFile, runTool } from "./desktopClient";
 export { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, ToplevelMissing, readClientsFile, runTool, toplevelMissing } from "./desktopClient";

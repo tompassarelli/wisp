@@ -5,8 +5,8 @@ import { Effect, Exit, Layer, Option } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { type InputAction, type KeyAction, untypable, vncActions, vncKey } from "../../warcraft/inputBatch";
 import { type Client, type ClientEntry, type ClientsConfig, DesktopFailure, type Region, ToplevelMissing, runTool, toolExit, toplevelMissing } from "../../warcraft/desktopClient";
-import { skillScript } from "../../../cli/hostProcess";
-import { step } from "../../../cli/timings";
+import { skillScript } from "../../../process/hostProcess";
+import { step } from "../../../process/timings";
 import { InputInjection, ScreenCapture, type WindowTools } from "../services";
 
 const fail = (operation: string, client: string) => (cause: unknown) => new DesktopFailure({ operation, client, cause });

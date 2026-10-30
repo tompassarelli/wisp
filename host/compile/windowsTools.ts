@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Effect, Schema } from "effect";
-import { MapBuildFailure } from "../cli/hostProcess";
+import { MapBuildFailure } from "../process/hostProcess";
 
 const WINDOWS_TOOLS = join(import.meta.dir, "../../native/windows");
 

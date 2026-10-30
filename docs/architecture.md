@@ -15,11 +15,12 @@ A module may import only the modules in its "may use" column. `src/` never impor
 | netcode | `src/netcode/` | Game-agnostic rollback netcode behind a row codec: frame ring, input ledger, batched delta messages, wire varints, prediction and rollback session | runtime, num |
 | map | `src/map/` | Map-side services calling natives: file I/O, dispatch, hot reload, frame meter, native driver, scene | runtime, num, natives |
 | headless | `src/headless/` | Emulated Warcraft client: natives, lockstep, sync channel, journeys, Lua perf | map, runtime, num, natives |
-| cli | `host/cli/` | Command type, CLI runner, timings, process spawning, JSON results, panel server | none |
-| os | `host/os/` (`platform/`, `warcraft/`) | Host OS, desktop, Battle.net launcher, Warcraft window and input | cli |
-| build | `host/toolchain/` | TSTL compile, Lua bundle, map script, object data, natives producer, number rules, source maps, package | cli, runtime, num, plugins |
-| lan, net | `host/lan/`, `host/net/` | Offline LAN pair pool; UDP lockstep peer, proxy, join code | cli, os; cli, headless |
-| render | `host/{browser,fidelity,render,models,terrain}/` | WebGL renderer, models, terrain, fidelity metrics | cli, os, headless, runtime, num |
+| process | `host/process/` | Process spawning, polling, logged child processes, step timings | none |
+| cli | `host/cli/` | Command type, CLI runner, JSON results, panel server | os, process |
+| os | `host/os/` (`platform/`, `warcraft/`) | Host OS, desktop, Battle.net launcher, Warcraft window and input | process |
+| build | `host/toolchain/` | TSTL compile, Lua bundle, map script, object data, natives producer, number rules, source maps, package | process, runtime, num, plugins |
+| lan, net | `host/lan/`, `host/net/` | Offline LAN pair pool; UDP lockstep peer, proxy, join code | cli, process, os, build; process, headless |
+| render | `host/{browser,fidelity,render,models,terrain}/` | WebGL renderer, models, terrain, fidelity metrics | process, os, headless, runtime, num |
 | host | the other `host/` directories, one per responsibility: `accept`, `checks`, `client`, `compile`, `dev`, `doctor`, `farm`, `headless`, `io`, `perf`, `play`, `repro`, `scene`, `soak`, `testing`, `tune` | Feature services: play, doctor, menus, accept, soak, farm, map build, dev loop, test runner, repository checks | everything above |
 | commands | `host/commands/` | `makeX` command factories a game instantiates, plus Wisp's CLI entries | host and below |
 | plugins | `plugins/` | TSTL, tsserver and lint plugins | none |
@@ -35,7 +36,8 @@ A module may import only the modules in its "may use" column. `src/` never impor
 | Pure map helper | `src/runtime/` | stays |
 | Rollback netcode a game feeds its own row codec and simulation | `src/netcode/` | stays |
 | A command a game instantiates | `host/commands/<verb>.ts` (Wisp's own program: `host/commands/repo.ts`) | stays |
-| CLI runner, process spawning | `host/cli/cli.ts`, `host/cli/hostProcess.ts` | stays |
+| CLI runner and Command type | `host/cli/cli.ts`, `host/cli/command.ts` | stays |
+| Process spawning, polling, step timings | `host/process/hostProcess.ts`, `host/process/timings.ts` | stays |
 | Warcraft window, launcher, input | `host/os/warcraft/`, `host/os/platform/` | stays |
 | Compile, bundle, package | `host/toolchain/compiler.ts`, `host/toolchain/luaBundle.ts`, `host/toolchain/package.ts` (map build: `host/compile/mapBuild.ts`) | stays |
 | Soak, dev loop | `host/soak/soak.ts`, `host/dev/watch.ts` | stays |

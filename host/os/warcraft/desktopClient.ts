@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
-import { describeCause } from "../../cli/hostProcess";
-import { step } from "../../cli/timings";
+import { describeCause } from "../../process/hostProcess";
+import { step } from "../../process/timings";
 import { CLIENT_PROFILE_NAMES } from "./clientProfiles";
 
 export class DesktopFailure extends Schema.TaggedError<DesktopFailure, { readonly brand: unique symbol }>()("DesktopFailure", {

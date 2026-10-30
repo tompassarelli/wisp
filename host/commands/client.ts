@@ -1,7 +1,7 @@
 import { Console, Effect, Layer } from "effect";
 import { Clients, type Ink } from "../client/clients";
 import { type Command, UsageFailure, flagValues } from "../cli/command";
-import { step } from "../cli/timings";
+import { step } from "../process/timings";
 import { ClientWatch, FAIL_ON, STATE_KINDS, type StateKind, type WatchOptions, describeView, inState, waitFor } from "../dev/watch";
 import { makeWatch, selectClients, watchedClients } from "../client/clientWatchCommand";
 import { serviceDoctor, serviceStart, serviceStatus, serviceStop } from "../client/clientServicesCommand";

@@ -4,7 +4,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect } from "effect";
 import { ChildProcess } from "effect/process";
 import { GameLauncher } from "../os/platform/services";
-import { collect } from "../cli/hostProcess";
+import { collect } from "../process/hostProcess";
 import { installMenuPage } from "./menus";
 import { buildOf, linkPrefix, linkStorage } from "../os/warcraft/sharedStorage";
 import { LanFailure } from "./join";

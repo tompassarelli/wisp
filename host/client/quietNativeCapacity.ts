@@ -3,7 +3,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, FileSystem, Schedule, Schema } from "effect";
 import { ChildProcess } from "effect/process";
 import { capacityHelper } from "../render/gpuLease";
-import { spawnLogged } from "../cli/hostProcess";
+import { spawnLogged } from "../process/hostProcess";
 
 class QuietLeaseFailure extends Schema.TaggedError<QuietLeaseFailure, { readonly brand: unique symbol }>()("QuietLeaseFailure", {
   problem: Schema.String,

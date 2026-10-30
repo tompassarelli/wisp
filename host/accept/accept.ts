@@ -1,7 +1,7 @@
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Clock, Context, Duration, Effect, Schema } from "effect";
-import { pollUntil } from "../cli/hostProcess";
+import { pollUntil } from "../process/hostProcess";
 import { logLines, sessionStart } from "../os/warcraft/war3Log";
 import type { Ink, Region } from "../os/warcraft/desktop";
 import { preloadLines } from "../io/preloadRecord";

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { Console, Duration, Effect, Option, Schema } from "effect";
-import { pollUntil } from "../cli/hostProcess";
+import { pollUntil } from "../process/hostProcess";
 import { admissionFile, readiness, waitingForCapacity } from "./admission";
 import { LanFailure } from "./join";
 import { installMenuPage } from "./menus";

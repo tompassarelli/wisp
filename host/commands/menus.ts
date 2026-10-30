@@ -1,7 +1,7 @@
 import { Console, Effect } from "effect";
 import { type Command, UsageFailure, flagValues, portFlag } from "../cli/command";
 import { DEFAULT_MENU_REPORT_PORT, type MenuSocket, connectMenus, hostLobby, installMenuPage, joinLobby, leaveLobby, listenForMenus, removeMenuPage, startLobby } from "../lan/menus";
-import { step } from "../cli/timings";
+import { step } from "../process/timings";
 import { waitForProcessStop } from "../dev/hotReload";
 
 const ANNOUNCE_SECONDS = 5;

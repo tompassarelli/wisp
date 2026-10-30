@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { pollFor } from "../../cli/hostProcess";
+import { pollFor } from "../../process/hostProcess";
 import type { Frame } from "../platform/services";
 import { DesktopFailure, type Region } from "./desktopClient";
 

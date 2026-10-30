@@ -7,7 +7,7 @@ import { platformLayer } from "../os/platform/layer";
 import { Namespaces } from "../os/platform/services";
 import { ChildProcess } from "effect/process";
 import { flagValues } from "../cli/command";
-import { spawnLogged } from "../cli/hostProcess";
+import { spawnLogged } from "../process/hostProcess";
 import { LanFailure } from "./join";
 import { agentFile, agentPidFile, pairDirectory, pairFlags, pairSides, stopAgent } from "./pool";
 import { desktopSize } from "../os/warcraft/clientProfiles";

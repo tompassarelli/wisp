@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { Effect } from "effect";
 import { ChildProcess } from "effect/process";
-import { collect } from "../cli/hostProcess";
+import { collect } from "../process/hostProcess";
 import { NetFailure } from "./failure";
 import type { Endpoint } from "./link";
 

@@ -6,7 +6,7 @@ import { Deferred, Effect, Fiber, FiberSet, Schema } from "effect";
 import { ChildProcess } from "effect/process";
 import type { HeadlessClient } from "../../src/headless/client";
 import type { LockstepLink } from "../../src/headless/lockstep";
-import { spawnLogged } from "../cli/hostProcess";
+import { spawnLogged } from "../process/hostProcess";
 import { requireGpuLease } from "../render/gpuLease";
 import { joinCode, joinTarget, relayCode, relayRegions, CODE_HASH_DIGITS, type RelayChoice } from "../net/joinCode";
 import { chooseHostRelay, showJoinPing } from "../net/regionChoice";

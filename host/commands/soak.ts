@@ -7,13 +7,13 @@ import { ResourceAccounting } from "../os/platform/services";
 import { type Command, UsageFailure, describeCause, flagValues, wholeFlag } from "../cli/command";
 import { installHeadless } from "../headless/headless";
 import { writtenPreloadFile } from "../headless/headlessInput";
-import { spawnLogged } from "../cli/hostProcess";
+import { spawnLogged } from "../process/hostProcess";
 import { SOAK_LIMITS, type SoakProject, describeMatch, planSoak, playSoakMatch } from "../soak/soak";
 import type { SoakMatch } from "../soak/types";
 import { type SoakReply, loadSoakGame, loadSoakProject, readSoakReply, readSoakRepro, soakRepro } from "../soak/file";
 import { emitJson } from "../cli/jsonResults";
 import { shrinkSoakRepro } from "../repro/reproShrink";
-import { step } from "../cli/timings";
+import { step } from "../process/timings";
 
 class SoakFailure extends Schema.TaggedError<SoakFailure, { readonly brand: unique symbol }>()("SoakFailure", {
   problem: Schema.String,

@@ -7,7 +7,7 @@ import * as desktop from "../os/warcraft/desktop";
 import { liveBuild } from "../os/warcraft/liveBuild";
 import { buildOf, shareStorage, sharedFiles, unshareStorage } from "../os/warcraft/sharedStorage";
 import { UsageFailure } from "../cli/command";
-import { ServiceProblem } from "../cli/hostProcess";
+import { ServiceProblem } from "../process/hostProcess";
 
 const gigabytes = (bytes: number) => `${(bytes / 2 ** 30).toFixed(1)} GiB`;
 

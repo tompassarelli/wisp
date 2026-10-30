@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renam
 import { join } from "node:path";
 import { Duration, Effect, Schema } from "effect";
 import { LanFailure } from "./join";
-import { pollUntil } from "../cli/hostProcess";
+import { pollUntil } from "../process/hostProcess";
 import { holdLock } from "../cli/flockHold";
 import { healthy } from "./pairHealth";
 

@@ -6,7 +6,7 @@ import { parseArgs } from "node:util";
 import { decodeMapInfo } from "../toolchain/mapInfo";
 import { type Command, UsageFailure, describeCause } from "../cli/command";
 import { encodePpm } from "../scene/frameProbe";
-import { collect } from "../cli/hostProcess";
+import { collect } from "../process/hostProcess";
 import { ensurePackager } from "../compile/mapBuild";
 import { decodePreviewTexture, decodePreviewRgba, decodeMinimapMarkers, drawStartMarkers, selectMapPreview } from "../scene/mapPreview";
 

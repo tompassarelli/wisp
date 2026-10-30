@@ -21,7 +21,7 @@ import { runJourney } from "../../src/headless/journey";
 import type { Lockstep } from "../../src/headless/lockstep";
 import { sceneMatchFrame } from "../../src/runtime/scene";
 import type { Journey } from "../../src/headless/journey";
-import { step } from "../cli/timings";
+import { step } from "../process/timings";
 import { type PerfProject, measureRun } from "./perf";
 import { FRAME_MS } from "../../src/headless/frameRate";
 

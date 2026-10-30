@@ -6,7 +6,7 @@ import { Cause, Console, Effect, Exit, Layer } from "effect";
 import { platformLayer } from "../host/os/platform/layer";
 import { makeHeadless } from "../host/commands/headless";
 import type { HeadlessRenderProject } from "../host/render/headlessRender";
-import { timingsLayer } from "../host/cli/timings";
+import { timingsLayer } from "../host/process/timings";
 
 const cube = `Version { FormatVersion 800, }
 Model "Cube" { NumGeosets 1, NumBones 1, BlendTime 150, }

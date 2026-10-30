@@ -11,7 +11,7 @@ import { SOAK_LIMITS, SoakMonitor, helperRecorder, playSoakMatch } from "../host
 import type { SoakMatch } from "../host/soak/types";
 import { readSoakRepro, soakRepro } from "../host/soak/file";
 import { MEASURED_BATTLE_NET, syncDelivery } from "../src/headless/syncChannel";
-import { timingsLayer } from "../host/cli/timings";
+import { timingsLayer } from "../host/process/timings";
 import game from "../host/soak/ci/game";
 import project from "../host/soak/ci/project";
 import { farmTest } from "../host/farm/farmTest";

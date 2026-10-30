@@ -7,7 +7,7 @@ import { platformLayer, runPlatformSync } from "../os/platform/layer";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { AudioIsolation, CapacityAdmission, GameLauncher, InputInjection, ProcessTable } from "../os/platform/services";
 import { UsageFailure, flagValues, wholeFlag } from "../cli/command";
-import { pollUntil, spawnLogged } from "../cli/hostProcess";
+import { pollUntil, spawnLogged } from "../process/hostProcess";
 import { type MenuFailure, type MenuSocket, connectMenus, listenForMenus, type MenuReports, playLocalGame, type SentMessage } from "./menus";
 import { type LanHost, startHost } from "./host";
 import { LanFailure, joinLanGame } from "./join";

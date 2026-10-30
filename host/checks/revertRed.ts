@@ -1,6 +1,6 @@
 import { appendFileSync } from "node:fs";
 import { Console, Effect, Schema } from "effect";
-import { captureProcess } from "../cli/hostProcess";
+import { captureProcess } from "../process/hostProcess";
 
 class RevertRedFailure extends Schema.TaggedError<RevertRedFailure, { readonly brand: unique symbol }>()("RevertRedFailure", { command: Schema.String, problem: Schema.String }) {
   override get message(): string {

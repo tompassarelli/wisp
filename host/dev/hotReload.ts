@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
-import { pollUntil } from "../cli/hostProcess";
+import { pollUntil } from "../process/hostProcess";
 import { type Manifest, NO_BASE, ackFile, formatManifest, hotFolder, manifestFile, payloadKey } from "../../src/runtime/gameFiles";
 import { ModulePublisher, type ModuleSet, type VersionFiles, moduleChunk } from "../../src/runtime/modules";
 import type { BundledModule, BundledModules } from "../toolchain/luaBundle";
@@ -8,7 +8,7 @@ import { Acknowledgement, FILE_SLOT_NUMBERS, type MalformedGameFile, hostPath, l
 import { type GameFileFailure, GameFiles, prepareHotFolders, readGameFile } from "../io/gameFiles";
 import { type BuildProject, type CompileFailure, MapBuild, type MapBuildFailure } from "../compile/mapBuild";
 import { type SourceMapFailure, SourceErrors } from "../compile/sourceErrors";
-import { step } from "../cli/timings";
+import { step } from "../process/timings";
 
 export interface HotProject {
   readonly project: BuildProject;

@@ -5,8 +5,8 @@ import { availableParallelism } from "node:os";
 import { cacheHome } from "../os/xdg";
 import { basename, join } from "node:path";
 import { Console, Effect, Schedule, Schema } from "effect";
-import { MapBuildFailure, captureProcess, runProcess } from "../cli/hostProcess";
-import { step } from "../cli/timings";
+import { MapBuildFailure, captureProcess, runProcess } from "../process/hostProcess";
+import { step } from "../process/timings";
 import { usesWindowsTools, windowsTool } from "./windowsTools";
 
 export const TOWARD_ZERO_HEADER = join(import.meta.dir, "../../native/toward-zero.h");

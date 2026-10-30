@@ -5,7 +5,7 @@ import { join } from "node:path";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect } from "effect";
 import { ChildProcess } from "effect/process";
-import { pollFor, spawnLogged } from "../host/cli/hostProcess";
+import { pollFor, spawnLogged } from "../host/process/hostProcess";
 
 test("[boundary] a scoped child records its shutdown output before its readers stop", async () => {
   const folder = mkdtempSync(join(tmpdir(), "wisp-shutdown-output-"));

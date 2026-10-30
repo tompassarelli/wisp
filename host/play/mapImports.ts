@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { tryMapPromise, tryMapSync } from "../cli/hostProcess";
+import { tryMapPromise, tryMapSync } from "../process/hostProcess";
 import { mapPack, type ArchiveEntry } from "../compile/mapBuild";
 import { cacheHome } from "../os/xdg";
 

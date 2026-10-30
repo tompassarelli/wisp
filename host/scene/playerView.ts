@@ -9,7 +9,7 @@ import { type Frame, type FrameFeature, decodePpm, encodePpm, frameProblems, mea
 import { dataDirectory, readGameFile } from "../io/gameFiles";
 import { type SceneExpectations, describeScene, readSceneLines, sceneProblems } from "./scene";
 import type { SceneProblem, SceneReport } from "./sceneTypes";
-import { step } from "../cli/timings";
+import { step } from "../process/timings";
 
 const SceneLines = preloadRecord({ rest: "lines" }, Schema.Struct({ lines: Schema.Array(Schema.String) }));
 

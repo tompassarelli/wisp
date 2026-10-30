@@ -1,7 +1,7 @@
 import type { Effect } from "effect";
 import { Schema } from "effect";
 import type { Platform } from "../os/platform/services";
-export { describeCause } from "./hostProcess";
+export { describeCause } from "../process/hostProcess";
 
 export class UsageFailure extends Schema.TaggedError<UsageFailure, { readonly brand: unique symbol }>()("UsageFailure", {
   problem: Schema.String,

@@ -3,7 +3,7 @@ import { hostname } from "node:os";
 import { join } from "node:path";
 import { Console, Duration, Effect, Option, Schema } from "effect";
 import { type Command, UsageFailure, flagValues, wholeFlag } from "../cli/command";
-import { pollUntil } from "../cli/hostProcess";
+import { pollUntil } from "../process/hostProcess";
 import { LanFailure } from "../lan/join";
 import { type Lease, type QueueHost, type QueueWorld, expireIdle, queueStatus, releasePair, slotKey, takePair } from "../lan/pairQueue";
 import { orphaned } from "../lan/claim";

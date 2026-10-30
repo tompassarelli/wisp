@@ -7,7 +7,7 @@ import { GameFiles } from "../io/gameFiles";
 import { HotReload, type HotProject, waitForProcessStop } from "../dev/hotReload";
 import { MapBuild, type BuildProject } from "../compile/mapBuild";
 import { SourceErrors } from "../compile/sourceErrors";
-import { step } from "../cli/timings";
+import { step } from "../process/timings";
 import { modelFailureBridge } from "../dev/modelFailures";
 
 const DataDirectories = Schema.NonEmptyArray(Schema.String.check(Schema.isMinLength(1))).check(Schema.isUnique());

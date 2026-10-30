@@ -5,7 +5,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Console, Effect, Exit, Schema, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { Namespaces } from "../os/platform/services";
-import { collect, pollUntil, spawnLogged } from "../cli/hostProcess";
+import { collect, pollUntil, spawnLogged } from "../process/hostProcess";
 import { LEASE_USAGE, lease, releaseLocalLeases } from "./lanQueue";
 import { type Command, UsageFailure, describeCause, flagValues, portFlag, wholeFlag } from "../cli/command";
 import { CLEAR, type Impairment, clearedAlready, impairCommands, impairmentSummary } from "../lan/netem";

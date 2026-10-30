@@ -2,7 +2,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { Console, Effect } from "effect";
-import { MapBuildFailure, captureProcess, tryMapSync } from "../cli/hostProcess";
+import { MapBuildFailure, captureProcess, tryMapSync } from "../process/hostProcess";
 
 const entrySource = (library: string) => `import embedded from "./lib/${library}" with { type: "file" };
 import { dlopen } from "bun:ffi";

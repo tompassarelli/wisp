@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, s
 import { dirname, join } from "node:path";
 import { Console, Effect } from "effect";
 import { cacheHome } from "../os/xdg";
-import { captureProcess, runProcess, tryMapSync } from "../cli/hostProcess";
+import { captureProcess, runProcess, tryMapSync } from "../process/hostProcess";
 import { holdLock } from "../cli/flockHold";
 
 const DEFAULT_CAP_GIB = 8;

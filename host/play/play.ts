@@ -8,8 +8,8 @@ import {
 import type { Ink, Word } from "../os/warcraft/desktop";
 import { type DisplaySettings, absentSettings, displayChanges, preferencesBackupPath, preferencesPath, withGraphicsMode, withDisplaySettings } from "../os/warcraft/preferences";
 import { SCAN_QUIET_MS, importFailures, ladderScan, sessionStart, war3LogPath } from "../os/warcraft/war3Log";
-import { pollFor } from "../cli/hostProcess";
-import { step } from "../cli/timings";
+import { pollFor } from "../process/hostProcess";
+import { step } from "../process/timings";
 import { hostLocalLobby, hostLobby, leaveLobby, reportedMenus, startLobby } from "../lan/menus";
 import { ClientWatch, unlessLost } from "../dev/watch";
 

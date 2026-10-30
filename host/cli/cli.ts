@@ -3,7 +3,7 @@ import { Cause, Effect, Exit, Layer, Option } from "effect";
 import { platformLayer } from "../os/platform/layer";
 import type { Platform } from "../os/platform/services";
 import type { Command } from "./command";
-import { step, timingsLayer } from "./timings";
+import { step, timingsLayer } from "../process/timings";
 
 export interface CommandEntry {
 

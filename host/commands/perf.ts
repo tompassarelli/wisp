@@ -4,7 +4,7 @@ import { mapCompiler, report } from "../toolchain/compiler";
 import { type Command, UsageFailure, describeCause, flagValues } from "../cli/command";
 import { DEFAULT_PERF_THRESHOLD, comparePerfRuns, parsePerfRun, predictionLines } from "../perf/perf";
 import { lua32 } from "../compile/lua32";
-import { step } from "../cli/timings";
+import { step } from "../process/timings";
 import { emitJson } from "../cli/jsonResults";
 import { type NativeCase, checkNative, fitNativeCost, nativeCheckLines, parseNativeReadings, parsePerfSamples } from "../perf/nativeFit";
 import { type NativeCostModel, WARCRAFT_COST } from "../../src/headless/nativeCost";

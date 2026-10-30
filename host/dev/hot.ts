@@ -8,7 +8,7 @@ import { HotReload, type HotProject } from "./hotReload";
 import { MapBuild } from "../compile/mapBuild";
 import { modelFailureBridge } from "./modelFailures";
 import { SourceErrors } from "../compile/sourceErrors";
-import { step } from "../cli/timings";
+import { step } from "../process/timings";
 import type { HotSide } from "./context";
 import { elapsedLabel, plural } from "./summary";
 

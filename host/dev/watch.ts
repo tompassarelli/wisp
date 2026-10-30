@@ -11,7 +11,7 @@ import { dataDirectory } from "../io/gameFiles";
 import { type MenuEvent, connectMenus, keptAddress, menuAddress } from "../lan/menus";
 import { pairClients, pairSides, readPool } from "../lan/pool";
 import { describeCause } from "../cli/command";
-import { pollUntil } from "../cli/hostProcess";
+import { pollUntil } from "../process/hostProcess";
 
 export type Source = "socket" | "log" | "receipt" | "process" | "lan";
 

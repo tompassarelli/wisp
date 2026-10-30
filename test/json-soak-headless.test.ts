@@ -7,7 +7,7 @@ import { platformLayer } from "../host/os/platform/layer";
 import type { Command } from "../host/cli/command";
 import { makeHeadless } from "../host/commands/headless";
 import { makeSoak } from "../host/commands/soak";
-import { timingsLayer } from "../host/cli/timings";
+import { timingsLayer } from "../host/process/timings";
 
 async function capture(command: Command, args: readonly string[]) {
   const lines: string[] = [];

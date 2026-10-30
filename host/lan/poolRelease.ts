@@ -1,5 +1,5 @@
 import { Console, Duration, Effect, Schema } from "effect";
-import { pollUntil } from "../cli/hostProcess";
+import { pollUntil } from "../process/hostProcess";
 import { recordHold } from "./holdLog";
 
 export const RELEASE_AFTER_SECONDS = 600;

@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { MapBuildFailure } from "../cli/hostProcess";
+import { MapBuildFailure } from "../process/hostProcess";
 
 /** Holds an exclusive `flock` on `path` until the scope ends, waiting while another holder has it; the lock goes with its holder, even a killed one. */
 export const holdLock = (path: string) => Effect.acquireRelease(

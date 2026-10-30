@@ -14,7 +14,7 @@ Effect's own pieces. Four rules:
    failure, interruption, and SIGINT or SIGTERM. Hold sockets, servers,
    watchers and timers the same way, with `Effect.acquireRelease` or
    `Effect.forkScoped`. To write a child's output to files, use `spawnLogged`
-   (wisp:host/cli/hostProcess.ts); its scope waits at most 5 s for the
+   (wisp:host/process/hostProcess.ts); its scope waits at most 5 s for the
    output to close, since a descendant outside the process group (a session
    bus, a `setsid` helper) can hold it open forever.
 2. **The entry point runs under `runMain`.** A project's `bun` entry calls
@@ -25,7 +25,7 @@ Effect's own pieces. Four rules:
    inside a program.
 3. **Waits and retries use `Schedule` with a deadline.** Poll with
    `pollUntil(check, { until, every, within, onTimeout })`
-   (wisp:host/cli/hostProcess.ts), or `pollFor` when the check returns
+   (wisp:host/process/hostProcess.ts), or `pollFor` when the check returns
    `undefined` until it is done; leave out `within` only for a wait that ends
    by interruption or by its `until`.
    Retry only failures that can recover, with `Effect.retry({ schedule,

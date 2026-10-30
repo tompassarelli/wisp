@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { readTextOrUndefined } from "../os/files";
-import { ServiceProblem, pollFor } from "../cli/hostProcess";
+import { ServiceProblem, pollFor } from "../process/hostProcess";
 import { stateHome } from "../os/xdg";
 import { dirname, join, resolve } from "node:path";
 import { Effect, Schema } from "effect";

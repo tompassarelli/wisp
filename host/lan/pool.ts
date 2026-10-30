@@ -6,7 +6,7 @@ import { reservedLease } from "./admission";
 import { readClaimAt } from "./claim";
 import { LanFailure } from "./join";
 import { UsageFailure, flagValues, wholeFlag } from "../cli/command";
-import { pollUntil } from "../cli/hostProcess";
+import { pollUntil } from "../process/hostProcess";
 import { writeAtomic } from "../os/files";
 import { cacheHome, dataHome, stateHome } from "../os/xdg";
 import { CapacityAdmission, InputInjection } from "../os/platform/services";
