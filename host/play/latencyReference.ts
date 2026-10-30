@@ -16,7 +16,7 @@ const REGION: Rect = { x: 60, y: 60, width: 300, height: 300 };
 const CONTROL: Rect = { x: 600, y: 450, width: 150, height: 100 };
 
 /** A dark grey page, distinguishable from the black desktop, whose box turns white the given number of animation frames after a `j` keydown, then back, and whose control corner never changes. */
-export const referencePage = (frames: number) => `<!doctype html><meta charset=utf-8>
+const referencePage = (frames: number) => `<!doctype html><meta charset=utf-8>
 <body style="margin:0;background:#181818"><div id=box style="position:absolute;left:100px;top:100px;width:200px;height:200px;background:#181818"></div>
 <script>
 let busy = false;
