@@ -44,9 +44,10 @@ the shell.
   bytes from `/sound`.
 - **Measuring.** `standalone.json` records step, request, draw and
   presentation intervals. The press-latency harness that wisp-latency is
-  building (host/play/pressLatency.ts, still unlanded) presses a key with
-  xdotool and watches a screen region with grim. It reports a bracket from
-  press to changed pixels, and its results go into
+  built (host/play/pressLatency.ts) presses a key through an in-process
+  XTEST request and watches a screen region with grim, whose grabs end one
+  per compositor frame. It reports a one-frame bracket from press to changed
+  pixels, and its results go into
   [online-plan.md](online-plan.md) under "Input-to-display latency". Native
   Warcraft's press-to-display time has not been measured. What is measured is
   press to map read: 4 ms p50 at RTT 0

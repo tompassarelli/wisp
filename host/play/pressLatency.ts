@@ -5,8 +5,9 @@ import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { Effect } from "effect";
 import { decodePpm, encodePpm, type Frame } from "../os/platform/services";
 import { DesktopFailure, runTool } from "../os/warcraft/desktopClient";
+import { openKeyboard } from "./xtest";
 
-export const WINDOW_KINDS = ["chrome", "warcraft", "native"] as const;
+export const WINDOW_KINDS = ["chrome", "warcraft", "native", "reference"] as const;
 export type WindowKind = (typeof WINDOW_KINDS)[number];
 
 export interface Rect {
@@ -26,10 +27,10 @@ export interface PressLatencyOptions {
   readonly trials: number;
   readonly out: string;
   readonly grim: string;
-  readonly xdotool: string;
   readonly settleMs: number;
 }
 
+/** One screen grab. The compositor answers a grab with the next frame it draws, so `afterNs` stamps that frame to within the time grim takes to hand it over. */
 export interface Sample {
   readonly frame: Frame;
   readonly beforeNs: number;
@@ -43,8 +44,10 @@ export interface Trial {
   readonly controlChanged: number | undefined;
   readonly lowerMs: number | undefined;
   readonly upperMs: number | undefined;
-  readonly keyMs: number;
-  readonly captureMs: number;
+  readonly bracketMs: number | undefined;
+  readonly skippedFrames: number | undefined;
+  readonly frameMs: number;
+  readonly pressMs: number;
 }
 
 const BASELINE_MS = 300;
@@ -52,6 +55,8 @@ const WATCH_MS = 600;
 const CHANNEL_STEP = 40;
 const MIN_CHANGED = 300;
 const TAP_MS = 50;
+const LEAD_MS = 100;
+const SKIPPED_FRAME = 1.5;
 const QUIET_CHANGED = 1000;
 const QUIET_TRIES = 30;
 const CONTROL_CHANGED = 100;
@@ -83,16 +88,41 @@ export function changedPixels(reference: Frame, frame: Frame, rect: Rect): numbe
   return count;
 }
 
-/** The first sample whose `region` passes `threshold` changed pixels, with the press-to-change bracket it allows: the change came after the last unchanged acquisition began and before the changed one ended. */
-export function response(samples: readonly Sample[], reference: Frame, region: Rect, threshold: number, pressBeforeNs: number, pressAfterNs: number) {
-  for (let index = 0; index < samples.length; index++) {
+export interface Response {
+  readonly reference: number;
+  readonly index: number;
+  readonly changed: number;
+  readonly lowerMs: number;
+  readonly upperMs: number;
+  readonly bracketMs: number;
+}
+
+/**
+ * The first grab after the press whose `region` passes `threshold` changed pixels, against the last grab drawn before the press.
+ * The change appeared in a frame after the previous grab's and no later than this grab's, so it lies between their stamps:
+ * a bracket one display frame wide when the grabs caught consecutive frames, wider when the harness missed some.
+ */
+export function response(samples: readonly Sample[], region: Rect, threshold: number, pressNs: number): Response | undefined {
+  const reference = samples.findLastIndex((sample) => sample.afterNs <= pressNs);
+  if (reference < 0) return undefined;
+  for (let index = reference + 1; index < samples.length; index++) {
     const sample = samples[index]!;
-    const changed = changedPixels(reference, sample.frame, region);
+    const changed = changedPixels(samples[reference]!.frame, sample.frame, region);
     if (changed <= threshold) continue;
-    const lowerNs = samples[index - 1]?.beforeNs ?? pressAfterNs;
-    return { index, changed, lowerMs: Math.max(0, lowerNs - pressAfterNs) / 1e6, upperMs: (sample.afterNs - pressBeforeNs) / 1e6 };
+    const previous = samples[index - 1]!;
+    return {
+      reference, index, changed,
+      lowerMs: Math.max(0, previous.afterNs - pressNs) / 1e6,
+      upperMs: (sample.afterNs - pressNs) / 1e6,
+      bracketMs: (sample.afterNs - previous.afterNs) / 1e6,
+    };
   }
   return undefined;
+}
+
+/** The display frame period the grabs saw: the median gap between consecutive grab stamps. */
+export function framePeriodMs(samples: readonly Sample[]): number {
+  return percentile(samples.slice(1).map((sample, index) => (sample.afterNs - samples[index]!.afterNs) / 1e6), 0.5);
 }
 
 const percentile = (values: readonly number[], fraction: number) => {
@@ -100,74 +130,87 @@ const percentile = (values: readonly number[], fraction: number) => {
   return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(fraction * sorted.length) - 1))] ?? Number.NaN;
 };
 
+const bounds = (a: Rect, b: Rect): Rect => {
+  const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y);
+  return { x, y, width: Math.max(a.x + a.width, b.x + b.width) - x, height: Math.max(a.y + a.height, b.y + b.height) - y };
+};
+
+const relativeTo = (origin: Rect, rect: Rect): Rect => ({ ...rect, x: rect.x - origin.x, y: rect.y - origin.y });
+
 /**
- * Taps `key` through XTEST on `display` and grabs the whole compositor output until `region` changes.
- * A trial whose still `control` region also changed saw the camera move, not the press, and counts as unanswered.
+ * Taps `key` through XTEST on `display` while grabbing the compositor output back to back, and times the first grab whose `region` changed.
+ * grim returns once the compositor has drawn the next frame, so a loop of small-region grabs catches every frame and each grab's end is that frame's timestamp;
+ * the press is an in-process XTEST request at a known instant, fired at a random phase of the frame.
+ * A trial whose still `control` region also changed in the answering grab saw the camera move, not the press, and counts as unanswered.
  * See wisp:docs/online-plan.md, "Input-to-display latency".
  */
 export const pressLatency = (options: PressLatencyOptions) => Effect.scoped(Effect.gen(function*() {
   const wayland = { XDG_RUNTIME_DIR: options.waylandRuntime, WAYLAND_DISPLAY: "wayland-0" };
-  const x11 = { DISPLAY: options.display };
-  const tool = (operation: string, command: readonly string[], env: Record<string, string>) => runTool(options.window, operation, command, env);
+  const keyboard = yield* openKeyboard(options.display, options.key);
+  const area = bounds(options.region, options.control);
+  const region = relativeTo(area, options.region), control = relativeTo(area, options.control);
   const capture = Effect.gen(function*() {
     const beforeNs = nowNs();
-    const bytes = yield* tool("grab the screen", [options.grim, "-t", "ppm", "-"], wayland);
+    const bytes = yield* runTool(options.window, "grab the screen", [options.grim, "-g", `${area.x},${area.y} ${area.width}x${area.height}`, "-s", "1", "-t", "ppm", "-"], wayland);
     const afterNs = nowNs();
     const frame = decodePpm(bytes);
     if (frame === undefined) return yield* new DesktopFailure({ operation: "grab the screen", client: options.window, cause: "grim returned no PPM frame" });
     return { frame, beforeNs, afterNs } satisfies Sample;
   });
-  const captureFor = (ms: number, releaseAtNs?: number) => Effect.gen(function*() {
+  const captureFor = (ms: number) => Effect.gen(function*() {
     const samples: Sample[] = [];
     const end = nowNs() + ms * 1e6;
-    let pending = releaseAtNs;
-    while (nowNs() < end) {
-      if (pending !== undefined && nowNs() >= pending) {
-        yield* Effect.forkScoped(tool("release the key", [options.xdotool, "keyup", options.key], x11));
-        pending = undefined;
-      }
-      samples.push(yield* capture);
-    }
+    while (nowNs() < end) samples.push(yield* capture);
     return samples;
   });
   const drift = (samples: readonly Sample[], rect: Rect) => Math.max(...samples.map((sample) => changedPixels(samples[0]!.frame, sample.frame, rect)));
-  const quiet = (samples: readonly Sample[]) => drift(samples, options.region) <= QUIET_CHANGED && drift(samples, options.control) <= CONTROL_CHANGED;
+  const quiet = (samples: readonly Sample[]) => drift(samples, region) <= QUIET_CHANGED && drift(samples, control) <= CONTROL_CHANGED;
   mkdirSync(options.out, { recursive: true });
   const trials: Trial[] = [];
   for (let trial = 0; trial < options.trials; trial++) {
     let baseline = yield* captureFor(BASELINE_MS);
     for (let wait = 0; wait < QUIET_TRIES && !quiet(baseline); wait++) baseline = yield* captureFor(BASELINE_MS);
-    const reference = baseline.at(-1)!.frame;
-    const idleChanged = drift(baseline, options.region);
+    const idleChanged = drift(baseline, region);
     const threshold = Math.max(MIN_CHANGED, idleChanged * 3);
-    yield* Effect.sleep(Math.random() * 17);
-    const pressBeforeNs = nowNs();
-    yield* tool("press the key", [options.xdotool, "keydown", options.key], x11);
-    const pressAfterNs = nowNs();
-    const watched = yield* captureFor(WATCH_MS, pressAfterNs + TAP_MS * 1e6);
-    const found = response(watched, reference, options.region, threshold, pressBeforeNs, pressAfterNs);
-    const controlChanged = found === undefined ? undefined : changedPixels(reference, watched[found.index]!.frame, options.control);
+    let pressed: { readonly beforeNs: number; readonly afterNs: number } | undefined;
+    yield* Effect.forkScoped(Effect.gen(function*() {
+      yield* Effect.sleep(LEAD_MS + Math.random() * 17);
+      pressed = keyboard.send(true);
+      yield* Effect.sleep(TAP_MS);
+      keyboard.send(false);
+    }));
+    const watched = yield* captureFor(LEAD_MS + 17 + WATCH_MS);
+    const press = pressed ?? (yield* new DesktopFailure({ operation: "press the key", client: options.window, cause: "the press did not fire before the grabs ended" }));
+    const pressNs = (press.beforeNs + press.afterNs) / 2;
+    const found = response(watched, region, threshold, pressNs);
+    const frameMs = framePeriodMs(watched);
+    const controlChanged = found === undefined ? undefined : changedPixels(watched[found.reference]!.frame, watched[found.index]!.frame, control);
     const moved = controlChanged !== undefined && controlChanged > CONTROL_CHANGED;
-    const spans = [...baseline, ...watched].map((sample) => (sample.afterNs - sample.beforeNs) / 1e6);
+    const caught = found !== undefined && !moved && found.bracketMs < SKIPPED_FRAME * frameMs;
     trials.push({
-      idleChanged, threshold, changed: found?.changed, controlChanged,
-      lowerMs: moved ? undefined : found?.lowerMs, upperMs: moved ? undefined : found?.upperMs,
-      keyMs: (pressAfterNs - pressBeforeNs) / 1e6, captureMs: percentile(spans, 0.5),
+      idleChanged, threshold, changed: found?.changed, controlChanged, frameMs, pressMs: (press.afterNs - press.beforeNs) / 1e6,
+      lowerMs: caught ? found.lowerMs : undefined, upperMs: caught ? found.upperMs : undefined,
+      bracketMs: found?.bracketMs, skippedFrames: found === undefined ? undefined : Math.max(0, Math.round(found.bracketMs / frameMs) - 1),
     });
     const prefix = join(options.out, `trial-${String(trial).padStart(3, "0")}`);
-    writeFileSync(`${prefix}-reference.ppm`, encodePpm(reference));
-    if (found !== undefined) writeFileSync(`${prefix}-response.ppm`, encodePpm(watched[found.index]!.frame));
+    if (found !== undefined) {
+      writeFileSync(`${prefix}-reference.ppm`, encodePpm(watched[found.reference]!.frame));
+      writeFileSync(`${prefix}-response.ppm`, encodePpm(watched[found.index]!.frame));
+    }
     yield* Effect.log(JSON.stringify({ trial, ...trials.at(-1) }));
     yield* Effect.sleep(options.settleMs);
   }
+  const answered = trials.filter((trial) => trial.bracketMs !== undefined && trial.controlChanged !== undefined && trial.controlChanged <= CONTROL_CHANGED);
   const seen = trials.filter((trial) => trial.upperMs !== undefined && trial.lowerMs !== undefined);
   const upper = seen.map((trial) => trial.upperMs!);
   const middle = seen.map((trial) => (trial.upperMs! + trial.lowerMs!) / 2);
   const report = {
-    window: options.window, key: options.key, region: options.region, control: options.control, trials: trials.length, responded: seen.length,
+    window: options.window, key: options.key, region: options.region, control: options.control, trials: trials.length,
+    responded: seen.length, missedFrames: answered.length - seen.length,
+    resolutionMs: percentile(trials.map((trial) => trial.frameMs), 0.5),
+    bracketMs: { p50: percentile(seen.map((trial) => trial.bracketMs!), 0.5), p95: percentile(seen.map((trial) => trial.bracketMs!), 0.95), max: Math.max(...seen.map((trial) => trial.bracketMs!)) },
     upperMs: { p50: percentile(upper, 0.5), p95: percentile(upper, 0.95) },
     middleMs: { p50: percentile(middle, 0.5), p95: percentile(middle, 0.95) },
-    captureMs: percentile(trials.map((trial) => trial.captureMs), 0.5),
     rows: trials,
   };
   writeFileSync(join(options.out, "press-latency.json"), JSON.stringify(report, null, 2) + "\n");
@@ -176,7 +219,7 @@ export const pressLatency = (options: PressLatencyOptions) => Effect.scoped(Effe
 
 const PRESS_LATENCY_USAGE = `--window ${WINDOW_KINDS.join("|")} --display :N --wayland-runtime DIR --key KEYSYM --region X,Y,W,H --control X,Y,W,H --out DIR [--trials N] [--settle-ms MS]`;
 
-/** Reads the harness's flags; `GRIM` and `XDOTOOL` name the tools when they are not on PATH. Returns the usage line when a flag is missing or malformed. */
+/** Reads the harness's flags; `GRIM` names the tool when it is not on PATH. Returns the usage line when a flag is missing or malformed. */
 export function pressLatencyArguments(args: readonly string[], env: Readonly<Record<string, string | undefined>> = process.env): PressLatencyOptions | string {
   const { values } = parseArgs({ args: [...args], strict: false, options: {
     window: { type: "string" }, display: { type: "string" }, "wayland-runtime": { type: "string" }, key: { type: "string" },
@@ -189,7 +232,7 @@ export function pressLatencyArguments(args: readonly string[], env: Readonly<Rec
   const trials = Number(text("trials") ?? "30"), settleMs = Number(text("settle-ms") ?? "1500");
   if (window === undefined || region === undefined || control === undefined || display === undefined || waylandRuntime === undefined || key === undefined || out === undefined
     || !Number.isInteger(trials) || trials < 1 || !(settleMs >= 0)) return PRESS_LATENCY_USAGE;
-  return { window, display, waylandRuntime, key, region, control, out, trials, settleMs, grim: env["GRIM"] ?? "grim", xdotool: env["XDOTOOL"] ?? "xdotool" };
+  return { window, display, waylandRuntime, key, region, control, out, trials, settleMs, grim: env["GRIM"] ?? "grim" };
 }
 
 if (import.meta.main) {

@@ -194,10 +194,11 @@ Every flag a command's usage line shows is declared here with its one meaning.
 | `--program FILE` | External command executable | `lan dummy` |
 | `--region X,Y,WIDTH,HEIGHT` | The pixel rectangle to capture | `integrity capture --screen`, `perf latency` |
 | `--control X,Y,WIDTH,HEIGHT` | A still pixel rectangle whose change marks camera motion, not a response | `perf latency` |
-| `--window chrome\|warcraft\|native` | The kind of game window measured, recorded in the result | `perf latency` |
+| `--window chrome\|warcraft\|native\|reference` | The kind of game window measured, recorded in the result | `perf latency` |
 | `--display :N` | The private desktop's X display that receives input | `perf latency` |
 | `--wayland-runtime DIR` | The private desktop's Wayland runtime folder, for screen grabs | `perf latency` |
 | `--key KEYSYM` | The X key a trial taps | `perf latency` |
+| `--check` | Runs the method against a reference page that changes a pixel a known number of frames after the key, and fails when a measured delay is off by more than one frame | `perf latency` |
 | `--trials N` | How many presses to time | `perf latency` |
 | `--settle-ms MS` | The wait after each trial so the move ends | `perf latency` |
 | `--functions` | Report functions in the worst frames | `perf census` |

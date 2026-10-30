@@ -10,6 +10,7 @@ import { type NativeCase, checkNative, fitNativeCost, nativeCheckLines, parseNat
 import { type NativeCostModel, WARCRAFT_COST } from "../../src/headless/nativeCost";
 import { captureReceipt, parseFrameCostCapture, sectionTable, sectionTableLines } from "../perf/frameCostCapture";
 import { PERF_COLLECTOR_VARIABLE } from "../../src/headless/perfCollector";
+import { checkArguments, checkPressLatency } from "../play/latencyReference";
 import { pressLatency, pressLatencyArguments } from "../play/pressLatency";
 
 export interface LuaBuild {
@@ -175,6 +176,15 @@ const sections = (output: PerfOutput): Command => (args) => Effect.gen(function*
 });
 
 const latency = (output: PerfOutput): Command => (args) => Effect.gen(function*() {
+  if (args.includes("--check")) {
+    const check = checkArguments(args);
+    if (typeof check === "string") return yield* new UsageFailure({ problem: `perf latency ${check}` });
+    const result = yield* checkPressLatency(check).pipe(Effect.mapError((cause) => new PerfFailure({ problem: `perf latency --check: ${describeCause(cause)}` })));
+    if (output.json) yield* output.result({ ...result });
+    else yield* Console.log(JSON.stringify(result));
+    if (!result.passes) return yield* new PerfFailure({ problem: "the press-latency method missed a known delay by more than one display frame" });
+    return;
+  }
   const options = pressLatencyArguments(args);
   if (typeof options === "string") return yield* new UsageFailure({ problem: `perf latency ${options}` });
   const report = yield* pressLatency(options).pipe(Effect.mapError((cause) => new PerfFailure({ problem: `perf latency: ${describeCause(cause)}` })));

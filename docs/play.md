@@ -232,7 +232,7 @@ handle's selected variation. Assets remain outside Wisp. Closing the window
 closes the game session.
 Press-to-pixel latency and frame-time stalls against the Warcraft build are measured in
 [Input-to-display latency](online-plan.md#input-to-display-latency); `wisp perf latency --window chrome|warcraft|native`
-(wisp:host/play/pressLatency.ts) repeats the press timing for any window.
+(wisp:host/play/pressLatency.ts) repeats the press timing for any window, to within one display frame; `wisp perf latency --check` proves that against a page of known delay.
 Like `headless --render`, `runStandalone` refuses to open Chrome outside a gpu
 machine-capacity lease where the helper is installed, naming the lease command
 to rerun it under ([Rendered frames and sound cues](headless.md#rendered-frames-and-sound-cues)).
