@@ -83,6 +83,8 @@ Without `FARM_RUNNER` every shard is hosted (`no farm runner`). A
 the load check (`farm-runner input`). The plan job's run summary has one line
 per shard, such as `- bun 0: ubuntu-latest (load 62.1 > 30 cores)`.
 
+Autoland runs the suite inside each branch's own run, so branches waiting at once each add a farm run, and the plan job chooses its runners again for each.
+
 ## A repository's workflow
 
 Wisp's own wisp:.github/workflows/farm-test.yml is the template: a plan job,
