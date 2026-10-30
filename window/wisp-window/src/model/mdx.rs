@@ -1,6 +1,10 @@
 use super::track::{Key, LineType, Track};
 use super::emitter::{Emitter2, Scalar};
-use super::{Geoset, GeosetAnim, Layer, TextureAnim, Material, Model, ModelError, Node, Sequence, Texture};
+use super::{Geoset, GeosetAnim, TextureAnim, Model, ModelError, Node, Sequence};
+
+mod materials;
+
+use materials::{parse_materials, parse_textures};
 
 const NO_ID: i32 = -1;
 const NAME_LENGTH: usize = 80;
@@ -362,58 +366,6 @@ fn parse_skin(chunk: &mut Reader, version: u32) -> Result<Vec<[u8; 8]>, ModelErr
     Ok(flat.chunks_exact(8).map(|row| row.try_into().unwrap()).collect())
 }
 
-const TEXTURE_RECORD: usize = 268;
-const PATH_LENGTH: usize = 260;
-
-fn parse_textures(chunk: &mut Reader, model: &mut Model) -> Result<(), ModelError> {
-    for _ in 0..chunk.bytes.len() / TEXTURE_RECORD {
-        let replaceable_id = u32::try_from(chunk.i32()?).unwrap_or(0);
-        let path = chunk.take(PATH_LENGTH)?;
-        let end = path.iter().position(|&byte| byte == 0).unwrap_or(PATH_LENGTH);
-        model.textures.push(Texture { replaceable_id, image: String::from_utf8_lossy(&path[..end]).into_owned() });
-        chunk.take(4)?;
-    }
-    Ok(())
-}
-
-fn parse_materials(chunk: &mut Reader, model: &mut Model) -> Result<(), ModelError> {
-    while chunk.at < chunk.bytes.len() {
-        let start = chunk.at;
-        let size = chunk.count()?;
-        chunk.take(8)?;
-        if chunk.bytes.get(chunk.at..chunk.at + 4) != Some(b"LAYS".as_slice()) {
-            chunk.take(NAME_LENGTH)?;
-        }
-        chunk.expect("LAYS")?;
-        let mut material = Material::default();
-        for _ in 0..chunk.count()? {
-            let layer_start = chunk.at;
-            let layer_size = chunk.count()?;
-            let filter_mode = u32::try_from(chunk.i32()?).unwrap_or(0);
-            let shading_flags = u32::try_from(chunk.i32()?).unwrap_or(0);
-            let texture_id = chunk.i32()?;
-            let texture_anim = usize::try_from(chunk.i32()?).ok();
-            chunk.take(4)?;
-            let mut alpha = Scalar::fixed(chunk.f32()?);
-            let mut texture_track = None;
-            while chunk.at < layer_start + layer_size {
-                match chunk.keyword()? {
-                    b"KMTA" => alpha.track = Some(chunk.track::<1>()?),
-                    b"KMTF" => texture_track = Some(chunk.track::<1>()?),
-                    b"KMTE" => {
-                        chunk.track::<1>()?;
-                    }
-                    _ => return Err(ModelError::Chunk { chunk: "MTLS", reason: "unknown layer keyword" }),
-                }
-            }
-            material.layers.push(Layer { filter_mode, texture_id, shading_flags, alpha, texture_track, texture_anim });
-            chunk.at = layer_start + layer_size;
-        }
-        model.materials.push(material);
-        chunk.at = start + size;
-    }
-    Ok(())
-}
 
 #[cfg(test)]
 mod tests {
@@ -482,4 +434,5 @@ mod tests {
         assert_eq!(emitter.visibility.track.as_ref().map(|track| track.keys.len()), Some(1));
         assert!(model.nodes[0].is_some());
     }
+
 }
