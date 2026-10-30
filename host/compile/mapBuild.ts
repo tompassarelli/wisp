@@ -377,7 +377,7 @@ const cachedAssetArchives = (directory: string): readonly AssetArchiveBase[] =>
 
 export const assetArchive = (packager: string, container: string, assets: readonly ArchiveEntry[], work: string) => Effect.gen(function*() {
   const directory = join(compileCacheDirectory(), "archives");
-  const wanted = yield* tryMapSync("hash map assets", container, () => assetManifest(container, assets));
+  const wanted = yield* tryMapSync("hash map assets", container, () => assetManifest(container, packagerSource(), assets));
   const key = assetArchiveKey(wanted);
   const archive = join(directory, `${key}.w3x`);
   if (existsSync(archive)) {

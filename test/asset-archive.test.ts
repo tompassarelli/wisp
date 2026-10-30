@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { assetArchive, mapPack } from "../host/compile/mapBuild";
+import { assetArchive, mapPack, packagerSource } from "../host/compile/mapBuild";
 import { assetManifest, nearestAssetArchive, type AssetManifest } from "../host/compile/assetArchivePlan";
 import { syntheticBaseMap } from "../host/compile/syntheticBaseMap";
 
@@ -29,7 +29,7 @@ const cacheOf = (name: string) => {
   return join(cache, "archives");
 };
 
-const manifest = (generation: number, container: string, entries: Record<string, string>): AssetManifest => ({ container, generation, entries });
+const manifest = (generation: number, container: string, entries: Record<string, string>, packager = "p"): AssetManifest => ({ container, packager, generation, entries });
 
 test("[invariant] a build whose imports differ from a cached archive's in N files replaces only those N entries and lists the bytes of a full repack", async () => {
   const container = join(work, "container.w3x");
@@ -46,7 +46,7 @@ test("[invariant] a build whose imports differ from a cached archive's in N file
   const incremental = await Effect.runPromise(assetArchive(packager, container, changed, work));
   const recorded: AssetManifest = JSON.parse(readFileSync(incremental.replace(/\.w3x$/, ".json"), "utf8"));
   expect(recorded.generation).toBe(1);
-  expect(recorded.entries).toEqual(assetManifest(container, changed).entries);
+  expect(recorded.entries).toEqual(assetManifest(container, packagerSource(), changed).entries);
 
   cacheOf("full");
   const full = await Effect.runPromise(assetArchive(packager, container, changed, work));
@@ -55,10 +55,11 @@ test("[invariant] a build whose imports differ from a cached archive's in N file
   expect(readFileSync(incremental)).not.toEqual(readFileSync(join(archives, first[0]!.replace(/\.json$/, ".w3x"))));
 });
 
-test("[invariant] a cached archive is no base when its container differs, it holds an entry the build lacks, or its chain of incremental builds is long", () => {
+test("[invariant] a cached archive is no base when its container or packager source differs, it holds an entry the build lacks, or its chain of incremental builds is long", () => {
   const wanted = manifest(0, "a", { x: "1", y: "2" });
   const base = (key: string, generation: number, container: string, entries: Record<string, string>) => ({ key, manifest: manifest(generation, container, entries) });
   expect(nearestAssetArchive([base("other", 0, "b", { x: "1", y: "2" })], wanted)).toBeUndefined();
+  expect(nearestAssetArchive([{ key: "repacked", manifest: manifest(0, "a", { x: "1", y: "2" }, "q") }], wanted)).toBeUndefined();
   expect(nearestAssetArchive([base("extra", 0, "a", { x: "1", z: "3" })], wanted)).toBeUndefined();
   expect(nearestAssetArchive([base("tall", 8, "a", { x: "1", y: "2" })], wanted)).toBeUndefined();
   expect(nearestAssetArchive([base("far", 0, "a", { x: "0" }), base("near", 0, "a", { x: "1" })], wanted)?.key).toBe("near");
