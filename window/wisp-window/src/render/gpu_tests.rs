@@ -358,3 +358,33 @@ fn a_rig_is_posed_with_the_scene_clock_in_seconds() {
     let _ = render(&mut renderer, &device, &queue, &scene);
     assert_eq!(*seen.lock().unwrap(), 2.5, "the pose clock reaches the rig as seconds, which the rig turns into global sequence milliseconds");
 }
+
+fn particle_light(filter_mode: u32, texel: [u8; 4]) -> [f32; 3] {
+    let Some((device, queue)) = device() else { return [f32::NAN; 3] };
+    let mut renderer = Renderer::new(device.clone(), queue.clone(), FORMAT, crate::remaster::Quality::Off, crate::settings::Preset::High.features());
+    let view = upload(&device, &queue, &crate::texture::Image { width: 1, height: 1, rgba: texel.to_vec() });
+    let spec = Emitter2 { rows: 1, columns: 1, head: true, life_span: 5.0, time: 0.5, scaling: [20.0; 3], alphas: [1.0; 3], colors: [[1.0; 3]; 3], filter_mode, ..Emitter2::default() };
+    let emitter = ModelEmitter { spec, paint: Paint::None };
+    let slot = renderer.particles.register(&device, &queue, &emitter, ("shine", &view), &renderer.sampler).expect("room for an emitter");
+    let mut scene = Scene { frame: 0, clear: BACKGROUND, ..Scene::default() };
+    scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0 };
+    let _ = render(&mut renderer, &device, &queue, &scene);
+    renderer.particles.begin(1);
+    let sample = EmitterSample { visible: true, rate: 60.0, ..EmitterSample::default() };
+    renderer.particles.emit(1, 0, slot, &emitter, &sample, &translation(0.0, 0.0, -100.0), 1.0);
+    scene.frame = 1;
+    light_at_centre(&mut renderer, &device, &queue, &scene)
+}
+
+#[test]
+fn an_additive_particle_adds_its_colour_in_linear_light_scaled_by_its_texture_alpha() {
+    let (source, background) = (source(), background());
+    assert_pixel(particle_light(1, texel(SOURCE, 0.5)), [0, 1, 2].map(|channel| source[channel] * 0.5 + background[channel]), "source alpha plus one, so a soft edge stays soft and a colour is not brighter than its texture");
+}
+
+#[test]
+fn an_alpha_keyed_particle_cuts_at_three_quarters_and_adds_the_rest() {
+    let (source, background) = (source(), background());
+    assert_pixel(particle_light(4, texel(SOURCE, 0.5)), background, "alpha 0.5 is cut out");
+    assert_pixel(particle_light(4, texel(SOURCE, 0.8)), [0, 1, 2].map(|channel| source[channel] * 0.8 + background[channel]), "alpha 0.8 adds by its alpha");
+}

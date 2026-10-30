@@ -9,6 +9,7 @@ mod math;
 mod assets;
 mod gpu;
 pub mod model;
+mod emitters;
 mod lightning;
 mod weather;
 mod particles;
@@ -251,15 +252,7 @@ impl Renderer {
                 draws.push(Draw { filter: layer.filter, first_index: part.first_index, index_count: part.index_count, bind_group });
             }
         }
-        let mut emitters = Vec::new();
-        for emitter in data.emitters {
-            let (key, view) = match &emitter.paint {
-                Paint::Texture(name) => (name.as_str(), self.textures.get(&name.to_ascii_lowercase()).unwrap_or(&self.white)),
-                _ => ("", &self.white),
-            };
-            let slot = self.particles.register(&self.device, &self.queue, &emitter, (key, view), &self.sampler);
-            emitters.push((emitter, slot));
-        }
+        let emitters = self.register_emitters(path, data.emitters);
         let bones = data.rig.bone_count().max(1);
         self.model_ids.insert(path.to_string(), self.models.len());
         self.models.push(GpuModel { vertices, indices, draws, opaque_first, rig: data.rig, bones, emitters });

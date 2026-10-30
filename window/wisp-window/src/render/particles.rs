@@ -24,7 +24,7 @@ const HEAD: u32 = 1;
 const TAIL: u32 = 2;
 const FLAT: u32 = 4;
 const KEYED: u32 = 8;
-const BLENDS: [Filter; 4] = [Filter::Blend, Filter::Additive, Filter::Modulate, Filter::Modulate2x];
+const BLENDS: [Filter; 4] = [Filter::Blend, Filter::AddAlpha, Filter::Modulate, Filter::Modulate2x];
 
 /// How an emitter's particles look over their life, shared by all of them: colours (alpha last), scale, frame ranges and flags.
 #[repr(C)]
@@ -105,7 +105,7 @@ fn storage() -> wgpu::BindingType {
 
 fn blend_index(filter_mode: u32) -> usize {
     match filter_mode {
-        1 => 1,
+        1 | 4 => 1,
         2 => 2,
         3 => 3,
         _ => 0,
