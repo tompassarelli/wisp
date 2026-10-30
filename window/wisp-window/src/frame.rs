@@ -6,6 +6,7 @@ use std::time::Duration;
 use crate::input::Input;
 use crate::metrics::{ms, Metrics, Series};
 use crate::sync::lock;
+use crate::timer::TimerResolution;
 
 pub const QUEUE_CAPACITY: usize = 8;
 const DEADLINE_BEFORE_NEXT_ACQUIRE_NS: u64 = 4_000_000;
@@ -179,6 +180,7 @@ pub struct FrameLoop<S: Surface, C: Clock> {
     sample_times: [Option<(u32, u64)>; SAMPLE_MEMORY],
     previous_frame_late: bool,
     pub problem: Option<String>,
+    _timer: TimerResolution,
 }
 
 impl<S: Surface, C: Clock> FrameLoop<S, C> {
@@ -196,6 +198,7 @@ impl<S: Surface, C: Clock> FrameLoop<S, C> {
             sample_times: [None; SAMPLE_MEMORY],
             previous_frame_late: false,
             problem: None,
+            _timer: TimerResolution::raise(),
         }
     }
 

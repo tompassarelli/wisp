@@ -22,6 +22,7 @@ mod pad_windows;
 #[cfg(any(windows, test))]
 mod sdl_mapping;
 mod sync;
+mod timer;
 pub mod texture;
 
 use std::ffi::{c_char, c_void};

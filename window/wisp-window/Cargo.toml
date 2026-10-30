@@ -28,7 +28,7 @@ gilrs = "=0.11.2"
 evdev = { version = "0.13", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62.2", features = ["Gaming_Input", "Foundation_Collections"] }
+windows = { version = "0.62.2", features = ["Gaming_Input", "Foundation_Collections", "Win32_Media"] }
 
 [dev-dependencies]
 image-blp-pixels = { package = "image", version = "0.24.9", default-features = false }
