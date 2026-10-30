@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Weathers } from "./weather";
-import type { Handle } from "./clientTypes";
+import type { Handle } from "../game/native/types";
 
 const fourCC = (id: string) => [...id].reduce((total, letter) => total * 256 + letter.charCodeAt(0), 0);
 

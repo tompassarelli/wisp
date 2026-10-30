@@ -5,6 +5,7 @@ declares (wisp:docs/architecture.md, "Where things live").
 
 ## Unreleased
 
+- `wisp/game/effects` is Wisp's own effects API (effects, beams and floating text): on Warcraft `plugins/game-api.ts` lowers each call to its native at compile time, on Bun it resolves to the native backend in `src/game/native`. `wisp/src/headless/animation`, `frameRate`, `lightnings` and `textTags` moved to `wisp/src/game/native`, and `Handle`, `EffectPose`, `EffectDeaths` and `HandleFactory` are no longer exported from `wisp/src/headless/client`.
 - The native window reads pads at its sample point: `InputSample` carries `axisX` and `axisY`, `WindowView.selectPad` takes the browser's `gamepadIndex`, and `bun wisp play --standalone --window native` plays with the first connected pad (wisp#110).
 - `wisp/src/netcode/ledger` now admits rows against the common frontier K
   with epochs, a participant mask, retained history, `discardThrough`,

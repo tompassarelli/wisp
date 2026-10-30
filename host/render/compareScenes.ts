@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { deflateSync } from "node:zlib";
 import { Schema } from "effect";
 import { generateMDX, parseMDL } from "../../vendor/war3-model.mjs";
-import { freshAnimation } from "../../src/headless/animation";
+import { freshAnimation } from "../../src/game/native/animation";
 import type { RenderScene } from "./renderScene";
 
 const Camera = Schema.Struct({

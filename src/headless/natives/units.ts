@@ -1,7 +1,8 @@
 import { addFloat32, multiplyFloat32TowardZero, subtractFloat32, subtractFloat32TowardZero } from "../../sim/binary32";
 import { f32 } from "../../sim/f32";
-import { advanceAnimation, type AnimationBlend, freshAnimation, selectAnimation } from "../animation";
-import type { Handle, HandleFactory, NativeBehavior, UnitPose, UnitStateFixtures } from "../clientTypes";
+import { advanceAnimation, type AnimationBlend, copyBlend, freshAnimation, selectAnimation } from "../../game/native/animation";
+import type { Handle, HandleFactory } from "../../game/native/types";
+import type { NativeBehavior, UnitPose, UnitStateFixtures } from "../clientTypes";
 import { isHandle } from "../jassFormat";
 import type { Warcraft3Abilities } from "../warcraft3Abilities";
 
@@ -22,9 +23,6 @@ export interface PlayerContext {
   readonly humans: readonly number[];
   readonly playerNames: Readonly<Record<number, string>> | undefined;
 }
-
-export const copyBlend = (blend: AnimationBlend | undefined): AnimationBlend | undefined =>
-  blend === undefined ? undefined : { from: { ...blend.from, subAnimations: [...blend.from.subAnimations] }, remaining: blend.remaining };
 
 const PLAYER_COLORS = ["RED", "BLUE", "CYAN", "PURPLE", "YELLOW", "ORANGE", "GREEN", "PINK", "LIGHT_GRAY", "LIGHT_BLUE", "AQUA", "BROWN", "MAROON", "NAVY", "TURQUOISE", "VIOLET", "WHEAT", "PEACH", "MINT", "LAVENDER", "COAL", "SNOW", "EMERALD", "PEANUT", "BLACK"].map(name => "PLAYER_COLOR_" + name);
 

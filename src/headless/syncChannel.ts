@@ -3,9 +3,9 @@ import type { SyncDelivery } from "./lockstep";
 import { Random } from "./random";
 import { f32 } from "../sim/f32";
 import { floorDiv, floorMod } from "../sim/intMath";
-import { type CallbackTiming, FRAME_MS } from "./frameRate";
+import { type CallbackTiming, FRAME_MS } from "../game/native/frameRate";
 
-export { type CallbackTiming, EVEN_CALLBACKS } from "./frameRate";
+export { type CallbackTiming, EVEN_CALLBACKS } from "../game/native/frameRate";
 
 export interface SyncLatency {
 

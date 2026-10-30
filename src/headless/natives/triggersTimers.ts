@@ -1,8 +1,9 @@
 import { divideFloat32, roundToFloat32, subtractFloat32TowardZero } from "../../sim/binary32";
 import { f32 } from "../../sim/f32";
-import type { Handle, HandleFactory, NativeBehavior, PlayerMouseInput, SyncMessage } from "../clientTypes";
+import type { Handle, HandleFactory } from "../../game/native/types";
+import type { NativeBehavior, PlayerMouseInput, SyncMessage } from "../clientTypes";
 import type { Frame } from "../frames";
-import { FRAMES_PER_SECOND } from "../frameRate";
+import { FRAMES_PER_SECOND } from "../../game/native/frameRate";
 import { isFrame } from "./frames";
 import { after } from "./timerDeadline";
 import type { Unit, Units } from "./units";

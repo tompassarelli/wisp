@@ -1,5 +1,5 @@
 import { MEASURED_BATTLE_NET, MEASURED_TURN_BURSTS, syncDelivery, turnBursts } from "../../src/headless/syncChannel";
-import { turnStart } from "../../src/headless/frameRate";
+import { turnStart } from "../../src/game/native/frameRate";
 import { floorMod } from "../../src/sim/intMath";
 
 export const SEND_FRAMES: readonly number[] = Array.from({ length: 120 }, (_, index) => 1 + index * 3 + floorMod(index * 7, 5) * 2);

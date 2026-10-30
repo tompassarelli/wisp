@@ -1,5 +1,5 @@
-import { type AnimationSequence, type SequenceSample, selectSequence, sequenceFrame } from "../../src/headless/animation";
-import { FRAME_MS } from "../../src/headless/frameRate";
+import { type AnimationSequence, type SequenceSample, selectSequence, sequenceFrame } from "../../src/game/native/animation";
+import { FRAME_MS } from "../../src/game/native/frameRate";
 import type { DrawnPose } from "../render/renderScene";
 
 const length = (sequence: AnimationSequence | undefined) => sequence === undefined ? 0 : Math.max(0, sequence.end - sequence.start);

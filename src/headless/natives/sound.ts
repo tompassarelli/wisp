@@ -1,6 +1,7 @@
 import { f32 } from "../../sim/f32";
-import type { Handle, HandleFactory, NativeBehavior, SoundCue } from "../clientTypes";
-import { FRAMES_PER_SECOND } from "../frameRate";
+import type { Handle, HandleFactory } from "../../game/native/types";
+import type { NativeBehavior, SoundCue } from "../clientTypes";
+import { FRAMES_PER_SECOND } from "../../game/native/frameRate";
 import type { Unit } from "./units";
 
 interface SoundState {

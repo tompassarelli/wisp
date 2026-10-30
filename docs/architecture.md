@@ -14,7 +14,8 @@ A module may import only the modules in its "may use" column. `src/` never impor
 | runtime | `src/runtime/` | Pure map-side helpers: lookup, record text, config, payload, modules, test harness | num |
 | netcode | `src/netcode/` | Game-agnostic rollback netcode behind a row codec: frame ring, input ledger, batched delta messages, wire varints, prediction and rollback session | runtime, num |
 | map | `src/map/` | Map-side services calling natives: file I/O, dispatch, hot reload, frame meter, native driver, scene | runtime, num, natives |
-| headless | `src/headless/` | Emulated Warcraft client: natives, lockstep, sync channel, journeys, Lua perf | map, runtime, num, natives |
+| game | `src/game/` | Wisp's game API: per-family declarations, the Warcraft backend's lowering table and the native backend ([game-api.md](game-api.md)) | num, runtime, natives |
+| headless | `src/headless/` | Emulated Warcraft client: natives, lockstep, sync channel, journeys, Lua perf | map, runtime, num, natives, game |
 | process | `host/process/` | Process spawning, polling, logged child processes, step timings | none |
 | cli | `host/cli/` | Command type, CLI runner, JSON results, panel server | os, process |
 | os | `host/os/` (`platform/`, `warcraft/`) | Host OS, desktop, Battle.net launcher, Warcraft window and input | process |

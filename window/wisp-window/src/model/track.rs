@@ -166,7 +166,7 @@ pub fn rotate(q: [f32; 4], v: [f32; 3]) -> [f32; 3] {
     [vx + w * tx + (y * tz - z * ty), vy + w * ty + (z * tx - x * tz), vz + w * tz + (x * ty - y * tx)]
 }
 
-/// The frame a global sequence of `length` milliseconds shows at `clock_seconds` (src/headless/animation.ts).
+/// The frame a global sequence of `length` milliseconds shows at `clock_seconds` (src/game/native/animation.ts).
 pub fn global_sequence_frame(clock_seconds: f32, length: u32) -> u32 {
     if length == 0 {
         return 0;

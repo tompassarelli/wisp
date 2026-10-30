@@ -176,7 +176,7 @@ jobs:
           # A test over the frame ceiling fails and names its file.
           cat > "$scratch/frames.test.ts" <<'EOF'
           import { test } from "bun:test";
-          import { steppedFrames } from "../src/headless/frameRate";
+          import { steppedFrames } from "../src/game/native/frameRate";
           import { TEST_CEILING_FRAMES } from "../host/testing/testCost";
           test("[spec #65] scratch test steps one frame over the ceiling", () => {
             steppedFrames.count += TEST_CEILING_FRAMES + 1;

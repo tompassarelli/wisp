@@ -1,15 +1,18 @@
 import { f32 } from "../sim/f32";
 import { mixCall } from "./callHash";
-import type { CameraPose, CineFilterPose, ClientFiles, EffectDeaths, EffectPose, Handle, IntentionalNoops, LocalNatives, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, PlayerMouseInput, SoundCue, StandaloneProfile, SyncMessage, UnitPose, UnitStateFixtures } from "./clientTypes";
+import type { EffectDeaths, EffectPose, Handle } from "../game/native/types";
+import type { CameraPose, CineFilterPose, ClientFiles, IntentionalNoops, LocalNatives, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, PlayerMouseInput, SoundCue, StandaloneProfile, SyncMessage, UnitPose, UnitStateFixtures } from "./clientTypes";
 import type { NativeDeclarations } from "./declarations";
 import { FRAME_POINTS, type Frame, type FrameTemplate, Frames } from "./frames";
 import { enforceStandaloneProfile } from "./standaloneProfile";
-import { FRAMES_PER_SECOND, steppedFrames } from "./frameRate";
+import { FRAMES_PER_SECOND, steppedFrames } from "../game/native/frameRate";
 import { describeNumber } from "./jassFormat";
-import { Lightnings } from "./lightnings";
+import { EmulatedCalls, logUnlessLocal } from "./nativeCalls";
+import { Lightnings } from "../game/native/lightnings";
 import { Weathers } from "./weather";
 import { CameraCine } from "./natives/cameraCine";
-import { Effects } from "./natives/effects";
+import { Effects } from "../game/native/effectStore";
+import { effectNatives, lightningNatives, textTagNatives } from "./natives/effects";
 import { frameNatives, type FrameContext, inputNatives } from "./natives/frames";
 import { mathNatives } from "./natives/math";
 import { Playing } from "./natives/playing";
@@ -17,13 +20,14 @@ import { PreloadText } from "./natives/preloadText";
 import { Sounds } from "./natives/sound";
 import { playerMouseEvent, TriggersTimers } from "./natives/triggersTimers";
 import { type Unit, Units } from "./natives/units";
-import { TextTags } from "./textTags";
+import { TextTags } from "../game/native/textTags";
+import type { World } from "../game/native/world";
 import { type AbilityObjectFixtures, Warcraft3Abilities } from "./warcraft3Abilities";
 import { Warcraft3Inventory, type Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 import { WARCRAFT3_ENUM_VALUES } from "./warcraft3Natives";
 import { Scenery, type SceneryFixtures } from "./warcraft3Scenery";
 
-export type { CameraPose, CineFilterPose, ClientFiles, EffectDeaths, EffectPose, Handle, IntentionalNoops, LocalNatives, MapEntry, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, StandaloneProfile, SyncMessage, UnitPose, UnitStateFixture, UnitStateFixtures } from "./clientTypes";
+export type { CameraPose, CineFilterPose, ClientFiles, IntentionalNoops, LocalNatives, MapEntry, MissingNative, NativeBehavior, NativeBehaviors, NativeCall, SoundCue, StandaloneProfile, SyncMessage, UnitPose, UnitStateFixture, UnitStateFixtures } from "./clientTypes";
 export { describeCall, describeNumber, describeValue, sameCall } from "./jassFormat";
 export { assertSoundCue } from "./natives/sound";
 export { FRAMES_PER_SECOND };
@@ -89,9 +93,10 @@ export class HeadlessClient {
   readonly inventory: Warcraft3Inventory;
   readonly abilities: Warcraft3Abilities;
 
-  readonly textTags = new TextTags();
-  readonly lightnings = new Lightnings();
+  readonly textTags = new TextTags(kind => this.handle(kind));
+  readonly lightnings = new Lightnings(kind => this.handle(kind));
   readonly weathers = new Weathers();
+  readonly world: World;
   readonly textAreaAutoScroll = new Map<Handle, boolean>();
   readonly heldMouseButtons = new Set<unknown>();
   /** Pixels `BlzGetLocalClientWidth/Height` report, which a window's cursor is mapped into. */
@@ -102,6 +107,11 @@ export class HeadlessClient {
   readonly slot: number;
 
   readonly log: NativeCall[] = [];
+
+  /** Calls each Warcraft-named native took, local ones too: a migrated family's natives stay at zero while its game uses the native backend (wisp:docs/game-api.md). */
+  private readonly emulated = new EmulatedCalls();
+
+  readonly emulatedCalls: ReadonlyMap<string, number> = this.emulated.byName;
 
   forgotten = 0;
   private forgottenHash = 0;
@@ -168,31 +178,39 @@ export class HeadlessClient {
     const behaviors = this.behaviors(options);
     const local = options.localNatives;
     const log = this.log;
+    this.world = { effects: this.effects, beams: this.lightnings, floatingText: this.textTags, log: logUnlessLocal(log, local) };
 
+    const count = this.emulated.count;
     const logged = (name: string, parameters: number, behave: (this: void, ...args: unknown[]) => unknown): ((this: void, ...args: unknown[]) => unknown) => {
       switch (parameters) {
         case 0: return () => {
           log.push({ name, args: [] });
+          count(name);
           return behave();
         };
         case 1: return (a: unknown) => {
           log.push({ name, args: [a] });
+          count(name);
           return behave(a);
         };
         case 2: return (a: unknown, b: unknown) => {
           log.push({ name, args: [a, b] });
+          count(name);
           return behave(a, b);
         };
         case 3: return (a: unknown, b: unknown, c: unknown) => {
           log.push({ name, args: [a, b, c] });
+          count(name);
           return behave(a, b, c);
         };
         case 4: return (a: unknown, b: unknown, c: unknown, d: unknown) => {
           log.push({ name, args: [a, b, c, d] });
+          count(name);
           return behave(a, b, c, d);
         };
         default: return (...args: unknown[]) => {
           log.push({ name, args });
+          count(name);
           return behave(...args);
         };
       }
@@ -217,7 +235,7 @@ export class HeadlessClient {
         }
         return fallback();
       })) as (this: void, ...args: unknown[]) => unknown;
-      this.natives[name] = local[name] === undefined ? logged(name, parameters, behave) : behave;
+      this.natives[name] = local[name] === undefined ? logged(name, parameters, behave) : this.emulated.counting(name, behave);
     }
 
     for (const [name, type] of options.declarations.constants) this.natives[name] = WARCRAFT3_ENUM_VALUES[name] ?? (type === "number" ? 0 : type === "boolean" ? name === "TRUE" : name);
@@ -283,11 +301,10 @@ export class HeadlessClient {
     };
     return {
       ...this.scenery.behaviors({ handle }),
-      ...this.textTags.behaviors({
-        handle,
+      ...textTagNatives(this.textTags, {
         unitPosition: (unit) => { const live = unit as Unit | undefined; return live === undefined || live.removed ? undefined : { x: live.x, y: live.y, z: live.z }; },
       }),
-      ...this.lightnings.behaviors({ handle }),
+      ...lightningNatives(this.lightnings),
       ...this.weathers.behaviors({ handle }),
       ...this.inventory.behaviors(),
       ...this.units.playerBehaviors({ slot: this.slot, humans, playerNames }),
@@ -305,7 +322,7 @@ export class HeadlessClient {
       ...this.preloadText.behaviors(),
       ...this.camera.behaviors(),
       ...this.sounds.behaviors(),
-      ...this.effects.behaviors(),
+      ...effectNatives(this.effects),
       ...mathNatives(),
       ...this.playing.behaviors(),
     };

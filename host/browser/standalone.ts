@@ -2,7 +2,7 @@ import "./headlessRender";
 import type { SoundCue } from "../../src/headless/clientTypes";
 import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
 import type { RenderScene } from "../render/headlessRender";
-import { FRAME_MS } from "../../src/headless/frameRate";
+import { FRAME_MS } from "../../src/game/native/frameRate";
 
 const held = new Set<string>();
 let gamepadIndex: number | undefined;

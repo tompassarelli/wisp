@@ -19,6 +19,7 @@ farmTest("[invariant] installed package resolves bare imports and preserves Lua3
     expect({ code: install.exitCode, stderr: install.stderr.toString().replace(/bun install[^\n]*\n|Saved lockfile\n/g, "") }).toEqual({ code: 0, stderr: "" });
     expect(await Bun.file(join(fixture, "node_modules/wisp/src/map/hotReload.lua")).exists()).toBe(true);
     expect((await Bun.file(join(fixture, "node_modules/wisp/package.json")).json()).version).toBe("0.0.0-g0123456789ab");
+    expect((await Bun.file(join(fixture, "node_modules/wisp/package.json")).json()).exports["./game/effects"]).toEqual({ types: "./src/game/effects.d.ts", bun: "./src/game/native/effects.ts", default: "./src/game/native/effects.ts" });
     const host = Bun.spawnSync([process.execPath, "-e", "import { idiv } from 'wisp/src/sim/intMath'; import { mapCompiler } from 'wisp/scripts/compiler'; if (idiv(-2000000000, 3) !== -666666666 || typeof mapCompiler !== 'function') throw new Error('installed host import failed');"], { cwd: fixture, stdout: "pipe", stderr: "pipe" });
     expect({ code: host.exitCode, stderr: host.stderr.toString() }).toEqual({ code: 0, stderr: "" });
     const { diagnostics } = transpileProject(join(fixture, "tsconfig.json"));

@@ -1,4 +1,4 @@
-import type { EffectDeaths } from "../../src/headless/clientTypes";
+import type { EffectDeaths } from "../../src/game/native/types";
 import type { Lockstep } from "../../src/headless/lockstep";
 import { DYING } from "./cases";
 

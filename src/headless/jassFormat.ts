@@ -1,6 +1,7 @@
 import { roundToFloat32 } from "../sim/binary32";
 import { f32 } from "../sim/f32";
-import type { Handle, NativeCall } from "./clientTypes";
+import type { Handle } from "../game/native/types";
+import type { NativeCall } from "./clientTypes";
 
 export const isHandle = (value: unknown): value is Handle =>
   typeof value === "object" && value !== null && "id" in value && "kind" in value;

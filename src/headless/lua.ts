@@ -1,4 +1,5 @@
-import type { ClientScope, EffectDeaths, LocalNatives, MapEntry, IntentionalNoops, StandaloneProfile, HeadlessClient, NativeBehaviors, UnitStateFixtures } from "./client";
+import type { EffectDeaths } from "../game/native/types";
+import type { ClientScope, LocalNatives, MapEntry, IntentionalNoops, StandaloneProfile, HeadlessClient, NativeBehaviors, UnitStateFixtures } from "./client";
 import type { FrameTemplate } from "./frames";
 import type { SyncDelivery } from "./lockstep";
 import { parseNativeDeclarations } from "./declarations";

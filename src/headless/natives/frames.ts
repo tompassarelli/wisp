@@ -1,5 +1,6 @@
 import { f32 } from "../../sim/f32";
-import type { Handle, HandleFactory, NativeBehavior } from "../clientTypes";
+import type { Handle, HandleFactory } from "../../game/native/types";
+import type { NativeBehavior } from "../clientTypes";
 import { FRAME_POINTS, type Frame, type Frames } from "../frames";
 import { describeValue } from "../jassFormat";
 

@@ -3,12 +3,13 @@ import type { FrameTemplate } from "./frames";
 import { type Hash, type ModuleSet, ModulePublisher, type VersionFiles } from "../runtime/modules";
 import { type ClientFiles, type ClientScope, HeadlessClient, type LocalNatives, type MapEntry, type NativeBehaviors, type SyncMessage, WISP_LOCAL_NATIVES, describeCall, sameCall } from "./client";
 import type { NativeDeclarations } from "./declarations";
-import type { EffectDeaths, UnitStateFixtures } from "./clientTypes";
+import type { EffectDeaths } from "../game/native/types";
+import type { UnitStateFixtures } from "./clientTypes";
 import type { IntentionalNoops, PlayerMouseInput, StandaloneProfile } from "./clientTypes";
 import type { SceneryFixtures } from "./warcraft3Scenery";
 import type { Warcraft3InventoryFixtures } from "./warcraft3Inventory";
 import type { AbilityObjectFixtures } from "./warcraft3Abilities";
-import { type CallbackTiming, stampWallTime, turnStart } from "./frameRate";
+import { type CallbackTiming, stampWallTime, turnStart } from "../game/native/frameRate";
 
 export interface LockstepOptions {
   readonly abilityObjects?: AbilityObjectFixtures;

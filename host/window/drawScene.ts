@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { type AnimationSequence, animationSample } from "../../src/headless/animation";
+import { type AnimationSequence, animationSample } from "../../src/game/native/animation";
 import { parseMDX } from "../../vendor/war3-model.mjs";
 import { lightAtHour } from "../render/dayNightLight";
 import { parsableModel } from "../models/models";
@@ -88,7 +88,7 @@ function createDayNightLights(read: AssetReader, report: (problem: string) => vo
 
 /**
  * Reads each model a scene names, once, and pushes it and the textures it paints with to the window; until a model is pushed its poses are left out.
- * The sequences stay here because choosing one (wisp:src/headless/animation.ts) is the game's rule, shared with bounds and capture.
+ * The sequences stay here because choosing one (wisp:src/game/native/animation.ts) is the game's rule, shared with bounds and capture.
  */
 export function createModelLibrary(read: AssetReader, sink: AssetSink, report: (problem: string) => void): ModelLibrary {
   const entries = new Map<string, Entry>();

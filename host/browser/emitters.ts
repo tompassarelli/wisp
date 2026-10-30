@@ -1,5 +1,5 @@
-import { type AnimationSequence, animationSample, type SavedAnimation } from "../../src/headless/animation";
-import { FRAME_MS } from "../../src/headless/frameRate";
+import { type AnimationSequence, animationSample, type SavedAnimation } from "../../src/game/native/animation";
+import { FRAME_MS } from "../../src/game/native/frameRate";
 
 const STEP_MS = FRAME_MS;
 

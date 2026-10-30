@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { appendFileSync, chmodSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { steppedFrames } from "../../src/headless/frameRate";
+import { steppedFrames } from "../../src/game/native/frameRate";
 import { FARM_TEST_RUNNING } from "../farm/farmTest";
 import { provideLua32Env } from "../compile/lua32";
 import { TEST_CEILING_FRAMES, TEST_CEILING_LUA_INSTRUCTIONS, TEST_COST_OUT_ENV } from "./testCost";

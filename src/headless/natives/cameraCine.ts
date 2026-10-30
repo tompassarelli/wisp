@@ -1,5 +1,5 @@
 import type { CameraPose, CineFilterPose, NativeBehavior } from "../clientTypes";
-import { FRAMES_PER_SECOND } from "../frameRate";
+import { FRAMES_PER_SECOND } from "../../game/native/frameRate";
 import { describeValue } from "../jassFormat";
 import type { Scenery } from "../warcraft3Scenery";
 

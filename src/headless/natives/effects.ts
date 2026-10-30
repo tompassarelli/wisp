@@ -1,234 +1,84 @@
-import { f32 } from "../../sim/f32";
-import { freshAnimation, seekAnimation, selectAnimation, settleAnimation } from "../animation";
-import type { EffectDeaths, EffectPose, Handle, HandleFactory, NativeBehavior } from "../clientTypes";
-import { FRAMES_PER_SECOND } from "../frameRate";
-import { copyBlend } from "./units";
+import type { Effects } from "../../game/native/effectStore";
+import type { Lightnings } from "../../game/native/lightnings";
+import type { TextTags } from "../../game/native/textTags";
+import type { Handle } from "../../game/native/types";
+import type { NativeBehavior } from "../clientTypes";
 
-export class Effects {
-  private readonly poses = new Map<Handle, EffectPose>();
-  /** Destroyed effects in destruction order, so expiry reads only the oldest. */
-  private readonly dying: EffectPose[] = [];
-  // Effect poses advance when read: each remembers how many draws it has taken,
-  // and every draw it hasn't taken since was `drawSeconds` long.
-  private readonly settled = new WeakMap<EffectPose, number>();
-  private draws = 0;
-  private drawSeconds = 0;
+export function effectNatives(effects: Effects): Readonly<Record<string, NativeBehavior>> {
+  return {
+    AddSpecialEffect: (model: string, x: number, y: number) => effects.create(model, x, y),
+    AddSpecialEffectLoc: (model: string) => effects.create(model, 0, 0),
+    // Local position getters read attached effects at 0, 0 regardless of the unit position.
+    AddSpecialEffectTarget: (model: string) => effects.create(model, 0, 0),
+    DestroyEffect: (effect: Handle) => effects.destroy(effect),
+    BlzRemoveEffect: (effect: Handle) => effects.remove(effect),
+    BlzSetSpecialEffectAnimationBlendTime: (effect: Handle, time: number) => effects.setAnimationBlendTime(effect, time),
+    BlzSetSpecialEffectAnimation: (effect: Handle, animation: string) => effects.setAnimation(effect, animation),
+    BlzQueueSpecialEffectAnimation: (effect: Handle, animation: string) => effects.queueAnimation(effect, animation),
+    BlzSetSpecialEffectTimeScale: (effect: Handle, timeScale: number) => effects.setTimeScale(effect, timeScale),
+    BlzSetSpecialEffectTime: (effect: Handle, time: number) => effects.setTime(effect, time),
+    BlzPlaySpecialEffect: (effect: Handle, animation: string | number) => effects.play(effect, animation),
+    BlzPlaySpecialEffectWithTimeScale: (effect: Handle, animation: string | number, timeScale: number) => effects.play(effect, animation, timeScale),
+    BlzSpecialEffectClearSubAnimations: (effect: Handle) => effects.clearSubAnimations(effect),
+    BlzSpecialEffectAddSubAnimation: (effect: Handle, animation: string | number) => effects.addSubAnimation(effect, animation),
+    BlzSpecialEffectRemoveSubAnimation: (effect: Handle, animation: string | number) => effects.removeSubAnimation(effect, animation),
+    BlzGetLocalSpecialEffectX: (effect: Handle) => effects.x(effect),
+    BlzGetLocalSpecialEffectY: (effect: Handle) => effects.y(effect),
+    BlzGetLocalSpecialEffectZ: (effect: Handle) => effects.z(effect),
+    BlzGetSpecialEffectScale: (effect: Handle) => effects.scale(effect),
+    BlzSetSpecialEffectPosition: (effect: Handle, x: number, y: number, z: number) => effects.setPosition(effect, x, y, z),
+    BlzSetSpecialEffectX: (effect: Handle, x: number) => effects.setX(effect, x),
+    BlzSetSpecialEffectY: (effect: Handle, y: number) => effects.setY(effect, y),
+    BlzSetSpecialEffectZ: (effect: Handle, z: number) => effects.setZ(effect, z),
+    BlzSetSpecialEffectAlpha: (effect: Handle, alpha: number) => effects.setAlpha(effect, alpha),
+    BlzSetSpecialEffectScale: (effect: Handle, scale: number) => effects.setScale(effect, scale),
+    BlzSetSpecialEffectOrientation: (effect: Handle, yaw: number, pitch: number, roll: number) => effects.setOrientation(effect, yaw, pitch, roll),
+    BlzSetSpecialEffectYaw: (effect: Handle, yaw: number) => effects.setYaw(effect, yaw),
+    BlzSetSpecialEffectPitch: (effect: Handle, pitch: number) => effects.setPitch(effect, pitch),
+    BlzSetSpecialEffectRoll: (effect: Handle, roll: number) => effects.setRoll(effect, roll),
+    BlzSetSpecialEffectColor: (effect: Handle, r: number, g: number, b: number) => effects.setColor(effect, r, g, b),
+    BlzSetSpecialEffectColorByPlayer: (effect: Handle, player: number) => effects.setTeamColor(effect, player),
+    BlzSetSpecialEffectMatrixScale: (effect: Handle, x: number, y: number, z: number) => effects.setMatrixScale(effect, x, y, z),
+    BlzResetSpecialEffectMatrix: (effect: Handle) => effects.resetMatrix(effect),
+  };
+}
 
-  constructor(private readonly handle: HandleFactory, private readonly deaths: EffectDeaths | undefined, private readonly frame: (this: void) => number) {}
+export function lightningNatives(bolts: Lightnings): Readonly<Record<string, NativeBehavior>> {
+  return {
+    AddLightning: (codeName: string, _visible: boolean, x1: number, y1: number, x2: number, y2: number) => bolts.add(codeName, x1, y1, 0, x2, y2, 0),
+    AddLightningEx: (codeName: string, _visible: boolean, x1: number, y1: number, z1: number, x2: number, y2: number, z2: number) => bolts.add(codeName, x1, y1, z1, x2, y2, z2),
+    DestroyLightning: (bolt: Handle) => bolts.destroy(bolt),
+    MoveLightning: (bolt: Handle, _visible: boolean, x1: number, y1: number, x2: number, y2: number) => bolts.move(bolt, x1, y1, 0, x2, y2, 0),
+    MoveLightningEx: (bolt: Handle, _visible: boolean, x1: number, y1: number, z1: number, x2: number, y2: number, z2: number) => bolts.move(bolt, x1, y1, z1, x2, y2, z2),
+    SetLightningColor: (bolt: Handle, red: number, green: number, blue: number, alpha: number) => bolts.setColor(bolt, red, green, blue, alpha),
+    GetLightningColorR: (bolt: Handle) => bolts.channel(bolt, 0),
+    GetLightningColorG: (bolt: Handle) => bolts.channel(bolt, 1),
+    GetLightningColorB: (bolt: Handle) => bolts.channel(bolt, 2),
+    GetLightningColorA: (bolt: Handle) => bolts.channel(bolt, 3),
+  };
+}
 
-  create(model: string, x: number, y: number): Handle {
-    const handle = this.handle("effect");
-    const pose: EffectPose = { ...freshAnimation(), handle, model, created: this.frame(), x: f32(x), y: f32(y), z: 0, alpha: 255, scale: 1, timeScale: 1, flat: false, queuedAnimations: [],
-      yaw: 0, pitch: 0, roll: 0, color: [255, 255, 255], teamColor: 0, matrixScale: [1, 1, 1] };
-    this.poses.set(handle, pose);
-    this.settled.set(pose, this.draws);
-    return handle;
-  }
+export interface TextTagContext {
+  unitPosition(this: void, unit: unknown): { readonly x: number; readonly y: number; readonly z: number } | undefined;
+}
 
-  private live(effect: Handle): EffectPose | undefined {
-    const pose = this.poses.get(effect);
-    return pose?.destroyed === undefined ? pose : undefined;
-  }
-
-  /** Brings the pose's animation clocks up to the last draw before anything reads them or changes how they advance. */
-  private settle(pose: EffectPose): void {
-    const settled = this.settled.get(pose) ?? this.draws;
-    if (settled === this.draws) return;
-    settleAnimation(pose, pose.timeScale, this.drawSeconds, this.draws - settled);
-    this.settled.set(pose, this.draws);
-  }
-
-  private destroy(effect: Handle): void {
-    const pose = this.live(effect);
-    if (pose === undefined) return;
-    const death = this.deaths?.(pose.model);
-    this.settle(pose);
-    pose.destroyed = this.frame();
-    this.dying.push(pose);
-    pose.queuedAnimations.length = 0;
-    if (death !== undefined && death > 0) {
-      pose.death = death;
-      selectAnimation(pose, "death", []);
-    }
-  }
-
-  private play(effect: Handle, animation: string | number, timeScale?: number): void {
-    const pose = this.live(effect);
-    if (pose === undefined) return;
-    this.settle(pose);
-    selectAnimation(pose, animation, undefined, true);
-    if (timeScale !== undefined) pose.timeScale = f32(timeScale);
-  }
-
-  snapshot(options: { readonly visibleOnly?: boolean }): EffectPose[] {
-    const poses: EffectPose[] = [];
-    for (const pose of this.poses.values()) if (options.visibleOnly !== true || (pose.alpha > 0 && pose.scale > 0 && !pose.flat)) {
-      this.settle(pose);
-      poses.push({ ...pose, subAnimations: [...pose.subAnimations], animationBlend: copyBlend(pose.animationBlend), color: [...pose.color], matrixScale: [...pose.matrixScale] });
-    }
-    return poses;
-  }
-
-  draw(step: number): void {
-    if (step !== this.drawSeconds) {
-      for (const pose of this.poses.values()) this.settle(pose);
-      this.drawSeconds = step;
-    }
-    this.draws++;
-  }
-
-  expire(frame: number): void {
-    let expired = 0;
-    while (expired < this.dying.length && frame - (this.dying[expired]?.destroyed ?? frame) >= 5 * FRAMES_PER_SECOND) expired++;
-    if (expired > 0) for (const pose of this.dying.splice(0, expired)) if (this.poses.get(pose.handle) === pose) this.poses.delete(pose.handle);
-  }
-
-  behaviors(): Readonly<Record<string, NativeBehavior>> {
-    return {
-      AddSpecialEffect: (model: string, x: number, y: number) => this.create(model, x, y),
-      AddSpecialEffectLoc: (model: string) => this.create(model, 0, 0),
-      // Local position getters read attached effects at 0, 0 regardless of the unit position.
-      AddSpecialEffectTarget: (model: string) => this.create(model, 0, 0),
-      DestroyEffect: (effect: Handle) => this.destroy(effect),
-      BlzRemoveEffect: (effect: Handle) => { if (this.live(effect) !== undefined) this.poses.delete(effect); },
-      BlzSetSpecialEffectAnimationBlendTime: (effect: Handle, time: number) => {
-        const pose = this.live(effect);
-        if (pose !== undefined) pose.animationBlendTime = f32(time);
-      },
-      BlzSetSpecialEffectAnimation: (effect: Handle, animation: string) => {
-        const pose = this.live(effect);
-        if (pose !== undefined) { pose.queuedAnimations.length = 0; this.play(effect, animation); }
-      },
-      BlzQueueSpecialEffectAnimation: (effect: Handle, animation: string) => {
-        const pose = this.live(effect);
-        if (pose !== undefined) pose.queuedAnimations.push(animation);
-      },
-      BlzSetSpecialEffectTimeScale: (effect: Handle, timeScale: number) => {
-        const pose = this.live(effect);
-        if (pose === undefined) return;
-        this.settle(pose);
-        pose.timeScale = f32(timeScale);
-      },
-      BlzSetSpecialEffectTime: (effect: Handle, time: number) => {
-        const pose = this.live(effect);
-        if (pose === undefined) return;
-        this.settle(pose);
-        seekAnimation(pose, f32(time));
-      },
-      BlzPlaySpecialEffect: (effect: Handle, animation: string | number) => this.play(effect, animation),
-      BlzPlaySpecialEffectWithTimeScale: (effect: Handle, animation: string | number, timeScale: number) => this.play(effect, animation, timeScale),
-      BlzSpecialEffectClearSubAnimations: (effect: Handle) => {
-        const pose = this.live(effect);
-        if (pose !== undefined) pose.subAnimations.length = 0;
-      },
-      BlzSpecialEffectAddSubAnimation: (effect: Handle, animation: string | number) => {
-        const pose = this.live(effect);
-        if (pose !== undefined && !pose.subAnimations.includes(animation)) pose.subAnimations.push(animation);
-      },
-      BlzSpecialEffectRemoveSubAnimation: (effect: Handle, animation: string | number) => {
-        const pose = this.live(effect);
-        if (pose === undefined) return;
-        const index = pose.subAnimations.indexOf(animation);
-        if (index >= 0) pose.subAnimations.splice(index, 1);
-      },
-      // Destroyed effects still playing Death retain their position.
-      BlzGetLocalSpecialEffectX: (effect: Handle) => this.poses.get(effect)?.x ?? 0,
-      BlzGetLocalSpecialEffectY: (effect: Handle) => this.poses.get(effect)?.y ?? 0,
-      BlzGetLocalSpecialEffectZ: (effect: Handle) => this.poses.get(effect)?.z ?? 0,
-      ...this.placement(),
-    };
-  }
-
-  // Effect reals are stored as binary32 (wisp:docs/warsmash-notes.md, "Effects: attachment, scale and lifetime").
-
-  private placement(): Readonly<Record<string, NativeBehavior>> {
-    return {
-      BlzSetSpecialEffectPosition: (effect: Handle, x: number, y: number, z: number) => {
-        const pose = this.live(effect);
-        if (pose === undefined) return;
-        pose.x = f32(x);
-        pose.y = f32(y);
-        pose.z = f32(z);
-      },
-      BlzSetSpecialEffectX: (effect: Handle, x: number) => {
-        const pose = this.live(effect);
-        if (pose !== undefined) pose.x = f32(x);
-      },
-      BlzSetSpecialEffectY: (effect: Handle, y: number) => {
-        const pose = this.live(effect);
-        if (pose !== undefined) pose.y = f32(y);
-      },
-      BlzSetSpecialEffectZ: (effect: Handle, z: number) => {
-        const pose = this.live(effect);
-        if (pose !== undefined) pose.z = f32(z);
-      },
-      BlzSetSpecialEffectAlpha: (effect: Handle, alpha: number) => {
-        const pose = this.live(effect);
-        if (pose !== undefined) pose.alpha = alpha;
-      },
-      BlzSetSpecialEffectScale: (effect: Handle, scale: number) => {
-        const pose = this.live(effect);
-        if (pose !== undefined) pose.scale = f32(scale);
-      },
-      BlzSetSpecialEffectOrientation: (effect: Handle, yaw: number, pitch: number, roll: number) => {
-        const pose = this.live(effect);
-        if (pose !== undefined) {
-          pose.yaw = f32(yaw);
-          pose.pitch = f32(pitch);
-          pose.roll = f32(roll);
-          pose.matrixScale = [1, 1, 1];
-          pose.flat = false;
-        }
-      },
-      BlzSetSpecialEffectYaw: (effect: Handle, yaw: number) => {
-        const pose = this.live(effect);
-        if (pose !== undefined) {
-          pose.yaw = f32(yaw);
-          pose.matrixScale = [1, 1, 1];
-          pose.flat = false;
-        }
-      },
-      BlzSetSpecialEffectPitch: (effect: Handle, pitch: number) => {
-        const pose = this.live(effect);
-        if (pose !== undefined) {
-          pose.pitch = f32(pitch);
-          pose.matrixScale = [1, 1, 1];
-          pose.flat = false;
-        }
-      },
-      BlzSetSpecialEffectRoll: (effect: Handle, roll: number) => {
-        const pose = this.live(effect);
-        if (pose !== undefined) {
-          pose.roll = f32(roll);
-          pose.matrixScale = [1, 1, 1];
-          pose.flat = false;
-        }
-      },
-      BlzSetSpecialEffectColor: (effect: Handle, r: number, g: number, b: number) => {
-        const pose = this.live(effect);
-        if (pose !== undefined) pose.color = [r, g, b];
-      },
-      BlzSetSpecialEffectColorByPlayer: (effect: Handle, player: number) => {
-        const pose = this.live(effect);
-        if (pose !== undefined) pose.teamColor = player;
-      },
-      BlzSetSpecialEffectMatrixScale: (effect: Handle, x: number, y: number, z: number) => {
-        const pose = this.live(effect);
-        if (pose !== undefined) {
-          pose.matrixScale = [f32(pose.matrixScale[0] * f32(x)), f32(pose.matrixScale[1] * f32(y)), f32(pose.matrixScale[2] * f32(z))];
-          pose.flat = pose.matrixScale.includes(0);
-        }
-      },
-      BlzResetSpecialEffectMatrix: (effect: Handle) => {
-        const pose = this.live(effect);
-        if (pose !== undefined) {
-          pose.flat = false;
-          pose.matrixScale = [1, 1, 1];
-          pose.yaw = 0;
-          pose.pitch = 0;
-          pose.roll = 0;
-        }
-      },
-    };
-  }
+export function textTagNatives(tags: TextTags, context: TextTagContext): Readonly<Record<string, NativeBehavior>> {
+  return {
+    CreateTextTag: () => tags.create(),
+    DestroyTextTag: (tag: Handle) => tags.destroy(tag),
+    SetTextTagText: (tag: Handle, text: string, height: number) => tags.setText(tag, text, height),
+    SetTextTagPos: (tag: Handle, x: number, y: number, heightOffset: number) => tags.setPosition(tag, x, y, heightOffset),
+    SetTextTagPosUnit: (tag: Handle, unit: unknown, heightOffset: number) => {
+      const at = context.unitPosition(unit);
+      if (at !== undefined) tags.setPosition(tag, at.x, at.y, at.z + heightOffset);
+    },
+    SetTextTagColor: (tag: Handle, red: number, green: number, blue: number, alpha: number) => tags.setColor(tag, red, green, blue, alpha),
+    SetTextTagVelocity: (tag: Handle, xVelocity: number, yVelocity: number) => tags.setVelocity(tag, xVelocity, yVelocity),
+    SetTextTagVisibility: (tag: Handle, visible: boolean) => tags.setVisible(tag, visible),
+    SetTextTagSuspended: (tag: Handle, suspended: boolean) => tags.setSuspended(tag, suspended),
+    SetTextTagPermanent: (tag: Handle, permanent: boolean) => tags.setPermanent(tag, permanent),
+    SetTextTagAge: (tag: Handle, age: number) => tags.setAge(tag, age),
+    SetTextTagLifespan: (tag: Handle, lifespan: number) => tags.setLifespan(tag, lifespan),
+    SetTextTagFadepoint: (tag: Handle, fadepoint: number) => tags.setFadepoint(tag, fadepoint),
+  };
 }

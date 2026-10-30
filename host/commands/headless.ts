@@ -23,7 +23,7 @@ import { sceneMatchFrame } from "../../src/runtime/scene";
 import type { Journey } from "../../src/headless/journey";
 import { step } from "../process/timings";
 import { type PerfProject, measureRun } from "./perf";
-import { FRAME_MS } from "../../src/headless/frameRate";
+import { FRAME_MS } from "../../src/game/native/frameRate";
 
 export class HeadlessFailure extends Schema.TaggedError<HeadlessFailure, { readonly brand: unique symbol }>()("HeadlessFailure", {
   journey: Schema.String,

@@ -1,3 +1,4 @@
+import { bindWorld } from "../../src/game/native/world";
 import { readFileSync } from "node:fs";
 import type { FrameTemplate } from "../../src/headless/frames";
 import type { MissingNative, UnitStateFixtures } from "../../src/headless/clientTypes";
@@ -166,9 +167,11 @@ export function installHeadless(map: HeadlessMap, declarations = readNativeDecla
     enter: (client) => {
       if (current !== undefined) throw new Error(`p${client.slot} can't run inside p${current.slot}`);
       current = client;
+      bindWorld(client.world);
     },
     leave: () => {
       current = undefined;
+      bindWorld(undefined);
     },
   };
   const bundles = new Map<string, MapEntry>();

@@ -71,6 +71,8 @@ Start from the [sample map](sample-map.md) (wisp:docs/sample-map.md):
 a complete two-player map with its build, test, fresh-match and hot-reload
 commands, and what a base map needs.
 
+Wisp's own game API (effects first, lowered to Warcraft natives at compile time) is in [game-api.md](game-api.md).
+
 No Warcraft running? The [headless runtime](headless.md) (wisp:docs/headless.md)
 runs your map's real bundle in simulated clients, in Bun and in 32-bit Lua:
 desyncs between clients, error reports, hot reloads and what a player would see

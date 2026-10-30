@@ -1,5 +1,5 @@
 import { floorDiv, floorMod } from "../sim/intMath";
-import type { Handle } from "./clientTypes";
+import type { Handle } from "../game/native/types";
 
 export interface WeatherPose {
   readonly handle: Handle;

@@ -1,7 +1,7 @@
 import { Effect, Option, Schema } from "effect";
 import type { LockstepLink } from "../../src/headless/lockstep";
 import { TurnLedger, type TurnPacket } from "../../src/headless/turnLedger";
-import { FRAME_MS } from "../../src/headless/frameRate";
+import { FRAME_MS } from "../../src/game/native/frameRate";
 import { NetFailure } from "./failure";
 import { type Endpoint, type Link, openDirectLink } from "./link";
 import { openRelayLink } from "./relayLink";

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { freshAnimation } from "../src/headless/animation";
+import { freshAnimation } from "../src/game/native/animation";
 import type { DrawnPose, PopcornEmitterPose, UnsupportedEmitterPose } from "../host/render/headlessRender";
 import { emitterInventory, undrawnEmitters } from "../host/render/emitterInventory";
 import { boundsModel, posedSampler } from "../host/render/screenBounds";

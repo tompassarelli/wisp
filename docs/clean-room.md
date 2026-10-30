@@ -40,6 +40,10 @@ and history. The short form is the README's
 - Implement a native from its signature and from behaviour measured in the
   real game (native fixtures), not from Blizzard's script bodies or the
   game's machine code.
+- Write a game API lowering table (`src/game/warcraft/<family>.ts`) from the
+  generated declarations in `src/natives/warcraft.d.ts`: it names natives only
+  as they appear there, and composes them only as our own code does. It holds
+  interface facts, like the declarations.
 - Name game files by their in-game path (`Units\Human\Footman\Footman.mdx`)
   and let the install supply the bytes.
 

@@ -1,5 +1,5 @@
 import { type model as mdx, parseMDL, parseMDX } from "../../vendor/war3-model.mjs";
-import { selectSequence } from "../../src/headless/animation";
+import { selectSequence } from "../../src/game/native/animation";
 
 export type Vector3 = readonly [x: number, y: number, z: number];
 

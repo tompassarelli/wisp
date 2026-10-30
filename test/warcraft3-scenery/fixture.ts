@@ -1,4 +1,5 @@
-import { HeadlessClient, type Handle } from "../../src/headless/client";
+import type { Handle } from "../../src/game/native/types";
+import { HeadlessClient } from "../../src/headless/client";
 import type { NativeDeclarations } from "../../src/headless/declarations";
 import { Scenery, type DestructableState } from "../../src/headless/warcraft3Scenery";
 

@@ -4,7 +4,7 @@ import { Predicate } from "effect";
 import type { ClientFiles } from "../../src/headless/clientTypes";
 import type { Lockstep } from "../../src/headless/lockstep";
 import { hostPath } from "../io/preloadRecord";
-import { FRAMES_PER_SECOND } from "../../src/headless/frameRate";
+import { FRAMES_PER_SECOND } from "../../src/game/native/frameRate";
 
 /** The file Warcraft writes for PreloadGenEnd, byte for byte: Preload lines in a JASS function, with its CRLF and tab whitespace. */
 export function writtenPreloadFile(lines: readonly string[]): string {

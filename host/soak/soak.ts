@@ -8,7 +8,7 @@ import { type SceneBody, type SceneExpectations, bodyProblems, readSceneLines, s
 import { type NativeCostModel, WARCRAFT_COST, nativeFrameCost } from "../../src/headless/nativeCost";
 import { MEASURED_BATTLE_NET, syncDelivery } from "../../src/headless/syncChannel";
 import { describeStack } from "../cli/command";
-import { FRAME_MS } from "../../src/headless/frameRate";
+import { FRAME_MS } from "../../src/game/native/frameRate";
 import { type SoakClock, cpuMillis } from "./clock";
 import { NO_EDGES, SOAK_FUZZ, fuzzedInputs, recordedInputs } from "./inputs";
 import type { SoakController, SoakEdge, SoakInputFrame, SoakInputs, FuzzOptions, SoakMatch } from "./types";

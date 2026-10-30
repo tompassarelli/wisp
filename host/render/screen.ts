@@ -1,5 +1,5 @@
 import type { model } from "../../vendor/war3-model.mjs";
-import type { SequenceSample } from "../../src/headless/animation";
+import type { SequenceSample } from "../../src/game/native/animation";
 import type { PixelRect, TextureIdentity } from "./boundsTypes";
 import type { DrawnPose, RenderScene } from "./renderScene";
 import { cross, type Matrix, multiply, normalize, perspective } from "../browser/matrix";

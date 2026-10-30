@@ -1,5 +1,5 @@
 import { ModelRenderer, decodeBLP, getBLPImageData, parseMDL, parseMDX, type model } from "../../vendor/war3-model.mjs";
-import { type AnimationSequence, animationSample, blendWeight, globalSequenceFrame, type SequenceSample } from "../../src/headless/animation";
+import { type AnimationSequence, animationSample, blendWeight, globalSequenceFrame, type SequenceSample } from "../../src/game/native/animation";
 import type { DrawnPose as EffectPose, PopcornEmitterPose, UnsupportedEmitterPose, RenderedFrame, RenderScene } from "../render/headlessRender";
 import { parsableModel } from "../models/models";
 import { drawnPoses } from "../render/culling";

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { AnimationSequence } from "../../src/headless/animation";
+import type { AnimationSequence } from "../../src/game/native/animation";
 import { createModelLibrary, drawScene, preloadAssets } from "../../host/window/drawScene";
 import type { RenderScene } from "../../host/render/renderScene";
 

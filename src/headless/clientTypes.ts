@@ -1,8 +1,5 @@
-import type { AnimationState } from "./animation";
-
-export type Handle = { readonly kind: string; readonly id: number };
-
-export type HandleFactory = (this: void, kind: string) => Handle;
+import type { Handle } from "../game/native/types";
+import type { AnimationState } from "../game/native/animation";
 
 export interface NativeCall {
   readonly name: string;
@@ -43,35 +40,6 @@ export interface MissingNative {
 export type NativeBehavior = (this: void, ...args: never[]) => unknown;
 
 export type NativeBehaviors = Readonly<Record<string, unknown>>;
-
-export interface EffectPose extends AnimationState {
-  readonly handle: Handle;
-  readonly model: string;
-
-  readonly created: number;
-  x: number;
-  y: number;
-
-  z: number;
-  alpha: number;
-  scale: number;
-  timeScale: number;
-  queuedAnimations: string[];
-  yaw: number;
-  pitch: number;
-  roll: number;
-  color: [number, number, number];
-  teamColor: number;
-  matrixScale: [number, number, number];
-
-  flat: boolean;
-
-  destroyed?: number;
-
-  death?: number;
-}
-
-export type EffectDeaths = (this: void, model: string) => number | undefined;
 
 export interface CineFilterPose {
   readonly texture: string;

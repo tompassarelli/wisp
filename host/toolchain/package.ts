@@ -79,14 +79,16 @@ export const packageProgram = (output: string, revision?: string) => Effect.scop
   const decoded = yield* attempt(() => Bun.file(join(root, "package.json")).json()).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.Unknown))),
   );
-  const exports = yield* Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.String))(decoded.exports);
+  const exports = yield* Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Record(Schema.String, Schema.String)])))(decoded.exports);
   const manifest = { ...decoded };
   // Bun caches a local tarball by name and version, so each commit's package needs its own version.
   if (revision !== undefined) manifest.version = `${String(decoded.version)}-g${revision.slice(0, 12)}`;
   delete manifest.scripts;
   delete manifest.devDependencies;
   manifest.exports = Object.fromEntries(Object.entries(exports).map(([path, target]) =>
-    [path, target.startsWith("./src/") && target.endsWith(".ts") && !target.endsWith(".d.ts")
+    [path, typeof target !== "string"
+      ? target
+      : target.startsWith("./src/") && target.endsWith(".ts") && !target.endsWith(".d.ts")
       ? { types: `./types/${target.slice(2, -3)}.d.ts`, tstl: target.slice(0, -3), default: target }
       : target]));
   yield* attempt(async () => {

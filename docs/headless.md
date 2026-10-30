@@ -605,7 +605,7 @@ global-sequence clocks and node poses directly. Positions, model scales,
 animation times, rotations, camera fields and visible frame art come from the
 map's native calls. Particle and ribbon clocks advance to the captured time.
 Sequence selection, loop ends, Birth before Stand, blending and global
-sequences follow Warcraft's playback rules in wisp:src/headless/animation.ts,
+sequences follow Warcraft's playback rules in wisp:src/game/native/animation.ts,
 listed in [Animation playback](warsmash-notes.md#animation-playback); the
 headless runtime keeps each unit's and effect's clock, seek and blend.
 Under [M5](https://github.com/tompassarelli/wisp/issues/75), these frames give
@@ -1613,7 +1613,7 @@ frame, which the 3.0.1 #58 rulers pin. They advance lazily: each pose takes
 the drawn frames it missed when the map changes its animation, time scale or
 time, or something reads it (`effectPoses`, renders, scenes), with the same
 binary32 additions per frame, so every read matches per-frame stepping bit
-for bit (`settleAnimation`, wisp:src/headless/animation.ts; #126).
+for bit (`settleAnimation`, wisp:src/game/native/animation.ts; #126).
 
 An outside measurement of a stepped clock on Classic 3.0.0.24268 was
 attempted ([wisp#72](https://github.com/tompassarelli/wisp/issues/72);

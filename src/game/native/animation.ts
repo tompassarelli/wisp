@@ -1,5 +1,5 @@
-import { f32 } from "../sim/f32";
-import { floorMod } from "../sim/intMath";
+import { f32 } from "../../sim/f32";
+import { floorMod } from "../../sim/intMath";
 
 export interface AnimationSequence {
   readonly name: string;
@@ -242,3 +242,6 @@ export function globalSequenceFrame(clockSeconds: number, length: number): numbe
   if (length <= 0) return 0;
   return floorMod(Math.floor(f32(clockSeconds * 1000)), length);
 }
+
+export const copyBlend = (blend: AnimationBlend | undefined): AnimationBlend | undefined =>
+  blend === undefined ? undefined : { from: { ...blend.from, subAnimations: [...blend.from.subAnimations] }, remaining: blend.remaining };

@@ -1,4 +1,4 @@
-import { freshAnimation } from "../../src/headless/animation";
+import { freshAnimation } from "../../src/game/native/animation";
 import type { TerrainDoodad } from "./doodads";
 import type { DrawnPose } from "../render/headlessRender";
 import { CELL, type Terrain } from "./terrain";

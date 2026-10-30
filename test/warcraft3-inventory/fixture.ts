@@ -1,4 +1,5 @@
-import { HeadlessClient, type Handle } from "../../src/headless/client";
+import type { Handle } from "../../src/game/native/types";
+import { HeadlessClient } from "../../src/headless/client";
 import { parseNativeDeclarations, type NativeDeclarations } from "../../src/headless/declarations";
 import { Warcraft3Inventory, type Warcraft3InventoryFixtures } from "../../src/headless/warcraft3Inventory";
 

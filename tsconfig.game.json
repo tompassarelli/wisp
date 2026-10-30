@@ -24,7 +24,8 @@
     "src/sim/*.ts",
     "src/ui/*.ts",
     "src/netcode/*.ts",
-    "src/game/**/*.ts",
+    "src/game/*.ts",
+    "src/game/native/*.ts",
     "src/map/**/*.ts",
     "src/headless/*.ts"
   ],
