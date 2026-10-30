@@ -12,6 +12,7 @@ mod lightning;
 mod particles;
 mod pipelines;
 mod scene;
+mod targets;
 pub mod source;
 pub mod tessellate;
 mod uniforms;
@@ -31,17 +32,24 @@ use model::{Filter, ModelData, ModelEmitter, Paint, Vertex};
 use uniforms::{FrameUniform, Instance, LayerUniform};
 use particles::{ParticleFrame, Particles, Slot};
 use scene::{Pose, Scene};
+use targets::Targets;
+use crate::post::{Look, Post, Tuning, TUNING};
 
 pub use gpu::fitted;
 pub use scene::Scene as DrawScene;
 
 const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+const HDR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 const SAMPLES: u32 = 4;
 const BONES_AT_START: usize = 16 * 1024;
 const OPACITIES_AT_START: usize = 16 * 1024;
 const INSTANCES_AT_START: usize = 4 * 1024;
 const DECODERS: usize = 2;
 const CLEAR: [f64; 3] = [0.04, 0.06, 0.09];
+
+fn linear_of(display: f64) -> f64 {
+    if display <= 0.04045 { display / 12.92 } else { ((display + 0.055) / 1.055).powf(2.4) }
+}
 
 struct Draw {
     filter: Filter,
@@ -64,12 +72,6 @@ struct Group {
     model: usize,
     first: u32,
     count: u32,
-}
-
-struct Targets {
-    size: (u32, u32),
-    color: wgpu::TextureView,
-    depth: wgpu::TextureView,
 }
 
 pub struct Renderer {
@@ -101,6 +103,8 @@ pub struct Renderer {
     main_group: wgpu::BindGroup,
     sky_group: wgpu::BindGroup,
     targets: Option<Targets>,
+    post: Post,
+    tuning: Tuning,
     bone_scratch: Vec<Mat4>,
     instance_scratch: Vec<Instance>,
     counts: Vec<u32>,
@@ -118,7 +122,7 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(device: wgpu::Device, queue: wgpu::Queue, format: wgpu::TextureFormat, quality: Quality) -> Self {
-        let (pipelines, frame_layout, layer_layout) = pipelines::build(&device, format);
+        let (pipelines, frame_layout, layer_layout) = pipelines::build(&device, HDR);
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::Repeat,
             address_mode_v: wgpu::AddressMode::Repeat,
@@ -136,8 +140,9 @@ impl Renderer {
         let instance_buffer = instance_storage(&device, INSTANCES_AT_START);
         let main_group = frame_group(&device, &frame_layout, &main_frame, &bone_buffer, &opacity_buffer, &uv_buffer);
         let sky_group = frame_group(&device, &frame_layout, &sky_frame, &bone_buffer, &opacity_buffer, &uv_buffer);
-        let particles = Particles::new(&device, format);
-        let lightning = Lightning::new(&device, format, &particles);
+        let particles = Particles::new(&device, HDR);
+        let lightning = Lightning::new(&device, HDR, &particles);
+        let post = Post::new(&device, &queue, format, HDR, DEPTH, SAMPLES);
         Self {
             white: upload(&device, &queue, &white()),
             device,
@@ -167,6 +172,8 @@ impl Renderer {
             main_group,
             sky_group,
             targets: None,
+            post,
+            tuning: TUNING,
             bone_scratch: Vec::new(),
             instance_scratch: Vec::new(),
             counts: Vec::new(),
@@ -181,6 +188,11 @@ impl Renderer {
             lightning,
             problems: Vec::new(),
         }
+    }
+
+    /// Sets how strongly the final-image pass acts; a strength of zero skips that effect's passes (the graphics settings' bloom and ambient-occlusion keys).
+    pub fn set_post_tuning(&mut self, tuning: Tuning) {
+        self.tuning = tuning;
     }
 
     /// Takes a file Bun pushed, a model or a texture told apart by its magic. Textures decode on worker threads; a model waits for them so its bind groups hold its real textures, and one that cannot be read is left out.
@@ -287,21 +299,9 @@ impl Renderer {
         if self.targets.as_ref().is_some_and(|targets| targets.size == size) {
             return;
         }
-        let make = |format, label| {
-            self.device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some(label),
-                    size: wgpu::Extent3d { width: size.0, height: size.1, depth_or_array_layers: 1 },
-                    mip_level_count: 1,
-                    sample_count: SAMPLES,
-                    dimension: wgpu::TextureDimension::D2,
-                    format,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                    view_formats: &[],
-                })
-                .create_view(&Default::default())
-        };
-        self.targets = Some(Targets { size, color: make(self.format, "scene colour"), depth: make(DEPTH, "scene depth") });
+        let targets = Targets::new(&self.device, size);
+        self.post.fit(size, &targets.resolved, &targets.depth);
+        self.targets = Some(targets);
     }
 
     fn frame_uniform(scene: &Scene, aspect: f32, window: f32, far: f32) -> FrameUniform {
@@ -440,7 +440,10 @@ impl Renderer {
         let window = size.0 as f32 / size.1.max(1) as f32;
         self.prepare(scene, aspect, window);
 
-        let clear = if scene.clear == [0.0; 3] { CLEAR } else { scene.clear.map(f64::from) };
+        let clear = (if scene.clear == [0.0; 3] { CLEAR } else { scene.clear.map(f64::from) }).map(linear_of);
+        let look = Look::of(scene, aspect, fitted(size, aspect).map(|edge| edge as f32), self.post.srgb_surface(), &self.tuning);
+        let procedural_sky = scene.sky.is_some() || scene.fog.is_some();
+        self.post.prepare(&look);
         let targets = self.targets.as_ref().expect("fit_targets ran");
         let begin = |encoder: &'_ mut wgpu::CommandEncoder, color_load: wgpu::LoadOp<wgpu::Color>, resolve: bool| -> wgpu::RenderPass<'static> {
             encoder
@@ -449,12 +452,12 @@ impl Renderer {
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                         view: &targets.color,
                         depth_slice: None,
-                        resolve_target: resolve.then_some(target),
+                        resolve_target: resolve.then_some(&targets.resolved),
                         ops: wgpu::Operations { load: color_load, store: wgpu::StoreOp::Store },
                     })],
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                         view: &targets.depth,
-                        depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Discard }),
+                        depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: wgpu::StoreOp::Store }),
                         stencil_ops: None,
                     }),
                     timestamp_writes: None,
@@ -466,7 +469,9 @@ impl Renderer {
         {
             let mut pass = begin(encoder, wgpu::LoadOp::Clear(wgpu::Color { r: clear[0], g: clear[1], b: clear[2], a: 1.0 }), false);
             pass.set_viewport(viewport[0], viewport[1], viewport[2], viewport[3], 0.0, 1.0);
-            if let Some(group) = &self.sky_group_of {
+            if procedural_sky {
+                self.post.draw_sky(&mut pass);
+            } else if let Some(group) = &self.sky_group_of {
                 pass.set_bind_group(0, &self.sky_group, &[]);
                 self.draw_groups(&mut pass, std::slice::from_ref(group), true);
                 self.draw_groups(&mut pass, std::slice::from_ref(group), false);
@@ -479,6 +484,8 @@ impl Renderer {
         self.draw_groups(&mut pass, &self.groups, false);
         self.particles.draw(&mut pass);
         self.lightning.draw(&mut pass, &self.particles);
+        drop(pass);
+        self.post.encode(encoder, target);
     }
 }
 

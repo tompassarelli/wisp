@@ -23,6 +23,7 @@ mod pad;
 mod pad_sdl;
 mod surface_target;
 mod mixer;
+pub mod post;
 mod sync;
 mod timer;
 pub mod remaster;

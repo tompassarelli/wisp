@@ -911,6 +911,32 @@ The overlay of the peon's front view shows the change: rounded forms (back, bell
 - Running Real-CUGAN 2x in the remaster on wgpu (the follow-up box in remaster-upscaler.md).
 - Binding the relief map in the lighting shader (wisp-109-light owns it).
 
+## The native look (wisp#109)
+
+Direction (Tom, 31 October 2026): full send on the native look, in five layers. Each is presentation-only, gameplay is identical, and everything a player must read is at least as clear as in Warcraft. Every landing is judged blind by fresh viewers and held to a frame budget, with quality settings for weaker machines.
+
+1. **Rendering:** light and shadows, effects, the world, and the final-image pass below (sessions wisp-109-light, -fx, -world, -post).
+2. **Runtime remaster** of the player's own Classic art (wisp-109-remaster).
+3. **Display-rate interpolation** and motion polish (wisp-109-motion).
+4. **Stage worlds** with original or CC0 art (sc-stage-fullsend).
+5. **Presentation screens** (wisp-109-present).
+
+## The post stack (wisp#109)
+
+The scene pass draws in linear light into a 4x multisampled half-float target and resolves it to a single-sample half-float texture; nothing in the scene shaders tone maps or encodes. `window/wisp-window/src/post/` owns what happens next, in this order:
+
+1. **Sky**, drawn first inside the scene pass: a gradient from the stage's fog colour at the horizon to a zenith tinted by its ambient light, a sun glow and disc in the key light's colour toward the light's direction, and drifting fbm clouds lit from the sun's side. It replaces the sky model, so the sky is MSAA-resolved with the world's edges.
+2. **Ambient occlusion** at half resolution from a half-resolution copy of the scene's depth (sample 0 of the multisampled depth), an Alchemy-style estimate with ten taps rotated by interleaved gradient noise. It reads the depth only, so translucent effects never darken themselves.
+3. **Bloom:** a soft-knee threshold on luminance with a Karis average over four bilinear taps into a half-resolution target, a five-level 13-tap downsample chain, and an additive tent upsample back to the quarter-resolution level, which the composite samples bilinearly; no half-resolution upsample is drawn. Lightning, Flame Strike and hit sparks glow because their HDR values pass the threshold; a lit surface stays under it.
+4. **Composite** into the surface: the bilateral-filtered occlusion darkens creases (fading out above luminance 0.8 to 2.5 so bright effects are never shaded), bloom adds, and AgX plus the stage's grade run through a 64-node 3D lookup table over log exposure, then a triangular dither. The table is built on the CPU (`post/look.rs`), so a unit test pins what a known HDR value becomes on the display, and rebuilt only when the grade changes.
+5. **UI pass** last, straight onto the surface, so menu and HUD colours are untouched.
+
+**Per-stage grade.** A stage's grade (lift, gamma, gain, saturation) is derived from its own light: shadows lean toward the ambient colour, highlights toward the key colour, and saturation is restored after AgX. A stage with no light uses a neutral grade. Smashcraft's stage look docs (smashcraft: docs/design/home-stages.md) name where an explicit per-stage grade would be set if a derived one is not enough.
+
+**Rim light** is the lighting session's, in the model shader, because it needs the surface normal, which this pass does not have.
+
+Cost and tuning constants are `post::look::TUNING`. `bloom_strength` and `occlusion_strength` are the graphics settings' bloom and ssao keys (`Renderer::set_post_tuning`): a strength of zero skips that effect's passes, so the Low preset pays only for the composite.
+
 ## Boxes
 
 Order:

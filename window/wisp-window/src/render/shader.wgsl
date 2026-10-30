@@ -75,6 +75,10 @@ fn vertex_main(vertex: Vertex, instance: Instance) -> Varying {
     return out;
 }
 
+fn linear_light(display: vec3<f32>) -> vec3<f32> {
+    return select(pow((display + 0.055) / 1.055, vec3<f32>(2.4)), display / 12.92, display <= vec3<f32>(0.04045));
+}
+
 @fragment
 fn fragment_main(in: Varying) -> @location(0) vec4<f32> {
     var color = textureSample(layer_texture, layer_sampler, in.uv);
@@ -102,5 +106,5 @@ fn fragment_main(in: Varying) -> @location(0) vec4<f32> {
         let fog = clamp((in.clip.w - frame.fog_range.x) / max(frame.fog_range.y - frame.fog_range.x, 1.0), 0.0, frame.fog_range.z);
         color = vec4<f32>(mix(color.rgb, fog_target, fog), color.a);
     }
-    return color;
+    return vec4<f32>(linear_light(color.rgb), color.a);
 }
