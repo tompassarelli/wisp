@@ -8,9 +8,9 @@ export type Metric = (typeof METRICS)[number];
 export type Measures = Readonly<Record<Metric, number>>;
 
 /** A pixel differs when any channel moves by more than this many levels. */
-export const DIFFERING_LEVELS = 2;
+const DIFFERING_LEVELS = 2;
 /** A reference pixel is on an edge when a neighbour in its 3x3 block differs from it by more than this many levels. */
-export const EDGE_LEVELS = 16;
+const EDGE_LEVELS = 16;
 /** The bound is the measured spread times this, so a rerun's jitter stays inside it. */
 export const HEADROOM = 1.5;
 
