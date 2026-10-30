@@ -5,13 +5,30 @@
 @group(0) @binding(5) var grade: texture_3d<f32>;
 @group(0) @binding(6) var scene_depth: texture_depth_multisampled_2d;
 
-const LUT_SIZE = 64.0;
-const LUT_MIN_EV = -10.0;
-const LUT_MAX_EV = 6.0;
+const LUT_SIZE = 32.0;
+const AGX_MIN_EV = -12.47393;
+const AGX_MAX_EV = 4.026069;
+
+fn agx_grey(light: f32) -> f32 {
+    let x = clamp((log2(max(light, 1e-10)) - AGX_MIN_EV) / (AGX_MAX_EV - AGX_MIN_EV), 0.0, 1.0);
+    let x2 = x * x;
+    let x4 = x2 * x2;
+    let curved = 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
+    return pow(max(curved, 0.0), 2.2);
+}
+
+fn srgb_encode(linear: vec3<f32>) -> vec3<f32> {
+    return select(1.055 * pow(linear, vec3<f32>(1.0 / 2.4)) - 0.055, linear * 12.92, linear <= vec3<f32>(0.0031308));
+}
 
 fn display_of(scene: vec3<f32>) -> vec3<f32> {
-    let ev = clamp((log2(max(scene, vec3<f32>(1e-6))) - LUT_MIN_EV) / (LUT_MAX_EV - LUT_MIN_EV), vec3<f32>(0.0), vec3<f32>(1.0));
-    return textureSampleLevel(grade, linear_sampler, ev * ((LUT_SIZE - 1.0) / LUT_SIZE) + 0.5 / LUT_SIZE, 0.0).rgb;
+    let peak = max(max(scene.r, scene.g), scene.b);
+    var shown = vec3<f32>(0.0);
+    if (peak > 1e-6) {
+        shown = clamp(scene * (agx_grey(peak) / peak), vec3<f32>(0.0), vec3<f32>(1.0));
+    }
+    let encoded = srgb_encode(shown);
+    return textureSampleLevel(grade, linear_sampler, encoded * ((LUT_SIZE - 1.0) / LUT_SIZE) + 0.5 / LUT_SIZE, 0.0).rgb;
 }
 
 fn linear_of(display: vec3<f32>) -> vec3<f32> {

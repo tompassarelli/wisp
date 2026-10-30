@@ -7,10 +7,7 @@ use bytemuck::{Pod, Zeroable};
 use crate::render::DrawScene;
 
 /// Nodes per axis of the lookup table.
-pub const LUT_SIZE: u32 = 64;
-/// The table spans these exposure values (stops around 1.0) on each axis, log-spaced; node 0 is exactly black.
-pub const LUT_MIN_EV: f32 = -10.0;
-pub const LUT_MAX_EV: f32 = 6.0;
+pub const LUT_SIZE: u32 = 32;
 
 const AGX_MIN_EV: f32 = -12.47393;
 const AGX_MAX_EV: f32 = 4.026069;
@@ -64,13 +61,22 @@ pub fn agx(scene: [f32; 3]) -> [f32; 3] {
     apply(&REC2020_TO_SRGB, apply(&AGX_OUTSET, curved).map(|channel| channel.max(0.0).powf(2.2))).map(|channel| channel.clamp(0.0, 1.0))
 }
 
+/// The display light for `scene` that keeps its hue: AgX's grey ramp is applied to the brightest channel and every channel is scaled by the same factor, so a bright saturated colour (a golden column of light, fel green) stays that colour instead of sliding to white as AgX's per-channel curve takes it.
+pub fn hue_keeping(scene: [f32; 3]) -> [f32; 3] {
+    let peak = scene[0].max(scene[1]).max(scene[2]);
+    if peak <= 1e-6 {
+        return [0.0; 3];
+    }
+    let scale = agx([peak; 3])[0] / peak;
+    scene.map(|channel| (channel * scale).clamp(0.0, 1.0))
+}
+
 pub fn srgb_encode(linear: f32) -> f32 {
     if linear <= 0.0031308 { linear * 12.92 } else { 1.055 * linear.powf(1.0 / 2.4) - 0.055 }
 }
 
-/// Linear scene light to the display's sRGB encoding in 0..1: the curve, then the grade.
-pub fn tone_map(scene: [f32; 3], grade: &Grade) -> [f32; 3] {
-    let encoded = agx(scene).map(srgb_encode);
+/// The grade applied to display-encoded colour in 0..1: lift, gain and gamma per channel, then saturation.
+pub fn grade_display(encoded: [f32; 3], grade: &Grade) -> [f32; 3] {
     let graded: [f32; 3] = std::array::from_fn(|c| {
         let lifted = grade.gain[c] * (encoded[c] + grade.lift[c] * (1.0 - encoded[c]));
         lifted.max(0.0).powf(1.0 / grade.gamma[c])
@@ -79,23 +85,24 @@ pub fn tone_map(scene: [f32; 3], grade: &Grade) -> [f32; 3] {
     graded.map(|channel| (luma + (channel - luma) * grade.saturation).clamp(0.0, 1.0))
 }
 
+/// Linear scene light to the display's sRGB encoding in 0..1: the hue-keeping curve, then the grade.
+pub fn tone_map(scene: [f32; 3], grade: &Grade) -> [f32; 3] {
+    grade_display(hue_keeping(scene).map(srgb_encode), grade)
+}
+
 /// The display bytes of `tone_map`.
 pub fn display_bytes(scene: [f32; 3], grade: &Grade) -> [u8; 3] {
     tone_map(scene, grade).map(|channel| (channel * 255.0 + 0.5) as u8)
 }
 
-fn node_light(index: u32) -> f32 {
-    if index == 0 { 0.0 } else { (LUT_MIN_EV + (LUT_MAX_EV - LUT_MIN_EV) * index as f32 / (LUT_SIZE - 1) as f32).exp2() }
-}
-
-/// The table as RGBA8 texels, red varying fastest: node (r, g, b) holds the display colour of the scene light that node stands for.
+/// The table as RGBA8 texels, red varying fastest: node (r, g, b) holds the grade of the display colour whose channels are the nodes' positions on 0..1. The curve runs in the shader, so only the smooth grade is interpolated.
 pub fn build_lut(grade: &Grade) -> Vec<u8> {
-    let nodes: Vec<f32> = (0..LUT_SIZE).map(node_light).collect();
+    let nodes: Vec<f32> = (0..LUT_SIZE).map(|index| index as f32 / (LUT_SIZE - 1) as f32).collect();
     let mut texels = Vec::with_capacity((LUT_SIZE * LUT_SIZE * LUT_SIZE * 4) as usize);
     for &blue in &nodes {
         for &green in &nodes {
             for &red in &nodes {
-                let [r, g, b] = display_bytes([red, green, blue], grade);
+                let [r, g, b] = grade_display([red, green, blue], grade).map(|channel| (channel * 255.0 + 0.5) as u8);
                 texels.extend_from_slice(&[r, g, b, 255]);
             }
         }
@@ -215,6 +222,18 @@ mod tests {
         assert_eq!(display_bytes([64.0; 3], &grade), [255, 255, 255]);
     }
 
+
+    #[test]
+    fn a_bright_saturated_colour_keeps_its_hue_through_the_curve() {
+        let saturation = |rgb: [f32; 3]| (rgb[0].max(rgb[1]).max(rgb[2]) - rgb[0].min(rgb[1]).min(rgb[2])) / rgb[0].max(rgb[1]).max(rgb[2]);
+        for gold in [[1.0, 0.78, 0.2], [4.0, 3.1, 0.8], [16.0, 12.5, 3.2]] {
+            let shown = tone_map(gold, &Grade::NEUTRAL);
+            assert!(shown[0] >= shown[1] && shown[1] > shown[2], "gold keeps its channel order: {shown:?}");
+            assert!(saturation(shown) > 0.4, "{gold:?} stays gold, not white: {shown:?}");
+        }
+        let fel = tone_map([2.0, 8.0, 1.0], &Grade::NEUTRAL);
+        assert!(fel[1] > fel[0] * 1.3 && fel[1] > fel[2] * 1.8, "fel green stays green: {fel:?}");
+    }
     #[test]
     fn the_curve_keeps_hue_order_and_never_clips_a_hot_colour_to_a_flat_channel() {
         let hot = tone_map([8.0, 2.0, 0.2], &Grade::NEUTRAL);
@@ -238,9 +257,10 @@ mod tests {
         let lut = build_lut(&grade);
         assert_eq!(lut.len(), (LUT_SIZE * LUT_SIZE * LUT_SIZE * 4) as usize);
         assert_eq!(&lut[..4], &[0, 0, 0, 255]);
-        let (r, g, b) = (40u32, 30u32, 20u32);
+        let (r, g, b) = (25u32, 18u32, 9u32);
         let at = ((b * LUT_SIZE + g) * LUT_SIZE + r) as usize * 4;
-        let expected = display_bytes([node_light(r), node_light(g), node_light(b)], &grade);
+        let node = |index: u32| index as f32 / (LUT_SIZE - 1) as f32;
+        let expected = grade_display([node(r), node(g), node(b)], &grade).map(|channel| (channel * 255.0 + 0.5) as u8);
         assert_eq!(&lut[at..at + 3], &expected);
     }
 }

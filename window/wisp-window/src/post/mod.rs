@@ -8,7 +8,7 @@ mod look;
 
 use std::mem::size_of;
 
-pub use look::{Grade, Look, Params, Tuning, LUT_SIZE, TUNING};
+pub use look::{agx, srgb_encode, tone_map, Grade, Look, Params, Tuning, LUT_SIZE, TUNING};
 
 const COMMON: &str = include_str!("common.wgsl");
 const BLOOM_LEVELS: u32 = 5;
