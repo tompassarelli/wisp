@@ -319,13 +319,14 @@ it locally.
    `package.json`, tsconfigs, `Cargo.toml`, `knip.json`,
    `structure.toml`, the clean-room allowlist, `.github/`;
    `landing` in wisp:host/checks/autolandLanding.ts). Otherwise, or when
-   the rebase conflicts, it dispatches the branch again, so the tip is
-   tested on the new main as a train of one and never lands untested; a
-   tip pushed again meanwhile is left to the run for its new tip. The
-   branch is deleted on landing. Pushes made with the workflow token start no workflows, so the
-   run dispatches main's CI for the landed commit. A dispatched run starts no
-   `workflow_run` either, so that CI run's last job dispatches "Main is red"
-   with its own run ID.
+   the rebase conflicts, it dispatches the **train** (below) and the tip is
+   tested on the new main with every other waiting branch, so a tip that
+   touches shared inputs is never starved by a stream of other landings and
+   nothing lands untested. The branches are deleted on landing (each only
+   if it still holds the tested tip). Pushes made with the workflow token
+   start no workflows, so the run dispatches main's CI for the landed commit.
+   A dispatched run starts no `workflow_run` either, so that CI run's last job
+   dispatches "Main is red" with its own run ID.
 6. **Refuse.** On a conflict, a failed check, new failures or new
    code-health debt, the branch stays, the run fails and sets the tip's
    `autoland` status to failure, linked to the run, so safe-push and
@@ -335,6 +336,23 @@ it locally.
    posts no issue comments: read outcomes with `gh run list --workflow
    autoland.yml --branch claude/NAME` and `gh run view RUN_ID`. Push a fix to
    the same branch and it tries again.
+
+**Train.** A run's `branch` input is one branch, several separated by
+spaces, or `queue`. `queue` is every `claude/` branch ahead of main whose tip
+has a deny-list success and no Autoland refusal, oldest first
+(`queued` in wisp:host/checks/autolandTrain.ts). The run rebases them one
+after another onto main (each onto the stack so far), then checks, tests,
+judges and lands the stack as one candidate, exactly as for one branch. A branch
+that conflicts with main alone is refused with the files named; one that
+conflicts only with the branches stacked before it is left out and dispatched on
+its own after the train. When the stack fails its checks, the suites, the CI
+jobs or the gate, the judge refuses no one: it dispatches the first and second
+half of the stack as two trains (`halves`), each running the same steps, until
+a train of one tip fails and is refused with the usual `autoland` failure
+status. The halves test side by side, so a planted failure among N tips costs
+about log2(N) suite lengths while the passing halves land on the way. Dispatches
+of `queue` collapse into one pending run (the land job skips the dispatch when
+one is waiting).
 
 The push itself only queues a run of main's copy of the workflow, so a
 branch made from an older main still lands with the current rules. Each

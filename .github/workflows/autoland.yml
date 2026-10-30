@@ -1,19 +1,21 @@
 name: Autoland
 
-# A claude/** branch (a cloud worker's) lands on main by itself: rebased onto
-# main, checked, and run through the full suites (farm-test.yml); it lands when
-# it fails no test main's farm run doesn't also fail. Every waiting branch is
-# tested at once in its own run; only the push to main is serialized, and a tip
-# tested on a main that moved on its paths is tested again. Otherwise the branch
-# stays and the run's summary names the conflicting files or the new failures
-# (wisp:docs/ci.md).
+# A claude/** branch (a cloud worker's) lands on main by itself: rebased onto main,
+# checked, and run through the full suites (farm-test.yml); it lands when it fails
+# no test main's farm run doesn't also fail. Every waiting branch is tested at
+# once in its own run; only the push to main is serialized. A tip tested on a main
+# that moved on its paths is not tested alone again: the queue (every waiting
+# branch) is stacked on the new main and tested as one train, which lands whole
+# when green and splits in halves when not, down to the tip at fault. Otherwise
+# the branch stays and the run's summary names the conflicting files or the new
+# failures (wisp:docs/ci.md).
 on:
   push:
     branches: ["claude/**"]
   workflow_dispatch:
     inputs:
       branch:
-        description: claude/ branch to land
+        description: claude/ branch to land, several separated by spaces (a train stacked on main), or queue for every waiting branch
         required: true
 
 run-name: Autoland ${{ inputs.branch || format('{0} (push)', github.ref_name) }}
@@ -34,6 +36,7 @@ env:
   BRANCH: ${{ inputs.branch || github.ref_name }}
   GH_TOKEN: ${{ github.token }}
   GH_REPO: ${{ github.repository }}
+  WORKFLOW_REF: ${{ github.ref_name }}
   RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 jobs:
@@ -51,9 +54,9 @@ jobs:
     timeout-minutes: 15
     outputs:
       verdict: ${{ steps.rebase.outputs.verdict }}
-      tip: ${{ steps.rebase.outputs.tip }}
-      status-state: ${{ steps.rebase.outputs.status-state }}
-      status-description: ${{ steps.rebase.outputs.status-description }}
+      members: ${{ steps.rebase.outputs.members }}
+      deferred: ${{ steps.rebase.outputs.deferred }}
+      refused: ${{ steps.rebase.outputs.refused }}
       sha: ${{ steps.rebase.outputs.sha }}
       base: ${{ steps.rebase.outputs.base }}
       scratch: ${{ steps.rebase.outputs.scratch }}
@@ -61,54 +64,95 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
           fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile
-      # verdict: test (rebased and checked), conflict, check, empty (main holds it), gone, refuse or hold.
+      # verdict: test (the queued tips stacked on main and checked), check (the stack failed its checks) or none (no tip left to test).
+      # A tip that is gone, held, refused or conflicts with main alone is settled here; one that conflicts with the stack waits in deferred.
       - id: rebase
         run: |
           set +e -uo pipefail
+          trusted=$RUNNER_TEMP/checks
+          cp -r host/checks "$trusted"
+          . "$trusted/autolandLib.sh"
           out() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
-          detail() { { echo "detail<<AUTOLAND_EOF"; printf '%s\n' "$1"; echo "AUTOLAND_EOF"; } >> "$GITHUB_OUTPUT"; }
+          multi() { { echo "$1<<AUTOLAND_EOF"; printf '%s\n' "$2"; echo "AUTOLAND_EOF"; } >> "$GITHUB_OUTPUT"; }
           git config user.name "github-actions[bot]"
           git config user.email "41898183+github-actions[bot]@users.noreply.github.com"
-          if ! git fetch -q origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"; then out verdict gone; exit 0; fi
+          git fetch -q origin main
           base=$(git rev-parse origin/main)
           out base "$base"
-          if [ -z "$(git rev-list "origin/main..origin/$BRANCH")" ]; then out verdict empty; exit 0; fi
-          tip=$(git rev-parse "origin/$BRANCH")
-          out tip "$tip"
-          IFS=$'\t' read -r action state description <<< "$(bun host/checks/denylist.ts "$(gh api "repos/$GH_REPO/commits/$tip/status")")"
-          if [ "$action" != test ]; then
-            out verdict "${action:-hold}"
-            out status-state "${state:-pending}"
-            out status-description "${description:-waiting for the deny-list attestation}"
-            exit 0
+          if [ "$BRANCH" = queue ]; then
+            git fetch -q --prune origin '+refs/heads/claude/*:refs/remotes/origin/claude/*'
+            entries=$(git for-each-ref --format='%(refname:strip=3) %(committerdate:unix)' refs/remotes/origin/claude | while read -r name age; do
+              states=$(gh api "repos/$GH_REPO/commits/$(git rev-parse "origin/$name")/status" --jq '[.statuses[] | {(.context): .state}] | add // {}')
+              jq -nc --arg name "$name" --argjson age "$age" --argjson ahead "$(git rev-list --count "origin/main..origin/$name")" --argjson states "$states" '{$name, $age, $ahead, $states}'
+            done | jq -sc .)
+            names=$(bun "$trusted/autolandTrain.ts" queue "$entries")
+          else
+            names=$BRANCH
           fi
-          git checkout -q -B autoland "origin/$BRANCH"
-          if ! git rebase -q origin/main > rebase.log 2>&1; then
-            files=$(git diff --name-only --diff-filter=U)
-            git rebase --abort
-            out verdict conflict
-            detail "${files:-$(tail -20 rebase.log)}"
-            exit 0
-          fi
+          kept=()
+          deferred=
+          refused=0
+          git checkout -q -B autoland origin/main
+          for name in $names; do
+            if ! git fetch -q origin "+refs/heads/$name:refs/remotes/origin/$name"; then echo "$name no longer exists" >> "$GITHUB_STEP_SUMMARY"; continue; fi
+            if [ -z "$(git rev-list "origin/main..origin/$name")" ]; then
+              git push origin --delete "$name"
+              echo "main already holds $name: deleted it" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            tip=$(git rev-parse "origin/$name")
+            IFS=$'\t' read -r action state description <<< "$(bun "$trusted/denylist.ts" "$(gh api "repos/$GH_REPO/commits/$tip/status")")"
+            if [ "$action" != test ]; then
+              post_status "${state:-pending}" "$tip" "${description:-waiting for the deny-list attestation}"
+              if [ "$action" = refuse ]; then
+                refuse_member "$name" "$tip" "$description." ""
+                refused=$((refused + 1))
+              else
+                echo "$name (${tip:0:10}): ${description:-waiting for the deny-list attestation}; a later dispatch tries it again" >> "$GITHUB_STEP_SUMMARY"
+              fi
+              continue
+            fi
+            git checkout -q -B member "$tip"
+            if ! git rebase -q autoland > rebase.log 2>&1; then
+              files=$(git diff --name-only --diff-filter=U)
+              git rebase --abort
+              git checkout -q autoland
+              if [ ${#kept[@]} -eq 0 ]; then
+                files=${files:-$(tail -20 rebase.log)}
+                refuse_member "$name" "$tip" "rebasing onto main conflicts in $(printf '%s\n' "$files" | head -10 | paste -sd, - | sed 's/,/, /g')" "$files"
+                refused=$((refused + 1))
+              else
+                deferred+=${deferred:+ }$name
+                echo "$name conflicts with the tips stacked before it; it is tested after them" >> "$GITHUB_STEP_SUMMARY"
+              fi
+              continue
+            fi
+            git checkout -q autoland
+            git merge -q --ff-only member
+            kept+=("$name"$'\t'"$tip")
+          done
+          out refused "$refused"
+          out deferred "$deferred"
+          if [ ${#kept[@]} -eq 0 ]; then out verdict none; exit 0; fi
+          multi members "$(printf '%s\n' "${kept[@]}")"
           sha=$(git rev-parse HEAD)
           scratch="farm/autoland-${sha:0:12}"
           out sha "$sha"
           if ! bun run check > check.log 2>&1; then
             cat check.log
             out verdict check
-            detail "$(tail -40 check.log)"
+            multi detail "$(tail -40 check.log)"
             exit 0
           fi
           if ! git push origin "HEAD:refs/heads/$scratch" > push.log 2>&1; then
             cat push.log
             out verdict check
-            detail "$(grep -v '^remote:' push.log | tail -40)"
+            multi detail "$(grep -v '^remote:' push.log | tail -40)"
             exit 0
           fi
           out scratch "$scratch"
@@ -149,7 +193,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
           fetch-depth: 0
       - id: cached
         run: |
@@ -237,9 +280,8 @@ jobs:
       VERDICT: ${{ needs.rebase.outputs.verdict }}
       BASELINE_FROM: ${{ needs.baseline.outputs.from }}
       SHA: ${{ needs.rebase.outputs.sha }}
-      TIP: ${{ needs.rebase.outputs.tip }}
-      STATUS_STATE: ${{ needs.rebase.outputs.status-state }}
-      STATUS_DESCRIPTION: ${{ needs.rebase.outputs.status-description }}
+      MEMBERS: ${{ needs.rebase.outputs.members }}
+      DEFERRED: ${{ needs.rebase.outputs.deferred }}
       BASE: ${{ needs.rebase.outputs.base }}
       DETAIL: ${{ needs.rebase.outputs.detail }}
       SUITE: ${{ needs.suite.result }}
@@ -250,7 +292,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
           fetch-depth: 0
       - if: env.VERDICT == 'test'
         uses: actions/download-artifact@v4
@@ -264,36 +305,40 @@ jobs:
         with:
           name: autoland-baseline
           path: baseline
-      - if: env.VERDICT == 'test'
+      - if: env.VERDICT != 'none'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.13
       - id: judge
         run: |
           set +e -uo pipefail
-          short=${SHA:0:10}
+          . host/checks/autolandLib.sh
+          mapfile -t members <<< "$MEMBERS"
+          names=("${members[@]%%$'\t'*}")
           refuse() {
-            { echo "Autoland didn't land \`$BRANCH\`${SHA:+ ($short, rebased onto main ${BASE:0:10})}: $1"; echo; printf '%s\n' "$2" | head -60
-              echo; echo "The branch stays; push a fix to it and it tries again."; } >> "$GITHUB_STEP_SUMMARY"
-            fail_tip "$1"
-            echo "::error title=Autoland didn't land::$BRANCH${SHA:+ ($short)}: $1"
+            for member in "${members[@]}"; do refuse_member "${member%%$'\t'*}" "${member##*$'\t'}" "$1" "$2"; done
             exit 1
           }
-          fail_tip() { gh api -X POST "repos/$GH_REPO/statuses/$TIP" -f state=failure -f context=autoland -f description="${1:0:139}" -f target_url="$RUN_URL" > /dev/null || echo "::warning::couldn't post the autoland failure status on ${TIP:0:10}"; }
-          post_status() { gh api -X POST "repos/$GH_REPO/statuses/$TIP" -f state="$STATUS_STATE" -f context=autoland -f description="$STATUS_DESCRIPTION" > /dev/null; }
+          # A failing train of several tips is not refused as a whole: each half is tested on its own, down to the tip at fault.
+          split() {
+            mapfile -t half < <(bun host/checks/autolandTrain.ts split "${names[@]}")
+            { echo "Autoland's train of ${#names[@]} (${names[*]}) didn't pass: $1"; echo; printf '%s\n' "$2" | head -60
+              echo; echo "Testing the halves on their own: ${half[0]} | ${half[1]}"; } >> "$GITHUB_STEP_SUMMARY"
+            dispatch "${half[0]}"
+            dispatch "${half[1]}"
+            [ -z "$DEFERRED" ] || dispatch "$DEFERRED"
+            exit 0
+          }
+          fail() { if [ "${#names[@]}" -gt 1 ]; then split "$@"; else refuse "$@"; fi; }
           case "$VERDICT" in
-            gone) echo "$BRANCH no longer exists"; exit 0 ;;
-            empty) git push origin --delete "$BRANCH"; echo "main already holds $BRANCH: deleted it" >> "$GITHUB_STEP_SUMMARY"; exit 0 ;;
-            conflict) refuse "rebasing onto main conflicts in $(printf '%s\n' "$DETAIL" | head -10 | paste -sd, - | sed 's/,/, /g')" "$DETAIL" ;;
-            check) refuse "the checks failed:" "$(printf '```\n%s\n```' "$DETAIL")" ;;
-            refuse) post_status; refuse "$STATUS_DESCRIPTION." "" ;;
-            hold) post_status; echo "$BRANCH (${TIP:0:10}): $STATUS_DESCRIPTION; a later dispatch tries it again" >> "$GITHUB_STEP_SUMMARY"; exit 0 ;;
+            none) exit 0 ;;
+            check) fail "the checks failed:" "$(printf '```\n%s\n```' "$DETAIL")" ;;
           esac
-          [ -f candidate/summary.json ] || refuse "the suite run ended without a result." ""
+          [ -f candidate/summary.json ] || fail "the suite run ended without a result." ""
           if [ ! -f baseline/summary.json ] && [ "$SUITE" = success ] && jq -e '.failures == [] and .problems == []' candidate/summary.json > /dev/null; then
             mkdir -p baseline && echo '{"failures":[],"problems":[]}' > baseline/summary.json
           fi
-          [ -f baseline/summary.json ] || refuse "main's baseline run ended without a result." ""
+          [ -f baseline/summary.json ] || fail "main's baseline run ended without a result." ""
           # A shard that failed without naming a test is new unless main's run had one in the same suite.
           compare() {
             jq -rn --slurpfile c candidate/summary.json --slurpfile b baseline/summary.json '
@@ -311,7 +356,7 @@ jobs:
             fi
           fi
           if [ -n "$new" ]; then
-            refuse "$(grep -c . <<< "$new") failing that main's run passes:" "$(printf '%s\n' "$new" | sed 's/^/- /')"
+            fail "$(grep -c . <<< "$new") failing that main's run passes:" "$(printf '%s\n' "$new" | sed 's/^/- /')"
           fi
           if [ "$CI_RESULT" != success ]; then
             jobs=$(gh api "repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" --jq '.jobs[] | select(.name | startswith("ci / ")) | select(.conclusion == "failure") | [.id, .name, .html_url] | @tsv')
@@ -323,13 +368,13 @@ jobs:
               failing+="${failing:+, }${name#ci / }${tests:+ ($(grep -c . <<< "$tests") failing: $(head -1 <<< "$tests"))}"
               detail+="- [$name]($url)"$'\n'"$(sed 's/^/    - /' <<< "$tests")"$'\n'
             done <<< "$jobs"
-            refuse "CI jobs failed on the rebased commit: ${failing:-$CI_RESULT}" "$detail"
+            fail "CI jobs failed on the rebased commit: ${failing:-$CI_RESULT}" "$detail"
           fi
           case "$CODE_HEALTH:$CODE_HEALTH_VERDICT" in
             success:pass) ;;
-            success:debt) refuse "it adds code-health debt:" "$(printf '```\n%s\n```' "$CODE_HEALTH_DETAIL")" ;;
-            success:*) refuse "the code-health gate failed to run:" "$(printf '```\n%s\n```' "$CODE_HEALTH_DETAIL")" ;;
-            *) refuse "the code-health gate ended without a result." "" ;;
+            success:debt) fail "it adds code-health debt:" "$(printf '```\n%s\n```' "$CODE_HEALTH_DETAIL")" ;;
+            success:*) fail "the code-health gate failed to run:" "$(printf '```\n%s\n```' "$CODE_HEALTH_DETAIL")" ;;
+            *) fail "the code-health gate ended without a result." "" ;;
           esac
           echo "go=true" >> "$GITHUB_OUTPUT"
 
@@ -347,13 +392,13 @@ jobs:
       queue: max
     env:
       SHA: ${{ needs.rebase.outputs.sha }}
-      TIP: ${{ needs.rebase.outputs.tip }}
+      MEMBERS: ${{ needs.rebase.outputs.members }}
+      DEFERRED: ${{ needs.rebase.outputs.deferred }}
       BASE: ${{ needs.rebase.outputs.base }}
       SCRATCH: ${{ needs.rebase.outputs.scratch }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
           fetch-depth: 0
       - uses: actions/download-artifact@v4
         continue-on-error: true
@@ -368,26 +413,33 @@ jobs:
           set +e -uo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898183+github-actions[bot]@users.noreply.github.com"
-          short=${SHA:0:10}
-          refuse() {
-            { echo "Autoland didn't land \`$BRANCH\` ($short, rebased onto main ${BASE:0:10}): $1"; echo; printf '%s\n' "$2" | head -60
-              echo; echo "The branch stays; push a fix to it and it tries again."; } >> "$GITHUB_STEP_SUMMARY"
-            fail_tip "$1"
-            echo "::error title=Autoland didn't land::$BRANCH ($short): $1"
-            exit 1
-          }
-          fail_tip() { gh api -X POST "repos/$GH_REPO/statuses/$TIP" -f state=failure -f context=autoland -f description="${1:0:139}" -f target_url="$RUN_URL" > /dev/null || echo "::warning::couldn't post the autoland failure status on ${TIP:0:10}"; }
+          checks=$RUNNER_TEMP/checks
+          cp -r host/checks "$checks"
+          . "$checks/autolandLib.sh"
+          mapfile -t members <<< "$MEMBERS"
+          names=("${members[@]%%$'\t'*}")
+          lanes=$(printf '%s\n' "${names[@]}" | paste -sd, - | sed 's/,/, /g')
           requeue() {
-            gh workflow run autoland.yml --ref main -f branch="$BRANCH"
-            echo "$1: queued $BRANCH to be tested again on the new main" >> "$GITHUB_STEP_SUMMARY"
+            requeue_queue
+            echo "$1: the queue is tested again on the new main" >> "$GITHUB_STEP_SUMMARY"
+            [ -z "$DEFERRED" ] || dispatch "$DEFERRED"
             exit 0
           }
-          [ "$(bun host/checks/denylist.ts "$(gh api "repos/$GH_REPO/commits/$TIP/status")")" = test ] || refuse "${TIP:0:10} no longer carries a denylist success." ""
-          git fetch -q origin "$SCRATCH" "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || requeue "$BRANCH vanished or its scratch branch is gone"
-          if [ "$(git rev-parse "origin/$BRANCH")" != "$TIP" ]; then
-            echo "$BRANCH moved on from ${TIP:0:10}; the run for its new tip lands it" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
+          refspecs=()
+          for member in "${members[@]}"; do
+            name=${member%%$'\t'*}
+            tip=${member##*$'\t'}
+            if [ "$(bun "$checks/denylist.ts" "$(gh api "repos/$GH_REPO/commits/$tip/status")")" != test ]; then
+              refuse_member "$name" "$tip" "${tip:0:10} no longer carries a denylist success." ""
+              [ "${#names[@]}" -eq 1 ] || requeue_queue
+              exit 1
+            fi
+            refspecs+=("+refs/heads/$name:refs/remotes/origin/$name")
+          done
+          git fetch -q origin "$SCRATCH" "${refspecs[@]}" || requeue "a branch vanished or the scratch branch is gone"
+          for member in "${members[@]}"; do
+            [ "$(git rev-parse "origin/${member%%$'\t'*}")" = "${member##*$'\t'}" ] || requeue "${member%%$'\t'*} moved on from ${member##*$'\t'}"
+          done
           candidate=$(git diff --name-only "$BASE" "$SHA")
           landed=
           pushed=
@@ -396,18 +448,26 @@ jobs:
             if [ "$(git rev-parse origin/main)" = "$BASE" ]; then
               landed=$SHA
             else
-              [ "$(bun host/checks/autolandLanding.ts "$candidate" "$(git diff --name-only "$BASE" origin/main)")" = land ] || requeue "main moved on paths $BRANCH changes"
+              [ "$(bun "$checks/autolandLanding.ts" "$candidate" "$(git diff --name-only "$BASE" origin/main)")" = land ] || requeue "main moved on paths $lanes changes"
               git checkout -q -B land "$SHA"
-              git rebase -q origin/main || { git rebase --abort; requeue "main moved and $BRANCH now conflicts with it"; }
+              git rebase -q origin/main || { git rebase --abort; requeue "main moved and $lanes now conflicts with it"; }
               landed=$(git rev-parse HEAD)
             fi
+            listing=$(git log --format='- %h %s' "origin/main..$landed" | cut -c1-120)
             if git push origin "$landed:refs/heads/main" 2> push.log; then pushed=1; break; fi
           done
-          [ -n "$pushed" ] || refuse "pushing to main failed:" "$(cat push.log)"
-          git push origin --delete "$BRANCH"
-          echo "Landed $BRANCH on main as ${landed:0:10}; deleted the branch." >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$pushed" ]; then
+            for member in "${members[@]}"; do refuse_member "${member%%$'\t'*}" "${member##*$'\t'}" "pushing to main failed:" "$(cat push.log)"; done
+            exit 1
+          fi
+          for member in "${members[@]}"; do
+            git push origin --force-with-lease="refs/heads/${member%%$'\t'*}:${member##*$'\t'}" --delete "${member%%$'\t'*}" || echo "::warning::couldn't delete ${member%%$'\t'*}"
+          done
+          [ -z "$DEFERRED" ] || dispatch "$DEFERRED"
+          { echo "Landed ${#names[@]} branch(es) ($lanes) on main as ${landed:0:10} and deleted them:"; echo; printf '%s\n' "$listing"; } >> "$GITHUB_STEP_SUMMARY"
           echo "pushed=true" >> "$GITHUB_OUTPUT"
           echo "sha=$landed" >> "$GITHUB_OUTPUT"
+          echo "lanes=$lanes" >> "$GITHUB_OUTPUT"
           if [ "$landed" = "$SHA" ]; then echo "landed=true" >> "$GITHUB_OUTPUT"; fi
       # The landed commit's result: main's CI skips the tests it passed, and the next landing's baseline reads it.
       - if: steps.land.outputs.landed == 'true'
@@ -419,7 +479,8 @@ jobs:
       - if: steps.land.outputs.pushed == 'true'
         env:
           LANDED: ${{ steps.land.outputs.sha }}
-        run: gh api -X POST "repos/$GH_REPO/statuses/$LANDED" -f state=success -f context=autoland/branch -f description="$BRANCH" > /dev/null || echo "::warning::couldn't record the landing branch on ${LANDED:0:10}"
+          LANES: ${{ steps.land.outputs.lanes }}
+        run: gh api -X POST "repos/$GH_REPO/statuses/$LANDED" -f state=success -f context=autoland/branch -f description="${LANES:0:139}" > /dev/null || echo "::warning::couldn't record the landing branch on ${LANDED:0:10}"
       # Pushes made with this token start no workflows: start main's CI (main-red follows it).
       - if: steps.land.outputs.pushed == 'true'
         run: gh workflow run ci.yml --ref main || echo "::warning::couldn't start main's CI"
@@ -431,6 +492,13 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main
       - run: git push origin --delete "${{ needs.rebase.outputs.scratch }}" || true
+
+  # A tip refused while the train was assembled fails the run, though the rest of the train goes on to land.
+  refusals:
+    needs: [rebase, land]
+    if: ${{ always() && needs.rebase.outputs.refused != '' && needs.rebase.outputs.refused != '0' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "::error title=Autoland refused tips::${{ needs.rebase.outputs.refused }} tip(s) were refused; the run's summary names each"; exit 1
