@@ -3,10 +3,11 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { PEER_STATE_SCRIPT, localHolder, parseIdle, parsePeerState, poolablePairs } from "../host/commands/lanQueue";
+import { PEER_STATE_SCRIPT, localHolder, parseIdle, parsePeerState, poolablePairs, reclaimOrphan } from "../host/commands/lanQueue";
 import { markOf } from "../host/lan/claim";
+import { holdPair } from "../host/lan/custody";
 import { readHealth, recordFailure, recordPassed } from "../host/lan/pairHealth";
-import { claimFile, exeOf, installOf, missingClients, retailOf, writeJson } from "../host/lan/pool";
+import { alive, claimFile, exeOf, installOf, leaseDirectory, missingClients, retailOf, writeJson } from "../host/lan/pool";
 import { type QueueWorld, expireIdle, nextFree, queueStatus, releasePair, takePair } from "../host/lan/pairQueue";
 
 const world = (overrides: Partial<QueueWorld> = {}): QueueWorld => ({
@@ -191,3 +192,41 @@ test("[scenario] a pair whose client install the disk reclaim removed is missing
     else process.env["XDG_DATA_HOME"] = previous;
   }
 });
+
+test("[scenario] a pool start on a pair leased to another session is refused naming the lease's holder, in line or not, and the leasing session's own start passes", () => inStateHome(async () => {
+  const previousPlaytest = process.env["PLAYTEST_STATE"];
+  process.env["PLAYTEST_STATE"] = join(tmpdir(), "wisp-no-playtest-state.json");
+  try {
+    const host = (await Bun.$`hostname`.text()).trim();
+    mkdirSync(join(leaseDirectory(), "leases"), { recursive: true });
+    writeFileSync(join(leaseDirectory(), "leases", `${host}-7.json`), JSON.stringify({ host, pair: 7, owner: "capture-sweep", pid: process.pid, session: "sc-capture-sweep", since: "2026-10-30T02:00:00Z" }));
+    const refusal = (session: string, queued: boolean) => Effect.runPromise(Effect.scoped(holdPair(7, { session, owner: session }, queued)).pipe(Effect.flip, Effect.map((failure) => failure.message)));
+    for (const queued of [false, true]) {
+      const said = await refusal("sc-760-d0146", queued);
+      expect(said).toContain("leased to capture-sweep (fleet session sc-capture-sweep)");
+      expect(said).toContain(`pid ${process.pid}`);
+    }
+    expect(await refusal("", false)).toContain("leased to capture-sweep");
+    const started = (pair: number, session: string) => Effect.runPromise(Effect.scoped(holdPair(pair, { session, owner: session }, false)).pipe(Effect.as("started")));
+    expect(await started(7, "sc-capture-sweep")).toBe("started");
+    expect(await started(8, "sc-760-d0146")).toBe("started");
+  } finally {
+    if (previousPlaytest === undefined) delete process.env["PLAYTEST_STATE"];
+    else process.env["PLAYTEST_STATE"] = previousPlaytest;
+  }
+}));
+
+test("[scenario] a lease on a pair whose pool outlived its custodian is granted only once that pool has exited, and fails when the pool will not stop", () => inStateHome(async () => {
+  const claim = (pid: number) => writeJson(claimFile(7), { pair: 7, owner: "smashcraft-653", session: "smashcraft-653", ...markOf(pid), agent: { pid: 2999999, start: 1 } });
+  const pool = Bun.spawn(["sh", "-c", "trap 'sleep 1; exit 0' TERM; while :; do sleep 0.1; done"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+  await Bun.sleep(300);
+  claim(pool.pid);
+  await Effect.runPromise(reclaimOrphan(7, 10));
+  expect(alive(pool.pid)).toBe(false);
+  const stuck = Bun.spawn(["sh", "-c", "trap '' TERM; while :; do sleep 0.1; done"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+  await Bun.sleep(300);
+  claim(stuck.pid);
+  await expect(Effect.runPromise(reclaimOrphan(7, 1))).rejects.toThrow("still running 1 s after its stop");
+  stuck.kill("SIGKILL");
+  await stuck.exited;
+}));

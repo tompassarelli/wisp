@@ -17,6 +17,7 @@ const Lease = Schema.Struct({
   owner: Schema.String,
   pid: Schema.Int,
   since: Schema.String,
+  session: Schema.optionalKey(Schema.String),
 });
 export type Lease = typeof Lease.Type;
 const decodeLease = Schema.decodeUnknownOption(Schema.fromJsonString(Lease));
@@ -56,7 +57,7 @@ const readLease = (path: string) => {
   try { return decodeLease(readFileSync(path, "utf8")); } catch { return { _tag: "None" } as const; }
 };
 
-const liveLeases = (world: QueueWorld): readonly Lease[] => {
+const liveLeases = (world: Pick<QueueWorld, "directory" | "alive">): readonly Lease[] => {
   const folder = join(world.directory, "leases");
   if (!existsSync(folder)) return [];
   return readdirSync(folder).flatMap((name) => {
@@ -66,6 +67,9 @@ const liveLeases = (world: QueueWorld): readonly Lease[] => {
     return [];
   });
 };
+
+/** The live lease on `slot`, if any. */
+export const leaseOn = (world: Pick<QueueWorld, "directory" | "alive">, slot: Slot): Lease | undefined => liveLeases(world).find((lease) => lease.host === slot.host && lease.pair === slot.pair);
 
 /** Ticket files are named by arrival, so the oldest live one is the head of the line. */
 const liveTickets = (world: QueueWorld): readonly string[] => {
@@ -144,7 +148,7 @@ export const takePair = (world: QueueWorld, request: Request) => Effect.scoped(E
     if (head !== ticket) return undefined;
     const slot = yield* freeSlot;
     if (slot === undefined) return undefined;
-    const lease: Lease = { ...slot, owner: request.owner, pid: request.pid, since: new Date().toISOString() };
+    const lease: Lease = { ...slot, owner: request.owner, pid: request.pid, session: request.session, since: new Date().toISOString() };
     yield* attempt("record the lease", () => {
       const path = leaseFile(world.directory, slot);
       writeFileSync(`${path}.next`, `${JSON.stringify(lease)}\n`);

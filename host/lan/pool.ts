@@ -17,6 +17,8 @@ export {
 } from "../os/warcraft/clientProfiles";
 
 export const stateRoot = () => join(stateHome(), "wisp/lan");
+/** The pair lease queue: the lease files `lan lease take` writes and a pool start reads. */
+export const leaseDirectory = () => join(stateRoot(), "queue");
 export const dataRoot = () => join(dataHome(), "wisp/lan");
 export const mapPackager = () => join(cacheHome(), "wisp/lan/map-pack");
 

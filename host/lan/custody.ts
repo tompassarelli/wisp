@@ -1,11 +1,13 @@
 import { mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import { Console, Effect, Option, Schema } from "effect";
 import { describeCause } from "../cli/command";
 import { pollUntil } from "../cli/hostProcess";
 import { type PairClaim, type ProcessMark, claimHolder, markOf, running } from "./claim";
 import { LanFailure } from "./join";
-import { claimFile, pairDirectory, playtestPairRefusal, readClaim, writeJson } from "./pool";
+import { type Lease, leaseOn } from "./pairQueue";
+import { alive, claimFile, leaseDirectory, pairDirectory, playtestPairRefusal, readClaim, writeJson } from "./pool";
 
 /** Who asks for a pair: the fleet session, that session's own process (`agent`), and the lane label its claim carries. */
 export interface Custodian {
@@ -170,12 +172,19 @@ const releaseClaim = (pair: number) => Effect.sync(() => {
   if (readClaim(pair)?.pid === process.pid) rmSync(claimFile(pair), { force: true });
 });
 
-/** Holds pair K for the rest of the scope: takes its `pool.lock`, in line behind earlier waiters when `queued`, then records this pool in its `claim.json` until it lets go. */
+/** A lease is the custodian's own when it was taken by the same fleet session or under the same lane label. */
+const leasedTo = (lease: Lease, { session, owner }: Custodian) => lease.owner === owner || (session !== "" && lease.session === session);
+
+const leaseHolder = (lease: Lease) => `${lease.owner}${lease.session === undefined || lease.session === "" ? "" : ` (fleet session ${lease.session})`}, pid ${lease.pid}, since ${lease.since}`;
+
+/** Holds pair K for the rest of the scope: refuses it while another owner's lease holds it, takes its `pool.lock`, in line behind earlier waiters when `queued`, then records this pool in its `claim.json` until it lets go. */
 export const holdPair = (pair: number, custodian: Custodian, queued: boolean) => Effect.gen(function*() {
   yield* Effect.try({
     try: () => mkdirSync(queueDirectory(pair), { recursive: true }),
     catch: (cause) => new LanFailure({ problem: `create pair ${pair}: ${describeCause(cause)}` }),
   });
+  const lease = leaseOn({ directory: leaseDirectory(), alive }, { host: hostname(), pair });
+  if (lease !== undefined && !leasedTo(lease, custodian)) return yield* new LanFailure({ problem: `it is leased to ${leaseHolder(lease)}; only that lease's session starts a pool on it` });
   if (queued) yield* waitTurn(pair, custodian.session);
   else {
     const line = waiters(pair);

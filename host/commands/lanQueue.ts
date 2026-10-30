@@ -1,19 +1,22 @@
 import { existsSync, readdirSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
-import { Console, Effect, Option, Schema } from "effect";
+import { Console, Duration, Effect, Option, Schema } from "effect";
 import { type Command, UsageFailure, flagValues, wholeFlag } from "../cli/command";
+import { pollUntil } from "../cli/hostProcess";
 import { LanFailure } from "../lan/join";
 import { type Lease, type QueueHost, type QueueWorld, expireIdle, queueStatus, releasePair, slotKey, takePair } from "../lan/pairQueue";
 import { orphaned } from "../lan/claim";
 import { readHealth } from "../lan/pairHealth";
-import { agentSocket, alive, dataRoot, installOf, missingClients, readClaim, stateRoot } from "../lan/pool";
+import { agentSocket, alive, dataRoot, installOf, leaseDirectory, missingClients, readClaim } from "../lan/pool";
 import { lanPoolSupported } from "../os/warcraft/builds";
 import { buildOf } from "../os/warcraft/sharedStorage";
 
 export const LEASE_USAGE = "lease take --owner NAME [--pid PID] [--wait SECONDS] [--hosts local|any] | lease release --host H --pair K | lease status [--hosts local|any]";
 
 const WAIT_SECONDS = 1800;
+
+const ORPHAN_STOP_SECONDS = 120;
 
 /** The pairs `lan setup` made on this host: one `lanKa` client install each. */
 const provisionedPairs = (clients = join(dataRoot(), "clients")): readonly number[] =>
@@ -113,8 +116,6 @@ const idleness = (local: string) => (leases: readonly Lease[]) => Effect.gen(fun
   return new Map(entries.flatMap(([key, seconds]) => seconds === undefined ? [] : [[key, seconds] as const]));
 });
 
-const leaseQueue = () => join(stateRoot(), "queue");
-
 /** The fleet session of the live pool holding this host's pair K; a pool whose custodian has exited holds it for nobody. */
 export const localHolder = (pair: number) => {
   const claim = readClaim(pair);
@@ -127,7 +128,7 @@ const world = (any: boolean) => Effect.gen(function*() {
   const busyThere = new Map(remote.map(({ busy, host }) => [host.name, busy ?? new Map<number, string>()]));
   const failuresThere = new Map(remote.map(({ failures, host }) => [host.name, failures ?? new Map<number, number>()]));
   return {
-    directory: leaseQueue(),
+    directory: leaseDirectory(),
     hosts: [local, ...remote.map(({ host }) => host)],
     alive,
     idleness: idleness(local.name),
@@ -139,14 +140,16 @@ const world = (any: boolean) => Effect.gen(function*() {
 });
 
 /** Frees this host's leases on `pairs`, so the queue offers them again once their pool has let them go. */
-export const releaseLocalLeases = (pairs: readonly number[]) => Effect.forEach(pairs, (pair) => releasePair(leaseQueue(), { host: hostname(), pair }), { discard: true });
+export const releaseLocalLeases = (pairs: readonly number[]) => Effect.forEach(pairs, (pair) => releasePair(leaseDirectory(), { host: hostname(), pair }), { discard: true });
 
-/** Stops the pool still holding pair K after its custodian exited, so the pool the new lease starts gets the pair's lock. */
-const reclaimOrphan = (pair: number) => Effect.suspend(() => {
+/** Stops the pool still holding pair K after its custodian exited and waits until it has exited, so the lease is granted only once the pair has no live pool and the pool the new lease starts gets the pair's lock. */
+export const reclaimOrphan = (pair: number, seconds = ORPHAN_STOP_SECONDS) => Effect.suspend(() => {
   const claim = readClaim(pair);
   if (claim === undefined || !alive(claim.pid) || !orphaned(claim)) return Effect.void;
   return Console.error(`pair ${pair}: stopping ${claim.owner}'s pool ${claim.pid}, whose custodian ${claim.agent?.pid} has exited`).pipe(
     Effect.andThen(Effect.sync(() => { try { process.kill(claim.pid, "SIGTERM"); } catch { return; } })),
+    Effect.andThen(pollUntil(Effect.sync(() => !alive(claim.pid)), { until: (gone) => gone, every: "250 millis", within: Duration.seconds(seconds), onTimeout: () => Effect.fail(new LanFailure({ problem: `pair ${pair}: ${claim.owner}'s pool ${claim.pid} is still running ${seconds} s after its stop` })) })),
+    Effect.asVoid,
   );
 });
 
@@ -162,7 +165,7 @@ export const lease: Command = ([verb, ...args]) => Effect.gen(function*() {
     if (pid instanceof UsageFailure) return yield* pid;
     if (wait instanceof UsageFailure) return yield* wait;
     const slot = yield* takePair(state, { owner, pid, waitSeconds: wait, session: process.env["NORTH_FLEET_SESSION"] ?? "" });
-    if (slot.host === hostname()) yield* reclaimOrphan(slot.pair);
+    if (slot.host === hostname()) yield* reclaimOrphan(slot.pair).pipe(Effect.tapError(() => releasePair(state.directory, slot)));
     return yield* Console.log(JSON.stringify(slot));
   }
   if (verb === "release") {
