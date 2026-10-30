@@ -62,12 +62,10 @@ Measured facts, each with its source:
   3.0.1.24371, no outside route reaches LAN: the menus only build the
   loopback provider, and 3.0.1.24342 had no LAN provider left
   (wisp#21, 24 October). W3Champions' 3.0 path switches the provider inside
-  the running game. On 25 October 2026 Tom approved the same kind of switch
-  for players, only as their opt-in to Smashcraft Servers
-  (wisp:docs/clean-room.md, "Smashcraft Servers"). On 3.0.1.24371 the
-  switch alone doesn't give a LAN provider (wisp#21), so players there reach
-  the relay through Smashcraft Servers only after Tom decides the player
-  question that follows wisp#21's offline work.
+  the running game. Smashcraft Servers, that kind of switch for players, was
+  approved on 25 October 2026 and stopped on 31 October 2026
+  (wisp:docs/clean-room.md, "Smashcraft Servers (stopped)"), so no player
+  reaches the relay through Warcraft III.
 
 That last fact splits the plan in two:
 
@@ -76,9 +74,9 @@ That last fact splits the plan in two:
    pairs, which are our own offline test clients.
 2. **Reach players.** This needs a route by which an unmodified, signed-in
    live client joins a game the agent hosts. Box R0 found none from outside
-   the game on 3.0.1.24371 (Reaching players, below). Players there reach
-   the agent through Smashcraft Servers only after Tom decides the player
-   question that follows wisp#21 (C3 and Decisions, below).
+   the game on 3.0.1.24371 (Reaching players, below), and no player build
+   switches Warcraft's provider, so players reach the relay in Wisp's own
+   window instead (Standalone use, below; Decisions, below).
 
 ## Baseline: Wisp's TCP host on a lossy path (box R4)
 
@@ -1807,13 +1805,11 @@ Battle.net app options:
 - W3Champions' 3.0 "Native LAN" switches the provider inside the running
   game (w3champions-issues #57 and #58). Its discovery, UDP 16000 or mDNS
   with `W3C_LAN_TRANSPORT=csdk`, runs on the LAN provider that switch puts in
-  place. Smashcraft Servers is that kind of switch, allowed only as the
-  player's opt-in (wisp:docs/clean-room.md, "Smashcraft Servers").
+  place. Smashcraft Servers was that kind of switch and is stopped
+  (wisp:docs/clean-room.md, "Smashcraft Servers (stopped)").
 
 So no route from outside the game reaches a 127.0.0.1 host on 3.0.1.24371.
-On that build the switch alone doesn't give a LAN provider (wisp#21), so
-players reach the relay through Smashcraft Servers only after Tom decides
-the player question that follows wisp#21's offline work (Decisions, below). R0
+Players reach the relay in Wisp's own window instead (Decisions, below). R0
 is rerun when a new live build ships, since a route from outside would need
 no switch.
 
@@ -1862,26 +1858,23 @@ smashcraft-client (epic smashcraft-client#25):
   (smashcraft-client#26).
 - **C2** The agent's feed schedule holds on Windows and Linux runners
   (smashcraft-client#27).
-- **C3** Smashcraft Servers: the opt-in LAN switch beside Battle.net,
-  unavailable on unchecked builds, tested end to end on the spare signed-in
-  account before players see it (smashcraft-client#28). Players on
-  3.0.1.24371 get Smashcraft Servers only after Tom decides the player
-  question that follows wisp#21.
+- **C3** Smashcraft Servers, the opt-in LAN switch beside Battle.net
+  (smashcraft-client#28): stopped on 31 October 2026 and removed from the
+  client (Decisions, below).
 
 Order: R0, R1, R5 and R6 start now. R2 and R3 follow R1; R4 follows R1 and
 R5; R7 follows R5 and R6; R8 follows R1 and R6; R9 follows R3, R4, R7 and
 R8; R10 follows R7 and Tom's approval of the port; R11 follows R6; S1 follows
-R11; C3 follows wisp#21, the scan that locates the LAN provider on
-3.0.1.24371 on offline pool clients; C1 follows R8, R10 and C3; C2 follows
-R6.
+R11; C1 follows R8 and R10; C2 follows R6.
 
 Code placement: the relay is map-agnostic, so it lives in Wisp as a Rust
 workspace at `relay/` with crates `relay-proto` (wire format and pure relay
 and agent cores), `relay` (server), `relay-agent` (sockets, W3GS host,
-pacer) and `relay-bench`. smashcraft-client depends on `relay-agent` at a
-pinned revision. Rust is used because the agent ships inside the Rust client
-on players' Windows and Linux machines, with no Bun runtime. R11's headless
-model is TypeScript in wisp:src/headless/syncChannel.ts beside
+pacer) and `relay-bench`. Rust was chosen because the agent was to ship
+inside the Rust client on players' Windows and Linux machines, with no Bun
+runtime; since Smashcraft Servers stopped, no player build runs the agent
+against Warcraft III, and players reach the relay through Wisp's own window.
+R11's headless model is TypeScript in wisp:src/headless/syncChannel.ts beside
 `syncDelivery()`, because the headless runtime is TypeScript.
 
 ## Decisions
@@ -1895,13 +1888,16 @@ model is TypeScript in wisp:src/headless/syncChannel.ts beside
   connects while it runs and that Blizzard has not approved it. He also
   approved scanning the live build, 3.0.1.24371, on our own offline pool
   clients to locate its LAN provider (gate 38, wisp#21). The limits are in
-  wisp:docs/clean-room.md, "Smashcraft Servers". C3 and then C1
-  can now proceed.
-- **Players on 3.0.1.24371 (Tom, open).** On that build the switch alone
-  doesn't give a LAN provider (wisp#21), and wisp:docs/clean-room.md allows
-  writing one only on our own offline test clients. Players there reach the
-  relay through Smashcraft Servers only after Tom decides the player
-  question that follows wisp#21's offline work.
+  wisp:docs/clean-room.md, "Smashcraft Servers (stopped)".
+- **Smashcraft Servers stopped (Tom, 31 October 2026).** Tom withdrew the
+  25 October approval after an outside review named the in-game switch the
+  project's one real legal exposure (the bnetd and Glider cases: a EULA's
+  reverse-engineering ban and DMCA anti-circumvention). Warcraft III online
+  play is Battle.net's, in Warcraft's own menus; Smashcraft offers no online
+  play inside the Warcraft client; players play online in Wisp's own window
+  over the relay. The private switch stays a test tool for our own offline
+  clients with no Battle.net account. C3 is closed and the switch is removed
+  from smashcraft-client (smashcraft-client#28).
 - **Public port (Tom).** R10 asks before opening the relay's UDP port on
   Nexus or gex45.
 - **Settled here.** Raw UDP with redundancy, no QUIC, per Tom's direction.

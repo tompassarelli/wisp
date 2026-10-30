@@ -64,53 +64,40 @@ and history. The short form is the README's
   wisp:docs/warsmash-notes.md, and decide numbers with native fixtures.
 - Put "Warcraft" (or Blizzard art or logos) in a product name, icon or logo.
 
-## Smashcraft Servers
+## Smashcraft Servers (stopped)
 
-Smashcraft Servers is the one change any of our code may make inside a
-running game. Patch 3.0 left no route from outside the game to LAN on the live
-build (wisp:docs/relay.md, "Reaching players"), so on 25 October 2026 Tom
-approved the same kind of in-game LAN switch W3Champions has run for most
-active Reforged players for years, as an opt-in in smashcraft-client. It is
-allowed only as follows:
+Warcraft III's online play is Battle.net's, in Warcraft's own menus.
+Smashcraft and Wisp offer no online play inside the Warcraft client. Online
+play is Wisp's own window over Wisp's relay (wisp:docs/relay.md), with
+Warcraft III closed. On 25 October 2026 Tom approved Smashcraft Servers, an
+in-game LAN switch for players as an opt-in in smashcraft-client. On 31
+October 2026 he withdrew that approval: an outside review named the switch the
+project's one real legal exposure, because the bnetd and Glider cases turned
+on a EULA's reverse-engineering ban and on DMCA anti-circumvention, and
+Wisp's window now reaches the relay without touching Warcraft's memory
+(smashcraft-client#28). The rules:
 
-- **The switch.** smashcraft-client turns on Warcraft III's LAN network
-  provider in the running game, and only after the player opts in to
-  "Smashcraft Servers", offered beside Battle.net. The opt-in says Smashcraft
-  changes how Warcraft connects while it runs and that Blizzard has not
-  approved it. Without the opt-in the client never touches the game.
-- **The scan.** Locating the LAN provider on a Warcraft build is done only on
-  our own offline pool clients, which hold no Battle.net account; never on a
-  signed-in client or a player's.
-- **The offline provider write.** On a build that has no LAN provider to
-  turn on, writing the missing provider into the running game, and learning
-  what it must do by logging the provider calls that pass through our own
-  code, is allowed only on our own offline test clients, which hold no
-  Battle.net account (Tom, 25 October 2026; the logging is the lead's ruling
-  under that decision). No player build and no signed-in client may use it;
-  letting players use it needs a new decision from Tom after it works
-  offline.
-- **The test.** Before any player sees a switch build, it passes end to end on
-  a spare signed-in test account of ours.
+- **No player build touches a running game.** No client we ship turns on
+  Warcraft III's LAN network provider, writes into a running game, or drives
+  Warcraft III to host or join online games for the player.
+- **The switch is a test tool.** Turning on the LAN provider is allowed only
+  on our own offline test clients, which hold no Battle.net account, through
+  the private LAN switch (Private tools, below). Locating the provider on a
+  Warcraft build, and writing a missing provider into the running game and
+  logging the provider calls that pass through our own code, are allowed
+  only there too.
+- **Battle.net and real LAN are unaffected.** Players host and join on
+  Battle.net, or on LAN where their build still has it, in Warcraft's own
+  menus.
 
 Nothing else is allowed: no other read or write of game memory, no reading
-hidden game state, no sending or changing match input, no anti-cheat evasion
-(a refused or detected switch reports unavailable and stops), nothing in
-ranked or ladder play, and no W3Champions code; their FLO is a reference for
-behaviour only. What the scan, switch or offline provider write shows never
-decides Wisp's or Smashcraft's behaviour.
-
-The switch's addresses, offsets, byte patterns and procedure live in a private
-repository and ship compiled inside the client. The offline provider write's
-internals live in the same private repository and never ship in any client,
-and its call logs stay private and are never committed.
-Wisp, Smashcraft and smashcraft-client are public: their code, issues, pull
-requests and docs see only the interface (enable the LAN provider, returning
-ok or an error), and the rest of this page applies to them unchanged.
-
-After a Warcraft patch the switch may stop working. It accepts only builds it
-was checked on, so on a new build Smashcraft Servers reports itself
-unavailable and Battle.net play is unaffected until a new scan and test admit
-the build.
+hidden game state, no sending or changing match input, no anti-cheat evasion,
+nothing in ranked or ladder play, and no W3Champions code; their FLO is a
+reference for behaviour only. What the switch or the offline provider write
+shows never decides Wisp's or Smashcraft's behaviour. Their addresses,
+offsets, byte patterns, procedures and call logs live in a private repository,
+never ship in any client and are never committed. Shipping any of them to
+players again needs a new decision from Tom.
 
 ## Private tools
 
@@ -118,8 +105,8 @@ Private test tools stay private. Two local tools exist only for testing on our
 own machines and test accounts: the LAN switch that lets our own test clients
 offer LAN games, and the desync debugger that inspects our own clients. They
 live outside every repository, under `~/.local/share/wisp-private/`, and never
-feed Wisp's implementation; the LAN switch's player form is Smashcraft
-Servers, above. The LAN switch loads through
+feed Wisp's implementation; no player build carries the LAN switch
+(Smashcraft Servers (stopped), above). The LAN switch loads through
 wisp:host/lan/plugin.ts; nothing else in Wisp imports private code.
 Their addresses, offsets, dumps, byte patterns and procedures are never
 committed, posted in issues or pull requests, or quoted in docs. What they show
