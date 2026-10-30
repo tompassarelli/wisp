@@ -40,6 +40,7 @@ const sandbox = () => {
     const exe = join(env.XDG_DATA_HOME, "wisp/lan/clients", `lan${pair}${side}`, "pfx/drive_c/Program Files (x86)/Warcraft III/_retail_/x86_64/Warcraft III.exe");
     mkdirSync(dirname(exe), { recursive: true });
     writeFileSync(exe, "");
+    writeFileSync(join(exe, "../../../.build.info"), "");
   }
   const marked = () => readdirSync("/proc").filter((entry) => /^\d+$/.test(entry)).filter((pid) => {
     try {

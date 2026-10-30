@@ -87,6 +87,9 @@ export const setupClient = (name: string, from: string, poolBuild: string, port:
     if (stamps[0] !== stamps[1]) {
       const how = yield* placeInstall(name, from, true);
       log(`${name}: install refreshed, ${how} (executable was ${stamps[1]}, now ${stamps[0]})`);
+    } else if (!existsSync(join(installOf(name), ".build.info"))) {
+      const how = yield* placeInstall(name, from, true);
+      log(`${name}: install refreshed, ${how} (it had only Data and _retail_ left)`);
     }
   }
   const linked = yield* linkStorage(from, installOf(name)).pipe(Effect.mapError((failure) => new LanFailure({ problem: `${name}: ${failure.problem}` })));

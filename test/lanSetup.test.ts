@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { GameLauncher } from "../host/os/platform/services";
@@ -37,7 +37,7 @@ describe("lan setup registry", () => {
     }
   });
 
-  test("[integration tmpfs] a new client links the source's Data and _retail_, so it costs only its own small files beyond the shared base", async () => {
+  test("[integration tmpfs] a new client links the source's Data and _retail_, so it costs only its own small files beyond the shared base, and one left with only Data and _retail_ gets its own files back", async () => {
     const root = mkdtempSync("/dev/shm/wisp-lan-view-");
     const dataHome = process.env.XDG_DATA_HOME;
     process.env.XDG_DATA_HOME = join(root, "data");
@@ -61,6 +61,12 @@ describe("lan setup registry", () => {
       const ownBytes = clientFiles.filter((file) => !baseInodes.has(statSync(file).ino)).reduce((sum, file) => sum + statSync(file).size, 0);
       expect(clientFiles.length).toBe(8);
       expect(ownBytes).toBeLessThan(2 ** 16);
+
+      rmSync(join(installOf("lan1a"), ".build.info"));
+      rmSync(join(installOf("lan1a"), "Launcher.db"));
+      await Effect.runPromise(setupClient("lan1a", from, "3.0.0.24268", 47200, () => {}).pipe(
+        Effect.provideService(GameLauncher, GameLauncher.of({ inPrefix: () => Effect.succeed({ command: ["true"], env: {} }) }))));
+      expect([".build.info", "Launcher.db"].filter((entry) => existsSync(join(installOf("lan1a"), entry)))).toEqual([".build.info", "Launcher.db"]);
     } finally {
       if (dataHome === undefined) delete process.env.XDG_DATA_HOME;
       else process.env.XDG_DATA_HOME = dataHome;

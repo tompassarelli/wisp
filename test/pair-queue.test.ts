@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { PEER_STATE_SCRIPT, localHolder, parseIdle, parsePeerState, poolablePairs } from "../host/commands/lanQueue";
 import { markOf } from "../host/lan/claim";
 import { readHealth, recordFailure, recordPassed } from "../host/lan/pairHealth";
-import { claimFile, exeOf, missingClients, retailOf, writeJson } from "../host/lan/pool";
+import { claimFile, exeOf, installOf, missingClients, retailOf, writeJson } from "../host/lan/pool";
 import { type QueueWorld, expireIdle, nextFree, queueStatus, releasePair, takePair } from "../host/lan/pairQueue";
 
 const world = (overrides: Partial<QueueWorld> = {}): QueueWorld => ({
@@ -180,11 +180,12 @@ test("[scenario] a pair whose client install the disk reclaim removed is missing
   const previous = process.env["XDG_DATA_HOME"];
   process.env["XDG_DATA_HOME"] = mkdtempSync(join(tmpdir(), "wisp-pair-data-"));
   try {
-    for (const name of ["lan9a", "lan9b", "lan4a"]) {
+    for (const name of ["lan9a", "lan9b", "lan4a", "lan6a", "lan6b"]) {
       mkdirSync(join(retailOf(name), "x86_64"), { recursive: true });
       writeFileSync(exeOf(name), "");
+      if (name !== "lan6a") writeFileSync(join(installOf(name), ".build.info"), "");
     }
-    expect([missingClients(9), missingClients(4), missingClients(4, true), missingClients(5)]).toEqual([[], ["lan4b"], [], ["lan5a", "lan5b"]]);
+    expect([missingClients(9), missingClients(4), missingClients(4, true), missingClients(5), missingClients(6)]).toEqual([[], ["lan4b"], [], ["lan5a", "lan5b"], ["lan6a"]]);
   } finally {
     if (previous === undefined) delete process.env["XDG_DATA_HOME"];
     else process.env["XDG_DATA_HOME"] = previous;
