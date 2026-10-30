@@ -210,6 +210,13 @@ texts.
 - `image-blp` 1.2.0 (MIT), `ddsfile` 0.6.0 (MIT) and `image` 0.25.10 (MIT OR
   Apache-2.0, PNG, JPEG and TGA only): textures. The browser decodes all five
   formats today (host/browser/headlessRender.ts).
+  `window/wisp-window/src/texture.rs` decodes by magic to straight-alpha RGBA8.
+  `image-blp` decodes only JPEG-content BLP1: its paletted path takes the
+  palette as RGB, where the game and war3-model store BGR, and it leaves 1 and
+  4-bit alpha unscaled, so texture.rs reads paletted BLP1 itself. `texpresso`
+  2.0.2 (MIT, a dependency of `image-blp`) decompresses DDS blocks. `image-blp`
+  brings `image` 0.24 with its default features, which its manifest does not
+  let a dependent turn off.
 - `fontdue` 0.9.5 (MIT OR Apache-2.0 OR Zlib): rasterizing the TTF and OTF
   fonts the scene names. Its fallback is the Warcraft install's own font,
   where the browser falls back to `sans-serif`.

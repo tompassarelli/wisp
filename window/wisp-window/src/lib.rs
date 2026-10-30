@@ -4,6 +4,7 @@
 //! unwind into Bun, and `wisp_window_close` joins both threads, so the wake callback is never called after it returns.
 
 mod clock;
+pub mod decode_pool;
 mod draw;
 mod frame;
 mod host;
@@ -15,6 +16,7 @@ mod pad_gilrs;
 #[cfg(windows)]
 mod pad_windows;
 mod sync;
+pub mod texture;
 
 use std::ffi::{c_char, c_void};
 use std::panic::{catch_unwind, AssertUnwindSafe};

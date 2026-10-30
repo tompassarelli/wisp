@@ -28,6 +28,8 @@ ships each licence text below.
   textures. Ship the licence.
 - `image` 0.25.10, MIT OR Apache-2.0, https://github.com/image-rs/image.
   PNG, JPEG and TGA textures. Ship the licence.
+- `texpresso` 2.0.2, MIT, https://github.com/jansol/texpresso. DDS block
+  decompression. Ship the licence.
 - `fontdue` 0.9.5, MIT OR Apache-2.0 OR Zlib, https://github.com/mooman219/fontdue.
   UI text rasterizing. Ship the licence.
 - `bytemuck` 1.25.2, Zlib OR Apache-2.0 OR MIT,
