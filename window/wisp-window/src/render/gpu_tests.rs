@@ -49,6 +49,45 @@ fn render(renderer: &mut Renderer, device: &wgpu::Device, queue: &wgpu::Queue, s
     bytes
 }
 
+fn half_to_f32(bits: u16) -> f32 {
+    let (sign, exponent, fraction) = ((bits >> 15) & 1, i32::from((bits >> 10) & 0x1f), f32::from(bits & 0x3ff));
+    let magnitude = match exponent {
+        0 => fraction * 2f32.powi(-24),
+        31 => f32::INFINITY,
+        _ => (1.0 + fraction / 1024.0) * 2f32.powi(exponent - 15),
+    };
+    if sign == 1 { -magnitude } else { magnitude }
+}
+
+/// Draws `scene` and reads the middle pixel of the linear light the scene pass resolved, before the final-image pass tone maps it.
+fn light_at_centre(renderer: &mut Renderer, device: &wgpu::Device, queue: &wgpu::Queue, scene: &Scene) -> [f32; 3] {
+    let target = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("target"),
+        size: wgpu::Extent3d { width: SIDE, height: SIDE, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    let mut encoder = device.create_command_encoder(&Default::default());
+    renderer.draw(&mut encoder, &target.create_view(&Default::default()), (SIDE, SIDE), 1.0, scene);
+    let buffer = device.create_buffer(&wgpu::BufferDescriptor { label: Some("light"), size: u64::from(SIDE * SIDE * 8), usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
+    let resolved = &renderer.targets.as_ref().expect("a drawn frame has targets").resolved_texture;
+    encoder.copy_texture_to_buffer(
+        resolved.as_image_copy(),
+        wgpu::TexelCopyBufferInfo { buffer: &buffer, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(SIDE * 8), rows_per_image: Some(SIDE) } },
+        wgpu::Extent3d { width: SIDE, height: SIDE, depth_or_array_layers: 1 },
+    );
+    queue.submit([encoder.finish()]);
+    buffer.slice(..).map_async(wgpu::MapMode::Read, |_| ());
+    let _ = device.poll(wgpu::PollType::wait_indefinitely());
+    let bytes = buffer.slice(..).get_mapped_range().expect("mapped").to_vec();
+    let at = ((SIDE / 2 * SIDE + SIDE / 2) * 8) as usize;
+    [0, 1, 2].map(|channel| half_to_f32(u16::from_le_bytes([bytes[at + channel * 2], bytes[at + channel * 2 + 1]])))
+}
+
 fn pixel(image: &[u8], x: u32, y: u32) -> [u8; 3] {
     let at = ((y * SIDE + x) * 4) as usize;
     [image[at], image[at + 1], image[at + 2]]
@@ -188,10 +227,30 @@ fn centre_of(sheets: &[Sheet]) -> [f32; 3] {
     scene.camera = scene::Camera { view: IDENTITY, eye: [0.0; 3], tangent: 1.0, near: 1.0, far: 10_000.0, sky_far: 10_000.0, rise: 0.0 };
     scene.poses = vec![scene::Pose { id: 0, model: "sheets".into(), matrix: IDENTITY, sequence: 0, frame: 0.0, clock: 0.0, alpha: 1.0, color: [1.0; 3], team: TEAM }];
     let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
-    let image = render(&mut renderer, &device, &queue, &scene);
+    let light = light_at_centre(&mut renderer, &device, &queue, &scene);
     let error = pollster::block_on(scope.pop());
     assert!(error.is_none(), "wgpu validation: {error:?}");
-    pixel(&image, SIDE / 2, SIDE / 2).map(|channel| f32::from(channel) / 255.0)
+    light
+}
+
+fn linear(display: [f32; 3]) -> [f32; 3] {
+    display.map(|channel| linear_of(f64::from(channel)) as f32)
+}
+
+fn background() -> [f32; 3] {
+    linear(BACKGROUND)
+}
+
+fn source() -> [f32; 3] {
+    linear(SOURCE)
+}
+
+fn far() -> [f32; 3] {
+    linear(FAR)
+}
+
+fn team_light() -> [f32; 3] {
+    linear(TEAM)
 }
 
 fn assert_pixel(actual: [f32; 3], expected: [f32; 3], rule: &str) {
@@ -214,49 +273,49 @@ fn texel(color: [f32; 3], alpha: f32) -> [u8; 4] {
 
 #[test]
 fn transparent_tests_alpha_at_three_quarters_and_writes_depth() {
-    assert_pixel(centre_of(&[sheet(Filter::Cutout, 100.0, texel(SOURCE, 0.7))]), BACKGROUND, "alpha 0.7 is cut out");
-    assert_pixel(centre_of(&[sheet(Filter::Cutout, 100.0, texel(SOURCE, 0.8))]), SOURCE, "alpha 0.8 is drawn whole, not blended");
+    assert_pixel(centre_of(&[sheet(Filter::Cutout, 100.0, texel(SOURCE, 0.7))]), background(), "alpha 0.7 is cut out");
+    assert_pixel(centre_of(&[sheet(Filter::Cutout, 100.0, texel(SOURCE, 0.8))]), source(), "alpha 0.8 is drawn whole, not blended");
     let behind = sheet(Filter::Opaque, 200.0, texel(FAR, 1.0));
-    assert_pixel(centre_of(&[sheet(Filter::Cutout, 100.0, texel(SOURCE, 0.8)), behind]), SOURCE, "a cut-out hides what is drawn behind it afterwards");
+    assert_pixel(centre_of(&[sheet(Filter::Cutout, 100.0, texel(SOURCE, 0.8)), behind]), source(), "a cut-out hides what is drawn behind it afterwards");
 }
 
 #[test]
 fn blend_is_source_alpha_over_with_no_depth_write() {
-    let near = over(SOURCE, 0.5, BACKGROUND);
+    let near = over(source(), 0.5, background());
     assert_pixel(centre_of(&[sheet(Filter::Blend, 100.0, texel(SOURCE, 0.5))]), near, "source alpha over the background");
-    assert_pixel(centre_of(&[sheet(Filter::Blend, 100.0, texel(SOURCE, 0.5)), sheet(Filter::Blend, 200.0, texel(FAR, 0.5))]), over(FAR, 0.5, near), "a blended sheet leaves what is behind it drawable");
+    assert_pixel(centre_of(&[sheet(Filter::Blend, 100.0, texel(SOURCE, 0.5)), sheet(Filter::Blend, 200.0, texel(FAR, 0.5))]), over(far(), 0.5, near), "a blended sheet leaves what is behind it drawable");
 }
 
 #[test]
 fn additive_adds_the_colour_and_ignores_the_texture_alpha() {
-    let expected = [0, 1, 2].map(|channel| (SOURCE[channel] + BACKGROUND[channel]).min(1.0));
+    let expected = [0, 1, 2].map(|channel| (source()[channel] + background()[channel]));
     assert_pixel(centre_of(&[sheet(Filter::Additive, 100.0, texel(SOURCE, 0.25))]), expected, "one plus one");
 }
 
 #[test]
 fn add_alpha_adds_the_colour_scaled_by_the_texture_alpha() {
-    let expected = [0, 1, 2].map(|channel| (SOURCE[channel] * 0.5 + BACKGROUND[channel]).min(1.0));
+    let expected = [0, 1, 2].map(|channel| (source()[channel] * 0.5 + background()[channel]));
     assert_pixel(centre_of(&[sheet(Filter::AddAlpha, 100.0, texel(SOURCE, 0.5))]), expected, "source alpha plus one");
 }
 
 #[test]
 fn modulate_multiplies_the_background_by_the_colour() {
-    let expected = [0, 1, 2].map(|channel| SOURCE[channel] * BACKGROUND[channel]);
+    let expected = [0, 1, 2].map(|channel| source()[channel] * background()[channel]);
     assert_pixel(centre_of(&[sheet(Filter::Modulate, 100.0, texel(SOURCE, 1.0))]), expected, "destination colour times source colour");
 }
 
 #[test]
 fn modulate_twice_doubles_the_product() {
-    let expected = [0, 1, 2].map(|channel| (SOURCE[channel] * BACKGROUND[channel] * 2.0).min(1.0));
+    let expected = [0, 1, 2].map(|channel| (source()[channel] * background()[channel] * 2.0));
     assert_pixel(centre_of(&[sheet(Filter::Modulate2x, 100.0, texel(SOURCE, 1.0))]), expected, "twice destination times source");
 }
 
 #[test]
 fn replaceable_one_and_two_draw_the_players_team_colour_and_glow() {
     let team = Sheet { filter: Filter::Opaque, depth: 100.0, paint: Paint::TeamColor, texel: [0; 4] };
-    assert_pixel(centre_of(&[team]), TEAM, "replaceable 1 is the team colour");
+    assert_pixel(centre_of(&[team]), team_light(), "replaceable 1 is the team colour");
     let glow = Sheet { filter: Filter::Blend, depth: 100.0, paint: Paint::TeamGlow, texel: [0; 4] };
-    let expected = over(TEAM, 1.0f32.sin(), BACKGROUND);
+    let expected = over(team_light(), 1.0f32.sin(), background());
     assert_pixel(centre_of(&[glow]), expected, "replaceable 2 is the team glow at its centre");
 }
 
