@@ -906,7 +906,7 @@ Quality is PSNR of each upscaler restoring the original from a copy of half its 
 | FrostmourneNew | 256x512 | 26.16 | 27.08 | 26.99 | 218 | 1176 | 14 |
 | HelmOfDom | 256x256 | 25.14 | 26.49 | 26.41 | 115 | 597 | 7 |
 
-Edge-directed beats bilinear by about 1 dB and ties plain Catmull-Rom within 0.11 dB; PSNR does not measure stair-step smoothness, which is what the edge averaging is for, so it is kept. A learned upscaler is not in this table: Real-ESRGAN, waifu2x and xBR were read for licence only ([references.md](references.md)) and were not run, so their times and quality are unmeasured.
+Edge-directed beats bilinear by about 1 dB and ties plain Catmull-Rom within 0.11 dB; PSNR does not measure stair-step smoothness, which is what the edge averaging is for, so it is kept. Learned upscalers were measured separately on twelve Classic textures; [remaster-upscaler.md](remaster-upscaler.md) records the bake-off and adopts Real-CUGAN 2x on wgpu, with this filter kept for alpha and as the fallback.
 
 ### Silhouette before and after (one subdivision, bind pose, orthographic)
 
@@ -925,7 +925,8 @@ The overlay of the peon's front view shows the change: rounded forms (back, bell
 
 ### Not yet done
 
-- A before/after window screenshot at match zoom, both facings, and the three fresh viewers' reads: the window has no offscreen capture, so they need W3's capture.
+- A before/after window screenshot at match zoom, both facings: the bake-off drew models through `Renderer` offscreen in one facing (remaster-upscaler.md), not through the window's own capture.
+- Running Real-CUGAN 2x in the remaster on wgpu (the follow-up box in remaster-upscaler.md).
 - Binding the relief map in the lighting shader (wisp-109-light owns it).
 
 ## Boxes

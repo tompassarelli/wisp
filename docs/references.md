@@ -50,26 +50,49 @@ Not adopted by default: `symphonia` 0.6.1 (MPL-2.0). Its file-level copyleft
 would oblige the player build to offer its source. It is the fallback if the
 sound box finds a codec the permissive decoders cannot read.
 
-## Remaster candidates (wisp#109, [native-window-plan.md](native-window-plan.md#remaster-at-load))
+## Remaster candidates (wisp#109, [remaster-upscaler.md](remaster-upscaler.md))
 
-Licences read from each repository's licence file through the GitHub API on
-2026-10-31. None of these is linked or shipped; the chosen method is Wisp's own
-code, written from the published ideas (structure-tensor edge direction,
-Catmull-Rom resampling, premultiplied alpha) and copies nothing.
+Licences were read from each repository through the GitHub API on
+2026-10-31. Nothing here is linked or shipped yet. The bake-off ran the
+upscalers as separate measuring tools on gex45 and the laptop, on textures
+from the player install that stay outside Git. Real-CUGAN's weights are
+adopted for the follow-up box, which ships its notice.
 
-- Real-ESRGAN (xinntao, BSD-3-Clause, master a4abfb29), https://github.com/xinntao/Real-ESRGAN.
-  Licence file BSD-3-Clause (GitHub API; the weights' licence was not checked).
-  Not run and not adopted: it needs weights fetched at run time and an ONNX
-  or Vulkan runtime, which the classical path avoids.
-- Real-ESRGAN-ncnn-vulkan (xinntao, MIT), https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan.
-  A runner for the same weights on Tencent's ncnn (licence not read). Not run;
-  not adopted for the same reasons.
-- waifu2x (nagadomi, MIT), https://github.com/nagadomi/waifu2x. Not run; not adopted (its models target line art, which the Classic
-  painted textures are not; this was not tested).
-- `ort` (pykeio, Apache-2.0), https://github.com/pykeio/ort. The Rust ONNX
-  Runtime binding a model path would use. Not adopted; the classical path needs no runtime.
-- xBR and Super-xBR (Hyllian, libretro glsl-shaders; the one file read carries an MIT-style
-  notice, the others were not read). Made for pixel art. Not run; not adopted.
+- Real-CUGAN (bilibili, MIT, `Real-CUGAN/LICENSE` at 2799af78; weights are
+  the release assets of tag `Real-CUGAN`, commit d7f36f1f, with no
+  separate licence), https://github.com/bilibili/ailab/tree/main/Real-CUGAN.
+  Adopted: SE 2x conservative weights, 2.6 MB.
+- realcugan-ncnn-vulkan (nihui, MIT, 20220728, 395302c5),
+  https://github.com/nihui/realcugan-ncnn-vulkan. Measuring tool and the
+  reference that Wisp's kernels are checked against; not linked.
+- Real-ESRGAN (xinntao, BSD-3-Clause, a4abfb29; x4plus, x4plus-anime-6B,
+  animevideov3 and general-x4v3 weights are release assets of the same
+  repository), https://github.com/xinntao/Real-ESRGAN. Run, not adopted.
+- Real-ESRGAN-ncnn-vulkan (xinntao, MIT, v0.2.0, 37026f49),
+  https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan. Measuring tool only.
+- upscayl/custom-models (no licence, 4b6d2cfa),
+  https://github.com/upscayl/custom-models. Its ncnn conversion of
+  realesr-general-x4v3 was used to measure only and is not to be shipped.
+- ncnn (Tencent, BSD-3-Clause), https://github.com/Tencent/ncnn. The
+  fallback engine through FFI if Wisp's wgpu kernels fall short; 13.1 MB
+  `libncnn.so` (nixpkgs 20250503).
+- `ort` (pykeio, Apache-2.0, 2.0.0-rc.15), https://github.com/pykeio/ort,
+  with ONNX Runtime 1.24.4 (26.2 MB). Not adopted.
+- burn (tracel-ai, MIT OR Apache-2.0, 0.22.1),
+  https://github.com/tracel-ai/burn. Not adopted.
+- PBRify_Remix (Kim2091, CC0-1.0, 190db537),
+  https://github.com/Kim2091/PBRify_Remix, and 4x-HDCube (Venomalia,
+  CC0-1.0, OpenModelDB 782aac08). Game-texture models with clear licences;
+  not run, because no ncnn or ONNX build exists.
+- OpenModelDB (782aac08), https://github.com/OpenModelDB/open-model-database.
+  Source of the licences for the community models. 4x-UltraSharp and the
+  other CC-BY-NC(-SA) game-texture models are rejected as non-commercial.
+- SwinIR (Apache-2.0, 6545850f), HAT (Apache-2.0, 1638a9a8) and waifu2x
+  (nagadomi, MIT, cc385f97). Not run: SwinIR and HAT have no Vulkan port and
+  are too heavy, and waifu2x's CUNet line is covered by Real-CUGAN.
+- xBR and Super-xBR (Hyllian, libretro glsl-shaders; the one file read
+  carries an MIT-style notice, the others were not read). Made for pixel
+  art. Not run; not adopted.
 
 ## Tools
 
