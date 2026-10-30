@@ -284,9 +284,9 @@ shows the loading and ready text in the window's title. The scene is parsed in
 the library on every frame, so the cost of encoding and parsing it is measured
 before the renderer is ported. Keyboard and pads (box W5: the left stick and the standard-layout buttons of the
 first connected pad, or `gamepadIndex`, read at the sample point and cleared with
-the keys when the window loses focus); sound, captures and
+the keys when the window loses focus); captures and
 `--headless` stay with Chrome (`--capture-frames` with the native window is
-refused). `standalone.json` keeps the page's fields and adds `adapter`,
+refused). Sound plays through cpal: the game's cues resolve as the page's do, decode once per resolved file (Vorbis, MP3, FLAC and PCM WAV) and play at `volume / 127` and the cue's pitch as a playback rate; `standalone.json` carries the page's `audioEvents`, `audioReadyEvents`, `audioPlayed`, `audioDecodedAssets` and `missingSounds`, with `audioOutput` naming the device (or `none`). `standalone.json` keeps the page's fields and adds `adapter`,
 `backend`, `presentMode`, `desiredMaximumFrameLatency`, `wakeMs`, `encodeMs`,
 `parseMs`, `inputToPresentMs` (the present time minus the sample time of the scene
 drawn), `missedPresents` (an acquire interval over 1.5 T, with

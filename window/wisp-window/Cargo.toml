@@ -10,10 +10,15 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 bytemuck = { version = "1", features = ["derive"] }
+claxon = "0.4.3"
+cpal = "0.18.2"
 ddsfile = { version = "0.6.0", default-features = false }
 fontdue = "0.9.5"
+hound = "3.5.1"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "tga"] }
 image-blp = { version = "1.2.0", default-features = false }
+lewton = "0.10.2"
+nanomp3 = "0.2.0"
 padbridge-model = { git = "https://github.com/tompassarelli/padbridge", rev = "126ba31e4065eef4e4025701b6cd5f4a6aaddbc2" }
 pollster = "0.4"
 sdl3-sys = { version = "0.7.2", default-features = false, features = ["build-from-source-static", "sdl-unix-console-build", "no-sdl-video", "no-sdl-audio", "no-sdl-gpu", "no-sdl-render", "no-sdl-camera", "no-sdl-dialog", "no-sdl-tray", "no-sdl-power"] }

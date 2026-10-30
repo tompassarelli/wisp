@@ -211,8 +211,9 @@ texts.
   built from source and linked statically with only the joystick and HIDAPI
   subsystems (see Pads). `padbridge-model`, MIT, supplies the layout.
 - `cpal` 0.18.2, Apache-2.0: audio output.
-- `claxon` 0.4.3 (FLAC) and `hound` 3.5.1 (PCM and float WAV), both
-  Apache-2.0: the first sound decoders. W6 settles the rest (see Sound).
+- `claxon` 0.4.3 (FLAC), `hound` 3.5.1 (PCM and float WAV), `lewton` 0.10.2
+  (Ogg Vorbis, MIT OR Apache-2.0) and `nanomp3` 0.2.0 (MP3, MIT OR
+  Apache-2.0): the sound decoders W6 settled (see Sound).
 - `image-blp` 1.2.0 (MIT), `ddsfile` 0.6.0 (MIT) and `image` 0.25.10 (MIT OR
   Apache-2.0, PNG, JPEG and TGA only): textures. The browser decodes all five
   formats today (host/browser/headlessRender.ts).
@@ -500,11 +501,16 @@ The native window takes over the page's whole job, not only its drawing
 
 ### Sound
 
-W6 first lists every sound file the resolver reaches in a player's install,
-by container and codec. The resolver tries `.flac`, `.wav`, `.mp3` and `.ogg`
-(host/render/standaloneSound.ts), and Warcraft's WAVs may be ADPCM, which
-`hound` does not decode. Decoders are chosen from that list, each with its
-licence entered in references.md.
+The resolver tries `.flac`, `.wav`, `.mp3` and `.ogg` in that order
+(host/render/standaloneSound.ts). The files it has reached so far, in the stock
+read cache of the Smashcraft checkout (30 October 2026): 95 Ogg Vorbis, 3 MP3
+(the music) and no WAV; Smashcraft's own sounds are FLAC in the map. The decoders
+are `lewton` for Vorbis, `nanomp3` for MP3, `claxon` for FLAC and `hound`
+for PCM and float WAV, all permissive and entered in references.md. The format
+is read from the file's first bytes, not its extension. A WAV in ADPCM, which
+`hound` does not decode, or any other unreadable file is listed in
+`missingSounds` with the reason and plays nothing; if one shows up in a
+player's install, it is the case that would bring in `symphonia`.
 
 Playback follows the page's rules:
 
@@ -512,7 +518,15 @@ Playback follows the page's rules:
 - volume as `volume / 127`;
 - pitch as a playback-rate change, done with linear resampling in the mixer
   as WebAudio's `playbackRate` does;
-- decoded assets reused by resolved path, keeping each handle's variation.
+- decoded assets reused by resolved path, keeping each handle's variation;
+- a machine with no output device mixes at the same pace into nothing, and
+  `audioOutput` in `standalone.json` names what played.
+
+The library holds the output and the decoded clips (`wisp_audio_open`,
+`wisp_audio_load`, `wisp_audio_play`, `wisp_audio_info`, `wisp_audio_close`),
+apart from the window's handle, so the wake and present path is untouched. The
+thread that steps the game takes each step's cues, resolves and loads them, and
+starts the sound when its file is ready, as the page's `sound` does.
 
 ### Player build (smashcraft#807)
 

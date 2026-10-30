@@ -44,7 +44,7 @@ const run = async (init: SimWorkerInit) => {
   const game = module[init.game.export];
   if (game === undefined) throw new Error(`${init.game.module} exports no ${init.game.export}`);
   await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-    const player = yield* openStandalone(game, { ...init.options, window: "native" });
+    const player = yield* openStandalone(game, { ...init.options, window: "native", library: init.library });
     send({ type: "ready" });
     const view = yield* Effect.acquireRelease(
       Effect.promise(() => attached.promise).pipe(Effect.map((handle) => adoptNativeWindow(handle, init.library))),
@@ -77,7 +77,7 @@ const run = async (init: SimWorkerInit) => {
       },
       extraResult: probe === undefined ? undefined : (series) => ({ series: { ...series, readAssets: reads, render: measured } }),
     }, (result) => {
-      void player.native.finish(result).catch(() => undefined).then(() => { send({ type: "completed", result }); finished.resolve(); });
+      void player.native.finish(result).catch(() => result).then((final) => { send({ type: "completed", result: final }); finished.resolve(); });
     });
     yield* preloadScene(player.native.prepare().scene, library, () => view.assetsPending());
     view.start();

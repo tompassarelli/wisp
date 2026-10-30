@@ -3,11 +3,11 @@ import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrame
 import type { InputSample, WindowView } from "./binding";
 import { spread } from "./stats";
 
-/** What `openStandalone` gives a window that drives the session itself: the scene before the first step, one step, and the end of the run. */
+/** What `openStandalone` gives a window that drives the session itself: the scene before the first step, one step, and the end of the run, whose result comes back with the sound figures added. */
 export interface NativePlayer {
   prepare(): { readonly scene: StandaloneFrame["scene"]; readonly models: readonly string[]; readonly step: number };
   advance(input: StandaloneInput): StandaloneFrame;
-  finish(result: Readonly<Record<string, unknown>>): Promise<void>;
+  finish(result: Readonly<Record<string, unknown>>): Promise<Readonly<Record<string, unknown>>>;
 }
 
 export interface FrameLoopOptions {
