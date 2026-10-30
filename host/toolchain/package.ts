@@ -57,7 +57,7 @@ const editorPluginProgram = (output: string) => attempt(async () => {
 
 export const writeEditorPlugin = (output: string): Promise<void> => Effect.runPromise(editorPluginProgram(output));
 
-export const packageProgram = (output: string) => Effect.scoped(Effect.gen(function*() {
+export const packageProgram = (output: string, revision?: string) => Effect.scoped(Effect.gen(function*() {
   const target = resolve(output);
   yield* attempt(() => mkdir(join(root, "build"), { recursive: true }));
   const staging = yield* Effect.acquireRelease(
@@ -81,6 +81,8 @@ export const packageProgram = (output: string) => Effect.scoped(Effect.gen(funct
   );
   const exports = yield* Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.String))(decoded.exports);
   const manifest = { ...decoded };
+  // Bun caches a local tarball by name and version, so each commit's package needs its own version.
+  if (revision !== undefined) manifest.version = `${String(decoded.version)}-g${revision.slice(0, 12)}`;
   delete manifest.scripts;
   delete manifest.devDependencies;
   manifest.exports = Object.fromEntries(Object.entries(exports).map(([path, target]) =>
@@ -95,14 +97,16 @@ export const packageProgram = (output: string) => Effect.scoped(Effect.gen(funct
   if (packed.exitCode !== 0) return yield* new PackageFailure({ cause: `package failed: ${packed.stderr}` });
 }));
 
-export const producePackage = (output: string): Promise<void> => Effect.runPromise(packageProgram(output).pipe(Effect.provide(BunServices.layer)));
+export const producePackage = (output: string, revision?: string): Promise<void> => Effect.runPromise(packageProgram(output, revision).pipe(Effect.provide(BunServices.layer)));
 
 if (import.meta.main) {
   BunRuntime.runMain(Effect.gen(function*() {
     const output = yield* Schema.decodeUnknownEffect(Schema.String)(process.argv[2]).pipe(
-      Effect.mapError(() => new PackageFailure({ cause: "usage: bun host/toolchain/package.ts OUTPUT_TGZ" })),
+      Effect.mapError(() => new PackageFailure({ cause: "usage: bun host/toolchain/package.ts OUTPUT_TGZ [FULL_COMMIT]" })),
     );
-    yield* packageProgram(output);
+    const revision = process.argv[3];
+    if (revision !== undefined && !/^[a-f0-9]{40}$/.test(revision)) return yield* new PackageFailure({ cause: "REVISION must be a full lowercase commit hash" });
+    yield* packageProgram(output, revision);
     console.log(resolve(output));
   }).pipe(Effect.provide(BunServices.layer)));
 }
