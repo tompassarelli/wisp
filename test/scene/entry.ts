@@ -1,14 +1,19 @@
 import { configureRuntime } from "../../src/runtime/config";
 import { installDispatch } from "../../src/map/dispatch";
-import { startSceneReport } from "../../src/map/scene";
+import { installSceneReport, startSceneReport } from "../../src/map/scene";
 
 declare global {
   var __fixtureFrame: number | undefined;
 }
 
-export function start(): void {
+export function install(): void {
   configureRuntime({ filePrefix: "fixture", readyPrefix: "FX_HRR", globalPrefix: "__fixture" });
   installDispatch();
+  installSceneReport();
+}
+
+export function start(): void {
+  install();
   startSceneReport({
     frame: () => globalThis.__fixtureFrame ?? 0,
     parked: (_x, _y, z) => z < -1000.0,

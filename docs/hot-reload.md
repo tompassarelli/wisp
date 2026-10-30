@@ -50,6 +50,7 @@ writes it with `abilityData()` from [object data](../host/toolchain/objectData.t
 
 Put state that must survive in globals. Each reload creates fresh module locals.
 If the state shape changes, migrate it deliberately or start a fresh match.
+A `Map` or `Set` held in that state is an instance of the first bundle's lualib classes, and its iterators carry that bundle's `Symbol.iterator`, which a reloaded bundle's `for...of` and spread do not recognise: they read it as empty. Visit such a collection with `forEach`, whose callback takes a `this: unknown` parameter because the lualib passes a self argument (the scene recorder does, wisp:src/map/scene.ts).
 Call `configureRuntime()` before installing handlers in every bundle, keeping
 its file/message/global prefixes stable across that match. See
 [runtime configuration](../src/runtime/config.ts)

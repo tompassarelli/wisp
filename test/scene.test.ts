@@ -27,7 +27,7 @@ test("[spec docs/player-view.md] the emitted scene recorder reports each model's
   expect({ code: run.exitCode, stderr: run.stderr.toString() }).toEqual({ code: 0, stderr: "" });
   const scene = await Effect.runPromise(SceneReportFile.decode("fixture-scene-p0.txt", run.stdout.toString()));
   expect(scene).toEqual({
-    serial: 6,
+    serial: 7,
     frame: 101,
     effects: 9,
     models: [

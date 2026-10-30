@@ -222,15 +222,18 @@ function wrapUnitNatives(state: SceneState, unitModel: (this: void, unitType: nu
   };
 }
 
+// The state's maps outlive a hot reload as instances of the first bundle's Map class, whose iterators the reloaded bundle's for-of and spread cannot read; forEach runs inside that class, with a self parameter because the Map class calls its callbacks with one.
 function observe(state: SceneState, frame: number): void {
   const { parked } = state.options;
-  for (const [handle, effect] of state.effects) {
+  state.effects.forEach(function (this: unknown, effect, handle) {
     const inView = !parked(BlzGetLocalSpecialEffectX(handle), BlzGetLocalSpecialEffectY(handle), BlzGetLocalSpecialEffectZ(handle));
     if (!inView) leftView(state, effect, frame);
     else effect.since ??= frame;
     effect.drawn = inView && effect.alpha > 0 && effect.scale > 0 && !effect.flat;
-  }
-  for (const recorded of state.units.values()) recorded.drawn = !recorded.hidden && recorded.alpha > 0 && recorded.scale > 0 && !recorded.flat;
+  });
+  state.units.forEach(function (this: unknown, recorded) {
+    recorded.drawn = !recorded.hidden && recorded.alpha > 0 && recorded.scale > 0 && !recorded.flat;
+  });
 }
 
 interface Summary {
@@ -243,17 +246,24 @@ interface Summary {
 
 function sceneModels(state: SceneState, frame: number): SceneModel[] {
   const summaries = new Map<string, Summary>();
-  for (const effect of [...state.effects.values(), ...state.units.values()]) {
+  const summarize = function (this: unknown, effect: Recorded): void {
     const summary = summaries.get(effect.model) ?? { live: 0, inView: 0, drawn: 0, created: effect.created, since: undefined };
     summaries.set(effect.model, summary);
     summary.live++;
     summary.created = Math.min(summary.created, effect.created);
     if (effect.drawn) summary.drawn++;
-    if (effect.since === undefined) continue;
+    if (effect.since === undefined) return;
     summary.inView++;
     summary.since = Math.min(summary.since ?? effect.since, effect.since);
-  }
-  const models = [...new Set([...summaries.keys(), ...state.longest.keys(), ...state.destroyed.keys()])].sort();
+  };
+  state.effects.forEach(summarize);
+  state.units.forEach(summarize);
+  const names = new Set<string>();
+  const name = function (this: unknown, _: unknown, model: string): void { names.add(model); };
+  summaries.forEach(name);
+  state.longest.forEach(name);
+  state.destroyed.forEach(name);
+  const models = [...names].sort();
   return models.map((model) => {
     const summary = summaries.get(model);
     const age = summary?.since === undefined ? undefined : frame - summary.since;

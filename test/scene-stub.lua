@@ -79,6 +79,10 @@ at(90) DestroyEffect(gone) RemoveUnit(removed)
 -- A rematch restarts the game's frames; the report's clock keeps rising.
 at(0) report()
 at(10) report()
+-- A hot reload evaluates the bundle again; the recorder state, built by the first evaluation, outlives it.
+module = assert(load(payload))()
+module.install()
+report()
 assert(calls[1] == "AddSpecialEffect" and calls[2] == "BlzSetSpecialEffectMatrixScale", "wrapped natives were not called")
 io.write("function PreloadFiles takes nothing returns nothing\r\n\tcall PreloadStart()\r\n")
 for _, line in ipairs(writes["fixture-scene-p0.txt"]) do io.write("\tcall Preload( \"" .. line .. "\" )\r\n") end
