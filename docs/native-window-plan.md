@@ -828,7 +828,8 @@ Decision (31 October 2026, after Tom said Chrome is a dead end and the Rust wind
 - **Instanced draws.** Poses are grouped by model. Each layer of each model is one instanced draw, with the layer's filter mode choosing one of seven pipelines (blend state and depth write). Models with a layer below Blend draw before the rest, as `orderDrawnModels` does in Chrome.
 - **No per-frame allocation in the draw.** The bone, instance and grouping scratch vectors keep their capacity; only a new model, texture or larger scene allocates. The scene's JSON parse still allocates once per scene (see "The scene goes to Rust as the same JSON").
 - **Not yet drawn:** day-night light and shadows, per-layer alpha and texture animation, particle and ribbon emitters, terrain and water, lightning and the cinematic filter (the UI is drawn, see below).
-- **Capture.** `WISP_WINDOW_CAPTURE=FILE.png` (after `WISP_WINDOW_CAPTURE_AFTER` scenes that drew a model, default 30) saves the window's image; W3's offscreen capture replaces it.
+- **Window shape.** The world fills the whole window: no bars. The projection keeps the reach of the game's picture (the window's size at open) in view, so a window taller than that picture shows more world above and below at the same horizontal framing and a wider one shows more world to the sides at the same vertical framing; the menu and HUD frames keep the picture's centred rectangle (wisp#109).
+- **Capture.** `WISP_WINDOW_CAPTURE=FILE.png` (after `WISP_WINDOW_CAPTURE_AFTER` scenes that drew a model, default 30) saves the whole window's image; W3's offscreen capture replaces it.
 
 ## UI as built (wisp#109)
 

@@ -292,14 +292,13 @@ impl Gpu {
         let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
         let Ok(mapped) = buffer.slice(..).get_mapped_range() else { return };
         let bgra = matches!(self.config.format, wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb);
-        let [left, top, picture_width, picture_height] = crate::render::fitted((width, height), self.aspect);
-        let mut rgba = Vec::with_capacity((picture_width * picture_height * 4) as usize);
-        for line in mapped.chunks(row as usize).skip(top as usize).take(picture_height as usize) {
-            for pixel in line[(left * 4) as usize..((left + picture_width) * 4) as usize].chunks(4) {
+        let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+        for line in mapped.chunks(row as usize).take(height as usize) {
+            for pixel in line[..(width * 4) as usize].chunks(4) {
                 rgba.extend_from_slice(&if bgra { [pixel[2], pixel[1], pixel[0], 255] } else { [pixel[0], pixel[1], pixel[2], 255] });
             }
         }
-        let _ = capture::write(&capture.path, picture_width, picture_height, &rgba);
+        let _ = capture::write(&capture.path, width, height, &rgba);
     }
 }
 

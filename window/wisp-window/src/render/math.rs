@@ -18,10 +18,12 @@ pub fn multiply(a: &Mat4, b: &Mat4) -> Mat4 {
 const GL_TO_WGPU: Mat4 = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.5, 1.0];
 
 /// `perspective` of host/browser/matrix.ts with `nativeProjection`'s rise, in wgpu's depth range.
-pub fn projection(tangent: f32, near: f32, far: f32, aspect: f32, rise: f32) -> Mat4 {
+/// `aspect` is the game's picture and `window` the window's; the picture's horizontal and vertical reach are always in view, and
+/// whatever the window has beyond them (more height when it is taller, more width when it is wider) shows more world.
+pub fn projection(tangent: f32, near: f32, far: f32, aspect: f32, window: f32, rise: f32) -> Mat4 {
     let mut out = [0.0; 16];
-    out[0] = 1.0 / tangent;
-    out[5] = aspect / tangent;
+    out[0] = (aspect / window).min(1.0) / tangent;
+    out[5] = aspect.min(window) / tangent;
     out[9] = -rise;
     out[10] = (far + near) / (near - far);
     out[11] = -1.0;
@@ -35,10 +37,22 @@ mod tests {
 
     #[test]
     fn near_plane_maps_to_zero_and_far_to_one() {
-        let p = projection(1.0, 10.0, 1000.0, 1.0, 0.0);
+        let p = projection(1.0, 10.0, 1000.0, 1.0, 1.0, 0.0);
         let depth = |z: f32| (p[10] * z + p[14]) / (p[11] * z);
         assert!(depth(-10.0).abs() < 1e-5);
         assert!((depth(-1000.0) - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn a_taller_window_sees_more_height_and_a_wider_one_more_width() {
+        let game = 16.0 / 9.0;
+        let level = projection(2.0, 10.0, 1000.0, game, game, 0.0);
+        let tall = projection(2.0, 10.0, 1000.0, game, 1.0, 0.0);
+        let wide = projection(2.0, 10.0, 1000.0, game, 2.5, 0.0);
+        assert_eq!(tall[0], level[0]);
+        assert!(tall[5] < level[5]);
+        assert_eq!(wide[5], level[5]);
+        assert!(wide[0] < level[0]);
     }
 
     #[test]

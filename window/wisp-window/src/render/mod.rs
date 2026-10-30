@@ -278,7 +278,7 @@ impl Renderer {
         self.targets = Some(Targets { size, color: make(self.format, "scene colour"), depth: make(DEPTH, "scene depth") });
     }
 
-    fn frame_uniform(scene: &Scene, aspect: f32, far: f32) -> FrameUniform {
+    fn frame_uniform(scene: &Scene, aspect: f32, window: f32, far: f32) -> FrameUniform {
         let camera = &scene.camera;
         let view = camera.view;
         let (light_toward, light_key, light_ambient) = match &scene.light {
@@ -289,7 +289,7 @@ impl Renderer {
             Some(fog) => ([fog.color[0], fog.color[1], fog.color[2], 1.0], [fog.start, fog.end, fog.max, 0.0]),
             None => ([0.0; 4], [0.0, 1.0, 1.0, 0.0]),
         };
-        FrameUniform { view_projection: multiply(&projection(camera.tangent, camera.near, far, aspect, camera.rise), &view), light_toward, light_key, light_ambient, fog_color, fog_range }
+        FrameUniform { view_projection: multiply(&projection(camera.tangent, camera.near, far, aspect, window, camera.rise), &view), light_toward, light_key, light_ambient, fog_color, fog_range }
     }
 
     /// Lays every resident pose out by model: bone matrices into the scratch, instances grouped so each model's are contiguous.
@@ -344,10 +344,11 @@ impl Renderer {
     }
 
     /// Draws `scene` into `target`, a surface view of `size` in this renderer's format, in the encoder's order: the sky, then the world.
-    /// The world keeps `aspect` (the game's width over its height) and is centred in the window, with bars where the window is wider or taller.
+    /// The world fills the window and keeps the reach of the `aspect` picture (the game's width over its height) in view: a taller or wider window shows more world, never bars.
     pub fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, size: (u32, u32), aspect: f32, scene: &Scene) {
         self.fit_targets(size);
-        let viewport = fitted(size, aspect).map(|edge| edge as f32);
+        let viewport = [0.0, 0.0, size.0 as f32, size.1 as f32];
+        let window = size.0 as f32 / size.1.max(1) as f32;
         self.layout(&scene.poses);
         if self.bone_scratch.len() > self.bone_capacity {
             self.bone_capacity = self.bone_scratch.len().next_power_of_two();
@@ -380,8 +381,8 @@ impl Renderer {
         }
         self.queue.write_buffer(&self.bone_buffer, 0, bytemuck::cast_slice(&self.bone_scratch));
         self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&self.instance_scratch));
-        self.queue.write_buffer(&self.main_frame, 0, bytemuck::bytes_of(&Self::frame_uniform(scene, aspect, scene.camera.far)));
-        self.queue.write_buffer(&self.sky_frame, 0, bytemuck::bytes_of(&Self::frame_uniform(scene, aspect, scene.camera.sky_far)));
+        self.queue.write_buffer(&self.main_frame, 0, bytemuck::bytes_of(&Self::frame_uniform(scene, aspect, window, scene.camera.far)));
+        self.queue.write_buffer(&self.sky_frame, 0, bytemuck::bytes_of(&Self::frame_uniform(scene, aspect, window, scene.camera.sky_far)));
         self.sky_group_of = sky.map(|(id, _)| Group { model: id, first: sky_instance as u32, count: 1 });
 
         let clear = if scene.clear == [0.0; 3] { CLEAR } else { scene.clear.map(f64::from) };
