@@ -79,7 +79,7 @@ const run = async (init: SimWorkerInit) => {
     }, (result) => {
       void player.native.finish(result).catch(() => undefined).then(() => { send({ type: "completed", result }); finished.resolve(); });
     });
-    yield* Effect.promise(() => preloadScene(player.native.prepare().scene, library, () => view.assetsPending()));
+    yield* preloadScene(player.native.prepare().scene, library, () => view.assetsPending());
     view.start();
     yield* serve(view, loop, finished.promise);
   })));

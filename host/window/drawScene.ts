@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { type AnimationSequence, animationSample } from "../../src/headless/animation";
 import { parseMDX } from "../../vendor/war3-model.mjs";
 import { parsableModel } from "../models/models";
@@ -111,12 +112,12 @@ export function drawScene(scene: RenderScene, library: ModelLibrary) {
 const PRELOAD_MS = 120_000;
 
 /** Reads every model `scene` names and waits until the window has built them all: the visible scene loads before the game's first step. */
-export async function preloadScene(scene: RenderScene, library: ModelLibrary, pending: () => number): Promise<void> {
+export const preloadScene = (scene: RenderScene, library: ModelLibrary, pending: () => number) => Effect.gen(function*() {
   const began = performance.now();
   for (;;) {
     const drawn = drawScene(scene, library);
     if (drawn.pending === 0 && pending() === 0) return;
-    if (performance.now() - began > PRELOAD_MS) throw new Error(`the first scene's models did not load in ${PRELOAD_MS / 1000} s`);
-    await Bun.sleep(5);
+    if (performance.now() - began > PRELOAD_MS) return yield* Effect.die(new Error(`the first scene's models did not load in ${PRELOAD_MS / 1000} s`));
+    yield* Effect.sleep("5 millis");
   }
-}
+});
