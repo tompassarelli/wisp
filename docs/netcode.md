@@ -11,7 +11,9 @@ game and runs as plain TypeScript in Bun and in Warcraft's 32-bit Lua.
 | `codec` | `RowCodec<Row>`: how a game's input row is made, copied, compared, held, flagged urgent, written to and read from the wire. |
 | `frameRing` | A fixed ring of rows keyed by frame; a slot answers only for the frame it holds. |
 | `ledger` | `InputLedger`: each player's accepted rows, how far each is known, who left and after which frame, and the receipt for every refusal. |
+| `delay` | The ping-based input delay: an integer round trip EWMA, `oneWayFrames`, `autoDelay`, `nextDelay` with its 34 ms lowering hysteresis, `agreedDelay` and the host's manual override, `correctDelay` and `timeSyncWait`. All integers, so Bun and Lua32 decide alike. |
 | `message` | `encodeMessage` and `decodeMessage`: a batch of consecutive frames as one text message of at most 200 bytes and 64 frames, each row written as a delta from the one before and runs of unchanged rows as a skip count. |
+| `rate` | Slow-machine detection: a machine under 55 fps with 750 ms busy for 2 seconds is slow until 2 seconds are not. A game words its own warning. |
 | `wire` | The 64-character alphabet, varints, signed varints and `WireReader`; a reader refuses non-minimal and over-limit values. |
 | `session` | `createSession`, `tick`, `receive`, `leave`: prediction, rollback and confirmation. |
 
@@ -62,6 +64,7 @@ rows survive a message round trip within 200 bytes, that two sessions trading
 rows over a late, bursty channel end with the confirmed state of the rows each
 player really captured and a rolled-back prediction equal to it, and that a
 player who leaves while holding a key is idle after their last accepted row.
+`src/netcode/delay.tests.ts` checks the delay and rate rules against settled round trips, the lowering hysteresis, the host override and the second-by-second correction.
 `test/netcode.test.ts` runs them in Bun, and `test/lua/index.ts` in 32-bit Lua
 (`test/runtime.test.ts`, a farm test).
 

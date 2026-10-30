@@ -8,3 +8,4 @@ import "../../src/headless/animation.tests";
 import "../../src/headless/natives/preloadText.tests";
 import "../../src/netcode/rowCodec.tests";
 import "../../src/netcode/session.tests";
+import "../../src/netcode/delay.tests";

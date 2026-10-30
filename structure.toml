@@ -42,7 +42,7 @@ may_use = ["num"]
 [[module]]
 name = "netcode"
 paths = ["src/netcode/**"]
-responsibility = "Game-agnostic rollback netcode behind a row codec: frame ring, input ledger, batched delta messages, wire varints and the prediction and rollback session."
+responsibility = "Game-agnostic rollback netcode behind a row codec: frame ring, input ledger, batched delta messages, wire varints and the prediction and rollback session, the ping-based input delay and slow-machine detection."
 may_use = ["runtime", "num"]
 
 [[module]]
