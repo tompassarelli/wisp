@@ -146,3 +146,37 @@ Rust (wisp:docs/relay.md, "Lobby and game on the agent").
 - **Obligations:** none for facts. Copying FLO expression later would carry the
   MIT notice for files at this revision and a separate check of any file's
   history before 2023.
+
+## Game API: UI frames
+
+Checked 31 October 2026 for the UI frames family of the game API
+(wisp:docs/game-api-plan.md), on Tom's pointer the same day.
+
+- **Source and revision:** wc3-w3ts-frame-components,
+  github.com/bertman12/wc3-w3ts-frame-components at
+  `327f12cb95a094e1c203bd06209a3f966773a9dc` (17 October 2026). Read:
+  `README.md`, `src/components/Core/MonoFrame.ts` and `CompositeFrame.ts`,
+  `src/models/components.ts`, `src/theme/theme.ts` and `src/grid/grid.ts`.
+- **Licence:** MIT (Copyright (c) 2026 JediMindTrix), root `LICENSE`.
+- **What it is:** components built on w3ts's `Frame` class. A `MonoFrame` wraps
+  one Warcraft frame type, and a `CompositeFrame` or `Grid` builds bigger
+  widgets (button, tooltip, timer, list) from the small ones. Each component
+  holds its configuration and its frame objects at run time.
+- **Taken (ideas, no code):**
+  - Frame types and known templates are typed, so a misspelt type fails to
+    compile while a template from the map's own FDF is still accepted. The
+    game API's `kind` and `template` parameters get the same typing, which
+    costs nothing in Lua.
+  - A frame has one handler per event; the library destroys the old trigger
+    when the handler is set again. The game API keeps registration one to
+    one on Warcraft, so the lowering stays free, and the native backend
+    refuses a second handler for the same frame and event, so headless Bun
+    tests catch a double registration.
+- **Not taken:** the component classes, composites, grid and theme. They are
+  wrapper objects with methods, which put a table lookup or an allocation
+  on each Lua call; the plan's Lua cost rule allows neither. Widgets are a
+  layer above the API that a game builds for itself (Smashcraft already has
+  its own layout code in `ts/src/game/ui/`). The theme object is marked
+  deprecated in its own source.
+- **Obligations:** none, since no expression is copied. Copying code later
+  would carry the MIT notice for this revision.
