@@ -68,6 +68,13 @@ on Windows, X11 and Wayland), and a render thread that owns the wgpu device
 and the frame clock. Bun's main thread keeps running the map, the netcode and
 the sockets.
 
+Build and test it from a clean checkout with one command:
+`cd window && nix develop --command cargo test -p wisp-window`. The dev shell
+(`window/flake.nix`, locked) supplies the toolchain `rust-toolchain.toml`
+names, a C compiler, pkg-config, and the libudev and libxkbcommon that gilrs
+and winit link, and puts the Wayland, X11 and Vulkan runtime libraries on
+`LD_LIBRARY_PATH` for `bun wisp window probe`.
+
 As first built, each frame the render thread sampled input and woke Bun
 through a `threadsafe` `JSCallback` that carried the input. Bun ran one step
 and handed back the scene with one FFI call that passed a pointer and a
