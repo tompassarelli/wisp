@@ -3,12 +3,15 @@
 //! Bun loads this library with `bun:ffi`. Every exported function is `catch_unwind`-guarded, because a Rust panic must not
 //! unwind into Bun, and `wisp_window_close` joins both threads, so the wake callback is never called after it returns.
 
+mod audio;
 mod clock;
+mod decode;
 mod draw;
 mod frame;
 mod host;
 mod input;
 mod metrics;
+mod mixer;
 mod sync;
 
 use std::ffi::{c_char, c_void};
@@ -17,6 +20,7 @@ use std::ptr;
 use std::slice;
 use std::time::Duration;
 
+use audio::Audio;
 use host::{Host, Wake};
 
 fn guard<T>(fallback: T, body: impl FnOnce() -> T) -> T {
@@ -199,4 +203,74 @@ pub unsafe extern "C" fn wisp_window_close(handle: *mut c_void) {
 #[no_mangle]
 pub unsafe extern "C" fn wisp_window_vocabulary(out: *mut u8, capacity: usize) -> usize {
     guard(0, || copy_text(&format!("{{\"buttons\":{:?},\"metrics\":{:?}}}", input::BUTTONS, metrics::SERIES), out, capacity))
+}
+
+/// Opens the sound output: a cpal stream on the default device, or a mixer into nothing when the machine has none (`wisp_audio_info` says which).
+#[no_mangle]
+pub extern "C" fn wisp_audio_open() -> *mut c_void {
+    guard(ptr::null_mut(), || Box::into_raw(Box::new(Audio::open())) as *mut c_void)
+}
+
+unsafe fn audio<'a>(handle: *mut c_void) -> Option<&'a Audio> {
+    (handle as *const Audio).as_ref()
+}
+
+static AUDIO_ERROR: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+/// Decodes the sound file in `bytes` under `key` unless that key is already loaded; returns 0, or 1 with the reason readable through `wisp_audio_error`.
+///
+/// # Safety
+/// `handle` comes from `wisp_audio_open`; `key` and `bytes` point to readable bytes of the given lengths.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_audio_load(handle: *mut c_void, key: *const c_char, key_length: usize, bytes: *const u8, length: usize) -> u32 {
+    guard(1, || {
+        let (Some(audio), false) = (audio(handle), bytes.is_null()) else { return 1 };
+        match audio.load(text(key, key_length), slice::from_raw_parts(bytes, length)) {
+            Ok(()) => 0,
+            Err(error) => {
+                *AUDIO_ERROR.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = error;
+                1
+            }
+        }
+    })
+}
+
+/// Copies up to `capacity` bytes of the last `wisp_audio_load` failure; returns its full length.
+///
+/// # Safety
+/// `out` must point to `capacity` writable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_audio_error(out: *mut u8, capacity: usize) -> usize {
+    guard(0, || copy_text(&AUDIO_ERROR.lock().unwrap_or_else(|poisoned| poisoned.into_inner()), out, capacity))
+}
+
+/// Starts the sound loaded under `key` with the page's volume (over 127) and pitch (a playback rate); returns 1 when it started and 0 when `key` isn't loaded.
+///
+/// # Safety
+/// `handle` comes from `wisp_audio_open`; `key` points to `key_length` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_audio_play(handle: *mut c_void, key: *const c_char, key_length: usize, volume: f64, pitch: f64) -> u32 {
+    guard(0, || audio(handle).map_or(0, |audio| audio.play(text(key, key_length), volume, pitch) as u32))
+}
+
+/// The output, its format and the decoded and started counts as JSON; returns its full length.
+///
+/// # Safety
+/// `handle` comes from `wisp_audio_open`; `out` has room for `capacity` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_audio_info(handle: *mut c_void, out: *mut u8, capacity: usize) -> usize {
+    guard(0, || audio(handle).map_or(0, |audio| copy_text(&audio.info(), out, capacity)))
+}
+
+/// Stops the output and frees the handle.
+///
+/// # Safety
+/// `handle` comes from `wisp_audio_open` and is passed here once.
+#[no_mangle]
+pub unsafe extern "C" fn wisp_audio_close(handle: *mut c_void) {
+    guard((), || {
+        if !handle.is_null() {
+            drop(Box::from_raw(handle as *mut Audio));
+        }
+    })
 }

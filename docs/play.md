@@ -262,9 +262,9 @@ never makes a present miss its vblank; a scene that missed its deadline is
 counted in `lateScenes` and drawn on a later frame. Box W1 draws only a clear colour and the step as 24 lit squares, and it
 shows the loading and ready text in the window's title. The scene is parsed in
 the library on every frame, so the cost of encoding and parsing it is measured
-before the renderer is ported. Keyboard only: pads, sound, captures and
+before the renderer is ported. Keyboard only: pads, captures and
 `--headless` stay with Chrome (`--capture-frames` with the native window is
-refused). `standalone.json` keeps the page's fields and adds `adapter`,
+refused). Sound plays through cpal: the game's cues resolve as the page's do, decode once per resolved file (Vorbis, MP3, FLAC and PCM WAV) and play at `volume / 127` and the cue's pitch as a playback rate; `standalone.json` carries the page's `audioEvents`, `audioReadyEvents`, `audioPlayed`, `audioDecodedAssets` and `missingSounds`, with `audioOutput` naming the device (or `none`). `standalone.json` keeps the page's fields and adds `adapter`,
 `backend`, `presentMode`, `desiredMaximumFrameLatency`, `wakeMs`, `encodeMs`,
 `parseMs`, `inputToPresentMs` (the present time minus the sample time of the scene
 drawn), `missedPresents` (an acquire interval over 1.5 T, with

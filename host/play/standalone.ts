@@ -15,8 +15,10 @@ import { type NetListening, type NetRole, type NetSession, runNetPeer } from "..
 import { captureScene, sceneWithUnits, RenderFailure, type HeadlessRenderProject } from "../render/headlessRender";
 import { browserBundle } from "../render/browserBundle";
 import { createSoundResolver } from "../render/standaloneSound";
+import { openNativeAudio } from "../window/audio";
 import { openNativePlayer } from "../window/nativePlay";
 import { openSimPlayer } from "../window/simPlayer";
+import { createSoundPlayer } from "../window/soundPlayer";
 import type { NativeGameModule } from "../window/simProtocol";
 import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
 
@@ -70,6 +72,8 @@ export interface StandaloneOptions {
   readonly gpuLease?: boolean;
   /** With `window: "native"`, where a worker thread imports the game from: it then steps the game there, so the game's collections never delay the window's wake. Without it, or with `net`, the game steps on Bun's main thread. */
   readonly nativeGame?: NativeGameModule;
+  /** With `window: "native"`, the `wisp-window` library the sound output loads, else the one the window uses. */
+  readonly library?: string | undefined;
 }
 
 class MapMismatch extends Schema.TaggedError<MapMismatch, { readonly brand: unique symbol }>()("MapMismatch", { code: Schema.String, here: Schema.String }) {
@@ -115,6 +119,8 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
   const recordChecksums = options.recordChecksums ?? (options.script !== undefined && session.paced !== true);
   const sounds = createSoundResolver(game.render.readAsset);
   const assets = new Map<string, Promise<Uint8Array | undefined>>();
+  const audio = options.window === "native" ? yield* Effect.acquireRelease(attempt(async () => openNativeAudio(options.library)), (open) => Effect.sync(() => open.close())) : undefined;
+  const soundPlayer = audio === undefined ? undefined : createSoundPlayer(sounds, audio);
   const completion = yield* Deferred.make<Readonly<Record<string, unknown>>, RenderFailure>();
   const javascript = options.window === "native" ? "" : yield* attempt(() => browserBundle(join(import.meta.dir, "../browser/standalone.ts")));
   if (options.out !== undefined) yield* attempt(() => mkdir(options.out!, { recursive: true }));
@@ -130,6 +136,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
     const scene = sceneWithUnits(game.render, captureScene(session.client, { visibleOnly: !capture }));
     const cues = session.client.soundLog.slice(soundOffset);
     soundOffset = session.client.soundLog.length;
+    soundPlayer?.cues(cues);
     const frameOf = { scene: { ...scene, frame, units: [], effects: scene.effects.filter((effect) => effect.alpha > 0 && effect.scale > 0 && !effect.flat), ui: scene.ui.filter((element) => element.visible && element.alpha > 0) },
       sounds: cues, step: steps, frame, ...(checksum === undefined ? {} : { checksum }), capture, done, serverMs: performance.now() - start } satisfies StandaloneFrame;
     return { frame: frameOf, saved: capture ? scene : undefined };
@@ -140,6 +147,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
     return frame;
   });
   const finish = (result: Readonly<Record<string, unknown>>) => Effect.gen(function*() {
+    if (soundPlayer !== undefined && result.error === undefined) result = { ...result, ...(yield* attempt(() => soundPlayer.settle())) };
     if (options.out !== undefined) {
       const out = options.out;
       if (recordChecksums) yield* attempt(() => Bun.write(join(out, "checksums.jsonl"), checksums.map((row) => JSON.stringify(row)).join("\n") + "\n"));
@@ -148,6 +156,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
     if (result.error !== undefined) yield* Deferred.fail(completion, failed(String(result.error)));
     else if (captures.size > 0) yield* Deferred.fail(completion, failed(`capture frames not reached: ${[...captures].join(", ")}`));
     else yield* Deferred.succeed(completion, result);
+    return result;
   });
   const handle = (request: Request, server: Bun.Server<undefined>) => Effect.gen(function*() {
     const url = new URL(request.url);

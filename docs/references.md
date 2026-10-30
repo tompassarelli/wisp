@@ -22,6 +22,11 @@ ships each licence text below.
   Ship the licence.
 - `hound` 3.5.1, Apache-2.0, https://github.com/ruuda/hound. WAV decoding.
   Ship the licence.
+- `lewton` 0.10.2, MIT OR Apache-2.0, https://github.com/RustAudio/lewton. Ogg
+  Vorbis decoding, with `ogg` 0.8.0 (BSD-3-Clause) under it. Ship both licences.
+- `nanomp3` 0.2.0 and `nanomp3-core` 0.2.0, MIT OR Apache-2.0,
+  https://github.com/nanomp3/nanomp3. MP3 decoding, a safe port of minimp3.
+  Ship the licence.
 - `image-blp` 1.2.0, MIT, https://github.com/zloy-tulen/image-blp. BLP
   textures. Ship the licence.
 - `ddsfile` 0.6.0, MIT, https://github.com/cwfitzgerald/ddsfile. DDS
