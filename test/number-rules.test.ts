@@ -49,6 +49,7 @@ farmTest("[spec #129] the check command reports every number-rule error the Lua3
     ["7,7", "an `if` condition tests a number or string"],
     ["11,24", "Unsupported node kind RegularExpressionLiteral"],
     ["12,23", "Array literals may not contain undefined or null"],
+    ["13,66", "Boolean as a value is a nil global"],
   ];
   // The rules that repeat one of TypeScriptToLua's own refusals, by the start of its message.
   const refusals = ["Unsupported node kind RegularExpressionLiteral", "Array literals may not contain undefined or null"];

@@ -12,6 +12,10 @@
 //   of synchronized binary32 arithmetic, and Warcraft's math and random
 //   natives anywhere: each platform's math library differs by an ulp, and a
 //   headless replay can't repeat Warcraft's own;
+// - Boolean, Number, String, Object and Array as values, such as
+//   `xs.some(Boolean)`: TypeScriptToLua translates Number() and String()
+//   calls and these globals' members, and emits any other use as a bare
+//   global, which is nil in Warcraft's Lua;
 // - type escapes in game code (tests excepted): `any`, `as unknown as` and
 //   non-null `!`, which assert what the code should check;
 // - truthiness tests of a number or string: `||`, `&&`, `||=` and `&&=`
@@ -67,6 +71,7 @@ export interface RuleSyntax<N extends RuleNode<N>> {
   isBinaryExpression(node: N): node is N & { readonly left: N; readonly operatorToken: N; readonly right: N };
   isArrayLiteralExpression(node: N): node is N & { readonly elements: readonly N[] };
   isCallExpression(node: N): node is N & { readonly expression: N; readonly arguments: readonly N[] };
+  isNewExpression(node: N): node is N & { readonly expression: N };
   isParenthesizedExpression(node: N): node is N & { readonly expression: N };
   isPrefixUnaryExpression(node: N): node is N & { readonly operator: number; readonly operand: N };
   isIfStatement(node: N): node is N & { readonly expression: N };
@@ -137,6 +142,11 @@ const LIBRARY_MATH_MESSAGE = (name: string) => `Math.${name} comes from the plat
 /** Warcraft's natives that compute with its own math library or random generator. */
 const WARCRAFT_MATH = new Set(["Sin", "Cos", "Tan", "Asin", "Acos", "Atan", "Atan2", "SquareRoot", "Pow", "Deg2Rad", "Rad2Deg", "SinBJ", "CosBJ", "TanBJ", "AsinBJ", "AcosBJ", "AtanBJ", "Atan2BJ"]);
 const WARCRAFT_RANDOM = new Set(["GetRandomInt", "GetRandomReal"]);
+
+/** The constructors TypeScriptToLua translates only when called (as named here) or read for a member. */
+const CONSTRUCTOR_CALLS = new Map([["Boolean", false], ["Number", true], ["String", true], ["Object", false], ["Array", false]]);
+const CONSTRUCTOR_VALUE_MESSAGE = (name: string) =>
+  `${name} as a value is a nil global in Warcraft's Lua: TypeScriptToLua translates only Number() and String() calls and these globals' members; pass a function, e.g. \`(x) => x !== undefined\``;
 
 const RUNTIME_SERVICES = new Map([
   ["Date", "Date has no deterministic meaning in Warcraft; synchronized time is the frame counter"],
@@ -236,8 +246,14 @@ export function scanNumberRules<N extends RuleNode<N>>(syntax: RuleSyntax<N>, fi
       if (array !== undefined) findings.push({ node, message: HOLEY_LENGTH_MESSAGE, holeyArray: array });
     } else if (syntax.isIdentifier(node)) {
       const service = RUNTIME_SERVICES.get(node.text);
-      if (service !== undefined && !syntax.isTypeReferenceNode(node.parent)) {
+      const callable = CONSTRUCTOR_CALLS.get(node.text);
+      const { parent } = node;
+      if (service !== undefined && !syntax.isTypeReferenceNode(parent)) {
         findings.push({ node, message: service, condition: { identifier: node, test: "standardLibrary" } });
+      } else if (callable !== undefined && !syntax.isTypeReferenceNode(parent) && !syntax.isPropertyAccessExpression(parent)
+        && !(callable && syntax.isCallExpression(parent) && parent.expression === node)
+        && !(node.text === "Array" && syntax.isNewExpression(parent) && parent.expression === node)) {
+        findings.push({ node, message: CONSTRUCTOR_VALUE_MESSAGE(node.text), condition: { identifier: node, test: "standardLibrary" } });
       }
     } else if (syntax.isArrayLiteralExpression(node)) {
       const isNil = (element: N) => element.kind === kind.NullKeyword || element.kind === kind.UndefinedKeyword || (syntax.isIdentifier(element) && element.text === "undefined");
