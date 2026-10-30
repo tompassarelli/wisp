@@ -10,7 +10,7 @@ export type HoldRecord = typeof HoldJson.Type;
 
 const decodeHold = Schema.decodeUnknownOption(Schema.fromJsonString(HoldJson));
 
-export const holdsFile = () => join(stateRoot(), "holds.jsonl");
+const holdsFile = () => join(stateRoot(), "holds.jsonl");
 
 export const recordHold = (hold: HoldRecord, file = holdsFile()) => {
   mkdirSync(dirname(file), { recursive: true });
