@@ -28,8 +28,8 @@ impl Renderer {
         } else {
             self.next_job += 1;
             self.decoding.insert(self.next_job, path.to_ascii_lowercase());
-            let (quality, cache) = (self.quality, self.cache.clone());
-            self.decoder.submit(self.next_job, move || remaster::prepare(&bytes, quality, cache.as_deref()));
+            let (quality, cache, upscaler, edges) = (self.quality, self.cache.clone(), self.upscaler.clone(), Edges::for_path(path));
+            self.decoder.submit(self.next_job, move || remaster::prepare(&bytes, quality, cache.as_deref(), &upscaler, edges));
         }
     }
 
@@ -84,7 +84,7 @@ impl Renderer {
             self.incoming = None;
             return;
         }
-        let mut incoming = Box::new(Renderer::new(self.device.clone(), self.queue.clone(), self.format, quality, self.features));
+        let mut incoming = Box::new(Renderer::new(self.device.clone(), self.queue.clone(), self.format, quality, self.features).with_upscaler(self.upscaler.clone()));
         for (path, bytes) in &self.sources {
             incoming.ingest_shared(path, bytes.clone());
         }

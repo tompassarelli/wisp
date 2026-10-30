@@ -1,17 +1,21 @@
 //! Remasters a Classic texture on the player's machine: an upscaled albedo, plus a tangent-space normal map with roughness in its alpha, both derived from the player's own file. Results are cached under the player's cache directory and never leave it.
 
 mod cache;
+mod cugan;
 mod relief;
 mod upscale;
+mod upscaler;
 
 use std::str::FromStr;
 
 use crate::texture::Image;
 
 pub use cache::Cache;
+pub use cugan::{device_limits, Edges, NOTICE as REAL_CUGAN_NOTICE};
+pub use upscaler::Upscaler;
 
 /// Textures this large or larger are already high resolution (backdrops, loading screens) and are left as they are.
-const LARGEST_SOURCE: u32 = 1024;
+pub const LARGEST_SOURCE: u32 = 1024;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Quality {
@@ -65,10 +69,22 @@ pub struct Maps {
 }
 
 /// Bumped whenever the output of `enhance` changes, so stale cache entries are never read.
-const ALGORITHM: u32 = 1;
+const ALGORITHM: u32 = 2;
 
-pub fn cache_key(source: &[u8], quality: Quality) -> String {
-    cache::digest(source, &format!("{}-v{ALGORITHM}", quality.name()))
+/// Names the source, the quality, how the texture continues past its edges and the method that made it (the model and weights, or the edge-directed filter), so a change to any of them refills the cache.
+pub fn cache_key(source: &[u8], quality: Quality, upscaler: &Upscaler, edges: Edges) -> String {
+    cache::digest(source, &format!("{}-v{ALGORITHM}-{}-{edges:?}", quality.name(), upscaler.method()))
+}
+
+impl Edges {
+    /// Terrain tiles repeat across the ground, so their context wraps; every other texture is mirrored at its edge.
+    pub fn for_path(path: &str) -> Self {
+        if path.replace('\\', "/").to_ascii_lowercase().starts_with("terrainart/") {
+            Edges::Wrap
+        } else {
+            Edges::Mirror
+        }
+    }
 }
 
 /// A decoded texture and, when the remaster ran, the relief maps derived from it.
@@ -78,15 +94,17 @@ pub struct Prepared {
 }
 
 /// Decodes a texture file and remasters it, reading the result from `cache` when this file and quality were seen before and storing it there when not.
-pub fn prepare(bytes: &[u8], quality: Quality, cache: Option<&Cache>) -> Result<Prepared, String> {
-    let key = (quality != Quality::Off).then(|| cache_key(bytes, quality));
+pub fn prepare(bytes: &[u8], quality: Quality, cache: Option<&Cache>, upscaler: &Upscaler, edges: Edges) -> Result<Prepared, String> {
+    let key = (quality != Quality::Off).then(|| cache_key(bytes, quality, upscaler, edges));
     if let (Some(cache), Some(key)) = (cache, &key) {
         if let Some(maps) = cache.load(key) {
             return Ok(Prepared { albedo: maps.albedo, relief: Some(maps.relief) });
         }
     }
     let decoded = crate::texture::decode(bytes)?;
-    match enhance(&decoded, quality) {
+    let enhanced = enhance(&decoded, quality, upscaler, edges);
+    upscaler.announce(&mut std::io::stderr());
+    match enhanced {
         Some(maps) => {
             if let (Some(cache), Some(key)) = (cache, &key) {
                 cache.store(key, &maps);
@@ -97,12 +115,14 @@ pub fn prepare(bytes: &[u8], quality: Quality, cache: Option<&Cache>) -> Result<
     }
 }
 
-/// Upscales `image` and derives its relief, or returns `None` when the quality is off or the texture is already large.
-pub fn enhance(image: &Image, quality: Quality) -> Option<Maps> {
+/// Upscales `image` (the first doubling by `upscaler`, any further ones by the edge-directed filter) and derives its relief, or returns `None` when the quality is off or the texture is already large.
+pub fn enhance(image: &Image, quality: Quality, upscaler: &Upscaler, edges: Edges) -> Option<Maps> {
     if quality == Quality::Off || image.width.max(image.height) >= LARGEST_SOURCE {
         return None;
     }
-    let albedo = upscale::steps(image, quality.upscale_steps());
+    let steps = quality.upscale_steps();
+    let albedo = upscaler.doubled(image, edges);
+    let albedo = if steps > 1 { upscale::steps(&albedo, steps - 1) } else { albedo };
     let relief = relief::derive(&albedo);
     Some(Maps { albedo, relief })
 }
@@ -126,15 +146,15 @@ mod tests {
 
     #[test]
     fn off_and_large_textures_are_left_alone() {
-        assert!(enhance(&checker(8), Quality::Off).is_none());
-        assert!(enhance(&Image { width: 1024, height: 4, rgba: vec![0; 1024 * 16] }, Quality::Standard).is_none());
+        assert!(enhance(&checker(8), Quality::Off, &Upscaler::classical(), Edges::Mirror).is_none());
+        assert!(enhance(&Image { width: 1024, height: 4, rgba: vec![0; 1024 * 16] }, Quality::Standard, &Upscaler::classical(), Edges::Mirror).is_none());
     }
 
     #[test]
     fn each_step_doubles_both_sides_and_relief_matches_the_albedo() {
-        let standard = enhance(&checker(8), Quality::Standard).unwrap();
+        let standard = enhance(&checker(8), Quality::Standard, &Upscaler::classical(), Edges::Mirror).unwrap();
         assert_eq!((standard.albedo.width, standard.albedo.height), (16, 16));
-        let high = enhance(&checker(8), Quality::High).unwrap();
+        let high = enhance(&checker(8), Quality::High, &Upscaler::classical(), Edges::Mirror).unwrap();
         assert_eq!((high.albedo.width, high.relief.height), (32, 32));
         assert_eq!(high.relief.rgba.len(), 32 * 32 * 4);
     }
@@ -142,21 +162,30 @@ mod tests {
     #[test]
     fn a_flat_texture_stays_flat_and_its_normals_point_out() {
         let flat = Image { width: 6, height: 6, rgba: [90, 120, 150, 255].repeat(36) };
-        let maps = enhance(&flat, Quality::Standard).unwrap();
+        let maps = enhance(&flat, Quality::Standard, &Upscaler::classical(), Edges::Mirror).unwrap();
         assert!(maps.albedo.rgba.chunks_exact(4).all(|pixel| pixel.iter().zip([90u8, 120, 150, 255]).all(|(got, want)| got.abs_diff(want) <= 1)));
         assert!(maps.relief.rgba.chunks_exact(4).all(|pixel| pixel[0].abs_diff(128) <= 1 && pixel[1].abs_diff(128) <= 1 && pixel[2] >= 254));
     }
 
     #[test]
     fn upscaling_stays_within_the_source_range() {
-        let maps = enhance(&checker(8), Quality::High).unwrap();
+        let maps = enhance(&checker(8), Quality::High, &Upscaler::classical(), Edges::Mirror).unwrap();
         assert!(maps.albedo.rgba.chunks_exact(4).all(|pixel| (30..=220).contains(&pixel[0]) && (30..=200).contains(&pixel[2])));
     }
 
     #[test]
-    fn the_cache_key_follows_the_bytes_and_the_quality() {
-        assert_ne!(cache_key(b"a", Quality::Standard), cache_key(b"b", Quality::Standard));
-        assert_ne!(cache_key(b"a", Quality::Standard), cache_key(b"a", Quality::High));
-        assert_eq!(cache_key(b"a", Quality::High), cache_key(b"a", Quality::High));
+    fn the_cache_key_follows_the_bytes_the_quality_and_the_edges() {
+        let key = |source: &[u8], quality, edges| cache_key(source, quality, &Upscaler::classical(), edges);
+        assert_ne!(key(b"a", Quality::Standard, Edges::Mirror), key(b"b", Quality::Standard, Edges::Mirror));
+        assert_ne!(key(b"a", Quality::Standard, Edges::Mirror), key(b"a", Quality::High, Edges::Mirror));
+        assert_ne!(key(b"a", Quality::High, Edges::Mirror), key(b"a", Quality::High, Edges::Wrap));
+        assert_eq!(key(b"a", Quality::High, Edges::Wrap), key(b"a", Quality::High, Edges::Wrap));
+    }
+
+    #[test]
+    fn only_terrain_art_wraps() {
+        assert_eq!(Edges::for_path("TerrainArt\\LordaeronSummer\\Lords_Grass.blp"), Edges::Wrap);
+        assert_eq!(Edges::for_path("terrainart/lordaeronsummer/lords_dirt.blp"), Edges::Wrap);
+        assert_eq!(Edges::for_path("Units\\Human\\Footman\\Footman.blp"), Edges::Mirror);
     }
 }

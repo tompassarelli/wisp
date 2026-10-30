@@ -53,18 +53,30 @@ sound box finds a codec the permissive decoders cannot read.
 ## Remaster candidates (wisp#109, [remaster-upscaler.md](remaster-upscaler.md))
 
 Licences were read from each repository through the GitHub API on
-2026-10-31. Nothing here is linked or shipped yet. The bake-off ran the
-upscalers as separate measuring tools on gex45 and the laptop, on textures
-from the player install that stay outside Git. Real-CUGAN's weights are
-adopted for the follow-up box, which ships its notice.
+2026-10-31. The bake-off ran the upscalers as separate measuring tools on
+gex45 and the laptop, on textures from the player install that stay outside
+Git. Only Real-CUGAN's weights are shipped: the player build carries them in
+`window/wisp-window/assets/real-cugan/` with the MIT notice
+(`docs/notices/real-cugan-MIT.txt`, the same text as `LICENSE.txt` beside the
+weights).
 
 - Real-CUGAN (bilibili, MIT, `Real-CUGAN/LICENSE` at 2799af78; weights are
   the release assets of tag `Real-CUGAN`, commit d7f36f1f, with no
   separate licence), https://github.com/bilibili/ailab/tree/main/Real-CUGAN.
-  Adopted: SE 2x conservative weights, 2.6 MB.
+  Adopted: SE 2x conservative weights, 2.6 MB, embedded and run by Wisp's own
+  WGSL kernels (`remaster/cugan/`). The exact revision is the file
+  `models-se/up2x-conservative.bin` of realcugan-ncnn-vulkan 20220728
+  (below), sha256
+  `91c72c136e7ff8556323d4449c5ceeff22d9829bf8463a01137cadb8d59b84a0`, copied
+  unmodified; the file stores its weights as half floats, and no other
+  conversion is made. Its network graph (30 weighted layers of the 2x CUNet)
+  is rewritten from the port's `.param` file, which is read as
+  a published description of the layers and not copied.
 - realcugan-ncnn-vulkan (nihui, MIT, 20220728, 395302c5),
-  https://github.com/nihui/realcugan-ncnn-vulkan. Measuring tool and the
-  reference that Wisp's kernels are checked against; not linked.
+  https://github.com/nihui/realcugan-ncnn-vulkan. Source of the shipped weights
+  file, and the reference tool that Wisp's kernels are checked against; its
+  tiling and edge padding (18 pixels, mirrored) are mirrored in
+  `remaster/cugan/mod.rs`, and nothing is linked.
 - Real-ESRGAN (xinntao, BSD-3-Clause, a4abfb29; x4plus, x4plus-anime-6B,
   animevideov3 and general-x4v3 weights are release assets of the same
   repository), https://github.com/xinntao/Real-ESRGAN. Run, not adopted.

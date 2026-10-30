@@ -132,7 +132,7 @@ impl Gpu {
             apply_limit_buckets: false,
         }))
         .map_err(|e| format!("adapter: {e}"))?;
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).map_err(|e| format!("device: {e}"))?;
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor { required_limits: crate::remaster::device_limits(&adapter.limits()), ..Default::default() })).map_err(|e| format!("device: {e}"))?;
         let mut config = surface.get_default_config(&adapter, size.width.max(1), size.height.max(1)).ok_or("surface not supported by the adapter")?;
         let formats = surface.get_capabilities(&adapter).formats;
         let plain = config.format.remove_srgb_suffix();
@@ -181,7 +181,8 @@ impl Gpu {
             mapped_at_creation: false,
         });
         let info = adapter.get_info();
-        let renderer = Renderer::new(device.clone(), queue.clone(), config.format, settings.quality(settings::developer_quality()), settings.features());
+        let upscaler = crate::remaster::Upscaler::on(device.clone(), queue.clone(), &info);
+        let renderer = Renderer::new(device.clone(), queue.clone(), config.format, settings.quality(settings::developer_quality()), settings.features()).with_upscaler(Arc::new(upscaler));
         let ui = UiRenderer::new(device.clone(), queue.clone(), config.format);
         Ok(Self { surface, config, device, queue, pipeline, vertices, renderer, ui, aspect, scene: None, capture, adapter_handle: adapter, present, settings, store, menu: Menu::default(), sweep, images: HashSet::new(), adapter: info.name, backend: format!("{:?}", info.backend) })
     }

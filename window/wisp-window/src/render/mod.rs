@@ -33,7 +33,7 @@ use wgpu::util::DeviceExt;
 use std::sync::Arc;
 
 use crate::decode_pool::Pool;
-use crate::remaster::{self, Cache, Prepared, Quality};
+use crate::remaster::{self, Cache, Edges, Prepared, Quality, Upscaler};
 use crate::settings::Features;
 use math::{mirrored, multiply, projection, Mat4, IDENTITY};
 use gpu::{bone_storage, frame_group, instance_storage, opacity_storage, repeat_sampler, upload, uv_storage, white};
@@ -107,6 +107,7 @@ pub struct Renderer {
     textures: HashMap<String, wgpu::TextureView>,
     reliefs: HashMap<String, wgpu::TextureView>,
     quality: Quality,
+    upscaler: Arc<Upscaler>,
     cache: Option<Arc<Cache>>,
     models: Vec<GpuModel>,
     model_ids: HashMap<String, usize>,
@@ -150,6 +151,12 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// Doubles textures with `upscaler` instead of the edge-directed filter alone; the one an adapter was checked for is shared by every rebuild of the art.
+    pub fn with_upscaler(mut self, upscaler: Arc<Upscaler>) -> Self {
+        self.upscaler = upscaler;
+        self
+    }
+
     pub fn new(device: wgpu::Device, queue: wgpu::Queue, format: wgpu::TextureFormat, quality: Quality, features: Features) -> Self {
         let (pipelines, frame_layout, layer_layout) = pipelines::build(&device, HDR);
         let sampler = repeat_sampler(&device);
@@ -181,6 +188,7 @@ impl Renderer {
             textures: HashMap::new(),
             reliefs: HashMap::new(),
             quality,
+            upscaler: Arc::new(Upscaler::classical()),
             cache: (quality != Quality::Off).then(Cache::open).flatten().map(Arc::new),
             models: Vec::new(),
             model_ids: HashMap::new(),
