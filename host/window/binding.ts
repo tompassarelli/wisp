@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { JSCallback, dlopen } from "bun:ffi";
+import { JSCallback, type Pointer, dlopen } from "bun:ffi";
 
 const root = join(import.meta.dir, "../..");
 const libraryFile = process.platform === "win32" ? "wisp_window.dll" : "libwisp_window.so";
@@ -28,24 +28,18 @@ const symbols = {
   wisp_window_close: { args: ["ptr"], returns: "void" },
 } as const;
 
-export type WakeKind = "frame" | "closed" | "error";
+/** What the render thread tells Bun at each sample point: the kind below, the frame to step, when the sample was taken, the held buttons as a bit mask and when Bun began handling it. */
+export const WAKE_FRAME = 0, WAKE_CLOSED = 1, WAKE_ERROR = 2;
 
-/** What the render thread tells Bun at each sample point: the frame to step, the buttons held and when the sample was taken. */
-export interface Wake {
-  readonly kind: WakeKind;
-  readonly frame: number;
-  readonly sampleNs: number;
-  readonly buttons: readonly string[];
-  /** The library's clock when Bun began handling the wake, in the same nanoseconds as `sampleNs`. */
-  readonly handledNs: number;
-}
+/** Called on Bun's main thread for every wake, with numbers only so the seam allocates nothing; `handledNs` is the library's clock when the callback began, in the same nanoseconds as `sampleNs`. */
+export type OnWake = (kind: number, frame: number, sampleNs: number, mask: number, handledNs: number) => void;
 
 export interface NativeWindowOptions {
   readonly title: string;
   readonly width: number;
   readonly height: number;
-  readonly library?: string;
-  readonly onWake: (wake: Wake) => void;
+  readonly library?: string | undefined;
+  readonly onWake: OnWake;
 }
 
 export interface WindowInfo {
@@ -55,55 +49,51 @@ export interface WindowInfo {
   readonly desiredMaximumFrameLatency: number;
 }
 
-export interface NativeWindow {
-  /** Starts the frame wakes; until then the window shows its loading state. */
-  start(): void;
+/** What the thread that steps the game needs from an open window: the scene in, the status and the measured series out. Any thread can hold one. */
+export interface WindowView {
+  readonly handle: number;
   status(text: string): void;
+  /** Encodes `scene` into one buffer the view reuses and hands it to the render thread. */
   submit(scene: string, step: number): void;
   /** One of the library's per-frame series, in milliseconds. */
   metric(name: string): Float64Array;
   missedScenes(): number;
   info(): WindowInfo;
   error(): string | undefined;
+  /** The names of the buttons set in a wake's mask. */
+  buttons(mask: number): readonly string[];
+  /** The library's clock now, in the nanoseconds of a wake's `sampleNs`. */
+  nowNs(): number;
+}
+
+export interface NativeWindow extends WindowView {
+  /** Starts the frame wakes; until then the window shows its loading state. */
+  start(): void;
   /** Stops the library's threads, then releases the callback and the library; the wake is never called after it returns. */
   close(): void;
 }
 
-const kinds: readonly WakeKind[] = ["frame", "closed", "error"];
+type Library = ReturnType<typeof dlopen<typeof symbols>>;
 
-export function openNativeWindow(options: NativeWindowOptions): NativeWindow {
-  const library = dlopen(options.library ?? windowLibraryPath(), symbols);
-  const call = library.symbols;
-  const readText = (read: (pointer: Uint8Array, capacity: number) => number | bigint) => {
-    let buffer = new Uint8Array(1024);
-    let length = Number(read(buffer, buffer.length));
-    if (length > buffer.length) {
-      buffer = new Uint8Array(length);
-      length = Number(read(buffer, buffer.length));
-    }
-    return new TextDecoder().decode(buffer.subarray(0, length));
-  };
-  const vocabulary = JSON.parse(readText((out, capacity) => call.wisp_window_vocabulary(out, capacity))) as { buttons: string[]; metrics: string[] };
-  let closed = false;
-  // A fresh array per frame reports external memory to the collector, which then collects every frame; one reused buffer keeps the pause count to what the frame allocates.
-  const encoder = new TextEncoder();
-  let sceneBuffer = new Uint8Array(64 * 1024);
-  const wake = new JSCallback((kind: number, frame: number, sampleNs: number, mask: number) => {
-    if (closed) return;
-    const handledNs = call.wisp_window_now_ns();
-    const buttons = vocabulary.buttons.filter((_, bit) => (mask >> bit & 1) === 1);
-    options.onWake({ kind: kinds[kind] ?? "error", frame, sampleNs, buttons, handledNs });
-  }, { args: ["u32", "u32", "f64", "u32"], returns: "void", threadsafe: true });
-  const title = Buffer.from(options.title);
-  const handle = call.wisp_window_open(title, title.length, options.width, options.height, wake.ptr);
-  if (handle === null) {
-    const reason = readText((out, capacity) => call.wisp_window_open_error(out, capacity));
-    wake.close();
-    library.close();
-    throw new Error(`the window didn't open: ${reason}`);
+const textFrom = (read: (pointer: Uint8Array, capacity: number) => number | bigint) => {
+  let buffer = new Uint8Array(1024);
+  let length = Number(read(buffer, buffer.length));
+  if (length > buffer.length) {
+    buffer = new Uint8Array(length);
+    length = Number(read(buffer, buffer.length));
   }
+  return new TextDecoder().decode(buffer.subarray(0, length));
+};
+
+const vocabularyOf = (library: Library) => JSON.parse(textFrom((out, capacity) => library.symbols.wisp_window_vocabulary(out, capacity))) as { buttons: string[]; metrics: string[] };
+
+const viewOf = (library: Library, handle: Pointer, vocabulary: { buttons: string[]; metrics: string[] }): WindowView => {
+  const call = library.symbols;
+  const encoder = new TextEncoder();
+  // A fresh array per frame reports external memory to the collector, which then collects every frame; one reused buffer keeps the pause count to what the frame allocates.
+  let sceneBuffer = new Uint8Array(64 * 1024);
   return {
-    start: () => call.wisp_window_start(handle),
+    handle: handle as number,
     status: (text) => { const bytes = Buffer.from(text); call.wisp_window_status(handle, bytes, bytes.length); },
     submit: (scene, step) => {
       let written = encoder.encodeInto(scene, sceneBuffer);
@@ -121,8 +111,39 @@ export function openNativeWindow(options: NativeWindowOptions): NativeWindow {
       return values;
     },
     missedScenes: () => call.wisp_window_missed_scenes(handle),
-    info: () => JSON.parse(readText((out, capacity) => call.wisp_window_info(handle, out, capacity)) || "{}") as WindowInfo,
-    error: () => readText((out, capacity) => call.wisp_window_error(handle, out, capacity)) || undefined,
+    info: () => JSON.parse(textFrom((out, capacity) => call.wisp_window_info(handle, out, capacity)) || "{}") as WindowInfo,
+    error: () => textFrom((out, capacity) => call.wisp_window_error(handle, out, capacity)) || undefined,
+    buttons: (mask) => vocabulary.buttons.filter((_, bit) => (mask >> bit & 1) === 1),
+    nowNs: () => call.wisp_window_now_ns(),
+  };
+};
+
+/** Another thread's view of a window `openNativeWindow` opened: it loads the library again and calls the same handle, which the library guards with its own locks. `release` unloads this view's copy. */
+export function attachNativeWindow(handle: number, library?: string): WindowView & { release(): void } {
+  const loaded = dlopen(library ?? windowLibraryPath(), symbols);
+  return { ...viewOf(loaded, handle as Pointer, vocabularyOf(loaded)), release: () => loaded.close() };
+}
+
+export function openNativeWindow(options: NativeWindowOptions): NativeWindow {
+  const library = dlopen(options.library ?? windowLibraryPath(), symbols);
+  const call = library.symbols;
+  const vocabulary = vocabularyOf(library);
+  let closed = false;
+  const wake = new JSCallback((kind: number, frame: number, sampleNs: number, mask: number) => {
+    if (closed) return;
+    options.onWake(kind, frame, sampleNs, mask, call.wisp_window_now_ns());
+  }, { args: ["u32", "u32", "f64", "u32"], returns: "void", threadsafe: true });
+  const title = Buffer.from(options.title);
+  const handle = call.wisp_window_open(title, title.length, options.width, options.height, wake.ptr);
+  if (handle === null) {
+    const reason = textFrom((out, capacity) => call.wisp_window_open_error(out, capacity));
+    wake.close();
+    library.close();
+    throw new Error(`the window didn't open: ${reason}`);
+  }
+  return {
+    ...viewOf(library, handle as Pointer, vocabulary),
+    start: () => call.wisp_window_start(handle),
     close: () => {
       if (closed) return;
       closed = true;

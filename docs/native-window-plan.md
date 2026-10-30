@@ -128,6 +128,58 @@ Rejected: a blocking FFI call that waits for the sample point. It would also
 block Bun's event loop, so UDP packets would be read only after the step that
 needed them.
 
+### The game steps on a worker thread
+
+Decision (30 October 2026): in a local or scripted native run, the game's
+session, its step and the scene's encoding run in a Bun `Worker`, a thread of
+the same process, so the process is still one. Bun's main thread keeps only the
+seam: the `JSCallback` that the render thread wakes writes the wake's numbers
+into a `SharedArrayBuffer` ring (kind, frame, sample time, button mask, handled
+time), bumps a counter and calls `Atomics.notify`, and returns. The worker waits
+on that counter, steps the map, encodes the scene into one reused buffer and
+calls `wisp_window_submit` itself, through its own `dlopen` of the library and
+the window's handle; `submit` and the library's other calls are guarded by the
+library's locks, so any thread may make them. The main thread opens the window,
+starts it, and at shutdown tells the worker to stop and waits for its
+acknowledgement before `wisp_window_close`, so the worker makes no call on a
+freed handle. The game is named by a module path and an export
+(`StandaloneOptions.nativeGame`) because a game object cannot cross threads. A
+networked session is `paced` and its netcode owns the sockets and the clock on
+the main thread, so it keeps stepping there until W2 moves its transport; a
+`runStandalone` call without `nativeGame` also steps on the main thread.
+
+Why: the first box's collection-pause bound is about the thread that answers
+the wake. With the sample map stepping on the main thread, Bun ran an eden
+collection about every two frames (664 in a 600-frame probe, 1 to 2 ms each, up
+to 18 ms) and no JavaScriptCore option changed the count. The count did not follow
+the bytes allocated per frame: the collector log shows 0 to 16 KB allocated since the previous collection when they fire,
+and the sample map's step, capture and scene build run 600 times in a loop
+without one. The guarantee kept is that no frame misses its present because of
+a JavaScript pause: the worker's pauses delay only its own submit, and a late
+scene is a counted miss (`missedScenes`) while `Fifo` presents the previous
+one. The probe therefore reports `gcPauseMs` for the main thread's heap, with
+the 2 ms bound, `workerGcPauseMs` for the worker's heap as a figure that must
+stay inside the frame, `dispatchMs` for the time from the sample to the worker
+starting its step, and `presentedMs`, whose p95 bound of 17.5 ms catches a
+worker pause that delayed a present.
+
+Rejected: a `setImmediate` loop that keeps Bun's loop from idling, which
+avoids the per-frame collections but segfaults Bun 1.3.13 with a `threadsafe`
+`JSCallback`. Rejected: shaving the sample map's step and `JSON.stringify`
+allocations, which the loop measurement above shows is not what the collector
+follows.
+
+Known Bun 1.3.13 behaviour, reproducible without a window or the game: a
+`setInterval` callback at 16 ms that stores a fresh string each tick
+(`keep = \`${n}\`` or `keep = JSON.stringify({ a: n })`, `keep` declared outside
+the callback) runs about 320 eden collections in 300 ticks under
+`BUN_JSC_logGC=1`, while the same callback storing an object (`keep = { a: n }`),
+an array, a number or a `Float64Array` runs 42 to 46, and a callback that stores
+nothing runs 11 or fewer. `BUN_GC_TIMER_DISABLE`, `BUN_GC_TIMER_INTERVAL`,
+`BUN_JSC_useConcurrentGC=false`, `BUN_JSC_percentCPUPerMBForEdenTimer` and
+`BUN_JSC_collectionTimerMaxPercentCPU` leave the count unchanged. It has not
+been reported upstream; that waits for Tom.
+
 ### Libraries
 
 Licences were checked on crates.io on 30 October 2026 and are recorded in
@@ -460,9 +512,12 @@ yet are created by that box. Each graphics run takes the gpu lease as
   - the host, status text, `standalone.json` and window lifetime from "Host,
     status and output";
   - the callback's `unref`, shutdown order and `catch_unwind`;
+  - the worker thread that steps the game, with the shared-memory seam on the
+    main thread (see "The game steps on a worker thread");
   - `bun wisp window probe`, which runs the sample map's scene and writes
     percentiles for wake, step, scene encode plus parse, garbage collection
-    pauses, `readAsset` and present interval.
+    pauses (the main thread's, and the worker's beside them), `readAsset` and
+    present interval.
 
   Done when:
   `cd ~/code/wisp/main && bun wisp window probe --frames 600 --out build/window-probe && jq -e '.wakeMs.p99 < 1 and .sceneMs.p99 < 1 and .gcPauseMs.max < 2 and .presentedMs.p95 <= 17.5' build/window-probe/probe.json`

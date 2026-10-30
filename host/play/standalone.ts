@@ -16,6 +16,8 @@ import { captureScene, sceneWithUnits, RenderFailure, type HeadlessRenderProject
 import { browserBundle } from "../render/browserBundle";
 import { createSoundResolver } from "../render/standaloneSound";
 import { openNativePlayer } from "../window/nativePlay";
+import { openSimPlayer } from "../window/simPlayer";
+import type { NativeGameModule } from "../window/simProtocol";
 import type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
 
 export type { StandaloneFrame, StandaloneInput } from "../render/standaloneFrames";
@@ -66,6 +68,8 @@ export interface StandaloneOptions {
   readonly net?: StandaloneNet;
   /** False for a player run, which has no gpu machine-capacity lease to hold. */
   readonly gpuLease?: boolean;
+  /** With `window: "native"`, where a worker thread imports the game from: it then steps the game there, so the game's collections never delay the window's wake. Without it, or with `net`, the game steps on Bun's main thread. */
+  readonly nativeGame?: NativeGameModule;
 }
 
 class MapMismatch extends Schema.TaggedError<MapMismatch, { readonly brand: unique symbol }>()("MapMismatch", { code: Schema.String, here: Schema.String }) {
@@ -196,7 +200,7 @@ export const openStandalone = (game: StandaloneGame, options: StandaloneOptions 
   return {
     url: `http://127.0.0.1:${server.port}/`, completed: Deferred.await(completion),
     /** What the native window drives in place of the page: the scene before the first step, one step, and the end of the run. */
-    native: { prepare: () => ({ scene: sceneWithUnits(game.render, captureScene(session.client)), models: game.render.preloadModels ?? [], step: steps }), advance: (input: StandaloneInput) => advance(input).frame, finish },
+    native: { prepare: () => ({ scene: sceneWithUnits(game.render, captureScene(session.client)), models: game.render.preloadModels ?? [], step: steps }), advance: (input: StandaloneInput) => advance(input).frame, finish: (result: Readonly<Record<string, unknown>>) => Effect.runPromise(finish(result)) },
   };
 });
 
@@ -296,6 +300,11 @@ const runNetStandalone = (game: StandaloneGame, options: StandaloneOptions, net:
 export const runStandalone = (game: StandaloneGame, options: StandaloneOptions = {}) => Effect.scoped(Effect.gen(function*() {
   if (options.gpuLease !== false) yield* requireGpuLease();
   if (options.net !== undefined) return yield* runNetStandalone(game, options, options.net);
+  if (options.window === "native" && options.nativeGame !== undefined) {
+    const sim = yield* openSimPlayer({ title: game.title, width: game.render.width ?? 1280, height: game.render.height ?? 720, scripted: options.script !== undefined, game: options.nativeGame, standalone: options });
+    printSummary(yield* Effect.raceFirst(sim.completed, sim.closed));
+    return;
+  }
   const player = yield* openStandalone(game, options);
   const { closed } = yield* openPlayerWindow(game, options, player);
   printSummary(yield* Effect.raceFirst(player.completed, closed));

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { openNativeWindow, windowLibraryPath } from "../host/window/binding";
+import { WAKE_FRAME, openNativeWindow, windowLibraryPath } from "../host/window/binding";
 import { standaloneWindowArgument } from "../host/play/standalone";
 
 const hasDisplay = (process.env.WAYLAND_DISPLAY ?? process.env.DISPLAY) !== undefined && existsSync(windowLibraryPath());
@@ -18,9 +18,9 @@ test.skipIf(!hasDisplay)("[spec docs/native-window-plan.md] a scene Bun never ha
   const midFrame = Promise.withResolvers<void>();
   const window = openNativeWindow({
     title: "close mid-frame", width: 320, height: 200,
-    onWake: (wake) => {
-      woken.push(wake.kind);
-      if (wake.kind === "frame" && woken.length === 4) midFrame.resolve();
+    onWake: (kind) => {
+      woken.push(kind === WAKE_FRAME ? "frame" : "other");
+      if (kind === WAKE_FRAME && woken.length === 4) midFrame.resolve();
     },
   });
   window.start();

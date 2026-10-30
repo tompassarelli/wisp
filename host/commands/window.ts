@@ -6,7 +6,7 @@ import { Effect, Schema } from "effect";
 import { type Command, UsageFailure, describeCause } from "../cli/command";
 import { windowLibraryBuild, windowLibraryPath } from "../window/binding";
 import { type ProbeSamples, probeReport } from "../window/probe";
-import { gcPauses } from "../window/stats";
+import { GC_LOG_BEGIN, GC_LOG_END, firstHeap, gcPausesByHeap } from "../window/stats";
 
 class WindowFailure extends Schema.TaggedError<WindowFailure, { readonly brand: unique symbol }>()("WindowFailure", { problem: Schema.String }) {
   override get message() { return this.problem; }
@@ -14,7 +14,6 @@ class WindowFailure extends Schema.TaggedError<WindowFailure, { readonly brand: 
 
 const WARMUP_FRAMES = 30;
 const USAGE = "probe [--frames N] [--out DIR]   (wisp:docs/native-window-plan.md, box W1)";
-const FRAMES_BEGIN = "wisp-window-probe frames begin", FRAMES_END = "wisp-window-probe frames end";
 
 const attempt = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: (cause) => new WindowFailure({ problem: describeCause(cause) }) });
 
@@ -38,16 +37,16 @@ export const makeWindow = (gameModule: string): Command => (args) => Effect.gen(
   yield* buildLibrary();
   const rawPath = join(out, "samples.json"), logPath = join(out, "gc.log");
   const child = yield* attempt(async () => {
-    const run = Bun.spawn([process.execPath, join(import.meta.dir, "../window/probeChild.ts"), gameModule, String(frames), String(WARMUP_FRAMES), rawPath], {
+    const run = Bun.spawn([process.execPath, join(import.meta.dir, "../window/probeChild.ts"), gameModule, "sampleGame", "Wisp Sample · window probe", String(frames), String(WARMUP_FRAMES), rawPath], {
       env: { ...process.env, BUN_JSC_logGC: "1" }, stdout: "inherit", stderr: Bun.file(logPath),
     });
     return run.exited;
   });
   const log = yield* attempt(() => readFile(logPath, "utf8"));
   if (child !== 0) return yield* new WindowFailure({ problem: `the probe window run exited ${child}\n${log.split("\n").filter((line) => !line.startsWith("[GC")).slice(-12).join("\n")}` });
-  const measured = log.slice(log.indexOf(FRAMES_BEGIN), log.indexOf(FRAMES_END));
+  const measured = log.slice(log.indexOf(GC_LOG_BEGIN), log.indexOf(GC_LOG_END));
   const samples = JSON.parse(yield* attempt(() => readFile(rawPath, "utf8"))) as ProbeSamples;
-  const report = probeReport(samples, gcPauses(measured));
+  const report = probeReport(samples, gcPausesByHeap(measured), firstHeap(log));
   yield* attempt(() => writeFile(join(out, "probe.json"), JSON.stringify(report, null, 2) + "\n"));
   console.log(JSON.stringify(report));
 }).pipe(Effect.mapError((cause) => cause._tag === "UsageFailure" ? cause : new WindowFailure({ problem: cause.message })));

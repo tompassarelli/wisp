@@ -249,9 +249,14 @@ Chrome, and `chrome` stays the default. A game reads the flag with
 `WISP_WINDOW_LIBRARY`, else beside the executable, else `window/target/release`
 (build it with `cd window && cargo build --release`). The library runs the
 window and a render thread; the render thread acquires the next `Fifo` image,
-samples the held keys and wakes Bun with a `threadsafe` `JSCallback`. Bun steps
-the map once and gives the scene back as JSON in one call, and the render thread
-draws it. Box W1 draws only a clear colour and the step as 24 lit squares, and it
+samples the held keys and wakes Bun with a `threadsafe` `JSCallback`. With
+`nativeGame` in the options (the module path and export name that a worker
+thread imports the game from, because a game object cannot cross threads) the
+main thread only passes each wake to a worker thread through shared memory, and
+the worker steps the map once and gives the scene back as JSON in one call, so
+the game's garbage collections never delay a wake; a networked run, or a call
+without `nativeGame`, steps on the main thread. The render thread draws the
+scene. Box W1 draws only a clear colour and the step as 24 lit squares, and it
 shows the loading and ready text in the window's title. The scene is parsed in
 the library on every frame, so the cost of encoding and parsing it is measured
 before the renderer is ported. Keyboard only: pads, sound, captures and
